@@ -3,28 +3,26 @@
  */
 
 #include "Particle.h"
+#include "config.h"
+#include "libnfc.h"
 
 // Let Device OS manage the connection to the Particle Cloud
 SYSTEM_MODE(AUTOMATIC);
 
-// Run the application and system concurrently in separate threads
-SYSTEM_THREAD(ENABLED);
+SerialLogHandler logHandler(
+    LOG_LEVEL_WARN,
+    {
+        // Logging level for non-application messages
+        {"app", LOG_LEVEL_ALL},   // Logging level for application messages
+        {"pn532", LOG_LEVEL_ALL}  // Logging level for application messages
+    });
 
-// Show system, cloud connectivity, and application logs over USB
-// View logs with CLI using 'particle serial monitor --follow'
-SerialLogHandler logHandler(LOG_LEVEL_INFO);
-
-// setup() runs once, when the device is first turned on
 void setup() {
-  // Put initialization like pinMode and begin functions here
+#if defined(DEVELOPMENT_BUILD)
+  // Await the terminal connections, so that all log messages during setup are
+  // not skipped.
+  waitFor(Serial.isConnected, 15000);
+#endif
 }
 
-// loop() runs over and over again, as quickly as it can execute.
-void loop() {
-  // The core of your code will likely live here.
-
-  // Example: Publish event to cloud every 10 seconds. Uncomment the next 3 lines to try it!
-  // Log.info("Sending Hello World to the cloud!");
-  // Particle.publish("Hello world!");
-  // delay( 10 * 1000 ); // milliseconds and blocking - see docs for more info!
-}
+void loop() {}
