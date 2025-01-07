@@ -1,0 +1,7 @@
+{
+    "deviceOsDir": "/home/michschn/.particle/toolchains/deviceOS/6.2.1",
+    "testDir": "/home/michschn/werkstattwaedi/machine-auth-firmware/tests",
+    "binaryDir": "/home/michschn/werkstattwaedi/machine-auth-firmware/target/",
+    "targetDir": "/home/michschn/werkstattwaedi/machine-auth-firmware/",
+    "logLevel": "debug"
+}
