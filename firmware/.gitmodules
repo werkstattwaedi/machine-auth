@@ -4,3 +4,6 @@
 [submodule "lib/libbase"]
 	path = lib/libbase
 	url = https://github.com/werkstattwaedi/libbase
+[submodule "lib/lvgl"]
+	path = lib/lvgl
+	url = https://github.com/werkstattwaedi/lvgl.git
