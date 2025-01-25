@@ -10,13 +10,14 @@
 // Let Device OS manage the connection to the Particle Cloud
 SYSTEM_MODE(AUTOMATIC);
 
-PN532 nfc_chip = PN532(&HW_NFC_SERIAL, HW_NFC_RESET, HW_NFC_IRQ);
+PN532 nfc_chip =
+    PN532(&Serial1, config::nfc::pin_reset, config::nfc::pin_reset);
 
 SerialLogHandler logHandler(
     // Logging level for non-application messages
     LOG_LEVEL_WARN, {{"app", LOG_LEVEL_ALL},
                      {PN532_LOGTAG, LOG_LEVEL_ALL},
-                     {DISPLAY_LOGTAG, LOG_LEVEL_ALL}});
+                     {config::display::logtag, LOG_LEVEL_ALL}});
 
 void setup() {
 #if defined(DEVELOPMENT_BUILD)

@@ -110,27 +110,24 @@ static const uint8_t init_cmd_list[] = {
 
 // clang-format on
 
-Logger display_log(DISPLAY_LOGTAG);
+using namespace config::display;
+
+Logger display_log(logtag);
 
 Display *Display::instance_;
 
 Display &Display::instance() {
   if (!instance_) {
-    instance_ =
-        new Display(PIN_LCD_RESET, PIN_LCD_CS, PIN_LCD_DC, PIN_LCD_BACKLIGHT
-
-        );
+    instance_ = new Display();
   }
   return *instance_;
 }
 
-Display::Display(uint8_t reset_pin, uint8_t chipselect_pin,
-                 uint8_t datacommand_pin, uint8_t backlight_pin)
-    : spi_settings_(40 * MHZ, MSBFIRST, SPI_MODE0),
-      reset_pin_(reset_pin),
-      chipselect_pin_(chipselect_pin),
-      datacommand_pin_(datacommand_pin),
-      backlight_pin_(backlight_pin) {}
+Display::Display()
+    : spi_interface_(SPI1),
+      spi_settings_(50 * MHZ, MSBFIRST, SPI_MODE0),
+      touchscreen_interface_(SPI1, resolution_horizontal, resolution_vertical,
+                             pin_touch_chipselect, pin_touch_irq) {}
 
 Display::~Display() {}
 
@@ -140,19 +137,20 @@ Status Display::Begin() {
     return Status::kError;
   }
 
-  pinMode(reset_pin_, OUTPUT);
-  pinMode(chipselect_pin_, OUTPUT);
-  pinMode(datacommand_pin_, OUTPUT);
-  pinMode(backlight_pin_, OUTPUT);
-  SPI1.begin(chipselect_pin_);
+  pinMode(pin_reset, OUTPUT);
+  pinMode(pin_chipselect, OUTPUT);
+  pinMode(pin_datacommand, OUTPUT);
+  pinMode(pin_backlight, OUTPUT);
 
-  digitalWrite(backlight_pin_, HIGH);
-  digitalWrite(reset_pin_, HIGH);
+  spi_interface_.begin();
+
+  digitalWrite(pin_backlight, HIGH);
+  digitalWrite(pin_reset, HIGH);
 
   delay(200);
-  digitalWrite(reset_pin_, LOW);
+  digitalWrite(pin_reset, LOW);
   delay(200);
-  digitalWrite(reset_pin_, HIGH);
+  digitalWrite(pin_reset, HIGH);
   delay(200);
 
   lv_init();
@@ -161,24 +159,14 @@ Status Display::Begin() {
 
   lv_tick_set_cb([]() { return millis(); });
 
-  static auto send_direct = [this](const uint8_t *cmd, size_t cmd_size,
-                                   const uint8_t *param, size_t param_size) {
-    SendCommandDirect(cmd, cmd_size, param, param_size);
-  };
-
-  static auto send_dma = [this](auto *cmd, size_t cmd_size,
-                                const uint8_t *param, size_t param_size) {
-    SendCommandDma(cmd, cmd_size, param, param_size);
-  };
-
   display_ = lv_lcd_generic_mipi_create(
-      DISPLAY_H_RES, DISPLAY_V_RES,
+      resolution_horizontal, resolution_vertical,
       LV_LCD_PIXEL_FORMAT_RGB666 | LV_LCD_FLAG_MIRROR_X,
       [](auto *disp, auto *cmd, auto cmd_size, auto *param, auto param_size) {
-        send_direct(cmd, cmd_size, param, param_size);
+        Display::instance().SendCommandDirect(cmd, cmd_size, param, param_size);
       },
       [](auto *disp, auto *cmd, auto cmd_size, auto *param, auto param_size) {
-        send_dma(cmd, cmd_size, param, param_size);
+        Display::instance().SendCommandDma(cmd, cmd_size, param, param_size);
       });
 
   lv_lcd_generic_mipi_send_cmd_list(display_, init_cmd_list);
@@ -186,16 +174,16 @@ Status Display::Begin() {
 
   // Photon2 has 3MB of RAM, so easily use 2 full size buffers (~160k each)
   uint32_t buf_size =
-      DISPLAY_H_RES * DISPLAY_V_RES  / 10*
+      resolution_horizontal * resolution_vertical *
       lv_color_format_get_size(lv_display_get_color_format(display_));
 
-  lv_color_t *buffer_1 = (lv_color_t *)lv_malloc(buf_size);
+  lv_color_t *buffer_1 = (lv_color_t *)malloc(buf_size);
   if (buffer_1 == NULL) {
     Log.error("display draw buffer malloc failed");
     return Status::kError;
   }
 
-  lv_color_t *buffer_2 = (lv_color_t *)lv_malloc(buf_size);
+  lv_color_t *buffer_2 = (lv_color_t *)malloc(buf_size);
   if (buffer_2 == NULL) {
     Log.error("display buffer malloc failed");
     lv_free(buffer_1);
@@ -207,7 +195,18 @@ Status Display::Begin() {
 
   os_mutex_create(&mutex_);
 
-  thread_ = new Thread("Display", [this]() { DisplayThreadFunction(); });
+  touchscreen_interface_.begin();
+
+  lv_indev_t *indev = lv_indev_create();
+  lv_indev_set_type(
+      indev, LV_INDEV_TYPE_POINTER); /* Touch pad is a pointer-like device. */
+  lv_indev_set_read_cb(indev, [](auto indev, auto data) {
+    Display::instance().ReadTouchInput(indev, data);
+  });
+
+  thread_ = new Thread(
+      "Display", [this]() { DisplayThreadFunction(); }, thread_priority,
+      thread_stack_size);
 
   return Status::kOk;
 }
@@ -248,41 +247,53 @@ void Display::RenderFrame() {}
 
 void Display::SendCommandDirect(const uint8_t *cmd, size_t cmd_size,
                                 const uint8_t *param, size_t param_size) {
-  SPI1.beginTransaction(spi_settings_);
+  spi_interface_.beginTransaction(spi_settings_);
 
-  digitalWrite(chipselect_pin_, LOW);
-  digitalWrite(datacommand_pin_, LOW);
+  pinResetFast(pin_chipselect);
+  pinResetFast(pin_datacommand);
 
   for (size_t i = 0; i < cmd_size; i++) {
-    SPI1.transfer(cmd[i]);
+    spi_interface_.transfer(cmd[i]);
   }
-  digitalWrite(datacommand_pin_, HIGH);
+  pinSetFast(pin_datacommand);
 
   for (size_t i = 0; i < param_size; i++) {
-    SPI1.transfer(param[i]);
+    spi_interface_.transfer(param[i]);
   }
-  digitalWrite(chipselect_pin_, HIGH);
+  pinSetFast(pin_chipselect);
 
-  SPI1.endTransaction();
+  spi_interface_.endTransaction();
 }
 
 void Display::SendCommandDma(const uint8_t *cmd, size_t cmd_size,
                              const uint8_t *param, size_t param_size) {
-  SPI1.beginTransaction(spi_settings_);
-  digitalWrite(chipselect_pin_, LOW);
-
-  digitalWrite(datacommand_pin_, LOW);
+  spi_interface_.beginTransaction(spi_settings_);
+  pinResetFast(pin_chipselect);
+  pinResetFast(pin_datacommand);
 
   for (size_t i = 0; i < cmd_size; i++) {
-    SPI1.transfer(cmd[i]);
+    spi_interface_.transfer(cmd[i]);
   }
-  digitalWrite(datacommand_pin_, HIGH);
 
-  static auto callback = [this]() {
-    digitalWrite(chipselect_pin_, HIGH);
-    SPI1.endTransaction();
-    lv_display_flush_ready(display_);
-  };
+  pinSetFast(pin_datacommand);
+  spi_interface_.transfer(param, nullptr, param_size, nullptr);
 
-  SPI1.transfer(param, NULL, param_size, []() { callback(); });
+  pinSetFast(pin_chipselect);
+
+  Display::instance_->spi_interface_.endTransaction();
+  lv_display_flush_ready(Display::instance_->display_);
+}
+
+void Display::ReadTouchInput(lv_indev_t *indev, lv_indev_data_t *data) {
+  // if (touchscreen_interface_.touched()) {
+  //   TS_Point p = touchscreen_interface_.getPoint();
+  //   auto x = map(p.x, 220, 3850, 1, 480);  //
+  //   auto y = map(p.y, 310, 3773, 1, 320);  // Feel pretty good about this
+  //   data->point.x = x;
+  //   data->point.y = y;
+  //   data->state = LV_INDEV_STATE_PR;
+
+  // } else {
+    data->state = LV_INDEV_STATE_REL;
+  // }
 }

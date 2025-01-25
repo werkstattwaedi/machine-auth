@@ -1,11 +1,9 @@
 #pragma once
 
+#include <XPT2046_Touch.h>
+
 #include "libbase.h"
 #include "lvgl.h"
-
-#define DISPLAY_LOGTAG "Display"
-#define DISPLAY_H_RES 240
-#define DISPLAY_V_RES 320
 
 class Display {
  public:
@@ -37,8 +35,7 @@ class Display {
  private:
   // Display is a singleton - use Display.instance()
   static Display *instance_;
-  Display(uint8_t reset_pin, uint8_t chipselect_pin, uint8_t datacommand_pin,
-          uint8_t backlight_pin);
+  Display();
 
   virtual ~Display();
   Display(const Display &) = delete;
@@ -48,19 +45,20 @@ class Display {
   os_mutex_t mutex_ = 0;
 
   lv_display_t *display_ = nullptr;
+  lv_indev_t *touch_input = nullptr;
+
+  SPIClass &spi_interface_;
   SPISettings spi_settings_;
-  int8_t reset_pin_;
-  int8_t chipselect_pin_;
-  int8_t datacommand_pin_;
-  int8_t backlight_pin_;
+  XPT2046_Touchscreen touchscreen_interface_;
 
   os_thread_return_t DisplayThreadFunction();
 
-    void RenderFrame();
-
+  void RenderFrame();
 
   void SendCommandDirect(const uint8_t *cmd, size_t cmd_size,
                          const uint8_t *param, size_t param_size);
   void SendCommandDma(const uint8_t *cmd, size_t cmd_size, const uint8_t *param,
                       size_t param_size);
+
+  void ReadTouchInput(lv_indev_t *indev, lv_indev_data_t *data);
 };

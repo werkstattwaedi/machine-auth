@@ -7,3 +7,6 @@
 [submodule "lib/lvgl"]
 	path = lib/lvgl
 	url = https://github.com/werkstattwaedi/lvgl.git
+[submodule "lib/XPT2046_Touch"]
+	path = lib/XPT2046_Touch
+	url = https://github.com/vritzka/XPT2046_Touch.git
