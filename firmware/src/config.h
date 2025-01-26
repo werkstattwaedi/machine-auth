@@ -7,6 +7,7 @@
 
 namespace config {
 
+
 namespace display {
 
 constexpr auto logtag = "Display";

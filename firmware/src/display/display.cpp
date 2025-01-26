@@ -1,6 +1,7 @@
 #include "display.h"
 
 #include "../config.h"
+#include "../state/configuration.h"
 #include "drivers/display/lcd/lv_lcd_generic_mipi.h"
 
 // clang-format off
@@ -127,15 +128,17 @@ Display::Display()
     : spi_interface_(SPI1),
       spi_settings_(50 * MHZ, MSBFIRST, SPI_MODE0),
       touchscreen_interface_(SPI1, resolution_horizontal, resolution_vertical,
-                             pin_touch_chipselect, pin_touch_irq) {}
+                             pin_touch_chipselect, pin_touch_irq), state_(std::weak_ptr<oww::state::State>()) {}
 
 Display::~Display() {}
 
-Status Display::Begin() {
+Status Display::Begin(std::weak_ptr<oww::state::State> state) {
   if (thread_ != nullptr) {
     display_log.error("Display::Begin() Already initialized");
     return Status::kError;
   }
+
+  state_ = state;
 
   pinMode(pin_reset, OUTPUT);
   pinMode(pin_chipselect, OUTPUT);
@@ -216,23 +219,14 @@ void Display::DisplayThreadFunction() {
 
   /*Create a white label, set its text and align it to the center*/
   lv_obj_t *label = lv_label_create(lv_screen_active());
-  lv_label_set_text(label, "Hello Waedi!");
+
+  auto state = state_.lock();
+  auto configuration = state->GetConfiguration();
+  lv_label_set_text(label, configuration->IsConfigured()
+                               ? configuration->GetTerminal()->label.c_str()
+                               : "unconfigured");
   lv_obj_set_style_text_color(lv_screen_active(), lv_color_hex(0x0000ff),
                               LV_PART_MAIN);
-
-  lv_anim_t a;
-  lv_anim_init(&a);
-  lv_anim_set_var(&a, label);
-  lv_anim_set_values(&a, 0, 50);
-  lv_anim_set_duration(&a, 1000);
-  lv_anim_set_repeat_delay(&a, 500);
-  lv_anim_set_repeat_count(&a, LV_ANIM_REPEAT_INFINITE);
-  lv_anim_set_path_cb(&a, lv_anim_path_ease_in_out);
-
-  lv_anim_set_exec_cb(&a, [](void *var, int32_t v) {
-    lv_obj_align((lv_obj_t *)var, LV_ALIGN_CENTER, 0, v);
-  });
-  lv_anim_start(&a);
 
   while (true) {
     RenderFrame();
@@ -276,8 +270,13 @@ void Display::SendCommandDma(const uint8_t *cmd, size_t cmd_size,
   }
 
   pinSetFast(pin_datacommand);
-  spi_interface_.transfer(param, nullptr, param_size, nullptr);
+  // if (param_size > 0) {
+  //   spi_interface_.transfer(param, nullptr, param_size, nullptr);
+  // }
 
+  for (size_t i = 0; i < param_size; i++) {
+    spi_interface_.transfer(param[i]);
+  }
   pinSetFast(pin_chipselect);
 
   Display::instance_->spi_interface_.endTransaction();
@@ -294,6 +293,6 @@ void Display::ReadTouchInput(lv_indev_t *indev, lv_indev_data_t *data) {
   //   data->state = LV_INDEV_STATE_PR;
 
   // } else {
-    data->state = LV_INDEV_STATE_REL;
+  data->state = LV_INDEV_STATE_REL;
   // }
 }

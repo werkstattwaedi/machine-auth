@@ -2,6 +2,7 @@
 
 #include <XPT2046_Touch.h>
 
+#include "../state/state.h"
 #include "libbase.h"
 #include "lvgl.h"
 
@@ -9,7 +10,7 @@ class Display {
  public:
   static Display &instance();
 
-  Status Begin();
+  Status Begin(std::weak_ptr<oww::state::State> state);
 
   /**
    * @brief Locks the mutex that protects shared resources
@@ -50,6 +51,8 @@ class Display {
   SPIClass &spi_interface_;
   SPISettings spi_settings_;
   XPT2046_Touchscreen touchscreen_interface_;
+
+  std::weak_ptr<oww::state::State> state_;
 
   os_thread_return_t DisplayThreadFunction();
 
