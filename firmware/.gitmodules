@@ -10,3 +10,15 @@
 [submodule "lib/XPT2046_Touch"]
 	path = lib/XPT2046_Touch
 	url = https://github.com/vritzka/XPT2046_Touch.git
+[submodule "lib/libntag424"]
+	path = lib/libntag424
+	url = https://github.com/werkstattwaedi/libntag424.git
+[submodule "lib/CryptoAES_CBC"]
+	path = lib/CryptoAES_CBC
+	url = https://github.com/werkstattwaedi/CryptoAES_CBC.git
+[submodule "lib/CRC32"]
+	path = lib/CRC32
+	url = https://github.com/werkstattwaedi/CRC32.git
+[submodule "lib/AES_CMAC"]
+	path = lib/AES_CMAC
+	url = https://github.com/werkstattwaedi/AES_CMAC.git
