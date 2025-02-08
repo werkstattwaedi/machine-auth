@@ -128,11 +128,11 @@ Display::Display()
     : spi_interface_(SPI1),
       spi_settings_(50 * MHZ, MSBFIRST, SPI_MODE0),
       touchscreen_interface_(SPI1, resolution_horizontal, resolution_vertical,
-                             pin_touch_chipselect, pin_touch_irq), state_(std::weak_ptr<oww::state::State>()) {}
+                             pin_touch_chipselect, pin_touch_irq) {}
 
 Display::~Display() {}
 
-Status Display::Begin(std::weak_ptr<oww::state::State> state) {
+Status Display::Begin(std::shared_ptr<oww::state::State> state) {
   if (thread_ != nullptr) {
     display_log.error("Display::Begin() Already initialized");
     return Status::kError;
@@ -208,20 +208,19 @@ Status Display::Begin(std::weak_ptr<oww::state::State> state) {
   });
 
   thread_ = new Thread(
-      "Display", [this]() { DisplayThreadFunction(); }, thread_priority,
+      "Display", [this]() { DisplayThread(); }, thread_priority,
       thread_stack_size);
 
   return Status::kOk;
 }
 
-void Display::DisplayThreadFunction() {
+os_thread_return_t Display::DisplayThread() {
   lv_obj_set_style_bg_color(lv_screen_active(), lv_color_white(), LV_PART_MAIN);
 
   /*Create a white label, set its text and align it to the center*/
   lv_obj_t *label = lv_label_create(lv_screen_active());
 
-  auto state = state_.lock();
-  auto configuration = state->GetConfiguration();
+  auto configuration = state_->GetConfiguration();
   lv_label_set_text(label, configuration->IsConfigured()
                                ? configuration->GetTerminal()->label.c_str()
                                : "unconfigured");

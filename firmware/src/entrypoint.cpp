@@ -5,14 +5,11 @@
 #include "Particle.h"
 #include "config.h"
 #include "display/display.h"
-#include "libnfc.h"
+#include "nfc/nfc_tags.h"
 #include "state/state.h"
 
 // Let Device OS manage the connection to the Particle Cloud
 SYSTEM_MODE(AUTOMATIC);
-
-PN532 nfc_chip =
-    PN532(&Serial1, config::nfc::pin_reset, config::nfc::pin_reset);
 
 SerialLogHandler logHandler(
     // Logging level for non-application messages
@@ -45,11 +42,11 @@ void setup() {
   }
 
   Status display_setup_result =
-      Display::instance().Begin(std::weak_ptr(state_));
+      Display::instance().Begin(state_);
   Log.info("Display Status = %d", (int)display_setup_result);
 
-  Status status = nfc_chip.Begin();
-  Log.info("NFC status = %d", (int)status);
+  Status nfc_setup_result = NfcTags::instance().Begin(state_);
+  Log.info("NFC Status = %d", (int)nfc_setup_result);
 }
 
 void loop() { state_->Loop(); }

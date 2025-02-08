@@ -1,17 +1,15 @@
 #pragma once
 
-#include <XPT2046_Touch.h>
-
 #include "../state/state.h"
 #include "libbase.h"
 #include "lvgl.h"
+#include "libnfc.h"
 
-class Display {
+class NfcTags {
  public:
-  static Display &instance();
+  static NfcTags &instance();
 
   Status Begin(std::shared_ptr<oww::state::State> state);
-
   /**
    * @brief Locks the mutex that protects shared resources
    *
@@ -35,33 +33,24 @@ class Display {
 
  private:
   // Display is a singleton - use Display.instance()
-  static Display *instance_;
-  Display();
+  static NfcTags *instance_;
+  NfcTags(
+    // std::unique_ptr<PN532> pcd_interface,
+    // std::unique_ptr<Ntag424> ntag_interface
+  );
 
-  virtual ~Display();
-  Display(const Display &) = delete;
-  Display &operator=(const Display &) = delete;
+  virtual ~NfcTags();
+  NfcTags(const NfcTags &) = delete;
+  NfcTags &operator=(const NfcTags &) = delete;
 
   Thread *thread_ = nullptr;
   os_mutex_t mutex_ = 0;
 
-  lv_display_t *display_ = nullptr;
-  lv_indev_t *touch_input = nullptr;
-
-  SPIClass &spi_interface_;
-  SPISettings spi_settings_;
-  XPT2046_Touchscreen touchscreen_interface_;
-
   std::shared_ptr<oww::state::State> state_ = nullptr;
 
-  os_thread_return_t DisplayThread();
+  std::unique_ptr<PN532> pcd_interface_ ;
+  std::unique_ptr<Ntag424> ntag_interface_;
 
-  void RenderFrame();
 
-  void SendCommandDirect(const uint8_t *cmd, size_t cmd_size,
-                         const uint8_t *param, size_t param_size);
-  void SendCommandDma(const uint8_t *cmd, size_t cmd_size, const uint8_t *param,
-                      size_t param_size);
-
-  void ReadTouchInput(lv_indev_t *indev, lv_indev_data_t *data);
+  os_thread_return_t NfcThread();
 };

@@ -7,7 +7,6 @@
 
 namespace config {
 
-
 namespace display {
 
 constexpr auto logtag = "Display";
@@ -28,6 +27,8 @@ constexpr int8_t pin_touch_irq = S4;
 }  // namespace display
 
 namespace nfc {
+
+constexpr auto logtag = "Nfc";
 
 constexpr int8_t pin_irq = D17;
 constexpr int8_t pin_reset = D15;
