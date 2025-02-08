@@ -5,7 +5,7 @@
 
 using namespace config::nfc;
 
-Logger logger(logtag);
+Logger NfcTags::logger(logtag);
 
 NfcTags *NfcTags::instance_;
 
@@ -32,8 +32,8 @@ Status NfcTags::Begin(std::shared_ptr<oww::state::State> state) {
 
   state_ = state;
 
-  auto status = pcd_interface_->Begin();
-  if (status != Status::kOk) {
+  auto pcd_begin = pcd_interface_->Begin();
+  if (!pcd_begin) {
     logger.error("Initialization of PN532 failed");
     return Status::kError;
   }
@@ -46,4 +46,30 @@ Status NfcTags::Begin(std::shared_ptr<oww::state::State> state) {
   return Status::kOk;
 }
 
-os_thread_return_t NfcTags::NfcThread() {}
+os_thread_return_t NfcTags::NfcThread() {
+  NfcStateData state_data{.state = NfcState::kIdle};
+
+  while (true) {
+    MachineTerminalLoop(state_data);
+  }
+}
+
+void NfcTags::MachineTerminalLoop(NfcStateData &data) {
+  if (logger.isTraceEnabled()) {
+  }
+  switch (data.state) {
+    case NfcState::kIdle: {
+      auto wait_for_tag = pcd_interface_->WaitForTag();
+      if (!wait_for_tag) return;
+
+      auto selected_tag = wait_for_tag.value();
+
+      data.state = NfcState::kCardFound;
+      data.tg = selected_tag.tg;
+    }
+    case NfcState::kDeselectAndWakeup: {
+    }
+    case NfcState::kCardFound: {
+    }
+  }
+}

@@ -2,7 +2,6 @@
 
 #include "../state/state.h"
 #include "libbase.h"
-#include "lvgl.h"
 #include "libnfc.h"
 
 class NfcTags {
@@ -35,22 +34,37 @@ class NfcTags {
   // Display is a singleton - use Display.instance()
   static NfcTags *instance_;
   NfcTags(
-    // std::unique_ptr<PN532> pcd_interface,
-    // std::unique_ptr<Ntag424> ntag_interface
+      // std::unique_ptr<PN532> pcd_interface,
+      // std::unique_ptr<Ntag424> ntag_interface
   );
 
   virtual ~NfcTags();
   NfcTags(const NfcTags &) = delete;
   NfcTags &operator=(const NfcTags &) = delete;
 
+  static Logger logger;
   Thread *thread_ = nullptr;
   os_mutex_t mutex_ = 0;
 
   std::shared_ptr<oww::state::State> state_ = nullptr;
 
-  std::unique_ptr<PN532> pcd_interface_ ;
+  std::unique_ptr<PN532> pcd_interface_;
   std::unique_ptr<Ntag424> ntag_interface_;
 
-
   os_thread_return_t NfcThread();
+
+  // machine terminal specific NFC handler
+ private:
+  enum class NfcState {
+    kIdle = 0,
+    kCardFound = 1,
+    kDeselectAndWakeup = 2,
+  };
+
+  struct NfcStateData {
+    NfcState state;
+    uint8_t tg;
+  };
+
+  void MachineTerminalLoop(NfcStateData &data);
 };
