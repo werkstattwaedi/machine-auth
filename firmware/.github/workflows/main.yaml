@@ -33,7 +33,7 @@ jobs:
 
       # Optional: Upload compiled firmware as an artifact on GitHub.
       - name: Upload Firmware as Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: firmware-artifact
           path: |
