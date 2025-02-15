@@ -19,6 +19,12 @@ class State : public event::IStateEvent {
 
  public:
   virtual void OnConfigChanged() override;
+
+  virtual void OnTagFound() override;
+  virtual void OnTagBlank() override;
+  virtual void OnTagVerified() override;
+  virtual void OnTagRejected() override;
+  virtual void OnTagRemoved() override;
 };
 
 }  // namespace oww::state

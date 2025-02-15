@@ -46,6 +46,21 @@ Status NfcTags::Begin(std::shared_ptr<oww::state::State> state) {
   return Status::kOk;
 }
 
+enum class NfcState {
+  kIdle = 0,
+  kCardFound = 1,
+  kCardInRange = 2,
+  kDeselectAndWakeup = 3,
+};
+
+// NfcTags internal state machine.
+// This is intentionally separate from state_ and the Pn532/Ntag424
+// state
+struct NfcStateData {
+  NfcState state;
+  std::shared_ptr<SelectedTag> selected_tag;
+};
+
 os_thread_return_t NfcTags::NfcThread() {
   NfcStateData state_data{.state = NfcState::kIdle};
 
@@ -55,21 +70,65 @@ os_thread_return_t NfcTags::NfcThread() {
 }
 
 void NfcTags::MachineTerminalLoop(NfcStateData &data) {
-  if (logger.isTraceEnabled()) {
-  }
+  logger.trace("MachineTerminalLoop %d", (int)data.state);
   switch (data.state) {
     case NfcState::kIdle: {
-      auto wait_for_tag = pcd_interface_->WaitForTag();
+      auto wait_for_tag = pcd_interface_->WaitForNewTag();
       if (!wait_for_tag) return;
 
       auto selected_tag = wait_for_tag.value();
+      logger.info("Found tag ID");
+      ntag_interface_->SetSelectedTag(selected_tag);
 
       data.state = NfcState::kCardFound;
-      data.tg = selected_tag.tg;
-    }
-    case NfcState::kDeselectAndWakeup: {
+      data.selected_tag = selected_tag;
+
+      state_->OnTagFound();
+      return;
     }
     case NfcState::kCardFound: {
+      uint8_t response_data[29];
+      uint8_t response_length = 29;
+      auto get_version_result = ntag_interface_->DNA_Plain_GetVersion(
+          response_data, &response_length);
+      if (get_version_result != Ntag424::DNA_STATUS_OK) {
+        logger.error("Get Version Failed %d", get_version_result);
+        delay(500);
+        data.state = NfcState::kIdle;
+        data.selected_tag = nullptr;
+        return;
+      }
+
+
+      
+      logger.info("Version Info: " +
+                  BytesToHexAndAsciiString(response_data, response_length));
+
+      data.state = NfcState::kCardInRange;
+
+      return;
+    }
+
+    case NfcState::kCardInRange: {
+      logger.info("Pinging");
+auto ping_result = ntag_interface_->DNA_Plain_Ping();
+
+      if (ping_result != Ntag424::DNA_STATUS_OK) {
+
+        logger.info("Removed %d", ping_result );
+        state_->OnTagRemoved();
+
+        data.state = NfcState::kIdle;
+        data.selected_tag = nullptr;
+        return;
+      }
+
+      // Polling card every 500ms
+      delay(500);
+      return;
+    }
+
+    case NfcState::kDeselectAndWakeup: {
     }
   }
 }

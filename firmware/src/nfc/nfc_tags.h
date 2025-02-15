@@ -3,7 +3,7 @@
 #include "../state/state.h"
 #include "libbase.h"
 #include "libnfc.h"
-
+struct NfcStateData;
 class NfcTags {
  public:
   static NfcTags &instance();
@@ -55,16 +55,5 @@ class NfcTags {
 
   // machine terminal specific NFC handler
  private:
-  enum class NfcState {
-    kIdle = 0,
-    kCardFound = 1,
-    kDeselectAndWakeup = 2,
-  };
-
-  struct NfcStateData {
-    NfcState state;
-    uint8_t tg;
-  };
-
   void MachineTerminalLoop(NfcStateData &data);
 };

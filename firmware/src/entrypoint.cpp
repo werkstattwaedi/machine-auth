@@ -18,6 +18,7 @@ SerialLogHandler logHandler(
                         {PN532_LOGTAG, LOG_LEVEL_ALL},
                         // {config::display::logtag, LOG_LEVEL_ALL},
                         {oww::state::configuration::logtag, LOG_LEVEL_ALL},
+                        {config::nfc::logtag, LOG_LEVEL_ALL},
                     });
 
 using namespace oww::state;

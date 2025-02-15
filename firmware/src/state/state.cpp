@@ -14,4 +14,17 @@ void State::Loop() {}
 
 void State::OnConfigChanged() { System.reset(RESET_REASON_CONFIG_UPDATE); }
 
+
+void State::OnTagFound() {}
+void State::OnTagBlank() {}
+void State::OnTagVerified() {}
+void State::OnTagRejected() {}
+void State::OnTagRemoved() {}
+
+
+
+
 }  // namespace oww::state
+
+
+
