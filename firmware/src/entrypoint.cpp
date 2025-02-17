@@ -36,9 +36,7 @@ void setup() {
   {
     // create state_
     state_.reset(new State());
-
     auto config = std::make_unique<Configuration>(std::weak_ptr(state_));
-
     state_->Begin(std::move(config));
   }
 

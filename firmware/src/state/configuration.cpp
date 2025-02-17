@@ -3,6 +3,29 @@
 #include "configuration.h"
 namespace oww::state {
 
+// Factory data used for dev devices.
+FactoryData DEV_FACTORY_DATA{
+    .version = 1,
+    .key = {
+        // THIS KEY IS FOR DEVELOPMENT PURPOSES ONLY. DO NOT USE IN PRODUCTION.
+        0xf5,
+        0xe4,
+        0xb9,
+        0x99,
+        0xd5,
+        0xaa,
+        0x62,
+        0x9f,
+        0x19,
+        0x3a,
+        0x87,
+        0x45,
+        0x29,
+        0xc4,
+        0xaa,
+        0x2f,
+    }};
+
 Logger logger(configuration::logtag);
 
 TerminalConfig::TerminalConfig(String machine_id, String label)
@@ -14,6 +37,23 @@ Configuration::Configuration(std::weak_ptr<IStateEvent> event_sink)
     : event_sink_(event_sink) {}
 
 Status Configuration::Begin() {
+  factory_data_ = std::make_unique<FactoryData>();
+
+  EEPROM.get(0, *(factory_data_.get()));
+  if (factory_data_->version == 0xFF) {
+    logger.warn("FactoryData EEPROM is invalid. Flashing DEV_FACTORY_DATA");
+    // This device never saw factory data before. Write the dev data.
+    // TODO(michschn) fail on production devices instead.
+    EEPROM.put(0, DEV_FACTORY_DATA);
+    memcpy(factory_data_.get(), &DEV_FACTORY_DATA, sizeof(FactoryData));
+  }
+
+  if (UsesDevKeys()) {
+    logger.warn(
+        "Dev keys are in use. Production devices must be provisioned with "
+        "production keys.");
+  }
+
   auto ledger = Particle.ledger(ledger_name);
 
   ledger.onSync(
@@ -75,6 +115,14 @@ Status Configuration::Begin() {
   is_configured_ = true;
 
   return Status::kOk;
+}
+
+bool Configuration::UsesDevKeys() {
+  return memcmp(factory_data_->key, DEV_FACTORY_DATA.key, 16) == 0;
+}
+
+void Configuration::CopyTerminalKey(std::array<byte, 16>& target) {
+  memcpy(target.data(), factory_data_->key, 16);
 }
 
 }  // namespace oww::state

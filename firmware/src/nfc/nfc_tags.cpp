@@ -51,6 +51,9 @@ enum class NfcState {
   kCardFound = 1,
   kCardInRange = 2,
   kDeselectAndWakeup = 3,
+  kCardError = 4,
+  kNewTag = 5,
+
 };
 
 // NfcTags internal state machine.
@@ -73,10 +76,10 @@ void NfcTags::MachineTerminalLoop(NfcStateData &data) {
   logger.trace("MachineTerminalLoop %d", (int)data.state);
   switch (data.state) {
     case NfcState::kIdle: {
-      auto wait_for_tag = pcd_interface_->WaitForNewTag();
+      auto wait_for_tag = pcd_interface_->WaitForNewTag(50);
       if (!wait_for_tag) return;
 
-      auto selected_tag = wait_for_tag.value();
+auto selected_tag = wait_for_tag.value();
       logger.info("Found tag ID");
       ntag_interface_->SetSelectedTag(selected_tag);
 
@@ -84,23 +87,41 @@ void NfcTags::MachineTerminalLoop(NfcStateData &data) {
       data.selected_tag = selected_tag;
 
       state_->OnTagFound();
+
       return;
     }
     case NfcState::kCardFound: {
+      auto select_application_result =
+          ntag_interface_->DNA_Plain_ISOSelectFile_Application();
+      if (select_application_result != Ntag424::DNA_STATUS_OK) {
+        logger.error("ISOSelectFile_Application %d", select_application_result);
+        data.state = NfcState::kCardError;
+        return;
+      }
+
+      auto is_new_tag_response =
+          ntag_interface_->DNA_Plain_IsNewTag_WithFactoryDefaults();
+      if (!is_new_tag_response) {
+        logger.error("IsNewTag failed %d", is_new_tag_response.error());
+        data.state = NfcState::kCardError;
+      }
+
+      // if (is_new_tag_response.value()) {
+      //   data.state = NfcState::kNewTag;
+      //   return;
+      // }
+
+
       uint8_t response_data[29];
       uint8_t response_length = 29;
       auto get_version_result = ntag_interface_->DNA_Plain_GetVersion(
           response_data, &response_length);
       if (get_version_result != Ntag424::DNA_STATUS_OK) {
         logger.error("Get Version Failed %d", get_version_result);
-        delay(500);
-        data.state = NfcState::kIdle;
-        data.selected_tag = nullptr;
+        data.state = NfcState::kCardError;
         return;
       }
 
-
-      
       logger.info("Version Info: " +
                   BytesToHexAndAsciiString(response_data, response_length));
 
@@ -111,15 +132,13 @@ void NfcTags::MachineTerminalLoop(NfcStateData &data) {
 
     case NfcState::kCardInRange: {
       logger.info("Pinging");
-auto ping_result = ntag_interface_->DNA_Plain_Ping();
+      auto ping_result = ntag_interface_->DNA_Plain_Ping();
 
       if (ping_result != Ntag424::DNA_STATUS_OK) {
-
-        logger.info("Removed %d", ping_result );
+        logger.info("Removed %d", ping_result);
         state_->OnTagRemoved();
 
-        data.state = NfcState::kIdle;
-        data.selected_tag = nullptr;
+        data.state = NfcState::kCardError;
         return;
       }
 
@@ -129,6 +148,29 @@ auto ping_result = ntag_interface_->DNA_Plain_Ping();
     }
 
     case NfcState::kDeselectAndWakeup: {
+      return;
+    }
+    
+    case NfcState::kNewTag: {
+      return;
+    }
+    case NfcState::kCardError: {
+      auto release_tag = pcd_interface_->ReleaseTag(data.selected_tag);
+      if (release_tag) {
+        data.state = NfcState::kIdle;
+        data.selected_tag = nullptr;
+        return;
+      };
+
+      logger.warn("Release failed (%d), resetting PCD ",
+                  (int)release_tag.error());
+
+      pcd_interface_->ResetController();
+
+      data.state = NfcState::kIdle;
+      data.selected_tag = nullptr;
+
+      return;
     }
   }
 }

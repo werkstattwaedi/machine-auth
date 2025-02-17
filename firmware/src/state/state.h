@@ -14,8 +14,13 @@ class State : public event::IStateEvent {
 
   Configuration* GetConfiguration() { return configuration_.get(); }
 
+
+  boolean has_tag = false;
+
+
  private:
   std::unique_ptr<Configuration> configuration_ = nullptr;
+
 
  public:
   virtual void OnConfigChanged() override;
@@ -26,5 +31,7 @@ class State : public event::IStateEvent {
   virtual void OnTagRejected() override;
   virtual void OnTagRemoved() override;
 };
+
+
 
 }  // namespace oww::state

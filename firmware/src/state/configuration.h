@@ -21,9 +21,9 @@ class TerminalConfig {
 };
 
 enum class MachineControl {
-    kUndefined = 0,
-    kRelais0 = 1,
-    kRelais1 = 2,
+  kUndefined = 0,
+  kRelais0 = 1,
+  kRelais1 = 2,
 };
 
 class MachineConfig {
@@ -31,6 +31,19 @@ class MachineConfig {
   MachineConfig(String machine_id, MachineControl control);
   const String machine_id;
   const MachineControl control;
+};
+
+// Sensitive data stored in EEPROM in "factory", that is when assembling and
+// getting devices ready. Data in EEPROM is not meant to be seen in the particle
+// cloud, only in a secure environment where devices are assembled.
+//
+// Production devices use the device protection feature to avoid attackers
+// flashing their own firmware and extract the keys.
+// https://docs.particle.io/scaling/enterprise-features/device-protection/
+//
+struct FactoryData {
+  uint8_t version;
+  byte key[16];
 };
 
 /**
@@ -48,11 +61,18 @@ class Configuration {
 
   bool IsConfigured() { return is_configured_; }
 
-   TerminalConfig* GetTerminal() { return terminal_config_.get(); }
+  TerminalConfig* GetTerminal() { return terminal_config_.get(); }
 
-   MachineConfig* GetMachine() { return machine_config_.get(); }
+  MachineConfig* GetMachine() { return machine_config_.get(); }
+
+  // Whether development terminal keys are used.
+  bool UsesDevKeys();
+
+  // Copyes the terminal key in the [target] buffer.
+  void CopyTerminalKey(std::array<byte, 16>& target);
 
  private:
+  std::unique_ptr<FactoryData> factory_data_ = nullptr;
   std::weak_ptr<IStateEvent> event_sink_;
 
   bool is_configured_ = false;
