@@ -4,6 +4,7 @@
 #include "../state/configuration.h"
 
 using namespace config::nfc;
+using namespace config::tag;
 
 Logger NfcTags::logger(logtag);
 
@@ -54,6 +55,9 @@ enum class NfcState {
   kCardError = 4,
   kNewTag = 5,
 
+  kTerminalAuthenticated = 6,
+  kCloudAuthRequested = 7,
+
 };
 
 // NfcTags internal state machine.
@@ -62,6 +66,7 @@ enum class NfcState {
 struct NfcStateData {
   NfcState state;
   std::shared_ptr<SelectedTag> selected_tag;
+  std::unique_ptr<Buffer> real_uid;
 };
 
 os_thread_return_t NfcTags::NfcThread() {
@@ -79,7 +84,7 @@ void NfcTags::MachineTerminalLoop(NfcStateData &data) {
       auto wait_for_tag = pcd_interface_->WaitForNewTag(50);
       if (!wait_for_tag) return;
 
-auto selected_tag = wait_for_tag.value();
+      auto selected_tag = wait_for_tag.value();
       logger.info("Found tag ID");
       ntag_interface_->SetSelectedTag(selected_tag);
 
@@ -99,31 +104,42 @@ auto selected_tag = wait_for_tag.value();
         return;
       }
 
-      auto is_new_tag_response =
-          ntag_interface_->DNA_Plain_IsNewTag_WithFactoryDefaults();
-      if (!is_new_tag_response) {
-        logger.error("IsNewTag failed %d", is_new_tag_response.error());
-        data.state = NfcState::kCardError;
+      auto auth_result = ntag_interface_->Authenticate(
+          /* key_number = */ key_terminal, terminal_key_bytes_);
+
+      if (auth_result) {
+        // This tag successfully authenticated with the machine auth terminal
+        // key.
+        logger.trace("OWW tag found");
+
+        data.state = NfcState::kTerminalAuthenticated;
+
+      } else {
+        auto is_new_tag_response =
+            ntag_interface_->DNA_Plain_IsNewTag_WithFactoryDefaults();
+        if (!is_new_tag_response) {
+          logger.error("IsNewTag failed %d", is_new_tag_response.error());
+          data.state = NfcState::kCardError;
+        }
+
+        if (is_new_tag_response.value()) {
+          data.state = NfcState::kNewTag;
+          return;
+        }
+
+        uint8_t response_data[29];
+        uint8_t response_length = 29;
+        auto get_version_result = ntag_interface_->DNA_Plain_GetVersion(
+            response_data, &response_length);
+        if (get_version_result != Ntag424::DNA_STATUS_OK) {
+          logger.error("Get Version Failed %d", get_version_result);
+          data.state = NfcState::kCardError;
+          return;
+        }
+
+        logger.info("Version Info: " +
+                    BytesToHexAndAsciiString(response_data, response_length));
       }
-
-      // if (is_new_tag_response.value()) {
-      //   data.state = NfcState::kNewTag;
-      //   return;
-      // }
-
-
-      uint8_t response_data[29];
-      uint8_t response_length = 29;
-      auto get_version_result = ntag_interface_->DNA_Plain_GetVersion(
-          response_data, &response_length);
-      if (get_version_result != Ntag424::DNA_STATUS_OK) {
-        logger.error("Get Version Failed %d", get_version_result);
-        data.state = NfcState::kCardError;
-        return;
-      }
-
-      logger.info("Version Info: " +
-                  BytesToHexAndAsciiString(response_data, response_length));
 
       data.state = NfcState::kCardInRange;
 
@@ -150,7 +166,7 @@ auto selected_tag = wait_for_tag.value();
     case NfcState::kDeselectAndWakeup: {
       return;
     }
-    
+
     case NfcState::kNewTag: {
       return;
     }
@@ -171,6 +187,36 @@ auto selected_tag = wait_for_tag.value();
       data.selected_tag = nullptr;
 
       return;
+    }
+    case NfcState::kTerminalAuthenticated: {
+      auto card_uid_result = ntag_interface_->GetCardUID();
+      if (!card_uid_result) {
+        logger.error("GetCardUID failed %d", card_uid_result.error());
+        data.state = NfcState::kCardError;
+        return;
+      }
+
+      data.real_uid = std::move(card_uid_result.value());
+
+      auto authentication_begin_result =
+          ntag_interface_->AuthenticateWithCloud_Begin(key_authorization);
+      if (!authentication_begin_result) {
+        logger.error("AuthenticateWithCloud_Begin failed %d",
+                     authentication_begin_result.error());
+        data.state = NfcState::kCardError;
+        return;
+      }
+
+      Variant payload;
+      payload.set("uid", Variant(data.real_uid->toHex()));
+      payload.set("challenge",
+                  Variant(authentication_begin_result.value()->toHex()));
+      Particle.publish("firestore/auth-begin", payload);
+      data.state = NfcState::kCloudAuthRequested;
+      return;
+    }
+    case NfcState::kCloudAuthRequested: {
+      // TODO() wait for cloud resposne
     }
   }
 }

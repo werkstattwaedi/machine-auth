@@ -38,4 +38,12 @@ constexpr size_t thread_stack_size = OS_THREAD_STACK_SIZE_DEFAULT_HIGH;
 
 }  // namespace nfc
 
+namespace tag {
+
+constexpr byte key_application = 0;
+constexpr byte key_terminal = 1;
+constexpr byte key_authorization = 2;
+
+}  // namespace tag
+
 }  // namespace config
