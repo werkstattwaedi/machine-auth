@@ -50,8 +50,7 @@ class NfcTags {
 
   std::unique_ptr<PN532> pcd_interface_;
   std::unique_ptr<Ntag424> ntag_interface_;
-  std::array<byte, 16>& terminal_key_bytes_;
-
+  std::array<byte, 16> terminal_key_bytes_;
 
   os_thread_return_t NfcThread();
 

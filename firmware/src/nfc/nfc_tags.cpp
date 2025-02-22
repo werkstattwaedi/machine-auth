@@ -211,7 +211,7 @@ void NfcTags::MachineTerminalLoop(NfcStateData &data) {
       payload.set("uid", Variant(data.real_uid->toHex()));
       payload.set("challenge",
                   Variant(authentication_begin_result.value()->toHex()));
-      Particle.publish("firestore/auth-begin", payload);
+      Particle.publish("token-authentication", payload);
       data.state = NfcState::kCloudAuthRequested;
       return;
     }
