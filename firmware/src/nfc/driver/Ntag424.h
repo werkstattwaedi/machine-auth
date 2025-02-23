@@ -24,6 +24,9 @@ class Ntag424 {
 
   // --- BEGIN: Intended API for next version ---------------------------------
 
+  // Checks whether the card is a new tag, with only factory defaults.
+  tl::expected<bool, DNA_StatusCode> IsNewTagWithFactoryDefaults();
+
   tl::expected<void, DNA_StatusCode> Authenticate(
       byte key_number, const std::array<byte, 16>& key_bytes);
 
@@ -75,12 +78,6 @@ class Ntag424 {
   // Plain communication mode
   //
   /////////////////////////////////////////////////////////////////////////////////////
-
-  // Pings the card by checking
-  DNA_StatusCode DNA_Plain_Ping();
-
-  // Checks whether the card is a new tag, with only factory defaults.
-  tl::expected<bool, DNA_StatusCode> DNA_Plain_IsNewTag_WithFactoryDefaults();
 
   // Warning! "SDMEnabled = false" disables SDM for a file!
   // Use this function if you do not need to use SDM (SDM is disabled by default

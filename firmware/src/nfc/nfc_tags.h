@@ -56,7 +56,15 @@ class NfcTags {
 
   os_thread_return_t NfcThread();
 
-  // machine terminal specific NFC handler
  private:
-  void MachineTerminalLoop(NfcStateData &data);
+  //  Main loop for NfcThread
+  void NfcLoop(NfcStateData &data);
+
+  void WaitForTag(NfcStateData &data);
+
+  bool CheckTagStillAvailable(NfcStateData &data);
+
+  void TagPerformQueuedAction(NfcStateData &data);
+
+  void TagError(NfcStateData &data);
 };

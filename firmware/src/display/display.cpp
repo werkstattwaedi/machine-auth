@@ -218,17 +218,52 @@ os_thread_return_t Display::DisplayThread() {
   lv_obj_set_style_bg_color(lv_screen_active(), lv_color_white(), LV_PART_MAIN);
 
   /*Create a white label, set its text and align it to the center*/
-  lv_obj_t *label = lv_label_create(lv_screen_active());
+  lv_obj_t *config_label = lv_label_create(lv_screen_active());
 
   auto configuration = state_->GetConfiguration();
-  lv_label_set_text(label, configuration->IsConfigured()
-                               ? configuration->GetTerminal()->label.c_str()
-                               : "unconfigured");
-  lv_obj_set_style_text_color(lv_screen_active(), lv_color_hex(0x0000ff),
-                              LV_PART_MAIN);
+  lv_label_set_text(config_label,
+                    configuration->IsConfigured()
+                        ? configuration->GetTerminal()->label.c_str()
+                        : "unconfigured");
+  // lv_obj_set_style_text_color(lv_screen_active(), lv_color_hex(0x0000ff),
+  //                             LV_PART_MAIN);
 
+  /*Create a white label, set its text and align it to the center*/
+  lv_obj_t *tag_label = lv_label_create(lv_screen_active());
+  lv_obj_align(tag_label, LV_ALIGN_TOP_LEFT, 0, 50);
+
+  auto lastState = state_->GetTagState();
   while (true) {
     RenderFrame();
+
+    auto currentState = state_->GetTagState();
+    if (lastState != state_->GetTagState()) {
+      lastState = currentState;
+      String tagState = "?";
+      switch (currentState) {
+        case oww::state::TagState::kNone:
+          tagState = "No tag detected";
+          break;
+        case oww::state::TagState::kReading:
+          tagState = "Lese Tag";
+          break;
+        case oww::state::TagState::kOwwAuthenticated:
+          tagState = "OWW Tag";
+          break;
+        case oww::state::TagState::kOwwAuthorized:
+          tagState = "Authorisiertes Tag";
+          break;
+        case oww::state::TagState::kUnknown:
+          tagState = "Unbekannte Karte";
+          break;
+
+        case oww::state::TagState::kBlank:
+          tagState = "Blank TAG";
+          break;
+      }
+
+      lv_label_set_text(tag_label, tagState);
+    }
 
     uint32_t time_till_next = lv_timer_handler();
     delay(time_till_next);

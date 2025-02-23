@@ -87,32 +87,46 @@ tl::expected<std::shared_ptr<SelectedTag>, PN532Error> PN532::WaitForNewTag(
 
   size_t nfc_id_length = list_passive_target.params[5];
 
-  auto nfc_id = std::make_unique<uint8_t[]>(nfc_id_length);
-  memcpy(nfc_id.get(), list_passive_target.params + 6, nfc_id_length);
+  auto result = std::shared_ptr<SelectedTag>{
+      new SelectedTag{.tg = tg, .nfc_id_length = nfc_id_length}};
 
-  return {std::shared_ptr<SelectedTag>{new SelectedTag{
-      .tg = tg,
-      .nfc_id_length = nfc_id_length,
-      .nfc_id = std::move(nfc_id),
-  }}};
+  memcpy(result->nfc_id, list_passive_target.params + 6, nfc_id_length);
+
+  return {result};
 }
 
-tl::expected<bool, PN532Error> PN532::CheckTagStillAvailable(
-    std::shared_ptr<SelectedTag> tag) {
-  // for now, simply scan
-  auto result = WaitForNewTag(100);
-  if (!result) {
-    return tl::unexpected(result.error());
+tl::expected<bool, PN532Error> PN532::CheckTagStillAvailable() {
+  //  NumTst = 0x06 : Attention Request Test or ISO/IEC14443-4 card presence
+  //  detection
+
+  uint8_t num_tst = 0x06;
+
+  DataFrame diagnose{.command = PN532_COMMAND_DIAGNOSE,
+                     .params =
+                         {
+                             num_tst,
+                         },
+                     .params_length = 1};
+
+  auto call_function = CallFunction(&diagnose, 100, 1);
+  if (!call_function) {
+    logger.error("CheckTagStillAvailable Diagnose failed");
+    return tl::unexpected(call_function.error());
   }
 
-  auto current_tag = result.value();
-  if (current_tag->nfc_id_length != tag->nfc_id_length) {
-    return {false};
+  if (diagnose.params_length != 1) {
+    logger.error("CheckTagStillAvailable Diagnose response wrong length");
+    return tl::unexpected(PN532Error::kEmptyResponse);
   }
 
-  if (memcmp(current_tag->nfc_id.get(), tag->nfc_id.get(),
-             tag->nfc_id_length) != 0) {
-    return {false};
+  uint8_t result = diagnose.params[0];
+
+  if (result != 0x00) {
+    // see "7.1 Error handling"
+    // ../docs/datasheets/Pn532um.pdf#page=67
+
+    logger.error("card presence failed, code %d", result);
+    return { false };
   }
 
   return {true};

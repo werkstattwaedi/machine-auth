@@ -10,10 +10,13 @@ class IStateEvent {
 
 
   // NFC Events
+  // A ISO tag found, not clear whether its the right tag, or its valid
   virtual void OnTagFound() = 0;
-  virtual void OnTagBlank() = 0;
-  virtual void OnTagVerified() = 0;
-  virtual void OnTagRejected() = 0;
+  virtual void OnBlankNtag() = 0;
+  virtual void OnOwwTagAuthenicated() = 0;
+  virtual void OnOwwTagAuthorized() = 0;
+  virtual void OnOwwTagRejected() = 0;
+  virtual void OnUnknownTag() = 0;
   virtual void OnTagRemoved() = 0;
 
 

@@ -15,19 +15,22 @@ struct DataFrame {
 };
 
 struct SelectedTag {
+  // PCD's logical ID of the selected tag
   uint8_t tg;
+
+  // The ISO/IEC14443 Type A tag UID, as seen by the PCD
+  uint8_t nfc_id[7];
   size_t nfc_id_length;
-  std::unique_ptr<uint8_t[]> nfc_id;
 };
 
-enum class PN532Error {
+enum class PN532Error : int {
   kUnspecified = 0,
   kTimeout = 1,
   kEmptyResponse = 2,
   kNoTarget = 3,
   kFirmwareMismatch = 4,
-
 };
+
 class Ntag424;
 
 // Communicates with a PN532 via UART.
@@ -54,8 +57,7 @@ class PN532 {
       system_tick_t timeout_ms = CONCURRENT_WAIT_FOREVER);
 
   // Check whether previously selected tag is still available.
-  tl::expected<bool, PN532Error> CheckTagStillAvailable(
-      std::shared_ptr<SelectedTag> tag);
+  tl::expected<bool, PN532Error> CheckTagStillAvailable();
 
   tl::expected<void, PN532Error> ReleaseTag(std::shared_ptr<SelectedTag> tag);
 

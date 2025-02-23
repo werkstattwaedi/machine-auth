@@ -30,6 +30,32 @@ void generateRndA(byte* backRndA) {
   for (byte i = 0; i < 16; i++) backRndA[i] = random(0xFF);
 }
 
+
+tl::expected<bool, Ntag424::DNA_StatusCode>
+Ntag424::IsNewTagWithFactoryDefaults() {
+  DNA_File file = DNA_FILE_CC;
+  uint16_t lengthToRead = 32;
+  byte* backData = new byte[lengthToRead];
+  memset(backData, 0, lengthToRead);
+  uint16_t backLen = lengthToRead;
+  byte offset = 0;
+  auto status =
+      DNA_Plain_ISOReadBinary(file, lengthToRead, offset, backData, &backLen);
+  if (status != DNA_STATUS_OK) {
+    return tl::unexpected(status);
+  }
+
+  if (memcmp(backData, CC_FILE_AT_DELIVERY, lengthToRead) != 0) {
+    return {false};
+  }
+
+  
+
+
+  return {true};
+}
+
+
 tl::expected<void, Ntag424::DNA_StatusCode> Ntag424::Authenticate(
     byte key_number, const std::array<byte, 16>& key_bytes) {
   byte random_challenge[16];
@@ -77,6 +103,9 @@ Ntag424::GetCardUID() {
 
   return {std::make_unique<Buffer>((const char*)uid_buffer, 7)};
 }
+
+
+
 
 /////////////////////////////////////////////////////////////////////////////////////
 //
@@ -265,40 +294,6 @@ Ntag424::DNA_StatusCode Ntag424::DNA_AuthenticateEV2NonFirst(byte keyNumber,
 //
 /////////////////////////////////////////////////////////////////////////////////////
 
-tl::expected<bool, Ntag424::DNA_StatusCode>
-Ntag424::DNA_Plain_IsNewTag_WithFactoryDefaults() {
-  DNA_File file = DNA_FILE_CC;
-  uint16_t lengthToRead = 32;
-  byte* backData = new byte[lengthToRead];
-  memset(backData, 0, lengthToRead);
-  uint16_t backLen = lengthToRead;
-  byte offset = 0;
-  auto status =
-      DNA_Plain_ISOReadBinary(file, lengthToRead, offset, backData, &backLen);
-  if (status != DNA_STATUS_OK) {
-    return tl::unexpected(status);
-  }
-
-  if (memcmp(backData, CC_FILE_AT_DELIVERY, lengthToRead) != 0) {
-    return {false};
-  }
-
-  return {true};
-}
-
-Ntag424::DNA_StatusCode Ntag424::DNA_Plain_Ping() {
-  byte backData[7];
-  byte backLen = 7;
-
-  Ntag424::DNA_StatusCode dna_statusCode;
-  dna_statusCode = DNA_Plain_GetVersion_native(0x60, 0xAF, backData, &backLen);
-
-  if (dna_statusCode != DNA_STATUS_OK) return dna_statusCode;
-
-  if (backLen != 7) return DNA_WRONG_RESPONSE_LEN;
-
-  return DNA_STATUS_OK;
-}
 
 // Warning! "SDMEnabled = false" disables SDM for a file!
 // Use this function if you do not need to use SDM (SDM is disabled by default

@@ -48,15 +48,10 @@ Status NfcTags::Begin(std::shared_ptr<oww::state::State> state) {
 }
 
 enum class NfcState {
-  kIdle = 0,
-  kCardFound = 1,
-  kCardInRange = 2,
-  kDeselectAndWakeup = 3,
-  kCardError = 4,
-  kNewTag = 5,
-
-  kTerminalAuthenticated = 6,
-  kCloudAuthRequested = 7,
+  kWaitForTag = 0,
+  kTagIdle = 1,
+  kTagUnknown = 2,
+  kTagError = 3,
 
 };
 
@@ -67,219 +62,321 @@ struct NfcStateData {
   NfcState state;
   std::shared_ptr<SelectedTag> selected_tag;
   std::unique_ptr<Buffer> real_uid;
+
+  int error_count;
 };
 
 os_thread_return_t NfcTags::NfcThread() {
-  NfcStateData state_data{.state = NfcState::kIdle};
+  NfcStateData state_data{.state = NfcState::kWaitForTag, .error_count = 0};
 
   while (true) {
-    MachineTerminalLoop(state_data);
+    NfcLoop(state_data);
   }
 }
 
-void NfcTags::MachineTerminalLoop(NfcStateData &data) {
-  logger.trace("MachineTerminalLoop %d", (int)data.state);
+void NfcTags::NfcLoop(NfcStateData &data) {
+  logger.trace("NfcLoop %d", (int)data.state);
   switch (data.state) {
-    case NfcState::kIdle: {
-      auto wait_for_tag = pcd_interface_->WaitForNewTag();
-      if (!wait_for_tag) return;
-
-      auto selected_tag = wait_for_tag.value();
-      logger.info("Found tag ID");
-      ntag_interface_->SetSelectedTag(selected_tag);
-
-      data.state = NfcState::kCardFound;
-      data.selected_tag = selected_tag;
-
-      state_->OnTagFound();
-
+    case NfcState::kWaitForTag:
+      WaitForTag(data);
       return;
-    }
-    case NfcState::kCardFound: {
-      auto select_application_result =
-          ntag_interface_->DNA_Plain_ISOSelectFile_Application();
-      if (select_application_result != Ntag424::DNA_STATUS_OK) {
-        logger.error("ISOSelectFile_Application %d", select_application_result);
-        data.state = NfcState::kCardError;
-        return;
-      }
 
-      auto auth_result = ntag_interface_->Authenticate(
-          /* key_number = */ key_terminal, terminal_key_bytes_);
+    case NfcState::kTagIdle:
+      if (!CheckTagStillAvailable(data)) return;
 
-      if (auth_result) {
-        // This tag successfully authenticated with the machine auth terminal
-        // key.
-        logger.trace("OWW tag found");
-
-        data.state = NfcState::kTerminalAuthenticated;
-
-      } else {
-
-        logger.trace("AUTH failed %d", auth_result.error());
-
-        delay (500);
-        logger.trace("Trying key 0");
-
-        byte key_number = 0;
-        std::array<byte, 16> authKey = {};  // all zeros on delivery
-  
-        auto result = ntag_interface_->Authenticate(key_number, authKey);
-        if (!result) {
-          logger.error("Failed to authenticate key 0 %d", result.error());
-          return;
-        }
-
-        logger.trace("Auth key 0");
-
-
-        delay (5000);
-
-
-
-        auto is_new_tag_response =
-            ntag_interface_->DNA_Plain_IsNewTag_WithFactoryDefaults();
-        if (!is_new_tag_response) {
-          logger.error("IsNewTag failed %d", is_new_tag_response.error());
-          data.state = NfcState::kCardError;
-        }
-
-        // if (is_new_tag_response.value()) {
-        //   data.state = NfcState::kNewTag;
-        //   return;
-        // }
-
-        uint8_t response_data[29];
-        uint8_t response_length = 29;
-        auto get_version_result = ntag_interface_->DNA_Plain_GetVersion(
-            response_data, &response_length);
-        if (get_version_result != Ntag424::DNA_STATUS_OK) {
-          logger.error("Get Version Failed %d", get_version_result);
-          data.state = NfcState::kCardError;
-          return;
-        }
-
-        logger.info("Version Info: " +
-                    BytesToHexAndAsciiString(response_data, response_length));
-      }
-
-      data.state = NfcState::kCardInRange;
-
+      TagPerformQueuedAction(data);
       return;
-    }
 
-    case NfcState::kCardInRange: {
-      logger.info("Pinging");
-      auto ping_result = ntag_interface_->DNA_Plain_Ping();
-
-      if (ping_result != Ntag424::DNA_STATUS_OK) {
-        logger.info("Removed %d", ping_result);
-        state_->OnTagRemoved();
-
-        data.state = NfcState::kCardError;
-        return;
-      }
-
-      // Polling card every 500ms
-      delay(500);
+    case NfcState::kTagUnknown:
+      CheckTagStillAvailable(data);
       return;
-    }
 
-    case NfcState::kDeselectAndWakeup: {
+    case NfcState::kTagError:
+      TagError(data);
       return;
-    }
-
-    case NfcState::kNewTag: {
-      byte key_number = 0;
-      std::array<byte, 16> authKey = {};  // all zeros on delivery
-
-      auto result = ntag_interface_->Authenticate(key_number, authKey);
-      if (!result) {
-        logger.error("Failed to authenticate key 0 %d", result.error());
-        return;
-      }
-
-      byte oldKey[16] = {};  // all zeros on delivery
-      byte newKeyVersion = 1;
-      auto dna_statusCode = ntag_interface_->DNA_Full_ChangeKey(
-          key_terminal, oldKey, terminal_key_bytes_.data(), newKeyVersion);
-      if (dna_statusCode != Ntag424::DNA_STATUS_OK) {
-        logger.error("Failed to change key 1 %d", dna_statusCode);
-        return;
-      }
-
-      logger.info("Key 1 changed sucessfully");
-
-      byte newKey[16] = {
-          0x87, 0x50, 0x25, 0x1e, 0xe1, 0x73, 0xa3, 0x26,
-          0x2d, 0xa3, 0x6e, 0x88, 0x4a, 0xd2, 0x44, 0x02,
-      };  // all zeros on delivery
-
-      dna_statusCode = ntag_interface_->DNA_Full_ChangeKey(
-          key_authorization, oldKey, newKey, newKeyVersion);
-      if (dna_statusCode != Ntag424::DNA_STATUS_OK) {
-        logger.error("Failed to change key 2 %d", dna_statusCode);
-        return;
-      }
-
-      logger.info("Key 2 changed sucessfully");
-
-      auto release_tag = pcd_interface_->ReleaseTag(data.selected_tag);
-      if (release_tag) {
-        data.state = NfcState::kIdle;
-        data.selected_tag = nullptr;
-        return;
-      };
-
-      return;
-    }
-    case NfcState::kCardError: {
-      auto release_tag = pcd_interface_->ReleaseTag(data.selected_tag);
-      if (release_tag) {
-        data.state = NfcState::kIdle;
-        data.selected_tag = nullptr;
-        return;
-      };
-
-      logger.warn("Release failed (%d), resetting PCD ",
-                  (int)release_tag.error());
-
-      pcd_interface_->ResetController();
-
-      data.state = NfcState::kIdle;
-      data.selected_tag = nullptr;
-
-      return;
-    }
-    case NfcState::kTerminalAuthenticated: {
-      auto card_uid_result = ntag_interface_->GetCardUID();
-      if (!card_uid_result) {
-        logger.error("GetCardUID failed %d", card_uid_result.error());
-        data.state = NfcState::kCardError;
-        return;
-      }
-
-      data.real_uid = std::move(card_uid_result.value());
-
-      auto authentication_begin_result =
-          ntag_interface_->AuthenticateWithCloud_Begin(key_authorization);
-      if (!authentication_begin_result) {
-        logger.error("AuthenticateWithCloud_Begin failed %d",
-                     authentication_begin_result.error());
-        data.state = NfcState::kCardError;
-        return;
-      }
-
-      Variant payload;
-      payload.set("uid", Variant(data.real_uid->toHex()));
-      payload.set("challenge",
-                  Variant(authentication_begin_result.value()->toHex()));
-      Particle.publish("terminal-authentication", payload);
-      data.state = NfcState::kCloudAuthRequested;
-      return;
-    }
-    case NfcState::kCloudAuthRequested: {
-      // TODO() wait for cloud resposne
-    }
   }
 }
+
+void NfcTags::WaitForTag(NfcStateData &data) {
+  auto wait_for_tag = pcd_interface_->WaitForNewTag();
+  if (!wait_for_tag) return;
+
+  auto selected_tag = wait_for_tag.value();
+  data.selected_tag = selected_tag;
+  if (logger.isInfoEnabled()) {
+    logger.info(
+        "Found tag with UID %s",
+        BytesToHexString(selected_tag->nfc_id, selected_tag->nfc_id_length)
+            .c_str());
+  }
+
+  ntag_interface_->SetSelectedTag(selected_tag);
+
+  state_->OnTagFound();
+
+  auto select_application_result =
+      ntag_interface_->DNA_Plain_ISOSelectFile_Application();
+  if (select_application_result != Ntag424::DNA_STATUS_OK) {
+    // card communication might be unstable, or the application file cannot be
+    // selected.
+    // FIXME - handle common errors of cards without the application.
+    logger.error("ISOSelectFile_Application %d", select_application_result);
+    data.state = NfcState::kTagError;
+    return;
+  }
+
+  auto terminal_authenticate = ntag_interface_->Authenticate(
+      /* key_number = */ key_terminal, terminal_key_bytes_);
+
+  if (terminal_authenticate.has_value()) {
+    // This tag successfully authenticated with the machine auth terminal key.
+    if (logger.isInfoEnabled()) {
+      logger.info("Authenticated OWW tag with terminal key");
+    }
+
+    data.state = NfcState::kTagIdle;
+    state_->OnOwwTagAuthenicated();
+
+    return;
+  }
+
+  if (logger.isInfoEnabled()) {
+    logger.info("Authenticated tag with terminal key failed with error: %d",
+                terminal_authenticate.error());
+  }
+
+  auto is_new_tag = ntag_interface_->IsNewTagWithFactoryDefaults();
+  if (!is_new_tag.has_value()) {
+    logger.error("IsNewTagWithFactoryDefaults failed %d", is_new_tag.error());
+    data.state = NfcState::kTagError;
+  }
+
+  if (is_new_tag.value()) {
+    state_->OnBlankNtag();
+    data.state = NfcState::kTagIdle;
+    return;
+  }
+
+  state_->OnUnknownTag();
+  data.state = NfcState::kTagUnknown;
+}
+
+boolean NfcTags::CheckTagStillAvailable(NfcStateData &data) {
+  // Poll with 10Hz
+  delay(100);
+
+  auto check_still_available = pcd_interface_->CheckTagStillAvailable();
+  if (!check_still_available) {
+    logger.error("TagIdle::CheckTagStillAvailable returned PCD error: %d",
+                 (int)check_still_available.error());
+    data.state = NfcState::kTagError;
+    return false;
+  }
+
+  // Reset error count when idle; all seems good now.
+  data.error_count = 0;
+
+  if (check_still_available.value()) {
+    // Nothing to do, keep polling
+    return true;
+  }
+
+  auto release_tag = pcd_interface_->ReleaseTag(data.selected_tag);
+  if (!release_tag) {
+    logger.warn("TagIdle::ReleaseTag returned error: %d ",
+                (int)release_tag.error());
+  }
+
+  data.state = NfcState::kWaitForTag;
+  data.selected_tag = nullptr;
+  state_->OnTagRemoved();
+
+  return false;
+}
+
+void NfcTags::TagPerformQueuedAction(NfcStateData &data) {}
+
+void NfcTags::TagError(NfcStateData &data) {
+  if (data.error_count > 3) {
+    // wait for card to disappear
+    return;
+  }
+
+  auto selected_tag = data.selected_tag;
+
+  // Retry re-selecting the tag a couple times.
+  data.error_count++;
+  data.state = NfcState::kWaitForTag;
+  data.selected_tag = nullptr;
+
+  auto release_tag = pcd_interface_->ReleaseTag(selected_tag);
+  if (release_tag) return;
+
+  logger.warn("Release failed (%d), resetting PCD ", (int)release_tag.error());
+  auto reset_controller = pcd_interface_->ResetController();
+  if (!reset_controller) {
+    logger.error("Resetting PCD failed %d", (int)reset_controller.error());
+  }
+}
+
+// void NfcTags::NfcLoop(NfcStateData &data) {
+//   switch (data.state) {
+//     case NfcState::kWaitForTag: {
+//       return;
+//     }
+//     case NfcState::kCardFound: {
+//       auto auth_result = ntag_interface_->Authenticate(
+//           /* key_number = */ key_terminal, terminal_key_bytes_);
+
+//       if (auth_result) {
+//         // This tag successfully authenticated with the machine auth terminal
+//         // key.
+//         logger.trace("OWW tag found");
+
+//         data.state = NfcState::kTerminalAuthenticated;
+
+//       } else {
+//         logger.trace("AUTH failed %d", auth_result.error());
+
+//         delay(500);
+//         logger.trace("Trying key 0");
+
+//         byte key_number = 0;
+//         std::array<byte, 16> authKey = {};  // all zeros on delivery
+
+//         auto result = ntag_interface_->Authenticate(key_number, authKey);
+//         if (!result) {
+//           logger.error("Failed to authenticate key 0 %d", result.error());
+//           return;
+//         }
+
+//         logger.trace("Auth key 0");
+
+//         delay(5000);
+
+//         auto is_new_tag_response =
+//             ntag_interface_->DNA_Plain_IsNewTag_WithFactoryDefaults();
+//         if (!is_new_tag_response) {
+//           logger.error("IsNewTag failed %d", is_new_tag_response.error());
+//           data.state = NfcState::kTagError;
+//         }
+
+//         // if (is_new_tag_response.value()) {
+//         //   data.state = NfcState::kNewTag;
+//         //   return;
+//         // }
+
+//         uint8_t response_data[29];
+//         uint8_t response_length = 29;
+//         auto get_version_result = ntag_interface_->DNA_Plain_GetVersion(
+//             response_data, &response_length);
+//         if (get_version_result != Ntag424::DNA_STATUS_OK) {
+//           logger.error("Get Version Failed %d", get_version_result);
+//           data.state = NfcState::kTagError;
+//           return;
+//         }
+
+//         logger.info("Version Info: " +
+//                     BytesToHexAndAsciiString(response_data,
+//                     response_length));
+//       }
+
+//       data.state = NfcState::kCardInRange;
+
+//       return;
+//     }
+
+//     case NfcState::kNewTag: {
+//       byte key_number = 0;
+//       std::array<byte, 16> authKey = {};  // all zeros on delivery
+
+//       auto result = ntag_interface_->Authenticate(key_number, authKey);
+//       if (!result) {
+//         logger.error("Failed to authenticate key 0 %d", result.error());
+//         return;
+//       }
+
+//       byte oldKey[16] = {};  // all zeros on delivery
+//       byte newKeyVersion = 1;
+//       auto dna_statusCode = ntag_interface_->DNA_Full_ChangeKey(
+//           key_terminal, oldKey, terminal_key_bytes_.data(), newKeyVersion);
+//       if (dna_statusCode != Ntag424::DNA_STATUS_OK) {
+//         logger.error("Failed to change key 1 %d", dna_statusCode);
+//         return;
+//       }
+
+//       logger.info("Key 1 changed sucessfully");
+
+//       byte newKey[16] = {
+//           0x87, 0x50, 0x25, 0x1e, 0xe1, 0x73, 0xa3, 0x26,
+//           0x2d, 0xa3, 0x6e, 0x88, 0x4a, 0xd2, 0x44, 0x02,
+//       };  // all zeros on delivery
+
+//       dna_statusCode = ntag_interface_->DNA_Full_ChangeKey(
+//           key_authorization, oldKey, newKey, newKeyVersion);
+//       if (dna_statusCode != Ntag424::DNA_STATUS_OK) {
+//         logger.error("Failed to change key 2 %d", dna_statusCode);
+//         return;
+//       }
+
+//       logger.info("Key 2 changed sucessfully");
+
+//       auto release_tag = pcd_interface_->ReleaseTag(data.selected_tag);
+//       if (release_tag) {
+//         data.state = NfcState::kWaitForTag;
+//         data.selected_tag = nullptr;
+//         return;
+//       };
+
+//       return;
+//     }
+//     case NfcState::kTagError: {
+//       auto release_tag = pcd_interface_->ReleaseTag(data.selected_tag);
+//       if (release_tag) {
+//         data.state = NfcState::kWaitForTag;
+//         data.selected_tag = nullptr;
+//         return;
+//       };
+
+//       logger.warn("Release failed (%d), resetting PCD ",
+//                   (int)release_tag.error());
+
+//       pcd_interface_->ResetController();
+
+//       data.state = NfcState::kWaitForTag;
+//       data.selected_tag = nullptr;
+
+//       return;
+//     }
+//     case NfcState::kTerminalAuthenticated: {
+//       auto card_uid_result = ntag_interface_->GetCardUID();
+//       if (!card_uid_result) {
+//         logger.error("GetCardUID failed %d", card_uid_result.error());
+//         data.state = NfcState::kTagError;
+//         return;
+//       }
+
+//       data.real_uid = std::move(card_uid_result.value());
+
+//       auto authentication_begin_result =
+//           ntag_interface_->AuthenticateWithCloud_Begin(key_authorization);
+//       if (!authentication_begin_result) {
+//         logger.error("AuthenticateWithCloud_Begin failed %d",
+//                      authentication_begin_result.error());
+//         data.state = NfcState::kTagError;
+//         return;
+//       }
+
+//       Variant payload;
+//       payload.set("uid", Variant(data.real_uid->toHex()));
+//       payload.set("challenge",
+//                   Variant(authentication_begin_result.value()->toHex()));
+//       Particle.publish("terminal-authentication", payload);
+//       data.state = NfcState::kCloudAuthRequested;
+//       return;
+//     }
+//     case NfcState::kCloudAuthRequested: {
+//       // TODO() wait for cloud resposne
+//     }
+//   }
+// }
