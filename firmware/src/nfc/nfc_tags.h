@@ -1,8 +1,10 @@
 #pragma once
 
 #include "../state/state.h"
+#include "driver/Ntag424.h"
+#include "driver/PN532.h"
 #include "libbase.h"
-#include "libnfc.h"
+
 struct NfcStateData;
 class NfcTags {
  public:
