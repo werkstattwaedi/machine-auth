@@ -1,6 +1,6 @@
 #pragma once
 
-#include "libbase.h"
+#include "../../common.h"
 
 #define PN532_LOGTAG "PN532"
 

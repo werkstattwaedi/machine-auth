@@ -4,14 +4,13 @@
  */
 
 #pragma once
-
 #include <AES.h>
 #include <AES_CMAC.h>
 #include <CBC.h>
 #include <CRC32.h>
-#include "PN532.h"
 
-#include "libbase.h"
+#include "../../common.h"
+#include "PN532.h"
 
 class PN532;
 

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "event/state_event.h"
-#include "libbase.h"
+#include "../common.h"
 
 namespace oww::state {
 

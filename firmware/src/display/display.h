@@ -2,8 +2,8 @@
 
 #include <XPT2046_Touch.h>
 
+#include "../common.h"
 #include "../state/state.h"
-#include "libbase.h"
 #include "lvgl.h"
 
 class Display {

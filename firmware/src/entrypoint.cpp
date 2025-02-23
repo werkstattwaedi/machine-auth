@@ -2,7 +2,7 @@
  * @brief Entrypoint for terminal firmware.
  */
 
-#include "Particle.h"
+#include "common.h"
 #include "config.h"
 #include "display/display.h"
 #include "nfc/nfc_tags.h"
