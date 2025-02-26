@@ -37,6 +37,13 @@ class Ntag424 {
 
   tl::expected<std::unique_ptr<Buffer>, DNA_StatusCode> GetCardUID();
 
+  tl::expected<void, DNA_StatusCode> ChangeKey(
+      byte key_number, const std::array<byte, 16>& old_key_bytes,
+      const std::array<byte, 16>& new_key_bytes, byte new_key_version);
+
+  tl::expected<void, DNA_StatusCode> ChangeKey0(
+      const std::array<byte, 16>& new_key_bytes, byte new_key_version);
+
   // --- END: Intended API for next version -----------------------------------
 
  public:

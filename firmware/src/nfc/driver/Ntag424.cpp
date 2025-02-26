@@ -30,7 +30,6 @@ void generateRndA(byte* backRndA) {
   for (byte i = 0; i < 16; i++) backRndA[i] = random(0xFF);
 }
 
-
 tl::expected<bool, Ntag424::DNA_StatusCode>
 Ntag424::IsNewTagWithFactoryDefaults() {
   DNA_File file = DNA_FILE_CC;
@@ -49,12 +48,8 @@ Ntag424::IsNewTagWithFactoryDefaults() {
     return {false};
   }
 
-  
-
-
   return {true};
 }
-
 
 tl::expected<void, Ntag424::DNA_StatusCode> Ntag424::Authenticate(
     byte key_number, const std::array<byte, 16>& key_bytes) {
@@ -104,8 +99,31 @@ Ntag424::GetCardUID() {
   return {std::make_unique<Buffer>((const char*)uid_buffer, 7)};
 }
 
+tl::expected<void, Ntag424::DNA_StatusCode> Ntag424::ChangeKey(
+    byte key_number, const std::array<byte, 16>& old_key_bytes,
+    const std::array<byte, 16>& new_key_bytes, byte new_key_version) {
+  auto result = DNA_Full_ChangeKey(
+      key_number, const_cast<byte*>(old_key_bytes.begin()),
+      const_cast<byte*>(new_key_bytes.begin()), new_key_version);
 
+  if (result != DNA_STATUS_OK) {
+    return tl::unexpected(result);
+  }
 
+  return {};
+}
+
+tl::expected<void, Ntag424::DNA_StatusCode> Ntag424::ChangeKey0(
+    const std::array<byte, 16>& new_key_bytes, byte new_key_version) {
+  auto result = DNA_Full_ChangeKey0(const_cast<byte*>(new_key_bytes.begin()),
+                                    new_key_version);
+
+  if (result != DNA_STATUS_OK) {
+    return tl::unexpected(result);
+  }
+
+  return {};
+}
 
 /////////////////////////////////////////////////////////////////////////////////////
 //
@@ -293,7 +311,6 @@ Ntag424::DNA_StatusCode Ntag424::DNA_AuthenticateEV2NonFirst(byte keyNumber,
 // Plain communication mode
 //
 /////////////////////////////////////////////////////////////////////////////////////
-
 
 // Warning! "SDMEnabled = false" disables SDM for a file!
 // Use this function if you do not need to use SDM (SDM is disabled by default

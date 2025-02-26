@@ -10,10 +10,7 @@ class PersonalizeTag : INfcAction {
                  const std::array<byte, 16>& terminal_key_bytes,
                  const std::array<byte, 16>& card_key_bytes);
 
-  virtual tl::expected<void, Ntag424::DNA_StatusCode> Begin(
-      Ntag424* ntag_interface) override;
-
-  virtual tl::expected<boolean, Ntag424::DNA_StatusCode> Loop() override;
+  virtual tl::expected<ActionResult, Error> Loop() override;
 
  private:
   const std::array<byte, 16> application_key_bytes_;
