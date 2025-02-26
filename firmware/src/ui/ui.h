@@ -1,10 +1,12 @@
 #pragma once
 
 #include <XPT2046_Touch.h>
+#include <lvgl.h>
 
 #include "common.h"
+#include "splashscreen.h"
 #include "state/state.h"
-#include <lvgl.h>
+#include "statusbar.h"
 
 namespace oww::ui {
 
@@ -60,6 +62,10 @@ class UserInterface {
   os_thread_return_t UserInterfaceThread();
 
   void UpdateGui();
+
+ private:
+  std::unique_ptr<SplashScreen> splash_screen_ = nullptr;
+  std::unique_ptr<StatusBar> status_bar_ = nullptr;
 };
 
 }  // namespace oww::ui

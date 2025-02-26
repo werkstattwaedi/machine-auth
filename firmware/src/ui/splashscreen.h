@@ -4,7 +4,7 @@
 
 namespace oww::ui {
 
-class SplashScreen : Component {
+class SplashScreen : public Component {
  public:
   SplashScreen(std::shared_ptr<oww::state::State> state);
   virtual ~SplashScreen();
