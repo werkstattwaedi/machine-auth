@@ -1,39 +1,26 @@
 #pragma once
 
 #include "../../common.h"
+#include "../../state/state.h"
 #include "../driver/Ntag424.h"
+
+class NfcTags;
 
 namespace oww::nfc::action {
 
+struct Complete {};
+struct Suspend {};
 
-
-struct ResultComplete {};
-
-struct ResultInvokeService {
-  String service;
-  std::unique_ptr<Variant> payload;
-};
-
+using Response = std::variant<Complete, Suspend>;
 
 struct Error {
   Ntag424::DNA_StatusCode tag_error;
   String error_message;
 };
 
-using ActionResponse = std::variant<Completed, InvokeService>;
-
 class INfcAction {
  public:
-  virtual tl::expected<void, Ntag424::DNA_StatusCode> Begin(
-      Ntag424* ntag_interface) {
-    ntag_interface_ = ntag_interface;
-    return {};
-  }
-
-  virtual tl::expected<ActionResult, Error> Loop() = 0;
-
- protected:
-  Ntag424* ntag_interface_ = nullptr;
+  virtual tl::expected<Response, Error> Loop(NfcTags& pcd) = 0;
 };
 
 }  // namespace oww::nfc::action

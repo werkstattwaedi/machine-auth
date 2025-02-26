@@ -349,31 +349,7 @@ void NfcTags::TagError(NfcStateData &data) {
 //       return;
 //     }
 //     case NfcState::kTerminalAuthenticated: {
-//       auto card_uid_result = ntag_interface_->GetCardUID();
-//       if (!card_uid_result) {
-//         logger.error("GetCardUID failed %d", card_uid_result.error());
-//         data.state = NfcState::kTagError;
-//         return;
-//       }
-
-//       data.real_uid = std::move(card_uid_result.value());
-
-//       auto authentication_begin_result =
-//           ntag_interface_->AuthenticateWithCloud_Begin(key_authorization);
-//       if (!authentication_begin_result) {
-//         logger.error("AuthenticateWithCloud_Begin failed %d",
-//                      authentication_begin_result.error());
-//         data.state = NfcState::kTagError;
-//         return;
-//       }
-
-//       Variant payload;
-//       payload.set("uid", Variant(data.real_uid->toHex()));
-//       payload.set("challenge",
-//                   Variant(authentication_begin_result.value()->toHex()));
-//       Particle.publish("terminal-authentication", payload);
-//       data.state = NfcState::kCloudAuthRequested;
-//       return;
+//      
 //     }
 //     case NfcState::kCloudAuthRequested: {
 //       // TODO() wait for cloud resposne

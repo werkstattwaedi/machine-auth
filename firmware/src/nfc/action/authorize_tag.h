@@ -6,12 +6,10 @@ namespace oww::nfc::action {
 
 class AuthorizeTag : INfcAction {
  public:
-  AuthorizeTag(const std::array<byte, 16>& terminal_key_bytes);
-
-  virtual tl::expected<ActionResult, Error> Loop() override;
+  virtual tl::expected<Response, Error> Loop(NfcTags& tags) override;
 
  private:
-  const std::array<byte, 16> terminal_key_bytes_;
+  byte uid_[7];
 };
 
 }  // namespace oww::nfc::action

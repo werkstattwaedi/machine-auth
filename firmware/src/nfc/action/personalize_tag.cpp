@@ -2,6 +2,7 @@
 #include "personalize_tag.h"
 
 #include "../../config.h"
+#include "../nfc_tags.h"
 
 namespace oww::nfc::action {
 
@@ -15,25 +16,28 @@ PersonalizeTag::PersonalizeTag(
       terminal_key_bytes_(terminal_key_bytes),
       card_key_bytes_(card_key_bytes) {}
 
-tl::expected<ActionResult, Error> PersonalizeTag::Loop() {
+tl::expected<Response, Error> PersonalizeTag::Loop(NfcTags& tags) {
+  // Factory default keys are all 0
   std::array<byte, 16> factory_default_key = {};
 
   auto result =
-      ntag_interface_->Authenticate(key_application, factory_default_key);
+      tags.ntag_interface_->Authenticate(key_application, factory_default_key);
   if (!result) {
     return tl::unexpected(
         Error{.tag_error = result.error(),
               .error_message = "Failed to authenticate key 0"});
   }
 
-  result = ntag_interface_->ChangeKey(key_terminal, factory_default_key,
+  result =
+      tags.ntag_interface_->ChangeKey(key_terminal, factory_default_key,
                                       terminal_key_bytes_, /* key_version */ 1);
   if (!result) {
     return tl::unexpected(Error{.tag_error = result.error(),
                                 .error_message = "Failed to change key 1"});
   }
 
-  result = ntag_interface_->ChangeKey(key_authorization, factory_default_key,
+  result =
+      tags.ntag_interface_->ChangeKey(key_authorization, factory_default_key,
                                       card_key_bytes_, /* key_version */ 1);
   if (!result) {
     return tl::unexpected(Error{.tag_error = result.error(),
@@ -48,7 +52,7 @@ tl::expected<ActionResult, Error> PersonalizeTag::Loop() {
   //   return;
   // }
 
-  return {Completed{}};
+  return {Complete{}};
 }
 
 }  // namespace oww::nfc::action
