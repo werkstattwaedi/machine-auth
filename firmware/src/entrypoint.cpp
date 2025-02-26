@@ -3,10 +3,9 @@
  */
 
 #include "common.h"
-#include "config.h"
-#include "display/display.h"
 #include "nfc/nfc_tags.h"
 #include "state/state.h"
+#include "ui/ui.h"
 
 // Let Device OS manage the connection to the Particle Cloud
 SYSTEM_MODE(AUTOMATIC);
@@ -26,11 +25,6 @@ using namespace oww::state;
 std::shared_ptr<State> state_;
 
 void setup() {
-#if defined(DEVELOPMENT_BUILD)
-  // Await the terminal connections, so that all log messages during setup are
-  // not skipped.
-  waitFor(Serial.isConnected, 5000);
-#endif
   Log.info("machine-auth-firmware starting");
 
   {
@@ -40,9 +34,17 @@ void setup() {
     state_->Begin(std::move(config));
   }
 
-  Status display_setup_result =
-      Display::instance().Begin(state_);
-  Log.info("Display Status = %d", (int)display_setup_result);
+  auto display_setup_result = oww::ui::UserInterface::instance().Begin(state_);
+
+#if defined(DEVELOPMENT_BUILD)
+  // Await the terminal connections, so that all log messages during setup are
+  // not skipped.
+  waitFor(Serial.isConnected, 5000);
+#endif
+
+  if (!display_setup_result) {
+    Log.info("Failed to start display = %d", (int)display_setup_result.error());
+  }
 
   Status nfc_setup_result = NfcTags::instance().Begin(state_);
   Log.info("NFC Status = %d", (int)nfc_setup_result);

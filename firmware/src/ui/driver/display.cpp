@@ -1,8 +1,9 @@
 #include "display.h"
 
-#include "../config.h"
-#include "../state/configuration.h"
-#include "drivers/display/lcd/lv_lcd_generic_mipi.h"
+#include <drivers/display/lcd/lv_lcd_generic_mipi.h>
+
+#include "config.h"
+#include "state/configuration.h"
 
 // clang-format off
 
@@ -111,7 +112,7 @@ static const uint8_t init_cmd_list[] = {
 
 // clang-format on
 
-using namespace config::display;
+using namespace config::ui::display;
 
 Logger display_log(logtag);
 
@@ -132,14 +133,7 @@ Display::Display()
 
 Display::~Display() {}
 
-Status Display::Begin(std::shared_ptr<oww::state::State> state) {
-  if (thread_ != nullptr) {
-    display_log.error("Display::Begin() Already initialized");
-    return Status::kError;
-  }
-
-  state_ = state;
-
+Status Display::Begin() {
   pinMode(pin_reset, OUTPUT);
   pinMode(pin_chipselect, OUTPUT);
   pinMode(pin_datacommand, OUTPUT);
@@ -196,8 +190,6 @@ Status Display::Begin(std::shared_ptr<oww::state::State> state) {
   lv_display_set_buffers(display_, buffer_1, buffer_2, buf_size,
                          LV_DISPLAY_RENDER_MODE_PARTIAL);
 
-  os_mutex_create(&mutex_);
-
   touchscreen_interface_.begin();
 
   lv_indev_t *indev = lv_indev_create();
@@ -207,71 +199,14 @@ Status Display::Begin(std::shared_ptr<oww::state::State> state) {
     Display::instance().ReadTouchInput(indev, data);
   });
 
-  thread_ = new Thread(
-      "Display", [this]() { DisplayThread(); }, thread_priority,
-      thread_stack_size);
-
   return Status::kOk;
 }
 
-os_thread_return_t Display::DisplayThread() {
-  lv_obj_set_style_bg_color(lv_screen_active(), lv_color_white(), LV_PART_MAIN);
-
-  /*Create a white label, set its text and align it to the center*/
-  lv_obj_t *config_label = lv_label_create(lv_screen_active());
-
-  auto configuration = state_->GetConfiguration();
-  lv_label_set_text(config_label,
-                    configuration->IsConfigured()
-                        ? configuration->GetTerminal()->label.c_str()
-                        : "unconfigured");
-  // lv_obj_set_style_text_color(lv_screen_active(), lv_color_hex(0x0000ff),
-  //                             LV_PART_MAIN);
-
-  /*Create a white label, set its text and align it to the center*/
-  lv_obj_t *tag_label = lv_label_create(lv_screen_active());
-  lv_obj_align(tag_label, LV_ALIGN_TOP_LEFT, 0, 50);
-
-  auto lastState = state_->GetTagState();
-  while (true) {
-    RenderFrame();
-
-    auto currentState = state_->GetTagState();
-    if (lastState != state_->GetTagState()) {
-      lastState = currentState;
-      String tagState = "?";
-      switch (currentState) {
-        case oww::state::TagState::kNone:
-          tagState = "No tag detected";
-          break;
-        case oww::state::TagState::kReading:
-          tagState = "Lese Tag";
-          break;
-        case oww::state::TagState::kOwwAuthenticated:
-          tagState = "OWW Tag";
-          break;
-        case oww::state::TagState::kOwwAuthorized:
-          tagState = "Authorisiertes Tag";
-          break;
-        case oww::state::TagState::kUnknown:
-          tagState = "Unbekannte Karte";
-          break;
-
-        case oww::state::TagState::kBlank:
-          tagState = "Blank TAG";
-          break;
-      }
-
-      lv_label_set_text(tag_label, tagState);
-    }
-
-    uint32_t time_till_next = lv_timer_handler();
-    delay(time_till_next);
-    display_log.info("Frame complete");
-  }
+os_thread_return_t Display::RenderLoop() {
+  uint32_t time_till_next = lv_timer_handler();
+  delay(time_till_next);
+  display_log.info("Frame complete");
 }
-
-void Display::RenderFrame() {}
 
 void Display::SendCommandDirect(const uint8_t *cmd, size_t cmd_size,
                                 const uint8_t *param, size_t param_size) {

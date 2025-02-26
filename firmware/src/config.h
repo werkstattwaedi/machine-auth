@@ -7,16 +7,19 @@
 
 namespace config {
 
-namespace display {
-
-constexpr auto logtag = "Display";
-constexpr auto resolution_horizontal = 240;
-constexpr auto resolution_vertical = 320;
+namespace ui {
+constexpr auto logtag = "UI";
 
 constexpr os_thread_prio_t thread_priority = 3;
 // Stack size is recommended to be 8k+
 // https:  // docs.lvgl.io/master/intro/introduction.html#requirements
 constexpr size_t thread_stack_size = 8 * 1024;
+
+namespace display {
+
+constexpr auto logtag = "Display";
+constexpr auto resolution_horizontal = 240;
+constexpr auto resolution_vertical = 320;
 
 constexpr int8_t pin_reset = D6;
 constexpr int8_t pin_chipselect = D5;
@@ -25,6 +28,8 @@ constexpr int8_t pin_backlight = D7;
 constexpr int8_t pin_touch_chipselect = S3;
 constexpr int8_t pin_touch_irq = S4;
 }  // namespace display
+
+}  // namespace ui
 
 namespace nfc {
 
