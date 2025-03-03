@@ -30,9 +30,9 @@ class Display {
   SPISettings spi_settings_;
   XPT2046_Touchscreen touchscreen_interface_;
 
-  void SendCommandDirect(const uint8_t *cmd, size_t cmd_size,
+  void SendCommand(const uint8_t *cmd, size_t cmd_size,
                          const uint8_t *param, size_t param_size);
-  void SendCommandDma(const uint8_t *cmd, size_t cmd_size, const uint8_t *param,
+  void SendColor(const uint8_t *cmd, size_t cmd_size, const uint8_t *param,
                       size_t param_size);
 
   void ReadTouchInput(lv_indev_t *indev, lv_indev_data_t *data);

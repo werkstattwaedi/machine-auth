@@ -59,12 +59,10 @@ void UserInterface::UpdateGui() {
     if (millis() > 10000) {
       splash_screen_ = nullptr;
       status_bar_ = std::make_unique<StatusBar>(lv_screen_active(), state_);
-        
-      lv_obj_set_size(status_bar_->Root(), lv_pct(100), 50);
-      lv_obj_align(status_bar_->Root(), LV_ALIGN_TOP_LEFT, 0, 0);
 
+      lv_obj_set_size(*status_bar_, lv_pct(100), 50);
+      lv_obj_align(*status_bar_, LV_ALIGN_TOP_LEFT, 0, 0);
     }
-
   }
 }
 

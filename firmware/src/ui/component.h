@@ -13,7 +13,8 @@ class Component {
 
   virtual void Render() = 0;
 
-  // operator lv_obj_t*();
+  operator lv_obj_t*();
+
   lv_obj_t* Root();
 
  protected:

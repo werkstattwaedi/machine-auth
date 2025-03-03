@@ -66,7 +66,8 @@
         "thread": "cpp",
         "cinttypes": "cpp",
         "typeinfo": "cpp",
-        "variant": "cpp"
+        "variant": "cpp",
+        "lv_lcd_generic_mipi.h": "c"
     },
     "C_Cpp.clang_format_fallbackStyle": "Google",
     "C_Cpp.formatting": "clangFormat"
