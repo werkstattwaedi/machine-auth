@@ -5,6 +5,7 @@
 
 #include "common.h"
 #include "splashscreen.h"
+#include "tagstatus.h"
 #include "state/state.h"
 #include "statusbar.h"
 
@@ -66,6 +67,7 @@ class UserInterface {
  private:
   std::unique_ptr<SplashScreen> splash_screen_ = nullptr;
   std::unique_ptr<StatusBar> status_bar_ = nullptr;
+  std::unique_ptr<TagStatus> tag_status_ = nullptr;
 };
 
 }  // namespace oww::ui

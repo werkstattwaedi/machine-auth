@@ -12,7 +12,7 @@ class StatusBar : public Component {
   virtual void Render() override;
 
  private:
-  lv_obj_t* container_;
+  lv_obj_t* machine_label_ = nullptr;
 };
 
 }  // namespace oww::ui

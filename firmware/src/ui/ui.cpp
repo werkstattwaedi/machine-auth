@@ -55,14 +55,26 @@ os_thread_return_t UserInterface::UserInterfaceThread() {
 void UserInterface::UpdateGui() {
   if (splash_screen_) {
     splash_screen_->Render();
-
-    if (millis() > 10000) {
-      splash_screen_ = nullptr;
-      status_bar_ = std::make_unique<StatusBar>(lv_screen_active(), state_);
-
-      lv_obj_set_size(*status_bar_, lv_pct(100), 50);
-      lv_obj_align(*status_bar_, LV_ALIGN_TOP_LEFT, 0, 0);
+    if (millis() < 2000) {
+      return;
     }
+
+    splash_screen_ = nullptr;
+    status_bar_ = std::make_unique<StatusBar>(lv_screen_active(), state_);
+
+    lv_obj_set_size(*status_bar_, lv_pct(100), 50);
+    lv_obj_align(*status_bar_, LV_ALIGN_TOP_LEFT, 0, 0);
+
+    tag_status_ = std::make_unique<TagStatus>(lv_screen_active(), state_);
+
+    lv_obj_set_size(*tag_status_, lv_pct(100), 100);
+    lv_obj_align(*tag_status_, LV_ALIGN_TOP_LEFT, 0, 50);
+  }
+  if (status_bar_) {
+    status_bar_->Render();
+  }
+  if (tag_status_) {
+    tag_status_->Render();
   }
 }
 
