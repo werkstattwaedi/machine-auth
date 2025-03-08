@@ -1,19 +1,42 @@
 /**
- * Import function triggers from their respective submodules:
- *
- * import {onCall} from "firebase-functions/v2/https";
- * import {onDocumentWritten} from "firebase-functions/v2/firestore";
- *
- * See a full list of supported triggers at https://firebase.google.com/docs/functions
  */
 
-import {onRequest} from "firebase-functions/v2/https";
+import { onMessagePublished } from "firebase-functions/v2/pubsub";
 import * as logger from "firebase-functions/logger";
+import { defineSecret } from "firebase-functions/params";
+import Particle from "particle-api-js";
 
-// Start writing functions
-// https://firebase.google.com/docs/functions/typescript
+const particle = new Particle();
+const particleAccessToken = defineSecret("PARTICLE_ACCESS_TOKEN");
 
-// export const helloWorld = onRequest((request, response) => {
-//   logger.info("Hello logs!", {structuredData: true});
-//   response.send("Hello from Firebase!");
-// });
+interface BlankTag {
+  type: "blank-tag";
+  uid: string;
+}
+
+type TerminalPayload = BlankTag;
+
+export const terminalEvent = onMessagePublished<TerminalPayload>(
+  { topic: "terminal", secrets: [particleAccessToken] },
+  (event) => {
+    const message = event.data.message;
+    const deviceId = message.attributes["device_id"];
+    const payload = message.json;
+
+    logger.warn(`Received event from ${deviceId}`, payload);
+
+    switch (payload.type) {
+    case "blank-tag":
+      logger.warn(`Blank Tag ${payload.uid}`);
+
+      particle.callFunction({
+        deviceId,
+        name: "State",
+        argument: JSON.stringify({ response: "OK" }),
+        auth: particleAccessToken.value(),
+      });
+
+      break;
+    }
+  },
+);
