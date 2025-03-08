@@ -19,7 +19,7 @@ struct SelectedTag {
   uint8_t tg;
 
   // The ISO/IEC14443 Type A tag UID, as seen by the PCD
-  uint8_t nfc_id[7];
+  std::array<uint8_t, 7> nfc_id;
   size_t nfc_id_length;
 };
 

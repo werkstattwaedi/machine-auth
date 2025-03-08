@@ -90,7 +90,8 @@ tl::expected<std::shared_ptr<SelectedTag>, PN532Error> PN532::WaitForNewTag(
   auto result = std::shared_ptr<SelectedTag>{
       new SelectedTag{.tg = tg, .nfc_id_length = nfc_id_length}};
 
-  memcpy(result->nfc_id, list_passive_target.params + 6, nfc_id_length);
+  std::copy_n(std::begin(list_passive_target.params) + 6, nfc_id_length,
+              std::begin(result->nfc_id));
 
   return {result};
 }
@@ -126,7 +127,7 @@ tl::expected<bool, PN532Error> PN532::CheckTagStillAvailable() {
     // ../docs/datasheets/Pn532um.pdf#page=67
 
     logger.error("card presence failed, code %d", result);
-    return { false };
+    return {false};
   }
 
   return {true};

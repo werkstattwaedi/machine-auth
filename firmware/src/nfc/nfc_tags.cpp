@@ -104,10 +104,10 @@ void NfcTags::WaitForTag(NfcStateData &data) {
   auto selected_tag = wait_for_tag.value();
   data.selected_tag = selected_tag;
   if (logger.isInfoEnabled()) {
-    logger.info(
-        "Found tag with UID %s",
-        BytesToHexString(selected_tag->nfc_id, selected_tag->nfc_id_length)
-            .c_str());
+    // logger.info(
+    //     "Found tag with UID %s",
+    //     BytesToHexString(selected_tag->nfc_id, selected_tag->nfc_id_length)
+    //         .c_str());
   }
 
   ntag_interface_->SetSelectedTag(selected_tag);
@@ -151,8 +151,8 @@ void NfcTags::WaitForTag(NfcStateData &data) {
     data.state = NfcState::kTagError;
   }
 
-  if (is_new_tag.value()) {
-    state_->OnBlankNtag();
+  if (is_new_tag.value() && selected_tag->nfc_id_length == 7) {
+    state_->OnBlankNtag(selected_tag->nfc_id);
     data.state = NfcState::kTagIdle;
     return;
   }
@@ -349,7 +349,7 @@ void NfcTags::TagError(NfcStateData &data) {
 //       return;
 //     }
 //     case NfcState::kTerminalAuthenticated: {
-//      
+//
 //     }
 //     case NfcState::kCloudAuthRequested: {
 //       // TODO() wait for cloud resposne
