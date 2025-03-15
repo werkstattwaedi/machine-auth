@@ -1,7 +1,7 @@
 #pragma once
 
-#include "event/state_event.h"
 #include "../common.h"
+#include "event/state_event.h"
 
 namespace oww::state {
 
@@ -68,11 +68,10 @@ class Configuration {
   // Whether development terminal keys are used.
   bool UsesDevKeys();
 
-  // Copyes the terminal key in the [target] buffer.
-  void CopyTerminalKey(std::array<byte, 16>& target);
+  std::array<std::byte, 16> GetTerminalKey();
 
  private:
-  std::unique_ptr<FactoryData> factory_data_ = nullptr;
+  std::array<std::byte, 16> terminal_key_;
   std::weak_ptr<IStateEvent> event_sink_;
 
   bool is_configured_ = false;

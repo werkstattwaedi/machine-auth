@@ -52,12 +52,13 @@ Ntag424::IsNewTagWithFactoryDefaults() {
 }
 
 tl::expected<void, Ntag424::DNA_StatusCode> Ntag424::Authenticate(
-    byte key_number, const std::array<byte, 16>& key_bytes) {
+    Ntag424Key key_number, const std::array<std::byte, 16>& key_bytes) {
   byte random_challenge[16];
   generateRndA(random_challenge);
 
-  auto result =
-      DNA_AuthenticateEV2First(key_number, key_bytes.begin(), random_challenge);
+  auto result = DNA_AuthenticateEV2First(
+      static_cast<byte>(key_number),
+      reinterpret_cast<const byte*>(key_bytes.begin()), random_challenge);
   if (result != DNA_STATUS_OK) {
     return tl::unexpected(result);
   }
@@ -65,8 +66,8 @@ tl::expected<void, Ntag424::DNA_StatusCode> Ntag424::Authenticate(
   return {};
 }
 
-tl::expected<std::unique_ptr<AuthChallenge>, Ntag424::DNA_StatusCode>
-Ntag424::AuthenticateWithCloud_Begin(byte key_number) {
+tl::expected<std::array<std::byte, 16>, Ntag424::DNA_StatusCode>
+Ntag424::AuthenticateWithCloud_Begin(Ntag424Key key_number) {
   byte back_data[18];
   byte back_len = 18;
 
@@ -84,27 +85,32 @@ Ntag424::AuthenticateWithCloud_Begin(byte key_number) {
     return tl::unexpected(DNA_WRONG_RESPONSE_LEN);
   }
 
-  return {std::make_unique<AuthChallenge>((const char*)back_data, 16)};
+  auto auth_challenge = std::array<std::byte, 16>{};
+  memcpy(auth_challenge.data(), back_data, 16);
+
+  return {auth_challenge};
 }
 
-tl::expected<std::unique_ptr<Buffer>, Ntag424::DNA_StatusCode>
+tl::expected<std::array<std::byte, 7>, Ntag424::DNA_StatusCode>
 Ntag424::GetCardUID() {
-  byte uid_buffer[7];
-
-  auto card_uid_status = DNA_Full_GetCardUID(uid_buffer);
+  std::array<std::byte, 7> uid;
+  auto card_uid_status =
+      DNA_Full_GetCardUID(reinterpret_cast<byte*>(uid.data()));
   if (card_uid_status != Ntag424::DNA_STATUS_OK) {
     return tl::unexpected(card_uid_status);
   }
 
-  return {std::make_unique<Buffer>((const char*)uid_buffer, 7)};
+  return {uid};
 }
 
 tl::expected<void, Ntag424::DNA_StatusCode> Ntag424::ChangeKey(
-    byte key_number, const std::array<byte, 16>& old_key_bytes,
-    const std::array<byte, 16>& new_key_bytes, byte new_key_version) {
+    Ntag424Key key_number, const std::array<std::byte, 16>& old_key_bytes,
+    const std::array<std::byte, 16>& new_key_bytes, byte new_key_version) {
   auto result = DNA_Full_ChangeKey(
-      key_number, const_cast<byte*>(old_key_bytes.begin()),
-      const_cast<byte*>(new_key_bytes.begin()), new_key_version);
+      key_number,
+      const_cast<byte*>(reinterpret_cast<const byte*>(old_key_bytes.begin())),
+      const_cast<byte*>(reinterpret_cast<const byte*>(new_key_bytes.begin())),
+      new_key_version);
 
   if (result != DNA_STATUS_OK) {
     return tl::unexpected(result);
@@ -114,9 +120,10 @@ tl::expected<void, Ntag424::DNA_StatusCode> Ntag424::ChangeKey(
 }
 
 tl::expected<void, Ntag424::DNA_StatusCode> Ntag424::ChangeKey0(
-    const std::array<byte, 16>& new_key_bytes, byte new_key_version) {
-  auto result = DNA_Full_ChangeKey0(const_cast<byte*>(new_key_bytes.begin()),
-                                    new_key_version);
+    const std::array<std::byte, 16>& new_key_bytes, byte new_key_version) {
+  auto result = DNA_Full_ChangeKey0(
+      const_cast<byte*>(reinterpret_cast<const byte*>(new_key_bytes.begin())),
+      new_key_version);
 
   if (result != DNA_STATUS_OK) {
     return tl::unexpected(result);

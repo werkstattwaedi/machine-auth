@@ -71,5 +71,8 @@
         "iostream": "cpp"
     },
     "C_Cpp.clang_format_fallbackStyle": "Google",
-    "C_Cpp.formatting": "clangFormat"
+    "C_Cpp.formatting": "clangFormat",
+    "editor.defaultFormatter": null,
+    "prettier.enable": false,
+    "files.autoSave": "onFocusChange"
 }

@@ -2,24 +2,17 @@
 
 #include "../common.h"
 #include "../state/state.h"
-#include "action/action.h"
 #include "driver/Ntag424.h"
 #include "driver/PN532.h"
 
 struct NfcStateData;
-
-namespace oww::nfc::action {
-// Forward declarations for actions to get friend access.
-// TODO(michschn) Implement this properly.
-class AuthorizeTag;
-class PersonalizeTag;
-}  // namespace oww::nfc::action
 
 class NfcTags {
  public:
   static NfcTags &instance();
 
   Status Begin(std::shared_ptr<oww::state::State> state);
+
   /**
    * @brief Locks the mutex that protects shared resources
    *
@@ -57,13 +50,10 @@ class NfcTags {
   os_thread_return_t NfcThread();
 
  private:
-  friend oww::nfc::action::AuthorizeTag;
-  friend oww::nfc::action::PersonalizeTag;
-
   std::shared_ptr<oww::state::State> state_ = nullptr;
   std::shared_ptr<PN532> pcd_interface_;
   std::shared_ptr<Ntag424> ntag_interface_;
-  std::array<byte, 16> terminal_key_bytes_;
+  std::array<std::byte, 16> terminal_key_bytes_;
 
  private:
   //  Main loop for NfcThread

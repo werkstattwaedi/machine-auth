@@ -37,16 +37,18 @@ Configuration::Configuration(std::weak_ptr<IStateEvent> event_sink)
     : event_sink_(event_sink) {}
 
 Status Configuration::Begin() {
-  factory_data_ = std::make_unique<FactoryData>();
+  auto factory_data = std::make_unique<FactoryData>();
 
-  EEPROM.get(0, *(factory_data_.get()));
-  if (factory_data_->version == 0xFF) {
+  EEPROM.get(0, *(factory_data.get()));
+  if (factory_data->version == 0xFF) {
     logger.warn("FactoryData EEPROM is invalid. Flashing DEV_FACTORY_DATA");
     // This device never saw factory data before. Write the dev data.
     // TODO(michschn) fail on production devices instead.
     EEPROM.put(0, DEV_FACTORY_DATA);
-    memcpy(factory_data_.get(), &DEV_FACTORY_DATA, sizeof(FactoryData));
+    memcpy(factory_data.get(), &DEV_FACTORY_DATA, sizeof(FactoryData));
   }
+
+  memcpy(terminal_key_.data(), factory_data->key, 16);
 
   if (UsesDevKeys()) {
     logger.warn(
@@ -118,11 +120,11 @@ Status Configuration::Begin() {
 }
 
 bool Configuration::UsesDevKeys() {
-  return memcmp(factory_data_->key, DEV_FACTORY_DATA.key, 16) == 0;
+  return memcmp(terminal_key_.begin(), DEV_FACTORY_DATA.key, 16) == 0;
 }
 
-void Configuration::CopyTerminalKey(std::array<byte, 16>& target) {
-  memcpy(target.data(), factory_data_->key, 16);
+std::array<std::byte, 16> Configuration::GetTerminalKey() {
+  return terminal_key_;
 }
 
 }  // namespace oww::state

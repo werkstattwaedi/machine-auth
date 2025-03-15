@@ -5,6 +5,8 @@
 #define DEVELOPMENT_BUILD 1
 #endif
 
+enum Ntag424Key : byte;
+
 namespace config {
 
 namespace ui {
@@ -45,9 +47,11 @@ constexpr size_t thread_stack_size = OS_THREAD_STACK_SIZE_DEFAULT_HIGH;
 
 namespace tag {
 
-constexpr byte key_application = 0;
-constexpr byte key_terminal = 1;
-constexpr byte key_authorization = 2;
+constexpr Ntag424Key key_application{0};
+constexpr Ntag424Key key_terminal{1};
+constexpr Ntag424Key key_authorization{2};
+constexpr Ntag424Key key_reserved_1{3};
+constexpr Ntag424Key key_reserved_2{4};
 
 }  // namespace tag
 

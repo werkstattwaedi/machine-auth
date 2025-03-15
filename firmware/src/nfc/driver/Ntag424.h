@@ -14,7 +14,7 @@
 
 class PN532;
 
-using AuthChallenge = Buffer;
+enum Ntag424Key : byte;
 
 class Ntag424 {
  public:
@@ -28,21 +28,21 @@ class Ntag424 {
   tl::expected<bool, DNA_StatusCode> IsNewTagWithFactoryDefaults();
 
   tl::expected<void, DNA_StatusCode> Authenticate(
-      byte key_number, const std::array<byte, 16>& key_bytes);
+      Ntag424Key key_number, const std::array<std::byte, 16>& key_bytes);
 
-  tl::expected<std::unique_ptr<AuthChallenge>, DNA_StatusCode>
-  AuthenticateWithCloud_Begin(byte keyNumber);
+  tl::expected<std::array<std::byte, 16>, DNA_StatusCode>
+  AuthenticateWithCloud_Begin(Ntag424Key keyNumber);
 
   // --- Authenticated API - move to different interface?
 
-  tl::expected<std::unique_ptr<Buffer>, DNA_StatusCode> GetCardUID();
+  tl::expected<std::array<std::byte, 7>, DNA_StatusCode> GetCardUID();
 
   tl::expected<void, DNA_StatusCode> ChangeKey(
-      byte key_number, const std::array<byte, 16>& old_key_bytes,
-      const std::array<byte, 16>& new_key_bytes, byte new_key_version);
+      Ntag424Key key_number, const std::array<std::byte, 16>& old_key_bytes,
+      const std::array<std::byte, 16>& new_key_bytes, byte new_key_version);
 
   tl::expected<void, DNA_StatusCode> ChangeKey0(
-      const std::array<byte, 16>& new_key_bytes, byte new_key_version);
+      const std::array<std::byte, 16>& new_key_bytes, byte new_key_version);
 
   // --- END: Intended API for next version -----------------------------------
 
