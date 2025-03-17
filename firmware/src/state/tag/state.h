@@ -13,7 +13,7 @@ struct Authenticated {
 };
 struct Unknown {};
 
-using State = std::variant<Idle, Detected, Authenticated, authorize::State,
-                           personalize::State, Unknown>;
+using State = std::variant<Idle, Detected, Authenticated, Authorize,
+                           Personalize, Unknown>;
 
 }  // namespace oww::state::tag

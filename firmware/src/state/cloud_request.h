@@ -13,7 +13,7 @@ class CloudRequest {
 
  private:
   int request_counter_ = 1;
-  virtual int HandleTerminalResponse(String response_payload) = 0;
+  int HandleTerminalResponse(String response_payload);
 
  protected:
   void Begin();

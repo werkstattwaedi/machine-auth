@@ -1,8 +1,35 @@
 #include "personalize.h"
 
 #include "../../config.h"
+#include "common/hex_util.h"
 
-namespace oww::state::tag::personalize {
+namespace oww::state::tag {
+std::optional<Personalize> StateLoop(Personalize state,
+                                     CloudRequest &cloud_interface) {
+  auto nested_state = state.state;
+  if (auto wait_state =
+          std::get_if<tag::personalize::Wait>(nested_state.get())) {
+    if (millis() < wait_state->timeout) return {};
+
+    Variant payload;
+    auto hex_uid_string = BytesToHexString(state.tag_uid);
+    payload.set("uid", Variant(hex_uid_string.c_str()));
+    if (auto request_result =
+            cloud_interface.SendTerminalRequest("presonalization", payload)) {
+      auto result = state;
+      result.state = std::make_shared<tag::personalize::State>(
+          tag::personalize::RequestedKeys{.request_id =
+                                              request_result.value()});
+
+      return result;
+    } else {
+      // TODO: limit retry
+    }
+  }
+  return {};
+}
+
+namespace personalize {
 using namespace config::tag;
 
 State PersonalizeTag(Ntag424 &ntag_interface, std::array<std::byte, 7> tag_uid,
@@ -39,4 +66,5 @@ State PersonalizeTag(Ntag424 &ntag_interface, std::array<std::byte, 7> tag_uid,
   return {Completed{}};
 }
 
-}  // namespace oww::state::tag::personalize
+}  // namespace personalize
+}  // namespace oww::state::tag

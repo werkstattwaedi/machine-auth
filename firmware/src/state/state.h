@@ -1,14 +1,14 @@
 #pragma once
 
 #include "../common.h"
+#include "cloud_request.h"
 #include "configuration.h"
 #include "event/state_event.h"
-#include "cloud_request.h"
 #include "tag/state.h"
 
 namespace oww::state {
 
-class State : public event::IStateEvent, public CloudRequest  {
+class State : public event::IStateEvent, public CloudRequest {
  public:
   Status Begin(std::unique_ptr<Configuration> configuration);
 
@@ -30,14 +30,9 @@ class State : public event::IStateEvent, public CloudRequest  {
   std::unique_ptr<Configuration> configuration_ = nullptr;
   std::shared_ptr<tag::State> tag_state_;
 
- private:
-  void AuthorizationLoop(tag::Authorize& authorize_state);
-  bool AuthorizationResponse(RequestId requestId, Variant payload);
-
-  std::optional<tag::Personalize> PersonalizationLoop(
-      tag::Personalize personalize_state);
-  tl::expected<tag::Personalize, ErrorType> PersonalizationResponse(
-      RequestId requestId, Variant payload);
+ protected:
+  virtual int DispatchTerminalResponse(String command, RequestId request_id,
+                                       VariantMap& payload) override;
 
  private:
   int request_counter_ = 1;

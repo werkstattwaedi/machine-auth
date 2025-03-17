@@ -2,11 +2,9 @@
 
 #include "../config.h"
 #include "../state/configuration.h"
-#include "action/personalize_tag.h"
 
 using namespace config::nfc;
 using namespace config::tag;
-
 
 Logger NfcTags::logger(logtag);
 

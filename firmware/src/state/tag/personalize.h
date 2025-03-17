@@ -1,8 +1,8 @@
 #pragma once
 
 #include "../../common.h"
-#include "../state_request.h"
 #include "nfc/driver/Ntag424.h"
+#include "state/cloud_request.h"
 
 namespace oww::state::tag {
 
@@ -30,14 +30,19 @@ struct Failed {};
 
 using State = std::variant<Wait, RequestedKeys, UpdateTag, Completed, Failed>;
 
-State PersonalizeTag(Ntag424 &ntag_interface, std::array<std::byte, 7> tag_uid,
-                     UpdateTag update_tag);
-
 }  // namespace personalize
 
 struct Personalize {
   std::array<std::byte, 7> tag_uid;
   std::shared_ptr<personalize::State> state;
 };
+
+std::optional<Personalize> StateLoop(Personalize state,
+                                     CloudRequest &cloud_interface);
+
+// std::optional<Personalize> ProcessLoop(Personalize personalize_state);
+// std::optional<Personalize> ProcessResponse(Personalize personalize_state,
+//                                            RequestId requestId,
+//                                            Variant payload);
 
 }  // namespace oww::state::tag

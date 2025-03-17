@@ -16,7 +16,7 @@ struct DataFrame {
 
 struct SelectedTag {
   // PCD's logical ID of the selected tag
-  std::byte tg;
+  uint8_t tg;
 
   // The ISO/IEC14443 Type A tag UID, as seen by the PCD
   std::array<std::byte, 7> nfc_id;
