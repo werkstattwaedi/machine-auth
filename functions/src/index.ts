@@ -20,40 +20,50 @@ const particleAccessToken = defineSecret("PARTICLE_ACCESS_TOKEN");
 const diversificationMasterKey = defineSecret("DIVERSIFICATION_MASTER_KEY");
 const diversificationSystemName = defineString("DIVERSIFICATION_SYSTEM_NAME");
 
-interface BlankTag {
-  type: "blank-tag";
+interface Personalization {
+  type: "presonalization";
+  requestId: string;
   uid: string;
 }
 
-type TerminalPayload = BlankTag;
+type TerminalRequestPayload = Personalization;
 
-export const terminalEvent = onMessagePublished<TerminalPayload>(
-  { topic: "terminal", secrets: [particleAccessToken] },
+export const terminalEvent = onMessagePublished<TerminalRequestPayload>(
+  {
+    topic: "terminal",
+    secrets: [particleAccessToken, diversificationMasterKey],
+  },
   (event) => {
     const message = event.data.message;
     const deviceId = message.attributes["device_id"];
     const payload = message.json;
 
-    logger.warn(`Received event from ${deviceId}`, payload);
+    logger.info(`Received request from ${deviceId}`, payload);
 
     switch (payload.type) {
-    case "blank-tag": {
-      logger.warn(`Blank Tag ${payload.uid}`);
-      const keys = diversifyKeys(
-        diversificationMasterKey.value(),
-        diversificationSystemName.value(),
-        payload.uid
-      );
+      case "presonalization": {
+        logger.info(`Personalization for ${payload.uid}`);
+        const keys = diversifyKeys(
+          diversificationMasterKey.value(),
+          diversificationSystemName.value(),
+          payload.uid
+        );
 
-      particle.callFunction({
-        deviceId,
-        name: "State",
-        argument: JSON.stringify({ keys }),
-        auth: particleAccessToken.value(),
-      });
+        particle.callFunction({
+          deviceId,
+          name: "TerminalResponse",
+          argument: JSON.stringify({
+            type: payload.type,
+            requestId: payload.requestId,
+            keys,
+          }),
+          auth: particleAccessToken.value(),
+        });
 
-      break;
-    }
+        break;
+      }
+      case "presonalization": {
+
     }
   }
 );

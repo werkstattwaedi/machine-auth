@@ -12,6 +12,12 @@ export type KeyName =
   | "authorization"
   | "reserved1"
   | "reserved2";
+const keyNames: Array<KeyName> = [
+  "application",
+  "authorization",
+  "reserved1",
+  "reserved2",
+];
 
 export type NtagKeys = {
   [k in KeyName]: string;
@@ -25,44 +31,19 @@ export function diversifyKeys(
 ): NtagKeys {
   const masterKeyBytes = toMasterKeyBytes(masterKey);
   const subkeys = generateSubkeys(masterKeyBytes);
-
   const uidBytes = toUidBytes(uid);
+  const result: Partial<NtagKeys> = {};
 
-  const application = computeDiversifiedKey(
-    masterKeyBytes,
-    uidBytes,
-    "application",
-    systemName,
-    subkeys
-  );
-  const authorization = computeDiversifiedKey(
-    masterKeyBytes,
-    uidBytes,
-    "authorization",
-    systemName,
-    subkeys
-  );
-  const reserved1 = computeDiversifiedKey(
-    masterKeyBytes,
-    uidBytes,
-    "reserved1",
-    systemName,
-    subkeys
-  );
-  const reserved2 = computeDiversifiedKey(
-    masterKeyBytes,
-    uidBytes,
-    "reserved2",
-    systemName,
-    subkeys
-  );
-
-  return {
-    application,
-    authorization,
-    reserved1,
-    reserved2,
-  };
+  for (const keyName of keyNames) {
+    result[keyName] = computeDiversifiedKey(
+      masterKeyBytes,
+      uidBytes,
+      keyName,
+      systemName,
+      subkeys
+    );
+  }
+  return result as NtagKeys;
 }
 
 /** Generates the specified diversified key for the tag. */
