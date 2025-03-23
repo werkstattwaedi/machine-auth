@@ -1,24 +1,32 @@
 #pragma once
 
+#include <map>
+#include <type_traits>
+
 #include "../common.h"
 
 namespace oww::state {
 
-enum class RequestId : int { kInvalid = 0 };
+struct CloudResponse {
+  const system_tick_t deadline = CONCURRENT_WAIT_FOREVER;
+  std::optional<tl::expected<VariantMap, ErrorType>> result;
+};
 
 class CloudRequest {
  public:
-  tl::expected<RequestId, ErrorType> SendTerminalRequest(String command,
-                                                         Variant& payload);
+  std::shared_ptr<CloudResponse> SendTerminalRequest(
+      String command, Variant& payload,
+      system_tick_t timeout_ms = CONCURRENT_WAIT_FOREVER);
 
  private:
   int request_counter_ = 1;
+  std::map<int, std::shared_ptr<CloudResponse>> inflight_requests_;
+
   int HandleTerminalResponse(String response_payload);
+  void HandleTerminalFailure(int request_id, particle::Error error);
 
  protected:
   void Begin();
-  virtual int DispatchTerminalResponse(String command, RequestId request_id,
-                                       VariantMap& payload) = 0;
 };
 
 }  // namespace oww::state

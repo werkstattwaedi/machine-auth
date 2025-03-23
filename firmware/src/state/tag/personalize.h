@@ -12,8 +12,8 @@ struct Wait {
   const system_tick_t timeout = CONCURRENT_WAIT_FOREVER;
 };
 
-struct RequestedKeys {
-  const RequestId request_id = RequestId::kInvalid;
+struct KeyDiversification {
+  const std::shared_ptr<CloudResponse> response;
 };
 
 struct UpdateTag {
@@ -26,23 +26,26 @@ struct UpdateTag {
 
 struct Completed {};
 
-struct Failed {};
+struct Failed {
+  const ErrorType error;
+  const String message;
+};
 
-using State = std::variant<Wait, RequestedKeys, UpdateTag, Completed, Failed>;
+using State =
+    std::variant<Wait, KeyDiversification, UpdateTag, Completed, Failed>;
 
 }  // namespace personalize
 
 struct Personalize {
   std::array<std::byte, 7> tag_uid;
   std::shared_ptr<personalize::State> state;
+
+  Personalize WithNestedState(personalize::State nested_state);
 };
 
 std::optional<Personalize> StateLoop(Personalize state,
                                      CloudRequest &cloud_interface);
 
-// std::optional<Personalize> ProcessLoop(Personalize personalize_state);
-// std::optional<Personalize> ProcessResponse(Personalize personalize_state,
-//                                            RequestId requestId,
-//                                            Variant payload);
+std::optional<Personalize> NfcLoop(Personalize state, Ntag424 &ntag_interface);
 
 }  // namespace oww::state::tag

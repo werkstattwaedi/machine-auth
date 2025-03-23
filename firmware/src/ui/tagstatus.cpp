@@ -5,6 +5,7 @@
 namespace oww::ui {
 
 using namespace oww::state;
+using namespace oww::state::tag;
 
 TagStatus::TagStatus(lv_obj_t* parent, std::shared_ptr<oww::state::State> state)
     : Component(state) {
@@ -29,31 +30,31 @@ void TagStatus::Render() {
   boolean led_on = true;
   auto led_color = lv_palette_main(LV_PALETTE_GREY);
 
-  std::visit(
-      [&](auto&& arg) {
-        using T = std::decay_t<decltype(arg)>;
-        if constexpr (std::is_same_v<T, oww::state::tag::Idle>) {
-          state_string = "Kein Tag";
-          led_on = false;
-        } else if constexpr (std::is_same_v<T, oww::state::tag::Detected>) {
-          state_string = "Lese Tag";
-          led_color = lv_palette_main(LV_PALETTE_DEEP_ORANGE);
-        } else if constexpr (std::is_same_v<T, oww::state::tag::Authenticated>) {
-          state_string = "OWW Tag";
-          led_color = lv_palette_main(LV_PALETTE_ORANGE);
-        } else if constexpr (std::is_same_v<T, oww::state::tag::Authorize>) {
-          state_string = "Authorisiertes Tag";
-          led_color = lv_palette_main(LV_PALETTE_GREEN);
-        } else if constexpr (std::is_same_v<T, oww::state::tag::Unknown>) {
-          state_string = "Unbekannte Karte";
-        } else if constexpr (std::is_same_v<T, oww::state::tag::Personalize>) {
+  std::visit(overloaded{
+                 [&](Idle state) {
+                   state_string = "Kein Tag";
+                   led_on = false;
+                 },
+                 [&](Detected state) {
+                   state_string = "Lese Tag";
+                   led_color = lv_palette_main(LV_PALETTE_DEEP_ORANGE);
+                 },
+                 [&](Authenticated state) {
+                   state_string = "OWW Tag";
+                   led_color = lv_palette_main(LV_PALETTE_ORANGE);
+                 },
+                 [&](Authorize state) {
+                   state_string = "Authorisiertes Tag";
+                   led_color = lv_palette_main(LV_PALETTE_GREEN);
+                 },
+                 [&](Unknown state) { state_string = "Unbekannte Karte"; },
+                 [&](Personalize state) {
+                   state_string = "Personalisiere...";
+                   led_color = lv_palette_main(LV_PALETTE_LIGHT_BLUE);
+                 },
 
-          
-          state_string = "Personalisiere...";
-          led_color = lv_palette_main(LV_PALETTE_LIGHT_BLUE);
-        }
-      },
-      *last_state_);
+             },
+             *(current_state.get()));
 
   lv_label_set_text(status_label, state_string);
   lv_led_set_color(status_led, led_color);

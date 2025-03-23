@@ -19,11 +19,11 @@ struct NtagChallenge {
 };
 
 struct AwaitCloudChallenge {
-  const RequestId request_id = RequestId::kInvalid;
+  const std::shared_ptr<CloudResponse> response;
 };
 
 struct AwaitAuthPart2Response {
-  const RequestId request_id = RequestId::kInvalid;
+  const std::shared_ptr<CloudResponse> response;
 };
 
 struct Succeeded {};
@@ -31,7 +31,8 @@ struct Succeeded {};
 struct Rejected {};
 
 struct Failed {
-  Ntag424::DNA_StatusCode tag_status;
+  const Ntag424::DNA_StatusCode tag_status;
+  const String message;
 };
 using State = std::variant<Start, NtagChallenge, AwaitCloudChallenge,
                            AwaitAuthPart2Response, Succeeded, Rejected, Failed>;
@@ -49,7 +50,5 @@ std::optional<Authorize> StateLoop(Authorize authorize_state,
                                    CloudRequest &cloud_interface);
 std::optional<Authorize> NfcLoop(Authorize authorize_state,
                                  Ntag424 &ntag_interface);
-std::optional<Authorize> ProcessResponse(Authorize state, RequestId requestId,
-                                         Variant payload);
 
 }  // namespace oww::state::tag

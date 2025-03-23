@@ -30,16 +30,6 @@ class State : public event::IStateEvent, public CloudRequest {
   std::unique_ptr<Configuration> configuration_ = nullptr;
   std::shared_ptr<tag::State> tag_state_;
 
- protected:
-  virtual int DispatchTerminalResponse(String command, RequestId request_id,
-                                       VariantMap& payload) override;
-
- private:
-  int request_counter_ = 1;
-  tl::expected<RequestId, ErrorType> SendTerminalRequest(String command,
-                                                         Variant& payload);
-  int ProcessTerminalResponse(String response_payload);
-
  public:
   virtual void OnConfigChanged() override;
 
