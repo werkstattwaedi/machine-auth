@@ -2,6 +2,7 @@
 
 #include "../config.h"
 #include "../state/configuration.h"
+#include "common/hex_util.h"
 
 using namespace config::nfc;
 using namespace config::tag;
@@ -96,16 +97,15 @@ void NfcTags::NfcLoop(NfcStateData &data) {
 }
 
 void NfcTags::WaitForTag(NfcStateData &data) {
+  
   auto wait_for_tag = pcd_interface_->WaitForNewTag();
   if (!wait_for_tag) return;
 
   auto selected_tag = wait_for_tag.value();
   data.selected_tag = selected_tag;
   if (logger.isInfoEnabled()) {
-    // logger.info(
-    //     "Found tag with UID %s",
-    //     BytesToHexString(selected_tag->nfc_id, selected_tag->nfc_id_length)
-    //         .c_str());
+    logger.info("Found tag with UID %s",
+                BytesToHexString(selected_tag->nfc_id).c_str());
   }
 
   ntag_interface_->SetSelectedTag(selected_tag);
@@ -200,7 +200,17 @@ boolean NfcTags::CheckTagStillAvailable(NfcStateData &data) {
 }
 
 void NfcTags::TagPerformQueuedAction(NfcStateData &data) {
+  using namespace oww::state;
   auto tag_state = state_->GetTagState();
+  if (auto state = std::get_if<tag::Authorize>(tag_state.get())) {
+    if (auto new_state = tag::NfcLoop(*state, *ntag_interface_.get())) {
+      state_->OnNewState(new_state.value());
+    }
+  } else if (auto state = std::get_if<tag::Personalize>(tag_state.get())) {
+    if (auto new_state = tag::NfcLoop(*state, *ntag_interface_.get())) {
+      state_->OnNewState(new_state.value());
+    }
+  }
 }
 
 void NfcTags::TagError(NfcStateData &data) {

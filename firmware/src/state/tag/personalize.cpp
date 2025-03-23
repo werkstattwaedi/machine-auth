@@ -12,6 +12,7 @@ using namespace config::tag;
 std::optional<Personalize> OnWait(Personalize state, Wait &wait,
                                   CloudRequest &cloud_interface) {
   if (millis() < wait.timeout) return {};
+  
 
   Variant payload;
   auto hex_uid_string = BytesToHexString(state.tag_uid);

@@ -15,6 +15,7 @@ std::shared_ptr<CloudResponse> CloudRequest::SendTerminalRequest(
   auto response_container =
       std::make_shared<CloudResponse>(CloudResponse{.deadline = deadline});
   auto requestId = request_counter_++;
+  Log.info("SendTerminalRequest(%s):%d", command.c_str(), requestId);
 
   inflight_requests_[requestId] = response_container;
 
@@ -35,6 +36,8 @@ int CloudRequest::HandleTerminalResponse(String response_payload) {
   auto type = payload.get("type").asString();
   auto requestId = payload.get("requestId").asInt();
 
+  Log.info("HandleTerminalResponse(%s:%d)", type.c_str(), requestId);
+
   auto extracted = inflight_requests_.extract(requestId);
   if (extracted.empty()) return -1;
 
@@ -44,6 +47,8 @@ int CloudRequest::HandleTerminalResponse(String response_payload) {
 
 void CloudRequest::HandleTerminalFailure(int request_id,
                                          particle::Error error) {
+  Log.error("HandleTerminalFailure(%d, %s)", request_id, error.message());
+
   auto extracted = inflight_requests_.extract(request_id);
   if (extracted.empty()) return;
 

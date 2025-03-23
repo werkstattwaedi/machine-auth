@@ -1,6 +1,8 @@
 #pragma once
 
 #include "../../common.h"
+#include "../tag/authorize.h"
+#include "../tag/personalize.h"
 
 namespace oww::state::event {
 
@@ -15,6 +17,9 @@ class IStateEvent {
   virtual void OnTagAuthenicated(std::array<std::byte, 7> uid) = 0;
   virtual void OnUnknownTag() = 0;
   virtual void OnTagRemoved() = 0;
+
+  virtual void OnNewState(oww::state::tag::Authorize state) = 0;
+  virtual void OnNewState(oww::state::tag::Personalize state) = 0;
 };
 
 }  // namespace oww::state::event
