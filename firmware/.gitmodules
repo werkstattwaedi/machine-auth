@@ -13,3 +13,6 @@
 [submodule "lib/AES_CMAC"]
 	path = lib/AES_CMAC
 	url = https://github.com/werkstattwaedi/AES_CMAC.git
+[submodule "test/UnitTestLib"]
+	path = test/UnitTestLib
+	url = https://github.com/rickkas7/UnitTestLib

@@ -32,7 +32,6 @@ class NfcTags {
   std::shared_ptr<oww::state::State> state_ = nullptr;
   std::shared_ptr<PN532> pcd_interface_;
   std::shared_ptr<Ntag424> ntag_interface_;
-  std::array<std::byte, 16> terminal_key_bytes_;
 
  private:
   //  Main loop for NfcThread

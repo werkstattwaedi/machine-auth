@@ -14,8 +14,7 @@ std::shared_ptr<CloudResponse> CloudRequest::SendTerminalRequest(
 
   auto response_container =
       std::make_shared<CloudResponse>(CloudResponse{.deadline = deadline});
-  auto requestId = request_counter_++;
-  Log.info("SendTerminalRequest(%s):%d", command.c_str(), requestId);
+  auto requestId = String(request_counter_++);
 
   inflight_requests_[requestId] = response_container;
 
@@ -34,20 +33,24 @@ int CloudRequest::HandleTerminalResponse(String response_payload) {
   auto payload = Variant::fromJSON(response_payload).asMap();
 
   auto type = payload.get("type").asString();
-  auto requestId = payload.get("requestId").asInt();
-
-  Log.info("HandleTerminalResponse(%s:%d)", type.c_str(), requestId);
+  auto requestId = payload.get("requestId").asString();
 
   auto extracted = inflight_requests_.extract(requestId);
-  if (extracted.empty()) return -1;
+  if (extracted.empty()) {
+    Log.error("HandleTerminalResponse(%s:%s) not found", type.c_str(),
+              requestId.c_str());
+
+    return -1;
+  }
 
   extracted.mapped()->result = payload;
   return 0;
 }
 
-void CloudRequest::HandleTerminalFailure(int request_id,
+void CloudRequest::HandleTerminalFailure(String request_id,
                                          particle::Error error) {
-  Log.error("HandleTerminalFailure(%d, %s)", request_id, error.message());
+  Log.error("HandleTerminalFailure(%s, %s)", request_id.c_str(),
+            error.message());
 
   auto extracted = inflight_requests_.extract(request_id);
   if (extracted.empty()) return;

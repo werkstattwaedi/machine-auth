@@ -3,7 +3,9 @@
 #include <type_traits>
 
 #include "../../config.h"
-#include "common/hex_util.h"
+#include "common/byte_array.h"
+#include "state/cloud_request.h"
+#include "state/configuration.h"
 
 namespace oww::state::tag {
 using namespace authorize;
@@ -26,8 +28,8 @@ std::optional<Authorize> OnStart(Authorize state, Start &start,
 std::optional<Authorize> OnNtagChallenge(Authorize state,
                                          NtagChallenge &challenge,
                                          CloudRequest &cloud_interface) {
-  auto encoded_challenge = BytesToHexString(challenge.auth_challenge);
-  auto encoded_uid = BytesToHexString(state.tag_uid);
+  auto encoded_challenge = ToHexString(challenge.auth_challenge);
+  auto encoded_uid = ToHexString(state.tag_uid);
   Variant payload;
   payload.set("uid", Variant(encoded_uid.c_str()));
   payload.set("challenge", Variant(encoded_challenge.c_str()));
@@ -39,6 +41,7 @@ std::optional<Authorize> OnNtagChallenge(Authorize state,
 // ---- Loop dispatchers ------------------------------------------------------
 
 std::optional<Authorize> StateLoop(Authorize state,
+                                   Configuration &configuration,
                                    CloudRequest &cloud_interface) {
   if (auto nested = std::get_if<NtagChallenge>(state.state.get())) {
     return OnNtagChallenge(state, *nested, cloud_interface);

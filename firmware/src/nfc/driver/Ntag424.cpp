@@ -141,7 +141,7 @@ tl::expected<void, Ntag424::DNA_StatusCode> Ntag424::ChangeKey0(
 Ntag424::DNA_StatusCode Ntag424::DNA_BasicTransceive(byte* sendData,
                                                      byte sendLen,
                                                      byte* backData,
-                                                     byte* backLen, byte pcb) {
+                                                     byte* backLen) {
   if (!selected_tag_) {
     return DNA_STATUS_ERROR;
   }
@@ -183,9 +183,9 @@ Ntag424::DNA_StatusCode Ntag424::DNA_AuthenticateEV2First(byte keyNumber,
     return (DNA_StatusCode)statusCode;
   }
 
-  if (backData[backLen - 2] != 0x91 || backData[backLen - 1] != 0xAF)
+  if (backData[backLen - 2] != 0x91 || backData[backLen - 1] != 0xAF) {
     return DNA_InterpretErrorCode(&backData[backLen - 2]);
-
+  }
   if (backLen != 18) return DNA_WRONG_RESPONSE_LEN;
 
   byte iv[16] = {0};
@@ -219,8 +219,9 @@ Ntag424::DNA_StatusCode Ntag424::DNA_AuthenticateEV2First(byte keyNumber,
     return (DNA_StatusCode)statusCode;
   }
 
-  if (backData[backLen - 2] != 0x91 || backData[backLen - 1] != 0x00)
+  if (backData[backLen - 2] != 0x91 || backData[backLen - 1] != 0x00) {
     return DNA_InterpretErrorCode(&backData[backLen - 2]);
+  }
 
   if (backLen != 34) return DNA_WRONG_RESPONSE_LEN;
 

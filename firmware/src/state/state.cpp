@@ -1,7 +1,7 @@
 
 #include "state.h"
 
-#include "common/hex_util.h"
+#include "common/byte_array.h"
 
 namespace oww::state {
 
@@ -22,13 +22,13 @@ Status State::Begin(std::unique_ptr<Configuration> configuration) {
 
 void State::Loop() {
   if (auto state = std::get_if<tag::Authorize>(tag_state_.get())) {
-    if (auto new_state =
-            tag::StateLoop(*state, *static_cast<CloudRequest*>(this))) {
+    if (auto new_state = tag::StateLoop(*state, *configuration_.get(),
+                                        *static_cast<CloudRequest*>(this))) {
       OnNewState(new_state.value());
     }
   } else if (auto state = std::get_if<tag::Personalize>(tag_state_.get())) {
-    if (auto new_state =
-            tag::StateLoop(*state, *static_cast<CloudRequest*>(this))) {
+    if (auto new_state = tag::StateLoop(*state, *configuration_.get(),
+                                        *static_cast<CloudRequest*>(this))) {
       OnNewState(new_state.value());
     }
   }
@@ -45,7 +45,7 @@ void State::OnTagFound() {
 void State::OnBlankNtag(std::array<std::byte, 7> uid) {
   logger.info("tag_state: OnBlankNtag");
 
-  tag_state_ = std::make_shared<tag::State>(tag::Personalize{
+  OnNewState(tag::Personalize{
       .tag_uid = uid,
       .state = std::make_shared<tag::personalize::State>(tag::personalize::Wait{
           .timeout = millis() + 3000,
@@ -116,7 +116,9 @@ void State::OnNewState(oww::state::tag::Personalize state) {
               logger.info("tag_state: Personalize::Completed");
             },
             [](Failed state) {
-              logger.info("tag_state: Personalize::Failed");
+              logger.info(
+                  "tag_state: Personalize::Failed tag_status:%d, message %s",
+                  (int)state.error, state.message.c_str());
             }},
         *(state.state.get()));
   }

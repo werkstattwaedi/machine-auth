@@ -2,7 +2,13 @@
 
 #include "../../common.h"
 #include "nfc/driver/Ntag424.h"
-#include "state/cloud_request.h"
+
+
+namespace oww::state {
+class CloudRequest;
+class Configuration;
+class CloudResponse;
+}  // namespace oww::state
 
 namespace oww::state::tag {
 
@@ -44,6 +50,7 @@ struct Personalize {
 };
 
 std::optional<Personalize> StateLoop(Personalize state,
+                                     Configuration &configuration,
                                      CloudRequest &cloud_interface);
 
 std::optional<Personalize> NfcLoop(Personalize state, Ntag424 &ntag_interface);

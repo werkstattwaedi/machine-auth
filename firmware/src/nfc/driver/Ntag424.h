@@ -71,8 +71,7 @@ class Ntag424 {
   /////////////////////////////////////////////////////////////////////////////////////
 
   DNA_StatusCode DNA_BasicTransceive(byte* sendData, byte sendLen,
-                                     byte* backData, byte* backLen,
-                                     byte pcb = 2);
+                                     byte* backData, byte* backLen);
 
   DNA_StatusCode DNA_AuthenticateEV2First(byte keyNumber, const byte* key,
                                           byte* rndA);

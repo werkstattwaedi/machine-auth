@@ -2,7 +2,7 @@
 
 #include "../config.h"
 #include "../state/configuration.h"
-#include "common/hex_util.h"
+#include "common/byte_array.h"
 
 using namespace config::nfc;
 using namespace config::tag;
@@ -97,7 +97,6 @@ void NfcTags::NfcLoop(NfcStateData &data) {
 }
 
 void NfcTags::WaitForTag(NfcStateData &data) {
-  
   auto wait_for_tag = pcd_interface_->WaitForNewTag();
   if (!wait_for_tag) return;
 
@@ -105,7 +104,7 @@ void NfcTags::WaitForTag(NfcStateData &data) {
   data.selected_tag = selected_tag;
   if (logger.isInfoEnabled()) {
     logger.info("Found tag with UID %s",
-                BytesToHexString(selected_tag->nfc_id).c_str());
+                ToHexString(selected_tag->nfc_id).c_str());
   }
 
   ntag_interface_->SetSelectedTag(selected_tag);
@@ -124,7 +123,8 @@ void NfcTags::WaitForTag(NfcStateData &data) {
   }
 
   auto terminal_authenticate = ntag_interface_->Authenticate(
-      /* key_number = */ key_terminal, terminal_key_bytes_);
+      /* key_number = */ key_terminal,
+      state_->GetConfiguration()->GetTerminalKey());
 
   if (terminal_authenticate.has_value()) {
     // This tag successfully authenticated with the machine auth terminal key.

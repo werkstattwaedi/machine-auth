@@ -20,10 +20,10 @@ class CloudRequest {
 
  private:
   int request_counter_ = 1;
-  std::map<int, std::shared_ptr<CloudResponse>> inflight_requests_;
+  std::map<String, std::shared_ptr<CloudResponse>> inflight_requests_;
 
   int HandleTerminalResponse(String response_payload);
-  void HandleTerminalFailure(int request_id, particle::Error error);
+  void HandleTerminalFailure(String request_id, particle::Error error);
 
  protected:
   void Begin();
