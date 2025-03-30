@@ -34,8 +34,33 @@ std::optional<Authorize> OnNtagChallenge(Authorize state,
   payload.set("uid", Variant(encoded_uid.c_str()));
   payload.set("challenge", Variant(encoded_challenge.c_str()));
   return state.WithNestedState(
-      AwaitCloudChallenge{.response = cloud_interface.SendTerminalRequest(
-                              "authenticate-part1", payload)});
+      CloudChallenge{.response = cloud_interface.SendTerminalRequest(
+                         "authorize-part1", payload)});
+}
+
+std::optional<Authorize> OnCloudChallenge(Authorize state,
+                                          CloudChallenge &clound_challenge,
+                                          Ntag424 &ntag_interface) {
+  auto response = clound_challenge.response;
+  if (!response->result.has_value()) {
+    if (millis() < response->deadline) return {};
+    return state.WithNestedState(Failed{.error = ErrorType::kTimeout});
+  }
+  
+  auto request_result = response->result.value();
+  if (!request_result) {
+    return state.WithNestedState(Failed{.error = request_result.error()});
+  }
+
+  auto payload = request_result.value();
+  auto keys = payload.get("keys").asMap();
+
+  auto application_key =
+      MakeBytesFromHexStringVariant<16>(keys.get("application"));
+
+
+
+
 }
 
 // ---- Loop dispatchers ------------------------------------------------------
@@ -53,14 +78,15 @@ std::optional<Authorize> StateLoop(Authorize state,
 std::optional<Authorize> NfcLoop(Authorize state, Ntag424 &ntag_interface) {
   if (auto nested = std::get_if<Start>(state.state.get())) {
     return OnStart(state, *nested, ntag_interface);
+  } else if (auto nested = std::get_if<CloudChallenge>(state.state.get())) {
+    return OnCloudChallenge(state, *nested, ntag_interface);
+
+    return {};
   }
 
-  return {};
-}
-
-Authorize Authorize::WithNestedState(authorize::State nested_state) {
-  return Authorize{.tag_uid = this->tag_uid,
-                   .state = std::make_shared<State>(nested_state)};
-}
+  Authorize Authorize::WithNestedState(authorize::State nested_state) {
+    return Authorize{.tag_uid = this->tag_uid,
+                     .state = std::make_shared<State>(nested_state)};
+  }
 
 }  // namespace oww::state::tag

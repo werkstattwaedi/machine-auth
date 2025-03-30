@@ -55,7 +55,15 @@ void State::OnBlankNtag(std::array<std::byte, 7> uid) {
 void State::OnTagAuthenicated(std::array<std::byte, 7> uid) {
   logger.info("tag_state: OnTagAuthenicated");
 
-  tag_state_ = std::make_shared<tag::State>(tag::Authenticated{.tag_uid = uid});
+  // TODO:
+  // - check tap-out
+  // - check pre-authorized.
+
+  OnNewState(tag::Authorize{
+      .tag_uid = uid,
+      .state = std::make_shared<tag::authorize::State>(tag::authorize::Start{
+          .key_number = config::tag::key_authorization})});
+
 }
 
 void State::OnUnknownTag() {

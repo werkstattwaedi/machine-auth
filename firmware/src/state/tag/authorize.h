@@ -23,7 +23,7 @@ struct NtagChallenge {
   std::array<std::byte, 16> auth_challenge;
 };
 
-struct AwaitCloudChallenge {
+struct CloudChallenge {
   const std::shared_ptr<CloudResponse> response;
 };
 
@@ -36,10 +36,11 @@ struct Succeeded {};
 struct Rejected {};
 
 struct Failed {
+  const ErrorType error;
   const Ntag424::DNA_StatusCode tag_status;
   const String message;
 };
-using State = std::variant<Start, NtagChallenge, AwaitCloudChallenge,
+using State = std::variant<Start, NtagChallenge, CloudChallenge,
                            AwaitAuthPart2Response, Succeeded, Rejected, Failed>;
 
 }  // namespace authorize
