@@ -9,24 +9,34 @@ import { defineSecret, defineString } from "firebase-functions/params";
 import Particle from "particle-api-js";
 import { initializeApp } from "firebase-admin/app";
 
-// import { getFirestore } from "firebase-admin/firestore";
+import { getFirestore } from "firebase-admin/firestore";
 import { diversifyKeys } from "./key_diversification";
 
 initializeApp();
 
-// const db = getFirestore();
+const db = getFirestore();
 const particle = new Particle();
 const particleAccessToken = defineSecret("PARTICLE_ACCESS_TOKEN");
 const diversificationMasterKey = defineSecret("DIVERSIFICATION_MASTER_KEY");
 const diversificationSystemName = defineString("DIVERSIFICATION_SYSTEM_NAME");
 
 interface Personalization {
-  type: "presonalization";
+  type: "personalization";
   requestId: string;
   uid: string;
 }
 
-type TerminalRequestPayload = Personalization;
+interface AuthorizePart1 {
+  type: "authorize-part1";
+  requestId: string;
+  machineId: string;
+  tokenId: string;
+  challenge: string;
+}
+
+type TerminalRequestPayload = Personalization | AuthorizePart1;
+
+type TerminalResponsePayload = Record<string, any>;
 
 export const terminalEvent = onMessagePublished<TerminalRequestPayload>(
   {
@@ -40,31 +50,38 @@ export const terminalEvent = onMessagePublished<TerminalRequestPayload>(
 
     logger.info(`Received request from ${deviceId}`, payload);
 
+    let responsePayload: TerminalResponsePayload;
+
     switch (payload.type) {
-      case "presonalization": {
+      case "personalization": {
         logger.info(`Personalization for ${payload.uid}`);
-        const keys = diversifyKeys(
-          diversificationMasterKey.value(),
-          diversificationSystemName.value(),
-          payload.uid
-        );
-
-        particle.callFunction({
-          deviceId,
-          name: "TerminalResponse",
-          argument: JSON.stringify({
-            type: payload.type,
-            requestId: payload.requestId,
-            keys,
-          }),
-          auth: particleAccessToken.value(),
-        });
-
+        responsePayload = {
+          keys: diversifyKeys(
+            diversificationMasterKey.value(),
+            diversificationSystemName.value(),
+            payload.uid
+          ),
+        };
         break;
       }
-      case "presonalization": {
-
+      default: {
+        logger.error(`Unknown request ${payload.type}`);
+        responsePayload = {
+          error: "unknown requerst",
+        };
+      }
     }
+
+    particle.callFunction({
+      deviceId,
+      name: "TerminalResponse",
+      argument: JSON.stringify({
+        type: payload.type,
+        requestId: payload.requestId,
+        ...responsePayload,
+      }),
+      auth: particleAccessToken.value(),
+    });
   }
 );
 

@@ -1,3 +1,4 @@
+/* eslint-disable valid-jsdoc */
 /**
  * @fileoverview Key diversification based for OWW NTags
  *
@@ -6,6 +7,7 @@
 
 import * as crypto from "crypto";
 import assert from "assert";
+import { toKeyBytes, toUidBytes } from "./bytebuffer_util";
 
 export type KeyName =
   | "application"
@@ -29,7 +31,7 @@ export function diversifyKeys(
   systemName: string,
   uid: string
 ): NtagKeys {
-  const masterKeyBytes = toMasterKeyBytes(masterKey);
+  const masterKeyBytes = toKeyBytes(masterKey);
   const subkeys = generateSubkeys(masterKeyBytes);
   const uidBytes = toUidBytes(uid);
   const result: Partial<NtagKeys> = {};
@@ -53,7 +55,7 @@ export function diversifyKey(
   systemName: string,
   keyName: KeyName
 ): string {
-  const keyBytes = toMasterKeyBytes(masterKey);
+  const keyBytes = toKeyBytes(masterKey);
   const subkeys = generateSubkeys(keyBytes);
 
   const uidBytes = toUidBytes(uid);
@@ -74,24 +76,6 @@ const keyIdBytes = {
   reserved1: Buffer.from([0x00, 0x00, 0x03]),
   reserved2: Buffer.from([0x00, 0x00, 0x04]),
 };
-
-/** Converts HEX master key to buffer. */
-function toMasterKeyBytes(masterKey: string): Buffer {
-  const masterKeyBytes = Buffer.from(masterKey, "hex");
-  assert(
-    masterKeyBytes.length == 16,
-    `Master KEY must be 16 bytes, but got ${masterKey}`
-  );
-  return masterKeyBytes;
-}
-
-/** Converts HEX UID to buffer. */
-function toUidBytes(uid: string): Buffer {
-  const uidBytes = Buffer.from(uid, "hex");
-  assert(uidBytes.length == 7, `UID must be 7 bytes but got ${uid}`);
-
-  return uidBytes;
-}
 
 /** Computes the diversified key. */
 function computeDiversifiedKey(
@@ -127,6 +111,7 @@ type CmacSubkeys = {
 
 /** Computes CMAC subkeys from master key. */
 function generateSubkeys(masterKey: Buffer): CmacSubkeys {
+  /** Shifts the key buffer by one bit  */
   function bitshiftBuffer(input: Buffer): Buffer {
     assert(input.length == 16);
 
