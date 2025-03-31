@@ -88,8 +88,8 @@ void State::OnNewState(oww::state::tag::Authorize state) {
             [](NtagChallenge state) {
               logger.info("tag_state: Authorize::NtagChallenge");
             },
-            [](AwaitCloudChallenge state) {
-              logger.info("tag_state: Authorize::AwaitCloudChallenge");
+            [](CloudChallenge state) {
+              logger.info("tag_state: Authorize::CloudChallenge");
             },
             [](AwaitAuthPart2Response state) {
               logger.info("tag_state: Authorize::AwaitAuthPart2Response");
