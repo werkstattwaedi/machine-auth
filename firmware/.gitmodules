@@ -16,3 +16,6 @@
 [submodule "test/UnitTestLib"]
 	path = test/UnitTestLib
 	url = https://github.com/rickkas7/UnitTestLib
+[submodule "lib/Base64RK"]
+	path = lib/Base64RK
+	url = https://github.com/rickkas7/Base64RK.git

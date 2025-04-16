@@ -3,10 +3,12 @@
 #include "../../common.h"
 #include "nfc/driver/Ntag424.h"
 
+#include "fbs/personalization_generated.h"
 
 namespace oww::state {
 class CloudRequest;
 class Configuration;
+template <typename TResponse>
 class CloudResponse;
 }  // namespace oww::state
 
@@ -19,7 +21,7 @@ struct Wait {
 };
 
 struct KeyDiversification {
-  const std::shared_ptr<CloudResponse> response;
+  const std::shared_ptr<CloudResponse<oww::personalization::KeyDiversificationResponseT> > response;
 };
 
 struct UpdateTag {

@@ -361,7 +361,7 @@ inline ::flatbuffers::Offset<FirstAuthentication> CreateFirstAuthenticationDirec
 
 struct RecentAuthenticationT : public ::flatbuffers::NativeTable {
   typedef RecentAuthentication TableType;
-  particle::String token{};
+  std::string token{};
 };
 
 struct RecentAuthentication FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
@@ -497,7 +497,7 @@ inline ::flatbuffers::Offset<AuthenticationPart2> CreateAuthenticationPart2Direc
 
 struct StateAuthorizedT : public ::flatbuffers::NativeTable {
   typedef StateAuthorized TableType;
-  particle::String name{};
+  std::string name{};
 };
 
 struct StateAuthorized FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
@@ -565,7 +565,7 @@ inline ::flatbuffers::Offset<StateAuthorized> CreateStateAuthorizedDirect(
 
 struct StateRejectedT : public ::flatbuffers::NativeTable {
   typedef StateRejected TableType;
-  particle::String message{};
+  std::string message{};
 };
 
 struct StateRejected FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
@@ -634,7 +634,7 @@ inline ::flatbuffers::Offset<StateRejected> CreateStateRejectedDirect(
 struct StartSessionRequestT : public ::flatbuffers::NativeTable {
   typedef StartSessionRequest TableType;
   std::unique_ptr<oww::ntag::TagUid> token_id{};
-  particle::String machine_id{};
+  std::string machine_id{};
   oww::session::AuthenticationUnion authentication{};
   StartSessionRequestT() = default;
   StartSessionRequestT(const StartSessionRequestT &o);
@@ -673,7 +673,7 @@ struct StartSessionRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tabl
   }
   bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
-           VerifyField<oww::ntag::TagUid>(verifier, VT_TOKEN_ID, 4) &&
+           VerifyField<oww::ntag::TagUid>(verifier, VT_TOKEN_ID, 1) &&
            VerifyOffset(verifier, VT_MACHINE_ID) &&
            verifier.VerifyString(machine_id()) &&
            VerifyField<uint8_t>(verifier, VT_AUTHENTICATION_TYPE, 1) &&
@@ -759,7 +759,7 @@ inline ::flatbuffers::Offset<StartSessionRequest> CreateStartSessionRequestDirec
 
 struct StartSessionResponseT : public ::flatbuffers::NativeTable {
   typedef StartSessionResponse TableType;
-  particle::String session_id{};
+  std::string session_id{};
   oww::session::AuthorizationResultUnion result{};
 };
 
@@ -875,7 +875,7 @@ inline ::flatbuffers::Offset<StartSessionResponse> CreateStartSessionResponseDir
 
 struct AuthenticatePart2RequestT : public ::flatbuffers::NativeTable {
   typedef AuthenticatePart2Request TableType;
-  particle::String session_id{};
+  std::string session_id{};
   std::vector<uint8_t> encrypted_ntag_response{};
 };
 
@@ -958,7 +958,7 @@ inline ::flatbuffers::Offset<AuthenticatePart2Request> CreateAuthenticatePart2Re
 
 struct AuthenticatePart2ResponseT : public ::flatbuffers::NativeTable {
   typedef AuthenticatePart2Response TableType;
-  particle::String session_id{};
+  std::string session_id{};
   oww::session::AuthorizationResultUnion result{};
 };
 

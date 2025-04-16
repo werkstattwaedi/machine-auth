@@ -6,7 +6,7 @@
 namespace oww::ui {
 using namespace config::ui;
 
-Logger UserInterface::logger(config::ui::logtag);
+Logger UserInterface::logger("ui");
 
 UserInterface *UserInterface::instance_;
 

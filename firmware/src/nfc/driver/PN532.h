@@ -2,7 +2,6 @@
 
 #include "../../common.h"
 
-#define PN532_LOGTAG "PN532"
 
 // Payload packet data to be sent from / to PN532.
 //

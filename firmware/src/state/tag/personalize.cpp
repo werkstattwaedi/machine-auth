@@ -15,14 +15,16 @@ using namespace config::tag;
 std::optional<Personalize> OnWait(Personalize state, Wait &wait,
                                   CloudRequest &cloud_interface) {
   if (millis() < wait.timeout) return {};
+  using namespace oww::personalization;
 
-  Variant payload;
-  auto hex_uid_string = ToHexString(state.tag_uid);
-  payload.set("uid", Variant(hex_uid_string.c_str()));
+  KeyDiversificationRequestT request;
+  request.token_id = std::make_unique<oww::ntag::TagUid>();
 
-  return state.WithNestedState(
-      KeyDiversification{.response = cloud_interface.SendTerminalRequest(
-                             "personalization", payload)});
+  return state.WithNestedState(KeyDiversification{
+      .response =
+          cloud_interface.SendTerminalRequest<KeyDiversificationRequestT,
+                                              KeyDiversificationResponseT>(
+              "personalization", request)});
 }
 
 std::optional<Personalize> OnKeyDiversification(
@@ -39,24 +41,8 @@ std::optional<Personalize> OnKeyDiversification(
     return state.WithNestedState(Failed{.error = request_result.error()});
   }
 
-  auto payload = request_result.value();
-  auto keys = payload.get("keys").asMap();
-
-  auto application_key =
-      MakeBytesFromHexStringVariant<16>(keys.get("application"));
-  auto authorization_key =
-      MakeBytesFromHexStringVariant<16>(keys.get("authorization"));
-  auto reserved1_key = MakeBytesFromHexStringVariant<16>(keys.get("reserved1"));
-  auto reserved2_key = MakeBytesFromHexStringVariant<16>(keys.get("reserved2"));
-
-  if (!(application_key && authorization_key && reserved1_key &&
-        reserved2_key)) {
-    return state.WithNestedState(
-        Failed{.error = ErrorType::kMalformedResponse});
-  }
-
   return state.WithNestedState(UpdateTag{
-      .application_key = application_key.value(),
+      .application_key = request_result->application_key,
       .terminal_key = configuration.GetTerminalKey(),
       .card_key = authorization_key.value(),
       .reserved_1_key = reserved1_key.value(),

@@ -9,7 +9,7 @@
 
 using namespace config::ui::display;
 
-Logger display_log(logtag);
+Logger display_log("display");
 
 Display *Display::instance_;
 

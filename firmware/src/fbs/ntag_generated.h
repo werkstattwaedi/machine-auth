@@ -61,45 +61,45 @@ inline const char *EnumNameKey(Key e) {
   return EnumNamesKey()[index];
 }
 
-FLATBUFFERS_MANUALLY_ALIGNED_STRUCT(4) TagUid FLATBUFFERS_FINAL_CLASS {
+FLATBUFFERS_MANUALLY_ALIGNED_STRUCT(1) TagUid FLATBUFFERS_FINAL_CLASS {
  private:
-  float uid_[7];
+  uint8_t uid_[7];
 
  public:
   struct Traits;
   TagUid()
       : uid_() {
   }
-  TagUid(::flatbuffers::span<const float, 7> _uid) {
+  TagUid(::flatbuffers::span<const uint8_t, 7> _uid) {
     ::flatbuffers::CastToArray(uid_).CopyFromSpan(_uid);
   }
-  const ::flatbuffers::Array<float, 7> *uid() const {
+  const ::flatbuffers::Array<uint8_t, 7> *uid() const {
     return &::flatbuffers::CastToArray(uid_);
   }
 };
-FLATBUFFERS_STRUCT_END(TagUid, 28);
+FLATBUFFERS_STRUCT_END(TagUid, 7);
 
 struct TagUid::Traits {
   using type = TagUid;
 };
 
-FLATBUFFERS_MANUALLY_ALIGNED_STRUCT(4) KeyBytes FLATBUFFERS_FINAL_CLASS {
+FLATBUFFERS_MANUALLY_ALIGNED_STRUCT(1) KeyBytes FLATBUFFERS_FINAL_CLASS {
  private:
-  float uid_[16];
+  uint8_t uid_[16];
 
  public:
   struct Traits;
   KeyBytes()
       : uid_() {
   }
-  KeyBytes(::flatbuffers::span<const float, 16> _uid) {
+  KeyBytes(::flatbuffers::span<const uint8_t, 16> _uid) {
     ::flatbuffers::CastToArray(uid_).CopyFromSpan(_uid);
   }
-  const ::flatbuffers::Array<float, 16> *uid() const {
+  const ::flatbuffers::Array<uint8_t, 16> *uid() const {
     return &::flatbuffers::CastToArray(uid_);
   }
 };
-FLATBUFFERS_STRUCT_END(KeyBytes, 64);
+FLATBUFFERS_STRUCT_END(KeyBytes, 16);
 
 struct KeyBytes::Traits {
   using type = KeyBytes;

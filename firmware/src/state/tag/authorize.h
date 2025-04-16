@@ -3,9 +3,12 @@
 #include "../../common.h"
 #include "nfc/driver/Ntag424.h"
 
+#include "fbs/session_generated.h"
+
 namespace oww::state {
 class CloudRequest;
 class Configuration;
+template <typename TResponse>
 class CloudResponse;
 }  // namespace oww::state
 
@@ -24,11 +27,11 @@ struct NtagChallenge {
 };
 
 struct CloudChallenge {
-  const std::shared_ptr<CloudResponse> response;
+  const std::shared_ptr<CloudResponse<oww::session::StartSessionResponseT> > response;
 };
 
 struct AwaitAuthPart2Response {
-  const std::shared_ptr<CloudResponse> response;
+  const std::shared_ptr<CloudResponse<oww::session::StartSessionResponseT> > response;
 };
 
 struct Succeeded {};

@@ -72,7 +72,9 @@
     },
     "C_Cpp.clang_format_fallbackStyle": "Google",
     "C_Cpp.formatting": "clangFormat",
-    "editor.defaultFormatter": null,
+    "editor.defaultFormatter": "ms-vscode.cpptools",
     "prettier.enable": false,
-    "files.autoSave": "onFocusChange"
+    "files.autoSave": "onFocusChange",
+    "particle.enablePre-releaseDeviceOSBuilds": true,
+    "C_Cpp.clang_format_style": "Google"
 }

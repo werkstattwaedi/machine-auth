@@ -26,7 +26,7 @@ FactoryData DEV_FACTORY_DATA{
         0x2f,
     }};
 
-Logger logger(configuration::logtag);
+Logger logger("config");
 
 TerminalConfig::TerminalConfig(String machine_id, String label)
     : machine_id(machine_id), label(label) {}

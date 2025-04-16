@@ -7,7 +7,7 @@
 using namespace config::nfc;
 using namespace config::tag;
 
-Logger NfcTags::logger(logtag);
+Logger NfcTags::logger("nfc");
 
 NfcTags *NfcTags::instance_;
 

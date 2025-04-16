@@ -14,10 +14,11 @@ SerialLogHandler logHandler(
     // Logging level for non-application messages
     LOG_LEVEL_WARN, {
                         {"app", LOG_LEVEL_ALL},
-                        {PN532_LOGTAG, LOG_LEVEL_WARN},
-                        // {config::display::logtag, LOG_LEVEL_ALL},
-                        {oww::state::configuration::logtag, LOG_LEVEL_ALL},
-                        {config::nfc::logtag, LOG_LEVEL_ALL},
+                        {"cloud_request", LOG_LEVEL_ALL},
+                        {"config", LOG_LEVEL_ALL},
+                        {"display", LOG_LEVEL_WARN},
+                        {"nfc", LOG_LEVEL_ALL},
+                        {"pn532", LOG_LEVEL_WARN},
                     });
 
 using namespace oww::state;

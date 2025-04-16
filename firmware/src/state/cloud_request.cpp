@@ -2,60 +2,101 @@
 
 namespace oww::state {
 
+Logger CloudRequest::logger("cloud_request");
+
 void CloudRequest::Begin() {
   Particle.function("TerminalResponse", &CloudRequest::HandleTerminalResponse,
                     this);
 }
 
-std::shared_ptr<CloudResponse> CloudRequest::SendTerminalRequest(
-    String command, Variant& payload, system_tick_t timeout_ms) {
-  auto deadline = timeout_ms;
-  if (deadline != CONCURRENT_WAIT_FOREVER) deadline += millis();
+// std::shared_ptr<CloudResponse> CloudRequest::SendTerminalRequest(
+//     String command, Variant& payload, system_tick_t timeout_ms) {
+//   auto deadline = timeout_ms;
+//   if (deadline != CONCURRENT_WAIT_FOREVER) deadline += millis();
 
-  auto response_container =
-      std::make_shared<CloudResponse>(CloudResponse{.deadline = deadline});
-  auto requestId = String(request_counter_++);
+//   auto response_container =
+//       std::make_shared<CloudResponse>(CloudResponse{.deadline = deadline});
 
-  inflight_requests_[requestId] = response_container;
+//   auto requestId = String(request_counter_++);
 
-  payload.set("type", Variant(command));
-  payload.set("requestId", Variant(requestId));
+//   inflight_requests_[requestId] = response_container;
 
-  auto publish_future = Particle.publish("terminalRequest", payload, WITH_ACK);
-  publish_future.onError([this, requestId](auto error) {
-    HandleTerminalFailure(requestId, error);
-  });
+//   payload.set("type", Variant(command));
+//   payload.set("requestId", Variant(requestId));
 
-  return response_container;
-}
+//   auto publish_future = Particle.publish("terminalRequest", payload,
+//   WITH_ACK); publish_future.onError([this, requestId](auto error) {
+//     HandleTerminalFailure(requestId, error);
+//   });
+
+//   return response_container;
+// }
 
 int CloudRequest::HandleTerminalResponse(String response_payload) {
-  auto payload = Variant::fromJSON(response_payload).asMap();
-
-  auto type = payload.get("type").asString();
-  auto requestId = payload.get("requestId").asString();
-
-  auto extracted = inflight_requests_.extract(requestId);
-  if (extracted.empty()) {
-    Log.error("HandleTerminalResponse(%s:%s) not found", type.c_str(),
-              requestId.c_str());
-
+  auto separator_index = response_payload.indexOf(',');
+  if (separator_index < 0) {
+    logger.error("Unparsable TerminalResponse payload. Separator not found.");
     return -1;
   }
 
-  extracted.mapped()->result = payload;
+  auto request_id = response_payload.substring(0, separator_index);
+  auto it = inflight_requests_.find(request_id);
+  if (it == inflight_requests_.end()) {
+    logger.error("Received response for unknown or timed-out request ID: %s",
+                 request_id.c_str());
+    return -2;
+  }
+
+  InFlightRequest& inflight_request = it->second;
+
+  // Check for timeout before invoking handler (optional)
+  if (inflight_request.deadline != CONCURRENT_WAIT_FOREVER &&
+      millis() > inflight_request.deadline) {
+    logger.warn("Received response for request %s after deadline.",
+                request_id.c_str());
+  }
+
+  auto encoded = response_payload.substring(separator_index + 1);
+
+  size_t decoded_len = Base64::getMaxDecodedSize(encoded.length());
+
+  std::unique_ptr<uint8_t[]> decoded = std::make_unique<uint8_t[]>(decoded_len);
+
+  if (!Base64::decode(encoded.c_str(), decoded.get(), decoded_len)) {
+    logger.error("Unparsable TerminalResponse payload. Base64 decode failed.");
+    return -3;
+  }
+
+  assert(inflight_request.response_handler);
+  inflight_request.response_handler(decoded.get(), decoded_len);
+
+  // Remove the processed request from the map
+  inflight_requests_.erase(it);
+
   return 0;
 }
 
 void CloudRequest::HandleTerminalFailure(String request_id,
                                          particle::Error error) {
-  Log.error("HandleTerminalFailure(%s, %s)", request_id.c_str(),
-            error.message());
+  auto it = inflight_requests_.find(request_id);
+  if (it == inflight_requests_.end()) {
+    logger.warn(
+        "Received failure for unknown or already handled request ID: %s",
+        request_id.c_str());
+    return;
+  }
 
-  auto extracted = inflight_requests_.extract(request_id);
-  if (extracted.empty()) return;
+  ErrorType internal_error = ErrorType::kUnspecified;
+  switch (error.type()) {
+    case particle::Error::TIMEOUT:
+      internal_error = ErrorType::kTimeout;
+      break;
+  }
 
-  extracted.mapped()->result = tl::unexpected(ErrorType::kUnspecified);
+  InFlightRequest& inflight_request = it->second;
+  assert(inflight_request.failure_handler);
+  inflight_request.failure_handler(internal_error);
+  inflight_requests_.erase(it);
 }
 
 }  // namespace oww::state

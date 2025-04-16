@@ -5,7 +5,7 @@
 
 namespace oww::state {
 
-Logger State::logger(oww::state::configuration::logtag);
+Logger State::logger("state");
 
 Status State::Begin(std::unique_ptr<Configuration> configuration) {
   os_mutex_create(&mutex_);

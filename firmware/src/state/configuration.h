@@ -7,10 +7,6 @@ namespace oww::state {
 
 using namespace event;
 
-namespace configuration {
-constexpr auto logtag = "config";
-}
-
 constexpr auto ledger_name = "terminal-config";
 
 class TerminalConfig {
