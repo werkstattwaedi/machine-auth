@@ -201,15 +201,11 @@ boolean NfcTags::CheckTagStillAvailable(NfcStateData &data) {
 
 void NfcTags::TagPerformQueuedAction(NfcStateData &data) {
   using namespace oww::state;
-  auto tag_state = state_->GetTagState();
-  if (auto state = std::get_if<tag::Authorize>(tag_state.get())) {
-    if (auto new_state = tag::NfcLoop(*state, *ntag_interface_.get())) {
-      state_->OnNewState(new_state.value());
-    }
-  } else if (auto state = std::get_if<tag::Personalize>(tag_state.get())) {
-    if (auto new_state = tag::NfcLoop(*state, *ntag_interface_.get())) {
-      state_->OnNewState(new_state.value());
-    }
+  auto tag_state = state_->GetTerminalState();
+  if (auto state = std::get_if<terminal::StartSession>(tag_state.get())) {
+    terminal::Loop(*state, *state_, *ntag_interface_.get());
+  } else if (auto state = std::get_if<terminal::Personalize>(tag_state.get())) {
+    terminal::Loop(*state, *state_, *ntag_interface_.get());
   }
 }
 

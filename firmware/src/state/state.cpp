@@ -13,125 +13,68 @@ Status State::Begin(std::unique_ptr<Configuration> configuration) {
   configuration_ = std::move(configuration);
   configuration_->Begin();
 
-  tag_state_ = std::make_shared<tag::State>(tag::Idle{});
+  terminal_state_ = std::make_shared<terminal::State>(terminal::Idle{});
 
   CloudRequest::Begin();
 
   return Status::kOk;
 }
 
-void State::Loop() {
-  if (auto state = std::get_if<tag::Authorize>(tag_state_.get())) {
-    if (auto new_state = tag::StateLoop(*state, *configuration_.get(),
-                                        *static_cast<CloudRequest*>(this))) {
-      OnNewState(new_state.value());
-    }
-  } else if (auto state = std::get_if<tag::Personalize>(tag_state_.get())) {
-    if (auto new_state = tag::StateLoop(*state, *configuration_.get(),
-                                        *static_cast<CloudRequest*>(this))) {
-      OnNewState(new_state.value());
-    }
-  }
-}
+void State::Loop() { CheckTimeouts(); }
 
 void State::OnConfigChanged() { System.reset(RESET_REASON_CONFIG_UPDATE); }
 
 void State::OnTagFound() {
   logger.info("tag_state: OnTagFound");
 
-  tag_state_ = std::make_shared<tag::State>(tag::Detected{});
+  terminal_state_ = std::make_shared<terminal::State>(terminal::Detected{});
 }
 
-void State::OnBlankNtag(std::array<std::byte, 7> uid) {
+void State::OnBlankNtag(std::array<uint8_t, 7> uid) {
   logger.info("tag_state: OnBlankNtag");
 
-  OnNewState(tag::Personalize{
+  OnNewState(terminal::Personalize{
       .tag_uid = uid,
-      .state = std::make_shared<tag::personalize::State>(tag::personalize::Wait{
-          .timeout = millis() + 3000,
-      })});
+      .state = std::make_shared<terminal::personalize::State>(
+          terminal::personalize::Wait{
+              .timeout = millis() + 3000,
+          })});
 }
 
-void State::OnTagAuthenicated(std::array<std::byte, 7> uid) {
+void State::OnTagAuthenicated(std::array<uint8_t, 7> uid) {
   logger.info("tag_state: OnTagAuthenicated");
 
   // TODO:
   // - check tap-out
   // - check pre-authorized.
 
-  OnNewState(tag::Authorize{
-      .tag_uid = uid,
-      .state = std::make_shared<tag::authorize::State>(tag::authorize::Start{
-          .key_number = config::tag::key_authorization})});
-
+  OnNewState(
+      terminal::StartSession{.tag_uid = uid,
+                             .state = std::make_shared<terminal::start::State>(
+                                 terminal::start::StartWithNfcAuth{})});
 }
 
 void State::OnUnknownTag() {
   logger.info("tag_state: OnUnknownTag");
 
-  tag_state_ = std::make_shared<tag::State>(tag::Unknown{});
+  terminal_state_ = std::make_shared<terminal::State>(terminal::Unknown{});
 }
 
 void State::OnTagRemoved() {
   logger.info("tag_state: OnTagRemoved");
 
-  tag_state_ = std::make_shared<tag::State>(tag::Idle{});
+  terminal_state_ = std::make_shared<terminal::State>(terminal::Idle{});
 }
 
-void State::OnNewState(oww::state::tag::Authorize state) {
-  using namespace oww::state::tag::authorize;
+void State::OnNewState(oww::state::terminal::StartSession state) {
+  using namespace oww::state::terminal::start;
 
-  if (logger.isInfoEnabled()) {
-    std::visit(
-        overloaded{
-            [](Start state) { logger.info("tag_state: Authorize::Start"); },
-            [](NtagChallenge state) {
-              logger.info("tag_state: Authorize::NtagChallenge");
-            },
-            [](CloudChallenge state) {
-              logger.info("tag_state: Authorize::CloudChallenge");
-            },
-            [](AwaitAuthPart2Response state) {
-              logger.info("tag_state: Authorize::AwaitAuthPart2Response");
-            },
-            [](Succeeded state) {
-              logger.info("tag_state: Authorize::Succeeded");
-            },
-            [](Rejected state) {
-              logger.info("tag_state: Authorize::Rejected");
-            },
-            [](Failed state) { logger.info("tag_state: Authorize::Failed"); },
-        },
-        *(state.state.get()));
-  }
-
-  tag_state_ = std::make_shared<tag::State>(state);
+  terminal_state_ = std::make_shared<terminal::State>(state);
 }
-void State::OnNewState(oww::state::tag::Personalize state) {
-  using namespace oww::state::tag::personalize;
+void State::OnNewState(oww::state::terminal::Personalize state) {
+  using namespace oww::state::terminal::personalize;
 
-  if (logger.isInfoEnabled()) {
-    std::visit(
-        overloaded{
-            [](Wait state) { logger.info("tag_state: Personalize::Wait"); },
-            [](KeyDiversification state) {
-              logger.info("tag_state: Personalize::KeyDiversification");
-            },
-            [](UpdateTag state) {
-              logger.info("tag_state: Personalize::UpdateTag");
-            },
-            [](Completed state) {
-              logger.info("tag_state: Personalize::Completed");
-            },
-            [](Failed state) {
-              logger.info(
-                  "tag_state: Personalize::Failed tag_status:%d, message %s",
-                  (int)state.error, state.message.c_str());
-            }},
-        *(state.state.get()));
-  }
-
-  tag_state_ = std::make_shared<tag::State>(state);
+  terminal_state_ = std::make_shared<terminal::State>(state);
 }
 
 }  // namespace oww::state

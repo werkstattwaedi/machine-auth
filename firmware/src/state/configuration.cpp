@@ -123,7 +123,7 @@ bool Configuration::UsesDevKeys() {
   return memcmp(terminal_key_.begin(), DEV_FACTORY_DATA.key, 16) == 0;
 }
 
-std::array<std::byte, 16> Configuration::GetTerminalKey() {
+std::array<uint8_t, 16> Configuration::GetTerminalKey() {
   return terminal_key_;
 }
 

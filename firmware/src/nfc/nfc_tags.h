@@ -7,6 +7,7 @@
 
 struct NfcStateData;
 
+// Rename to NfcWorker ?
 class NfcTags {
  public:
   static NfcTags &instance();

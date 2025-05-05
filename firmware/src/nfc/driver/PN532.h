@@ -2,7 +2,6 @@
 
 #include "../../common.h"
 
-
 // Payload packet data to be sent from / to PN532.
 //
 // See https://files.waveshare.com/upload/b/bb/Pn532um.pdf
@@ -18,7 +17,7 @@ struct SelectedTag {
   uint8_t tg;
 
   // The ISO/IEC14443 Type A tag UID, as seen by the PCD
-  std::array<std::byte, 7> nfc_id;
+  std::array<uint8_t, 7> nfc_id;
   size_t nfc_id_length;
 };
 

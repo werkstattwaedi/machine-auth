@@ -99,4 +99,26 @@ void CloudRequest::HandleTerminalFailure(String request_id,
   inflight_requests_.erase(it);
 }
 
+void CloudRequest::CheckTimeouts() {
+  system_tick_t now = millis();
+  std::vector<String> timed_out_ids;
+
+  for (auto const& [request_id, inflight_request] : inflight_requests_) {
+    // Check if a deadline is set and if it has passed
+    if (inflight_request.deadline != CONCURRENT_WAIT_FOREVER &&
+        now > inflight_request.deadline) {
+      logger.warn("Request %s timed out", request_id.c_str());
+      timed_out_ids.push_back(request_id);  // Mark for removal and handling
+    }
+  }
+
+  // Process and remove timed-out requests
+  for (const auto& request_id : timed_out_ids) {
+    auto it = inflight_requests_.find(request_id);
+    assert(it != inflight_requests_.end());
+    it->second.failure_handler(ErrorType::kTimeout);
+    inflight_requests_.erase(it);  // Remove from the map
+  }
+}
+
 }  // namespace oww::state

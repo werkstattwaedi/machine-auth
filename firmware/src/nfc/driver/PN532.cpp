@@ -90,7 +90,8 @@ tl::expected<std::shared_ptr<SelectedTag>, PN532Error> PN532::WaitForNewTag(
   auto result = std::shared_ptr<SelectedTag>{
       new SelectedTag{.tg = tg, .nfc_id_length = nfc_id_length}};
 
-  std::memcpy(result->nfc_id.data(), std::begin(list_passive_target.params) + 6, nfc_id_length);
+  std::memcpy(result->nfc_id.data(), std::begin(list_passive_target.params) + 6,
+              nfc_id_length);
 
   return {result};
 }

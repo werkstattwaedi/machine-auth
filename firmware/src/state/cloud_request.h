@@ -4,24 +4,10 @@
 #include <type_traits>
 
 #include "Base64RK.h"
+#include "cloud_response.h"
 #include "common.h"
 #include "flatbuffers/flatbuffers.h"
-
 namespace oww::state {
-
-/**
- * @brief Represents the response received from the cloud for a specific
- * request.
- * @tparam TResponse The specific data type expected in the response (e.g., a
- * FlatBuffer table struct).
- */
-template <typename TResponse>
-struct CloudResponse {
-  // Holds the result of the cloud operation. Contains TResponse on success,
-  // ErrorType on failure. std::nullopt if the response hasn't been received
-  // yet.
-  std::optional<tl::expected<TResponse, ErrorType>> result;
-};
 
 class CloudRequest {
  public:
@@ -62,6 +48,7 @@ class CloudRequest {
 
  protected:
   void Begin();
+  void CheckTimeouts();
 };
 
 template <typename TRequest, typename TResponse>
@@ -85,7 +72,8 @@ std::shared_ptr<CloudResponse<TResponse>> CloudRequest::SendTerminalRequest(
                                      : (millis() + timeout_ms);
 
   // Create the response container specific to this request's TResponse type
-  auto response_container = std::make_shared<CloudResponse<TResponse>>();
+  auto response_container =
+      std::make_shared<CloudResponse<TResponse>>(Pending{});
 
   String request_id = String::format("req-%d", request_counter_++);
 
@@ -98,15 +86,16 @@ std::shared_ptr<CloudResponse<TResponse>> CloudRequest::SendTerminalRequest(
             if (verifier.VerifyBuffer<TResponseTable>()) {
               ::flatbuffers::GetRoot<TResponseTable>(data)->UnPackTo(
                   &deserialized_response);
-              response_container->result = {deserialized_response};
+              response_container->template emplace<TResponse>(
+                  deserialized_response);
             } else {
-              response_container->result =
-                  tl::make_unexpected(ErrorType::kMalformedResponse);
+              response_container->template emplace<ErrorType>(
+                  ErrorType::kMalformedResponse);
             }
           },
       .failure_handler =
           [response_container](ErrorType error) {
-            response_container->result = tl::make_unexpected(error);
+            response_container->template emplace<ErrorType>(error);
           },
       .deadline = deadline_ticks,
   };

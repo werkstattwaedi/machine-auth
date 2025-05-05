@@ -68,7 +68,9 @@
         "typeinfo": "cpp",
         "variant": "cpp",
         "lv_lcd_generic_mipi.h": "c",
-        "iostream": "cpp"
+        "iostream": "cpp",
+        "unordered_set": "cpp",
+        "set": "cpp"
     },
     "C_Cpp.clang_format_fallbackStyle": "Google",
     "C_Cpp.formatting": "clangFormat",

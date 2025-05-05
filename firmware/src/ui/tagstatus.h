@@ -1,7 +1,7 @@
 #pragma once
 
 #include "component.h"
-#include "state/tag/state.h"
+#include "state/terminal/state.h"
 
 namespace oww::ui {
 
@@ -13,7 +13,7 @@ class TagStatus : public Component {
   virtual void Render() override;
 
  private:
-  std::shared_ptr<oww::state::tag::State> last_state_;
+  std::shared_ptr<oww::state::terminal::State> last_state_;
   lv_obj_t* status_led = nullptr;
   lv_obj_t* status_label = nullptr;
 };

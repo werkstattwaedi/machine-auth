@@ -52,7 +52,7 @@ Ntag424::IsNewTagWithFactoryDefaults() {
 }
 
 tl::expected<void, Ntag424::DNA_StatusCode> Ntag424::Authenticate(
-    Ntag424Key key_number, const std::array<std::byte, 16>& key_bytes) {
+    Ntag424Key key_number, const std::array<uint8_t, 16>& key_bytes) {
   byte random_challenge[16];
   generateRndA(random_challenge);
 
@@ -66,7 +66,7 @@ tl::expected<void, Ntag424::DNA_StatusCode> Ntag424::Authenticate(
   return {};
 }
 
-tl::expected<std::array<std::byte, 16>, Ntag424::DNA_StatusCode>
+tl::expected<std::array<uint8_t, 16>, Ntag424::DNA_StatusCode>
 Ntag424::AuthenticateWithCloud_Begin(Ntag424Key key_number) {
   byte back_data[18];
   byte back_len = 18;
@@ -85,15 +85,15 @@ Ntag424::AuthenticateWithCloud_Begin(Ntag424Key key_number) {
     return tl::unexpected(DNA_WRONG_RESPONSE_LEN);
   }
 
-  auto auth_challenge = std::array<std::byte, 16>{};
+  auto auth_challenge = std::array<uint8_t, 16>{};
   memcpy(auth_challenge.data(), back_data, 16);
 
   return {auth_challenge};
 }
 
-tl::expected<std::array<std::byte, 7>, Ntag424::DNA_StatusCode>
+tl::expected<std::array<uint8_t, 7>, Ntag424::DNA_StatusCode>
 Ntag424::GetCardUID() {
-  std::array<std::byte, 7> uid;
+  std::array<uint8_t, 7> uid;
   auto card_uid_status =
       DNA_Full_GetCardUID(reinterpret_cast<byte*>(uid.data()));
   if (card_uid_status != Ntag424::DNA_STATUS_OK) {
@@ -104,8 +104,8 @@ Ntag424::GetCardUID() {
 }
 
 tl::expected<void, Ntag424::DNA_StatusCode> Ntag424::ChangeKey(
-    Ntag424Key key_number, const std::array<std::byte, 16>& old_key_bytes,
-    const std::array<std::byte, 16>& new_key_bytes, byte new_key_version) {
+    Ntag424Key key_number, const std::array<uint8_t, 16>& old_key_bytes,
+    const std::array<uint8_t, 16>& new_key_bytes, byte new_key_version) {
   auto result = DNA_Full_ChangeKey(
       key_number,
       const_cast<byte*>(reinterpret_cast<const byte*>(old_key_bytes.begin())),
@@ -120,7 +120,7 @@ tl::expected<void, Ntag424::DNA_StatusCode> Ntag424::ChangeKey(
 }
 
 tl::expected<void, Ntag424::DNA_StatusCode> Ntag424::ChangeKey0(
-    const std::array<std::byte, 16>& new_key_bytes, byte new_key_version) {
+    const std::array<uint8_t, 16>& new_key_bytes, byte new_key_version) {
   auto result = DNA_Full_ChangeKey0(
       const_cast<byte*>(reinterpret_cast<const byte*>(new_key_bytes.begin())),
       new_key_version);

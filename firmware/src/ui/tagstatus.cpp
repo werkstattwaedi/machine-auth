@@ -5,7 +5,7 @@
 namespace oww::ui {
 
 using namespace oww::state;
-using namespace oww::state::tag;
+using namespace oww::state::terminal;
 
 TagStatus::TagStatus(lv_obj_t* parent, std::shared_ptr<oww::state::State> state)
     : Component(state) {
@@ -22,7 +22,7 @@ TagStatus::TagStatus(lv_obj_t* parent, std::shared_ptr<oww::state::State> state)
 TagStatus::~TagStatus() { lv_obj_delete(root_); }
 
 void TagStatus::Render() {
-  auto current_state = state_->GetTagState();
+  auto current_state = state_->GetTerminalState();
   if (current_state == last_state_) return;
 
   last_state_ = current_state;
@@ -43,7 +43,7 @@ void TagStatus::Render() {
                    state_string = "OWW Tag";
                    led_color = lv_palette_main(LV_PALETTE_ORANGE);
                  },
-                 [&](Authorize state) {
+                 [&](StartSession state) {
                    state_string = "Authorisiertes Tag";
                    led_color = lv_palette_main(LV_PALETTE_GREEN);
                  },

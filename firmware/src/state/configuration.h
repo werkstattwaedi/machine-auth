@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../common.h"
+#include "common.h"
 #include "event/state_event.h"
 
 namespace oww::state {
@@ -64,10 +64,10 @@ class Configuration {
   // Whether development terminal keys are used.
   bool UsesDevKeys();
 
-  std::array<std::byte, 16> GetTerminalKey();
+  std::array<uint8_t, 16> GetTerminalKey();
 
  private:
-  std::array<std::byte, 16> terminal_key_;
+  std::array<uint8_t, 16> terminal_key_;
   std::weak_ptr<IStateEvent> event_sink_;
 
   bool is_configured_ = false;
