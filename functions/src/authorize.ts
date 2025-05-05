@@ -7,9 +7,9 @@ import assert from "assert";
 import { toKeyBytes } from "./bytebuffer_util";
 
 /** Generates all diversified keys for the tag. */
-export function authorizeStep1(ntagChallenge: string, key: string): string {
+export function authorizeStep1(ntagChallenge: (number)[], key: string): Buffer {
   const keyBytes = toKeyBytes(key);
-  const ntagChallengeBytes = Buffer.from(ntagChallenge, "hex");
+  const ntagChallengeBytes = Buffer.from(ntagChallenge);
   assert(ntagChallengeBytes.length == 16);
 
   const cipher = crypto.createDecipheriv(
@@ -30,5 +30,5 @@ export function authorizeStep1(ntagChallenge: string, key: string): string {
   const cloudChallenge = crypto.randomBytes(16);
 
   const encrypted = Buffer.concat([cloudChallenge, rotatedNtagChallenge]);
-  return encrypted.toString("hex");
+  return encrypted;
 }

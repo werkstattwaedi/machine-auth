@@ -51,8 +51,8 @@ export function diversifyKeys(
 /** Generates the specified diversified key for the tag. */
 export function diversifyKey(
   masterKey: string,
-  uid: string,
   systemName: string,
+  uid: Buffer,
   keyName: KeyName
 ): string {
   const keyBytes = toKeyBytes(masterKey);

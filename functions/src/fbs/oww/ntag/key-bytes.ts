@@ -16,18 +16,18 @@ export class KeyBytes implements flatbuffers.IUnpackableObject<KeyBytesT> {
 }
 
 uid(index: number):number|null {
-    return this.bb!.readFloat32(this.bb_pos + 0 + index * 4);
+    return this.bb!.readUint8(this.bb_pos + 0 + index);
 }
 
 static sizeOf():number {
-  return 64;
+  return 16;
 }
 
 static createKeyBytes(builder:flatbuffers.Builder, uid: number[]|null):flatbuffers.Offset {
-  builder.prep(4, 64);
+  builder.prep(1, 16);
 
   for (let i = 15; i >= 0; --i) {
-    builder.writeFloat32((uid?.[i] ?? 0));
+    builder.writeInt8((uid?.[i] ?? 0));
 
   }
 

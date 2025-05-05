@@ -23,7 +23,7 @@ cpp_code: flatc
 	@echo "Generating C++ FlatBuffers code..."
 	@mkdir -p $(FIRMWARE_CPP_OUT_DIR)
 	@for schema in $(CPP_SCHEMAS); do \
-		$(FLATBUFFER_COMPILER) --cpp  --gen-object-api --cpp-include common.h --cpp-str-type particle::String --cpp-std c++17 -o $(FIRMWARE_CPP_OUT_DIR) $$schema; \
+		$(FLATBUFFER_COMPILER) --cpp  --gen-object-api --cpp-include common.h --cpp-std c++17 -o $(FIRMWARE_CPP_OUT_DIR) $$schema; \
 	done
 	@echo "C++ FlatBuffers code generated in $(FIRMWARE_CPP_OUT_DIR)"
 

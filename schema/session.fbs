@@ -74,3 +74,4 @@ table AuthenticatePart2Response {
   session_id:string;
   result:AuthorizationResult;
 }
+

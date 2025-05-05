@@ -16,18 +16,18 @@ export class TagUid implements flatbuffers.IUnpackableObject<TagUidT> {
 }
 
 uid(index: number):number|null {
-    return this.bb!.readFloat32(this.bb_pos + 0 + index * 4);
+    return this.bb!.readUint8(this.bb_pos + 0 + index);
 }
 
 static sizeOf():number {
-  return 28;
+  return 7;
 }
 
 static createTagUid(builder:flatbuffers.Builder, uid: number[]|null):flatbuffers.Offset {
-  builder.prep(4, 28);
+  builder.prep(1, 7);
 
   for (let i = 6; i >= 0; --i) {
-    builder.writeFloat32((uid?.[i] ?? 0));
+    builder.writeInt8((uid?.[i] ?? 0));
 
   }
 

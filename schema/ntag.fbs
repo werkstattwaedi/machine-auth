@@ -9,9 +9,9 @@ enum Key:byte {
 }
 
 struct TagUid {
-  uid:[float:7];
+  uid:[ubyte:7];
 }
 
 struct KeyBytes {
-  uid:[float:16];
+  uid:[ubyte:16];
 }
