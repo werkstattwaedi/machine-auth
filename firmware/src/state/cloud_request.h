@@ -110,7 +110,8 @@ std::shared_ptr<CloudResponse<TResponse>> CloudRequest::SendTerminalRequest(
       Base64::encodeToString(builder.GetBufferPointer(), builder.GetSize());
 
   String publish_payload =
-      String::format("%s,%s,%s", command, request_id, base64_encoded_data);
+      String::format("%s,%s,%s", command.c_str(), request_id.c_str(),
+                     base64_encoded_data.c_str());
 
   auto publish_future =
       Particle.publish("terminalRequest", publish_payload, WITH_ACK);

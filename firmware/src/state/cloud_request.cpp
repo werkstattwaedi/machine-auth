@@ -33,18 +33,19 @@ void CloudRequest::Begin() {
 // }
 
 int CloudRequest::HandleTerminalResponse(String response_payload) {
-  auto separator_index = response_payload.indexOf(',');
-  if (separator_index < 0) {
-    logger.error("Unparsable TerminalResponse payload. Separator not found.");
+  auto id_end_index = response_payload.indexOf(',');
+  if (id_end_index < 0) {
+    logger.error(
+        "Unparsable TerminalResponse payload. RequestID Separator not found.");
     return -1;
   }
 
-  auto request_id = response_payload.substring(0, separator_index);
+  auto request_id = response_payload.substring(0, id_end_index);
   auto it = inflight_requests_.find(request_id);
   if (it == inflight_requests_.end()) {
     logger.error("Received response for unknown or timed-out request ID: %s",
                  request_id.c_str());
-    return -2;
+    return 0;
   }
 
   InFlightRequest& inflight_request = it->second;
@@ -56,7 +57,28 @@ int CloudRequest::HandleTerminalResponse(String response_payload) {
                 request_id.c_str());
   }
 
-  auto encoded = response_payload.substring(separator_index + 1);
+  auto status_end_index = response_payload.indexOf(',', id_end_index + 1);
+  if (status_end_index < 0) {
+    if (response_payload.substring(id_end_index + 1) == "ERROR") {
+      logger.error("Received error response for request %s",
+                   request_id.c_str());
+      inflight_request.failure_handler(ErrorType::kWrongState);
+      return 0;
+    } else {
+      logger.error(
+          "Unparsable TerminalResponse payload. Status Separator not found.");
+      return -1;
+    }
+  }
+
+  auto status = response_payload.substring(id_end_index + 1, status_end_index);
+  if (status != "OK") {
+    logger.error("Unparsable TerminalResponse payload. Unknown status: %s",
+                 status.c_str());
+    return -1;
+  }
+
+  auto encoded = response_payload.substring(status_end_index + 1);
 
   size_t decoded_len = Base64::getMaxDecodedSize(encoded.length());
 

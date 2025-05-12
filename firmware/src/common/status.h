@@ -5,6 +5,7 @@ enum class ErrorType {
   kTimeout = 2,
   kWrongState = 3,
   kMalformedResponse = 4,
+  kServerError = 3,
 };
 
 // Generic success/fail return status.
