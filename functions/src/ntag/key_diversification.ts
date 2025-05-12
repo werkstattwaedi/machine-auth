@@ -52,13 +52,11 @@ export function diversifyKeys(
 export function diversifyKey(
   masterKey: string,
   systemName: string,
-  uid: Buffer,
+  uidBytes: Buffer,
   keyName: KeyName
 ): string {
   const keyBytes = toKeyBytes(masterKey);
   const subkeys = generateSubkeys(keyBytes);
-
-  const uidBytes = toUidBytes(uid);
 
   return computeDiversifiedKey(
     keyBytes,

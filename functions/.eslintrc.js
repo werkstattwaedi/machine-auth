@@ -20,6 +20,7 @@ module.exports = {
   },
   ignorePatterns: [
     "/lib/**/*", // Ignore built files.
+    "/src/fbs/**/*", // Ignore generated fbs files.
     "/generated/**/*", // Ignore generated files.
   ],
   plugins: [
@@ -30,5 +31,7 @@ module.exports = {
     "quotes": ["error", "double"],
     "import/no-unresolved": 0,
     "indent": ["error", 2],
+    "no-unused-vars": "warn", 
+    "@typescript-eslint/no-unused-vars": "off",
   },
 };
