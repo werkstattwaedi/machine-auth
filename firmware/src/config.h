@@ -24,7 +24,7 @@ constexpr auto resolution_vertical = 320;
 constexpr int8_t pin_reset = D6;
 constexpr int8_t pin_chipselect = D5;
 constexpr int8_t pin_datacommand = D10;
-constexpr int8_t pin_backlight = D7;
+constexpr int8_t pin_backlight = A5;
 constexpr int8_t pin_touch_chipselect = S3;
 constexpr int8_t pin_touch_irq = S4;
 }  // namespace display
