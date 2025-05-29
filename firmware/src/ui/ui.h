@@ -4,10 +4,11 @@
 #include <lvgl.h>
 
 #include "common.h"
+#include "neopixel.h"
 #include "splashscreen.h"
-#include "tagstatus.h"
 #include "state/state.h"
 #include "statusbar.h"
+#include "tagstatus.h"
 
 namespace oww::ui {
 
@@ -64,7 +65,14 @@ class UserInterface {
 
   void UpdateGui();
 
+  system_tick_t buzz_timeout = CONCURRENT_WAIT_FOREVER;
+  void *last_buzz_state_id_ = nullptr;
+
+  void UpdateBuzzer();
+  void UpdateLed();
+
  private:
+  Adafruit_NeoPixel led_strip_;
   std::unique_ptr<SplashScreen> splash_screen_ = nullptr;
   std::unique_ptr<StatusBar> status_bar_ = nullptr;
   std::unique_ptr<TagStatus> tag_status_ = nullptr;
