@@ -34,6 +34,9 @@ tl::expected<void, Error> UserInterface::Begin(
 
   pinMode(buzzer::pin_pwm, OUTPUT);
 
+  led_strip_.begin();
+  led_strip_.show();
+
   Display::instance().Begin();
 
   os_mutex_create(&mutex_);
@@ -59,6 +62,11 @@ os_thread_return_t UserInterface::UserInterfaceThread() {
 }
 
 void UserInterface::UpdateGui() {
+    byte brightness = sin((millis() / 5000.0) * TWO_PI) * 127 + 128;
+
+
+    analogWrite(config::ui::display::pin_backlight, brightness);
+
   if (splash_screen_) {
     splash_screen_->Render();
     if (millis() < 2000) {
@@ -93,13 +101,20 @@ void UserInterface::UpdateBuzzer() {
     using namespace oww::state::terminal;
 
     int frequency = 0;
+    int duration = 100;
 
     std::visit(overloaded{
                    [&](Idle state) {},
                    [&](Detected state) { frequency = 440; },
-                   [&](Authenticated state) { frequency = 660; },
+                   [&](Authenticated state) {
+                     frequency = 660;
+                     duration = 200;
+                   },
                    [&](StartSession state) {},
-                   [&](Unknown state) { frequency = 370; },
+                   [&](Unknown state) {
+                     frequency = 370;
+                     duration = 200;
+                   },
                    [&](Personalize state) {},
 
                },
@@ -109,7 +124,8 @@ void UserInterface::UpdateBuzzer() {
       logger.error("Buzzing with frequency %d", frequency);
 
       analogWrite(buzzer::pin_pwm, 128, frequency);
-      buzz_timeout = millis() + 2000;
+
+      buzz_timeout = millis() + duration;
     }
 
     last_buzz_state_id_ = static_cast<void *>(current_state.get());
@@ -118,11 +134,48 @@ void UserInterface::UpdateBuzzer() {
   if (buzz_timeout != CONCURRENT_WAIT_FOREVER && buzz_timeout < millis()) {
     logger.error("Stopping buzzer");
 
-    analogWrite(buzzer::pin_pwm, 0, 0);
+    analogWrite(buzzer::pin_pwm, 0);
+
     buzz_timeout = CONCURRENT_WAIT_FOREVER;
   }
 }
 
-void UserInterface::UpdateLed() {}
+void UserInterface::UpdateLed() {
+  auto current_state = state_->GetTerminalState();
+
+  using namespace oww::state::terminal;
+
+  byte r = 0;
+  byte g = 0;
+  byte b = 0;
+
+  std::visit(overloaded{
+                 [&](Idle state) { b = 255; },  // Blue
+                 [&](Detected state) {
+                   r = 255;
+                   g = 255;
+                 },                                      // Yellow
+                 [&](Authenticated state) { g = 255; },  // Green
+                 [&](StartSession state) {
+                   g = 255;
+                   b = 255;
+                 },                                // Cyan
+                 [&](Unknown state) { r = 255; },  // Red
+                 [&](Personalize state) {
+                   r = 255;
+                   b = 255;
+                 },  // Magenta
+
+             },
+             *(current_state.get()));
+
+  byte scaling = sin((millis() / 5000.0) * TWO_PI) * 15 + 20;
+
+  for (size_t i = 0; i < led_strip_.numPixels(); i++) {
+    led_strip_.setColorScaled(i, r, g, b, scaling);
+  }
+
+  led_strip_.show();
+}
 
 }  // namespace oww::ui

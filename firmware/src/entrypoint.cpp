@@ -51,4 +51,10 @@ void setup() {
   Log.info("NFC Status = %d", (int)nfc_setup_result);
 }
 
-void loop() { state_->Loop(); }
+void loop() { state_->Loop(); 
+
+
+      // analogWrite(config::buzzer::pin_pwm, (millis() >> 4 ) % 256, 500);
+
+
+}

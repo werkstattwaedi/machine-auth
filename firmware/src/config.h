@@ -34,7 +34,7 @@ constexpr int8_t pin_touch_irq = S4;
 }  // namespace ui
 
 namespace buzzer {
-constexpr int8_t pin_pwm = D16;
+constexpr int8_t pin_pwm = A2;
 }  // namespace buzzer
 
 namespace led {

@@ -1,6 +1,6 @@
 {
     "particle.targetPlatform": "p2",
-    "particle.firmwareVersion": "6.2.1",
+    "particle.firmwareVersion": "6.3.2",
     "files.associations": {
         "array": "cpp",
         "deque": "cpp",
