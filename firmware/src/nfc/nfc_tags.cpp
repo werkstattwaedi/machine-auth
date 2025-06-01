@@ -40,6 +40,12 @@ Status NfcTags::Begin(std::shared_ptr<oww::state::State> state) {
     return Status::kError;
   }
 
+  auto pcd_config_gpio = pcd_interface_->ConfigureGpio72();
+  if (!pcd_config_gpio) {
+    logger.error("Initialization of PN532 GPIO");
+    return Status::kError;
+  }
+
   os_mutex_create(&mutex_);
 
   thread_ = new Thread(
@@ -68,8 +74,29 @@ struct NfcStateData {
 os_thread_return_t NfcTags::NfcThread() {
   NfcStateData state_data{.state = NfcState::kWaitForTag, .error_count = 0};
 
+  auto is_relais_on = false;
+
   while (true) {
     NfcLoop(state_data);
+
+    // FIXME that does not belong here
+    auto should_relais_be_on = false;
+    auto current_state = state_->GetTerminalState();
+    using namespace oww::state::terminal;
+
+    if (std::get_if<StartSession>(current_state.get())) {
+      logger.trace("Should Be ON");
+
+      should_relais_be_on = true;
+    } else {
+      should_relais_be_on = false;
+    }
+
+    if (is_relais_on != should_relais_be_on) {
+      is_relais_on = should_relais_be_on;
+      logger.trace("Toggle Relais %d", is_relais_on ? 1 : 0);
+      pcd_interface_->SetGpio72(is_relais_on);
+    }
   }
 }
 

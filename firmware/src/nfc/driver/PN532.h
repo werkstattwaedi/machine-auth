@@ -63,6 +63,12 @@ class PN532 {
   // it as PCD
   tl::expected<void, PN532Error> ResetController();
 
+  // Configures P72 as an output
+  tl::expected<void, PN532Error> ConfigureGpio72();
+
+  // Sets the status of P72 GPIO
+  tl::expected<void, PN532Error> SetGpio72(bool high);
+
  private:
   // Sends the command_data payload to the PN532.
   //

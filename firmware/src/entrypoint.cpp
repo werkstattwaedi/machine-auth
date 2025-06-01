@@ -18,7 +18,7 @@ SerialLogHandler logHandler(
                         {"config", LOG_LEVEL_ALL},
                         {"display", LOG_LEVEL_WARN},
                         {"nfc", LOG_LEVEL_ALL},
-                        {"pn532", LOG_LEVEL_WARN},
+                        {"pn532", LOG_LEVEL_ALL},
                     });
 
 using namespace oww::state;
@@ -51,10 +51,4 @@ void setup() {
   Log.info("NFC Status = %d", (int)nfc_setup_result);
 }
 
-void loop() { state_->Loop(); 
-
-
-      // analogWrite(config::buzzer::pin_pwm, (millis() >> 4 ) % 256, 500);
-
-
-}
+void loop() { state_->Loop(); }
