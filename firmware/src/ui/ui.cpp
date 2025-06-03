@@ -33,6 +33,7 @@ tl::expected<void, Error> UserInterface::Begin(
   state_ = state;
 
   pinMode(buzzer::pin_pwm, OUTPUT);
+  analogWrite(config::ui::display::pin_backlight, 255);
 
   led_strip_.begin();
   led_strip_.show();
@@ -62,11 +63,6 @@ os_thread_return_t UserInterface::UserInterfaceThread() {
 }
 
 void UserInterface::UpdateGui() {
-    byte brightness = sin((millis() / 5000.0) * TWO_PI) * 127 + 128;
-
-
-    analogWrite(config::ui::display::pin_backlight, brightness);
-
   if (splash_screen_) {
     splash_screen_->Render();
     if (millis() < 2000) {
@@ -94,8 +90,6 @@ void UserInterface::UpdateGui() {
 
 void UserInterface::UpdateBuzzer() {
   auto current_state = state_->GetTerminalState();
-
-  // logger.error("UpdateBuzzer");
 
   if (last_buzz_state_id_ != static_cast<void *>(current_state.get())) {
     using namespace oww::state::terminal;
@@ -169,7 +163,7 @@ void UserInterface::UpdateLed() {
              },
              *(current_state.get()));
 
-  byte scaling = sin((millis() / 5000.0) * TWO_PI) * 15 + 20;
+  byte scaling = 20;  // sin((millis() / 5000.0) * TWO_PI) * 15 + 20;
 
   for (size_t i = 0; i < led_strip_.numPixels(); i++) {
     led_strip_.setColorScaled(i, r, g, b, scaling);
