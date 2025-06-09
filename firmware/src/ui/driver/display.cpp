@@ -138,13 +138,13 @@ void Display::SendColor(const uint8_t *cmd, size_t cmd_size,
   lv_draw_sw_rgb565_swap((void *)param, param_size / 2);
 
   pinSetFast(pin_datacommand);
-  // if (param_size > 0) {
-  //   spi_interface_.transfer(param, nullptr, param_size, nullptr);
-  // }
-
-  for (size_t i = 0; i < param_size; i++) {
-    spi_interface_.transfer(param[i]);
+  if (param_size > 0) {
+    spi_interface_.transfer(param, nullptr, param_size, nullptr);
   }
+
+  // for (size_t i = 0; i < param_size; i++) {
+  //   spi_interface_.transfer(param[i]);
+  // }
   pinSetFast(pin_chipselect);
 
   Display::instance_->spi_interface_.endTransaction();
