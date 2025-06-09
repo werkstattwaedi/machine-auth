@@ -1,0 +1,12 @@
+{
+    "terminal": {
+        "machineId": "test-fraese",
+        "machineName": "Fräse"
+    },
+    "machine": [
+        {
+            "machineId": "test-fraese",
+            "control": "relais-0"
+        }
+    ]
+}
