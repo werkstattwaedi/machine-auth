@@ -10,6 +10,7 @@ import {
 import * as logger from "firebase-functions/logger";
 import { diversifyKey } from "../ntag/key_diversification";
 import { authorizeStep1 } from "../ntag/authorize";
+import { toKeyBytes } from "../ntag/bytebuffer_util";
 
 export function handleStartSession(
   request: StartSessionRequestT,
@@ -18,7 +19,7 @@ export function handleStartSession(
     systemName: string;
   }
 ): StartSessionResponseT {
-  logger.info("handleStartSession", request);
+  // logger.info("handleStartSession", request);
   if (!request.tokenId?.uid) {
     throw new Error("Missing token uid in startSession request");
   }
@@ -41,12 +42,12 @@ export function handleStartSession(
       );
 
       const challengeResponse = authorizeStep1(
-        firstAuth.ntagChallenge,
-        authorizationKey
+        Buffer.from(firstAuth.ntagChallenge),
+        toKeyBytes(authorizationKey)
       );
 
       const authenticationPart2T = new AuthenticationPart2T();
-      authenticationPart2T.cloudChallenge = Array.from(challengeResponse);
+      authenticationPart2T.cloudChallenge = Array.from(challengeResponse.encrypted);
       response.resultType = AuthorizationResult.AuthenticationPart2;
       response.result = authenticationPart2T;
       break;
