@@ -1,0 +1,21 @@
+{
+  "event": "terminalRequest",
+  "url": "https://us-central1-{{{FIREBASE_PROJECT_ID}}}.cloudfunctions.net/api/{{method}}",
+  "requestType": "POST",
+  "json": {
+    "id": "{{{id}}}",
+    "data": "{{{data}}}"
+  },
+  "mydevices": true,
+  "noDefaults": true,
+  "rejectUnauthorized": true,
+  "responseTopic": "{{PARTICLE_DEVICE_ID}}/hook-response/terminalRequest",
+  "responseJson": {
+    "id": "{{{id}}}",
+    "data": "{{{data}}}"
+  },
+  "errorResponseTopic": "{{{PARTICLE_DEVICE_ID}}}/hook-error/terminalRequest",
+  "headers": {
+    "Authorization": "Bearer {{{FIREBASE_AUTH_TOKEN}}}"
+  }
+}

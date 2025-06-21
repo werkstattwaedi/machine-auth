@@ -2,8 +2,8 @@
 
 /* eslint-disable @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any, @typescript-eslint/no-non-null-assertion */
 
-import { FirstAuthentication, FirstAuthenticationT } from '../../oww/session/first-authentication.js';
-import { RecentAuthentication, RecentAuthenticationT } from '../../oww/session/recent-authentication.js';
+import { FirstAuthentication, FirstAuthenticationT } from '../../oww/session/first-authentication';
+import { RecentAuthentication, RecentAuthenticationT } from '../../oww/session/recent-authentication';
 
 
 export enum Authentication {

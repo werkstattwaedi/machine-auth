@@ -4,7 +4,7 @@
 
 import * as flatbuffers from 'flatbuffers';
 
-import { KeyBytes, KeyBytesT } from '../../oww/ntag/key-bytes.js';
+import { KeyBytes, KeyBytesT } from '../../oww/ntag/key-bytes';
 
 
 export class NewTagResponse implements flatbuffers.IUnpackableObject<NewTagResponseT> {

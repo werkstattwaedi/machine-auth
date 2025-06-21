@@ -4,10 +4,10 @@
 
 import * as flatbuffers from 'flatbuffers';
 
-import { TagUid, TagUidT } from '../../oww/ntag/tag-uid.js';
-import { Authentication, unionToAuthentication, unionListToAuthentication } from '../../oww/session/authentication.js';
-import { FirstAuthentication, FirstAuthenticationT } from '../../oww/session/first-authentication.js';
-import { RecentAuthentication, RecentAuthenticationT } from '../../oww/session/recent-authentication.js';
+import { TagUid, TagUidT } from '../../oww/ntag/tag-uid';
+import { Authentication, unionToAuthentication, unionListToAuthentication } from '../../oww/session/authentication';
+import { FirstAuthentication, FirstAuthenticationT } from '../../oww/session/first-authentication';
+import { RecentAuthentication, RecentAuthenticationT } from '../../oww/session/recent-authentication';
 
 
 export class StartSessionRequest implements flatbuffers.IUnpackableObject<StartSessionRequestT> {

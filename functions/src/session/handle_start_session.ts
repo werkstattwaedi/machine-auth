@@ -19,7 +19,6 @@ export function handleStartSession(
     systemName: string;
   }
 ): StartSessionResponseT {
-  // logger.info("handleStartSession", request);
   if (!request.tokenId?.uid) {
     throw new Error("Missing token uid in startSession request");
   }
@@ -47,7 +46,9 @@ export function handleStartSession(
       );
 
       const authenticationPart2T = new AuthenticationPart2T();
-      authenticationPart2T.cloudChallenge = Array.from(challengeResponse.encrypted);
+      authenticationPart2T.cloudChallenge = Array.from(
+        challengeResponse.encrypted
+      );
       response.resultType = AuthorizationResult.AuthenticationPart2;
       response.result = authenticationPart2T;
       break;

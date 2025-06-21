@@ -1,5 +1,8 @@
 import { logger } from "firebase-functions";
-import { AuthenticatePart2RequestT, AuthenticatePart2ResponseT } from "../fbs/oww/session";
+import {
+  AuthenticatePart2RequestT,
+  AuthenticatePart2ResponseT,
+} from "../fbs/oww/session";
 
 export function handleAuthenticatePart2(
   request: AuthenticatePart2RequestT,
@@ -8,16 +11,14 @@ export function handleAuthenticatePart2(
     systemName: string;
   }
 ): AuthenticatePart2ResponseT {
+  logger.info("handleStartSession", request);
+  if (!request.sessionId) {
+    throw new Error("Missing sessionId");
+  }
 
-   logger.info("handleStartSession", request);
-    if (!request.sessionId) {
-      throw new Error("Missing sessionId");
-    }
-    
-    
-    // const uid = Buffer.from(request.tokenId.uid);
-  
-    const response = new AuthenticatePart2ResponseT();
+  // const uid = Buffer.from(request.tokenId.uid);
 
-    return response;
+  const response = new AuthenticatePart2ResponseT();
+
+  return response;
 }

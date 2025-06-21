@@ -75,6 +75,9 @@ const keyIdBytes = {
   reserved2: Buffer.from([0x00, 0x00, 0x04]),
 };
 
+/** For testing only. */
+export const testOnly = { keyIdBytes };
+
 /** Computes the diversified key. */
 function computeDiversifiedKey(
   masterKey: Buffer,
@@ -89,6 +92,7 @@ function computeDiversifiedKey(
     masterKey,
     Buffer.alloc(16, 0)
   );
+  cipher.setAutoPadding(false);
 
   const cmacInput = generateDiversifiedCmacInput(
     tagUid,
@@ -109,27 +113,42 @@ type CmacSubkeys = {
 
 /** Computes CMAC subkeys from master key. */
 function generateSubkeys(masterKey: Buffer): CmacSubkeys {
-  /** Shifts the key buffer by one bit  */
-  function bitshiftBuffer(input: Buffer): Buffer {
-    assert(input.length == 16);
-
-    const output = Buffer.alloc(16);
-    for (let i = 0; i < 16; i++) {
-      const a = input.readUInt8(i);
-      const b = input.readUInt8((i + 1) % 16);
-      output.writeUInt8((a << 1) | (b >> 7) && 0xff);
-    }
-    return output;
-  }
+  const Rb = Buffer.from([
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x87,
+  ]);
 
   const cipher = crypto.createCipheriv(
     "aes-128-cbc",
     masterKey,
     Buffer.alloc(16, 0)
   );
+  cipher.setAutoPadding(false);
   const k0 = cipher.update(Buffer.alloc(16, 0));
-  const k1 = bitshiftBuffer(k0);
-  const k2 = bitshiftBuffer(k1);
+
+  function leftShift(input: Buffer): Buffer {
+    const output = Buffer.alloc(16);
+    for (let i = 0; i < 15; i++) {
+      output[i] = (input[i] << 1) | (input[i + 1] >> 7);
+    }
+    output[15] = input[15] << 1;
+    return output;
+  }
+
+  const k1 = leftShift(k0);
+  if ((k0[0] & 0x80) !== 0) {
+    for (let i = 0; i < 16; i++) {
+      k1[i] ^= Rb[i];
+    }
+  }
+
+  const k2 = leftShift(k1);
+  if ((k1[0] & 0x80) !== 0) {
+    for (let i = 0; i < 16; i++) {
+      k2[i] ^= Rb[i];
+    }
+  }
+
   return {
     k1,
     k2,
@@ -149,10 +168,11 @@ function generateDiversifiedCmacInput(
   const diversificationInputMaxLength = 31;
 
   // Diversification input
-  const diversificationInput = Buffer.concat(
-    [tagUid, keyId, Buffer.from(systemIdentifier, "utf8")],
-    /* totalLength  = */ diversificationInputMaxLength
-  );
+  const diversificationInput = Buffer.concat([
+    tagUid,
+    keyId,
+    Buffer.from(systemIdentifier, "utf8"),
+  ]);
 
   const divConstant = Buffer.of(0x01);
 

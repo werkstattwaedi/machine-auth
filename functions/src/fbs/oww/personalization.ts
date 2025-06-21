@@ -2,5 +2,5 @@
 
 /* eslint-disable @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any, @typescript-eslint/no-non-null-assertion */
 
-export { KeyDiversificationRequest, KeyDiversificationRequestT } from './personalization/key-diversification-request.js';
-export { KeyDiversificationResponse, KeyDiversificationResponseT } from './personalization/key-diversification-response.js';
+export { KeyDiversificationRequest, KeyDiversificationRequestT } from './personalization/key-diversification-request';
+export { KeyDiversificationResponse, KeyDiversificationResponseT } from './personalization/key-diversification-response';

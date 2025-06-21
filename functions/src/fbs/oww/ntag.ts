@@ -2,6 +2,6 @@
 
 /* eslint-disable @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any, @typescript-eslint/no-non-null-assertion */
 
-export { Key } from './ntag/key.js';
-export { KeyBytes, KeyBytesT } from './ntag/key-bytes.js';
-export { TagUid, TagUidT } from './ntag/tag-uid.js';
+export { Key } from './ntag/key';
+export { KeyBytes, KeyBytesT } from './ntag/key-bytes';
+export { TagUid, TagUidT } from './ntag/tag-uid';

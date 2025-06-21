@@ -2,9 +2,9 @@
 
 /* eslint-disable @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any, @typescript-eslint/no-non-null-assertion */
 
-import { AuthenticationPart2, AuthenticationPart2T } from '../../oww/session/authentication-part2.js';
-import { StateAuthorized, StateAuthorizedT } from '../../oww/session/state-authorized.js';
-import { StateRejected, StateRejectedT } from '../../oww/session/state-rejected.js';
+import { AuthenticationPart2, AuthenticationPart2T } from '../../oww/session/authentication-part2';
+import { StateAuthorized, StateAuthorizedT } from '../../oww/session/state-authorized';
+import { StateRejected, StateRejectedT } from '../../oww/session/state-rejected';
 
 
 export enum AuthorizationResult {

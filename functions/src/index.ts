@@ -1,6 +1,5 @@
 import express from "express";
-import { Response } from "express";
-import { onRequest, Request } from "firebase-functions/v2/https";
+import { onRequest } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { defineSecret, defineString } from "firebase-functions/params";
 import { initializeApp } from "firebase-admin/app";
@@ -15,54 +14,67 @@ initializeApp();
 const diversificationMasterKey = defineSecret("DIVERSIFICATION_MASTER_KEY");
 const diversificationSystemName = defineString("DIVERSIFICATION_SYSTEM_NAME");
 
-export const startSession = onRequest(
-  { secrets: [diversificationMasterKey, diversificationSystemName] },
-  async (req: Request, res: Response) => {
-    try {
+export const app = express();
+app.use(express.text());
 
-      console.log("key!!!", diversificationMasterKey.value())
-      const startSessionResponseFbs = handleStartSession(
-        unpackRequest(req, (buffer) =>
-          StartSessionRequest.getRootAsStartSessionRequest(buffer).unpack()
-        ),
-        {
-          masterKey: diversificationMasterKey.value(),
-          systemName: diversificationSystemName.value(),
-        }
-      );
-
-      sendFlatbufferSuccessResponse(res, startSessionResponseFbs);
-    } catch (error: any) {
-      sendHttpError(req, res, error);
-    }
+// Middleware to attach config to request
+app.use(
+  (
+    req: express.Request,
+    res: express.Response,
+    next: express.NextFunction
+  ) => {
+    (req as any).config = {
+      masterKey: diversificationMasterKey.value(),
+      systemName: diversificationSystemName.value(),
+    };
+    next();
   }
 );
 
-export const authenticatePart2 = onRequest(
-  { secrets: [diversificationMasterKey, diversificationSystemName] },
-  async (req: Request, res: Response) => {
-    try {
-      const responseFbs = handleAuthenticatePart2(
-        unpackRequest(req, (buffer) =>
-          AuthenticatePart2Request.getRootAsAuthenticatePart2Request(
-            buffer
-          ).unpack()
-        ),
-        {
-          masterKey: diversificationMasterKey.value(),
-          systemName: diversificationSystemName.value(),
-        }
-      );
+export const startSessionHandler = async (
+  req: express.Request,
+  res: express.Response
+) => {
+  try {
+    const startSessionResponseFbs = handleStartSession(
+      unpackRequest(req, (buffer) =>
+        StartSessionRequest.getRootAsStartSessionRequest(buffer).unpack()
+      ),
+      (req as any).config
+    );
 
-      sendFlatbufferSuccessResponse(res, responseFbs);
-    } catch (error: any) {
-      sendHttpError(req, res, error);
-    }
+    sendFlatbufferSuccessResponse(res, startSessionResponseFbs);
+  } catch (error: any) {
+    sendHttpError(req, res, error);
   }
-);
+};
+
+export const authenticatePart2Handler = async (
+  req: express.Request,
+  res: express.Response
+) => {
+  try {
+    const responseFbs = handleAuthenticatePart2(
+      unpackRequest(req, (buffer) =>
+        AuthenticatePart2Request.getRootAsAuthenticatePart2Request(
+          buffer
+        ).unpack()
+      ),
+      (req as any).config
+    );
+
+    sendFlatbufferSuccessResponse(res, responseFbs);
+  } catch (error: any) {
+    sendHttpError(req, res, error);
+  }
+};
+
+app.post("/startSession", startSessionHandler);
+app.post("/authenticatePart2", authenticatePart2Handler);
 
 function unpackRequest<T>(
-  req: Request,
+  req: express.Request,
   unpacker: (buffer: flatbuffers.ByteBuffer) => T
 ): T {
   if (req.method !== "POST") {
@@ -84,8 +96,8 @@ function unpackRequest<T>(
   }
 }
 
-function sendHttpError(req: Request, res: Response, error: any) {
-  console.log("Request Failed!", error)
+function sendHttpError(req: express.Request, res: express.Response, error: any) {
+  console.log("Request Failed!", error);
   let message = "unknown error2";
   if (error instanceof Error) {
     message = error.message;
@@ -93,11 +105,11 @@ function sendHttpError(req: Request, res: Response, error: any) {
 
   // logger.error(`Request ${req.url} failed`, error);
 
-  res.status(400).contentType("application/json").send({message});
+  res.status(400).contentType("application/json").send({ message });
 }
 
 function sendFlatbufferSuccessResponse(
-  res: Response,
+  res: express.Response,
   responseObject: flatbuffers.IGeneratedObject
 ) {
   const responseBuilder = new flatbuffers.Builder(1024);
@@ -107,3 +119,5 @@ function sendFlatbufferSuccessResponse(
   const responseBase64 = Buffer.from(responseBytes).toString("base64");
   res.status(200).type("text/plain").send(responseBase64);
 }
+
+export const api = onRequest({ secrets: [diversificationMasterKey] }, app);

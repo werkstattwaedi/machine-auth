@@ -1,4 +1,3 @@
-
 import { getFirestore } from "firebase-admin/firestore";
 
 const db = getFirestore();
@@ -7,17 +6,10 @@ const db = getFirestore();
 
 // }
 
-
-
-
 // export function createSession(tagUid: string): Session {
-
-
 
 // }
 
 // export function getSession(sessionId: string): Session {
-
-
 
 // }

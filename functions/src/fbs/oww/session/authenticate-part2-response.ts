@@ -4,10 +4,10 @@
 
 import * as flatbuffers from 'flatbuffers';
 
-import { AuthenticationPart2, AuthenticationPart2T } from '../../oww/session/authentication-part2.js';
-import { AuthorizationResult, unionToAuthorizationResult, unionListToAuthorizationResult } from '../../oww/session/authorization-result.js';
-import { StateAuthorized, StateAuthorizedT } from '../../oww/session/state-authorized.js';
-import { StateRejected, StateRejectedT } from '../../oww/session/state-rejected.js';
+import { AuthenticationPart2, AuthenticationPart2T } from '../../oww/session/authentication-part2';
+import { AuthorizationResult, unionToAuthorizationResult, unionListToAuthorizationResult } from '../../oww/session/authorization-result';
+import { StateAuthorized, StateAuthorizedT } from '../../oww/session/state-authorized';
+import { StateRejected, StateRejectedT } from '../../oww/session/state-rejected';
 
 
 export class AuthenticatePart2Response implements flatbuffers.IUnpackableObject<AuthenticatePart2ResponseT> {
