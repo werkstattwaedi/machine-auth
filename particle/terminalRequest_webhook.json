@@ -1,6 +1,7 @@
 {
+  "name": "terminalRequest",
   "event": "terminalRequest",
-  "url": "https://us-central1-{{{FIREBASE_PROJECT_ID}}}.cloudfunctions.net/api/{{method}}",
+  "url": "https://us-central1-oww-maschinenfreigabe.cloudfunctions.net/api/{{{method}}}",
   "requestType": "POST",
   "json": {
     "id": "{{{id}}}",
@@ -9,7 +10,7 @@
   "mydevices": true,
   "noDefaults": true,
   "rejectUnauthorized": true,
-  "responseTopic": "{{PARTICLE_DEVICE_ID}}/hook-response/terminalRequest",
+  "responseTopic": "{{{PARTICLE_DEVICE_ID}}}/hook-response/terminalRequest",
   "responseJson": {
     "id": "{{{id}}}",
     "data": "{{{data}}}"

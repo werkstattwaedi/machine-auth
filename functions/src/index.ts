@@ -13,17 +13,42 @@ initializeApp();
 
 const diversificationMasterKey = defineSecret("DIVERSIFICATION_MASTER_KEY");
 const diversificationSystemName = defineString("DIVERSIFICATION_SYSTEM_NAME");
+const particleWebhookApiKey = defineSecret("particle-webhook-api-key");
 
 export const app = express();
-app.use(express.text());
+app.use(express.json());
+
+// Authentication middleware to check for the Particle webhook API key.
+const authMiddleware = (
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction
+) => {
+  console.log("All incoming headers:", req.headers, req.path);
+
+  const authHeader = req.headers.authorization;
+  const apiKey = particleWebhookApiKey.value();
+
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    logger.warn("Missing or invalid Authorization header.");
+    return res.status(401).send({ message: "Unauthorized" });
+  }
+
+  const token = authHeader.split(" ")[1];
+  if (token !== apiKey) {
+    logger.warn("Invalid API key provided.");
+    return res.status(403).send({ message: "Forbidden" });
+  }
+
+  next();
+  return;
+};
+
+app.use(authMiddleware);
 
 // Middleware to attach config to request
 app.use(
-  (
-    req: express.Request,
-    res: express.Response,
-    next: express.NextFunction
-  ) => {
+  (req: express.Request, res: express.Response, next: express.NextFunction) => {
     (req as any).config = {
       masterKey: diversificationMasterKey.value(),
       systemName: diversificationSystemName.value(),
@@ -44,7 +69,7 @@ export const startSessionHandler = async (
       (req as any).config
     );
 
-    sendFlatbufferSuccessResponse(res, startSessionResponseFbs);
+    sendFlatbufferSuccessResponse(req, res, startSessionResponseFbs);
   } catch (error: any) {
     sendHttpError(req, res, error);
   }
@@ -64,7 +89,7 @@ export const authenticatePart2Handler = async (
       (req as any).config
     );
 
-    sendFlatbufferSuccessResponse(res, responseFbs);
+    sendFlatbufferSuccessResponse(req, res, responseFbs);
   } catch (error: any) {
     sendHttpError(req, res, error);
   }
@@ -81,9 +106,10 @@ function unpackRequest<T>(
     throw new Error("Method Not Allowed.");
   }
 
-  const base64Payload = req.body;
+  const base64Payload = req.body.data;
+
   if (typeof base64Payload !== "string" || base64Payload.trim() === "") {
-    throw new Error("Missing request body.");
+    throw new Error("Missing request payload.");
   }
 
   try {
@@ -96,19 +122,22 @@ function unpackRequest<T>(
   }
 }
 
-function sendHttpError(req: express.Request, res: express.Response, error: any) {
+function sendHttpError(
+  req: express.Request,
+  res: express.Response,
+  error: any
+) {
   console.log("Request Failed!", error);
-  let message = "unknown error2";
-  if (error instanceof Error) {
-    message = error.message;
-  }
+  let message = error instanceof Error ? error.message : "Unknown Error";
 
-  // logger.error(`Request ${req.url} failed`, error);
-
-  res.status(400).contentType("application/json").send({ message });
+  res.status(400).contentType("application/json").send({
+    id: req.body.id,
+    message: message,
+  });
 }
 
 function sendFlatbufferSuccessResponse(
+  req: express.Request,
   res: express.Response,
   responseObject: flatbuffers.IGeneratedObject
 ) {
@@ -117,7 +146,14 @@ function sendFlatbufferSuccessResponse(
   responseBuilder.finish(responseOffset);
   const responseBytes = responseBuilder.asUint8Array();
   const responseBase64 = Buffer.from(responseBytes).toString("base64");
-  res.status(200).type("text/plain").send(responseBase64);
+
+  res.status(200).contentType("application/json").send({
+    id: req.body.id,
+    data: responseBase64,
+  });
 }
 
-export const api = onRequest({ secrets: [diversificationMasterKey] }, app);
+export const api = onRequest(
+  { secrets: [diversificationMasterKey, particleWebhookApiKey] },
+  app
+);

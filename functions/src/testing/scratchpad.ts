@@ -3,6 +3,7 @@ import { diversifyKey } from "../ntag/key_diversification";
 import { generateEncodedStartSessionRequest } from "./test_utils";
 import { toKeyBytes } from "../ntag/bytebuffer_util";
 import * as crypto from "crypto";
+import { api } from "..";
 
 // Call your function here with test data
 const machineId = "test-machine-123";
@@ -33,7 +34,7 @@ const encryptedTagChallenge = Buffer.concat([
   cipher.final(),
 ]);
 
-console.log(encryptedTagChallenge);
+// console.log(encryptedTagChallenge);
 
 const encodedRequest = generateEncodedStartSessionRequest(
   machineId,
@@ -41,8 +42,29 @@ const encodedRequest = generateEncodedStartSessionRequest(
   Array.from(encryptedTagChallenge)
 );
 
-// Log the output to the console
-console.log("Encoded StartSessionRequest:");
+// start env
+// npm run build:watch
+// firebase emulators:start --only database,firestore,hosting,pubsub
+// firebase functions:shell
+
+// Generate with
+// functions$ npx ts-node src/testing/scratchpad.ts
+
+// paste output in shell
 console.log(
-  `startSession.post({body: "${encodedRequest}", headers:{"content-type": "text/plain"}})`
+  `api.post("/startSession", ${JSON.stringify({
+    body: {
+      id: "123",
+      data: encodedRequest,
+    },
+    json: true,
+    headers: {
+      Authorization: `Bearer SuperSecr3t`,
+    },
+  })})`
+);
+
+
+console.log(
+  `particle publish terminalRequest '{"id":"123", "method": "startSession", "data": "EAAAAAwAEwATAAwACwAEAAwAAAAcAAAAAAAAATAAAAAAAAABAgMEBQYHBgAIAAQABgAAAAQAAAAQAAAArLrsTDWA0D1qQNOozMPyKRAAAAB0ZXN0LW1hY2hpbmUtMTIzAAAAAA=="}'`
 );
