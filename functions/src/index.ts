@@ -6,8 +6,10 @@ import { initializeApp } from "firebase-admin/app";
 import * as flatbuffers from "flatbuffers";
 import { StartSessionRequest } from "./fbs/oww/session/start-session-request";
 import { AuthenticatePart2Request } from "./fbs/oww/session/authenticate-part2-request";
+import { KeyDiversificationRequest } from "./fbs/oww/personalization/key-diversification-request";
 import { handleStartSession } from "./session/handle_start_session";
 import { handleAuthenticatePart2 } from "./session/handle_authentication_part2";
+import { handleKeyDiversification } from "./personalization/handle_key_diversification";
 
 initializeApp();
 
@@ -24,8 +26,6 @@ const authMiddleware = (
   res: express.Response,
   next: express.NextFunction
 ) => {
-  console.log("All incoming headers:", req.headers, req.path);
-
   const authHeader = req.headers.authorization;
   const apiKey = particleWebhookApiKey.value();
 
@@ -95,8 +95,28 @@ export const authenticatePart2Handler = async (
   }
 };
 
+export const keyDiversificationHandler = async (
+  req: express.Request,
+  res: express.Response
+) => {
+  try {
+    const keyDiversificationResponseFbs = handleKeyDiversification(
+      unpackRequest(req, (buffer) =>
+        KeyDiversificationRequest.getRootAsKeyDiversificationRequest(
+          buffer
+        ).unpack()
+      ),
+      (req as any).config
+    );
+    sendFlatbufferSuccessResponse(req, res, keyDiversificationResponseFbs);
+  } catch (error: any) {
+    sendHttpError(req, res, error);
+  }
+};
+
 app.post("/startSession", startSessionHandler);
 app.post("/authenticatePart2", authenticatePart2Handler);
+app.post("/personalize", keyDiversificationHandler);
 
 function unpackRequest<T>(
   req: express.Request,
