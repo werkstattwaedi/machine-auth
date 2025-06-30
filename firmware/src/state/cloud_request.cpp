@@ -5,8 +5,13 @@ namespace oww::state {
 Logger CloudRequest::logger("cloud_request");
 
 void CloudRequest::Begin() {
-  Particle.function("TerminalResponse", &CloudRequest::HandleTerminalResponse,
-                    this);
+  SubscribeOptions subscribeOptions;
+  subscribeOptions.structured(true);
+
+  Particle.subscribe(
+      System.deviceID() + "/hook-response/terminalRequest/",
+      [this](CloudEvent event) { HandleTerminalResponse(event); },
+      subscribeOptions);
 }
 
 // std::shared_ptr<CloudResponse> CloudRequest::SendTerminalRequest(
@@ -32,20 +37,22 @@ void CloudRequest::Begin() {
 //   return response_container;
 // }
 
-int CloudRequest::HandleTerminalResponse(String response_payload) {
-  auto id_end_index = response_payload.indexOf(',');
-  if (id_end_index < 0) {
-    logger.error(
-        "Unparsable TerminalResponse payload. RequestID Separator not found.");
-    return -1;
+void CloudRequest::HandleTerminalResponse(CloudEvent event) {
+  EventData event_data = event.dataStructured();
+
+  if (!event_data.has("id") || !event_data.has("data")) {
+    logger.error("Invalid response, missing id or data property");
+    return;
   }
 
-  auto request_id = response_payload.substring(0, id_end_index);
+  String request_id = event_data.get("id").asString();
+  String response_data = event_data.get("data").asString();
+
   auto it = inflight_requests_.find(request_id);
   if (it == inflight_requests_.end()) {
     logger.error("Received response for unknown or timed-out request ID: %s",
                  request_id.c_str());
-    return 0;
+    return;
   }
 
   InFlightRequest& inflight_request = it->second;
@@ -57,36 +64,13 @@ int CloudRequest::HandleTerminalResponse(String response_payload) {
                 request_id.c_str());
   }
 
-  auto status_end_index = response_payload.indexOf(',', id_end_index + 1);
-  if (status_end_index < 0) {
-    if (response_payload.substring(id_end_index + 1) == "ERROR") {
-      logger.error("Received error response for request %s",
-                   request_id.c_str());
-      inflight_request.failure_handler(ErrorType::kWrongState);
-      return 0;
-    } else {
-      logger.error(
-          "Unparsable TerminalResponse payload. Status Separator not found.");
-      return -1;
-    }
-  }
-
-  auto status = response_payload.substring(id_end_index + 1, status_end_index);
-  if (status != "OK") {
-    logger.error("Unparsable TerminalResponse payload. Unknown status: %s",
-                 status.c_str());
-    return -1;
-  }
-
-  auto encoded = response_payload.substring(status_end_index + 1);
-
-  size_t decoded_len = Base64::getMaxDecodedSize(encoded.length());
+  size_t decoded_len = Base64::getMaxDecodedSize(response_data.length());
 
   std::unique_ptr<uint8_t[]> decoded = std::make_unique<uint8_t[]>(decoded_len);
 
-  if (!Base64::decode(encoded.c_str(), decoded.get(), decoded_len)) {
+  if (!Base64::decode(response_data.c_str(), decoded.get(), decoded_len)) {
     logger.error("Unparsable TerminalResponse payload. Base64 decode failed.");
-    return -3;
+    return;
   }
 
   assert(inflight_request.response_handler);
@@ -94,8 +78,6 @@ int CloudRequest::HandleTerminalResponse(String response_payload) {
 
   // Remove the processed request from the map
   inflight_requests_.erase(it);
-
-  return 0;
 }
 
 void CloudRequest::HandleTerminalFailure(String request_id,

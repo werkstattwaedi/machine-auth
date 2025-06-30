@@ -57,6 +57,13 @@ void OnStartWithNfcAuth(StartSession state, StartWithNfcAuth &start,
       config::tag::key_authorization);
 
   if (!auth_challenge) {
+    Log.error("OnStartWithNfcAuth failed  [dna:%d]", auth_challenge.error());
+    if (auth_challenge.error() ==
+        Ntag424::DNA_StatusCode::AUTHENTICATION_DELAY) {
+      // Need to retry until successful
+      return;
+    }
+
     return UpdateNestedState(
         state_manager, state,
         Failed{.tag_status = auth_challenge.error(),

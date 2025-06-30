@@ -41,7 +41,7 @@ class CloudRequest {
   // Requests currently awaiting a response.
   std::map<String, InFlightRequest> inflight_requests_;
 
-  int HandleTerminalResponse(String response_payload);
+  void HandleTerminalResponse(CloudEvent event);
   void HandleTerminalFailure(String request_id, particle::Error error);
 
   static Logger logger;
@@ -109,12 +109,17 @@ std::shared_ptr<CloudResponse<TResponse>> CloudRequest::SendTerminalRequest(
   auto base64_encoded_data =
       Base64::encodeToString(builder.GetBufferPointer(), builder.GetSize());
 
-  String publish_payload =
-      String::format("%s,%s,%s", command.c_str(), request_id.c_str(),
-                     base64_encoded_data.c_str());
+  char payload_buffer[1024];
+  memset(payload_buffer, 0, sizeof(payload_buffer));
+  JSONBufferWriter writer(payload_buffer, sizeof(payload_buffer));
+  writer.beginObject();
+  writer.name("id").value(request_id);
+  writer.name("method").value(command);
+  writer.name("data").value(base64_encoded_data);
+  writer.endObject();
 
   auto publish_future =
-      Particle.publish("terminalRequest", publish_payload, WITH_ACK);
+      Particle.publish("terminalRequest", payload_buffer, WITH_ACK);
 
   publish_future.onError([this, request_id](particle::Error error) {
     // Call HandleTerminalFailure using the captured 'this' pointer and

@@ -17,8 +17,8 @@ SerialLogHandler logHandler(
                         {"cloud_request", LOG_LEVEL_ALL},
                         {"config", LOG_LEVEL_ALL},
                         {"display", LOG_LEVEL_WARN},
-                        {"nfc", LOG_LEVEL_ALL},
-                        {"pn532", LOG_LEVEL_ALL},
+                        {"nfc", LOG_LEVEL_WARN},
+                        {"pn532", LOG_LEVEL_WARN},
                     });
 
 using namespace oww::state;

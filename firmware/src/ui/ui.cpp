@@ -115,10 +115,7 @@ void UserInterface::UpdateBuzzer() {
                *(current_state.get()));
 
     if (frequency > 0) {
-      logger.error("Buzzing with frequency %d", frequency);
-
       analogWrite(buzzer::pin_pwm, 128, frequency);
-
       buzz_timeout = millis() + duration;
     }
 
@@ -126,10 +123,7 @@ void UserInterface::UpdateBuzzer() {
   }
 
   if (buzz_timeout != CONCURRENT_WAIT_FOREVER && buzz_timeout < millis()) {
-    logger.error("Stopping buzzer");
-
     analogWrite(buzzer::pin_pwm, 0);
-
     buzz_timeout = CONCURRENT_WAIT_FOREVER;
   }
 }
