@@ -10,6 +10,8 @@ namespace oww::state {
 
 class State : public event::IStateEvent, public CloudRequest {
  public:
+State();
+
   Status Begin(std::unique_ptr<Configuration> configuration);
 
   void Loop();
@@ -26,8 +28,15 @@ class State : public event::IStateEvent, public CloudRequest {
   bool tryLock() { return os_mutex_trylock(mutex_); };
   void unlock() { os_mutex_unlock(mutex_); };
 
+  void SetBootProgress(std::string message);
+  void BootCompleted();
+  bool IsBootCompleted();
+  std::string GetBootProgress();
+
  private:
   static Logger logger;
+
+  std::string boot_progress_;
 
   std::unique_ptr<Configuration> configuration_ = nullptr;
   std::shared_ptr<terminal::State> terminal_state_;

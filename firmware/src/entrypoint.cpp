@@ -40,6 +40,7 @@ void setup() {
 #if defined(DEVELOPMENT_BUILD)
   // Await the terminal connections, so that all log messages during setup are
   // not skipped.
+  state_->SetBootProgress("Warte auf Debugger...");
   waitFor(Serial.isConnected, 5000);
 #endif
 
@@ -47,8 +48,21 @@ void setup() {
     Log.info("Failed to start display = %d", (int)display_setup_result.error());
   }
 
+  state_->SetBootProgress("Start NFC...");
   Status nfc_setup_result = NfcTags::instance().Begin(state_);
   Log.info("NFC Status = %d", (int)nfc_setup_result);
+  state_->SetBootProgress("Verbinde mit WiFi...");
+
+  while (!WiFi.ready()) {
+    delay(10);
+  }
+
+  state_->SetBootProgress("Verbinde mit Cloud...");
+
+  while (!Particle.connected()) {
+    delay(10);
+  }
+  state_->BootCompleted();
 }
 
 void loop() { state_->Loop(); }

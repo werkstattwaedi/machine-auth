@@ -65,7 +65,7 @@ os_thread_return_t UserInterface::UserInterfaceThread() {
 void UserInterface::UpdateGui() {
   if (splash_screen_) {
     splash_screen_->Render();
-    if (millis() < 50000) {
+    if (!state_->IsBootCompleted()) {
       return;
     }
 

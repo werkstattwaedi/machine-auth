@@ -22,13 +22,21 @@ SplashScreen::SplashScreen(std::shared_ptr<oww::state::State> state)
 
   // lv_obj_set_size(root_, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
   lv_obj_align(logo, LV_ALIGN_CENTER, 0, 0);
-   
+
+  progress_label_ = lv_label_create(root_);
+  lv_obj_set_style_text_font(progress_label_, &roboto_12, LV_PART_MAIN);
+  lv_obj_align(progress_label_, LV_ALIGN_BOTTOM_MID, 0, 0);
 };
 SplashScreen::~SplashScreen() {
   // lv_obj_delete(image_);
   lv_obj_delete(root_);
 }
 
-void SplashScreen::Render() {}
+void SplashScreen::Render() {
+  auto message = state_->GetBootProgress();
+  if (message.compare(lv_label_get_text(progress_label_)) != 0) {
+    lv_label_set_text(progress_label_, state_->GetBootProgress().c_str());
+  }
+}
 
 }  // namespace oww::ui

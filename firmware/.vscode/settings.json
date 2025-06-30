@@ -70,7 +70,8 @@
         "lv_lcd_generic_mipi.h": "c",
         "iostream": "cpp",
         "unordered_set": "cpp",
-        "set": "cpp"
+        "set": "cpp",
+        "lvgl.h": "c"
     },
     "C_Cpp.clang_format_fallbackStyle": "Google",
     "C_Cpp.formatting": "clangFormat",

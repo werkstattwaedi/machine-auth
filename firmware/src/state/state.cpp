@@ -7,6 +7,8 @@ namespace oww::state {
 
 Logger State::logger("state");
 
+State::State() : boot_progress_("Starte...") {}
+
 Status State::Begin(std::unique_ptr<Configuration> configuration) {
   os_mutex_create(&mutex_);
 
@@ -23,6 +25,11 @@ Status State::Begin(std::unique_ptr<Configuration> configuration) {
 void State::Loop() { CheckTimeouts(); }
 
 void State::OnConfigChanged() { System.reset(RESET_REASON_CONFIG_UPDATE); }
+
+void State::SetBootProgress(std::string message) { boot_progress_ = message; }
+void State::BootCompleted() { boot_progress_.clear(); }
+bool State::IsBootCompleted() { return boot_progress_.empty(); }
+std::string State::GetBootProgress() { return boot_progress_; }
 
 void State::OnTagFound() {
   logger.info("tag_state: OnTagFound");

@@ -13,6 +13,7 @@ class SplashScreen : public Component {
 
  private:
   lv_obj_t* image_;
+  lv_obj_t* progress_label_;
 };
 
 }  // namespace oww::ui
