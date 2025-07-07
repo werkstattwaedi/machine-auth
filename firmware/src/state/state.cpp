@@ -82,6 +82,12 @@ void State::OnNewState(oww::state::terminal::Personalize state) {
   using namespace oww::state::terminal::personalize;
 
   terminal_state_ = std::make_shared<terminal::State>(state);
+
+  using namespace oww::state::terminal::personalize;
+  if (auto nested = std::get_if<Failed>(state.state.get())) {
+    logger.error("Failed to personailize: error: %d, message: %s",
+                 (int)nested->error, nested->message.c_str());
+  }
 }
 
 }  // namespace oww::state

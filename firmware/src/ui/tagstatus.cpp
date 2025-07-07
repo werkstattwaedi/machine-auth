@@ -49,8 +49,31 @@ void TagStatus::Render() {
                  },
                  [&](Unknown state) { state_string = "Unbekannte Karte"; },
                  [&](Personalize state) {
-                   state_string = "Personalisiere...";
+                   using namespace oww::state::terminal::personalize;
                    led_color = lv_palette_main(LV_PALETTE_LIGHT_BLUE);
+
+                   std::visit(
+                       overloaded{
+                           [&](Wait sub_state) {
+                             state_string =
+                                 String::format("Starte Personalierung");
+                           },
+                           [&](AwaitKeyDiversificationResponse sub_state) {
+                             state_string = "Lade Geheimnisse.. ";
+                           },
+                           [&](DoPersonalizeTag sub_state) {
+                             state_string = "Programmiere Tag.. ";
+                           },
+                           [&](Completed sub_state) {
+                             state_string = "Fertig!";
+                             led_color = lv_palette_main(LV_PALETTE_GREEN);
+                           },
+                           [&](Failed sub_state) {
+                             state_string = "Fehler!";
+                             led_color = lv_palette_main(LV_PALETTE_RED);
+                           },
+                       },
+                       *(state.state.get()));
                  },
 
              },

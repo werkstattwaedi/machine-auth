@@ -1,5 +1,6 @@
 #include "personalize.h"
 
+#include <array>
 #include <type_traits>
 
 #include "../../config.h"
@@ -8,6 +9,20 @@
 #include "state/cloud_response.h"
 #include "state/configuration.h"
 #include "state/state.h"
+
+namespace {
+
+std::array<uint8_t, 16> get_key_bytes(
+    const std::unique_ptr<oww::ntag::KeyBytes> &source) {
+  std::array<uint8_t, 16> destination{};
+  if (source && source->uid()) {
+    std::copy(source->uid()->begin(), source->uid()->end(),
+              destination.begin());
+  }
+  return destination;
+}
+
+}  // namespace
 
 namespace oww::state::terminal {
 using namespace personalize;
@@ -42,7 +57,7 @@ void OnWait(Personalize state, Wait &wait, oww::state::State &state_manager) {
           .response =
               state_manager.SendTerminalRequest<KeyDiversificationRequestT,
                                                 KeyDiversificationResponseT>(
-                  "personalization", request)});
+                  "personalize", request)});
 }
 
 void OnAwaitKeyDiversificationResponse(
@@ -53,22 +68,29 @@ void OnAwaitKeyDiversificationResponse(
     return;
   }
 
-  // }
+  auto response =
+      std::get_if<oww::personalization::KeyDiversificationResponseT>(
+          cloud_response);
+  if (!response) {
+    return UpdateNestedState(
+        state_manager, state,
+        Failed{.error = std::get<ErrorType>(*cloud_response)});
+  }
 
-  // auto request_result = response->result.value();
-  // if (!request_result) {
-  //   return state.WithNestedState(Failed{.error = request_result.error()});
-  // }
+  auto application_key = get_key_bytes(response->application_key);
+  auto card_key = get_key_bytes(response->authorization_key);
+  auto reserved_1_key = get_key_bytes(response->reserved1_key);
+  auto reserved_2_key = get_key_bytes(response->reserved2_key);
 
-  // auto payload = request_result.value();
+  auto next_state = DoPersonalizeTag{
+      .application_key = application_key,
+      .terminal_key = state_manager.GetConfiguration()->GetTerminalKey(),
+      .card_key = card_key,
+      .reserved_1_key = reserved_1_key,
+      .reserved_2_key = reserved_2_key,
+  };
 
-  // return state.WithNestedState(UpdateTag{
-  //     .application_key = payload.application_key,
-  //     .terminal_key = configuration.GetTerminalKey(),
-  //     .card_key = authorization_key.value(),
-  //     .reserved_1_key = reserved1_key.value(),
-  //     .reserved_2_key = reserved2_key.value(),
-  // });
+  UpdateNestedState(state_manager, state, next_state);
 }
 
 tl::expected<std::array<uint8_t, 16>, Ntag424::DNA_StatusCode> ProbeKeys(
