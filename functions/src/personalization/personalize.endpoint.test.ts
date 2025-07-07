@@ -1,6 +1,8 @@
 import { expect } from "chai";
 import supertest from "supertest";
 import express from "express";
+import * as admin from "firebase-admin";
+import * as sinon from "sinon";
 import * as flatbuffers from "flatbuffers";
 import { KeyDiversificationRequestT } from "../fbs/oww/personalization/key-diversification-request";
 import { TagUidT } from "../fbs/oww/ntag/tag-uid";
@@ -11,20 +13,28 @@ describe("/personalize endpoint", () => {
   const testMasterKey = "000102030405060708090a0b0c0d0e0f";
   const testApiKey = "test-api-key";
   let app: express.Express;
+  let firestoreStub: sinon.SinonStub;
 
   beforeEach(() => {
     process.env.DIVERSIFICATION_MASTER_KEY = testMasterKey;
     process.env.DIVERSIFICATION_SYSTEM_NAME = "OwwMachineAuth";
-    process.env["particle-webhook-api-key"] = testApiKey;
+    process.env.PARTICLE_WEBHOOK_API_KEY = testApiKey;
+
+    firestoreStub = sinon.stub(admin, "firestore").get(() => {
+      return () => ({});
+    });
+
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     app = require("../index").app;
   });
 
   afterEach(() => {
+    firestoreStub.restore();
     delete process.env.DIVERSIFICATION_MASTER_KEY;
     delete process.env.DIVERSIFICATION_SYSTEM_NAME;
-    delete process.env["particle-webhook-api-key"];
+    delete process.env.PARTICLE_WEBHOOK_API_KEY;
     delete require.cache[require.resolve("../index")];
+    Promise.all(admin.apps.map((app) => app?.delete()));
   });
 
   it("should return diversified keys for a valid request", async () => {

@@ -15,7 +15,7 @@ initializeApp();
 
 const diversificationMasterKey = defineSecret("DIVERSIFICATION_MASTER_KEY");
 const diversificationSystemName = defineString("DIVERSIFICATION_SYSTEM_NAME");
-const particleWebhookApiKey = defineSecret("particle-webhook-api-key");
+const particleWebhookApiKey = defineSecret("PARTICLE_WEBHOOK_API_KEY");
 
 export const app = express();
 app.use(express.json());
@@ -62,7 +62,7 @@ export const startSessionHandler = async (
   res: express.Response
 ) => {
   try {
-    const startSessionResponseFbs = handleStartSession(
+    const startSessionResponseFbs = await handleStartSession(
       unpackRequest(req, (buffer) =>
         StartSessionRequest.getRootAsStartSessionRequest(buffer).unpack()
       ),
@@ -80,7 +80,7 @@ export const authenticatePart2Handler = async (
   res: express.Response
 ) => {
   try {
-    const responseFbs = handleAuthenticatePart2(
+    const responseFbs = await handleAuthenticatePart2(
       unpackRequest(req, (buffer) =>
         AuthenticatePart2Request.getRootAsAuthenticatePart2Request(
           buffer

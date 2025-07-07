@@ -81,6 +81,7 @@ void OnStartWithNfcAuth(StartSession state, StartWithNfcAuth &start,
 
 void OnAwaitStartSessionResponse(StartSession state,
                                  AwaitStartSessionResponse &response_holder,
+                                 Ntag424 &ntag_interface,
                                  oww::state::State &state_manager) {
   auto cloud_response = response_holder.response.get();
   if (IsPending(*cloud_response)) {
@@ -107,7 +108,41 @@ void OnAwaitStartSessionResponse(StartSession state,
               .message =
                   start_session_response->result.AsStateRejected()->message});
     case oww::session::AuthorizationResult::AuthenticationPart2:
-      // FIXME IMPLEMENT
+
+    {
+      auto auth_part2 = start_session_response->result.AsAuthenticationPart2();
+      auto cloud_challenge = auth_part2->cloud_challenge;
+
+      std::array<byte, 32> challenge_array;
+      std::copy(cloud_challenge.begin(), cloud_challenge.end(),
+                challenge_array.begin());
+
+      auto encrypted_response =
+          ntag_interface.AuthenticateWithCloud_Part2(challenge_array);
+
+      if (!encrypted_response) {
+        return UpdateNestedState(
+            state_manager, state,
+            Failed{.tag_status = encrypted_response.error(),
+                   .message = String::format(
+                       "AuthenticateEV2First_Part2 failed [dna:%d]",
+                       encrypted_response.error())});
+      }
+
+      oww::session::AuthenticatePart2RequestT auth_part2_request{
+          .session_id = start_session_response->session_id};
+      auth_part2_request.encrypted_ntag_response.assign(
+          encrypted_response->begin(), encrypted_response->end());
+
+      UpdateNestedState(
+          state_manager, state,
+          AwaitAuthenticatePart2Response{
+              .response =
+                  state_manager.SendTerminalRequest<AuthenticatePart2RequestT,
+                                                    AuthenticatePart2ResponseT>(
+                      "authenticatePart2", auth_part2_request)});
+      return;
+    }
     default:
       return UpdateNestedState(
           state_manager, state,
@@ -126,7 +161,7 @@ void Loop(StartSession state, oww::state::State &state_manager,
     OnStartWithNfcAuth(state, *nested, ntag_interface, state_manager);
   } else if (auto nested =
                  std::get_if<AwaitStartSessionResponse>(state.state.get())) {
-    OnAwaitStartSessionResponse(state, *nested, state_manager);
+    OnAwaitStartSessionResponse(state, *nested, ntag_interface, state_manager);
   }
 }
 

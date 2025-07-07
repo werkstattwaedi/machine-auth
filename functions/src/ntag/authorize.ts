@@ -5,7 +5,6 @@
 import * as crypto from "crypto";
 import assert from "assert";
 
-/** Generates all diversified keys for the tag. */
 export function authorizeStep1(
   ntagChallenge: Uint8Array,
   key: Uint8Array
@@ -44,4 +43,55 @@ export function authorizeStep1(
   ]);
 
   return { encrypted, cloudChallenge };
+}
+
+/**
+ *
+ * @param encryptedNtagResponse 32 bytes, encrypted with key
+ * @param key 16 bytes
+ * @param rndA 16 bytes, the cloud challenge from step 1
+ * @returns
+ */
+export function authorizeStep2(
+  encryptedNtagResponse: Uint8Array,
+  key: Uint8Array,
+  rndA: Uint8Array
+): {
+  ti: Uint8Array;
+  pdCap2: Uint8Array;
+  pcdCap2: Uint8Array;
+} {
+  assert(
+    encryptedNtagResponse.length === 32,
+    "encryptedNtagResponse must be 32 bytes"
+  );
+  assert(key.length === 16, "key must be 16 bytes");
+  assert(rndA.length === 16, "rndA must be 16 bytes");
+
+  const decipher = crypto
+    .createDecipheriv("aes-128-cbc", key, Buffer.alloc(16, 0))
+    .setAutoPadding(false);
+
+  const decrypted = Buffer.concat([
+    decipher.update(encryptedNtagResponse),
+    decipher.final(),
+  ]);
+
+  const ti = decrypted.subarray(0, 4);
+  const rndARotated = decrypted.subarray(4, 20);
+  const pdCap2 = decrypted.subarray(20, 26);
+  const pcdCap2 = decrypted.subarray(26, 32);
+
+  const expectedRndARotated = Buffer.concat([
+    rndA.subarray(1, 16),
+    Buffer.of(rndA[0]),
+  ]);
+
+  assert.deepStrictEqual(
+    rndARotated,
+    expectedRndARotated,
+    "RndA' verification failed"
+  );
+
+  return { ti, pdCap2, pcdCap2 };
 }

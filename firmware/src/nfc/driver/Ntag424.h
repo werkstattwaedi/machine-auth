@@ -33,6 +33,9 @@ class Ntag424 {
   tl::expected<std::array<uint8_t, 16>, DNA_StatusCode>
   AuthenticateWithCloud_Begin(Ntag424Key keyNumber);
 
+  tl::expected<std::array<uint8_t, 32>, DNA_StatusCode>
+  AuthenticateWithCloud_Part2(const std::array<uint8_t, 32>& cloud_challenge);
+
   // --- Authenticated API - move to different interface?
 
   tl::expected<std::array<uint8_t, 7>, DNA_StatusCode> GetCardUID();

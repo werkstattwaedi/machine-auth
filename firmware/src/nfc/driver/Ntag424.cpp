@@ -91,6 +91,33 @@ Ntag424::AuthenticateWithCloud_Begin(Ntag424Key key_number) {
   return {auth_challenge};
 }
 
+tl::expected<std::array<uint8_t, 32>, Ntag424::DNA_StatusCode>
+Ntag424::AuthenticateWithCloud_Part2(
+    const std::array<uint8_t, 32>& cloud_challenge) {
+  byte back_data[61];
+  byte back_len = 61;
+
+  auto statusCode = DNA_AuthenticateEV2First_Part2(
+      const_cast<byte*>(cloud_challenge.data()), back_data, &back_len);
+
+  if (statusCode != DNA_StatusCode::DNA_STATUS_OK) {
+    return tl::unexpected((DNA_StatusCode)statusCode);
+  }
+
+  if (back_data[back_len - 2] != 0x91 || back_data[back_len - 1] != 0x00) {
+    return tl::unexpected(DNA_InterpretErrorCode(&back_data[back_len - 2]));
+  }
+
+  if (back_len != 34) {
+    return tl::unexpected(DNA_WRONG_RESPONSE_LEN);
+  }
+
+  auto encrypted_response = std::array<uint8_t, 32>{};
+  memcpy(encrypted_response.data(), back_data, 32);
+
+  return {encrypted_response};
+}
+
 tl::expected<std::array<uint8_t, 7>, Ntag424::DNA_StatusCode>
 Ntag424::GetCardUID() {
   std::array<uint8_t, 7> uid;

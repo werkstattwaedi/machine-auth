@@ -102,5 +102,5 @@ function personalizationRequestExample() {
 }
 
 // Uncomment to run
-personalizationRequestExample();
-// startSessionExample();
+// personalizationRequestExample();
+startSessionExample();

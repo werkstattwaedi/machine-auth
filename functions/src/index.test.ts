@@ -2,25 +2,53 @@ import { expect } from "chai";
 import supertest from "supertest";
 import express from "express";
 import * as admin from "firebase-admin";
+import * as sinon from "sinon";
 import { testEnv } from "./util/test-utils";
 import { generateEncodedStartSessionRequest } from "./testing/test_utils";
 import * as crypto from "crypto";
 import { diversifyKey } from "./ntag/key_diversification";
 import { toKeyBytes } from "./ntag/bytebuffer_util";
 import { KeyDiversificationRequestT } from "./fbs/oww/personalization/key-diversification-request";
-import { TagUidT } from "./fbs/oww/ntag/tag-uid";
+import { TagUidT, TagUid } from "./fbs/oww/ntag/tag-uid";
 import { KeyDiversificationResponse } from "./fbs/oww/personalization/key-diversification-response";
 import { diversifyKeys } from "./ntag/key_diversification";
+import { AuthenticatePart2RequestT, AuthenticatePart2Request } from "./fbs/oww/session";
+import * as flatbuffers from "flatbuffers";
 
 describe("API endpoints", () => {
   const testMasterKey = "000102030405060708090a0b0c0d0e0f";
   const testApiKey = "test-api-key";
   let app: express.Express;
+  let firestoreStub: sinon.SinonStub;
 
   beforeEach(() => {
     process.env.DIVERSIFICATION_MASTER_KEY = testMasterKey;
     process.env.DIVERSIFICATION_SYSTEM_NAME = "OwwMachineAuth";
-    process.env["particle-webhook-api-key"] = testApiKey;
+    process.env.PARTICLE_WEBHOOK_API_KEY = testApiKey;
+
+    firestoreStub = sinon.stub(admin, "firestore").get(() => {
+      return Object.assign(
+        () => ({
+          collection: (name: string) => ({
+            doc: (id: string) => ({
+              id: "test-session-id",
+              set: (data: any) => Promise.resolve(),
+              get: () =>
+                Promise.resolve({
+                  exists: true,
+                  data: () => ({ rndA: crypto.randomBytes(16), tokenId: "01020304050607" }),
+                }),
+            }),
+          }),
+        }),
+        {
+          FieldValue: {
+            serverTimestamp: () => new Date(),
+          },
+        }
+      );
+    });
+
     // Because defineSecret reads process.env at module load time,
     // we need to dynamically require the app after setting the env vars.
     // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -28,9 +56,10 @@ describe("API endpoints", () => {
   });
 
   afterEach(async () => {
+    firestoreStub.restore();
     delete process.env.DIVERSIFICATION_MASTER_KEY;
     delete process.env.DIVERSIFICATION_SYSTEM_NAME;
-    delete process.env["particle-webhook-api-key"];
+    delete process.env.PARTICLE_WEBHOOK_API_KEY;
     // Unload the module so it can be re-imported with different env vars in other tests
     delete require.cache[require.resolve("./index")];
     // Clean up the Firebase app to avoid "already exists" errors
@@ -105,6 +134,37 @@ describe("API endpoints", () => {
 
       expect(response.status).to.equal(401);
       expect(response.body.message).to.equal("Unauthorized");
+    });
+  });
+
+  describe("/authenticatePart2", () => {
+    it("should handle a valid authenticatePart2 request", async () => {
+      const requestId = "test-auth-req-123";
+      const sessionId = "test-session-id";
+      const encryptedNtagResponse = crypto.randomBytes(32);
+      const tokenId = [1, 2, 3, 4, 5, 6, 7];
+
+      const builder = new flatbuffers.Builder(128);
+      const sessionIdOffset = builder.createString(sessionId);
+      const encryptedNtagResponseOffset = AuthenticatePart2Request.createEncryptedNtagResponseVector(builder, encryptedNtagResponse);
+
+      AuthenticatePart2Request.startAuthenticatePart2Request(builder);
+      AuthenticatePart2Request.addSessionId(builder, sessionIdOffset);
+      AuthenticatePart2Request.addEncryptedNtagResponse(builder, encryptedNtagResponseOffset);
+      const reqOffset = AuthenticatePart2Request.endAuthenticatePart2Request(builder);
+      builder.finish(reqOffset);
+
+      const encodedRequest = Buffer.from(builder.asUint8Array()).toString("base64");
+
+      const response = await supertest(app)
+        .post("/authenticatePart2")
+        .set("Authorization", `Bearer ${testApiKey}`)
+        .send({ id: requestId, data: encodedRequest });
+
+      expect(response.status).to.equal(200);
+      expect(response.type).to.equal("application/json");
+      expect(response.body).to.have.property("id", requestId);
+      expect(response.body).to.have.property("data").that.is.a("string").and.not.be.empty;
     });
   });
 

@@ -11,14 +11,16 @@ import * as logger from "firebase-functions/logger";
 import { diversifyKey } from "../ntag/key_diversification";
 import { authorizeStep1 } from "../ntag/authorize";
 import { toKeyBytes } from "../ntag/bytebuffer_util";
+import * as admin from "firebase-admin";
+import { Timestamp } from "firebase-admin/firestore";
 
-export function handleStartSession(
+export async function handleStartSession(
   request: StartSessionRequestT,
   options: {
     masterKey: string;
     systemName: string;
   }
-): StartSessionResponseT {
+): Promise<StartSessionResponseT> {
   if (!request.tokenId?.uid) {
     throw new Error("Missing token uid in startSession request");
   }
@@ -45,12 +47,24 @@ export function handleStartSession(
         toKeyBytes(authorizationKey)
       );
 
+      const sessionId = admin.firestore().collection("sessions").doc().id;
+      await admin
+        .firestore()
+        .collection("sessions")
+        .doc(sessionId)
+        .set({
+          rndA: challengeResponse.cloudChallenge,
+          tokenId: uid.toString("hex"),
+          createdAt: Timestamp.now(),
+        });
+
       const authenticationPart2T = new AuthenticationPart2T();
       authenticationPart2T.cloudChallenge = Array.from(
         challengeResponse.encrypted
       );
       response.resultType = AuthorizationResult.AuthenticationPart2;
       response.result = authenticationPart2T;
+      response.sessionId = sessionId;
       break;
     }
     case Authentication.RecentAuthentication: {
@@ -66,8 +80,6 @@ export function handleStartSession(
         `Unknown authentication type: ${request.authenticationType}`
       );
   }
-
-  response.sessionId = "session-123"; // Assign session ID
 
   return response;
 }
