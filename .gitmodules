@@ -24,4 +24,4 @@
 	url = https://github.com/rickkas7/Base64RK.git
 [submodule "firmware/lib/Particle-NeoPixel"]
 	path = firmware/lib/Particle-NeoPixel
-	url = https://github.com/technobly/Particle-NeoPixel.git
+	url = https://github.com/werkstattwaedi/Particle-NeoPixel.git
