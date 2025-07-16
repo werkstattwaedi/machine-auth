@@ -62,6 +62,13 @@ void setup() {
   while (!Particle.connected()) {
     delay(10);
   }
+
+  state_->SetBootProgress("Warte auf Terminal Config...");
+
+  while (!state_->GetConfiguration()->GetTerminal()) {
+    delay(10);
+  }
+
   state_->BootCompleted();
 }
 

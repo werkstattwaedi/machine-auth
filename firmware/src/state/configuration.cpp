@@ -114,7 +114,7 @@ Status Configuration::Begin() {
         std::make_unique<MachineConfig>(machine_id.asString(), control);
   }
 
-  is_configured_ = true;
+  is_configured_ = terminal_config_ != nullptr;
 
   return Status::kOk;
 }
