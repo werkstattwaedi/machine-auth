@@ -22,7 +22,7 @@ Display &Display::instance() {
 
 Display::Display()
     : spi_interface_(SPI1),
-      spi_settings_(50 * MHZ, MSBFIRST, SPI_MODE0),
+      spi_settings_(40 * MHZ, MSBFIRST, SPI_MODE0),
       touchscreen_interface_(SPI1, resolution_horizontal, resolution_vertical,
                              pin_touch_chipselect, pin_touch_irq) {}
 
@@ -53,7 +53,8 @@ Status Display::Begin() {
   lv_tick_set_cb([]() { return millis(); });
 
   display_ = lv_lcd_generic_mipi_create(
-      resolution_horizontal, resolution_vertical, LV_LCD_FLAG_NONE,
+      resolution_horizontal, resolution_vertical,
+      LV_LCD_FLAG_MIRROR_X | LV_LCD_FLAG_MIRROR_Y,
       [](auto *disp, auto *cmd, auto cmd_size, auto *param, auto param_size) {
         Display::instance().SendCommand(cmd, cmd_size, param, param_size);
       },
