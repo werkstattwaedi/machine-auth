@@ -12,7 +12,7 @@ SYSTEM_MODE(AUTOMATIC);
 
 SerialLogHandler logHandler(
     // Logging level for non-application messages
-    LOG_LEVEL_WARN, {
+    LOG_LEVEL_ALL, {
                         {"app", LOG_LEVEL_ALL},
                         {"cloud_request", LOG_LEVEL_ALL},
                         {"config", LOG_LEVEL_ALL},

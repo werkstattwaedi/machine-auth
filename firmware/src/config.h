@@ -39,7 +39,7 @@ constexpr int8_t pin_pwm = A2;
 
 namespace led {
 constexpr uint8_t pixel_count = 16;
-constexpr uint8_t pixel_type = WS2812B;
+constexpr uint8_t pixel_type = IN4818;
 }  // namespace led
 
 namespace nfc {

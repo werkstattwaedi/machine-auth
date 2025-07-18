@@ -128,6 +128,28 @@ void UserInterface::UpdateBuzzer() {
   }
 }
 
+// Helper function to convert HSL to RGB
+void HslToRgb(float h, float s, float l, byte &r, byte &g, byte &b) {
+  if (s == 0) {
+    r = g = b = (byte)(l * 255.0f);
+  } else {
+    auto hue2rgb = [](float p, float q, float t) {
+      if (t < 0.0f) t += 1.0f;
+      if (t > 1.0f) t -= 1.0f;
+      if (t < 1.0f / 6.0f) return p + (q - p) * 6.0f * t;
+      if (t < 1.0f / 2.0f) return q;
+      if (t < 2.0f / 3.0f) return p + (q - p) * (2.0f / 3.0f - t) * 6.0f;
+      return p;
+    };
+
+    float q = l < 0.5f ? l * (1.0f + s) : l + s - l * s;
+    float p = 2.0f * l - q;
+    r = (byte)(hue2rgb(p, q, h + 1.0f / 3.0f) * 255.0f);
+    g = (byte)(hue2rgb(p, q, h) * 255.0f);
+    b = (byte)(hue2rgb(p, q, h - 1.0f / 3.0f) * 255.0f);
+  }
+}
+
 void UserInterface::UpdateLed() {
   auto current_state = state_->GetTerminalState();
 
@@ -158,10 +180,22 @@ void UserInterface::UpdateLed() {
              *(current_state.get()));
 
   byte scaling = 20;  // sin((millis() / 5000.0) * TWO_PI) * 15 + 20;
-
   for (size_t i = 0; i < led_strip_.numPixels(); i++) {
     led_strip_.setColorScaled(i, r, g, b, scaling);
   }
+
+  // Dicso test
+  // byte scaling = sin((millis() / 10000.0) * TWO_PI) * 100 + 150;
+  // float hue_offset = fmod((millis() / 2000.0f), 1.0f);  // Cycle every 5
+  // seconds
+
+  // for (size_t i = 0; i < led_strip_.numPixels(); i++) {
+  //   float pixel_hue =
+  //       fmod(hue_offset + (float)i / led_strip_.numPixels(), 1.0f);
+  //   byte pixel_r, pixel_g, pixel_b;
+  //   HslToRgb(pixel_hue, 1.0f, 0.5f, pixel_r, pixel_g, pixel_b);
+  //   led_strip_.setColorScaled(i, pixel_r, pixel_g, pixel_b, scaling);
+  // }
 
   led_strip_.show();
 }
