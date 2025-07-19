@@ -5,6 +5,7 @@
 #include "common.h"
 #include "nfc/nfc_tags.h"
 #include "state/state.h"
+#include "ui/driver/cap1296.h"
 #include "ui/ui.h"
 
 // Let Device OS manage the connection to the Particle Cloud
@@ -12,18 +13,21 @@ SYSTEM_MODE(AUTOMATIC);
 
 SerialLogHandler logHandler(
     // Logging level for non-application messages
-    LOG_LEVEL_ALL, {
+    LOG_LEVEL_INFO, {
                         {"app", LOG_LEVEL_ALL},
                         {"cloud_request", LOG_LEVEL_ALL},
                         {"config", LOG_LEVEL_ALL},
                         {"display", LOG_LEVEL_WARN},
                         {"nfc", LOG_LEVEL_WARN},
                         {"pn532", LOG_LEVEL_WARN},
+                        {"cap1296", LOG_LEVEL_ALL},
                     });
 
 using namespace oww::state;
+using namespace oww::ui::driver::cap;
 
 std::shared_ptr<State> state_;
+CAP1296 cap;
 
 void setup() {
   Log.info("machine-auth-firmware starting");
@@ -46,6 +50,10 @@ void setup() {
 
   if (!display_setup_result) {
     Log.info("Failed to start display = %d", (int)display_setup_result.error());
+  }
+
+  if (cap.Begin() != Status::kOk) {
+    Log.info("Failed to start touch");
   }
 
   state_->SetBootProgress("Start NFC...");
@@ -71,5 +79,22 @@ void setup() {
 
   state_->BootCompleted();
 }
+uint8_t last_touched = 0;
+uint8_t current_touched = 0;
+void loop() {
+  state_->Loop();
 
-void loop() { state_->Loop(); }
+  current_touched = cap.Touched();
+
+  for (uint8_t i = 0; i < 6; i++) {
+    uint8_t mask = 0x01 << i;
+    if ((current_touched & mask) && !(last_touched & mask)) {
+      Log.info("%d touched", i);
+    }
+    if (!(current_touched & mask) && (last_touched & mask)) {
+      Log.info("%d released", i);
+    }
+  }
+
+  last_touched = current_touched;
+}
