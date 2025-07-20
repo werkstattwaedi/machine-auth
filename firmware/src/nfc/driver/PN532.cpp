@@ -13,6 +13,8 @@ const uint8_t PN532_FRAME_START[] = {PN532_PREAMBLE, PN532_STARTCODE1,
 // PN532, V1.6
 const uint8_t PN532_FIRMWARE_RESPONSE[] = {0x32, 0x01, 0x06, 0x07};
 
+using namespace config::nfc;
+
 PN532::PN532(USARTSerial* serialInterface, uint8_t resetPin, uint8_t irqPin)
     : is_initialized_(false),
       serial_interface_(serialInterface),
@@ -30,6 +32,8 @@ tl::expected<void, PN532Error> PN532::Begin() {
               serial_interface_->interface(), irq_pin_, reset_pin_);
 
   os_semaphore_create(&response_available_, 1, 0);
+  pinMode(pin_power_enable, OUTPUT);
+  digitalWrite(pin_power_enable, HIGH);
 
   pinMode(reset_pin_, OUTPUT);
   digitalWrite(reset_pin_, HIGH);

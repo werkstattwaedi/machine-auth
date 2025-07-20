@@ -33,6 +33,9 @@ Status Display::Begin() {
   pinMode(pin_chipselect, OUTPUT);
   pinMode(pin_datacommand, OUTPUT);
   pinMode(pin_backlight, OUTPUT);
+  pinMode(pin_power_enable, OUTPUT);
+
+  digitalWrite(pin_power_enable, HIGH);
 
   spi_interface_.begin();
 
