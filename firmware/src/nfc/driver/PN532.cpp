@@ -32,11 +32,9 @@ tl::expected<void, PN532Error> PN532::Begin() {
               serial_interface_->interface(), irq_pin_, reset_pin_);
 
   os_semaphore_create(&response_available_, 1, 0);
-  pinMode(pin_power_enable, OUTPUT);
-  digitalWrite(pin_power_enable, HIGH);
 
   pinMode(reset_pin_, OUTPUT);
-  digitalWrite(reset_pin_, HIGH);
+  digitalWrite(reset_pin_, LOW);
 
   pinMode(irq_pin_, INPUT);
   attachInterrupt(irq_pin_, &PN532::ResponseAvailableInterruptHandler, this,
@@ -153,42 +151,42 @@ tl::expected<void, PN532Error> PN532::ReleaseTag(
 }
 
 tl::expected<void, PN532Error> PN532::ConfigureGpio72() {
-  DataFrame read_register{.command = PN532_COMMAND_READREGISTER,
-                          .params =
-                              {
-                                  0xff, 0xf4,  // P7CFGA
-                                  0xff, 0xf5,  // P7CFGB
-                              },
-                          .params_length = 4};
+  // DataFrame read_register{.command = PN532_COMMAND_READREGISTER,
+  //                         .params =
+  //                             {
+  //                                 0xff, 0xf4,  // P7CFGA
+  //                                 0xff, 0xf5,  // P7CFGB
+  //                             },
+  //                         .params_length = 4};
 
-  auto read_register_result = CallFunction(&read_register);
-  if (!read_register_result) {
-    logger.error("ConfigureGpio72 ReadRegister failed");
-    return tl::unexpected(read_register_result.error());
-  }
+  // auto read_register_result = CallFunction(&read_register);
+  // if (!read_register_result) {
+  //   logger.error("ConfigureGpio72 ReadRegister failed");
+  //   return tl::unexpected(read_register_result.error());
+  // }
 
-  if (read_register.params_length != 2) {
-    logger.error("unexpected response");
-    return tl::unexpected(PN532Error::kEmptyResponse);
-  }
+  // if (read_register.params_length != 2) {
+  //   logger.error("unexpected response");
+  //   return tl::unexpected(PN532Error::kEmptyResponse);
+  // }
 
-  // Push/pull output is a bit 1 in both registers
-  uint8_t p7_cfg_a = read_register.params[0] | 0b0100;
-  uint8_t p7_cfg_b = read_register.params[1] | 0b0100;
+  // // Push/pull output is a bit 1 in both registers
+  // uint8_t p7_cfg_a = read_register.params[0] | 0b0100;
+  // uint8_t p7_cfg_b = read_register.params[1] | 0b0000;
 
-  DataFrame write_register{.command = PN532_COMMAND_WRITEREGISTER,
-                           .params =
-                               {
-                                   0xff, 0xf4, p7_cfg_a,  // P7CFGA
-                                   0xff, 0xf5, p7_cfg_b,  // P7CFGB
-                               },
-                           .params_length = 6};
+  // DataFrame write_register{.command = PN532_COMMAND_WRITEREGISTER,
+  //                          .params =
+  //                              {
+  //                                  0xff, 0xf4, p7_cfg_a,  // P7CFGA
+  //                                  0xff, 0xf5, p7_cfg_b,  // P7CFGB
+  //                              },
+  //                          .params_length = 6};
 
-  auto write_register_result = CallFunction(&write_register);
-  if (!write_register_result) {
-    logger.error("ConfigureGpio72 WriteRegister failed");
-    return tl::unexpected(write_register_result.error());
-  }
+  // auto write_register_result = CallFunction(&write_register);
+  // if (!write_register_result) {
+  //   logger.error("ConfigureGpio72 WriteRegister failed");
+  //   return tl::unexpected(write_register_result.error());
+  // }
 
   return SetGpio72(false);
 }

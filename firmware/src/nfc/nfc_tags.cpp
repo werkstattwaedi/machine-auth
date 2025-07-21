@@ -20,7 +20,7 @@ NfcTags &NfcTags::instance() {
 
 NfcTags::NfcTags() {
   pcd_interface_ = std::make_unique<PN532>(&Serial1, config::nfc::pin_reset,
-                                           config::nfc::pin_reset);
+                                           config::nfc::pin_irq);
   ntag_interface_ = std::make_unique<Ntag424>(pcd_interface_.get());
 }
 

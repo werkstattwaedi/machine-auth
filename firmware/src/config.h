@@ -27,9 +27,9 @@ constexpr int8_t pin_reset = D6;
 constexpr int8_t pin_chipselect = D5;
 constexpr int8_t pin_datacommand = D10;
 constexpr int8_t pin_backlight = A5;
-constexpr int8_t pin_touch_chipselect = S3;
-constexpr int8_t pin_touch_irq = S4;
-constexpr int8_t pin_power_enable = A0;
+constexpr int8_t pin_touch_chipselect = D18;
+constexpr int8_t pin_touch_irq = D19;
+constexpr int8_t pin_power_enable = D11;
 }  // namespace display
 
 }  // namespace ui
@@ -46,7 +46,8 @@ constexpr uint8_t pixel_type = IN4818;
 namespace nfc {
 
 constexpr int8_t pin_reset = D12;
-constexpr int8_t pin_power_enable = S1;
+constexpr int8_t pin_irq = D17;
+constexpr int8_t pin_power_enable = D16;
 
 constexpr os_thread_prio_t thread_priority = OS_THREAD_PRIORITY_DEFAULT;
 constexpr size_t thread_stack_size = OS_THREAD_STACK_SIZE_DEFAULT_HIGH;
