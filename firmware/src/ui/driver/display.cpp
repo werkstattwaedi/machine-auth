@@ -99,7 +99,7 @@ Status Display::Begin() {
   return Status::kOk;
 }
 
-os_thread_return_t Display::RenderLoop() {
+void Display::RenderLoop() {
   uint32_t time_till_next = lv_timer_handler();
   delay(time_till_next);
   display_log.info("Frame complete");

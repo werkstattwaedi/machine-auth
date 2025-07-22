@@ -71,10 +71,13 @@ class Configuration {
   std::array<uint8_t, 16> GetTerminalKey();
 
  private:
+  // Particle function handler for setSetupMode
+  int SetSetupModeHandler(String command);
   std::array<uint8_t, 16> terminal_key_;
   std::weak_ptr<IStateEvent> event_sink_;
 
   bool is_configured_ = false;
+  bool is_setup_mode_ = false;
   std::unique_ptr<TerminalConfig> terminal_config_ = nullptr;
   std::unique_ptr<MachineConfig> machine_config_ = nullptr;
 };

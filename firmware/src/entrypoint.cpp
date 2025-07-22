@@ -94,7 +94,7 @@ uint8_t last_touched = 0;
 uint8_t current_touched = 0;
 void loop() {
   if (state_->GetConfiguration()->IsSetupMode()) {
-    oww::setup::loop(state_);
+    oww::setup::loop();
     return;
   }
 

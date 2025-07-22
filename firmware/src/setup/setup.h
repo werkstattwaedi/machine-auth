@@ -7,7 +7,8 @@
 // firmware, to test HW and finalize setup.
 namespace oww::setup {
 
+    
 void setup(std::shared_ptr<oww::state::State> state);
-void loop(std::shared_ptr<oww::state::State> state);
+void loop();
 
 }  // namespace oww::setup
