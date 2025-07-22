@@ -40,13 +40,16 @@ Status Configuration::Begin() {
   auto factory_data = std::make_unique<FactoryData>();
 
   EEPROM.get(0, *(factory_data.get()));
-  if (factory_data->version == 0xFF) {
+  if (factory_data->version == 1) {
+    factory_data
+
+  } else if (factory_data->version == 0xFF) {
     logger.warn("FactoryData EEPROM is invalid. Flashing DEV_FACTORY_DATA");
     // This device never saw factory data before. Write the dev data.
     // TODO(michschn) fail on production devices instead.
     EEPROM.put(0, DEV_FACTORY_DATA);
     memcpy(factory_data.get(), &DEV_FACTORY_DATA, sizeof(FactoryData));
-  }
+  } 
 
   memcpy(terminal_key_.data(), factory_data->key, 16);
 

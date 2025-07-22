@@ -4,6 +4,7 @@
 
 #include "common.h"
 #include "nfc/nfc_tags.h"
+#include "setup/setup.h"
 #include "state/state.h"
 #include "ui/driver/cap1296.h"
 #include "ui/ui.h"
@@ -42,6 +43,11 @@ void setup() {
     state_ = std::make_shared<State>();
     auto config = std::make_unique<Configuration>(std::weak_ptr(state_));
     state_->Begin(std::move(config));
+  }
+
+  if (state_->GetConfiguration()->IsSetupMode()) {
+    oww::setup::setup(state_);
+    return;
   }
 
   auto display_setup_result = oww::ui::UserInterface::instance().Begin(state_);
@@ -87,6 +93,11 @@ void setup() {
 uint8_t last_touched = 0;
 uint8_t current_touched = 0;
 void loop() {
+  if (state_->GetConfiguration()->IsSetupMode()) {
+    oww::setup::loop(state_);
+    return;
+  }
+
   state_->Loop();
 
   current_touched = cap.Touched();

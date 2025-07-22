@@ -40,6 +40,7 @@ class MachineConfig {
 struct FactoryData {
   uint8_t version;
   byte key[16];
+  boolean setup_complete;
 };
 
 /**
@@ -56,6 +57,9 @@ class Configuration {
   Status Begin();
 
   bool IsConfigured() { return is_configured_; }
+
+  // Whether this device should boot in setup / hw test mode.
+  bool IsSetupMode();
 
   TerminalConfig* GetTerminal() { return terminal_config_.get(); }
 
