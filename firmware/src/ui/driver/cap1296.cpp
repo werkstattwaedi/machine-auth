@@ -26,7 +26,7 @@ Status CAP1296::Begin(uint8_t i2c_addr) {
 
   WriteRegister(Register::kMultipleTouchConfiguration, 0);
   WriteRegister(Register::kStandbyConfig, 0x30);
-  WriteRegister(Register::kInterruptEnable, 0);
+  WriteRegister(Register::kInterruptEnable, 0b00011011);
   return Status::kOk;
 }
 
