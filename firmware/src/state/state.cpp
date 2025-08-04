@@ -17,12 +17,26 @@ Status State::Begin(std::unique_ptr<Configuration> configuration) {
 
   terminal_state_ = std::make_shared<terminal::State>(terminal::Idle{});
 
+  pinMode(config::ext::pin_relais, INPUT);
+  relais_state_ = digitalRead(config::ext::pin_relais) ? HIGH : LOW;
+  if (relais_state_ == HIGH) {
+    Log.warn("Relais was ON at startup");
+  }
+
+  // TODO: Enable the external I2C bus bases on the configuration.
+  pinMode(config::ext::pin_ext_i2c_enable, OUTPUT);
+  digitalWrite(config::ext::pin_ext_i2c_enable, HIGH);
+
   CloudRequest::Begin();
 
   return Status::kOk;
 }
 
-void State::Loop() { CheckTimeouts(); }
+void State::Loop() {
+  CheckTimeouts();
+
+  UpdateRelaisState();
+}
 
 void State::OnConfigChanged() { System.reset(RESET_REASON_CONFIG_UPDATE); }
 
@@ -30,6 +44,32 @@ void State::SetBootProgress(std::string message) { boot_progress_ = message; }
 void State::BootCompleted() { boot_progress_.clear(); }
 bool State::IsBootCompleted() { return boot_progress_.empty(); }
 std::string State::GetBootProgress() { return boot_progress_; }
+
+void State::UpdateRelaisState() {
+  using namespace oww::state::terminal;
+  PinState expected_relais_state;
+  if (std::get_if<StartSession>(terminal_state_.get())) {
+    expected_relais_state = HIGH;
+  } else {
+    expected_relais_state = LOW;
+  }
+
+  if (relais_state_ != expected_relais_state) {
+    relais_state_ = expected_relais_state;
+    logger.info("Toggle Relais %s", relais_state_ == HIGH ? "HIGH" : "LOW");
+
+    digitalWrite(config::ext::pin_relais, relais_state_);
+    pinMode(config::ext::pin_relais, OUTPUT);
+    digitalWrite(config::ext::pin_relais, relais_state_);
+    delay(50);
+    pinMode(config::ext::pin_relais, INPUT);
+
+    auto actual_state = digitalRead(config::ext::pin_relais) ? HIGH : LOW;
+    if (actual_state == relais_state_) {
+      Log.error("FAILED TO SET RELAIS STATE");
+    }
+  }
+}
 
 void State::OnTagFound() {
   logger.info("tag_state: OnTagFound");

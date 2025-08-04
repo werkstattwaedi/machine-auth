@@ -27,10 +27,15 @@ constexpr int8_t pin_reset = D6;
 constexpr int8_t pin_chipselect = D5;
 constexpr int8_t pin_datacommand = D10;
 constexpr int8_t pin_backlight = A5;
-constexpr int8_t pin_touch_chipselect = D18; // NOT USED / S3 // RESET RELAIS
-constexpr int8_t pin_touch_irq = D19; // NOT USED // NEW RELAIS STATUS
-constexpr int8_t pin_power_enable = D11; // HARDWIRED  // SET RELAIS
+constexpr int8_t pin_touch_chipselect = D7;
+constexpr int8_t pin_touch_irq = D19; 
 }  // namespace display
+
+namespace touch {
+
+constexpr int8_t pin_irq = D11; // aka A0
+
+}  // namespace touch
 
 }  // namespace ui
 
@@ -44,15 +49,21 @@ constexpr uint8_t pixel_type = IN4818;
 }  // namespace led
 
 namespace nfc {
-
 constexpr int8_t pin_reset = D12;
-constexpr int8_t pin_irq = D17; // NOT USED AKA S2 / SCK potential conflict
-constexpr int8_t pin_power_enable = D16; // HARDWIRED AKA S1 / MISO potential conflict  // NEW EXT i2C enable
 
 constexpr os_thread_prio_t thread_priority = OS_THREAD_PRIORITY_DEFAULT;
 constexpr size_t thread_stack_size = OS_THREAD_STACK_SIZE_DEFAULT_HIGH;
-
 }  // namespace nfc
+
+namespace ext {
+
+constexpr int8_t pin_relais = D17;
+constexpr int8_t pin_ext_i2c_enable = D16;
+// NOTE: The two pins above are part of the SPI interface, where only the MOSI
+// pin is used to communicate with the LEDs. This works fine, but the
+// initialization has to be done in a specific order to make them work.
+
+}  // namespace ext
 
 namespace tag {
 

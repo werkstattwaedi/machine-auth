@@ -7,23 +7,23 @@ namespace oww::setup {
 
 std::shared_ptr<oww::state::State> state_;
 std::unique_ptr<Adafruit_NeoPixel> led_strip_;
-#define RELAIS_PIN S2
+using namespace config::ext;
 
 int SetLed(String command);
 int SetRelais(String command) {
   if (command == "on") {
-    digitalWrite(RELAIS_PIN, HIGH);
-    pinMode(RELAIS_PIN, OUTPUT);
-    digitalWrite(RELAIS_PIN, HIGH);
+    digitalWrite(pin_relais, HIGH);
+    pinMode(pin_relais, OUTPUT);
+    digitalWrite(pin_relais, HIGH);
     delay(1000);
-    pinMode(RELAIS_PIN, INPUT);
+    pinMode(pin_relais, INPUT);
     return 0;  // Success
   } else if (command == "off") {
-    digitalWrite(RELAIS_PIN, HIGH);
-    pinMode(RELAIS_PIN, OUTPUT);
-    digitalWrite(RELAIS_PIN, LOW);
+    digitalWrite(pin_relais, HIGH);
+    pinMode(pin_relais, OUTPUT);
+    digitalWrite(pin_relais, LOW);
     delay(1000);
-    pinMode(RELAIS_PIN, INPUT);
+    pinMode(pin_relais, INPUT);
     return 0;  // Success
   } else {
     return -1;  // Invalid command
@@ -31,7 +31,7 @@ int SetRelais(String command) {
 }
 
 String relaisState() {
-  int state = digitalRead(RELAIS_PIN);
+  int state = digitalRead(pin_relais);
   return String(state == HIGH ? "on" : "off");
 }
 
@@ -40,7 +40,7 @@ void setup(std::shared_ptr<oww::state::State> state) {
   Particle.function("relais", SetRelais);
   Particle.variable("relaisState", relaisState);
 
-  pinMode(RELAIS_PIN, INPUT);
+  pinMode(pin_relais, INPUT);
 
   state_ = state;
   led_strip_ = std::make_unique<Adafruit_NeoPixel>(

@@ -41,6 +41,9 @@ State();
   std::unique_ptr<Configuration> configuration_ = nullptr;
   std::shared_ptr<terminal::State> terminal_state_;
 
+  PinState relais_state_ = LOW;
+
+  void UpdateRelaisState();
  public:
   virtual void OnConfigChanged() override;
 

@@ -36,9 +36,11 @@ tl::expected<void, PN532Error> PN532::Begin() {
   pinMode(reset_pin_, OUTPUT);
   digitalWrite(reset_pin_, LOW);
 
-  pinMode(irq_pin_, INPUT);
-  attachInterrupt(irq_pin_, &PN532::ResponseAvailableInterruptHandler, this,
-                  FALLING);
+  if (irq_pin_ != PIN_INVALID) {
+    pinMode(irq_pin_, INPUT);
+    attachInterrupt(irq_pin_, &PN532::ResponseAvailableInterruptHandler, this,
+                    FALLING);
+  }
 
   serial_interface_->begin(115200);
 

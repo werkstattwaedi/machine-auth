@@ -31,11 +31,6 @@ std::shared_ptr<State> state_;
 CAP1296 cap;
 
 void setup() {
-  pinMode(config::nfc::pin_power_enable, OUTPUT);
-  pinMode(config::ui::display::pin_power_enable, OUTPUT);
-  digitalWrite(config::nfc::pin_power_enable, HIGH);
-  digitalWrite(config::ui::display::pin_power_enable, HIGH);
-
   Log.info("machine-auth-firmware starting");
 
   {
