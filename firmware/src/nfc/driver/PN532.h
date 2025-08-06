@@ -41,8 +41,7 @@ class PN532 {
   // Args:
   //   serial_interface: The interface on which the PN532 is connected.
   //   reset_pin: P2 pin connected to P70_IRQ's RSTPD_N pin.
-  //   irq_pin: P2 pin connected to PN532's P70_IRQ pin.
-  PN532(USARTSerial* serial_interface, uint8_t reset_pin, uint8_t irq_pin);
+  PN532(USARTSerial* serial_interface, uint8_t reset_pin);
 
   // Initializes the PN532 controller.
   //
@@ -62,12 +61,6 @@ class PN532 {
   // Resets the PN532 via reset_pin_, then wakes it up and configures
   // it as PCD
   tl::expected<void, PN532Error> ResetController();
-
-  // Configures P72 as an output
-  tl::expected<void, PN532Error> ConfigureGpio72();
-
-  // Sets the status of P72 GPIO
-  tl::expected<void, PN532Error> SetGpio72(bool high);
 
  private:
   // Sends the command_data payload to the PN532.

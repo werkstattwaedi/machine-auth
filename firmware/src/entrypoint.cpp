@@ -2,6 +2,7 @@
  * @brief Entrypoint for terminal firmware.
  */
 
+#include "RemoteLogRK.h"
 #include "common.h"
 #include "nfc/nfc_tags.h"
 #include "setup/setup.h"
@@ -19,19 +20,25 @@ SerialLogHandler logHandler(
                         {"cloud_request", LOG_LEVEL_ALL},
                         {"config", LOG_LEVEL_ALL},
                         {"display", LOG_LEVEL_WARN},
-                        {"nfc", LOG_LEVEL_WARN},
-                        {"pn532", LOG_LEVEL_WARN},
+                        {"nfc", LOG_LEVEL_ALL},
+                        {"pn532", LOG_LEVEL_ALL},
                         {"cap1296", LOG_LEVEL_ALL},
                     });
 
 using namespace oww::state;
 using namespace oww::ui::driver::cap;
 
+retained uint8_t remoteLogBuf[2560];
+RemoteLog remoteLog(remoteLogBuf, sizeof(remoteLogBuf));
+
+RemoteLogEventServer remoteLogEventServer("debugLog");
+
 std::shared_ptr<State> state_;
 CAP1296 cap;
 
 void setup() {
   Log.info("machine-auth-firmware starting");
+  remoteLog.withServer(&remoteLogEventServer).setup();
 
   {
     // create state_
@@ -62,9 +69,6 @@ void setup() {
     Log.info("Failed to start touch");
   }
 
-  state_->SetBootProgress("Start NFC...");
-  Status nfc_setup_result = NfcTags::instance().Begin(state_);
-  Log.info("NFC Status = %d", (int)nfc_setup_result);
   state_->SetBootProgress("Verbinde mit WiFi...");
 
   while (!WiFi.ready()) {
@@ -83,11 +87,20 @@ void setup() {
     delay(10);
   }
 
+  state_->SetBootProgress("zzzZZZZZ...");
+  delay(1000);
+
+  state_->SetBootProgress("Start NFC...");
+  Status nfc_setup_result = NfcTags::instance().Begin(state_);
+  Log.info("NFC Status = %d", (int)nfc_setup_result);
+
   state_->BootCompleted();
 }
+
 uint8_t last_touched = 0;
 uint8_t current_touched = 0;
 void loop() {
+  remoteLog.loop();
   if (state_->GetConfiguration()->IsSetupMode()) {
     oww::setup::loop();
     return;

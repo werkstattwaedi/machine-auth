@@ -102,7 +102,7 @@ Status Display::Begin() {
 void Display::RenderLoop() {
   uint32_t time_till_next = lv_timer_handler();
   delay(time_till_next);
-  display_log.info("Frame complete");
+  // display_log.info("Frame complete");
 }
 
 void Display::SendCommand(const uint8_t *cmd, size_t cmd_size,

@@ -19,8 +19,7 @@ NfcTags &NfcTags::instance() {
 }
 
 NfcTags::NfcTags() {
-  pcd_interface_ = std::make_unique<PN532>(&Serial1, config::nfc::pin_reset,
-                                           PIN_INVALID);
+  pcd_interface_ = std::make_unique<PN532>(&Serial1, config::nfc::pin_reset);
   ntag_interface_ = std::make_unique<Ntag424>(pcd_interface_.get());
 }
 
@@ -70,9 +69,6 @@ os_thread_return_t NfcTags::NfcThread() {
 
   while (true) {
     NfcLoop(state_data);
-
-    auto current_state = state_->GetTerminalState();
-    using namespace oww::state::terminal;
   }
 }
 

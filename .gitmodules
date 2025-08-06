@@ -25,3 +25,6 @@
 [submodule "firmware/lib/Particle-NeoPixel"]
 	path = firmware/lib/Particle-NeoPixel
 	url = https://github.com/werkstattwaedi/Particle-NeoPixel.git
+[submodule "firmware/lib/RemoteLogRK"]
+	path = firmware/lib/RemoteLogRK
+	url = https://github.com/rickkas7/RemoteLogRK.git

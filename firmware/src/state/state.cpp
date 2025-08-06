@@ -40,7 +40,10 @@ void State::Loop() {
 
 void State::OnConfigChanged() { System.reset(RESET_REASON_CONFIG_UPDATE); }
 
-void State::SetBootProgress(std::string message) { boot_progress_ = message; }
+void State::SetBootProgress(std::string message) {
+  boot_progress_ = message;
+  logger.info("Boot progress: %s", boot_progress_.c_str());
+}
 void State::BootCompleted() { boot_progress_.clear(); }
 bool State::IsBootCompleted() { return boot_progress_.empty(); }
 std::string State::GetBootProgress() { return boot_progress_; }
@@ -65,8 +68,8 @@ void State::UpdateRelaisState() {
     pinMode(config::ext::pin_relais, INPUT);
 
     auto actual_state = digitalRead(config::ext::pin_relais) ? HIGH : LOW;
-    if (actual_state == relais_state_) {
-      Log.error("FAILED TO SET RELAIS STATE");
+    if (actual_state != relais_state_) {
+      Log.error("Failed to toggle actual relais state");
     }
   }
 }
