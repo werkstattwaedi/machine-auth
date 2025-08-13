@@ -24,8 +24,8 @@ Status State::Begin(std::unique_ptr<Configuration> configuration) {
   }
 
   // TODO: Enable the external I2C bus bases on the configuration.
-  pinMode(config::ext::pin_ext_i2c_enable, OUTPUT);
-  digitalWrite(config::ext::pin_ext_i2c_enable, HIGH);
+  pinMode(config::ext::pin_i2c_enable, OUTPUT);
+  digitalWrite(config::ext::pin_i2c_enable, HIGH);
 
   CloudRequest::Begin();
 

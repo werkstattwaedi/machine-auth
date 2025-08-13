@@ -23,7 +23,7 @@ namespace display {
 constexpr auto resolution_horizontal = 240;
 constexpr auto resolution_vertical = 320;
 
-constexpr int8_t pin_reset = D6;
+constexpr int8_t pin_reset = S3;
 constexpr int8_t pin_chipselect = D5;
 constexpr int8_t pin_datacommand = D10;
 constexpr int8_t pin_backlight = A5;
@@ -49,7 +49,7 @@ constexpr uint8_t pixel_type = IN4818;
 }  // namespace led
 
 namespace nfc {
-constexpr int8_t pin_reset = D12;
+constexpr int8_t pin_reset = S1;
 
 constexpr os_thread_prio_t thread_priority = OS_THREAD_PRIORITY_DEFAULT;
 constexpr size_t thread_stack_size = OS_THREAD_STACK_SIZE_DEFAULT_HIGH;
@@ -57,11 +57,9 @@ constexpr size_t thread_stack_size = OS_THREAD_STACK_SIZE_DEFAULT_HIGH;
 
 namespace ext {
 
-constexpr int8_t pin_relais = D17;
-constexpr int8_t pin_ext_i2c_enable = D16;
-// NOTE: The two pins above are part of the SPI interface, where only the MOSI
-// pin is used to communicate with the LEDs. This works fine, but the
-// initialization has to be done in a specific order to make them work.
+constexpr int8_t pin_relais = A1;
+constexpr int8_t pin_i2c_enable = S2;
+constexpr int8_t pin_irq = D6;
 
 }  // namespace ext
 
