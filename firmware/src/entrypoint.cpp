@@ -2,7 +2,6 @@
  * @brief Entrypoint for terminal firmware.
  */
 
-#include "RemoteLogRK.h"
 #include "common.h"
 #include "nfc/nfc_tags.h"
 #include "setup/setup.h"
@@ -10,6 +9,9 @@
 #include "ui/driver/cap1296.h"
 #include "ui/ui.h"
 
+#ifdef REMOTE_LOGGING
+#include "RemoteLogRK.h"
+#endif
 // Let Device OS manage the connection to the Particle Cloud
 SYSTEM_MODE(AUTOMATIC);
 
@@ -28,17 +30,21 @@ SerialLogHandler logHandler(
 using namespace oww::state;
 using namespace oww::ui::driver::cap;
 
+#ifdef REMOTE_LOGGING
 retained uint8_t remoteLogBuf[2560];
 RemoteLog remoteLog(remoteLogBuf, sizeof(remoteLogBuf));
-
 RemoteLogEventServer remoteLogEventServer("debugLog");
+#endif
 
 std::shared_ptr<State> state_;
 CAP1296 cap;
 
 void setup() {
-  Log.info("machine-auth-firmware starting");
+#ifdef REMOTE_LOGGING
   remoteLog.withServer(&remoteLogEventServer).setup();
+#endif
+
+  Log.info("machine-auth-firmware starting");
 
   {
     // create state_
@@ -69,6 +75,10 @@ void setup() {
     Log.info("Failed to start touch");
   }
 
+  state_->SetBootProgress("Start NFC...");
+  Status nfc_setup_result = NfcTags::instance().Begin(state_);
+  Log.info("NFC Status = %d", (int)nfc_setup_result);
+
   state_->SetBootProgress("Verbinde mit WiFi...");
 
   while (!WiFi.ready()) {
@@ -87,20 +97,16 @@ void setup() {
     delay(10);
   }
 
-  state_->SetBootProgress("zzzZZZZZ...");
-  delay(1000);
-
-  state_->SetBootProgress("Start NFC...");
-  Status nfc_setup_result = NfcTags::instance().Begin(state_);
-  Log.info("NFC Status = %d", (int)nfc_setup_result);
-
   state_->BootCompleted();
 }
 
 uint8_t last_touched = 0;
 uint8_t current_touched = 0;
 void loop() {
+#ifdef REMOTE_LOGGING
   remoteLog.loop();
+#endif
+
   if (state_->GetConfiguration()->IsSetupMode()) {
     oww::setup::loop();
     return;
