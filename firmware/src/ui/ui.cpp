@@ -35,7 +35,6 @@ tl::expected<void, Error> UserInterface::Begin(
   pinMode(buzzer::pin_pwm, OUTPUT);
   analogWrite(config::ui::display::pin_backlight, 255);
 
-  led_strip_.begin();
   led_strip_.show();
 
   Display::instance().Begin();

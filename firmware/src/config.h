@@ -23,17 +23,17 @@ namespace display {
 constexpr auto resolution_horizontal = 240;
 constexpr auto resolution_vertical = 320;
 
-constexpr int8_t pin_reset = S3;
+constexpr int8_t pin_reset = S3;  // aka SS, D18. Not controlled by the LED SPI.
 constexpr int8_t pin_chipselect = D5;
 constexpr int8_t pin_datacommand = D10;
 constexpr int8_t pin_backlight = A5;
 constexpr int8_t pin_touch_chipselect = D7;
-constexpr int8_t pin_touch_irq = D19; 
+constexpr int8_t pin_touch_irq = D19;
 }  // namespace display
 
 namespace touch {
 
-constexpr int8_t pin_irq = D11; // aka A0
+constexpr int8_t pin_irq = D11;  // aka A0
 
 }  // namespace touch
 
@@ -44,12 +44,17 @@ constexpr int8_t pin_pwm = A2;
 }  // namespace buzzer
 
 namespace led {
+// NOTE: the LEDs use the MOSI pin of SPI1 interface. This conflicts with other
+//   uses of the MOSI and SCK pins
+
 constexpr uint8_t pixel_count = 16;
 constexpr uint8_t pixel_type = IN4818;
 }  // namespace led
 
 namespace nfc {
-constexpr int8_t pin_reset = S1;
+// NOTE: S1 is also affected by the LED strip. Always lock the SPI1
+// interface before working with the pin!
+constexpr int8_t pin_reset = S1;  // aka MISO, D16
 
 constexpr os_thread_prio_t thread_priority = OS_THREAD_PRIORITY_DEFAULT;
 constexpr size_t thread_stack_size = OS_THREAD_STACK_SIZE_DEFAULT_HIGH;
@@ -58,7 +63,9 @@ constexpr size_t thread_stack_size = OS_THREAD_STACK_SIZE_DEFAULT_HIGH;
 namespace ext {
 
 constexpr int8_t pin_relais = A1;
-constexpr int8_t pin_i2c_enable = S2;
+// NOTE: S1 is also affected by the LED strip. Always lock the SPI1
+// interface before working with the pin!
+constexpr int8_t pin_i2c_enable = S2;  // aka SCK, D17
 constexpr int8_t pin_irq = D6;
 
 }  // namespace ext

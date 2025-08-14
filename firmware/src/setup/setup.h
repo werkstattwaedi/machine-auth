@@ -11,4 +11,4 @@ namespace oww::setup {
 void setup(std::shared_ptr<oww::state::State> state);
 void loop();
 
-}  // namespace oww::setup
+}  // namespace oww::setup  

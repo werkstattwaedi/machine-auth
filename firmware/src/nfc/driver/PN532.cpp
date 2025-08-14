@@ -30,8 +30,13 @@ tl::expected<void, PN532Error> PN532::Begin() {
   logger.info("PN532::Begin [interface:%d, reset:%d]",
               serial_interface_->interface(), reset_pin_);
 
-  pinMode(reset_pin_, OUTPUT);
-  digitalWrite(reset_pin_, LOW);
+  WITH_LOCK(SPI) {
+    // FIXME - https://github.com/werkstattwaedi/machine-auth/issues/19:
+    // using the reset_pin_ should not have knowledge of using the SPI interface
+    // exclusively.
+    pinMode(reset_pin_, OUTPUT);
+    digitalWrite(reset_pin_, LOW);
+  }
 
   serial_interface_->begin(115200);
 
@@ -229,13 +234,18 @@ tl::expected<void, PN532Error> PN532::CallFunction(
 tl::expected<void, PN532Error> PN532::ResetController() {
   logger.info("PN532::ResetController");
 
-  digitalWrite(reset_pin_, LOW);
-  // 100us should be enough to reset, RSTOUT would indicate that PN532 is
-  // actually reset. Since this is not wired, wait for 10ms, that should do the
-  // trick.
-  delay(10);
-  digitalWrite(reset_pin_, HIGH);
-  delay(10);
+  WITH_LOCK(SPI) {
+    // FIXME - https://github.com/werkstattwaedi/machine-auth/issues/19:
+    // using the reset_pin_ should not have knowledge of using the SPI interface
+    // exclusively.
+    digitalWrite(reset_pin_, LOW);
+    // 100us should be enough to reset, RSTOUT would indicate that PN532 is
+    // actually reset. Since this is not wired, wait for 10ms, that should do
+    // the trick.
+    delay(10);
+    digitalWrite(reset_pin_, HIGH);
+    delay(10);
+  }
 
   // 6.3.2.3 Case of PN532 in Power Down mode
   // HSU wake up condition: the real waking up condition is the 5th rising edge

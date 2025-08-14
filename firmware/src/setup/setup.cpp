@@ -46,7 +46,6 @@ void setup(std::shared_ptr<oww::state::State> state) {
   led_strip_ = std::make_unique<Adafruit_NeoPixel>(
       config::led::pixel_count, SPI, config::led::pixel_type);
 
-  led_strip_->begin();
   led_strip_->show();
 
   // Initialize display
