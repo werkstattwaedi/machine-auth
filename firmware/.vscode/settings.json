@@ -71,7 +71,8 @@
         "iostream": "cpp",
         "unordered_set": "cpp",
         "set": "cpp",
-        "lvgl.h": "c"
+        "lvgl.h": "c",
+        "lv_version.h": "c"
     },
     "C_Cpp.clang_format_fallbackStyle": "Google",
     "C_Cpp.formatting": "clangFormat",

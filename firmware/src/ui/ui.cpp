@@ -74,16 +74,31 @@ void UserInterface::UpdateGui() {
     lv_obj_set_size(*status_bar_, lv_pct(100), 50);
     lv_obj_align(*status_bar_, LV_ALIGN_TOP_LEFT, 0, 0);
 
-    tag_status_ = std::make_unique<TagStatus>(lv_screen_active(), state_);
+    // Create button bar at the bottom
+    button_bar_ = std::make_unique<ButtonBar>(lv_screen_active(), state_);
 
-    lv_obj_set_size(*tag_status_, lv_pct(100), 100);
-    lv_obj_align(*tag_status_, LV_ALIGN_TOP_LEFT, 0, 50);
+    // Create main content area between status bar and button bar
+    lv_obj_t* content_container = lv_obj_create(lv_screen_active());
+    lv_obj_remove_style_all(content_container);
+    lv_obj_set_size(content_container, lv_pct(100), lv_pct(100) - 110); // Screen minus statusbar(50) and buttonbar(60)
+    lv_obj_align(content_container, LV_ALIGN_TOP_LEFT, 0, 50);
+
+    // Create and activate default main content
+    main_content_ = std::make_shared<DefaultMainContent>(content_container, state_, this);
+    PushContent(main_content_);
+
+    // Remove old tag_status_ since it's now replaced by MainContent
+    tag_status_ = nullptr;
   }
   if (status_bar_) {
     status_bar_->Render();
   }
-  if (tag_status_) {
-    tag_status_->Render();
+  if (button_bar_) {
+    button_bar_->Render();
+  }
+  auto current_content = GetCurrentContent();
+  if (current_content) {
+    current_content->Render();
   }
 }
 
@@ -197,6 +212,60 @@ void UserInterface::UpdateLed() {
   // }
 
   led_strip_.show();
+}
+
+void UserInterface::PushContent(std::shared_ptr<MainContent> content) {
+  if (!content_stack_.empty()) {
+    content_stack_.back()->OnDeactivate();
+    if (button_bar_ && content_stack_.back()->GetButtonDefinition()) {
+      button_bar_->RemoveButtons(content_stack_.back()->GetButtonDefinition());
+    }
+  }
+  
+  content_stack_.push_back(content);
+  ActivateContent(content);
+}
+
+void UserInterface::PopContent() {
+  if (content_stack_.size() <= 1) {
+    return; // Don't pop the last content
+  }
+  
+  auto current = content_stack_.back();
+  current->OnDeactivate();
+  if (button_bar_ && current->GetButtonDefinition()) {
+    button_bar_->RemoveButtons(current->GetButtonDefinition());
+  }
+  
+  content_stack_.pop_back();
+  
+  if (!content_stack_.empty()) {
+    ActivateContent(content_stack_.back());
+  }
+}
+
+std::shared_ptr<MainContent> UserInterface::GetCurrentContent() {
+  if (content_stack_.empty()) {
+    return nullptr;
+  }
+  return content_stack_.back();
+}
+
+void UserInterface::ActivateContent(std::shared_ptr<MainContent> content) {
+  content->OnActivate();
+  if (button_bar_ && content->GetButtonDefinition()) {
+    button_bar_->ActivateButtons(content->GetButtonDefinition());
+  }
+}
+
+void UserInterface::DeactivateCurrentContent() {
+  if (!content_stack_.empty()) {
+    auto current = content_stack_.back();
+    current->OnDeactivate();
+    if (button_bar_ && current->GetButtonDefinition()) {
+      button_bar_->RemoveButtons(current->GetButtonDefinition());
+    }
+  }
 }
 
 }  // namespace oww::ui

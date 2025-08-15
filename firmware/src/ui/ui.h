@@ -9,6 +9,9 @@
 #include "state/state.h"
 #include "statusbar.h"
 #include "tagstatus.h"
+#include "buttonbar.h"
+#include "maincontent.h"
+#include "defaultmaincontent.h"
 
 namespace oww::ui {
 
@@ -45,6 +48,15 @@ class UserInterface {
    */
   void unlock() { os_mutex_unlock(mutex_); };
 
+  /** Push a new MainContent onto the stack, making it active */
+  void PushContent(std::shared_ptr<MainContent> content);
+
+  /** Pop the current MainContent from the stack, returning to the previous one */
+  void PopContent();
+
+  /** Get the currently active MainContent */
+  std::shared_ptr<MainContent> GetCurrentContent();
+
  private:
   // UserInterface is a singleton - use UserInterface.instance()
   static UserInterface *instance_;
@@ -76,6 +88,12 @@ class UserInterface {
   std::unique_ptr<SplashScreen> splash_screen_ = nullptr;
   std::unique_ptr<StatusBar> status_bar_ = nullptr;
   std::unique_ptr<TagStatus> tag_status_ = nullptr;
+  std::unique_ptr<ButtonBar> button_bar_ = nullptr;
+  std::shared_ptr<MainContent> main_content_ = nullptr;
+  std::vector<std::shared_ptr<MainContent>> content_stack_;
+
+  void ActivateContent(std::shared_ptr<MainContent> content);
+  void DeactivateCurrentContent();
 };
 
 }  // namespace oww::ui
