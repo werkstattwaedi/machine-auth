@@ -17,10 +17,10 @@ class MainContent : public Component {
   virtual void Render() override;
 
   /** Called when this content becomes active */
-  virtual void OnActivate() {}
+  virtual void OnActivate();
 
   /** Called when this content becomes inactive */
-  virtual void OnDeactivate() {}
+  virtual void OnDeactivate();
 
   /** Returns the button definition for this content, or nullptr if none */
   virtual std::shared_ptr<ButtonDefinition> GetButtonDefinition() { return nullptr; }

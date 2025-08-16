@@ -7,26 +7,28 @@ namespace oww::ui {
 ButtonBar::ButtonBar(lv_obj_t* parent, std::shared_ptr<oww::state::State> state)
     : Component(state) {
   // Create the main container for the button bar
+  // ButtonBar: 240×50px at bottom of screen
   root_ = lv_obj_create(parent);
   lv_obj_remove_style_all(root_);
-  lv_obj_set_size(root_, LV_PCT(100), 60);
+  lv_obj_set_size(root_, 240, 50);
   lv_obj_set_align(root_, LV_ALIGN_BOTTOM_MID);
   lv_obj_set_flex_flow(root_, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(root_, LV_FLEX_ALIGN_SPACE_BETWEEN,
                         LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-  lv_obj_set_style_pad_left(root_, 20, 0);
-  lv_obj_set_style_pad_right(root_, 20, 0);
+  // 10px margins on left/right: 240 - 20 = 220px for content
+  lv_obj_set_style_pad_left(root_, 10, 0);
+  lv_obj_set_style_pad_right(root_, 10, 0);
 
-  // Create left button
+  // Create left button: 100×40px (as per mockup specifications)
   left_button_ = lv_btn_create(root_);
-  lv_obj_set_size(left_button_, 120, 40);
+  lv_obj_set_size(left_button_, 100, 40);
   left_label_ = lv_label_create(left_button_);
   lv_obj_center(left_label_);
   lv_obj_add_flag(left_button_, LV_OBJ_FLAG_HIDDEN);  // Hidden by default
 
-  // Create right button
+  // Create right button: 100×40px (as per mockup specifications)  
   right_button_ = lv_btn_create(root_);
-  lv_obj_set_size(right_button_, 120, 40);
+  lv_obj_set_size(right_button_, 100, 40);
   right_label_ = lv_label_create(right_button_);
   lv_obj_center(right_label_);
   lv_obj_add_flag(right_button_, LV_OBJ_FLAG_HIDDEN);  // Hidden by default
@@ -89,8 +91,9 @@ void ButtonBar::Render() {
 }
 
 void ButtonBar::ActivateButtons(std::shared_ptr<ButtonDefinition> definition) {
+  if (definition) {
   definitions.push_back(definition);
-  Render();
+  }
 }
 
 void ButtonBar::RemoveButtons(std::shared_ptr<ButtonDefinition> definition) {

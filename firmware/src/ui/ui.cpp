@@ -71,31 +71,29 @@ void UserInterface::UpdateGui() {
     splash_screen_ = nullptr;
     status_bar_ = std::make_unique<StatusBar>(lv_screen_active(), state_);
 
-    lv_obj_set_size(*status_bar_, lv_pct(100), 50);
+    // StatusBar: 240×58px (full width, 58px height)
+    lv_obj_set_size(*status_bar_, 240, 58);
     lv_obj_align(*status_bar_, LV_ALIGN_TOP_LEFT, 0, 0);
 
     // Create button bar at the bottom
     button_bar_ = std::make_unique<ButtonBar>(lv_screen_active(), state_);
 
     // Create main content area between status bar and button bar
-    lv_obj_t* content_container = lv_obj_create(lv_screen_active());
+    lv_obj_t *content_container = lv_obj_create(lv_screen_active());
     lv_obj_remove_style_all(content_container);
-    lv_obj_set_size(content_container, lv_pct(100), lv_pct(100) - 110); // Screen minus statusbar(50) and buttonbar(60)
-    lv_obj_align(content_container, LV_ALIGN_TOP_LEFT, 0, 50);
+    // Main content: 240×212px (320 - 58 statusbar - 50 buttonbar = 212px
+    // height)
+    lv_obj_set_size(content_container, 240, 212);
+    lv_obj_align(content_container, LV_ALIGN_TOP_LEFT, 0, 58);
 
-    // Create and activate default main content
-    main_content_ = std::make_shared<DefaultMainContent>(content_container, state_, this);
-    PushContent(main_content_);
+    // Create and activate session status as main content
+    session_status_ =
+        std::make_shared<SessionStatus>(content_container, state_, this);
+    PushContent(session_status_);
+  }
 
-    // Remove old tag_status_ since it's now replaced by MainContent
-    tag_status_ = nullptr;
-  }
-  if (status_bar_) {
-    status_bar_->Render();
-  }
-  if (button_bar_) {
-    button_bar_->Render();
-  }
+  status_bar_->Render();
+  button_bar_->Render();
   auto current_content = GetCurrentContent();
   if (current_content) {
     current_content->Render();
@@ -221,24 +219,24 @@ void UserInterface::PushContent(std::shared_ptr<MainContent> content) {
       button_bar_->RemoveButtons(content_stack_.back()->GetButtonDefinition());
     }
   }
-  
+
   content_stack_.push_back(content);
   ActivateContent(content);
 }
 
 void UserInterface::PopContent() {
   if (content_stack_.size() <= 1) {
-    return; // Don't pop the last content
+    return;  // Don't pop the last content
   }
-  
+
   auto current = content_stack_.back();
   current->OnDeactivate();
   if (button_bar_ && current->GetButtonDefinition()) {
     button_bar_->RemoveButtons(current->GetButtonDefinition());
   }
-  
+
   content_stack_.pop_back();
-  
+
   if (!content_stack_.empty()) {
     ActivateContent(content_stack_.back());
   }

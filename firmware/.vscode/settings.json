@@ -82,5 +82,6 @@
     "particle.enablePre-releaseDeviceOSBuilds": true,
     "C_Cpp.clang_format_style": "Google",
     "C_Cpp.default.configurationProvider": "particle.particle-vscode-core",
-    "particle.targetDevice": ""
+    "particle.targetDevice": "",
+    "particle.debugWarningShown": true
 }
