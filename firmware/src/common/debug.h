@@ -3,6 +3,8 @@
 
 #include "Particle.h"
 
+#define DLOG(fmt, ...) Log.warn("%s:%d " fmt, __FILE__, __LINE__, ##__VA_ARGS__)
+
 // Converts a byte array to a hexadecimal and ASCII string representation.
 //
 // Args:

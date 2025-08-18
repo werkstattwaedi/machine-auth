@@ -3,6 +3,7 @@
  */
 
 #include "common.h"
+#include "faulthandler.h"
 #include "nfc/nfc_tags.h"
 #include "setup/setup.h"
 #include "state/state.h"
@@ -43,6 +44,7 @@ void setup() {
 #ifdef REMOTE_LOGGING
   remoteLog.withServer(&remoteLogEventServer).setup();
 #endif
+  oww::fault::Init();
 
   Log.info("machine-auth-firmware starting");
 
@@ -106,7 +108,6 @@ void loop() {
 #ifdef REMOTE_LOGGING
   remoteLog.loop();
 #endif
-
   if (state_->GetConfiguration()->IsSetupMode()) {
     oww::setup::loop();
     return;
