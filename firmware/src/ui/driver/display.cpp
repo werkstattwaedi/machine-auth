@@ -5,6 +5,9 @@
 #include "config.h"
 #include "state/configuration.h"
 
+// Define this to use async SPI transfers (may be more stable in AUTOMATIC mode)
+#define USE_ASYNC_SPI_TRANSFERS 1
+
 // clang-format on
 
 using namespace config::ui::display;
@@ -12,6 +15,7 @@ using namespace config::ui::display;
 Logger display_log("display");
 
 Display *Display::instance_;
+uint32_t Display::transfer_count_ = 0;
 
 Display &Display::instance() {
   if (!instance_) {
@@ -24,7 +28,11 @@ Display::Display()
     : spi_interface_(SPI1),
       spi_settings_(40 * MHZ, MSBFIRST, SPI_MODE0),
       touchscreen_interface_(SPI1, resolution_horizontal, resolution_vertical,
-                             pin_touch_chipselect, pin_touch_irq) {}
+                             pin_touch_chipselect, pin_touch_irq),
+      transfer_complete_(true),
+      transfer_error_(false),
+      transfer_needs_completion_(false),
+      transfer_start_time_(0) {}
 
 Display::~Display() {}
 
@@ -35,6 +43,7 @@ Status Display::Begin() {
   pinMode(pin_backlight, OUTPUT);
 
   spi_interface_.begin();
+  spi_interface_.beginTransaction(spi_settings_);
 
   digitalWrite(pin_backlight, HIGH);
   digitalWrite(pin_reset, HIGH);
@@ -59,7 +68,12 @@ Status Display::Begin() {
         Display::instance().SendCommand(cmd, cmd_size, param, param_size);
       },
       [](auto *disp, auto *cmd, auto cmd_size, auto *param, auto param_size) {
+#if USE_ASYNC_SPI_TRANSFERS
+        // Use async version to test if it's more stable
+        Display::instance().SendColorAsync(cmd, cmd_size, param, param_size);
+#else
         Display::instance().SendColor(cmd, cmd_size, param, param_size);
+#endif
       });
 
   lv_lcd_generic_mipi_set_invert(display_, true);
@@ -87,7 +101,7 @@ Status Display::Begin() {
   lv_display_set_buffers(display_, buffer_1, buffer_2, buf_size,
                          LV_DISPLAY_RENDER_MODE_PARTIAL);
 
-  touchscreen_interface_.begin();
+  // touchscreen_interface_.begin();
 
   lv_indev_t *indev = lv_indev_create();
   lv_indev_set_type(
@@ -107,8 +121,6 @@ void Display::RenderLoop() {
 
 void Display::SendCommand(const uint8_t *cmd, size_t cmd_size,
                           const uint8_t *param, size_t param_size) {
-  spi_interface_.beginTransaction(spi_settings_);
-
   pinResetFast(pin_chipselect);
   pinResetFast(pin_datacommand);
 
@@ -125,9 +137,25 @@ void Display::SendCommand(const uint8_t *cmd, size_t cmd_size,
   spi_interface_.endTransaction();
 }
 
+
+void Display::ReadTouchInput(lv_indev_t *indev, lv_indev_data_t *data) {
+  // if (touchscreen_interface_.touched()) {
+  //   TS_Point p = touchscreen_interface_.getPoint();
+  //   auto x = map(p.x, 220, 3850, 1, 480);  //
+  //   auto y = map(p.y, 310, 3773, 1, 320);  // Feel pretty good about this
+  //   data->point.x = x;
+  //   data->point.y = y;
+  //   data->state = LV_INDEV_STATE_PR;
+
+  // } else {
+  data->state = LV_INDEV_STATE_REL;
+  // }
+}
+
 void Display::SendColor(const uint8_t *cmd, size_t cmd_size,
                         const uint8_t *param, size_t param_size) {
-  spi_interface_.beginTransaction(spi_settings_);
+  transfer_count_++;
+
   pinResetFast(pin_chipselect);
   pinResetFast(pin_datacommand);
 
@@ -143,25 +171,33 @@ void Display::SendColor(const uint8_t *cmd, size_t cmd_size,
     spi_interface_.transfer(param, nullptr, param_size, nullptr);
   }
 
-  // for (size_t i = 0; i < param_size; i++) {
-  //   spi_interface_.transfer(param[i]);
-  // }
   pinSetFast(pin_chipselect);
 
-  Display::instance_->spi_interface_.endTransaction();
-  lv_display_flush_ready(Display::instance_->display_);
+  lv_display_flush_ready(display_);
 }
 
-void Display::ReadTouchInput(lv_indev_t *indev, lv_indev_data_t *data) {
-  // if (touchscreen_interface_.touched()) {
-  //   TS_Point p = touchscreen_interface_.getPoint();
-  //   auto x = map(p.x, 220, 3850, 1, 480);  //
-  //   auto y = map(p.y, 310, 3773, 1, 320);  // Feel pretty good about this
-  //   data->point.x = x;
-  //   data->point.y = y;
-  //   data->state = LV_INDEV_STATE_PR;
 
-  // } else {
-  data->state = LV_INDEV_STATE_REL;
-  // }
+void Display::SendColorAsync(const uint8_t *cmd, size_t cmd_size,
+                             const uint8_t *param, size_t param_size) {
+  transfer_count_++;
+
+  pinResetFast(pin_chipselect);
+  pinResetFast(pin_datacommand);
+
+  // Send command bytes
+  for (size_t i = 0; i < cmd_size; i++) {
+    spi_interface_.transfer(cmd[i]);
+  }
+
+  // Swap RGB565 data
+  lv_draw_sw_rgb565_swap((void *)param, param_size / 2);
+
+  pinSetFast(pin_datacommand);
+
+  if (param_size > 0) {
+    // Start async transfer with callback
+    spi_interface_.transfer(param, nullptr, param_size, []() {
+      lv_display_flush_ready(Display::instance_->display_);
+    });
+  }
 }

@@ -4,128 +4,55 @@
 
 #include "common.h"
 #include "faulthandler.h"
-#include "nfc/nfc_tags.h"
-#include "setup/setup.h"
-#include "state/state.h"
-#include "ui/driver/cap1296.h"
-#include "ui/ui.h"
+#include "ui/driver/display.h"
+#include "ui/stresstest.h"
 
-#ifdef REMOTE_LOGGING
-#include "RemoteLogRK.h"
-#endif
-// Let Device OS manage the connection to the Particle Cloud
+// Switch between MANUAL and AUTOMATIC to test SPI stability
+#define TEST_AUTOMATIC_MODE 1
+
+#if TEST_AUTOMATIC_MODE
 SYSTEM_MODE(AUTOMATIC);
-
-SerialLogHandler logHandler(
-    // Logging level for non-application messages
-    LOG_LEVEL_INFO, {
-                        {"app", LOG_LEVEL_ALL},
-                        {"cloud_request", LOG_LEVEL_ALL},
-                        {"config", LOG_LEVEL_ALL},
-                        {"display", LOG_LEVEL_WARN},
-                        {"nfc", LOG_LEVEL_ALL},
-                        {"pn532", LOG_LEVEL_ALL},
-                        {"cap1296", LOG_LEVEL_ALL},
-                    });
-
-using namespace oww::state;
-using namespace oww::ui::driver::cap;
-
-#ifdef REMOTE_LOGGING
-retained uint8_t remoteLogBuf[2560];
-RemoteLog remoteLog(remoteLogBuf, sizeof(remoteLogBuf));
-RemoteLogEventServer remoteLogEventServer("debugLog");
+#else
+SYSTEM_MODE(MANUAL);
 #endif
 
-std::shared_ptr<State> state_;
-CAP1296 cap;
+SerialLogHandler logHandler(LOG_LEVEL_TRACE, {
+                                                 {"app", LOG_LEVEL_ALL},
+                                                 {"display", LOG_LEVEL_ALL},
+
+                                             });
 
 void setup() {
-#ifdef REMOTE_LOGGING
-  remoteLog.withServer(&remoteLogEventServer).setup();
-#endif
   oww::fault::Init();
 
-  Log.info("machine-auth-firmware starting");
+  Log.info("display debug starting");
+  Display::instance().Begin();
+  Log.info("Display started");
 
-  {
-    // create state_
-    state_ = std::make_shared<State>();
-    auto config = std::make_unique<Configuration>(std::weak_ptr(state_));
-    state_->Begin(std::move(config));
-  }
-
-  if (state_->GetConfiguration()->IsSetupMode()) {
-    oww::setup::setup(state_);
-    return;
-  }
-
-  auto display_setup_result = oww::ui::UserInterface::instance().Begin(state_);
-
-#if defined(DEVELOPMENT_BUILD)
-  // Await the terminal connections, so that all log messages during setup are
-  // not skipped.
-  state_->SetBootProgress("Warte auf Debugger...");
-  waitFor(Serial.isConnected, 5000);
-#endif
-
-  if (!display_setup_result) {
-    Log.info("Failed to start display = %d", (int)display_setup_result.error());
-  }
-
-  if (cap.Begin() != Status::kOk) {
-    Log.info("Failed to start touch");
-  }
-
-  state_->SetBootProgress("Start NFC...");
-  Status nfc_setup_result = NfcTags::instance().Begin(state_);
-  Log.info("NFC Status = %d", (int)nfc_setup_result);
-
-  state_->SetBootProgress("Verbinde mit WiFi...");
-
-  while (!WiFi.ready()) {
-    delay(10);
-  }
-
-  state_->SetBootProgress("Verbinde mit Cloud...");
-
-  while (!Particle.connected()) {
-    delay(10);
-  }
-
-  state_->SetBootProgress("Warte auf Terminal Config...");
-
-  while (!state_->GetConfiguration()->GetTerminal()) {
-    delay(10);
-  }
-
-  state_->BootCompleted();
+  // Start stress test to generate continuous SPI traffic
+  StressTest::Start();
+  Log.info("Stress test started");
 }
 
-uint8_t last_touched = 0;
-uint8_t current_touched = 0;
+int loop_count = 0;
+system_tick_t time_next_log = 0;
+
 void loop() {
-#ifdef REMOTE_LOGGING
-  remoteLog.loop();
+  loop_count++;
+  auto now = millis();
+  if (now > time_next_log) {
+#if TEST_AUTOMATIC_MODE
+    Log.info("Main Heartbeat %dfps (AUTOMATIC mode), SPI transfers: %lu",
+             loop_count, Display::GetTransferCount());
+#else
+    Log.info("Main Heartbeat %dfps (MANUAL mode), SPI transfers: %lu",
+             loop_count, Display::GetTransferCount());
 #endif
-  if (state_->GetConfiguration()->IsSetupMode()) {
-    oww::setup::loop();
-    return;
+    time_next_log = ((now / 1000) + 1) * 1000;
+    loop_count = 0;
   }
 
-  state_->Loop();
-
-  current_touched = cap.Touched();
-
-  for (uint8_t i = 0; i < 6; i++) {
-    uint8_t mask = 0x01 << i;
-    if ((current_touched & mask) && !(last_touched & mask)) {
-      Log.info("%d touched", i);
-    }
-    if (!(current_touched & mask) && (last_touched & mask)) {
-      Log.info("%d released", i);
-    }
-  }
-
-  last_touched = current_touched;
+  // Run LVGL timer handler - this processes the stress test animations
+  uint32_t time_till_next = lv_timer_handler();
+  delay(time_till_next);
 }
