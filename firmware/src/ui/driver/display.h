@@ -20,6 +20,15 @@ class Display {
   void RenderLoop();
 
   static uint32_t GetTransferCount() { return transfer_count_; }
+  void LogStat() {
+    Log.warn("loop\n 1: %d\n 2: %d\n 3: %d\n X: %d", loop1, loop2, loop3,
+             loopX);
+    Log.warn(
+        "f\n S: %d\n 1: %d\n 2: %d\n 3: %d\n 4: %d\n 5: %d\n 6: %d\n 7: %d\n "
+        "8: %d\n 9: %d\n 10: %d\n 11: %d\n 12: %d\n E: %d",
+        flushS, flush1, flush2, flush3, flush4, flush5, flush6, flush7, flush8,
+        flush9, flush10, flush11, flush12, flushE);
+  }
 
  private:
   // Display is a singleton - use Display.instance()
@@ -54,6 +63,25 @@ class Display {
 
   // Transfer state tracking
   static uint32_t transfer_count_;
+  volatile uint32_t loop1 = 0;
+  volatile uint32_t loop2 = 0;
+  volatile uint32_t loop3 = 0;
+  volatile uint32_t loopX = 0;
+
+  volatile uint32_t flushS = 0;
+  volatile uint32_t flush1 = 0;
+  volatile uint32_t flush2 = 0;
+  volatile uint32_t flush3 = 0;
+  volatile uint32_t flush4 = 0;
+  volatile uint32_t flush5 = 0;
+  volatile uint32_t flush6 = 0;
+  volatile uint32_t flush7 = 0;
+  volatile uint32_t flush8 = 0;
+  volatile uint32_t flush9 = 0;
+  volatile uint32_t flush10 = 0;
+  volatile uint32_t flush11 = 0;
+  volatile uint32_t flush12 = 0;
+  volatile uint32_t flushE = 0;
 
   // Make these accessible to the static thread function
   SPIClass &GetSpiInterface() { return spi_interface_; }

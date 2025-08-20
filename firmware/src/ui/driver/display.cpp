@@ -52,7 +52,7 @@ Status Display::Begin() {
   os_semaphore_create(&dma_complete_semaphore_, /*max_count=*/1,
                       /*initial_count=*/0);
   spi_flush_thread_ = new Thread(
-      "spi_flush", [this]() { SpiFlushThread(); }, OS_THREAD_PRIORITY_CRITICAL);
+      "spi_flush", [this]() { SpiFlushThread(); }, OS_THREAD_PRIORITY_DEFAULT + 1);
 
   lv_init();
 #if LV_USE_LOG
@@ -163,11 +163,15 @@ void Display::SpiFlushThread() {
 
   while (true) {
     DisplayFlushRequest request;
+    loop1++;
     if (os_queue_take(flush_queue_, &request, CONCURRENT_WAIT_FOREVER, NULL) !=
         0) {
+      loopX++;
       continue;
     }
+    loop2++;
     ProcessFlushRequest(request);
+    loop3++;
   }
 }
 
@@ -184,6 +188,7 @@ void Display::SendAddressCommand(uint8_t cmd, int32_t start, int32_t end) {
 // Process flush request in SPI thread
 void Display::ProcessFlushRequest(const DisplayFlushRequest &request) {
   transfer_count_++;
+  flushS++;
   auto drv =
       (lv_lcd_generic_mipi_driver_t *)lv_display_get_driver_data(display_);
 
@@ -196,12 +201,17 @@ void Display::ProcessFlushRequest(const DisplayFlushRequest &request) {
             "start position must be smaller than end position");
 
   // Start SPI transaction (safe in this dedicated thread)
+  flush1++;
   spi_interface_.beginTransaction(spi_settings_);
+  flush2++;
   pinResetFast(pin_chipselect);
+  flush3++;
 
   /* define an area of frame memory where MCU can access */
   SendAddressCommand(LV_LCD_CMD_SET_COLUMN_ADDRESS, x_start, x_end);
+  flush4++;
   SendAddressCommand(LV_LCD_CMD_SET_PAGE_ADDRESS, y_start, y_end);
+  flush5++;
 
   /* transfer frame buffer */
 
@@ -215,19 +225,29 @@ void Display::ProcessFlushRequest(const DisplayFlushRequest &request) {
   lv_draw_sw_rgb565_swap(request.px_map, lv_area_get_size(&request.area));
 
   pinResetFast(pin_datacommand);
+
   spi_interface_.transfer(LV_LCD_CMD_WRITE_MEMORY_START);
   pinSetFast(pin_datacommand);
+  flush6++;
 
   spi_interface_.transfer(request.px_map, NULL, len, [] {
+    Display::instance_->flush7++;
+
     // Signal DMA complete callback and semaphore, rather than NULL callback:
     // The null callback will busy way, burning through precious cycles.
     os_semaphore_give(Display::instance_->dma_complete_semaphore_, false);
   });
+  flush8++;
 
   os_semaphore_take(dma_complete_semaphore_, CONCURRENT_WAIT_FOREVER, false);
 
+  flush9++;
+
   pinSetFast(pin_chipselect);
+  flush10++;
   spi_interface_.endTransaction();
+  flush11++;
 
   lv_display_flush_ready(display_);
+  flush12++;
 }

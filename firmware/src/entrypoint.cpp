@@ -32,6 +32,16 @@ void setup() {
   // Start stress test to generate continuous SPI traffic
   StressTest::Start();
   Log.info("Stress test started");
+
+  new Thread(
+      "spi_flush",
+      []() {
+        while (true) {
+          delay(5000);
+          Display::instance().LogStat();
+        }
+      },
+      OS_THREAD_PRIORITY_DEFAULT);
 }
 
 int loop_count = 0;
@@ -40,9 +50,9 @@ system_tick_t time_next_frame = 0;
 
 void loop() {
   auto now = millis();
-  
+
   loop_count++;
-  
+
   // Heartbeat logging every second
   if (now > time_next_log) {
 #if TEST_AUTOMATIC_MODE
@@ -61,7 +71,7 @@ void loop() {
     uint32_t time_till_next = lv_timer_handler();
     time_next_frame = now + time_till_next;
   }
-  
+
   // Yield to other tasks briefly but don't block
   delay(1);
 }
