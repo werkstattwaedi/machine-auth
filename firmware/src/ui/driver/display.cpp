@@ -239,7 +239,10 @@ void Display::ProcessFlushRequest(const DisplayFlushRequest &request) {
   });
   flush8++;
 
-  os_semaphore_take(dma_complete_semaphore_, CONCURRENT_WAIT_FOREVER, false);
+  if (os_semaphore_take(dma_complete_semaphore_, 20, false) != 0 ) {
+    flushX++;
+    spi_interface_.transferCancel();
+  }
 
   flush9++;
 

@@ -25,9 +25,9 @@ class Display {
              loopX);
     Log.warn(
         "f\n S: %d\n 1: %d\n 2: %d\n 3: %d\n 4: %d\n 5: %d\n 6: %d\n 7: %d\n "
-        "8: %d\n 9: %d\n 10: %d\n 11: %d\n 12: %d\n E: %d",
+        "8: %d\n 9: %d\n 10: %d\n 11: %d\n 12: %d\n E: %d\n X: %d",
         flushS, flush1, flush2, flush3, flush4, flush5, flush6, flush7, flush8,
-        flush9, flush10, flush11, flush12, flushE);
+        flush9, flush10, flush11, flush12, flushE, flushX);
   }
 
  private:
@@ -81,6 +81,8 @@ class Display {
   volatile uint32_t flush10 = 0;
   volatile uint32_t flush11 = 0;
   volatile uint32_t flush12 = 0;
+  volatile uint32_t flushX = 0;
+  
   volatile uint32_t flushE = 0;
 
   // Make these accessible to the static thread function
