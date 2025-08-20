@@ -36,10 +36,14 @@ void setup() {
 
 int loop_count = 0;
 system_tick_t time_next_log = 0;
+system_tick_t time_next_frame = 0;
 
 void loop() {
-  loop_count++;
   auto now = millis();
+  
+  loop_count++;
+  
+  // Heartbeat logging every second
   if (now > time_next_log) {
 #if TEST_AUTOMATIC_MODE
     Log.info("Main Heartbeat %dfps (AUTOMATIC mode), SPI transfers: %lu",
@@ -52,7 +56,12 @@ void loop() {
     loop_count = 0;
   }
 
-  // Run LVGL timer handler - this processes the stress test animations
-  uint32_t time_till_next = lv_timer_handler();
-  delay(time_till_next);
+  // Run LVGL timer handler only when it's time (non-blocking approach)
+  if (now >= time_next_frame) {
+    uint32_t time_till_next = lv_timer_handler();
+    time_next_frame = now + time_till_next;
+  }
+  
+  // Yield to other tasks briefly but don't block
+  delay(1);
 }

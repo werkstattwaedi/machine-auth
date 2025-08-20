@@ -159,6 +159,10 @@ void Init() {
       }
     }
     Replay.warn("---- End retained logs ----");
+
+    if (hadCrash) {
+      delay(5000);
+    }
   }
 }
 

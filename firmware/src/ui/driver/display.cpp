@@ -1,12 +1,11 @@
 #include "display.h"
 
+#include <concurrent_hal.h>
 #include <drivers/display/lcd/lv_lcd_generic_mipi.h>
 
+#include "Particle.h"
 #include "config.h"
 #include "state/configuration.h"
-
-// Define this to use async SPI transfers (may be more stable in AUTOMATIC mode)
-#define USE_ASYNC_SPI_TRANSFERS 1
 
 // clang-format on
 
@@ -28,11 +27,7 @@ Display::Display()
     : spi_interface_(SPI1),
       spi_settings_(40 * MHZ, MSBFIRST, SPI_MODE0),
       touchscreen_interface_(SPI1, resolution_horizontal, resolution_vertical,
-                             pin_touch_chipselect, pin_touch_irq),
-      transfer_complete_(true),
-      transfer_error_(false),
-      transfer_needs_completion_(false),
-      transfer_start_time_(0) {}
+                             pin_touch_chipselect, pin_touch_irq) {}
 
 Display::~Display() {}
 
@@ -43,7 +38,6 @@ Status Display::Begin() {
   pinMode(pin_backlight, OUTPUT);
 
   spi_interface_.begin();
-  spi_interface_.beginTransaction(spi_settings_);
 
   digitalWrite(pin_backlight, HIGH);
   digitalWrite(pin_reset, HIGH);
@@ -53,6 +47,12 @@ Status Display::Begin() {
   delay(200);
   digitalWrite(pin_reset, HIGH);
   delay(200);
+
+  os_queue_create(&flush_queue_, sizeof(DisplayFlushRequest), 1, NULL);
+  os_semaphore_create(&dma_complete_semaphore_, /*max_count=*/1,
+                      /*initial_count=*/0);
+  spi_flush_thread_ = new Thread(
+      "spi_flush", [this]() { SpiFlushThread(); }, OS_THREAD_PRIORITY_CRITICAL);
 
   lv_init();
 #if LV_USE_LOG
@@ -68,15 +68,21 @@ Status Display::Begin() {
         Display::instance().SendCommand(cmd, cmd_size, param, param_size);
       },
       [](auto *disp, auto *cmd, auto cmd_size, auto *param, auto param_size) {
-#if USE_ASYNC_SPI_TRANSFERS
-        // Use async version to test if it's more stable
-        Display::instance().SendColorAsync(cmd, cmd_size, param, param_size);
-#else
-        Display::instance().SendColor(cmd, cmd_size, param, param_size);
-#endif
+        // Unused
       });
 
   lv_lcd_generic_mipi_set_invert(display_, true);
+
+  // Set our custom flush callback
+  lv_display_set_flush_cb(
+      display_, [](lv_display_t *disp, const lv_area_t *area, uint8_t *px_map) {
+        auto request = DisplayFlushRequest{
+            .area = *area,
+            .px_map = px_map,
+        };
+        os_queue_put(Display::instance_->flush_queue_, &request,
+                     CONCURRENT_WAIT_FOREVER, NULL);
+      });
 
   // FIXME: Photon2 has 3MB of RAM, so easily use 2 full size buffers
   // (~160k each), but for this, need to fix the render issues with
@@ -116,11 +122,12 @@ Status Display::Begin() {
 void Display::RenderLoop() {
   uint32_t time_till_next = lv_timer_handler();
   delay(time_till_next);
-  // display_log.info("Frame complete");
 }
 
 void Display::SendCommand(const uint8_t *cmd, size_t cmd_size,
                           const uint8_t *param, size_t param_size) {
+  spi_interface_.beginTransaction(spi_settings_);
+
   pinResetFast(pin_chipselect);
   pinResetFast(pin_datacommand);
 
@@ -133,10 +140,8 @@ void Display::SendCommand(const uint8_t *cmd, size_t cmd_size,
     spi_interface_.transfer(param[i]);
   }
   pinSetFast(pin_chipselect);
-
   spi_interface_.endTransaction();
 }
-
 
 void Display::ReadTouchInput(lv_indev_t *indev, lv_indev_data_t *data) {
   // if (touchscreen_interface_.touched()) {
@@ -152,52 +157,77 @@ void Display::ReadTouchInput(lv_indev_t *indev, lv_indev_data_t *data) {
   // }
 }
 
-void Display::SendColor(const uint8_t *cmd, size_t cmd_size,
-                        const uint8_t *param, size_t param_size) {
-  transfer_count_++;
+// SPI flush thread - handles all SPI transfers
+void Display::SpiFlushThread() {
+  display_log.error("Flush thread started");
 
-  pinResetFast(pin_chipselect);
-  pinResetFast(pin_datacommand);
-
-  for (size_t i = 0; i < cmd_size; i++) {
-    spi_interface_.transfer(cmd[i]);
+  while (true) {
+    DisplayFlushRequest request;
+    if (os_queue_take(flush_queue_, &request, CONCURRENT_WAIT_FOREVER, NULL) !=
+        0) {
+      continue;
+    }
+    ProcessFlushRequest(request);
   }
-
-  // FIXME - this should be done in the flush callback, rather than
-  lv_draw_sw_rgb565_swap((void *)param, param_size / 2);
-
-  pinSetFast(pin_datacommand);
-  if (param_size > 0) {
-    spi_interface_.transfer(param, nullptr, param_size, nullptr);
-  }
-
-  pinSetFast(pin_chipselect);
-
-  lv_display_flush_ready(display_);
 }
 
-
-void Display::SendColorAsync(const uint8_t *cmd, size_t cmd_size,
-                             const uint8_t *param, size_t param_size) {
-  transfer_count_++;
-
-  pinResetFast(pin_chipselect);
+void Display::SendAddressCommand(uint8_t cmd, int32_t start, int32_t end) {
   pinResetFast(pin_datacommand);
+  spi_interface_.transfer(cmd);
+  pinSetFast(pin_datacommand);
+  spi_interface_.transfer((start >> 8) & 0xFF);
+  spi_interface_.transfer(start & 0xFF);
+  spi_interface_.transfer(((end - 1) >> 8) & 0xFF);
+  spi_interface_.transfer((end - 1) & 0xFF);
+}
 
-  // Send command bytes
-  for (size_t i = 0; i < cmd_size; i++) {
-    spi_interface_.transfer(cmd[i]);
-  }
+// Process flush request in SPI thread
+void Display::ProcessFlushRequest(const DisplayFlushRequest &request) {
+  transfer_count_++;
+  auto drv =
+      (lv_lcd_generic_mipi_driver_t *)lv_display_get_driver_data(display_);
 
-  // Swap RGB565 data
-  lv_draw_sw_rgb565_swap((void *)param, param_size / 2);
+  int32_t x_start = request.area.x1 + drv->x_gap;
+  int32_t x_end = request.area.x2 + 1 + drv->x_gap;
+  int32_t y_start = request.area.y1 + drv->y_gap;
+  int32_t y_end = request.area.y2 + 1 + drv->y_gap;
 
+  LV_ASSERT((x_start < x_end) && (y_start < y_end) &&
+            "start position must be smaller than end position");
+
+  // Start SPI transaction (safe in this dedicated thread)
+  spi_interface_.beginTransaction(spi_settings_);
+  pinResetFast(pin_chipselect);
+
+  /* define an area of frame memory where MCU can access */
+  SendAddressCommand(LV_LCD_CMD_SET_COLUMN_ADDRESS, x_start, x_end);
+  SendAddressCommand(LV_LCD_CMD_SET_PAGE_ADDRESS, y_start, y_end);
+
+  /* transfer frame buffer */
+
+  size_t len = (x_end - x_start) * (y_end - y_start) *
+               lv_color_format_get_size(lv_display_get_color_format(display_));
+
+  // Particles SPI does not let us flush the words in the reverse order, so
+  // flipping the buffer ahead of time in memory.
+  // TODO measure if things can be effectively speed up by swapping and flushing
+  // smaller blocks in parallel.
+  lv_draw_sw_rgb565_swap(request.px_map, lv_area_get_size(&request.area));
+
+  pinResetFast(pin_datacommand);
+  spi_interface_.transfer(LV_LCD_CMD_WRITE_MEMORY_START);
   pinSetFast(pin_datacommand);
 
-  if (param_size > 0) {
-    // Start async transfer with callback
-    spi_interface_.transfer(param, nullptr, param_size, []() {
-      lv_display_flush_ready(Display::instance_->display_);
-    });
-  }
+  spi_interface_.transfer(request.px_map, NULL, len, [] {
+    // Signal DMA complete callback and semaphore, rather than NULL callback:
+    // The null callback will busy way, burning through precious cycles.
+    os_semaphore_give(Display::instance_->dma_complete_semaphore_, false);
+  });
+
+  os_semaphore_take(dma_complete_semaphore_, CONCURRENT_WAIT_FOREVER, false);
+
+  pinSetFast(pin_chipselect);
+  spi_interface_.endTransaction();
+
+  lv_display_flush_ready(display_);
 }
