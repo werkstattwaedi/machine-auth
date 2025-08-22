@@ -15,17 +15,18 @@
 #endif
 // Let Device OS manage the connection to the Particle Cloud
 SYSTEM_MODE(AUTOMATIC);
+STARTUP(WiFi.selectAntenna(ANT_AUTO));
 
 SerialLogHandler logHandler(
     // Logging level for non-application messages
-    LOG_LEVEL_INFO, {
-                        {"app", LOG_LEVEL_ALL},
-                        {"cloud_request", LOG_LEVEL_ALL},
-                        {"config", LOG_LEVEL_ALL},
-                        {"display", LOG_LEVEL_WARN},
-                        {"nfc", LOG_LEVEL_ALL},
-                        {"pn532", LOG_LEVEL_ALL},
-                        {"cap1296", LOG_LEVEL_ALL},
+    LOG_LEVEL_WARN, {
+                        {"app", LOG_LEVEL_INFO},
+                        {"cloud_request", LOG_LEVEL_INFO},
+                        {"config", LOG_LEVEL_INFO},
+                        {"display", LOG_LEVEL_INFO},
+                        {"nfc", LOG_LEVEL_INFO},
+                        {"pn532", LOG_LEVEL_INFO},
+                        {"cap1296", LOG_LEVEL_INFO},
                     });
 
 using namespace oww::state;
@@ -104,6 +105,9 @@ void setup() {
 
 uint8_t last_touched = 0;
 uint8_t current_touched = 0;
+
+system_tick_t next_telemetry_log = 0;
+
 void loop() {
 #ifdef REMOTE_LOGGING
   remoteLog.loop();
@@ -114,6 +118,21 @@ void loop() {
   }
 
   state_->Loop();
+
+  auto now = millis();
+  if (Log.isInfoEnabled() && now > next_telemetry_log) {
+    next_telemetry_log = ((now / 1000) + 5) * 1000;
+#if defined(DEVELOPMENT_BUILD)
+
+    WiFiSignal signal = WiFi.RSSI();
+
+    Log.info(
+        "System Telemetry\n"
+        "  Wifi signal strength: %.02f%% (%fdBm)\n"
+        "  WiFi signal quality: %.02f%%",
+        signal.getStrength(), signal.getStrengthValue(), signal.getQuality());
+#endif
+  }
 
   current_touched = cap.Touched();
 
