@@ -19,7 +19,7 @@ UserInterface &UserInterface::instance() {
 }
 
 UserInterface::UserInterface()
-    : led_strip_(config::led::pixel_count, SPI, config::led::pixel_type) {}
+  : led_strip_(config::led::pixel_count, SPI, config::led::pixel_type) {}
 
 UserInterface::~UserInterface() {}
 
@@ -36,6 +36,9 @@ tl::expected<void, Error> UserInterface::Begin(
   analogWrite(config::ui::display::pin_backlight, 255);
 
   led_strip_.show();
+  // LED controller setup
+  led_ = std::make_unique<leds::LedController>(&led_strip_);
+  led_->InitializeDefaultMapping();
 
   Display::instance().Begin();
 
@@ -167,49 +170,104 @@ void UserInterface::UpdateLed() {
 
   using namespace oww::state::terminal;
 
-  byte r = 0;
-  byte g = 0;
-  byte b = 0;
+  // Choose effects/colors for each section based on state
+  using leds::Color;
+  using leds::EffectConfig;
+  using leds::EffectType;
+
+  EffectConfig ring, buttons, nfc;
+  leds::ButtonColors btn_colors;
 
   std::visit(overloaded{
-                 [&](Idle state) { b = 255; },  // Blue
-                 [&](Detected state) {
-                   r = 255;
-                   g = 255;
-                 },                                      // Yellow
-                 [&](Authenticated state) { g = 255; },  // Green
-                 [&](StartSession state) {
-                   g = 255;
-                   b = 255;
-                 },                                // Cyan
-                 [&](Unknown state) { r = 255; },  // Red
-                 [&](Personalize state) {
-                   r = 255;
-                   b = 255;
-                 },  // Magenta
+                 [&](Idle state) {
+                   // Idle: soft blue breathe on ring and dim warm white NFC
+                   ring.type = EffectType::Breathe;
+                   ring.color = Color::RGB(0, 64, 200);
+                   ring.min_brightness = 8;
+                   ring.max_brightness = 64;
+                   ring.period_ms = 3000;
 
+                   nfc.type = EffectType::Solid;
+                   nfc.color = Color::WarmWhite(24);
+
+                   buttons.type = EffectType::Solid;
+                   btn_colors = {Color::RGB(32, 32, 32), Color::RGB(32, 32, 32),
+                                 Color::RGB(32, 32, 32), Color::RGB(32, 32, 32)};
+                 },
+                 [&](Detected state) {
+                   // Tag detected: rotate yellow highlight on ring
+                   ring.type = EffectType::Rotate;
+                   ring.color = Color::RGB(200, 160, 20);
+                   ring.lit_pixels = 20; // ~2x nominal width
+                   ring.hotspots = 2; // opposite sides
+                   ring.period_ms = 1500;
+
+                   nfc.type = EffectType::Breathe;
+                   nfc.color = Color::RGB(0, 80, 220);
+
+                   buttons.type = EffectType::Solid;
+                   btn_colors = {Color::RGB(60, 60, 20), Color::RGB(60, 60, 20),
+                                 Color::RGB(60, 60, 20), Color::RGB(60, 60, 20)};
+                 },
+                 [&](Authenticated state) {
+                   // Green steady ring, NFC short breathe pulse
+                   ring.type = EffectType::Solid;
+                   ring.color = Color::RGB(0, 180, 40);
+                   nfc.type = EffectType::Breathe;
+                   nfc.color = Color::RGB(0, 120, 40);
+
+                   buttons.type = EffectType::Solid;
+                   btn_colors = {Color::RGB(40, 120, 40), Color::RGB(40, 120, 40),
+                                 Color::RGB(40, 120, 40), Color::RGB(40, 120, 40)};
+                 },
+                 [&](StartSession state) {
+                   // Cyan rotating highlight
+                   ring.type = EffectType::Rotate;
+                   ring.color = Color::RGB(10, 180, 180);
+                   ring.lit_pixels = 10; // ~1x nominal width
+                   ring.hotspots = 2;
+                   ring.period_ms = 1200;
+                   nfc.type = EffectType::Solid;
+                   nfc.color = Color::RGB(0, 60, 60);
+                   buttons.type = EffectType::Blink;
+                   buttons.duty_cycle = 180;
+                   btn_colors = {Color::RGB(20, 80, 80), Color::RGB(20, 80, 80),
+                                 Color::RGB(20, 80, 80), Color::RGB(20, 80, 80)};
+                 },
+                 [&](Unknown state) {
+                   // Access denied: red blink all around, red NFC
+                   ring.type = EffectType::Blink;
+                   ring.color = Color::RGB(200, 20, 20);
+                   ring.period_ms = 700;
+                   ring.duty_cycle = 160;
+                   nfc.type = EffectType::Solid;
+                   nfc.color = Color::RGB(120, 0, 0);
+                   buttons.type = EffectType::Solid;
+                   btn_colors = {Color::RGB(120, 20, 20), Color::RGB(120, 20, 20),
+                                 Color::RGB(120, 20, 20), Color::RGB(120, 20, 20)};
+                 },
+                 [&](Personalize state) {
+                   // Developer mode: magenta ring breathe
+                   ring.type = EffectType::Breathe;
+                   ring.color = Color::RGB(180, 0, 180);
+                   ring.period_ms = 2500;
+                   nfc.type = EffectType::Solid;
+                   nfc.color = Color::RGB(120, 0, 120);
+                   buttons.type = EffectType::Solid;
+                   btn_colors = {Color::RGB(80, 0, 80), Color::RGB(80, 0, 80),
+                                 Color::RGB(80, 0, 80), Color::RGB(80, 0, 80)};
+                 },
              },
              *(current_state.get()));
 
-  byte scaling = 20;  // sin((millis() / 5000.0) * TWO_PI) * 15 + 20;
-  for (size_t i = 0; i < led_strip_.numPixels(); i++) {
-    led_strip_.setColorScaled(i, r, g, b, scaling);
-  }
+  // Apply configs
+  led_->Ring().SetEffect(ring);
+  led_->Buttons().SetEffect(buttons);
+  led_->Buttons().SetColors(btn_colors);
+  led_->Nfc().SetEffect(nfc);
 
-  // Dicso test
-  // byte scaling = sin((millis() / 10000.0) * TWO_PI) * 100 + 150;
-  // float hue_offset = fmod((millis() / 2000.0f), 1.0f);  // Cycle every 5
-  // seconds
-
-  // for (size_t i = 0; i < led_strip_.numPixels(); i++) {
-  //   float pixel_hue =
-  //       fmod(hue_offset + (float)i / led_strip_.numPixels(), 1.0f);
-  //   byte pixel_r, pixel_g, pixel_b;
-  //   HslToRgb(pixel_hue, 1.0f, 0.5f, pixel_r, pixel_g, pixel_b);
-  //   led_strip_.setColorScaled(i, pixel_r, pixel_g, pixel_b, scaling);
-  // }
-
-  led_strip_.show();
+  // Tick renderer
+  led_->Tick(millis());
 }
 
 void UserInterface::PushContent(std::shared_ptr<MainContent> content) {

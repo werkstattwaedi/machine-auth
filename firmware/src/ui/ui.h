@@ -7,6 +7,7 @@
 #include "common.h"
 #include "maincontent.h"
 #include "neopixel.h"
+#include "leds/led_controller.h"
 #include "sessionstatus.h"
 #include "splashscreen.h"
 #include "state/state.h"
@@ -86,6 +87,7 @@ class UserInterface {
 
  private:
   Adafruit_NeoPixel led_strip_;
+  std::unique_ptr<leds::LedController> led_;
   std::unique_ptr<SplashScreen> splash_screen_ = nullptr;
   std::unique_ptr<StatusBar> status_bar_ = nullptr;
   std::unique_ptr<ButtonBar> button_bar_ = nullptr;
