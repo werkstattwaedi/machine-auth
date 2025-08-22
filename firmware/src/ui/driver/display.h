@@ -6,6 +6,11 @@
 #include "common.h"
 #include "state/state.h"
 
+struct DisplayFlushRequest {
+  lv_area_t area;
+  uint8_t *px_map;
+};
+
 class Display {
  public:
   static Display &instance();
@@ -30,10 +35,21 @@ class Display {
   SPISettings spi_settings_;
   XPT2046_Touchscreen touchscreen_interface_;
 
-  void SendCommand(const uint8_t *cmd, size_t cmd_size,
-                         const uint8_t *param, size_t param_size);
-  void SendColor(const uint8_t *cmd, size_t cmd_size, const uint8_t *param,
-                      size_t param_size);
-
   void ReadTouchInput(lv_indev_t *indev, lv_indev_data_t *data);
+
+  // Sends generic display command.
+  void SendCommand(const uint8_t *cmd, size_t cmd_size, const uint8_t *param,
+                   size_t param_size);
+
+  // SPI Flush Thread Implementation
+  void SpiFlushThread();
+  void ProcessFlushRequest(const DisplayFlushRequest &request);
+  void SendAddressCommand(uint8_t cmd, int32_t start, int32_t end);
+  Thread *spi_flush_thread_;
+  os_queue_t flush_queue_;
+  os_semaphore_t dma_complete_semaphore_;
+
+  volatile uint32_t frame_count_ = 0;
+  volatile uint32_t transfer_count_ = 0;
+  volatile uint32_t transfer_hang_count_ = 0;
 };
