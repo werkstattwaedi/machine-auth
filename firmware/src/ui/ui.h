@@ -12,7 +12,6 @@
 #include "splashscreen.h"
 #include "state/state.h"
 #include "statusbar.h"
-#include "tagstatus.h"
 
 namespace oww::ui {
 
@@ -58,6 +57,9 @@ class UserInterface {
 
   /** Get the currently active MainContent */
   std::shared_ptr<MainContent> GetCurrentContent();
+
+  // Access to LED controller for UI components (SessionStatus, ButtonBar)
+  leds::LedController *leds() { return led_.get(); }
 
  private:
   // UserInterface is a singleton - use UserInterface.instance()

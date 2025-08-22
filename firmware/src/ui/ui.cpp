@@ -260,11 +260,18 @@ void UserInterface::UpdateLed() {
              },
              *(current_state.get()));
 
-  // Apply configs
+  // Apply configs (ring and NFC always from UI state)
   led_->Ring().SetEffect(ring);
-  led_->Buttons().SetEffect(buttons);
-  led_->Buttons().SetColors(btn_colors);
   led_->Nfc().SetEffect(nfc);
+
+  // Buttons: if current content has a definition, ButtonBar drives LEDs in its Render();
+  // otherwise, fall back to generic state colors here.
+  auto active = GetCurrentContent();
+  bool has_buttons = active && active->GetButtonDefinition();
+  if (!has_buttons) {
+    led_->Buttons().SetEffect(buttons);
+    led_->Buttons().SetColors(btn_colors);
+  }
 
   // Tick renderer
   led_->Tick(millis());

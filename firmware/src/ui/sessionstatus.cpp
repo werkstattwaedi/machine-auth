@@ -85,12 +85,14 @@ void SessionStatus::UpdateForState(
             // Idle state buttons (single button on right)
             current_buttons_->left_label = "";  // No left button in idle state
             current_buttons_->left_enabled = false;
-            current_buttons_->right_label = "A";  // Three dots button
+
+            current_buttons_->right_label = "R";  // Three dots button
             current_buttons_->right_enabled = true;
             current_buttons_->right_color =
                 lv_color32_make(255, 193, 7, 255);  // Yellow/amber color
             current_buttons_->up_enabled = false;
             current_buttons_->down_enabled = false;
+            // LED mood handled by UI state (ring/NFC); buttons by ButtonBar
           },
           [&](Detected state) {
             lv_label_set_text(status_text_, "Token erkannt");
@@ -108,6 +110,7 @@ void SessionStatus::UpdateForState(
                 lv_color32_make(40, 167, 69, 255);  // Green
             current_buttons_->up_enabled = false;
             current_buttons_->down_enabled = false;
+            // LED mood handled by UI state (ring/NFC); buttons by ButtonBar
           },
           [&](Authenticated state) {
             lv_label_set_text(status_text_, "Authentifiziert");
@@ -125,6 +128,7 @@ void SessionStatus::UpdateForState(
                 lv_color32_make(40, 167, 69, 255);  // Green
             current_buttons_->up_enabled = false;
             current_buttons_->down_enabled = false;
+            // LED mood handled by UI state (ring/NFC); buttons by ButtonBar
           },
           [&](StartSession state) {
             lv_label_set_text(status_text_, "Session gestartet");
@@ -140,6 +144,7 @@ void SessionStatus::UpdateForState(
                 lv_color32_make(255, 193, 7, 255);  // Yellow
             current_buttons_->up_enabled = false;
             current_buttons_->down_enabled = false;
+            // LED mood handled by UI state (ring/NFC); buttons by ButtonBar
           },
           [&](Unknown state) {
             lv_label_set_text(status_text_, "Unbekannter Token");
@@ -157,6 +162,7 @@ void SessionStatus::UpdateForState(
                 lv_color32_make(255, 193, 7, 255);  // Yellow
             current_buttons_->up_enabled = false;
             current_buttons_->down_enabled = false;
+            // LED mood handled by UI state (ring/NFC); buttons by ButtonBar
           },
           [&](Personalize state) {
             lv_label_set_text(status_text_, "Token wird personalisiert");
@@ -172,6 +178,7 @@ void SessionStatus::UpdateForState(
                 lv_color32_make(40, 167, 69, 255);  // Green
             current_buttons_->up_enabled = false;
             current_buttons_->down_enabled = false;
+            // LED mood handled by UI state (ring/NFC); buttons by ButtonBar
           }},
       *(terminal_state.get()));
 }
