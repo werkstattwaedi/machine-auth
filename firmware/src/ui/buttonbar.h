@@ -32,8 +32,13 @@ class ButtonBar : public Component {
    * previously active definiton. */
   void RemoveButtons(std::shared_ptr<ButtonDefinition> definition);
 
+  // Expose LVGL button objects so the input driver can simulate touches at their centers
+  inline lv_obj_t* GetLeftButtonObj() const { return left_button_; }
+  inline lv_obj_t* GetRightButtonObj() const { return right_button_; }
+
  private:
   std::vector<std::shared_ptr<ButtonDefinition>> definitions;
+  // Visible buttons
   lv_obj_t* left_button_;
   lv_obj_t* left_label_;
   lv_obj_t* right_button_;

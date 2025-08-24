@@ -7,7 +7,6 @@
 #include "nfc/nfc_tags.h"
 #include "setup/setup.h"
 #include "state/state.h"
-#include "ui/driver/cap1296.h"
 #include "ui/ui.h"
 
 #ifdef REMOTE_LOGGING
@@ -30,7 +29,6 @@ SerialLogHandler logHandler(
                     });
 
 using namespace oww::state;
-using namespace oww::ui::driver::cap;
 
 #ifdef REMOTE_LOGGING
 retained uint8_t remoteLogBuf[2560];
@@ -39,7 +37,6 @@ RemoteLogEventServer remoteLogEventServer("debugLog");
 #endif
 
 std::shared_ptr<State> state_;
-CAP1296 cap;
 
 void setup() {
 #ifdef REMOTE_LOGGING
@@ -74,10 +71,6 @@ void setup() {
     Log.info("Failed to start display = %d", (int)display_setup_result.error());
   }
 
-  if (cap.Begin() != Status::kOk) {
-    Log.info("Failed to start touch");
-  }
-
   state_->SetBootProgress("Start NFC...");
   Status nfc_setup_result = NfcTags::instance().Begin(state_);
   Log.info("NFC Status = %d", (int)nfc_setup_result);
@@ -102,9 +95,6 @@ void setup() {
 
   state_->BootCompleted();
 }
-
-uint8_t last_touched = 0;
-uint8_t current_touched = 0;
 
 system_tick_t next_telemetry_log = 0;
 
@@ -133,18 +123,4 @@ void loop() {
         signal.getStrength(), signal.getStrengthValue(), signal.getQuality());
 #endif
   }
-
-  current_touched = cap.Touched();
-
-  for (uint8_t i = 0; i < 6; i++) {
-    uint8_t mask = 0x01 << i;
-    if ((current_touched & mask) && !(last_touched & mask)) {
-      Log.info("%d touched", i);
-    }
-    if (!(current_touched & mask) && (last_touched & mask)) {
-      Log.info("%d released", i);
-    }
-  }
-
-  last_touched = current_touched;
 }

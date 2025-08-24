@@ -87,6 +87,9 @@ class UserInterface {
   void UpdateBuzzer();
   void UpdateLed();
 
+  // Set up button position mappings for touch input
+  void SetupButtonMappings();
+
  private:
   Adafruit_NeoPixel led_strip_;
   std::unique_ptr<leds::LedController> led_;

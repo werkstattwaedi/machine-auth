@@ -3,6 +3,9 @@
 #include <XPT2046_Touch.h>
 #include <lvgl.h>
 
+#include <array>
+
+#include "cap1296.h"
 #include "common.h"
 #include "state/state.h"
 
@@ -18,6 +21,9 @@ class Display {
   Status Begin();
 
   void RenderLoop();
+  // Button mapping system for physical buttons to touch positions
+  void SetButtonMapping(uint8_t button_id, lv_point_t position);
+  void ClearButtonMappings();
 
  private:
   // Display is a singleton - use Display.instance()
@@ -34,8 +40,16 @@ class Display {
   SPIClass &spi_interface_;
   SPISettings spi_settings_;
   XPT2046_Touchscreen touchscreen_interface_;
+  oww::ui::driver::cap::CAP1296 cap_interface_;
 
   void ReadTouchInput(lv_indev_t *indev, lv_indev_data_t *data);
+
+    // Button state tracking for buffered reading
+  uint8_t last_buttons_state_ = 0;
+
+  // Button mapping storage (button_id -> touch position)
+  std::array<lv_point_t, 6> button_mappings_ = {};
+  std::array<bool, 6> button_mapped_ = {};
 
   // Sends generic display command.
   void SendCommand(const uint8_t *cmd, size_t cmd_size, const uint8_t *param,

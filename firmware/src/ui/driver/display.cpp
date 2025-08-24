@@ -3,6 +3,7 @@
 #include <concurrent_hal.h>
 #include <drivers/display/lcd/lv_lcd_generic_mipi.h>
 
+#include "../ui.h"
 #include "Particle.h"
 #include "config.h"
 #include "state/configuration.h"
@@ -107,14 +108,19 @@ Status Display::Begin() {
   lv_display_set_buffers(display_, buffer_1, buffer_2, buf_size,
                          LV_DISPLAY_RENDER_MODE_PARTIAL);
 
-  // touchscreen_interface_.begin();
+  if (cap_interface_.Begin() != Status::kOk) {
+    Log.info("Failed to start touch");
+  }
 
   lv_indev_t *indev = lv_indev_create();
-  lv_indev_set_type(
-      indev, LV_INDEV_TYPE_POINTER); /* Touch pad is a pointer-like device. */
+  lv_indev_set_type(indev, LV_INDEV_TYPE_BUTTON);
   lv_indev_set_read_cb(indev, [](auto indev, auto data) {
     Display::instance().ReadTouchInput(indev, data);
   });
+
+  // Set up button coordinate mapping for LVGL
+  // LVGL will map button IDs to these coordinates automatically
+  lv_indev_set_button_points(indev, button_mappings_.data());
 
   return Status::kOk;
 }
@@ -145,18 +151,38 @@ void Display::SendCommand(const uint8_t *cmd, size_t cmd_size,
 }
 
 void Display::ReadTouchInput(lv_indev_t *indev, lv_indev_data_t *data) {
-  // if (touchscreen_interface_.touched()) {
-  //   TS_Point p = touchscreen_interface_.getPoint();
-  //   auto x = map(p.x, 220, 3850, 1, 480);  //
-  //   auto y = map(p.y, 310, 3773, 1, 320);  // Feel pretty good about this
-  //   data->point.x = x;
-  //   data->point.y = y;
-  //   data->state = LV_INDEV_STATE_PR;
+  uint8_t current_buttons_state = cap_interface_.Touched();
 
-  // } else {
-  data->state = LV_INDEV_STATE_REL;
-  // }
+  uint8_t state_changes = current_buttons_state ^ last_buttons_state_;
+  if (state_changes == 0) {
+    data->btn_id = 0xFF;
+    data->state = LV_INDEV_STATE_RELEASED;
+    data->continue_reading = false;
+    return;
+  }
+
+  int first_toggled_bit = ffs(state_changes) - 1;
+  uint8_t toggled_button_mask = 1 << first_toggled_bit;
+  data->btn_id = first_toggled_bit;
+  data->state = (current_buttons_state & (toggled_button_mask))
+                    ? LV_INDEV_STATE_PRESSED
+                    : LV_INDEV_STATE_RELEASED;
+
+  // patch the state of the processed button into the last_buttons_state_
+  last_buttons_state_ = (last_buttons_state_ & ~toggled_button_mask) |
+                        (current_buttons_state & last_buttons_state_);
+
+  data->continue_reading = current_buttons_state != last_buttons_state_;
 }
+
+void Display::SetButtonMapping(uint8_t button_id, lv_point_t position) {
+  if (button_id < 6) {
+    button_mappings_[button_id] = position;
+    button_mapped_[button_id] = true;
+  }
+}
+
+void Display::ClearButtonMappings() { button_mapped_.fill(false); }
 
 // SPI flush thread - handles all SPI transfers
 void Display::SpiFlushThread() {
@@ -219,7 +245,7 @@ void Display::ProcessFlushRequest(const DisplayFlushRequest &request) {
 
   spi_interface_.transfer(request.px_map, NULL, len, [] {
     // Signal DMA complete callback and semaphore, rather than NULL callback:
-    // The null callback will busy way, burning through precious cycles.
+    // The null callback will busy wait, burning through precious cycles.
     os_semaphore_give(Display::instance_->dma_complete_semaphore_, false);
   });
 

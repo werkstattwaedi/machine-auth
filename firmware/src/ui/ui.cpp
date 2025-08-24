@@ -93,6 +93,9 @@ void UserInterface::UpdateGui() {
     session_status_ =
         std::make_shared<SessionStatus>(content_container, state_, this);
     PushContent(session_status_);
+
+    // Set up button mappings for touch input
+    SetupButtonMappings();
   }
 
   status_bar_->Render();
@@ -275,6 +278,44 @@ void UserInterface::UpdateLed() {
 
   // Tick renderer
   led_->Tick(millis());
+}
+
+
+void UserInterface::SetupButtonMappings() {
+  auto& display = Display::instance();
+  display.ClearButtonMappings();
+  
+  // Map physical buttons to UI positions
+  // Physical button mapping:
+  // 0: lower right  -> right button in ButtonBar (center at ~180, 295)
+  // 4: lower left   -> left button in ButtonBar (center at ~60, 295)  
+  // 3: top left     -> left half of status bar for UP (center at ~60, 29)
+  // 1: top right    -> right half of status bar for DOWN (center at ~180, 29)
+  
+  // Bottom buttons - get actual positions from ButtonBar if available
+  if (button_bar_) {
+    lv_obj_t* left_btn = button_bar_->GetLeftButtonObj();
+    lv_obj_t* right_btn = button_bar_->GetRightButtonObj();
+    
+    if (left_btn) {
+      lv_area_t area;
+      lv_obj_get_coords(left_btn, &area);
+      lv_point_t center = {(area.x1 + area.x2) / 2, (area.y1 + area.y2) / 2};
+      display.SetButtonMapping(4, center); // Button 4 -> left button
+    }
+    
+    if (right_btn) {
+      lv_area_t area;
+      lv_obj_get_coords(right_btn, &area);
+      lv_point_t center = {(area.x1 + area.x2) / 2, (area.y1 + area.y2) / 2};
+      display.SetButtonMapping(0, center); // Button 0 -> right button
+    }
+  }
+  
+  // Top area buttons - hardcoded positions for status bar halves
+  // StatusBar is 240×58px, so left half = 120×58 at (0,0), right half at (120,0)
+  display.SetButtonMapping(3, {60, 29});   // Button 3 -> UP (left half of status bar)
+  display.SetButtonMapping(1, {180, 29});  // Button 1 -> DOWN (right half of status bar)
 }
 
 void UserInterface::PushContent(std::shared_ptr<MainContent> content) {
