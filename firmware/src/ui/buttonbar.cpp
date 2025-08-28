@@ -10,54 +10,55 @@ namespace oww::ui {
 ButtonBar::ButtonBar(lv_obj_t* parent, std::shared_ptr<oww::state::State> state)
     : Component(state) {
   // Create the main container for the button bar
-  // ButtonBar: 240×50px at bottom of screen
+  // ButtonBar: 240×50px at bottom of screen, no padding
   root_ = lv_obj_create(parent);
   lv_obj_remove_style_all(root_);
   lv_obj_set_size(root_, 240, 50);
   lv_obj_set_align(root_, LV_ALIGN_BOTTOM_MID);
-  // Remove flex layout - use static positioning instead
   lv_obj_set_style_pad_all(root_, 0, 0);
 
-  // Create invisible down button (left side): 10px wide at x=0
-  down_button_ = lv_btn_create(root_);
-  lv_obj_set_size(down_button_, 10, 50);
-  lv_obj_set_pos(down_button_, 0, 0);
-  // Make invisible but still clickable
-  lv_obj_set_style_bg_opa(down_button_, LV_OPA_TRANSP, LV_PART_MAIN);
-  lv_obj_set_style_border_opa(down_button_, LV_OPA_TRANSP, LV_PART_MAIN);
-  lv_obj_set_style_shadow_opa(down_button_, LV_OPA_TRANSP, LV_PART_MAIN);
-  lv_obj_add_event_cb(down_button_, down_button_event_cb, LV_EVENT_CLICKED,
-                      this);
-
-  // Create left button: 100×40px at x=10 (after down button)
+  // Create left button: Align with HW button from x=0 to ~x=45
+  // Based on image: left HW button covers roughly first 45px
   left_button_ = lv_btn_create(root_);
-  lv_obj_set_size(left_button_, 100, 40);
-  lv_obj_set_pos(left_button_, 10, 5);  // Center vertically (50-40)/2 = 5
+  lv_obj_set_size(left_button_, 90, 50);
+  lv_obj_set_pos(left_button_, 0, 0);
   left_label_ = lv_label_create(left_button_);
   lv_obj_center(left_label_);
   lv_obj_add_flag(left_button_, LV_OBJ_FLAG_HIDDEN);  // Hidden by default
   lv_obj_add_event_cb(left_button_, left_button_event_cb, LV_EVENT_CLICKED,
                       this);
 
-  // Create right button: 100×40px at x=130 (240-100-10 = 130)
+  // Create right button: Align with HW button from ~x=195 to x=240
+  // Based on image: right HW button covers roughly last 45px
   right_button_ = lv_btn_create(root_);
-  lv_obj_set_size(right_button_, 100, 40);
-  lv_obj_set_pos(right_button_, 130, 5);  // Center vertically
+  lv_obj_set_size(right_button_, 90, 50);
+  lv_obj_set_pos(right_button_, 150, 0);
   right_label_ = lv_label_create(right_button_);
   lv_obj_center(right_label_);
   lv_obj_add_flag(right_button_, LV_OBJ_FLAG_HIDDEN);  // Hidden by default
   lv_obj_add_event_cb(right_button_, right_button_event_cb, LV_EVENT_CLICKED,
                       this);
 
-  // Create invisible up button (right side): 10px wide at x=230
+  // Create invisible up button in the gap: x=45 to x=120
   up_button_ = lv_btn_create(root_);
   lv_obj_set_size(up_button_, 10, 50);
-  lv_obj_set_pos(up_button_, 230, 0);
+  lv_obj_set_pos(up_button_, 110, 0);
   // Make invisible but still clickable
   lv_obj_set_style_bg_opa(up_button_, LV_OPA_TRANSP, LV_PART_MAIN);
   lv_obj_set_style_border_opa(up_button_, LV_OPA_TRANSP, LV_PART_MAIN);
   lv_obj_set_style_shadow_opa(up_button_, LV_OPA_TRANSP, LV_PART_MAIN);
   lv_obj_add_event_cb(up_button_, up_button_event_cb, LV_EVENT_CLICKED, this);
+
+  // Create invisible down button in the gap: x=120 to x=195
+  down_button_ = lv_btn_create(root_);
+  lv_obj_set_size(down_button_, 10, 50);
+  lv_obj_set_pos(down_button_, 120, 0);
+  // Make invisible but still clickable
+  lv_obj_set_style_bg_opa(down_button_, LV_OPA_TRANSP, LV_PART_MAIN);
+  lv_obj_set_style_border_opa(down_button_, LV_OPA_TRANSP, LV_PART_MAIN);
+  lv_obj_set_style_shadow_opa(down_button_, LV_OPA_TRANSP, LV_PART_MAIN);
+  lv_obj_add_event_cb(down_button_, down_button_event_cb, LV_EVENT_CLICKED,
+                      this);
 }
 
 ButtonBar::~ButtonBar() { lv_obj_delete(root_); }

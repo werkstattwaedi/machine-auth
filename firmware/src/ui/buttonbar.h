@@ -24,10 +24,14 @@ class ButtonDefinition {
   std::function<void()> down_callback;
 };
 
-inline constexpr lv_point_t top_left_touch_point{5, 300};
-inline constexpr lv_point_t top_right_touch_point{235, 300};
-inline constexpr lv_point_t bottom_left_touch_point{60, 300};
-inline constexpr lv_point_t bottom_right_touch_point{180, 300};
+// Touch points based on actual hardware button positions from image
+// Left HW button: roughly x=0 to x=45, center at x=22
+// Right HW button: roughly x=195 to x=240, center at x=217
+// Up/Down buttons in the gap between them
+inline constexpr lv_point_t top_left_touch_point{115, 300};      // Left HW button center
+inline constexpr lv_point_t top_right_touch_point{125, 300};    // Right HW button center  
+inline constexpr lv_point_t bottom_left_touch_point{45, 300};   // Left HW button center
+inline constexpr lv_point_t bottom_right_touch_point{195, 300}; // Right HW button center
 
 class ButtonBar : public Component {
  public:
