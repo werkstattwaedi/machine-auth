@@ -83,15 +83,24 @@ void SessionStatus::UpdateForState(
                                       LV_PART_MAIN);  // Cyan blue
 
             // Idle state buttons (single button on right)
-            current_buttons_->left_label = "";  // No left button in idle state
-            current_buttons_->left_enabled = false;
+            current_buttons_->left_label = "L";  // No left button in idle state
+            current_buttons_->left_enabled = true;
+            current_buttons_->left_callback = []() {
+              Log.info("Left button clicked!");
+              // Handle cancel action
+            };
 
             current_buttons_->right_label = "R";  // Three dots button
             current_buttons_->right_enabled = true;
             current_buttons_->right_color =
                 lv_color32_make(255, 193, 7, 255);  // Yellow/amber color
-            current_buttons_->up_enabled = false;
-            current_buttons_->down_enabled = false;
+
+            current_buttons_->right_callback = []() {
+              Log.info("Right button clicked!");
+              // Handle cancel action
+            };
+            current_buttons_->up_enabled = true;
+            current_buttons_->down_enabled = true;
             // LED mood handled by UI state (ring/NFC); buttons by ButtonBar
           },
           [&](Detected state) {

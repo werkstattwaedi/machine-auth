@@ -1,5 +1,7 @@
 #pragma once
 
+#include <functional>
+
 #include "component.h"
 
 namespace oww::ui {
@@ -9,14 +11,23 @@ class ButtonDefinition {
   String left_label;
   bool left_enabled;
   lv_color32_t left_color;
+  std::function<void()> left_callback;
 
   String right_label;
   bool right_enabled;
   lv_color32_t right_color;
+  std::function<void()> right_callback;
 
   bool up_enabled;
   bool down_enabled;
+  std::function<void()> up_callback;
+  std::function<void()> down_callback;
 };
+
+inline constexpr lv_point_t top_left_touch_point{5, 300};
+inline constexpr lv_point_t top_right_touch_point{235, 300};
+inline constexpr lv_point_t bottom_left_touch_point{60, 300};
+inline constexpr lv_point_t bottom_right_touch_point{180, 300};
 
 class ButtonBar : public Component {
  public:
@@ -32,10 +43,6 @@ class ButtonBar : public Component {
    * previously active definiton. */
   void RemoveButtons(std::shared_ptr<ButtonDefinition> definition);
 
-  // Expose LVGL button objects so the input driver can simulate touches at their centers
-  inline lv_obj_t* GetLeftButtonObj() const { return left_button_; }
-  inline lv_obj_t* GetRightButtonObj() const { return right_button_; }
-
  private:
   std::vector<std::shared_ptr<ButtonDefinition>> definitions;
   // Visible buttons
@@ -43,6 +50,19 @@ class ButtonBar : public Component {
   lv_obj_t* left_label_;
   lv_obj_t* right_button_;
   lv_obj_t* right_label_;
+
+  // Invisible buttons for hardware up/down
+  lv_obj_t* up_button_;    // Invisible button on the right side for up
+  lv_obj_t* down_button_;  // Invisible button on the left side for down
+
+  // LVGL event callbacks
+  static void left_button_event_cb(lv_event_t* e);
+  static void right_button_event_cb(lv_event_t* e);
+  static void up_button_event_cb(lv_event_t* e);
+  static void down_button_event_cb(lv_event_t* e);
+
+  // Current active definition for callbacks
+  std::shared_ptr<ButtonDefinition> current_definition_;
 };
 
 }  // namespace oww::ui

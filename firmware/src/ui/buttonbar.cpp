@@ -15,26 +15,49 @@ ButtonBar::ButtonBar(lv_obj_t* parent, std::shared_ptr<oww::state::State> state)
   lv_obj_remove_style_all(root_);
   lv_obj_set_size(root_, 240, 50);
   lv_obj_set_align(root_, LV_ALIGN_BOTTOM_MID);
-  lv_obj_set_flex_flow(root_, LV_FLEX_FLOW_ROW);
-  lv_obj_set_flex_align(root_, LV_FLEX_ALIGN_SPACE_BETWEEN,
-                        LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-  // 10px margins on left/right: 240 - 20 = 220px for content
-  lv_obj_set_style_pad_left(root_, 10, 0);
-  lv_obj_set_style_pad_right(root_, 10, 0);
+  // Remove flex layout - use static positioning instead
+  lv_obj_set_style_pad_all(root_, 0, 0);
 
-  // Create left button: 100×40px (as per mockup specifications)
+  // Create invisible down button (left side): 10px wide at x=0
+  down_button_ = lv_btn_create(root_);
+  lv_obj_set_size(down_button_, 10, 50);
+  lv_obj_set_pos(down_button_, 0, 0);
+  // Make invisible but still clickable
+  lv_obj_set_style_bg_opa(down_button_, LV_OPA_TRANSP, LV_PART_MAIN);
+  lv_obj_set_style_border_opa(down_button_, LV_OPA_TRANSP, LV_PART_MAIN);
+  lv_obj_set_style_shadow_opa(down_button_, LV_OPA_TRANSP, LV_PART_MAIN);
+  lv_obj_add_event_cb(down_button_, down_button_event_cb, LV_EVENT_CLICKED,
+                      this);
+
+  // Create left button: 100×40px at x=10 (after down button)
   left_button_ = lv_btn_create(root_);
   lv_obj_set_size(left_button_, 100, 40);
+  lv_obj_set_pos(left_button_, 10, 5);  // Center vertically (50-40)/2 = 5
   left_label_ = lv_label_create(left_button_);
   lv_obj_center(left_label_);
   lv_obj_add_flag(left_button_, LV_OBJ_FLAG_HIDDEN);  // Hidden by default
+  lv_obj_add_event_cb(left_button_, left_button_event_cb, LV_EVENT_CLICKED,
+                      this);
 
-  // Create right button: 100×40px (as per mockup specifications)
+  // Create right button: 100×40px at x=130 (240-100-10 = 130)
   right_button_ = lv_btn_create(root_);
   lv_obj_set_size(right_button_, 100, 40);
+  lv_obj_set_pos(right_button_, 130, 5);  // Center vertically
   right_label_ = lv_label_create(right_button_);
   lv_obj_center(right_label_);
   lv_obj_add_flag(right_button_, LV_OBJ_FLAG_HIDDEN);  // Hidden by default
+  lv_obj_add_event_cb(right_button_, right_button_event_cb, LV_EVENT_CLICKED,
+                      this);
+
+  // Create invisible up button (right side): 10px wide at x=230
+  up_button_ = lv_btn_create(root_);
+  lv_obj_set_size(up_button_, 10, 50);
+  lv_obj_set_pos(up_button_, 230, 0);
+  // Make invisible but still clickable
+  lv_obj_set_style_bg_opa(up_button_, LV_OPA_TRANSP, LV_PART_MAIN);
+  lv_obj_set_style_border_opa(up_button_, LV_OPA_TRANSP, LV_PART_MAIN);
+  lv_obj_set_style_shadow_opa(up_button_, LV_OPA_TRANSP, LV_PART_MAIN);
+  lv_obj_add_event_cb(up_button_, up_button_event_cb, LV_EVENT_CLICKED, this);
 }
 
 ButtonBar::~ButtonBar() { lv_obj_delete(root_); }
@@ -44,11 +67,13 @@ void ButtonBar::Render() {
     // No active definition - hide all buttons
     lv_obj_add_flag(left_button_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(right_button_, LV_OBJ_FLAG_HIDDEN);
+    current_definition_ = nullptr;
     return;
   }
 
   // Get the currently active definition (top of stack)
   auto definition = definitions.back();
+  current_definition_ = definition;  // Store for callbacks
 
   // Handle left button
   if (definition->left_label == "") {
@@ -92,17 +117,6 @@ void ButtonBar::Render() {
     }
   }
 
-  // Adjust flex alignment so a single visible button sits at the edge
-  bool left_visible = definition->left_label != "";
-  bool right_visible = definition->right_label != "";
-  if (left_visible && right_visible) {
-    lv_obj_set_flex_align(root_, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-  } else if (right_visible && !left_visible) {
-    lv_obj_set_flex_align(root_, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-  } else if (left_visible && !right_visible) {
-    lv_obj_set_flex_align(root_, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-  }
-
   // Push colors to LED controller (override generic state)
   if (auto ui = UserInterface::instance().leds()) {
     using namespace oww::ui::leds;
@@ -139,6 +153,42 @@ void ButtonBar::RemoveButtons(std::shared_ptr<ButtonDefinition> definition) {
   auto it = std::find(definitions.begin(), definitions.end(), definition);
   if (it != definitions.end()) {
     definitions.erase(it);
+  }
+}
+
+void ButtonBar::left_button_event_cb(lv_event_t* e) {
+  Log.info("ButtonBar::left clicked");
+  ButtonBar* buttonbar = static_cast<ButtonBar*>(lv_event_get_user_data(e));
+  if (buttonbar && buttonbar->current_definition_ &&
+      buttonbar->current_definition_->left_callback) {
+    buttonbar->current_definition_->left_callback();
+  }
+}
+
+void ButtonBar::right_button_event_cb(lv_event_t* e) {
+  Log.info("ButtonBar::right clicked");
+  ButtonBar* buttonbar = static_cast<ButtonBar*>(lv_event_get_user_data(e));
+  if (buttonbar && buttonbar->current_definition_ &&
+      buttonbar->current_definition_->right_callback) {
+    buttonbar->current_definition_->right_callback();
+  }
+}
+
+void ButtonBar::up_button_event_cb(lv_event_t* e) {
+  Log.info("ButtonBar::up clicked");
+  ButtonBar* buttonbar = static_cast<ButtonBar*>(lv_event_get_user_data(e));
+  if (buttonbar && buttonbar->current_definition_ &&
+      buttonbar->current_definition_->up_callback) {
+    buttonbar->current_definition_->up_callback();
+  }
+}
+
+void ButtonBar::down_button_event_cb(lv_event_t* e) {
+  Log.info("ButtonBar::down clicked");
+  ButtonBar* buttonbar = static_cast<ButtonBar*>(lv_event_get_user_data(e));
+  if (buttonbar && buttonbar->current_definition_ &&
+      buttonbar->current_definition_->down_callback) {
+    buttonbar->current_definition_->down_callback();
   }
 }
 

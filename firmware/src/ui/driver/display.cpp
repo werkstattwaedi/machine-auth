@@ -118,8 +118,6 @@ Status Display::Begin() {
     Display::instance().ReadTouchInput(indev, data);
   });
 
-  // Set up button coordinate mapping for LVGL
-  // LVGL will map button IDs to these coordinates automatically
   lv_indev_set_button_points(indev, button_mappings_.data());
 
   return Status::kOk;
@@ -168,21 +166,23 @@ void Display::ReadTouchInput(lv_indev_t *indev, lv_indev_data_t *data) {
                     ? LV_INDEV_STATE_PRESSED
                     : LV_INDEV_STATE_RELEASED;
 
+  display_log.info(
+      "Update button state %d: %s", (int)data->btn_id,
+      data->state == LV_INDEV_STATE_PRESSED ? "pressed" : "released");
+
   // patch the state of the processed button into the last_buttons_state_
   last_buttons_state_ = (last_buttons_state_ & ~toggled_button_mask) |
-                        (current_buttons_state & last_buttons_state_);
+                        (current_buttons_state & toggled_button_mask);
 
   data->continue_reading = current_buttons_state != last_buttons_state_;
 }
 
 void Display::SetButtonMapping(uint8_t button_id, lv_point_t position) {
+  display_log.info("SetButtonMapping %d -> [%ld,%ld]", (int)button_id, position.x, position.y);
   if (button_id < 6) {
     button_mappings_[button_id] = position;
-    button_mapped_[button_id] = true;
   }
 }
-
-void Display::ClearButtonMappings() { button_mapped_.fill(false); }
 
 // SPI flush thread - handles all SPI transfers
 void Display::SpiFlushThread() {

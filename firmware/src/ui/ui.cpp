@@ -19,7 +19,7 @@ UserInterface &UserInterface::instance() {
 }
 
 UserInterface::UserInterface()
-  : led_strip_(config::led::pixel_count, SPI, config::led::pixel_type) {}
+    : led_strip_(config::led::pixel_count, SPI, config::led::pixel_type) {}
 
 UserInterface::~UserInterface() {}
 
@@ -181,94 +181,95 @@ void UserInterface::UpdateLed() {
   EffectConfig ring, buttons, nfc;
   leds::ButtonColors btn_colors;
 
-  std::visit(overloaded{
-                 [&](Idle state) {
-                   // Idle: soft blue breathe on ring and dim warm white NFC
-                   ring.type = EffectType::Breathe;
-                   ring.color = Color::RGB(0, 64, 200);
-                   ring.min_brightness = 8;
-                   ring.max_brightness = 64;
-                   ring.period_ms = 3000;
+  std::visit(
+      overloaded{
+          [&](Idle state) {
+            // Idle: soft blue breathe on ring and dim warm white NFC
+            ring.type = EffectType::Breathe;
+            ring.color = Color::RGB(0, 64, 200);
+            ring.min_brightness = 8;
+            ring.max_brightness = 64;
+            ring.period_ms = 3000;
 
-                   nfc.type = EffectType::Solid;
-                   nfc.color = Color::WarmWhite(24);
+            nfc.type = EffectType::Solid;
+            nfc.color = Color::WarmWhite(24);
 
-                   buttons.type = EffectType::Solid;
-                   btn_colors = {Color::RGB(32, 32, 32), Color::RGB(32, 32, 32),
-                                 Color::RGB(32, 32, 32), Color::RGB(32, 32, 32)};
-                 },
-                 [&](Detected state) {
-                   // Tag detected: rotate yellow highlight on ring
-                   ring.type = EffectType::Rotate;
-                   ring.color = Color::RGB(200, 160, 20);
-                   ring.lit_pixels = 20; // ~2x nominal width
-                   ring.hotspots = 2; // opposite sides
-                   ring.period_ms = 1500;
+            buttons.type = EffectType::Solid;
+            btn_colors = {Color::RGB(32, 32, 32), Color::RGB(32, 32, 32),
+                          Color::RGB(32, 32, 32), Color::RGB(32, 32, 32)};
+          },
+          [&](Detected state) {
+            // Tag detected: rotate yellow highlight on ring
+            ring.type = EffectType::Rotate;
+            ring.color = Color::RGB(200, 160, 20);
+            ring.lit_pixels = 20;  // ~2x nominal width
+            ring.hotspots = 2;     // opposite sides
+            ring.period_ms = 1500;
 
-                   nfc.type = EffectType::Breathe;
-                   nfc.color = Color::RGB(0, 80, 220);
+            nfc.type = EffectType::Breathe;
+            nfc.color = Color::RGB(0, 80, 220);
 
-                   buttons.type = EffectType::Solid;
-                   btn_colors = {Color::RGB(60, 60, 20), Color::RGB(60, 60, 20),
-                                 Color::RGB(60, 60, 20), Color::RGB(60, 60, 20)};
-                 },
-                 [&](Authenticated state) {
-                   // Green steady ring, NFC short breathe pulse
-                   ring.type = EffectType::Solid;
-                   ring.color = Color::RGB(0, 180, 40);
-                   nfc.type = EffectType::Breathe;
-                   nfc.color = Color::RGB(0, 120, 40);
+            buttons.type = EffectType::Solid;
+            btn_colors = {Color::RGB(60, 60, 20), Color::RGB(60, 60, 20),
+                          Color::RGB(60, 60, 20), Color::RGB(60, 60, 20)};
+          },
+          [&](Authenticated state) {
+            // Green steady ring, NFC short breathe pulse
+            ring.type = EffectType::Solid;
+            ring.color = Color::RGB(0, 180, 40);
+            nfc.type = EffectType::Breathe;
+            nfc.color = Color::RGB(0, 120, 40);
 
-                   buttons.type = EffectType::Solid;
-                   btn_colors = {Color::RGB(40, 120, 40), Color::RGB(40, 120, 40),
-                                 Color::RGB(40, 120, 40), Color::RGB(40, 120, 40)};
-                 },
-                 [&](StartSession state) {
-                   // Cyan rotating highlight
-                   ring.type = EffectType::Rotate;
-                   ring.color = Color::RGB(10, 180, 180);
-                   ring.lit_pixels = 10; // ~1x nominal width
-                   ring.hotspots = 2;
-                   ring.period_ms = 1200;
-                   nfc.type = EffectType::Solid;
-                   nfc.color = Color::RGB(0, 60, 60);
-                   buttons.type = EffectType::Blink;
-                   buttons.duty_cycle = 180;
-                   btn_colors = {Color::RGB(20, 80, 80), Color::RGB(20, 80, 80),
-                                 Color::RGB(20, 80, 80), Color::RGB(20, 80, 80)};
-                 },
-                 [&](Unknown state) {
-                   // Access denied: red blink all around, red NFC
-                   ring.type = EffectType::Blink;
-                   ring.color = Color::RGB(200, 20, 20);
-                   ring.period_ms = 700;
-                   ring.duty_cycle = 160;
-                   nfc.type = EffectType::Solid;
-                   nfc.color = Color::RGB(120, 0, 0);
-                   buttons.type = EffectType::Solid;
-                   btn_colors = {Color::RGB(120, 20, 20), Color::RGB(120, 20, 20),
-                                 Color::RGB(120, 20, 20), Color::RGB(120, 20, 20)};
-                 },
-                 [&](Personalize state) {
-                   // Developer mode: magenta ring breathe
-                   ring.type = EffectType::Breathe;
-                   ring.color = Color::RGB(180, 0, 180);
-                   ring.period_ms = 2500;
-                   nfc.type = EffectType::Solid;
-                   nfc.color = Color::RGB(120, 0, 120);
-                   buttons.type = EffectType::Solid;
-                   btn_colors = {Color::RGB(80, 0, 80), Color::RGB(80, 0, 80),
-                                 Color::RGB(80, 0, 80), Color::RGB(80, 0, 80)};
-                 },
-             },
-             *(current_state.get()));
+            buttons.type = EffectType::Solid;
+            btn_colors = {Color::RGB(40, 120, 40), Color::RGB(40, 120, 40),
+                          Color::RGB(40, 120, 40), Color::RGB(40, 120, 40)};
+          },
+          [&](StartSession state) {
+            // Cyan rotating highlight
+            ring.type = EffectType::Rotate;
+            ring.color = Color::RGB(10, 180, 180);
+            ring.lit_pixels = 10;  // ~1x nominal width
+            ring.hotspots = 2;
+            ring.period_ms = 1200;
+            nfc.type = EffectType::Solid;
+            nfc.color = Color::RGB(0, 60, 60);
+            buttons.type = EffectType::Blink;
+            buttons.duty_cycle = 180;
+            btn_colors = {Color::RGB(20, 80, 80), Color::RGB(20, 80, 80),
+                          Color::RGB(20, 80, 80), Color::RGB(20, 80, 80)};
+          },
+          [&](Unknown state) {
+            // Access denied: red blink all around, red NFC
+            ring.type = EffectType::Blink;
+            ring.color = Color::RGB(200, 20, 20);
+            ring.period_ms = 700;
+            ring.duty_cycle = 160;
+            nfc.type = EffectType::Solid;
+            nfc.color = Color::RGB(120, 0, 0);
+            buttons.type = EffectType::Solid;
+            btn_colors = {Color::RGB(120, 20, 20), Color::RGB(120, 20, 20),
+                          Color::RGB(120, 20, 20), Color::RGB(120, 20, 20)};
+          },
+          [&](Personalize state) {
+            // Developer mode: magenta ring breathe
+            ring.type = EffectType::Breathe;
+            ring.color = Color::RGB(180, 0, 180);
+            ring.period_ms = 2500;
+            nfc.type = EffectType::Solid;
+            nfc.color = Color::RGB(120, 0, 120);
+            buttons.type = EffectType::Solid;
+            btn_colors = {Color::RGB(80, 0, 80), Color::RGB(80, 0, 80),
+                          Color::RGB(80, 0, 80), Color::RGB(80, 0, 80)};
+          },
+      },
+      *(current_state.get()));
 
   // Apply configs (ring and NFC always from UI state)
   led_->Ring().SetEffect(ring);
   led_->Nfc().SetEffect(nfc);
 
-  // Buttons: if current content has a definition, ButtonBar drives LEDs in its Render();
-  // otherwise, fall back to generic state colors here.
+  // Buttons: if current content has a definition, ButtonBar drives LEDs in its
+  // Render(); otherwise, fall back to generic state colors here.
   auto active = GetCurrentContent();
   bool has_buttons = active && active->GetButtonDefinition();
   if (!has_buttons) {
@@ -280,42 +281,21 @@ void UserInterface::UpdateLed() {
   led_->Tick(millis());
 }
 
-
 void UserInterface::SetupButtonMappings() {
-  auto& display = Display::instance();
-  display.ClearButtonMappings();
-  
-  // Map physical buttons to UI positions
+  auto &display = Display::instance();
+
+  // Map physical buttons to UI positions using static coordinates
   // Physical button mapping:
-  // 0: lower right  -> right button in ButtonBar (center at ~180, 295)
-  // 4: lower left   -> left button in ButtonBar (center at ~60, 295)  
-  // 3: top left     -> left half of status bar for UP (center at ~60, 29)
-  // 1: top right    -> right half of status bar for DOWN (center at ~180, 29)
-  
-  // Bottom buttons - get actual positions from ButtonBar if available
-  if (button_bar_) {
-    lv_obj_t* left_btn = button_bar_->GetLeftButtonObj();
-    lv_obj_t* right_btn = button_bar_->GetRightButtonObj();
-    
-    if (left_btn) {
-      lv_area_t area;
-      lv_obj_get_coords(left_btn, &area);
-      lv_point_t center = {(area.x1 + area.x2) / 2, (area.y1 + area.y2) / 2};
-      display.SetButtonMapping(4, center); // Button 4 -> left button
-    }
-    
-    if (right_btn) {
-      lv_area_t area;
-      lv_obj_get_coords(right_btn, &area);
-      lv_point_t center = {(area.x1 + area.x2) / 2, (area.y1 + area.y2) / 2};
-      display.SetButtonMapping(0, center); // Button 0 -> right button
-    }
-  }
-  
-  // Top area buttons - hardcoded positions for status bar halves
-  // StatusBar is 240×58px, so left half = 120×58 at (0,0), right half at (120,0)
-  display.SetButtonMapping(3, {60, 29});   // Button 3 -> UP (left half of status bar)
-  display.SetButtonMapping(1, {180, 29});  // Button 1 -> DOWN (right half of status bar)
+  // 0: lower right  -> right button in ButtonBar
+  // 4: lower left   -> left button in ButtonBar
+  // 3: top left     -> UP button (invisible left area)
+  // 1: top right    -> DOWN button (invisible right area)
+
+  // Use static coordinates from ButtonBar for reliable positioning
+  display.SetButtonMapping(4, bottom_left_touch_point);
+  display.SetButtonMapping(0, bottom_right_touch_point);
+  display.SetButtonMapping(3, top_left_touch_point);
+  display.SetButtonMapping(1, top_right_touch_point);
 }
 
 void UserInterface::PushContent(std::shared_ptr<MainContent> content) {
