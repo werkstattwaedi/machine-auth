@@ -9,7 +9,7 @@ namespace oww::state {
 class State;
 }  // namespace oww::state
 
-namespace oww::state::terminal {
+namespace oww::state::tag {
 
 namespace personalize {
 
@@ -51,4 +51,4 @@ struct Personalize {
 void Loop(Personalize start_session_state, oww::state::State &state_manager,
           Ntag424 &ntag_interface);
 
-}  // namespace oww::state::terminal
+}  // namespace oww::state::tag

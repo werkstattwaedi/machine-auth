@@ -24,7 +24,7 @@ std::array<uint8_t, 16> get_key_bytes(
 
 }  // namespace
 
-namespace oww::state::terminal {
+namespace oww::state::tag {
 using namespace personalize;
 using namespace config::tag;
 
@@ -212,4 +212,4 @@ void Loop(Personalize state, oww::state::State &state_manager,
   }
 }
 
-}  // namespace oww::state::terminal
+}  // namespace oww::state::tag

@@ -107,10 +107,10 @@ void UserInterface::UpdateGui() {
 }
 
 void UserInterface::UpdateBuzzer() {
-  auto current_state = state_->GetTerminalState();
+  auto current_state = state_->GetTagState();
 
   if (last_buzz_state_id_ != static_cast<void *>(current_state.get())) {
-    using namespace oww::state::terminal;
+    using namespace oww::state::tag;
 
     int frequency = 0;
     int duration = 100;
@@ -169,9 +169,9 @@ void HslToRgb(float h, float s, float l, byte &r, byte &g, byte &b) {
 }
 
 void UserInterface::UpdateLed() {
-  auto current_state = state_->GetTerminalState();
+  auto current_state = state_->GetTagState();
 
-  using namespace oww::state::terminal;
+  using namespace oww::state::tag;
 
   // Choose effects/colors for each section based on state
   using leds::Color;

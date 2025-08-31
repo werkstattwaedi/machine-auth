@@ -5,9 +5,9 @@
 
 #include "buttonbar.h"
 #include "common.h"
+#include "leds/led_controller.h"
 #include "maincontent.h"
 #include "neopixel.h"
-#include "leds/led_controller.h"
 #include "sessionstatus.h"
 #include "splashscreen.h"
 #include "state/state.h"

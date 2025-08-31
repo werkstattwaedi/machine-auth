@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../../common.h"
-#include "state/terminal/state.h"
+#include "state/tag/tag_state.h"
 
 namespace oww::state::event {
 
@@ -17,8 +17,8 @@ class IStateEvent {
   virtual void OnUnknownTag() = 0;
   virtual void OnTagRemoved() = 0;
 
-  virtual void OnNewState(oww::state::terminal::StartSession state) = 0;
-  virtual void OnNewState(oww::state::terminal::Personalize state) = 0;
+  virtual void OnNewState(oww::state::tag::StartSession state) = 0;
+  virtual void OnNewState(oww::state::tag::Personalize state) = 0;
 };
 
 }  // namespace oww::state::event

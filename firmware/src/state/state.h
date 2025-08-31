@@ -4,13 +4,13 @@
 #include "common.h"
 #include "configuration.h"
 #include "event/state_event.h"
-#include "terminal/state.h"
+#include "tag/tag_state.h"
 
 namespace oww::state {
 
 class State : public event::IStateEvent, public CloudRequest {
  public:
-State();
+  State();
 
   Status Begin(std::unique_ptr<Configuration> configuration);
 
@@ -18,9 +18,7 @@ State();
 
   Configuration* GetConfiguration() { return configuration_.get(); }
 
-  std::shared_ptr<terminal::State> GetTerminalState() {
-    return terminal_state_;
-  }
+  std::shared_ptr<tag::TagState> GetTagState() { return tag_state_; }
 
  public:
   os_mutex_t mutex_ = 0;
@@ -39,11 +37,12 @@ State();
   std::string boot_progress_;
 
   std::unique_ptr<Configuration> configuration_ = nullptr;
-  std::shared_ptr<terminal::State> terminal_state_;
+  std::shared_ptr<tag::TagState> tag_state_;
 
   PinState relais_state_ = LOW;
 
   void UpdateRelaisState();
+
  public:
   virtual void OnConfigChanged() override;
 
@@ -52,8 +51,8 @@ State();
   virtual void OnUnknownTag() override;
   virtual void OnTagRemoved() override;
   virtual void OnTagAuthenicated(std::array<uint8_t, 7> uid) override;
-  virtual void OnNewState(oww::state::terminal::StartSession state) override;
-  virtual void OnNewState(oww::state::terminal::Personalize state) override;
+  virtual void OnNewState(oww::state::tag::StartSession state) override;
+  virtual void OnNewState(oww::state::tag::Personalize state) override;
 };
 
 }  // namespace oww::state

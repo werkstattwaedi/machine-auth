@@ -15,7 +15,7 @@ Status State::Begin(std::unique_ptr<Configuration> configuration) {
   configuration_ = std::move(configuration);
   configuration_->Begin();
 
-  terminal_state_ = std::make_shared<terminal::State>(terminal::Idle{});
+  tag_state_ = std::make_shared<tag::TagState>(tag::Idle{});
 
   pinMode(config::ext::pin_relais, INPUT);
   relais_state_ = digitalRead(config::ext::pin_relais) ? HIGH : LOW;
@@ -49,9 +49,9 @@ bool State::IsBootCompleted() { return boot_progress_.empty(); }
 std::string State::GetBootProgress() { return boot_progress_; }
 
 void State::UpdateRelaisState() {
-  using namespace oww::state::terminal;
+  using namespace oww::state::tag;
   PinState expected_relais_state;
-  if (std::get_if<StartSession>(terminal_state_.get())) {
+  if (std::get_if<StartSession>(tag_state_.get())) {
     expected_relais_state = HIGH;
   } else {
     expected_relais_state = LOW;
@@ -69,7 +69,7 @@ void State::UpdateRelaisState() {
 
     auto actual_state = digitalRead(config::ext::pin_relais) ? HIGH : LOW;
     if (actual_state != relais_state_) {
-      logger.error("Failed to toggle actual relais state");
+      Log.error("Failed to toggle actual relais state");
     }
   }
 }
@@ -77,18 +77,17 @@ void State::UpdateRelaisState() {
 void State::OnTagFound() {
   logger.info("tag_state: OnTagFound");
 
-  terminal_state_ = std::make_shared<terminal::State>(terminal::Detected{});
+  tag_state_ = std::make_shared<tag::TagState>(tag::Detected{});
 }
 
 void State::OnBlankNtag(std::array<uint8_t, 7> uid) {
   logger.info("tag_state: OnBlankNtag");
 
-  OnNewState(terminal::Personalize{
+  OnNewState(tag::Personalize{
       .tag_uid = uid,
-      .state = std::make_shared<terminal::personalize::State>(
-          terminal::personalize::Wait{
-              .timeout = millis() + 3000,
-          })});
+      .state = std::make_shared<tag::personalize::State>(tag::personalize::Wait{
+          .timeout = millis() + 3000,
+      })});
 }
 
 void State::OnTagAuthenicated(std::array<uint8_t, 7> uid) {
@@ -98,35 +97,34 @@ void State::OnTagAuthenicated(std::array<uint8_t, 7> uid) {
   // - check tap-out
   // - check pre-authorized.
 
-  OnNewState(
-      terminal::StartSession{.tag_uid = uid,
-                             .state = std::make_shared<terminal::start::State>(
-                                 terminal::start::StartWithNfcAuth{})});
+  OnNewState(tag::StartSession{.tag_uid = uid,
+                               .state = std::make_shared<tag::start::State>(
+                                   tag::start::StartWithNfcAuth{})});
 }
 
 void State::OnUnknownTag() {
   logger.info("tag_state: OnUnknownTag");
 
-  terminal_state_ = std::make_shared<terminal::State>(terminal::Unknown{});
+  tag_state_ = std::make_shared<tag::TagState>(tag::Unknown{});
 }
 
 void State::OnTagRemoved() {
   logger.info("tag_state: OnTagRemoved");
 
-  terminal_state_ = std::make_shared<terminal::State>(terminal::Idle{});
+  tag_state_ = std::make_shared<tag::TagState>(tag::Idle{});
 }
 
-void State::OnNewState(oww::state::terminal::StartSession state) {
-  using namespace oww::state::terminal::start;
+void State::OnNewState(oww::state::tag::StartSession state) {
+  using namespace oww::state::tag::start;
 
-  terminal_state_ = std::make_shared<terminal::State>(state);
+  tag_state_ = std::make_shared<tag::TagState>(state);
 }
-void State::OnNewState(oww::state::terminal::Personalize state) {
-  using namespace oww::state::terminal::personalize;
+void State::OnNewState(oww::state::tag::Personalize state) {
+  using namespace oww::state::tag::personalize;
 
-  terminal_state_ = std::make_shared<terminal::State>(state);
+  tag_state_ = std::make_shared<tag::TagState>(state);
 
-  using namespace oww::state::terminal::personalize;
+  using namespace oww::state::tag::personalize;
   if (auto nested = std::get_if<Failed>(state.state.get())) {
     logger.error("Failed to personailize: error: %d, message: %s",
                  (int)nested->error, nested->message.c_str());

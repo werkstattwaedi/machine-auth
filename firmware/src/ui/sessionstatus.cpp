@@ -1,7 +1,7 @@
 #include "sessionstatus.h"
 
-#include "../state/terminal/state.h"
 #include "lvgl.h"
+#include "state/tag/tag_state.h"
 
 LV_IMG_DECLARE(tap_token);
 
@@ -62,18 +62,17 @@ void SessionStatus::OnActivate() {
 void SessionStatus::OnDeactivate() { MainContent::OnDeactivate(); }
 
 void SessionStatus::Render() {
-  auto terminal_state = state_->GetTerminalState();
+  auto tag_state = state_->GetTagState();
 
-  if (terminal_state &&
-      last_state_id_ != static_cast<void*>(terminal_state.get())) {
-    UpdateForState(terminal_state);
-    last_state_id_ = static_cast<void*>(terminal_state.get());
+  if (tag_state && last_state_id_ != static_cast<void*>(tag_state.get())) {
+    UpdateForState(tag_state);
+    last_state_id_ = static_cast<void*>(tag_state.get());
   }
 }
 
 void SessionStatus::UpdateForState(
-    const std::shared_ptr<oww::state::terminal::State> terminal_state) {
-  using namespace oww::state::terminal;
+    const std::shared_ptr<oww::state::tag::TagState> tag_state) {
+  using namespace oww::state::tag;
 
   std::visit(
       overloaded{
@@ -189,7 +188,7 @@ void SessionStatus::UpdateForState(
             current_buttons_->down_enabled = false;
             // LED mood handled by UI state (ring/NFC); buttons by ButtonBar
           }},
-      *(terminal_state.get()));
+      *(tag_state.get()));
 }
 
 std::shared_ptr<ButtonDefinition> SessionStatus::GetButtonDefinition() {

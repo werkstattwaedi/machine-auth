@@ -7,14 +7,14 @@
 #include "state/configuration.h"
 #include "state/state.h"
 
-namespace oww::state::terminal {
+namespace oww::state::tag {
 using namespace start;
 using namespace config::tag;
 using namespace oww::session;
 
-void UpdateNestedState(
-    oww::state::State &state_manager, StartSession last_state,
-    oww::state::terminal::start::State updated_nested_state) {
+void UpdateNestedState(oww::state::State &state_manager,
+                       StartSession last_state,
+                       oww::state::tag::start::State updated_nested_state) {
   state_manager.lock();
   state_manager.OnNewState(StartSession{
       .tag_uid = last_state.tag_uid,
@@ -165,4 +165,4 @@ void Loop(StartSession state, oww::state::State &state_manager,
   }
 }
 
-}  // namespace oww::state::terminal
+}  // namespace oww::state::tag
