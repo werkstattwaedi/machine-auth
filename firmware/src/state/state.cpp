@@ -69,7 +69,7 @@ void State::UpdateRelaisState() {
 
     auto actual_state = digitalRead(config::ext::pin_relais) ? HIGH : LOW;
     if (actual_state != relais_state_) {
-      Log.error("Failed to toggle actual relais state");
+      logger.error("Failed to toggle actual relais state");
     }
   }
 }

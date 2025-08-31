@@ -26,25 +26,38 @@ tl::expected<void, PN532Error> PN532::Begin() {
     return tl::unexpected(PN532Error::kUnspecified);
   }
   is_initialized_ = true;
-
+  auto retries = 3;
   logger.info("PN532::Begin [interface:%d, reset:%d]",
               serial_interface_->interface(), reset_pin_);
 
+  serial_interface_->begin(115200);
+
   WITH_LOCK(SPI) {
     // FIXME - https://github.com/werkstattwaedi/machine-auth/issues/19:
-    // using the reset_pin_ should not have knowledge of using the SPI interface
-    // exclusively.
+    // using the reset_pin_ should not have knowledge of using the SPI
+    // interface exclusively.
     pinMode(reset_pin_, OUTPUT);
     digitalWrite(reset_pin_, LOW);
   }
-
-  serial_interface_->begin(115200);
 
   // 6.2.2 Dialog structure - timeout is 89ms at 115200 baud
   command_timeout_ms_ = 89;
   serial_interface_->setTimeout(command_timeout_ms_);
 
-  return ResetController();
+  tl::expected<void, PN532Error> reset_controller_response =
+      tl::unexpected(PN532Error::kUnspecified);
+  do {
+    reset_controller_response = ResetController();
+    if (reset_controller_response) {
+      break;
+    }
+
+    logger.warn("PN532::Begin Failed to initialize with error %d",
+                (int)reset_controller_response.error());
+    retries--;
+  } while (retries > 0);
+
+  return reset_controller_response;
 }
 
 tl::expected<std::shared_ptr<SelectedTag>, PN532Error> PN532::WaitForNewTag(

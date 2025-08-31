@@ -75,23 +75,20 @@ void setup() {
   Status nfc_setup_result = NfcTags::instance().Begin(state_);
   Log.info("NFC Status = %d", (int)nfc_setup_result);
 
-  state_->SetBootProgress("Verbinde mit WiFi...");
-
-  while (!WiFi.ready()) {
-    delay(10);
+  if (nfc_setup_result != Status::kOk) {
+    state_->SetBootProgress("Fehler: NFC Initialisierung!");
+    delay(2000);
+    System.reset();
   }
+
+  state_->SetBootProgress("Verbinde mit WiFi...");
+  waitUntil(WiFi.ready);
 
   state_->SetBootProgress("Verbinde mit Cloud...");
-
-  while (!Particle.connected()) {
-    delay(10);
-  }
+  waitUntil(Particle.connected);
 
   state_->SetBootProgress("Warte auf Terminal Config...");
-
-  while (!state_->GetConfiguration()->GetTerminal()) {
-    delay(10);
-  }
+  waitUntil(state_->GetConfiguration()->GetTerminal);
 
   state_->BootCompleted();
 }
