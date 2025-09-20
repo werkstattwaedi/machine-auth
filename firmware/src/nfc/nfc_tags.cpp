@@ -225,7 +225,7 @@ void NfcTags::TagError(NfcStateData &data) {
   if (release_tag) return;
 
   logger.warn("Release failed (%d), resetting PCD ", (int)release_tag.error());
-  auto reset_controller = pcd_interface_->ResetController();
+  auto reset_controller = pcd_interface_->ResetControllerWithRetries();
   if (!reset_controller) {
     logger.error("Resetting PCD failed %d", (int)reset_controller.error());
   }

@@ -26,7 +26,6 @@ tl::expected<void, PN532Error> PN532::Begin() {
     return tl::unexpected(PN532Error::kUnspecified);
   }
   is_initialized_ = true;
-  auto retries = 3;
   logger.info("PN532::Begin [interface:%d, reset:%d]",
               serial_interface_->interface(), reset_pin_);
 
@@ -43,21 +42,7 @@ tl::expected<void, PN532Error> PN532::Begin() {
   // 6.2.2 Dialog structure - timeout is 89ms at 115200 baud
   command_timeout_ms_ = 89;
   serial_interface_->setTimeout(command_timeout_ms_);
-
-  tl::expected<void, PN532Error> reset_controller_response =
-      tl::unexpected(PN532Error::kUnspecified);
-  do {
-    reset_controller_response = ResetController();
-    if (reset_controller_response) {
-      break;
-    }
-
-    logger.warn("PN532::Begin Failed to initialize with error %d",
-                (int)reset_controller_response.error());
-    retries--;
-  } while (retries > 0);
-
-  return reset_controller_response;
+  return ResetControllerWithRetries();
 }
 
 tl::expected<std::shared_ptr<SelectedTag>, PN532Error> PN532::WaitForNewTag(
@@ -244,7 +229,30 @@ tl::expected<void, PN532Error> PN532::CallFunction(
   return {};
 }
 
-tl::expected<void, PN532Error> PN532::ResetController() {
+tl::expected<void, PN532Error> PN532::ResetControllerWithRetries() {
+  tl::expected<void, PN532Error> reset_controller_response =
+      tl::unexpected(PN532Error::kUnspecified);
+
+  auto retries = 3;
+  system_tick_t reset_duration = 20;  // ms
+
+  do {
+    reset_controller_response = ResetController(reset_duration);
+    if (reset_controller_response) {
+      break;
+    }
+
+    logger.warn("PN532::Begin Failed to initialize with error %d",
+                (int)reset_controller_response.error());
+    reset_duration *= 2;
+    retries--;
+  } while (retries > 0);
+
+  return reset_controller_response;
+}
+
+tl::expected<void, PN532Error> PN532::ResetController(
+    system_tick_t reset_duration) {
   logger.info("PN532::ResetController");
 
   WITH_LOCK(SPI) {
@@ -255,7 +263,7 @@ tl::expected<void, PN532Error> PN532::ResetController() {
     // 100us should be enough to reset, RSTOUT would indicate that PN532 is
     // actually reset. Since this is not wired, wait for 10ms, that should do
     // the trick.
-    delay(10);
+    delay(reset_duration);
     digitalWrite(reset_pin_, HIGH);
     delay(10);
   }

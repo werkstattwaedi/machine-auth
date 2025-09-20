@@ -58,9 +58,11 @@ class PN532 {
 
   tl::expected<void, PN532Error> ReleaseTag(std::shared_ptr<SelectedTag> tag);
 
+  tl::expected<void, PN532Error> ResetControllerWithRetries();
+
   // Resets the PN532 via reset_pin_, then wakes it up and configures
   // it as PCD
-  tl::expected<void, PN532Error> ResetController();
+  tl::expected<void, PN532Error> ResetController(system_tick_t reset_duration);
 
  private:
   // Sends the command_data payload to the PN532.
