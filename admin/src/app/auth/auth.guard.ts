@@ -9,8 +9,10 @@ export const authGuard: CanActivateFn = async (route, state) => {
   const auth = inject(Auth);
   const firestore = inject(Firestore);
   const router = inject(Router);
+  console.log('before');
 
   const user = await firstValueFrom(authState(auth));
+  console.log('something', user);
 
   if (user) {
     const userDocRef = doc(firestore, `users/${user.uid}`);
@@ -19,7 +21,11 @@ export const authGuard: CanActivateFn = async (route, state) => {
     if (userDocSnap.exists()) {
       const userData = userDocSnap.data();
       // Check if the roles array exists and includes 'admin'
-      if (userData['roles'] && Array.isArray(userData['roles']) && userData['roles'].includes('admin')) {
+      if (
+        userData['roles'] &&
+        Array.isArray(userData['roles']) &&
+        userData['roles'].includes('admin')
+      ) {
         return true;
       }
     }
