@@ -4,11 +4,12 @@ import * as logger from "firebase-functions/logger";
 import { defineSecret, defineString } from "firebase-functions/params";
 import { initializeApp } from "firebase-admin/app";
 import * as flatbuffers from "flatbuffers";
-import { StartSessionRequest } from "./fbs/oww/session/start-session-request";
-import { AuthenticatePart2Request } from "./fbs/oww/session/authenticate-part2-request";
-import { KeyDiversificationRequest } from "./fbs/oww/personalization/key-diversification-request";
+import { StartSessionRequest , AuthenticateNewSessionRequest ,  CompleteAuthenticationRequest , UploadUsageRequest } from "./fbs";
+import { KeyDiversificationRequest } from "./fbs/key-diversification-request.js";
 import { handleStartSession } from "./session/handle_start_session";
-import { handleAuthenticatePart2 } from "./session/handle_authentication_part2";
+import { handleAuthenticateNewSession } from "./session/handle_authenticate_new_session";
+import { handleCompleteAuthentication } from "./session/handle_complete_authentication";
+import { handleUploadUsage } from "./session/handle_upload_usage";
 import { handleKeyDiversification } from "./personalization/handle_key_diversification";
 
 initializeApp();
@@ -62,29 +63,9 @@ export const startSessionHandler = async (
   res: express.Response
 ) => {
   try {
-    const startSessionResponseFbs = await handleStartSession(
+    const responseFbs = await handleStartSession(
       unpackRequest(req, (buffer) =>
         StartSessionRequest.getRootAsStartSessionRequest(buffer).unpack()
-      ),
-      (req as any).config
-    );
-
-    sendFlatbufferSuccessResponse(req, res, startSessionResponseFbs);
-  } catch (error: any) {
-    sendHttpError(req, res, error);
-  }
-};
-
-export const authenticatePart2Handler = async (
-  req: express.Request,
-  res: express.Response
-) => {
-  try {
-    const responseFbs = await handleAuthenticatePart2(
-      unpackRequest(req, (buffer) =>
-        AuthenticatePart2Request.getRootAsAuthenticatePart2Request(
-          buffer
-        ).unpack()
       ),
       (req as any).config
     );
@@ -94,6 +75,61 @@ export const authenticatePart2Handler = async (
     sendHttpError(req, res, error);
   }
 };
+
+export const authenticateNewSessionHandler = async (
+  req: express.Request,
+  res: express.Response
+) => {
+  try {
+    const responseFbs = await handleAuthenticateNewSession(
+      unpackRequest(req, (buffer) =>
+        AuthenticateNewSessionRequest.getRootAsAuthenticateNewSessionRequest(buffer).unpack()
+      ),
+      (req as any).config
+    );
+
+    sendFlatbufferSuccessResponse(req, res, responseFbs);
+  } catch (error: any) {
+    sendHttpError(req, res, error);
+  }
+};
+
+export const completeAuthenticationHandler = async (
+  req: express.Request,
+  res: express.Response
+) => {
+  try {
+    const responseFbs = await handleCompleteAuthentication(
+      unpackRequest(req, (buffer) =>
+        CompleteAuthenticationRequest.getRootAsCompleteAuthenticationRequest(buffer).unpack()
+      ),
+      (req as any).config
+    );
+
+    sendFlatbufferSuccessResponse(req, res, responseFbs);
+  } catch (error: any) {
+    sendHttpError(req, res, error);
+  }
+};
+
+export const uploadUsageHandler = async (
+  req: express.Request,
+  res: express.Response
+) => {
+  try {
+    const responseFbs = await handleUploadUsage(
+      unpackRequest(req, (buffer) =>
+        UploadUsageRequest.getRootAsUploadUsageRequest(buffer).unpack()
+      ),
+      (req as any).config
+    );
+
+    sendFlatbufferSuccessResponse(req, res, responseFbs);
+  } catch (error: any) {
+    sendHttpError(req, res, error);
+  }
+};
+
 
 export const keyDiversificationHandler = async (
   req: express.Request,
@@ -115,7 +151,9 @@ export const keyDiversificationHandler = async (
 };
 
 app.post("/startSession", startSessionHandler);
-app.post("/authenticatePart2", authenticatePart2Handler);
+app.post("/authenticateNewSession", authenticateNewSessionHandler);
+app.post("/completeAuthentication", completeAuthenticationHandler);
+app.post("/uploadUsage", uploadUsageHandler);
 app.post("/personalize", keyDiversificationHandler);
 
 function unpackRequest<T>(

@@ -1,13 +1,13 @@
 include "ntag.fbs";
 
-namespace oww;
+namespace fbs;
 
 /** Checked-out via UI */
 table ReasonUi {}
 
 /** Another tag/user checked in on the same terminal */
 table ReasonCheckInOtherTag {
-  token_id: oww.TagUid;
+  token_id: TagUid;
   user_id: string;
 }
 

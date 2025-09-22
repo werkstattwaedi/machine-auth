@@ -1,24 +1,17 @@
 import * as flatbuffers from "flatbuffers";
-import { StartSessionRequestT } from "../fbs/oww/session/start-session-request";
-import { TagUidT } from "../fbs/oww/ntag/tag-uid";
-import { Authentication } from "../fbs/oww/session/authentication";
-import { FirstAuthenticationT } from "../fbs/oww/session/first-authentication";
+import { AuthenticateNewSessionRequestT, TagUidT } from "../fbs";
 
 export function generateEncodedStartSessionRequest(
-  machineId: string,
   tokenId: number[],
   challenge: number[]
 ): string {
   const builder = new flatbuffers.Builder(1024);
 
   const tagUid = new TagUidT(tokenId);
-  const firstAuth = new FirstAuthenticationT(challenge);
 
-  const startSessionRequest = new StartSessionRequestT(
+  const startSessionRequest = new AuthenticateNewSessionRequestT(
     tagUid,
-    machineId,
-    Authentication.FirstAuthentication,
-    firstAuth
+    challenge
   );
 
   const requestOffset = startSessionRequest.pack(builder);

@@ -1,6 +1,6 @@
 include "ntag.fbs";
 
-namespace oww;
+namespace fbs;
 
 // Personalization RPCs
 // NOTE: documentation only, code is generated solely for request/response tables
@@ -12,12 +12,12 @@ rpc_service Personalization {
 
 /** Computes the diversified keys for the tag */
 table KeyDiversificationRequest {
-  token_id: oww.TagUid;
+  token_id: TagUid;
 }
 
 table KeyDiversificationResponse {
-  application_key: oww.KeyBytes;
-  authorization_key: oww.KeyBytes;
-  reserved1_key: oww.KeyBytes;
-  reserved2_key: oww.KeyBytes;
+  application_key: KeyBytes;
+  authorization_key: KeyBytes;
+  reserved1_key: KeyBytes;
+  reserved2_key: KeyBytes;
 }

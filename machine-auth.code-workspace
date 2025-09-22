@@ -1,0 +1,16 @@
+{
+  "folders": [
+    {
+      "path": "firmware"
+    },
+    {
+      "path": "functions"
+    },
+    {
+      "path": "admin"
+    },
+    {
+      "path": "."
+    }
+  ]
+}

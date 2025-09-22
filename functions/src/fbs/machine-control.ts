@@ -2,7 +2,7 @@
 
 /* eslint-disable @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any, @typescript-eslint/no-non-null-assertion */
 
-import { MachineControlRelais, MachineControlRelaisT } from '../oww/machine-control-relais.js';
+import { MachineControlRelais, MachineControlRelaisT } from '../fbs/machine-control-relais';
 
 
 export enum MachineControl {

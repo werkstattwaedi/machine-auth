@@ -4,7 +4,7 @@
 
 import * as flatbuffers from 'flatbuffers';
 
-import { TagUid, TagUidT } from '../oww/tag-uid.js';
+import { TagUid, TagUidT } from '../fbs/tag-uid';
 
 
 export class TokenSession implements flatbuffers.IUnpackableObject<TokenSessionT> {

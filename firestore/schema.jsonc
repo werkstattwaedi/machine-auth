@@ -1,0 +1,63 @@
+{
+  "machine": {
+    "{machineId}" : {
+      "name": "string", // Human readable label
+      "requiredPermission": ["/permission/{permissionId}"], // Permissions required to use the machine
+      "maco": "/maco/{deviceID}", // particle device id of MaCo that controls this device
+      "control": { // map with metadata on how to control the machine.
+
+      }
+    }
+  },
+  "permission": {
+    "{permissionId}": {
+      "name": "string" // Human readable permission name (e.g., "Laser Cutter")
+    }
+  },
+  "sessions": {
+    "{sessionId}": { // generated in AuthenticateNewSessionRequest
+      "userId": "/users/{userId}", // reference to user assciated with this session
+      "startTime": "timestamp", // timestamp the session was created
+      "rndA": { // cloud-generated random bytes for Ntag 3-pass mutual authentication. Used in CompleteAuthentication to verify authenticity
+        "_byteString": "string" // Base64 encoded random bytes
+      },
+
+      "tokenId": "/users/{userId}/token/{tokenId}", // Reference to token UID
+      "usage": [ // array of individual check-ins / check-outs within the session. Added in UploadUsage
+        {
+          "machine": "/machine/{machineId}", // The reference to the machine used
+          "checkIn": "timestamp",
+          "checkOut": "timestamp",
+          "metadata": "string" // json representation of the checkout reason
+        }
+      ],
+
+      "closed": { // map indicating when the session was marked as closed
+         "time": "timestamp", // timestamp the session was created
+         "metadata": "string" // json representation of how the user closed the session (self checkout terminal, app, manually confirmed paid)
+      }
+    }
+  },
+  "maco": {
+    "{deviceId}": { //  particle device id (e.g., "0a10aced202194944a042f04")
+      "name": "string" // Human readable terminal name (e.g., "Dev Terminal 01")
+    }
+  },
+  "users": {
+    "{userId}": { // user id, will be changed to firebase auth UID, if an user their account to a firebase account
+      "created": "timestamp",
+      "firebaseUid": "string", 
+      "displayName": "string", // Display name (e.g., "MikeS")
+      "name": "string", // Full name (e.g., "Michael Schneider")
+      "permissions": ["permissionId"], // Array of permission granted to the user
+      "roles": ["vereinsmitglid|admin"],
+      "token": { // subcollection with all registerd tokens
+        "{tokenId}": { // NTag UID  (e.g., "04c339aa1e1890")
+          "registered": "timestamp", // time the token was added to the user's profile
+          "deactivated": "timestamp", // optional timestamp, when set the token is not in use anymore
+          "label": "string" // Token label (e.g., "Key 1")
+        }
+      }
+    }
+  }
+}

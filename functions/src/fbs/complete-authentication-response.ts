@@ -4,9 +4,9 @@
 
 import * as flatbuffers from 'flatbuffers';
 
-import { CompleteAuthenticationResult, unionToCompleteAuthenticationResult, unionListToCompleteAuthenticationResult } from '../oww/complete-authentication-result.js';
-import { Rejected, RejectedT } from '../oww/rejected.js';
-import { TokenSession, TokenSessionT } from '../oww/token-session.js';
+import { CompleteAuthenticationResult, unionToCompleteAuthenticationResult, unionListToCompleteAuthenticationResult } from '../fbs/complete-authentication-result';
+import { Rejected, RejectedT } from '../fbs/rejected';
+import { TokenSession, TokenSessionT } from '../fbs/token-session';
 
 
 export class CompleteAuthenticationResponse implements flatbuffers.IUnpackableObject<CompleteAuthenticationResponseT> {

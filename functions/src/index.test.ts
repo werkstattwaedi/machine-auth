@@ -8,11 +8,10 @@ import { generateEncodedStartSessionRequest } from "./testing/test_utils";
 import * as crypto from "crypto";
 import { diversifyKey } from "./ntag/key_diversification";
 import { toKeyBytes } from "./ntag/bytebuffer_util";
-import { KeyDiversificationRequestT } from "./fbs/oww/personalization/key-diversification-request";
-import { TagUidT, TagUid } from "./fbs/oww/ntag/tag-uid";
-import { KeyDiversificationResponse } from "./fbs/oww/personalization/key-diversification-response";
+import { KeyDiversificationRequestT } from "./fbs/key-diversification-request";
+import { TagUidT, TagUid } from "./fbs";
+import { KeyDiversificationResponse } from "./fbs/key-diversification-response";
 import { diversifyKeys } from "./ntag/key_diversification";
-import { AuthenticatePart2RequestT, AuthenticatePart2Request } from "./fbs/oww/session";
 import * as flatbuffers from "flatbuffers";
 
 describe("API endpoints", () => {

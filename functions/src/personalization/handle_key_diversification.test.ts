@@ -1,8 +1,7 @@
 import { expect } from "chai";
 import { handleKeyDiversification } from "../personalization/handle_key_diversification";
-import { KeyDiversificationRequestT } from "../fbs/oww/personalization/key-diversification-request";
-import { KeyBytesT } from "../fbs/oww/ntag/key-bytes";
-import { TagUidT } from "../fbs/oww/ntag/tag-uid";
+import { KeyDiversificationRequestT } from "../fbs/key-diversification-request";
+import { TagUidT } from "../fbs";
 import { diversifyKeys } from "../ntag/key_diversification";
 
 describe("handleKeyDiversification", () => {

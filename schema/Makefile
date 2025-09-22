@@ -2,7 +2,7 @@
 FLATBUFFERS_REPO_DIR := flatbuffers
 FLATBUFFER_COMPILER := $(FLATBUFFERS_REPO_DIR)/flatc
 FIRMWARE_CPP_OUT_DIR := ../firmware/src/fbs
-CLOUDFUNCTIONS_TS_OUT_DIR := ../functions/src/fbs
+CLOUDFUNCTIONS_TS_OUT_DIR := ../functions/src
 
 # --- Helper Variables ---
 CPP_SCHEMAS := $(wildcard ./*.fbs)
@@ -39,7 +39,7 @@ ts_code: flatc
 clean:
 	@echo "Cleaning generated FlatBuffers code and build files..."
 	@rm -rf $(FIRMWARE_CPP_OUT_DIR)
-	@rm -rf $(CLOUDFUNCTIONS_TS_OUT_DIR)
+	@rm -rf $(CLOUDFUNCTIONS_TS_OUT_DIR)/fbs
 	@rm -rf $(FLATBUFFER_BUILD_DIR)
 	@echo "Clean complete."
 

@@ -4,8 +4,8 @@
 
 import * as flatbuffers from 'flatbuffers';
 
-import { MachineControl, unionToMachineControl, unionListToMachineControl } from '../oww/machine-control.js';
-import { MachineControlRelais, MachineControlRelaisT } from '../oww/machine-control-relais.js';
+import { MachineControl, unionToMachineControl, unionListToMachineControl } from '../fbs/machine-control';
+import { MachineControlRelais, MachineControlRelaisT } from '../fbs/machine-control-relais';
 
 
 export class Machine implements flatbuffers.IUnpackableObject<MachineT> {

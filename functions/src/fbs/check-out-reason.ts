@@ -2,11 +2,11 @@
 
 /* eslint-disable @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any, @typescript-eslint/no-non-null-assertion */
 
-import { ReasonCheckInOtherMachine, ReasonCheckInOtherMachineT } from '../oww/reason-check-in-other-machine.js';
-import { ReasonCheckInOtherTag, ReasonCheckInOtherTagT } from '../oww/reason-check-in-other-tag.js';
-import { ReasonSelfCheckout, ReasonSelfCheckoutT } from '../oww/reason-self-checkout.js';
-import { ReasonTimeout, ReasonTimeoutT } from '../oww/reason-timeout.js';
-import { ReasonUi, ReasonUiT } from '../oww/reason-ui.js';
+import { ReasonCheckInOtherMachine, ReasonCheckInOtherMachineT } from '../fbs/reason-check-in-other-machine';
+import { ReasonCheckInOtherTag, ReasonCheckInOtherTagT } from '../fbs/reason-check-in-other-tag';
+import { ReasonSelfCheckout, ReasonSelfCheckoutT } from '../fbs/reason-self-checkout';
+import { ReasonTimeout, ReasonTimeoutT } from '../fbs/reason-timeout';
+import { ReasonUi, ReasonUiT } from '../fbs/reason-ui';
 
 
 export enum CheckOutReason {

@@ -14,7 +14,6 @@
         "firebase-debug.*.log",
         "*.local",
         "*.test.ts"
-
       ],
       "predeploy": [
         "npm --prefix \"$RESOURCE_DIR\" run lint",
@@ -22,7 +21,35 @@
       ]
     }
   ],
+  "hosting": {
+    "predeploy": [
+      "cd client && npm install && npm run build",
+      "cd admin && npm install && npm run build"
+    ],
+    "rewrites": [
+      {
+        "source": "/admin/**",
+        "destination": "/admin/index.html"
+      },
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ],
+    "public": "client/dist/client",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ]
+  },
   "emulators": {
+    "auth": {
+      "port": 9099
+    },
+    "hosting": {
+      "port": 5000
+    },
     "functions": {
       "port": 5001
     },
@@ -30,7 +57,8 @@
       "port": 8080
     },
     "ui": {
-      "enabled": true
+      "enabled": true,
+      "port": 4000
     },
     "singleProjectMode": true
   }

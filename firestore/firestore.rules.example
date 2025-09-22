@@ -1,0 +1,31 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper function to check if the requesting user has the 'admin' role.
+    function isAdmin() {
+      // The user must be authenticated.
+      // We get their user document from the 'users' collection using their UID.
+      // Then, we check if the 'roles' array in their document contains 'admin'.
+      return request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles.hasAny(['admin']);
+    }
+
+    // Example Usage:
+    // Secure a collection so that only admins can read or write to it.
+    match /some_admin_only_collection/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // You should also protect your users collection.
+    // For example, users should only be able to edit their own data, but admins can edit anyone's.
+    match /users/{userId} {
+      allow read: if request.auth.uid == userId || isAdmin();
+      allow update: if request.auth.uid == userId || isAdmin();
+      // Only admins can create or delete users.
+      allow create, delete: if isAdmin();
+    }
+
+    // Add your other rules here...
+  }
+}

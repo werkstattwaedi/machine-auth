@@ -1,7 +1,7 @@
 #pragma once
 
 #include "common.h"
-#include "fbs/session_generated.h"
+#include "fbs/token_session_generated.h"
 #include "nfc/driver/Ntag424.h"
 #include "state/cloud_response.h"
 
@@ -20,12 +20,12 @@ struct StartWithRecentAuth {
 struct StartWithNfcAuth {};
 
 struct AwaitStartSessionResponse {
-  const std::shared_ptr<CloudResponse<oww::session::StartSessionResponseT>>
+  const std::shared_ptr<CloudResponse<oww::StartSessionResponseT>>
       response;
 };
 
 struct AwaitAuthenticatePart2Response {
-  const std::shared_ptr<CloudResponse<oww::session::AuthenticatePart2ResponseT>>
+  const std::shared_ptr<CloudResponse<oww::AuthenticatePart2ResponseT>>
       response;
 };
 

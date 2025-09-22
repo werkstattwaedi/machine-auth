@@ -2,9 +2,9 @@
 
 /* eslint-disable @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any, @typescript-eslint/no-non-null-assertion */
 
-import { AuthRequired, AuthRequiredT } from '../oww/auth-required.js';
-import { Rejected, RejectedT } from '../oww/rejected.js';
-import { TokenSession, TokenSessionT } from '../oww/token-session.js';
+import { AuthRequired, AuthRequiredT } from '../fbs/auth-required';
+import { Rejected, RejectedT } from '../fbs/rejected';
+import { TokenSession, TokenSessionT } from '../fbs/token-session';
 
 
 export enum StartSessionResult {

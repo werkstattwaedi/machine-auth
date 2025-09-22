@@ -4,9 +4,9 @@ import express from "express";
 import * as admin from "firebase-admin";
 import * as sinon from "sinon";
 import * as flatbuffers from "flatbuffers";
-import { KeyDiversificationRequestT } from "../fbs/oww/personalization/key-diversification-request";
-import { TagUidT } from "../fbs/oww/ntag/tag-uid";
-import { KeyDiversificationResponse } from "../fbs/oww/personalization/key-diversification-response";
+import { KeyDiversificationRequestT } from "../fbs/key-diversification-request";
+import { TagUidT } from "../fbs";
+import { KeyDiversificationResponse } from "../fbs/key-diversification-response";
 import { diversifyKeys } from "../ntag/key_diversification";
 
 describe("/personalize endpoint", () => {
@@ -45,7 +45,9 @@ describe("/personalize endpoint", () => {
     const reqT = new KeyDiversificationRequestT(tagUid);
     const reqOffset = reqT.pack(builder);
     builder.finish(reqOffset);
-    const encodedRequest = Buffer.from(builder.asUint8Array()).toString("base64");
+    const encodedRequest = Buffer.from(builder.asUint8Array()).toString(
+      "base64"
+    );
 
     const response = await supertest(app)
       .post("/personalize")
@@ -55,16 +57,32 @@ describe("/personalize endpoint", () => {
     expect(response.status).to.equal(200);
     expect(response.type).to.equal("application/json");
     expect(response.body).to.have.property("id", requestId);
-    expect(response.body).to.have.property("data").that.is.a("string").and.not.be.empty;
+    expect(response.body).to.have.property("data").that.is.a("string").and.not
+      .be.empty;
 
     // Decode and check the response
     const responseBytes = Buffer.from(response.body.data, "base64");
-    const fbResp = KeyDiversificationResponse.getRootAsKeyDiversificationResponse(new flatbuffers.ByteBuffer(responseBytes));
-    const keys = diversifyKeys(testMasterKey, "OwwMachineAuth", Buffer.from(tokenId).toString("hex"));
-    expect(Array.from(fbResp.applicationKey()!.unpack().uid)).to.deep.equal(Array.from(Buffer.from(keys.application, "hex")));
-    expect(Array.from(fbResp.authorizationKey()!.unpack().uid)).to.deep.equal(Array.from(Buffer.from(keys.authorization, "hex")));
-    expect(Array.from(fbResp.reserved1Key()!.unpack().uid)).to.deep.equal(Array.from(Buffer.from(keys.reserved1, "hex")));
-    expect(Array.from(fbResp.reserved2Key()!.unpack().uid)).to.deep.equal(Array.from(Buffer.from(keys.reserved2, "hex")));
+    const fbResp =
+      KeyDiversificationResponse.getRootAsKeyDiversificationResponse(
+        new flatbuffers.ByteBuffer(responseBytes)
+      );
+    const keys = diversifyKeys(
+      testMasterKey,
+      "OwwMachineAuth",
+      Buffer.from(tokenId).toString("hex")
+    );
+    expect(Array.from(fbResp.applicationKey()!.unpack().uid)).to.deep.equal(
+      Array.from(Buffer.from(keys.application, "hex"))
+    );
+    expect(Array.from(fbResp.authorizationKey()!.unpack().uid)).to.deep.equal(
+      Array.from(Buffer.from(keys.authorization, "hex"))
+    );
+    expect(Array.from(fbResp.reserved1Key()!.unpack().uid)).to.deep.equal(
+      Array.from(Buffer.from(keys.reserved1, "hex"))
+    );
+    expect(Array.from(fbResp.reserved2Key()!.unpack().uid)).to.deep.equal(
+      Array.from(Buffer.from(keys.reserved2, "hex"))
+    );
   });
 
   it("should return 403 for an invalid API key", async () => {

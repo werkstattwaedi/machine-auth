@@ -1,6 +1,6 @@
-import { KeyDiversificationRequestT } from "../fbs/oww/personalization/key-diversification-request";
-import { KeyDiversificationResponseT } from "../fbs/oww/personalization/key-diversification-response";
-import { KeyBytesT } from "../fbs/oww/ntag/key-bytes";
+import { KeyDiversificationRequestT } from "../fbs/key-diversification-request";
+import { KeyDiversificationResponseT } from "../fbs/key-diversification-response";
+import { KeyBytesT } from "../fbs";
 import { diversifyKeys } from "../ntag/key_diversification";
 
 /**

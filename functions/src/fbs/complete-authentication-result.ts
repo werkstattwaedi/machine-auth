@@ -2,8 +2,8 @@
 
 /* eslint-disable @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any, @typescript-eslint/no-non-null-assertion */
 
-import { Rejected, RejectedT } from '../oww/rejected.js';
-import { TokenSession, TokenSessionT } from '../oww/token-session.js';
+import { Rejected, RejectedT } from '../fbs/rejected';
+import { TokenSession, TokenSessionT } from '../fbs/token-session';
 
 
 export enum CompleteAuthenticationResult {

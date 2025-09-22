@@ -4,8 +4,8 @@ import { generateEncodedStartSessionRequest } from "./test_utils";
 import { toKeyBytes } from "../ntag/bytebuffer_util";
 import * as crypto from "crypto";
 import { api } from "..";
-import { KeyDiversificationRequestT } from "../fbs/oww/personalization/key-diversification-request";
-import { TagUidT } from "../fbs/oww/ntag/tag-uid";
+import { KeyDiversificationRequestT } from "../fbs/key-diversification-request";
+import { TagUidT } from "../fbs/tag-uid";
 
 function startSessionExample() {
   // Call your function here with test data
@@ -40,7 +40,6 @@ function startSessionExample() {
   // console.log(encryptedTagChallenge);
 
   const encodedRequest = generateEncodedStartSessionRequest(
-    machineId,
     tokenId,
     Array.from(encryptedTagChallenge)
   );
