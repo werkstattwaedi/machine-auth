@@ -2,6 +2,8 @@
 
 /* eslint-disable @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any, @typescript-eslint/no-non-null-assertion */
 
-export { Key } from './ntag/key';
-export { KeyBytes, KeyBytesT } from './ntag/key-bytes';
-export { TagUid, TagUidT } from './ntag/tag-uid';
+export enum HwRevision {
+  Unspecified = 0,
+  Breadboard = 1,
+  Prototype = 2
+}

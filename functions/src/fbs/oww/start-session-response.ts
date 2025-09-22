@@ -4,10 +4,10 @@
 
 import * as flatbuffers from 'flatbuffers';
 
-import { AuthenticationPart2, AuthenticationPart2T } from '../../oww/session/authentication-part2';
-import { AuthorizationResult, unionToAuthorizationResult, unionListToAuthorizationResult } from '../../oww/session/authorization-result';
-import { StateAuthorized, StateAuthorizedT } from '../../oww/session/state-authorized';
-import { StateRejected, StateRejectedT } from '../../oww/session/state-rejected';
+import { AuthRequired, AuthRequiredT } from '../oww/auth-required.js';
+import { Rejected, RejectedT } from '../oww/rejected.js';
+import { StartSessionResult, unionToStartSessionResult, unionListToStartSessionResult } from '../oww/start-session-result.js';
+import { TokenSession, TokenSessionT } from '../oww/token-session.js';
 
 
 export class StartSessionResponse implements flatbuffers.IUnpackableObject<StartSessionResponseT> {
@@ -28,37 +28,26 @@ static getSizePrefixedRootAsStartSessionResponse(bb:flatbuffers.ByteBuffer, obj?
   return (obj || new StartSessionResponse()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
 }
 
-sessionId():string|null
-sessionId(optionalEncoding:flatbuffers.Encoding):string|Uint8Array|null
-sessionId(optionalEncoding?:any):string|Uint8Array|null {
+resultType():StartSessionResult {
   const offset = this.bb!.__offset(this.bb_pos, 4);
-  return offset ? this.bb!.__string(this.bb_pos + offset, optionalEncoding) : null;
-}
-
-resultType():AuthorizationResult {
-  const offset = this.bb!.__offset(this.bb_pos, 6);
-  return offset ? this.bb!.readUint8(this.bb_pos + offset) : AuthorizationResult.NONE;
+  return offset ? this.bb!.readUint8(this.bb_pos + offset) : StartSessionResult.NONE;
 }
 
 result<T extends flatbuffers.Table>(obj:any):any|null {
-  const offset = this.bb!.__offset(this.bb_pos, 8);
+  const offset = this.bb!.__offset(this.bb_pos, 6);
   return offset ? this.bb!.__union(obj, this.bb_pos + offset) : null;
 }
 
 static startStartSessionResponse(builder:flatbuffers.Builder) {
-  builder.startObject(3);
+  builder.startObject(2);
 }
 
-static addSessionId(builder:flatbuffers.Builder, sessionIdOffset:flatbuffers.Offset) {
-  builder.addFieldOffset(0, sessionIdOffset, 0);
-}
-
-static addResultType(builder:flatbuffers.Builder, resultType:AuthorizationResult) {
-  builder.addFieldInt8(1, resultType, AuthorizationResult.NONE);
+static addResultType(builder:flatbuffers.Builder, resultType:StartSessionResult) {
+  builder.addFieldInt8(0, resultType, StartSessionResult.NONE);
 }
 
 static addResult(builder:flatbuffers.Builder, resultOffset:flatbuffers.Offset) {
-  builder.addFieldOffset(2, resultOffset, 0);
+  builder.addFieldOffset(1, resultOffset, 0);
 }
 
 static endStartSessionResponse(builder:flatbuffers.Builder):flatbuffers.Offset {
@@ -66,9 +55,8 @@ static endStartSessionResponse(builder:flatbuffers.Builder):flatbuffers.Offset {
   return offset;
 }
 
-static createStartSessionResponse(builder:flatbuffers.Builder, sessionIdOffset:flatbuffers.Offset, resultType:AuthorizationResult, resultOffset:flatbuffers.Offset):flatbuffers.Offset {
+static createStartSessionResponse(builder:flatbuffers.Builder, resultType:StartSessionResult, resultOffset:flatbuffers.Offset):flatbuffers.Offset {
   StartSessionResponse.startStartSessionResponse(builder);
-  StartSessionResponse.addSessionId(builder, sessionIdOffset);
   StartSessionResponse.addResultType(builder, resultType);
   StartSessionResponse.addResult(builder, resultOffset);
   return StartSessionResponse.endStartSessionResponse(builder);
@@ -84,10 +72,9 @@ static deserialize(buffer: Uint8Array):StartSessionResponse {
 
 unpack(): StartSessionResponseT {
   return new StartSessionResponseT(
-    this.sessionId(),
     this.resultType(),
     (() => {
-      const temp = unionToAuthorizationResult(this.resultType(), this.result.bind(this));
+      const temp = unionToStartSessionResult(this.resultType(), this.result.bind(this));
       if(temp === null) { return null; }
       return temp.unpack()
   })()
@@ -96,10 +83,9 @@ unpack(): StartSessionResponseT {
 
 
 unpackTo(_o: StartSessionResponseT): void {
-  _o.sessionId = this.sessionId();
   _o.resultType = this.resultType();
   _o.result = (() => {
-      const temp = unionToAuthorizationResult(this.resultType(), this.result.bind(this));
+      const temp = unionToStartSessionResult(this.resultType(), this.result.bind(this));
       if(temp === null) { return null; }
       return temp.unpack()
   })();
@@ -108,18 +94,15 @@ unpackTo(_o: StartSessionResponseT): void {
 
 export class StartSessionResponseT implements flatbuffers.IGeneratedObject {
 constructor(
-  public sessionId: string|Uint8Array|null = null,
-  public resultType: AuthorizationResult = AuthorizationResult.NONE,
-  public result: AuthenticationPart2T|StateAuthorizedT|StateRejectedT|null = null
+  public resultType: StartSessionResult = StartSessionResult.NONE,
+  public result: AuthRequiredT|RejectedT|TokenSessionT|null = null
 ){}
 
 
 pack(builder:flatbuffers.Builder): flatbuffers.Offset {
-  const sessionId = (this.sessionId !== null ? builder.createString(this.sessionId!) : 0);
   const result = builder.createObjectOffset(this.result);
 
   return StartSessionResponse.createStartSessionResponse(builder,
-    sessionId,
     this.resultType,
     result
   );

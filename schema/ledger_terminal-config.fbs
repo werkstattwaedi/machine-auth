@@ -1,0 +1,26 @@
+namespace oww;
+
+enum HwRevision : byte {
+  Unspecified = 0,
+  Breadboard = 1,
+  Prototype
+}
+
+table MachineControlRelais {}
+
+union MachineControl {
+  relais: MachineControlRelais,
+}
+
+table Machine {
+  id: string;
+  label: string;
+  required_permissions: [string];
+  
+  control: MachineControl;
+}
+
+table DeviceConfig {
+  hw_revision: HwRevision;
+  machines: [Machine];
+}

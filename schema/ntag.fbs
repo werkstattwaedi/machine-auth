@@ -1,17 +1,17 @@
-namespace oww.ntag;
+namespace oww;
 
-enum Key:byte { 
+enum Key: byte { 
   Application = 0, 
-  Terminal = 1 ,
+  Terminal = 1,
   Authorization = 2,
   Reserved1 = 3,
   Reserved2 = 4 
 }
 
 struct TagUid {
-  uid:[ubyte:7];
+  uid: [ubyte: 7];
 }
 
 struct KeyBytes {
-  uid:[ubyte:16];
+  uid: [ubyte: 16];
 }

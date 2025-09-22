@@ -4,7 +4,7 @@
 
 import * as flatbuffers from 'flatbuffers';
 
-import { TagUid, TagUidT } from '../../oww/ntag/tag-uid';
+import { TagUid, TagUidT } from '../oww/tag-uid.js';
 
 
 export class KeyDiversificationRequest implements flatbuffers.IUnpackableObject<KeyDiversificationRequestT> {

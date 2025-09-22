@@ -1,0 +1,42 @@
+include "ntag.fbs";
+
+namespace oww;
+
+/** Checked-out via UI */
+table ReasonUi {}
+
+/** Another tag/user checked in on the same terminal */
+table ReasonCheckInOtherTag {
+  token_id: oww.TagUid;
+  user_id: string;
+}
+
+/** The user checked in on another machine */
+table ReasonCheckInOtherMachine {
+  machine_id: string;
+}
+
+/** The session timed out. */
+table ReasonTimeout {}
+
+/** User used the self checkout. */
+table ReasonSelfCheckout {}
+
+union CheckOutReason {
+  ui: ReasonUi,
+  other_tag: ReasonCheckInOtherTag,
+  other_machine: ReasonCheckInOtherMachine,
+  timeout: ReasonTimeout,
+  self_checkout: ReasonSelfCheckout,
+}
+
+table MachineUsage {
+  session_id: string; 
+  check_in: long; 
+  check_out: long; 
+  reason: CheckOutReason;
+}
+
+table MachineUsageHistory {
+  records: [MachineUsage];
+}

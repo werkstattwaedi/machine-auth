@@ -6,22 +6,22 @@ import * as flatbuffers from 'flatbuffers';
 
 
 
-export class StateRejected implements flatbuffers.IUnpackableObject<StateRejectedT> {
+export class Rejected implements flatbuffers.IUnpackableObject<RejectedT> {
   bb: flatbuffers.ByteBuffer|null = null;
   bb_pos = 0;
-  __init(i:number, bb:flatbuffers.ByteBuffer):StateRejected {
+  __init(i:number, bb:flatbuffers.ByteBuffer):Rejected {
   this.bb_pos = i;
   this.bb = bb;
   return this;
 }
 
-static getRootAsStateRejected(bb:flatbuffers.ByteBuffer, obj?:StateRejected):StateRejected {
-  return (obj || new StateRejected()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+static getRootAsRejected(bb:flatbuffers.ByteBuffer, obj?:Rejected):Rejected {
+  return (obj || new Rejected()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
 }
 
-static getSizePrefixedRootAsStateRejected(bb:flatbuffers.ByteBuffer, obj?:StateRejected):StateRejected {
+static getSizePrefixedRootAsRejected(bb:flatbuffers.ByteBuffer, obj?:Rejected):Rejected {
   bb.setPosition(bb.position() + flatbuffers.SIZE_PREFIX_LENGTH);
-  return (obj || new StateRejected()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  return (obj || new Rejected()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
 }
 
 message():string|null
@@ -31,7 +31,7 @@ message(optionalEncoding?:any):string|Uint8Array|null {
   return offset ? this.bb!.__string(this.bb_pos + offset, optionalEncoding) : null;
 }
 
-static startStateRejected(builder:flatbuffers.Builder) {
+static startRejected(builder:flatbuffers.Builder) {
   builder.startObject(1);
 }
 
@@ -39,38 +39,38 @@ static addMessage(builder:flatbuffers.Builder, messageOffset:flatbuffers.Offset)
   builder.addFieldOffset(0, messageOffset, 0);
 }
 
-static endStateRejected(builder:flatbuffers.Builder):flatbuffers.Offset {
+static endRejected(builder:flatbuffers.Builder):flatbuffers.Offset {
   const offset = builder.endObject();
   return offset;
 }
 
-static createStateRejected(builder:flatbuffers.Builder, messageOffset:flatbuffers.Offset):flatbuffers.Offset {
-  StateRejected.startStateRejected(builder);
-  StateRejected.addMessage(builder, messageOffset);
-  return StateRejected.endStateRejected(builder);
+static createRejected(builder:flatbuffers.Builder, messageOffset:flatbuffers.Offset):flatbuffers.Offset {
+  Rejected.startRejected(builder);
+  Rejected.addMessage(builder, messageOffset);
+  return Rejected.endRejected(builder);
 }
 
 serialize():Uint8Array {
   return this.bb!.bytes();
 }
 
-static deserialize(buffer: Uint8Array):StateRejected {
-  return StateRejected.getRootAsStateRejected(new flatbuffers.ByteBuffer(buffer))
+static deserialize(buffer: Uint8Array):Rejected {
+  return Rejected.getRootAsRejected(new flatbuffers.ByteBuffer(buffer))
 }
 
-unpack(): StateRejectedT {
-  return new StateRejectedT(
+unpack(): RejectedT {
+  return new RejectedT(
     this.message()
   );
 }
 
 
-unpackTo(_o: StateRejectedT): void {
+unpackTo(_o: RejectedT): void {
   _o.message = this.message();
 }
 }
 
-export class StateRejectedT implements flatbuffers.IGeneratedObject {
+export class RejectedT implements flatbuffers.IGeneratedObject {
 constructor(
   public message: string|Uint8Array|null = null
 ){}
@@ -79,7 +79,7 @@ constructor(
 pack(builder:flatbuffers.Builder): flatbuffers.Offset {
   const message = (this.message !== null ? builder.createString(this.message!) : 0);
 
-  return StateRejected.createStateRejected(builder,
+  return Rejected.createRejected(builder,
     message
   );
 }

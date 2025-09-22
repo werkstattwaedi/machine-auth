@@ -6,22 +6,22 @@ import * as flatbuffers from 'flatbuffers';
 
 
 
-export class AuthenticatePart2Request implements flatbuffers.IUnpackableObject<AuthenticatePart2RequestT> {
+export class CompleteAuthenticationRequest implements flatbuffers.IUnpackableObject<CompleteAuthenticationRequestT> {
   bb: flatbuffers.ByteBuffer|null = null;
   bb_pos = 0;
-  __init(i:number, bb:flatbuffers.ByteBuffer):AuthenticatePart2Request {
+  __init(i:number, bb:flatbuffers.ByteBuffer):CompleteAuthenticationRequest {
   this.bb_pos = i;
   this.bb = bb;
   return this;
 }
 
-static getRootAsAuthenticatePart2Request(bb:flatbuffers.ByteBuffer, obj?:AuthenticatePart2Request):AuthenticatePart2Request {
-  return (obj || new AuthenticatePart2Request()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+static getRootAsCompleteAuthenticationRequest(bb:flatbuffers.ByteBuffer, obj?:CompleteAuthenticationRequest):CompleteAuthenticationRequest {
+  return (obj || new CompleteAuthenticationRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
 }
 
-static getSizePrefixedRootAsAuthenticatePart2Request(bb:flatbuffers.ByteBuffer, obj?:AuthenticatePart2Request):AuthenticatePart2Request {
+static getSizePrefixedRootAsCompleteAuthenticationRequest(bb:flatbuffers.ByteBuffer, obj?:CompleteAuthenticationRequest):CompleteAuthenticationRequest {
   bb.setPosition(bb.position() + flatbuffers.SIZE_PREFIX_LENGTH);
-  return (obj || new AuthenticatePart2Request()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  return (obj || new CompleteAuthenticationRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
 }
 
 sessionId():string|null
@@ -46,7 +46,7 @@ encryptedNtagResponseArray():Uint8Array|null {
   return offset ? new Uint8Array(this.bb!.bytes().buffer, this.bb!.bytes().byteOffset + this.bb!.__vector(this.bb_pos + offset), this.bb!.__vector_len(this.bb_pos + offset)) : null;
 }
 
-static startAuthenticatePart2Request(builder:flatbuffers.Builder) {
+static startCompleteAuthenticationRequest(builder:flatbuffers.Builder) {
   builder.startObject(2);
 }
 
@@ -70,41 +70,41 @@ static startEncryptedNtagResponseVector(builder:flatbuffers.Builder, numElems:nu
   builder.startVector(1, numElems, 1);
 }
 
-static endAuthenticatePart2Request(builder:flatbuffers.Builder):flatbuffers.Offset {
+static endCompleteAuthenticationRequest(builder:flatbuffers.Builder):flatbuffers.Offset {
   const offset = builder.endObject();
   return offset;
 }
 
-static createAuthenticatePart2Request(builder:flatbuffers.Builder, sessionIdOffset:flatbuffers.Offset, encryptedNtagResponseOffset:flatbuffers.Offset):flatbuffers.Offset {
-  AuthenticatePart2Request.startAuthenticatePart2Request(builder);
-  AuthenticatePart2Request.addSessionId(builder, sessionIdOffset);
-  AuthenticatePart2Request.addEncryptedNtagResponse(builder, encryptedNtagResponseOffset);
-  return AuthenticatePart2Request.endAuthenticatePart2Request(builder);
+static createCompleteAuthenticationRequest(builder:flatbuffers.Builder, sessionIdOffset:flatbuffers.Offset, encryptedNtagResponseOffset:flatbuffers.Offset):flatbuffers.Offset {
+  CompleteAuthenticationRequest.startCompleteAuthenticationRequest(builder);
+  CompleteAuthenticationRequest.addSessionId(builder, sessionIdOffset);
+  CompleteAuthenticationRequest.addEncryptedNtagResponse(builder, encryptedNtagResponseOffset);
+  return CompleteAuthenticationRequest.endCompleteAuthenticationRequest(builder);
 }
 
 serialize():Uint8Array {
   return this.bb!.bytes();
 }
 
-static deserialize(buffer: Uint8Array):AuthenticatePart2Request {
-  return AuthenticatePart2Request.getRootAsAuthenticatePart2Request(new flatbuffers.ByteBuffer(buffer))
+static deserialize(buffer: Uint8Array):CompleteAuthenticationRequest {
+  return CompleteAuthenticationRequest.getRootAsCompleteAuthenticationRequest(new flatbuffers.ByteBuffer(buffer))
 }
 
-unpack(): AuthenticatePart2RequestT {
-  return new AuthenticatePart2RequestT(
+unpack(): CompleteAuthenticationRequestT {
+  return new CompleteAuthenticationRequestT(
     this.sessionId(),
     this.bb!.createScalarList<number>(this.encryptedNtagResponse.bind(this), this.encryptedNtagResponseLength())
   );
 }
 
 
-unpackTo(_o: AuthenticatePart2RequestT): void {
+unpackTo(_o: CompleteAuthenticationRequestT): void {
   _o.sessionId = this.sessionId();
   _o.encryptedNtagResponse = this.bb!.createScalarList<number>(this.encryptedNtagResponse.bind(this), this.encryptedNtagResponseLength());
 }
 }
 
-export class AuthenticatePart2RequestT implements flatbuffers.IGeneratedObject {
+export class CompleteAuthenticationRequestT implements flatbuffers.IGeneratedObject {
 constructor(
   public sessionId: string|Uint8Array|null = null,
   public encryptedNtagResponse: (number)[] = []
@@ -113,9 +113,9 @@ constructor(
 
 pack(builder:flatbuffers.Builder): flatbuffers.Offset {
   const sessionId = (this.sessionId !== null ? builder.createString(this.sessionId!) : 0);
-  const encryptedNtagResponse = AuthenticatePart2Request.createEncryptedNtagResponseVector(builder, this.encryptedNtagResponse);
+  const encryptedNtagResponse = CompleteAuthenticationRequest.createEncryptedNtagResponseVector(builder, this.encryptedNtagResponse);
 
-  return AuthenticatePart2Request.createAuthenticatePart2Request(builder,
+  return CompleteAuthenticationRequest.createCompleteAuthenticationRequest(builder,
     sessionId,
     encryptedNtagResponse
   );
