@@ -13,7 +13,7 @@
 namespace {
 
 std::array<uint8_t, 16> get_key_bytes(
-    const std::unique_ptr<oww::ntag::KeyBytes> &source) {
+    const std::unique_ptr<fbs::KeyBytes> &source) {
   std::array<uint8_t, 16> destination{};
   if (source && source->uid()) {
     std::copy(source->uid()->begin(), source->uid()->end(),
@@ -25,6 +25,7 @@ std::array<uint8_t, 16> get_key_bytes(
 }  // namespace
 
 namespace oww::state::tag {
+using namespace fbs;
 using namespace personalize;
 using namespace config::tag;
 
@@ -45,11 +46,10 @@ void UpdateFailedState(oww::state::State &state_manager, Personalize last_state,
 
 void OnWait(Personalize state, Wait &wait, oww::state::State &state_manager) {
   if (millis() < wait.timeout) return;
-  using namespace oww::personalization;
 
   KeyDiversificationRequestT request;
-  request.token_id = std::make_unique<oww::ntag::TagUid>(
-      flatbuffers::span<uint8_t, 7>(state.tag_uid));
+  request.token_id =
+      std::make_unique<TagUid>(flatbuffers::span<uint8_t, 7>(state.tag_uid));
 
   UpdateNestedState(
       state_manager, state,
@@ -68,9 +68,7 @@ void OnAwaitKeyDiversificationResponse(
     return;
   }
 
-  auto response =
-      std::get_if<oww::personalization::KeyDiversificationResponseT>(
-          cloud_response);
+  auto response = std::get_if<KeyDiversificationResponseT>(cloud_response);
   if (!response) {
     return UpdateNestedState(
         state_manager, state,

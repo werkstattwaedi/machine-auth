@@ -19,7 +19,7 @@ struct Wait {
 
 struct AwaitKeyDiversificationResponse {
   const std::shared_ptr<
-      CloudResponse<oww::personalization::KeyDiversificationResponseT>>
+      CloudResponse<fbs::KeyDiversificationResponseT>>
       response;
 };
 

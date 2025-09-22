@@ -2,7 +2,7 @@
 
 #include "common.h"
 
-namespace oww::state::session {
+namespace oww::state::machine_usage {
 
 struct Idle {};
 

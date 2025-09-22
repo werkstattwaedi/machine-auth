@@ -4,12 +4,12 @@
 
 import * as flatbuffers from 'flatbuffers';
 
-import { CheckOutReason, unionToCheckOutReason, unionListToCheckOutReason } from '../fbs/check-out-reason';
-import { ReasonCheckInOtherMachine, ReasonCheckInOtherMachineT } from '../fbs/reason-check-in-other-machine';
-import { ReasonCheckInOtherTag, ReasonCheckInOtherTagT } from '../fbs/reason-check-in-other-tag';
-import { ReasonSelfCheckout, ReasonSelfCheckoutT } from '../fbs/reason-self-checkout';
-import { ReasonTimeout, ReasonTimeoutT } from '../fbs/reason-timeout';
-import { ReasonUi, ReasonUiT } from '../fbs/reason-ui';
+import { CheckOutReason, unionToCheckOutReason, unionListToCheckOutReason } from '../fbs/check-out-reason.js';
+import { ReasonCheckInOtherMachine, ReasonCheckInOtherMachineT } from '../fbs/reason-check-in-other-machine.js';
+import { ReasonCheckInOtherTag, ReasonCheckInOtherTagT } from '../fbs/reason-check-in-other-tag.js';
+import { ReasonSelfCheckout, ReasonSelfCheckoutT } from '../fbs/reason-self-checkout.js';
+import { ReasonTimeout, ReasonTimeoutT } from '../fbs/reason-timeout.js';
+import { ReasonUi, ReasonUiT } from '../fbs/reason-ui.js';
 
 
 export class MachineUsage implements flatbuffers.IUnpackableObject<MachineUsageT> {

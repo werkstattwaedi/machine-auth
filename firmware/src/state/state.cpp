@@ -16,6 +16,7 @@ Status State::Begin(std::unique_ptr<Configuration> configuration) {
   configuration_->Begin();
 
   tag_state_ = std::make_shared<tag::TagState>(tag::Idle{});
+  sessions_.Begin();
 
   pinMode(config::ext::pin_relais, INPUT);
   relais_state_ = digitalRead(config::ext::pin_relais) ? HIGH : LOW;
@@ -93,13 +94,9 @@ void State::OnBlankNtag(std::array<uint8_t, 7> uid) {
 void State::OnTagAuthenicated(std::array<uint8_t, 7> uid) {
   logger.info("tag_state: OnTagAuthenicated");
 
-  // TODO:
-  // - check tap-out
-  // - check pre-authorized.
-
-  OnNewState(tag::StartSession{.tag_uid = uid,
-                               .state = std::make_shared<tag::start::State>(
-                                   tag::start::StartWithNfcAuth{})});
+  OnNewState(tag::StartSession{
+      .tag_uid = uid,
+      .state = std::make_shared<tag::start::NestedState>(tag::start::Begin{})});
 }
 
 void State::OnUnknownTag() {

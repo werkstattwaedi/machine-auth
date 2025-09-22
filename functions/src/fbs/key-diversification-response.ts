@@ -4,7 +4,7 @@
 
 import * as flatbuffers from 'flatbuffers';
 
-import { KeyBytes, KeyBytesT } from '../fbs/key-bytes';
+import { KeyBytes, KeyBytesT } from '../fbs/key-bytes.js';
 
 
 export class KeyDiversificationResponse implements flatbuffers.IUnpackableObject<KeyDiversificationResponseT> {

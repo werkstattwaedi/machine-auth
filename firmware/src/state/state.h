@@ -5,6 +5,7 @@
 #include "configuration.h"
 #include "event/state_event.h"
 #include "tag/tag_state.h"
+#include "token_session/sessions.h"
 
 namespace oww::state {
 
@@ -19,6 +20,8 @@ class State : public event::IStateEvent, public CloudRequest {
   Configuration* GetConfiguration() { return configuration_.get(); }
 
   std::shared_ptr<tag::TagState> GetTagState() { return tag_state_; }
+
+  token_session::Sessions& GetSessions() { return sessions_; }
 
  public:
   os_mutex_t mutex_ = 0;
@@ -38,6 +41,7 @@ class State : public event::IStateEvent, public CloudRequest {
 
   std::unique_ptr<Configuration> configuration_ = nullptr;
   std::shared_ptr<tag::TagState> tag_state_;
+  token_session::Sessions sessions_;
 
   PinState relais_state_ = LOW;
 

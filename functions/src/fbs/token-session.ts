@@ -4,7 +4,7 @@
 
 import * as flatbuffers from 'flatbuffers';
 
-import { TagUid, TagUidT } from '../fbs/tag-uid';
+import { TagUid, TagUidT } from '../fbs/tag-uid.js';
 
 
 export class TokenSession implements flatbuffers.IUnpackableObject<TokenSessionT> {
@@ -39,7 +39,7 @@ sessionId(optionalEncoding?:any):string|Uint8Array|null {
 
 expiration():bigint {
   const offset = this.bb!.__offset(this.bb_pos, 8);
-  return offset ? this.bb!.readUint64(this.bb_pos + offset) : BigInt('0');
+  return offset ? this.bb!.readInt64(this.bb_pos + offset) : BigInt('0');
 }
 
 userId():string|null

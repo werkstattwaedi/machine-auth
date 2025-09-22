@@ -4,8 +4,8 @@
 
 import * as flatbuffers from 'flatbuffers';
 
-import { HwRevision } from '../fbs/hw-revision';
-import { Machine, MachineT } from '../fbs/machine';
+import { HwRevision } from '../fbs/hw-revision.js';
+import { Machine, MachineT } from '../fbs/machine.js';
 
 
 export class DeviceConfig implements flatbuffers.IUnpackableObject<DeviceConfigT> {

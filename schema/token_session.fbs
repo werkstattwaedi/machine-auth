@@ -20,7 +20,7 @@ table TokenSession {
   // Firebase session ID
   session_id: string;
   // Session expiration date (unix timestamp)
-  expiration: ulong;
+  expiration: long;
 
   // Firebase user ID
   user_id: string;

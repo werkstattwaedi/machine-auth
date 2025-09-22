@@ -4,10 +4,10 @@
 
 import * as flatbuffers from 'flatbuffers';
 
-import { AuthRequired, AuthRequiredT } from '../fbs/auth-required';
-import { Rejected, RejectedT } from '../fbs/rejected';
-import { StartSessionResult, unionToStartSessionResult, unionListToStartSessionResult } from '../fbs/start-session-result';
-import { TokenSession, TokenSessionT } from '../fbs/token-session';
+import { AuthRequired, AuthRequiredT } from '../fbs/auth-required.js';
+import { Rejected, RejectedT } from '../fbs/rejected.js';
+import { StartSessionResult, unionToStartSessionResult, unionListToStartSessionResult } from '../fbs/start-session-result.js';
+import { TokenSession, TokenSessionT } from '../fbs/token-session.js';
 
 
 export class StartSessionResponse implements flatbuffers.IUnpackableObject<StartSessionResponseT> {

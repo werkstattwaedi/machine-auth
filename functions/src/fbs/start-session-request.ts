@@ -4,7 +4,7 @@
 
 import * as flatbuffers from 'flatbuffers';
 
-import { TagUid, TagUidT } from '../fbs/tag-uid';
+import { TagUid, TagUidT } from '../fbs/tag-uid.js';
 
 
 export class StartSessionRequest implements flatbuffers.IUnpackableObject<StartSessionRequestT> {

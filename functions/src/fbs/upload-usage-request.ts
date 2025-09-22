@@ -4,7 +4,7 @@
 
 import * as flatbuffers from 'flatbuffers';
 
-import { MachineUsageHistory, MachineUsageHistoryT } from '../fbs/machine-usage-history';
+import { MachineUsageHistory, MachineUsageHistoryT } from '../fbs/machine-usage-history.js';
 
 
 export class UploadUsageRequest implements flatbuffers.IUnpackableObject<UploadUsageRequestT> {

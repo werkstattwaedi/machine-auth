@@ -303,7 +303,7 @@ struct TokenSessionT : public ::flatbuffers::NativeTable {
   typedef TokenSession TableType;
   std::unique_ptr<fbs::TagUid> token_id{};
   std::string session_id{};
-  uint64_t expiration = 0;
+  int64_t expiration = 0;
   std::string user_id{};
   std::string user_label{};
   std::vector<std::string> permissions{};
@@ -331,8 +331,8 @@ struct TokenSession FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::String *session_id() const {
     return GetPointer<const ::flatbuffers::String *>(VT_SESSION_ID);
   }
-  uint64_t expiration() const {
-    return GetField<uint64_t>(VT_EXPIRATION, 0);
+  int64_t expiration() const {
+    return GetField<int64_t>(VT_EXPIRATION, 0);
   }
   const ::flatbuffers::String *user_id() const {
     return GetPointer<const ::flatbuffers::String *>(VT_USER_ID);
@@ -348,7 +348,7 @@ struct TokenSession FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<fbs::TagUid>(verifier, VT_TOKEN_ID, 1) &&
            VerifyOffset(verifier, VT_SESSION_ID) &&
            verifier.VerifyString(session_id()) &&
-           VerifyField<uint64_t>(verifier, VT_EXPIRATION, 8) &&
+           VerifyField<int64_t>(verifier, VT_EXPIRATION, 8) &&
            VerifyOffset(verifier, VT_USER_ID) &&
            verifier.VerifyString(user_id()) &&
            VerifyOffset(verifier, VT_USER_LABEL) &&
@@ -373,8 +373,8 @@ struct TokenSessionBuilder {
   void add_session_id(::flatbuffers::Offset<::flatbuffers::String> session_id) {
     fbb_.AddOffset(TokenSession::VT_SESSION_ID, session_id);
   }
-  void add_expiration(uint64_t expiration) {
-    fbb_.AddElement<uint64_t>(TokenSession::VT_EXPIRATION, expiration, 0);
+  void add_expiration(int64_t expiration) {
+    fbb_.AddElement<int64_t>(TokenSession::VT_EXPIRATION, expiration, 0);
   }
   void add_user_id(::flatbuffers::Offset<::flatbuffers::String> user_id) {
     fbb_.AddOffset(TokenSession::VT_USER_ID, user_id);
@@ -400,7 +400,7 @@ inline ::flatbuffers::Offset<TokenSession> CreateTokenSession(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     const fbs::TagUid *token_id = nullptr,
     ::flatbuffers::Offset<::flatbuffers::String> session_id = 0,
-    uint64_t expiration = 0,
+    int64_t expiration = 0,
     ::flatbuffers::Offset<::flatbuffers::String> user_id = 0,
     ::flatbuffers::Offset<::flatbuffers::String> user_label = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> permissions = 0) {
@@ -423,7 +423,7 @@ inline ::flatbuffers::Offset<TokenSession> CreateTokenSessionDirect(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     const fbs::TagUid *token_id = nullptr,
     const char *session_id = nullptr,
-    uint64_t expiration = 0,
+    int64_t expiration = 0,
     const char *user_id = nullptr,
     const char *user_label = nullptr,
     const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *permissions = nullptr) {
