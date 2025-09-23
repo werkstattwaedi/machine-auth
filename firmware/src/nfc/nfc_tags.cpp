@@ -47,179 +47,187 @@ Status NfcTags::Begin(std::shared_ptr<oww::state::State> state) {
   return Status::kOk;
 }
 
-enum class NfcState {
-  kWaitForTag = 0,
-  kTagIdle = 1,
-  kTagUnknown = 2,
-  kTagError = 3,
+tl::expected<void, ErrorType> NfcTags::QueueAction(
+    std::shared_ptr<NtagAction> action) {
+  WITH_LOCK(*this) {
+    if (tag_state_ != NfcState::kTagIdle) {
+      return tl::unexpected(ErrorType::kNoNfcTag);
+    }
 
-};
-
-// NfcTags internal state machine.
-// This is intentionally separate from state_ and the Pn532/Ntag424
-// state
-struct NfcStateData {
-  NfcState state;
-  std::shared_ptr<SelectedTag> selected_tag;
-  int error_count;
-};
+    action_queue_.push_back(action);
+  }
+  return {};
+}
 
 os_thread_return_t NfcTags::NfcThread() {
-  NfcStateData state_data{.state = NfcState::kWaitForTag, .error_count = 0};
-
   while (true) {
-    NfcLoop(state_data);
+    NfcLoop();
   }
 }
 
-void NfcTags::NfcLoop(NfcStateData &data) {
-  logger.trace("NfcLoop %d", (int)data.state);
-  switch (data.state) {
+void NfcTags::NfcLoop() {
+  logger.trace("NfcLoop %d", (int)tag_state_);
+  switch (tag_state_) {
     case NfcState::kWaitForTag:
-      WaitForTag(data);
+      WaitForTag();
       return;
 
     case NfcState::kTagIdle:
-      if (!CheckTagStillAvailable(data)) return;
+      WITH_LOCK(*this) {
+        if (!CheckTagStillAvailable()) {
+          AbortQueuedActions();
+          return;
+        }
 
-      TagPerformQueuedAction(data);
+        TagPerformQueuedAction();
+      }
+      delay(100);
       return;
 
     case NfcState::kTagUnknown:
-      CheckTagStillAvailable(data);
+      WITH_LOCK(*this) { CheckTagStillAvailable(); }
+      // Rate limit
+      delay(100);
       return;
 
     case NfcState::kTagError:
-      TagError(data);
+      WITH_LOCK(*this) { TagError(); }
       return;
   }
 }
 
-void NfcTags::WaitForTag(NfcStateData &data) {
+void NfcTags::WaitForTag() {
   auto wait_for_tag = pcd_interface_->WaitForNewTag();
   if (!wait_for_tag) return;
 
-  auto selected_tag = wait_for_tag.value();
-  data.selected_tag = selected_tag;
-  if (logger.isInfoEnabled()) {
-    logger.info("Found tag with UID %s",
-                ToHexString(selected_tag->nfc_id).c_str());
-  }
-
-  ntag_interface_->SetSelectedTag(selected_tag);
-
-  state_->OnTagFound();
-
-  auto select_application_result =
-      ntag_interface_->DNA_Plain_ISOSelectFile_Application();
-  if (select_application_result != Ntag424::DNA_STATUS_OK) {
-    // card communication might be unstable, or the application file cannot be
-    // selected.
-    // FIXME - handle common errors of cards without the application.
-    logger.error("ISOSelectFile_Application %d", select_application_result);
-    data.state = NfcState::kTagError;
-    return;
-  }
-
-  auto terminal_authenticate = ntag_interface_->Authenticate(
-      /* key_number = */ key_terminal,
-      state_->GetConfiguration()->GetTerminalKey());
-
-  if (terminal_authenticate.has_value()) {
-    // This tag successfully authenticated with the machine auth terminal key.
+  WITH_LOCK(*this) {
+    selected_tag_ = wait_for_tag.value();
     if (logger.isInfoEnabled()) {
-      logger.info("Authenticated tag with terminal key");
+      logger.info("Found tag with UID %s",
+                  ToHexString(selected_tag_->nfc_id).c_str());
     }
 
-    auto card_uid = ntag_interface_->GetCardUID();
-    if (!card_uid) {
-      logger.error("Unable to read card UID");
-      data.state = NfcState::kTagError;
+    ntag_interface_->SetSelectedTag(selected_tag_);
+
+    state_->OnTagFound();
+
+    auto select_application_result =
+        ntag_interface_->DNA_Plain_ISOSelectFile_Application();
+    if (select_application_result != Ntag424::DNA_STATUS_OK) {
+      // card communication might be unstable, or the application file cannot be
+      // selected.
+      // FIXME - handle common errors of cards without the application.
+      logger.error("ISOSelectFile_Application %d", select_application_result);
+      tag_state_ = NfcState::kTagError;
       return;
     }
 
-    data.state = NfcState::kTagIdle;
-    state_->OnTagAuthenicated(card_uid.value());
+    auto terminal_authenticate = ntag_interface_->Authenticate(
+        /* key_number = */ key_terminal,
+        state_->GetConfiguration()->GetTerminalKey());
 
-    return;
+    if (terminal_authenticate.has_value()) {
+      // This tag successfully authenticated with the machine auth terminal key.
+      if (logger.isInfoEnabled()) {
+        logger.info("Authenticated tag with terminal key");
+      }
+
+      auto card_uid = ntag_interface_->GetCardUID();
+      if (!card_uid) {
+        logger.error("Unable to read card UID");
+        tag_state_ = NfcState::kTagError;
+        return;
+      }
+
+      tag_state_ = NfcState::kTagIdle;
+      state_->OnTagAuthenicated(card_uid.value());
+
+      return;
+    }
+
+    if (logger.isInfoEnabled()) {
+      logger.info("Authenticated tag with terminal key failed with error: %d",
+                  terminal_authenticate.error());
+    }
+
+    auto is_new_tag = ntag_interface_->IsNewTagWithFactoryDefaults();
+    if (!is_new_tag.has_value()) {
+      logger.error("IsNewTagWithFactoryDefaults failed %d", is_new_tag.error());
+      tag_state_ = NfcState::kTagError;
+    }
+
+    if (is_new_tag.value() && selected_tag_->nfc_id_length == 7) {
+      state_->OnBlankNtag(selected_tag_->nfc_id);
+      tag_state_ = NfcState::kTagIdle;
+      return;
+    }
+
+    state_->OnUnknownTag();
+    tag_state_ = NfcState::kTagUnknown;
   }
-
-  if (logger.isInfoEnabled()) {
-    logger.info("Authenticated tag with terminal key failed with error: %d",
-                terminal_authenticate.error());
-  }
-
-  auto is_new_tag = ntag_interface_->IsNewTagWithFactoryDefaults();
-  if (!is_new_tag.has_value()) {
-    logger.error("IsNewTagWithFactoryDefaults failed %d", is_new_tag.error());
-    data.state = NfcState::kTagError;
-  }
-
-  if (is_new_tag.value() && selected_tag->nfc_id_length == 7) {
-    state_->OnBlankNtag(selected_tag->nfc_id);
-    data.state = NfcState::kTagIdle;
-    return;
-  }
-
-  state_->OnUnknownTag();
-  data.state = NfcState::kTagUnknown;
 }
 
-boolean NfcTags::CheckTagStillAvailable(NfcStateData &data) {
-  // Poll with 10Hz
-  delay(100);
-
+boolean NfcTags::CheckTagStillAvailable() {
   auto check_still_available = pcd_interface_->CheckTagStillAvailable();
   if (!check_still_available) {
     logger.error("TagIdle::CheckTagStillAvailable returned PCD error: %d",
                  (int)check_still_available.error());
-    data.state = NfcState::kTagError;
+    tag_state_ = NfcState::kTagError;
     return false;
   }
 
   // Reset error count when idle; all seems good now.
-  data.error_count = 0;
+  error_count_ = 0;
 
   if (check_still_available.value()) {
     // Nothing to do, keep polling
     return true;
   }
 
-  auto release_tag = pcd_interface_->ReleaseTag(data.selected_tag);
+  auto release_tag = pcd_interface_->ReleaseTag(selected_tag_);
   if (!release_tag) {
     logger.warn("TagIdle::ReleaseTag returned error: %d ",
                 (int)release_tag.error());
   }
 
-  data.state = NfcState::kWaitForTag;
-  data.selected_tag = nullptr;
+  tag_state_ = NfcState::kWaitForTag;
+  selected_tag_ = nullptr;
   state_->OnTagRemoved();
 
   return false;
 }
 
-void NfcTags::TagPerformQueuedAction(NfcStateData &data) {
-  using namespace oww::state;
-  auto tag_state = state_->GetTagState();
-  if (auto state = std::get_if<tag::StartSession>(tag_state.get())) {
-    session::Loop(*state, *state_, *ntag_interface_.get());
-  } else if (auto state = std::get_if<tag::Personalize>(tag_state.get())) {
-    tag::Loop(*state, *state_, *ntag_interface_.get());
+void NfcTags::TagPerformQueuedAction() {
+  auto it = action_queue_.begin();
+  while (it != action_queue_.end()) {
+    auto action = *it;
+    if (action->Loop(*ntag_interface_.get()) == NtagAction::Continue) {
+      return;
+    }
+
+    it = action_queue_.erase(it);
   }
 }
 
-void NfcTags::TagError(NfcStateData &data) {
-  if (data.error_count > 3) {
+void NfcTags::AbortQueuedActions() {
+  for (auto &action : action_queue_) {
+    action->OnAbort(ErrorType::kNoNfcTag);
+  }
+  action_queue_.clear();
+}
+
+void NfcTags::TagError() {
+  if (error_count_ > 3) {
     // wait for card to disappear
     return;
   }
 
-  auto selected_tag = data.selected_tag;
+  auto selected_tag = selected_tag_;
 
   // Retry re-selecting the tag a couple times.
-  data.error_count++;
-  data.state = NfcState::kWaitForTag;
-  data.selected_tag = nullptr;
+  error_count_++;
+  tag_state_ = NfcState::kWaitForTag;
+  selected_tag_ = nullptr;
 
   auto release_tag = pcd_interface_->ReleaseTag(selected_tag);
   if (release_tag) return;

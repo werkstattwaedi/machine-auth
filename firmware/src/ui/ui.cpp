@@ -122,12 +122,10 @@ void UserInterface::UpdateBuzzer() {
                      frequency = 660;
                      duration = 200;
                    },
-                   [&](StartSession state) {},
                    [&](Unknown state) {
                      frequency = 370;
                      duration = 200;
                    },
-                   [&](Personalize state) {},
 
                },
                *(current_state.get()));
@@ -224,20 +222,6 @@ void UserInterface::UpdateLed() {
             btn_colors = {Color::RGB(40, 120, 40), Color::RGB(40, 120, 40),
                           Color::RGB(40, 120, 40), Color::RGB(40, 120, 40)};
           },
-          [&](StartSession state) {
-            // Cyan rotating highlight
-            ring.type = EffectType::Rotate;
-            ring.color = Color::RGB(10, 180, 180);
-            ring.lit_pixels = 10;  // ~1x nominal width
-            ring.hotspots = 2;
-            ring.period_ms = 1200;
-            nfc.type = EffectType::Solid;
-            nfc.color = Color::RGB(0, 60, 60);
-            buttons.type = EffectType::Blink;
-            buttons.duty_cycle = 180;
-            btn_colors = {Color::RGB(20, 80, 80), Color::RGB(20, 80, 80),
-                          Color::RGB(20, 80, 80), Color::RGB(20, 80, 80)};
-          },
           [&](Unknown state) {
             // Access denied: red blink all around, red NFC
             ring.type = EffectType::Blink;
@@ -249,17 +233,6 @@ void UserInterface::UpdateLed() {
             buttons.type = EffectType::Solid;
             btn_colors = {Color::RGB(120, 20, 20), Color::RGB(120, 20, 20),
                           Color::RGB(120, 20, 20), Color::RGB(120, 20, 20)};
-          },
-          [&](Personalize state) {
-            // Developer mode: magenta ring breathe
-            ring.type = EffectType::Breathe;
-            ring.color = Color::RGB(180, 0, 180);
-            ring.period_ms = 2500;
-            nfc.type = EffectType::Solid;
-            nfc.color = Color::RGB(120, 0, 120);
-            buttons.type = EffectType::Solid;
-            btn_colors = {Color::RGB(80, 0, 80), Color::RGB(80, 0, 80),
-                          Color::RGB(80, 0, 80), Color::RGB(80, 0, 80)};
           },
       },
       *(current_state.get()));

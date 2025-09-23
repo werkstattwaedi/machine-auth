@@ -7,6 +7,11 @@ enum class ErrorType {
   kMalformedResponse = 4,
   kServerError = 5,
   kUnexpectedState = 6,
+
+
+  kNoNfcTag = 10,
+  kNtagFailed = 10,
+
 };
 
 // Generic success/fail return status.

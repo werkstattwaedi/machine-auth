@@ -14,29 +14,6 @@ void CloudRequest::Begin() {
       subscribeOptions);
 }
 
-// std::shared_ptr<CloudResponse> CloudRequest::SendTerminalRequest(
-//     String command, Variant& payload, system_tick_t timeout_ms) {
-//   auto deadline = timeout_ms;
-//   if (deadline != CONCURRENT_WAIT_FOREVER) deadline += millis();
-
-//   auto response_container =
-//       std::make_shared<CloudResponse>(CloudResponse{.deadline = deadline});
-
-//   auto requestId = String(request_counter_++);
-
-//   inflight_requests_[requestId] = response_container;
-
-//   payload.set("type", Variant(command));
-//   payload.set("requestId", Variant(requestId));
-
-//   auto publish_future = Particle.publish("terminalRequest", payload,
-//   WITH_ACK); publish_future.onError([this, requestId](auto error) {
-//     HandleTerminalFailure(requestId, error);
-//   });
-
-//   return response_container;
-// }
-
 void CloudRequest::HandleTerminalResponse(CloudEvent event) {
   EventData event_data = event.dataStructured();
 

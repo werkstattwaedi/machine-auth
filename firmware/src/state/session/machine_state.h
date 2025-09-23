@@ -10,7 +10,11 @@
 #include "fbs/token_session_generated.h"
 #include "token_session.h"
 
-namespace oww::state::session {
+namespace oww::state {
+class State;
+
+namespace session {
+
 namespace machine_state {
 struct Idle {};
 
@@ -33,7 +37,8 @@ class MachineUsage {
   static Logger logger;
 
  public:
-  void Begin(const fbs::Machine& machine);
+  MachineUsage(const fbs::Machine &machine);
+  void Begin(std::shared_ptr<oww::state::State> state);
   void Loop();
 
   MachineState GetMachineState() { return current_state_; }
@@ -41,18 +46,13 @@ class MachineUsage {
   tl::expected<MachineState, ErrorType> CheckIn(
       std::shared_ptr<TokenSession> session);
 
-  template <typename T,
-            typename = std::enable_if_t<
-                std::is_same_v<T, fbs::ReasonUiT> ||
-                std::is_same_v<T, fbs::ReasonCheckInOtherTagT> ||
-                std::is_same_v<T, fbs::ReasonCheckInOtherMachineT> ||
-                std::is_same_v<T, fbs::ReasonTimeoutT> ||
-                std::is_same_v<T, fbs::ReasonSelfCheckoutT>>>
+  template <typename T>
   tl::expected<MachineState, ErrorType> CheckOut(
       std::unique_ptr<T> checkout_reason);
 
-  void QueueSessionDataUpload();
  private:
+  std::shared_ptr<oww::state::State> state_ = nullptr;
+
   std::string machine_id_;
   std::vector<std::string> required_permissions_;
 
@@ -62,6 +62,8 @@ class MachineUsage {
   std::string usage_history_logfile_path;
 
   tl::expected<void, ErrorType> PersistHistory();
+  void UploadHistory();
 };
 
-}  // namespace oww::state::session
+}  // namespace session
+}  // namespace oww::state

@@ -55,8 +55,6 @@ class State : public event::IStateEvent, public CloudRequest {
   virtual void OnUnknownTag() override;
   virtual void OnTagRemoved() override;
   virtual void OnTagAuthenicated(std::array<uint8_t, 7> uid) override;
-  virtual void OnNewState(oww::state::tag::StartSession state) override;
-  virtual void OnNewState(oww::state::tag::Personalize state) override;
 };
 
 }  // namespace oww::state

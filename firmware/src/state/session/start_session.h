@@ -2,7 +2,7 @@
 
 #include "common.h"
 #include "fbs/token_session_generated.h"
-#include "nfc/driver/Ntag424.h"
+#include "nfc/nfc_tags.h"
 #include "state/cloud_response.h"
 #include "token_session.h"
 
@@ -40,21 +40,33 @@ struct Rejected {
 
 struct Failed {
   const ErrorType error;
-  const Ntag424::DNA_StatusCode tag_status;
   const String message;
 };
-using NestedState = std::variant<
+
+using InternalState = std::variant<
     Begin, AwaitStartSessionResponse, AwaitAuthenticateNewSessionResponse,
     AwaitCompleteAuthenticationResponse, Succeeded, Rejected, Failed>;
 
 }  // namespace start
 
-struct StartSession {
-  std::array<uint8_t, 7> tag_uid;
-  std::shared_ptr<start::NestedState> state;
-};
+class StartSessionAction : public NtagAction {
+ public:
+  StartSessionAction(std::array<uint8_t, 7> tag_uid,
+                     std::weak_ptr<CloudRequest> cloud_request,
+                     std::weak_ptr<Sessions> sessions);
+  ~StartSessionAction() {}
 
-void Loop(StartSession start_session_state, oww::state::State &state_manager,
-          Ntag424 &ntag_interface);
+  virtual Continuation Loop(Ntag424 &ntag_interface);
+  virtual void OnAbort(ErrorType error);
+
+  bool IsComplete();
+
+ private:
+  std::array<uint8_t, 7> tag_uid_;
+  std::weak_ptr<CloudRequest> cloud_request_;
+  std::weak_ptr<Sessions> sessions_;
+
+  std::shared_ptr<start::InternalState> state_;
+};
 
 }  // namespace oww::state::session

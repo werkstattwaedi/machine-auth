@@ -8,23 +8,31 @@
 
 #include "../cloud_request.h"
 #include "../configuration.h"
-#include "../state.h"
 #include "fbs/machine_usage_generated.h"
 #include "fbs/token_session_generated.h"
+#include "state/state.h"
 #include "token_session.h"
 
 namespace oww::state::session {
 
 Logger MachineUsage::logger("machine_usage");
 
-void MachineUsage::Begin(const fbs::Machine& machine) {
-  machine_id_ = machine.id()->str();
+MachineUsage::MachineUsage(const fbs::Machine& machine)
+    : machine_id_(machine.id()->str()),
+      usage_history_logfile_path("/machine_" + machine.id()->str() +
+                                 "/machine_history.data") {
+  // Copy permissions from machine to permissions_ vector
+  if (machine.required_permissions()) {
+    for (const auto* permission : *machine.required_permissions()) {
+      required_permissions_.push_back(permission->str());
+    }
+  }
+}
 
-  std::stringstream path;
-  path << "/machine_" << machine_id_ << "/machine_history.data";
-  usage_history_logfile_path = path.str();
+void MachineUsage::Begin(std::shared_ptr<oww::state::State> state) {
+  state_ = state;
 
-  // 1. Read the binary file into a vector<char>
+  // Restore persisted usage history.
   std::ifstream file(usage_history_logfile_path,
                      std::ios::binary | std::ios::ate);
   if (file) {
@@ -57,6 +65,34 @@ void MachineUsage::Loop() {
   // Currently no periodic tasks needed for machine usage
 }
 
+
+void State::UpdateRelaisState() {
+  using namespace oww::state::tag;
+  PinState expected_relais_state;
+  if (std::get_if<StartSession>(tag_state_.get())) {
+    expected_relais_state = HIGH;
+  } else {
+    expected_relais_state = LOW;
+  }
+
+  if (relais_state_ != expected_relais_state) {
+    relais_state_ = expected_relais_state;
+    logger.info("Toggle Relais %s", relais_state_ == HIGH ? "HIGH" : "LOW");
+
+    digitalWrite(config::ext::pin_relais, relais_state_);
+    pinMode(config::ext::pin_relais, OUTPUT);
+    digitalWrite(config::ext::pin_relais, relais_state_);
+    delay(50);
+    pinMode(config::ext::pin_relais, INPUT);
+
+    auto actual_state = digitalRead(config::ext::pin_relais) ? HIGH : LOW;
+    if (actual_state != relais_state_) {
+      Log.error("Failed to toggle actual relais state");
+    }
+  }
+}
+
+
 tl::expected<MachineState, ErrorType> MachineUsage::CheckIn(
     std::shared_ptr<TokenSession> session) {
   if (std::holds_alternative<machine_state::Active>(current_state_)) {
@@ -65,6 +101,15 @@ tl::expected<MachineState, ErrorType> MachineUsage::CheckIn(
   }
 
   auto now = timeUtc();
+
+  // Check if session has all required permissions
+  for (const auto& permission : required_permissions_) {
+    if (!session->HasPermission(permission)) {
+      current_state_ =
+          machine_state::Denied{.message = "Keine Berechtigung", .time = now};
+      return current_state_;
+    }
+  }
 
   current_state_ = machine_state::Active{
       .session = session,
@@ -82,7 +127,7 @@ tl::expected<MachineState, ErrorType> MachineUsage::CheckIn(
   return current_state_;
 }
 
-template <typename T, typename>
+template <typename T>
 tl::expected<MachineState, ErrorType> MachineUsage::CheckOut(
     std::unique_ptr<T> checkout_reason) {
   auto active_state = std::get_if<machine_state::Active>(&current_state_);
@@ -135,7 +180,7 @@ template tl::expected<MachineState, ErrorType>
 MachineUsage::CheckOut<fbs::ReasonSelfCheckoutT>(
     std::unique_ptr<fbs::ReasonSelfCheckoutT> checkout_reason);
 
-void MachineUsage::QueueSessionDataUpload() {
+void MachineUsage::UploadHistory() {
   logger.info("QueueSessionDataUpload");
 
   // This method would normally use CloudRequest, but since we don't have access

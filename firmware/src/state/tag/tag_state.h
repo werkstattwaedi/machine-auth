@@ -1,11 +1,8 @@
 #pragma once
 
-#include "../session/start_session.h"
 #include "common.h"
-#include "personalize.h"
 
 namespace oww::state::tag {
-using namespace oww::state::session;
 
 struct Idle {};
 struct Detected {};
@@ -15,8 +12,6 @@ struct Authenticated {
 
 struct Unknown {};
 
-
-using TagState = std::variant<Idle, Detected, Authenticated, StartSession,
-                              Personalize, Unknown>;
+using TagState = std::variant<Idle, Detected, Authenticated, Unknown>;
 
 }  // namespace oww::state::tag

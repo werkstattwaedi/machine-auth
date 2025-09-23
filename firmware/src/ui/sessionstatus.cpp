@@ -138,22 +138,6 @@ void SessionStatus::UpdateForState(
             current_buttons_->down_enabled = false;
             // LED mood handled by UI state (ring/NFC); buttons by ButtonBar
           },
-          [&](StartSession state) {
-            lv_label_set_text(status_text_, "Session gestartet");
-            lv_obj_set_style_bg_color(status_text_, lv_color_hex(0x28a745),
-                                      LV_PART_MAIN);  // Green
-
-            // StartSession state buttons
-            current_buttons_->left_label = "";
-            current_buttons_->left_enabled = false;
-            current_buttons_->right_label = "F";  // Pause/stop button
-            current_buttons_->right_enabled = true;
-            current_buttons_->right_color =
-                lv_color32_make(255, 193, 7, 255);  // Yellow
-            current_buttons_->up_enabled = false;
-            current_buttons_->down_enabled = false;
-            // LED mood handled by UI state (ring/NFC); buttons by ButtonBar
-          },
           [&](Unknown state) {
             lv_label_set_text(status_text_, "Unbekannter Token");
             lv_obj_set_style_bg_color(status_text_, lv_color_hex(0xdc3545),
@@ -172,22 +156,7 @@ void SessionStatus::UpdateForState(
             current_buttons_->down_enabled = false;
             // LED mood handled by UI state (ring/NFC); buttons by ButtonBar
           },
-          [&](Personalize state) {
-            lv_label_set_text(status_text_, "Token wird personalisiert");
-            lv_obj_set_style_bg_color(status_text_, lv_color_hex(0xffc107),
-                                      LV_PART_MAIN);  // Yellow
-
-            // Personalize state buttons
-            current_buttons_->left_label = "";
-            current_buttons_->left_enabled = false;
-            current_buttons_->right_label = "I";  // Confirm button
-            current_buttons_->right_enabled = true;
-            current_buttons_->right_color =
-                lv_color32_make(40, 167, 69, 255);  // Green
-            current_buttons_->up_enabled = false;
-            current_buttons_->down_enabled = false;
-            // LED mood handled by UI state (ring/NFC); buttons by ButtonBar
-          }},
+      },
       *(tag_state.get()));
 }
 
