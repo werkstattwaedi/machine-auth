@@ -72,7 +72,8 @@ void setup() {
   }
 
   state_->SetBootProgress("Start NFC...");
-  Status nfc_setup_result = NfcTags::instance().Begin(state_);
+  Status nfc_setup_result =
+      NfcTags::instance().Begin(state_->GetConfiguration()->GetTerminalKey());
   Log.info("NFC Status = %d", (int)nfc_setup_result);
 
   if (nfc_setup_result != Status::kOk) {

@@ -32,9 +32,9 @@ using namespace config::tag;
 void UpdateNestedState(oww::state::State &state_manager, Personalize last_state,
                        personalize::State updated_nested_state) {
   state_manager.lock();
-  state_manager.OnNewState(Personalize{
-      .tag_uid = last_state.tag_uid,
-      .state = std::make_shared<personalize::State>(updated_nested_state)});
+  // state_manager.OnNewState(Personalize{
+  //     .tag_uid = last_state.tag_uid,
+  //     .state = std::make_shared<personalize::State>(updated_nested_state)});
   state_manager.unlock();
 }
 

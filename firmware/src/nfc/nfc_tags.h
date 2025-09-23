@@ -1,9 +1,11 @@
 #pragma once
 
 #include "../common.h"
-#include "../state/state.h"
+#include "common/state_machine.h"
 #include "driver/Ntag424.h"
 #include "driver/PN532.h"
+#include "nfc/states.h"
+#include "state/configuration.h"
 
 struct NfcStateData;
 
@@ -19,9 +21,15 @@ class NtagAction {
 // Rename to NfcWorker ?
 class NfcTags {
  public:
+  using NfcStateMachine =
+      oww::common::StateMachine<oww::nfc::WaitForTag, oww::nfc::TagPresent,
+                                oww::nfc::Ntag424Unauthenticated,
+                                oww::nfc::Ntag424Authenticated,
+                                oww::nfc::TagError>;
+
   static NfcTags &instance();
 
-  Status Begin(std::shared_ptr<oww::state::State> state);
+  Status Begin(std::array<uint8_t, 16> terminal_key);
 
   // Queues an action.
   // returns an error if no tag is currently in range.
@@ -30,6 +38,8 @@ class NfcTags {
   void lock() { os_mutex_lock(mutex_); };
   bool tryLock() { return os_mutex_trylock(mutex_); };
   void unlock() { os_mutex_unlock(mutex_); };
+
+  std::shared_ptr<NfcStateMachine> GetStateMachine() { return state_machine_; }
 
  private:
   static NfcTags *instance_;
@@ -46,29 +56,28 @@ class NfcTags {
   os_thread_return_t NfcThread();
 
  private:
-  std::shared_ptr<oww::state::State> state_ = nullptr;
+  // Main loop for NfcThread
+  void NfcLoop();
+
+  void RegisterStateHandlers();
+
+  // State machine handlers
+  NfcStateMachine::StateOpt OnWaitForTag(oww::nfc::WaitForTag &state);
+  NfcStateMachine::StateOpt OnTagPresent(oww::nfc::TagPresent &state);
+  NfcStateMachine::StateOpt OnNtag424Unauthenticated(
+      oww::nfc::Ntag424Unauthenticated &state);
+  NfcStateMachine::StateOpt OnNtag424Authenticated(
+      oww::nfc::Ntag424Authenticated &state);
+  NfcStateMachine::StateOpt OnTagError(oww::nfc::TagError &state);
+
+ private:
+  std::array<uint8_t, 16> terminal_key_;
   std::shared_ptr<PN532> pcd_interface_;
   std::shared_ptr<Ntag424> ntag_interface_;
   std::vector<std::shared_ptr<NtagAction>> action_queue_;
-
- private:
-  //  Main loop for NfcThread
-  void NfcLoop();
-  void WaitForTag();
-  bool CheckTagStillAvailable();
-  void TagPerformQueuedAction();
-  void AbortQueuedActions();
-  void TagError();
-
- private:
-  enum class NfcState {
-    kWaitForTag = 0,
-    kTagIdle = 1,
-    kTagUnknown = 2,
-    kTagError = 3,
-  };
-
-  NfcState tag_state_ = NfcState::kWaitForTag;
-  std::shared_ptr<SelectedTag> selected_tag_ = nullptr;
-  int32_t error_count_ = 0;
+  std::shared_ptr<NfcStateMachine> state_machine_;
 };
+
+static const NfcTags::NfcStateMachine::Query HasTag([](const auto &state) {
+  return !std::holds_alternative<oww::nfc::WaitForTag>(state);
+});
