@@ -1,6 +1,6 @@
 #include "cloud_request.h"
 
-namespace oww::state {
+namespace oww::app {
 
 Logger CloudRequest::logger("cloud_request");
 
@@ -102,4 +102,4 @@ void CloudRequest::CheckTimeouts() {
   }
 }
 
-}  // namespace oww::state
+}  // namespace oww::app

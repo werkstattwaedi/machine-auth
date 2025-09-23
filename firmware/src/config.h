@@ -7,7 +7,6 @@
 
 // #define REMOTE_LOGGING 0
 
-
 #include "neopixel.h"
 
 enum Ntag424Key : byte;

@@ -3,11 +3,11 @@
 #include <array>
 #include <type_traits>
 
-#include "../../config.h"
+#include "app/cloud_response.h"
+#include "app/configuration.h"
 #include "common/byte_array.h"
 #include "common/debug.h"
-#include "state/cloud_response.h"
-#include "state/configuration.h"
+#include "config.h"
 #include "state/state.h"
 
 namespace {
@@ -24,12 +24,13 @@ std::array<uint8_t, 16> get_key_bytes(
 
 }  // namespace
 
-namespace oww::state::tag {
+namespace oww::app::tag {
 using namespace fbs;
 using namespace personalize;
 using namespace config::tag;
 
-void UpdateNestedState(oww::state::State &state_manager, Personalize last_state,
+void UpdateNestedState(oww::app::Application &state_manager,
+                       Personalize last_state,
                        personalize::State updated_nested_state) {
   state_manager.lock();
   // state_manager.OnNewState(Personalize{
@@ -38,13 +39,14 @@ void UpdateNestedState(oww::state::State &state_manager, Personalize last_state,
   state_manager.unlock();
 }
 
-void UpdateFailedState(oww::state::State &state_manager, Personalize last_state,
-                       String failure_message) {
+void UpdateFailedState(oww::app::Application &state_manager,
+                       Personalize last_state, String failure_message) {
   UpdateNestedState(state_manager, last_state,
                     Failed{.message = failure_message});
 }
 
-void OnWait(Personalize state, Wait &wait, oww::state::State &state_manager) {
+void OnWait(Personalize state, Wait &wait,
+            oww::app::Application &state_manager) {
   if (millis() < wait.timeout) return;
 
   KeyDiversificationRequestT request;
@@ -62,7 +64,7 @@ void OnWait(Personalize state, Wait &wait, oww::state::State &state_manager) {
 
 void OnAwaitKeyDiversificationResponse(
     Personalize state, AwaitKeyDiversificationResponse &response_holder,
-    oww::state::State &state_manager) {
+    oww::app::Application &state_manager) {
   auto cloud_response = response_holder.response.get();
   if (IsPending(*cloud_response)) {
     return;
@@ -104,7 +106,7 @@ tl::expected<std::array<uint8_t, 16>, Ntag424::DNA_StatusCode> ProbeKeys(
 
 void OnDoPersonalizeTag(Personalize state, DoPersonalizeTag &update_tag,
                         Ntag424 &ntag_interface,
-                        oww::state::State &state_manager) {
+                        oww::app::Application &state_manager) {
   std::array<uint8_t, 16> factory_default_key = {};
 
   auto current_key_0 =
@@ -198,7 +200,7 @@ void OnDoPersonalizeTag(Personalize state, DoPersonalizeTag &update_tag,
 
 // ---- Loop dispatchers ------------------------------------------------------
 
-void Loop(Personalize state, oww::state::State &state_manager,
+void Loop(Personalize state, oww::app::Application &state_manager,
           Ntag424 &ntag_interface) {
   if (auto nested = std::get_if<Wait>(state.state.get())) {
     OnWait(state, *nested, state_manager);
@@ -210,4 +212,4 @@ void Loop(Personalize state, oww::state::State &state_manager,
   }
 }
 
-}  // namespace oww::state::tag
+}  // namespace oww::app::tag

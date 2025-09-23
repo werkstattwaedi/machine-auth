@@ -24,13 +24,13 @@ UserInterface::UserInterface()
 UserInterface::~UserInterface() {}
 
 tl::expected<void, Error> UserInterface::Begin(
-    std::shared_ptr<oww::state::State> state) {
+    std::shared_ptr<oww::app::Application> state) {
   if (thread_ != nullptr) {
     logger.error("UserInterface::Begin() Already initialized");
     return tl::unexpected(Error::kIllegalState);
   }
 
-  state_ = state;
+  app_ = state;
 
   pinMode(buzzer::pin_pwm, OUTPUT);
   analogWrite(config::ui::display::pin_backlight, 255);
@@ -54,7 +54,7 @@ tl::expected<void, Error> UserInterface::Begin(
 os_thread_return_t UserInterface::UserInterfaceThread() {
   auto display = &Display::instance();
 
-  splash_screen_ = std::make_unique<SplashScreen>(state_);
+  splash_screen_ = std::make_unique<SplashScreen>(app_);
 
   while (true) {
     UpdateGui();
@@ -67,19 +67,19 @@ os_thread_return_t UserInterface::UserInterfaceThread() {
 void UserInterface::UpdateGui() {
   if (splash_screen_) {
     splash_screen_->Render();
-    if (!state_->IsBootCompleted()) {
+    if (!app_->IsBootCompleted()) {
       return;
     }
 
     splash_screen_ = nullptr;
-    status_bar_ = std::make_unique<StatusBar>(lv_screen_active(), state_);
+    status_bar_ = std::make_unique<StatusBar>(lv_screen_active(), app_);
 
     // StatusBar: 240×58px (full width, 58px height)
     lv_obj_set_size(*status_bar_, 240, 58);
     lv_obj_align(*status_bar_, LV_ALIGN_TOP_LEFT, 0, 0);
 
     // Create button bar at the bottom
-    button_bar_ = std::make_unique<ButtonBar>(lv_screen_active(), state_);
+    button_bar_ = std::make_unique<ButtonBar>(lv_screen_active(), app_);
 
     // Create main content area between status bar and button bar
     lv_obj_t *content_container = lv_obj_create(lv_screen_active());
@@ -91,7 +91,7 @@ void UserInterface::UpdateGui() {
 
     // Create and activate session status as main content
     session_status_ =
-        std::make_shared<SessionStatus>(content_container, state_, this);
+        std::make_shared<SessionStatus>(content_container, app_, this);
     PushContent(session_status_);
 
     // Set up button mappings for touch input
@@ -107,10 +107,10 @@ void UserInterface::UpdateGui() {
 }
 
 void UserInterface::UpdateBuzzer() {
-  auto current_state = state_->GetTagState();
+  auto current_state = app_->GetTagState();
 
   if (last_buzz_state_id_ != static_cast<void *>(current_state.get())) {
-    using namespace oww::state::tag;
+    using namespace oww::app::tag;
 
     int frequency = 0;
     int duration = 100;
@@ -167,9 +167,9 @@ void HslToRgb(float h, float s, float l, byte &r, byte &g, byte &b) {
 }
 
 void UserInterface::UpdateLed() {
-  auto current_state = state_->GetTagState();
+  auto current_state = app_->GetTagState();
 
-  using namespace oww::state::tag;
+  using namespace oww::app::tag;
 
   // Choose effects/colors for each section based on state
   using leds::Color;

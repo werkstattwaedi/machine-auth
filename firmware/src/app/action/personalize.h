@@ -1,15 +1,15 @@
 #pragma once
 
-#include "../../common.h"
+#include "app/cloud_response.h"
+#include "common.h"
 #include "fbs/personalization_generated.h"
 #include "nfc/driver/Ntag424.h"
-#include "state/cloud_response.h"
 
-namespace oww::state {
-class State;
-}  // namespace oww::state
+namespace oww::app {
+class Application;
+}  // namespace oww::app
 
-namespace oww::state::tag {
+namespace oww::app::action {
 
 namespace personalize {
 
@@ -18,8 +18,7 @@ struct Wait {
 };
 
 struct AwaitKeyDiversificationResponse {
-  const std::shared_ptr<
-      CloudResponse<fbs::KeyDiversificationResponseT>>
+  const std::shared_ptr<CloudResponse<fbs::KeyDiversificationResponseT>>
       response;
 };
 
@@ -48,7 +47,7 @@ struct Personalize {
   std::shared_ptr<personalize::State> state;
 };
 
-void Loop(Personalize start_session_state, oww::state::State &state_manager,
+void Loop(Personalize start_session_state, oww::app::Application &state_manager,
           Ntag424 &ntag_interface);
 
-}  // namespace oww::state::tag
+}  // namespace oww::app::action

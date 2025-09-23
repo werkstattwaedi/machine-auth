@@ -3,6 +3,7 @@
 #include <XPT2046_Touch.h>
 #include <lvgl.h>
 
+#include "app/application.h"
 #include "buttonbar.h"
 #include "common.h"
 #include "leds/led_controller.h"
@@ -10,7 +11,6 @@
 #include "neopixel.h"
 #include "sessionstatus.h"
 #include "splashscreen.h"
-#include "state/state.h"
 #include "statusbar.h"
 
 namespace oww::ui {
@@ -25,7 +25,7 @@ class UserInterface {
  public:
   static UserInterface &instance();
 
-  tl::expected<void, Error> Begin(std::shared_ptr<oww::state::State> state);
+  tl::expected<void, Error> Begin(std::shared_ptr<oww::app::Application> app);
 
   /**
    * @brief Locks the mutex that protects shared resources
@@ -75,7 +75,7 @@ class UserInterface {
   Thread *thread_ = nullptr;
   os_mutex_t mutex_ = 0;
 
-  std::shared_ptr<oww::state::State> state_ = nullptr;
+  std::shared_ptr<oww::app::Application> app_ = nullptr;
 
   os_thread_return_t UserInterfaceThread();
 

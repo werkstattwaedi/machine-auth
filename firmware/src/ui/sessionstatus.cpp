@@ -1,14 +1,13 @@
 #include "sessionstatus.h"
 
 #include "lvgl.h"
-#include "state/tag/tag_state.h"
 
 LV_IMG_DECLARE(tap_token);
 
 namespace oww::ui {
 
 SessionStatus::SessionStatus(lv_obj_t* parent,
-                             std::shared_ptr<oww::state::State> state,
+                             std::shared_ptr<oww::app::Application> state,
                              UserInterface* ui)
     : MainContent(parent, state, ui), last_state_id_(nullptr) {
   CreateNfcIconArea();
@@ -62,7 +61,7 @@ void SessionStatus::OnActivate() {
 void SessionStatus::OnDeactivate() { MainContent::OnDeactivate(); }
 
 void SessionStatus::Render() {
-  auto tag_state = state_->GetTagState();
+  auto tag_state = app_->GetTagState();
 
   if (tag_state && last_state_id_ != static_cast<void*>(tag_state.get())) {
     UpdateForState(tag_state);
@@ -71,8 +70,8 @@ void SessionStatus::Render() {
 }
 
 void SessionStatus::UpdateForState(
-    const std::shared_ptr<oww::state::tag::TagState> tag_state) {
-  using namespace oww::state::tag;
+    const std::shared_ptr<oww::app::tag::TagState> tag_state) {
+  using namespace oww::app::tag;
 
   std::visit(
       overloaded{

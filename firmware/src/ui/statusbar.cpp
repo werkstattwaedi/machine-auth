@@ -2,8 +2,8 @@
 
 namespace oww::ui {
 
-StatusBar::StatusBar(lv_obj_t* parent, std::shared_ptr<oww::state::State> state)
-    : Component(state) {
+StatusBar::StatusBar(lv_obj_t* parent, std::shared_ptr<oww::app::Application> app)
+    : Component(app) {
   // StatusBar: 240×58px at top of screen
   root_ = lv_obj_create(parent);
   lv_obj_remove_style_all(root_);
@@ -21,7 +21,7 @@ StatusBar::StatusBar(lv_obj_t* parent, std::shared_ptr<oww::state::State> state)
   lv_obj_align(machine_label_, LV_ALIGN_LEFT_MID, 10, 0);
   lv_obj_set_style_text_color(machine_label_, lv_color_hex(0x333333), LV_PART_MAIN);
 
-  auto configuration = state_->GetConfiguration();
+  auto configuration = app_->GetConfiguration();
   lv_label_set_text(machine_label_,
                     configuration->IsConfigured()
                         ? configuration->GetTerminal()->label.c_str()

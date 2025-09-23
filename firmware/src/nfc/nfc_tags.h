@@ -1,13 +1,12 @@
 #pragma once
 
-#include "../common.h"
+#include "common.h"
 #include "common/state_machine.h"
 #include "driver/Ntag424.h"
 #include "driver/PN532.h"
 #include "nfc/states.h"
-#include "state/configuration.h"
 
-struct NfcStateData;
+namespace oww::nfc {
 
 class NtagAction {
  public:
@@ -21,12 +20,6 @@ class NtagAction {
 // Rename to NfcWorker ?
 class NfcTags {
  public:
-  using NfcStateMachine =
-      oww::common::StateMachine<oww::nfc::WaitForTag, oww::nfc::TagPresent,
-                                oww::nfc::Ntag424Unauthenticated,
-                                oww::nfc::Ntag424Authenticated,
-                                oww::nfc::TagError>;
-
   static NfcTags &instance();
 
   Status Begin(std::array<uint8_t, 16> terminal_key);
@@ -62,13 +55,12 @@ class NfcTags {
   void RegisterStateHandlers();
 
   // State machine handlers
-  NfcStateMachine::StateOpt OnWaitForTag(oww::nfc::WaitForTag &state);
-  NfcStateMachine::StateOpt OnTagPresent(oww::nfc::TagPresent &state);
+  NfcStateMachine::StateOpt OnWaitForTag(WaitForTag &state);
+  NfcStateMachine::StateOpt OnTagPresent(TagPresent &state);
   NfcStateMachine::StateOpt OnNtag424Unauthenticated(
-      oww::nfc::Ntag424Unauthenticated &state);
-  NfcStateMachine::StateOpt OnNtag424Authenticated(
-      oww::nfc::Ntag424Authenticated &state);
-  NfcStateMachine::StateOpt OnTagError(oww::nfc::TagError &state);
+      Ntag424Unauthenticated &state);
+  NfcStateMachine::StateOpt OnNtag424Authenticated(Ntag424Authenticated &state);
+  NfcStateMachine::StateOpt OnTagError(TagError &state);
 
  private:
   std::array<uint8_t, 16> terminal_key_;
@@ -77,7 +69,4 @@ class NfcTags {
   std::vector<std::shared_ptr<NtagAction>> action_queue_;
   std::shared_ptr<NfcStateMachine> state_machine_;
 };
-
-static const NfcTags::NfcStateMachine::Query HasTag([](const auto &state) {
-  return !std::holds_alternative<oww::nfc::WaitForTag>(state);
-});
+}  // namespace oww::nfc

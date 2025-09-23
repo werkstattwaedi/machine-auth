@@ -2,11 +2,11 @@
  * @brief Entrypoint for terminal firmware.
  */
 
+#include "app/application.h"
 #include "common.h"
 #include "faulthandler.h"
 #include "nfc/nfc_tags.h"
 #include "setup/setup.h"
-#include "state/state.h"
 #include "ui/ui.h"
 
 #ifdef REMOTE_LOGGING
@@ -28,7 +28,7 @@ SerialLogHandler logHandler(
                         {"cap1296", LOG_LEVEL_INFO},
                     });
 
-using namespace oww::state;
+using namespace oww::app;
 
 #ifdef REMOTE_LOGGING
 retained uint8_t remoteLogBuf[2560];
@@ -36,7 +36,7 @@ RemoteLog remoteLog(remoteLogBuf, sizeof(remoteLogBuf));
 RemoteLogEventServer remoteLogEventServer("debugLog");
 #endif
 
-std::shared_ptr<State> state_;
+std::shared_ptr<Application> app_;
 
 void setup() {
 #ifdef REMOTE_LOGGING
@@ -47,23 +47,23 @@ void setup() {
   Log.info("machine-auth-firmware starting");
 
   {
-    // create state_
-    state_ = std::make_shared<State>();
-    auto config = std::make_unique<Configuration>(std::weak_ptr(state_));
-    state_->Begin(std::move(config));
+    // create app_
+    app_ = std::make_shared<Application>();
+    auto config = std::make_unique<Configuration>(std::weak_ptr(app_));
+    app_->Begin(std::move(config));
   }
 
-  if (state_->GetConfiguration()->IsSetupMode()) {
-    oww::setup::setup(state_);
+  if (app_->GetConfiguration()->IsSetupMode()) {
+    oww::setup::setup(app_);
     return;
   }
 
-  auto display_setup_result = oww::ui::UserInterface::instance().Begin(state_);
+  auto display_setup_result = oww::ui::UserInterface::instance().Begin(app_);
 
 #if defined(DEVELOPMENT_BUILD)
   // Await the terminal connections, so that all log messages during setup are
   // not skipped.
-  state_->SetBootProgress("Warte auf Debugger...");
+  app_->SetBootProgress("Warte auf Debugger...");
   waitFor(Serial.isConnected, 5000);
 #endif
 
@@ -71,27 +71,27 @@ void setup() {
     Log.info("Failed to start display = %d", (int)display_setup_result.error());
   }
 
-  state_->SetBootProgress("Start NFC...");
+  app_->SetBootProgress("Start NFC...");
   Status nfc_setup_result =
-      NfcTags::instance().Begin(state_->GetConfiguration()->GetTerminalKey());
+      NfcTags::instance().Begin(app_->GetConfiguration()->GetTerminalKey());
   Log.info("NFC Status = %d", (int)nfc_setup_result);
 
   if (nfc_setup_result != Status::kOk) {
-    state_->SetBootProgress("Fehler: NFC Initialisierung!");
+    app_->SetBootProgress("Fehler: NFC Initialisierung!");
     delay(2000);
     System.reset();
   }
 
-  state_->SetBootProgress("Verbinde mit WiFi...");
+  app_->SetBootProgress("Verbinde mit WiFi...");
   waitUntil(WiFi.ready);
 
-  state_->SetBootProgress("Verbinde mit Cloud...");
+  app_->SetBootProgress("Verbinde mit Cloud...");
   waitUntil(Particle.connected);
 
-  state_->SetBootProgress("Warte auf Terminal Config...");
-  waitUntil(state_->GetConfiguration()->GetTerminal);
+  app_->SetBootProgress("Warte auf Terminal Config...");
+  waitUntil(app_->GetConfiguration()->GetTerminal);
 
-  state_->BootCompleted();
+  app_->BootCompleted();
 }
 
 system_tick_t next_telemetry_log = 0;
@@ -100,12 +100,12 @@ void loop() {
 #ifdef REMOTE_LOGGING
   remoteLog.loop();
 #endif
-  if (state_->GetConfiguration()->IsSetupMode()) {
+  if (app_->GetConfiguration()->IsSetupMode()) {
     oww::setup::loop();
     return;
   }
 
-  state_->Loop();
+  app_->Loop();
 
   auto now = millis();
   if (Log.isInfoEnabled() && now > next_telemetry_log) {

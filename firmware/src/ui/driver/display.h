@@ -7,7 +7,6 @@
 
 #include "cap1296.h"
 #include "common.h"
-#include "state/state.h"
 
 struct DisplayFlushRequest {
   lv_area_t area;

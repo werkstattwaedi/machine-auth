@@ -1,16 +1,12 @@
 #pragma once
 
+#include "app/cloud_response.h"
 #include "common.h"
 #include "fbs/token_session_generated.h"
 #include "nfc/nfc_tags.h"
-#include "state/cloud_response.h"
 #include "token_session.h"
 
-namespace oww::state {
-class State;
-}  // namespace oww::state
-
-namespace oww::state::session {
+namespace oww::app::session {
 
 namespace start {
 
@@ -69,4 +65,4 @@ class StartSessionAction : public NtagAction {
   std::shared_ptr<start::InternalState> state_;
 };
 
-}  // namespace oww::state::session
+}  // namespace oww::app::session

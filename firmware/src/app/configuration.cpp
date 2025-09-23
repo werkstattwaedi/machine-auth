@@ -1,7 +1,7 @@
 
 
 #include "configuration.h"
-namespace oww::state {
+namespace oww::app {
 
 // Factory data used for dev devices.
 FactoryData DEV_FACTORY_DATA{
@@ -37,8 +37,7 @@ TerminalConfig::TerminalConfig(String machine_id, String label)
 MachineConfig::MachineConfig(String machine_id, MachineControl control)
     : machine_id(machine_id), control(control) {}
 
-Configuration::Configuration(std::weak_ptr<IStateEvent> event_sink)
-    : event_sink_(event_sink) {
+Configuration::Configuration() {
   // Register Particle function with member function
   Particle.function("setSetupMode", &Configuration::SetSetupModeHandler, this);
 }
@@ -72,8 +71,7 @@ Status Configuration::Begin() {
 
   auto ledger = Particle.ledger(ledger_name);
 
-  ledger.onSync(
-      [this](Ledger ledger) { event_sink_.lock()->OnConfigChanged(); });
+  ledger.onSync([this](Ledger ledger) { OnConfigChanged(); });
 
   if (!ledger.isValid()) {
     logger.warn("Ledger is not valid, waiting for sync.");
@@ -178,9 +176,13 @@ int Configuration::SetSetupModeHandler(String command) {
   EEPROM.put(0, *(factory_data.get()));
 
   // Notify about config change which will trigger restart
-  event_sink_.lock()->OnConfigChanged();
+  OnConfigChanged();
 
   return 0;
 }
 
-}  // namespace oww::state
+void Configuration::OnConfigChanged() {
+  System.reset(RESET_REASON_CONFIG_UPDATE);
+}
+
+}  // namespace oww::app

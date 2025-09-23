@@ -8,7 +8,7 @@
 
 namespace oww::setup {
 
-std::shared_ptr<oww::state::State> state_;
+std::shared_ptr<oww::app::Application> app_;
 std::unique_ptr<Adafruit_NeoPixel> led_strip_;
 std::unique_ptr<oww::ui::leds::LedController> led_;
 using namespace config::ext;
@@ -40,7 +40,7 @@ String relaisState() {
   return String(state == HIGH ? "on" : "off");
 }
 
-void setup(std::shared_ptr<oww::state::State> state) {
+void setup(std::shared_ptr<oww::app::Application> state) {
   Particle.function("led", SetLed);
   Particle.function("ledfx", SetLedFx);  // high-level LED test interface
   Particle.function("relais", SetRelais);
@@ -48,7 +48,7 @@ void setup(std::shared_ptr<oww::state::State> state) {
 
   pinMode(pin_relais, INPUT);
 
-  state_ = state;
+  app_ = state;
   led_strip_ = std::make_unique<Adafruit_NeoPixel>(
       config::led::pixel_count, SPI, config::led::pixel_type);
 

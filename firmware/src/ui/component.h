@@ -2,13 +2,13 @@
 
 #include <lvgl.h>
 
-#include "state/state.h"
+#include "app/application.h"
 
 namespace oww::ui {
 
 class Component {
  public:
-  Component(std::shared_ptr<oww::state::State> state) : state_(state) {};
+  Component(std::shared_ptr<oww::app::Application> app) : app_(app) {};
   virtual ~Component() {};
 
   virtual void Render() = 0;
@@ -19,7 +19,7 @@ class Component {
 
  protected:
   lv_obj_t* root_;
-  std::shared_ptr<oww::state::State> state_;
+  std::shared_ptr<oww::app::Application> app_;
 };
 
 }  // namespace oww::ui

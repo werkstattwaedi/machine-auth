@@ -4,13 +4,12 @@
 #include <variant>
 
 #include "maincontent.h"
-#include "state/tag/tag_state.h"
 
 namespace oww::ui {
 
 class SessionStatus : public MainContent {
  public:
-  SessionStatus(lv_obj_t* parent, std::shared_ptr<oww::state::State> state,
+  SessionStatus(lv_obj_t* parent, std::shared_ptr<oww::app::Application> app,
                 UserInterface* ui);
   virtual ~SessionStatus();
 
@@ -34,7 +33,7 @@ class SessionStatus : public MainContent {
   void CreateNfcIconArea();
   void CreateStatusText();
   void UpdateForState(
-      const std::shared_ptr<oww::state::tag::TagState> tag_state);
+      const std::shared_ptr<oww::app::tag::TagState> tag_state);
 };
 
 }  // namespace oww::ui

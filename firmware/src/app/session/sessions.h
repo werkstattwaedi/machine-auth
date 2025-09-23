@@ -6,7 +6,7 @@
 #include "fbs/token_session_generated.h"
 #include "machine_state.h"
 
-namespace oww::state::session {
+namespace oww::app::session {
 class TokenSession;
 
 class Sessions {
@@ -28,4 +28,4 @@ class Sessions {
   void HandleSessionEvent(CloudEvent event);
 };
 
-}  // namespace oww::state::session
+}  // namespace oww::app::session

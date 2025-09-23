@@ -5,7 +5,7 @@
 namespace oww::ui {
 
 MainContent::MainContent(lv_obj_t* parent,
-                         std::shared_ptr<oww::state::State> state,
+                         std::shared_ptr<oww::app::Application> state,
                          UserInterface* ui)
     : Component(state), ui_(ui) {
   root_ = lv_obj_create(parent);

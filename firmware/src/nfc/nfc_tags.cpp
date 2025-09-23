@@ -1,12 +1,12 @@
 #include "nfc_tags.h"
 
-#include "../config.h"
-#include "../state/configuration.h"
 #include "common/byte_array.h"
+#include "config.h"
+
+namespace oww::nfc {
 
 using namespace config::nfc;
 using namespace config::tag;
-using namespace oww::nfc;
 
 Logger NfcTags::logger("nfc");
 
@@ -90,7 +90,7 @@ void NfcTags::RegisterStateHandlers() {
       [this](TagError& state) { return OnTagError(state); });
 }
 
-NfcTags::NfcStateMachine::StateOpt NfcTags::OnWaitForTag(WaitForTag& state) {
+NfcStateMachine::StateOpt NfcTags::OnWaitForTag(WaitForTag& state) {
   auto wait_for_tag = pcd_interface_->WaitForNewTag();
   if (!wait_for_tag) {
     return std::nullopt;
@@ -104,7 +104,7 @@ NfcTags::NfcStateMachine::StateOpt NfcTags::OnWaitForTag(WaitForTag& state) {
   return NfcStateMachine::StateOpt(TagPresent{selected_tag});
 }
 
-NfcTags::NfcStateMachine::StateOpt NfcTags::OnTagPresent(TagPresent& state) {
+NfcStateMachine::StateOpt NfcTags::OnTagPresent(TagPresent& state) {
   WITH_LOCK(*this) {
     ntag_interface_->SetSelectedTag(state.selected_tag);
 
@@ -143,7 +143,7 @@ NfcTags::NfcStateMachine::StateOpt NfcTags::OnTagPresent(TagPresent& state) {
   return std::nullopt;
 }
 
-NfcTags::NfcStateMachine::StateOpt NfcTags::OnNtag424Unauthenticated(
+NfcStateMachine::StateOpt NfcTags::OnNtag424Unauthenticated(
     Ntag424Unauthenticated& state) {
   WITH_LOCK(*this) {
     auto check_still_available = pcd_interface_->CheckTagStillAvailable();
@@ -155,7 +155,7 @@ NfcTags::NfcStateMachine::StateOpt NfcTags::OnNtag424Unauthenticated(
   return std::nullopt;
 }
 
-NfcTags::NfcStateMachine::StateOpt NfcTags::OnNtag424Authenticated(
+NfcStateMachine::StateOpt NfcTags::OnNtag424Authenticated(
     Ntag424Authenticated& state) {
   WITH_LOCK(*this) {
     auto check_still_available = pcd_interface_->CheckTagStillAvailable();
@@ -195,7 +195,7 @@ NfcTags::NfcStateMachine::StateOpt NfcTags::OnNtag424Authenticated(
   return std::nullopt;
 }
 
-NfcTags::NfcStateMachine::StateOpt NfcTags::OnTagError(TagError& state) {
+NfcStateMachine::StateOpt NfcTags::OnTagError(TagError& state) {
   if (state.error_count > 3) {
     // wait for card to disappear
     return std::nullopt;
@@ -216,3 +216,4 @@ NfcTags::NfcStateMachine::StateOpt NfcTags::OnTagError(TagError& state) {
   }
   return NfcStateMachine::StateOpt(WaitForTag{});
 }
+}  // namespace oww::nfc

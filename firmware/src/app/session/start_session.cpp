@@ -2,16 +2,17 @@
 
 #include <type_traits>
 
-#include "../../config.h"
+#include "app/application.h"
+#include "app/configuration.h"
 #include "common/byte_array.h"
-#include "state/configuration.h"
-#include "state/state.h"
+#include "config.h"
 
-namespace oww::state::session {
+namespace oww::app::session {
 using namespace start;
 using namespace config::tag;
 using namespace fbs;
-using oww::state::CloudRequest;
+using namespace oww::nfc;
+using oww::app::CloudRequest;
 
 tl::expected<std::shared_ptr<start::InternalState>, ErrorType> OnBegin(
     std::array<uint8_t, 7> tag_uid, Sessions &sessions,
@@ -255,4 +256,4 @@ void StartSessionAction::OnAbort(ErrorType error) {
       Failed{.error = error, .message = "Ntag transaction aborted"});
 }
 
-}  // namespace oww::state::session
+}  // namespace oww::app::session

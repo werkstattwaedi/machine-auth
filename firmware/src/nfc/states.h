@@ -32,4 +32,14 @@ struct TagError {
   int32_t error_count = 0;
 };
 
+using NfcStateMachine =
+    oww::common::StateMachine<oww::nfc::WaitForTag, oww::nfc::TagPresent,
+                              oww::nfc::Ntag424Unauthenticated,
+                              oww::nfc::Ntag424Authenticated,
+                              oww::nfc::TagError>;
+
+static const NfcStateMachine::Query HasTag([](const auto &state) {
+  return !std::holds_alternative<oww::nfc::WaitForTag>(state);
+});
+
 }  // namespace oww::nfc

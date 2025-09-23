@@ -26,10 +26,7 @@ class StateQuery {
   }
 
   bool Matches(const StateHandle<States...>& handle) const {
-    if (auto sm = handle.state_machine_.lock()) {
-      return fn_(sm->GetState());
-    }
-    return false;
+    return fn_(handle.captured_state_);
   }
 
  private:
@@ -42,48 +39,30 @@ class StateHandle {
   friend class StateQuery<States...>;
 
  public:
-  bool IsNew() const { return !previous_state_; }
-
   template <typename T>
   bool Is() const {
-    if (auto sm = state_machine_.lock()) {
-      return std::holds_alternative<T>(*sm->get_state_ptr());
-    }
-    return false;
-  }
-
-  template <typename T>
-  bool Entered() const {
-    if (auto sm = state_machine_.lock()) {
-      return Is<T>() &&
-             (!previous_state_ || !std::holds_alternative<T>(*previous_state_));
-    }
-    return false;
+    return std::holds_alternative<T>(*captured_state_);
   }
 
   template <typename T>
   bool Exited() const {
     if (auto sm = state_machine_.lock()) {
-      return !Is<T>() &&
-             (previous_state_ && std::holds_alternative<T>(*previous_state_));
+      return Is<T>() && (!std::holds_alternative<T>(*sm - get_state_ptr() >));
     }
-    return false;
+    return true;
   }
 
   template <typename T>
   const T* Get() const {
-    if (auto sm = state_machine_.lock()) {
-      return std::get_if<T>(sm->get_state_ptr().get());
-    }
-    return nullptr;
+    return std::get_if<T>(*captured_state_);
   }
 
  private:
-  StateHandle(std::shared_ptr<const std::variant<States...>> previous_state,
+  StateHandle(std::shared_ptr<const std::variant<States...>> captured_state,
               std::weak_ptr<const StateMachine<States...>> state_machine)
-      : previous_state_(previous_state), state_machine_(state_machine) {}
+      : captured_state_(captured_state), state_machine_(state_machine) {}
 
-  std::shared_ptr<const std::variant<States...>> previous_state_;
+  std::shared_ptr<const std::variant<States...>> captured_state_;
   std::weak_ptr<const StateMachine<States...>> state_machine_;
 };
 
@@ -106,6 +85,7 @@ class StateMachine
   using State = std::variant<States...>;
   using StateOpt = std::optional<State>;
   using Query = oww::common::StateQuery<States...>;
+  using StateHandle = oww::common::StateHandle<States...>;
 
   template <typename T>
   using LoopFn = std::function<StateOpt(T&)>;
@@ -127,9 +107,8 @@ class StateMachine
     std::get<LoopFn<T>>(loop_handlers_) = fn;
   }
 
-  StateHandle<States...> Loop() {
-    auto handle =
-        StateHandle<States...>(current_state_, this->weak_from_this());
+  StateHandle Loop() {
+    auto handle = StateHandle(current_state_, this->weak_from_this());
 
     StateOpt new_state = std::visit(
         [this](auto& state) -> StateOpt {
@@ -149,12 +128,37 @@ class StateMachine
     return handle;
   }
 
+  // Add the new method here
+  void TransitionTo(State&& new_state) {
+    current_state_ = std::make_shared<State>(std::move(new_state));
+  }
+
+  StateHandle GetStateHandle() {
+    return StateHandle(current_state_, this->weak_from_this());
+  }
+
   const State& GetState() const { return *current_state_; }
   std::shared_ptr<const State> GetStatePtr() const { return current_state_; }
 
   template <typename T>
   bool Is() const {
     return std::holds_alternative<T>(*current_state_);
+  }
+
+  template <typename T>
+  bool Entered(StateHandle& last_state) const {
+    if (last_state.state_machine_ == this) {
+      return Is<T>() && !last_state.Is<T>();
+    }
+    return false;
+  }
+
+  template <typename T>
+  bool Exited(StateHandle& last_state) const {
+    if (last_state.state_machine_ == this) {
+      return !Is<T>() && last_state.Is<T>();
+    }
+    return false;
   }
 
   template <typename T>

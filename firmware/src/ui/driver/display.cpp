@@ -3,10 +3,8 @@
 #include <concurrent_hal.h>
 #include <drivers/display/lcd/lv_lcd_generic_mipi.h>
 
-#include "../ui.h"
 #include "Particle.h"
 #include "config.h"
-#include "state/configuration.h"
 
 // clang-format on
 
@@ -178,7 +176,8 @@ void Display::ReadTouchInput(lv_indev_t *indev, lv_indev_data_t *data) {
 }
 
 void Display::SetButtonMapping(uint8_t button_id, lv_point_t position) {
-  display_log.info("SetButtonMapping %d -> [%ld,%ld]", (int)button_id, position.x, position.y);
+  display_log.info("SetButtonMapping %d -> [%ld,%ld]", (int)button_id,
+                   position.x, position.y);
   if (button_id < 6) {
     button_mappings_[button_id] = position;
   }

@@ -11,7 +11,7 @@ class UserInterface;
 
 class MainContent : public Component {
  public:
-  MainContent(lv_obj_t* parent, std::shared_ptr<oww::state::State> state, UserInterface* ui);
+  MainContent(lv_obj_t* parent, std::shared_ptr<oww::app::Application> state, UserInterface* ui);
   virtual ~MainContent();
 
   virtual void Render() override;

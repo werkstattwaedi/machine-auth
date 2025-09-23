@@ -4,8 +4,8 @@ LV_IMG_DECLARE(oww_logo);
 
 namespace oww::ui {
 
-SplashScreen::SplashScreen(std::shared_ptr<oww::state::State> state)
-    : Component(state) {
+SplashScreen::SplashScreen(std::shared_ptr<oww::app::Application> app)
+    : Component(app) {
   lv_obj_set_style_bg_color(lv_screen_active(), lv_color_white(), LV_PART_MAIN);
 
   root_ = lv_obj_create(lv_screen_active());
@@ -33,9 +33,9 @@ SplashScreen::~SplashScreen() {
 }
 
 void SplashScreen::Render() {
-  auto message = state_->GetBootProgress();
+  auto message = app_->GetBootProgress();
   if (message.compare(lv_label_get_text(progress_label_)) != 0) {
-    lv_label_set_text(progress_label_, state_->GetBootProgress().c_str());
+    lv_label_set_text(progress_label_, app_->GetBootProgress().c_str());
   }
 }
 

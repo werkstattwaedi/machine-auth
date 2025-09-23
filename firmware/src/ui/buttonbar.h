@@ -35,7 +35,7 @@ inline constexpr lv_point_t bottom_right_touch_point{195, 300}; // Right HW butt
 
 class ButtonBar : public Component {
  public:
-  ButtonBar(lv_obj_t* parent, std::shared_ptr<oww::state::State> state);
+  ButtonBar(lv_obj_t* parent, std::shared_ptr<oww::app::Application> state);
   virtual ~ButtonBar();
 
   virtual void Render() override;
