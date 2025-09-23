@@ -4,12 +4,13 @@
 #include "fbs/token_session_generated.h"
 #include "nfc/driver/Ntag424.h"
 #include "state/cloud_response.h"
+#include "token_session.h"
 
 namespace oww::state {
 class State;
 }  // namespace oww::state
 
-namespace oww::state::token_session {
+namespace oww::state::session {
 
 namespace start {
 
@@ -56,4 +57,4 @@ struct StartSession {
 void Loop(StartSession start_session_state, oww::state::State &state_manager,
           Ntag424 &ntag_interface);
 
-}  // namespace oww::state::token_session
+}  // namespace oww::state::session

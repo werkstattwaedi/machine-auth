@@ -202,7 +202,7 @@ void NfcTags::TagPerformQueuedAction(NfcStateData &data) {
   using namespace oww::state;
   auto tag_state = state_->GetTagState();
   if (auto state = std::get_if<tag::StartSession>(tag_state.get())) {
-    tag::Loop(*state, *state_, *ntag_interface_.get());
+    session::Loop(*state, *state_, *ntag_interface_.get());
   } else if (auto state = std::get_if<tag::Personalize>(tag_state.get())) {
     tag::Loop(*state, *state_, *ntag_interface_.get());
   }

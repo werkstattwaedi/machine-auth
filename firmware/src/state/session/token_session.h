@@ -3,7 +3,7 @@
 #include "common.h"
 #include "fbs/token_session_generated.h"
 
-namespace oww::state::token_session {
+namespace oww::state::session {
 
 class TokenSession {
  public:
@@ -11,6 +11,7 @@ class TokenSession {
 
   bool IsActive() const { return expiration_ > millis(); }
   std::array<uint8_t, 7> GetTokenId() const { return tag_uid_; }
+  std::string GetSessionId() const { return session_id_; }
   std::string GetUserId() const { return user_id_; }
   std::string GetUserLabel() const { return user_label_; }
 
@@ -25,4 +26,4 @@ class TokenSession {
   std::vector<std::string> permissions_;
 };
 
-}  // namespace oww::state::token_session
+}  // namespace oww::state::session

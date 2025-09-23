@@ -1,11 +1,11 @@
 #pragma once
 
-#include "../token_session/start_session.h"
+#include "../session/start_session.h"
 #include "common.h"
 #include "personalize.h"
 
 namespace oww::state::tag {
-using namespace oww::state::token_session;
+using namespace oww::state::session;
 
 struct Idle {};
 struct Detected {};

@@ -7,7 +7,7 @@
 #include "state/configuration.h"
 #include "state/state.h"
 
-namespace oww::state::token_session {
+namespace oww::state::session {
 using namespace start;
 using namespace config::tag;
 using namespace fbs;
@@ -64,8 +64,17 @@ void OnStartSessionResponse(StartSession state,
   switch (start_session_response->result.type) {
     case StartSessionResult::TokenSession: {
       // ---- EXISTING SESSION ------------------------------------------------
-      auto existing_session = state_manager.GetSessions().RegisterSession(
-          start_session_response->result.AsTokenSession());
+      auto token_session_data = start_session_response->result.AsTokenSession();
+
+      if (!token_session_data) {
+        return UpdateNestedState(
+            state_manager, state,
+            Failed{.error = ErrorType::kMalformedResponse,
+                   .message = "StartSessionResult is missing TokenSession"});
+      }
+
+      auto existing_session =
+          state_manager.GetSessions().RegisterSession(*token_session_data);
       return UpdateNestedState(state_manager, state,
                                Succeeded{.session = existing_session});
     }
@@ -189,8 +198,18 @@ void OnCompleteAuthenticationResponse(
   switch (complete_auth_response->result.type) {
     case CompleteAuthenticationResult::TokenSession: {
       // ---- SESSION CREATED ------------------------------------------------
-      auto existing_session = state_manager.GetSessions().RegisterSession(
-          complete_auth_response->result.AsTokenSession());
+      auto token_session_data = complete_auth_response->result.AsTokenSession();
+
+      if (!token_session_data) {
+        return UpdateNestedState(
+            state_manager, state,
+            Failed{.error = ErrorType::kMalformedResponse,
+                   .message =
+                       "CompleteAuthenticationResult is missing TokenSession"});
+      }
+
+      auto existing_session =
+          state_manager.GetSessions().RegisterSession(*token_session_data);
       return UpdateNestedState(state_manager, state,
                                Succeeded{.session = existing_session});
     }
@@ -230,4 +249,4 @@ void Loop(StartSession state, oww::state::State &state_manager,
   }
 }
 
-}  // namespace oww::state::token_session
+}  // namespace oww::state::session

@@ -1,6 +1,6 @@
 #include "token_session.h"
 
-namespace oww::state::token_session {
+namespace oww::state::session {
 
 TokenSession::TokenSession(const fbs::TokenSessionT& src) {
   std::copy(src.token_id.get()->uid()->begin(),
@@ -21,4 +21,4 @@ bool TokenSession::HasPermission(std::string permission) const {
          permissions_.end();
 }
 
-}  // namespace oww::state::token_session
+}  // namespace oww::state::session
