@@ -2,7 +2,7 @@
 
 namespace oww::state::session {
 
-TokenSession::TokenSession(const fbs::TokenSessionT& src) {
+TokenSession::TokenSession(const fbs::TokenSessionT& src, Sessions* sessions) {
   std::copy(src.token_id.get()->uid()->begin(),
             src.token_id.get()->uid()->end(), tag_uid_.begin());
 

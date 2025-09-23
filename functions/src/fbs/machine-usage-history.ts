@@ -25,22 +25,33 @@ static getSizePrefixedRootAsMachineUsageHistory(bb:flatbuffers.ByteBuffer, obj?:
   return (obj || new MachineUsageHistory()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
 }
 
-records(index: number, obj?:MachineUsage):MachineUsage|null {
+machineId():string|null
+machineId(optionalEncoding:flatbuffers.Encoding):string|Uint8Array|null
+machineId(optionalEncoding?:any):string|Uint8Array|null {
   const offset = this.bb!.__offset(this.bb_pos, 4);
+  return offset ? this.bb!.__string(this.bb_pos + offset, optionalEncoding) : null;
+}
+
+records(index: number, obj?:MachineUsage):MachineUsage|null {
+  const offset = this.bb!.__offset(this.bb_pos, 6);
   return offset ? (obj || new MachineUsage()).__init(this.bb!.__indirect(this.bb!.__vector(this.bb_pos + offset) + index * 4), this.bb!) : null;
 }
 
 recordsLength():number {
-  const offset = this.bb!.__offset(this.bb_pos, 4);
+  const offset = this.bb!.__offset(this.bb_pos, 6);
   return offset ? this.bb!.__vector_len(this.bb_pos + offset) : 0;
 }
 
 static startMachineUsageHistory(builder:flatbuffers.Builder) {
-  builder.startObject(1);
+  builder.startObject(2);
+}
+
+static addMachineId(builder:flatbuffers.Builder, machineIdOffset:flatbuffers.Offset) {
+  builder.addFieldOffset(0, machineIdOffset, 0);
 }
 
 static addRecords(builder:flatbuffers.Builder, recordsOffset:flatbuffers.Offset) {
-  builder.addFieldOffset(0, recordsOffset, 0);
+  builder.addFieldOffset(1, recordsOffset, 0);
 }
 
 static createRecordsVector(builder:flatbuffers.Builder, data:flatbuffers.Offset[]):flatbuffers.Offset {
@@ -60,34 +71,48 @@ static endMachineUsageHistory(builder:flatbuffers.Builder):flatbuffers.Offset {
   return offset;
 }
 
-static createMachineUsageHistory(builder:flatbuffers.Builder, recordsOffset:flatbuffers.Offset):flatbuffers.Offset {
+static finishMachineUsageHistoryBuffer(builder:flatbuffers.Builder, offset:flatbuffers.Offset) {
+  builder.finish(offset);
+}
+
+static finishSizePrefixedMachineUsageHistoryBuffer(builder:flatbuffers.Builder, offset:flatbuffers.Offset) {
+  builder.finish(offset, undefined, true);
+}
+
+static createMachineUsageHistory(builder:flatbuffers.Builder, machineIdOffset:flatbuffers.Offset, recordsOffset:flatbuffers.Offset):flatbuffers.Offset {
   MachineUsageHistory.startMachineUsageHistory(builder);
+  MachineUsageHistory.addMachineId(builder, machineIdOffset);
   MachineUsageHistory.addRecords(builder, recordsOffset);
   return MachineUsageHistory.endMachineUsageHistory(builder);
 }
 
 unpack(): MachineUsageHistoryT {
   return new MachineUsageHistoryT(
+    this.machineId(),
     this.bb!.createObjList<MachineUsage, MachineUsageT>(this.records.bind(this), this.recordsLength())
   );
 }
 
 
 unpackTo(_o: MachineUsageHistoryT): void {
+  _o.machineId = this.machineId();
   _o.records = this.bb!.createObjList<MachineUsage, MachineUsageT>(this.records.bind(this), this.recordsLength());
 }
 }
 
 export class MachineUsageHistoryT implements flatbuffers.IGeneratedObject {
 constructor(
+  public machineId: string|Uint8Array|null = null,
   public records: (MachineUsageT)[] = []
 ){}
 
 
 pack(builder:flatbuffers.Builder): flatbuffers.Offset {
+  const machineId = (this.machineId !== null ? builder.createString(this.machineId!) : 0);
   const records = MachineUsageHistory.createRecordsVector(builder, builder.createObjectOffsetList(this.records));
 
   return MachineUsageHistory.createMachineUsageHistory(builder,
+    machineId,
     records
   );
 }

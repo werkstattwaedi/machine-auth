@@ -33,10 +33,13 @@ union CheckOutReason {
 table MachineUsage {
   session_id: string; 
   check_in: long; 
-  check_out: long; 
-  reason: CheckOutReason;
+  check_out: long = 0; 
+  reason: CheckOutReason ;
 }
 
 table MachineUsageHistory {
+  machine_id: string;
   records: [MachineUsage];
 }
+
+root_type MachineUsageHistory;

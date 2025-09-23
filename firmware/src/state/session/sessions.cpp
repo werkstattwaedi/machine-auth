@@ -13,6 +13,8 @@ void Sessions::Begin() {
       subscribeOptions);
 }
 
+void Sessions::Loop() {}
+
 std::shared_ptr<TokenSession> Sessions::GetSessionForToken(
     std::array<uint8_t, 7> token_id) {
   if (auto it = session_by_token.find(token_id); it != session_by_token.end()) {
@@ -24,7 +26,7 @@ std::shared_ptr<TokenSession> Sessions::GetSessionForToken(
 
 std::shared_ptr<TokenSession> Sessions::RegisterSession(
     fbs::TokenSessionT& session_data) {
-  auto new_session = std::make_shared<TokenSession>(session_data);
+  auto new_session = std::make_shared<TokenSession>(session_data, this);
   const auto token_id = new_session->GetTokenId();
   const auto session_id = new_session->GetSessionId();
 

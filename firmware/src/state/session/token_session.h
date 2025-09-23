@@ -4,10 +4,11 @@
 #include "fbs/token_session_generated.h"
 
 namespace oww::state::session {
+class Sessions;
 
 class TokenSession {
  public:
-  TokenSession(const fbs::TokenSessionT& src);
+  TokenSession(const fbs::TokenSessionT& src, Sessions* sessions);
 
   bool IsActive() const { return expiration_ > millis(); }
   std::array<uint8_t, 7> GetTokenId() const { return tag_uid_; }

@@ -35,8 +35,8 @@ Status State::Begin(std::unique_ptr<Configuration> configuration) {
 
 void State::Loop() {
   CheckTimeouts();
-
   UpdateRelaisState();
+  sessions_.Loop();
 }
 
 void State::OnConfigChanged() { System.reset(RESET_REASON_CONFIG_UPDATE); }

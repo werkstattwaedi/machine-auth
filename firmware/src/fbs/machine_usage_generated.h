@@ -658,6 +658,7 @@ inline ::flatbuffers::Offset<MachineUsage> CreateMachineUsageDirect(
 
 struct MachineUsageHistoryT : public ::flatbuffers::NativeTable {
   typedef MachineUsageHistory TableType;
+  std::string machine_id{};
   std::vector<std::unique_ptr<fbs::MachineUsageT>> records{};
   MachineUsageHistoryT() = default;
   MachineUsageHistoryT(const MachineUsageHistoryT &o);
@@ -670,13 +671,19 @@ struct MachineUsageHistory FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tabl
   typedef MachineUsageHistoryBuilder Builder;
   struct Traits;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-    VT_RECORDS = 4
+    VT_MACHINE_ID = 4,
+    VT_RECORDS = 6
   };
+  const ::flatbuffers::String *machine_id() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_MACHINE_ID);
+  }
   const ::flatbuffers::Vector<::flatbuffers::Offset<fbs::MachineUsage>> *records() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<fbs::MachineUsage>> *>(VT_RECORDS);
   }
   bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_MACHINE_ID) &&
+           verifier.VerifyString(machine_id()) &&
            VerifyOffset(verifier, VT_RECORDS) &&
            verifier.VerifyVector(records()) &&
            verifier.VerifyVectorOfTables(records()) &&
@@ -691,6 +698,9 @@ struct MachineUsageHistoryBuilder {
   typedef MachineUsageHistory Table;
   ::flatbuffers::FlatBufferBuilder &fbb_;
   ::flatbuffers::uoffset_t start_;
+  void add_machine_id(::flatbuffers::Offset<::flatbuffers::String> machine_id) {
+    fbb_.AddOffset(MachineUsageHistory::VT_MACHINE_ID, machine_id);
+  }
   void add_records(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<fbs::MachineUsage>>> records) {
     fbb_.AddOffset(MachineUsageHistory::VT_RECORDS, records);
   }
@@ -707,9 +717,11 @@ struct MachineUsageHistoryBuilder {
 
 inline ::flatbuffers::Offset<MachineUsageHistory> CreateMachineUsageHistory(
     ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> machine_id = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<fbs::MachineUsage>>> records = 0) {
   MachineUsageHistoryBuilder builder_(_fbb);
   builder_.add_records(records);
+  builder_.add_machine_id(machine_id);
   return builder_.Finish();
 }
 
@@ -720,10 +732,13 @@ struct MachineUsageHistory::Traits {
 
 inline ::flatbuffers::Offset<MachineUsageHistory> CreateMachineUsageHistoryDirect(
     ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *machine_id = nullptr,
     const std::vector<::flatbuffers::Offset<fbs::MachineUsage>> *records = nullptr) {
+  auto machine_id__ = machine_id ? _fbb.CreateString(machine_id) : 0;
   auto records__ = records ? _fbb.CreateVector<::flatbuffers::Offset<fbs::MachineUsage>>(*records) : 0;
   return fbs::CreateMachineUsageHistory(
       _fbb,
+      machine_id__,
       records__);
 }
 
@@ -902,12 +917,14 @@ inline ::flatbuffers::Offset<MachineUsage> CreateMachineUsage(::flatbuffers::Fla
       _reason);
 }
 
-inline MachineUsageHistoryT::MachineUsageHistoryT(const MachineUsageHistoryT &o) {
+inline MachineUsageHistoryT::MachineUsageHistoryT(const MachineUsageHistoryT &o)
+      : machine_id(o.machine_id) {
   records.reserve(o.records.size());
   for (const auto &records_ : o.records) { records.emplace_back((records_) ? new fbs::MachineUsageT(*records_) : nullptr); }
 }
 
 inline MachineUsageHistoryT &MachineUsageHistoryT::operator=(MachineUsageHistoryT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(machine_id, o.machine_id);
   std::swap(records, o.records);
   return *this;
 }
@@ -921,6 +938,7 @@ inline MachineUsageHistoryT *MachineUsageHistory::UnPack(const ::flatbuffers::re
 inline void MachineUsageHistory::UnPackTo(MachineUsageHistoryT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
   (void)_o;
   (void)_resolver;
+  { auto _e = machine_id(); if (_e) _o->machine_id = _e->str(); }
   { auto _e = records(); if (_e) { _o->records.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->records[_i]) { _e->Get(_i)->UnPackTo(_o->records[_i].get(), _resolver); } else { _o->records[_i] = std::unique_ptr<fbs::MachineUsageT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->records.resize(0); } }
 }
 
@@ -932,9 +950,11 @@ inline ::flatbuffers::Offset<MachineUsageHistory> CreateMachineUsageHistory(::fl
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const MachineUsageHistoryT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _machine_id = _o->machine_id.empty() ? 0 : _fbb.CreateString(_o->machine_id);
   auto _records = _o->records.size() ? _fbb.CreateVector<::flatbuffers::Offset<fbs::MachineUsage>> (_o->records.size(), [](size_t i, _VectorArgs *__va) { return CreateMachineUsage(*__va->__fbb, __va->__o->records[i].get(), __va->__rehasher); }, &_va ) : 0;
   return fbs::CreateMachineUsageHistory(
       _fbb,
+      _machine_id,
       _records);
 }
 
@@ -1091,6 +1111,48 @@ inline void CheckOutReasonUnion::Reset() {
   }
   value = nullptr;
   type = CheckOutReason::NONE;
+}
+
+inline const fbs::MachineUsageHistory *GetMachineUsageHistory(const void *buf) {
+  return ::flatbuffers::GetRoot<fbs::MachineUsageHistory>(buf);
+}
+
+inline const fbs::MachineUsageHistory *GetSizePrefixedMachineUsageHistory(const void *buf) {
+  return ::flatbuffers::GetSizePrefixedRoot<fbs::MachineUsageHistory>(buf);
+}
+
+inline bool VerifyMachineUsageHistoryBuffer(
+    ::flatbuffers::Verifier &verifier) {
+  return verifier.VerifyBuffer<fbs::MachineUsageHistory>(nullptr);
+}
+
+inline bool VerifySizePrefixedMachineUsageHistoryBuffer(
+    ::flatbuffers::Verifier &verifier) {
+  return verifier.VerifySizePrefixedBuffer<fbs::MachineUsageHistory>(nullptr);
+}
+
+inline void FinishMachineUsageHistoryBuffer(
+    ::flatbuffers::FlatBufferBuilder &fbb,
+    ::flatbuffers::Offset<fbs::MachineUsageHistory> root) {
+  fbb.Finish(root);
+}
+
+inline void FinishSizePrefixedMachineUsageHistoryBuffer(
+    ::flatbuffers::FlatBufferBuilder &fbb,
+    ::flatbuffers::Offset<fbs::MachineUsageHistory> root) {
+  fbb.FinishSizePrefixed(root);
+}
+
+inline std::unique_ptr<fbs::MachineUsageHistoryT> UnPackMachineUsageHistory(
+    const void *buf,
+    const ::flatbuffers::resolver_function_t *res = nullptr) {
+  return std::unique_ptr<fbs::MachineUsageHistoryT>(GetMachineUsageHistory(buf)->UnPack(res));
+}
+
+inline std::unique_ptr<fbs::MachineUsageHistoryT> UnPackSizePrefixedMachineUsageHistory(
+    const void *buf,
+    const ::flatbuffers::resolver_function_t *res = nullptr) {
+  return std::unique_ptr<fbs::MachineUsageHistoryT>(GetSizePrefixedMachineUsageHistory(buf)->UnPack(res));
 }
 
 }  // namespace fbs

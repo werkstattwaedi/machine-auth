@@ -83,6 +83,7 @@
       "streambuf": "cpp",
       "thread": "cpp",
       "typeinfo": "cpp"
-    }
+    },
+    "chat.useAgentsMdFile": true
   }
 }

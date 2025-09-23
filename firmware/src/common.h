@@ -6,9 +6,10 @@
 #include "common/debug.h"
 #include "common/expected.h"
 #include "common/status.h"
+#include "common/time.h"
 #include "config.h"
 
-// Helper type for overloaded std::variant visit 
+// Helper type for overloaded std::variant visit
 template <class... Ts>
 struct overloaded : Ts... {
   using Ts::operator()...;
