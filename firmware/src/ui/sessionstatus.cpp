@@ -61,102 +61,101 @@ void SessionStatus::OnActivate() {
 void SessionStatus::OnDeactivate() { MainContent::OnDeactivate(); }
 
 void SessionStatus::Render() {
-  auto tag_state = app_->GetTagState();
+  // auto tag_state = app_->GetTagState();
 
-  if (tag_state && last_state_id_ != static_cast<void*>(tag_state.get())) {
-    UpdateForState(tag_state);
-    last_state_id_ = static_cast<void*>(tag_state.get());
-  }
+  // if (tag_state && last_state_id_ != static_cast<void*>(tag_state.get())) {
+  //   UpdateForState(tag_state);
+  //   last_state_id_ = static_cast<void*>(tag_state.get());
+  // }
 }
 
-void SessionStatus::UpdateForState(
-    const std::shared_ptr<oww::app::tag::TagState> tag_state) {
-  using namespace oww::app::tag;
+void SessionStatus::UpdateForState() {
+  // using namespace oww::app::tag;
 
-  std::visit(
-      overloaded{
-          [&](Idle state) {
-            lv_label_set_text(status_text_, "Mit Token anmelden");
-            lv_obj_set_style_bg_color(status_text_, lv_color_hex(0x17a2b8),
-                                      LV_PART_MAIN);  // Cyan blue
+  // std::visit(
+  //     overloaded{
+  //         [&](Idle state) {
+  //           lv_label_set_text(status_text_, "Mit Token anmelden");
+  //           lv_obj_set_style_bg_color(status_text_, lv_color_hex(0x17a2b8),
+  //                                     LV_PART_MAIN);  // Cyan blue
 
-            // Idle state buttons (single button on right)
-            current_buttons_->left_label = "L";  // No left button in idle state
-            current_buttons_->left_enabled = true;
-            current_buttons_->left_callback = []() {
-              Log.info("Left button clicked!");
-              // Handle cancel action
-            };
+  //           // Idle state buttons (single button on right)
+  //           current_buttons_->left_label = "L";  // No left button in idle
+  //           state current_buttons_->left_enabled = true;
+  //           current_buttons_->left_callback = []() {
+  //             Log.info("Left button clicked!");
+  //             // Handle cancel action
+  //           };
 
-            current_buttons_->right_label = "R";  // Three dots button
-            current_buttons_->right_enabled = true;
-            current_buttons_->right_color =
-                lv_color32_make(255, 193, 7, 255);  // Yellow/amber color
+  //           current_buttons_->right_label = "R";  // Three dots button
+  //           current_buttons_->right_enabled = true;
+  //           current_buttons_->right_color =
+  //               lv_color32_make(255, 193, 7, 255);  // Yellow/amber color
 
-            current_buttons_->right_callback = []() {
-              Log.info("Right button clicked!");
-              // Handle cancel action
-            };
-            current_buttons_->up_enabled = true;
-            current_buttons_->down_enabled = true;
-            // LED mood handled by UI state (ring/NFC); buttons by ButtonBar
-          },
-          [&](Detected state) {
-            lv_label_set_text(status_text_, "Token erkannt");
-            lv_obj_set_style_bg_color(status_text_, lv_color_hex(0x0066cc),
-                                      LV_PART_MAIN);  // Blue
+  //           current_buttons_->right_callback = []() {
+  //             Log.info("Right button clicked!");
+  //             // Handle cancel action
+  //           };
+  //           current_buttons_->up_enabled = true;
+  //           current_buttons_->down_enabled = true;
+  //           // LED mood handled by UI state (ring/NFC); buttons by ButtonBar
+  //         },
+  //         [&](Detected state) {
+  //           lv_label_set_text(status_text_, "Token erkannt");
+  //           lv_obj_set_style_bg_color(status_text_, lv_color_hex(0x0066cc),
+  //                                     LV_PART_MAIN);  // Blue
 
-            // Detected state buttons (two buttons)
-            current_buttons_->left_label = "B";  // Cancel/X button
-            current_buttons_->left_enabled = true;
-            current_buttons_->left_color =
-                lv_color32_make(220, 53, 69, 255);  // Red
-            current_buttons_->right_label = "C";    // Confirm/checkmark button
-            current_buttons_->right_enabled = true;
-            current_buttons_->right_color =
-                lv_color32_make(40, 167, 69, 255);  // Green
-            current_buttons_->up_enabled = false;
-            current_buttons_->down_enabled = false;
-            // LED mood handled by UI state (ring/NFC); buttons by ButtonBar
-          },
-          [&](Authenticated state) {
-            lv_label_set_text(status_text_, "Authentifiziert");
-            lv_obj_set_style_bg_color(status_text_, lv_color_hex(0x28a745),
-                                      LV_PART_MAIN);  // Green
+  //           // Detected state buttons (two buttons)
+  //           current_buttons_->left_label = "B";  // Cancel/X button
+  //           current_buttons_->left_enabled = true;
+  //           current_buttons_->left_color =
+  //               lv_color32_make(220, 53, 69, 255);  // Red
+  //           current_buttons_->right_label = "C";    // Confirm/checkmark
+  //           button current_buttons_->right_enabled = true;
+  //           current_buttons_->right_color =
+  //               lv_color32_make(40, 167, 69, 255);  // Green
+  //           current_buttons_->up_enabled = false;
+  //           current_buttons_->down_enabled = false;
+  //           // LED mood handled by UI state (ring/NFC); buttons by ButtonBar
+  //         },
+  //         [&](Authenticated state) {
+  //           lv_label_set_text(status_text_, "Authentifiziert");
+  //           lv_obj_set_style_bg_color(status_text_, lv_color_hex(0x28a745),
+  //                                     LV_PART_MAIN);  // Green
 
-            // Authenticated state buttons
-            current_buttons_->left_label = "D";  // Back button
-            current_buttons_->left_enabled = true;
-            current_buttons_->left_color =
-                lv_color32_make(108, 117, 125, 255);  // Gray
-            current_buttons_->right_label = "E";      // Forward/continue button
-            current_buttons_->right_enabled = true;
-            current_buttons_->right_color =
-                lv_color32_make(40, 167, 69, 255);  // Green
-            current_buttons_->up_enabled = false;
-            current_buttons_->down_enabled = false;
-            // LED mood handled by UI state (ring/NFC); buttons by ButtonBar
-          },
-          [&](Unknown state) {
-            lv_label_set_text(status_text_, "Unbekannter Token");
-            lv_obj_set_style_bg_color(status_text_, lv_color_hex(0xdc3545),
-                                      LV_PART_MAIN);  // Red
+  //           // Authenticated state buttons
+  //           current_buttons_->left_label = "D";  // Back button
+  //           current_buttons_->left_enabled = true;
+  //           current_buttons_->left_color =
+  //               lv_color32_make(108, 117, 125, 255);  // Gray
+  //           current_buttons_->right_label = "E";      // Forward/continue
+  //           button current_buttons_->right_enabled = true;
+  //           current_buttons_->right_color =
+  //               lv_color32_make(40, 167, 69, 255);  // Green
+  //           current_buttons_->up_enabled = false;
+  //           current_buttons_->down_enabled = false;
+  //           // LED mood handled by UI state (ring/NFC); buttons by ButtonBar
+  //         },
+  //         [&](Unknown state) {
+  //           lv_label_set_text(status_text_, "Unbekannter Token");
+  //           lv_obj_set_style_bg_color(status_text_, lv_color_hex(0xdc3545),
+  //                                     LV_PART_MAIN);  // Red
 
-            // Unknown state buttons
-            current_buttons_->left_label = "G";  // Back button
-            current_buttons_->left_enabled = true;
-            current_buttons_->left_color =
-                lv_color32_make(108, 117, 125, 255);  // Gray
-            current_buttons_->right_label = "H";      // Help/question button
-            current_buttons_->right_enabled = true;
-            current_buttons_->right_color =
-                lv_color32_make(255, 193, 7, 255);  // Yellow
-            current_buttons_->up_enabled = false;
-            current_buttons_->down_enabled = false;
-            // LED mood handled by UI state (ring/NFC); buttons by ButtonBar
-          },
-      },
-      *(tag_state.get()));
+  //           // Unknown state buttons
+  //           current_buttons_->left_label = "G";  // Back button
+  //           current_buttons_->left_enabled = true;
+  //           current_buttons_->left_color =
+  //               lv_color32_make(108, 117, 125, 255);  // Gray
+  //           current_buttons_->right_label = "H";      // Help/question button
+  //           current_buttons_->right_enabled = true;
+  //           current_buttons_->right_color =
+  //               lv_color32_make(255, 193, 7, 255);  // Yellow
+  //           current_buttons_->up_enabled = false;
+  //           current_buttons_->down_enabled = false;
+  //           // LED mood handled by UI state (ring/NFC); buttons by ButtonBar
+  //         },
+  //     },
+  //     *(tag_state.get()));
 }
 
 std::shared_ptr<ButtonDefinition> SessionStatus::GetButtonDefinition() {

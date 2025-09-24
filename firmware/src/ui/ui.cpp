@@ -1,6 +1,5 @@
 #include "ui.h"
 
-#include "../state/configuration.h"
 #include "driver/display.h"
 
 namespace oww::ui {
@@ -107,41 +106,41 @@ void UserInterface::UpdateGui() {
 }
 
 void UserInterface::UpdateBuzzer() {
-  auto current_state = app_->GetTagState();
+  // auto current_state = app_->GetTagState();
 
-  if (last_buzz_state_id_ != static_cast<void *>(current_state.get())) {
-    using namespace oww::app::tag;
+  // if (last_buzz_state_id_ != static_cast<void *>(current_state.get())) {
+  //   using namespace oww::app::tag;
 
-    int frequency = 0;
-    int duration = 100;
+  //   int frequency = 0;
+  //   int duration = 100;
 
-    std::visit(overloaded{
-                   [&](Idle state) {},
-                   [&](Detected state) { frequency = 440; },
-                   [&](Authenticated state) {
-                     frequency = 660;
-                     duration = 200;
-                   },
-                   [&](Unknown state) {
-                     frequency = 370;
-                     duration = 200;
-                   },
+  //   std::visit(overloaded{
+  //                  [&](Idle state) {},
+  //                  [&](Detected state) { frequency = 440; },
+  //                  [&](Authenticated state) {
+  //                    frequency = 660;
+  //                    duration = 200;
+  //                  },
+  //                  [&](Unknown state) {
+  //                    frequency = 370;
+  //                    duration = 200;
+  //                  },
 
-               },
-               *(current_state.get()));
+  //              },
+  //              *(current_state.get()));
 
-    if (frequency > 0) {
-      analogWrite(buzzer::pin_pwm, 128, frequency);
-      buzz_timeout = millis() + duration;
-    }
+  //   if (frequency > 0) {
+  //     analogWrite(buzzer::pin_pwm, 128, frequency);
+  //     buzz_timeout = millis() + duration;
+  //   }
 
-    last_buzz_state_id_ = static_cast<void *>(current_state.get());
-  }
+  //   last_buzz_state_id_ = static_cast<void *>(current_state.get());
+  // }
 
-  if (buzz_timeout != CONCURRENT_WAIT_FOREVER && buzz_timeout < millis()) {
-    analogWrite(buzzer::pin_pwm, 0);
-    buzz_timeout = CONCURRENT_WAIT_FOREVER;
-  }
+  // if (buzz_timeout != CONCURRENT_WAIT_FOREVER && buzz_timeout < millis()) {
+  //   analogWrite(buzzer::pin_pwm, 0);
+  //   buzz_timeout = CONCURRENT_WAIT_FOREVER;
+  // }
 }
 
 // Helper function to convert HSL to RGB
@@ -167,91 +166,92 @@ void HslToRgb(float h, float s, float l, byte &r, byte &g, byte &b) {
 }
 
 void UserInterface::UpdateLed() {
-  auto current_state = app_->GetTagState();
+  // auto current_state = app_->GetTagState();
 
-  using namespace oww::app::tag;
+  // using namespace oww::app::tag;
 
-  // Choose effects/colors for each section based on state
-  using leds::Color;
-  using leds::EffectConfig;
-  using leds::EffectType;
+  // // Choose effects/colors for each section based on state
+  // using leds::Color;
+  // using leds::EffectConfig;
+  // using leds::EffectType;
 
-  EffectConfig ring, buttons, nfc;
-  leds::ButtonColors btn_colors;
+  // EffectConfig ring, buttons, nfc;
+  // leds::ButtonColors btn_colors;
 
-  std::visit(
-      overloaded{
-          [&](Idle state) {
-            // Idle: soft blue breathe on ring and dim warm white NFC
-            ring.type = EffectType::Breathe;
-            ring.color = Color::RGB(0, 64, 200);
-            ring.min_brightness = 8;
-            ring.max_brightness = 64;
-            ring.period_ms = 3000;
+  // std::visit(
+  //     overloaded{
+  //         [&](Idle state) {
+  //           // Idle: soft blue breathe on ring and dim warm white NFC
+  //           ring.type = EffectType::Breathe;
+  //           ring.color = Color::RGB(0, 64, 200);
+  //           ring.min_brightness = 8;
+  //           ring.max_brightness = 64;
+  //           ring.period_ms = 3000;
 
-            nfc.type = EffectType::Solid;
-            nfc.color = Color::WarmWhite(24);
+  //           nfc.type = EffectType::Solid;
+  //           nfc.color = Color::WarmWhite(24);
 
-            buttons.type = EffectType::Solid;
-            btn_colors = {Color::RGB(32, 32, 32), Color::RGB(32, 32, 32),
-                          Color::RGB(32, 32, 32), Color::RGB(32, 32, 32)};
-          },
-          [&](Detected state) {
-            // Tag detected: rotate yellow highlight on ring
-            ring.type = EffectType::Rotate;
-            ring.color = Color::RGB(200, 160, 20);
-            ring.lit_pixels = 20;  // ~2x nominal width
-            ring.hotspots = 2;     // opposite sides
-            ring.period_ms = 1500;
+  //           buttons.type = EffectType::Solid;
+  //           btn_colors = {Color::RGB(32, 32, 32), Color::RGB(32, 32, 32),
+  //                         Color::RGB(32, 32, 32), Color::RGB(32, 32, 32)};
+  //         },
+  //         [&](Detected state) {
+  //           // Tag detected: rotate yellow highlight on ring
+  //           ring.type = EffectType::Rotate;
+  //           ring.color = Color::RGB(200, 160, 20);
+  //           ring.lit_pixels = 20;  // ~2x nominal width
+  //           ring.hotspots = 2;     // opposite sides
+  //           ring.period_ms = 1500;
 
-            nfc.type = EffectType::Breathe;
-            nfc.color = Color::RGB(0, 80, 220);
+  //           nfc.type = EffectType::Breathe;
+  //           nfc.color = Color::RGB(0, 80, 220);
 
-            buttons.type = EffectType::Solid;
-            btn_colors = {Color::RGB(60, 60, 20), Color::RGB(60, 60, 20),
-                          Color::RGB(60, 60, 20), Color::RGB(60, 60, 20)};
-          },
-          [&](Authenticated state) {
-            // Green steady ring, NFC short breathe pulse
-            ring.type = EffectType::Solid;
-            ring.color = Color::RGB(0, 180, 40);
-            nfc.type = EffectType::Breathe;
-            nfc.color = Color::RGB(0, 120, 40);
+  //           buttons.type = EffectType::Solid;
+  //           btn_colors = {Color::RGB(60, 60, 20), Color::RGB(60, 60, 20),
+  //                         Color::RGB(60, 60, 20), Color::RGB(60, 60, 20)};
+  //         },
+  //         [&](Authenticated state) {
+  //           // Green steady ring, NFC short breathe pulse
+  //           ring.type = EffectType::Solid;
+  //           ring.color = Color::RGB(0, 180, 40);
+  //           nfc.type = EffectType::Breathe;
+  //           nfc.color = Color::RGB(0, 120, 40);
 
-            buttons.type = EffectType::Solid;
-            btn_colors = {Color::RGB(40, 120, 40), Color::RGB(40, 120, 40),
-                          Color::RGB(40, 120, 40), Color::RGB(40, 120, 40)};
-          },
-          [&](Unknown state) {
-            // Access denied: red blink all around, red NFC
-            ring.type = EffectType::Blink;
-            ring.color = Color::RGB(200, 20, 20);
-            ring.period_ms = 700;
-            ring.duty_cycle = 160;
-            nfc.type = EffectType::Solid;
-            nfc.color = Color::RGB(120, 0, 0);
-            buttons.type = EffectType::Solid;
-            btn_colors = {Color::RGB(120, 20, 20), Color::RGB(120, 20, 20),
-                          Color::RGB(120, 20, 20), Color::RGB(120, 20, 20)};
-          },
-      },
-      *(current_state.get()));
+  //           buttons.type = EffectType::Solid;
+  //           btn_colors = {Color::RGB(40, 120, 40), Color::RGB(40, 120, 40),
+  //                         Color::RGB(40, 120, 40), Color::RGB(40, 120, 40)};
+  //         },
+  //         [&](Unknown state) {
+  //           // Access denied: red blink all around, red NFC
+  //           ring.type = EffectType::Blink;
+  //           ring.color = Color::RGB(200, 20, 20);
+  //           ring.period_ms = 700;
+  //           ring.duty_cycle = 160;
+  //           nfc.type = EffectType::Solid;
+  //           nfc.color = Color::RGB(120, 0, 0);
+  //           buttons.type = EffectType::Solid;
+  //           btn_colors = {Color::RGB(120, 20, 20), Color::RGB(120, 20, 20),
+  //                         Color::RGB(120, 20, 20), Color::RGB(120, 20, 20)};
+  //         },
+  //     },
+  //     *(current_state.get()));
 
-  // Apply configs (ring and NFC always from UI state)
-  led_->Ring().SetEffect(ring);
-  led_->Nfc().SetEffect(nfc);
+  // // Apply configs (ring and NFC always from UI state)
+  // led_->Ring().SetEffect(ring);
+  // led_->Nfc().SetEffect(nfc);
 
-  // Buttons: if current content has a definition, ButtonBar drives LEDs in its
-  // Render(); otherwise, fall back to generic state colors here.
-  auto active = GetCurrentContent();
-  bool has_buttons = active && active->GetButtonDefinition();
-  if (!has_buttons) {
-    led_->Buttons().SetEffect(buttons);
-    led_->Buttons().SetColors(btn_colors);
-  }
+  // // Buttons: if current content has a definition, ButtonBar drives LEDs in
+  // its
+  // // Render(); otherwise, fall back to generic state colors here.
+  // auto active = GetCurrentContent();
+  // bool has_buttons = active && active->GetButtonDefinition();
+  // if (!has_buttons) {
+  //   led_->Buttons().SetEffect(buttons);
+  //   led_->Buttons().SetColors(btn_colors);
+  // }
 
-  // Tick renderer
-  led_->Tick(millis());
+  // // Tick renderer
+  // led_->Tick(millis());
 }
 
 void UserInterface::SetupButtonMappings() {

@@ -21,7 +21,7 @@ Status Application::Begin() {
 
   configuration_->Begin();
   sessions_.Begin();
-  machine_usage_.Begin(configuration_->GetMachine);
+  machine_usage_.Begin(configuration_->GetMachine());
   cloud_request_.Begin();
 
   return Status::kOk;

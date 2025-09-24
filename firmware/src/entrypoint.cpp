@@ -29,6 +29,7 @@ SerialLogHandler logHandler(
                     });
 
 using namespace oww::app;
+using namespace oww::nfc;
 
 #ifdef REMOTE_LOGGING
 retained uint8_t remoteLogBuf[2560];
@@ -48,9 +49,8 @@ void setup() {
 
   {
     // create app_
-    app_ = std::make_shared<Application>();
-    auto config = std::make_unique<Configuration>(std::weak_ptr(app_));
-    app_->Begin(std::move(config));
+    app_ = std::make_shared<Application>(std::make_unique<Configuration>());
+    app_->Begin();
   }
 
   if (app_->GetConfiguration()->IsSetupMode()) {

@@ -4,11 +4,15 @@
 #include "common.h"
 #include "fbs/token_session_generated.h"
 #include "nfc/nfc_tags.h"
-#include "token_session.h"
 
 namespace oww::app::session {
+class TokenSession;
+class Sessions;
+}  // namespace oww::app::session
 
-namespace start {
+namespace oww::app::action {
+
+namespace start_session {
 
 struct Begin {};
 
@@ -27,7 +31,7 @@ struct AwaitCompleteAuthenticationResponse {
 };
 
 struct Succeeded {
-  std::shared_ptr<TokenSession> session;
+  std::shared_ptr<oww::app::session::TokenSession> session;
 };
 
 struct Rejected {
@@ -43,13 +47,13 @@ using InternalState = std::variant<
     Begin, AwaitStartSessionResponse, AwaitAuthenticateNewSessionResponse,
     AwaitCompleteAuthenticationResponse, Succeeded, Rejected, Failed>;
 
-}  // namespace start
+}  // namespace start_session
 
 class StartSessionAction : public NtagAction {
  public:
   StartSessionAction(std::array<uint8_t, 7> tag_uid,
-                     std::weak_ptr<CloudRequest> cloud_request,
-                     std::weak_ptr<Sessions> sessions);
+                     std::weak_ptr<oww::app::CloudRequest> cloud_request,
+                     std::weak_ptr<oww::app::session::Sessions> sessions);
   ~StartSessionAction() {}
 
   virtual Continuation Loop(Ntag424 &ntag_interface);
@@ -59,10 +63,10 @@ class StartSessionAction : public NtagAction {
 
  private:
   std::array<uint8_t, 7> tag_uid_;
-  std::weak_ptr<CloudRequest> cloud_request_;
-  std::weak_ptr<Sessions> sessions_;
+  std::weak_ptr<oww::app::CloudRequest> cloud_request_;
+  std::weak_ptr<oww::app::session::Sessions> sessions_;
 
-  std::shared_ptr<start::InternalState> state_;
+  std::shared_ptr<start_session::InternalState> state_;
 };
 
-}  // namespace oww::app::session
+}  // namespace oww::app::action

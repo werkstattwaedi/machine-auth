@@ -47,7 +47,7 @@ class StateHandle {
   template <typename T>
   bool Exited() const {
     if (auto sm = state_machine_.lock()) {
-      return Is<T>() && (!std::holds_alternative<T>(*sm - get_state_ptr() >));
+      return Is<T>() && (!std::holds_alternative<T>(*sm->GetStatePtr()));
     }
     return true;
   }
@@ -147,16 +147,18 @@ class StateMachine
 
   template <typename T>
   bool Entered(StateHandle& last_state) const {
-    if (last_state.state_machine_ == this) {
-      return Is<T>() && !last_state.Is<T>();
+    auto sm = last_state.state_machine_.lock();
+    if (sm.get() == this) {
+      return Is<T>() && !last_state.template Is<T>();
     }
     return false;
   }
 
   template <typename T>
   bool Exited(StateHandle& last_state) const {
-    if (last_state.state_machine_ == this) {
-      return !Is<T>() && last_state.Is<T>();
+    auto sm = last_state.state_machine_.lock();
+    if (sm.get() == this) {
+      return !Is<T>() && last_state.template Is<T>();
     }
     return false;
   }

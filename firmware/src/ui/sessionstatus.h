@@ -32,8 +32,7 @@ class SessionStatus : public MainContent {
   // Helper methods
   void CreateNfcIconArea();
   void CreateStatusText();
-  void UpdateForState(
-      const std::shared_ptr<oww::app::tag::TagState> tag_state);
+  void UpdateForState();
 };
 
 }  // namespace oww::ui
