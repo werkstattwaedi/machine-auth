@@ -2,6 +2,10 @@
 
 #include "common.h"
 
+namespace fbs {
+struct DeviceConfig;
+}
+
 namespace oww::app {
 
 constexpr auto ledger_name = "terminal-config";
@@ -61,6 +65,11 @@ class Configuration {
   TerminalConfig* GetTerminal() { return terminal_config_.get(); }
 
   MachineConfig* GetMachine() { return machine_config_.get(); }
+
+  fbs::DeviceConfig* GetDeviceConfig() {
+    // TODO Implement
+    return nullptr;
+  }
 
   // Whether development terminal keys are used.
   bool UsesDevKeys();

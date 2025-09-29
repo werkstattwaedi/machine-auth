@@ -2,6 +2,7 @@
 #include "app/application.h"
 
 #include "common/byte_array.h"
+#include "fbs/ledger_terminal-config_generated.h"
 
 namespace oww::app {
 
@@ -19,9 +20,12 @@ Application::Application(std::unique_ptr<Configuration> configuration)
 Status Application::Begin() {
   os_mutex_create(&mutex_);
 
+  auto device_config = configuration_->GetDeviceConfig();
+  auto machine = (device_config->machines()->begin());
+
   configuration_->Begin();
   sessions_.Begin();
-  machine_usage_.Begin(configuration_->GetMachine());
+  machine_usage_.Begin(**machine);
   cloud_request_.Begin();
 
   return Status::kOk;
