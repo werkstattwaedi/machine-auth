@@ -1,7 +1,7 @@
 
 #include "debug.h"
 
-String BytesToHexAndAsciiString(const uint8_t *data, const size_t num_bytes) {
+String BytesToHexAndAsciiString(const uint8_t* data, const size_t num_bytes) {
   String output_string = BytesToHexString(data, num_bytes) + "  ";
 
   // ASCII part.
@@ -19,7 +19,7 @@ String BytesToHexAndAsciiString(const uint8_t *data, const size_t num_bytes) {
   return output_string;
 }
 
-String BytesToHexString(const uint8_t *data, const size_t num_bytes) {
+String BytesToHexString(const uint8_t* data, const size_t num_bytes) {
   String output_string;
 
   for (size_t i = 0; i < num_bytes; ++i) {

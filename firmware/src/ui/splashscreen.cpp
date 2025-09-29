@@ -4,7 +4,7 @@ LV_IMG_DECLARE(oww_logo);
 
 namespace oww::ui {
 
-SplashScreen::SplashScreen(std::shared_ptr<oww::app::Application> app)
+SplashScreen::SplashScreen(std::shared_ptr<oww::logic::Application> app)
     : Component(app) {
   lv_obj_set_style_bg_color(lv_screen_active(), lv_color_white(), LV_PART_MAIN);
 

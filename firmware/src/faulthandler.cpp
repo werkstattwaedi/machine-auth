@@ -130,7 +130,7 @@ void Init() {
   if (waitForDebugger) {
     waitFor(Serial.isConnected, 5000);
   }
-  
+
   if (hadCrash) {
     log_crash_record(g_crash);
     // Clear to avoid repeating on every boot

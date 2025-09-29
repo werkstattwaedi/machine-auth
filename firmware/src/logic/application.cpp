@@ -1,10 +1,10 @@
 
-#include "app/application.h"
+#include "logic/application.h"
 
 #include "common/byte_array.h"
 #include "fbs/ledger_terminal-config_generated.h"
 
-namespace oww::app {
+namespace oww::logic {
 
 Logger Application::logger("app");
 
@@ -45,4 +45,4 @@ void Application::BootCompleted() { boot_progress_.clear(); }
 bool Application::IsBootCompleted() { return boot_progress_.empty(); }
 std::string Application::GetBootProgress() { return boot_progress_; }
 
-}  // namespace oww::app
+}  // namespace oww::logic

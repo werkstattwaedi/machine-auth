@@ -7,7 +7,8 @@
 
 namespace oww::ui {
 
-ButtonBar::ButtonBar(lv_obj_t* parent, std::shared_ptr<oww::app::Application> state)
+ButtonBar::ButtonBar(lv_obj_t* parent,
+                     std::shared_ptr<oww::logic::Application> state)
     : Component(state) {
   // Create the main container for the button bar
   // ButtonBar: 240×50px at bottom of screen, no padding

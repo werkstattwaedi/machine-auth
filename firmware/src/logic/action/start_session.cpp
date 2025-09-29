@@ -2,18 +2,18 @@
 
 #include <type_traits>
 
-#include "app/application.h"
-#include "app/configuration.h"
 #include "common/byte_array.h"
 #include "config.h"
+#include "logic/application.h"
+#include "logic/configuration.h"
 
-namespace oww::app::action {
-using namespace oww::app::action::start_session;
-using namespace oww::app::session;
+namespace oww::logic::action {
+using namespace oww::logic::action::start_session;
+using namespace oww::logic::session;
 using namespace config::tag;
 using namespace fbs;
 using namespace oww::nfc;
-using oww::app::CloudRequest;
+using oww::logic::CloudRequest;
 
 tl::expected<std::shared_ptr<InternalState>, ErrorType> OnBegin(
     std::array<uint8_t, 7> tag_uid, Sessions& sessions,
@@ -243,8 +243,7 @@ bool StartSessionAction::IsComplete() {
   return std::visit(
       [](auto&& arg) {
         using T = std::decay_t<decltype(arg)>;
-        return std::is_same_v<T, Succeeded> ||
-               std::is_same_v<T, Rejected> ||
+        return std::is_same_v<T, Succeeded> || std::is_same_v<T, Rejected> ||
                std::is_same_v<T, Failed>;
       },
       *state_);
@@ -255,4 +254,4 @@ void StartSessionAction::OnAbort(ErrorType error) {
       Failed{.error = error, .message = "Ntag transaction aborted"});
 }
 
-}  // namespace oww::app::action
+}  // namespace oww::logic::action

@@ -1,8 +1,9 @@
 #pragma once
 
-#include "component.h"
-#include "buttonbar.h"
 #include <memory>
+
+#include "buttonbar.h"
+#include "component.h"
 
 namespace oww::ui {
 
@@ -11,7 +12,8 @@ class UserInterface;
 
 class MainContent : public Component {
  public:
-  MainContent(lv_obj_t* parent, std::shared_ptr<oww::app::Application> state, UserInterface* ui);
+  MainContent(lv_obj_t* parent, std::shared_ptr<oww::logic::Application> state,
+              UserInterface* ui);
   virtual ~MainContent();
 
   virtual void Render() override;
@@ -23,13 +25,16 @@ class MainContent : public Component {
   virtual void OnDeactivate();
 
   /** Returns the button definition for this content, or nullptr if none */
-  virtual std::shared_ptr<ButtonDefinition> GetButtonDefinition() { return nullptr; }
+  virtual std::shared_ptr<ButtonDefinition> GetButtonDefinition() {
+    return nullptr;
+  }
 
  protected:
   /** Push a new MainContent onto the stack, making it active */
   void PushContent(std::shared_ptr<MainContent> content);
 
-  /** Pop the current MainContent from the stack, returning to the previous one */
+  /** Pop the current MainContent from the stack, returning to the previous one
+   */
   void PopContent();
 
  private:

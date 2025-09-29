@@ -1,7 +1,7 @@
 
 
 #include "configuration.h"
-namespace oww::app {
+namespace oww::logic {
 
 // Factory data used for dev devices.
 FactoryData DEV_FACTORY_DATA{
@@ -186,4 +186,4 @@ void Configuration::OnConfigChanged() {
   System.reset(RESET_REASON_CONFIG_UPDATE);
 }
 
-}  // namespace oww::app
+}  // namespace oww::logic

@@ -1,19 +1,19 @@
-#include "app/action/personalize.h"
+#include "logic/action/personalize.h"
 
 #include <array>
 #include <type_traits>
 
-#include "app/application.h"
-#include "app/configuration.h"
 #include "common/byte_array.h"
 #include "common/debug.h"
 #include "config.h"
+#include "logic/application.h"
+#include "logic/configuration.h"
 #include "nfc/driver/Ntag424.h"
 #include "nfc/nfc_tags.h"
 
-namespace oww::app::action {
+namespace oww::logic::action {
 
-using namespace oww::app::action::personalize;
+using namespace oww::logic::action::personalize;
 using namespace oww::nfc;
 using namespace fbs;
 using namespace config::tag;
@@ -173,7 +173,7 @@ tl::expected<std::shared_ptr<InternalState>, ErrorType> OnDoPersonalizeTag(
 
 PersonalizeAction::PersonalizeAction(
     std::array<uint8_t, 7> tag_uid, std::array<uint8_t, 16> terminal_key,
-    std::weak_ptr<oww::app::CloudRequest> cloud_request)
+    std::weak_ptr<oww::logic::CloudRequest> cloud_request)
     : tag_uid_(tag_uid),
       terminal_key_(terminal_key),
       cloud_request_(cloud_request),
@@ -216,4 +216,4 @@ void PersonalizeAction::OnAbort(ErrorType error) {
       Failed{.error = error, .message = "Ntag transaction aborted"});
 }
 
-}  // namespace oww::app::action
+}  // namespace oww::logic::action

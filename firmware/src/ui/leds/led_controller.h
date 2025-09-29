@@ -1,9 +1,9 @@
 #pragma once
 
-#include <vector>
-#include <memory>
 #include <algorithm>
 #include <cmath>
+#include <memory>
+#include <vector>
 
 #include "neopixel.h"
 
@@ -35,12 +35,12 @@ struct EffectConfig {
   // Lobe width control in tenths (fine control). For example 10 ~= baseline
   // width of one nominal pixel span, 5 ~= half, 20 ~= double.
   uint8_t lit_pixels{10};
-  int8_t direction{1};      // +1 clockwise, -1 counter-clockwise
-  uint8_t hotspots{1};      // number of evenly spaced hotspots around ring
+  int8_t direction{1};  // +1 clockwise, -1 counter-clockwise
+  uint8_t hotspots{1};  // number of evenly spaced hotspots around ring
 };
 
 // Helper to scale an RGBW color by 0..255 factor
-inline Color scale(const Color &c, uint8_t s) {
+inline Color scale(const Color& c, uint8_t s) {
   auto mul = [](uint8_t v, uint8_t s) -> uint8_t {
     return static_cast<uint8_t>((static_cast<uint16_t>(v) * s) / 255);
   };
@@ -52,21 +52,21 @@ class LedController;
 // Base class: a logical LED section controlling a subset of indices
 class Section {
  public:
-  Section(LedController *owner, std::vector<uint8_t> indices)
+  Section(LedController* owner, std::vector<uint8_t> indices)
       : owner_(owner), indices_(std::move(indices)) {}
   virtual ~Section() = default;
 
   // Change the active effect
-  virtual void SetEffect(const EffectConfig &cfg) { effect_ = cfg; }
+  virtual void SetEffect(const EffectConfig& cfg) { effect_ = cfg; }
 
   // Drive pixels for this section
   virtual void Render(uint32_t now_ms);
 
-  const EffectConfig &GetEffect() const { return effect_; }
-  const std::vector<uint8_t> &Indices() const { return indices_; }
+  const EffectConfig& GetEffect() const { return effect_; }
+  const std::vector<uint8_t>& Indices() const { return indices_; }
 
  protected:
-  LedController *owner_;
+  LedController* owner_;
   std::vector<uint8_t> indices_;
   EffectConfig effect_{};
 };
@@ -97,10 +97,10 @@ struct ButtonColors {
 
 class ButtonSection : public Section {
  public:
-  ButtonSection(LedController *owner, const std::vector<uint8_t> &indices)
+  ButtonSection(LedController* owner, const std::vector<uint8_t>& indices)
       : Section(owner, indices) {}
 
-  void SetColors(const ButtonColors &c) { colors_ = c; }
+  void SetColors(const ButtonColors& c) { colors_ = c; }
   void Render(uint32_t now_ms) override;
 
  private:
@@ -110,28 +110,28 @@ class ButtonSection : public Section {
 // NFC backlight section (two pixels)
 class NfcSection : public Section {
  public:
-    using Section::Section;
+  using Section::Section;
 };
 
 // Facade that owns all sections and updates the physical strip
 class LedController {
  public:
-  explicit LedController(Adafruit_NeoPixel *strip) : strip_(strip) {}
+  explicit LedController(Adafruit_NeoPixel* strip) : strip_(strip) {}
 
-  RingSection &Ring() { return ring_; }
-  ButtonSection &Buttons() { return buttons_; }
-  NfcSection &Nfc() { return nfc_; }
+  RingSection& Ring() { return ring_; }
+  ButtonSection& Buttons() { return buttons_; }
+  NfcSection& Nfc() { return nfc_; }
 
   void InitializeDefaultMapping();
   // Optional: provide custom per-edge distances for ring (size must equal
   // ring indices count). Values are relative units; only ratios matter.
-  void SetRingEdgeLengths(const std::vector<float> &edge_lengths);
+  void SetRingEdgeLengths(const std::vector<float>& edge_lengths);
 
   // Call this each frame to render all effects and push to the strip
   void Tick(uint32_t now_ms);
 
   // Low-level paint, used by sections
-  void Paint(uint8_t pixel, const Color &c, uint8_t brightness = 255) {
+  void Paint(uint8_t pixel, const Color& c, uint8_t brightness = 255) {
     Color s = scale(c, brightness);
     strip_->setPixelColor(pixel, s.r, s.g, s.b, s.w);
   }
@@ -139,15 +139,15 @@ class LedController {
   size_t PixelCount() const { return strip_->numPixels(); }
 
  private:
-  Adafruit_NeoPixel *strip_;
+  Adafruit_NeoPixel* strip_;
   // Sections are built with index mapping in InitializeDefaultMapping()
   RingSection ring_{this, {}};
   ButtonSection buttons_{this, {}};
   NfcSection nfc_{this, {}};
 
   // Physical model for ring animation
-  std::vector<float> ring_pos_;      // cumulative positions per pixel
-  float ring_wrap_len_{0.0f};        // length from last to first
+  std::vector<float> ring_pos_;  // cumulative positions per pixel
+  float ring_wrap_len_{0.0f};    // length from last to first
 };
 
 }  // namespace oww::ui::leds

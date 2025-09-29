@@ -28,14 +28,18 @@ class ButtonDefinition {
 // Left HW button: roughly x=0 to x=45, center at x=22
 // Right HW button: roughly x=195 to x=240, center at x=217
 // Up/Down buttons in the gap between them
-inline constexpr lv_point_t top_left_touch_point{115, 300};      // Left HW button center
-inline constexpr lv_point_t top_right_touch_point{125, 300};    // Right HW button center  
-inline constexpr lv_point_t bottom_left_touch_point{45, 300};   // Left HW button center
-inline constexpr lv_point_t bottom_right_touch_point{195, 300}; // Right HW button center
+inline constexpr lv_point_t top_left_touch_point{115,
+                                                 300};  // Left HW button center
+inline constexpr lv_point_t top_right_touch_point{
+    125, 300};  // Right HW button center
+inline constexpr lv_point_t bottom_left_touch_point{
+    45, 300};  // Left HW button center
+inline constexpr lv_point_t bottom_right_touch_point{
+    195, 300};  // Right HW button center
 
 class ButtonBar : public Component {
  public:
-  ButtonBar(lv_obj_t* parent, std::shared_ptr<oww::app::Application> state);
+  ButtonBar(lv_obj_t* parent, std::shared_ptr<oww::logic::Application> state);
   virtual ~ButtonBar();
 
   virtual void Render() override;

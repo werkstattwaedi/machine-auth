@@ -2,9 +2,9 @@
  * @brief Entrypoint for terminal firmware.
  */
 
-#include "app/application.h"
 #include "common.h"
 #include "faulthandler.h"
+#include "logic/application.h"
 #include "nfc/nfc_tags.h"
 #include "setup/setup.h"
 #include "ui/ui.h"
@@ -28,7 +28,7 @@ SerialLogHandler logHandler(
                         {"cap1296", LOG_LEVEL_INFO},
                     });
 
-using namespace oww::app;
+using namespace oww::logic;
 using namespace oww::nfc;
 
 #ifdef REMOTE_LOGGING

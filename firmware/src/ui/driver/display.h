@@ -10,12 +10,12 @@
 
 struct DisplayFlushRequest {
   lv_area_t area;
-  uint8_t *px_map;
+  uint8_t* px_map;
 };
 
 class Display {
  public:
-  static Display &instance();
+  static Display& instance();
 
   Status Begin();
 
@@ -25,22 +25,22 @@ class Display {
 
  private:
   // Display is a singleton - use Display.instance()
-  static Display *instance_;
+  static Display* instance_;
   Display();
 
   virtual ~Display();
-  Display(const Display &) = delete;
-  Display &operator=(const Display &) = delete;
+  Display(const Display&) = delete;
+  Display& operator=(const Display&) = delete;
 
-  lv_display_t *display_ = nullptr;
-  lv_indev_t *touch_input = nullptr;
+  lv_display_t* display_ = nullptr;
+  lv_indev_t* touch_input = nullptr;
 
-  SPIClass &spi_interface_;
+  SPIClass& spi_interface_;
   SPISettings spi_settings_;
   XPT2046_Touchscreen touchscreen_interface_;
   oww::ui::driver::cap::CAP1296 cap_interface_;
 
-  void ReadTouchInput(lv_indev_t *indev, lv_indev_data_t *data);
+  void ReadTouchInput(lv_indev_t* indev, lv_indev_data_t* data);
 
   // Button state tracking for buffered reading
   uint8_t last_buttons_state_ = 0;
@@ -49,14 +49,14 @@ class Display {
   std::array<lv_point_t, 6> button_mappings_ = {};
 
   // Sends generic display command.
-  void SendCommand(const uint8_t *cmd, size_t cmd_size, const uint8_t *param,
+  void SendCommand(const uint8_t* cmd, size_t cmd_size, const uint8_t* param,
                    size_t param_size);
 
   // SPI Flush Thread Implementation
   void SpiFlushThread();
-  void ProcessFlushRequest(const DisplayFlushRequest &request);
+  void ProcessFlushRequest(const DisplayFlushRequest& request);
   void SendAddressCommand(uint8_t cmd, int32_t start, int32_t end);
-  Thread *spi_flush_thread_;
+  Thread* spi_flush_thread_;
   os_queue_t flush_queue_;
   os_semaphore_t dma_complete_semaphore_;
 

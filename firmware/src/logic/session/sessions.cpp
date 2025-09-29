@@ -2,7 +2,7 @@
 
 #include "token_session.h"
 
-namespace oww::app::session {
+namespace oww::logic::session {
 
 void Sessions::Begin() {
   SubscribeOptions subscribeOptions;
@@ -55,4 +55,4 @@ std::shared_ptr<TokenSession> Sessions::RegisterSession(
 
 void Sessions::HandleSessionEvent(CloudEvent event) {}
 
-}  // namespace oww::app::session
+}  // namespace oww::logic::session

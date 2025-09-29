@@ -8,7 +8,6 @@ enum class ErrorType {
   kServerError = 5,
   kUnexpectedState = 6,
 
-
   kNoNfcTag = 10,
   kNtagFailed = 10,
 

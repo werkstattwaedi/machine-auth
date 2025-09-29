@@ -3,7 +3,7 @@
 #include "common.h"
 #include "fbs/token_session_generated.h"
 
-namespace oww::app::session {
+namespace oww::logic::session {
 class Sessions;
 
 class TokenSession {
@@ -27,4 +27,4 @@ class TokenSession {
   std::vector<std::string> permissions_;
 };
 
-}  // namespace oww::app::session
+}  // namespace oww::logic::session

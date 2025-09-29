@@ -2,13 +2,13 @@
 
 #include <lvgl.h>
 
-#include "app/application.h"
+#include "logic/application.h"
 
 namespace oww::ui {
 
 class Component {
  public:
-  Component(std::shared_ptr<oww::app::Application> app) : app_(app) {};
+  Component(std::shared_ptr<oww::logic::Application> app) : app_(app) {};
   virtual ~Component() {};
 
   virtual void Render() = 0;
@@ -19,7 +19,7 @@ class Component {
 
  protected:
   lv_obj_t* root_;
-  std::shared_ptr<oww::app::Application> app_;
+  std::shared_ptr<oww::logic::Application> app_;
 };
 
 }  // namespace oww::ui

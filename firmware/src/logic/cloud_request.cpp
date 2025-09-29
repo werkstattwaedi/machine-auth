@@ -1,6 +1,6 @@
 #include "cloud_request.h"
 
-namespace oww::app {
+namespace oww::logic {
 
 Logger CloudRequest::logger("cloud_request");
 
@@ -102,4 +102,4 @@ void CloudRequest::Loop() {
   }
 }
 
-}  // namespace oww::app
+}  // namespace oww::logic

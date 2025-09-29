@@ -8,9 +8,9 @@ using namespace config;
 
 Logger UserInterface::logger("ui");
 
-UserInterface *UserInterface::instance_;
+UserInterface* UserInterface::instance_;
 
-UserInterface &UserInterface::instance() {
+UserInterface& UserInterface::instance() {
   if (!instance_) {
     instance_ = new UserInterface();
   }
@@ -23,7 +23,7 @@ UserInterface::UserInterface()
 UserInterface::~UserInterface() {}
 
 tl::expected<void, Error> UserInterface::Begin(
-    std::shared_ptr<oww::app::Application> state) {
+    std::shared_ptr<oww::logic::Application> state) {
   if (thread_ != nullptr) {
     logger.error("UserInterface::Begin() Already initialized");
     return tl::unexpected(Error::kIllegalState);
@@ -81,7 +81,7 @@ void UserInterface::UpdateGui() {
     button_bar_ = std::make_unique<ButtonBar>(lv_screen_active(), app_);
 
     // Create main content area between status bar and button bar
-    lv_obj_t *content_container = lv_obj_create(lv_screen_active());
+    lv_obj_t* content_container = lv_obj_create(lv_screen_active());
     lv_obj_remove_style_all(content_container);
     // Main content: 240×212px (320 - 58 statusbar - 50 buttonbar = 212px
     // height)
@@ -109,7 +109,7 @@ void UserInterface::UpdateBuzzer() {
   // auto current_state = app_->GetTagState();
 
   // if (last_buzz_state_id_ != static_cast<void *>(current_state.get())) {
-  //   using namespace oww::app::tag;
+  //   using namespace oww::logic::tag;
 
   //   int frequency = 0;
   //   int duration = 100;
@@ -144,7 +144,7 @@ void UserInterface::UpdateBuzzer() {
 }
 
 // Helper function to convert HSL to RGB
-void HslToRgb(float h, float s, float l, byte &r, byte &g, byte &b) {
+void HslToRgb(float h, float s, float l, byte& r, byte& g, byte& b) {
   if (s == 0) {
     r = g = b = (byte)(l * 255.0f);
   } else {
@@ -168,7 +168,7 @@ void HslToRgb(float h, float s, float l, byte &r, byte &g, byte &b) {
 void UserInterface::UpdateLed() {
   // auto current_state = app_->GetTagState();
 
-  // using namespace oww::app::tag;
+  // using namespace oww::logic::tag;
 
   // // Choose effects/colors for each section based on state
   // using leds::Color;
@@ -255,7 +255,7 @@ void UserInterface::UpdateLed() {
 }
 
 void UserInterface::SetupButtonMappings() {
-  auto &display = Display::instance();
+  auto& display = Display::instance();
 
   // Map physical buttons to UI positions using static coordinates
   // Physical button mapping:

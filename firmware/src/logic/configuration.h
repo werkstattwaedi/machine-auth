@@ -6,7 +6,7 @@ namespace fbs {
 struct DeviceConfig;
 }
 
-namespace oww::app {
+namespace oww::logic {
 
 constexpr auto ledger_name = "terminal-config";
 
@@ -89,4 +89,4 @@ class Configuration {
   void OnConfigChanged();
 };
 
-}  // namespace oww::app
+}  // namespace oww::logic

@@ -13,14 +13,14 @@ class NtagAction {
   virtual ~NtagAction() = 0;
 
   enum Continuation { Done, Continue };
-  virtual Continuation Loop(Ntag424 &ntag_interface) = 0;
+  virtual Continuation Loop(Ntag424& ntag_interface) = 0;
   virtual void OnAbort(ErrorType error) = 0;
 };
 
 // Rename to NfcWorker ?
 class NfcTags {
  public:
-  static NfcTags &instance();
+  static NfcTags& instance();
 
   Status Begin(std::array<uint8_t, 16> terminal_key);
 
@@ -35,15 +35,15 @@ class NfcTags {
   std::shared_ptr<NfcStateMachine> GetStateMachine() { return state_machine_; }
 
  private:
-  static NfcTags *instance_;
+  static NfcTags* instance_;
   NfcTags();
 
   virtual ~NfcTags();
-  NfcTags(const NfcTags &) = delete;
-  NfcTags &operator=(const NfcTags &) = delete;
+  NfcTags(const NfcTags&) = delete;
+  NfcTags& operator=(const NfcTags&) = delete;
 
   static Logger logger;
-  Thread *thread_ = nullptr;
+  Thread* thread_ = nullptr;
   os_mutex_t mutex_ = 0;
 
   os_thread_return_t NfcThread();
@@ -55,12 +55,12 @@ class NfcTags {
   void RegisterStateHandlers();
 
   // State machine handlers
-  NfcStateMachine::StateOpt OnWaitForTag(WaitForTag &state);
-  NfcStateMachine::StateOpt OnTagPresent(TagPresent &state);
+  NfcStateMachine::StateOpt OnWaitForTag(WaitForTag& state);
+  NfcStateMachine::StateOpt OnTagPresent(TagPresent& state);
   NfcStateMachine::StateOpt OnNtag424Unauthenticated(
-      Ntag424Unauthenticated &state);
-  NfcStateMachine::StateOpt OnNtag424Authenticated(Ntag424Authenticated &state);
-  NfcStateMachine::StateOpt OnTagError(TagError &state);
+      Ntag424Unauthenticated& state);
+  NfcStateMachine::StateOpt OnNtag424Authenticated(Ntag424Authenticated& state);
+  NfcStateMachine::StateOpt OnTagError(TagError& state);
 
  private:
   std::array<uint8_t, 16> terminal_key_;

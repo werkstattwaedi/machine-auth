@@ -7,7 +7,7 @@
 #include "cloud_response.h"
 #include "common.h"
 #include "flatbuffers/flatbuffers.h"
-namespace oww::app {
+namespace oww::logic {
 
 class CloudRequest {
  public:
@@ -129,4 +129,4 @@ std::shared_ptr<CloudResponse<TResponse>> CloudRequest::SendTerminalRequest(
 
   return response_container;  // Return the shared_ptr to the response struct
 }
-}  // namespace oww::app
+}  // namespace oww::logic

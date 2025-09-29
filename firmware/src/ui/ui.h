@@ -3,10 +3,10 @@
 #include <XPT2046_Touch.h>
 #include <lvgl.h>
 
-#include "app/application.h"
 #include "buttonbar.h"
 #include "common.h"
 #include "leds/led_controller.h"
+#include "logic/application.h"
 #include "maincontent.h"
 #include "neopixel.h"
 #include "sessionstatus.h"
@@ -23,9 +23,9 @@ enum class Error : int {
 
 class UserInterface {
  public:
-  static UserInterface &instance();
+  static UserInterface& instance();
 
-  tl::expected<void, Error> Begin(std::shared_ptr<oww::app::Application> app);
+  tl::expected<void, Error> Begin(std::shared_ptr<oww::logic::Application> app);
 
   /**
    * @brief Locks the mutex that protects shared resources
@@ -59,30 +59,30 @@ class UserInterface {
   std::shared_ptr<MainContent> GetCurrentContent();
 
   // Access to LED controller for UI components (SessionStatus, ButtonBar)
-  leds::LedController *leds() { return led_.get(); }
+  leds::LedController* leds() { return led_.get(); }
 
  private:
   // UserInterface is a singleton - use UserInterface.instance()
-  static UserInterface *instance_;
+  static UserInterface* instance_;
   UserInterface();
 
   virtual ~UserInterface();
-  UserInterface(const UserInterface &) = delete;
-  UserInterface &operator=(const UserInterface &) = delete;
+  UserInterface(const UserInterface&) = delete;
+  UserInterface& operator=(const UserInterface&) = delete;
 
   static Logger logger;
 
-  Thread *thread_ = nullptr;
+  Thread* thread_ = nullptr;
   os_mutex_t mutex_ = 0;
 
-  std::shared_ptr<oww::app::Application> app_ = nullptr;
+  std::shared_ptr<oww::logic::Application> app_ = nullptr;
 
   os_thread_return_t UserInterfaceThread();
 
   void UpdateGui();
 
   system_tick_t buzz_timeout = CONCURRENT_WAIT_FOREVER;
-  void *last_buzz_state_id_ = nullptr;
+  void* last_buzz_state_id_ = nullptr;
 
   void UpdateBuzzer();
   void UpdateLed();

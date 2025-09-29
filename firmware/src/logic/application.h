@@ -1,11 +1,11 @@
 #pragma once
 
-#include "app/cloud_request.h"
-#include "app/configuration.h"
-#include "app/session/sessions.h"
 #include "common.h"
+#include "logic/cloud_request.h"
+#include "logic/configuration.h"
+#include "logic/session/sessions.h"
 
-namespace oww::app {
+namespace oww::logic {
 
 class Application : public std::enable_shared_from_this<Application> {
  public:
@@ -42,4 +42,4 @@ class Application : public std::enable_shared_from_this<Application> {
   session::MachineUsage machine_usage_;
 };
 
-}  // namespace oww::app
+}  // namespace oww::logic

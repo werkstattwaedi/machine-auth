@@ -9,7 +9,7 @@ namespace oww::ui {
 
 class SessionStatus : public MainContent {
  public:
-  SessionStatus(lv_obj_t* parent, std::shared_ptr<oww::app::Application> app,
+  SessionStatus(lv_obj_t* parent, std::shared_ptr<oww::logic::Application> app,
                 UserInterface* ui);
   virtual ~SessionStatus();
 

@@ -1,16 +1,16 @@
 #pragma once
 
-#include "app/cloud_request.h"
 #include "common.h"
 #include "fbs/personalization_generated.h"
+#include "logic/cloud_request.h"
 #include "nfc/nfc_tags.h"
 
 // Forward declarations
-namespace oww::app {
+namespace oww::logic {
 class Application;
-}  // namespace oww::app
+}  // namespace oww::logic
 
-namespace oww::app::action {
+namespace oww::logic::action {
 
 namespace personalize {
 
@@ -44,7 +44,7 @@ class PersonalizeAction : public oww::nfc::NtagAction {
  public:
   PersonalizeAction(std::array<uint8_t, 7> tag_uid,
                     std::array<uint8_t, 16> terminal_key_,
-                    std::weak_ptr<oww::app::CloudRequest> cloud_request);
+                    std::weak_ptr<oww::logic::CloudRequest> cloud_request);
 
   virtual Continuation Loop(Ntag424& ntag_interface);
   virtual bool IsComplete();
@@ -53,8 +53,8 @@ class PersonalizeAction : public oww::nfc::NtagAction {
  private:
   std::array<uint8_t, 7> tag_uid_;
   std::array<uint8_t, 16> terminal_key_;
-  std::weak_ptr<oww::app::CloudRequest> cloud_request_;
+  std::weak_ptr<oww::logic::CloudRequest> cloud_request_;
   std::shared_ptr<personalize::InternalState> state_;
 };
 
-}  // namespace oww::app::action
+}  // namespace oww::logic::action

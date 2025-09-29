@@ -12,9 +12,9 @@ using namespace config::ui::display;
 
 Logger display_log("display");
 
-Display *Display::instance_;
+Display* Display::instance_;
 
-Display &Display::instance() {
+Display& Display::instance() {
   if (!instance_) {
     instance_ = new Display();
   }
@@ -56,17 +56,17 @@ Status Display::Begin() {
   lv_init();
 #if LV_USE_LOG
   lv_log_register_print_cb(
-      [](lv_log_level_t level, const char *buf) { display_log.print(buf); });
+      [](lv_log_level_t level, const char* buf) { display_log.print(buf); });
 #endif
   lv_tick_set_cb([]() { return millis(); });
 
   display_ = lv_lcd_generic_mipi_create(
       resolution_horizontal, resolution_vertical,
       LV_LCD_FLAG_MIRROR_X | LV_LCD_FLAG_MIRROR_Y,
-      [](auto *disp, auto *cmd, auto cmd_size, auto *param, auto param_size) {
+      [](auto* disp, auto* cmd, auto cmd_size, auto* param, auto param_size) {
         Display::instance().SendCommand(cmd, cmd_size, param, param_size);
       },
-      [](auto *disp, auto *cmd, auto cmd_size, auto *param, auto param_size) {
+      [](auto* disp, auto* cmd, auto cmd_size, auto* param, auto param_size) {
         // Unused, the flush callback is overridden below
       });
 
@@ -74,7 +74,7 @@ Status Display::Begin() {
 
   // Set our custom flush callback
   lv_display_set_flush_cb(
-      display_, [](lv_display_t *disp, const lv_area_t *area, uint8_t *px_map) {
+      display_, [](lv_display_t* disp, const lv_area_t* area, uint8_t* px_map) {
         auto request = DisplayFlushRequest{
             .area = *area,
             .px_map = px_map,
@@ -90,13 +90,13 @@ Status Display::Begin() {
       resolution_horizontal * resolution_vertical / 10 *
       lv_color_format_get_size(lv_display_get_color_format(display_));
 
-  lv_color_t *buffer_1 = (lv_color_t *)malloc(buf_size);
+  lv_color_t* buffer_1 = (lv_color_t*)malloc(buf_size);
   if (buffer_1 == NULL) {
     Log.error("display draw buffer malloc failed");
     return Status::kError;
   }
 
-  lv_color_t *buffer_2 = (lv_color_t *)malloc(buf_size);
+  lv_color_t* buffer_2 = (lv_color_t*)malloc(buf_size);
   if (buffer_2 == NULL) {
     Log.error("display buffer malloc failed");
     lv_free(buffer_1);
@@ -110,7 +110,7 @@ Status Display::Begin() {
     Log.info("Failed to start touch");
   }
 
-  lv_indev_t *indev = lv_indev_create();
+  lv_indev_t* indev = lv_indev_create();
   lv_indev_set_type(indev, LV_INDEV_TYPE_BUTTON);
   lv_indev_set_read_cb(indev, [](auto indev, auto data) {
     Display::instance().ReadTouchInput(indev, data);
@@ -127,8 +127,8 @@ void Display::RenderLoop() {
   delay(time_till_next);
 }
 
-void Display::SendCommand(const uint8_t *cmd, size_t cmd_size,
-                          const uint8_t *param, size_t param_size) {
+void Display::SendCommand(const uint8_t* cmd, size_t cmd_size,
+                          const uint8_t* param, size_t param_size) {
   spi_interface_.beginTransaction(spi_settings_);
 
   pinResetFast(pin_chipselect);
@@ -146,7 +146,7 @@ void Display::SendCommand(const uint8_t *cmd, size_t cmd_size,
   spi_interface_.endTransaction();
 }
 
-void Display::ReadTouchInput(lv_indev_t *indev, lv_indev_data_t *data) {
+void Display::ReadTouchInput(lv_indev_t* indev, lv_indev_data_t* data) {
   uint8_t current_buttons_state = cap_interface_.Touched();
 
   uint8_t state_changes = current_buttons_state ^ last_buttons_state_;
@@ -207,10 +207,10 @@ void Display::SendAddressCommand(uint8_t cmd, int32_t start, int32_t end) {
 }
 
 // Process flush request in SPI thread
-void Display::ProcessFlushRequest(const DisplayFlushRequest &request) {
+void Display::ProcessFlushRequest(const DisplayFlushRequest& request) {
   transfer_count_++;
   auto drv =
-      (lv_lcd_generic_mipi_driver_t *)lv_display_get_driver_data(display_);
+      (lv_lcd_generic_mipi_driver_t*)lv_display_get_driver_data(display_);
 
   int32_t x_start = request.area.x1 + drv->x_gap;
   int32_t x_end = request.area.x2 + 1 + drv->x_gap;

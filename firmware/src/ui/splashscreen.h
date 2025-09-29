@@ -6,7 +6,7 @@ namespace oww::ui {
 
 class SplashScreen : public Component {
  public:
-  SplashScreen(std::shared_ptr<oww::app::Application> app);
+  SplashScreen(std::shared_ptr<oww::logic::Application> app);
   virtual ~SplashScreen();
 
   virtual void Render() override;

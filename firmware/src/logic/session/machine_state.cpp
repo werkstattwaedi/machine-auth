@@ -6,18 +6,18 @@
 #include <string>
 #include <vector>
 
-#include "app/application.h"
-#include "app/cloud_request.h"
-#include "app/configuration.h"
 #include "fbs/machine_usage_generated.h"
 #include "fbs/token_session_generated.h"
+#include "logic/application.h"
+#include "logic/cloud_request.h"
+#include "logic/configuration.h"
 #include "token_session.h"
 
-namespace oww::app::session {
+namespace oww::logic::session {
 
 Logger MachineUsage::logger("machine_usage");
 
-MachineUsage::MachineUsage(oww::app::Application* app)
+MachineUsage::MachineUsage(oww::logic::Application* app)
     : app_(app),
       state_machine_(MachineStateMachine::Create(
           std::in_place_type<machine_state::Idle>)) {
@@ -174,8 +174,7 @@ tl::expected<void, ErrorType> MachineUsage::CheckOut(
   return {};
 }
 
-MachineStateMachine::StateOpt MachineUsage::OnIdle(
-    machine_state::Idle& state) {
+MachineStateMachine::StateOpt MachineUsage::OnIdle(machine_state::Idle& state) {
   // Nothing to do in idle
   return std::nullopt;
 }
@@ -243,4 +242,4 @@ tl::expected<void, ErrorType> MachineUsage::PersistHistory() {
   return {};
 }
 
-}  // namespace oww::app::session
+}  // namespace oww::logic::session

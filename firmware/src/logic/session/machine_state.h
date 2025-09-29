@@ -11,7 +11,7 @@
 #include "fbs/token_session_generated.h"
 #include "token_session.h"
 
-namespace oww::app {
+namespace oww::logic {
 class Application;
 
 namespace session {
@@ -40,8 +40,8 @@ class MachineUsage {
   static Logger logger;
 
  public:
-  MachineUsage(oww::app::Application *state);
-  void Begin(const fbs::Machine &machine);
+  MachineUsage(oww::logic::Application* state);
+  void Begin(const fbs::Machine& machine);
   void Loop();
 
   StateHandle GetState() { return state_machine_->GetStateHandle(); }
@@ -55,11 +55,11 @@ class MachineUsage {
   void RegisterStateHandlers();
 
   // State machine handlers
-  MachineStateMachine::StateOpt OnIdle(machine_state::Idle &state);
-  MachineStateMachine::StateOpt OnActive(machine_state::Active &state);
-  MachineStateMachine::StateOpt OnDenied(machine_state::Denied &state);
+  MachineStateMachine::StateOpt OnIdle(machine_state::Idle& state);
+  MachineStateMachine::StateOpt OnActive(machine_state::Active& state);
+  MachineStateMachine::StateOpt OnDenied(machine_state::Denied& state);
 
-  oww::app::Application *app_;
+  oww::logic::Application* app_;
 
   std::string machine_id_;
   std::vector<std::string> required_permissions_;
@@ -78,4 +78,4 @@ class MachineUsage {
 };
 
 }  // namespace session
-}  // namespace oww::app
+}  // namespace oww::logic

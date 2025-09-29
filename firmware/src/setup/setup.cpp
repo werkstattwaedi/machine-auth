@@ -8,7 +8,7 @@
 
 namespace oww::setup {
 
-std::shared_ptr<oww::app::Application> app_;
+std::shared_ptr<oww::logic::Application> app_;
 std::unique_ptr<Adafruit_NeoPixel> led_strip_;
 std::unique_ptr<oww::ui::leds::LedController> led_;
 using namespace config::ext;
@@ -40,7 +40,7 @@ String relaisState() {
   return String(state == HIGH ? "on" : "off");
 }
 
-void setup(std::shared_ptr<oww::app::Application> state) {
+void setup(std::shared_ptr<oww::logic::Application> state) {
   Particle.function("led", SetLed);
   Particle.function("ledfx", SetLedFx);  // high-level LED test interface
   Particle.function("relais", SetRelais);
@@ -197,9 +197,9 @@ int SetLed(String command) {
 
 using namespace oww::ui::leds;
 
-static bool parseRGBA(const String &params, Color &c,
-                      uint16_t *p0 = nullptr, uint8_t *p1 = nullptr,
-                      uint8_t *p2 = nullptr, int8_t *p3 = nullptr) {
+static bool parseRGBA(const String& params, Color& c, uint16_t* p0 = nullptr,
+                      uint8_t* p1 = nullptr, uint8_t* p2 = nullptr,
+                      int8_t* p3 = nullptr) {
   // Accept forms: r,g,b,w[,p0[,p1[,p2[,p3]]]]
   std::vector<int> vals;
   vals.reserve(8);
@@ -207,7 +207,7 @@ static bool parseRGBA(const String &params, Color &c,
   for (unsigned int i = 0; i <= params.length(); ++i) {
     if (i == params.length() || params.charAt(i) == ',') {
       if (i == start) return false;
-      char *endptr;
+      char* endptr;
       long v = strtol(params.substring(start, i).c_str(), &endptr, 10);
       if (*endptr != '\0') return false;
       vals.push_back((int)v);
@@ -224,34 +224,68 @@ static bool parseRGBA(const String &params, Color &c,
   return true;
 }
 
-static void applyPreset(const String &name) {
+static void applyPreset(const String& name) {
   EffectConfig ring, buttons, nfc;
   ButtonColors btn_colors;
   if (name == "idle") {
-    ring.type = EffectType::Breathe; ring.color = Color::RGB(0, 64, 200); ring.period_ms = 3000; ring.min_brightness = 8; ring.max_brightness = 64;
-    nfc.type = EffectType::Solid; nfc.color = Color::WarmWhite(24);
-    buttons.type = EffectType::Solid; btn_colors = {Color::RGB(32,32,32),Color::RGB(32,32,32),Color::RGB(32,32,32),Color::RGB(32,32,32)};
+    ring.type = EffectType::Breathe;
+    ring.color = Color::RGB(0, 64, 200);
+    ring.period_ms = 3000;
+    ring.min_brightness = 8;
+    ring.max_brightness = 64;
+    nfc.type = EffectType::Solid;
+    nfc.color = Color::WarmWhite(24);
+    buttons.type = EffectType::Solid;
+    btn_colors = {Color::RGB(32, 32, 32), Color::RGB(32, 32, 32),
+                  Color::RGB(32, 32, 32), Color::RGB(32, 32, 32)};
   } else if (name == "detected") {
-    ring.type = EffectType::Rotate; ring.color = Color::RGB(200,160,20); ring.lit_pixels = 2; ring.period_ms = 1500;
-    nfc.type = EffectType::Breathe; nfc.color = Color::RGB(0,80,220);
-    buttons.type = EffectType::Solid; btn_colors = {Color::RGB(60,60,20),Color::RGB(60,60,20),Color::RGB(60,60,20),Color::RGB(60,60,20)};
+    ring.type = EffectType::Rotate;
+    ring.color = Color::RGB(200, 160, 20);
+    ring.lit_pixels = 2;
+    ring.period_ms = 1500;
+    nfc.type = EffectType::Breathe;
+    nfc.color = Color::RGB(0, 80, 220);
+    buttons.type = EffectType::Solid;
+    btn_colors = {Color::RGB(60, 60, 20), Color::RGB(60, 60, 20),
+                  Color::RGB(60, 60, 20), Color::RGB(60, 60, 20)};
   } else if (name == "auth") {
-    ring.type = EffectType::Solid; ring.color = Color::RGB(0,180,40);
-    nfc.type = EffectType::Breathe; nfc.color = Color::RGB(0,120,40);
-    buttons.type = EffectType::Solid; btn_colors = {Color::RGB(40,120,40),Color::RGB(40,120,40),Color::RGB(40,120,40),Color::RGB(40,120,40)};
+    ring.type = EffectType::Solid;
+    ring.color = Color::RGB(0, 180, 40);
+    nfc.type = EffectType::Breathe;
+    nfc.color = Color::RGB(0, 120, 40);
+    buttons.type = EffectType::Solid;
+    btn_colors = {Color::RGB(40, 120, 40), Color::RGB(40, 120, 40),
+                  Color::RGB(40, 120, 40), Color::RGB(40, 120, 40)};
   } else if (name == "start") {
-    ring.type = EffectType::Rotate; ring.color = Color::RGB(10,180,180); ring.period_ms = 1200; ring.lit_pixels = 1;
-    nfc.type = EffectType::Solid; nfc.color = Color::RGB(0,60,60);
-    buttons.type = EffectType::Blink; buttons.duty_cycle = 180;
-    btn_colors = {Color::RGB(20,80,80),Color::RGB(20,80,80),Color::RGB(20,80,80),Color::RGB(20,80,80)};
+    ring.type = EffectType::Rotate;
+    ring.color = Color::RGB(10, 180, 180);
+    ring.period_ms = 1200;
+    ring.lit_pixels = 1;
+    nfc.type = EffectType::Solid;
+    nfc.color = Color::RGB(0, 60, 60);
+    buttons.type = EffectType::Blink;
+    buttons.duty_cycle = 180;
+    btn_colors = {Color::RGB(20, 80, 80), Color::RGB(20, 80, 80),
+                  Color::RGB(20, 80, 80), Color::RGB(20, 80, 80)};
   } else if (name == "denied") {
-    ring.type = EffectType::Blink; ring.color = Color::RGB(200,20,20); ring.period_ms = 700; ring.duty_cycle = 160;
-    nfc.type = EffectType::Solid; nfc.color = Color::RGB(120,0,0);
-    buttons.type = EffectType::Solid; btn_colors = {Color::RGB(120,20,20),Color::RGB(120,20,20),Color::RGB(120,20,20),Color::RGB(120,20,20)};
+    ring.type = EffectType::Blink;
+    ring.color = Color::RGB(200, 20, 20);
+    ring.period_ms = 700;
+    ring.duty_cycle = 160;
+    nfc.type = EffectType::Solid;
+    nfc.color = Color::RGB(120, 0, 0);
+    buttons.type = EffectType::Solid;
+    btn_colors = {Color::RGB(120, 20, 20), Color::RGB(120, 20, 20),
+                  Color::RGB(120, 20, 20), Color::RGB(120, 20, 20)};
   } else if (name == "dev") {
-    ring.type = EffectType::Breathe; ring.color = Color::RGB(180,0,180); ring.period_ms = 2500;
-    nfc.type = EffectType::Solid; nfc.color = Color::RGB(120,0,120);
-    buttons.type = EffectType::Solid; btn_colors = {Color::RGB(80,0,80),Color::RGB(80,0,80),Color::RGB(80,0,80),Color::RGB(80,0,80)};
+    ring.type = EffectType::Breathe;
+    ring.color = Color::RGB(180, 0, 180);
+    ring.period_ms = 2500;
+    nfc.type = EffectType::Solid;
+    nfc.color = Color::RGB(120, 0, 120);
+    buttons.type = EffectType::Solid;
+    btn_colors = {Color::RGB(80, 0, 80), Color::RGB(80, 0, 80),
+                  Color::RGB(80, 0, 80), Color::RGB(80, 0, 80)};
   } else {
     return;
   }
@@ -287,19 +321,33 @@ int SetLedFx(String command) {
     cfg.color = c;
   } else if (effect == "breathe") {
     cfg.type = EffectType::Breathe;
-    uint16_t period = 2000; uint8_t minb = 8, maxb = 96;
+    uint16_t period = 2000;
+    uint8_t minb = 8, maxb = 96;
     if (!parseRGBA(params, c, &period, &minb, &maxb)) return -1;
-    cfg.color = c; cfg.period_ms = period; cfg.min_brightness = minb; cfg.max_brightness = maxb;
+    cfg.color = c;
+    cfg.period_ms = period;
+    cfg.min_brightness = minb;
+    cfg.max_brightness = maxb;
   } else if (effect == "blink") {
     cfg.type = EffectType::Blink;
-    uint16_t period = 800; uint8_t duty = 127;
+    uint16_t period = 800;
+    uint8_t duty = 127;
     if (!parseRGBA(params, c, &period, &duty)) return -1;
-    cfg.color = c; cfg.period_ms = period; cfg.duty_cycle = duty;
+    cfg.color = c;
+    cfg.period_ms = period;
+    cfg.duty_cycle = duty;
   } else if (effect == "rotate") {
     cfg.type = EffectType::Rotate;
-  uint16_t period = 1500; uint8_t lit = 10; uint8_t hotspots = 1; int8_t dir = 1;
+    uint16_t period = 1500;
+    uint8_t lit = 10;
+    uint8_t hotspots = 1;
+    int8_t dir = 1;
     if (!parseRGBA(params, c, &period, &lit, &hotspots, &dir)) return -1;
-    cfg.color = c; cfg.period_ms = period; cfg.lit_pixels = lit; cfg.hotspots = hotspots; cfg.direction = dir;
+    cfg.color = c;
+    cfg.period_ms = period;
+    cfg.lit_pixels = lit;
+    cfg.hotspots = hotspots;
+    cfg.direction = dir;
   } else {
     return -1;
   }

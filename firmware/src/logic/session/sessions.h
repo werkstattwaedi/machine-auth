@@ -6,7 +6,7 @@
 #include "fbs/token_session_generated.h"
 #include "machine_state.h"
 
-namespace oww::app::session {
+namespace oww::logic::session {
 class TokenSession;
 
 class Sessions {
@@ -18,7 +18,7 @@ class Sessions {
       std::array<uint8_t, 7> token_id);
 
   std::shared_ptr<TokenSession> RegisterSession(
-      fbs::TokenSessionT &session_data);
+      fbs::TokenSessionT& session_data);
 
  private:
   std::map<std::array<uint8_t, 7>, std::shared_ptr<TokenSession>>
@@ -28,4 +28,4 @@ class Sessions {
   void HandleSessionEvent(CloudEvent event);
 };
 
-}  // namespace oww::app::session
+}  // namespace oww::logic::session

@@ -38,7 +38,7 @@ using NfcStateMachine =
                               oww::nfc::Ntag424Authenticated,
                               oww::nfc::TagError>;
 
-static const NfcStateMachine::Query HasTag([](const auto &state) {
+static const NfcStateMachine::Query HasTag([](const auto& state) {
   return !std::holds_alternative<oww::nfc::WaitForTag>(state);
 });
 
