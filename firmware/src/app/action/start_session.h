@@ -1,6 +1,6 @@
 #pragma once
 
-#include "app/cloud_response.h"
+#include "app/cloud_request.h"
 #include "common.h"
 #include "fbs/token_session_generated.h"
 #include "nfc/nfc_tags.h"
@@ -49,7 +49,7 @@ using InternalState = std::variant<
 
 }  // namespace start_session
 
-class StartSessionAction : public NtagAction {
+class StartSessionAction : public oww::nfc::NtagAction {
  public:
   StartSessionAction(std::array<uint8_t, 7> tag_uid,
                      std::weak_ptr<oww::app::CloudRequest> cloud_request,

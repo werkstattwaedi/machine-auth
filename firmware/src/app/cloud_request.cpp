@@ -80,7 +80,7 @@ void CloudRequest::HandleTerminalFailure(String request_id,
   inflight_requests_.erase(it);
 }
 
-void CloudRequest::CheckTimeouts() {
+void CloudRequest::Loop() {
   system_tick_t now = millis();
   std::vector<String> timed_out_ids;
 

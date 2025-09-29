@@ -174,19 +174,19 @@ tl::expected<void, ErrorType> MachineUsage::CheckOut(
   return {};
 }
 
-MachineUsage::MachineStateMachine::StateOpt MachineUsage::OnIdle(
+MachineStateMachine::StateOpt MachineUsage::OnIdle(
     machine_state::Idle& state) {
   // Nothing to do in idle
   return std::nullopt;
 }
 
-MachineUsage::MachineStateMachine::StateOpt MachineUsage::OnActive(
+MachineStateMachine::StateOpt MachineUsage::OnActive(
     machine_state::Active& state) {
   // TODO: Implement session timeout logic
   return std::nullopt;
 }
 
-MachineUsage::MachineStateMachine::StateOpt MachineUsage::OnDenied(
+MachineStateMachine::StateOpt MachineUsage::OnDenied(
     machine_state::Denied& state) {
   // After a delay, transition back to idle
   if (timeUtc() - state.time > std::chrono::seconds(5)) {

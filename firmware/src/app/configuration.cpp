@@ -32,8 +32,9 @@ FactoryData DEV_FACTORY_DATA{
 
 Logger logger("config");
 
-TerminalConfig::TerminalConfig(String machine_id, String label)
-    : machine_id(machine_id), label(label) {}
+// TerminalConfig::TerminalConfig(String machine_id, String label)
+//     : machine_id(machine_id), label(label) {}
+
 MachineConfig::MachineConfig(String machine_id, MachineControl control)
     : machine_id(machine_id), control(control) {}
 

@@ -16,8 +16,8 @@ using namespace oww::nfc;
 using oww::app::CloudRequest;
 
 tl::expected<std::shared_ptr<InternalState>, ErrorType> OnBegin(
-    std::array<uint8_t, 7> tag_uid, Sessions &sessions,
-    CloudRequest &cloud_request) {
+    std::array<uint8_t, 7> tag_uid, Sessions& sessions,
+    CloudRequest& cloud_request) {
   auto existing_session = sessions.GetSessionForToken(tag_uid);
 
   if (existing_session) {
@@ -39,8 +39,8 @@ tl::expected<std::shared_ptr<InternalState>, ErrorType> OnBegin(
 }
 
 tl::expected<std::shared_ptr<InternalState>, ErrorType> OnStartSessionResponse(
-    AwaitStartSessionResponse &response_holder, std::array<uint8_t, 7> tag_uid,
-    Sessions &sessions, CloudRequest &cloud_request, Ntag424 &ntag_interface) {
+    AwaitStartSessionResponse& response_holder, std::array<uint8_t, 7> tag_uid,
+    Sessions& sessions, CloudRequest& cloud_request, Ntag424& ntag_interface) {
   auto cloud_response = response_holder.response.get();
   if (IsPending(*cloud_response)) {
     return nullptr;
@@ -114,9 +114,9 @@ tl::expected<std::shared_ptr<InternalState>, ErrorType> OnStartSessionResponse(
 
 tl::expected<std::shared_ptr<InternalState>, ErrorType>
 OnAuthenticateNewSessionResponse(
-    AwaitAuthenticateNewSessionResponse &response_holder,
+    AwaitAuthenticateNewSessionResponse& response_holder,
 
-    CloudRequest &cloud_request, Ntag424 &ntag_interface) {
+    CloudRequest& cloud_request, Ntag424& ntag_interface) {
   auto cloud_response = response_holder.response.get();
   if (IsPending(*cloud_response)) {
     return nullptr;
@@ -159,10 +159,10 @@ OnAuthenticateNewSessionResponse(
 
 tl::expected<std::shared_ptr<InternalState>, ErrorType>
 OnCompleteAuthenticationResponse(
-    AwaitCompleteAuthenticationResponse &response_holder, Sessions &sessions) {
+    AwaitCompleteAuthenticationResponse& response_holder, Sessions& sessions) {
   auto cloud_response = response_holder.response.get();
   if (IsPending(*cloud_response)) {
-    return;
+    return nullptr;
   }
 
   auto complete_auth_response =
@@ -209,13 +209,13 @@ StartSessionAction::StartSessionAction(
       sessions_(sessions),
       state_(std::make_shared<InternalState>(Begin{})) {}
 
-NtagAction::Continuation StartSessionAction::Loop(Ntag424 &ntag_interface) {
+NtagAction::Continuation StartSessionAction::Loop(Ntag424& ntag_interface) {
   auto sessions = sessions_.lock();
   auto cloud_request = cloud_request_.lock();
 
   tl::expected<std::shared_ptr<InternalState>, ErrorType> result;
 
-  if (auto nested = std::get_if<Begin>(state_.get())) {
+  if (std::get_if<Begin>(state_.get())) {
     result = OnBegin(tag_uid_, *sessions, *cloud_request);
   } else if (auto nested =
                  std::get_if<AwaitStartSessionResponse>(state_.get())) {
@@ -241,13 +241,13 @@ NtagAction::Continuation StartSessionAction::Loop(Ntag424 &ntag_interface) {
 
 bool StartSessionAction::IsComplete() {
   return std::visit(
-      [](auto &&arg) {
+      [](auto&& arg) {
         using T = std::decay_t<decltype(arg)>;
-        return constexpr(std::is_same_v<T, Succeeded> ||
-                         std::is_same_v<T, Rejected> ||
-                         std::is_same_v<T, Failed>);
+        return std::is_same_v<T, Succeeded> ||
+               std::is_same_v<T, Rejected> ||
+               std::is_same_v<T, Failed>;
       },
-      state_);
+      *state_);
 }
 
 void StartSessionAction::OnAbort(ErrorType error) {

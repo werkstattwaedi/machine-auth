@@ -1,10 +1,11 @@
 #pragma once
 
-#include "app/cloud_response.h"
+#include "app/cloud_request.h"
 #include "common.h"
 #include "fbs/personalization_generated.h"
-#include "nfc/driver/Ntag424.h"
+#include "nfc/nfc_tags.h"
 
+// Forward declarations
 namespace oww::app {
 class Application;
 }  // namespace oww::app
@@ -13,41 +14,47 @@ namespace oww::app::action {
 
 namespace personalize {
 
-struct Wait {
-  const system_tick_t timeout = CONCURRENT_WAIT_FOREVER;
-};
+struct Begin {};
 
 struct AwaitKeyDiversificationResponse {
-  const std::shared_ptr<CloudResponse<fbs::KeyDiversificationResponseT>>
-      response;
+  std::shared_ptr<CloudResponse<fbs::KeyDiversificationResponseT>> response;
 };
 
 struct DoPersonalizeTag {
-  const std::array<uint8_t, 16> application_key;
-  const std::array<uint8_t, 16> terminal_key;
-  const std::array<uint8_t, 16> card_key;
-  const std::array<uint8_t, 16> reserved_1_key;
-  const std::array<uint8_t, 16> reserved_2_key;
+  std::array<uint8_t, 16> application_key;
+  std::array<uint8_t, 16> terminal_key;
+  std::array<uint8_t, 16> card_key;
+  std::array<uint8_t, 16> reserved_1_key;
+  std::array<uint8_t, 16> reserved_2_key;
 };
 
 struct Completed {};
 
 struct Failed {
-  const ErrorType error;
-  const String message;
+  ErrorType error;
+  std::string message;
 };
 
-using State = std::variant<Wait, AwaitKeyDiversificationResponse,
-                           DoPersonalizeTag, Completed, Failed>;
+using InternalState = std::variant<Begin, AwaitKeyDiversificationResponse,
+                                   DoPersonalizeTag, Completed, Failed>;
 
 }  // namespace personalize
 
-struct Personalize {
-  std::array<uint8_t, 7> tag_uid;
-  std::shared_ptr<personalize::State> state;
-};
+class PersonalizeAction : public oww::nfc::NtagAction {
+ public:
+  PersonalizeAction(std::array<uint8_t, 7> tag_uid,
+                    std::array<uint8_t, 16> terminal_key_,
+                    std::weak_ptr<oww::app::CloudRequest> cloud_request);
 
-void Loop(Personalize start_session_state, oww::app::Application &state_manager,
-          Ntag424 &ntag_interface);
+  virtual Continuation Loop(Ntag424& ntag_interface);
+  virtual bool IsComplete();
+  virtual void OnAbort(ErrorType error);
+
+ private:
+  std::array<uint8_t, 7> tag_uid_;
+  std::array<uint8_t, 16> terminal_key_;
+  std::weak_ptr<oww::app::CloudRequest> cloud_request_;
+  std::shared_ptr<personalize::InternalState> state_;
+};
 
 }  // namespace oww::app::action
