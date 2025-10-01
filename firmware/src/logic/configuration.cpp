@@ -1,6 +1,8 @@
-
-
 #include "configuration.h"
+
+#include "Base64RK.h"
+#include "flatbuffers/flatbuffers.h"
+
 namespace oww::logic {
 
 // Factory data used for dev devices.
@@ -31,12 +33,6 @@ FactoryData DEV_FACTORY_DATA{
 };
 
 Logger logger("config");
-
-// TerminalConfig::TerminalConfig(String machine_id, String label)
-//     : machine_id(machine_id), label(label) {}
-
-MachineConfig::MachineConfig(String machine_id, MachineControl control)
-    : machine_id(machine_id), control(control) {}
 
 Configuration::Configuration() {
   // Register Particle function with member function
@@ -71,7 +67,6 @@ Status Configuration::Begin() {
   }
 
   auto ledger = Particle.ledger(ledger_name);
-
   ledger.onSync([this](Ledger ledger) { OnConfigChanged(); });
 
   if (!ledger.isValid()) {
@@ -80,54 +75,37 @@ Status Configuration::Begin() {
   }
 
   auto data = ledger.get();
-  auto terminal_data = data.get("terminal");
-  if (terminal_data.isMap()) {
-    auto machine_id = terminal_data.get("machineId");
-    if (!machine_id.isString()) {
-      logger.error("terminal configuration is missing [machineId]");
-      return Status::kError;
-    }
-
-    auto machine_name = terminal_data.get("machineName");
-    if (!machine_name.isString()) {
-      logger.error("terminal configuration is missing [machineName]");
-      return Status::kError;
-    }
-
-    terminal_config_ = std::make_unique<TerminalConfig>(
-        machine_id.asString(), machine_name.asString());
+  auto fbs_field = data.get("fbs");
+  if (!fbs_field.isString()) {
+    logger.error("Ledger missing 'fbs' field with base64 data");
+    return Status::kError;
   }
 
-  auto machine_list = data.get("machine");
-  if (machine_list.isArray() && machine_list.asArray().size() == 1) {
-    auto machine_data = machine_list.asArray().first();
+  String fbs_string = fbs_field.asString();
+  size_t decoded_len = Base64::getMaxDecodedSize(fbs_string.length());
 
-    auto machine_id = machine_data.get("machineId");
-    if (!machine_id.isString()) {
-      logger.error("machine configuration is missing [machineId]");
-      return Status::kError;
-    }
+  config_buffer_ = std::make_unique<uint8_t[]>(decoded_len);
 
-    auto control_string = machine_data.get("control");
-    if (!control_string.isString()) {
-      logger.error("machine configuration is missing [control]");
-      return Status::kError;
-    }
-
-    MachineControl control = MachineControl::kUndefined;
-    if (control_string.asString() == "relais-0") {
-      control = MachineControl::kRelais0;
-    } else {
-      logger.error("machine configuration unknown control [%s]",
-                   control_string.asString().c_str());
-      return Status::kError;
-    }
-
-    machine_config_ =
-        std::make_unique<MachineConfig>(machine_id.asString(), control);
+  if (!Base64::decode(fbs_string.c_str(), config_buffer_.get(), decoded_len)) {
+    logger.error("Unparsable TerminalConfig ledger. Base64 decode failed.");
+    return Status::kError;
   }
 
-  is_configured_ = terminal_config_ != nullptr;
+  auto verifier = flatbuffers::Verifier(config_buffer_.get(), decoded_len);
+
+  if (!verifier.VerifyBuffer<fbs::DeviceConfig>()) {
+    logger.error("Failed to parse DeviceConfig from ledger");
+    return Status::kError;
+  }
+
+  device_config_ =
+      flatbuffers::GetRoot<fbs::DeviceConfig>(config_buffer_.get());
+
+  logger.info("DeviceConfig loaded: %d machine(s)",
+              (int)device_config_->machines()->size());
+
+  is_configured_ =
+      device_config_ != nullptr && device_config_->machines() != nullptr;
 
   return Status::kOk;
 }

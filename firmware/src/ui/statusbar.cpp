@@ -26,7 +26,7 @@ StatusBar::StatusBar(lv_obj_t* parent,
   auto configuration = app_->GetConfiguration();
   lv_label_set_text(machine_label_,
                     configuration->IsConfigured()
-                        ? configuration->GetTerminal()->label.c_str()
+                        ? configuration->GetDeviceConfig()->machines()->begin()->label()->c_str()
                         : "unconfigured");
 }
 

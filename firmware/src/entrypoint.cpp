@@ -40,6 +40,7 @@ RemoteLogEventServer remoteLogEventServer("debugLog");
 std::shared_ptr<Application> app_;
 
 void setup() {
+    waitFor(Serial.isConnected, 5000);
 #ifdef REMOTE_LOGGING
   remoteLog.withServer(&remoteLogEventServer).setup();
 #endif
@@ -89,7 +90,7 @@ void setup() {
   waitUntil(Particle.connected);
 
   app_->SetBootProgress("Warte auf Terminal Config...");
-  waitUntil(app_->GetConfiguration()->GetTerminal);
+  waitUntil(app_->GetConfiguration()->GetDeviceConfig);
 
   app_->BootCompleted();
 }

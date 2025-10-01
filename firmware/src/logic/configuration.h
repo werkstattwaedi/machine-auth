@@ -1,34 +1,11 @@
 #pragma once
 
 #include "common.h"
-
-namespace fbs {
-struct DeviceConfig;
-}
+#include "fbs/ledger_terminal-config_generated.h"
 
 namespace oww::logic {
 
 constexpr auto ledger_name = "terminal-config";
-
-class TerminalConfig {
- public:
-  TerminalConfig(String machine_id, String label);
-  const String machine_id;
-  const String label;
-};
-
-enum class MachineControl {
-  kUndefined = 0,
-  kRelais0 = 1,
-  kRelais1 = 2,
-};
-
-class MachineConfig {
- public:
-  MachineConfig(String machine_id, MachineControl control);
-  const String machine_id;
-  const MachineControl control;
-};
 
 // Sensitive data stored in EEPROM in "factory", that is when assembling and
 // getting devices ready. Data in EEPROM is not meant to be seen in the particle
@@ -59,17 +36,9 @@ class Configuration {
 
   bool IsConfigured() { return is_configured_; }
 
-  // Whether this device should boot in setup / hw test mode.
   bool IsSetupMode();
 
-  TerminalConfig* GetTerminal() { return terminal_config_.get(); }
-
-  MachineConfig* GetMachine() { return machine_config_.get(); }
-
-  fbs::DeviceConfig* GetDeviceConfig() {
-    // TODO Implement
-    return nullptr;
-  }
+  const fbs::DeviceConfig* GetDeviceConfig() { return device_config_; }
 
   // Whether development terminal keys are used.
   bool UsesDevKeys();
@@ -79,12 +48,13 @@ class Configuration {
  private:
   // Particle function handler for setSetupMode
   int SetSetupModeHandler(String command);
+  
   std::array<uint8_t, 16> terminal_key_;
-
   bool is_configured_ = false;
   bool is_setup_mode_ = false;
-  std::unique_ptr<TerminalConfig> terminal_config_ = nullptr;
-  std::unique_ptr<MachineConfig> machine_config_ = nullptr;
+  
+  const fbs::DeviceConfig* device_config_ = nullptr;
+  std::unique_ptr<uint8_t[]> config_buffer_;
 
   void OnConfigChanged();
 };
