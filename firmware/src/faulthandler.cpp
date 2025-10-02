@@ -1,4 +1,5 @@
 // Fault handler and retained log replay that uses Particle logging (no Serial)
+#define PARTICLE_USE_UNSTABLE_API
 
 #include "faulthandler.h"
 
@@ -26,7 +27,7 @@ struct CrashRecord {
 retained CrashRecord g_crash = {0};
 
 // Retained logs.
-#define OWW_RETAINED_LOG_LINES 32
+#define OWW_RETAINED_LOG_LINES 10
 #define OWW_RETAINED_LOG_LINE_LEN 72
 
 #define RET_LOG_MAGIC 0xB10CAFE5u
@@ -86,7 +87,7 @@ class RetainedRingLogHandler : public spark::LogHandler {
 };
 
 // Global instance: constructed very early, before setup()
-static RetainedRingLogHandler s_retained_handler(LOG_LEVEL_ALL);
+static RetainedRingLogHandler* s_retained_handler = nullptr;
 
 static Logger CrashLog("crash");
 
@@ -119,10 +120,122 @@ static void log_crash_record(const CrashRecord& c) {
                  (unsigned long)c.lr);
 }
 
+void MyPanicHook(const ePanicCode code, const void* extraInfo);
+
 void Init() {
+  std::string message;
+
+  panic_set_hook(MyPanicHook, nullptr);
+
+  auto need_confirmation = false;
+  switch (System.resetReason()) {
+    case RESET_REASON_NONE:
+      message = "Invalid reason code.";
+      break;
+    case RESET_REASON_UNKNOWN:
+      message = "Unspecified reason.";
+      break;
+    case RESET_REASON_PIN_RESET:
+      message = "Reset from the reset pin.";
+      break;
+    case RESET_REASON_POWER_MANAGEMENT:
+      message = "Low-power management reset.";
+      break;
+    case RESET_REASON_POWER_DOWN:
+      message = "Power-down reset.";
+      break;
+    case RESET_REASON_POWER_BROWNOUT:
+      message = "Brownout reset.";
+      break;
+    case RESET_REASON_WATCHDOG:
+      message = "Watchdog reset.";
+      break;
+    case RESET_REASON_UPDATE:
+      message = "Reset to apply firmware update.";
+      break;
+    case RESET_REASON_UPDATE_ERROR:
+      message = "Generic firmware update error (deprecated).";
+      break;
+    case RESET_REASON_UPDATE_TIMEOUT:
+      message = "Firmware update timeout.";
+      break;
+    case RESET_REASON_FACTORY_RESET:
+      message = "Factory reset requested.";
+      break;
+    case RESET_REASON_SAFE_MODE:
+      message = "Safe mode requested.";
+      break;
+    case RESET_REASON_DFU_MODE:
+      message = "DFU mode requested.";
+      break;
+    case RESET_REASON_PANIC: {
+      message = "System panic.";
+
+      need_confirmation = true;
+
+      switch (System.resetReasonData()) {
+        case 1:
+          message += "HardFault";
+          break;
+        case 2:
+          message += "NMIFault";
+          break;
+        case 3:
+          message += "MemManage";
+          break;
+        case 4:
+          message += "BusFault";
+          break;
+        case 5:
+          message += "UsageFault";
+          break;
+        case 6:
+          message += "InvalidLenth";
+          break;
+        case 7:
+          message += "Exit";
+          break;
+        case 8:
+          message += "OutOfHeap";
+          break;
+        case 9:
+          message += "SPIOverRun";
+          break;
+        case 10:
+          message += "AssertionFailure";
+          break;
+        case 11:
+          message += "InvalidCase";
+          break;
+        case 12:
+          message += "PureVirtualCall";
+          break;
+        case 13:
+          message += "StackOverflow";
+          break;
+        case 14:
+          message += "HeapError";
+          break;
+        case 15:
+          message += "SecureFault";
+          break;
+      }
+
+    } break;
+    case RESET_REASON_USER:
+      message = "User-requested reset.";
+      break;
+    case RESET_REASON_CONFIG_UPDATE:
+      message = "Reset to apply configuration changes.";
+      break;
+    default:
+      message = "code not known";
+      break;
+  }
+
   bool hadCrash = (g_crash.magic == CRASH_MAGIC);
 
-  bool waitForDebugger = hadCrash;
+  bool waitForDebugger = hadCrash || need_confirmation;
 #if defined(DEVELOPMENT_BUILD)
   waitForDebugger = true;
 #endif
@@ -131,13 +244,12 @@ void Init() {
     waitFor(Serial.isConnected, 5000);
   }
 
+  CrashLog.warn("Previous reset reason: %s", message.c_str());
+
   if (hadCrash) {
     log_crash_record(g_crash);
     // Clear to avoid repeating on every boot
     memset(&g_crash, 0, sizeof(g_crash));
-  } else {
-    // Log the previous reset reason for context
-    CrashLog.warn("Previous reset reason: %d", (int)System.resetReason());
   }
 
   retained_log_init_once();
@@ -160,6 +272,16 @@ void Init() {
     }
     Replay.warn("---- End retained logs ----");
   }
+
+  if (need_confirmation) {
+    CrashLog.warn("Boot prevented due to failure. Reset manually");
+    while (true) {
+      delay(20s);
+    }
+  } else {
+  }
+
+  s_retained_handler = new RetainedRingLogHandler(LOG_LEVEL_ALL);
 }
 
 }  // namespace fault
@@ -198,18 +320,18 @@ extern "C" void hardfault_record_and_reboot(uint32_t* stacked_regs,
 
   g_crash.timestamp_ms = millis();
 
+  // This data is not correct, since we did not manage to register the hardfault ISR directly.
+
   // Minimal breadcrumb into retained ring (avoid full logging in fault context)
   char mini[80];
   snprintf(mini, sizeof(mini), "HardFault PC=0x%08lx LR=0x%08lx",
            (unsigned long)g_crash.pc, (unsigned long)g_crash.lr);
   retained_log_put_raw(mini);
-
-  // Reset to reboot cleanly
-  NVIC_SystemReset();
 }
 
 // ---------- HardFault ISR (naked) ----------
-extern "C" __attribute__((naked)) void HardFault_Handler(void) {
+extern "C" __attribute__((naked)) void HardFault_Handler(
+    const ePanicCode code) {
   __asm volatile(
       "tst lr, #4\n"
       "ite eq\n"
@@ -219,6 +341,10 @@ extern "C" __attribute__((naked)) void HardFault_Handler(void) {
       "mrs   r2, msp\n"
       "mrs   r3, psp\n"
       "b     hardfault_record_and_reboot\n");
+}
+
+void oww::fault::MyPanicHook(const ePanicCode code, const void* extraInfo) {
+  HardFault_Handler(code);
 }
 
 #if defined(TaskHandle_t)
