@@ -52,14 +52,31 @@ Device configuration (machine assignments, permissions) stored in Particle Ledge
 
 ### Particle Firmware Compilation
 
-The firmware uses the Particle IoT development environment, which requires to run the compilation via either of these ways
+The firmware uses local compilation with `neopo`, a tool that manages the Particle toolchain and build environment.
 
-- Use VS Code command palette. Command: `Particle: Compile application (local)`
-- via VS Code task system. Command ID `particle.compileApplicationLocal`
+**Prerequisites:**
+- `neopo` installed at `/home/michschn/werkstattwaedi/neopo/` (or equivalent path)
+- Python virtual environment with neopo package
 
-Compilation exits with code 0 for success, code 2 for errors. Wait for the terminal to complete. Error markers from the previous compilation persist, so make sure to recompile before assessing the markers in the editor.
+**Compilation:**
 
-Do not try to compile by invoking make directly, it will not work due missing environment variables.
+```bash
+cd /home/michschn/werkstattwaedi/machine-auth/firmware
+source /home/michschn/werkstattwaedi/neopo/.venv/bin/activate
+neopo compile
+```
+
+**Output:**
+- Success: `*** COMPILED SUCCESSFULLY ***` (exit code 0)
+- Failure: `*** COMPILE-USER FAILED ***` (exit code 2)
+- Binary: `target/p2/firmware.elf` and `target/p2/firmware.bin`
+- Bundle: `target/p2/firmware.zip` (includes assets)
+
+**Important Notes:**
+- Cloud compilation (`particle compile`) fails due to large LVGL library size
+- Do NOT invoke `make` directly - missing environment variables will cause failures
+- Error markers from previous compilation persist in editor - always recompile to verify fixes
+- Can also use VS Code task: `Particle: Compile application (local)` or command ID `particle.compileApplicationLocal`
 
 ### Flatbuffer Schema Generation
 
