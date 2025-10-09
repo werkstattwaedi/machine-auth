@@ -20,10 +20,19 @@ Application::Application(std::unique_ptr<Configuration> configuration)
 Status Application::Begin() {
   os_mutex_create(&mutex_);
 
+  if (auto status = configuration_->Begin(); status != Status::kOk) {
+    return status;
+  }
+
   auto device_config = configuration_->GetDeviceConfig();
+
+  if (device_config->machines()->empty()) {
+    logger.error("No Machine configured");
+    return Status::kError;
+  }
+
   auto machine = (device_config->machines()->begin());
 
-  configuration_->Begin();
   sessions_.Begin();
   machine_usage_.Begin(**machine);
   cloud_request_.Begin();
