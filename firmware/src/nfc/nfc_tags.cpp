@@ -118,12 +118,6 @@ NfcStateMachine::StateOpt NfcTags::OnTagPresent(TagPresent& state) {
       return std::nullopt;
     }
 
-    auto card_uid = ntag_interface_->GetCardUID();
-    if (!card_uid) {
-      logger.error("Unable to read card UID");
-      return NfcStateMachine::StateOpt(TagError{state.selected_tag});
-    }
-
     auto terminal_authenticate = ntag_interface_->Authenticate(
         /* key_number = */ key_terminal, terminal_key_);
 
@@ -131,6 +125,13 @@ NfcStateMachine::StateOpt NfcTags::OnTagPresent(TagPresent& state) {
       if (logger.isInfoEnabled()) {
         logger.info("Authenticated tag with terminal key");
       }
+
+      auto card_uid = ntag_interface_->GetCardUID();
+      if (!card_uid) {
+        logger.error("Unable to read card UID");
+        return NfcStateMachine::StateOpt(TagError{state.selected_tag});
+      }
+
       return NfcStateMachine::StateOpt(
           Ntag424Authenticated{state.selected_tag, card_uid.value()});
     }
@@ -139,8 +140,10 @@ NfcStateMachine::StateOpt NfcTags::OnTagPresent(TagPresent& state) {
       logger.info("Authenticated tag with terminal key failed with error: %d",
                   terminal_authenticate.error());
     }
+
+    // For unauthenticated tags, use the NFC ID from the reader
     return NfcStateMachine::StateOpt(
-        Ntag424Unauthenticated{state.selected_tag, card_uid.value()});
+        Ntag424Unauthenticated{state.selected_tag, state.selected_tag->nfc_id});
   }
   return std::nullopt;
 }
