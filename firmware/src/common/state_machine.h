@@ -54,7 +54,18 @@ class StateHandle {
 
   template <typename T>
   const T* Get() const {
-    return std::get_if<T>(*captured_state_);
+    return std::get_if<T>(captured_state_.get());
+  }
+
+  // Compare with another StateHandle to detect transitions
+  template <typename T>
+  bool Entered(const StateHandle& previous) const {
+    return Is<T>() && !previous.Is<T>();
+  }
+
+  template <typename T>
+  bool Exited(const StateHandle& previous) const {
+    return !Is<T>() && previous.Is<T>();
   }
 
  private:

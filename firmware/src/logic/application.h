@@ -3,6 +3,7 @@
 #include "common.h"
 #include "logic/cloud_request.h"
 #include "logic/configuration.h"
+#include "logic/session/session_coordinator.h"
 #include "logic/session/sessions.h"
 
 namespace oww::logic {
@@ -17,8 +18,16 @@ class Application : public std::enable_shared_from_this<Application> {
 
   Configuration* GetConfiguration() { return configuration_.get(); }
 
-  session::Sessions& GetSessions() { return sessions_; }
+  std::shared_ptr<CloudRequest> GetCloudRequest() { return cloud_request_; }
+  std::shared_ptr<session::Sessions> GetSessions() { return sessions_; }
   session::MachineUsage& GetMachineUsage() { return machine_usage_; }
+  session::SessionCoordinator& GetSessionCoordinator() {
+    return session_coordinator_;
+  }
+
+  // Thread-safe state queries (for UI)
+  session::SessionStateHandle GetSessionState();
+  session::StateHandle GetMachineState();
 
  public:
   os_mutex_t mutex_ = 0;
@@ -37,8 +46,13 @@ class Application : public std::enable_shared_from_this<Application> {
   std::string boot_progress_;
 
   std::unique_ptr<Configuration> configuration_;
-  CloudRequest cloud_request_;
-  session::Sessions sessions_;
+
+  // Shared ownership for actions/callbacks
+  std::shared_ptr<CloudRequest> cloud_request_;
+  std::shared_ptr<session::Sessions> sessions_;
+
+  // Stack members (no shared ownership needed)
+  session::SessionCoordinator session_coordinator_;
   session::MachineUsage machine_usage_;
 };
 

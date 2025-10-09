@@ -60,6 +60,9 @@ class StartSessionAction : public oww::nfc::NtagAction {
   virtual void OnAbort(ErrorType error);
 
   bool IsComplete();
+  std::shared_ptr<const start_session::InternalState> GetState() const {
+    return state_;
+  }
 
  private:
   std::array<uint8_t, 7> tag_uid_;

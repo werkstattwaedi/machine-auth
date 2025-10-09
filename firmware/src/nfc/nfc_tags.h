@@ -32,7 +32,10 @@ class NfcTags {
   bool tryLock() { return os_mutex_trylock(mutex_); };
   void unlock() { os_mutex_unlock(mutex_); };
 
-  std::shared_ptr<NfcStateMachine> GetStateMachine() { return state_machine_; }
+  NfcStateMachine::StateHandle GetNfcStateHandle() {
+    std::lock_guard<NfcTags> lock(*this);
+    return state_machine_->GetStateHandle();
+  }
 
  private:
   static NfcTags* instance_;

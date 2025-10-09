@@ -9,6 +9,7 @@
 #include "fbs/ledger_terminal-config_generated.h"
 #include "fbs/machine_usage_generated.h"
 #include "fbs/token_session_generated.h"
+#include "logic/session/session_coordinator.h"
 #include "token_session.h"
 
 namespace oww::logic {
@@ -42,9 +43,15 @@ class MachineUsage {
  public:
   MachineUsage(oww::logic::Application* state);
   void Begin(const fbs::Machine& machine);
-  void Loop();
 
+  // Takes session state as input, returns machine state
+  StateHandle Loop(const SessionStateHandle& session_state);
+
+  // Thread-safe state query (for UI)
   StateHandle GetState() { return state_machine_->GetStateHandle(); }
+
+  // Manual checkout (UI button)
+  tl::expected<void, ErrorType> ManualCheckOut();
 
   tl::expected<void, ErrorType> CheckIn(std::shared_ptr<TokenSession> session);
 
@@ -65,6 +72,8 @@ class MachineUsage {
   std::vector<std::string> required_permissions_;
 
   std::shared_ptr<MachineStateMachine> state_machine_;
+  std::optional<SessionStateHandle> last_session_state_;
+
   fbs::MachineUsageHistoryT usage_history_;
 
   std::string usage_history_logfile_path;

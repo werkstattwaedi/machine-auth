@@ -3,6 +3,7 @@
 
 #include "common/byte_array.h"
 #include "fbs/ledger_terminal-config_generated.h"
+#include "nfc/nfc_tags.h"
 
 namespace oww::logic {
 
@@ -11,8 +12,9 @@ Logger Application::logger("app");
 Application::Application(std::unique_ptr<Configuration> configuration)
     : boot_progress_("Starte..."),
       configuration_(std::move(configuration)),
-      cloud_request_(),
-      sessions_(),
+      cloud_request_(std::make_shared<CloudRequest>()),
+      sessions_(std::make_shared<session::Sessions>()),
+      session_coordinator_(cloud_request_, sessions_),
       machine_usage_(this)
 
 {}
@@ -33,17 +35,36 @@ Status Application::Begin() {
 
   auto machine = (device_config->machines()->begin());
 
-  sessions_.Begin();
+  sessions_->Begin();
   machine_usage_.Begin(**machine);
-  cloud_request_.Begin();
+  cloud_request_->Begin();
 
   return Status::kOk;
 }
 
 void Application::Loop() {
-  cloud_request_.Loop();
-  sessions_.Loop();
-  machine_usage_.Loop();
+  // Update cloud requests
+  cloud_request_->Loop();
+
+  // Read NFC state (thread-safe across NFC thread boundary)
+  auto nfc_state = oww::nfc::NfcTags::instance().GetNfcStateHandle();
+
+  // Session coordinator observes NFC
+  auto session_state = session_coordinator_.Loop(nfc_state);
+
+  // Machine observes session coordinator
+  auto machine_state = machine_usage_.Loop(session_state);
+
+  // All states available for UI/debugging
+  (void)machine_state;  // Unused for now
+}
+
+session::SessionStateHandle Application::GetSessionState() {
+  return session_coordinator_.GetStateHandle();
+}
+
+session::StateHandle Application::GetMachineState() {
+  return machine_usage_.GetState();
 }
 
 void Application::SetBootProgress(std::string message) {

@@ -28,6 +28,8 @@ NfcTags::NfcTags() {
 
 NfcTags::~NfcTags() {}
 
+NtagAction::~NtagAction() {}
+
 Status NfcTags::Begin(std::array<uint8_t, 16> terminal_key) {
   if (thread_ != nullptr) {
     logger.error("NfcTags::Begin() Already initialized");
