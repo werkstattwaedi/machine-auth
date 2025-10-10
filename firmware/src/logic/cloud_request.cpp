@@ -12,6 +12,11 @@ void CloudRequest::Begin() {
       System.deviceID() + "/hook-response/terminalRequest/",
       [this](CloudEvent event) { HandleTerminalResponse(event); },
       subscribeOptions);
+
+  Particle.subscribe(
+      System.deviceID() + "/hook-error/terminalRequest/",
+      [this](CloudEvent event) { HandleTerminalError(event); },
+      subscribeOptions);
 }
 
 void CloudRequest::HandleTerminalResponse(CloudEvent event) {
@@ -54,6 +59,39 @@ void CloudRequest::HandleTerminalResponse(CloudEvent event) {
   inflight_request.response_handler(decoded.get(), decoded_len);
 
   // Remove the processed request from the map
+  inflight_requests_.erase(it);
+}
+
+void CloudRequest::HandleTerminalError(CloudEvent event) {
+  EventData event_data = event.dataStructured();
+
+  if (!event_data.has("id")) {
+    logger.error("Invalid hook-error response, missing id property");
+    return;
+  }
+
+  String request_id = event_data.get("id").asString();
+
+  // Log the error details if available
+  if (event_data.has("error")) {
+    logger.error("Hook error for request %s: %s",
+                 request_id.c_str(),
+                 event_data.get("error").asString().c_str());
+  } else {
+    logger.error("Hook error for request %s (no error details)",
+                 request_id.c_str());
+  }
+
+  auto it = inflight_requests_.find(request_id);
+  if (it == inflight_requests_.end()) {
+    logger.warn("Received error for unknown or already handled request ID: %s",
+                request_id.c_str());
+    return;
+  }
+
+  InFlightRequest& inflight_request = it->second;
+  assert(inflight_request.failure_handler);
+  inflight_request.failure_handler(ErrorType::kCloudError);
   inflight_requests_.erase(it);
 }
 

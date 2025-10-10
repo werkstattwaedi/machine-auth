@@ -42,6 +42,7 @@ class CloudRequest {
   std::map<String, InFlightRequest> inflight_requests_;
 
   void HandleTerminalResponse(CloudEvent event);
+  void HandleTerminalError(CloudEvent event);
   void HandleTerminalFailure(String request_id, particle::Error error);
 
   static Logger logger;

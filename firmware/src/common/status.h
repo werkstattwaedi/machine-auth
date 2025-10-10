@@ -7,6 +7,7 @@ enum class ErrorType {
   kMalformedResponse = 4,
   kServerError = 5,
   kUnexpectedState = 6,
+  kCloudError = 7,  // Cloud hook returned an error
 
   kNoNfcTag = 10,
   kNtagFailed = 10,
