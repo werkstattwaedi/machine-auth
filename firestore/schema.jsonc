@@ -22,7 +22,7 @@
         "_byteString": "string" // Base64 encoded random bytes
       },
 
-      "tokenId": "/users/{userId}/token/{tokenId}", // Reference to token UID
+      "tokenId": "/tokens/{tokenId}", // Reference to token
       "usage": [ // array of individual check-ins / check-outs within the session. Added in UploadUsage
         {
           "machine": "/machine/{machineId}", // The reference to the machine used
@@ -43,21 +43,22 @@
       "name": "string" // Human readable terminal name (e.g., "Dev Terminal 01")
     }
   },
+  "tokens": {
+    "{tokenId}": { // NTag UID (e.g., "04c339aa1e1890")
+      "userId": "/users/{userId}", // reference to owning user
+      "registered": "timestamp", // time the token was added to the user's profile
+      "deactivated": "timestamp", // optional timestamp, when set the token is not in use anymore
+      "label": "string" // Token label (e.g., "Key 1")
+    }
+  },
   "users": {
     "{userId}": { // user id, will be changed to firebase auth UID, if an user their account to a firebase account
       "created": "timestamp",
-      "firebaseUid": "string", 
+      "firebaseUid": "string",
       "displayName": "string", // Display name (e.g., "MikeS")
       "name": "string", // Full name (e.g., "Michael Schneider")
       "permissions": ["permissionId"], // Array of permission granted to the user
-      "roles": ["vereinsmitglid|admin"],
-      "token": { // subcollection with all registerd tokens
-        "{tokenId}": { // NTag UID  (e.g., "04c339aa1e1890")
-          "registered": "timestamp", // time the token was added to the user's profile
-          "deactivated": "timestamp", // optional timestamp, when set the token is not in use anymore
-          "label": "string" // Token label (e.g., "Key 1")
-        }
-      }
+      "roles": ["vereinsmitglid|admin"]
     }
   }
 }

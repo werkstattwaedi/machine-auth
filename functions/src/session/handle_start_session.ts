@@ -30,18 +30,26 @@ export async function handleStartSession(
   const uid = Buffer.from(request.tokenId.uid);
   const tokenIdHex = uid.toString("hex");
 
+  logger.info("Looking up token", {
+    tokenIdHex,
+    uidBytes: Array.from(uid),
+    uidLength: uid.length
+  });
+
   // Check if user exists and has valid permissions
   try {
-    // First, find the user who owns this token
-    const usersQuery = await admin
+    // Look up token directly by document ID
+    const tokenDoc = await admin
       .firestore()
-      .collectionGroup("token")
-      .where(admin.firestore.FieldPath.documentId(), "==", tokenIdHex)
-      .limit(1)
+      .collection("tokens")
+      .doc(tokenIdHex)
       .get();
 
-    if (usersQuery.empty) {
-      logger.warn("Token not found in user database", { tokenId: tokenIdHex });
+    if (!tokenDoc.exists) {
+      logger.warn("Token not found in database", {
+        tokenId: tokenIdHex,
+        searchedPath: `tokens/${tokenIdHex}`
+      });
       const rejected = new RejectedT();
       rejected.message = "Token not registered";
 
@@ -51,8 +59,10 @@ export async function handleStartSession(
       return response;
     }
 
-    const tokenDoc = usersQuery.docs[0];
     const tokenData = tokenDoc.data();
+    if (!tokenData) {
+      throw new Error("Token document exists but has no data");
+    }
 
     // Check if token is deactivated
     if (tokenData.deactivated) {
@@ -66,10 +76,14 @@ export async function handleStartSession(
       return response;
     }
 
-    // Get the user ID from the token document path
-    const userId = tokenDoc.ref.parent.parent?.id;
+    // Get the user ID from the userId reference field
+    const userIdRef = tokenData.userId; // e.g., "/users/someUserId"
+    if (!userIdRef || typeof userIdRef !== "string") {
+      throw new Error("Token document missing userId reference");
+    }
+    const userId = userIdRef.split("/").pop(); // Extract userId from path
     if (!userId) {
-      throw new Error("Could not determine user ID from token");
+      throw new Error("Could not extract user ID from reference");
     }
 
     // Get user data
@@ -84,7 +98,7 @@ export async function handleStartSession(
     const userData = userDoc.data();
 
     // Check for existing non-closed session (most recent first)
-    const tokenIdReference = `/users/${userId}/token/${tokenIdHex}`;
+    const tokenIdReference = `/tokens/${tokenIdHex}`;
     const existingSessionQuery = await admin
       .firestore()
       .collection("sessions")
