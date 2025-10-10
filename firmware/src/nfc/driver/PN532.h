@@ -16,6 +16,9 @@ struct SelectedTag {
   // PCD's logical ID of the selected tag
   uint8_t tg;
 
+  // whether the tag is ISO14443-4 compliant
+  bool supportsApdu;
+
   // The ISO/IEC14443 Type A tag UID, as seen by the PCD
   std::array<uint8_t, 7> nfc_id;
   size_t nfc_id_length;
@@ -27,6 +30,7 @@ enum class PN532Error : int {
   kEmptyResponse = 2,
   kNoTarget = 3,
   kFirmwareMismatch = 4,
+  kApplicationError = 5,  // PN532 detected application-level error (0x7F frame)
 };
 
 class Ntag424;
@@ -54,7 +58,8 @@ class PN532 {
       system_tick_t timeout_ms = CONCURRENT_WAIT_FOREVER);
 
   // Check whether previously selected tag is still available.
-  tl::expected<bool, PN532Error> CheckTagStillAvailable();
+  tl::expected<bool, PN532Error> CheckTagStillAvailable(
+      std::shared_ptr<SelectedTag> tag);
 
   tl::expected<void, PN532Error> ReleaseTag(std::shared_ptr<SelectedTag> tag);
 
@@ -138,6 +143,7 @@ class PN532 {
 
 #define PN532_HOSTTOPN532 (0xD4)  ///< Host-to-PN532
 #define PN532_PN532TOHOST (0xD5)  ///< PN532-to-host
+#define PN532_ERROR_FRAME (0x7F)  ///< Error frame (application-level error)
 
 // PN532 Commands
 #define PN532_COMMAND_DIAGNOSE (0x00)               ///< Diagnose

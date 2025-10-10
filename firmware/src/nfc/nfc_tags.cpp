@@ -80,6 +80,8 @@ void NfcTags::RegisterStateHandlers() {
       [this](WaitForTag& state) { return OnWaitForTag(state); });
   state_machine_->OnLoop<TagPresent>(
       [this](TagPresent& state) { return OnTagPresent(state); });
+  state_machine_->OnLoop<UnsupportedTag>(
+      [this](UnsupportedTag& state) { return OnUnsupportedTag(state); });
   state_machine_->OnLoop<Ntag424Unauthenticated>(
       [this](Ntag424Unauthenticated& state) {
         return OnNtag424Unauthenticated(state);
@@ -110,12 +112,20 @@ NfcStateMachine::StateOpt NfcTags::OnTagPresent(TagPresent& state) {
   WITH_LOCK(*this) {
     ntag_interface_->SetSelectedTag(state.selected_tag);
 
+    if (!state.selected_tag->supportsApdu) {
+      // NTAG424 DNA cards are ISO14443-4 compliant.
+      // Since this card is not, transition to UnsupportedTag state
+      logger.info("Card does not support ISO14443-4");
+      return NfcStateMachine::StateOpt(UnsupportedTag{state.selected_tag});
+    }
+
     auto select_application_result =
         ntag_interface_->DNA_Plain_ISOSelectFile_Application();
     if (select_application_result != Ntag424::DNA_STATUS_OK) {
-      logger.warn("ISOSelectFile_Application %d", select_application_result);
-      // Not an NTAG424, or some other issue. We'll just stay in TagPresent.
-      return std::nullopt;
+      logger.info("Not an NTAG424 tag (ISOSelectFile status: %d)",
+                  select_application_result);
+      // Not an NTAG424, transition to UnsupportedTag state
+      return NfcStateMachine::StateOpt(UnsupportedTag{state.selected_tag});
     }
 
     auto terminal_authenticate = ntag_interface_->Authenticate(
@@ -148,10 +158,40 @@ NfcStateMachine::StateOpt NfcTags::OnTagPresent(TagPresent& state) {
   return std::nullopt;
 }
 
+NfcStateMachine::StateOpt NfcTags::OnUnsupportedTag(UnsupportedTag& state) {
+  WITH_LOCK(*this) {
+    // For non-ISO14443-4 cards, CheckTagStillAvailable won't work
+    // (it uses DIAGNOSE command 0x06 which requires ISO14443-4)
+    // Instead, we release the current tag and try to detect a new one with
+    // a short timeout. If no tag is found, the unsupported card was removed.
+
+    auto release_result = pcd_interface_->ReleaseTag(state.selected_tag);
+    if (!release_result) {
+      logger.warn("ReleaseTag failed in OnUnsupportedTag: %d",
+                  (int)release_result.error());
+    }
+
+    // Try to detect a tag with a very short timeout (100ms)
+    // If no tag is found, we assume the unsupported card was removed
+    auto wait_result = pcd_interface_->WaitForNewTag(100);
+    if (!wait_result) {
+      // No tag detected - the unsupported card was removed
+      return NfcStateMachine::StateOpt(WaitForTag{});
+    }
+
+    // Tag still present - stay in UnsupportedTag state
+    // Update the selected_tag reference in case it changed
+    state.selected_tag = wait_result.value();
+  }
+  delay(100);
+  return std::nullopt;
+}
+
 NfcStateMachine::StateOpt NfcTags::OnNtag424Unauthenticated(
     Ntag424Unauthenticated& state) {
   WITH_LOCK(*this) {
-    auto check_still_available = pcd_interface_->CheckTagStillAvailable();
+    auto check_still_available =
+        pcd_interface_->CheckTagStillAvailable(state.selected_tag);
     if (!check_still_available.has_value() || !check_still_available.value()) {
       return NfcStateMachine::StateOpt(WaitForTag{});
     }
@@ -163,7 +203,8 @@ NfcStateMachine::StateOpt NfcTags::OnNtag424Unauthenticated(
 NfcStateMachine::StateOpt NfcTags::OnNtag424Authenticated(
     Ntag424Authenticated& state) {
   WITH_LOCK(*this) {
-    auto check_still_available = pcd_interface_->CheckTagStillAvailable();
+    auto check_still_available =
+        pcd_interface_->CheckTagStillAvailable(state.selected_tag);
     if (!check_still_available) {
       logger.error("TagIdle::CheckTagStillAvailable returned PCD error: %d",
                    (int)check_still_available.error());

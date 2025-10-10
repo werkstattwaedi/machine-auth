@@ -60,6 +60,7 @@ class NfcTags {
   // State machine handlers
   NfcStateMachine::StateOpt OnWaitForTag(WaitForTag& state);
   NfcStateMachine::StateOpt OnTagPresent(TagPresent& state);
+  NfcStateMachine::StateOpt OnUnsupportedTag(UnsupportedTag& state);
   NfcStateMachine::StateOpt OnNtag424Unauthenticated(
       Ntag424Unauthenticated& state);
   NfcStateMachine::StateOpt OnNtag424Authenticated(Ntag424Authenticated& state);

@@ -13,6 +13,12 @@ struct TagPresent {
   std::shared_ptr<SelectedTag> selected_tag;
 };
 
+// A tag is in the field, but it's not an NTAG424 (or ISOSelectFile failed).
+// We'll wait for it to be removed before trying again.
+struct UnsupportedTag {
+  std::shared_ptr<SelectedTag> selected_tag;
+};
+
 // An NTAG424 tag is in the field, but not authenticated with the terminal key.
 // This could be a blank tag, or a tag from another system.
 struct Ntag424Unauthenticated {
@@ -32,11 +38,10 @@ struct TagError {
   int32_t error_count = 0;
 };
 
-using NfcStateMachine =
-    oww::common::StateMachine<oww::nfc::WaitForTag, oww::nfc::TagPresent,
-                              oww::nfc::Ntag424Unauthenticated,
-                              oww::nfc::Ntag424Authenticated,
-                              oww::nfc::TagError>;
+using NfcStateMachine = oww::common::StateMachine<
+    oww::nfc::WaitForTag, oww::nfc::TagPresent, oww::nfc::UnsupportedTag,
+    oww::nfc::Ntag424Unauthenticated, oww::nfc::Ntag424Authenticated,
+    oww::nfc::TagError>;
 
 static const NfcStateMachine::Query HasTag([](const auto& state) {
   return !std::holds_alternative<oww::nfc::WaitForTag>(state);

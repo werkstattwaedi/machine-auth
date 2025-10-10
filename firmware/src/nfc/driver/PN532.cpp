@@ -80,13 +80,22 @@ tl::expected<std::shared_ptr<SelectedTag>, PN532Error> PN532::WaitForNewTag(
     return tl::unexpected(PN532Error::kNoTarget);
   }
 
-  // Only interested in tg ID and NFC ID
+  // Parse InListPassiveTarget response for ISO14443A:
+  // params[0]: Number of targets
+  // params[1]: Tg (target number)
+  // params[2-3]: SENS_RES (ATQA)
+  // params[4]: SEL_RES (SAK)
+  // params[5]: NFCID Length
+  // params[6+]: NFCID bytes
   uint8_t tg = list_passive_target.params[1];
-
+  uint8_t sak = list_passive_target.params[4];
   size_t nfc_id_length = list_passive_target.params[5];
 
-  auto result = std::shared_ptr<SelectedTag>{
-      new SelectedTag{.tg = tg, .nfc_id_length = nfc_id_length}};
+  // Check if card supports ISO14443-4 by examining SAK bit 5
+  bool supportsApdu = (sak & 0x20) != 0;
+
+  auto result = std::shared_ptr<SelectedTag>{new SelectedTag{
+      .tg = tg, .supportsApdu = supportsApdu, .nfc_id_length = nfc_id_length}};
 
   std::memcpy(result->nfc_id.data(), std::begin(list_passive_target.params) + 6,
               nfc_id_length);
@@ -94,10 +103,10 @@ tl::expected<std::shared_ptr<SelectedTag>, PN532Error> PN532::WaitForNewTag(
   return {result};
 }
 
-tl::expected<bool, PN532Error> PN532::CheckTagStillAvailable() {
+tl::expected<bool, PN532Error> PN532::CheckTagStillAvailable(
+    std::shared_ptr<SelectedTag> tag) {
   //  NumTst = 0x06 : Attention Request Test or ISO/IEC14443-4 card presence
   //  detection
-
   uint8_t num_tst = 0x06;
 
   DataFrame diagnose{.command = PN532_COMMAND_DIAGNOSE,
@@ -120,15 +129,19 @@ tl::expected<bool, PN532Error> PN532::CheckTagStillAvailable() {
 
   uint8_t result = diagnose.params[0];
 
-  if (result != 0x00) {
+  if (result == 0x00) {
+    // OK - tag is still present
+    return {true};
+  } else if (result == 0x01) {
+    // Time Out, the target has not answered
+    return {false};
+  } else {
+    // Other error codes (including 0x27 for non-ISO14443-4 cards)
     // see "7.1 Error handling"
     // ../docs/datasheets/Pn532um.pdf#page=67
-
-    logger.error("card presence failed, code %d", result);
-    return {false};
+    logger.error("card presence check failed, code %#04x", result);
+    return tl::unexpected(PN532Error::kUnspecified);
   }
-
-  return {true};
 }
 
 tl::expected<void, PN532Error> PN532::ReleaseTag(
@@ -190,6 +203,11 @@ tl::expected<void, PN532Error> PN532::ReceiveResponse(DataFrame* response_data,
 
   auto read_frame = ReadFrame(response_data);
   if (!read_frame) {
+    // Don't retry on application-level errors - NACK won't help
+    if (read_frame.error() == PN532Error::kApplicationError) {
+      return read_frame;
+    }
+
     if (retries > 0) {
       logger.warn(
           "ReceiveResponse did not receive frame, retrying with NACK...");
@@ -412,49 +430,63 @@ tl::expected<void, PN532Error> PN532::ReadFrame(DataFrame* response_data) {
     logger.error("Response length checksum did not match length!");
     return tl::unexpected(PN532Error::kUnspecified);
   }
-  // Check TFI byte matches.
+
+  // Check TFI byte.
   uint8_t frame_identifier = serial_interface_->read();
-  if (frame_identifier != PN532_PN532TOHOST) {
-    logger.error("TFI byte (%#04x) did not match expected value",
-                 frame_identifier);
-    return tl::unexpected(PN532Error::kUnspecified);
-  }
 
-  // Check response command matches
-  uint8_t response_command = serial_interface_->read();
-  uint8_t expected_response = response_data->command + 1;
-  if (response_command != expected_response) {
-    logger.error(
-        "response_command (%#04x) did not match expected command (%#04x)",
-        response_command, expected_response);
-    return tl::unexpected(PN532Error::kUnspecified);
-  }
+  // Keep track of the checksum as we read the data
+  uint8_t checksum = frame_identifier;
 
-  // Read frame with expected length of data. Note:
-  // - TFI byte and response_command was already consumed above.
-  // - response_data's packetData is big enough to contain the maximal
-  // frame_length
-  response_data->params_length = frame_length - 2;
-  size_t bytes_read = serial_interface_->readBytes(
-      (char*)response_data->params, response_data->params_length);
-  if (bytes_read != response_data->params_length) {
-    logger.error(
-        "Response stream tearminated early. Read %d bytes, expected %d",
-        bytes_read, response_data->params_length);
-    return tl::unexpected(PN532Error::kUnspecified);
-  }
+  // see 6.2.1.5 Error frame - this indicates an application-level error
+  bool is_error_frame = (frame_identifier == PN532_ERROR_FRAME);
+  if (is_error_frame) {
+    response_data->params_length = 0;
+    logger.warn("ReadFrame received application-level error(%#04x)",
+                PN532_ERROR_FRAME);
+  } else {
+    if (frame_identifier != PN532_PN532TOHOST) {
+      logger.error("TFI byte (%#04x) did not match expected value",
+                   frame_identifier);
+      return tl::unexpected(PN532Error::kUnspecified);
+    }
 
-  if (logger.isTraceEnabled()) {
-    logger.trace(
-        "ReadFrame(%#04x)[%s]", response_command,
-        BytesToHexString(response_data->params, response_data->params_length)
-            .c_str());
-  }
+    // Check response command matches
+    uint8_t response_command = 0;
+    response_command = serial_interface_->read();
+    uint8_t expected_response = response_data->command + 1;
+    if (response_command != expected_response) {
+      logger.error(
+          "response_command (%#04x) did not match expected command (%#04x)",
+          response_command, expected_response);
+      return tl::unexpected(PN532Error::kUnspecified);
+    }
+    checksum += response_command;
 
-  uint8_t checksum = frame_identifier + response_command;
-  // Check frame checksum value matches bytes.
-  for (uint8_t i = 0; i < response_data->params_length; i++) {
-    checksum += response_data->params[i];
+    // Read frame with expected length of data. Note:
+    // - TFI byte and response_command was already consumed above.
+    // - response_data's packetData is big enough to contain the maximal
+    //   frame_length
+    size_t data_length = frame_length - 2;
+    response_data->params_length = data_length;
+    size_t bytes_read =
+        serial_interface_->readBytes((char*)response_data->params, data_length);
+    if (bytes_read != data_length) {
+      logger.error(
+          "Response stream terminated early. Read %d bytes, expected %d",
+          bytes_read, data_length);
+      return tl::unexpected(PN532Error::kUnspecified);
+    }
+
+    for (uint8_t i = 0; i < data_length; i++) {
+      checksum += response_data->params[i];
+    }
+
+    if (logger.isTraceEnabled()) {
+      logger.trace(
+          "ReadFrame(%#04x)[%s]", response_command,
+          BytesToHexString(response_data->params, response_data->params_length)
+              .c_str());
+    }
   }
 
   // Add last "Data checksum byte".
@@ -465,6 +497,10 @@ tl::expected<void, PN532Error> PN532::ReadFrame(DataFrame* response_data) {
   if (((checksum + checksum_byte) & 0xff) != 0) {
     logger.error("Response checksum did not match expected checksum");
     return tl::unexpected(PN532Error::kUnspecified);
+  }
+
+  if (is_error_frame) {
+    return tl::unexpected(PN532Error::kApplicationError);
   }
 
   return {};

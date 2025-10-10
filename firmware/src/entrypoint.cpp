@@ -21,6 +21,7 @@ SerialLogHandler logHandler(LOG_LEVEL_WARN,
                              {"app.logic.session", LOG_LEVEL_TRACE},
                              {"app.logic", LOG_LEVEL_WARN},
                              {"app.nfc", LOG_LEVEL_WARN},
+                             //  {"app.nfc.driver", LOG_LEVEL_TRACE},
                              {"app.ui", LOG_LEVEL_WARN}});
 
 using namespace oww::logic;
@@ -65,7 +66,8 @@ void setup() {
 #endif
 
   if (!display_setup_result) {
-    entrypoint_logger.info("Failed to start display = %d", (int)display_setup_result.error());
+    entrypoint_logger.info("Failed to start display = %d",
+                           (int)display_setup_result.error());
   }
 
   app_->SetBootProgress("Start NFC...");
