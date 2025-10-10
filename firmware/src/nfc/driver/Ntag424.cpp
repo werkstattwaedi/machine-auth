@@ -10,6 +10,8 @@ CBC<AES128> cbc;
 AESTiny128 aes128;
 AES_CMAC cmac(aes128);
 
+Logger ntag424_logger("app.nfc.driver.ntag424");
+
 byte CC_FILE_AT_DELIVERY[32] = {0x00, 0x17, 0x20, 0x01, 0x00, 0x00, 0xFF, 0x04,
                                 0x06, 0xE1, 0x04, 0x01, 0x00, 0x00, 0x00, 0x05,
                                 0x06, 0xE1, 0x05, 0x00, 0x80, 0x82, 0x83};
@@ -187,7 +189,7 @@ Ntag424::DNA_StatusCode Ntag424::DNA_BasicTransceive(byte* sendData,
   }
   auto communication_status = in_data_exchange.params[0];
   if (communication_status != 0) {
-    Log.error("INDATAEXCHANGE returned error = 0x%02X", communication_status);
+    ntag424_logger.error("INDATAEXCHANGE returned error = 0x%02X", communication_status);
   }
 
   memcpy(backData, in_data_exchange.params + 1,

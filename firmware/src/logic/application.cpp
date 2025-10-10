@@ -7,7 +7,7 @@
 
 namespace oww::logic {
 
-Logger Application::logger("app");
+Logger Application::logger("app.logic.application");
 
 Application::Application(std::unique_ptr<Configuration> configuration)
     : boot_progress_("Starte..."),

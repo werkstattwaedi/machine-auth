@@ -4,6 +4,8 @@
 
 namespace oww::logic::session {
 
+Logger Sessions::logger("app.logic.session.sessions");
+
 void Sessions::Begin() {
   SubscribeOptions subscribeOptions;
   subscribeOptions.structured(true);
@@ -37,8 +39,8 @@ std::shared_ptr<TokenSession> Sessions::RegisterSession(
     if (session_id == existing_session->GetSessionId()) {
       // If we had racing RPCs, we could theoretically get the same session
       // again. Just use the already existing object.
-      Log.warn("RegisterSession: Session %s was already registerd before",
-               new_session->GetSessionId().c_str());
+      logger.warn("RegisterSession: Session %s was already registerd before",
+                  new_session->GetSessionId().c_str());
       return it->second;
     }
 

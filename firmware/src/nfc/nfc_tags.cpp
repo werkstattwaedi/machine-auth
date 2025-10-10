@@ -8,7 +8,7 @@ namespace oww::nfc {
 using namespace config::nfc;
 using namespace config::tag;
 
-Logger NfcTags::logger("nfc");
+Logger NfcTags::logger("app.nfc.tags");
 
 NfcTags* NfcTags::instance_;
 

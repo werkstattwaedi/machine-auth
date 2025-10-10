@@ -2,7 +2,7 @@
 
 namespace oww::logic {
 
-Logger CloudRequest::logger("cloud_request");
+Logger CloudRequest::logger("app.logic.cloud_request");
 
 void CloudRequest::Begin() {
   SubscribeOptions subscribeOptions;

@@ -8,6 +8,8 @@
 
 namespace oww::setup {
 
+Logger logger("app.setup");
+
 std::shared_ptr<oww::logic::Application> app_;
 std::unique_ptr<Adafruit_NeoPixel> led_strip_;
 std::unique_ptr<oww::ui::leds::LedController> led_;
@@ -61,9 +63,9 @@ void setup(std::shared_ptr<oww::logic::Application> state) {
   // Initialize display
   Status display_status = Display::instance().Begin();
   if (display_status != Status::kOk) {
-    Log.error("Failed to initialize display: %d", (int)display_status);
+    logger.error("Failed to initialize display: %d", (int)display_status);
   } else {
-    Log.info("Display initialized successfully");
+    logger.info("Display initialized successfully");
 
     lv_obj_t* label = lv_label_create(lv_screen_active());
     lv_label_set_text(label, "OWW MACO TEST");

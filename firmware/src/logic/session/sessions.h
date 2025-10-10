@@ -21,6 +21,7 @@ class Sessions {
       fbs::TokenSessionT& session_data);
 
  private:
+  static Logger logger;
   std::map<std::array<uint8_t, 7>, std::shared_ptr<TokenSession>>
       session_by_token;
   std::map<std::string, std::shared_ptr<TokenSession>> session_by_id;

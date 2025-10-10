@@ -1,7 +1,7 @@
 
 #include "PN532.h"
 
-Logger PN532::logger("pn532");
+Logger PN532::logger("app.nfc.driver.pn532");
 
 #define PN532_FRAME_MAX_LENGTH 255
 #define PN532_DEFAULT_TIMEOUT 1000

@@ -16,7 +16,7 @@
 
 namespace oww::logic::session {
 
-Logger MachineUsage::logger("machine_usage");
+Logger MachineUsage::logger("app.logic.session.machine_usage");
 
 MachineUsage::MachineUsage(oww::logic::Application* app)
     : app_(app),
@@ -71,7 +71,7 @@ void MachineUsage::Begin(const fbs::Machine& machine) {
   pinMode(config::ext::pin_relais, INPUT);
   relais_state_ = digitalRead(config::ext::pin_relais) ? HIGH : LOW;
   if (relais_state_ == HIGH) {
-    Log.warn("Relais was ON at startup");
+    logger.warn("Relais was ON at startup");
   }
 
   // TODO: Enable the external I2C bus bases on the configuration.
@@ -149,7 +149,7 @@ void MachineUsage::UpdateRelaisState() {
 
     auto actual_state = digitalRead(config::ext::pin_relais) ? HIGH : LOW;
     if (actual_state != relais_state_) {
-      Log.error("Failed to toggle actual relais state");
+      logger.error("Failed to toggle actual relais state");
     }
   }
 }

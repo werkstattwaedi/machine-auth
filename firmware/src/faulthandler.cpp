@@ -10,6 +10,8 @@ using spark::Logger;
 namespace oww {
 namespace fault {
 
+Logger logger("app.fault");
+
 void Init() {
   std::string message;
 
@@ -121,7 +123,7 @@ void Init() {
     while (!Serial.isConnected()) {
     }
 
-    Log.error("Firmware crashed! (Reason: %s)", message.c_str());
+    logger.error("Firmware crashed! (Reason: %s)", message.c_str());
 
     while (true) {
       delay(20s);
@@ -130,7 +132,7 @@ void Init() {
 
   waitFor(Serial.isConnected, 5000);
 #endif
-  Log.error("Firmware staring. (Reset reason: %s)", message.c_str());
+  logger.error("Firmware staring. (Reset reason: %s)", message.c_str());
 }
 
 }  // namespace fault

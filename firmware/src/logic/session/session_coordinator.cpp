@@ -7,7 +7,7 @@
 
 namespace oww::logic::session {
 
-Logger SessionCoordinator::logger("session_coordinator");
+Logger SessionCoordinator::logger("app.logic.session.coordinator");
 
 SessionCoordinator::SessionCoordinator(
     std::shared_ptr<CloudRequest> cloud_request,

@@ -8,6 +8,9 @@
 #include "logic/configuration.h"
 
 namespace oww::logic::action {
+
+Logger logger("app.logic.action.start_session");
+
 using namespace oww::logic::action::start_session;
 using namespace oww::logic::session;
 using namespace config::tag;
@@ -70,16 +73,16 @@ tl::expected<std::shared_ptr<InternalState>, ErrorType> OnStartSessionResponse(
           config::tag::key_authorization);
 
       if (!auth_challenge) {
-        Log.error("AuthenticateWithCloud_Begin failed [dna:%d]",
-                  auth_challenge.error());
+        logger.error("AuthenticateWithCloud_Begin failed [dna:%d]",
+                     auth_challenge.error());
         if (auth_challenge.error() ==
             Ntag424::DNA_StatusCode::AUTHENTICATION_DELAY) {
           // Need to retry until successful
           return nullptr;
         }
 
-        Log.error(String::format("AuthenticateWithCloud_Begin failed [dna:%d]",
-                                 auth_challenge.error()));
+        logger.error(String::format("AuthenticateWithCloud_Begin failed [dna:%d]",
+                                    auth_challenge.error()));
         return tl::unexpected(ErrorType::kNtagFailed);
       }
 
@@ -105,8 +108,8 @@ tl::expected<std::shared_ptr<InternalState>, ErrorType> OnStartSessionResponse(
     }
     default: {
       // ---- MALFORMED RESPONSE ----------------------------------------------
-      Log.error(String::format("Unknown StartSessionResult type %d",
-                               start_session_response->result.type));
+      logger.error(String::format("Unknown StartSessionResult type %d",
+                                  start_session_response->result.type));
       return tl::unexpected(ErrorType::kMalformedResponse);
     }
   }
@@ -138,8 +141,8 @@ OnAuthenticateNewSessionResponse(
       ntag_interface.AuthenticateWithCloud_Part2(challenge_array);
 
   if (!encrypted_response) {
-    Log.error(String::format("AuthenticateWithCloud_Part2 failed [dna:%d]",
-                             encrypted_response.error()));
+    logger.error(String::format("AuthenticateWithCloud_Part2 failed [dna:%d]",
+                                encrypted_response.error()));
     return tl::unexpected(ErrorType::kNtagFailed);
   }
 
@@ -177,7 +180,7 @@ OnCompleteAuthenticationResponse(
       auto token_session_data = complete_auth_response->result.AsTokenSession();
 
       if (!token_session_data) {
-        Log.error("CompleteAuthenticationResult is missing TokenSession");
+        logger.error("CompleteAuthenticationResult is missing TokenSession");
         return tl::unexpected(ErrorType::kMalformedResponse);
       }
 
@@ -192,8 +195,8 @@ OnCompleteAuthenticationResponse(
     }
     default: {
       // ---- MALFORMED RESPONSE ----------------------------------------------
-      Log.error(String::format("Unknown CompleteAuthenticationResult type %d",
-                               complete_auth_response->result.type));
+      logger.error(String::format("Unknown CompleteAuthenticationResult type %d",
+                                  complete_auth_response->result.type));
       return tl::unexpected(ErrorType::kMalformedResponse);
     }
   }

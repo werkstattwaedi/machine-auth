@@ -16,20 +16,17 @@
 SYSTEM_MODE(AUTOMATIC);
 STARTUP(WiFi.selectAntenna(ANT_AUTO));
 
-SerialLogHandler logHandler(
-    // Logging level for non-application messages
-    LOG_LEVEL_WARN, {
-                        {"app", LOG_LEVEL_INFO},
-                        {"cloud_request", LOG_LEVEL_INFO},
-                        {"config", LOG_LEVEL_INFO},
-                        {"display", LOG_LEVEL_INFO},
-                        {"nfc", LOG_LEVEL_INFO},
-                        {"pn532", LOG_LEVEL_INFO},
-                        {"cap1296", LOG_LEVEL_INFO},
-                    });
+SerialLogHandler logHandler(LOG_LEVEL_WARN,
+                            {{"app.logic.action", LOG_LEVEL_TRACE},
+                             {"app.logic.session", LOG_LEVEL_TRACE},
+                             {"app.logic", LOG_LEVEL_WARN},
+                             {"app.nfc", LOG_LEVEL_WARN},
+                             {"app.ui", LOG_LEVEL_WARN}});
 
 using namespace oww::logic;
 using namespace oww::nfc;
+
+Logger entrypoint_logger("app.entrypoint");
 
 #ifdef REMOTE_LOGGING
 retained uint8_t remoteLogBuf[2560];
@@ -45,7 +42,7 @@ void setup() {
 #endif
   oww::fault::Init();
 
-  Log.info("machine-auth-firmware starting");
+  entrypoint_logger.info("machine-auth-firmware starting");
 
   {
     // create app_
@@ -68,13 +65,13 @@ void setup() {
 #endif
 
   if (!display_setup_result) {
-    Log.info("Failed to start display = %d", (int)display_setup_result.error());
+    entrypoint_logger.info("Failed to start display = %d", (int)display_setup_result.error());
   }
 
   app_->SetBootProgress("Start NFC...");
   Status nfc_setup_result =
       NfcTags::instance().Begin(app_->GetConfiguration()->GetTerminalKey());
-  Log.info("NFC Status = %d", (int)nfc_setup_result);
+  entrypoint_logger.info("NFC Status = %d", (int)nfc_setup_result);
 
   if (nfc_setup_result != Status::kOk) {
     app_->SetBootProgress("Fehler: NFC Initialisierung!");
@@ -108,13 +105,13 @@ void loop() {
   app_->Loop();
 
   auto now = millis();
-  if (Log.isInfoEnabled() && now > next_telemetry_log) {
+  if (entrypoint_logger.isInfoEnabled() && now > next_telemetry_log) {
     next_telemetry_log = ((now / 1000) + 5) * 1000;
 #if defined(DEVELOPMENT_BUILD)
 
     WiFiSignal signal = WiFi.RSSI();
 
-    Log.info(
+    entrypoint_logger.info(
         "System Telemetry\n"
         "  Wifi signal strength: %.02f%% (%fdBm)\n"
         "  WiFi signal quality: %.02f%%",

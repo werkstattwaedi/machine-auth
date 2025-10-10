@@ -10,7 +10,7 @@
 
 using namespace config::ui::display;
 
-Logger display_log("display");
+Logger display_log("app.ui.driver.display");
 
 Display* Display::instance_;
 
@@ -92,13 +92,13 @@ Status Display::Begin() {
 
   lv_color_t* buffer_1 = (lv_color_t*)malloc(buf_size);
   if (buffer_1 == NULL) {
-    Log.error("display draw buffer malloc failed");
+    display_log.error("display draw buffer malloc failed");
     return Status::kError;
   }
 
   lv_color_t* buffer_2 = (lv_color_t*)malloc(buf_size);
   if (buffer_2 == NULL) {
-    Log.error("display buffer malloc failed");
+    display_log.error("display buffer malloc failed");
     lv_free(buffer_1);
     return Status::kError;
   }
@@ -107,7 +107,7 @@ Status Display::Begin() {
                          LV_DISPLAY_RENDER_MODE_PARTIAL);
 
   if (cap_interface_.Begin() != Status::kOk) {
-    Log.info("Failed to start touch");
+    display_log.info("Failed to start touch");
   }
 
   lv_indev_t* indev = lv_indev_create();

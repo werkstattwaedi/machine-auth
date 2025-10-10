@@ -7,6 +7,8 @@
 
 namespace oww::ui {
 
+Logger buttonbar_logger("app.ui.buttonbar");
+
 ButtonBar::ButtonBar(lv_obj_t* parent,
                      std::shared_ptr<oww::logic::Application> state)
     : Component(state) {
@@ -159,7 +161,7 @@ void ButtonBar::RemoveButtons(std::shared_ptr<ButtonDefinition> definition) {
 }
 
 void ButtonBar::left_button_event_cb(lv_event_t* e) {
-  Log.info("ButtonBar::left clicked");
+  buttonbar_logger.info("ButtonBar::left clicked");
   ButtonBar* buttonbar = static_cast<ButtonBar*>(lv_event_get_user_data(e));
   if (buttonbar && buttonbar->current_definition_ &&
       buttonbar->current_definition_->left_callback) {
@@ -168,7 +170,7 @@ void ButtonBar::left_button_event_cb(lv_event_t* e) {
 }
 
 void ButtonBar::right_button_event_cb(lv_event_t* e) {
-  Log.info("ButtonBar::right clicked");
+  buttonbar_logger.info("ButtonBar::right clicked");
   ButtonBar* buttonbar = static_cast<ButtonBar*>(lv_event_get_user_data(e));
   if (buttonbar && buttonbar->current_definition_ &&
       buttonbar->current_definition_->right_callback) {
@@ -177,7 +179,7 @@ void ButtonBar::right_button_event_cb(lv_event_t* e) {
 }
 
 void ButtonBar::up_button_event_cb(lv_event_t* e) {
-  Log.info("ButtonBar::up clicked");
+  buttonbar_logger.info("ButtonBar::up clicked");
   ButtonBar* buttonbar = static_cast<ButtonBar*>(lv_event_get_user_data(e));
   if (buttonbar && buttonbar->current_definition_ &&
       buttonbar->current_definition_->up_callback) {
@@ -186,7 +188,7 @@ void ButtonBar::up_button_event_cb(lv_event_t* e) {
 }
 
 void ButtonBar::down_button_event_cb(lv_event_t* e) {
-  Log.info("ButtonBar::down clicked");
+  buttonbar_logger.info("ButtonBar::down clicked");
   ButtonBar* buttonbar = static_cast<ButtonBar*>(lv_event_get_user_data(e));
   if (buttonbar && buttonbar->current_definition_ &&
       buttonbar->current_definition_->down_callback) {
