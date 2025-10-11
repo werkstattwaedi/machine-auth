@@ -1,10 +1,12 @@
 #include "ui/components/splashscreen.h"
 
+#include "state/system_state.h"
+
 LV_IMG_DECLARE(oww_logo);
 
 namespace oww::ui {
 
-SplashScreen::SplashScreen(std::shared_ptr<oww::logic::Application> app)
+SplashScreen::SplashScreen(std::shared_ptr<state::IApplicationState> app)
     : Component(app) {
   lv_obj_set_style_bg_color(lv_screen_active(), lv_color_white(), LV_PART_MAIN);
 
@@ -33,9 +35,14 @@ SplashScreen::~SplashScreen() {
 }
 
 void SplashScreen::Render() {
-  auto message = app_->GetBootProgress();
-  if (message.compare(lv_label_get_text(progress_label_)) != 0) {
-    lv_label_set_text(progress_label_, app_->GetBootProgress().c_str());
+  auto system_state = app_->GetSystemState();
+
+  // Display boot message if in Booting state
+  if (std::holds_alternative<state::system::Booting>(*system_state)) {
+    auto& booting = std::get<state::system::Booting>(*system_state);
+    if (booting.message.compare(lv_label_get_text(progress_label_)) != 0) {
+      lv_label_set_text(progress_label_, booting.message.c_str());
+    }
   }
 }
 

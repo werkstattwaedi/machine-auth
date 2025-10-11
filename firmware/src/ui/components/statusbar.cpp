@@ -3,7 +3,8 @@
 namespace oww::ui {
 
 StatusBar::StatusBar(lv_obj_t* parent,
-                     std::shared_ptr<oww::logic::Application> app)
+                     std::shared_ptr<state::IApplicationState> app,
+                     const std::string& machine_label)
     : Component(app) {
   // StatusBar: 240×58px at top of screen
   root_ = lv_obj_create(parent);
@@ -23,11 +24,7 @@ StatusBar::StatusBar(lv_obj_t* parent,
   lv_obj_set_style_text_color(machine_label_, lv_color_hex(0x333333),
                               LV_PART_MAIN);
 
-  auto configuration = app_->GetConfiguration();
-  lv_label_set_text(machine_label_,
-                    configuration->IsConfigured()
-                        ? configuration->GetDeviceConfig()->machines()->begin()->label()->c_str()
-                        : "unconfigured");
+  lv_label_set_text(machine_label_, machine_label.c_str());
 }
 
 StatusBar::~StatusBar() { lv_obj_delete(root_); }

@@ -2,16 +2,17 @@
 
 #include <algorithm>
 
-#include "drivers/leds/ws2812.h"
-#include "ui/platform/maco_ui.h"
+#include "common.h"
+#include "hal/led_layout.h"
 
 namespace oww::ui {
 
-Logger buttonbar_logger("app.ui.buttonbar");
+static Logger buttonbar_logger("app.ui.buttonbar");
 
 ButtonBar::ButtonBar(lv_obj_t* parent,
-                     std::shared_ptr<oww::logic::Application> state)
-    : Component(state) {
+                     std::shared_ptr<state::IApplicationState> state,
+                     hal::IHardware* hardware)
+    : Component(state, hardware) {
   // Create the main container for the button bar
   // ButtonBar: 240×50px at bottom of screen, no padding
   root_ = lv_obj_create(parent);
@@ -121,29 +122,42 @@ void ButtonBar::Render() {
     }
   }
 
-  // Push colors to LED controller (override generic state)
-  if (auto ui = UserInterface::instance().leds()) {
-    using namespace oww::drivers::leds;
-    ButtonColors colors;
-    // Map: TL, TR, BL, BR -> using LV button colors for now
-    // Use brighter color when enabled, dim when disabled
-    auto scale = [](lv_color32_t c, bool on) -> Color {
-      uint8_t s = on ? 180 : 0;
-      return Color::RGB((c.red * s) / 255, (c.green * s) / 255,
-                        (c.blue * s) / 255);
+  // Update button LEDs via hardware interface
+  if (hardware_) {
+    using namespace hal::led_indices;
+
+    // Helper to scale color by brightness
+    auto scale_color = [](const lv_color32_t& color, uint8_t brightness) {
+      uint8_t r = (color.red * brightness) / 255;
+      uint8_t g = (color.green * brightness) / 255;
+      uint8_t b = (color.blue * brightness) / 255;
+      return std::make_tuple(r, g, b);
     };
-    colors.bottom_left =
-        scale(definition->left_color, definition->left_enabled);
-    colors.bottom_right =
-        scale(definition->right_color, definition->right_enabled);
-    colors.top_left =
-        definition->down_enabled ? Color::WarmWhite(180) : Color::Off();
-    colors.top_right =
-        definition->up_enabled ? Color::WarmWhite(180) : Color::Off();
-    ui->Buttons().SetColors(colors);
-    EffectConfig fx;
-    fx.type = EffectType::Solid;
-    ui->Buttons().SetEffect(fx);
+
+    // Bottom left button
+    if (definition->left_enabled) {
+      auto [r, g, b] = scale_color(definition->left_color, 180);
+      hardware_->SetLED(BUTTON_BOTTOM_LEFT, r, g, b);
+    } else {
+      hardware_->SetLED(BUTTON_BOTTOM_LEFT, 0, 0, 0);
+    }
+
+    // Bottom right button
+    if (definition->right_enabled) {
+      auto [r, g, b] = scale_color(definition->right_color, 180);
+      hardware_->SetLED(BUTTON_BOTTOM_RIGHT, r, g, b);
+    } else {
+      hardware_->SetLED(BUTTON_BOTTOM_RIGHT, 0, 0, 0);
+    }
+
+    // Top buttons (up/down) - use warm white
+    uint8_t up_brightness = definition->up_enabled ? 180 : 0;
+    uint8_t down_brightness = definition->down_enabled ? 180 : 0;
+    hardware_->SetLED(BUTTON_TOP_RIGHT, 0, 0, 0, up_brightness);
+    hardware_->SetLED(BUTTON_TOP_LEFT, 0, 0, 0, down_brightness);
+
+    // Push LED changes to hardware
+    hardware_->ShowLEDs();
   }
 }
 

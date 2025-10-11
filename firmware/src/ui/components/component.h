@@ -2,13 +2,16 @@
 
 #include <lvgl.h>
 
-#include "logic/application.h"
+#include "hal/hardware_interface.h"
+#include "state/iapplication_state.h"
 
 namespace oww::ui {
 
 class Component {
  public:
-  Component(std::shared_ptr<oww::logic::Application> app) : app_(app) {};
+  Component(std::shared_ptr<state::IApplicationState> app,
+            hal::IHardware* hardware = nullptr)
+      : app_(app), hardware_(hardware) {};
   virtual ~Component() {};
 
   virtual void Render() = 0;
@@ -19,7 +22,8 @@ class Component {
 
  protected:
   lv_obj_t* root_;
-  std::shared_ptr<oww::logic::Application> app_;
+  std::shared_ptr<state::IApplicationState> app_;
+  hal::IHardware* hardware_;
 };
 
 }  // namespace oww::ui

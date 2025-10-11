@@ -7,9 +7,9 @@ LV_IMG_DECLARE(tap_token);
 namespace oww::ui {
 
 SessionStatus::SessionStatus(lv_obj_t* parent,
-                             std::shared_ptr<oww::logic::Application> state,
-                             UserInterface* ui)
-    : MainContent(parent, state, ui), last_state_id_(nullptr) {
+                             std::shared_ptr<state::IApplicationState> state,
+                             hal::IHardware* hardware)
+    : MainContent(parent, state, hardware), last_state_id_(nullptr) {
   CreateNfcIconArea();
   CreateStatusText();
 

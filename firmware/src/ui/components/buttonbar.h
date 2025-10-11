@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <string>
 
 #include "ui/components/component.h"
 
@@ -8,12 +9,12 @@ namespace oww::ui {
 
 class ButtonDefinition {
  public:
-  String left_label;
+  std::string left_label;
   bool left_enabled;
   lv_color32_t left_color;
   std::function<void()> left_callback;
 
-  String right_label;
+  std::string right_label;
   bool right_enabled;
   lv_color32_t right_color;
   std::function<void()> right_callback;
@@ -39,7 +40,8 @@ inline constexpr lv_point_t bottom_right_touch_point{
 
 class ButtonBar : public Component {
  public:
-  ButtonBar(lv_obj_t* parent, std::shared_ptr<oww::logic::Application> state);
+  ButtonBar(lv_obj_t* parent, std::shared_ptr<state::IApplicationState> state,
+            hal::IHardware* hardware);
   virtual ~ButtonBar();
 
   virtual void Render() override;

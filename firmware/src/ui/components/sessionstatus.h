@@ -9,8 +9,8 @@ namespace oww::ui {
 
 class SessionStatus : public MainContent {
  public:
-  SessionStatus(lv_obj_t* parent, std::shared_ptr<oww::logic::Application> app,
-                UserInterface* ui);
+  SessionStatus(lv_obj_t* parent, std::shared_ptr<state::IApplicationState> app,
+                hal::IHardware* hardware = nullptr);
   virtual ~SessionStatus();
 
   virtual void Render() override;

@@ -5,10 +5,12 @@
 #include "logic/configuration.h"
 #include "logic/session/session_coordinator.h"
 #include "logic/session/sessions.h"
+#include "state/iapplication_state.h"
 
 namespace oww::logic {
 
-class Application : public std::enable_shared_from_this<Application> {
+class Application : public state::IApplicationState,
+                    public std::enable_shared_from_this<Application> {
  public:
   Application(std::unique_ptr<Configuration> configuration);
 
@@ -25,9 +27,12 @@ class Application : public std::enable_shared_from_this<Application> {
     return session_coordinator_;
   }
 
-  // Thread-safe state queries (for UI)
-  session::SessionStateHandle GetSessionState();
-  session::StateHandle GetMachineState();
+  // IApplicationState implementation
+  state::SystemStateHandle GetSystemState() const override;
+  state::SessionStateHandle GetSessionState() const override;
+  state::MachineStateHandle GetMachineState() const override;
+  tl::expected<void, ErrorType> RequestManualCheckOut() override;
+  void RequestCancelCurrentOperation() override;
 
  public:
   os_mutex_t mutex_ = 0;

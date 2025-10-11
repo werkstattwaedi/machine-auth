@@ -1,6 +1,7 @@
 #include "ui/platform/maco_ui.h"
 
 #include "drivers/display/ili9341.h"
+#include "state/system_state.h"
 
 namespace oww::ui {
 using namespace config::ui;
@@ -30,6 +31,10 @@ tl::expected<void, Error> UserInterface::Begin(
   }
 
   app_ = state;
+  // Cast to interface for UI components
+  std::shared_ptr<oww::state::IApplicationState> app_state =
+      std::static_pointer_cast<oww::state::IApplicationState>(app_);
+  ui_manager_ = std::make_unique<UiManager>(app_state);
 
   pinMode(buzzer::pin_pwm, OUTPUT);
   analogWrite(config::ui::display::pin_backlight, 255);
@@ -38,6 +43,9 @@ tl::expected<void, Error> UserInterface::Begin(
   // LED controller setup
   led_ = std::make_unique<drivers::leds::LedController>(&led_strip_);
   led_->InitializeDefaultMapping();
+
+  // Hardware abstraction setup
+  hardware_ = std::make_unique<hal::MacoHardware>(&led_strip_);
 
   drivers::display::Display::instance().Begin();
 
@@ -53,7 +61,9 @@ tl::expected<void, Error> UserInterface::Begin(
 os_thread_return_t UserInterface::UserInterfaceThread() {
   auto display = &drivers::display::Display::instance();
 
-  splash_screen_ = std::make_unique<SplashScreen>(app_);
+  std::shared_ptr<oww::state::IApplicationState> app_state =
+      std::static_pointer_cast<oww::state::IApplicationState>(app_);
+  splash_screen_ = std::make_unique<SplashScreen>(app_state);
 
   while (true) {
     UpdateGui();
@@ -66,19 +76,38 @@ os_thread_return_t UserInterface::UserInterfaceThread() {
 void UserInterface::UpdateGui() {
   if (splash_screen_) {
     splash_screen_->Render();
-    if (!app_->IsBootCompleted()) {
+
+    // Check if boot is complete (system is Ready)
+    auto system_state = app_->GetSystemState();
+    if (!std::holds_alternative<state::system::Ready>(*system_state)) {
       return;
     }
 
     splash_screen_ = nullptr;
-    status_bar_ = std::make_unique<StatusBar>(lv_screen_active(), app_);
+
+    // Get machine label from configuration
+    auto configuration = app_->GetConfiguration();
+    std::string machine_label = configuration->IsConfigured()
+                                    ? configuration->GetDeviceConfig()
+                                          ->machines()
+                                          ->begin()
+                                          ->label()
+                                          ->c_str()
+                                    : "unconfigured";
+
+    std::shared_ptr<oww::state::IApplicationState> app_state =
+        std::static_pointer_cast<oww::state::IApplicationState>(app_);
+    status_bar_ =
+        std::make_unique<StatusBar>(lv_screen_active(), app_state, machine_label);
 
     // StatusBar: 240×58px (full width, 58px height)
     lv_obj_set_size(*status_bar_, 240, 58);
     lv_obj_align(*status_bar_, LV_ALIGN_TOP_LEFT, 0, 0);
 
     // Create button bar at the bottom
-    button_bar_ = std::make_unique<ButtonBar>(lv_screen_active(), app_);
+    button_bar_ = std::make_unique<ButtonBar>(lv_screen_active(), app_state,
+                                               hardware_.get());
+    ui_manager_->SetButtonBar(button_bar_.get());
 
     // Create main content area between status bar and button bar
     lv_obj_t* content_container = lv_obj_create(lv_screen_active());
@@ -89,9 +118,9 @@ void UserInterface::UpdateGui() {
     lv_obj_align(content_container, LV_ALIGN_TOP_LEFT, 0, 58);
 
     // Create and activate session status as main content
-    session_status_ =
-        std::make_shared<SessionStatus>(content_container, app_, this);
-    PushContent(session_status_);
+    session_status_ = std::make_shared<SessionStatus>(content_container, app_state,
+                                                       hardware_.get());
+    ui_manager_->PushContent(session_status_);
 
     // Set up button mappings for touch input
     SetupButtonMappings();
@@ -99,7 +128,7 @@ void UserInterface::UpdateGui() {
 
   status_bar_->Render();
   button_bar_->Render();
-  auto current_content = GetCurrentContent();
+  auto current_content = ui_manager_->GetCurrentContent();
   if (current_content) {
     current_content->Render();
   }
@@ -128,60 +157,6 @@ void UserInterface::SetupButtonMappings() {
   display.SetButtonMapping(0, bottom_right_touch_point);
   display.SetButtonMapping(3, top_left_touch_point);
   display.SetButtonMapping(1, top_right_touch_point);
-}
-
-void UserInterface::PushContent(std::shared_ptr<MainContent> content) {
-  if (!content_stack_.empty()) {
-    content_stack_.back()->OnDeactivate();
-    if (button_bar_ && content_stack_.back()->GetButtonDefinition()) {
-      button_bar_->RemoveButtons(content_stack_.back()->GetButtonDefinition());
-    }
-  }
-
-  content_stack_.push_back(content);
-  ActivateContent(content);
-}
-
-void UserInterface::PopContent() {
-  if (content_stack_.size() <= 1) {
-    return;  // Don't pop the last content
-  }
-
-  auto current = content_stack_.back();
-  current->OnDeactivate();
-  if (button_bar_ && current->GetButtonDefinition()) {
-    button_bar_->RemoveButtons(current->GetButtonDefinition());
-  }
-
-  content_stack_.pop_back();
-
-  if (!content_stack_.empty()) {
-    ActivateContent(content_stack_.back());
-  }
-}
-
-std::shared_ptr<MainContent> UserInterface::GetCurrentContent() {
-  if (content_stack_.empty()) {
-    return nullptr;
-  }
-  return content_stack_.back();
-}
-
-void UserInterface::ActivateContent(std::shared_ptr<MainContent> content) {
-  content->OnActivate();
-  if (button_bar_ && content->GetButtonDefinition()) {
-    button_bar_->ActivateButtons(content->GetButtonDefinition());
-  }
-}
-
-void UserInterface::DeactivateCurrentContent() {
-  if (!content_stack_.empty()) {
-    auto current = content_stack_.back();
-    current->OnDeactivate();
-    if (button_bar_ && current->GetButtonDefinition()) {
-      button_bar_->RemoveButtons(current->GetButtonDefinition());
-    }
-  }
 }
 
 }  // namespace oww::ui

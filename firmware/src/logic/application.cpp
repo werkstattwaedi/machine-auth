@@ -59,12 +59,37 @@ void Application::Loop() {
   (void)machine_state;  // Unused for now
 }
 
-session::SessionStateHandle Application::GetSessionState() {
-  return session_coordinator_.GetStateHandle();
+// IApplicationState implementation
+state::SystemStateHandle Application::GetSystemState() const {
+  // TODO: Implement proper system state tracking
+  // For now, return Ready if boot is complete
+  if (boot_progress_.empty()) {
+    return std::make_shared<state::SystemState>(state::system::Ready{});
+  } else {
+    return std::make_shared<state::SystemState>(
+        state::system::Booting{boot_progress_});
+  }
 }
 
-session::StateHandle Application::GetMachineState() {
-  return machine_usage_.GetState();
+state::SessionStateHandle Application::GetSessionState() const {
+  // TODO: Proper conversion from session:: to state:: types
+  // For now, return a simple Idle state
+  return std::make_shared<state::SessionState>(state::session::Idle{});
+}
+
+state::MachineStateHandle Application::GetMachineState() const {
+  // TODO: Proper conversion from session:: to state:: types
+  // For now, return a simple Idle state
+  return std::make_shared<state::MachineState>(state::machine::Idle{});
+}
+
+tl::expected<void, ErrorType> Application::RequestManualCheckOut() {
+  // TODO: Implement manual check-out request
+  return {};
+}
+
+void Application::RequestCancelCurrentOperation() {
+  // TODO: Implement cancel operation
 }
 
 void Application::SetBootProgress(std::string message) {

@@ -6,7 +6,9 @@ namespace oww::hal {
 
 SimulatorHardware::SimulatorHardware() {
   // Initialize all LEDs to off
-  leds_.fill(Color::Off());
+  for (auto& led : leds_) {
+    led = {0, 0, 0, 0};
+  }
 }
 
 SimulatorHardware::~SimulatorHardware() {
@@ -100,7 +102,7 @@ void SimulatorHardware::InitializeLEDPositions() {
 
 void SimulatorHardware::SetLED(uint8_t index, uint8_t r, uint8_t g, uint8_t b, uint8_t w) {
   if (index < 16) {
-    leds_[index] = Color{r, g, b, w};
+    leds_[index] = {r, g, b, w};
   }
 }
 
@@ -111,45 +113,15 @@ void SimulatorHardware::ShowLEDs() {
   DrawLabels();
 }
 
-uint8_t SimulatorHardware::GetButtonState() {
-  return button_state_;
-}
-
 void SimulatorHardware::Beep(uint16_t frequency_hz, uint16_t duration_ms) {
   printf("[BEEP] %d Hz for %d ms\n", frequency_hz, duration_ms);
   fflush(stdout);
 }
 
 void SimulatorHardware::UpdateButtonState(const SDL_KeyboardEvent& key) {
-  uint8_t mask = 0;
-
-  // Map numpad keys to buttons (matches physical layout):
-  // 7 (numpad top-left) = Top-Left button
-  // 9 (numpad top-right) = Top-Right button
-  // 1 (numpad bottom-left) = Bottom-Left button
-  // 3 (numpad bottom-right) = Bottom-Right button
-  switch (key.keysym.sym) {
-    case SDLK_KP_7:
-      mask = BUTTON_TOP_LEFT;
-      break;
-    case SDLK_KP_9:
-      mask = BUTTON_TOP_RIGHT;
-      break;
-    case SDLK_KP_1:
-      mask = BUTTON_BOTTOM_LEFT;
-      break;
-    case SDLK_KP_3:
-      mask = BUTTON_BOTTOM_RIGHT;
-      break;
-    default:
-      return;
-  }
-
-  if (key.type == SDL_KEYDOWN) {
-    button_state_ |= mask;
-  } else if (key.type == SDL_KEYUP) {
-    button_state_ &= ~mask;
-  }
+  // Button state tracking removed - buttons now simulate touch events directly
+  // This method kept for compatibility but does nothing
+  (void)key;
 }
 
 void SimulatorHardware::SimulateNFCTag(const uint8_t* uid, size_t len) {
@@ -163,13 +135,8 @@ void SimulatorHardware::SimulateNFCTag(const uint8_t* uid, size_t len) {
   fflush(stdout);
 }
 
-void SimulatorHardware::DrawCircle(int x, int y, int radius, const Color& color) {
+void SimulatorHardware::DrawCircle(int x, int y, int radius, uint8_t r, uint8_t g, uint8_t b) {
   if (!renderer_) return;
-
-  // Convert RGBW to RGB (simple: add white to all channels)
-  uint8_t r = std::min(255, color.r + color.w);
-  uint8_t g = std::min(255, color.g + color.w);
-  uint8_t b = std::min(255, color.b + color.w);
 
   SDL_SetRenderDrawColor(renderer_, r, g, b, 255);
 
@@ -208,7 +175,12 @@ void SimulatorHardware::DrawAllLEDs() {
   // Draw all 16 LEDs at their mapped positions
   for (size_t i = 0; i < leds_.size(); i++) {
     const auto& pos = led_positions_[i];
-    DrawCircle(pos.x, pos.y, pos.radius, leds_[i]);
+    const auto& led = leds_[i];
+    // Convert RGBW to RGB (simple: add white to all channels)
+    uint8_t r = std::min(255, (int)led.r + (int)led.w);
+    uint8_t g = std::min(255, (int)led.g + (int)led.w);
+    uint8_t b = std::min(255, (int)led.b + (int)led.w);
+    DrawCircle(pos.x, pos.y, pos.radius, r, g, b);
   }
 
   // On first frame, print LED mapping to console
