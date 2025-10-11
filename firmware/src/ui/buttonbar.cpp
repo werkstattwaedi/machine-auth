@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-#include "leds/led_controller.h"
+#include "drivers/leds/ws2812.h"
 #include "ui.h"
 
 namespace oww::ui {
@@ -123,7 +123,7 @@ void ButtonBar::Render() {
 
   // Push colors to LED controller (override generic state)
   if (auto ui = UserInterface::instance().leds()) {
-    using namespace oww::ui::leds;
+    using namespace oww::drivers::leds;
     ButtonColors colors;
     // Map: TL, TR, BL, BR -> using LV button colors for now
     // Use brighter color when enabled, dim when disabled

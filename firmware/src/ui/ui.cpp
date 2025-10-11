@@ -1,6 +1,6 @@
 #include "ui.h"
 
-#include "driver/display.h"
+#include "drivers/display/ili9341.h"
 
 namespace oww::ui {
 using namespace config::ui;
@@ -36,10 +36,10 @@ tl::expected<void, Error> UserInterface::Begin(
 
   led_strip_.show();
   // LED controller setup
-  led_ = std::make_unique<leds::LedController>(&led_strip_);
+  led_ = std::make_unique<drivers::leds::LedController>(&led_strip_);
   led_->InitializeDefaultMapping();
 
-  Display::instance().Begin();
+  drivers::display::Display::instance().Begin();
 
   os_mutex_create(&mutex_);
 
@@ -51,7 +51,7 @@ tl::expected<void, Error> UserInterface::Begin(
 }
 
 os_thread_return_t UserInterface::UserInterfaceThread() {
-  auto display = &Display::instance();
+  auto display = &drivers::display::Display::instance();
 
   splash_screen_ = std::make_unique<SplashScreen>(app_);
 
@@ -255,7 +255,7 @@ void UserInterface::UpdateLed() {
 }
 
 void UserInterface::SetupButtonMappings() {
-  auto& display = Display::instance();
+  auto& display = drivers::display::Display::instance();
 
   // Map physical buttons to UI positions using static coordinates
   // Physical button mapping:

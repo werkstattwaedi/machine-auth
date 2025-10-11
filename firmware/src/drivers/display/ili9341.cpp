@@ -1,4 +1,4 @@
-#include "display.h"
+#include "drivers/display/ili9341.h"
 
 #include <concurrent_hal.h>
 #include <drivers/display/lcd/lv_lcd_generic_mipi.h>
@@ -7,6 +7,8 @@
 #include "config.h"
 
 // clang-format on
+
+namespace oww::drivers::display {
 
 using namespace config::ui::display;
 
@@ -257,3 +259,5 @@ void Display::ProcessFlushRequest(const DisplayFlushRequest& request) {
 
   lv_display_flush_ready(display_);
 }
+
+}  // namespace oww::drivers::display

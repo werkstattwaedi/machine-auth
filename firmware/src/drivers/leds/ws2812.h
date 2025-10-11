@@ -7,7 +7,7 @@
 
 #include "neopixel.h"
 
-namespace oww::ui::leds {
+namespace oww::drivers::leds {
 
 // Compact color container for RGBW pixels
 struct Color {
@@ -150,4 +150,4 @@ class LedController {
   float ring_wrap_len_{0.0f};    // length from last to first
 };
 
-}  // namespace oww::ui::leds
+}  // namespace oww::drivers::leds

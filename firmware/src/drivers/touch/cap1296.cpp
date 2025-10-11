@@ -1,6 +1,6 @@
-#include "ui/driver/cap1296.h"
+#include "drivers/touch/cap1296.h"
 
-namespace oww::ui::driver::cap {
+namespace oww::drivers::touch {
 Logger cap1296_log("cap1296");
 
 CAP1296::CAP1296() {}
@@ -55,4 +55,4 @@ void CAP1296::WriteRegister(Register reg, uint8_t value) {
   Wire.endTransmission();
 }
 
-}  // namespace oww::ui::driver::cap
+}  // namespace oww::drivers::touch

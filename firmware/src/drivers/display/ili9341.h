@@ -5,8 +5,10 @@
 
 #include <array>
 
-#include "cap1296.h"
+#include "drivers/touch/cap1296.h"
 #include "common.h"
+
+namespace oww::drivers::display {
 
 struct DisplayFlushRequest {
   lv_area_t area;
@@ -38,7 +40,7 @@ class Display {
   SPIClass& spi_interface_;
   SPISettings spi_settings_;
   XPT2046_Touchscreen touchscreen_interface_;
-  oww::ui::driver::cap::CAP1296 cap_interface_;
+  oww::drivers::touch::CAP1296 cap_interface_;
 
   void ReadTouchInput(lv_indev_t* indev, lv_indev_data_t* data);
 
@@ -64,3 +66,5 @@ class Display {
   volatile uint32_t transfer_count_ = 0;
   volatile uint32_t transfer_hang_count_ = 0;
 };
+
+}  // namespace oww::drivers::display

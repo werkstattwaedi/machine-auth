@@ -3,7 +3,7 @@
 #include "Particle.h"
 #include "common.h"
 
-namespace oww::ui::driver::cap {
+namespace oww::drivers::touch {
 
 // Default I2C address
 constexpr uint8_t kCap1296ddr = 0x28;
@@ -84,4 +84,4 @@ enum class Register : uint8_t {
   kRevision = 0xFF,
 };
 
-}  // namespace oww::ui::driver::cap
+}  // namespace oww::drivers::touch

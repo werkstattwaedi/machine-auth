@@ -3,8 +3,8 @@
 
 #include <vector>
 
-#include "ui/driver/display.h"
-#include "ui/leds/led_controller.h"
+#include "drivers/display/ili9341.h"
+#include "drivers/leds/ws2812.h"
 
 namespace oww::setup {
 
@@ -12,7 +12,7 @@ Logger logger("app.setup");
 
 std::shared_ptr<oww::logic::Application> app_;
 std::unique_ptr<Adafruit_NeoPixel> led_strip_;
-std::unique_ptr<oww::ui::leds::LedController> led_;
+std::unique_ptr<oww::drivers::leds::LedController> led_;
 using namespace config::ext;
 
 int SetLed(String command);
@@ -57,11 +57,11 @@ void setup(std::shared_ptr<oww::logic::Application> state) {
   led_strip_->show();
 
   // High-level LED controller for quick testing
-  led_ = std::make_unique<oww::ui::leds::LedController>(led_strip_.get());
+  led_ = std::make_unique<oww::drivers::leds::LedController>(led_strip_.get());
   led_->InitializeDefaultMapping();
 
   // Initialize display
-  Status display_status = Display::instance().Begin();
+  Status display_status = oww::drivers::display::Display::instance().Begin();
   if (display_status != Status::kOk) {
     logger.error("Failed to initialize display: %d", (int)display_status);
   } else {
@@ -74,7 +74,7 @@ void setup(std::shared_ptr<oww::logic::Application> state) {
 }
 
 void loop() {
-  Display::instance().RenderLoop();
+  oww::drivers::display::Display::instance().RenderLoop();
   if (led_) led_->Tick(millis());
 }
 
@@ -197,7 +197,7 @@ int SetLed(String command) {
 // Return values
 //   0 on success, -1 on parse/validation errors.
 
-using namespace oww::ui::leds;
+using namespace oww::drivers::leds;
 
 static bool parseRGBA(const String& params, Color& c, uint16_t* p0 = nullptr,
                       uint8_t* p1 = nullptr, uint8_t* p2 = nullptr,

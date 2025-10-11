@@ -1,6 +1,6 @@
-#include "led_controller.h"
+#include "drivers/leds/ws2812.h"
 
-namespace oww::ui::leds {
+namespace oww::drivers::leds {
 
 static uint8_t breathe_brightness(uint32_t now, uint16_t period_ms,
                                   uint8_t min_b, uint8_t max_b) {
@@ -174,4 +174,4 @@ void LedController::SetRingEdgeLengths(const std::vector<float>& edge_lengths) {
   ring_wrap_len_ = std::max(0.001f, edge_lengths.back());
 }
 
-}  // namespace oww::ui::leds
+}  // namespace oww::drivers::leds

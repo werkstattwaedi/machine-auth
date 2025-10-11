@@ -5,7 +5,7 @@
 
 #include "buttonbar.h"
 #include "common.h"
-#include "leds/led_controller.h"
+#include "drivers/leds/ws2812.h"
 #include "logic/application.h"
 #include "maincontent.h"
 #include "neopixel.h"
@@ -59,7 +59,7 @@ class UserInterface {
   std::shared_ptr<MainContent> GetCurrentContent();
 
   // Access to LED controller for UI components (SessionStatus, ButtonBar)
-  leds::LedController* leds() { return led_.get(); }
+  drivers::leds::LedController* leds() { return led_.get(); }
 
  private:
   // UserInterface is a singleton - use UserInterface.instance()
@@ -92,7 +92,7 @@ class UserInterface {
 
  private:
   Adafruit_NeoPixel led_strip_;
-  std::unique_ptr<leds::LedController> led_;
+  std::unique_ptr<drivers::leds::LedController> led_;
   std::unique_ptr<SplashScreen> splash_screen_ = nullptr;
   std::unique_ptr<StatusBar> status_bar_ = nullptr;
   std::unique_ptr<ButtonBar> button_bar_ = nullptr;
