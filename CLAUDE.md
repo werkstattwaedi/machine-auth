@@ -331,6 +331,24 @@ firmware/src/
 
 ## Cloud Integration Notes
 
+### Firebase Operations Budget Constraint
+
+**CRITICAL REQUIREMENT: 100,000 operations/month maximum**
+
+The project must stay within Firebase free tier limits of 100K read/write operations per month. This hard constraint drives several architectural decisions:
+
+**Design Decisions to Minimize Operations:**
+1. **Terminal-side permission checking**: Authentication happens in cloud (crypto security), but permission validation happens locally on the device after session is established
+2. **Local session caching**: Once a session is active, subsequent badge-ins on the same terminal don't query the cloud
+3. **Batch usage uploads**: Usage records are stored locally and uploaded in batches rather than real-time
+4. **Future: Session broadcasting** (planned): When a session becomes active, broadcast to other devices so they can cache it without querying cloud on every badge-in
+
+**Always consider Firebase operation cost when:**
+- Adding new cloud queries
+- Implementing real-time features
+- Designing data sync patterns
+- Broadcasting state changes
+
 ### Firebase Functions
 
 All code is in `functions/`
