@@ -8,6 +8,7 @@ import { authorizeStep1 } from "../ntag/authorize";
 import { toKeyBytes } from "../ntag/bytebuffer_util";
 import * as admin from "firebase-admin";
 import { Timestamp } from "firebase-admin/firestore";
+import { assertIsDocumentReference } from "../util/firestore_helpers";
 
 export async function handleAuthenticateNewSession(
   request: AuthenticateNewSessionRequestT,
@@ -50,15 +51,9 @@ export async function handleAuthenticateNewSession(
     throw new Error(`Token ${tokenIdHex} has been deactivated`);
   }
 
-  // Get the user ID from the userId reference field
-  const userIdRef = tokenData.userId; // e.g., "/users/someUserId"
-  if (!userIdRef || typeof userIdRef !== "string") {
-    throw new Error("Token document missing userId reference");
-  }
-  const userId = userIdRef.split("/").pop(); // Extract userId from path
-  if (!userId) {
-    throw new Error("Could not extract user ID from reference");
-  }
+  // Get the user ID from the userId DocumentReference
+  assertIsDocumentReference(tokenData.userId, 'userId');
+  const userId = String(tokenData.userId.id);
 
   // Verify the user exists and get their data
   const userDoc = await admin.firestore().collection("users").doc(userId).get();

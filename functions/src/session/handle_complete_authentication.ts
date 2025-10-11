@@ -12,6 +12,7 @@ import { diversifyKey } from "../ntag/key_diversification";
 import { toKeyBytes } from "../ntag/bytebuffer_util";
 import * as admin from "firebase-admin";
 import { Timestamp } from "firebase-admin/firestore";
+import { assertIsDocumentReference } from "../util/firestore_helpers";
 
 export async function handleCompleteAuthentication(
   request: CompleteAuthenticationRequestT,
@@ -52,12 +53,9 @@ export async function handleCompleteAuthentication(
       throw new Error(`Invalid session data: ${sessionId}`);
     }
 
-    // Extract user ID from the userId reference
-    const userIdMatch = sessionData.userId.match(/^\/users\/(.+)$/);
-    if (!userIdMatch) {
-      throw new Error(`Invalid userId reference format: ${sessionData.userId}`);
-    }
-    const userId = userIdMatch[1];
+    // Extract user ID from the userId DocumentReference
+    assertIsDocumentReference(sessionData.userId, 'userId');
+    const userId = String(sessionData.userId.id);
 
     // Get user data
     const userDoc = await admin
@@ -78,12 +76,9 @@ export async function handleCompleteAuthentication(
 
     const userData = userDoc.data();
 
-    // Extract token ID from the tokenId reference
-    const tokenIdMatch = sessionData.tokenId.match(/^\/tokens\/(.+)$/);
-    if (!tokenIdMatch) {
-      throw new Error(`Invalid tokenId reference format: ${sessionData.tokenId}`);
-    }
-    const tokenIdHex = tokenIdMatch[1];
+    // Extract token ID from the tokenId DocumentReference
+    assertIsDocumentReference(sessionData.tokenId, 'tokenId');
+    const tokenIdHex = String(sessionData.tokenId.id);
 
     // Generate authorization key
     const authorizationKey = diversifyKey(
@@ -113,7 +108,17 @@ export async function handleCompleteAuthentication(
     tokenSession.expiration = BigInt(Math.floor(Date.now() / 1000) + 24 * 60 * 60); // 24 hours from now in seconds
     tokenSession.userId = userDoc.id;
     tokenSession.userLabel = userData?.displayName || "Unknown User";
-    tokenSession.permissions = userData?.permissions || [];
+
+    // Extract permission IDs from DocumentReferences
+    // Permissions are stored as DocumentReferences in Firestore
+    // We extract just the ID for the flatbuffer response
+    const rawPermissions = userData?.permissions || [];
+    tokenSession.permissions = Array.isArray(rawPermissions)
+      ? rawPermissions.map(p => {
+          assertIsDocumentReference(p, 'permission');
+          return String(p.id);
+        })
+      : [];
 
     const response = new CompleteAuthenticationResponseT();
     response.resultType = CompleteAuthenticationResult.TokenSession;

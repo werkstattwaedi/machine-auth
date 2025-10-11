@@ -172,7 +172,7 @@ void SessionStatus::RenderActiveState(const state::machine::Active& active) {
   lv_obj_clear_flag(duration_label_, LV_OBJ_FLAG_HIDDEN);
 
   // Calculate and format duration
-  auto now = std::chrono::system_clock::now();
+  auto now = timeUtc();
   auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
       now - active.start_time);
   std::string duration_text = FormatDuration(elapsed);

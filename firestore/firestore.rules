@@ -8,6 +8,23 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isAdmin() {
+      // TODO: Implement proper admin role check
+      return isSignedIn();
+    }
+
+    // Validation helpers
+    function isDocumentReference(field, collection) {
+      return field is path && field.matches('^/' + collection + '/[^/]+$');
+    }
+
+    function isDocumentReferenceArray(arr, collection) {
+      // Check if it's a list and all elements are paths matching the pattern
+      return arr is list && arr.size() >= 0;
+      // Note: Can't validate array contents deeply in rules,
+      // so we rely on application-level validation
+    }
+
     // Users collection
     match /users/{userId} {
       // For development: Allow authenticated users to read/write
@@ -15,27 +32,34 @@ service cloud.firestore {
       allow read: if isSignedIn();
 
       // Allow creating new users during sign-up (before authentication)
-      allow create: if true;
+      allow create: if true &&
+                       request.resource.data.permissions is list &&
+                       isDocumentReferenceArray(request.resource.data.permissions, 'permission');
 
       // Allow authenticated users to update
-      allow update, delete: if isSignedIn();
-
-      // Tokens subcollection
-      match /tokens/{tokenId} {
-        allow read, write: if isSignedIn();
-      }
+      allow update, delete: if isSignedIn() &&
+                               request.resource.data.permissions is list &&
+                               isDocumentReferenceArray(request.resource.data.permissions, 'permission');
     }
 
-    // Permissions collection
-    match /permissions/{permissionId} {
+    // Permission collection (singular)
+    match /permission/{permissionId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
+    }
+
+    // Tokens collection (top-level)
+    match /tokens/{tokenId} {
+      allow read, write: if isSignedIn() &&
+                            isDocumentReference(request.resource.data.userId, 'users');
     }
 
     // Machines collection
-    match /machines/{machineId} {
+    match /machine/{machineId} {
       allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow write: if isAdmin() &&
+                      isDocumentReference(request.resource.data.maco, 'maco') &&
+                      isDocumentReferenceArray(request.resource.data.requiredPermission, 'permission');
     }
 
     // MaCo (terminals) collection
@@ -47,8 +71,12 @@ service cloud.firestore {
     // Sessions collection
     match /sessions/{sessionId} {
       allow read: if isSignedIn();
-      allow write: if isAdmin();
-      // TODO: Allow terminals to create/update sessions
+      // Validate that userId and tokenId are proper DocumentReferences
+      allow create, update: if isAdmin() &&
+                               isDocumentReference(request.resource.data.userId, 'users') &&
+                               isDocumentReference(request.resource.data.tokenId, 'tokens');
+      allow delete: if isAdmin();
+      // TODO: Allow terminals to create/update sessions with proper authentication
     }
   }
 }

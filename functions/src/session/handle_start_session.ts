@@ -13,6 +13,7 @@ import {
   isSessionExpired,
   calculateSessionExpiration,
 } from "../util/session_expiration";
+import { assertIsDocumentReference } from "../util/firestore_helpers";
 
 export async function handleStartSession(
   request: StartSessionRequestT,
@@ -76,15 +77,9 @@ export async function handleStartSession(
       return response;
     }
 
-    // Get the user ID from the userId reference field
-    const userIdRef = tokenData.userId; // e.g., "/users/someUserId"
-    if (!userIdRef || typeof userIdRef !== "string") {
-      throw new Error("Token document missing userId reference");
-    }
-    const userId = userIdRef.split("/").pop(); // Extract userId from path
-    if (!userId) {
-      throw new Error("Could not extract user ID from reference");
-    }
+    // Get the user ID from the userId DocumentReference
+    assertIsDocumentReference(tokenData.userId, 'userId');
+    const userId = String(tokenData.userId.id);
 
     // Get user data
     const userDoc = await admin
@@ -98,11 +93,12 @@ export async function handleStartSession(
     const userData = userDoc.data();
 
     // Check for existing non-closed session (most recent first)
-    const tokenIdReference = `/tokens/${tokenIdHex}`;
+    // Use DocumentReference for query to match how it's stored in Firestore
+    const tokenIdDocRef = admin.firestore().doc(`tokens/${tokenIdHex}`);
     const existingSessionQuery = await admin
       .firestore()
       .collection("sessions")
-      .where("tokenId", "==", tokenIdReference)
+      .where("tokenId", "==", tokenIdDocRef)
       .where("closed", "==", null) // Only get non-closed sessions
       .orderBy("startTime", "desc") // Get the most recent first
       .limit(1)
@@ -123,7 +119,15 @@ export async function handleStartSession(
         tokenSession.expiration = BigInt(expiration.seconds);
         tokenSession.userId = userId;
         tokenSession.userLabel = userData?.displayName || "Unknown User";
-        tokenSession.permissions = userData?.permissions || [];
+
+        // Extract permission IDs from DocumentReferences
+        const rawPermissions = userData?.permissions || [];
+        tokenSession.permissions = Array.isArray(rawPermissions)
+          ? rawPermissions.map(p => {
+              assertIsDocumentReference(p, 'permission');
+              return String(p.id);
+            })
+          : [];
 
         const response = new StartSessionResponseT();
         response.resultType = StartSessionResult.TokenSession;

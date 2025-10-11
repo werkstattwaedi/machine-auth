@@ -2,8 +2,8 @@
   "machine": {
     "{machineId}" : {
       "name": "string", // Human readable label
-      "requiredPermission": ["/permission/{permissionId}"], // Permissions required to use the machine
-      "maco": "/maco/{deviceID}", // particle device id of MaCo that controls this device
+      "requiredPermission": ["DocumentReference"], // Array of DocumentReferences to /permission/{permissionId}
+      "maco": "DocumentReference", // DocumentReference to /maco/{deviceID}
       "control": { // map with metadata on how to control the machine.
 
       }
@@ -16,16 +16,16 @@
   },
   "sessions": {
     "{sessionId}": { // generated in AuthenticateNewSessionRequest
-      "userId": "/users/{userId}", // reference to user assciated with this session
+      "userId": "DocumentReference", // DocumentReference to /users/{userId}
       "startTime": "timestamp", // timestamp the session was created
       "rndA": { // cloud-generated random bytes for Ntag 3-pass mutual authentication. Used in CompleteAuthentication to verify authenticity
         "_byteString": "string" // Base64 encoded random bytes
       },
 
-      "tokenId": "/tokens/{tokenId}", // Reference to token
+      "tokenId": "DocumentReference", // DocumentReference to /tokens/{tokenId}
       "usage": [ // array of individual check-ins / check-outs within the session. Added in UploadUsage
         {
-          "machine": "/machine/{machineId}", // The reference to the machine used
+          "machine": "DocumentReference", // DocumentReference to /machine/{machineId}
           "checkIn": "timestamp",
           "checkOut": "timestamp",
           "metadata": "string" // json representation of the checkout reason
@@ -45,7 +45,7 @@
   },
   "tokens": {
     "{tokenId}": { // NTag UID (e.g., "04c339aa1e1890")
-      "userId": "/users/{userId}", // reference to owning user
+      "userId": "DocumentReference", // DocumentReference to /users/{userId}
       "registered": "timestamp", // time the token was added to the user's profile
       "deactivated": "timestamp", // optional timestamp, when set the token is not in use anymore
       "label": "string" // Token label (e.g., "Key 1")
@@ -57,7 +57,7 @@
       "firebaseUid": "string",
       "displayName": "string", // Display name (e.g., "MikeS")
       "name": "string", // Full name (e.g., "Michael Schneider")
-      "permissions": ["permissionId"], // Array of permission granted to the user
+      "permissions": ["DocumentReference"], // Array of DocumentReferences to /permission/{permissionId}
       "roles": ["vereinsmitglid|admin"]
     }
   }

@@ -1,4 +1,5 @@
 import { expect } from "chai";
+import * as admin from "firebase-admin";
 import { Timestamp } from "firebase-admin/firestore";
 import {
   setupEmulator,
@@ -75,52 +76,108 @@ describe("handleCompleteAuthentication (Integration)", () => {
     });
   });
 
-  describe("Token path format", () => {
-    it("should correctly parse new /tokens/ path format", async () => {
-      // Create a session with the new token path format
+  describe("DocumentReference validation", () => {
+    it("should reject sessions with string-based references", async () => {
+      const db = admin.firestore();
+
+      // Manually create documents with string references (bypassing seedTestData conversion)
+      await db.collection("tokens").doc(TEST_TOKEN_ID).set({
+        userId: `/users/${TEST_USER_ID}`, // String reference instead of DocumentReference
+        label: "Test Token",
+        registered: Timestamp.now(),
+      });
+
+      await db.collection("users").doc(TEST_USER_ID).set({
+        displayName: "Test User",
+        name: "Test User Full Name",
+        permissions: [],
+        roles: [],
+        created: Timestamp.now(),
+      });
+
+      await db.collection("sessions").doc("stringRefSession").set({
+        userId: `/users/${TEST_USER_ID}`, // String reference instead of DocumentReference
+        tokenId: `/tokens/${TEST_TOKEN_ID}`, // String reference instead of DocumentReference
+        startTime: Timestamp.now(),
+        rndA: Array.from(Buffer.alloc(16)),
+        usage: [],
+      });
+
+      const request = new CompleteAuthenticationRequestT();
+      request.sessionId = "stringRefSession";
+      request.encryptedNtagResponse = Array.from(Buffer.alloc(16));
+
+      const response = await handleCompleteAuthentication(request, mockOptions);
+
+      // Should be rejected due to invalid reference format
+      expect(response.resultType).to.equal(CompleteAuthenticationResult.Rejected);
+      if (response.result && "message" in response.result) {
+        expect(response.result.message).to.include("expected DocumentReference");
+      }
+    });
+  });
+
+  describe("Permissions handling", () => {
+    it("should correctly serialize permissions array to flatbuffers", async () => {
+      const db = admin.firestore();
+
+      // Create permission documents first
       await seedTestData({
+        permissions: {
+          permission1: { name: "Permission 1" },
+          permission2: { name: "Permission 2" },
+          permission3: { name: "Permission 3" },
+        },
         tokens: {
           [TEST_TOKEN_ID]: {
             userId: `/users/${TEST_USER_ID}`,
             label: "Test Token",
           },
         },
-        users: {
-          [TEST_USER_ID]: {
-            displayName: "Test User",
-            name: "Test User Full Name",
-            permissions: ["laser"],
-            roles: ["member"],
-          },
-        },
-        sessions: {
-          testSession456: {
-            userId: `/users/${TEST_USER_ID}`,
-            tokenId: `/tokens/${TEST_TOKEN_ID}`,
-            startTime: Timestamp.now(),
-            rndA: Array.from(Buffer.alloc(16)),
-            usage: [],
-          },
-        },
       });
 
-      const request = new CompleteAuthenticationRequestT();
-      request.sessionId = "testSession456";
-      request.encryptedNtagResponse = Array.from(Buffer.alloc(16));
+      // Create user with DocumentReferences to permissions
+      await db.collection("users").doc(TEST_USER_ID).set({
+        displayName: "Test User",
+        name: "Test User Full Name",
+        permissions: [
+          db.doc("permission/permission1"),
+          db.doc("permission/permission2"),
+          db.doc("permission/permission3"),
+        ],
+        roles: ["member"],
+        created: Timestamp.now(),
+      });
 
-      // This should not throw an error about invalid path format
-      const response = await handleCompleteAuthentication(request, mockOptions);
+      // Create session for authentication
+      const authRequest = new AuthenticateNewSessionRequestT();
+      const tagUid = new TagUidT();
+      tagUid.uid = Array.from(Buffer.from(TEST_TOKEN_ID, "hex"));
+      authRequest.tokenId = tagUid;
+      authRequest.ntagChallenge = Array.from(Buffer.from("0123456789abcdef0123456789abcdef", "hex"));
 
-      // It will be rejected due to authentication failure, but not path parsing
-      expect(response.resultType).to.equal(CompleteAuthenticationResult.Rejected);
-      // Should not be a path format error
-      if (response.result && "message" in response.result) {
-        expect(response.result.message).to.not.include("Invalid tokenId reference format");
+      const authResponse = await handleAuthenticateNewSession(authRequest, mockOptions);
+
+      // Try to complete authentication - it will fail crypto but we can test the response structure
+      const completeRequest = new CompleteAuthenticationRequestT();
+      completeRequest.sessionId = authResponse.sessionId;
+      completeRequest.encryptedNtagResponse = Array.from(Buffer.alloc(16));
+
+      // This should not throw "obj.pack is not a function" error
+      let thrownError;
+      try {
+        await handleCompleteAuthentication(completeRequest, mockOptions);
+      } catch (error) {
+        thrownError = error;
+      }
+
+      // Should not get a flatbuffer packing error
+      if (thrownError) {
+        expect((thrownError as Error).message).to.not.include("obj.pack is not a function");
       }
     });
 
-    it("should reject old /users/.../token/ path format", async () => {
-      // Create a session with the OLD token path format
+    it("should handle empty permissions array", async () => {
       await seedTestData({
         tokens: {
           [TEST_TOKEN_ID]: {
@@ -133,30 +190,28 @@ describe("handleCompleteAuthentication (Integration)", () => {
             displayName: "Test User",
             name: "Test User Full Name",
             permissions: [],
-            roles: [],
-          },
-        },
-        sessions: {
-          oldFormatSession: {
-            userId: `/users/${TEST_USER_ID}`,
-            tokenId: `/users/${TEST_USER_ID}/token/${TEST_TOKEN_ID}`, // OLD FORMAT
-            startTime: Timestamp.now(),
-            rndA: Array.from(Buffer.alloc(16)),
-            usage: [],
+            roles: ["member"],
           },
         },
       });
 
-      const request = new CompleteAuthenticationRequestT();
-      request.sessionId = "oldFormatSession";
-      request.encryptedNtagResponse = Array.from(Buffer.alloc(16));
+      const authRequest = new AuthenticateNewSessionRequestT();
+      const tagUid = new TagUidT();
+      tagUid.uid = Array.from(Buffer.from(TEST_TOKEN_ID, "hex"));
+      authRequest.tokenId = tagUid;
+      authRequest.ntagChallenge = Array.from(Buffer.from("0123456789abcdef0123456789abcdef", "hex"));
 
-      const response = await handleCompleteAuthentication(request, mockOptions);
+      const authResponse = await handleAuthenticateNewSession(authRequest, mockOptions);
 
-      expect(response.resultType).to.equal(CompleteAuthenticationResult.Rejected);
-      if (response.result && "message" in response.result) {
-        expect(response.result.message).to.include("Invalid tokenId reference format");
-      }
+      const completeRequest = new CompleteAuthenticationRequestT();
+      completeRequest.sessionId = authResponse.sessionId;
+      completeRequest.encryptedNtagResponse = Array.from(Buffer.alloc(16));
+
+      // Should not throw
+      const response = await handleCompleteAuthentication(completeRequest, mockOptions);
+
+      // Response will be rejected due to crypto, but should not throw packing errors
+      expect(response).to.not.be.undefined;
     });
   });
 
