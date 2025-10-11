@@ -12,8 +12,9 @@
     "shell": "npm run build && firebase functions:shell",
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
-    "test": "ts-mocha -p tsconfig.json 'src/**/*.test.ts'",
-    "test:watch": "ts-mocha -p tsconfig.json 'src/**/*.test.ts' --watch --watch-files 'src/**/*.ts'",
+    "test:unit": "npm run build && mocha 'lib/src/**/*.test.js'",
+    "test:integration": "npm run build && firebase emulators:exec --only firestore 'mocha lib/test/integration/**/*.test.js'",
+    "test": "npm run build && npm run test:unit && npm run test:integration",
     "logs": "firebase functions:log"
   },
   "engines": {
@@ -29,6 +30,7 @@
     "particle-api-js": "^9.1.2"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.0",
     "@types/chai": "^4.3.16",
     "@types/express": "^4.17.21",
     "@types/mocha": "^10.0.6",
