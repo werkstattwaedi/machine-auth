@@ -6,6 +6,12 @@
 
 #include "hal/simulator_hardware.h"
 #include "mock/mock_application.h"
+#include "ui/core/ui_manager.h"
+#include "ui/components/buttonbar.h"
+#include "ui/components/splashscreen.h"
+#include "ui/components/sessionstatus.h"
+#include "ui/components/statusbar.h"
+#include "state/system_state.h"
 
 // Display configuration (matching hardware)
 constexpr int DISPLAY_WIDTH = 240;
@@ -16,6 +22,11 @@ constexpr int WINDOW_HEIGHT = 500;
 // Global instances
 static oww::hal::SimulatorHardware* g_hardware = nullptr;
 static std::shared_ptr<oww::logic::MockApplication> g_app = nullptr;
+static std::unique_ptr<oww::ui::UiManager> g_ui_manager = nullptr;
+static std::unique_ptr<oww::ui::ButtonBar> g_button_bar = nullptr;
+static std::unique_ptr<oww::ui::StatusBar> g_status_bar = nullptr;
+static std::unique_ptr<oww::ui::SplashScreen> g_splash_screen = nullptr;
+static std::shared_ptr<oww::ui::SessionStatus> g_session_status = nullptr;
 
 // LVGL display buffer
 static lv_display_t* disp = nullptr;
@@ -223,16 +234,63 @@ static void main_loop() {
 
   bool running = true;
   uint32_t last_tick = SDL_GetTicks();
+  bool boot_completed = false;
 
   while (running) {
     // Handle events
     running = handle_events();
+
+    // Check if boot completed and transition to main UI
+    if (!boot_completed && g_app) {
+      auto system_state = g_app->GetSystemState();
+      if (std::holds_alternative<oww::state::system::Ready>(*system_state)) {
+        // Boot complete - destroy splash screen and create main UI
+        g_splash_screen = nullptr;
+
+        // Create status bar at top
+        g_status_bar = std::make_unique<oww::ui::StatusBar>(
+            lv_screen_active(), g_app, "Test Machine");
+        lv_obj_set_size(*g_status_bar, 240, 58);
+        lv_obj_align(*g_status_bar, LV_ALIGN_TOP_LEFT, 0, 0);
+
+        // Create button bar at bottom
+        g_button_bar = std::make_unique<oww::ui::ButtonBar>(
+            lv_screen_active(), g_app, g_hardware);
+        g_ui_manager->SetButtonBar(g_button_bar.get());
+
+        // Create main content container (between status bar and button bar)
+        lv_obj_t* content_container = lv_obj_create(lv_screen_active());
+        lv_obj_remove_style_all(content_container);
+        lv_obj_set_size(content_container, 240, 212);  // 320 - 58 - 50
+        lv_obj_align(content_container, LV_ALIGN_TOP_LEFT, 0, 58);
+
+        // Create and activate session status
+        g_session_status = std::make_shared<oww::ui::SessionStatus>(
+            content_container, g_app, g_hardware);
+        g_ui_manager->PushContent(g_session_status);
+        g_session_status->OnActivate();
+
+        boot_completed = true;
+      }
+    }
 
     // Update LVGL tick
     uint32_t now = SDL_GetTicks();
     uint32_t elapsed = now - last_tick;
     lv_tick_inc(elapsed);
     last_tick = now;
+
+    // Render UI components
+    if (g_splash_screen) {
+      g_splash_screen->Render();
+    } else {
+      if (g_status_bar) g_status_bar->Render();
+      if (g_button_bar) g_button_bar->Render();
+      if (g_ui_manager) {
+        auto current = g_ui_manager->GetCurrentContent();
+        if (current) current->Render();
+      }
+    }
 
     // Run LVGL tasks
     lv_timer_handler();
@@ -262,6 +320,13 @@ static void main_loop() {
  * @brief Cleanup
  */
 static void cleanup() {
+  // Clean up UI components (must be done before LVGL shutdown)
+  g_session_status = nullptr;
+  g_splash_screen = nullptr;
+  g_status_bar = nullptr;
+  g_button_bar = nullptr;
+  g_ui_manager = nullptr;
+
   g_app = nullptr;
 
   delete g_hardware;
@@ -305,27 +370,14 @@ int main(int argc, char* argv[]) {
   g_app->SetBootProgress("Ready");
   // g_app->BootCompleted();  // Press 'B' to complete boot
 
-  // TODO: Initialize UI components here
-  // For now, just show a test screen
-  lv_obj_t* label = lv_label_create(lv_screen_active());
-  lv_label_set_text(label, "Machine Auth Simulator\n\nPress B to boot\nPress 1-3 for states\nPress C/M to cycle");
-  lv_obj_center(label);
+  // Initialize UI manager
+  g_ui_manager = std::make_unique<oww::ui::UiManager>(g_app);
 
-  // Test: Light up LEDs to show positions
-  // Display surround (dim white)
-  for (int i : {0, 5, 6, 7, 8, 9, 12, 13, 14, 15}) {
-    g_hardware->SetLED(i, 0, 0, 0, 50);  // Dim white
-  }
+  // Create splash screen (shown during boot)
+  g_splash_screen = std::make_unique<oww::ui::SplashScreen>(g_app);
 
-  // Buttons (different colors to identify)
-  g_hardware->SetLED(1, 255, 0, 0, 0);   // Button TL - Red
-  g_hardware->SetLED(4, 0, 255, 0, 0);   // Button TR - Green
-  g_hardware->SetLED(10, 0, 0, 255, 0);  // Button BL - Blue
-  g_hardware->SetLED(11, 255, 255, 0, 0); // Button BR - Yellow
-
-  // NFC area (cyan)
-  g_hardware->SetLED(2, 0, 255, 255, 0);  // Cyan
-  g_hardware->SetLED(3, 0, 255, 255, 0);  // Cyan
+  // Initial render
+  g_splash_screen->Render();
 
   // Run main loop
   main_loop();

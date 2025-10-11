@@ -27,10 +27,22 @@ file(GLOB LVGL_SDL_SOURCES
   ${LVGL_DIR}/src/drivers/sdl/*.c
 )
 
-# Custom fonts from firmware
-set(CUSTOM_FONTS
+# Custom fonts and images from firmware
+set(CUSTOM_ASSETS
   ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/fonts/roboto_24.c
   ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/fonts/roboto_12.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/image/oww_logo.c
+)
+
+# Shared UI sources from firmware
+set(SHARED_UI_SOURCES
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/core/ui_manager.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/components/component.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/components/buttonbar.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/components/maincontent.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/components/sessionstatus.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/components/splashscreen.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/components/statusbar.cpp
 )
 
 # Simulator sources
@@ -43,9 +55,10 @@ set(SIMULATOR_SOURCES
 # Create executable
 add_executable(simulator
   ${SIMULATOR_SOURCES}
+  ${SHARED_UI_SOURCES}
   ${LVGL_SOURCES}
   ${LVGL_SDL_SOURCES}
-  ${CUSTOM_FONTS}
+  ${CUSTOM_ASSETS}
 )
 
 # Include directories
@@ -61,6 +74,7 @@ target_include_directories(simulator PRIVATE
 target_compile_definitions(simulator PRIVATE
   LV_CONF_INCLUDE_SIMPLE=1
   LV_USE_SDL=1
+  SIMULATOR_BUILD=1
 )
 
 # Link libraries
