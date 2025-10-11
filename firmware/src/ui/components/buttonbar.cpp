@@ -1,9 +1,9 @@
-#include "buttonbar.h"
+#include "ui/components/buttonbar.h"
 
 #include <algorithm>
 
 #include "drivers/leds/ws2812.h"
-#include "ui.h"
+#include "ui/platform/maco_ui.h"
 
 namespace oww::ui {
 

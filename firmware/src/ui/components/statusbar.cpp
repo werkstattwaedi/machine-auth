@@ -1,4 +1,4 @@
-#include "statusbar.h"
+#include "ui/components/statusbar.h"
 
 namespace oww::ui {
 

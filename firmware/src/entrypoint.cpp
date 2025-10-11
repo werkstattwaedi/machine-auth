@@ -7,7 +7,7 @@
 #include "logic/application.h"
 #include "nfc/nfc_tags.h"
 #include "setup/setup.h"
-#include "ui/ui.h"
+#include "ui/platform/maco_ui.h"
 
 #ifdef REMOTE_LOGGING
 #include "RemoteLogRK.h"

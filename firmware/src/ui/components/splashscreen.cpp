@@ -1,4 +1,4 @@
-#include "splashscreen.h"
+#include "ui/components/splashscreen.h"
 
 LV_IMG_DECLARE(oww_logo);
 

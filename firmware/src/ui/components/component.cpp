@@ -1,4 +1,4 @@
-#include "component.h"
+#include "ui/components/component.h"
 
 namespace oww::ui {
 

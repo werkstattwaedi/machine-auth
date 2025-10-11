@@ -1,6 +1,6 @@
-#include "maincontent.h"
+#include "ui/components/maincontent.h"
 
-#include "ui.h"
+#include "ui/platform/maco_ui.h"
 
 namespace oww::ui {
 

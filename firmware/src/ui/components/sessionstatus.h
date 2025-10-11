@@ -3,7 +3,7 @@
 #include <memory>
 #include <variant>
 
-#include "maincontent.h"
+#include "ui/components/maincontent.h"
 
 namespace oww::ui {
 

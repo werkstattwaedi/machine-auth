@@ -2,8 +2,8 @@
 
 #include <memory>
 
-#include "buttonbar.h"
-#include "component.h"
+#include "ui/components/buttonbar.h"
+#include "ui/components/component.h"
 
 namespace oww::ui {
 

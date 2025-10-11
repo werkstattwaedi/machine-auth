@@ -3,15 +3,15 @@
 #include <XPT2046_Touch.h>
 #include <lvgl.h>
 
-#include "buttonbar.h"
 #include "common.h"
 #include "drivers/leds/ws2812.h"
 #include "logic/application.h"
-#include "maincontent.h"
 #include "neopixel.h"
-#include "sessionstatus.h"
-#include "splashscreen.h"
-#include "statusbar.h"
+#include "ui/components/buttonbar.h"
+#include "ui/components/maincontent.h"
+#include "ui/components/sessionstatus.h"
+#include "ui/components/splashscreen.h"
+#include "ui/components/statusbar.h"
 
 namespace oww::ui {
 
@@ -80,10 +80,6 @@ class UserInterface {
   os_thread_return_t UserInterfaceThread();
 
   void UpdateGui();
-
-  system_tick_t buzz_timeout = CONCURRENT_WAIT_FOREVER;
-  void* last_buzz_state_id_ = nullptr;
-
   void UpdateBuzzer();
   void UpdateLed();
 
