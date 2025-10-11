@@ -29,30 +29,35 @@ export async function handleAuthenticateNewSession(
   const uid = Buffer.from(request.tokenId.uid);
   const tokenIdHex = uid.toString("hex");
 
-  // First, find the user who owns this token
-  const usersQuery = await admin
+  // Look up token directly by document ID
+  const tokenDoc = await admin
     .firestore()
-    .collectionGroup("token")
-    .where(admin.firestore.FieldPath.documentId(), "==", tokenIdHex)
-    .limit(1)
+    .collection("tokens")
+    .doc(tokenIdHex)
     .get();
 
-  if (usersQuery.empty) {
-    throw new Error(`Token ${tokenIdHex} is not registered to any user`);
+  if (!tokenDoc.exists) {
+    throw new Error(`Token ${tokenIdHex} is not registered`);
   }
 
-  const tokenDoc = usersQuery.docs[0];
   const tokenData = tokenDoc.data();
+  if (!tokenData) {
+    throw new Error("Token document exists but has no data");
+  }
 
   // Check if token is deactivated
   if (tokenData.deactivated) {
     throw new Error(`Token ${tokenIdHex} has been deactivated`);
   }
 
-  // Get the user ID from the token document path
-  const userId = tokenDoc.ref.parent.parent?.id;
+  // Get the user ID from the userId reference field
+  const userIdRef = tokenData.userId; // e.g., "/users/someUserId"
+  if (!userIdRef || typeof userIdRef !== "string") {
+    throw new Error("Token document missing userId reference");
+  }
+  const userId = userIdRef.split("/").pop(); // Extract userId from path
   if (!userId) {
-    throw new Error("Could not determine user ID from token");
+    throw new Error("Could not extract user ID from reference");
   }
 
   // Verify the user exists and get their data
@@ -85,7 +90,7 @@ export async function handleAuthenticateNewSession(
       userId: `/users/${userId}`,
       startTime: Timestamp.now(),
       rndA: challengeResponse.cloudChallenge, // Store as byte array directly
-      tokenId: `/users/${userId}/token/${tokenIdHex}`,
+      tokenId: `/tokens/${tokenIdHex}`,
       usage: [], // Empty array for usage records
       // No 'closed' field - will be added when session is closed
     });

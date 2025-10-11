@@ -79,7 +79,7 @@ export async function handleCompleteAuthentication(
     const userData = userDoc.data();
 
     // Extract token ID from the tokenId reference
-    const tokenIdMatch = sessionData.tokenId.match(/^\/users\/.+\/token\/(.+)$/);
+    const tokenIdMatch = sessionData.tokenId.match(/^\/tokens\/(.+)$/);
     if (!tokenIdMatch) {
       throw new Error(`Invalid tokenId reference format: ${sessionData.tokenId}`);
     }
