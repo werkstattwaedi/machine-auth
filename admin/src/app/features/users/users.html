@@ -1,1 +1,208 @@
-<p>users works!</p>
+<div class="users-container">
+  <div class="header">
+    <h2>Benutzerverwaltung</h2>
+    <button mat-raised-button color="primary" (click)="createUser()">
+      <mat-icon>add</mat-icon>
+      Neuer Benutzer
+    </button>
+  </div>
+
+  <div class="content-layout">
+    <!-- Users List -->
+    <div class="users-list">
+      @if (users$ | async; as users) {
+        @if (permissions$ | async; as permissions) {
+          @if (users.length === 0) {
+            <div class="empty-state">
+              <mat-icon>people</mat-icon>
+              <p>Noch keine Benutzer vorhanden</p>
+              <button mat-raised-button color="primary" (click)="createUser()">
+                Ersten Benutzer erstellen
+              </button>
+            </div>
+          } @else {
+            <table mat-table [dataSource]="users" class="users-table">
+              <!-- Display Name Column -->
+              <ng-container matColumnDef="displayName">
+                <th mat-header-cell *matHeaderCellDef>Name</th>
+                <td mat-cell *matCellDef="let user">
+                  <div class="user-cell" (click)="selectUser(user)">
+                    {{ user.displayName }}
+                    @if (!user.firebaseUid) {
+                      <mat-icon class="unclaimed-icon" title="Nicht beansprucht">link_off</mat-icon>
+                    }
+                  </div>
+                </td>
+              </ng-container>
+
+              <!-- Email Column -->
+              <ng-container matColumnDef="email">
+                <th mat-header-cell *matHeaderCellDef>E-Mail</th>
+                <td mat-cell *matCellDef="let user">{{ user.email }}</td>
+              </ng-container>
+
+              <!-- Roles Column -->
+              <ng-container matColumnDef="roles">
+                <th mat-header-cell *matHeaderCellDef>Rollen</th>
+                <td mat-cell *matCellDef="let user">
+                  <mat-chip-set>
+                    @for (role of user.roles; track role) {
+                      <mat-chip>{{ role }}</mat-chip>
+                    }
+                  </mat-chip-set>
+                </td>
+              </ng-container>
+
+              <!-- Actions Column -->
+              <ng-container matColumnDef="actions">
+                <th mat-header-cell *matHeaderCellDef>Aktionen</th>
+                <td mat-cell *matCellDef="let user">
+                  <button mat-icon-button (click)="selectUser(user)" title="Details anzeigen">
+                    <mat-icon>visibility</mat-icon>
+                  </button>
+                  <button mat-icon-button (click)="editUser(user)" title="Bearbeiten">
+                    <mat-icon>edit</mat-icon>
+                  </button>
+                  <button mat-icon-button (click)="deleteUser(user)" title="Löschen">
+                    <mat-icon>delete</mat-icon>
+                  </button>
+                </td>
+              </ng-container>
+
+              <tr mat-header-row *matHeaderRowDef="userColumns"></tr>
+              <tr mat-row *matRowDef="let row; columns: userColumns"></tr>
+            </table>
+          }
+        }
+      }
+    </div>
+
+    <!-- User Details Panel -->
+    <div class="user-details">
+      @if (selectedUser$ | async; as user) {
+        <mat-card>
+          <mat-card-header>
+            <mat-card-title>{{ user.displayName }}</mat-card-title>
+            <mat-card-subtitle>{{ user.email }}</mat-card-subtitle>
+          </mat-card-header>
+
+          <mat-card-content>
+            <div class="detail-section">
+              <h3>Informationen</h3>
+              <div class="info-grid">
+                <div class="info-item">
+                  <strong>ID:</strong>
+                  <code>{{ user.id }}</code>
+                </div>
+                <div class="info-item">
+                  <strong>Firebase UID:</strong>
+                  <code>{{ user.firebaseUid || 'Nicht beansprucht' }}</code>
+                </div>
+                @if (user.name) {
+                  <div class="info-item">
+                    <strong>Vollständiger Name:</strong>
+                    {{ user.name }}
+                  </div>
+                }
+                <div class="info-item">
+                  <strong>Erstellt:</strong>
+                  {{ formatDate(user.created) }}
+                </div>
+              </div>
+            </div>
+
+            @if (permissions$ | async; as permissions) {
+              <div class="detail-section">
+                <h3>Berechtigungen</h3>
+                @if (user.permissions.length === 0) {
+                  <p class="empty-message">Keine Berechtigungen zugewiesen</p>
+                } @else {
+                  <mat-chip-set>
+                    @for (permId of user.permissions; track permId) {
+                      <mat-chip>{{ getPermissionName(permId, permissions) }}</mat-chip>
+                    }
+                  </mat-chip-set>
+                }
+              </div>
+            }
+
+            <div class="detail-section">
+              <div class="section-header">
+                <h3>Tokens (NFC-Tags)</h3>
+                <button mat-mini-fab color="primary" (click)="addToken(user)" title="Token hinzufügen">
+                  <mat-icon>add</mat-icon>
+                </button>
+              </div>
+
+              @if (selectedUserTokens$ | async; as tokens) {
+                @if (tokens.length === 0) {
+                  <p class="empty-message">Keine Tokens registriert</p>
+                } @else {
+                  <table mat-table [dataSource]="tokens" class="tokens-table">
+                    <!-- Token ID Column -->
+                    <ng-container matColumnDef="id">
+                      <th mat-header-cell *matHeaderCellDef>NTag UID</th>
+                      <td mat-cell *matCellDef="let token">
+                        <code>{{ token.id }}</code>
+                      </td>
+                    </ng-container>
+
+                    <!-- Label Column -->
+                    <ng-container matColumnDef="label">
+                      <th mat-header-cell *matHeaderCellDef>Label</th>
+                      <td mat-cell *matCellDef="let token">{{ token.label }}</td>
+                    </ng-container>
+
+                    <!-- Registered Column -->
+                    <ng-container matColumnDef="registered">
+                      <th mat-header-cell *matHeaderCellDef>Registriert</th>
+                      <td mat-cell *matCellDef="let token">{{ formatDate(token.registered) }}</td>
+                    </ng-container>
+
+                    <!-- Deactivated Column -->
+                    <ng-container matColumnDef="deactivated">
+                      <th mat-header-cell *matHeaderCellDef>Status</th>
+                      <td mat-cell *matCellDef="let token">
+                        @if (token.deactivated) {
+                          <span class="status-inactive">Deaktiviert</span>
+                        } @else {
+                          <span class="status-active">Aktiv</span>
+                        }
+                      </td>
+                    </ng-container>
+
+                    <!-- Actions Column -->
+                    <ng-container matColumnDef="actions">
+                      <th mat-header-cell *matHeaderCellDef>Aktionen</th>
+                      <td mat-cell *matCellDef="let token">
+                        <button mat-icon-button (click)="editToken(user, token)" title="Bearbeiten">
+                          <mat-icon>edit</mat-icon>
+                        </button>
+                        @if (!token.deactivated) {
+                          <button mat-icon-button (click)="deactivateToken(user, token)" title="Deaktivieren">
+                            <mat-icon>block</mat-icon>
+                          </button>
+                        }
+                        <button mat-icon-button (click)="deleteToken(user, token)" title="Löschen">
+                          <mat-icon>delete</mat-icon>
+                        </button>
+                      </td>
+                    </ng-container>
+
+                    <tr mat-header-row *matHeaderRowDef="tokenColumns"></tr>
+                    <tr mat-row *matRowDef="let row; columns: tokenColumns"></tr>
+                  </table>
+                }
+              }
+            </div>
+          </mat-card-content>
+        </mat-card>
+      } @else {
+        <div class="no-selection">
+          <mat-icon>person</mat-icon>
+          <p>Wähle einen Benutzer aus der Liste aus</p>
+        </div>
+      }
+    </div>
+  </div>
+</div>

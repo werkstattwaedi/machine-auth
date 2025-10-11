@@ -1,1 +1,133 @@
-<p>machines works!</p>
+<div class="machines-container">
+  <h2>Maschinen & Terminals</h2>
+
+  <mat-tab-group>
+    <!-- Machines Tab -->
+    <mat-tab label="Maschinen">
+      <div class="tab-content">
+        <div class="header">
+          <button mat-raised-button color="primary" (click)="createMachine()">
+            <mat-icon>add</mat-icon>
+            Neue Maschine
+          </button>
+        </div>
+
+        @if (machines$ | async; as machines) {
+          @if (macos$ | async; as macos) {
+            @if (permissions$ | async; as permissions) {
+              @if (machines.length === 0) {
+                <div class="empty-state">
+                  <mat-icon>precision_manufacturing</mat-icon>
+                  <p>Noch keine Maschinen vorhanden</p>
+                  <button mat-raised-button color="primary" (click)="createMachine()">
+                    Erste Maschine erstellen
+                  </button>
+                </div>
+              } @else {
+                <table mat-table [dataSource]="machines" class="machines-table">
+                  <!-- Name Column -->
+                  <ng-container matColumnDef="name">
+                    <th mat-header-cell *matHeaderCellDef>Name</th>
+                    <td mat-cell *matCellDef="let machine">{{ machine.name }}</td>
+                  </ng-container>
+
+                  <!-- Terminal Column -->
+                  <ng-container matColumnDef="maco">
+                    <th mat-header-cell *matHeaderCellDef>Terminal</th>
+                    <td mat-cell *matCellDef="let machine">
+                      {{ getMacoName(machine.maco, macos) }}
+                    </td>
+                  </ng-container>
+
+                  <!-- Required Permissions Column -->
+                  <ng-container matColumnDef="requiredPermission">
+                    <th mat-header-cell *matHeaderCellDef>Erforderliche Berechtigungen</th>
+                    <td mat-cell *matCellDef="let machine">
+                      <mat-chip-set>
+                        @for (permId of machine.requiredPermission; track permId) {
+                          <mat-chip>{{ getPermissionName(permId, permissions) }}</mat-chip>
+                        }
+                      </mat-chip-set>
+                    </td>
+                  </ng-container>
+
+                  <!-- Actions Column -->
+                  <ng-container matColumnDef="actions">
+                    <th mat-header-cell *matHeaderCellDef>Aktionen</th>
+                    <td mat-cell *matCellDef="let machine">
+                      <button mat-icon-button (click)="editMachine(machine)" title="Bearbeiten">
+                        <mat-icon>edit</mat-icon>
+                      </button>
+                      <button mat-icon-button (click)="deleteMachine(machine)" title="Löschen">
+                        <mat-icon>delete</mat-icon>
+                      </button>
+                    </td>
+                  </ng-container>
+
+                  <tr mat-header-row *matHeaderRowDef="machineColumns"></tr>
+                  <tr mat-row *matRowDef="let row; columns: machineColumns"></tr>
+                </table>
+              }
+            }
+          }
+        }
+      </div>
+    </mat-tab>
+
+    <!-- Terminals Tab -->
+    <mat-tab label="Terminals">
+      <div class="tab-content">
+        <div class="header">
+          <button mat-raised-button color="primary" (click)="createMaco()">
+            <mat-icon>add</mat-icon>
+            Neues Terminal
+          </button>
+        </div>
+
+        @if (macos$ | async; as macos) {
+          @if (macos.length === 0) {
+            <div class="empty-state">
+              <mat-icon>computer</mat-icon>
+              <p>Noch keine Terminals vorhanden</p>
+              <button mat-raised-button color="primary" (click)="createMaco()">
+                Erstes Terminal erstellen
+              </button>
+            </div>
+          } @else {
+            <table mat-table [dataSource]="macos" class="machines-table">
+              <!-- Device ID Column -->
+              <ng-container matColumnDef="id">
+                <th mat-header-cell *matHeaderCellDef>Particle Device ID</th>
+                <td mat-cell *matCellDef="let maco">
+                  <code>{{ maco.id }}</code>
+                </td>
+              </ng-container>
+
+              <!-- Name Column -->
+              <ng-container matColumnDef="name">
+                <th mat-header-cell *matHeaderCellDef>Name</th>
+                <td mat-cell *matCellDef="let maco">{{ maco.name }}</td>
+              </ng-container>
+
+              <!-- Actions Column -->
+              <ng-container matColumnDef="actions">
+                <th mat-header-cell *matHeaderCellDef>Aktionen</th>
+                <td mat-cell *matCellDef="let maco">
+                  <button mat-icon-button (click)="editMaco(maco)" title="Bearbeiten">
+                    <mat-icon>edit</mat-icon>
+                  </button>
+                  <button mat-icon-button (click)="deleteMaco(maco)" title="Löschen">
+                    <mat-icon>delete</mat-icon>
+                  </button>
+                </td>
+              </ng-container>
+
+              <tr mat-header-row *matHeaderRowDef="macoColumns"></tr>
+              <tr mat-row *matRowDef="let row; columns: macoColumns"></tr>
+            </table>
+          }
+        }
+      </div>
+    </mat-tab>
+  </mat-tab-group>
+</div>

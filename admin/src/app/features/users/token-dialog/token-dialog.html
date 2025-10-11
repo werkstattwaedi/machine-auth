@@ -1,0 +1,35 @@
+<h2 mat-dialog-title>{{ title }}</h2>
+
+<mat-dialog-content>
+  <form [formGroup]="form">
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>NTag UID</mat-label>
+      <input matInput formControlName="tokenId" placeholder="z.B. 04c339aa1e1890" required>
+      <mat-hint>14-stellige Hexadezimalzahl</mat-hint>
+      @if (form.get('tokenId')?.hasError('required')) {
+        <mat-error>Token ID ist erforderlich</mat-error>
+      }
+      @if (form.get('tokenId')?.hasError('pattern')) {
+        <mat-error>Token ID muss 14 hexadezimale Zeichen sein (0-9, a-f)</mat-error>
+      }
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Label</mat-label>
+      <input matInput formControlName="label" placeholder="z.B. Schlüssel 1, Hauptkarte" required>
+      @if (form.get('label')?.hasError('required')) {
+        <mat-error>Label ist erforderlich</mat-error>
+      }
+      @if (form.get('label')?.hasError('minlength')) {
+        <mat-error>Label muss mindestens 2 Zeichen lang sein</mat-error>
+      }
+    </mat-form-field>
+  </form>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="onCancel()">Abbrechen</button>
+  <button mat-raised-button color="primary" (click)="onSubmit()" [disabled]="!form.valid">
+    {{ isEditMode ? 'Speichern' : 'Hinzufügen' }}
+  </button>
+</mat-dialog-actions>

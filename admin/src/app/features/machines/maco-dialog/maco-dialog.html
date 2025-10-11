@@ -1,0 +1,35 @@
+<h2 mat-dialog-title>{{ title }}</h2>
+
+<mat-dialog-content>
+  <form [formGroup]="form">
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Particle Device ID</mat-label>
+      <input matInput formControlName="deviceId" placeholder="z.B. 0a10aced202194944a042f04" required>
+      <mat-hint>24-stellige Hexadezimalzahl</mat-hint>
+      @if (form.get('deviceId')?.hasError('required')) {
+        <mat-error>Device ID ist erforderlich</mat-error>
+      }
+      @if (form.get('deviceId')?.hasError('pattern')) {
+        <mat-error>Device ID muss 24 hexadezimale Zeichen sein (0-9, a-f)</mat-error>
+      }
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Name</mat-label>
+      <input matInput formControlName="name" placeholder="z.B. Terminal Holzwerkstatt" required>
+      @if (form.get('name')?.hasError('required')) {
+        <mat-error>Name ist erforderlich</mat-error>
+      }
+      @if (form.get('name')?.hasError('minlength')) {
+        <mat-error>Name muss mindestens 2 Zeichen lang sein</mat-error>
+      }
+    </mat-form-field>
+  </form>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="onCancel()">Abbrechen</button>
+  <button mat-raised-button color="primary" (click)="onSubmit()" [disabled]="!form.valid">
+    {{ isEditMode ? 'Speichern' : 'Erstellen' }}
+  </button>
+</mat-dialog-actions>
