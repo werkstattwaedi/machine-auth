@@ -2,11 +2,11 @@ export const environment = {
   production: false,
   useEmulators: true,
   firebase: {
-    apiKey: 'YOUR_API_KEY',
-    authDomain: 'YOUR_AUTH_DOMAIN',
-    projectId: 'YOUR_PROJECT_ID',
-    storageBucket: 'YOUR_STORAGE_BUCKET',
-    messagingSenderId: 'YOUR_MESSAGING_SENDER_ID',
-    appId: 'YOUR_APP_ID',
+    apiKey: 'fake-api-key-for-emulator',
+    authDomain: 'localhost',
+    projectId: 'oww-maschinenfreigabe',
+    storageBucket: 'oww-maschinenfreigabe.appspot.com',
+    messagingSenderId: '123456789',
+    appId: 'fake-app-id-for-emulator',
   },
 };

@@ -1,0 +1,17 @@
+<div class="dashboard-container">
+  @if (userDoc$ | async; as user) {
+  <h1>Willkommen, {{ user.displayName }}!</h1>
+
+  @if (user.roles && user.roles.includes('admin')) {
+  <div class="admin-section">
+    <h2>Admin-Dashboard</h2>
+    <p>Du hast Admin-Zugriff. Hier werden die Systemstatistiken angezeigt.</p>
+  </div>
+  } @else {
+  <div class="user-section">
+    <h2>Dein Dashboard</h2>
+    <p>Hier werden deine Sitzungen und Tokens angezeigt.</p>
+  </div>
+  }
+  }
+</div>

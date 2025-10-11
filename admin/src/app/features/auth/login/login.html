@@ -1,0 +1,78 @@
+<div class="login-container">
+  <mat-card class="login-card">
+    <mat-card-header>
+      <mat-card-title>
+        <div class="logo-section">
+          <img src="/logo.png" alt="Offene Werkstatt Wädenswil" class="logo" />
+        </div>
+      </mat-card-title>
+    </mat-card-header>
+
+    <mat-card-content>
+      <div class="login-methods">
+        <!-- Email Link Sign-In -->
+        <div class="email-section">
+          <h3>Anmelden mit E-Mail</h3>
+          <p class="description">Gib deine E-Mail-Adresse ein, um einen Anmeldelink zu erhalten (kein Passwort erforderlich)</p>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>E-Mail</mat-label>
+            <input
+              matInput
+              type="email"
+              [(ngModel)]="email"
+              [disabled]="loading || linkSent"
+              (keyup.enter)="sendEmailLink()"
+              placeholder="deine@email.com"
+            />
+          </mat-form-field>
+
+          <button
+            mat-raised-button
+            color="primary"
+            class="full-width"
+            (click)="sendEmailLink()"
+            [disabled]="loading || linkSent"
+          >
+            @if (loading) {
+            <mat-spinner diameter="20"></mat-spinner>
+            } @else if (linkSent) { E-Mail gesendet! } @else { Anmeldelink senden }
+          </button>
+
+          @if (linkSent) {
+          <div class="success-message">
+            <p>
+              <strong>Prüfe deine E-Mails!</strong><br />
+              Wir haben einen Anmeldelink an <strong>{{ email }}</strong> gesendet
+            </p>
+          </div>
+          }
+        </div>
+
+        <div class="divider">
+          <span>ODER</span>
+        </div>
+
+        <!-- Google Sign-In -->
+        <div class="google-section">
+          <button
+            mat-stroked-button
+            class="full-width google-button"
+            (click)="signInWithGoogle()"
+            [disabled]="loading"
+          >
+            <span class="google-icon">G</span>
+            Mit Google anmelden
+          </button>
+        </div>
+
+        <!-- Error Message -->
+        @if (errorMessage && errorMessage.trim()) {
+        <div class="error-message">
+          <p>{{ errorMessage }}</p>
+        </div>
+        }
+      </div>
+    </mat-card-content>
+  </mat-card>
+</div>

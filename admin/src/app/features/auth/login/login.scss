@@ -1,0 +1,126 @@
+.login-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background-color: #fafafa;
+  padding: 20px;
+}
+
+.login-card {
+  max-width: 450px;
+  width: 100%;
+}
+
+.logo-section {
+  text-align: center;
+  margin-bottom: 20px;
+  display: flex;
+  justify-content: center;
+
+  .logo {
+    max-width: 280px;
+    height: auto;
+  }
+}
+
+.login-methods {
+  padding: 20px 0;
+}
+
+.email-section,
+.google-section {
+  margin-bottom: 20px;
+
+  h3 {
+    font-size: 1.1rem;
+    font-weight: 500;
+    margin: 0 0 8px 0;
+  }
+
+  .description {
+    font-size: 0.875rem;
+    color: rgba(0, 0, 0, 0.6);
+    margin: 0 0 16px 0;
+  }
+}
+
+.full-width {
+  width: 100%;
+}
+
+.divider {
+  text-align: center;
+  margin: 30px 0;
+  position: relative;
+
+  &::before,
+  &::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 42%;
+    height: 1px;
+    background-color: rgba(0, 0, 0, 0.12);
+  }
+
+  &::before {
+    left: 0;
+  }
+
+  &::after {
+    right: 0;
+  }
+
+  span {
+    background-color: #fff;
+    padding: 0 10px;
+    font-size: 0.875rem;
+    color: rgba(0, 0, 0, 0.6);
+  }
+}
+
+.google-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+
+  .google-icon {
+    font-weight: 700;
+    font-size: 1.2rem;
+  }
+}
+
+.success-message {
+  margin-top: 16px;
+  padding: 12px;
+  background-color: #e8f5e9;
+  border-left: 4px solid #4caf50;
+  border-radius: 4px;
+
+  p {
+    margin: 0;
+    font-size: 0.875rem;
+    color: rgba(0, 0, 0, 0.87);
+  }
+}
+
+.error-message {
+  margin-top: 16px;
+  padding: 12px;
+  background-color: #ffebee;
+  border-left: 4px solid #f44336;
+  border-radius: 4px;
+
+  p {
+    margin: 0;
+    font-size: 0.875rem;
+    color: rgba(0, 0, 0, 0.87);
+  }
+}
+
+mat-spinner {
+  display: inline-block;
+  margin-right: 8px;
+}

@@ -1,0 +1,85 @@
+@use '@angular/material' as mat;
+
+@include mat.core();
+
+// Werkstatt Wädenswil color palette
+$werkstatt-yellow: (
+  50: #fef9e7,
+  100: #fdf0c2,
+  200: #fbe699,
+  300: #f9dc70,
+  400: #f9d451,
+  500: #f9c74f,
+  600: #f7b73e,
+  700: #f5a52c,
+  800: #f3931b,
+  900: #f07300,
+  contrast: (
+    50: rgba(black, 0.87),
+    100: rgba(black, 0.87),
+    200: rgba(black, 0.87),
+    300: rgba(black, 0.87),
+    400: rgba(black, 0.87),
+    500: rgba(black, 0.87),
+    600: rgba(black, 0.87),
+    700: rgba(black, 0.87),
+    800: rgba(black, 0.87),
+    900: white,
+  )
+);
+
+$werkstatt-blue: (
+  50: #e8f2f7,
+  100: #c6deec,
+  200: #a0c9df,
+  300: #7ab4d2,
+  400: #90b8d8,
+  500: #4a9ec0,
+  600: #4190b0,
+  700: #377f9e,
+  800: #2d6f8c,
+  900: #1c526d,
+  contrast: (
+    50: rgba(black, 0.87),
+    100: rgba(black, 0.87),
+    200: rgba(black, 0.87),
+    300: rgba(black, 0.87),
+    400: rgba(black, 0.87),
+    500: white,
+    600: white,
+    700: white,
+    800: white,
+    900: white,
+  )
+);
+
+// Define the palettes
+$admin-primary: mat.m2-define-palette($werkstatt-yellow, 500);
+$admin-accent: mat.m2-define-palette($werkstatt-blue, 400);
+$admin-warn: mat.m2-define-palette(mat.$m2-red-palette);
+
+// Create the theme
+$admin-theme: mat.m2-define-light-theme((
+  color: (
+    primary: $admin-primary,
+    accent: $admin-accent,
+    warn: $admin-warn,
+  ),
+  typography: mat.m2-define-typography-config(
+    $font-family: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+  ),
+  density: 0,
+));
+
+// Include theme styles
+@include mat.all-component-themes($admin-theme);
+
+// Custom CSS variables for direct use
+:root {
+  --color-primary: #f9c74f;
+  --color-accent: #90b8d8;
+  --color-text: #000000;
+  --color-background: #ffffff;
+  --color-ceramic: #e07a5f;
+  --color-textile: #51c4c4;
+}

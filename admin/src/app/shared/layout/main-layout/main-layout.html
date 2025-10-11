@@ -1,0 +1,50 @@
+@if (userDoc$ | async; as user) {
+<mat-sidenav-container class="sidenav-container">
+  <!-- Sidebar -->
+  <mat-sidenav mode="side" opened class="sidenav">
+    <div class="sidenav-header">
+      <img src="/logo.png" alt="Offene Werkstatt Wädenswil" class="logo" />
+    </div>
+
+    <mat-nav-list>
+      @for (item of navItems; track item.route) { @if (!item.adminOnly || (isAdmin$ | async)) {
+      <a mat-list-item [routerLink]="item.route" routerLinkActive="active">
+        <mat-icon matListItemIcon>{{ item.icon }}</mat-icon>
+        <span matListItemTitle>{{ item.label }}</span>
+      </a>
+      } }
+    </mat-nav-list>
+  </mat-sidenav>
+
+  <!-- Main content -->
+  <mat-sidenav-content>
+    <!-- Toolbar -->
+    <mat-toolbar color="primary">
+      <span class="toolbar-spacer"></span>
+
+      @if (userDoc$ | async; as user) {
+      <button mat-button [matMenuTriggerFor]="userMenu">
+        <mat-icon>account_circle</mat-icon>
+        <span>{{ user.displayName }}</span>
+      </button>
+      }
+
+      <mat-menu #userMenu="matMenu">
+        <button mat-menu-item [routerLink]="'/profile'">
+          <mat-icon>person</mat-icon>
+          <span>Profil</span>
+        </button>
+        <button mat-menu-item (click)="signOut()">
+          <mat-icon>logout</mat-icon>
+          <span>Abmelden</span>
+        </button>
+      </mat-menu>
+    </mat-toolbar>
+
+    <!-- Page content -->
+    <div class="content">
+      <router-outlet />
+    </div>
+  </mat-sidenav-content>
+</mat-sidenav-container>
+}
