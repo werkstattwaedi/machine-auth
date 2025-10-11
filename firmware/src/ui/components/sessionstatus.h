@@ -22,6 +22,9 @@ class SessionStatus : public MainContent {
   // UI Elements
   lv_obj_t* icon_container_;
   lv_obj_t* status_text_;
+  lv_obj_t* user_label_;
+  lv_obj_t* duration_label_;
+  lv_obj_t* icon_;
 
   // Current button definition - updated dynamically
   std::shared_ptr<ButtonDefinition> current_buttons_;
@@ -29,10 +32,18 @@ class SessionStatus : public MainContent {
   // Current state tracking
   void* last_state_id_;
 
-  // Helper methods
+  // Setup methods
   void CreateNfcIconArea();
   void CreateStatusText();
-  void UpdateForState();
+
+  // State rendering methods
+  void RenderIdleState();
+  void RenderActiveState(const state::machine::Active& active);
+  void RenderDeniedState(const state::machine::Denied& denied);
+  void UpdateButtonsForState();
+
+  // Helper methods
+  std::string FormatDuration(std::chrono::seconds elapsed);
 };
 
 }  // namespace oww::ui
