@@ -341,11 +341,40 @@ static void cleanup() {
 }
 
 /**
+ * @brief Print usage information
+ */
+static void print_usage(const char* prog_name) {
+  printf("Usage: %s [options]\n", prog_name);
+  printf("\nOptions:\n");
+  printf("  --state <state>     Start in specific state:\n");
+  printf("                        boot      - Boot screen (default)\n");
+  printf("                        idle      - Ready, waiting for tag\n");
+  printf("                        active    - Active session\n");
+  printf("                        denied    - Access denied\n");
+  printf("  --help              Show this help message\n");
+  printf("\n");
+}
+
+/**
  * @brief Entry point
  */
 int main(int argc, char* argv[]) {
-  (void)argc;
-  (void)argv;
+  std::string initial_state = "boot";
+
+  // Parse command line arguments
+  for (int i = 1; i < argc; i++) {
+    std::string arg = argv[i];
+    if (arg == "--help" || arg == "-h") {
+      print_usage(argv[0]);
+      return 0;
+    } else if (arg == "--state" && i + 1 < argc) {
+      initial_state = argv[++i];
+    } else {
+      fprintf(stderr, "Unknown argument: %s\n", arg.c_str());
+      print_usage(argv[0]);
+      return 1;
+    }
+  }
 
   // Initialize SDL
   if (!init_sdl()) {
@@ -365,16 +394,33 @@ int main(int argc, char* argv[]) {
 
   // Create mock application
   g_app = std::make_shared<oww::logic::MockApplication>();
-  g_app->SetBootProgress("Initializing...");
-  g_app->SetBootProgress("Connecting to cloud...");
-  g_app->SetBootProgress("Ready");
-  // g_app->BootCompleted();  // Press 'B' to complete boot
+
+  // Apply initial state based on command line argument
+  if (initial_state == "boot") {
+    g_app->SetBootProgress("Initializing...");
+    g_app->SetBootProgress("Connecting to cloud...");
+    g_app->SetBootProgress("Ready");
+    printf("[Simulator] Starting in BOOT state (press 'B' to complete)\n");
+  } else if (initial_state == "idle") {
+    g_app->BootCompleted();
+    printf("[Simulator] Starting in IDLE state\n");
+  } else if (initial_state == "active") {
+    g_app->BootCompleted();
+    g_app->TriggerActiveSession();
+    printf("[Simulator] Starting in ACTIVE state\n");
+  } else if (initial_state == "denied") {
+    g_app->BootCompleted();
+    g_app->TriggerDenied();
+    printf("[Simulator] Starting in DENIED state\n");
+  } else {
+    fprintf(stderr, "[Simulator] Unknown state: %s\n", initial_state.c_str());
+    fprintf(stderr, "[Simulator] Valid states: boot, idle, active, denied\n");
+    cleanup();
+    return 1;
+  }
 
   // Initialize UI manager
   g_ui_manager = std::make_unique<oww::ui::UiManager>(g_app);
-
-  // Create splash screen (shown during boot)
-  g_splash_screen = std::make_unique<oww::ui::SplashScreen>(g_app);
 
   // Initialize LEDs with test pattern to show positions
   // Display surround (dim white)
@@ -386,8 +432,32 @@ int main(int argc, char* argv[]) {
   g_hardware->SetLED(3, 0, 255, 255, 0);  // Cyan
   g_hardware->ShowLEDs();
 
-  // Initial render
-  g_splash_screen->Render();
+  // Create UI based on initial state
+  if (initial_state == "boot") {
+    // Create splash screen (shown during boot)
+    g_splash_screen = std::make_unique<oww::ui::SplashScreen>(g_app);
+    g_splash_screen->Render();
+  } else {
+    // Boot already complete - create main UI immediately
+    g_status_bar = std::make_unique<oww::ui::StatusBar>(
+        lv_screen_active(), g_app, "Test Machine");
+    lv_obj_set_size(*g_status_bar, 240, 58);
+    lv_obj_align(*g_status_bar, LV_ALIGN_TOP_LEFT, 0, 0);
+
+    g_button_bar = std::make_unique<oww::ui::ButtonBar>(
+        lv_screen_active(), g_app, g_hardware);
+    g_ui_manager->SetButtonBar(g_button_bar.get());
+
+    lv_obj_t* content_container = lv_obj_create(lv_screen_active());
+    lv_obj_remove_style_all(content_container);
+    lv_obj_set_size(content_container, 240, 212);
+    lv_obj_align(content_container, LV_ALIGN_TOP_LEFT, 0, 58);
+
+    g_session_status = std::make_shared<oww::ui::SessionStatus>(
+        content_container, g_app, g_hardware);
+    g_ui_manager->PushContent(g_session_status);
+    g_session_status->OnActivate();
+  }
 
   // Run main loop
   main_loop();
