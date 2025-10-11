@@ -23,20 +23,15 @@
   ],
   "hosting": {
     "predeploy": [
-      "cd client && npm install && npm run build",
       "cd admin && npm install && npm run build"
     ],
     "rewrites": [
-      {
-        "source": "/admin/**",
-        "destination": "/admin/index.html"
-      },
       {
         "source": "**",
         "destination": "/index.html"
       }
     ],
-    "public": "client/dist/client",
+    "public": "admin/dist/admin/browser",
     "ignore": [
       "firebase.json",
       "**/.*",
