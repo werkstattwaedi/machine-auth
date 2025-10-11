@@ -8,7 +8,7 @@ import { authorizeStep1 } from "../ntag/authorize";
 import { toKeyBytes } from "../ntag/bytebuffer_util";
 import * as admin from "firebase-admin";
 import { Timestamp } from "firebase-admin/firestore";
-import { assertIsDocumentReference } from "../util/firestore_helpers";
+import { TokenEntity } from "../types/firestore_entities";
 
 export async function handleAuthenticateNewSession(
   request: AuthenticateNewSessionRequestT,
@@ -41,7 +41,7 @@ export async function handleAuthenticateNewSession(
     throw new Error(`Token ${tokenIdHex} is not registered`);
   }
 
-  const tokenData = tokenDoc.data();
+  const tokenData = tokenDoc.data() as TokenEntity;
   if (!tokenData) {
     throw new Error("Token document exists but has no data");
   }
@@ -52,8 +52,7 @@ export async function handleAuthenticateNewSession(
   }
 
   // Get the user ID from the userId DocumentReference
-  assertIsDocumentReference(tokenData.userId, 'userId');
-  const userId = String(tokenData.userId.id);
+  const userId = tokenData.userId.id;
 
   // Verify the user exists and get their data
   const userDoc = await admin.firestore().collection("users").doc(userId).get();

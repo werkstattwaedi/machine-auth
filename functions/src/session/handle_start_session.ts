@@ -8,12 +8,11 @@ import {
 } from "../fbs";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
-import { Timestamp } from "firebase-admin/firestore";
 import {
   isSessionExpired,
   calculateSessionExpiration,
 } from "../util/session_expiration";
-import { assertIsDocumentReference } from "../util/firestore_helpers";
+import { TokenEntity, UserEntity, SessionEntity } from "../types/firestore_entities";
 
 export async function handleStartSession(
   request: StartSessionRequestT,
@@ -60,7 +59,7 @@ export async function handleStartSession(
       return response;
     }
 
-    const tokenData = tokenDoc.data();
+    const tokenData = tokenDoc.data() as TokenEntity;
     if (!tokenData) {
       throw new Error("Token document exists but has no data");
     }
@@ -78,8 +77,7 @@ export async function handleStartSession(
     }
 
     // Get the user ID from the userId DocumentReference
-    assertIsDocumentReference(tokenData.userId, 'userId');
-    const userId = String(tokenData.userId.id);
+    const userId = tokenData.userId.id;
 
     // Get user data
     const userDoc = await admin
@@ -90,7 +88,7 @@ export async function handleStartSession(
     if (!userDoc.exists) {
       throw new Error(`User ${userId} not found`);
     }
-    const userData = userDoc.data();
+    const userData = userDoc.data() as UserEntity;
 
     // Check for existing non-closed session (most recent first)
     // Use DocumentReference for query to match how it's stored in Firestore
@@ -106,7 +104,7 @@ export async function handleStartSession(
 
     if (!existingSessionQuery.empty) {
       const sessionDoc = existingSessionQuery.docs[0];
-      const sessionData = sessionDoc.data();
+      const sessionData = sessionDoc.data() as SessionEntity;
 
       // Check if the most recent session has expired
       if (!isSessionExpired(sessionData.startTime)) {
@@ -118,16 +116,10 @@ export async function handleStartSession(
         tokenSession.sessionId = sessionDoc.id;
         tokenSession.expiration = BigInt(expiration.seconds);
         tokenSession.userId = userId;
-        tokenSession.userLabel = userData?.displayName || "Unknown User";
+        tokenSession.userLabel = userData.displayName || "Unknown User";
 
         // Extract permission IDs from DocumentReferences
-        const rawPermissions = userData?.permissions || [];
-        tokenSession.permissions = Array.isArray(rawPermissions)
-          ? rawPermissions.map(p => {
-              assertIsDocumentReference(p, 'permission');
-              return String(p.id);
-            })
-          : [];
+        tokenSession.permissions = userData.permissions.map(p => p.id);
 
         const response = new StartSessionResponseT();
         response.resultType = StartSessionResult.TokenSession;

@@ -76,47 +76,6 @@ describe("handleCompleteAuthentication (Integration)", () => {
     });
   });
 
-  describe("DocumentReference validation", () => {
-    it("should reject sessions with string-based references", async () => {
-      const db = admin.firestore();
-
-      // Manually create documents with string references (bypassing seedTestData conversion)
-      await db.collection("tokens").doc(TEST_TOKEN_ID).set({
-        userId: `/users/${TEST_USER_ID}`, // String reference instead of DocumentReference
-        label: "Test Token",
-        registered: Timestamp.now(),
-      });
-
-      await db.collection("users").doc(TEST_USER_ID).set({
-        displayName: "Test User",
-        name: "Test User Full Name",
-        permissions: [],
-        roles: [],
-        created: Timestamp.now(),
-      });
-
-      await db.collection("sessions").doc("stringRefSession").set({
-        userId: `/users/${TEST_USER_ID}`, // String reference instead of DocumentReference
-        tokenId: `/tokens/${TEST_TOKEN_ID}`, // String reference instead of DocumentReference
-        startTime: Timestamp.now(),
-        rndA: Array.from(Buffer.alloc(16)),
-        usage: [],
-      });
-
-      const request = new CompleteAuthenticationRequestT();
-      request.sessionId = "stringRefSession";
-      request.encryptedNtagResponse = Array.from(Buffer.alloc(16));
-
-      const response = await handleCompleteAuthentication(request, mockOptions);
-
-      // Should be rejected due to invalid reference format
-      expect(response.resultType).to.equal(CompleteAuthenticationResult.Rejected);
-      if (response.result && "message" in response.result) {
-        expect(response.result.message).to.include("expected DocumentReference");
-      }
-    });
-  });
-
   describe("Permissions handling", () => {
     it("should correctly serialize permissions array to flatbuffers", async () => {
       const db = admin.firestore();
