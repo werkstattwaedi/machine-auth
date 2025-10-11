@@ -376,6 +376,16 @@ int main(int argc, char* argv[]) {
   // Create splash screen (shown during boot)
   g_splash_screen = std::make_unique<oww::ui::SplashScreen>(g_app);
 
+  // Initialize LEDs with test pattern to show positions
+  // Display surround (dim white)
+  for (int i : {0, 5, 6, 7, 8, 9, 12, 13, 14, 15}) {
+    g_hardware->SetLED(i, 0, 0, 0, 50);  // Dim white
+  }
+  // NFC area (cyan)
+  g_hardware->SetLED(2, 0, 255, 255, 0);  // Cyan
+  g_hardware->SetLED(3, 0, 255, 255, 0);  // Cyan
+  g_hardware->ShowLEDs();
+
   // Initial render
   g_splash_screen->Render();
 
