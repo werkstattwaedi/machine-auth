@@ -2,8 +2,53 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if false;
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Users collection
+    match /users/{userId} {
+      // For development: Allow authenticated users to read/write
+      // TODO: Implement proper admin checks once we have a better auth flow
+      allow read: if isSignedIn();
+
+      // Allow creating new users during sign-up (before authentication)
+      allow create: if true;
+
+      // Allow authenticated users to update
+      allow update, delete: if isSignedIn();
+
+      // Tokens subcollection
+      match /tokens/{tokenId} {
+        allow read, write: if isSignedIn();
+      }
+    }
+
+    // Permissions collection
+    match /permissions/{permissionId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Machines collection
+    match /machines/{machineId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // MaCo (terminals) collection
+    match /maco/{deviceId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Sessions collection
+    match /sessions/{sessionId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+      // TODO: Allow terminals to create/update sessions
     }
   }
 }
