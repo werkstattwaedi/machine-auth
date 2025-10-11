@@ -1,15 +1,19 @@
 {
   "folders": [
     {
-      "path": "firmware"
-    },
-    {
-      "path": "functions"
-    },
-    {
+      "name": "admin",
       "path": "admin"
     },
     {
+      "name": "firmware",
+      "path": "firmware"
+    },
+    {
+      "name": "functions",
+      "path": "functions"
+    },
+    {
+      "name": "machine-auth",
       "path": "."
     }
   ],
