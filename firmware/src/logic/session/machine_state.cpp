@@ -166,6 +166,22 @@ tl::expected<void, ErrorType> MachineUsage::CheckIn(
   // Check if session has all required permissions
   for (const auto& permission : required_permissions_) {
     if (!session->HasPermission(permission)) {
+      // Build diagnostic message with actual vs required permissions
+      std::string required_perms;
+      for (const auto& perm : required_permissions_) {
+        if (!required_perms.empty()) required_perms += ", ";
+        required_perms += "'" + perm + "'";
+      }
+
+      std::string user_perms;
+      for (const auto& perm : session->GetPermissions()) {
+        if (!user_perms.empty()) user_perms += ", ";
+        user_perms += "'" + perm + "'";
+      }
+      if (user_perms.empty()) user_perms = "(none)";
+
+      logger.warn("Permission denied: missing '%s'. Required: [%s], User has: [%s]",
+                  permission.c_str(), required_perms.c_str(), user_perms.c_str());
       state_machine_->TransitionTo(
           machine_state::Denied{.message = "Keine Berechtigung", .time = now});
       return {};

@@ -15,6 +15,7 @@ class TokenSession {
   std::string GetSessionId() const { return session_id_; }
   std::string GetUserId() const { return user_id_; }
   std::string GetUserLabel() const { return user_label_; }
+  const std::vector<std::string>& GetPermissions() const { return permissions_; }
 
   bool HasPermission(std::string permission) const;
 
