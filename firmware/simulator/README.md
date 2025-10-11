@@ -29,14 +29,21 @@ cmake --build build
 ## Keyboard Controls
 
 **Numpad (matches physical button layout):**
-- **7** - Top-Left Button
-- **9** - Top-Right Button
-- **1** - Bottom-Left Button
-- **3** - Bottom-Right Button
+- **Numpad 7** - Top-Left Button
+- **Numpad 9** - Top-Right Button
+- **Numpad 1** - Bottom-Left Button
+- **Numpad 3** - Bottom-Right Button
+
+**State Control:**
+- **1** - Return to Idle state
+- **2** - Trigger Active Session (user logged in, machine running)
+- **3** - Trigger Denied state (access denied)
+- **C** - Cycle through Session states (Idle → WaitingForTag → Authenticating → Active → Rejected → Idle)
+- **M** - Cycle through Machine states (Idle → Active → Denied → Idle)
+- **B** - Complete boot sequence
 
 **Other Keys:**
 - **S** - Simulate NFC Tag
-- **M** - Menu (not yet implemented)
 - **ESC** - Quit
 
 ## Features
@@ -63,10 +70,29 @@ cmake --build build
 
 Both firmware and simulator implement the same HAL interface, allowing UI code to run identically on both platforms.
 
+## Mock Application State
+
+The simulator includes a `MockApplication` class (`mock/mock_application.h/cpp`) that provides testable application states:
+
+**Session States:**
+- Idle - No activity
+- WaitingForTag - Ready for NFC tag
+- AuthenticatingTag - Tag detected, authenticating
+- SessionActive - User logged in with active session
+- Rejected - Access denied / unknown tag
+
+**Machine States:**
+- Idle - Machine off
+- Active - Machine running with active user session
+- Denied - Access denied (insufficient permissions)
+
+Use keyboard shortcuts (1-3, C, M) to cycle through states and test UI behavior.
+
 ## Next Steps
 
-- [ ] Port existing UI components from `firmware/src/ui/`
-- [ ] Create mock Application state for testing
-- [ ] Implement screen transitions
-- [ ] Add LED pattern testing
+- [x] Create mock Application state for testing
+- [ ] Extract state abstraction layer to `src/state/`
+- [ ] Move hardware drivers out of UI to `src/drivers/`
+- [ ] Split UI into reusable core and platform-specific code
+- [ ] Port UI components to use shared state interface
 - [ ] Build missing UI screens from mockups

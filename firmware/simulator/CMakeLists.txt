@@ -37,6 +37,7 @@ set(CUSTOM_FONTS
 set(SIMULATOR_SOURCES
   main.cpp
   hal/simulator_hardware.cpp
+  mock/mock_application.cpp
 )
 
 # Create executable

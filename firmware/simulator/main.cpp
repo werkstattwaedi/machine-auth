@@ -2,8 +2,10 @@
 #include <lvgl.h>
 #include <cstdio>
 #include <cstdlib>
+#include <memory>
 
 #include "hal/simulator_hardware.h"
+#include "mock/mock_application.h"
 
 // Display configuration (matching hardware)
 constexpr int DISPLAY_WIDTH = 240;
@@ -11,8 +13,9 @@ constexpr int DISPLAY_HEIGHT = 320;
 constexpr int WINDOW_WIDTH = 400;
 constexpr int WINDOW_HEIGHT = 500;
 
-// Global hardware instance
+// Global instances
 static oww::hal::SimulatorHardware* g_hardware = nullptr;
+static std::shared_ptr<oww::logic::MockApplication> g_app = nullptr;
 
 // LVGL display buffer
 static lv_display_t* disp = nullptr;
@@ -141,15 +144,51 @@ static bool handle_events() {
           switch (event.key.keysym.sym) {
             case SDLK_ESCAPE:
               return false;
+
+            // NFC simulation
             case SDLK_s:
-              // Simulate NFC tag
               if (g_hardware) {
                 uint8_t test_uid[] = {0x04, 0xc3, 0x39, 0xaa, 0x1e, 0x18, 0x90};
                 g_hardware->SimulateNFCTag(test_uid, sizeof(test_uid));
               }
               break;
+
+            // State cycling
+            case SDLK_c:
+              if (g_app) {
+                g_app->CycleSessionState();
+              }
+              break;
+
             case SDLK_m:
-              printf("[KEY] Menu button pressed (not yet implemented)\n");
+              if (g_app) {
+                g_app->CycleMachineState();
+              }
+              break;
+
+            // Preset states
+            case SDLK_1:
+              if (g_app) {
+                g_app->ReturnToIdle();
+              }
+              break;
+
+            case SDLK_2:
+              if (g_app) {
+                g_app->TriggerActiveSession();
+              }
+              break;
+
+            case SDLK_3:
+              if (g_app) {
+                g_app->TriggerDenied();
+              }
+              break;
+
+            case SDLK_b:
+              if (g_app) {
+                g_app->BootCompleted();
+              }
               break;
           }
         }
@@ -165,14 +204,20 @@ static bool handle_events() {
 static void main_loop() {
   printf("\n=== Machine Auth Simulator ===\n");
   printf("Display: %dx%d portrait\n", DISPLAY_WIDTH, DISPLAY_HEIGHT);
-  printf("\nKeyboard Controls (Numpad):\n");
-  printf("  7 - Top-Left Button\n");
-  printf("  9 - Top-Right Button\n");
-  printf("  1 - Bottom-Left Button\n");
-  printf("  3 - Bottom-Right Button\n");
-  printf("\nOther Keys:\n");
+  printf("\nKeyboard Controls:\n");
+  printf("  Numpad 7 - Top-Left Button\n");
+  printf("  Numpad 9 - Top-Right Button\n");
+  printf("  Numpad 1 - Bottom-Left Button\n");
+  printf("  Numpad 3 - Bottom-Right Button\n");
+  printf("\nState Control:\n");
+  printf("  1 - Return to Idle\n");
+  printf("  2 - Trigger Active Session\n");
+  printf("  3 - Trigger Denied\n");
+  printf("  C - Cycle Session State\n");
+  printf("  M - Cycle Machine State\n");
+  printf("  B - Complete Boot\n");
+  printf("\nOther:\n");
   printf("  S   - Simulate NFC Tag\n");
-  printf("  M   - Menu (not yet implemented)\n");
   printf("  ESC - Quit\n");
   printf("\n");
 
@@ -217,6 +262,8 @@ static void main_loop() {
  * @brief Cleanup
  */
 static void cleanup() {
+  g_app = nullptr;
+
   delete g_hardware;
   g_hardware = nullptr;
 
@@ -251,10 +298,17 @@ int main(int argc, char* argv[]) {
   g_hardware = new oww::hal::SimulatorHardware();
   g_hardware->Initialize(renderer);
 
+  // Create mock application
+  g_app = std::make_shared<oww::logic::MockApplication>();
+  g_app->SetBootProgress("Initializing...");
+  g_app->SetBootProgress("Connecting to cloud...");
+  g_app->SetBootProgress("Ready");
+  // g_app->BootCompleted();  // Press 'B' to complete boot
+
   // TODO: Initialize UI components here
   // For now, just show a test screen
   lv_obj_t* label = lv_label_create(lv_screen_active());
-  lv_label_set_text(label, "Machine Auth\nSimulator\n\nNumpad: 7 9 1 3\nS = NFC tag");
+  lv_label_set_text(label, "Machine Auth Simulator\n\nPress B to boot\nPress 1-3 for states\nPress C/M to cycle");
   lv_obj_center(label);
 
   // Test: Light up LEDs to show positions
