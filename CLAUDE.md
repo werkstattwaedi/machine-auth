@@ -292,6 +292,30 @@ Always include "common.h" for a base set of includes. Write full path from src/ 
 - **Headers:** `snake_case.h`
 - **Implementation:** `snake_case.cpp`
 
+#### Commenting Guidelines
+
+**IMPORTANT: Comments should describe WHY, not WHAT changed**
+
+❌ **Bad - describes the change process:**
+```cpp
+led_positions_[14] = {x, y, size};  // Swapped with 15
+led_positions_[3] = {x, y, size};   // Swapped 2<->3
+```
+
+✅ **Good - describes the intent or layout:**
+```cpp
+// Right side: 0, 14, 15 (bottom to top)
+led_positions_[0] = {x, y, size};
+led_positions_[15] = {x, y, size};
+led_positions_[14] = {x, y, size};
+
+// NFC area: 3, 2 (left to right)
+led_positions_[3] = {x, y, size};
+led_positions_[2] = {x, y, size};
+```
+
+**Rationale:** Comments describing changes ("swapped", "inverted", "fixed") only make sense during development but confuse future readers. Change history belongs in commit messages and chat logs, not in code. Comments should help readers understand the system's design and intentions.
+
 ### Module Organization
 
 ```
