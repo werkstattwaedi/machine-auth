@@ -67,73 +67,24 @@ Device configuration (machine assignments, permissions) stored in Particle Ledge
 
 ## Firmware Development
 
-### Particle Firmware Compilation
+### Compilation
 
-The firmware uses local compilation with `neopo`, a tool that manages the Particle toolchain and build environment.
+**CRITICAL: Always use the build scripts documented in [`docs/compile.md`](docs/compile.md). Never run `cmake`, `make`, or `neopo` directly.**
 
-**Prerequisites:**
-- `neopo` installed at `/home/michschn/werkstattwaedi/neopo/` (or equivalent path)
-- Python virtual environment with neopo package
-
-**Compilation:**
+**Quick Reference:**
 
 ```bash
-cd /home/michschn/werkstattwaedi/machine-auth/firmware
-source /home/michschn/werkstattwaedi/neopo/.venv/bin/activate
-neopo compile
+# Compile Particle firmware (from anywhere)
+firmware/neopo.sh compile
+
+# Build and run simulator (from anywhere)
+firmware/simulator/run.sh --state idle
+
+# Or just compile simulator
+firmware/simulator/build.sh
 ```
 
-**Output:**
-- Success: `*** COMPILED SUCCESSFULLY ***` (exit code 0)
-- Failure: `*** COMPILE-USER FAILED ***` (exit code 2)
-- Binary: `target/p2/firmware.elf` and `target/p2/firmware.bin`
-- Bundle: `target/p2/firmware.zip` (includes assets)
-
-**Important Notes:**
-- Cloud compilation (`particle compile`) fails due to large LVGL library size
-- Do NOT invoke `make` directly - missing environment variables will cause failures
-- Error markers from previous compilation persist in editor - always recompile to verify fixes
-- Can also use VS Code task: `Particle: Compile application (local)` or command ID `particle.compileApplicationLocal`
-
-### Testing with Simulator
-
-The project includes a native simulator for testing UI and logic without hardware.
-
-**Building the Simulator:**
-
-```bash
-cd firmware
-mkdir -p build
-cd build
-cmake ..
-make simulator
-```
-
-**Running the Simulator:**
-
-```bash
-# From firmware/build/
-./simulator --state idle          # Start in idle state
-./simulator --state active        # Start with active session
-./simulator --state denied        # Start in denied state
-```
-
-The simulator creates a window showing the UI display and prints log output to stdout. Use Ctrl+C to exit.
-
-**What the simulator tests:**
-- ✅ UI rendering (LVGL display)
-- ✅ State machine logic
-- ✅ Session management
-- ✅ Touch input simulation
-- ❌ NFC hardware (mocked)
-- ❌ Cloud communication (mocked)
-- ❌ Relay/buzzer hardware (mocked)
-
-**Use cases:**
-1. Quick UI iteration without flashing hardware
-2. Testing state transitions visually
-3. Debugging logic issues in a native debugger (gdb/lldb)
-4. CI/CD testing (can run headless with appropriate flags)
+For setup instructions, troubleshooting, and detailed information, see [`docs/compile.md`](docs/compile.md).
 
 ### Flatbuffer Schema Generation
 
@@ -200,7 +151,7 @@ auto response = cloud_request_.SendTerminalRequest<
     fbs::StartSessionResponseT>("startSession", request);
 
 // Later, check if response is ready
-if (IsPending(*response)) {
+if (state::IsPending(*response)) {
     return;  // Not ready yet, try again next loop
 }
 
@@ -245,7 +196,7 @@ struct Denied {
 }
 
 // Create state machine
-using MachineStateMachine = oww::common::StateMachine<
+using MachineStateMachine = oww::state::StateMachine<
     machine_state::Idle,
     machine_state::Active,
     machine_state::Denied>;
@@ -268,9 +219,9 @@ if (state_machine_->Is<machine_state::Active>()) { ... }
 ```
 
 **Key State Machines:**
-- `NfcStateMachine`: WaitForTag → TagPresent → Ntag424Authenticated → WaitForTag
-- `MachineStateMachine`: Idle ⇄ Active / Denied
-- `StartSessionAction`: Internal state machine for multi-step cloud authentication
+- `NfcStateMachine` (`nfc/states.h`): WaitForTag → TagPresent → Ntag424Authenticated → WaitForTag
+- `MachineStateMachine` (`logic/session/machine_state.h`): Idle ⇄ Active / Denied
+- `SessionCreationStateMachine` (`state/session_creation.h`): Begin → AwaitStartSessionResponse → ... → Succeeded/Rejected/Failed
 
 #### Error Handling
 
@@ -290,14 +241,14 @@ if (!result) {
 
 **CloudResponse Pattern:**
 
-Cloud requests return `std::shared_ptr<CloudResponse<T>>` which is a variant:
+Cloud requests return `std::shared_ptr<state::CloudResponse<T>>` which is a variant:
 ```cpp
-using CloudResponse<T> = std::variant<Pending, T, ErrorType>;
+using CloudResponse<T> = std::variant<state::Pending, T, ErrorType>;
 
 auto response = cloud_request_.SendTerminalRequest<RequestT, ResponseT>(...);
 
 // Check if ready
-if (IsPending(*response)) {
+if (state::IsPending(*response)) {
     return nullptr;  // Not ready yet
 }
 
@@ -382,6 +333,10 @@ firmware/src/
 │   ├── status.h         # ErrorType and Status enums
 │   ├── time.h/cpp       # std::chrono wrappers for Particle time APIs
 │   └── debug.h          # Logging helpers
+├── state/               # Public state types and state machine framework
+│   ├── state_machine.h  # Generic variant-based state machine template
+│   ├── cloud_response.h # CloudResponse variant type
+│   └── session_creation.h # Session creation state machine
 ├── fbs/                 # Generated flatbuffer headers (don't edit manually)
 ├── logic/               # Core business logic
 │   ├── application.h/cpp        # Main app entry point, coordinates subsystems
@@ -392,14 +347,12 @@ firmware/src/
 │   │   └── personalize.*        # Tag personalization during setup
 │   └── session/                 # Session and usage tracking
 │       ├── sessions.*           # Session registry and management
-│       └── token_session.*      # Individual session data
-├── state/               # Public state types and state machine framework
-│   ├── state_machine.h  # Generic variant-based state machine template
-│   ├── session_state.*  # Session state types
-│   ├── machine_state.*  # Machine state types
-│   └── system_state.*   # System state types
+│       ├── token_session.*      # Individual session data
+│       ├── session_coordinator.* # Session state coordinator
+│       └── machine_state.*      # Machine state machine
 ├── nfc/                 # NFC hardware abstraction
 │   ├── nfc_tags.*       # NFC worker thread, tag state machine
+│   ├── states.h         # NFC state definitions
 │   └── driver/          # Low-level NFC hardware drivers
 │       ├── PN532.*      # PN532 NFC reader (UART)
 │       └── Ntag424.*    # NTAG424 DNA tag protocol

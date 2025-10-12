@@ -2,8 +2,16 @@
 set -e
 
 # Build script for Machine Auth Simulator
+# This script MUST be run from the firmware/simulator/ directory
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Change to script directory
+cd "$SCRIPT_DIR"
 
 echo "=== Machine Auth Simulator Build ==="
+echo "Working directory: $SCRIPT_DIR"
 echo
 
 # Check for SDL2
@@ -46,9 +54,10 @@ cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug
 
 # Build
 echo "Building..."
-cmake --build build -j$(nproc)
+NUM_CORES=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
+cmake --build build -j${NUM_CORES}
 
 echo
 echo "=== Build Complete ==="
-echo "Run simulator: ./build/simulator"
+echo "Run simulator: $SCRIPT_DIR/build/simulator [--state idle|active|denied]"
 echo
