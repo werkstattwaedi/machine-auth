@@ -2,7 +2,7 @@ export const environment = {
   production: true,
   useEmulators: false,
   firebase: {
-    apiKey: 'AIzaSyBqv4w8YBjeTZdQbGYOpFSit396_v5P_sc',
+    apiKey: 'AIzaSyA5uwdahukY5aj_ATtx6qqbwQsOXoUZT6Y',
     authDomain: 'oww-maschinenfreigabe.firebaseapp.com',
     projectId: 'oww-maschinenfreigabe',
     storageBucket: 'oww-maschinenfreigabe.firebasestorage.app',
