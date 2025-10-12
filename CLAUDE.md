@@ -453,3 +453,261 @@ The project uses a Firestore database. The structure is documented in `firestore
 3. On checkout (UI/timeout/new tag) → `MachineUsage::CheckOut()`
 4. Usage record completed with checkout reason
 5. `UploadHistory()` syncs usage data to cloud (via `uploadUsage` endpoint)
+
+## Admin Web Application
+
+The admin UI is an Angular 20 single-page application for managing users, permissions, machines, and terminals.
+
+### Tech Stack & Architecture
+
+**Framework:** Angular 20 with standalone components
+**UI Library:** Angular Material with custom Werkstatt Wädenswil theme
+**Database:** Firebase Firestore (client-side SDK)
+**Authentication:** Firebase Auth (Google OAuth + passwordless email link)
+**Language:** German throughout
+
+**Key Design Decisions:**
+- **Client-side Firebase SDK**: No custom backend API - admin UI talks directly to Firestore
+- **Account claiming pattern**: Admins can pre-create user accounts, users claim them via email when they sign in
+- **Role-based access**: Users have `roles: string[]` array, admin role checked via `roles.includes('admin')`
+- **Reactive data**: All Firestore queries exposed as observables via RxFire
+- **Material Design**: Consistent UI with tables, dialogs, chips, and form validation
+
+### Development Setup
+
+**Prerequisites:**
+- Node.js (version in `.nvmrc`)
+- Firebase CLI: `npm install -g firebase-tools`
+
+**Local Development:**
+```bash
+cd admin
+npm install
+npm start  # Runs on http://localhost:4200
+```
+
+**Environment Configuration:**
+- `src/environments/environment.ts`: Development config (uses Firebase emulators)
+- `src/environments/environment.production.ts`: Production config (needs real Firebase credentials)
+- Set `useEmulators: false` for production builds
+
+**Build:**
+```bash
+npm run build  # Output: dist/admin/browser/
+```
+
+### Deployment
+
+**Firebase Hosting Configuration:**
+The `firebase.json` at project root configures hosting:
+```json
+{
+  "hosting": {
+    "public": "admin/dist/admin/browser",
+    "predeploy": ["cd admin && npm install && npm run build"],
+    "rewrites": [{"source": "**", "destination": "/index.html"}]
+  }
+}
+```
+
+**Deploy:**
+```bash
+firebase deploy --only hosting
+```
+
+**IMPORTANT - Production Checklist:**
+- ⚠️ **Firestore security rules** (issue #30): Currently permissive for development, MUST harden before production
+- ⚠️ **Firebase credentials**: Replace fake emulator config with real project credentials
+- ⚠️ **Bundle size**: Currently 1.42 MB (exceeds budget) - consider lazy loading and code splitting
+- ⚠️ Set `useEmulators: false` in production environment
+
+### Module Structure
+
+```
+admin/src/app/
+├── core/                    # Services, models, guards
+│   ├── guards/
+│   │   ├── auth.guard.ts    # Requires authentication
+│   │   └── admin.guard.ts   # Requires admin role
+│   ├── models/              # TypeScript interfaces matching Firestore schema
+│   │   ├── user.model.ts    # UserDocument, UserWithId
+│   │   ├── permission.model.ts
+│   │   ├── machine.model.ts # MachineDocument, MacoDocument
+│   │   └── token.model.ts   # TokenDocument (NFC tags)
+│   └── services/            # Firestore operations
+│       ├── auth.service.ts  # Authentication + account claiming
+│       ├── user.service.ts  # User CRUD + token management
+│       ├── permission.service.ts
+│       └── machine.service.ts
+├── features/                # Feature modules
+│   ├── auth/login/          # Login page (Google OAuth + email link)
+│   ├── dashboard/           # Dashboard (placeholder)
+│   ├── permissions/         # Permissions CRUD
+│   ├── machines/            # Machines + Terminals CRUD (tabbed)
+│   ├── users/               # Users + Tokens CRUD (master-detail)
+│   ├── sessions/            # Sessions viewer (placeholder)
+│   └── profile/             # User profile (placeholder)
+├── shared/                  # Shared components
+│   └── layout/main-layout/  # Sidenav layout with role-based navigation
+└── app.routes.ts            # Route configuration
+```
+
+### CRUD Modules
+
+#### Permissions Module
+Simple CRUD for permission management.
+- **Model**: `{ id: string, name: string }`
+- **Table**: Lists all permissions
+- **Dialog**: Create/edit permission name
+- **Location**: `admin/src/app/features/permissions/`
+
+#### Machines & Terminals Module
+Tabbed interface for machines and their controlling terminals.
+- **Machines Model**: `{ id, name, maco: deviceId, requiredPermission: permissionId[] }`
+- **Terminals (MaCo) Model**: `{ id: deviceId, name }`
+- **Tab 1**: Machines table with terminal assignment and required permissions (multi-select)
+- **Tab 2**: Terminals table with Particle device ID (24-char hex validation)
+- **Location**: `admin/src/app/features/machines/`
+
+#### Users & Tokens Module
+Master-detail layout for user management with NFC token subcollection.
+- **Users Model**: `{ id, email, displayName, name?, firebaseUid?, roles[], permissions[], created }`
+- **Tokens Model**: `{ id: ntagUid, userId, label, registered, deactivated? }`
+- **Layout**: Left panel = users table, Right panel = selected user details + tokens
+- **Features**:
+  - User CRUD with role/permission assignment
+  - Token subcollection management (add/edit/deactivate/delete)
+  - Unclaimed account indicator (no `firebaseUid`)
+  - Token ID validation (14-char hex for NTAG UIDs)
+- **Location**: `admin/src/app/features/users/`
+
+### Authentication Flow
+
+**Login Methods:**
+1. **Google OAuth**: `signInWithPopup(GoogleAuthProvider)`
+2. **Email Link**: Passwordless - send link to email, user clicks to sign in
+
+**Account Claiming Pattern:**
+```typescript
+// On successful sign-in:
+1. Check if user doc exists with matching email but no firebaseUid
+2. If yes: Update doc with firebaseUid (claim account)
+3. If no: Create new user doc with firebaseUid
+```
+
+This allows admins to pre-create users and assign permissions/tokens before the user ever signs in.
+
+**Role Checking:**
+```typescript
+// Admin guard checks:
+userDoc.roles.includes('admin')
+
+// Available roles:
+- 'admin': Full system access
+- 'vereinsmitglied': Regular club member
+```
+
+**Auth Service Location**: `admin/src/app/core/services/auth.service.ts`
+
+### Firestore Integration
+
+**Pattern: Direct client-side Firestore access**
+- All services use AngularFire (`@angular/fire/firestore`)
+- Reactive queries via `collectionData()` → Observable
+- CRUD operations via `addDoc`, `updateDoc`, `deleteDoc`, `setDoc`
+
+**Example Service Pattern:**
+```typescript
+@Injectable({ providedIn: 'root' })
+export class PermissionService {
+  private firestore = inject(Firestore);
+  private collection = collection(this.firestore, 'permission');
+
+  getPermissions(): Observable<PermissionWithId[]> {
+    return collectionData(this.collection, { idField: 'id' });
+  }
+
+  async createPermission(data: PermissionDocument): Promise<string> {
+    const docRef = await addDoc(this.collection, data);
+    return docRef.id;
+  }
+}
+```
+
+**Subcollections Pattern (Tokens):**
+```typescript
+// Tokens stored at: users/{userId}/token/{tokenId}
+getUserTokens(userId: string): Observable<TokenWithId[]> {
+  const tokensCollection = collection(this.firestore, `users/${userId}/token`);
+  return collectionData(tokensCollection, { idField: 'id' });
+}
+```
+
+### UI Patterns & Best Practices
+
+**Component Naming:**
+- All components must end with `Component` suffix (e.g., `PermissionsComponent`)
+- Dialog components: `*DialogComponent` (e.g., `PermissionDialogComponent`)
+
+**Template Patterns:**
+- Use `@if`, `@for` (new Angular control flow syntax, not `*ngIf`/`*ngFor`)
+- Async pipe for observables: `@if (users$ | async; as users)`
+- Material table: `<table mat-table [dataSource]="items">`
+
+**Form Validation:**
+- Reactive forms with `FormBuilder`
+- Inline error messages: `@if (form.get('field')?.hasError('required'))`
+- German error messages throughout
+
+**German UI Text Guidelines:**
+- Buttons: "Erstellen" (Create), "Speichern" (Save), "Abbrechen" (Cancel), "Löschen" (Delete)
+- Tables: "Aktionen" (Actions), "Name", "E-Mail"
+- Messages: "Berechtigung erstellt" (Permission created), "Fehler: ..." (Error: ...)
+- Empty states: "Noch keine ... vorhanden" (No ... available yet)
+
+**Material Theme:**
+Custom theme with Werkstatt Wädenswil brand colors:
+- Primary: Yellow `#F9C74F`
+- Accent: Blue `#90B8D8`
+- Theme file: `admin/src/theme.scss`
+
+### Common Tasks
+
+**Add a new CRUD module:**
+1. Generate component: `ng generate component features/my-module`
+2. Create model interface in `core/models/`
+3. Create service in `core/services/`
+4. Build table component with Material table
+5. Create dialog component for create/edit
+6. Add route to `app.routes.ts` with appropriate guards
+7. Add navigation item to `main-layout.ts`
+
+**Add a field to existing model:**
+1. Update interface in `core/models/*.model.ts`
+2. Update form in dialog component
+3. Update table columns in list component
+4. Update service methods if needed
+
+**Debug Firestore queries:**
+1. Open browser DevTools → Network tab
+2. Filter by "firestore.googleapis.com"
+3. Check request/response payloads
+4. Verify security rules in Firebase console
+
+### Known Issues
+
+**Issue #30: Permissive Firestore Rules**
+Current rules allow all authenticated users to read/write everything. Must implement proper role-based rules before production:
+```javascript
+// TODO: Implement rules like:
+match /users/{userId} {
+  allow read: if request.auth != null;
+  allow write: if request.auth.token.admin == true;
+}
+```
+
+**Bundle Size Warning:**
+Build exceeds 1 MB budget (currently 1.42 MB). Future optimization:
+- Lazy load feature modules
+- Tree-shake unused Material components
+- Code splitting for dialogs
