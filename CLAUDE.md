@@ -1,5 +1,7 @@
 # Machine Authentication System - AI Context Documentation
 
+**Note:** This document provides AI-specific development context (patterns, commands, gotchas). For architectural decisions and requirements, see [`docs/`](docs/README.md).
+
 ## Project Overview
 
 This is a comprehensive IoT machine authentication system built with Particle IoT firmware, featuring secure NFC-based access control, usage tracking, and cloud synchronization. The system uses NTAG424 DNA NFC tags for secure mutual authentication.
@@ -9,6 +11,21 @@ This is a comprehensive IoT machine authentication system built with Particle Io
 - **Firmware**: Particle IoT device firmware (C++, ~15k LOC) for machine control
 - **Functions**: Firebase Cloud Functions (TypeScript) for backend authentication logic
 - **Admin**: Angular web application for system administration
+
+### Documentation Structure
+
+- **`CLAUDE.md`** (this file): AI development context, patterns, commands
+- **`docs/`**: Structured project documentation
+  - `docs/adr/`: Architecture Decision Records - why we made key technical choices
+  - `docs/requirements/`: Product requirements and specifications
+  - `docs/ideas/`: Exploration, brainstorming, future work
+  - See [`docs/README.md`](docs/README.md) for full guide
+
+**When to update docs during sessions:**
+- Create an ADR when making significant architectural decisions (e.g., choosing between approaches)
+- Update `docs/ideas/backlog.md` when discovering future work
+- Update CLAUDE.md for development patterns, build commands, and AI-specific context
+- Don't over-document - focus on capturing "why" for decisions that aren't obvious from code
 
 ### How It Works
 
@@ -323,7 +340,7 @@ Always include "common.h" for a base set of includes. Write full path from src/ 
 #include <variant>
 
 // Project includes
-#include "state/session/token_session.h"
+#include "logic/session/token_session.h"
 #include "fbs/machine_usage_generated.h"
 ```
 
@@ -376,18 +393,25 @@ firmware/src/
 │   │   └── personalize.*        # Tag personalization during setup
 │   └── session/                 # Session and usage tracking
 │       ├── sessions.*           # Session registry and management
-│       ├── token_session.*      # Individual session data
-│       └── machine_state.*      # Machine state machine (Idle/Active/Denied)
+│       └── token_session.*      # Individual session data
+├── state/               # Top-level state management
+│   └── machine_state.*  # Machine state machine (Idle/Active/Denied)
 ├── nfc/                 # NFC hardware abstraction
 │   ├── nfc_tags.*       # NFC worker thread, tag state machine
-│   └── driver/          # Low-level hardware drivers
-│       ├── PN532.*      # PN532 NFC reader (I2C/SPI)
+│   └── driver/          # Low-level NFC hardware drivers
+│       ├── PN532.*      # PN532 NFC reader (UART)
 │       └── Ntag424.*    # NTAG424 DNA tag protocol
+├── drivers/             # Other hardware drivers
+│   ├── buzzer/          # Buzzer control
+│   ├── display/         # Display drivers
+│   ├── neopixels/       # LED ring (WS2812)
+│   └── relay/           # Relay control
+├── hal/                 # Hardware abstraction layer
 ├── setup/               # Device setup mode for provisioning
 ├── ui/                  # User interface (LVGL-based)
 │   ├── ui.*             # UI thread and main screens
-│   ├── driver/          # Display and touch hardware
-│   └── leds/            # WS2812 LED ring controller
+│   ├── components/      # UI components
+│   └── screens/         # LVGL screen definitions
 ├── config.h             # Pin assignments and hardware config
 ├── entrypoint.cpp       # setup() and loop() - Particle entry points
 └── faulthandler.*       # Crash handler and diagnostics
@@ -618,70 +642,43 @@ match /sessions/{sessionId} {
 
 ## Admin Web Application
 
-The admin UI is an Angular 20 single-page application for managing users, permissions, machines, and terminals.
+Angular 20 SPA for managing users, permissions, machines, and terminals. All code in `admin/`.
 
-### Tech Stack & Architecture
+### Quick Start
 
-**Framework:** Angular 20 with standalone components
-**UI Library:** Angular Material with custom Werkstatt Wädenswil theme
-**Database:** Firebase Firestore (client-side SDK)
-**Authentication:** Firebase Auth (Google OAuth + passwordless email link)
-**Language:** German throughout
-
-**Key Design Decisions:**
-- **Client-side Firebase SDK**: No custom backend API - admin UI talks directly to Firestore
-- **Account claiming pattern**: Admins can pre-create user accounts, users claim them via email when they sign in
-- **Role-based access**: Users have `roles: string[]` array, admin role checked via `roles.includes('admin')`
-- **Reactive data**: All Firestore queries exposed as observables via RxFire
-- **Material Design**: Consistent UI with tables, dialogs, chips, and form validation
-
-### Development Setup
-
-**Prerequisites:**
-- Node.js (version in `.nvmrc`)
-- Firebase CLI: `npm install -g firebase-tools`
-
-**Local Development:**
 ```bash
 cd admin
 npm install
-npm start  # Runs on http://localhost:4200
+npm start  # http://localhost:4200 with emulators
 ```
 
-**Environment Configuration:**
-- `src/environments/environment.ts`: Development config (uses Firebase emulators)
-- `src/environments/environment.production.ts`: Production config (needs real Firebase credentials)
-- Set `useEmulators: false` for production builds
+### Tech Stack
 
-**Build:**
+- **Framework**: Angular 20 (standalone components, new control flow)
+- **UI**: Angular Material with custom Werkstatt Wädenswil theme (yellow/blue)
+- **Database**: Firebase Firestore (client-side SDK, no backend API)
+- **Auth**: Firebase Auth (Google OAuth + passwordless email link)
+- **Language**: German UI throughout
+
+### Key Architecture Decisions
+
+**Client-side Firestore** - Admin UI talks directly to Firestore, no custom backend. Security enforced by Firestore rules, not API layer.
+
+**Account Claiming Pattern** - Admins pre-create users with email/permissions/tokens. When user signs in with that email, account is "claimed" by linking their `firebaseUid`. Allows setup before user onboarding.
+
+**Role-based Access** - `userDoc.roles.includes('admin')` for authorization. Available roles: `admin`, `vereinsmitglied`.
+
+### Build & Deploy
+
 ```bash
+# Build
 npm run build  # Output: dist/admin/browser/
+
+# Deploy to Firebase Hosting
+firebase deploy --only hosting  # Auto-builds via predeploy hook
 ```
 
-### Deployment
-
-**Firebase Hosting Configuration:**
-The `firebase.json` at project root configures hosting:
-```json
-{
-  "hosting": {
-    "public": "admin/dist/admin/browser",
-    "predeploy": ["cd admin && npm install && npm run build"],
-    "rewrites": [{"source": "**", "destination": "/index.html"}]
-  }
-}
-```
-
-**Deploy:**
-```bash
-firebase deploy --only hosting
-```
-
-**IMPORTANT - Production Checklist:**
-- ⚠️ **Firestore security rules** (issue #30): Currently permissive for development, MUST harden before production
-- ⚠️ **Firebase credentials**: Replace fake emulator config with real project credentials
-- ⚠️ **Bundle size**: Currently 1.42 MB (exceeds budget) - consider lazy loading and code splitting
-- ⚠️ Set `useEmulators: false` in production environment
+**Production Checklist:** See [`docs/requirements/admin-ui-deployment.md`](docs/requirements/admin-ui-deployment.md) for deployment requirements and gotchas.
 
 ### Module Structure
 
@@ -716,160 +713,47 @@ admin/src/app/
 
 ### CRUD Modules
 
-#### Permissions Module
-Simple CRUD for permission management.
-- **Model**: `{ id: string, name: string }`
-- **Table**: Lists all permissions
-- **Dialog**: Create/edit permission name
-- **Location**: `admin/src/app/features/permissions/`
+Three core modules with complete create/read/update/delete functionality:
 
-#### Machines & Terminals Module
-Tabbed interface for machines and their controlling terminals.
-- **Machines Model**: `{ id, name, maco: deviceId, requiredPermission: permissionId[] }`
-- **Terminals (MaCo) Model**: `{ id: deviceId, name }`
-- **Tab 1**: Machines table with terminal assignment and required permissions (multi-select)
-- **Tab 2**: Terminals table with Particle device ID (24-char hex validation)
-- **Location**: `admin/src/app/features/machines/`
+- **Permissions** (`features/permissions/`) - Simple table, create/edit dialog
+- **Machines & Terminals** (`features/machines/`) - Tabbed interface, machine→terminal assignment
+- **Users & Tokens** (`features/users/`) - Master-detail layout, token subcollection management
 
-#### Users & Tokens Module
-Master-detail layout for user management with NFC token subcollection.
-- **Users Model**: `{ id, email, displayName, name?, firebaseUid?, roles[], permissions[], created }`
-- **Tokens Model**: `{ id: ntagUid, userId, label, registered, deactivated? }`
-- **Layout**: Left panel = users table, Right panel = selected user details + tokens
-- **Features**:
-  - User CRUD with role/permission assignment
-  - Token subcollection management (add/edit/deactivate/delete)
-  - Unclaimed account indicator (no `firebaseUid`)
-  - Token ID validation (14-char hex for NTAG UIDs)
-- **Location**: `admin/src/app/features/users/`
+All use Material tables + dialogs with German UI and form validation.
 
-### Authentication Flow
+### Development Patterns
 
-**Login Methods:**
-1. **Google OAuth**: `signInWithPopup(GoogleAuthProvider)`
-2. **Email Link**: Passwordless - send link to email, user clicks to sign in
-
-**Account Claiming Pattern:**
-```typescript
-// On successful sign-in:
-1. Check if user doc exists with matching email but no firebaseUid
-2. If yes: Update doc with firebaseUid (claim account)
-3. If no: Create new user doc with firebaseUid
-```
-
-This allows admins to pre-create users and assign permissions/tokens before the user ever signs in.
-
-**Role Checking:**
-```typescript
-// Admin guard checks:
-userDoc.roles.includes('admin')
-
-// Available roles:
-- 'admin': Full system access
-- 'vereinsmitglied': Regular club member
-```
-
-**Auth Service Location**: `admin/src/app/core/services/auth.service.ts`
-
-### Firestore Integration
-
-**Pattern: Direct client-side Firestore access**
-- All services use AngularFire (`@angular/fire/firestore`)
-- Reactive queries via `collectionData()` → Observable
-- CRUD operations via `addDoc`, `updateDoc`, `deleteDoc`, `setDoc`
-
-**Example Service Pattern:**
+**Service Pattern** - AngularFire with observables:
 ```typescript
 @Injectable({ providedIn: 'root' })
 export class PermissionService {
   private firestore = inject(Firestore);
-  private collection = collection(this.firestore, 'permission');
 
   getPermissions(): Observable<PermissionWithId[]> {
-    return collectionData(this.collection, { idField: 'id' });
-  }
-
-  async createPermission(data: PermissionDocument): Promise<string> {
-    const docRef = await addDoc(this.collection, data);
-    return docRef.id;
+    return collectionData(collection(this.firestore, 'permission'), { idField: 'id' });
   }
 }
 ```
 
-**Subcollections Pattern (Tokens):**
-```typescript
-// Tokens stored at: users/{userId}/token/{tokenId}
-getUserTokens(userId: string): Observable<TokenWithId[]> {
-  const tokensCollection = collection(this.firestore, `users/${userId}/token`);
-  return collectionData(tokensCollection, { idField: 'id' });
-}
-```
+**Component Naming** - Always suffix with `Component` (e.g., `PermissionsComponent`, `PermissionDialogComponent`)
 
-### UI Patterns & Best Practices
+**Templates** - Use new Angular control flow: `@if`, `@for` (not `*ngIf`/`*ngFor`)
 
-**Component Naming:**
-- All components must end with `Component` suffix (e.g., `PermissionsComponent`)
-- Dialog components: `*DialogComponent` (e.g., `PermissionDialogComponent`)
+**German UI** - All text in German: "Erstellen" (Create), "Speichern" (Save), "Abbrechen" (Cancel), "Löschen" (Delete)
 
-**Template Patterns:**
-- Use `@if`, `@for` (new Angular control flow syntax, not `*ngIf`/`*ngFor`)
-- Async pipe for observables: `@if (users$ | async; as users)`
-- Material table: `<table mat-table [dataSource]="items">`
+**Theme** - Werkstatt colors: Primary yellow `#F9C74F`, Accent blue `#90B8D8` (see `admin/src/theme.scss`)
 
-**Form Validation:**
-- Reactive forms with `FormBuilder`
-- Inline error messages: `@if (form.get('field')?.hasError('required'))`
-- German error messages throughout
+### Adding CRUD Modules
 
-**German UI Text Guidelines:**
-- Buttons: "Erstellen" (Create), "Speichern" (Save), "Abbrechen" (Cancel), "Löschen" (Delete)
-- Tables: "Aktionen" (Actions), "Name", "E-Mail"
-- Messages: "Berechtigung erstellt" (Permission created), "Fehler: ..." (Error: ...)
-- Empty states: "Noch keine ... vorhanden" (No ... available yet)
-
-**Material Theme:**
-Custom theme with Werkstatt Wädenswil brand colors:
-- Primary: Yellow `#F9C74F`
-- Accent: Blue `#90B8D8`
-- Theme file: `admin/src/theme.scss`
-
-### Common Tasks
-
-**Add a new CRUD module:**
-1. Generate component: `ng generate component features/my-module`
-2. Create model interface in `core/models/`
-3. Create service in `core/services/`
-4. Build table component with Material table
-5. Create dialog component for create/edit
-6. Add route to `app.routes.ts` with appropriate guards
-7. Add navigation item to `main-layout.ts`
-
-**Add a field to existing model:**
-1. Update interface in `core/models/*.model.ts`
-2. Update form in dialog component
-3. Update table columns in list component
-4. Update service methods if needed
-
-**Debug Firestore queries:**
-1. Open browser DevTools → Network tab
-2. Filter by "firestore.googleapis.com"
-3. Check request/response payloads
-4. Verify security rules in Firebase console
+1. Generate: `ng generate component features/my-module`
+2. Create model in `core/models/`
+3. Create service in `core/services/` (extends AngularFire pattern)
+4. Build table + dialog components
+5. Add route to `app.routes.ts` with guards
+6. Add nav item to `main-layout.ts`
 
 ### Known Issues
 
-**Issue #30: Permissive Firestore Rules**
-Current rules allow all authenticated users to read/write everything. Must implement proper role-based rules before production:
-```javascript
-// TODO: Implement rules like:
-match /users/{userId} {
-  allow read: if request.auth != null;
-  allow write: if request.auth.token.admin == true;
-}
-```
-
-**Bundle Size Warning:**
-Build exceeds 1 MB budget (currently 1.42 MB). Future optimization:
-- Lazy load feature modules
-- Tree-shake unused Material components
-- Code splitting for dialogs
+- **Issue #30**: Firestore rules permissive (development only - harden before prod)
+- **Bundle size**: 1.42 MB exceeds budget - needs lazy loading
+- See [`docs/requirements/admin-ui-deployment.md`](docs/requirements/admin-ui-deployment.md) for production checklist
