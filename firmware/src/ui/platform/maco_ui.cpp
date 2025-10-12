@@ -1,5 +1,6 @@
 #include "ui/platform/maco_ui.h"
 
+#include "drivers/maco_watchdog.h"
 #include "drivers/display/ili9341.h"
 #include "state/system_state.h"
 
@@ -66,6 +67,7 @@ os_thread_return_t UserInterface::UserInterfaceThread() {
   splash_screen_ = std::make_unique<SplashScreen>(app_state);
 
   while (true) {
+    drivers::MacoWatchdog::instance().Ping(drivers::ObservedThread::kUi);
     UpdateGui();
     UpdateBuzzer();
     UpdateLed();

@@ -66,7 +66,9 @@ tl::expected<std::shared_ptr<SelectedTag>, PN532Error> PN532::WaitForNewTag(
 
   auto call_function = CallFunction(&list_passive_target, timeout_ms, 1);
   if (!call_function) {
-    logger.error("WaitForTag InListPassiveTarget failed");
+    if (call_function.error() != PN532Error::kTimeout) {
+      logger.error("WaitForTag InListPassiveTarget failed");
+    }
     return tl::unexpected(call_function.error());
   }
 
@@ -233,14 +235,15 @@ tl::expected<void, PN532Error> PN532::CallFunction(
   auto receive_response =
       ReceiveResponse(command_in_response_out, timeout_ms, retries);
   if (!receive_response) {
-    logger.error("CallFunction ReceiveResponse failed (error: %d)",
-                 (int)receive_response.error());
     if (receive_response.error() == PN532Error::kTimeout) {
       // see "6.2.2.1 Data link level", section "d) Abort"
       // When receiving the response timed out, send ACK to abort
       serial_interface_->write(PN532_ACK, sizeof(PN532_ACK));
+    } else {
+      // log non-timeout errors
+      logger.error("CallFunction ReceiveResponse failed (error: %d)",
+                   (int)receive_response.error());
     }
-
     return receive_response;
   }
 

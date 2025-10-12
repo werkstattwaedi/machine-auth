@@ -2,6 +2,7 @@
 
 #include "common/byte_array.h"
 #include "config.h"
+#include "drivers/maco_watchdog.h"
 
 namespace oww::nfc {
 
@@ -72,6 +73,7 @@ os_thread_return_t NfcTags::NfcThread() {
 
 void NfcTags::NfcLoop() {
   logger.trace("NfcLoop");
+  drivers::MacoWatchdog::instance().Ping(drivers::ObservedThread::kNfc);
   state_machine_->Loop();
 }
 
@@ -95,7 +97,10 @@ void NfcTags::RegisterStateHandlers() {
 }
 
 NfcStateMachine::StateOpt NfcTags::OnWaitForTag(WaitForTag& state) {
-  auto wait_for_tag = pcd_interface_->WaitForNewTag();
+  // Use a timeout to ensure the loop continues even when no tag is present
+  // This allows the watchdog to monitor the thread's liveness
+  constexpr system_tick_t kWaitForTagTimeout = 1000;  // 1 second
+  auto wait_for_tag = pcd_interface_->WaitForNewTag(kWaitForTagTimeout);
   if (!wait_for_tag) {
     return std::nullopt;
   }

@@ -3,6 +3,7 @@
  */
 
 #include "common.h"
+#include "drivers/maco_watchdog.h"
 #include "faulthandler.h"
 #include "logic/application.h"
 #include "nfc/nfc_tags.h"
@@ -21,7 +22,9 @@ SerialLogHandler logHandler(LOG_LEVEL_WARN,
                              {"app.logic.session", LOG_LEVEL_TRACE},
                              {"app.logic", LOG_LEVEL_WARN},
                              {"app.nfc", LOG_LEVEL_WARN},
+                             {"app.watchdog", LOG_LEVEL_INFO},
                              //  {"app.nfc.driver", LOG_LEVEL_TRACE},
+
                              {"app.ui", LOG_LEVEL_WARN}});
 
 using namespace oww::logic;
@@ -42,6 +45,7 @@ void setup() {
   remoteLog.withServer(&remoteLogEventServer).setup();
 #endif
   oww::fault::Init();
+  oww::drivers::MacoWatchdog::instance().Begin();
 
   entrypoint_logger.info("machine-auth-firmware starting");
 
@@ -91,6 +95,10 @@ void setup() {
   waitUntil(app_->GetConfiguration()->GetDeviceConfig);
 
   app_->BootCompleted();
+
+  // Boot complete - reduce watchdog timeout from 60s to 10s
+  oww::drivers::MacoWatchdog::instance().SetThreadTimeout(
+      oww::drivers::MacoWatchdog::kNormalTimeout);
 }
 
 system_tick_t next_telemetry_log = 0;
@@ -99,6 +107,9 @@ void loop() {
 #ifdef REMOTE_LOGGING
   remoteLog.loop();
 #endif
+  oww::drivers::MacoWatchdog::instance().Ping(
+      oww::drivers::ObservedThread::kMain);
+
   if (app_->GetConfiguration()->IsSetupMode()) {
     oww::setup::loop();
     return;
