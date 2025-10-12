@@ -14,6 +14,7 @@ import { MachineWithId, MacoWithId } from '../../core/models/machine.model';
 import { PermissionWithId } from '../../core/models/permission.model';
 import { MachineDialogComponent } from './machine-dialog/machine-dialog';
 import { MacoDialogComponent } from './maco-dialog/maco-dialog';
+import { ImportDialogComponent } from './import-dialog/import-dialog';
 
 @Component({
   selector: 'app-machines',
@@ -163,5 +164,22 @@ export class MachinesComponent {
   getMacoName(deviceId: string, macos: MacoWithId[]): string {
     const maco = macos.find(m => m.id === deviceId);
     return maco ? maco.name : deviceId;
+  }
+
+  /**
+   * Import devices from Particle Cloud
+   */
+  importFromParticle(): void {
+    const dialogRef = this.dialog.open(ImportDialogComponent, {
+      width: '800px',
+      maxHeight: '80vh',
+    });
+
+    dialogRef.afterClosed().subscribe((shouldRefresh) => {
+      if (shouldRefresh) {
+        // Refresh the macos list
+        this.macos$ = this.machineService.getMacos();
+      }
+    });
   }
 }

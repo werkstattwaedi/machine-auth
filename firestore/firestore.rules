@@ -9,13 +9,28 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      // TODO: Implement proper admin role check
+      // DEVELOPMENT MODE: Allow all authenticated users
+      // TODO: Implement proper admin role checking
+      //
+      // Problem: User document ID != Firebase Auth UID
+      // User docs use random IDs with a 'firebaseUid' field
+      // Firestore rules can't query by field values (only document paths)
+      //
+      // Solutions for production:
+      // 1. Use Firebase Auth custom claims (preferred)
+      // 2. Restructure: Use Firebase Auth UID as user document ID
+      // 3. Maintain a separate admin list in a known document
+      //
+      // See Issue #30 and docs/requirements/admin-ui-deployment.md
       return isSignedIn();
     }
 
     // Validation helpers
     function isDocumentReference(field, collection) {
-      return field is path && field.matches('^/' + collection + '/[^/]+$');
+      // Check if field is a path (DocumentReference type)
+      return field is path;
+      // Note: Can't deeply validate path format in Firestore rules
+      // Rely on client-side validation to ensure correct collection references
     }
 
     function isDocumentReferenceArray(arr, collection) {

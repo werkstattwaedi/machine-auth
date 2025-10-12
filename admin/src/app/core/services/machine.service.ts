@@ -17,7 +17,16 @@ export class MachineService {
    */
   getMachines(): Observable<MachineWithId[]> {
     return collectionData(this.machinesCollection, { idField: 'id' }).pipe(
-      map((machines) => machines as MachineWithId[])
+      map((machines) =>
+        machines.map((machine: any) => ({
+          id: machine.id,
+          name: machine.name,
+          // Convert DocumentReferences back to string IDs
+          maco: machine.maco?.id || machine.maco,
+          requiredPermission: machine.requiredPermission?.map((ref: any) => ref.id || ref) || [],
+          control: machine.control,
+        })) as MachineWithId[]
+      )
     );
   }
 
@@ -43,7 +52,17 @@ export class MachineService {
    * Create a new machine
    */
   async createMachine(machine: MachineDocument): Promise<string> {
-    const docRef = await addDoc(this.machinesCollection, machine);
+    // Convert string IDs to DocumentReferences
+    const machineData = {
+      name: machine.name,
+      maco: doc(this.firestore, 'maco', machine.maco),
+      requiredPermission: machine.requiredPermission.map(permId =>
+        doc(this.firestore, 'permission', permId)
+      ),
+      ...(machine.control && { control: machine.control }),
+    };
+
+    const docRef = await addDoc(this.machinesCollection, machineData);
     return docRef.id;
   }
 
@@ -52,7 +71,21 @@ export class MachineService {
    */
   async updateMachine(id: string, machine: Partial<MachineDocument>): Promise<void> {
     const docRef = doc(this.machinesCollection, id);
-    await updateDoc(docRef, machine);
+
+    // Convert string IDs to DocumentReferences
+    const updateData: any = {};
+    if (machine.name !== undefined) updateData.name = machine.name;
+    if (machine.maco !== undefined) {
+      updateData.maco = doc(this.firestore, 'maco', machine.maco);
+    }
+    if (machine.requiredPermission !== undefined) {
+      updateData.requiredPermission = machine.requiredPermission.map(permId =>
+        doc(this.firestore, 'permission', permId)
+      );
+    }
+    if (machine.control !== undefined) updateData.control = machine.control;
+
+    await updateDoc(docRef, updateData);
   }
 
   /**

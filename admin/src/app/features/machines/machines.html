@@ -82,6 +82,10 @@
             <mat-icon>add</mat-icon>
             Neues Terminal
           </button>
+          <button mat-raised-button color="accent" (click)="importFromParticle()" class="import-button">
+            <mat-icon>cloud_download</mat-icon>
+            Von Particle importieren
+          </button>
         </div>
 
         @if (macos$ | async; as macos) {

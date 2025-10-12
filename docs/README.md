@@ -2,6 +2,11 @@
 
 This directory contains structured documentation for the machine authentication system.
 
+## Quick Start
+
+- **🚀 [Configuration Guide](config.md)** - Complete setup for new environments
+- **🔨 [Compilation Guide](compile.md)** - Building and running firmware
+
 ## Directory Structure
 
 ### `adr/` - Architecture Decision Records
@@ -31,6 +36,9 @@ High-level product requirements, user stories, and functional specs. Use for:
 - Business rules
 - Non-functional requirements (performance, security, etc.)
 
+**Key documents:**
+- [admin-ui-deployment.md](requirements/admin-ui-deployment.md) - Production deployment checklist
+
 ### `ideas/` - Exploration & Future Work
 
 Brainstorming, research notes, and future work. Use for:
@@ -56,8 +64,14 @@ Design assets, mockups, and brand guidelines.
 3. **Before major changes:** Review existing ADRs to understand constraints
 4. **GitHub issues** are for tracking work; **docs/** is for recording decisions and context
 
-## Related
+## Root-Level Documentation
 
-- `CLAUDE.md` - AI context and development patterns
-- `firestore/schema.jsonc` - Database schema
+- [`config.md`](config.md) - **Configuration guide for all system components**
+- [`compile.md`](compile.md) - Firmware build instructions
+
+## Related Files
+
+- `../CLAUDE.md` - AI context and development patterns
+- `../firestore/schema.jsonc` - Database schema
+- `../scripts/README.md` - Scripts documentation
 - GitHub Issues - Active work tracking

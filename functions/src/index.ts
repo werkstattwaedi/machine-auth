@@ -215,3 +215,6 @@ export const api = onRequest(
   { secrets: [diversificationMasterKey, particleWebhookApiKey] },
   app
 );
+
+// Export admin API
+export { admin } from "./admin-api";

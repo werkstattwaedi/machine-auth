@@ -16,6 +16,8 @@ This is a comprehensive IoT machine authentication system built with Particle Io
 
 - **`CLAUDE.md`** (this file): AI development context, patterns, commands
 - **`docs/`**: Structured project documentation
+  - `docs/config.md`: **Complete configuration guide for new environments**
+  - `docs/compile.md`: Firmware build instructions
   - `docs/adr/`: Architecture Decision Records - why we made key technical choices
   - `docs/requirements/`: Product requirements and specifications
   - `docs/ideas/`: Exploration, brainstorming, future work
