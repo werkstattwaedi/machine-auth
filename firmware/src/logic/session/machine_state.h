@@ -10,7 +10,7 @@
 #include "fbs/machine_usage_generated.h"
 #include "fbs/token_session_generated.h"
 #include "logic/session/session_coordinator.h"
-#include "token_session.h"
+#include "state/token_session.h"
 
 namespace oww::logic {
 class Application;
@@ -21,7 +21,7 @@ namespace machine_state {
 struct Idle {};
 
 struct Active {
-  std::shared_ptr<TokenSession> session;
+  std::shared_ptr<oww::state::TokenSession> session;
   std::chrono::time_point<std::chrono::system_clock> start_time;
 };
 
@@ -53,7 +53,7 @@ class MachineUsage {
   // Manual checkout (UI button)
   tl::expected<void, ErrorType> ManualCheckOut();
 
-  tl::expected<void, ErrorType> CheckIn(std::shared_ptr<TokenSession> session);
+  tl::expected<void, ErrorType> CheckIn(std::shared_ptr<oww::state::TokenSession> session);
 
   template <typename T>
   tl::expected<void, ErrorType> CheckOut(std::unique_ptr<T> checkout_reason);

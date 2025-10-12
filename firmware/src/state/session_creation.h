@@ -9,7 +9,7 @@
 #include "fbs/token_session_generated.h"
 #include "state/state_machine.h"
 
-namespace oww::logic::session {
+namespace oww::state {
 class TokenSession;
 }
 
@@ -37,7 +37,7 @@ struct AwaitCompleteAuthenticationResponse {
 
 // Session creation succeeded
 struct Succeeded {
-  std::shared_ptr<oww::logic::session::TokenSession> session;
+  std::shared_ptr<oww::state::TokenSession> session;
 };
 
 // Session creation rejected by backend

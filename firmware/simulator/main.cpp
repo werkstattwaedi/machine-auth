@@ -167,7 +167,7 @@ static bool handle_events() {
             // State cycling
             case SDLK_c:
               if (g_app) {
-                g_app->CycleSessionState();
+                g_app->CycleTagState();
               }
               break;
 
@@ -224,7 +224,7 @@ static void main_loop() {
   printf("  1 - Return to Idle\n");
   printf("  2 - Trigger Active Session\n");
   printf("  3 - Trigger Denied\n");
-  printf("  C - Cycle Session State\n");
+  printf("  C - Cycle Tag State\n");
   printf("  M - Cycle Machine State\n");
   printf("  B - Complete Boot\n");
   printf("\nOther:\n");

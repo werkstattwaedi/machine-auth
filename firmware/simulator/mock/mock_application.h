@@ -20,7 +20,7 @@ class MockApplication : public state::IApplicationState {
 
   // IApplicationState interface (state queries)
   state::SystemStateHandle GetSystemState() const override;
-  state::SessionStateHandle GetSessionState() const override;
+  state::TagStateHandle GetTagState() const override;
   state::MachineStateHandle GetMachineState() const override;
 
   // IApplicationState interface (actions)
@@ -30,7 +30,7 @@ class MockApplication : public state::IApplicationState {
   // Simulator-specific state control (for keyboard shortcuts)
   void SetBootProgress(std::string message);
   void BootCompleted();
-  void CycleSessionState();
+  void CycleTagState();
   void CycleMachineState();
   void TriggerActiveSession();
   void TriggerDenied();
@@ -38,7 +38,7 @@ class MockApplication : public state::IApplicationState {
 
  private:
   state::SystemStateHandle system_state_;
-  state::SessionStateHandle session_state_;
+  state::TagStateHandle tag_state_;
   state::MachineStateHandle machine_state_;
 
   // Test data

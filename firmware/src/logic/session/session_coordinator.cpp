@@ -3,7 +3,7 @@
 #include "logic/action/start_session.h"
 #include "nfc/nfc_tags.h"
 #include "sessions.h"
-#include "token_session.h"
+#include "state/token_session.h"
 
 namespace oww::logic::session {
 
@@ -62,7 +62,7 @@ SessionStateHandle SessionCoordinator::Loop(
   return state_machine_->Loop();
 }
 
-std::shared_ptr<TokenSession> SessionCoordinator::GetActiveSession() const {
+std::shared_ptr<oww::state::TokenSession> SessionCoordinator::GetActiveSession() const {
   if (auto* active =
           state_machine_->Get<coordinator_state::SessionActive>()) {
     return active->session;

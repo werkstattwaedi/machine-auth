@@ -1,6 +1,6 @@
 #include "sessions.h"
 
-#include "token_session.h"
+#include "state/token_session.h"
 
 namespace oww::logic::session {
 
@@ -17,7 +17,7 @@ void Sessions::Begin() {
 
 void Sessions::Loop() {}
 
-std::shared_ptr<TokenSession> Sessions::GetSessionForToken(
+std::shared_ptr<oww::state::TokenSession> Sessions::GetSessionForToken(
     std::array<uint8_t, 7> token_id) {
   if (auto it = session_by_token.find(token_id); it != session_by_token.end()) {
     return it->second;
@@ -26,9 +26,9 @@ std::shared_ptr<TokenSession> Sessions::GetSessionForToken(
   }
 }
 
-std::shared_ptr<TokenSession> Sessions::RegisterSession(
+std::shared_ptr<oww::state::TokenSession> Sessions::RegisterSession(
     fbs::TokenSessionT& session_data) {
-  auto new_session = std::make_shared<TokenSession>(session_data, this);
+  auto new_session = std::make_shared<oww::state::TokenSession>(session_data);
   const auto token_id = new_session->GetTokenId();
   const auto session_id = new_session->GetSessionId();
 

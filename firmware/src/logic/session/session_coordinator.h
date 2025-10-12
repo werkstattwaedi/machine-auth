@@ -6,9 +6,12 @@
 #include "logic/cloud_request.h"
 #include "nfc/states.h"
 
+namespace oww::state {
+class TokenSession;
+}
+
 namespace oww::logic::session {
 
-class TokenSession;
 class Sessions;
 
 namespace coordinator_state {
@@ -24,7 +27,7 @@ struct AuthenticatingTag {
 
 struct SessionActive {
   std::array<uint8_t, 7> tag_uid;
-  std::shared_ptr<TokenSession> session;
+  std::shared_ptr<oww::state::TokenSession> session;
 };
 
 struct Rejected {
@@ -52,7 +55,7 @@ class SessionCoordinator {
       const oww::nfc::NfcStateMachine::StateHandle& nfc_state);
 
   // Query current session (thread-safe)
-  std::shared_ptr<TokenSession> GetActiveSession() const;
+  std::shared_ptr<oww::state::TokenSession> GetActiveSession() const;
   bool HasActiveSession() const;
 
   // Thread-safe state query (for UI/Application)

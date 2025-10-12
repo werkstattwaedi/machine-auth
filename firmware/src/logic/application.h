@@ -29,7 +29,7 @@ class Application : public state::IApplicationState,
 
   // IApplicationState implementation
   state::SystemStateHandle GetSystemState() const override;
-  state::SessionStateHandle GetSessionState() const override;
+  state::TagStateHandle GetTagState() const override;
   state::MachineStateHandle GetMachineState() const override;
   tl::expected<void, ErrorType> RequestManualCheckOut() override;
   void RequestCancelCurrentOperation() override;

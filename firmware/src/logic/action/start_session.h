@@ -6,8 +6,11 @@
 #include "nfc/nfc_tags.h"
 #include "state/session_creation.h"
 
-namespace oww::logic::session {
+namespace oww::state {
 class TokenSession;
+}
+
+namespace oww::logic::session {
 class Sessions;
 }  // namespace oww::logic::session
 

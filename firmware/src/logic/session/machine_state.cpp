@@ -12,7 +12,7 @@
 #include "logic/cloud_request.h"
 #include "logic/configuration.h"
 #include "session_coordinator.h"
-#include "token_session.h"
+#include "state/token_session.h"
 
 namespace oww::logic::session {
 
@@ -155,7 +155,7 @@ void MachineUsage::UpdateRelaisState() {
 }
 
 tl::expected<void, ErrorType> MachineUsage::CheckIn(
-    std::shared_ptr<TokenSession> session) {
+    std::shared_ptr<oww::state::TokenSession> session) {
   if (!state_machine_->Is<machine_state::Idle>()) {
     logger.warn("CheckIn failed: machine not idle");
     return tl::unexpected(ErrorType::kWrongState);

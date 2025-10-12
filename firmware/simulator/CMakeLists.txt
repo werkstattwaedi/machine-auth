@@ -14,6 +14,9 @@ pkg_check_modules(SDL2_TTF REQUIRED SDL2_ttf)
 # LVGL library path
 set(LVGL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../lib/lvgl)
 
+# Flatbuffers library path (header-only)
+set(FLATBUFFERS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../lib/flatbuffers)
+
 # LVGL sources
 file(GLOB_RECURSE LVGL_SOURCES
   ${LVGL_DIR}/src/*.c
@@ -67,6 +70,7 @@ target_include_directories(simulator PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}
   ${CMAKE_CURRENT_SOURCE_DIR}/../src
   ${LVGL_DIR}
+  ${FLATBUFFERS_DIR}/src
   ${SDL2_INCLUDE_DIRS}
   ${SDL2_TTF_INCLUDE_DIRS}
 )

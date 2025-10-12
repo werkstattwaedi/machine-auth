@@ -71,10 +71,10 @@ state::SystemStateHandle Application::GetSystemState() const {
   }
 }
 
-state::SessionStateHandle Application::GetSessionState() const {
-  // TODO: Proper conversion from session:: to state:: types
-  // For now, return a simple Idle state
-  return std::make_shared<state::SessionState>(state::session::Idle{});
+state::TagStateHandle Application::GetTagState() const {
+  // TODO: Proper conversion from internal to public state types
+  // For now, return NoTag as placeholder
+  return std::make_shared<state::TagState>(state::tag::NoTag{});
 }
 
 state::MachineStateHandle Application::GetMachineState() const {

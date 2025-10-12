@@ -3,7 +3,7 @@
 #include "common/expected.h"
 #include "common/status.h"
 #include "machine_state.h"
-#include "session_state.h"
+#include "tag_state.h"
 #include "system_state.h"
 
 namespace oww::state {
@@ -22,7 +22,7 @@ class IApplicationState {
 
   // State queries (read-only)
   virtual SystemStateHandle GetSystemState() const = 0;
-  virtual SessionStateHandle GetSessionState() const = 0;
+  virtual TagStateHandle GetTagState() const = 0;
   virtual MachineStateHandle GetMachineState() const = 0;
 
   // Actions (UI-initiated state changes)
