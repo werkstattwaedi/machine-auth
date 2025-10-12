@@ -24,6 +24,8 @@ class Sessions {
   std::shared_ptr<oww::state::TokenSession> RegisterSession(
       fbs::TokenSessionT& session_data);
 
+  void RemoveSession(std::array<uint8_t, 7> token_id);
+
  private:
   static Logger logger;
   std::map<std::array<uint8_t, 7>, std::shared_ptr<oww::state::TokenSession>>

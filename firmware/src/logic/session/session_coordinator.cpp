@@ -49,10 +49,15 @@ SessionStateHandle SessionCoordinator::Loop(
     // Tag removed (went back to WaitForTag)
     if (nfc_state.Exited<oww::nfc::Ntag424Authenticated>(*last_nfc_state_)) {
       logger.info("Tag removed");
-      // Return to idle (will trigger session cleanup if needed)
-      if (!state_machine_->Is<coordinator_state::Idle>()) {
+      // Only return to idle if we're NOT in an active session
+      // Active sessions should persist even without the tag being present
+      if (state_machine_->Is<coordinator_state::WaitingForTag>() ||
+          state_machine_->Is<coordinator_state::AuthenticatingTag>() ||
+          state_machine_->Is<coordinator_state::Rejected>()) {
+        // Tag removed during authentication - abort and return to idle
         state_machine_->TransitionTo(coordinator_state::Idle{});
       }
+      // If SessionActive, stay in SessionActive (session persists without tag)
     }
   }
 
@@ -72,6 +77,13 @@ std::shared_ptr<oww::state::TokenSession> SessionCoordinator::GetActiveSession()
 
 bool SessionCoordinator::HasActiveSession() const {
   return state_machine_->Is<coordinator_state::SessionActive>();
+}
+
+void SessionCoordinator::EndSession() {
+  if (state_machine_->Is<coordinator_state::SessionActive>()) {
+    logger.info("Ending session - returning to idle");
+    state_machine_->TransitionTo(coordinator_state::Idle{});
+  }
 }
 
 // ---- State Handlers --------------------------------------------------------

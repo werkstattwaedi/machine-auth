@@ -58,6 +58,9 @@ class SessionCoordinator {
   std::shared_ptr<oww::state::TokenSession> GetActiveSession() const;
   bool HasActiveSession() const;
 
+  // End the current session (called when machine checks out)
+  void EndSession();
+
   // Thread-safe state query (for UI/Application)
   SessionStateHandle GetStateHandle() { return state_machine_->GetStateHandle(); }
 

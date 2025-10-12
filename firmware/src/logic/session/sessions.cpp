@@ -55,6 +55,20 @@ std::shared_ptr<oww::state::TokenSession> Sessions::RegisterSession(
   return new_session;
 }
 
+// Removes a session from the registry.
+// Currently unused - sessions persist in registry for fast re-authentication.
+// Future use cases: session expiration cleanup, explicit logout, memory management.
+void Sessions::RemoveSession(std::array<uint8_t, 7> token_id) {
+  auto it = session_by_token.find(token_id);
+  if (it != session_by_token.end()) {
+    auto session_id = it->second->GetSessionId();
+    session_by_token.erase(it);
+    session_by_id.erase(session_id);
+    logger.info("Removed session for token %s",
+                BytesToHexString(token_id.data(), token_id.size()).c_str());
+  }
+}
+
 void Sessions::HandleSessionEvent(CloudEvent event) {}
 
 }  // namespace oww::logic::session

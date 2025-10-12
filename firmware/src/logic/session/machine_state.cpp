@@ -36,8 +36,9 @@ void MachineUsage::RegisterStateHandlers() {
 
 void MachineUsage::Begin(const fbs::Machine& machine) {
   machine_id_ = machine.id()->str();
+  // Use relative path (no leading /) so it uses application data directory
   usage_history_logfile_path =
-      "/machine_" + machine.id()->str() + "/machine_history.data";
+      "machine_" + machine.id()->str() + "_history.data";
   if (machine.required_permissions()) {
     for (const auto* permission : *machine.required_permissions()) {
       required_permissions_.push_back(permission->str());
@@ -242,6 +243,10 @@ tl::expected<void, ErrorType> MachineUsage::CheckOut(
 
   state_machine_->TransitionTo(machine_state::Idle{});
 
+  // Reset SessionCoordinator to accept new tags
+  // Note: Session stays in Sessions registry for fast re-authentication
+  app_->GetSessionCoordinator().EndSession();
+
   UploadHistory();
 
   return {};
@@ -280,6 +285,10 @@ MachineStateMachine::StateOpt MachineUsage::OnActive(
         UploadHistory();
       }
     }
+
+    // Reset SessionCoordinator to accept new tags
+    // Note: Session stays in Sessions registry for fast re-authentication
+    app_->GetSessionCoordinator().EndSession();
 
     return machine_state::Idle{};
   }

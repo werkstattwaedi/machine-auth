@@ -48,7 +48,7 @@ class MachineUsage {
   StateHandle Loop(const SessionStateHandle& session_state);
 
   // Thread-safe state query (for UI)
-  StateHandle GetState() { return state_machine_->GetStateHandle(); }
+  StateHandle GetState() const { return state_machine_->GetStateHandle(); }
 
   // Manual checkout (UI button)
   tl::expected<void, ErrorType> ManualCheckOut();
