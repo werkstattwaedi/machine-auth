@@ -33,8 +33,8 @@ struct Denied {
 }  // namespace machine_state
 
 using MachineStateMachine =
-    oww::common::StateMachine<machine_state::Idle, machine_state::Active,
-                              machine_state::Denied>;
+    oww::state::StateMachine<machine_state::Idle, machine_state::Active,
+                             machine_state::Denied>;
 using StateHandle = MachineStateMachine::StateHandle;
 
 class MachineUsage {

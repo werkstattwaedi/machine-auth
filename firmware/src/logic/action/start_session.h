@@ -4,7 +4,7 @@
 #include "fbs/token_session_generated.h"
 #include "logic/cloud_request.h"
 #include "nfc/nfc_tags.h"
-#include "state/state_machine.h"
+#include "state/session_creation.h"
 
 namespace oww::logic::session {
 class TokenSession;
@@ -12,43 +12,6 @@ class Sessions;
 }  // namespace oww::logic::session
 
 namespace oww::logic::action {
-
-namespace start_session {
-
-struct Begin {};
-
-struct AwaitStartSessionResponse {
-  const std::shared_ptr<CloudResponse<fbs::StartSessionResponseT>> response;
-};
-
-struct AwaitAuthenticateNewSessionResponse {
-  const std::shared_ptr<CloudResponse<fbs::AuthenticateNewSessionResponseT>>
-      response;
-};
-
-struct AwaitCompleteAuthenticationResponse {
-  const std::shared_ptr<CloudResponse<fbs::CompleteAuthenticationResponseT>>
-      response;
-};
-
-struct Succeeded {
-  std::shared_ptr<oww::logic::session::TokenSession> session;
-};
-
-struct Rejected {
-  std::string message;
-};
-
-struct Failed {
-  const ErrorType error;
-  const String message;
-};
-
-using SessionCreationStateMachine = oww::common::StateMachine<
-    Begin, AwaitStartSessionResponse, AwaitAuthenticateNewSessionResponse,
-    AwaitCompleteAuthenticationResponse, Succeeded, Rejected, Failed>;
-
-}  // namespace start_session
 
 class StartSessionAction : public oww::nfc::NtagAction {
  public:
@@ -61,7 +24,7 @@ class StartSessionAction : public oww::nfc::NtagAction {
   virtual void OnAbort(ErrorType error);
 
   bool IsComplete();
-  start_session::SessionCreationStateMachine::StateHandle GetState() const {
+  state::session_creation::SessionCreationStateHandle GetState() const {
     return state_machine_->GetStateHandle();
   }
 
@@ -77,7 +40,7 @@ class StartSessionAction : public oww::nfc::NtagAction {
   // Ntag interface reference (valid only during Loop())
   Ntag424* ntag_interface_ = nullptr;
 
-  std::shared_ptr<start_session::SessionCreationStateMachine> state_machine_;
+  std::shared_ptr<state::session_creation::SessionCreationStateMachine> state_machine_;
 };
 
 }  // namespace oww::logic::action

@@ -2,7 +2,7 @@
 
 #include "common.h"
 
-namespace oww::logic {
+namespace oww::state {
 
 struct Pending {};
 
@@ -19,4 +19,4 @@ bool IsPending(const CloudResponse<TResponse>& response) {
   return std::holds_alternative<Pending>(response);
 }
 
-}  // namespace oww::logic
+}  // namespace oww::state

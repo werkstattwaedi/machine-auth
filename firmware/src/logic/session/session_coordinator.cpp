@@ -132,7 +132,7 @@ SessionStateMachine::StateOpt SessionCoordinator::OnAuthenticatingTag(
   auto action_state = state.action->GetState();
 
   if (auto* succeeded =
-          action_state.Get<action::start_session::Succeeded>()) {
+          action_state.Get<oww::state::session_creation::Succeeded>()) {
     logger.info("Authentication succeeded for user: %s",
                 succeeded->session->GetUserLabel().c_str());
     return coordinator_state::SessionActive{.tag_uid = state.tag_uid,
@@ -140,14 +140,14 @@ SessionStateMachine::StateOpt SessionCoordinator::OnAuthenticatingTag(
   }
 
   if (auto* rejected =
-          action_state.Get<action::start_session::Rejected>()) {
+          action_state.Get<oww::state::session_creation::Rejected>()) {
     logger.warn("Authentication rejected: %s", rejected->message.c_str());
     return coordinator_state::Rejected{.message = rejected->message,
                                        .time = timeUtc()};
   }
 
   if (auto* failed =
-          action_state.Get<action::start_session::Failed>()) {
+          action_state.Get<oww::state::session_creation::Failed>()) {
     logger.error("Authentication failed: %s", failed->message.c_str());
     return coordinator_state::Rejected{.message = "Authentication failed",
                                        .time = timeUtc()};

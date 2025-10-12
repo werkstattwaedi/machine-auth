@@ -34,7 +34,7 @@ struct Rejected {
 
 }  // namespace coordinator_state
 
-using SessionStateMachine = oww::common::StateMachine<
+using SessionStateMachine = oww::state::StateMachine<
     coordinator_state::Idle, coordinator_state::WaitingForTag,
     coordinator_state::AuthenticatingTag, coordinator_state::SessionActive,
     coordinator_state::Rejected>;

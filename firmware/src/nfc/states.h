@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common.h"
+#include "state/state_machine.h"
 #include "nfc/driver/PN532.h"
 
 namespace oww::nfc {
@@ -38,7 +39,7 @@ struct TagError {
   int32_t error_count = 0;
 };
 
-using NfcStateMachine = oww::common::StateMachine<
+using NfcStateMachine = oww::state::StateMachine<
     oww::nfc::WaitForTag, oww::nfc::TagPresent, oww::nfc::UnsupportedTag,
     oww::nfc::Ntag424Unauthenticated, oww::nfc::Ntag424Authenticated,
     oww::nfc::TagError>;

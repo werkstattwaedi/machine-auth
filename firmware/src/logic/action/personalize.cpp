@@ -63,7 +63,7 @@ OnAwaitKeyDiversificationResponse(
     AwaitKeyDiversificationResponse& response_holder,
     std::array<uint8_t, 16> terminal_key) {
   auto cloud_response = response_holder.response.get();
-  if (IsPending(*cloud_response)) {
+  if (state::IsPending(*cloud_response)) {
     return nullptr;
   }
 

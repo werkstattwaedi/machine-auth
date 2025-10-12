@@ -17,7 +17,7 @@ namespace personalize {
 struct Begin {};
 
 struct AwaitKeyDiversificationResponse {
-  std::shared_ptr<CloudResponse<fbs::KeyDiversificationResponseT>> response;
+  std::shared_ptr<state::CloudResponse<fbs::KeyDiversificationResponseT>> response;
 };
 
 struct DoPersonalizeTag {

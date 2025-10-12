@@ -11,7 +11,7 @@ namespace oww::logic::action {
 
 Logger logger("app.logic.action.start_session");
 
-using namespace oww::logic::action::start_session;
+using namespace oww::state::session_creation;
 using namespace oww::logic::session;
 using namespace config::tag;
 using namespace fbs;
@@ -43,7 +43,7 @@ SessionCreationStateMachine::StateOpt OnAwaitStartSession(
     AwaitStartSessionResponse& state, std::array<uint8_t, 7> tag_uid,
     Sessions& sessions, CloudRequest& cloud_request, Ntag424& ntag_interface) {
   auto cloud_response = state.response.get();
-  if (IsPending(*cloud_response)) {
+  if (state::IsPending(*cloud_response)) {
     return std::nullopt;  // Stay in current state
   }
 
@@ -81,9 +81,9 @@ SessionCreationStateMachine::StateOpt OnAwaitStartSession(
         }
 
         return Failed{.error = ErrorType::kNtagFailed,
-                      .message = String::format(
+                      .message = std::string(String::format(
                           "AuthenticateWithCloud_Begin failed [dna:%d]",
-                          auth_challenge.error())};
+                          auth_challenge.error()).c_str())};
       }
 
       AuthenticateNewSessionRequestT request;
@@ -109,8 +109,8 @@ SessionCreationStateMachine::StateOpt OnAwaitStartSession(
       // ---- MALFORMED RESPONSE ----------------------------------------------
       return Failed{
           .error = ErrorType::kMalformedResponse,
-          .message = String::format("Unknown StartSessionResult type %d",
-                                    start_session_response->result.type)};
+          .message = std::string(String::format("Unknown StartSessionResult type %d",
+                                    start_session_response->result.type).c_str())};
     }
   }
 }
@@ -119,7 +119,7 @@ SessionCreationStateMachine::StateOpt OnAwaitAuthenticateNewSession(
     AwaitAuthenticateNewSessionResponse& state, CloudRequest& cloud_request,
     Ntag424& ntag_interface) {
   auto cloud_response = state.response.get();
-  if (IsPending(*cloud_response)) {
+  if (state::IsPending(*cloud_response)) {
     return std::nullopt;  // Stay in current state
   }
 
@@ -142,8 +142,8 @@ SessionCreationStateMachine::StateOpt OnAwaitAuthenticateNewSession(
   if (!encrypted_response) {
     return Failed{
         .error = ErrorType::kNtagFailed,
-        .message = String::format("AuthenticateWithCloud_Part2 failed [dna:%d]",
-                                  encrypted_response.error())};
+        .message = std::string(String::format("AuthenticateWithCloud_Part2 failed [dna:%d]",
+                                  encrypted_response.error()).c_str())};
   }
 
   CompleteAuthenticationRequestT request;
@@ -163,7 +163,7 @@ SessionCreationStateMachine::StateOpt OnAwaitAuthenticateNewSession(
 SessionCreationStateMachine::StateOpt OnAwaitCompleteAuthentication(
     AwaitCompleteAuthenticationResponse& state, Sessions& sessions) {
   auto cloud_response = state.response.get();
-  if (IsPending(*cloud_response)) {
+  if (state::IsPending(*cloud_response)) {
     return std::nullopt;  // Stay in current state
   }
 

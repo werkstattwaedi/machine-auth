@@ -6,7 +6,7 @@
 
 #include "common.h"
 
-namespace oww::common {
+namespace oww::state {
 
 template <typename... States>
 class StateMachine;
@@ -95,8 +95,8 @@ class StateMachine
   friend class StateHandle<States...>;
   using State = std::variant<States...>;
   using StateOpt = std::optional<State>;
-  using Query = oww::common::StateQuery<States...>;
-  using StateHandle = oww::common::StateHandle<States...>;
+  using Query = oww::state::StateQuery<States...>;
+  using StateHandle = oww::state::StateHandle<States...>;
 
   template <typename T>
   using LoopFn = std::function<StateOpt(T&)>;
@@ -190,4 +190,4 @@ class StateMachine
   std::tuple<LoopFn<States>...> loop_handlers_;
 };
 
-}  // namespace oww::common
+}  // namespace oww::state

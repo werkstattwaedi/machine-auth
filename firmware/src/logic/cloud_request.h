@@ -4,8 +4,8 @@
 #include <type_traits>
 
 #include "Base64RK.h"
-#include "cloud_response.h"
 #include "common.h"
+#include "state/cloud_response.h"
 #include "flatbuffers/flatbuffers.h"
 namespace oww::logic {
 
@@ -25,7 +25,7 @@ class CloudRequest {
    * failure of the request.
    */
   template <typename TRequest, typename TResponse>
-  std::shared_ptr<CloudResponse<TResponse>> SendTerminalRequest(
+  std::shared_ptr<state::CloudResponse<TResponse>> SendTerminalRequest(
       String command, const TRequest& payload,
       system_tick_t timeout_ms = CONCURRENT_WAIT_FOREVER);
 
@@ -53,7 +53,7 @@ class CloudRequest {
 };
 
 template <typename TRequest, typename TResponse>
-std::shared_ptr<CloudResponse<TResponse>> CloudRequest::SendTerminalRequest(
+std::shared_ptr<state::CloudResponse<TResponse>> CloudRequest::SendTerminalRequest(
     String command, const TRequest& payload, system_tick_t timeout_ms) {
   static_assert(
       std::is_class<TRequest>::value &&
@@ -74,7 +74,7 @@ std::shared_ptr<CloudResponse<TResponse>> CloudRequest::SendTerminalRequest(
 
   // Create the response container specific to this request's TResponse type
   auto response_container =
-      std::make_shared<CloudResponse<TResponse>>(Pending{});
+      std::make_shared<state::CloudResponse<TResponse>>(state::Pending{});
 
   String request_id = String::format("req-%d", request_counter_++);
 
