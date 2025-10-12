@@ -49,6 +49,7 @@ set(SHARED_UI_SOURCES
 set(SIMULATOR_SOURCES
   main.cpp
   hal/simulator_hardware.cpp
+  hal/time.cpp
   mock/mock_application.cpp
 )
 

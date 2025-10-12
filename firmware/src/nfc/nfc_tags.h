@@ -1,7 +1,7 @@
 #pragma once
 
 #include "common.h"
-#include "common/state_machine.h"
+#include "state/state_machine.h"
 #include "driver/Ntag424.h"
 #include "driver/PN532.h"
 #include "nfc/states.h"

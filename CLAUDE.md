@@ -226,7 +226,7 @@ All payloads are base64-encoded flatbuffers defined in `schema/*.fbs`
 
 #### State Management
 
-The codebase uses a custom variant-based state machine template (`common/state_machine.h`) for managing complex state.
+The codebase uses a custom variant-based state machine template (`state/state_machine.h`) for managing complex state.
 
 **State Machine Pattern:**
 
@@ -378,7 +378,6 @@ led_positions_[2] = {x, y, size};
 ```
 firmware/src/
 ├── common/              # Shared utilities and base includes
-│   ├── state_machine.h  # Generic variant-based state machine template
 │   ├── expected.h       # tl::expected for error handling
 │   ├── status.h         # ErrorType and Status enums
 │   ├── time.h/cpp       # std::chrono wrappers for Particle time APIs
@@ -394,8 +393,11 @@ firmware/src/
 │   └── session/                 # Session and usage tracking
 │       ├── sessions.*           # Session registry and management
 │       └── token_session.*      # Individual session data
-├── state/               # Top-level state management
-│   └── machine_state.*  # Machine state machine (Idle/Active/Denied)
+├── state/               # Public state types and state machine framework
+│   ├── state_machine.h  # Generic variant-based state machine template
+│   ├── session_state.*  # Session state types
+│   ├── machine_state.*  # Machine state types
+│   └── system_state.*   # System state types
 ├── nfc/                 # NFC hardware abstraction
 │   ├── nfc_tags.*       # NFC worker thread, tag state machine
 │   └── driver/          # Low-level NFC hardware drivers

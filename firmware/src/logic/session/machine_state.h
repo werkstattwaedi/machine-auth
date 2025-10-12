@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "common.h"
-#include "common/state_machine.h"
+#include "state/state_machine.h"
 #include "fbs/ledger_terminal-config_generated.h"
 #include "fbs/machine_usage_generated.h"
 #include "fbs/token_session_generated.h"

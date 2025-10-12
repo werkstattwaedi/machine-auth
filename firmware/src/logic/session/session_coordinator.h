@@ -1,7 +1,7 @@
 #pragma once
 
 #include "common.h"
-#include "common/state_machine.h"
+#include "state/state_machine.h"
 #include "logic/action/start_session.h"
 #include "logic/cloud_request.h"
 #include "nfc/states.h"

@@ -18,14 +18,13 @@ using namespace fbs;
 using namespace oww::nfc;
 using oww::logic::CloudRequest;
 
-tl::expected<std::shared_ptr<InternalState>, ErrorType> OnBegin(
-    std::array<uint8_t, 7> tag_uid, Sessions& sessions,
+SessionCreationStateMachine::StateOpt OnBegin(
+    Begin& state, std::array<uint8_t, 7> tag_uid, Sessions& sessions,
     CloudRequest& cloud_request) {
   auto existing_session = sessions.GetSessionForToken(tag_uid);
 
   if (existing_session) {
-    return std::make_shared<InternalState>(
-        Succeeded{.session = existing_session});
+    return Succeeded{.session = existing_session};
   }
 
   StartSessionRequestT request;
@@ -37,22 +36,22 @@ tl::expected<std::shared_ptr<InternalState>, ErrorType> OnBegin(
           .SendTerminalRequest<StartSessionRequestT, StartSessionResponseT>(
               "startSession", request);
 
-  return std::make_shared<InternalState>(
-      AwaitStartSessionResponse{.response = response});
+  return AwaitStartSessionResponse{.response = response};
 }
 
-tl::expected<std::shared_ptr<InternalState>, ErrorType> OnStartSessionResponse(
-    AwaitStartSessionResponse& response_holder, std::array<uint8_t, 7> tag_uid,
+SessionCreationStateMachine::StateOpt OnAwaitStartSession(
+    AwaitStartSessionResponse& state, std::array<uint8_t, 7> tag_uid,
     Sessions& sessions, CloudRequest& cloud_request, Ntag424& ntag_interface) {
-  auto cloud_response = response_holder.response.get();
+  auto cloud_response = state.response.get();
   if (IsPending(*cloud_response)) {
-    return nullptr;
+    return std::nullopt;  // Stay in current state
   }
 
   auto start_session_response =
       std::get_if<StartSessionResponseT>(cloud_response);
   if (!start_session_response) {
-    return tl::unexpected(std::get<ErrorType>(*cloud_response));
+    return Failed{.error = std::get<ErrorType>(*cloud_response),
+                  .message = "Cloud request failed"};
   }
 
   switch (start_session_response->result.type) {
@@ -60,12 +59,12 @@ tl::expected<std::shared_ptr<InternalState>, ErrorType> OnStartSessionResponse(
       // ---- EXISTING SESSION ------------------------------------------------
       auto token_session_data = start_session_response->result.AsTokenSession();
       if (!token_session_data) {
-        return tl::unexpected(ErrorType::kMalformedResponse);
+        return Failed{.error = ErrorType::kMalformedResponse,
+                      .message = "Missing TokenSession"};
       }
 
       auto existing_session = sessions.RegisterSession(*token_session_data);
-      return std::make_shared<InternalState>(
-          Succeeded{.session = existing_session});
+      return Succeeded{.session = existing_session};
     }
     case StartSessionResult::AuthRequired: {
       // ---- AUTH REQUIRED ---------------------------------------------------
@@ -78,12 +77,13 @@ tl::expected<std::shared_ptr<InternalState>, ErrorType> OnStartSessionResponse(
         if (auth_challenge.error() ==
             Ntag424::DNA_StatusCode::AUTHENTICATION_DELAY) {
           // Need to retry until successful
-          return nullptr;
+          return std::nullopt;
         }
 
-        logger.error(String::format("AuthenticateWithCloud_Begin failed [dna:%d]",
-                                    auth_challenge.error()));
-        return tl::unexpected(ErrorType::kNtagFailed);
+        return Failed{.error = ErrorType::kNtagFailed,
+                      .message = String::format(
+                          "AuthenticateWithCloud_Begin failed [dna:%d]",
+                          auth_challenge.error())};
       }
 
       AuthenticateNewSessionRequestT request;
@@ -93,42 +93,41 @@ tl::expected<std::shared_ptr<InternalState>, ErrorType> OnStartSessionResponse(
                                     auth_challenge->end());
 
       auto response =
-          cloud_request.SendTerminalRequest<AuthenticateNewSessionRequestT,
-                                            AuthenticateNewSessionResponseT>(
-              "authenticateNewSession", request);
+          cloud_request
+              .SendTerminalRequest<AuthenticateNewSessionRequestT,
+                                   AuthenticateNewSessionResponseT>(
+                  "authenticateNewSession", request);
 
-      return std::make_shared<InternalState>(
-          AwaitAuthenticateNewSessionResponse{.response = response});
+      return AwaitAuthenticateNewSessionResponse{.response = response};
     }
     case StartSessionResult::Rejected: {
       // ---- REJECTED --------------------------------------------------------
-
-      return std::make_shared<InternalState>(Rejected{
-          .message = start_session_response->result.AsRejected()->message});
+      return Rejected{
+          .message = start_session_response->result.AsRejected()->message};
     }
     default: {
       // ---- MALFORMED RESPONSE ----------------------------------------------
-      logger.error(String::format("Unknown StartSessionResult type %d",
-                                  start_session_response->result.type));
-      return tl::unexpected(ErrorType::kMalformedResponse);
+      return Failed{
+          .error = ErrorType::kMalformedResponse,
+          .message = String::format("Unknown StartSessionResult type %d",
+                                    start_session_response->result.type)};
     }
   }
 }
 
-tl::expected<std::shared_ptr<InternalState>, ErrorType>
-OnAuthenticateNewSessionResponse(
-    AwaitAuthenticateNewSessionResponse& response_holder,
-
-    CloudRequest& cloud_request, Ntag424& ntag_interface) {
-  auto cloud_response = response_holder.response.get();
+SessionCreationStateMachine::StateOpt OnAwaitAuthenticateNewSession(
+    AwaitAuthenticateNewSessionResponse& state, CloudRequest& cloud_request,
+    Ntag424& ntag_interface) {
+  auto cloud_response = state.response.get();
   if (IsPending(*cloud_response)) {
-    return nullptr;
+    return std::nullopt;  // Stay in current state
   }
 
   auto auth_new_session_response =
       std::get_if<AuthenticateNewSessionResponseT>(cloud_response);
   if (!auth_new_session_response) {
-    return tl::unexpected(std::get<ErrorType>(*cloud_response));
+    return Failed{.error = std::get<ErrorType>(*cloud_response),
+                  .message = "Cloud request failed"};
   }
 
   auto cloud_challenge = auth_new_session_response->cloud_challenge;
@@ -141,9 +140,10 @@ OnAuthenticateNewSessionResponse(
       ntag_interface.AuthenticateWithCloud_Part2(challenge_array);
 
   if (!encrypted_response) {
-    logger.error(String::format("AuthenticateWithCloud_Part2 failed [dna:%d]",
-                                encrypted_response.error()));
-    return tl::unexpected(ErrorType::kNtagFailed);
+    return Failed{
+        .error = ErrorType::kNtagFailed,
+        .message = String::format("AuthenticateWithCloud_Part2 failed [dna:%d]",
+                                  encrypted_response.error())};
   }
 
   CompleteAuthenticationRequestT request;
@@ -152,26 +152,26 @@ OnAuthenticateNewSessionResponse(
                                          encrypted_response->end());
 
   auto response =
-      cloud_request.SendTerminalRequest<CompleteAuthenticationRequestT,
-                                        CompleteAuthenticationResponseT>(
-          "completeAuthentication", request);
+      cloud_request
+          .SendTerminalRequest<CompleteAuthenticationRequestT,
+                               CompleteAuthenticationResponseT>(
+              "completeAuthentication", request);
 
-  return std::make_shared<InternalState>(
-      AwaitCompleteAuthenticationResponse{.response = response});
+  return AwaitCompleteAuthenticationResponse{.response = response};
 }
 
-tl::expected<std::shared_ptr<InternalState>, ErrorType>
-OnCompleteAuthenticationResponse(
-    AwaitCompleteAuthenticationResponse& response_holder, Sessions& sessions) {
-  auto cloud_response = response_holder.response.get();
+SessionCreationStateMachine::StateOpt OnAwaitCompleteAuthentication(
+    AwaitCompleteAuthenticationResponse& state, Sessions& sessions) {
+  auto cloud_response = state.response.get();
   if (IsPending(*cloud_response)) {
-    return nullptr;
+    return std::nullopt;  // Stay in current state
   }
 
   auto complete_auth_response =
       std::get_if<CompleteAuthenticationResponseT>(cloud_response);
   if (!complete_auth_response) {
-    return tl::unexpected(std::get<ErrorType>(*cloud_response));
+    return Failed{.error = std::get<ErrorType>(*cloud_response),
+                  .message = "Cloud request failed"};
   }
 
   switch (complete_auth_response->result.type) {
@@ -181,23 +181,24 @@ OnCompleteAuthenticationResponse(
 
       if (!token_session_data) {
         logger.error("CompleteAuthenticationResult is missing TokenSession");
-        return tl::unexpected(ErrorType::kMalformedResponse);
+        return Failed{.error = ErrorType::kMalformedResponse,
+                      .message = "Missing TokenSession"};
       }
 
       auto new_session = sessions.RegisterSession(*token_session_data);
-      return std::make_shared<InternalState>(Succeeded{.session = new_session});
+      return Succeeded{.session = new_session};
     }
     case CompleteAuthenticationResult::Rejected: {
       // ---- REJECTED --------------------------------------------------------
-
-      return std::make_shared<InternalState>(Rejected{
-          .message = complete_auth_response->result.AsRejected()->message});
+      return Rejected{
+          .message = complete_auth_response->result.AsRejected()->message};
     }
     default: {
       // ---- MALFORMED RESPONSE ----------------------------------------------
       logger.error(String::format("Unknown CompleteAuthenticationResult type %d",
                                   complete_auth_response->result.type));
-      return tl::unexpected(ErrorType::kMalformedResponse);
+      return Failed{.error = ErrorType::kMalformedResponse,
+                    .message = "Unknown CompleteAuthenticationResult type"};
     }
   }
 }
@@ -208,52 +209,57 @@ StartSessionAction::StartSessionAction(
     std::array<uint8_t, 7> tag_uid, std::weak_ptr<CloudRequest> cloud_request,
     std::weak_ptr<Sessions> sessions)
     : tag_uid_(tag_uid),
-      cloud_request_(cloud_request),
-      sessions_(sessions),
-      state_(std::make_shared<InternalState>(Begin{})) {}
+      cloud_request_(cloud_request.lock()),
+      sessions_(sessions.lock()),
+      state_machine_(SessionCreationStateMachine::Create(
+          std::in_place_type<Begin>)) {
+  // TODO: Replace with proper assert macro that logs and crashes
+  if (!cloud_request_ || !sessions_) {
+    logger.error("FATAL: StartSessionAction created with null dependencies");
+    delay(100);  // Let log flush
+    System.reset();
+  }
+
+  RegisterStateHandlers();
+}
+
+void StartSessionAction::RegisterStateHandlers() {
+  state_machine_->OnLoop<Begin>([this](auto& s) {
+    return OnBegin(s, tag_uid_, *sessions_, *cloud_request_);
+  });
+
+  state_machine_->OnLoop<AwaitStartSessionResponse>([this](auto& s) {
+    return OnAwaitStartSession(s, tag_uid_, *sessions_, *cloud_request_,
+                               *ntag_interface_);
+  });
+
+  state_machine_->OnLoop<AwaitAuthenticateNewSessionResponse>([this](auto& s) {
+    return OnAwaitAuthenticateNewSession(s, *cloud_request_, *ntag_interface_);
+  });
+
+  state_machine_->OnLoop<AwaitCompleteAuthenticationResponse>([this](auto& s) {
+    return OnAwaitCompleteAuthentication(s, *sessions_);
+  });
+}
 
 NtagAction::Continuation StartSessionAction::Loop(Ntag424& ntag_interface) {
-  auto sessions = sessions_.lock();
-  auto cloud_request = cloud_request_.lock();
+  // Store ntag interface for state handlers to access
+  ntag_interface_ = &ntag_interface;
 
-  tl::expected<std::shared_ptr<InternalState>, ErrorType> result;
-
-  if (std::get_if<Begin>(state_.get())) {
-    result = OnBegin(tag_uid_, *sessions, *cloud_request);
-  } else if (auto nested =
-                 std::get_if<AwaitStartSessionResponse>(state_.get())) {
-    result = OnStartSessionResponse(*nested, tag_uid_, *sessions,
-                                    *cloud_request, ntag_interface);
-  } else if (auto nested = std::get_if<AwaitAuthenticateNewSessionResponse>(
-                 state_.get())) {
-    result = OnAuthenticateNewSessionResponse(*nested, *cloud_request,
-                                              ntag_interface);
-  } else if (auto nested = std::get_if<AwaitCompleteAuthenticationResponse>(
-                 state_.get())) {
-    result = OnCompleteAuthenticationResponse(*nested, *sessions);
-  }
-
-  if (!result) {
-    state_ = std::make_shared<InternalState>(Failed{.error = result.error()});
-  } else if (auto new_state = (*result)) {
-    state_ = new_state;
-  }
+  // Run state machine
+  state_machine_->Loop();
 
   return IsComplete() ? Continuation::Done : Continuation::Continue;
 }
 
 bool StartSessionAction::IsComplete() {
-  return std::visit(
-      [](auto&& arg) {
-        using T = std::decay_t<decltype(arg)>;
-        return std::is_same_v<T, Succeeded> || std::is_same_v<T, Rejected> ||
-               std::is_same_v<T, Failed>;
-      },
-      *state_);
+  return state_machine_->Is<Succeeded>() ||
+         state_machine_->Is<Rejected>() ||
+         state_machine_->Is<Failed>();
 }
 
 void StartSessionAction::OnAbort(ErrorType error) {
-  state_ = std::make_shared<InternalState>(
+  state_machine_->TransitionTo(
       Failed{.error = error, .message = "Ntag transaction aborted"});
 }
 
