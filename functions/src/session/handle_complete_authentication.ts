@@ -52,14 +52,8 @@ export async function handleCompleteAuthentication(
       throw new Error(`Invalid session data: ${sessionId}`);
     }
 
-    const userId = sessionData.userId.id;
-
     // Get user data
-    const userDoc = await admin
-      .firestore()
-      .collection("users")
-      .doc(userId)
-      .get();
+    const userDoc = await sessionData.userId.get();
 
     if (!userDoc.exists) {
       const rejected = new RejectedT();
@@ -109,7 +103,7 @@ export async function handleCompleteAuthentication(
     // Extract permission IDs from DocumentReferences
     // Permissions are stored as DocumentReferences in Firestore
     // We extract just the ID for the flatbuffer response
-    tokenSession.permissions = userData.permissions.map(p => p.id);
+    tokenSession.permissions = userData.permissions.map((p) => p.id);
 
     const response = new CompleteAuthenticationResponseT();
     response.resultType = CompleteAuthenticationResult.TokenSession;

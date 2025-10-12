@@ -147,8 +147,9 @@ describe("handleAuthenticateNewSession (Integration)", () => {
 
       expect(sessionDoc.exists).to.be.true;
       const sessionData = sessionDoc.data();
-      expect(sessionData?.userId).to.equal(`/users/${TEST_USER_ID}`);
-      expect(sessionData?.tokenId).to.equal(`/tokens/${TEST_TOKEN_ID}`);
+      // Verify DocumentReferences
+      expect(sessionData?.userId.path).to.equal(`users/${TEST_USER_ID}`);
+      expect(sessionData?.tokenId.path).to.equal(`tokens/${TEST_TOKEN_ID}`);
       expect(sessionData?.rndA).to.exist; // Stored as Uint8Array
       expect(sessionData?.usage).to.deep.equal([]);
       expect(sessionData?.closed).to.be.undefined;
@@ -182,9 +183,9 @@ describe("handleAuthenticateNewSession (Integration)", () => {
       const sessionDoc = await db.collection("sessions").doc(sessionId).get();
       const sessionData = sessionDoc.data();
 
-      // Verify it uses the new /tokens/ format, not the old /users/.../token/ format
-      expect(sessionData?.tokenId).to.equal(`/tokens/${TEST_TOKEN_ID}`);
-      expect(sessionData?.tokenId).to.not.include("/users/");
+      // Verify it's a DocumentReference to tokens collection
+      expect(sessionData?.tokenId.path).to.equal(`tokens/${TEST_TOKEN_ID}`);
+      expect(sessionData?.tokenId.path).to.not.include("/users/");
     });
   });
 });

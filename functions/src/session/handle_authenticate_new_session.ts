@@ -52,12 +52,11 @@ export async function handleAuthenticateNewSession(
   }
 
   // Get the user ID from the userId DocumentReference
-  const userId = tokenData.userId.id;
+  const userDoc = await tokenData.userId.get();
 
   // Verify the user exists and get their data
-  const userDoc = await admin.firestore().collection("users").doc(userId).get();
   if (!userDoc.exists) {
-    throw new Error(`User ${userId} not found`);
+    throw new Error(`User ${tokenData.userId} not found`);
   }
 
   // Generate authorization key
@@ -76,18 +75,14 @@ export async function handleAuthenticateNewSession(
 
   // Create new session according to schema
   const sessionId = admin.firestore().collection("sessions").doc().id;
-  await admin
-    .firestore()
-    .collection("sessions")
-    .doc(sessionId)
-    .set({
-      userId: `/users/${userId}`,
-      startTime: Timestamp.now(),
-      rndA: challengeResponse.cloudChallenge, // Store as byte array directly
-      tokenId: `/tokens/${tokenIdHex}`,
-      usage: [], // Empty array for usage records
-      // No 'closed' field - will be added when session is closed
-    });
+  await admin.firestore().collection("sessions").doc(sessionId).set({
+    userId: userDoc.ref,
+    startTime: Timestamp.now(),
+    rndA: challengeResponse.cloudChallenge, // Store as byte array directly
+    tokenId: tokenDoc.ref,
+    usage: [], // Empty array for usage records
+    // No 'closed' field - will be added when session is closed
+  });
 
   // Return response with session ID and cloud challenge
   const response = new AuthenticateNewSessionResponseT();

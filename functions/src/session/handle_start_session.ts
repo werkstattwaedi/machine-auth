@@ -12,7 +12,11 @@ import {
   isSessionExpired,
   calculateSessionExpiration,
 } from "../util/session_expiration";
-import { TokenEntity, UserEntity, SessionEntity } from "../types/firestore_entities";
+import {
+  TokenEntity,
+  UserEntity,
+  SessionEntity,
+} from "../types/firestore_entities";
 
 export async function handleStartSession(
   request: StartSessionRequestT,
@@ -33,7 +37,7 @@ export async function handleStartSession(
   logger.info("Looking up token", {
     tokenIdHex,
     uidBytes: Array.from(uid),
-    uidLength: uid.length
+    uidLength: uid.length,
   });
 
   // Check if user exists and has valid permissions
@@ -48,7 +52,7 @@ export async function handleStartSession(
     if (!tokenDoc.exists) {
       logger.warn("Token not found in database", {
         tokenId: tokenIdHex,
-        searchedPath: `tokens/${tokenIdHex}`
+        searchedPath: `tokens/${tokenIdHex}`,
       });
       const rejected = new RejectedT();
       rejected.message = "Token not registered";
@@ -76,27 +80,18 @@ export async function handleStartSession(
       return response;
     }
 
-    // Get the user ID from the userId DocumentReference
-    const userId = tokenData.userId.id;
-
     // Get user data
-    const userDoc = await admin
-      .firestore()
-      .collection("users")
-      .doc(userId)
-      .get();
+    const userDoc = await tokenData.userId.get();
     if (!userDoc.exists) {
-      throw new Error(`User ${userId} not found`);
+      throw new Error(`User ${tokenData.userId} not found`);
     }
     const userData = userDoc.data() as UserEntity;
 
     // Check for existing non-closed session (most recent first)
-    // Use DocumentReference for query to match how it's stored in Firestore
-    const tokenIdDocRef = admin.firestore().doc(`tokens/${tokenIdHex}`);
     const existingSessionQuery = await admin
       .firestore()
       .collection("sessions")
-      .where("tokenId", "==", tokenIdDocRef)
+      .where("tokenId", "==", tokenDoc.ref)
       .where("closed", "==", null) // Only get non-closed sessions
       .orderBy("startTime", "desc") // Get the most recent first
       .limit(1)
@@ -115,11 +110,11 @@ export async function handleStartSession(
         tokenSession.tokenId = request.tokenId;
         tokenSession.sessionId = sessionDoc.id;
         tokenSession.expiration = BigInt(expiration.seconds);
-        tokenSession.userId = userId;
+        tokenSession.userId = userDoc.id;
         tokenSession.userLabel = userData.displayName || "Unknown User";
 
         // Extract permission IDs from DocumentReferences
-        tokenSession.permissions = userData.permissions.map(p => p.id);
+        tokenSession.permissions = userData.permissions.map((p) => p.id);
 
         const response = new StartSessionResponseT();
         response.resultType = StartSessionResult.TokenSession;
@@ -129,7 +124,7 @@ export async function handleStartSession(
     }
 
     // User exists but needs authentication - return AuthRequired
-    logger.info("User found, authentication required", { userId });
+    logger.info("User found, authentication required", { id: userDoc.id });
     const authRequired = new AuthRequiredT();
 
     const response = new StartSessionResponseT();
