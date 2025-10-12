@@ -40,15 +40,14 @@ class Application : public state::IApplicationState,
   bool tryLock() { return os_mutex_trylock(mutex_); };
   void unlock() { os_mutex_unlock(mutex_); };
 
-  void SetBootProgress(std::string message);
+  void SetBootProgress(state::system::BootPhase phase);
   void BootCompleted();
   bool IsBootCompleted();
-  std::string GetBootProgress();
 
  private:
   static Logger logger;
 
-  std::string boot_progress_;
+  std::optional<state::system::BootPhase> boot_phase_;
 
   std::unique_ptr<Configuration> configuration_;
 

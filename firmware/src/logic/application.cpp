@@ -10,7 +10,7 @@ namespace oww::logic {
 Logger Application::logger("app.logic.application");
 
 Application::Application(std::unique_ptr<Configuration> configuration)
-    : boot_progress_("Starte..."),
+    : boot_phase_(oww::state::system::BootPhase::Bootstrap),
       configuration_(std::move(configuration)),
       cloud_request_(std::make_shared<CloudRequest>()),
       sessions_(std::make_shared<session::Sessions>()),
@@ -61,13 +61,12 @@ void Application::Loop() {
 
 // IApplicationState implementation
 state::SystemStateHandle Application::GetSystemState() const {
-  // TODO: Implement proper system state tracking
-  // For now, return Ready if boot is complete
-  if (boot_progress_.empty()) {
+  // Return Ready if boot is complete
+  if (!boot_phase_.has_value()) {
     return std::make_shared<state::SystemState>(state::system::Ready{});
   } else {
     return std::make_shared<state::SystemState>(
-        state::system::Booting{boot_progress_});
+        state::system::Booting{boot_phase_.value()});
   }
 }
 
@@ -81,7 +80,8 @@ state::MachineStateHandle Application::GetMachineState() const {
   // Get internal machine state from MachineUsage
   auto internal_state = machine_usage_.GetState();
 
-  // Convert internal state (with TokenSession pointer) to public state (with strings)
+  // Convert internal state (with TokenSession pointer) to public state (with
+  // strings)
   if (internal_state.Is<session::machine_state::Idle>()) {
     return std::make_shared<state::MachineState>(state::machine::Idle{});
   }
@@ -121,12 +121,11 @@ void Application::RequestCancelCurrentOperation() {
   // TODO: Implement cancel operation
 }
 
-void Application::SetBootProgress(std::string message) {
-  boot_progress_ = message;
-  logger.info("Boot progress: %s", boot_progress_.c_str());
+void Application::SetBootProgress(state::system::BootPhase phase) {
+  boot_phase_ = phase;
+  logger.info("Boot phase: %d", static_cast<uint8_t>(phase));
 }
-void Application::BootCompleted() { boot_progress_.clear(); }
-bool Application::IsBootCompleted() { return boot_progress_.empty(); }
-std::string Application::GetBootProgress() { return boot_progress_; }
+void Application::BootCompleted() { boot_phase_.reset(); }
+bool Application::IsBootCompleted() { return !boot_phase_.has_value(); }
 
 }  // namespace oww::logic

@@ -124,6 +124,14 @@ Find the Particle API here: #fetch https://docs.particle.io/reference/device-os/
 - ✅ `std::chrono::time_point`, `std::chrono::seconds` → ❌ `millis()`, `system_tick_t` (except at boundaries)
 - ✅ Fixed-width types: `uint8_t`, `int16_t`, etc. → ❌ `int`, `long`
 
+**CRITICAL - Timing Functions:**
+- ✅ **`timeSinceBoot()`** from `common/time.h` - returns monotonic time since device boot
+- ✅ **`timeUtc()`** from `common/time.h` - returns current UTC time
+- ❌ **NEVER use `std::chrono::steady_clock::now()`** - not available in Particle Device OS linker
+- ❌ **NEVER use `std::chrono::system_clock::now()`** - use `timeUtc()` instead
+
+**Rationale:** Particle Device OS does not provide the standard C++ `steady_clock` or `system_clock` implementations. Always use the wrapper functions from `common/time.h` which properly interface with the Particle time APIs.
+
 **Note:** The codebase is not fully migrated yet - work towards these patterns when touching code.
 
 ### Cloud Communication

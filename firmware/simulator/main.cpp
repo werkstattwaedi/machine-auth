@@ -198,7 +198,7 @@ static bool handle_events() {
 
             case SDLK_b:
               if (g_app) {
-                g_app->BootCompleted();
+                g_app->CycleBootPhase();
               }
               break;
           }
@@ -226,7 +226,7 @@ static void main_loop() {
   printf("  3 - Trigger Denied\n");
   printf("  C - Cycle Tag State\n");
   printf("  M - Cycle Machine State\n");
-  printf("  B - Complete Boot\n");
+  printf("  B - Cycle Boot Phase (or complete boot)\n");
   printf("\nOther:\n");
   printf("  S   - Simulate NFC Tag\n");
   printf("  ESC - Quit\n");
@@ -397,9 +397,7 @@ int main(int argc, char* argv[]) {
 
   // Apply initial state based on command line argument
   if (initial_state == "boot") {
-    g_app->SetBootProgress("Initializing...");
-    g_app->SetBootProgress("Connecting to cloud...");
-    g_app->SetBootProgress("Ready");
+    g_app->SetBootProgress(oww::state::system::BootPhase::InitHardware);
     printf("[Simulator] Starting in BOOT state (press 'B' to complete)\n");
   } else if (initial_state == "idle") {
     g_app->BootCompleted();
@@ -435,7 +433,7 @@ int main(int argc, char* argv[]) {
   // Create UI based on initial state
   if (initial_state == "boot") {
     // Create splash screen (shown during boot)
-    g_splash_screen = std::make_unique<oww::ui::SplashScreen>(g_app);
+    g_splash_screen = std::make_unique<oww::ui::SplashScreen>(g_app, g_hardware);
     g_splash_screen->Render();
   } else {
     // Boot already complete - create main UI immediately

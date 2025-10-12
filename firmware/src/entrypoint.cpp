@@ -29,6 +29,7 @@ SerialLogHandler logHandler(LOG_LEVEL_WARN,
 
 using namespace oww::logic;
 using namespace oww::nfc;
+using namespace oww::state::system;
 
 Logger entrypoint_logger("app.entrypoint");
 
@@ -65,7 +66,7 @@ void setup() {
 #if defined(DEVELOPMENT_BUILD)
   // Await the terminal connections, so that all log messages during setup are
   // not skipped.
-  app_->SetBootProgress("Warte auf Debugger...");
+  app_->SetBootProgress(BootPhase::WaitForDebugger);
   waitFor(Serial.isConnected, 5000);
 #endif
 
@@ -74,24 +75,24 @@ void setup() {
                            (int)display_setup_result.error());
   }
 
-  app_->SetBootProgress("Start NFC...");
+  app_->SetBootProgress(BootPhase::InitHardware);
   Status nfc_setup_result =
       NfcTags::instance().Begin(app_->GetConfiguration()->GetTerminalKey());
   entrypoint_logger.info("NFC Status = %d", (int)nfc_setup_result);
 
   if (nfc_setup_result != Status::kOk) {
-    app_->SetBootProgress("Fehler: NFC Initialisierung!");
+    // TODO: Add error state handling
     delay(2000);
     System.reset();
   }
 
-  app_->SetBootProgress("Verbinde mit WiFi...");
+  app_->SetBootProgress(BootPhase::ConnectWifi);
   waitUntil(WiFi.ready);
 
-  app_->SetBootProgress("Verbinde mit Cloud...");
+  app_->SetBootProgress(BootPhase::ConnectCloud);
   waitUntil(Particle.connected);
 
-  app_->SetBootProgress("Warte auf Terminal Config...");
+  app_->SetBootProgress(BootPhase::WaitForConfig);
   waitUntil(app_->GetConfiguration()->GetDeviceConfig);
 
   app_->BootCompleted();

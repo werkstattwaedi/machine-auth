@@ -64,7 +64,7 @@ os_thread_return_t UserInterface::UserInterfaceThread() {
 
   std::shared_ptr<oww::state::IApplicationState> app_state =
       std::static_pointer_cast<oww::state::IApplicationState>(app_);
-  splash_screen_ = std::make_unique<SplashScreen>(app_state);
+  splash_screen_ = std::make_unique<SplashScreen>(app_state, hardware_.get());
 
   while (true) {
     drivers::MacoWatchdog::instance().Ping(drivers::ObservedThread::kUi);

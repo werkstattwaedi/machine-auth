@@ -6,7 +6,7 @@ namespace oww::logic {
 MockApplication::MockApplication() {
   // Initialize to boot state
   system_state_ = std::make_shared<state::SystemState>(
-      state::system::Booting{.message = "Starting..."});
+      state::system::Booting{.phase = state::system::BootPhase::InitHardware});
 
   // Initialize to idle states - no tag present
   tag_state_ = std::make_shared<state::TagState>(
@@ -49,14 +49,49 @@ void MockApplication::RequestCancelCurrentOperation() {
 }
 
 // Simulator-specific methods
-void MockApplication::SetBootProgress(std::string message) {
-  *system_state_ = state::system::Booting{.message = message};
-  printf("[MockApp] Boot progress: %s\n", message.c_str());
+void MockApplication::SetBootProgress(state::system::BootPhase phase) {
+  *system_state_ = state::system::Booting{.phase = phase};
+  printf("[MockApp] Boot phase: %d\n", static_cast<uint8_t>(phase));
 }
 
 void MockApplication::BootCompleted() {
   *system_state_ = state::system::Ready{};
   printf("[MockApp] Boot completed - system ready\n");
+}
+
+void MockApplication::CycleBootPhase() {
+  if (std::holds_alternative<state::system::Ready>(*system_state_)) {
+    // Already booted, restart to first phase
+    *system_state_ = state::system::Booting{.phase = state::system::BootPhase::Bootstrap};
+    printf("[MockApp] Boot: Ready -> Bootstrap\n");
+  } else if (std::holds_alternative<state::system::Booting>(*system_state_)) {
+    auto& booting = std::get<state::system::Booting>(*system_state_);
+    switch (booting.phase) {
+      case state::system::BootPhase::Bootstrap:
+        booting.phase = state::system::BootPhase::WaitForDebugger;
+        printf("[MockApp] Boot: Bootstrap -> WaitForDebugger\n");
+        break;
+      case state::system::BootPhase::WaitForDebugger:
+        booting.phase = state::system::BootPhase::InitHardware;
+        printf("[MockApp] Boot: WaitForDebugger -> InitHardware\n");
+        break;
+      case state::system::BootPhase::InitHardware:
+        booting.phase = state::system::BootPhase::ConnectWifi;
+        printf("[MockApp] Boot: InitHardware -> ConnectWifi\n");
+        break;
+      case state::system::BootPhase::ConnectWifi:
+        booting.phase = state::system::BootPhase::ConnectCloud;
+        printf("[MockApp] Boot: ConnectWifi -> ConnectCloud\n");
+        break;
+      case state::system::BootPhase::ConnectCloud:
+        booting.phase = state::system::BootPhase::WaitForConfig;
+        printf("[MockApp] Boot: ConnectCloud -> WaitForConfig\n");
+        break;
+      case state::system::BootPhase::WaitForConfig:
+        BootCompleted();
+        break;
+    }
+  }
 }
 
 void MockApplication::CycleTagState() {

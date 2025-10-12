@@ -7,9 +7,19 @@
 
 namespace oww::state::system {
 
+// Boot phases during system initialization
+enum class BootPhase : uint8_t {
+  Bootstrap,
+  WaitForDebugger,
+  InitHardware,
+  ConnectWifi,
+  ConnectCloud,
+  WaitForConfig,
+};
+
 // System-level states (boot, connectivity, errors)
 struct Booting {
-  std::string message;
+  BootPhase phase;
 };
 
 struct Ready {};

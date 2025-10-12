@@ -28,8 +28,9 @@ class MockApplication : public state::IApplicationState {
   void RequestCancelCurrentOperation() override;
 
   // Simulator-specific state control (for keyboard shortcuts)
-  void SetBootProgress(std::string message);
+  void SetBootProgress(state::system::BootPhase phase);
   void BootCompleted();
+  void CycleBootPhase();  // Cycle through boot phases, then complete
   void CycleTagState();
   void CycleMachineState();
   void TriggerActiveSession();
