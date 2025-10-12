@@ -5,8 +5,8 @@ export const environment = {
     apiKey: 'fake-api-key-for-emulator',
     authDomain: 'localhost',
     projectId: 'oww-maschinenfreigabe',
-    storageBucket: 'oww-maschinenfreigabe.appspot.com',
-    messagingSenderId: '123456789',
+    storageBucket: 'oww-maschinenfreigabe.firebasestorage.app',
+    messagingSenderId: 'fake-sender-id',
     appId: 'fake-app-id-for-emulator',
   },
 };
