@@ -78,6 +78,46 @@ neopo compile
 - Error markers from previous compilation persist in editor - always recompile to verify fixes
 - Can also use VS Code task: `Particle: Compile application (local)` or command ID `particle.compileApplicationLocal`
 
+### Testing with Simulator
+
+The project includes a native simulator for testing UI and logic without hardware.
+
+**Building the Simulator:**
+
+```bash
+cd firmware
+mkdir -p build
+cd build
+cmake ..
+make simulator
+```
+
+**Running the Simulator:**
+
+```bash
+# From firmware/build/
+./simulator --state idle          # Start in idle state
+./simulator --state active        # Start with active session
+./simulator --state denied        # Start in denied state
+```
+
+The simulator creates a window showing the UI display and prints log output to stdout. Use Ctrl+C to exit.
+
+**What the simulator tests:**
+- ✅ UI rendering (LVGL display)
+- ✅ State machine logic
+- ✅ Session management
+- ✅ Touch input simulation
+- ❌ NFC hardware (mocked)
+- ❌ Cloud communication (mocked)
+- ❌ Relay/buzzer hardware (mocked)
+
+**Use cases:**
+1. Quick UI iteration without flashing hardware
+2. Testing state transitions visually
+3. Debugging logic issues in a native debugger (gdb/lldb)
+4. CI/CD testing (can run headless with appropriate flags)
+
 ### Flatbuffer Schema Generation
 
 The project uses flatbuffers for efficient cross-platform data serialization between firmware, functions, and admin.
@@ -377,6 +417,20 @@ The project must stay within Firebase free tier limits of 100K read/write operat
 
 All code is in `functions/`
 
+**Build Structure:**
+
+TypeScript compiles to `functions/lib/src/` (preserving source directory structure):
+- `package.json` must have `"main": "lib/src/index.js"` (NOT `lib/index.js`)
+- Entry point: `lib/src/index.js` exports the `api` cloud function
+- Tests: `lib/test/integration/**/*.test.js`
+
+**IMPORTANT:** After changing `tsconfig.json` or if deployment uploads stale code, do a clean rebuild:
+```bash
+cd functions/
+rm -rf lib/
+npm run build
+```
+
 **Deployment:**
 
 ```bash
@@ -385,11 +439,22 @@ npm run build
 firebase deploy --only functions
 ```
 
+The `predeploy` hook in `firebase.json` runs `npm run build` automatically, but if you suspect stale files, do a manual clean rebuild first.
+
 **Local Development:**
 
 ```bash
 cd functions/
 npm run serve  # Local Firebase emulator
+```
+
+**Testing:**
+
+```bash
+cd functions/
+npm run test:integration  # Runs tests with Firestore emulator
+npm run test:unit         # Unit tests only
+npm run test              # All tests
 ```
 
 ### Architectural Patterns
@@ -437,6 +502,103 @@ The project uses a Firestore database. The structure is documented in `firestore
 - `permission/{permissionId}`: Permission definitions
 
 **Important:** Always read `firestore/schema.jsonc` before making assumptions about the database structure.
+
+#### DocumentReferences vs String Paths
+
+**CRITICAL: Always use Firestore DocumentReferences, NEVER string paths**
+
+All foreign key relationships in Firestore MUST be stored as `DocumentReference` objects, not string paths like `/users/xyz`.
+
+**Correct Pattern:**
+```typescript
+// Creating documents with references
+await sessionRef.set({
+  userId: userDoc.ref,           // ✅ DocumentReference
+  tokenId: tokenDoc.ref,         // ✅ DocumentReference
+  // ...
+});
+
+// Querying with references
+const sessions = await db
+  .collection('sessions')
+  .where('tokenId', '==', tokenDoc.ref)  // ✅ Query with DocumentReference
+  .get();
+
+// Reading referenced documents
+const sessionData = sessionDoc.data() as SessionEntity;
+const userDoc = await sessionData.userId.get();  // ✅ Call .get() on reference
+const userId = userDoc.id;                       // ✅ Extract ID from document
+```
+
+**Wrong Pattern (deprecated):**
+```typescript
+// ❌ NEVER do this:
+await sessionRef.set({
+  userId: `/users/${userId}`,     // ❌ String path
+  tokenId: `/tokens/${tokenId}`,  // ❌ String path
+});
+
+// ❌ NEVER do this:
+const userDoc = await db.collection('users').doc(userId).get();
+```
+
+**TypeScript Entity Interfaces:**
+
+Define entity interfaces in `functions/src/types/firestore_entities.ts` to enforce DocumentReference types at compile time:
+
+```typescript
+export interface SessionEntity {
+  userId: DocumentReference;     // Reference to /users/{userId}
+  tokenId: DocumentReference;    // Reference to /tokens/{tokenId}
+  startTime: Timestamp;
+  rndA?: Uint8Array;
+  usage: UsageRecordEntity[];
+  closed?: { time: Timestamp; metadata: string };
+}
+```
+
+Cast Firestore data at boundaries, then trust TypeScript:
+```typescript
+const sessionData = sessionDoc.data() as SessionEntity;
+// No runtime validation needed - TypeScript enforces correct types
+const userDoc = await sessionData.userId.get();
+```
+
+**Test Helpers:**
+
+The test infrastructure (`functions/test/emulator-helper.ts`) automatically converts string paths to DocumentReferences:
+
+```typescript
+await seedTestData({
+  sessions: {
+    [sessionId]: {
+      userId: `/users/${userId}`,     // Auto-converted to DocumentReference
+      tokenId: `/tokens/${tokenId}`,  // Auto-converted to DocumentReference
+    }
+  }
+});
+```
+
+**Firestore Security Rules:**
+
+Validate DocumentReference types in security rules (`firestore/firestore.rules`):
+
+```javascript
+function isDocumentReference(field, collection) {
+  return field is path && field.matches('^/' + collection + '/[^/]+$');
+}
+
+match /sessions/{sessionId} {
+  allow create: if isDocumentReference(request.resource.data.userId, 'users') &&
+                   isDocumentReference(request.resource.data.tokenId, 'tokens');
+}
+```
+
+**Why DocumentReferences?**
+1. Type safety - Firestore enforces referential integrity
+2. Easier queries - no string parsing or path construction
+3. Cleaner code - `.get()` instead of manual path building
+4. Better performance - Firestore optimizes reference queries
 
 ### Session Lifecycle
 
