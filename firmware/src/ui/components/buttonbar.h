@@ -2,8 +2,15 @@
 
 #include <functional>
 #include <string>
+#include <memory>
 
 #include "ui/components/component.h"
+
+// Forward declarations
+namespace oww::ui::leds {
+using LedEffect = hal::IHardware::LedEffect;
+class ButtonBarEffectState;
+}
 
 namespace oww::ui {
 
@@ -53,6 +60,9 @@ class ButtonBar : public Component {
    * previously active definiton. */
   void RemoveButtons(std::shared_ptr<ButtonDefinition> definition);
 
+  /** Get the button bar LED effect for rendering */
+  leds::LedEffect GetLedEffect();
+
  private:
   std::vector<std::shared_ptr<ButtonDefinition>> definitions;
   // Visible buttons
@@ -73,6 +83,9 @@ class ButtonBar : public Component {
 
   // Current active definition for callbacks
   std::shared_ptr<ButtonDefinition> current_definition_;
+
+  // LED effect state for button bar (shared with LED thread)
+  std::shared_ptr<leds::ButtonBarEffectState> led_effect_state_;
 };
 
 }  // namespace oww::ui

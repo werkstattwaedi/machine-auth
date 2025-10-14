@@ -37,6 +37,15 @@ set(CUSTOM_ASSETS
   ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/image/oww_logo.c
 )
 
+# Shared UI LED sources from firmware (LED effects)
+set(SHARED_UI_LEDS_SOURCES
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/leds/led_effect.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/leds/boot_wave_effect.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/leds/effect_manager.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/leds/buttonbar_effect.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/leds/multiplexer.cpp
+)
+
 # Shared UI sources from firmware
 set(SHARED_UI_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/core/ui_manager.cpp
@@ -59,6 +68,7 @@ set(SIMULATOR_SOURCES
 # Create executable
 add_executable(simulator
   ${SIMULATOR_SOURCES}
+  ${SHARED_UI_LEDS_SOURCES}
   ${SHARED_UI_SOURCES}
   ${LVGL_SOURCES}
   ${LVGL_SDL_SOURCES}

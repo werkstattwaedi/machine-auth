@@ -9,6 +9,7 @@ enum class ObservedThread {
   kMain,
   kNfc,
   kUi,
+  kLed,
   kCount  // Total number of threads
 };
 

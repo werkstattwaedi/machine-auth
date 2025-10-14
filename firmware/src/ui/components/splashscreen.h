@@ -3,8 +3,7 @@
 #include "ui/components/component.h"
 #include "state/system_state.h"
 #include "hal/hardware_interface.h"
-#include "common/time.h"
-#include <chrono>
+#include "ui/leds/led_effect.h"
 #include <optional>
 
 namespace oww::ui {
@@ -17,6 +16,9 @@ class SplashScreen : public Component {
 
   virtual void Render() override;
 
+  /** Returns the LED effect for the current boot phase */
+  leds::LedEffect GetLedEffect();
+
  private:
   // Hardware access
   hal::IHardware* hardware_;
@@ -26,20 +28,13 @@ class SplashScreen : public Component {
   lv_obj_t* progress_label_;
   lv_obj_t* progress_bar_;
 
-  // Animation state
-  std::optional<state::system::BootPhase> current_phase_;
-  std::optional<state::system::BootPhase> next_phase_;  // Queued phase for next wave
-  std::chrono::time_point<std::chrono::steady_clock> animation_start_time_;
-
-  // LED ring indices (display surround, ordered for animation)
-  static constexpr uint8_t kRingIndices[] = {0, 15, 14, 13, 12, 9, 8, 7, 6, 5};
-  static constexpr size_t kRingCount = 10;
+  // Track last set phase to create effect when phase changes
+  std::optional<state::system::BootPhase> last_phase_;
+  leds::LedEffect current_effect_;
 
   // Helper methods
   const char* GetPhaseMessage(state::system::BootPhase phase);
-  void UpdateLedAnimation(state::system::BootPhase phase);
-  void GetPhaseColor(state::system::BootPhase phase, uint8_t& r, uint8_t& g, uint8_t& b);
-  float GetAnimationProgress();
+  hal::LedColor GetPhaseColor(state::system::BootPhase phase);
 };
 
 }  // namespace oww::ui

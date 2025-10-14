@@ -1,6 +1,7 @@
 #include "simulator_hardware.h"
 #include <cmath>
 #include <cstdio>
+#include <chrono>
 
 namespace oww::hal {
 
@@ -9,9 +10,21 @@ SimulatorHardware::SimulatorHardware() {
   for (auto& led : leds_) {
     led = {0, 0, 0, 0};
   }
+
+  // Start LED thread
+  led_thread_running_ = true;
+  led_thread_ = std::thread(&SimulatorHardware::LEDThreadFunc, this);
 }
 
 SimulatorHardware::~SimulatorHardware() {
+  // Signal thread to stop
+  led_thread_running_ = false;
+
+  // Wait for thread to finish
+  if (led_thread_.joinable()) {
+    led_thread_.join();
+  }
+
   if (font_) {
     TTF_CloseFont(font_);
     font_ = nullptr;
@@ -102,6 +115,7 @@ void SimulatorHardware::InitializeLEDPositions() {
 
 void SimulatorHardware::SetLED(uint8_t index, uint8_t r, uint8_t g, uint8_t b, uint8_t w) {
   if (index < 16) {
+    std::lock_guard<std::mutex> lock(leds_mutex_);
     leds_[index] = {r, g, b, w};
   }
 }
@@ -109,8 +123,13 @@ void SimulatorHardware::SetLED(uint8_t index, uint8_t r, uint8_t g, uint8_t b, u
 void SimulatorHardware::ShowLEDs() {
   if (!renderer_) return;
 
+  std::lock_guard<std::mutex> lock(leds_mutex_);
   DrawAllLEDs();
   DrawLabels();
+}
+
+void SimulatorHardware::SetLedCallback(LedCallback callback) {
+  led_callback_ = callback;
 }
 
 void SimulatorHardware::Beep(uint16_t frequency_hz, uint16_t duration_ms) {
@@ -198,6 +217,34 @@ void SimulatorHardware::DrawAllLEDs() {
 void SimulatorHardware::DrawLabels() {
   // TODO: Use SDL_ttf to draw text labels
   // For now, LED indices and button mappings are shown in console
+}
+
+void SimulatorHardware::LEDThreadFunc() {
+  constexpr auto kFrameTime = std::chrono::milliseconds(16);  // ~60fps
+  constexpr size_t kNumLeds = 16;
+
+  while (led_thread_running_) {
+    auto frame_start = std::chrono::steady_clock::now();
+
+    // Render all LEDs using callback
+    if (led_callback_) {
+      auto colors = led_callback_(frame_start);
+      for (uint8_t i = 0; i < kNumLeds && i < colors.size(); i++) {
+        SetLED(i, colors[i].r, colors[i].g, colors[i].b, colors[i].w);
+      }
+      // Note: ShowLEDs() is called by the main SDL rendering loop, not here
+    }
+
+    // Maintain frame rate
+    auto frame_end = std::chrono::steady_clock::now();
+    auto frame_duration = std::chrono::duration_cast<std::chrono::milliseconds>(
+        frame_end - frame_start);
+    auto sleep_time = kFrameTime - frame_duration;
+
+    if (sleep_time > std::chrono::milliseconds(0)) {
+      std::this_thread::sleep_for(sleep_time);
+    }
+  }
 }
 
 }  // namespace oww::hal

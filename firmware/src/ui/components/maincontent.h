@@ -5,6 +5,10 @@
 #include "ui/components/buttonbar.h"
 #include "ui/components/component.h"
 
+namespace oww::ui::leds {
+using LedEffect = hal::IHardware::LedEffect;
+}
+
 namespace oww::ui {
 
 class MainContent : public Component {
@@ -25,6 +29,9 @@ class MainContent : public Component {
   virtual std::shared_ptr<ButtonDefinition> GetButtonDefinition() {
     return nullptr;
   }
+
+  /** Returns the LED effect for this content, or nullptr if none */
+  virtual leds::LedEffect GetLedEffect() { return nullptr; }
 };
 
 }  // namespace oww::ui

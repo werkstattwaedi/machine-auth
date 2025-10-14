@@ -283,12 +283,18 @@ static void main_loop() {
     // Render UI components
     if (g_splash_screen) {
       g_splash_screen->Render();
+      // Update LED effects for splash screen (special case during boot)
+      if (g_ui_manager) {
+        g_ui_manager->SetLedEffect(g_splash_screen->GetLedEffect());
+      }
     } else {
       if (g_status_bar) g_status_bar->Render();
       if (g_button_bar) g_button_bar->Render();
       if (g_ui_manager) {
         auto current = g_ui_manager->GetCurrentContent();
         if (current) current->Render();
+        // Update LED effects from current MainContent
+        g_ui_manager->UpdateLedEffects();
       }
     }
 
@@ -417,18 +423,9 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  // Initialize UI manager
-  g_ui_manager = std::make_unique<oww::ui::UiManager>(g_app);
-
-  // Initialize LEDs with test pattern to show positions
-  // Display surround (dim white)
-  for (int i : {0, 5, 6, 7, 8, 9, 12, 13, 14, 15}) {
-    g_hardware->SetLED(i, 0, 0, 0, 50);  // Dim white
-  }
-  // NFC area (cyan)
-  g_hardware->SetLED(2, 0, 255, 255, 0);  // Cyan
-  g_hardware->SetLED(3, 0, 255, 255, 0);  // Cyan
-  g_hardware->ShowLEDs();
+  // Initialize UI manager with hardware
+  // LED callback is set up by UiManager constructor
+  g_ui_manager = std::make_unique<oww::ui::UiManager>(g_app, g_hardware);
 
   // Create UI based on initial state
   if (initial_state == "boot") {

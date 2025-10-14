@@ -194,6 +194,8 @@ const char* MacoWatchdog::GetThreadName(ObservedThread thread) {
       return "NFC";
     case ObservedThread::kUi:
       return "UI";
+    case ObservedThread::kLed:
+      return "LED";
     default:
       return "Unknown";
   }

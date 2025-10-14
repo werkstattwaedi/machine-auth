@@ -7,6 +7,9 @@
 
 #include <array>
 #include <vector>
+#include <thread>
+#include <atomic>
+#include <mutex>
 
 namespace oww::hal {
 
@@ -25,12 +28,11 @@ class SimulatorHardware : public IHardware {
   // Initialize SDL renderer (called after SDL_CreateRenderer)
   void Initialize(SDL_Renderer* renderer);
 
-  // Set individual LED (0-15)
-  void SetLED(uint8_t index, uint8_t r, uint8_t g, uint8_t b,
-              uint8_t w = 0) override;
+  // Set LED callback (runs on dedicated thread)
+  void SetLedCallback(LedCallback callback) override;
 
-  // Push all LED changes to display (renders LEDs)
-  void ShowLEDs() override;
+  // Render LEDs visually (called by main loop for SDL rendering)
+  void ShowLEDs();
 
   // Buzzer - just prints to console
   void Beep(uint16_t frequency_hz, uint16_t duration_ms) override;
@@ -57,6 +59,18 @@ class SimulatorHardware : public IHardware {
     uint8_t r{0}, g{0}, b{0}, w{0};
   };
   std::array<LedState, 16> leds_;
+  std::mutex leds_mutex_;  // Protect LED state from concurrent access
+
+  // LED callback system
+  LedCallback led_callback_;
+  std::thread led_thread_;
+  std::atomic<bool> led_thread_running_{false};
+
+  // Internal LED control (called by LED thread)
+  void SetLED(uint8_t index, uint8_t r, uint8_t g, uint8_t b, uint8_t w = 0);
+
+  // LED thread function
+  void LEDThreadFunc();
 
   // LED physical positions (x, y, radius)
   struct LEDPosition {

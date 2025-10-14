@@ -4,6 +4,7 @@
 
 #include "common.h"
 #include "hal/led_layout.h"
+#include "ui/leds/buttonbar_effect.h"
 
 namespace oww::ui {
 
@@ -12,7 +13,8 @@ static Logger buttonbar_logger("app.ui.buttonbar");
 ButtonBar::ButtonBar(lv_obj_t* parent,
                      std::shared_ptr<state::IApplicationState> state,
                      hal::IHardware* hardware)
-    : Component(state, hardware) {
+    : Component(state, hardware),
+      led_effect_state_(std::make_shared<leds::ButtonBarEffectState>()) {
   // Create the main container for the button bar
   // ButtonBar: 240×50px at bottom of screen, no padding
   root_ = lv_obj_create(parent);
@@ -67,12 +69,17 @@ ButtonBar::ButtonBar(lv_obj_t* parent,
 
 ButtonBar::~ButtonBar() { lv_obj_delete(root_); }
 
+leds::LedEffect ButtonBar::GetLedEffect() {
+  return led_effect_state_->GetEffect();
+}
+
 void ButtonBar::Render() {
   if (definitions.empty()) {
-    // No active definition - hide all buttons
+    // No active definition - hide all buttons and clear LEDs
     lv_obj_add_flag(left_button_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(right_button_, LV_OBJ_FLAG_HIDDEN);
     current_definition_ = nullptr;
+    led_effect_state_->ClearAll();
     return;
   }
 
@@ -122,43 +129,34 @@ void ButtonBar::Render() {
     }
   }
 
-  // Update button LEDs via hardware interface
-  if (hardware_) {
-    using namespace hal::led_indices;
+  // Update button LED effect
+  // Helper to scale color by brightness
+  auto scale_color = [](const lv_color32_t& color, uint8_t brightness) {
+    uint8_t r = (color.red * brightness) / 255;
+    uint8_t g = (color.green * brightness) / 255;
+    uint8_t b = (color.blue * brightness) / 255;
+    return std::make_tuple(r, g, b);
+  };
 
-    // Helper to scale color by brightness
-    auto scale_color = [](const lv_color32_t& color, uint8_t brightness) {
-      uint8_t r = (color.red * brightness) / 255;
-      uint8_t g = (color.green * brightness) / 255;
-      uint8_t b = (color.blue * brightness) / 255;
-      return std::make_tuple(r, g, b);
-    };
-
-    // Bottom left button
-    if (definition->left_enabled) {
-      auto [r, g, b] = scale_color(definition->left_color, 180);
-      hardware_->SetLED(BUTTON_BOTTOM_LEFT, r, g, b);
-    } else {
-      hardware_->SetLED(BUTTON_BOTTOM_LEFT, 0, 0, 0);
-    }
-
-    // Bottom right button
-    if (definition->right_enabled) {
-      auto [r, g, b] = scale_color(definition->right_color, 180);
-      hardware_->SetLED(BUTTON_BOTTOM_RIGHT, r, g, b);
-    } else {
-      hardware_->SetLED(BUTTON_BOTTOM_RIGHT, 0, 0, 0);
-    }
-
-    // Top buttons (up/down) - use warm white
-    uint8_t up_brightness = definition->up_enabled ? 180 : 0;
-    uint8_t down_brightness = definition->down_enabled ? 180 : 0;
-    hardware_->SetLED(BUTTON_TOP_RIGHT, 0, 0, 0, up_brightness);
-    hardware_->SetLED(BUTTON_TOP_LEFT, 0, 0, 0, down_brightness);
-
-    // Push LED changes to hardware
-    hardware_->ShowLEDs();
+  // Bottom left button
+  if (definition->left_enabled) {
+    auto [r, g, b] = scale_color(definition->left_color, 180);
+    led_effect_state_->SetLeftButton(true, r, g, b);
+  } else {
+    led_effect_state_->SetLeftButton(false, 0, 0, 0);
   }
+
+  // Bottom right button
+  if (definition->right_enabled) {
+    auto [r, g, b] = scale_color(definition->right_color, 180);
+    led_effect_state_->SetRightButton(true, r, g, b);
+  } else {
+    led_effect_state_->SetRightButton(false, 0, 0, 0);
+  }
+
+  // Top buttons (up/down) - use warm white
+  led_effect_state_->SetUpButton(definition->up_enabled);
+  led_effect_state_->SetDownButton(definition->down_enabled);
 }
 
 void ButtonBar::ActivateButtons(std::shared_ptr<ButtonDefinition> definition) {
