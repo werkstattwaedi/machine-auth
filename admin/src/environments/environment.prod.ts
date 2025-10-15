@@ -9,4 +9,5 @@ export const environment = {
     messagingSenderId: '207165240294',
     appId: '1:207165240294:web:3f1eeab90a1673e7ef5c27',
   },
+  firebaseFunctionsUrl: 'https://us-central1-oww-maschinenfreigabe.cloudfunctions.net/api',
 };

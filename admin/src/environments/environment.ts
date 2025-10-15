@@ -9,4 +9,5 @@ export const environment = {
     messagingSenderId: 'fake-sender-id',
     appId: 'fake-app-id-for-emulator',
   },
+  firebaseFunctionsUrl: 'http://127.0.0.1:5001/oww-maschinenfreigabe/us-central1/api',
 };

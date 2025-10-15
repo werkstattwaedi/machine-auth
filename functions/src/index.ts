@@ -11,15 +11,39 @@ import { handleAuthenticateNewSession } from "./session/handle_authenticate_new_
 import { handleCompleteAuthentication } from "./session/handle_complete_authentication";
 import { handleUploadUsage } from "./session/handle_upload_usage";
 import { handleKeyDiversification } from "./personalization/handle_key_diversification";
+import { handleVerifyTagCheckout } from "./checkout/verify_tag";
 
 initializeApp();
 
 const diversificationMasterKey = defineSecret("DIVERSIFICATION_MASTER_KEY");
 const diversificationSystemName = defineString("DIVERSIFICATION_SYSTEM_NAME");
 const particleWebhookApiKey = defineSecret("PARTICLE_WEBHOOK_API_KEY");
+const terminalKey = defineSecret("TERMINAL_KEY");
 
 export const app = express();
 app.use(express.json());
+
+// Public endpoint for tag-based checkout (no auth required)
+// Must be registered BEFORE auth middleware
+export const verifyTagCheckoutHandler = async (
+  req: express.Request,
+  res: express.Response
+) => {
+  try {
+    const result = await handleVerifyTagCheckout(req.body, {
+      terminalKey: terminalKey.value(),
+    });
+
+    res.status(200).contentType("application/json").send(result);
+  } catch (error: any) {
+    logger.error("Tag verification failed", { error: error.message });
+    res.status(400).contentType("application/json").send({
+      error: error.message || "Tag verification failed",
+    });
+  }
+};
+
+app.post("/verifyTagCheckout", verifyTagCheckoutHandler);
 
 // Authentication middleware to check for the Particle webhook API key.
 const authMiddleware = (
@@ -53,6 +77,7 @@ app.use(
     (req as any).config = {
       masterKey: diversificationMasterKey.value(),
       systemName: diversificationSystemName.value(),
+      terminalKey: terminalKey.value(),
     };
     next();
   }
@@ -212,7 +237,7 @@ function sendFlatbufferSuccessResponse(
 }
 
 export const api = onRequest(
-  { secrets: [diversificationMasterKey, particleWebhookApiKey] },
+  { secrets: [diversificationMasterKey, particleWebhookApiKey, terminalKey] },
   app
 );
 
