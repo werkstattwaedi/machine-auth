@@ -1,17 +1,10 @@
 #pragma once
 
-#include <XPT2046_Touch.h>
 #include <lvgl.h>
 
 #include "common.h"
-#include "drivers/leds/ws2812.h"
-#include "logic/application.h"
-#include "neopixel.h"
 #include "drivers/maco_hardware.h"
-#include "ui/components/buttonbar.h"
-#include "ui/components/sessionstatus.h"
-#include "ui/components/splashscreen.h"
-#include "ui/components/statusbar.h"
+#include "logic/application.h"
 #include "ui/core/ui_manager.h"
 
 namespace oww::ui {
@@ -49,12 +42,9 @@ class UserInterface {
    */
   void unlock() { os_mutex_unlock(mutex_); };
 
-  // Access to LED controller for UI components (SessionStatus, ButtonBar)
-  drivers::leds::LedController* leds() { return led_.get(); }
-
   // Additional public API
-  std::shared_ptr<MainContent> GetCurrentContent() {
-    return ui_manager_->GetCurrentContent();
+  std::shared_ptr<Screen> GetCurrentScreen() {
+    return ui_manager_->GetCurrentScreen();
   }
 
  private:
@@ -75,10 +65,6 @@ class UserInterface {
 
   os_thread_return_t UserInterfaceThread();
 
-  void UpdateGui();
-  void UpdateBuzzer();
-  void UpdateLed();
-
   // Set up button position mappings for touch input
   void SetupButtonMappings();
 
@@ -87,15 +73,7 @@ class UserInterface {
   std::unique_ptr<UiManager> ui_manager_;
 
   // Platform-specific hardware
-  Adafruit_NeoPixel led_strip_;
-  std::unique_ptr<drivers::leds::LedController> led_;
   std::unique_ptr<hal::MacoHardware> hardware_;
-
-  // UI components
-  std::unique_ptr<SplashScreen> splash_screen_ = nullptr;
-  std::unique_ptr<StatusBar> status_bar_ = nullptr;
-  std::unique_ptr<ButtonBar> button_bar_ = nullptr;
-  std::shared_ptr<SessionStatus> session_status_ = nullptr;
 };
 
 }  // namespace oww::ui

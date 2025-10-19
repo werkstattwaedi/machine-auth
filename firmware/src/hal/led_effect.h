@@ -1,8 +1,32 @@
 #pragma once
 
-#include <cstdint>
+#include <array>
+#include <chrono>
+
+#include "hal/hardware_interface.h"
 
 namespace oww::hal {
+
+/**
+ * @brief LED effect interface
+ *
+ * Simple interface for LED effects.
+ *
+ * Effects should be lightweight and thread-safe for rendering.
+ */
+class ILedEffect {
+ public:
+  virtual ~ILedEffect() = default;
+
+  /**
+   * @brief Get all 16 LED colors at a given time
+   * @param animation_time Current animation time
+   * @return Array of 16 LED colors (unspecified = don't control this LED)
+   */
+  virtual std::array<LedColor, 16> GetLeds(
+      std::chrono::time_point<std::chrono::steady_clock> animation_time)
+      const = 0;
+};
 
 /**
  * @brief LED layout constants for the MACO hardware

@@ -3,11 +3,11 @@
 #include <memory>
 #include <variant>
 
-#include "ui/components/maincontent.h"
+#include "ui/components/screen.h"
 
 namespace oww::ui {
 
-class SessionStatus : public MainContent {
+class SessionStatus : public Screen {
  public:
   SessionStatus(lv_obj_t* parent, std::shared_ptr<state::IApplicationState> app,
                 hal::IHardware* hardware = nullptr);
@@ -16,21 +16,28 @@ class SessionStatus : public MainContent {
   virtual void Render() override;
   virtual void OnActivate() override;
   virtual void OnDeactivate() override;
-  virtual std::shared_ptr<ButtonDefinition> GetButtonDefinition() override;
+  virtual std::shared_ptr<ButtonBarSpec> GetButtonBarSpec() const override;
+  virtual std::shared_ptr<hal::ILedEffect> GetLedEffect() override;
 
  private:
   // UI Elements
-  lv_obj_t* icon_container_;
-  lv_obj_t* status_text_;
-  lv_obj_t* user_label_;
-  lv_obj_t* duration_label_;
-  lv_obj_t* icon_;
+  lv_obj_t* user_label_ = nullptr;
+  lv_obj_t* icon_container_ = nullptr;
+  lv_obj_t* status_text_ = nullptr;
+  lv_obj_t* duration_label_ = nullptr;
+  lv_obj_t* icon_ = nullptr;
 
   // Current button definition - updated dynamically
-  std::shared_ptr<ButtonDefinition> current_buttons_;
+  mutable std::shared_ptr<ButtonBarSpec> current_buttons_;
 
   // Current state tracking
-  void* last_state_id_;
+  void* last_state_id_ = nullptr;
+
+  // LED effects for different machine states
+  std::shared_ptr<hal::ILedEffect> idle_effect_;
+  std::shared_ptr<hal::ILedEffect> active_effect_;
+  std::shared_ptr<hal::ILedEffect> denied_effect_;
+  std::shared_ptr<hal::ILedEffect> current_effect_;
 
   // Setup methods
   void CreateNfcIconArea();

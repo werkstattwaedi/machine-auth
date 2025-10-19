@@ -132,4 +132,6 @@ void loop() {
         signal.getStrength(), signal.getStrengthValue(), signal.getQuality());
 #endif
   }
+  // Prevent tight loop from strarving other threads.
+  delay(1);
 }

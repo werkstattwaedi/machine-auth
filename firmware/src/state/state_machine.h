@@ -57,6 +57,10 @@ class StateHandle {
     return std::get_if<T>(captured_state_.get());
   }
 
+  bool SameAs(const StateHandle& previous) const {
+    return previous.captured_state_.get() == captured_state_.get();
+  }
+
   // Compare with another StateHandle to detect transitions
   template <typename T>
   bool Entered(const StateHandle& previous) const {
@@ -119,8 +123,6 @@ class StateMachine
   }
 
   StateHandle Loop() {
-    auto handle = StateHandle(current_state_, this->weak_from_this());
-
     StateOpt new_state = std::visit(
         [this](auto& state) -> StateOpt {
           using StateType = std::decay_t<decltype(state)>;
@@ -135,8 +137,7 @@ class StateMachine
     if (new_state) {
       current_state_ = std::make_shared<State>(std::move(*new_state));
     }
-
-    return handle;
+    return StateHandle(current_state_, this->weak_from_this());
   }
 
   // Add the new method here

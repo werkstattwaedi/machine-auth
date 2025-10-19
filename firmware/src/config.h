@@ -15,7 +15,7 @@ namespace config {
 
 namespace ui {
 
-constexpr os_thread_prio_t thread_priority = 3;
+constexpr os_thread_prio_t thread_priority = OS_THREAD_PRIORITY_DEFAULT;
 // Stack size is recommended to be 8k+
 // https:  // docs.lvgl.io/master/intro/introduction.html#requirements
 constexpr size_t thread_stack_size = 8 * 1024;
@@ -31,6 +31,9 @@ constexpr int8_t pin_datacommand = D10;
 constexpr int8_t pin_backlight = A5;
 constexpr int8_t pin_touch_chipselect = D7;
 constexpr int8_t pin_touch_irq = D19;
+
+// Display flush thread
+constexpr os_thread_prio_t thread_priority = OS_THREAD_PRIORITY_DEFAULT + 1;
 }  // namespace display
 
 namespace touch {
@@ -51,6 +54,15 @@ namespace led {
 
 constexpr uint8_t pixel_count = 16;
 constexpr uint8_t pixel_type = IN4818;
+
+// Super high priority for LED rendering, since its little work, and the
+// fluidity depends on it
+constexpr os_thread_prio_t thread_priority = OS_THREAD_PRIORITY_CRITICAL - 1;
+constexpr size_t thread_stack_size = 2048;
+
+constexpr auto target_frame_time =
+    std::chrono::milliseconds(1000 / 30);  // 30fps
+
 }  // namespace led
 
 namespace nfc {
@@ -58,6 +70,7 @@ namespace nfc {
 // interface before working with the pin!
 constexpr int8_t pin_reset = S1;  // aka MISO, D16
 
+// Bump priority of NFC thread, since UART requests must be answererd promptly
 constexpr os_thread_prio_t thread_priority = OS_THREAD_PRIORITY_DEFAULT;
 constexpr size_t thread_stack_size = OS_THREAD_STACK_SIZE_DEFAULT_HIGH;
 }  // namespace nfc

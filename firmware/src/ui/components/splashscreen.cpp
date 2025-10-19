@@ -9,14 +9,16 @@ LV_IMG_DECLARE(oww_logo);
 
 namespace oww::ui {
 
-SplashScreen::SplashScreen(std::shared_ptr<state::IApplicationState> app,
+SplashScreen::SplashScreen(lv_obj_t* parent,
+                           std::shared_ptr<state::IApplicationState> app,
                            hal::IHardware* hardware)
-    : Component(app), hardware_(hardware), last_phase_(std::nullopt) {
-  lv_obj_set_style_bg_color(lv_screen_active(), lv_color_white(), LV_PART_MAIN);
-
-  root_ = lv_obj_create(lv_screen_active());
+    : Screen(parent, app, hardware), hardware_(hardware), last_phase_(std::nullopt) {
+  // Splash screen fills entire display
   lv_obj_set_size(root_, 240, 320);
-  lv_obj_align(root_, LV_ALIGN_TOP_LEFT, 0, 0);
+  lv_obj_set_align(root_, LV_ALIGN_TOP_LEFT);
+  lv_obj_set_pos(root_, 0, 0);
+  lv_obj_clear_flag(root_, LV_OBJ_FLAG_HIDDEN);  // Always visible
+  lv_obj_set_style_bg_color(root_, lv_color_white(), LV_PART_MAIN);
 
   static lv_style_t style;
   lv_style_init(&style);
@@ -42,7 +44,9 @@ SplashScreen::SplashScreen(std::shared_ptr<state::IApplicationState> app,
   lv_obj_align(progress_label_, LV_ALIGN_BOTTOM_MID, 0, -10);
 }
 
-SplashScreen::~SplashScreen() { lv_obj_delete(root_); }
+SplashScreen::~SplashScreen() {
+  // Base class Screen destructor will delete root_
+}
 
 const char* SplashScreen::GetPhaseMessage(state::system::BootPhase phase) {
   switch (phase) {
@@ -82,7 +86,7 @@ hal::LedColor SplashScreen::GetPhaseColor(state::system::BootPhase phase) {
   }
 }
 
-leds::LedEffect SplashScreen::GetLedEffect() {
+std::shared_ptr<hal::ILedEffect> SplashScreen::GetLedEffect() {
   auto system_state = app_->GetSystemState();
 
   // Only provide effect when in Booting state
@@ -95,11 +99,11 @@ leds::LedEffect SplashScreen::GetLedEffect() {
   // Create new effect when phase changes
   if (!last_phase_.has_value() || last_phase_.value() != booting.phase) {
     hal::LedColor color = GetPhaseColor(booting.phase);
-    current_effect_ = leds::CreateBootWaveEffect(color, 1000);
+    current_effect_ = std::make_shared<leds::BootWaveEffect>(color, 1000);
     last_phase_ = booting.phase;
   }
 
-  return current_effect_;
+  return current_effect_;  // Implicit upcast to shared_ptr<hal::ILedEffect>
 }
 
 void SplashScreen::Render() {

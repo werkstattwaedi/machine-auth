@@ -1,10 +1,11 @@
 #pragma once
 
+#include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <array>
 #include <functional>
-#include <chrono>
+#include <memory>
 
 namespace oww::hal {
 
@@ -16,6 +17,9 @@ struct LedColor {
   static LedColor Off() { return {0, 0, 0, 0, false}; }
   static LedColor Unspecified() { return {0, 0, 0, 0, true}; }
 };
+
+// Forward declaration
+class ILedEffect;
 
 /**
  * @brief Hardware abstraction interface
@@ -32,21 +36,12 @@ class IHardware {
  public:
   virtual ~IHardware() = default;
 
-  // LED effect function signature
-  // Takes animation time, returns all 16 LED colors
-  using LedEffect = std::function<std::array<LedColor, 16>(
-      std::chrono::time_point<std::chrono::steady_clock>)>;
-
-  // Set LED effect (runs continuously on dedicated thread)
-  // @param effect Function to call for LED updates (nullptr disables)
-  virtual void SetLedCallback(LedEffect effect) = 0;
+  // Set LED callback (runs continuously on dedicated thread)
+  // @param callback Function to call for LED updates (nullptr disables)
+  virtual void SetLedEffect(std::shared_ptr<ILedEffect> led_effect) = 0;
 
   // Buzzer
   virtual void Beep(uint16_t frequency_hz, uint16_t duration_ms) = 0;
-
- protected:
-  // Alias for backwards compatibility in implementations
-  using LedCallback = LedEffect;
 };
 
 }  // namespace oww::hal

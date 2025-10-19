@@ -2,6 +2,7 @@
 
 #include <concurrent_hal.h>
 #include <drivers/display/lcd/lv_lcd_generic_mipi.h>
+#include "drivers/maco_watchdog.h"
 
 #include "Particle.h"
 #include "config.h"
@@ -53,7 +54,7 @@ Status Display::Begin() {
                       /*initial_count=*/0);
   spi_flush_thread_ = new Thread(
       "spi_flush", [this]() { SpiFlushThread(); },
-      OS_THREAD_PRIORITY_DEFAULT + 1);
+      config::ui::display::thread_priority);
 
   lv_init();
 #if LV_USE_LOG
@@ -189,12 +190,10 @@ void Display::SetButtonMapping(uint8_t button_id, lv_point_t position) {
 void Display::SpiFlushThread() {
   while (true) {
     DisplayFlushRequest request;
-    if (os_queue_take(flush_queue_, &request, CONCURRENT_WAIT_FOREVER, NULL) ==
-        0) {
+    if (os_queue_take(flush_queue_, &request, 1000, NULL) == 0) {
       ProcessFlushRequest(request);
-    } else {
-      display_log.error("failed to dequeue flush request");
     }
+    drivers::MacoWatchdog::instance().Ping(drivers::ObservedThread::kDisplayFlush);
   }
 }
 

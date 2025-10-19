@@ -1,5 +1,4 @@
 #include "ui/leds/effect_manager.h"
-
 #include "common/time.h"
 
 namespace oww::ui::leds {
@@ -10,9 +9,8 @@ EffectManager::EffectManager(uint16_t crossfade_ms)
       next_effect_(nullptr),
       crossfade_ms_(crossfade_ms) {}
 
-void EffectManager::SetEffect(LedEffect effect, bool immediate) {
-  std::lock_guard<std::mutex> lock(mutex_);
-
+void EffectManager::SetEffect(std::shared_ptr<ILedEffect> effect,
+                               bool immediate) {
   if (immediate || !current_effect_) {
     // Immediate switch or no current effect
     current_effect_ = effect;
@@ -41,47 +39,43 @@ float EffectManager::GetCrossfadeProgress() const {
   return elapsed.count() / static_cast<float>(crossfade_ms_);
 }
 
-LedEffect EffectManager::GetEffect() {
-  // Return lambda that handles crossfading
-  return
-      [this](std::chrono::time_point<std::chrono::steady_clock> animation_time)
-          -> std::array<LedColor, 16> {
-        std::lock_guard<std::mutex> lock(mutex_);
+std::array<LedColor, 16> EffectManager::GetLeds(
+    std::chrono::time_point<std::chrono::steady_clock> animation_time) const {
+  // Check if transition is complete (mutable state update)
+  if (next_effect_) {
+    float progress = GetCrossfadeProgress();
+    if (progress >= 1.0f) {
+      // Transition complete - promote next to current
+      // NOTE: This is mutable state modification, but safe because
+      // EffectManager is only called from one thread (LED thread via UiManager)
+      const_cast<EffectManager*>(this)->current_effect_ = next_effect_;
+      const_cast<EffectManager*>(this)->current_start_time_ = timeSinceBoot();
+      const_cast<EffectManager*>(this)->next_effect_ = nullptr;
+    }
+  }
 
-        // Check if transition is complete
-        if (next_effect_) {
-          float progress = GetCrossfadeProgress();
-          if (progress >= 1.0f) {
-            // Transition complete - promote next to current
-            current_effect_ = next_effect_;
-            current_start_time_ = timeSinceBoot();
-            next_effect_ = nullptr;
-          }
-        }
+  // No effect active - return all off
+  if (!current_effect_) {
+    std::array<LedColor, 16> result;
+    result.fill(LedColor::Off());
+    return result;
+  }
 
-        // No effect active - return all off
-        if (!current_effect_) {
-          std::array<LedColor, 16> result;
-          result.fill(LedColor::Off());
-          return result;
-        }
+  // Get current effect colors
+  auto colors = current_effect_->GetLeds(animation_time);
 
-        // Get current effect colors
-        auto colors = current_effect_(animation_time);
+  // Apply crossfade if transitioning
+  if (next_effect_) {
+    float progress = GetCrossfadeProgress();
+    auto next_colors = next_effect_->GetLeds(animation_time);
 
-        // Apply crossfade if transitioning
-        if (next_effect_) {
-          float progress = GetCrossfadeProgress();
-          auto next_colors = next_effect_(animation_time);
+    // Blend all LED colors
+    for (uint8_t i = 0; i < 16; i++) {
+      colors[i] = BlendColors(colors[i], next_colors[i], progress);
+    }
+  }
 
-          // Blend all LED colors
-          for (uint8_t i = 0; i < 16; i++) {
-            colors[i] = BlendColors(colors[i], next_colors[i], progress);
-          }
-        }
-
-        return colors;
-      };
+  return colors;
 }
 
 }  // namespace oww::ui::leds

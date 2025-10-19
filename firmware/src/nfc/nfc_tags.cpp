@@ -75,6 +75,9 @@ void NfcTags::NfcLoop() {
   logger.trace("NfcLoop");
   drivers::MacoWatchdog::instance().Ping(drivers::ObservedThread::kNfc);
   state_machine_->Loop();
+
+  // Prevent tight loop from starving other threads.
+  delay(10);
 }
 
 void NfcTags::RegisterStateHandlers() {
@@ -249,6 +252,7 @@ NfcStateMachine::StateOpt NfcTags::OnNtag424Authenticated(
 NfcStateMachine::StateOpt NfcTags::OnTagError(TagError& state) {
   if (state.error_count > 3) {
     // wait for card to disappear
+    delay(100);
     return std::nullopt;
   }
 

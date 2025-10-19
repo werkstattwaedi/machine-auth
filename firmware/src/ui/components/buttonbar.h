@@ -5,32 +5,20 @@
 #include <memory>
 
 #include "ui/components/component.h"
+#include "ui/components/screen.h"  // For ButtonBarSpec
 
 // Forward declarations
+namespace oww::hal {
+class ILedEffect;
+}
 namespace oww::ui::leds {
-using LedEffect = hal::IHardware::LedEffect;
-class ButtonBarEffectState;
+class ButtonBarEffect;
 }
 
 namespace oww::ui {
 
-class ButtonDefinition {
- public:
-  std::string left_label;
-  bool left_enabled;
-  lv_color32_t left_color;
-  std::function<void()> left_callback;
-
-  std::string right_label;
-  bool right_enabled;
-  lv_color32_t right_color;
-  std::function<void()> right_callback;
-
-  bool up_enabled;
-  bool down_enabled;
-  std::function<void()> up_callback;
-  std::function<void()> down_callback;
-};
+// Backward compatibility alias
+using ButtonDefinition = ButtonBarSpec;
 
 // Touch points based on actual hardware button positions from image
 // Left HW button: roughly x=0 to x=45, center at x=22
@@ -61,7 +49,10 @@ class ButtonBar : public Component {
   void RemoveButtons(std::shared_ptr<ButtonDefinition> definition);
 
   /** Get the button bar LED effect for rendering */
-  leds::LedEffect GetLedEffect();
+  std::shared_ptr<hal::ILedEffect> GetLedEffect();
+
+  /** Get root LVGL object (for show/hide) */
+  lv_obj_t* GetRoot() { return root_; }
 
  private:
   std::vector<std::shared_ptr<ButtonDefinition>> definitions;
@@ -84,8 +75,8 @@ class ButtonBar : public Component {
   // Current active definition for callbacks
   std::shared_ptr<ButtonDefinition> current_definition_;
 
-  // LED effect state for button bar (shared with LED thread)
-  std::shared_ptr<leds::ButtonBarEffectState> led_effect_state_;
+  // LED effect for button bar (shared with LED thread)
+  std::shared_ptr<leds::ButtonBarEffect> led_effect_;
 };
 
 }  // namespace oww::ui

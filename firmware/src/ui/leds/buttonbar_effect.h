@@ -1,21 +1,20 @@
 #pragma once
 
 #include "ui/leds/led_effect.h"
-#include "hal/led_layout.h"
 #include <mutex>
 #include <memory>
 
 namespace oww::ui::leds {
 
 /**
- * @brief Create a button bar LED effect
+ * @brief Button bar LED effect
  *
  * Renders button LEDs based on button state (colors, enabled/disabled).
- * Returns a shared state object that can be updated from UI thread.
+ * Thread-safe for updates from UI thread and rendering from LED thread.
  */
-class ButtonBarEffectState {
+class ButtonBarEffect : public ILedEffect {
  public:
-  ButtonBarEffectState();
+  ButtonBarEffect();
 
   // Update button states (called from UI thread)
   void SetLeftButton(bool enabled, uint8_t r, uint8_t g, uint8_t b);
@@ -24,8 +23,9 @@ class ButtonBarEffectState {
   void SetDownButton(bool enabled);
   void ClearAll();
 
-  // Get the effect function
-  LedEffect GetEffect();
+  // ILedEffect interface
+  std::array<LedColor, 16> GetLeds(
+      std::chrono::time_point<std::chrono::steady_clock> animation_time) const override;
 
  private:
   mutable std::mutex mutex_;

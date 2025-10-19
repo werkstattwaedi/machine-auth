@@ -1,37 +1,30 @@
 #include "drivers/maco_hardware.h"
-#include "drivers/maco_watchdog.h"
-#include "common/time.h"
+
 #include <chrono>
+#include <iostream>
+#include <sstream>
+
+#include "common/time.h"
+#include "config.h"
+#include "drivers/maco_watchdog.h"
+#include "hal/led_effect.h"
 
 namespace oww::hal {
 
-// LED thread priority and stack size
-constexpr os_thread_prio_t kLedThreadPriority = OS_THREAD_PRIORITY_DEFAULT;
-constexpr size_t kLedThreadStackSize = 2048;
-constexpr size_t kNumLeds = 16;
-
-MacoHardware::MacoHardware(Adafruit_NeoPixel* led_strip)
-    : led_strip_(led_strip) {
+MacoHardware::MacoHardware()
+    : led_strip_(config::led::pixel_count, SPI, config::led::pixel_type) {
   // Start LED thread
+
+  led_strip_.show();
+
   led_thread_running_ = true;
   led_thread_ = new Thread(
       "LEDs", [this]() { return LEDThreadFunc(); },
-      kLedThreadPriority, kLedThreadStackSize);
+      config::led::thread_priority, config::led::thread_stack_size);
 }
 
-void MacoHardware::SetLED(uint8_t index, uint8_t r, uint8_t g, uint8_t b,
-                          uint8_t w) {
-  if (!led_strip_ || index >= led_strip_->numPixels()) return;
-  led_strip_->setPixelColor(index, r, g, b, w);
-}
-
-void MacoHardware::ShowLEDs() {
-  if (!led_strip_) return;
-  led_strip_->show();
-}
-
-void MacoHardware::SetLedCallback(LedCallback callback) {
-  led_callback_ = callback;
+void MacoHardware::SetLedEffect(std::shared_ptr<ILedEffect> led_effect) {
+  led_effect_ = led_effect;
 }
 
 void MacoHardware::Beep(uint16_t frequency_hz, uint16_t duration_ms) {
@@ -52,8 +45,6 @@ MacoHardware::~MacoHardware() {
 }
 
 os_thread_return_t MacoHardware::LEDThreadFunc() {
-  constexpr auto kFrameTime = std::chrono::milliseconds(16);  // ~60fps
-
   while (led_thread_running_) {
     auto frame_start = timeSinceBoot();
 
@@ -61,22 +52,29 @@ os_thread_return_t MacoHardware::LEDThreadFunc() {
     drivers::MacoWatchdog::instance().Ping(drivers::ObservedThread::kLed);
 
     // Render all LEDs using callback
-    if (led_callback_ && led_strip_) {
-      auto colors = led_callback_(frame_start);
-      for (uint8_t i = 0; i < kNumLeds && i < colors.size(); i++) {
-        SetLED(i, colors[i].r, colors[i].g, colors[i].b, colors[i].w);
-      }
-      ShowLEDs();
+    if (!led_effect_) {
+      delay(config::led::target_frame_time);
+      continue;
     }
+    auto colors = led_effect_->GetLeds(frame_start);
+    for (uint8_t i = 0; i < config::led::pixel_count && i < colors.size();
+         i++) {
+      auto color = colors[i];
+      if (color.unspecified) continue;
+      led_strip_.setPixelColor(i, color.r, color.g, color.b, color.w);
+    }
+
+    // Note: calling show on the LEDs takes roghly 5ms
+    led_strip_.show();
 
     // Maintain frame rate
     auto frame_end = timeSinceBoot();
     auto frame_duration = std::chrono::duration_cast<std::chrono::milliseconds>(
         frame_end - frame_start);
-    auto sleep_time = kFrameTime - frame_duration;
+    auto sleep_time = config::led::target_frame_time - frame_duration;
 
     if (sleep_time > std::chrono::milliseconds(0)) {
-      delay(sleep_time.count());
+      delay(sleep_time);
     }
   }
 }

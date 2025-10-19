@@ -195,7 +195,9 @@ const char* MacoWatchdog::GetThreadName(ObservedThread thread) {
     case ObservedThread::kUi:
       return "UI";
     case ObservedThread::kLed:
-      return "LED";
+      return "LED";    
+      case ObservedThread::kDisplayFlush:
+      return "DisplayFlush";
     default:
       return "Unknown";
   }

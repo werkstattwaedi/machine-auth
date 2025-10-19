@@ -3,7 +3,6 @@
 #include <algorithm>
 
 #include "common.h"
-#include "hal/led_layout.h"
 #include "ui/leds/buttonbar_effect.h"
 
 namespace oww::ui {
@@ -14,7 +13,7 @@ ButtonBar::ButtonBar(lv_obj_t* parent,
                      std::shared_ptr<state::IApplicationState> state,
                      hal::IHardware* hardware)
     : Component(state, hardware),
-      led_effect_state_(std::make_shared<leds::ButtonBarEffectState>()) {
+      led_effect_(std::make_shared<leds::ButtonBarEffect>()) {
   // Create the main container for the button bar
   // ButtonBar: 240×50px at bottom of screen, no padding
   root_ = lv_obj_create(parent);
@@ -69,8 +68,8 @@ ButtonBar::ButtonBar(lv_obj_t* parent,
 
 ButtonBar::~ButtonBar() { lv_obj_delete(root_); }
 
-leds::LedEffect ButtonBar::GetLedEffect() {
-  return led_effect_state_->GetEffect();
+std::shared_ptr<hal::ILedEffect> ButtonBar::GetLedEffect() {
+  return led_effect_;
 }
 
 void ButtonBar::Render() {
@@ -79,7 +78,7 @@ void ButtonBar::Render() {
     lv_obj_add_flag(left_button_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(right_button_, LV_OBJ_FLAG_HIDDEN);
     current_definition_ = nullptr;
-    led_effect_state_->ClearAll();
+    led_effect_->ClearAll();
     return;
   }
 
@@ -141,22 +140,22 @@ void ButtonBar::Render() {
   // Bottom left button
   if (definition->left_enabled) {
     auto [r, g, b] = scale_color(definition->left_color, 180);
-    led_effect_state_->SetLeftButton(true, r, g, b);
+    led_effect_->SetLeftButton(true, r, g, b);
   } else {
-    led_effect_state_->SetLeftButton(false, 0, 0, 0);
+    led_effect_->SetLeftButton(false, 0, 0, 0);
   }
 
   // Bottom right button
   if (definition->right_enabled) {
     auto [r, g, b] = scale_color(definition->right_color, 180);
-    led_effect_state_->SetRightButton(true, r, g, b);
+    led_effect_->SetRightButton(true, r, g, b);
   } else {
-    led_effect_state_->SetRightButton(false, 0, 0, 0);
+    led_effect_->SetRightButton(false, 0, 0, 0);
   }
 
   // Top buttons (up/down) - use warm white
-  led_effect_state_->SetUpButton(definition->up_enabled);
-  led_effect_state_->SetDownButton(definition->down_enabled);
+  led_effect_->SetUpButton(definition->up_enabled);
+  led_effect_->SetDownButton(definition->down_enabled);
 }
 
 void ButtonBar::ActivateButtons(std::shared_ptr<ButtonDefinition> definition) {

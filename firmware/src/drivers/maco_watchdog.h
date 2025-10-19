@@ -10,6 +10,7 @@ enum class ObservedThread {
   kNfc,
   kUi,
   kLed,
+  kDisplayFlush,
   kCount  // Total number of threads
 };
 
@@ -26,7 +27,7 @@ class MacoWatchdog {
   static constexpr system_tick_t kNormalTimeout = 10000;  // 10 seconds after boot
 
   // Report interval for ping frequency statistics
-  static constexpr system_tick_t kReportInterval = 5000;  // 5 seconds
+  static constexpr system_tick_t kReportInterval = 1000;  // 5 seconds
 
 #if defined(DEVELOPMENT_BUILD)
   // Grace period after timeout before resetting (development only)

@@ -44,6 +44,7 @@ set(SHARED_UI_LEDS_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/leds/effect_manager.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/leds/buttonbar_effect.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/leds/multiplexer.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/leds/session_effects.cpp
 )
 
 # Shared UI sources from firmware
@@ -51,7 +52,7 @@ set(SHARED_UI_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/core/ui_manager.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/components/component.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/components/buttonbar.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/components/maincontent.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/components/screen.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/components/sessionstatus.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/components/splashscreen.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/components/statusbar.cpp

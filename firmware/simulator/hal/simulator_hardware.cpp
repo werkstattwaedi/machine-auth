@@ -1,7 +1,10 @@
 #include "simulator_hardware.h"
+
+#include <chrono>
 #include <cmath>
 #include <cstdio>
-#include <chrono>
+
+#include "hal/led_effect.h"
 
 namespace oww::hal {
 
@@ -43,10 +46,10 @@ void SimulatorHardware::Initialize(SDL_Renderer* renderer) {
 
   // Try to load a system font
   const char* font_paths[] = {
-      "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",           // Ubuntu/Debian
-      "/usr/share/fonts/dejavu/DejaVuSans.ttf",                    // Other Linux
-      "/System/Library/Fonts/Helvetica.ttc",                       // macOS
-      "C:\\Windows\\Fonts\\arial.ttf",                              // Windows
+      "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",  // Ubuntu/Debian
+      "/usr/share/fonts/dejavu/DejaVuSans.ttf",           // Other Linux
+      "/System/Library/Fonts/Helvetica.ttc",              // macOS
+      "C:\\Windows\\Fonts\\arial.ttf",                    // Windows
   };
 
   for (const char* path : font_paths) {
@@ -71,7 +74,7 @@ void SimulatorHardware::InitializeLEDPositions() {
   const int disp_h = 320;
 
   const int center_x = disp_x + disp_w / 2;  // 170
-  const int bottom_y = disp_y + disp_h;       // 370
+  const int bottom_y = disp_y + disp_h;      // 370
 
   // LED sizes
   const int ring_led_size = 10;
@@ -79,8 +82,10 @@ void SimulatorHardware::InitializeLEDPositions() {
   const int nfc_led_size = 8;
 
   // Right side: 0, 14, 15 (bottom to top)
-  led_positions_[0] = {disp_x + disp_w + 20, disp_y + disp_h - 60, ring_led_size};
-  led_positions_[15] = {disp_x + disp_w + 20, disp_y + disp_h / 2, ring_led_size};
+  led_positions_[0] = {disp_x + disp_w + 20, disp_y + disp_h - 60,
+                       ring_led_size};
+  led_positions_[15] = {disp_x + disp_w + 20, disp_y + disp_h / 2,
+                        ring_led_size};
   led_positions_[14] = {disp_x + disp_w + 20, disp_y + 60, ring_led_size};
 
   // Buttons: 10, 11 above display, 4, 1 below display
@@ -113,7 +118,8 @@ void SimulatorHardware::InitializeLEDPositions() {
   led_positions_[12] = {disp_x + disp_w - 60, disp_y - 20, ring_led_size};
 }
 
-void SimulatorHardware::SetLED(uint8_t index, uint8_t r, uint8_t g, uint8_t b, uint8_t w) {
+void SimulatorHardware::SetLED(uint8_t index, uint8_t r, uint8_t g, uint8_t b,
+                               uint8_t w) {
   if (index < 16) {
     std::lock_guard<std::mutex> lock(leds_mutex_);
     leds_[index] = {r, g, b, w};
@@ -128,8 +134,8 @@ void SimulatorHardware::ShowLEDs() {
   DrawLabels();
 }
 
-void SimulatorHardware::SetLedCallback(LedCallback callback) {
-  led_callback_ = callback;
+void SimulatorHardware::SetLedEffect(std::shared_ptr<ILedEffect> led_effect) {
+  led_effect_ = led_effect;
 }
 
 void SimulatorHardware::Beep(uint16_t frequency_hz, uint16_t duration_ms) {
@@ -154,7 +160,8 @@ void SimulatorHardware::SimulateNFCTag(const uint8_t* uid, size_t len) {
   fflush(stdout);
 }
 
-void SimulatorHardware::DrawCircle(int x, int y, int radius, uint8_t r, uint8_t g, uint8_t b) {
+void SimulatorHardware::DrawCircle(int x, int y, int radius, uint8_t r,
+                                   uint8_t g, uint8_t b) {
   if (!renderer_) return;
 
   SDL_SetRenderDrawColor(renderer_, r, g, b, 255);
@@ -171,7 +178,8 @@ void SimulatorHardware::DrawCircle(int x, int y, int radius, uint8_t r, uint8_t 
   }
 }
 
-void SimulatorHardware::DrawText(const char* text, int x, int y, SDL_Color color) {
+void SimulatorHardware::DrawText(const char* text, int x, int y,
+                                 SDL_Color color) {
   if (!font_ || !renderer_) return;
 
   SDL_Surface* surface = TTF_RenderText_Solid(font_, text, color);
@@ -227,8 +235,8 @@ void SimulatorHardware::LEDThreadFunc() {
     auto frame_start = std::chrono::steady_clock::now();
 
     // Render all LEDs using callback
-    if (led_callback_) {
-      auto colors = led_callback_(frame_start);
+    if (led_effect_) {
+      auto colors = led_effect_->GetLeds(frame_start);
       for (uint8_t i = 0; i < kNumLeds && i < colors.size(); i++) {
         SetLED(i, colors[i].r, colors[i].g, colors[i].b, colors[i].w);
       }

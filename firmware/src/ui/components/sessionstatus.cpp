@@ -1,9 +1,11 @@
 #include "ui/components/sessionstatus.h"
 
+#include <chrono>
+
 #include "common.h"
 #include "lvgl.h"
 #include "state/machine_state.h"
-#include <chrono>
+#include "ui/leds/session_effects.h"
 
 LV_IMG_DECLARE(tap_token);
 
@@ -12,16 +14,18 @@ namespace oww::ui {
 SessionStatus::SessionStatus(lv_obj_t* parent,
                              std::shared_ptr<state::IApplicationState> state,
                              hal::IHardware* hardware)
-    : MainContent(parent, state, hardware),
-      last_state_id_(nullptr),
-      user_label_(nullptr),
-      duration_label_(nullptr),
-      icon_(nullptr) {
+    : Screen(parent, state, hardware) {
   CreateNfcIconArea();
   CreateStatusText();
 
   // Initialize with empty button definition
-  current_buttons_ = std::make_shared<ButtonDefinition>();
+  current_buttons_ = std::make_shared<ButtonBarSpec>();
+
+  // Create LED effects for each state
+  idle_effect_ = std::make_shared<leds::IdleBreathingEffect>();
+  active_effect_ = std::make_shared<leds::ActiveSolidEffect>();
+  denied_effect_ = std::make_shared<leds::DeniedBlinkEffect>();
+  current_effect_ = idle_effect_;  // Start with idle
 }
 
 SessionStatus::~SessionStatus() {
@@ -60,12 +64,12 @@ void SessionStatus::CreateStatusText() {
 }
 
 void SessionStatus::OnActivate() {
-  MainContent::OnActivate();
+  Screen::OnActivate();
   // Force update when activated
   last_state_id_ = nullptr;
 }
 
-void SessionStatus::OnDeactivate() { MainContent::OnDeactivate(); }
+void SessionStatus::OnDeactivate() { Screen::OnDeactivate(); }
 
 void SessionStatus::Render() {
   auto machine_state = app_->GetMachineState();
@@ -96,8 +100,26 @@ void SessionStatus::Render() {
   UpdateButtonsForState();
 }
 
-std::shared_ptr<ButtonDefinition> SessionStatus::GetButtonDefinition() {
+std::shared_ptr<ButtonBarSpec> SessionStatus::GetButtonBarSpec() const {
   return current_buttons_;
+}
+
+std::shared_ptr<hal::ILedEffect> SessionStatus::GetLedEffect() {
+  auto machine_state = app_->GetMachineState();
+
+  // Update current effect based on machine state
+  std::visit(overloaded{[this](const state::machine::Idle&) {
+                          current_effect_ = idle_effect_;
+                        },
+                        [this](const state::machine::Active&) {
+                          current_effect_ = active_effect_;
+                        },
+                        [this](const state::machine::Denied&) {
+                          current_effect_ = denied_effect_;
+                        }},
+             *machine_state);
+
+  return current_effect_;
 }
 
 // ============================================================================
@@ -173,8 +195,8 @@ void SessionStatus::RenderActiveState(const state::machine::Active& active) {
 
   // Calculate and format duration
   auto now = timeUtc();
-  auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
-      now - active.start_time);
+  auto elapsed =
+      std::chrono::duration_cast<std::chrono::seconds>(now - active.start_time);
   std::string duration_text = FormatDuration(elapsed);
   lv_label_set_text(duration_label_, duration_text.c_str());
 }
@@ -214,41 +236,43 @@ void SessionStatus::RenderDeniedState(const state::machine::Denied& denied) {
 void SessionStatus::UpdateButtonsForState() {
   auto machine_state = app_->GetMachineState();
 
-  std::visit(
-      overloaded{
-          [this](const state::machine::Idle&) {
-            // No buttons in idle state
-            current_buttons_->left_enabled = false;
-            current_buttons_->right_enabled = false;
-            current_buttons_->up_enabled = false;
-            current_buttons_->down_enabled = false;
-          },
-          [this](const state::machine::Active&) {
-            // "Stopp" button on left side (yellow)
-            current_buttons_->left_enabled = true;
-            current_buttons_->left_label = "Stopp";
-            current_buttons_->left_color = lv_color32_make(0xf9, 0xc7, 0x4f, 0xff);
-            current_buttons_->left_callback = [this]() {
-              app_->RequestManualCheckOut();
-            };
-            current_buttons_->right_enabled = false;
-            current_buttons_->up_enabled = false;
-            current_buttons_->down_enabled = false;
-          },
-          [this](const state::machine::Denied&) {
-            // "OK" button to dismiss (or auto-dismiss after timeout)
-            current_buttons_->left_enabled = true;
-            current_buttons_->left_label = "OK";
-            current_buttons_->left_color = lv_color32_make(0xf9, 0xc7, 0x4f, 0xff);
-            current_buttons_->left_callback = [this]() {
-              // Denial state should auto-clear, but allow manual dismiss
-              // This would need to be handled by application logic
-            };
-            current_buttons_->right_enabled = false;
-            current_buttons_->up_enabled = false;
-            current_buttons_->down_enabled = false;
-          }},
-      *machine_state);
+  std::visit(overloaded{[this](const state::machine::Idle&) {
+                          // No buttons in idle state
+                          current_buttons_->left_enabled = false;
+                          current_buttons_->right_enabled = false;
+                          current_buttons_->up_enabled = false;
+                          current_buttons_->down_enabled = false;
+                        },
+                        [this](const state::machine::Active&) {
+                          // "Stopp" button on left side (yellow)
+                          current_buttons_->left_enabled = true;
+                          current_buttons_->left_label = "Stopp";
+                          current_buttons_->left_color =
+                              lv_color32_make(0xf9, 0xc7, 0x4f, 0xff);
+                          current_buttons_->left_callback = [this]() {
+                            app_->RequestManualCheckOut();
+                          };
+                          current_buttons_->right_enabled = false;
+                          current_buttons_->up_enabled = false;
+                          current_buttons_->down_enabled = false;
+                        },
+                        [this](const state::machine::Denied&) {
+                          // "OK" button to dismiss (or auto-dismiss after
+                          // timeout)
+                          current_buttons_->left_enabled = true;
+                          current_buttons_->left_label = "OK";
+                          current_buttons_->left_color =
+                              lv_color32_make(0xf9, 0xc7, 0x4f, 0xff);
+                          current_buttons_->left_callback = [this]() {
+                            // Denial state should auto-clear, but allow manual
+                            // dismiss This would need to be handled by
+                            // application logic
+                          };
+                          current_buttons_->right_enabled = false;
+                          current_buttons_->up_enabled = false;
+                          current_buttons_->down_enabled = false;
+                        }},
+             *machine_state);
 }
 
 std::string SessionStatus::FormatDuration(std::chrono::seconds elapsed) {

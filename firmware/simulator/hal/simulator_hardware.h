@@ -29,7 +29,7 @@ class SimulatorHardware : public IHardware {
   void Initialize(SDL_Renderer* renderer);
 
   // Set LED callback (runs on dedicated thread)
-  void SetLedCallback(LedCallback callback) override;
+  void SetLedEffect(std::shared_ptr<ILedEffect> led_effect) override;
 
   // Render LEDs visually (called by main loop for SDL rendering)
   void ShowLEDs();
@@ -62,7 +62,7 @@ class SimulatorHardware : public IHardware {
   std::mutex leds_mutex_;  // Protect LED state from concurrent access
 
   // LED callback system
-  LedCallback led_callback_;
+  std::shared_ptr<ILedEffect> led_effect_;
   std::thread led_thread_;
   std::atomic<bool> led_thread_running_{false};
 
