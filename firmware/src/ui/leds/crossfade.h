@@ -13,12 +13,12 @@ namespace oww::ui::leds {
  * Simple crossfader that blends between old and new effects.
  * Not thread-safe - caller must handle synchronization.
  */
-class EffectManager : public ILedEffect {
+class Crossfade : public ILedEffect {
  public:
   /**
    * @param crossfade_ms Default crossfade duration when changing effects
    */
-  explicit EffectManager(uint16_t crossfade_ms = 500);
+  explicit Crossfade(uint16_t crossfade_ms = 500);
 
   /**
    * @brief Set new effect

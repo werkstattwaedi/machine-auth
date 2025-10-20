@@ -1,15 +1,15 @@
-#include "ui/leds/effect_manager.h"
+#include "ui/leds/crossfade.h"
 #include "common/time.h"
 
 namespace oww::ui::leds {
 
-EffectManager::EffectManager(uint16_t crossfade_ms)
+Crossfade::Crossfade(uint16_t crossfade_ms)
     : current_effect_(nullptr),
       current_start_time_(timeSinceBoot()),
       next_effect_(nullptr),
       crossfade_ms_(crossfade_ms) {}
 
-void EffectManager::SetEffect(std::shared_ptr<ILedEffect> effect,
+void Crossfade::SetEffect(std::shared_ptr<ILedEffect> effect,
                                bool immediate) {
   if (immediate || !current_effect_) {
     // Immediate switch or no current effect
@@ -23,7 +23,7 @@ void EffectManager::SetEffect(std::shared_ptr<ILedEffect> effect,
   }
 }
 
-float EffectManager::GetCrossfadeProgress() const {
+float Crossfade::GetCrossfadeProgress() const {
   if (!next_effect_) {
     return 0.0f;  // No transition in progress
   }
@@ -39,7 +39,7 @@ float EffectManager::GetCrossfadeProgress() const {
   return elapsed.count() / static_cast<float>(crossfade_ms_);
 }
 
-std::array<LedColor, 16> EffectManager::GetLeds(
+std::array<LedColor, 16> Crossfade::GetLeds(
     std::chrono::time_point<std::chrono::steady_clock> animation_time) const {
   // Check if transition is complete (mutable state update)
   if (next_effect_) {
@@ -47,10 +47,10 @@ std::array<LedColor, 16> EffectManager::GetLeds(
     if (progress >= 1.0f) {
       // Transition complete - promote next to current
       // NOTE: This is mutable state modification, but safe because
-      // EffectManager is only called from one thread (LED thread via UiManager)
-      const_cast<EffectManager*>(this)->current_effect_ = next_effect_;
-      const_cast<EffectManager*>(this)->current_start_time_ = timeSinceBoot();
-      const_cast<EffectManager*>(this)->next_effect_ = nullptr;
+      // Crossfade is only called from one thread (LED thread via UiManager)
+      const_cast<Crossfade*>(this)->current_effect_ = next_effect_;
+      const_cast<Crossfade*>(this)->current_start_time_ = timeSinceBoot();
+      const_cast<Crossfade*>(this)->next_effect_ = nullptr;
     }
   }
 

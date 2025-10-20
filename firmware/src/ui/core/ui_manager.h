@@ -7,7 +7,7 @@
 #include "ui/components/buttonbar.h"
 #include "ui/components/screen.h"
 #include "ui/components/statusbar.h"
-#include "ui/leds/effect_manager.h"
+#include "ui/leds/crossfade.h"
 #include "ui/leds/multiplexer.h"
 #include "hal/hardware_interface.h"
 
@@ -78,7 +78,7 @@ class UiManager {
   lv_obj_t* content_container_ = nullptr;  // Container for main screens
 
   // LED effect management
-  std::shared_ptr<leds::EffectManager> effect_manager_;
+  std::shared_ptr<leds::Crossfade> crossfade_;
   std::shared_ptr<leds::Multiplexer> multiplexer_;
 
   // Track current effects for change detection

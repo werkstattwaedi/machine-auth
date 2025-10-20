@@ -16,12 +16,12 @@ UiManager::UiManager(std::shared_ptr<state::IApplicationState> app,
       hardware_(hardware),
       root_screen_(root_screen),
       machine_label_(machine_label),
-      effect_manager_(std::make_shared<leds::EffectManager>(500)),
+      crossfade_(std::make_shared<leds::Crossfade>(500)),
       multiplexer_(std::make_shared<leds::Multiplexer>()) {
   // Set up LED callback if hardware is available
   if (hardware_) {
-    // Create a lambda that bridges to effect_manager's GetLeds method
-    hardware_->SetLedEffect(effect_manager_);
+    // Create a lambda that bridges to root crossfade's GetLeds method
+    hardware_->SetLedEffect(crossfade_);
   }
 
   // Auto-create splash screen during boot
@@ -211,7 +211,7 @@ void UiManager::UpdateLedEffects() {
     std::shared_ptr<hal::ILedEffect> mux_effect =
         std::shared_ptr<hal::ILedEffect>(multiplexer_.get(),
                                          [](hal::ILedEffect*) {});
-    effect_manager_->SetEffect(mux_effect, false);
+    crossfade_->SetEffect(mux_effect, false);
   }
 }
 
