@@ -66,6 +66,9 @@ class MacoWatchdog {
   // Last time we reported statistics
   system_tick_t last_report_time_;
 
+  // Last time we performed a full check (for throttling)
+  system_tick_t last_check_time_;
+
   // Current thread timeout value (starts at kBootTimeout, reduced to kNormalTimeout after boot)
   system_tick_t thread_timeout_;
 

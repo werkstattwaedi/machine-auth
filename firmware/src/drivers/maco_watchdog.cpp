@@ -19,6 +19,9 @@ MacoWatchdog::MacoWatchdog() {
   // Initialize ping counts to 0
   ping_count_.fill(0);
 
+  // Initialize check time to 0
+  last_check_time_ = 0;
+
   // Start with boot timeout (60s) - will be reduced to 10s after boot
   thread_timeout_ = kBootTimeout;
 }
@@ -71,12 +74,14 @@ void MacoWatchdog::Ping(ObservedThread thread) {
 bool MacoWatchdog::Check() {
   auto now = millis();
 
-  // Throttle: only run full check once per second
-  static system_tick_t last_check_time = 0;
-  if (now - last_check_time < 1000) {
+  // Throttle: only run full check once per second (mutex-protected to prevent race)
+  os_mutex_lock(mutex_);
+  if (now - last_check_time_ < 1000) {
+    os_mutex_unlock(mutex_);
     return true;  // Early return, assume healthy
   }
-  last_check_time = now;
+  last_check_time_ = now;
+  os_mutex_unlock(mutex_);
 
   bool all_healthy = true;
   bool should_reset = false;
