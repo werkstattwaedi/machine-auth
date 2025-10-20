@@ -61,7 +61,7 @@ void setup() {
     return;
   }
 
-  auto display_setup_result = oww::ui::UserInterface::instance().Begin(app_);
+  auto ui_start_result = oww::ui::MacoUI::instance().Begin(app_);
 
 #if defined(DEVELOPMENT_BUILD)
   // Await the terminal connections, so that all log messages during setup are
@@ -70,9 +70,9 @@ void setup() {
   waitFor(Serial.isConnected, 5000);
 #endif
 
-  if (!display_setup_result) {
+  if (!ui_start_result) {
     entrypoint_logger.info("Failed to start display = %d",
-                           (int)display_setup_result.error());
+                           (int)ui_start_result.error());
   }
 
   app_->SetBootProgress(BootPhase::InitHardware);
