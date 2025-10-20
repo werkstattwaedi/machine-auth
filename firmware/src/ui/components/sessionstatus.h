@@ -5,6 +5,10 @@
 
 #include "ui/components/screen.h"
 
+namespace oww::ui::leds {
+class SessionEffect;
+}
+
 namespace oww::ui {
 
 class SessionStatus : public Screen {
@@ -33,11 +37,8 @@ class SessionStatus : public Screen {
   // Current state tracking
   void* last_state_id_ = nullptr;
 
-  // LED effects for different machine states
-  std::shared_ptr<hal::ILedEffect> idle_effect_;
-  std::shared_ptr<hal::ILedEffect> active_effect_;
-  std::shared_ptr<hal::ILedEffect> denied_effect_;
-  std::shared_ptr<hal::ILedEffect> current_effect_;
+  // Unified LED effect for all machine states
+  std::shared_ptr<leds::SessionEffect> session_effect_;
 
   // Setup methods
   void CreateNfcIconArea();

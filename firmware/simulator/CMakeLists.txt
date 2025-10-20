@@ -41,7 +41,7 @@ set(CUSTOM_ASSETS
 set(SHARED_UI_LEDS_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/leds/led_effect.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/leds/boot_wave_effect.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/leds/effect_manager.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/leds/crossfade.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/leds/buttonbar_effect.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/leds/multiplexer.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/leds/session_effects.cpp

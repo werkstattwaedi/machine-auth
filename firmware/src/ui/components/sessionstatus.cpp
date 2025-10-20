@@ -5,6 +5,7 @@
 #include "common.h"
 #include "lvgl.h"
 #include "state/machine_state.h"
+#include "state/tag_state.h"
 #include "ui/leds/session_effects.h"
 
 LV_IMG_DECLARE(tap_token);
@@ -21,11 +22,8 @@ SessionStatus::SessionStatus(lv_obj_t* parent,
   // Initialize with empty button definition
   current_buttons_ = std::make_shared<ButtonBarSpec>();
 
-  // Create LED effects for each state
-  idle_effect_ = std::make_shared<leds::IdleBreathingEffect>();
-  active_effect_ = std::make_shared<leds::ActiveSolidEffect>();
-  denied_effect_ = std::make_shared<leds::DeniedBlinkEffect>();
-  current_effect_ = idle_effect_;  // Start with idle
+  // Create unified LED effect (starts in Idle state)
+  session_effect_ = std::make_shared<leds::SessionEffect>();
 }
 
 SessionStatus::~SessionStatus() {
@@ -106,20 +104,59 @@ std::shared_ptr<ButtonBarSpec> SessionStatus::GetButtonBarSpec() const {
 
 std::shared_ptr<hal::ILedEffect> SessionStatus::GetLedEffect() {
   auto machine_state = app_->GetMachineState();
+  auto tag_state = app_->GetTagState();
 
-  // Update current effect based on machine state
-  std::visit(overloaded{[this](const state::machine::Idle&) {
-                          current_effect_ = idle_effect_;
-                        },
-                        [this](const state::machine::Active&) {
-                          current_effect_ = active_effect_;
-                        },
-                        [this](const state::machine::Denied&) {
-                          current_effect_ = denied_effect_;
-                        }},
-             *machine_state);
+  // Check if we're in an authentication flow (overrides machine state)
+  bool auth_in_progress = false;
 
-  return current_effect_;
+  std::visit(
+      overloaded{
+          [](const state::tag::NoTag&) {},
+          [](const state::tag::UnsupportedTag&) {},
+          [this, &auth_in_progress](const state::tag::AuthenticatedTag&) {
+            // Tag just authenticated - starting session creation
+            session_effect_->SetState(leds::SessionState::AuthStartSession);
+            auth_in_progress = true;
+          },
+          [this, &auth_in_progress](const state::tag::SessionTag& session_tag) {
+            // Session creation in progress - check which phase
+            if (session_tag.creation_state
+                    .Is<state::session_creation::Begin>() ||
+                session_tag.creation_state
+                    .Is<state::session_creation::AwaitStartSessionResponse>()) {
+              session_effect_->SetState(leds::SessionState::AuthStartSession);
+              auth_in_progress = true;
+            } else if (session_tag.creation_state
+                           .Is<state::session_creation::
+                                   AwaitAuthenticateNewSessionResponse>()) {
+              session_effect_->SetState(leds::SessionState::AuthNewSession);
+              auth_in_progress = true;
+            } else if (session_tag.creation_state
+                           .Is<state::session_creation::
+                                   AwaitCompleteAuthenticationResponse>()) {
+              session_effect_->SetState(leds::SessionState::AuthComplete);
+              auth_in_progress = true;
+            }
+            // For Succeeded, Rejected, Failed: let machine state drive the LED
+          }},
+      *tag_state);
+
+  // If not in auth flow, use machine state
+  if (!auth_in_progress) {
+    std::visit(
+        overloaded{[this](const state::machine::Idle&) {
+                     session_effect_->SetState(leds::SessionState::Idle);
+                   },
+                   [this](const state::machine::Active&) {
+                     session_effect_->SetState(leds::SessionState::Active);
+                   },
+                   [this](const state::machine::Denied&) {
+                     session_effect_->SetState(leds::SessionState::Denied);
+                   }},
+        *machine_state);
+  }
+
+  return session_effect_;
 }
 
 // ============================================================================
