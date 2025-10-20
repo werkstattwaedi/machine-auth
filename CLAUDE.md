@@ -275,12 +275,40 @@ if (!result) {
 The firmware uses multiple threads:
 - **Main thread**: Application logic, state machines
 - **NFC thread** (`nfc/nfc_tags.cpp`): Dedicated NFC polling loop, higher priority
-- **UI thread** (`ui/ui.cpp`): LVGL display updates
+- **UI thread** (`ui/platform/maco_ui.cpp`): LVGL display updates
+- **LED thread** (`ui/platform/maco_ui.cpp`): LED rendering at fixed frame rate
 
 **Thread Safety:**
 - Use mutexes for shared state (`WITH_LOCK()` macro)
 - `Application` has a mutex for cross-thread access
 - `NfcTags::QueueAction()` safely queues actions from main thread to NFC thread
+
+**CRITICAL - Static Variables in Multi-Threaded Code:**
+- ❌ **NEVER use static local variables** accessed from multiple threads without mutex protection
+- Static locals are shared across all threads but lack inherent synchronization
+- Common bug pattern: throttling mechanisms using `static system_tick_t last_check = 0`
+- ✅ **Always use mutex-protected member variables** for shared state across threads
+
+**Example of the bug:**
+```cpp
+// ❌ DANGEROUS - race condition
+bool Check() {
+  static system_tick_t last_check_time = 0;  // Shared, unprotected!
+  if (now - last_check_time < 1000) return true;
+  last_check_time = now;  // Multiple threads can interleave here
+}
+
+// ✅ SAFE - mutex-protected member
+bool Check() {
+  os_mutex_lock(mutex_);
+  if (now - last_check_time_ < 1000) {
+    os_mutex_unlock(mutex_);
+    return true;
+  }
+  last_check_time_ = now;
+  os_mutex_unlock(mutex_);
+}
+```
 
 ### Codestyle
 
@@ -334,6 +362,16 @@ led_positions_[2] = {x, y, size};
 
 **Rationale:** Comments describing changes ("swapped", "inverted", "fixed") only make sense during development but confuse future readers. Change history belongs in commit messages and chat logs, not in code. Comments should help readers understand the system's design and intentions.
 
+#### Naming Conventions
+
+**Avoid Generic "Manager" Suffixes:**
+- ❌ `EffectManager` - vague, could mean anything
+- ✅ `Crossfade` - specific, describes what it does
+- ❌ `DataManager` - what kind of management?
+- ✅ `SessionRegistry` or `SessionCache` - clear responsibility
+
+**Principle:** Class names should describe their specific responsibility, not generic roles. Reserve "Manager" for true orchestrators that coordinate multiple subsystems.
+
 ### Module Organization
 
 ```
@@ -374,13 +412,43 @@ firmware/src/
 ├── hal/                 # Hardware abstraction layer
 ├── setup/               # Device setup mode for provisioning
 ├── ui/                  # User interface (LVGL-based)
-│   ├── ui.*             # UI thread and main screens
-│   ├── components/      # UI components
+│   ├── platform/
+│   │   └── maco_ui.*    # MACO platform implementation (singleton)
+│   │                    # - Unified platform layer: display, touch, LEDs, buzzer
+│   │                    # - Implements IHardware interface
+│   │                    # - Manages UI thread and LED thread
+│   │                    # - Entry point: MacoUI::instance().Begin()
+│   ├── core/
+│   │   └── ui_manager.* # Platform-independent UI state & screen management
+│   ├── components/      # Reusable UI components (ButtonBar, SessionStatus, etc.)
+│   ├── leds/            # LED effect system
+│   │   ├── crossfade.*  # Crossfading effect implementation
+│   │   └── multiplexer.*# Multiplexes multiple LED effects
 │   └── screens/         # LVGL screen definitions
 ├── config.h             # Pin assignments and hardware config
 ├── entrypoint.cpp       # setup() and loop() - Particle entry points
 └── faulthandler.*       # Crash handler and diagnostics
 ```
+
+### Platform Architecture
+
+**MacoUI: Unified Platform Layer**
+
+`ui/platform/maco_ui.{h,cpp}` is the **canonical MACO platform implementation**. It consolidates all platform-specific initialization:
+
+- Display initialization (ILI9341 via SPI)
+- Touch button mapping
+- LED strip initialization (WS2812 NeoPixel)
+- Buzzer configuration
+- UI thread management
+- LED rendering thread
+
+**Design Principle:** Platform code is unified in one location (`ui/platform/`), not split between `drivers/` and `ui/`. MacoUI implements `IHardware` interface to provide hardware abstraction to platform-independent UI components.
+
+**When porting to new hardware:**
+- Copy `ui/platform/maco_ui.*` as template
+- Implement display, touch, LED, buzzer for new platform
+- Platform-independent code in `ui/core/` and `ui/components/` works unchanged
 
 ## Cloud Integration Notes
 
