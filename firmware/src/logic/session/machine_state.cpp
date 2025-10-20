@@ -16,21 +16,23 @@
 
 namespace oww::logic::session {
 
+using namespace state;
+
 Logger MachineUsage::logger("app.logic.session.machine_usage");
 
 MachineUsage::MachineUsage(oww::logic::Application* app)
     : app_(app),
       state_machine_(MachineStateMachine::Create(
-          std::in_place_type<machine_state::Idle>)) {
+          std::in_place_type<machine::Idle>)) {
   RegisterStateHandlers();
 }
 
 void MachineUsage::RegisterStateHandlers() {
-  state_machine_->OnLoop<machine_state::Idle>(
+  state_machine_->OnLoop<machine::Idle>(
       [this](auto& state) { return OnIdle(state); });
-  state_machine_->OnLoop<machine_state::Active>(
+  state_machine_->OnLoop<machine::Active>(
       [this](auto& state) { return OnActive(state); });
-  state_machine_->OnLoop<machine_state::Denied>(
+  state_machine_->OnLoop<machine::Denied>(
       [this](auto& state) { return OnDenied(state); });
 }
 
@@ -80,16 +82,17 @@ void MachineUsage::Begin(const fbs::Machine& machine) {
   digitalWrite(config::ext::pin_i2c_enable, HIGH);
 }
 
-StateHandle MachineUsage::Loop(const SessionStateHandle& session_state) {
+MachineStateHandle MachineUsage::Loop(const SessionStateHandle& session_state) {
   // Observe session coordinator state transitions
   if (last_session_state_) {
     // Need to get the state machine from SessionCoordinator
     // For now, check state types directly on handles
 
     // Session became active
-    bool was_idle = last_session_state_->Is<coordinator_state::Idle>() ||
-                    last_session_state_->Is<coordinator_state::WaitingForTag>() ||
-                    last_session_state_->Is<coordinator_state::AuthenticatingTag>();
+    bool was_idle =
+        last_session_state_->Is<coordinator_state::Idle>() ||
+        last_session_state_->Is<coordinator_state::WaitingForTag>() ||
+        last_session_state_->Is<coordinator_state::AuthenticatingTag>();
     bool is_active = session_state.Is<coordinator_state::SessionActive>();
 
     if (was_idle && is_active) {
@@ -106,12 +109,13 @@ StateHandle MachineUsage::Loop(const SessionStateHandle& session_state) {
     }
 
     // Session ended
-    bool was_active = last_session_state_->Is<coordinator_state::SessionActive>();
+    bool was_active =
+        last_session_state_->Is<coordinator_state::SessionActive>();
     bool is_idle = session_state.Is<coordinator_state::Idle>();
 
     if (was_active && is_idle) {
       // Session ended, check out if machine is still active
-      if (state_machine_->Is<machine_state::Active>()) {
+      if (state_machine_->Is<machine::Active>()) {
         logger.info("Session ended, checking out");
         auto result = CheckOut(std::make_unique<fbs::ReasonUiT>());
         if (!result) {
@@ -136,7 +140,7 @@ tl::expected<void, ErrorType> MachineUsage::ManualCheckOut() {
 
 void MachineUsage::UpdateRelaisState() {
   PinState expected_relais_state =
-      state_machine_->Is<machine_state::Active>() ? HIGH : LOW;
+      state_machine_->Is<machine::Active>() ? HIGH : LOW;
 
   if (relais_state_ != expected_relais_state) {
     relais_state_ = expected_relais_state;
@@ -157,7 +161,7 @@ void MachineUsage::UpdateRelaisState() {
 
 tl::expected<void, ErrorType> MachineUsage::CheckIn(
     std::shared_ptr<oww::state::TokenSession> session) {
-  if (!state_machine_->Is<machine_state::Idle>()) {
+  if (!state_machine_->Is<machine::Idle>()) {
     logger.warn("CheckIn failed: machine not idle");
     return tl::unexpected(ErrorType::kWrongState);
   }
@@ -181,15 +185,16 @@ tl::expected<void, ErrorType> MachineUsage::CheckIn(
       }
       if (user_perms.empty()) user_perms = "(none)";
 
-      logger.warn("Permission denied: missing '%s'. Required: [%s], User has: [%s]",
-                  permission.c_str(), required_perms.c_str(), user_perms.c_str());
+      logger.warn(
+          "Permission denied: missing '%s'. Required: [%s], User has: [%s]",
+          permission.c_str(), required_perms.c_str(), user_perms.c_str());
       state_machine_->TransitionTo(
-          machine_state::Denied{.message = "Keine Berechtigung", .time = now});
+          machine::Denied{.message = "Keine Berechtigung", .time = now});
       return {};
     }
   }
 
-  state_machine_->TransitionTo(machine_state::Active{
+  state_machine_->TransitionTo(machine::Active{
       .session = session,
       .start_time = now,
   });
@@ -215,11 +220,11 @@ tl::expected<void, ErrorType> MachineUsage::CheckIn(
 template <typename T>
 tl::expected<void, ErrorType> MachineUsage::CheckOut(
     std::unique_ptr<T> checkout_reason) {
-  if (!state_machine_->Is<machine_state::Active>()) {
+  if (!state_machine_->Is<machine::Active>()) {
     logger.warn("CheckOut failed: machine not in use");
     return tl::unexpected(ErrorType::kWrongState);
   }
-  auto active_state = state_machine_->Get<machine_state::Active>();
+  auto active_state = state_machine_->Get<machine::Active>();
 
   if (usage_history_.records.empty()) {
     logger.error("No history record");
@@ -241,7 +246,7 @@ tl::expected<void, ErrorType> MachineUsage::CheckOut(
           .count();
   last_record->reason.Set(std::move(checkout_reason));
 
-  state_machine_->TransitionTo(machine_state::Idle{});
+  state_machine_->TransitionTo(machine::Idle{});
 
   // Reset SessionCoordinator to accept new tags
   // Note: Session stays in Sessions registry for fast re-authentication
@@ -252,13 +257,13 @@ tl::expected<void, ErrorType> MachineUsage::CheckOut(
   return {};
 }
 
-MachineStateMachine::StateOpt MachineUsage::OnIdle(machine_state::Idle& state) {
+MachineStateMachine::StateOpt MachineUsage::OnIdle(machine::Idle& state) {
   // Nothing to do in idle
   return std::nullopt;
 }
 
 MachineStateMachine::StateOpt MachineUsage::OnActive(
-    machine_state::Active& state) {
+    machine::Active& state) {
   // Check for session timeout (e.g., 8 hours absolute timeout)
   constexpr auto ABSOLUTE_TIMEOUT = std::chrono::hours(8);
 
@@ -266,9 +271,9 @@ MachineStateMachine::StateOpt MachineUsage::OnActive(
   auto elapsed = now - state.start_time;
 
   if (elapsed > ABSOLUTE_TIMEOUT) {
-    logger.warn("Session timeout after %d minutes",
-                (int)std::chrono::duration_cast<std::chrono::minutes>(elapsed)
-                    .count());
+    logger.warn(
+        "Session timeout after %d minutes",
+        (int)std::chrono::duration_cast<std::chrono::minutes>(elapsed).count());
 
     // Complete the usage record with timeout reason
     if (!usage_history_.records.empty()) {
@@ -290,7 +295,7 @@ MachineStateMachine::StateOpt MachineUsage::OnActive(
     // Note: Session stays in Sessions registry for fast re-authentication
     app_->GetSessionCoordinator().EndSession();
 
-    return machine_state::Idle{};
+    return machine::Idle{};
   }
 
   // Could also check for idle timeout based on last activity
@@ -299,10 +304,10 @@ MachineStateMachine::StateOpt MachineUsage::OnActive(
 }
 
 MachineStateMachine::StateOpt MachineUsage::OnDenied(
-    machine_state::Denied& state) {
+    machine::Denied& state) {
   // After a delay, transition back to idle
   if (timeUtc() - state.time > std::chrono::seconds(5)) {
-    return machine_state::Idle{};
+    return machine::Idle{};
   }
   return std::nullopt;
 }
@@ -353,7 +358,7 @@ void MachineUsage::UploadHistory() {
 
   // Send async request
   auto response = cloud_request->SendTerminalRequest<fbs::UploadUsageRequestT,
-                                                      fbs::UploadUsageResponseT>(
+                                                     fbs::UploadUsageResponseT>(
       "uploadUsage", request);
 
   // TODO: Track response and clear uploaded records on success

@@ -77,40 +77,8 @@ state::TagStateHandle Application::GetTagState() const {
 }
 
 state::MachineStateHandle Application::GetMachineState() const {
-  // Get internal machine state from MachineUsage
-  auto internal_state = machine_usage_.GetState();
-
-  // Convert internal state (with TokenSession pointer) to public state (with
-  // strings)
-  if (internal_state.Is<session::machine_state::Idle>()) {
-    return std::make_shared<state::MachineState>(state::machine::Idle{});
-  }
-
-  if (auto* active = internal_state.Get<session::machine_state::Active>()) {
-    // Defensive null check - should never happen but prevents crashes
-    if (!active->session) {
-      logger.error("Active state has null session");
-      return std::make_shared<state::MachineState>(state::machine::Idle{});
-    }
-    // Extract user info from TokenSession
-    return std::make_shared<state::MachineState>(state::machine::Active{
-        .session_id = active->session->GetSessionId(),
-        .user_id = active->session->GetUserId(),
-        .user_label = active->session->GetUserLabel(),
-        .start_time = active->start_time,
-    });
-  }
-
-  if (auto* denied = internal_state.Get<session::machine_state::Denied>()) {
-    return std::make_shared<state::MachineState>(state::machine::Denied{
-        .message = denied->message,
-        .time = denied->time,
-    });
-  }
-
-  // Should never reach here
-  logger.error("Unknown machine state");
-  return std::make_shared<state::MachineState>(state::machine::Idle{});
+  // Return unified machine state directly (no conversion needed)
+  return machine_usage_.GetState();
 }
 
 tl::expected<void, ErrorType> Application::RequestManualCheckOut() {

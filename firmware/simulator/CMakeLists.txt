@@ -47,6 +47,11 @@ set(SHARED_UI_LEDS_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/leds/session_effects.cpp
 )
 
+# Shared state sources from firmware
+set(SHARED_STATE_SOURCES
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src/state/token_session.cpp
+)
+
 # Shared UI sources from firmware
 set(SHARED_UI_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/../src/ui/core/ui_manager.cpp
@@ -69,6 +74,7 @@ set(SIMULATOR_SOURCES
 # Create executable
 add_executable(simulator
   ${SIMULATOR_SOURCES}
+  ${SHARED_STATE_SOURCES}
   ${SHARED_UI_LEDS_SOURCES}
   ${SHARED_UI_SOURCES}
   ${LVGL_SOURCES}

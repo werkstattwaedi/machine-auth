@@ -5,15 +5,16 @@
 #include <string>
 #include <variant>
 
-namespace oww::state::machine {
+#include "state/state_machine.h"
 
-// Machine usage states (machine on/off, access control)
+namespace oww::state {
+class TokenSession;
+
+namespace machine {
 struct Idle {};
 
 struct Active {
-  std::string session_id;
-  std::string user_id;
-  std::string user_label;
+  std::shared_ptr<TokenSession> session;
   std::chrono::time_point<std::chrono::system_clock> start_time;
 };
 
@@ -22,16 +23,12 @@ struct Denied {
   std::chrono::time_point<std::chrono::system_clock> time;
 };
 
-}  // namespace oww::state::machine
+}  // namespace machine
 
-namespace oww::state {
+using MachineStateMachine =
+    StateMachine<machine::Idle, machine::Active, machine::Denied>;
 
-// Machine state variant
-using MachineState = std::variant<
-    machine::Idle,
-    machine::Active,
-    machine::Denied>;
-
-using MachineStateHandle = std::shared_ptr<MachineState>;
+using MachineState = MachineStateMachine::State;
+using MachineStateHandle = MachineStateMachine::StateHandle;
 
 }  // namespace oww::state

@@ -5,11 +5,11 @@
 #include <vector>
 
 #include "common.h"
-#include "state/state_machine.h"
 #include "fbs/ledger_terminal-config_generated.h"
 #include "fbs/machine_usage_generated.h"
 #include "fbs/token_session_generated.h"
 #include "logic/session/session_coordinator.h"
+#include "state/machine_state.h"
 #include "state/token_session.h"
 
 namespace oww::logic {
@@ -17,43 +17,29 @@ class Application;
 
 namespace session {
 
-namespace machine_state {
-struct Idle {};
-
-struct Active {
-  std::shared_ptr<oww::state::TokenSession> session;
-  std::chrono::time_point<std::chrono::system_clock> start_time;
-};
-
-struct Denied {
-  std::string message;
-  std::chrono::time_point<std::chrono::system_clock> time;
-};
-
-}  // namespace machine_state
-
-using MachineStateMachine =
-    oww::state::StateMachine<machine_state::Idle, machine_state::Active,
-                             machine_state::Denied>;
-using StateHandle = MachineStateMachine::StateHandle;
-
 class MachineUsage {
   static Logger logger;
+
+  using MachineStateHandle = oww::state::MachineStateHandle;
+  using MachineStateMachine = oww::state::MachineStateMachine;
 
  public:
   MachineUsage(oww::logic::Application* state);
   void Begin(const fbs::Machine& machine);
 
   // Takes session state as input, returns machine state
-  StateHandle Loop(const SessionStateHandle& session_state);
+  MachineStateHandle Loop(const SessionStateHandle& session_state);
 
   // Thread-safe state query (for UI)
-  StateHandle GetState() const { return state_machine_->GetStateHandle(); }
+  MachineStateHandle GetState() const {
+    return state_machine_->GetStateHandle();
+  }
 
   // Manual checkout (UI button)
   tl::expected<void, ErrorType> ManualCheckOut();
 
-  tl::expected<void, ErrorType> CheckIn(std::shared_ptr<oww::state::TokenSession> session);
+  tl::expected<void, ErrorType> CheckIn(
+      std::shared_ptr<oww::state::TokenSession> session);
 
   template <typename T>
   tl::expected<void, ErrorType> CheckOut(std::unique_ptr<T> checkout_reason);
@@ -62,9 +48,9 @@ class MachineUsage {
   void RegisterStateHandlers();
 
   // State machine handlers
-  MachineStateMachine::StateOpt OnIdle(machine_state::Idle& state);
-  MachineStateMachine::StateOpt OnActive(machine_state::Active& state);
-  MachineStateMachine::StateOpt OnDenied(machine_state::Denied& state);
+  MachineStateMachine::StateOpt OnIdle(state::machine::Idle& state);
+  MachineStateMachine::StateOpt OnActive(state::machine::Active& state);
+  MachineStateMachine::StateOpt OnDenied(state::machine::Denied& state);
 
   oww::logic::Application* app_;
 

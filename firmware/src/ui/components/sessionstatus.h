@@ -35,7 +35,7 @@ class SessionStatus : public Screen {
   mutable std::shared_ptr<ButtonBarSpec> current_buttons_;
 
   // Current state tracking
-  void* last_state_id_ = nullptr;
+  std::shared_ptr<state::MachineStateHandle> last_state_handle_ = nullptr;
 
   // Unified LED effect for all machine states
   std::shared_ptr<leds::SessionEffect> session_effect_;

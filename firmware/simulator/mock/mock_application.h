@@ -40,13 +40,14 @@ class MockApplication : public state::IApplicationState {
  private:
   state::SystemStateHandle system_state_;
   state::TagStateHandle tag_state_;
-  state::MachineStateHandle machine_state_;
+  std::shared_ptr<state::MachineStateMachine> machine_state_machine_;
 
   // Test data
   std::array<uint8_t, 7> test_tag_uid_ = {0x04, 0xc3, 0x39, 0xaa, 0x1e, 0x18, 0x90};
   std::string test_user_ = "John Doe";
   std::string test_user_id_ = "test-user-123";
   std::string test_session_id_ = "test-session-123";
+  std::shared_ptr<state::TokenSession> test_session_;
 };
 
 }  // namespace oww::logic
