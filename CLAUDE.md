@@ -251,6 +251,68 @@ if (handle.Is<machine::Active>()) {
 - Use `handle.Get<StateType>()` to access state (not `std::get_if`)
 - Use `handle.SameAs(other)` for state comparison (not pointer comparison)
 
+**Nested State Machine Pattern:**
+
+**CRITICAL - StateHandle Snapshot Limitation with Nested State Machines:**
+
+When a state contains a nested state machine, **NEVER store the StateHandle** - it captures an immutable snapshot and won't reflect async state progression.
+
+❌ **Wrong - stores snapshot:**
+```cpp
+struct SessionTag {
+  std::array<uint8_t, 7> tag_uid;
+  SessionCreationStateHandle creation_state;  // Snapshot! Never updates!
+};
+```
+
+✅ **Correct - stores state machine:**
+```cpp
+struct SessionTag {
+  std::array<uint8_t, 7> tag_uid;
+  std::shared_ptr<SessionCreationStateMachine> creation_sm;  // Query fresh handles
+};
+
+// Usage - always query fresh state
+auto creation_state = session_tag->creation_sm->GetStateHandle();
+if (creation_state.Is<Succeeded>()) { ... }
+```
+
+**Rationale:** StateHandle is immutable by design. The nested state machine progresses asynchronously (e.g., on NFC thread), but a stored handle never sees those updates. Store the machine itself and query fresh handles each iteration.
+
+**Observing Nested State Changes:**
+
+When observing a parent state that contains a nested state machine, track the nested state separately:
+
+```cpp
+// Track nested state, not parent state
+std::optional<SessionCreationStateHandle> last_session_create_state_;
+
+// In Loop()
+std::optional<SessionCreationStateHandle> creation_state;
+if (auto* session_tag = parent_state.Get<SessionTag>()) {
+  creation_state = session_tag->creation_sm->GetStateHandle();  // Fresh query
+}
+
+// Observe nested state transitions
+if (creation_state) {
+  bool entered_succeeded = false;
+
+  if (last_session_create_state_) {
+    // Have previous state - check transition
+    entered_succeeded = creation_state->Entered<Succeeded>(*last_session_create_state_);
+  } else {
+    // First observation - check current state
+    entered_succeeded = creation_state->Is<Succeeded>();
+  }
+
+  if (entered_succeeded) { ... }
+}
+
+last_session_create_state_ = creation_state;  // Store for next iteration
+```
+
+**Why track nested state separately?** Tracking the parent state (SessionTag) doesn't reveal changes in the child state machine. The parent remains "SessionTag" while the nested creation_sm progresses through Begin → AwaitResponse → Succeeded.
+
 #### Error Handling
 
 **tl::expected Pattern:**
