@@ -189,11 +189,17 @@ All payloads are base64-encoded flatbuffers defined in `schema/*.fbs`
 
 The codebase uses a custom variant-based state machine template (`state/state_machine.h`) for managing complex state.
 
+**CRITICAL - State Definition Architecture:**
+- ✅ **ALL state definitions belong in `state/` directory** - never duplicate them elsewhere
+- ❌ **NEVER create shadow copies** of state definitions in logic/ or other directories
+- State machines in `logic/` should **use** states from `state/`, not redefine them
+- Violations create confusion, conversion overhead, and maintenance nightmares
+
 **State Machine Pattern:**
 
 ```cpp
-// Define states as simple structs
-namespace machine_state {
+// Define states in state/ directory (e.g., state/machine_state.h)
+namespace oww::state::machine {
 struct Idle {};
 struct Active {
   std::shared_ptr<TokenSession> session;
@@ -205,33 +211,45 @@ struct Denied {
 };
 }
 
-// Create state machine
-using MachineStateMachine = oww::state::StateMachine<
-    machine_state::Idle,
-    machine_state::Active,
-    machine_state::Denied>;
+// Create state machine typedef in state/ directory
+using MachineStateMachine = StateMachine<machine::Idle, machine::Active, machine::Denied>;
+using MachineStateHandle = MachineStateMachine::StateHandle;
 
+// Usage in logic layer (with using namespace state;)
 auto state_machine_ = MachineStateMachine::Create(
-    std::in_place_type<machine_state::Idle>);
+    std::in_place_type<machine::Idle>);
 
 // Register handlers
-state_machine_->OnLoop<machine_state::Active>(
+state_machine_->OnLoop<machine::Active>(
     [this](auto& state) { return OnActive(state); });
 
 // Transition
-state_machine_->TransitionTo(machine_state::Active{
+state_machine_->TransitionTo(machine::Active{
     .session = session,
     .start_time = now,
 });
 
-// Query state
-if (state_machine_->Is<machine_state::Active>()) { ... }
+// Query state directly on machine
+if (state_machine_->Is<machine::Active>()) { ... }
+
+// Query state via handle (StateHandle is a class, not raw shared_ptr)
+auto handle = state_machine_->GetStateHandle();
+if (handle.Is<machine::Active>()) {
+  auto* active = handle.Get<machine::Active>();
+  // Use active state
+}
 ```
 
 **Key State Machines:**
 - `NfcStateMachine` (`nfc/states.h`): WaitForTag → TagPresent → Ntag424Authenticated → WaitForTag
-- `MachineStateMachine` (`logic/session/machine_state.h`): Idle ⇄ Active / Denied
+- `MachineStateMachine` (`state/machine_state.h`): Idle ⇄ Active / Denied
 - `SessionCreationStateMachine` (`state/session_creation.h`): Begin → AwaitStartSessionResponse → ... → Succeeded/Rejected/Failed
+
+**StateHandle Pattern:**
+- `StateHandle` is a **class** with methods, not a typedef to `shared_ptr<variant>`
+- Use `handle.Is<StateType>()` to check state (not `std::holds_alternative`)
+- Use `handle.Get<StateType>()` to access state (not `std::get_if`)
+- Use `handle.SameAs(other)` for state comparison (not pointer comparison)
 
 #### Error Handling
 
