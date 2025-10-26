@@ -268,7 +268,9 @@ void SessionStatus::UpdateButtonsForState() {
   if (machine_state.Is<state::machine::Idle>()) {
     // No buttons in idle state
     current_buttons_->left_enabled = false;
+    current_buttons_->left_label = "";
     current_buttons_->right_enabled = false;
+    current_buttons_->right_label = "";
     current_buttons_->up_enabled = false;
     current_buttons_->down_enabled = false;
   } else if (machine_state.Is<state::machine::Active>()) {

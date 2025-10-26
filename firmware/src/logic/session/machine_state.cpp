@@ -84,34 +84,33 @@ void MachineUsage::Begin(const fbs::Machine& machine) {
 
 MachineStateHandle MachineUsage::Loop(const state::TagStateHandle& tag_state) {
   // Extract current session creation state if we have a SessionTag
-  std::optional<state::session_creation::SessionCreationStateHandle> creation_state;
+  std::optional<state::session_creation::SessionCreationStateHandle>
+      creation_state;
   if (auto* session_tag = tag_state.Get<state::tag::SessionTag>()) {
     creation_state = session_tag->creation_sm->GetStateHandle();
   }
 
   // Observe session creation state transitions
   if (creation_state) {
-    bool entered_succeeded = false;
-
-    if (last_session_create_state_) {
-      // We have a previous state - check for transition
-      entered_succeeded = creation_state->Entered<state::session_creation::Succeeded>(
-          *last_session_create_state_);
-    } else {
-      // First observation - check if already in succeeded state
-      entered_succeeded = creation_state->Is<state::session_creation::Succeeded>();
+    if (auto succeeded =
+            creation_state->Entered<state::session_creation::Succeeded>(
+                last_session_create_state_)) {
+      logger.info("Session active, checking in user: %s",
+                  succeeded->session->GetUserLabel().c_str());
+      auto result = CheckIn(succeeded->session);
+      if (!result) {
+        logger.error("CheckIn failed: %d", (int)result.error());
+      }
     }
 
-    if (entered_succeeded) {
-      auto* succeeded = creation_state->Get<state::session_creation::Succeeded>();
-      if (succeeded) {
-        logger.info("Session active, checking in user: %s",
-                    succeeded->session->GetUserLabel().c_str());
-        auto result = CheckIn(succeeded->session);
-        if (!result) {
-          logger.error("CheckIn failed: %d", (int)result.error());
-        }
-      }
+    if (auto rejected =
+            creation_state->Entered<state::session_creation::Rejected>(
+                last_session_create_state_)) {
+      creation_state->Get<state::session_creation::Rejected>();
+      auto now = timeUtc();
+
+      state_machine_->TransitionTo(
+          machine::Denied{.message = rejected->message, .time = now});
     }
   }
 

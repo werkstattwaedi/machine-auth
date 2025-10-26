@@ -67,15 +67,20 @@ class StateHandle {
     return Is<T>() && !previous.Is<T>();
   }
 
+  // Compare with another StateHandle to detect transitions
+  template <typename T>
+  const T* Entered(const std::optional<StateHandle>& previous) const {
+    return (Is<T>() && (!previous || !previous->template Is<T>())) ? Get<T>()
+                                                                   : nullptr;
+  }
+
   template <typename T>
   bool Exited(const StateHandle& previous) const {
     return !Is<T>() && previous.Is<T>();
   }
 
   // Get underlying variant for std::visit
-  const std::variant<States...>& GetVariant() const {
-    return *captured_state_;
-  }
+  const std::variant<States...>& GetVariant() const { return *captured_state_; }
 
  private:
   StateHandle(std::shared_ptr<const std::variant<States...>> captured_state,
