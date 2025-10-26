@@ -49,11 +49,11 @@ void Application::Loop() {
   // Read NFC state (thread-safe across NFC thread boundary)
   auto nfc_state = oww::nfc::NfcTags::instance().GetNfcStateHandle();
 
-  // Session coordinator observes NFC
-  auto session_state = session_coordinator_.Loop(nfc_state);
+  // Session coordinator observes NFC and manages tag state
+  auto tag_state = session_coordinator_.Loop(nfc_state);
 
-  // Machine observes session coordinator
-  auto machine_state = machine_usage_.Loop(session_state);
+  // Machine observes tag state
+  auto machine_state = machine_usage_.Loop(tag_state);
 
   // All states available for UI/debugging
   (void)machine_state;  // Unused for now
@@ -71,9 +71,7 @@ state::SystemStateHandle Application::GetSystemState() const {
 }
 
 state::TagStateHandle Application::GetTagState() const {
-  // TODO: Proper conversion from internal to public state types
-  // For now, return NoTag as placeholder
-  return std::make_shared<state::TagState>(state::tag::NoTag{});
+  return session_coordinator_.GetStateHandle();
 }
 
 state::MachineStateHandle Application::GetMachineState() const {

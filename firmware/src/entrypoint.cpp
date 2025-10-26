@@ -20,7 +20,7 @@ STARTUP(WiFi.selectAntenna(ANT_AUTO));
 SerialLogHandler logHandler(LOG_LEVEL_WARN,
                             {{"app.logic.action", LOG_LEVEL_TRACE},
                              {"app.logic.session", LOG_LEVEL_TRACE},
-                             {"app.logic", LOG_LEVEL_WARN},
+                             {"app.logic", LOG_LEVEL_INFO},
                              {"app.nfc", LOG_LEVEL_WARN},
                              {"app.watchdog", LOG_LEVEL_INFO},
                              //  {"app.nfc.driver", LOG_LEVEL_TRACE},

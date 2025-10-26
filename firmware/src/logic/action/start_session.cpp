@@ -18,9 +18,11 @@ using namespace fbs;
 using namespace oww::nfc;
 using oww::logic::CloudRequest;
 
-SessionCreationStateMachine::StateOpt OnBegin(
-    Begin& state, std::array<uint8_t, 7> tag_uid, Sessions& sessions,
-    CloudRequest& cloud_request) {
+SessionCreationStateMachine::StateOpt OnBegin(Begin& state,
+                                              std::array<uint8_t, 7> tag_uid,
+                                              Sessions& sessions,
+                                              CloudRequest& cloud_request) {
+  logger.trace("SessionCreationStateMachine::OnBegin");
   auto existing_session = sessions.GetSessionForToken(tag_uid);
 
   if (existing_session) {
@@ -42,6 +44,8 @@ SessionCreationStateMachine::StateOpt OnBegin(
 SessionCreationStateMachine::StateOpt OnAwaitStartSession(
     AwaitStartSessionResponse& state, std::array<uint8_t, 7> tag_uid,
     Sessions& sessions, CloudRequest& cloud_request, Ntag424& ntag_interface) {
+  logger.trace("SessionCreationStateMachine::OnAwaitStartSession");
+
   auto cloud_response = state.response.get();
   if (state::IsPending(*cloud_response)) {
     return std::nullopt;  // Stay in current state
@@ -80,10 +84,12 @@ SessionCreationStateMachine::StateOpt OnAwaitStartSession(
           return std::nullopt;
         }
 
-        return Failed{.error = ErrorType::kNtagFailed,
-                      .message = std::string(String::format(
-                          "AuthenticateWithCloud_Begin failed [dna:%d]",
-                          auth_challenge.error()).c_str())};
+        return Failed{
+            .error = ErrorType::kNtagFailed,
+            .message = std::string(
+                String::format("AuthenticateWithCloud_Begin failed [dna:%d]",
+                               auth_challenge.error())
+                    .c_str())};
       }
 
       AuthenticateNewSessionRequestT request;
@@ -93,24 +99,24 @@ SessionCreationStateMachine::StateOpt OnAwaitStartSession(
                                     auth_challenge->end());
 
       auto response =
-          cloud_request
-              .SendTerminalRequest<AuthenticateNewSessionRequestT,
-                                   AuthenticateNewSessionResponseT>(
-                  "authenticateNewSession", request);
+          cloud_request.SendTerminalRequest<AuthenticateNewSessionRequestT,
+                                            AuthenticateNewSessionResponseT>(
+              "authenticateNewSession", request);
 
       return AwaitAuthenticateNewSessionResponse{.response = response};
     }
     case StartSessionResult::Rejected: {
       // ---- REJECTED --------------------------------------------------------
-      return Rejected{
-          .message = start_session_response->result.AsRejected()->message};
+      return Rejected{.message =
+                          start_session_response->result.AsRejected()->message};
     }
     default: {
       // ---- MALFORMED RESPONSE ----------------------------------------------
-      return Failed{
-          .error = ErrorType::kMalformedResponse,
-          .message = std::string(String::format("Unknown StartSessionResult type %d",
-                                    start_session_response->result.type).c_str())};
+      return Failed{.error = ErrorType::kMalformedResponse,
+                    .message = std::string(
+                        String::format("Unknown StartSessionResult type %d",
+                                       start_session_response->result.type)
+                            .c_str())};
     }
   }
 }
@@ -118,6 +124,8 @@ SessionCreationStateMachine::StateOpt OnAwaitStartSession(
 SessionCreationStateMachine::StateOpt OnAwaitAuthenticateNewSession(
     AwaitAuthenticateNewSessionResponse& state, CloudRequest& cloud_request,
     Ntag424& ntag_interface) {
+  logger.trace("SessionCreationStateMachine::OnAwaitAuthenticateNewSession");
+
   auto cloud_response = state.response.get();
   if (state::IsPending(*cloud_response)) {
     return std::nullopt;  // Stay in current state
@@ -142,8 +150,10 @@ SessionCreationStateMachine::StateOpt OnAwaitAuthenticateNewSession(
   if (!encrypted_response) {
     return Failed{
         .error = ErrorType::kNtagFailed,
-        .message = std::string(String::format("AuthenticateWithCloud_Part2 failed [dna:%d]",
-                                  encrypted_response.error()).c_str())};
+        .message = std::string(
+            String::format("AuthenticateWithCloud_Part2 failed [dna:%d]",
+                           encrypted_response.error())
+                .c_str())};
   }
 
   CompleteAuthenticationRequestT request;
@@ -152,16 +162,17 @@ SessionCreationStateMachine::StateOpt OnAwaitAuthenticateNewSession(
                                          encrypted_response->end());
 
   auto response =
-      cloud_request
-          .SendTerminalRequest<CompleteAuthenticationRequestT,
-                               CompleteAuthenticationResponseT>(
-              "completeAuthentication", request);
+      cloud_request.SendTerminalRequest<CompleteAuthenticationRequestT,
+                                        CompleteAuthenticationResponseT>(
+          "completeAuthentication", request);
 
   return AwaitCompleteAuthenticationResponse{.response = response};
 }
 
 SessionCreationStateMachine::StateOpt OnAwaitCompleteAuthentication(
     AwaitCompleteAuthenticationResponse& state, Sessions& sessions) {
+  logger.trace("SessionCreationStateMachine::OnAwaitCompleteAuthentication");
+
   auto cloud_response = state.response.get();
   if (state::IsPending(*cloud_response)) {
     return std::nullopt;  // Stay in current state
@@ -190,13 +201,14 @@ SessionCreationStateMachine::StateOpt OnAwaitCompleteAuthentication(
     }
     case CompleteAuthenticationResult::Rejected: {
       // ---- REJECTED --------------------------------------------------------
-      return Rejected{
-          .message = complete_auth_response->result.AsRejected()->message};
+      return Rejected{.message =
+                          complete_auth_response->result.AsRejected()->message};
     }
     default: {
       // ---- MALFORMED RESPONSE ----------------------------------------------
-      logger.error(String::format("Unknown CompleteAuthenticationResult type %d",
-                                  complete_auth_response->result.type));
+      logger.error(
+          String::format("Unknown CompleteAuthenticationResult type %d",
+                         complete_auth_response->result.type));
       return Failed{.error = ErrorType::kMalformedResponse,
                     .message = "Unknown CompleteAuthenticationResult type"};
     }
@@ -211,8 +223,8 @@ StartSessionAction::StartSessionAction(
     : tag_uid_(tag_uid),
       cloud_request_(cloud_request.lock()),
       sessions_(sessions.lock()),
-      state_machine_(SessionCreationStateMachine::Create(
-          std::in_place_type<Begin>)) {
+      state_machine_(
+          SessionCreationStateMachine::Create(std::in_place_type<Begin>)) {
   // TODO: Replace with proper assert macro that logs and crashes
   if (!cloud_request_ || !sessions_) {
     logger.error("FATAL: StartSessionAction created with null dependencies");
@@ -237,9 +249,8 @@ void StartSessionAction::RegisterStateHandlers() {
     return OnAwaitAuthenticateNewSession(s, *cloud_request_, *ntag_interface_);
   });
 
-  state_machine_->OnLoop<AwaitCompleteAuthenticationResponse>([this](auto& s) {
-    return OnAwaitCompleteAuthentication(s, *sessions_);
-  });
+  state_machine_->OnLoop<AwaitCompleteAuthenticationResponse>(
+      [this](auto& s) { return OnAwaitCompleteAuthentication(s, *sessions_); });
 }
 
 NtagAction::Continuation StartSessionAction::Loop(Ntag424& ntag_interface) {
@@ -249,12 +260,15 @@ NtagAction::Continuation StartSessionAction::Loop(Ntag424& ntag_interface) {
   // Run state machine
   state_machine_->Loop();
 
+  if (IsComplete()) {
+    logger.info("SessionCreationStateMachine::complete");
+  }
+
   return IsComplete() ? Continuation::Done : Continuation::Continue;
 }
 
 bool StartSessionAction::IsComplete() {
-  return state_machine_->Is<Succeeded>() ||
-         state_machine_->Is<Rejected>() ||
+  return state_machine_->Is<Succeeded>() || state_machine_->Is<Rejected>() ||
          state_machine_->Is<Failed>();
 }
 

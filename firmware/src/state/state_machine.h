@@ -72,6 +72,11 @@ class StateHandle {
     return !Is<T>() && previous.Is<T>();
   }
 
+  // Get underlying variant for std::visit
+  const std::variant<States...>& GetVariant() const {
+    return *captured_state_;
+  }
+
  private:
   StateHandle(std::shared_ptr<const std::variant<States...>> captured_state,
               std::weak_ptr<const StateMachine<States...>> state_machine)

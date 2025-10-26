@@ -6,6 +6,7 @@
 #include <variant>
 
 #include "session_creation.h"
+#include "state_machine.h"
 
 namespace oww::state {
 class TokenSession;
@@ -30,20 +31,21 @@ struct AuthenticatedTag {
 // Session creation in progress or session active
 struct SessionTag {
   std::array<uint8_t, 7> tag_uid;
-  session_creation::SessionCreationStateHandle creation_state;
+  std::shared_ptr<session_creation::SessionCreationStateMachine> creation_sm;
 };
 
 }  // namespace oww::state::tag
 
 namespace oww::state {
 
-// Tag state variant (tracks NFC tag status)
-using TagState = std::variant<
+// Tag state machine (tracks NFC tag status and session creation)
+using TagStateMachine = StateMachine<
     tag::NoTag,
-    tag::UnsupportedTag,
     tag::AuthenticatedTag,
-    tag::SessionTag>;
+    tag::SessionTag,
+    tag::UnsupportedTag>;
 
-using TagStateHandle = std::shared_ptr<TagState>;
+using TagState = TagStateMachine::State;
+using TagStateHandle = TagStateMachine::StateHandle;
 
 }  // namespace oww::state

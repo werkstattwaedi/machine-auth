@@ -39,7 +39,7 @@ class MockApplication : public state::IApplicationState {
 
  private:
   state::SystemStateHandle system_state_;
-  state::TagStateHandle tag_state_;
+  std::shared_ptr<state::TagStateMachine> tag_state_machine_;
   std::shared_ptr<state::MachineStateMachine> machine_state_machine_;
 
   // Test data

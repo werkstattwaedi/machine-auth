@@ -119,26 +119,23 @@ std::shared_ptr<hal::ILedEffect> SessionStatus::GetLedEffect() {
           },
           [this, &auth_in_progress](const state::tag::SessionTag& session_tag) {
             // Session creation in progress - check which phase
-            if (session_tag.creation_state
-                    .Is<state::session_creation::Begin>() ||
-                session_tag.creation_state
-                    .Is<state::session_creation::AwaitStartSessionResponse>()) {
+            auto creation_state = session_tag.creation_sm->GetStateHandle();
+            if (creation_state.Is<state::session_creation::Begin>() ||
+                creation_state.Is<state::session_creation::AwaitStartSessionResponse>()) {
               session_effect_->SetState(leds::SessionState::AuthStartSession);
               auth_in_progress = true;
-            } else if (session_tag.creation_state
-                           .Is<state::session_creation::
+            } else if (creation_state.Is<state::session_creation::
                                    AwaitAuthenticateNewSessionResponse>()) {
               session_effect_->SetState(leds::SessionState::AuthNewSession);
               auth_in_progress = true;
-            } else if (session_tag.creation_state
-                           .Is<state::session_creation::
+            } else if (creation_state.Is<state::session_creation::
                                    AwaitCompleteAuthenticationResponse>()) {
               session_effect_->SetState(leds::SessionState::AuthComplete);
               auth_in_progress = true;
             }
             // For Succeeded, Rejected, Failed: let machine state drive the LED
           }},
-      *tag_state);
+      tag_state.GetVariant());
 
   // If not in auth flow, use machine state
   if (!auth_in_progress) {

@@ -11,8 +11,8 @@ MockApplication::MockApplication() {
       state::system::Booting{.phase = state::system::BootPhase::InitHardware});
 
   // Initialize to idle states - no tag present
-  tag_state_ = std::make_shared<state::TagState>(
-      state::tag::NoTag{});
+  tag_state_machine_ = state::TagStateMachine::Create(
+      std::in_place_type<state::tag::NoTag>);
 
   machine_state_machine_ = state::MachineStateMachine::Create(
       std::in_place_type<state::machine::Idle>);
@@ -38,7 +38,7 @@ state::SystemStateHandle MockApplication::GetSystemState() const {
 }
 
 state::TagStateHandle MockApplication::GetTagState() const {
-  return tag_state_;
+  return tag_state_machine_->GetStateHandle();
 }
 
 state::MachineStateHandle MockApplication::GetMachineState() const {
@@ -49,7 +49,7 @@ tl::expected<void, ErrorType> MockApplication::RequestManualCheckOut() {
   printf("[MockApp] Manual checkout requested\n");
 
   // Transition to idle states - no tag
-  *tag_state_ = state::tag::NoTag{};
+  tag_state_machine_->TransitionTo(state::tag::NoTag{});
   machine_state_machine_->TransitionTo(state::machine::Idle{});
 
   printf("[MockApp] Checked out - returned to idle\n");
@@ -60,7 +60,7 @@ void MockApplication::RequestCancelCurrentOperation() {
   printf("[MockApp] Cancel operation requested\n");
 
   // Return to idle - no tag
-  *tag_state_ = state::tag::NoTag{};
+  tag_state_machine_->TransitionTo(state::tag::NoTag{});
   machine_state_machine_->TransitionTo(state::machine::Idle{});
 }
 
@@ -111,31 +111,31 @@ void MockApplication::CycleBootPhase() {
 }
 
 void MockApplication::CycleTagState() {
-  if (std::holds_alternative<state::tag::NoTag>(*tag_state_)) {
-    *tag_state_ = state::tag::AuthenticatedTag{
+  if (tag_state_machine_->Is<state::tag::NoTag>()) {
+    tag_state_machine_->TransitionTo(state::tag::AuthenticatedTag{
       .tag_uid = test_tag_uid_
-    };
+    });
     printf("[MockApp] Tag: NoTag -> AuthenticatedTag\n");
   }
-  else if (std::holds_alternative<state::tag::AuthenticatedTag>(*tag_state_)) {
+  else if (tag_state_machine_->Is<state::tag::AuthenticatedTag>()) {
     // Create a dummy session creation state machine (Begin state)
     auto session_creation_sm = state::session_creation::SessionCreationStateMachine::Create(
         std::in_place_type<state::session_creation::Begin>);
-    *tag_state_ = state::tag::SessionTag{
+    tag_state_machine_->TransitionTo(state::tag::SessionTag{
       .tag_uid = test_tag_uid_,
-      .creation_state = session_creation_sm->GetStateHandle()
-    };
+      .creation_sm = session_creation_sm
+    });
     printf("[MockApp] Tag: AuthenticatedTag -> SessionTag\n");
   }
-  else if (std::holds_alternative<state::tag::SessionTag>(*tag_state_)) {
-    *tag_state_ = state::tag::UnsupportedTag{
+  else if (tag_state_machine_->Is<state::tag::SessionTag>()) {
+    tag_state_machine_->TransitionTo(state::tag::UnsupportedTag{
       .tag_uid = test_tag_uid_,
       .reason = "Unknown tag"
-    };
+    });
     printf("[MockApp] Tag: SessionTag -> UnsupportedTag\n");
   }
-  else if (std::holds_alternative<state::tag::UnsupportedTag>(*tag_state_)) {
-    *tag_state_ = state::tag::NoTag{};
+  else if (tag_state_machine_->Is<state::tag::UnsupportedTag>()) {
+    tag_state_machine_->TransitionTo(state::tag::NoTag{});
     printf("[MockApp] Tag: UnsupportedTag -> NoTag\n");
   }
 }
@@ -166,10 +166,10 @@ void MockApplication::TriggerActiveSession() {
   // Create a dummy session creation state machine (Begin state)
   auto session_creation_sm = state::session_creation::SessionCreationStateMachine::Create(
       std::in_place_type<state::session_creation::Begin>);
-  *tag_state_ = state::tag::SessionTag{
+  tag_state_machine_->TransitionTo(state::tag::SessionTag{
     .tag_uid = test_tag_uid_,
-    .creation_state = session_creation_sm->GetStateHandle()
-  };
+    .creation_sm = session_creation_sm
+  });
 
   machine_state_machine_->TransitionTo(state::machine::Active{
     .session = test_session_,
@@ -180,10 +180,10 @@ void MockApplication::TriggerActiveSession() {
 }
 
 void MockApplication::TriggerDenied() {
-  *tag_state_ = state::tag::UnsupportedTag{
+  tag_state_machine_->TransitionTo(state::tag::UnsupportedTag{
     .tag_uid = test_tag_uid_,
     .reason = "Access denied"
-  };
+  });
 
   machine_state_machine_->TransitionTo(state::machine::Denied{
     .message = "Insufficient permissions",
@@ -194,7 +194,7 @@ void MockApplication::TriggerDenied() {
 }
 
 void MockApplication::ReturnToIdle() {
-  *tag_state_ = state::tag::NoTag{};
+  tag_state_machine_->TransitionTo(state::tag::NoTag{});
   machine_state_machine_->TransitionTo(state::machine::Idle{});
   printf("[MockApp] Returned to idle\n");
 }

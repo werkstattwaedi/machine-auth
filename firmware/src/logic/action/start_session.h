@@ -30,6 +30,9 @@ class StartSessionAction : public oww::nfc::NtagAction {
   state::session_creation::SessionCreationStateHandle GetState() const {
     return state_machine_->GetStateHandle();
   }
+  std::shared_ptr<state::session_creation::SessionCreationStateMachine> GetStateMachine() const {
+    return state_machine_;
+  }
 
  private:
   void RegisterStateHandlers();

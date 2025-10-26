@@ -22,8 +22,8 @@ Logger MachineUsage::logger("app.logic.session.machine_usage");
 
 MachineUsage::MachineUsage(oww::logic::Application* app)
     : app_(app),
-      state_machine_(MachineStateMachine::Create(
-          std::in_place_type<machine::Idle>)) {
+      state_machine_(
+          MachineStateMachine::Create(std::in_place_type<machine::Idle>)) {
   RegisterStateHandlers();
 }
 
@@ -82,50 +82,40 @@ void MachineUsage::Begin(const fbs::Machine& machine) {
   digitalWrite(config::ext::pin_i2c_enable, HIGH);
 }
 
-MachineStateHandle MachineUsage::Loop(const SessionStateHandle& session_state) {
-  // Observe session coordinator state transitions
-  if (last_session_state_) {
-    // Need to get the state machine from SessionCoordinator
-    // For now, check state types directly on handles
+MachineStateHandle MachineUsage::Loop(const state::TagStateHandle& tag_state) {
+  // Extract current session creation state if we have a SessionTag
+  std::optional<state::session_creation::SessionCreationStateHandle> creation_state;
+  if (auto* session_tag = tag_state.Get<state::tag::SessionTag>()) {
+    creation_state = session_tag->creation_sm->GetStateHandle();
+  }
 
-    // Session became active
-    bool was_idle =
-        last_session_state_->Is<coordinator_state::Idle>() ||
-        last_session_state_->Is<coordinator_state::WaitingForTag>() ||
-        last_session_state_->Is<coordinator_state::AuthenticatingTag>();
-    bool is_active = session_state.Is<coordinator_state::SessionActive>();
+  // Observe session creation state transitions
+  if (creation_state) {
+    bool entered_succeeded = false;
 
-    if (was_idle && is_active) {
-      // Session became active, check in
-      auto* active = session_state.Get<coordinator_state::SessionActive>();
-      if (active) {
+    if (last_session_create_state_) {
+      // We have a previous state - check for transition
+      entered_succeeded = creation_state->Entered<state::session_creation::Succeeded>(
+          *last_session_create_state_);
+    } else {
+      // First observation - check if already in succeeded state
+      entered_succeeded = creation_state->Is<state::session_creation::Succeeded>();
+    }
+
+    if (entered_succeeded) {
+      auto* succeeded = creation_state->Get<state::session_creation::Succeeded>();
+      if (succeeded) {
         logger.info("Session active, checking in user: %s",
-                    active->session->GetUserLabel().c_str());
-        auto result = CheckIn(active->session);
+                    succeeded->session->GetUserLabel().c_str());
+        auto result = CheckIn(succeeded->session);
         if (!result) {
           logger.error("CheckIn failed: %d", (int)result.error());
         }
       }
     }
-
-    // Session ended
-    bool was_active =
-        last_session_state_->Is<coordinator_state::SessionActive>();
-    bool is_idle = session_state.Is<coordinator_state::Idle>();
-
-    if (was_active && is_idle) {
-      // Session ended, check out if machine is still active
-      if (state_machine_->Is<machine::Active>()) {
-        logger.info("Session ended, checking out");
-        auto result = CheckOut(std::make_unique<fbs::ReasonUiT>());
-        if (!result) {
-          logger.error("CheckOut failed: %d", (int)result.error());
-        }
-      }
-    }
   }
 
-  last_session_state_ = session_state;
+  last_session_create_state_ = creation_state;
 
   // Run state machine
   auto handle = state_machine_->Loop();
@@ -248,10 +238,6 @@ tl::expected<void, ErrorType> MachineUsage::CheckOut(
 
   state_machine_->TransitionTo(machine::Idle{});
 
-  // Reset SessionCoordinator to accept new tags
-  // Note: Session stays in Sessions registry for fast re-authentication
-  app_->GetSessionCoordinator().EndSession();
-
   UploadHistory();
 
   return {};
@@ -262,8 +248,7 @@ MachineStateMachine::StateOpt MachineUsage::OnIdle(machine::Idle& state) {
   return std::nullopt;
 }
 
-MachineStateMachine::StateOpt MachineUsage::OnActive(
-    machine::Active& state) {
+MachineStateMachine::StateOpt MachineUsage::OnActive(machine::Active& state) {
   // Check for session timeout (e.g., 8 hours absolute timeout)
   constexpr auto ABSOLUTE_TIMEOUT = std::chrono::hours(8);
 
@@ -291,10 +276,6 @@ MachineStateMachine::StateOpt MachineUsage::OnActive(
       }
     }
 
-    // Reset SessionCoordinator to accept new tags
-    // Note: Session stays in Sessions registry for fast re-authentication
-    app_->GetSessionCoordinator().EndSession();
-
     return machine::Idle{};
   }
 
@@ -303,8 +284,7 @@ MachineStateMachine::StateOpt MachineUsage::OnActive(
   return std::nullopt;
 }
 
-MachineStateMachine::StateOpt MachineUsage::OnDenied(
-    machine::Denied& state) {
+MachineStateMachine::StateOpt MachineUsage::OnDenied(machine::Denied& state) {
   // After a delay, transition back to idle
   if (timeUtc() - state.time > std::chrono::seconds(5)) {
     return machine::Idle{};
