@@ -1,0 +1,3 @@
+# Target platform configurations
+# - host: Linux simulator for development/testing
+# - p2: Particle Photon 2 (Cortex-M33)

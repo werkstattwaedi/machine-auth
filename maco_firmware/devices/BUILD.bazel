@@ -1,0 +1,13 @@
+# Device drivers
+# Hardware-specific implementations of module interfaces
+#
+# Drivers are thin adapters between:
+# - Vendor APIs (Device OS HAL, sensor SDKs)
+# - Module interfaces (abstract Pigweed types)
+#
+# Example drivers to migrate from firmware/:
+# - PN532 NFC reader (nfc/driver/)
+# - ILI9341 display (drivers/display/)
+# - WS2812 LED ring (drivers/neopixels/)
+# - Buzzer (drivers/buzzer/)
+# - Relay (drivers/relay/)

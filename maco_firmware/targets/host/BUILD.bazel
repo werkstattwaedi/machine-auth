@@ -1,0 +1,26 @@
+# Host simulator target
+# Runs on development machine with fake/mock drivers
+#
+# Uses:
+# - Pigweed host toolchain
+# - Mock implementations of hardware interfaces
+# - Console-based UI simulation
+
+package(default_visibility = ["//maco_firmware:__subpackages__"])
+
+# config_setting(
+#     name = "is_host",
+#     constraint_values = ["@platforms//os:linux"],
+# )
+
+# cc_library(
+#     name = "system",
+#     srcs = ["system.cc"],
+#     deps = [
+#         "//maco_firmware/system:headers",
+#         "//maco_firmware/modules/...:..._fake",  # Use fakes
+#         "@pigweed//pw_log",
+#         "@pigweed//pw_system:async",
+#     ],
+#     alwayslink = True,
+# )

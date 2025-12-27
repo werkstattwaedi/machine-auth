@@ -1,0 +1,27 @@
+# Particle Photon 2 target
+# Cross-compiles for ARM Cortex-M33 (RTL8721DM)
+#
+# Uses:
+# - particle-bazel toolchain and rules
+# - Device OS HAL for hardware access
+# - Real device drivers from //maco_firmware/devices
+
+package(default_visibility = ["//maco_firmware:__subpackages__"])
+
+# config_setting(
+#     name = "is_p2",
+#     constraint_values = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+# )
+
+# cc_library(
+#     name = "system",
+#     srcs = ["system.cc"],
+#     deps = [
+#         "//maco_firmware/system:headers",
+#         "//maco_firmware/devices:...",  # Real drivers
+#         "@particle_bazel//:device_os_headers",
+#         "@particle_bazel//:device_os_user_part",
+#         "@pigweed//pw_log",
+#     ],
+#     alwayslink = True,
+# )

@@ -1,0 +1,23 @@
+# Production firmware application
+# Optimized for release, minimal logging
+#
+# Usage:
+#   bazel build --config=p2 //maco_firmware/apps/prod:prod_firmware
+#   bazel run --config=p2 //maco_firmware/apps/prod:flash
+
+# load("@particle_bazel//rules:particle_firmware.bzl", "particle_firmware", "particle_flash_binary")
+
+# TODO: Add production firmware target
+# particle_firmware(
+#     name = "prod_firmware",
+#     srcs = ["main.cc"],
+#     deps = [
+#         "//maco_firmware/modules/...",
+#         "//maco_firmware/system",
+#     ],
+# )
+#
+# particle_flash_binary(
+#     name = "flash",
+#     firmware = ":prod_firmware",
+# )

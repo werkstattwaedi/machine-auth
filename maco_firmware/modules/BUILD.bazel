@@ -1,0 +1,15 @@
+# Platform-agnostic modules
+# Business logic that depends only on Pigweed abstractions
+#
+# Each module should have:
+# - module_name.h     - Public interface
+# - module_name.cc    - Implementation
+# - module_name_fake.h - Test double (header-only)
+# - module_name_test.cc - Unit tests
+#
+# Example modules to migrate from firmware/:
+# - nfc/           - NFC state machine and tag handling
+# - session/       - Session management and usage tracking
+# - auth/          - Authentication protocol
+# - ui/            - UI state and screen management
+# - led_effects/   - LED effect system
