@@ -67,3 +67,9 @@ node_modules/
 
 # dataconnect generated files
 .dataconnect
+
+# Bazel
+bazel-*
+
+# proprietary docs
+docs/proprietary/

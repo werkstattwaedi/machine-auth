@@ -1,0 +1,9 @@
+# Non-Bazel directories
+admin
+docs
+firestore
+firmware
+functions
+particle
+schema
+scripts

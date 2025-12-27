@@ -5,6 +5,10 @@
       "path": "admin"
     },
     {
+      "name": "maco_firmware",
+      "path": "maco_firmware"
+    },
+    {
       "name": "firmware",
       "path": "firmware"
     },
@@ -15,6 +19,9 @@
     {
       "name": "machine-auth",
       "path": "."
+    },
+    {
+      "path": "third_party"
     }
   ],
   "settings": {

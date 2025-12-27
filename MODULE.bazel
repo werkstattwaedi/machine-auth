@@ -1,0 +1,22 @@
+module(
+    name = "machine_auth",
+    version = "0.0.1",
+)
+
+# Standard dependencies
+bazel_dep(name = "platforms", version = "0.0.10")
+bazel_dep(name = "rules_cc", version = "0.1.1")
+
+# Particle Bazel rules
+bazel_dep(name = "particle_bazel")
+local_path_override(
+    module_name = "particle_bazel",
+    path = "third_party/particle",
+)
+
+# Pigweed - root-level third_party
+bazel_dep(name = "pigweed")
+local_path_override(
+    module_name = "pigweed",
+    path = "third_party/pigweed",
+)

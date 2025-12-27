@@ -1,0 +1,5 @@
+# Import particle-bazel configuration
+import %workspace%/third_party/particle/.bazelrc
+
+# Project-specific settings
+build --experimental_convenience_symlinks=ignore
