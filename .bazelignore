@@ -7,3 +7,7 @@ functions
 particle
 schema
 scripts
+
+# Submodules accessed via Bazel modules, not as source packages
+third_party/pigweed
+third_party/particle

@@ -1,8 +1,0 @@
-{
-    "eslint.format.enable": true,
-    "editor.defaultFormatter": "esbenp.prettier-vscode",
-    "[cpp]": {
-        "editor.defaultFormatter": "ms-vscode.cpptools"
-    },
-    "cmake.sourceDirectory": "/home/michschn/werkstattwaedi/machine-auth/schema/flatbuffers"
-}

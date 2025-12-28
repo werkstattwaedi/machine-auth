@@ -1,30 +1,29 @@
-# System abstraction layer
-# Defines the platform contract that targets must implement
-#
-# Pattern:
-# - Headers define interfaces (system.h, worker.h, etc.)
-# - Each target (host, p2) provides implementation
-# - Apps depend on system headers, get platform impl at link time
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+load("@pigweed//pw_build:compatibility.bzl", "host_backend_alias")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
 package(default_visibility = ["//maco_firmware:__subpackages__"])
 
 # System contract headers
-# cc_library(
-#     name = "headers",
-#     hdrs = [
-#         "system.h",
-#     ],
-#     deps = [
-#         "//maco_firmware/modules/...",
-#     ],
-# )
+cc_library(
+    name = "headers",
+    hdrs = [
+        "system.h",
+    ],
+    includes = [".."],  # Allow includes like "maco_firmware/system/system.h"
+    deps = [
+        "@pigweed//pw_function",
+    ],
+)
 
-# System implementation - selected via target
-# Actual implementation provided by //maco_firmware/targets/{platform}:system
-# cc_library(
-#     name = "system",
-#     deps = select({
-#         "//maco_firmware/targets/p2:is_p2": ["//maco_firmware/targets/p2:system"],
-#         "//maco_firmware/targets/host:is_host": ["//maco_firmware/targets/host:system"],
-#     }),
-# )
+label_flag(
+    name = "system",
+    build_setting_default = ":unspecified_backend",
+)
+
+host_backend_alias(
+    name = "unspecified_backend",
+    backend = "//maco_firmware/targets/host:system",
+)

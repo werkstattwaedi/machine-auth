@@ -1,27 +1,96 @@
-# Particle Photon 2 target
-# Cross-compiles for ARM Cortex-M33 (RTL8721DM)
-#
-# Uses:
-# - particle-bazel toolchain and rules
-# - Device OS HAL for hardware access
-# - Real device drivers from //maco_firmware/devices
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+load("@pigweed//pw_build:merge_flags.bzl", "flags_from_dict")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
 package(default_visibility = ["//maco_firmware:__subpackages__"])
 
-# config_setting(
-#     name = "is_p2",
-#     constraint_values = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
-# )
+platform(
+    name = "p2",
+    constraint_values = [
+        "@platforms//os:none",
+        "@platforms//cpu:armv8-m",
+        "@pigweed//pw_build/constraints/arm:cortex-m33",
+    ],
+    flags = flags_from_dict({
+        "//maco_firmware/system:system": "//maco_firmware/targets/p2:system",
+        # Pigweed backend bindings for P2 (from particle-bazel)
+        "@pigweed//pw_assert:assert_backend": "@pigweed//pw_assert_basic",
+        "@pigweed//pw_assert:check_backend": "@pigweed//pw_assert_basic",
+        "@pigweed//pw_assert:check_backend_impl": "@pigweed//pw_assert_basic:impl",
+        "@pigweed//pw_assert_basic:handler_backend": "@particle_bazel//pw_assert_particle:handler",
+        "@pigweed//pw_log:backend": "@pigweed//pw_log_basic",
+        "@pigweed//pw_log:backend_impl": "@pigweed//pw_log_basic:impl",
+        "@pigweed//pw_sys_io:backend": "@particle_bazel//pw_sys_io_particle:sys_io",
+        "@pigweed//pw_chrono:system_clock_backend": "@particle_bazel//pw_chrono_particle:system_clock",
+        "@pigweed//pw_chrono:system_timer_backend": "@particle_bazel//pw_chrono_particle:system_timer",
+        # Thread backends
+        "@pigweed//pw_thread:id_backend": "@particle_bazel//pw_thread_particle:id",
+        "@pigweed//pw_thread:yield_backend": "@particle_bazel//pw_thread_particle:yield",
+        "@pigweed//pw_thread:sleep_backend": "@particle_bazel//pw_thread_particle:sleep",
+        "@pigweed//pw_thread:thread_backend": "@particle_bazel//pw_thread_particle:thread",
+        "@pigweed//pw_thread:iteration_backend": "@particle_bazel//pw_thread_particle:thread_iteration",
+        "@pigweed//pw_thread:thread_creation_backend": "@particle_bazel//pw_thread_particle:thread_context",
+        # Sync backends
+        "@pigweed//pw_sync:mutex_backend": "@particle_bazel//pw_sync_particle:mutex",
+        "@pigweed//pw_sync:timed_mutex_backend": "@particle_bazel//pw_sync_particle:timed_mutex",
+        "@pigweed//pw_sync:interrupt_spin_lock_backend": "@particle_bazel//pw_sync_particle:interrupt_spin_lock",
+        "@pigweed//pw_sync:binary_semaphore_backend": "@particle_bazel//pw_sync_particle:binary_semaphore",
+        "@pigweed//pw_sync:counting_semaphore_backend": "@particle_bazel//pw_sync_particle:counting_semaphore",
+        "@pigweed//pw_sync:thread_notification_backend": "@particle_bazel//pw_sync_particle:thread_notification",
+        "@pigweed//pw_sync:timed_thread_notification_backend": "@particle_bazel//pw_sync_particle:timed_thread_notification",
+        # I/O backend for pw_system
+        "@pigweed//pw_system:io_backend": "@pigweed//pw_system:sys_io_target_io",
+        "@pigweed//pw_system:target_hooks_backend": "//maco_firmware/targets/p2:target_hooks",
+        "@pigweed//pw_system:extra_platform_libs": "//maco_firmware/targets/p2:extra_platform_libs",
+        # C++ standard
+        "@pigweed//pw_toolchain/cc:cxx_standard": "17",
+    }),
+)
 
-# cc_library(
-#     name = "system",
-#     srcs = ["system.cc"],
-#     deps = [
-#         "//maco_firmware/system:headers",
-#         "//maco_firmware/devices:...",  # Real drivers
-#         "@particle_bazel//:device_os_headers",
-#         "@particle_bazel//:device_os_user_part",
-#         "@pigweed//pw_log",
-#     ],
-#     alwayslink = True,
-# )
+cc_library(
+    name = "target_hooks",
+    srcs = ["target_hooks.cc"],
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+    deps = [
+        "@particle_bazel//pw_thread_particle:thread",
+        "@pigweed//pw_thread:thread",
+    ],
+)
+
+cc_library(
+    name = "extra_platform_libs",
+    deps = [
+        "@particle_bazel//:hal_dynalib",
+        "@pigweed//pw_tokenizer:linker_script",
+    ],
+    alwayslink = 1,
+)
+
+cc_library(
+    name = "system",
+    srcs = [
+        "system.cc",
+    ],
+    implementation_deps = [
+        "//maco_firmware/system:headers",
+        "@particle_bazel//:device_os_headers",
+        "@particle_bazel//pw_digital_io_particle:digital_io",
+        "@particle_bazel//pw_system_particle:threads",  # Particle scheduler stub
+        "@particle_bazel//pw_thread_particle:thread",
+        "@particle_bazel//pb_log:log_bridge",
+        "@pigweed//pw_assert:check",
+        "@pigweed//pw_channel",
+        "@pigweed//pw_channel:stream_channel",
+        "@pigweed//pw_digital_io",
+        "@pigweed//pw_log",
+        "@pigweed//pw_multibuf:simple_allocator",
+        "@pigweed//pw_system:async",
+        "@pigweed//pw_system:io",
+        "@pigweed//pw_thread:thread",
+    ],
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+    deps = ["//maco_firmware/system:headers"],
+    alwayslink = 1,
+)

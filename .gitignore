@@ -71,5 +71,12 @@ node_modules/
 # Bazel
 bazel-*
 
+# Pigweed / IDE
+.compile_commands/
+compile_commands.json
+.pw_ide/
+.vscode/settings.json
+.clangd
+
 # proprietary docs
 docs/proprietary/

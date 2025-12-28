@@ -1,23 +1,56 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
 # Development firmware application
 # Includes debug features, verbose logging, test modes
 #
 # Usage:
-#   bazel build --config=p2 //maco_firmware/apps/dev:dev_firmware
-#   bazel run --config=p2 //maco_firmware/apps/dev:flash
+#   bazel build //maco_firmware/apps/dev:dev
+#   bazel run //maco_firmware/apps/dev:flash
 
-# load("@particle_bazel//rules:particle_firmware.bzl", "particle_firmware", "particle_flash_binary")
+load("@particle_bazel//rules:particle_firmware.bzl", "particle_firmware", "particle_flash_binary")
+load("@pigweed//targets/host_device_simulator:transition.bzl", "host_device_simulator_binary")
 
-# TODO: Add development firmware target
-# particle_firmware(
-#     name = "dev_firmware",
-#     srcs = ["main.cc"],
-#     deps = [
-#         "//maco_firmware/modules/...",
-#         "//maco_firmware/system",
-#     ],
-# )
-#
-# particle_flash_binary(
-#     name = "flash",
-#     firmware = ":dev_firmware",
-# )
+package(default_visibility = ["//visibility:public"])
+
+DEV_DEPS = [
+    "//maco_firmware/system",
+    "//maco_firmware/system:headers",
+    "@pigweed//pw_log",
+    # Backend implementations required for linking
+    "@pigweed//pw_assert:assert_backend_impl",
+    "@pigweed//pw_assert:check_backend_impl",
+    "@pigweed//pw_log:backend_impl",
+    "@pigweed//pw_system:extra_platform_libs",
+]
+
+cc_binary(
+    name = "simulator_binary",
+    srcs = ["main.cc"],
+    deps = DEV_DEPS,
+)
+
+host_device_simulator_binary(
+    name = "simulator",
+    binary = ":simulator_binary",
+)
+
+cc_library(
+    name = "dev_lib",
+)
+
+particle_firmware(
+    name = "dev",
+    srcs = ["main.cc"],
+    platform = "//maco_firmware/targets/p2:p2",
+    deps = [
+        "//maco_firmware/system",
+        "//maco_firmware/system:headers",
+        "@pigweed//pw_log",
+    ],
+)
+
+particle_flash_binary(
+    name = "flash",
+    firmware = ":dev",
+)

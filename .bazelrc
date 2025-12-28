@@ -2,4 +2,10 @@
 import %workspace%/third_party/particle/.bazelrc
 
 # Project-specific settings
-build --experimental_convenience_symlinks=ignore
+# Note: hedron_compile_commands requires convenience symlinks (bazel-out, etc.)
+# so we don't disable them here
+common --experimental_platform_in_output_dir=True
+
+# Host toolchain configuration
+# Enable layering check support (also configures module maps for includes)
+common --@pigweed//pw_toolchain/host_clang:layering_check

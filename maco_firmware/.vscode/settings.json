@@ -1,0 +1,3 @@
+{
+  "pigweed.disableBazelInterceptor": false
+}
