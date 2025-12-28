@@ -392,7 +392,27 @@ bool Check() {
 
 ### Codestyle
 
-using directory based namespaces, with an implicit `oww` namespace for most files in the project. Follow the google C++ style guide, as described here: #fetch https://google.github.io/styleguide/cppguide.html
+**Copyright Header (Required for all new files):**
+
+C/C++:
+```cpp
+// Copyright Offene Werkstatt Wädenswil
+// SPDX-License-Identifier: MIT
+```
+
+TypeScript/JavaScript:
+```typescript
+// Copyright Offene Werkstatt Wädenswil
+// SPDX-License-Identifier: MIT
+```
+
+Bazel/Starlark:
+```python
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+```
+
+Using directory based namespaces, with an implicit `oww` namespace for most files in the project. Follow the google C++ style guide, as described here: #fetch https://google.github.io/styleguide/cppguide.html
 
 #### Header Organization
 

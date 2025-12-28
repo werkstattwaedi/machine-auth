@@ -1,0 +1,5 @@
+{
+  "enabledPlugins": {
+    "pigweed-expert@claude-plugin-marketplace": true
+  }
+}
