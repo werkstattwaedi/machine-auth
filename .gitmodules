@@ -37,3 +37,4 @@
 [submodule "third_party/lvgl"]
 	path = third_party/lvgl
 	url = https://github.com/werkstattwaedi/lvgl.git
+	branch = bazel-9.4
