@@ -15,9 +15,53 @@ load("@rules_cc//cc:cc_library.bzl", "cc_library")
 package(default_visibility = ["//maco_firmware:__subpackages__"])
 
 cc_library(
+    name = "lvgl_conf",
+    hdrs = ["lv_conf.h"],
+    includes = ["."],
+    target_compatible_with = incompatible_with_mcu(),
+    visibility = ["//visibility:public"],
+)
+
+# System SDL2 library for host simulator (link only - includes via LVGL copts)
+cc_library(
+    name = "sdl2",
+    linkopts = ["-lSDL2"],
+    target_compatible_with = incompatible_with_mcu(),
+    visibility = ["//visibility:public"],
+)
+
+# SDL-based display driver for host simulator
+cc_library(
+    name = "sdl_display_driver",
+    srcs = ["sdl_display_driver.cc"],
+    hdrs = ["sdl_display_driver.h"],
+    target_compatible_with = incompatible_with_mcu(),
+    deps = [
+        "//maco_firmware/modules/display:display_driver",
+        "@lvgl//:lvgl",
+        "@pigweed//pw_log",
+    ],
+)
+
+# Keyboard input driver for host simulator
+cc_library(
+    name = "keyboard_input_driver",
+    srcs = ["keyboard_input_driver.cc"],
+    hdrs = ["keyboard_input_driver.h"],
+    target_compatible_with = incompatible_with_mcu(),
+    deps = [
+        "//maco_firmware/modules/display:touch_button_driver",
+        "@lvgl//:lvgl",
+        "@pigweed//pw_log",
+    ],
+)
+
+cc_library(
     name = "system",
     srcs = ["system.cc"],
     implementation_deps = [
+        ":keyboard_input_driver",
+        ":sdl_display_driver",
         "@pigweed//pw_assert:check",
         "@pigweed//pw_channel",
         "@pigweed//pw_channel:stream_channel",

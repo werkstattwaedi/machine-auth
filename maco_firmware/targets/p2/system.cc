@@ -5,6 +5,8 @@
 
 #include <cstddef>
 
+#include "maco_firmware/devices/cap_touch/cap_touch_input_driver.h"
+#include "maco_firmware/devices/pico_res28_lcd/pico_res28_lcd_driver.h"
 #include "pb_log/log_bridge.h"
 #include "pw_assert/check.h"
 #include "pw_channel/stream_channel.h"
@@ -51,6 +53,16 @@ void Init(pw::Function<void()> app_init) {
   PW_LOG_INFO("Starting system...");
   pw::system::StartAndClobberTheStack(channel->channel());
   PW_UNREACHABLE;
+}
+
+maco::display::DisplayDriver& GetDisplayDriver() {
+  static maco::display::PicoRes28LcdDriver driver;
+  return driver;
+}
+
+maco::display::TouchButtonDriver& GetTouchButtonDriver() {
+  static maco::display::CapTouchInputDriver driver;
+  return driver;
 }
 
 }  // namespace maco::system

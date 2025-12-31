@@ -9,3 +9,7 @@ common --experimental_platform_in_output_dir=True
 # Host toolchain configuration
 # Enable layering check support (also configures module maps for includes)
 common --@pigweed//pw_toolchain/host_clang:layering_check
+
+# LVGL configuration (host default - P2 overrides via platform flags)
+build --@lvgl//:lv_conf=//maco_firmware/targets/host:lvgl_conf
+

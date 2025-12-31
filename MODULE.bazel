@@ -30,3 +30,10 @@ local_path_override(
     module_name = "pigweed",
     path = "third_party/pigweed",
 )
+
+# LVGL graphics library
+bazel_dep(name = "lvgl")
+local_path_override(
+    module_name = "lvgl",
+    path = "third_party/lvgl",
+)

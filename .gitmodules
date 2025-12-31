@@ -34,3 +34,6 @@
 [submodule "third_party/pigweed"]
 	path = third_party/pigweed
 	url = https://pigweed.googlesource.com/pigweed/pigweed
+[submodule "third_party/lvgl"]
+	path = third_party/lvgl
+	url = https://github.com/werkstattwaedi/lvgl.git

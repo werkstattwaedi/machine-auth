@@ -6,6 +6,14 @@ load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
 package(default_visibility = ["//maco_firmware:__subpackages__"])
 
+cc_library(
+    name = "lvgl_conf",
+    hdrs = ["lv_conf.h"],
+    includes = ["."],
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+    visibility = ["//visibility:public"],
+)
+
 platform(
     name = "p2",
     constraint_values = [
@@ -14,6 +22,8 @@ platform(
         "@pigweed//pw_build/constraints/arm:cortex-m33",
     ],
     flags = flags_from_dict({
+        # LVGL configuration for P2 hardware
+        "@lvgl//:lv_conf": "//maco_firmware/targets/p2:lvgl_conf",
         "//maco_firmware/system:system": "//maco_firmware/targets/p2:system",
         # Pigweed backend bindings for P2 (from particle-bazel)
         "@pigweed//pw_assert:assert_backend": "@pigweed//pw_assert_basic",
@@ -74,6 +84,8 @@ cc_library(
         "system.cc",
     ],
     implementation_deps = [
+        "//maco_firmware/devices/cap_touch",
+        "//maco_firmware/devices/pico_res28_lcd",
         "//maco_firmware/system:headers",
         "@particle_bazel//:device_os_headers",
         "@particle_bazel//pw_digital_io_particle:digital_io",

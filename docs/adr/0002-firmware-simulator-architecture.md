@@ -1,12 +1,15 @@
 # ADR-0002: Firmware Simulator Architecture with HAL Abstraction
 
-**Status:** Accepted
+**Status:** Deprecated
 
 **Date:** 2025-10-12
+
+**Note:** This ADR describes the old `firmware/` codebase using Particle compiler and CMake. That architecture is being retired in favor of `maco_firmware/` built with Pigweed + Bazel. See ADR-0003 and ADR-0004 for the new architecture.
 
 ## Context
 
 Developing embedded firmware has a slow iteration cycle:
+
 1. Make code change
 2. Compile firmware (60+ seconds with `neopo`)
 3. Flash to hardware via USB
@@ -47,10 +50,12 @@ Firmware (Particle):                 Simulator (Desktop):
 ### What is Separate
 
 **Firmware (`src/`):**
+
 - `logic/Application` - Real session management, cloud communication, NFC
 - `drivers/MacoHardware` - Particle NeoPixel APIs
 
 **Simulator (`simulator/`):**
+
 - `mock/MockApplication` - Fake state for UI testing (keyboard shortcuts to cycle states)
 - `hal/SimulatorHardware` - SDL2 rendering for LED visualization
 - `main.cpp` - SDL2 window, event loop

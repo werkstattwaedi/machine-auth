@@ -7,6 +7,8 @@
 #include <stdio.h>
 #include <unistd.h>
 
+#include "maco_firmware/targets/host/keyboard_input_driver.h"
+#include "maco_firmware/targets/host/sdl_display_driver.h"
 #include "pw_assert/check.h"
 #include "pw_channel/stream_channel.h"
 #include "pw_multibuf/simple_allocator.h"
@@ -65,6 +67,16 @@ void Init(pw::Function<void()> app_init) {
 
   pw::system::StartAndClobberTheStack(channel->channel());
   PW_UNREACHABLE;
+}
+
+maco::display::DisplayDriver& GetDisplayDriver() {
+  static maco::display::SdlDisplayDriver driver;
+  return driver;
+}
+
+maco::display::TouchButtonDriver& GetTouchButtonDriver() {
+  static maco::display::KeyboardInputDriver driver;
+  return driver;
 }
 
 }  // namespace maco::system

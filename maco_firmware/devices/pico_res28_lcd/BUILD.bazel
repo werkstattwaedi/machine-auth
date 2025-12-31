@@ -1,0 +1,18 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//maco_firmware:__subpackages__"])
+
+# SPI LCD driver for Pico-ResTouch-LCD-2.8 (ILI9341)
+cc_library(
+    name = "pico_res28_lcd",
+    srcs = ["pico_res28_lcd_driver.cc"],
+    hdrs = ["pico_res28_lcd_driver.h"],
+    deps = [
+        "//maco_firmware/modules/display:display_driver",
+        "@lvgl//:lvgl",
+        "@pigweed//pw_log",
+    ],
+)
