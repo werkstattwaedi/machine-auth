@@ -4,8 +4,8 @@ module(
 )
 
 # Standard dependencies
-bazel_dep(name = "platforms", version = "0.0.10")
-bazel_dep(name = "rules_cc", version = "0.1.1")
+bazel_dep(name = "platforms", version = "1.0.0")
+bazel_dep(name = "rules_cc", version = "0.2.4")
 bazel_dep(name = "bazel_skylib", version = "1.8.1")
 
 # JavaScript toolchain for lv_font_conv
@@ -49,4 +49,16 @@ bazel_dep(name = "lvgl")
 local_path_override(
     module_name = "lvgl",
     path = "third_party/lvgl",
+)
+
+# System SDL2 library (for host simulator)
+# Requires: apt install libsdl2-dev
+new_local_repository = use_repo_rule(
+    "@bazel_tools//tools/build_defs/repo:local.bzl",
+    "new_local_repository",
+)
+new_local_repository(
+    name = "sdl2_system",
+    path = "/usr/lib/x86_64-linux-gnu",
+    build_file = "//third_party/sdl:sdl2_system.BUILD",
 )
