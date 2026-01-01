@@ -85,6 +85,7 @@ cc_library(
     implementation_deps = [
         "//maco_firmware/devices/cap_touch",
         "//maco_firmware/devices/pico_res28_lcd",
+        "//maco_firmware/modules/fonts",
         "//maco_firmware/system:headers",
         "@particle_bazel//:device_os_headers",
         "@particle_bazel//pw_digital_io_particle:digital_io",

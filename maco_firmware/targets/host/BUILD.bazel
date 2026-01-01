@@ -62,6 +62,7 @@ cc_library(
     implementation_deps = [
         ":keyboard_input_driver",
         ":sdl_display_driver",
+        "//maco_firmware/modules/fonts",
         "@pigweed//pw_assert:check",
         "@pigweed//pw_channel",
         "@pigweed//pw_channel:stream_channel",

@@ -1,0 +1,21 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//maco_firmware:__subpackages__"])
+
+# Custom LVGL fonts (generated with lv_font_conv)
+# alwayslink ensures fonts are included even without direct references
+# (LVGL references them via LV_FONT_DEFAULT in lv_conf.h)
+cc_library(
+    name = "fonts",
+    srcs = [
+        "roboto_12.c",
+        "roboto_24.c",
+    ],
+    alwayslink = True,
+    deps = [
+        "@lvgl//:lvgl",
+    ],
+)

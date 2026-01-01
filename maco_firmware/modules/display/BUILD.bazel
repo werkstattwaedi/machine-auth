@@ -37,6 +37,7 @@ cc_library(
     deps = [
         ":display_driver",
         ":touch_button_driver",
+        "//maco_firmware/modules/fonts",
         "//maco_firmware/system:headers",
         "@lvgl//:lvgl",
         "@pigweed//pw_chrono:system_clock",
