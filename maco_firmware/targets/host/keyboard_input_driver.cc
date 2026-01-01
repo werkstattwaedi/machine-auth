@@ -26,7 +26,7 @@ pw::Result<lv_indev_t*> KeyboardInputDriver::CreateLvglInputDevice() {
   return indev_;
 }
 
-void KeyboardInputDriver::ReadCallback(lv_indev_t* indev,
+void KeyboardInputDriver::ReadCallback([[maybe_unused]] lv_indev_t* indev,
                                        lv_indev_data_t* data) {
   // TODO: Read keyboard state when SDL2 is available
   data->btn_id = 0;

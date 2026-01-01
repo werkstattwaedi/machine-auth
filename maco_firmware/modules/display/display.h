@@ -10,15 +10,8 @@
 #include "maco_firmware/modules/display/display_driver.h"
 #include "maco_firmware/modules/display/touch_button_driver.h"
 #include "pw_status/status.h"
-#include "pw_thread/thread.h"
 
 namespace maco::display {
-
-// Display configuration
-struct DisplayConfig {
-  uint16_t width = 240;
-  uint16_t height = 320;
-};
 
 // Display manager - owns LVGL lifecycle and render thread
 // Usage:
@@ -41,15 +34,14 @@ class Display {
   // - Initializes touch driver and creates LVGL input device
   // - Starts the render thread
   pw::Status Init(DisplayDriver& display_driver,
-                  TouchButtonDriver& touch_button_driver,
-                  const DisplayConfig& config = {});
+                  TouchButtonDriver& touch_button_driver);
 
   // Check if display is initialized and running
   bool is_running() const { return running_.load(); }
 
-  // Get display dimensions
-  uint16_t width() const { return width_; }
-  uint16_t height() const { return height_; }
+  // Get display dimensions (from driver)
+  uint16_t width() const { return display_driver_->width(); }
+  uint16_t height() const { return display_driver_->height(); }
 
  private:
   void RenderThread();
@@ -58,12 +50,7 @@ class Display {
   TouchButtonDriver* touch_button_driver_ = nullptr;
   lv_display_t* lv_display_ = nullptr;
   lv_indev_t* lv_indev_ = nullptr;
-
-  pw::thread::Thread render_thread_;
   std::atomic<bool> running_{false};
-
-  uint16_t width_ = 0;
-  uint16_t height_ = 0;
 };
 
 }  // namespace maco::display

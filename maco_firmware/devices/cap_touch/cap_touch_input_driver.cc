@@ -28,7 +28,7 @@ pw::Result<lv_indev_t*> CapTouchInputDriver::CreateLvglInputDevice() {
   return indev_;
 }
 
-void CapTouchInputDriver::ReadCallback(lv_indev_t* indev,
+void CapTouchInputDriver::ReadCallback([[maybe_unused]] lv_indev_t* indev,
                                         lv_indev_data_t* data) {
   // TODO: Read capacitive touch state from hardware
   data->btn_id = 0;

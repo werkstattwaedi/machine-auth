@@ -29,7 +29,15 @@ namespace maco::system {
 
 // maco_firmware/targets/p2/system.cc
 maco::display::DisplayDriver& GetDisplayDriver() {
-  static maco::display::PicoRes28LcdDriver driver;
+  // Create hardware instances with platform-specific pin assignments
+  static pb::ParticleDigitalOut rst_pin(S3);
+  static pb::ParticleDigitalOut cs_pin(D5);
+  static pb::ParticleDigitalOut dc_pin(D10);
+  static pb::ParticleDigitalOut bl_pin(A5);
+  static pb::ParticleSpiInitiator spi(pb::ParticleSpiInitiator::Interface::kSpi1, 40'000'000);
+
+  // Inject dependencies into driver
+  static maco::display::PicoRes28LcdDriver driver(spi, cs_pin, dc_pin, rst_pin, bl_pin);
   return driver;
 }
 ```

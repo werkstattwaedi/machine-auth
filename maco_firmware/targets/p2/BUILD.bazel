@@ -54,8 +54,7 @@ platform(
         "@pigweed//pw_system:io_backend": "@pigweed//pw_system:sys_io_target_io",
         "@pigweed//pw_system:target_hooks_backend": "//maco_firmware/targets/p2:target_hooks",
         "@pigweed//pw_system:extra_platform_libs": "//maco_firmware/targets/p2:extra_platform_libs",
-        # C++ standard
-        "@pigweed//pw_toolchain/cc:cxx_standard": "17",
+        # Note: C++ standard is set in third_party/particle/.bazelrc
     }),
 )
 
@@ -89,6 +88,7 @@ cc_library(
         "//maco_firmware/system:headers",
         "@particle_bazel//:device_os_headers",
         "@particle_bazel//pw_digital_io_particle:digital_io",
+        "@particle_bazel//pw_spi_particle:initiator",
         "@particle_bazel//pw_system_particle:threads",  # Particle scheduler stub
         "@particle_bazel//pw_thread_particle:thread",
         "@particle_bazel//pb_log:log_bridge",
@@ -98,6 +98,7 @@ cc_library(
         "@pigweed//pw_digital_io",
         "@pigweed//pw_log",
         "@pigweed//pw_multibuf:simple_allocator",
+        "@pigweed//pw_spi:initiator",
         "@pigweed//pw_system:async",
         "@pigweed//pw_system:io",
         "@pigweed//pw_thread:thread",

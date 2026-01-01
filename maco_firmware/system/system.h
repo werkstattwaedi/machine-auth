@@ -4,6 +4,7 @@
 #pragma once
 
 #include "pw_function/function.h"
+#include "pw_thread/options.h"
 
 // The functions in this file return specific implementations of singleton types
 // provided by the system.
@@ -30,5 +31,9 @@ maco::display::DisplayDriver& GetDisplayDriver();
 /// Returns the platform-specific touch button input driver instance.
 /// Host: KeyboardInputDriver, P2: CapTouchInputDriver
 maco::display::TouchButtonDriver& GetTouchButtonDriver();
+
+/// Returns the default thread options for the current platform.
+/// Host: pw::thread::stl::Options, P2: pw::thread::particle::Options
+const pw::thread::Options& GetDefaultThreadOptions();
 
 }  // namespace maco::system

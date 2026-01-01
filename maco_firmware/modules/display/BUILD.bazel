@@ -37,11 +37,12 @@ cc_library(
     deps = [
         ":display_driver",
         ":touch_button_driver",
+        "//maco_firmware/system:headers",
         "@lvgl//:lvgl",
         "@pigweed//pw_chrono:system_clock",
         "@pigweed//pw_log",
         "@pigweed//pw_status",
+        "@pigweed//pw_thread:sleep",
         "@pigweed//pw_thread:thread",
-        "@pigweed//pw_thread_stl:options",
     ],
 )

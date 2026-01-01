@@ -4,11 +4,12 @@
 #include "maco_firmware/modules/display/display.h"
 
 #include <chrono>
-#include <thread>
 
+#include "maco_firmware/system/system.h"
 #include "pw_chrono/system_clock.h"
 #include "pw_log/log.h"
 #include "pw_thread/detached_thread.h"
+#include "pw_thread/sleep.h"
 
 namespace maco::display {
 namespace {
@@ -25,9 +26,7 @@ uint32_t GetMillisSinceBoot() {
 }  // namespace
 
 pw::Status Display::Init(
-    DisplayDriver& display_driver,
-    TouchButtonDriver& touch_button_driver,
-    const DisplayConfig& config
+    DisplayDriver& display_driver, TouchButtonDriver& touch_button_driver
 ) {
   if (running_.load()) {
     PW_LOG_WARN("Display already initialized");
@@ -36,8 +35,6 @@ pw::Status Display::Init(
 
   display_driver_ = &display_driver;
   touch_button_driver_ = &touch_button_driver;
-  width_ = config.width;
-  height_ = config.height;
 
   // Initialize LVGL
   lv_init();
@@ -45,7 +42,7 @@ pw::Status Display::Init(
   PW_LOG_INFO("LVGL initialized");
 
   // Initialize display driver
-  pw::Status status = display_driver_->Init(width_, height_);
+  pw::Status status = display_driver_->Init();
   if (!status.ok()) {
     PW_LOG_ERROR("Display driver init failed");
     return status;
@@ -59,7 +56,7 @@ pw::Status Display::Init(
     return display_result.status();
   }
   lv_display_ = *display_result;
-  PW_LOG_INFO("LVGL display created (%dx%d)", width_, height_);
+  PW_LOG_INFO("LVGL display created (%dx%d)", width(), height());
 
   // Initialize touch button driver
   status = touch_button_driver_->Init();
@@ -80,7 +77,7 @@ pw::Status Display::Init(
 
   // Start render thread
   running_.store(true);
-  pw::thread::DetachedThread(pw::thread::stl::Options(), [this]() {
+  pw::thread::DetachedThread(maco::system::GetDefaultThreadOptions(), [this]() {
     RenderThread();
   });
   PW_LOG_INFO("Render thread started");
@@ -91,7 +88,7 @@ pw::Status Display::Init(
 void Display::RenderThread() {
   while (running_.load()) {
     uint32_t time_till_next = lv_timer_handler();
-    std::this_thread::sleep_for(std::chrono::milliseconds(time_till_next));
+    pw::this_thread::sleep_for(std::chrono::milliseconds(time_till_next));
   }
 }
 

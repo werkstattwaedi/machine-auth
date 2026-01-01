@@ -11,14 +11,18 @@ namespace maco::display {
 // TODO: Implement when SDL2 Bazel dependency is configured
 class SdlDisplayDriver : public DisplayDriver {
  public:
+  /// Display dimensions (same as hardware for consistent UI)
+  static constexpr uint16_t kWidth = 240;
+  static constexpr uint16_t kHeight = 320;
+
   SdlDisplayDriver() = default;
   ~SdlDisplayDriver() override = default;
 
-  pw::Status Init(uint16_t width, uint16_t height) override;
+  pw::Status Init() override;
   pw::Result<lv_display_t*> CreateLvglDisplay() override;
 
-  uint16_t width() const override { return width_; }
-  uint16_t height() const override { return height_; }
+  uint16_t width() const override { return kWidth; }
+  uint16_t height() const override { return kHeight; }
 
  private:
   static void FlushCallback(lv_display_t* disp,
@@ -27,13 +31,11 @@ class SdlDisplayDriver : public DisplayDriver {
   void Flush(const lv_area_t* area, uint8_t* px_map);
 
   lv_display_t* display_ = nullptr;
-  uint16_t width_ = 0;
-  uint16_t height_ = 0;
 
   // Draw buffers (1/10 of screen, double buffered)
   static constexpr size_t kBufferLines = 32;  // ~1/10 of 320
-  uint8_t draw_buf1_[240 * kBufferLines * 2];  // RGB565
-  uint8_t draw_buf2_[240 * kBufferLines * 2];
+  uint8_t draw_buf1_[kWidth * kBufferLines * 2];  // RGB565
+  uint8_t draw_buf2_[kWidth * kBufferLines * 2];
 };
 
 }  // namespace maco::display

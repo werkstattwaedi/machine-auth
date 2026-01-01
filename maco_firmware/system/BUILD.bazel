@@ -15,6 +15,7 @@ cc_library(
     includes = [".."],  # Allow includes like "maco_firmware/system/system.h"
     deps = [
         "@pigweed//pw_function",
+        "@pigweed//pw_thread:options",
     ],
 )
 

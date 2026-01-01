@@ -79,4 +79,9 @@ maco::display::TouchButtonDriver& GetTouchButtonDriver() {
   return driver;
 }
 
+const pw::thread::Options& GetDefaultThreadOptions() {
+  static const pw::thread::stl::Options options;
+  return options;
+}
+
 }  // namespace maco::system

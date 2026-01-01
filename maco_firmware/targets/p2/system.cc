@@ -5,9 +5,8 @@
 
 #include <cstddef>
 
-#include "maco_firmware/devices/cap_touch/cap_touch_input_driver.h"
-#include "maco_firmware/devices/pico_res28_lcd/pico_res28_lcd_driver.h"
-#include "pb_log/log_bridge.h"
+// Pigweed headers first - before Particle headers that define pin macros
+// (D2, D3, etc.) which conflict with Pigweed template parameter names.
 #include "pw_assert/check.h"
 #include "pw_channel/stream_channel.h"
 #include "pw_log/log.h"
@@ -16,9 +15,31 @@
 #include "pw_system/system.h"
 #include "pw_thread_particle/options.h"
 
+// Particle and project headers after Pigweed
+#include "maco_firmware/devices/cap_touch/cap_touch_input_driver.h"
+#include "maco_firmware/devices/pico_res28_lcd/pico_res28_lcd_driver.h"
+#include "pb_digital_io/digital_io.h"
+#include "pb_log/log_bridge.h"
+#include "pb_spi/initiator.h"
+#include "pinmap_hal.h"
+
 namespace maco::system {
 
 using pw::channel::StreamChannel;
+
+namespace {
+
+// Pin definitions for Pico-ResTouch-LCD-2.8 display
+// (from original firmware/src/config.h)
+constexpr hal_pin_t kPinDisplayReset = S3;        // Display reset
+constexpr hal_pin_t kPinDisplayChipSelect = D5;   // Display CS
+constexpr hal_pin_t kPinDisplayDataCommand = D10; // Display D/C
+constexpr hal_pin_t kPinDisplayBacklight = A5;    // Display backlight
+
+// SPI clock frequency for display (40 MHz typical for ST7789)
+constexpr uint32_t kDisplaySpiClockHz = 40'000'000;
+
+}  // namespace
 
 void Init(pw::Function<void()> app_init) {
   pb::log::InitLogBridge();
@@ -56,13 +77,31 @@ void Init(pw::Function<void()> app_init) {
 }
 
 maco::display::DisplayDriver& GetDisplayDriver() {
-  static maco::display::PicoRes28LcdDriver driver;
+  // Create GPIO instances for display control
+  static pb::ParticleDigitalOut rst_pin(kPinDisplayReset);
+  static pb::ParticleDigitalOut cs_pin(kPinDisplayChipSelect);
+  static pb::ParticleDigitalOut dc_pin(kPinDisplayDataCommand);
+  static pb::ParticleDigitalOut bl_pin(kPinDisplayBacklight);
+
+  // Create SPI initiator for display (using SPI1 = HAL_SPI_INTERFACE2)
+  static pb::ParticleSpiInitiator spi_initiator(
+      pb::ParticleSpiInitiator::Interface::kSpi1,
+      kDisplaySpiClockHz);
+
+  // Create and return driver with injected dependencies
+  static maco::display::PicoRes28LcdDriver driver(
+      spi_initiator, cs_pin, dc_pin, rst_pin, bl_pin);
   return driver;
 }
 
 maco::display::TouchButtonDriver& GetTouchButtonDriver() {
   static maco::display::CapTouchInputDriver driver;
   return driver;
+}
+
+const pw::thread::Options& GetDefaultThreadOptions() {
+  static const pw::thread::particle::Options options;
+  return options;
 }
 
 }  // namespace maco::system

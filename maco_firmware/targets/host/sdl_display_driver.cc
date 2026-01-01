@@ -7,10 +7,7 @@
 
 namespace maco::display {
 
-pw::Status SdlDisplayDriver::Init(uint16_t width, uint16_t height) {
-  width_ = width;
-  height_ = height;
-
+pw::Status SdlDisplayDriver::Init() {
   // TODO: Initialize SDL window when SDL2 is available
   PW_LOG_WARN("SDL display driver not yet implemented - display will be blank");
 
@@ -18,7 +15,7 @@ pw::Status SdlDisplayDriver::Init(uint16_t width, uint16_t height) {
 }
 
 pw::Result<lv_display_t*> SdlDisplayDriver::CreateLvglDisplay() {
-  display_ = lv_display_create(width_, height_);
+  display_ = lv_display_create(kWidth, kHeight);
   if (display_ == nullptr) {
     return pw::Status::Internal();
   }
@@ -28,7 +25,7 @@ pw::Result<lv_display_t*> SdlDisplayDriver::CreateLvglDisplay() {
   lv_display_set_flush_cb(display_, &SdlDisplayDriver::FlushCallback);
 
   // Set up draw buffers (1/10 screen, double buffered)
-  size_t buf_size = width_ * kBufferLines *
+  size_t buf_size = kWidth * kBufferLines *
                     lv_color_format_get_size(lv_display_get_color_format(display_));
   lv_display_set_buffers(display_, draw_buf1_, draw_buf2_, buf_size,
                          LV_DISPLAY_RENDER_MODE_PARTIAL);

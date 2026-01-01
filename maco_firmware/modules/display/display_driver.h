@@ -19,7 +19,7 @@ class DisplayDriver {
   virtual ~DisplayDriver() = default;
 
   // Initialize the display hardware (SDL window, SPI bus, etc.)
-  virtual pw::Status Init(uint16_t width, uint16_t height) = 0;
+  virtual pw::Status Init() = 0;
 
   // Create and configure the LVGL display
   // The driver sets up flush callback and draw buffers internally
