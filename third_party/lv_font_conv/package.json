@@ -1,0 +1,11 @@
+{
+  "name": "lv_font_conv_wrapper",
+  "version": "1.0.0",
+  "private": true,
+  "devDependencies": {
+    "lv_font_conv": "^1.0.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": []
+  }
+}

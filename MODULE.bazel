@@ -8,6 +8,19 @@ bazel_dep(name = "platforms", version = "0.0.10")
 bazel_dep(name = "rules_cc", version = "0.1.1")
 bazel_dep(name = "bazel_skylib", version = "1.8.1")
 
+# JavaScript toolchain for lv_font_conv
+bazel_dep(name = "aspect_rules_js", version = "2.4.0")
+
+npm = use_extension("@aspect_rules_js//npm:extensions.bzl", "npm")
+npm.npm_translate_lock(
+    name = "npm",
+    pnpm_lock = "//third_party/lv_font_conv:pnpm-lock.yaml",
+    bins = {
+        "lv_font_conv": ["lv_font_conv=./lv_font_conv.js"],
+    },
+)
+use_repo(npm, "npm")
+
 # IDE support - generates compile_commands.json for clangd
 bazel_dep(name = "hedron_compile_commands", dev_dependency = True)
 archive_override(

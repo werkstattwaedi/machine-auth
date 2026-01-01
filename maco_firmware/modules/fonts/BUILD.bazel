@@ -1,21 +1,30 @@
 # Copyright Offene Werkstatt Wädenswil
 # SPDX-License-Identifier: MIT
 
-load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("//third_party/lv_font_conv:font.bzl", "lvgl_font")
 
 package(default_visibility = ["//maco_firmware:__subpackages__"])
 
-# Custom LVGL fonts (generated with lv_font_conv)
-# alwayslink ensures fonts are included even without direct references
-# (LVGL references them via LV_FONT_DEFAULT in lv_conf.h)
+# Roboto fonts for UI text
+# Generated from TTF using lv_font_conv
+
+lvgl_font(
+    name = "roboto_12",
+    ttf = "Roboto-Regular.ttf",
+    size = 12,
+)
+
+lvgl_font(
+    name = "roboto_24",
+    ttf = "Roboto-Regular.ttf",
+    size = 24,
+)
+
+# Combined fonts library
 cc_library(
     name = "fonts",
-    srcs = [
-        "roboto_12.c",
-        "roboto_24.c",
-    ],
-    alwayslink = True,
     deps = [
-        "@lvgl//:lvgl",
+        ":roboto_12",
+        ":roboto_24",
     ],
 )
