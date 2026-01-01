@@ -1,0 +1,37 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+# System-provided SDL2 library with headers from submodule
+#
+# SDL2 must be installed on the system:
+#   Ubuntu/Debian: apt install libsdl2-dev
+#   Fedora: dnf install SDL2-devel
+#   macOS: brew install sdl2
+
+load("@rules_cc//cc:cc_import.bzl", "cc_import")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# Headers from SDL submodule (SDL2 branch)
+cc_library(
+    name = "sdl2_headers",
+    hdrs = glob(["SDL/include/*.h"]),
+    includes = ["SDL/include"],
+    # Expose as SDL2/SDL.h by wrapping
+    strip_include_prefix = "SDL/include",
+    include_prefix = "SDL2",
+)
+
+# Combined target: headers + system shared library
+cc_library(
+    name = "sdl2",
+    linkopts = [
+        # Use system dynamic linker paths at runtime
+        "-Wl,-rpath,/usr/lib/x86_64-linux-gnu",
+    ],
+    deps = [
+        ":sdl2_headers",
+        "@sdl2_system//:sdl2_shared",
+    ],
+)

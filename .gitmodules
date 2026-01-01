@@ -38,3 +38,6 @@
 	path = third_party/lvgl
 	url = https://github.com/werkstattwaedi/lvgl.git
 	branch = bazel-9.4
+[submodule "third_party/sdl/SDL"]
+	path = third_party/sdl/SDL
+	url = https://github.com/libsdl-org/SDL.git
