@@ -56,12 +56,11 @@ void PwSystemThread() {
   pw::system::StartAndClobberTheStack(channel->channel());
 }
 
-// Main SDL/LVGL loop - must run on main thread for SDL event handling
+// Main SDL loop - must run on main thread for SDL event handling
+// Note: LVGL tick and timer handling is done by Display module's render thread
 [[noreturn]] void RunSdlLoop(maco::display::SdlDisplayDriver& display) {
   using namespace std::chrono_literals;
-  constexpr auto kTickPeriod = 5ms;
-
-  auto last_tick = std::chrono::steady_clock::now();
+  constexpr auto kFramePeriod = 16ms;  // ~60 FPS
 
   while (true) {
     // Handle SDL events (window close, etc.) - must be on main thread
@@ -71,22 +70,11 @@ void PwSystemThread() {
       _exit(0);
     }
 
-    // Update LVGL tick
-    auto now = std::chrono::steady_clock::now();
-    auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                          now - last_tick)
-                          .count();
-    last_tick = now;
-    lv_tick_inc(static_cast<uint32_t>(elapsed_ms));
-
-    // Run LVGL tasks
-    lv_timer_handler();
-
     // Present frame to screen
     display.Present();
 
-    // Small delay to avoid 100% CPU
-    std::this_thread::sleep_for(kTickPeriod);
+    // Frame rate limiter
+    std::this_thread::sleep_for(kFramePeriod);
   }
 }
 

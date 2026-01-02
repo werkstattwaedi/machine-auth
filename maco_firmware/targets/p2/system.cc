@@ -22,6 +22,8 @@
 #include "pb_log/log_bridge.h"
 #include "pb_spi/initiator.h"
 #include "pinmap_hal.h"
+#include "delay_hal.h"
+#include "usb_hal.h"
 
 namespace maco::system {
 
@@ -43,6 +45,16 @@ constexpr uint32_t kDisplaySpiClockHz = 40'000'000;
 
 void Init(pw::Function<void()> app_init) {
   pb::log::InitLogBridge();
+
+  // Dev firmware waits up to 10s for USB serial connection (for logs).
+  // TODO - this must be controlled from the APP, not here.
+  for (int i = 0; i < 100; i++) {
+    if (HAL_USB_USART_Is_Connected(HAL_USB_USART_SERIAL)) {
+      break;
+    }
+    HAL_Delay_Milliseconds(100);
+  }
+
 
   PW_LOG_INFO("=== MACO Firmware ===");
 

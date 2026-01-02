@@ -118,14 +118,8 @@ pw::Result<lv_display_t*> PicoRes28LcdDriver::CreateLvglDisplay() {
   // Override flush callback with our custom one for DMA transfers
   lv_display_set_flush_cb(display_, &PicoRes28LcdDriver::FlushCallback);
 
-  // Verify color format is RGB565 (2 bytes per pixel) - buffer size assumes
-  // this
-  PW_CHECK_INT_EQ(
-      lv_color_format_get_size(lv_display_get_color_format(display_)),
-      2,
-      "Expected RGB565 color format"
-  );
-
+  // Set swapped RGB565 format (big-endian for ST7789)
+  lv_display_set_color_format(display_, LV_COLOR_FORMAT_RGB565_SWAPPED);
   lv_display_set_buffers(
       display_,
       draw_buf1_,
@@ -140,16 +134,16 @@ pw::Result<lv_display_t*> PicoRes28LcdDriver::CreateLvglDisplay() {
 void PicoRes28LcdDriver::SendData(
     pw::ConstByteSpan cmd, pw::ConstByteSpan data
 ) {
+  PW_CHECK(!cmd.empty(), "SendData requires non-empty command");
+
   // CS low (select)
   (void)cs_.SetState(pw::digital_io::State::kInactive);
 
   // DC low = command
-  if (!cmd.empty()) {
-    (void)dc_.SetState(pw::digital_io::State::kInactive);
-    (void)spi_.WriteRead(cmd, pw::ByteSpan());
-  }
+  (void)dc_.SetState(pw::digital_io::State::kInactive);
+  (void)spi_.WriteRead(cmd, pw::ByteSpan());
 
-  // DC high = data
+  // DC high = data (optional)
   if (!data.empty()) {
     (void)dc_.SetState(pw::digital_io::State::kActive);
     (void)spi_.WriteRead(data, pw::ByteSpan());
@@ -172,12 +166,18 @@ void PicoRes28LcdDriver::FlushCallback(
 void PicoRes28LcdDriver::Flush(
     const lv_area_t* area, pw::ConstByteSpan pixels
 ) {
+  // Cast to uint16_t for MIPI DCS 2-byte coordinate format
+  const uint16_t x1 = static_cast<uint16_t>(area->x1);
+  const uint16_t y1 = static_cast<uint16_t>(area->y1);
+  const uint16_t x2 = static_cast<uint16_t>(area->x2);
+  const uint16_t y2 = static_cast<uint16_t>(area->y2);
+
   // Set column address (CASET)
   SendData(
       kCmdColumnAddressSet,
       pw::bytes::Concat(
-          /* start */ pw::bytes::CopyInOrder(pw::endian::big, area->x1),
-          /* end */ pw::bytes::CopyInOrder(pw::endian::big, area->x2)
+          pw::bytes::CopyInOrder(pw::endian::big, x1),
+          pw::bytes::CopyInOrder(pw::endian::big, x2)
       )
   );
 
@@ -185,8 +185,8 @@ void PicoRes28LcdDriver::Flush(
   SendData(
       kCmdRowAddressSet,
       pw::bytes::Concat(
-          /* start */ pw::bytes::CopyInOrder(pw::endian::big, area->y1),
-          /* end */ pw::bytes::CopyInOrder(pw::endian::big, area->y2)
+          pw::bytes::CopyInOrder(pw::endian::big, y1),
+          pw::bytes::CopyInOrder(pw::endian::big, y2)
       )
   );
 

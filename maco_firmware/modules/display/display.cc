@@ -23,6 +23,11 @@ uint32_t GetMillisSinceBoot() {
       .count();
 }
 
+// LVGL delay callback using pw_thread::sleep_for
+void DelayMs(uint32_t ms) {
+  pw::this_thread::sleep_for(std::chrono::milliseconds(ms));
+}
+
 }  // namespace
 
 pw::Status Display::Init(
@@ -39,6 +44,7 @@ pw::Status Display::Init(
   // Initialize LVGL
   lv_init();
   lv_tick_set_cb(GetMillisSinceBoot);
+  lv_delay_set_cb(DelayMs);
   PW_LOG_INFO("LVGL initialized");
 
   // Initialize display driver

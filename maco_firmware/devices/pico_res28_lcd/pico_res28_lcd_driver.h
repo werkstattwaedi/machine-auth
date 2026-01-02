@@ -49,17 +49,22 @@ class PicoRes28LcdDriver : public DisplayDriver {
   uint16_t width() const override { return kWidth; }
   uint16_t height() const override { return kHeight; }
 
+ protected:
+  // Protected for testability - allows test subclass to call directly
+  void Flush(const lv_area_t* area, pw::ConstByteSpan pixels);
+
+  /// Core SPI transfer: sends command with DC=low, then optionally data with
+  /// DC=high.
+  /// @param cmd Command byte(s) to send. Must be non-empty.
+  /// @param data Optional data bytes. May be empty.
+  void SendData(pw::ConstByteSpan cmd, pw::ConstByteSpan data);
+
  private:
   // LVGL flush callback (static, looks up instance from user_data)
   static void FlushCallback(
       lv_display_t* disp, const lv_area_t* area, uint8_t* px_map
   );
 
-  // Core SPI transfer: sends command with DC=low, then data with DC=high
-  void SendData(pw::ConstByteSpan cmd, pw::ConstByteSpan data);
-
-  // Instance methods
-  void Flush(const lv_area_t* area, pw::ConstByteSpan pixels);
   void HardwareReset();
 
   // Hardware dependencies (injected)

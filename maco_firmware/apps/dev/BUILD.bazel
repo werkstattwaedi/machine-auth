@@ -14,7 +14,7 @@ load("@pigweed//targets/host_device_simulator:transition.bzl", "host_device_simu
 package(default_visibility = ["//visibility:public"])
 
 DEV_DEPS = [
-    "//maco_firmware/modules/display:display_driver",
+    "//maco_firmware/modules/display",
     "//maco_firmware/system",
     "//maco_firmware/system:headers",
     "@lvgl//:lvgl",
@@ -42,7 +42,7 @@ particle_firmware(
     srcs = ["main.cc"],
     platform = "//maco_firmware/targets/p2:p2",
     deps = [
-        "//maco_firmware/modules/display:display_driver",
+        "//maco_firmware/modules/display",
         "//maco_firmware/system",
         "//maco_firmware/system:headers",
         "@lvgl//:lvgl",

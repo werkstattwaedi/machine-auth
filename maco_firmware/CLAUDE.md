@@ -196,6 +196,112 @@ display_ = lv_lcd_generic_mipi_create(
 
 Use `[[maybe_unused]]` for unused lambda parameters.
 
+## Unit Testing
+
+### Host Unit Tests (`pw_cc_test`)
+
+Use `pw_cc_test` for fast, isolated unit tests that run on the host. These test logic without hardware.
+
+```python
+# BUILD.bazel
+load("@pigweed//pw_unit_test:pw_cc_test.bzl", "pw_cc_test")
+
+pw_cc_test(
+    name = "my_driver_test",
+    srcs = ["my_driver_test.cc"],
+    deps = [
+        ":my_driver",
+        "@pigweed//pw_digital_io:digital_io_mock",
+        "@pigweed//pw_spi:initiator_mock",
+    ],
+)
+```
+
+Run with: `bazel test //path/to:my_driver_test`
+
+### On-Device Hardware Tests (`particle_cc_test`)
+
+Use `particle_cc_test` for tests that require real hardware (display, sensors, etc.).
+
+**⚠️ Claude: NEVER run on-device tests unless explicitly asked by the user.** Running these tests will flash the connected device, which may have unintended side effects (interrupts user's work, overwrites firmware, etc.).
+
+```python
+# BUILD.bazel
+load("@particle_bazel//rules:particle_test.bzl", "particle_cc_test")
+
+particle_cc_test(
+    name = "hardware_test",
+    srcs = ["hardware_test.cc"],
+    platform = "//maco_firmware/targets/p2:p2",
+    deps = [...],
+)
+```
+
+Flash and run with: `bazel run //path/to:hardware_test_flash`
+
+### Pigweed Mocks
+
+**SPI Mock** - Verify exact byte sequences sent over SPI:
+
+```cpp
+#include "pw_spi/initiator_mock.h"
+
+constexpr auto kExpectedCmd = pw::bytes::Array<0x2A>();
+constexpr auto kExpectedData = pw::bytes::Array<0x00, 0x10>();
+
+auto transactions = pw::spi::MakeExpectedTransactionArray({
+    pw::spi::MockWriteTransaction(pw::OkStatus(), kExpectedCmd),
+    pw::spi::MockWriteTransaction(pw::OkStatus(), kExpectedData),
+});
+pw::spi::MockInitiator spi_mock(transactions);
+
+// ... use spi_mock ...
+
+EXPECT_EQ(spi_mock.Finalize(), pw::OkStatus());  // Verify all transactions executed
+```
+
+**GPIO Mock** - Use `DigitalInOutMock` with sibling cast for `DigitalOut`:
+
+```cpp
+#include "pw_digital_io/digital_io_mock.h"
+
+// DigitalInOutMock provides both input and output, use .as<>() to convert
+pw::digital_io::DigitalInOutMock<10> pin_mock;  // 10 = event capacity
+
+// Pass to code expecting DigitalOut& using sibling cast
+MyDriver driver(spi, pin_mock.as<pw::digital_io::DigitalOut>());
+
+// Verify GPIO state changes
+auto& events = pin_mock.events();
+EXPECT_EQ(events[0].state, pw::digital_io::State::kInactive);
+// Note: Constructor creates initial event at kInactive
+```
+
+### Making Code Testable
+
+**Use protected methods** instead of private for testability:
+
+```cpp
+// In header
+class MyDriver {
+ public:
+  // Public API...
+
+ protected:
+  // Protected for testability - allows test subclass to call directly
+  void SendData(pw::ConstByteSpan cmd, pw::ConstByteSpan data);
+};
+
+// In test file
+class TestableMyDriver : public MyDriver {
+ public:
+  using MyDriver::MyDriver;    // Inherit constructors
+  using MyDriver::SendData;    // Expose protected method
+};
+```
+
+This follows Pigweed's preferred pattern over `FRIEND_TEST` (which couples tests to implementation).
+
 ## Codestyle
 
 **Copyright Header:**
