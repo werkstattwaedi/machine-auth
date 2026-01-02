@@ -71,6 +71,13 @@ pw::Status PicoRes28LcdDriver::Init() {
 }
 
 pw::Result<lv_display_t*> PicoRes28LcdDriver::CreateLvglDisplay() {
+  // Temporary storage for `this` pointer during lv_lcd_generic_mipi_create.
+  // LVGL calls send_cmd_cb before we can set user_data.
+  static PicoRes28LcdDriver* init_driver = nullptr;
+
+  PW_CHECK_PTR_EQ(init_driver, nullptr, "CreateLvglDisplay is not reentrant");
+  init_driver = this;
+
   // Use LVGL's generic MIPI LCD driver which handles the init sequence
   display_ = lv_lcd_generic_mipi_create(
       kWidth,
@@ -78,8 +85,12 @@ pw::Result<lv_display_t*> PicoRes28LcdDriver::CreateLvglDisplay() {
       LV_LCD_FLAG_MIRROR_X | LV_LCD_FLAG_MIRROR_Y,
 
       [](auto* disp, auto* cmd, auto cmd_size, auto* param, auto param_size) {
+        // Use user_data if set, otherwise fall back to init_driver
         auto* self =
             static_cast<PicoRes28LcdDriver*>(lv_display_get_user_data(disp));
+        if (self == nullptr) {
+          self = init_driver;
+        }
         PW_CHECK_NOTNULL(self);
         self->SendData(AsBytes(cmd, cmd_size), AsBytes(param, param_size));
       },
@@ -93,11 +104,13 @@ pw::Result<lv_display_t*> PicoRes28LcdDriver::CreateLvglDisplay() {
   );
 
   if (display_ == nullptr) {
+    init_driver = nullptr;
     return pw::Status::Internal();
   }
 
-  // Store this pointer for callbacks
+  // Store this pointer for callbacks, then clear temporary storage
   lv_display_set_user_data(display_, this);
+  init_driver = nullptr;
 
   // ST7789 typically needs inversion enabled
   lv_lcd_generic_mipi_set_invert(display_, true);
