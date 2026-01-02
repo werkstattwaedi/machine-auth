@@ -12,9 +12,13 @@ The new Pigweed-based firmware in `maco_firmware/` uses Bazel.
 |------|---------|
 | Build simulator | `bazel build //maco_firmware/apps/dev:simulator` |
 | Run simulator | `bazel run //maco_firmware/apps/dev:simulator` |
-| Build P2 firmware | `bazel build //maco_firmware/apps/dev` |
+| Build P2 firmware (ELF) | `bazel build //maco_firmware/apps/dev` |
+| Build P2 firmware (.bin) | `bazel build //maco_firmware/apps/dev:dev.bin` |
 | Flash to device | `./pw flash` |
 | Sanitizer builds | `./pw build asan`, `./pw build tsan`, `./pw build ubsan` |
+
+The default P2 target is the ELF binary, which generates proper IDE compile commands.
+The `.bin` target is only needed for flashing (and `./pw flash` handles that automatically).
 
 ### Important: `bazel` vs `./pw`
 

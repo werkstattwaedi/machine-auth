@@ -37,10 +37,6 @@ host_device_simulator_binary(
     binary = ":simulator_binary",
 )
 
-cc_library(
-    name = "dev_lib",
-)
-
 particle_firmware(
     name = "dev",
     srcs = ["main.cc"],
@@ -56,5 +52,5 @@ particle_firmware(
 
 particle_flash_binary(
     name = "flash",
-    firmware = ":dev",
+    firmware = ":dev.bin",
 )

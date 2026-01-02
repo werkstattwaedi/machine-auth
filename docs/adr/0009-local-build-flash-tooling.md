@@ -65,11 +65,18 @@ Runs bazel in an isolated environment with `BAZELISK_SKIP_WRAPPER=1`.
 | Build | Config | Targets |
 |-------|--------|---------|
 | `host` | default | `//maco_firmware/apps/dev:simulator` |
-| `p2` | `--config=p2` | `//maco_firmware/apps/dev:dev` |
-| `flash` | default | `//maco_firmware/apps/dev:flash` |
+| `p2` | default | `//maco_firmware/apps/dev:dev` |
 | `asan` | `--config=asan` | `//maco_firmware/...` |
 | `tsan` | `--config=tsan` | `//maco_firmware/...` |
 | `ubsan` | `--config=ubsan` | `//maco_firmware/...` |
+
+Note: P2 doesn't need `--config=p2` because `particle_firmware` applies a platform transition internally.
+
+### Target Naming Convention
+
+The `particle_firmware` macro produces:
+- `{name}` → ELF binary (default, generates IDE compile commands)
+- `{name}.bin` → Flashable binary with CRC (used by flash script)
 
 ### When to Use Each
 

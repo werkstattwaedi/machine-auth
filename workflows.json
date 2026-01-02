@@ -22,9 +22,7 @@
         "name": "p2_config",
         "description": "Particle P2 firmware build",
         "build_type": "bazel",
-        "args": [
-          "--config=p2"
-        ],
+        "args": [],
         "driver_options": {
           "@type": "pw.build.proto.BazelDriverOptions",
           "no_test": true
