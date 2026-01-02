@@ -13,3 +13,8 @@ common --@pigweed//pw_toolchain/host_clang:layering_check
 # LVGL configuration (host default - P2 overrides via platform flags)
 build --@lvgl//:lv_conf=//maco_firmware/targets/host:lvgl_conf
 
+# Sanitizer configs
+common:asan --@pigweed//pw_toolchain/host_clang:asan
+common:tsan --@pigweed//pw_toolchain/host_clang:tsan
+common:ubsan --@pigweed//pw_toolchain/host_clang:ubsan
+

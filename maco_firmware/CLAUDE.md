@@ -10,15 +10,39 @@ Use these skills when working on maco_firmware:
 - **`/pw-review`** - Review code for Pigweed best practices and anti-patterns
 - **`/docs-review`** - Check code consistency with documented architecture decisions
 
-## Building
+## Building and Flashing
+
+### For Claude (AI assistant)
+
+**Always use `./pw` to avoid changing the user's IDE state:**
 
 ```bash
-# Build firmware (P2 target)
-bazel build //maco_firmware/apps/dev
-
-# Build host simulator
-bazel build //maco_firmware/apps/dev:simulator
+./pw build host    # Build simulator
+./pw build p2      # Build P2 firmware
+./pw flash         # Flash to device
+./pw build asan    # Address Sanitizer
+./pw build tsan    # Thread Sanitizer
+./pw build ubsan   # Undefined Behavior Sanitizer
 ```
+
+### For human developers
+
+**Use `bazel` directly when you want IDE to update:**
+
+```bash
+bazel build //maco_firmware/apps/dev:simulator  # Updates IDE to host
+bazel build //maco_firmware/apps/dev            # Updates IDE to P2
+bazel run //maco_firmware/apps/dev:simulator    # Build + run simulator
+```
+
+**Use `./pw` when you don't want IDE changes:**
+
+```bash
+./pw flash         # Flash without IDE change
+./pw build asan    # Sanitizer without IDE change
+```
+
+See [ADR-0009](../docs/adr/0009-local-build-flash-tooling.md) for tooling architecture.
 
 ## Architecture
 

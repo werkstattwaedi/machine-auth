@@ -20,6 +20,23 @@ This is a comprehensive IoT machine authentication system featuring secure NFC-b
 - [`firmware/CLAUDE.md`](firmware/CLAUDE.md) - Legacy Particle firmware
 - [`third_party/particle/CLAUDE.md`](third_party/particle/CLAUDE.md) - Particle Pigweed backends
 
+### Build Commands (MACO Firmware)
+
+**For Claude (AI assistant) - always use `./pw`:**
+
+```bash
+./pw build host    # Build simulator (no IDE change)
+./pw build p2      # Build P2 firmware (no IDE change)
+./pw flash         # Flash to device
+./pw build asan    # Address Sanitizer
+```
+
+**For human developers:**
+- `bazel build ...` → Updates IDE compile_commands to match target
+- `./pw ...` → No IDE changes (use for flash, sanitizers)
+
+See [`docs/adr/0009-local-build-flash-tooling.md`](docs/adr/0009-local-build-flash-tooling.md) for details.
+
 ### Documentation Structure
 
 - **`docs/`**: Structured project documentation

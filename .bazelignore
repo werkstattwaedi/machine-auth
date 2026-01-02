@@ -1,5 +1,6 @@
 # Non-Bazel directories
 admin
+out
 docs
 firestore
 firmware

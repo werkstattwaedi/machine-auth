@@ -1,28 +1,23 @@
 # Copyright Offene Werkstatt Wädenswil
 # SPDX-License-Identifier: MIT
 
-load("@hedron_compile_commands//:refresh_compile_commands.bzl", "refresh_compile_commands")
-load("@pigweed//pw_build:compatibility.bzl", "incompatible_with_mcu")
+load("@bazel_skylib//rules:native_binary.bzl", "native_binary")
 
 package(default_visibility = ["//visibility:public"])
 
-# Generates compile_commands.json for IDE code intelligence
-# Usage:
-#   bazel run //:refresh_compile_commands
+# Pigweed workflows launcher for ./pw script
 #
-# After running, switch between target groups in your IDE:
-#   - "host": For host-based development and testing
-#   - "p2": For Particle P2 firmware analysis
-refresh_compile_commands(
-    name = "refresh_compile_commands",
-    out_dir = ".compile_commands",
-    target_compatible_with = incompatible_with_mcu(),
-    target_groups = {
-        "host": [
-            "//maco_firmware/apps/dev:simulator",
-        ],
-        "p2": [
-            "//maco_firmware/apps/dev:dev",
-        ],
-    },
+# The ./pw script runs bazel in an isolated environment that doesn't
+# update compile_commands. Use for flash and sanitizer builds.
+# See docs/adr/0009-local-build-flash-tooling.md
+#
+# Usage:
+#   ./pw flash              - Flash firmware to device
+#   ./pw build host         - Build simulator
+#   ./pw build p2           - Build P2 firmware
+#   ./pw build asan         - Address Sanitizer build
+#   ./pw build default      - Run all builds in default group
+native_binary(
+    name = "pw",
+    src = "@pigweed//pw_build/py:workflows_launcher",
 )

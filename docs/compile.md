@@ -1,8 +1,50 @@
 # Compilation Guide
 
+This guide covers building both the new Pigweed-based firmware (`maco_firmware/`) and the legacy Particle firmware (`firmware/`).
+
+## MACO Firmware (Bazel)
+
+The new Pigweed-based firmware in `maco_firmware/` uses Bazel.
+
+### Quick Reference
+
+| Task | Command |
+|------|---------|
+| Build simulator | `bazel build //maco_firmware/apps/dev:simulator` |
+| Run simulator | `bazel run //maco_firmware/apps/dev:simulator` |
+| Build P2 firmware | `bazel build //maco_firmware/apps/dev` |
+| Flash to device | `./pw flash` |
+| Sanitizer builds | `./pw build asan`, `./pw build tsan`, `./pw build ubsan` |
+
+### Important: `bazel` vs `./pw`
+
+- **Use `bazel`** for regular development - auto-updates IDE compile_commands
+- **Use `./pw`** for flash and sanitizers - runs isolated, no IDE pollution
+
+See [ADR-0009](adr/0009-local-build-flash-tooling.md) for architecture details.
+
+### One-time Setup (Bazel)
+
+For simulator builds, install SDL2 development libraries:
+
+```bash
+# Ubuntu/Debian
+sudo apt-get install libsdl2-dev
+
+# macOS
+brew install sdl2
+
+# Fedora
+sudo dnf install SDL2-devel
+```
+
+---
+
+## Legacy Firmware (neopo)
+
 **IMPORTANT: Always use these build scripts. Never run `cmake`, `make`, or `neopo` directly.**
 
-## One-time Setup
+### One-time Setup
 
 Run this once to set up the neopo build environment (must be run from firmware directory):
 
@@ -16,20 +58,7 @@ source .neopovenv/bin/activate
 python3 -m pip install "$TEMPDIR/neopo"
 ```
 
-For simulator builds, install SDL2 development libraries:
-
-```bash
-# Ubuntu/Debian
-sudo apt-get install libsdl2-dev libsdl2-ttf-dev
-
-# macOS
-brew install sdl2 sdl2_ttf
-
-# Fedora
-sudo dnf install SDL2-devel SDL2_ttf-devel
-```
-
-## Firmware Compilation
+### Firmware Compilation
 
 **Always use `firmware/neopo.sh` to compile Particle firmware.**
 

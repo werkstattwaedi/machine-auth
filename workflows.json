@@ -1,0 +1,96 @@
+{
+  "configs": [
+    {
+      "name": "bazel_default",
+      "description": "Default bazel build configuration (host)",
+      "build_type": "bazel",
+      "args": [],
+      "env": {}
+    }
+  ],
+  "builds": [
+    {
+      "name": "host",
+      "use_config": "bazel_default",
+      "targets": [
+        "//maco_firmware/apps/dev:simulator"
+      ]
+    },
+    {
+      "name": "p2",
+      "build_config": {
+        "name": "p2_config",
+        "description": "Particle P2 firmware build",
+        "build_type": "bazel",
+        "args": [
+          "--config=p2"
+        ],
+        "driver_options": {
+          "@type": "pw.build.proto.BazelDriverOptions",
+          "no_test": true
+        }
+      },
+      "targets": [
+        "//maco_firmware/apps/dev:dev"
+      ]
+    },
+    {
+      "name": "asan",
+      "build_config": {
+        "name": "asan_config",
+        "description": "Address Sanitizer build",
+        "build_type": "bazel",
+        "args": [
+          "--config=asan"
+        ],
+        "env": {}
+      },
+      "targets": [
+        "//maco_firmware/..."
+      ]
+    },
+    {
+      "name": "tsan",
+      "build_config": {
+        "name": "tsan_config",
+        "description": "Thread Sanitizer build",
+        "build_type": "bazel",
+        "args": [
+          "--config=tsan"
+        ],
+        "env": {}
+      },
+      "targets": [
+        "//maco_firmware/..."
+      ]
+    },
+    {
+      "name": "ubsan",
+      "build_config": {
+        "name": "ubsan_config",
+        "description": "Undefined Behavior Sanitizer build",
+        "build_type": "bazel",
+        "args": [
+          "--config=ubsan"
+        ],
+        "env": {}
+      },
+      "targets": [
+        "//maco_firmware/..."
+      ]
+    }
+  ],
+  "groups": [
+    {
+      "name": "default",
+      "description": "Quick presubmit for validating code changes locally",
+      "builds": [
+        "host",
+        "p2",
+        "asan",
+        "tsan",
+        "ubsan"
+      ]
+    }
+  ]
+}

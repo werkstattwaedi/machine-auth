@@ -96,10 +96,14 @@ Dependencies in `third_party/` as git submodules:
 - Multiple apps from shared code (production, factory test, tag prep, etc.)
 - On-device unit tests with pw_unit_test
 - Pigweed's battle-tested primitives (pw_async2, pw_result, pw_status)
-- Flash directly from Bazel
-- IDE support via compile_commands.json (hedron)
+- Flash directly via `./pw flash`
+- IDE support via compile_commands.json (pw_ide auto-refresh)
 
 **Cons:**
 - Learning curve for Bazel + Pigweed
 - particle-bazel requires maintenance as Device OS evolves
 - Git submodules add complexity to repo management
+
+## Related
+
+- [ADR-0009](0009-local-build-flash-tooling.md) - Local build and flash tooling architecture
