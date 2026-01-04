@@ -79,5 +79,8 @@ compile_commands.json
 .vscode/settings.json
 .clangd
 
+# Claude plugins
+.skills/
+
 # proprietary docs
 docs/proprietary/
