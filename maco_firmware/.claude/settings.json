@@ -1,11 +1,9 @@
 {
   "enabledPlugins": {
-    "pigweed-expert@claude-plugin-marketplace": true,
     "github@claude-plugins-official": true,
     "firebase@claude-plugins-official": false,
     "frontend-design@claude-plugins-official": false,
     "typescript-lsp@claude-plugins-official": true,
-    "docs-expert@claude-plugin-marketplace": true,
     "commit-commands@claude-plugins-official": true
   }
 }
