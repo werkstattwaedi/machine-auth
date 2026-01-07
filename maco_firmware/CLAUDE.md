@@ -223,6 +223,8 @@ Run with: `bazel test //path/to:my_driver_test`
 
 Use `particle_cc_test` for tests that require real hardware (display, sensors, etc.).
 
+**Note:** `./pw build p2` compiles hardware tests to ensure they stay buildable, but does not run them.
+
 **⚠️ Claude: NEVER run on-device tests unless explicitly asked by the user.** Running these tests will flash the connected device, which may have unintended side effects (interrupts user's work, overwrites firmware, etc.).
 
 ```python
