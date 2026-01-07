@@ -1,0 +1,62 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//maco_firmware:__subpackages__"])
+
+cc_library(
+    name = "ntag424_session",
+    hdrs = ["ntag424_session.h"],
+)
+
+cc_library(
+    name = "ntag424_key_provider",
+    hdrs = ["ntag424_key_provider.h"],
+    deps = [
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_result",
+    ],
+)
+
+cc_library(
+    name = "ntag424_crypto",
+    srcs = ["ntag424_crypto.cc"],
+    hdrs = ["ntag424_crypto.h"],
+    deps = [
+        "@particle_bazel//pb_crypto",
+        "@pigweed//pw_assert:check",
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_status",
+    ],
+)
+
+cc_library(
+    name = "local_key_provider",
+    srcs = ["local_key_provider.cc"],
+    hdrs = ["local_key_provider.h"],
+    deps = [
+        ":ntag424_crypto",
+        ":ntag424_key_provider",
+        "@pigweed//pw_assert:check",
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_result",
+        "@pigweed//pw_status",
+    ],
+)
+
+cc_library(
+    name = "ntag424_tag",
+    hdrs = ["ntag424_tag.h"],
+    deps = [
+        ":ntag424_crypto",
+        ":ntag424_key_provider",
+        ":ntag424_session",
+        "//maco_firmware/modules/nfc_tag:iso14443_tag",
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_chrono:system_clock",
+        "@pigweed//pw_random",
+        "@pigweed//pw_result",
+        "@pigweed//pw_status",
+    ],
+)

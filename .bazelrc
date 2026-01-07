@@ -18,3 +18,6 @@ common:asan --@pigweed//pw_toolchain/host_clang:asan
 common:tsan --@pigweed//pw_toolchain/host_clang:tsan
 common:ubsan --@pigweed//pw_toolchain/host_clang:ubsan
 
+# Suppress DEBUG log messages (filters "Dispatcher running task" spam)
+build --copt=-DPW_LOG_LEVEL=PW_LOG_LEVEL_INFO
+

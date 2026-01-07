@@ -1,0 +1,80 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+load("@particle_bazel//rules:particle_test.bzl", "particle_cc_test")
+load("@pigweed//pw_unit_test:pw_cc_test.bzl", "pw_cc_test")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//maco_firmware:__subpackages__"])
+
+cc_library(
+    name = "pn532_driver",
+    srcs = [
+        "pn532_await_idle_future.cc",
+        "pn532_call_future.cc",
+        "pn532_check_present_future.cc",
+        "pn532_command.cc",
+        "pn532_detect_tag_future.cc",
+        "pn532_driver.cc",
+        "pn532_transceive_future.cc",
+    ],
+    hdrs = [
+        "pn532_await_idle_future.h",
+        "pn532_call_future.h",
+        "pn532_check_present_future.h",
+        "pn532_command.h",
+        "pn532_constants.h",
+        "pn532_detect_tag_future.h",
+        "pn532_driver.h",
+        "pn532_transceive_future.h",
+    ],
+    deps = [
+        "//maco_firmware/modules/nfc_reader:nfc_reader_driver",
+        "@pigweed//pw_assert:check",
+        "@pigweed//pw_async2",
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_chrono:system_clock",
+        "@pigweed//pw_digital_io",
+        "@pigweed//pw_log",
+        "@pigweed//pw_result",
+        "@pigweed//pw_status",
+        "@pigweed//pw_stream",
+        "@pigweed//pw_thread:sleep",
+    ],
+)
+
+pw_cc_test(
+    name = "pn532_command_test",
+    srcs = ["pn532_command_test.cc"],
+    deps = [
+        ":pn532_driver",
+        "@pigweed//pw_bytes",
+    ],
+)
+
+pw_cc_test(
+    name = "pn532_driver_test",
+    srcs = ["pn532_driver_test.cc"],
+    deps = [
+        ":pn532_driver",
+        "@pigweed//pw_async2:testing",
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_digital_io:digital_io_mock",
+        "@pigweed//pw_stream",
+    ],
+)
+
+# On-device hardware test (requires P2 with PN532 connected)
+particle_cc_test(
+    name = "hardware_test",
+    srcs = ["hardware_test.cc"],
+    platform = "//maco_firmware/targets/p2:p2",
+    deps = [
+        ":pn532_driver",
+        "@particle_bazel//:device_os_headers",
+        "@particle_bazel//pw_digital_io_particle:digital_io",
+        "@particle_bazel//pw_stream_particle:uart_stream",
+        "@pigweed//pw_async2:testing",
+        "@pigweed//pw_log",
+    ],
+)
