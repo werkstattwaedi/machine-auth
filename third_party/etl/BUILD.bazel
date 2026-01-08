@@ -1,0 +1,16 @@
+# ETL (Embedded Template Library) v20.44.2
+# https://www.etlcpp.com/
+#
+# Header-only library for embedded systems. Provides containers,
+# algorithms, and state machines with zero dynamic allocation.
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "etl",
+    hdrs = glob(["etl/include/**/*.h"]),
+    includes = ["etl/include"],
+    defines = ["ETL_NO_PROFILE_HEADER"],
+)

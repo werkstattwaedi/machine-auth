@@ -41,3 +41,6 @@
 [submodule "third_party/sdl/SDL"]
 	path = third_party/sdl/SDL
 	url = https://github.com/libsdl-org/SDL.git
+[submodule "third_party/etl/etl"]
+	path = third_party/etl/etl
+	url = https://github.com/ETLCPP/etl.git
