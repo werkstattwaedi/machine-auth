@@ -1,6 +1,6 @@
 # ADR-0010: State Machine Architecture
 
-**Status:** Proposed
+**Status:** Accepted
 
 **Date:** 2026-01-04
 

@@ -87,6 +87,7 @@ Dependencies in `third_party/` as git submodules:
 - `third_party/pigweed` - Pigweed framework
 - `third_party/particle` - particle-bazel (our library)
 - `third_party/lvgl` - LVGL graphics (with custom BUILD.bazel)
+- `third_party/etl` - ETL state machine library (with custom BUILD.bazel)
 
 ## Consequences
 
