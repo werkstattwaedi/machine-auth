@@ -34,6 +34,7 @@ void ManualDelayMs([[maybe_unused]] uint32_t ms) {
   // No-op - we control time manually in tests
 }
 
+#if LV_USE_LOG
 // LVGL log callback - forward to PW_LOG
 void LvglLogCallback([[maybe_unused]] lv_log_level_t level, const char* buf) {
   size_t len = strlen(buf);
@@ -47,6 +48,7 @@ void LvglLogCallback([[maybe_unused]] lv_log_level_t level, const char* buf) {
     PW_LOG_INFO("[LVGL] %s", buf);
   }
 }
+#endif
 
 // Create hardware instances (singleton pattern for test lifetime)
 maco::display::PicoRes28LcdDriver& GetDriver() {
@@ -76,7 +78,9 @@ class DisplayTest : public ::testing::Test {
       lv_init();
       lv_tick_set_cb(GetManualTick);
       lv_delay_set_cb(ManualDelayMs);
+#if LV_USE_LOG
       lv_log_register_print_cb(LvglLogCallback);
+#endif
       lvgl_initialized_ = true;
       PW_LOG_INFO("LVGL initialized with manual tick");
     }
