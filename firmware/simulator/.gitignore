@@ -1,9 +1,0 @@
-build/
-*.o
-*.so
-*.dylib
-simulator
-.DS_Store
-*.swp
-*.swo
-*~

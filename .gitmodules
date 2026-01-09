@@ -1,30 +1,3 @@
-[submodule "firmware/lib/lvgl"]
-	path = firmware/lib/lvgl
-	url = https://github.com/werkstattwaedi/lvgl.git
-[submodule "firmware/lib/XPT2046_Touch"]
-	path = firmware/lib/XPT2046_Touch
-	url = https://github.com/vritzka/XPT2046_Touch.git
-[submodule "firmware/lib/CryptoAES_CBC"]
-	path = firmware/lib/CryptoAES_CBC
-	url = https://github.com/werkstattwaedi/CryptoAES_CBC.git
-[submodule "firmware/lib/CRC32"]
-	path = firmware/lib/CRC32
-	url = https://github.com/werkstattwaedi/CRC32.git
-[submodule "firmware/lib/AES_CMAC"]
-	path = firmware/lib/AES_CMAC
-	url = https://github.com/werkstattwaedi/AES_CMAC.git
-[submodule "firmware/test/UnitTestLib"]
-	path = firmware/test/UnitTestLib
-	url = https://github.com/rickkas7/UnitTestLib
-[submodule "firmware/lib/Base64RK"]
-	path = firmware/lib/Base64RK
-	url = https://github.com/rickkas7/Base64RK.git
-[submodule "firmware/lib/Particle-NeoPixel"]
-	path = firmware/lib/Particle-NeoPixel
-	url = https://github.com/werkstattwaedi/Particle-NeoPixel.git
-[submodule "firmware/lib/RemoteLogRK"]
-	path = firmware/lib/RemoteLogRK
-	url = https://github.com/rickkas7/RemoteLogRK.git
 [submodule "third_party/particle"]
 	path = third_party/particle
 	url = https://github.com/werkstattwaedi/particle-bazel.git
