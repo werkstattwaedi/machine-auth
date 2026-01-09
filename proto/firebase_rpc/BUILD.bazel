@@ -13,6 +13,7 @@ package(default_visibility = ["//visibility:public"])
 proto_library(
     name = "session_proto",
     srcs = ["session.proto"],
+    strip_import_prefix = "/proto",
     deps = ["//proto:common_proto"],
 )
 
@@ -25,6 +26,7 @@ pwpb_proto_library(
 proto_library(
     name = "usage_proto",
     srcs = ["usage.proto"],
+    strip_import_prefix = "/proto",
     deps = ["//proto:common_proto"],
 )
 
@@ -37,6 +39,7 @@ pwpb_proto_library(
 proto_library(
     name = "personalization_proto",
     srcs = ["personalization.proto"],
+    strip_import_prefix = "/proto",
     deps = ["//proto:common_proto"],
 )
 

@@ -1,11 +1,9 @@
 import {
-  CompleteAuthenticationRequestT,
-  CompleteAuthenticationResponseT,
-  CompleteAuthenticationResult,
-  RejectedT,
-  TokenSessionT,
-  TagUidT,
-} from "../fbs";
+  CompleteAuthenticationRequest,
+  CompleteAuthenticationResponse,
+  TokenSession,
+} from "../proto/firebase_rpc/session.js";
+import { TagUid } from "../proto/common.js";
 import * as logger from "firebase-functions/logger";
 import { authorizeStep2 } from "../ntag/authorize";
 import { diversifyKey } from "../ntag/key_diversification";
@@ -14,12 +12,12 @@ import * as admin from "firebase-admin";
 import { SessionEntity, UserEntity } from "../types/firestore_entities";
 
 export async function handleCompleteAuthentication(
-  request: CompleteAuthenticationRequestT,
+  request: CompleteAuthenticationRequest,
   options: {
     masterKey: string;
     systemName: string;
   }
-): Promise<CompleteAuthenticationResponseT> {
+): Promise<CompleteAuthenticationResponse> {
   logger.info("Completing authentication", { sessionId: request.sessionId });
 
   if (!request.sessionId) {
@@ -56,13 +54,9 @@ export async function handleCompleteAuthentication(
     const userDoc = await sessionData.userId.get();
 
     if (!userDoc.exists) {
-      const rejected = new RejectedT();
-      rejected.message = "User not found";
-
-      const response = new CompleteAuthenticationResponseT();
-      response.resultType = CompleteAuthenticationResult.Rejected;
-      response.result = rejected;
-      return response;
+      return {
+        result: { $case: "rejected", rejected: { message: "User not found" } },
+      };
     }
 
     const userData = userDoc.data() as UserEntity;
@@ -87,44 +81,38 @@ export async function handleCompleteAuthentication(
     // Authentication successful - no need to update session as it's already properly created
     // Just return the TokenSession response
 
-    // Create TokenSession response
-    const tagUid = new TagUidT();
-    tagUid.uid = Array.from(Buffer.from(tokenIdHex, "hex"));
+    const tokenId: TagUid = {
+      uid: new Uint8Array(Buffer.from(tokenIdHex, "hex")),
+    };
 
-    const tokenSession = new TokenSessionT();
-    tokenSession.tokenId = tagUid;
-    tokenSession.sessionId = sessionId;
-    tokenSession.expiration = BigInt(
-      Math.floor(Date.now() / 1000) + 24 * 60 * 60
-    ); // 24 hours from now in seconds
-    tokenSession.userId = userDoc.id;
-    tokenSession.userLabel = userData?.displayName || "Unknown User";
-
-    // Extract permission IDs from DocumentReferences
-    // Permissions are stored as DocumentReferences in Firestore
-    // We extract just the ID for the flatbuffer response
-    tokenSession.permissions = userData.permissions.map((p) => p.id);
-
-    const response = new CompleteAuthenticationResponseT();
-    response.resultType = CompleteAuthenticationResult.TokenSession;
-    response.result = tokenSession;
+    const session: TokenSession = {
+      tokenId,
+      sessionId,
+      expiration: BigInt(Math.floor(Date.now() / 1000) + 24 * 60 * 60), // 24 hours from now in seconds
+      userId: userDoc.id,
+      userLabel: userData?.displayName || "Unknown User",
+      permissions: userData.permissions.map((p) => p.id),
+    };
 
     logger.info("Authentication completed successfully", {
       sessionId,
       userId: userDoc.id,
     });
 
-    return response;
+    return {
+      result: { $case: "session", session },
+    };
   } catch (error) {
     logger.error("Authentication failed", { sessionId, error });
 
-    const rejected = new RejectedT();
-    rejected.message =
-      error instanceof Error ? error.message : "Authentication failed";
-
-    const response = new CompleteAuthenticationResponseT();
-    response.resultType = CompleteAuthenticationResult.Rejected;
-    response.result = rejected;
-    return response;
+    return {
+      result: {
+        $case: "rejected",
+        rejected: {
+          message:
+            error instanceof Error ? error.message : "Authentication failed",
+        },
+      },
+    };
   }
 }

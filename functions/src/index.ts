@@ -3,15 +3,29 @@ import { onRequest } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { defineSecret, defineString } from "firebase-functions/params";
 import { initializeApp } from "firebase-admin/app";
-import * as flatbuffers from "flatbuffers";
-import { StartSessionRequest , AuthenticateNewSessionRequest ,  CompleteAuthenticationRequest , UploadUsageRequest } from "./fbs";
-import { KeyDiversificationRequest } from "./fbs/key-diversification-request.js";
+import {
+  StartSessionRequest,
+  StartSessionResponse,
+  AuthenticateNewSessionRequest,
+  AuthenticateNewSessionResponse,
+  CompleteAuthenticationRequest,
+  CompleteAuthenticationResponse,
+} from "./proto/firebase_rpc/session.js";
+import {
+  UploadUsageRequest,
+  UploadUsageResponse,
+} from "./proto/firebase_rpc/usage.js";
+import {
+  KeyDiversificationRequest,
+  KeyDiversificationResponse,
+} from "./proto/firebase_rpc/personalization.js";
 import { handleStartSession } from "./session/handle_start_session";
 import { handleAuthenticateNewSession } from "./session/handle_authenticate_new_session";
 import { handleCompleteAuthentication } from "./session/handle_complete_authentication";
 import { handleUploadUsage } from "./session/handle_upload_usage";
 import { handleKeyDiversification } from "./personalization/handle_key_diversification";
 import { handleVerifyTagCheckout } from "./checkout/verify_tag";
+import { BinaryWriter } from "@bufbuild/protobuf/wire";
 
 initializeApp();
 
@@ -88,14 +102,9 @@ export const startSessionHandler = async (
   res: express.Response
 ) => {
   try {
-    const responseFbs = await handleStartSession(
-      unpackRequest(req, (buffer) =>
-        StartSessionRequest.getRootAsStartSessionRequest(buffer).unpack()
-      ),
-      (req as any).config
-    );
-
-    sendFlatbufferSuccessResponse(req, res, responseFbs);
+    const request = decodeProtoRequest(req, StartSessionRequest.decode);
+    const response = await handleStartSession(request, (req as any).config);
+    sendProtoResponse(req, res, response, StartSessionResponse.encode);
   } catch (error: any) {
     sendHttpError(req, res, error);
   }
@@ -106,14 +115,9 @@ export const authenticateNewSessionHandler = async (
   res: express.Response
 ) => {
   try {
-    const responseFbs = await handleAuthenticateNewSession(
-      unpackRequest(req, (buffer) =>
-        AuthenticateNewSessionRequest.getRootAsAuthenticateNewSessionRequest(buffer).unpack()
-      ),
-      (req as any).config
-    );
-
-    sendFlatbufferSuccessResponse(req, res, responseFbs);
+    const request = decodeProtoRequest(req, AuthenticateNewSessionRequest.decode);
+    const response = await handleAuthenticateNewSession(request, (req as any).config);
+    sendProtoResponse(req, res, response, AuthenticateNewSessionResponse.encode);
   } catch (error: any) {
     sendHttpError(req, res, error);
   }
@@ -124,14 +128,9 @@ export const completeAuthenticationHandler = async (
   res: express.Response
 ) => {
   try {
-    const responseFbs = await handleCompleteAuthentication(
-      unpackRequest(req, (buffer) =>
-        CompleteAuthenticationRequest.getRootAsCompleteAuthenticationRequest(buffer).unpack()
-      ),
-      (req as any).config
-    );
-
-    sendFlatbufferSuccessResponse(req, res, responseFbs);
+    const request = decodeProtoRequest(req, CompleteAuthenticationRequest.decode);
+    const response = await handleCompleteAuthentication(request, (req as any).config);
+    sendProtoResponse(req, res, response, CompleteAuthenticationResponse.encode);
   } catch (error: any) {
     sendHttpError(req, res, error);
   }
@@ -142,14 +141,9 @@ export const uploadUsageHandler = async (
   res: express.Response
 ) => {
   try {
-    const responseFbs = await handleUploadUsage(
-      unpackRequest(req, (buffer) =>
-        UploadUsageRequest.getRootAsUploadUsageRequest(buffer).unpack()
-      ),
-      (req as any).config
-    );
-
-    sendFlatbufferSuccessResponse(req, res, responseFbs);
+    const request = decodeProtoRequest(req, UploadUsageRequest.decode);
+    const response = await handleUploadUsage(request, (req as any).config);
+    sendProtoResponse(req, res, response, UploadUsageResponse.encode);
   } catch (error: any) {
     sendHttpError(req, res, error);
   }
@@ -161,15 +155,9 @@ export const keyDiversificationHandler = async (
   res: express.Response
 ) => {
   try {
-    const keyDiversificationResponseFbs = handleKeyDiversification(
-      unpackRequest(req, (buffer) =>
-        KeyDiversificationRequest.getRootAsKeyDiversificationRequest(
-          buffer
-        ).unpack()
-      ),
-      (req as any).config
-    );
-    sendFlatbufferSuccessResponse(req, res, keyDiversificationResponseFbs);
+    const request = decodeProtoRequest(req, KeyDiversificationRequest.decode);
+    const response = handleKeyDiversification(request, (req as any).config);
+    sendProtoResponse(req, res, response, KeyDiversificationResponse.encode);
   } catch (error: any) {
     sendHttpError(req, res, error);
   }
@@ -181,9 +169,9 @@ app.post("/completeAuthentication", completeAuthenticationHandler);
 app.post("/uploadUsage", uploadUsageHandler);
 app.post("/personalize", keyDiversificationHandler);
 
-function unpackRequest<T>(
+function decodeProtoRequest<T>(
   req: express.Request,
-  unpacker: (buffer: flatbuffers.ByteBuffer) => T
+  decode: (bytes: Uint8Array) => T
 ): T {
   if (req.method !== "POST") {
     throw new Error("Method Not Allowed.");
@@ -196,10 +184,8 @@ function unpackRequest<T>(
   }
 
   try {
-    const flatByteBuffer = new flatbuffers.ByteBuffer(
-      Buffer.from(base64Payload, "base64")
-    );
-    return unpacker(flatByteBuffer);
+    const bytes = new Uint8Array(Buffer.from(base64Payload, "base64"));
+    return decode(bytes);
   } catch (e: any) {
     throw new Error(`Invalid payload: ${e.message}`);
   }
@@ -219,15 +205,14 @@ function sendHttpError(
   });
 }
 
-function sendFlatbufferSuccessResponse(
+function sendProtoResponse<T>(
   req: express.Request,
   res: express.Response,
-  responseObject: flatbuffers.IGeneratedObject
+  message: T,
+  encode: (message: T, writer?: BinaryWriter) => BinaryWriter
 ) {
-  const responseBuilder = new flatbuffers.Builder(1024);
-  const responseOffset = responseObject.pack(responseBuilder);
-  responseBuilder.finish(responseOffset);
-  const responseBytes = responseBuilder.asUint8Array();
+  const writer = encode(message);
+  const responseBytes = writer.finish();
   const responseBase64 = Buffer.from(responseBytes).toString("base64");
 
   res.status(200).contentType("application/json").send({

@@ -1,0 +1,11 @@
+version: v2
+plugins:
+  - remote: buf.build/community/stephenh-ts-proto
+    out: ../functions/src/proto
+    opt:
+      - esModuleInterop=true
+      - outputEncodeMethods=true
+      - outputJsonMethods=false
+      - oneof=unions
+      - forceLong=bigint
+      - useExactTypes=false

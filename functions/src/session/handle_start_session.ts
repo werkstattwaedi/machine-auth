@@ -1,11 +1,8 @@
 import {
-  StartSessionRequestT,
-  StartSessionResponseT,
-  StartSessionResult,
-  AuthRequiredT,
-  RejectedT,
-  TokenSessionT,
-} from "../fbs";
+  StartSessionRequest,
+  StartSessionResponse,
+  TokenSession,
+} from "../proto/firebase_rpc/session.js";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import {
@@ -19,12 +16,12 @@ import {
 } from "../types/firestore_entities";
 
 export async function handleStartSession(
-  request: StartSessionRequestT,
+  request: StartSessionRequest,
   options: {
     masterKey: string;
     systemName: string;
   }
-): Promise<StartSessionResponseT> {
+): Promise<StartSessionResponse> {
   logger.info("Starting session for token", { tokenId: request.tokenId });
 
   if (!request.tokenId?.uid) {
@@ -54,13 +51,9 @@ export async function handleStartSession(
         tokenId: tokenIdHex,
         searchedPath: `tokens/${tokenIdHex}`,
       });
-      const rejected = new RejectedT();
-      rejected.message = "Token not registered";
-
-      const response = new StartSessionResponseT();
-      response.resultType = StartSessionResult.Rejected;
-      response.result = rejected;
-      return response;
+      return {
+        result: { $case: "rejected", rejected: { message: "Token not registered" } },
+      };
     }
 
     const tokenData = tokenDoc.data() as TokenEntity;
@@ -71,13 +64,9 @@ export async function handleStartSession(
     // Check if token is deactivated
     if (tokenData.deactivated) {
       logger.warn("Token is deactivated", { tokenId: tokenIdHex });
-      const rejected = new RejectedT();
-      rejected.message = "Token deactivated";
-
-      const response = new StartSessionResponseT();
-      response.resultType = StartSessionResult.Rejected;
-      response.result = rejected;
-      return response;
+      return {
+        result: { $case: "rejected", rejected: { message: "Token deactivated" } },
+      };
     }
 
     // Get user data
@@ -106,39 +95,30 @@ export async function handleStartSession(
         // Return existing valid session
         const expiration = calculateSessionExpiration(sessionData.startTime);
 
-        const tokenSession = new TokenSessionT();
-        tokenSession.tokenId = request.tokenId;
-        tokenSession.sessionId = sessionDoc.id;
-        tokenSession.expiration = BigInt(expiration.seconds);
-        tokenSession.userId = userDoc.id;
-        tokenSession.userLabel = userData.displayName || "Unknown User";
+        const session: TokenSession = {
+          tokenId: request.tokenId,
+          sessionId: sessionDoc.id,
+          expiration: BigInt(expiration.seconds),
+          userId: userDoc.id,
+          userLabel: userData.displayName || "Unknown User",
+          permissions: userData.permissions.map((p) => p.id),
+        };
 
-        // Extract permission IDs from DocumentReferences
-        tokenSession.permissions = userData.permissions.map((p) => p.id);
-
-        const response = new StartSessionResponseT();
-        response.resultType = StartSessionResult.TokenSession;
-        response.result = tokenSession;
-        return response;
+        return {
+          result: { $case: "session", session },
+        };
       }
     }
 
     // User exists but needs authentication - return AuthRequired
     logger.info("User found, authentication required", { id: userDoc.id });
-    const authRequired = new AuthRequiredT();
-
-    const response = new StartSessionResponseT();
-    response.resultType = StartSessionResult.AuthRequired;
-    response.result = authRequired;
-    return response;
+    return {
+      result: { $case: "authRequired", authRequired: {} },
+    };
   } catch (error) {
     logger.error("Error during start session", error);
-    const rejected = new RejectedT();
-    rejected.message = "Internal server error";
-
-    const response = new StartSessionResponseT();
-    response.resultType = StartSessionResult.Rejected;
-    response.result = rejected;
-    return response;
+    return {
+      result: { $case: "rejected", rejected: { message: "Internal server error" } },
+    };
   }
 }

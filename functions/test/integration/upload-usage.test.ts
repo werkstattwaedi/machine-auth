@@ -9,11 +9,10 @@ import {
 } from "../emulator-helper";
 import { handleUploadUsage } from "../../src/session/handle_upload_usage";
 import {
-  UploadUsageRequestT,
-  MachineUsageHistoryT,
-  MachineUsageT,
-  CheckOutReason,
-} from "../../src/fbs";
+  UploadUsageRequest,
+  MachineUsageHistory,
+  MachineUsage,
+} from "../../src/proto/firebase_rpc/usage.js";
 
 describe("handleUploadUsage (Integration)", () => {
   const TEST_SESSION_ID = "testSession123";
@@ -40,8 +39,9 @@ describe("handleUploadUsage (Integration)", () => {
 
   describe("Request validation", () => {
     it("should throw error for missing usage history", async () => {
-      const request = new UploadUsageRequestT();
-      // history is missing
+      const request: UploadUsageRequest = {
+        history: undefined,
+      };
 
       try {
         await handleUploadUsage(request, mockOptions);
@@ -52,11 +52,12 @@ describe("handleUploadUsage (Integration)", () => {
     });
 
     it("should handle empty usage records", async () => {
-      const history = new MachineUsageHistoryT();
-      history.records = [];
-
-      const request = new UploadUsageRequestT();
-      request.history = history;
+      const request: UploadUsageRequest = {
+        history: {
+          machineId: "test-machine",
+          records: [],
+        },
+      };
 
       const response = await handleUploadUsage(request, mockOptions);
 
@@ -78,23 +79,26 @@ describe("handleUploadUsage (Integration)", () => {
         },
       });
 
-      const record1 = new MachineUsageT();
-      record1.sessionId = TEST_SESSION_ID;
-      record1.checkIn = BigInt(Date.now() - 3600000); // 1 hour ago
-      record1.checkOut = BigInt(Date.now() - 1800000); // 30 min ago
-      record1.reasonType = CheckOutReason.self_checkout;
+      const record1: MachineUsage = {
+        sessionId: TEST_SESSION_ID,
+        checkIn: BigInt(Date.now() - 3600000), // 1 hour ago
+        checkOut: BigInt(Date.now() - 1800000), // 30 min ago
+        reason: { reason: { $case: "selfCheckout", selfCheckout: {} } },
+      };
 
-      const record2 = new MachineUsageT();
-      record2.sessionId = TEST_SESSION_ID;
-      record2.checkIn = BigInt(Date.now() - 1800000); // 30 min ago
-      record2.checkOut = BigInt(Date.now()); // now
-      record2.reasonType = CheckOutReason.self_checkout;
+      const record2: MachineUsage = {
+        sessionId: TEST_SESSION_ID,
+        checkIn: BigInt(Date.now() - 1800000), // 30 min ago
+        checkOut: BigInt(Date.now()), // now
+        reason: { reason: { $case: "selfCheckout", selfCheckout: {} } },
+      };
 
-      const history = new MachineUsageHistoryT();
-      history.records = [record1, record2];
-
-      const request = new UploadUsageRequestT();
-      request.history = history;
+      const request: UploadUsageRequest = {
+        history: {
+          machineId: "test-machine",
+          records: [record1, record2],
+        },
+      };
 
       const response = await handleUploadUsage(request, mockOptions);
 
@@ -142,23 +146,26 @@ describe("handleUploadUsage (Integration)", () => {
         },
       });
 
-      const record1 = new MachineUsageT();
-      record1.sessionId = session1Id;
-      record1.checkIn = BigInt(Date.now() - 3600000);
-      record1.checkOut = BigInt(Date.now() - 1800000);
-      record1.reasonType = CheckOutReason.self_checkout;
+      const record1: MachineUsage = {
+        sessionId: session1Id,
+        checkIn: BigInt(Date.now() - 3600000),
+        checkOut: BigInt(Date.now() - 1800000),
+        reason: { reason: { $case: "selfCheckout", selfCheckout: {} } },
+      };
 
-      const record2 = new MachineUsageT();
-      record2.sessionId = session2Id;
-      record2.checkIn = BigInt(Date.now() - 1800000);
-      record2.checkOut = BigInt(Date.now());
-      record2.reasonType = CheckOutReason.timeout;
+      const record2: MachineUsage = {
+        sessionId: session2Id,
+        checkIn: BigInt(Date.now() - 1800000),
+        checkOut: BigInt(Date.now()),
+        reason: { reason: { $case: "timeout", timeout: {} } },
+      };
 
-      const history = new MachineUsageHistoryT();
-      history.records = [record1, record2];
-
-      const request = new UploadUsageRequestT();
-      request.history = history;
+      const request: UploadUsageRequest = {
+        history: {
+          machineId: "test-machine",
+          records: [record1, record2],
+        },
+      };
 
       const response = await handleUploadUsage(request, mockOptions);
 
@@ -186,23 +193,26 @@ describe("handleUploadUsage (Integration)", () => {
         },
       });
 
-      const validRecord = new MachineUsageT();
-      validRecord.sessionId = TEST_SESSION_ID;
-      validRecord.checkIn = BigInt(Date.now() - 3600000);
-      validRecord.checkOut = BigInt(Date.now());
-      validRecord.reasonType = CheckOutReason.self_checkout;
+      const validRecord: MachineUsage = {
+        sessionId: TEST_SESSION_ID,
+        checkIn: BigInt(Date.now() - 3600000),
+        checkOut: BigInt(Date.now()),
+        reason: { reason: { $case: "selfCheckout", selfCheckout: {} } },
+      };
 
-      const invalidRecord = new MachineUsageT();
-      // sessionId is missing
-      invalidRecord.checkIn = BigInt(Date.now() - 3600000);
-      invalidRecord.checkOut = BigInt(Date.now());
-      invalidRecord.reasonType = CheckOutReason.self_checkout;
+      const invalidRecord: MachineUsage = {
+        sessionId: "", // missing sessionId
+        checkIn: BigInt(Date.now() - 3600000),
+        checkOut: BigInt(Date.now()),
+        reason: { reason: { $case: "selfCheckout", selfCheckout: {} } },
+      };
 
-      const history = new MachineUsageHistoryT();
-      history.records = [validRecord, invalidRecord];
-
-      const request = new UploadUsageRequestT();
-      request.history = history;
+      const request: UploadUsageRequest = {
+        history: {
+          machineId: "test-machine",
+          records: [validRecord, invalidRecord],
+        },
+      };
 
       const response = await handleUploadUsage(request, mockOptions);
 
@@ -222,7 +232,7 @@ describe("handleUploadUsage (Integration)", () => {
           machine: "/machine/laser1",
           checkIn: Timestamp.fromMillis(Date.now() - 7200000),
           checkOut: Timestamp.fromMillis(Date.now() - 3600000),
-          metadata: JSON.stringify({ reasonType: CheckOutReason.self_checkout }),
+          metadata: JSON.stringify({ reason: "selfCheckout" }),
         },
       ];
 
@@ -238,17 +248,19 @@ describe("handleUploadUsage (Integration)", () => {
         },
       });
 
-      const newRecord = new MachineUsageT();
-      newRecord.sessionId = TEST_SESSION_ID;
-      newRecord.checkIn = BigInt(Date.now() - 1800000);
-      newRecord.checkOut = BigInt(Date.now());
-      newRecord.reasonType = CheckOutReason.self_checkout;
+      const newRecord: MachineUsage = {
+        sessionId: TEST_SESSION_ID,
+        checkIn: BigInt(Date.now() - 1800000),
+        checkOut: BigInt(Date.now()),
+        reason: { reason: { $case: "selfCheckout", selfCheckout: {} } },
+      };
 
-      const history = new MachineUsageHistoryT();
-      history.records = [newRecord];
-
-      const request = new UploadUsageRequestT();
-      request.history = history;
+      const request: UploadUsageRequest = {
+        history: {
+          machineId: "test-machine",
+          records: [newRecord],
+        },
+      };
 
       const response = await handleUploadUsage(request, mockOptions);
 

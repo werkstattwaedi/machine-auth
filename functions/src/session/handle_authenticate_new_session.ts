@@ -1,7 +1,7 @@
 import {
-  AuthenticateNewSessionRequestT,
-  AuthenticateNewSessionResponseT,
-} from "../fbs";
+  AuthenticateNewSessionRequest,
+  AuthenticateNewSessionResponse,
+} from "../proto/firebase_rpc/session.js";
 import * as logger from "firebase-functions/logger";
 import { diversifyKey } from "../ntag/key_diversification";
 import { authorizeStep1 } from "../ntag/authorize";
@@ -11,12 +11,12 @@ import { Timestamp } from "firebase-admin/firestore";
 import { TokenEntity } from "../types/firestore_entities";
 
 export async function handleAuthenticateNewSession(
-  request: AuthenticateNewSessionRequestT,
+  request: AuthenticateNewSessionRequest,
   options: {
     masterKey: string;
     systemName: string;
   }
-): Promise<AuthenticateNewSessionResponseT> {
+): Promise<AuthenticateNewSessionResponse> {
   logger.info("Authenticating new session", { tokenId: request.tokenId });
 
   if (!request.tokenId?.uid || request.tokenId.uid.length === 0) {
@@ -85,9 +85,8 @@ export async function handleAuthenticateNewSession(
   });
 
   // Return response with session ID and cloud challenge
-  const response = new AuthenticateNewSessionResponseT();
-  response.sessionId = sessionId;
-  response.cloudChallenge = Array.from(challengeResponse.encrypted);
-
-  return response;
+  return {
+    sessionId,
+    cloudChallenge: new Uint8Array(challengeResponse.encrypted),
+  };
 }

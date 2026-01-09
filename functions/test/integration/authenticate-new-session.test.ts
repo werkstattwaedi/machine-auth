@@ -9,9 +9,8 @@ import {
 } from "../emulator-helper";
 import { handleAuthenticateNewSession } from "../../src/session/handle_authenticate_new_session";
 import {
-  AuthenticateNewSessionRequestT,
-  TagUidT,
-} from "../../src/fbs";
+  AuthenticateNewSessionRequest,
+} from "../../src/proto/firebase_rpc/session.js";
 
 describe("handleAuthenticateNewSession (Integration)", () => {
   const TEST_TOKEN_ID = "04c339aa1e1890";
@@ -35,14 +34,11 @@ describe("handleAuthenticateNewSession (Integration)", () => {
   const createRequest = (
     tokenIdHex: string,
     ntagChallenge: Buffer
-  ): AuthenticateNewSessionRequestT => {
-    const tagUid = new TagUidT();
-    tagUid.uid = Array.from(Buffer.from(tokenIdHex, "hex"));
-
-    const request = new AuthenticateNewSessionRequestT();
-    request.tokenId = tagUid;
-    request.ntagChallenge = Array.from(ntagChallenge);
-    return request;
+  ): AuthenticateNewSessionRequest => {
+    return {
+      tokenId: { uid: new Uint8Array(Buffer.from(tokenIdHex, "hex")) },
+      ntagChallenge: new Uint8Array(ntagChallenge),
+    };
   };
 
   const mockOptions = {
@@ -94,12 +90,10 @@ describe("handleAuthenticateNewSession (Integration)", () => {
     });
 
     it("should throw error for missing ntagChallenge", async () => {
-      const tagUid = new TagUidT();
-      tagUid.uid = Array.from(Buffer.from(TEST_TOKEN_ID, "hex"));
-
-      const request = new AuthenticateNewSessionRequestT();
-      request.tokenId = tagUid;
-      // ntagChallenge is missing
+      const request: AuthenticateNewSessionRequest = {
+        tokenId: { uid: new Uint8Array(Buffer.from(TEST_TOKEN_ID, "hex")) },
+        ntagChallenge: new Uint8Array(0),
+      };
 
       try {
         await handleAuthenticateNewSession(request, mockOptions);
@@ -137,12 +131,12 @@ describe("handleAuthenticateNewSession (Integration)", () => {
       expect(response.sessionId).to.be.a("string");
       expect(response.sessionId).to.not.be.null;
       expect(response.sessionId).to.have.length.greaterThan(0);
-      expect(response.cloudChallenge).to.be.an("array");
-      expect(response.cloudChallenge).to.have.length.greaterThan(0); // Encrypted challenge from authorizeStep1
+      expect(response.cloudChallenge).to.be.instanceOf(Uint8Array);
+      expect(response.cloudChallenge.length).to.be.greaterThan(0); // Encrypted challenge from authorizeStep1
 
       // Verify session was created in Firestore
       const db = getFirestore();
-      const sessionId = typeof response.sessionId === 'string' ? response.sessionId : Buffer.from(response.sessionId!).toString();
+      const sessionId = response.sessionId;
       const sessionDoc = await db.collection("sessions").doc(sessionId).get();
 
       expect(sessionDoc.exists).to.be.true;
@@ -179,7 +173,7 @@ describe("handleAuthenticateNewSession (Integration)", () => {
       const response = await handleAuthenticateNewSession(request, mockOptions);
 
       const db = getFirestore();
-      const sessionId = typeof response.sessionId === 'string' ? response.sessionId : Buffer.from(response.sessionId!).toString();
+      const sessionId = response.sessionId;
       const sessionDoc = await db.collection("sessions").doc(sessionId).get();
       const sessionData = sessionDoc.data();
 

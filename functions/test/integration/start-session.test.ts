@@ -8,11 +8,11 @@ import {
 } from "../emulator-helper";
 import { handleStartSession } from "../../src/session/handle_start_session";
 import {
-  StartSessionRequestT,
-  StartSessionResult,
-  TagUidT,
-  TokenSessionT,
-} from "../../src/fbs";
+  StartSessionRequest,
+  StartSessionResponse,
+  TokenSession,
+} from "../../src/proto/firebase_rpc/session.js";
+import { TagUid } from "../../src/proto/common.js";
 
 describe("handleStartSession (Integration)", () => {
   const TEST_TOKEN_ID = "04c339aa1e1890";
@@ -31,13 +31,10 @@ describe("handleStartSession (Integration)", () => {
     await clearFirestore();
   });
 
-  const createRequest = (tokenIdHex: string): StartSessionRequestT => {
-    const tagUid = new TagUidT();
-    tagUid.uid = Array.from(Buffer.from(tokenIdHex, "hex"));
-
-    const request = new StartSessionRequestT();
-    request.tokenId = tagUid;
-    return request;
+  const createRequest = (tokenIdHex: string): StartSessionRequest => {
+    return {
+      tokenId: { uid: new Uint8Array(Buffer.from(tokenIdHex, "hex")) },
+    };
   };
 
   const mockOptions = {
@@ -51,11 +48,10 @@ describe("handleStartSession (Integration)", () => {
 
       const response = await handleStartSession(request, mockOptions);
 
-      expect(response.resultType).to.equal(StartSessionResult.Rejected);
-      expect(response.result).to.have.property(
-        "message",
-        "Token not registered"
-      );
+      expect(response.result?.$case).to.equal("rejected");
+      if (response.result?.$case === "rejected") {
+        expect(response.result.rejected.message).to.equal("Token not registered");
+      }
     });
 
     it("should reject deactivated token", async () => {
@@ -80,8 +76,10 @@ describe("handleStartSession (Integration)", () => {
       const request = createRequest(TEST_TOKEN_ID);
       const response = await handleStartSession(request, mockOptions);
 
-      expect(response.resultType).to.equal(StartSessionResult.Rejected);
-      expect(response.result).to.have.property("message", "Token deactivated");
+      expect(response.result?.$case).to.equal("rejected");
+      if (response.result?.$case === "rejected") {
+        expect(response.result.rejected.message).to.equal("Token deactivated");
+      }
     });
 
     it("should return AuthRequired for valid token with no active session", async () => {
@@ -105,7 +103,7 @@ describe("handleStartSession (Integration)", () => {
       const request = createRequest(TEST_TOKEN_ID);
       const response = await handleStartSession(request, mockOptions);
 
-      expect(response.resultType).to.equal(StartSessionResult.AuthRequired);
+      expect(response.result?.$case).to.equal("authRequired");
     });
   });
 
@@ -143,13 +141,14 @@ describe("handleStartSession (Integration)", () => {
       const request = createRequest(TEST_TOKEN_ID);
       const response = await handleStartSession(request, mockOptions);
 
-      expect(response.resultType).to.equal(StartSessionResult.TokenSession);
-      expect(response.result).to.have.property("sessionId", sessionId);
-      expect(response.result).to.have.property("userId", TEST_USER_ID);
-      expect(response.result).to.have.property("userLabel", "Test User");
-      expect(response.result).to.have.property("permissions");
-      const tokenSession = response.result as TokenSessionT;
-      expect(tokenSession.permissions).to.deep.equal(["laser"]);
+      expect(response.result?.$case).to.equal("session");
+      if (response.result?.$case === "session") {
+        const tokenSession = response.result.session;
+        expect(tokenSession.sessionId).to.equal(sessionId);
+        expect(tokenSession.userId).to.equal(TEST_USER_ID);
+        expect(tokenSession.userLabel).to.equal("Test User");
+        expect(tokenSession.permissions).to.deep.equal(["laser"]);
+      }
     });
 
     it("should return AuthRequired when session is expired", async () => {
@@ -189,7 +188,7 @@ describe("handleStartSession (Integration)", () => {
       const response = await handleStartSession(request, mockOptions);
 
       // Should return AuthRequired for expired session
-      expect(response.resultType).to.equal(StartSessionResult.AuthRequired);
+      expect(response.result?.$case).to.equal("authRequired");
     });
 
     it("should ignore closed sessions", async () => {
@@ -228,7 +227,7 @@ describe("handleStartSession (Integration)", () => {
       const response = await handleStartSession(request, mockOptions);
 
       // Should return AuthRequired since the only session is closed
-      expect(response.resultType).to.equal(StartSessionResult.AuthRequired);
+      expect(response.result?.$case).to.equal("authRequired");
     });
   });
 
@@ -265,13 +264,15 @@ describe("handleStartSession (Integration)", () => {
       const request = createRequest(TEST_TOKEN_ID);
       const response = await handleStartSession(request, mockOptions);
 
-      expect(response.resultType).to.equal(StartSessionResult.TokenSession);
-      const tokenSession = response.result as TokenSessionT;
-      expect(tokenSession.permissions).to.deep.equal([
-        "laser",
-        "cnc",
-        "3dprinter",
-      ]);
+      expect(response.result?.$case).to.equal("session");
+      if (response.result?.$case === "session") {
+        const tokenSession = response.result.session;
+        expect(tokenSession.permissions).to.deep.equal([
+          "laser",
+          "cnc",
+          "3dprinter",
+        ]);
+      }
     });
   });
 });

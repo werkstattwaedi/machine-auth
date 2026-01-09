@@ -1,17 +1,17 @@
 import {
-  UploadUsageRequestT,
-  UploadUsageResponseT,
-} from "../fbs";
+  UploadUsageRequest,
+  UploadUsageResponse,
+} from "../proto/firebase_rpc/usage.js";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 
 export async function handleUploadUsage(
-  request: UploadUsageRequestT,
+  request: UploadUsageRequest,
   options: {
     masterKey: string;
     systemName: string;
   }
-): Promise<UploadUsageResponseT> {
+): Promise<UploadUsageResponse> {
   logger.info("Processing upload usage request");
 
   if (!request.history) {
@@ -42,7 +42,7 @@ export async function handleUploadUsage(
       checkIn: admin.firestore.Timestamp.fromMillis(Number(record.checkIn)),
       checkOut: admin.firestore.Timestamp.fromMillis(Number(record.checkOut)),
       metadata: JSON.stringify({
-        reasonType: record.reasonType,
+        reason: record.reason?.reason?.$case,
         // Add any other metadata from the record
       })
     });
@@ -54,7 +54,7 @@ export async function handleUploadUsage(
   for (const [sessionId, usageRecords] of recordsBySession) {
     // Verify session exists before updating
     const sessionRef = admin.firestore().collection("sessions").doc(sessionId);
-    
+
     // Add usage records to the session
     batch.update(sessionRef, {
       usage: admin.firestore.FieldValue.arrayUnion(...usageRecords)
@@ -69,8 +69,5 @@ export async function handleUploadUsage(
   });
 
   // Create success response
-  const response = new UploadUsageResponseT();
-  response.success = true;
-
-  return response;
+  return { success: true };
 }
