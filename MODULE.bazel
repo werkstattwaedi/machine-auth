@@ -11,6 +11,9 @@ bazel_dep(name = "bazel_skylib", version = "1.8.1")
 # Crypto library (used by NFC authentication)
 bazel_dep(name = "mbedtls", version = "3.6.0")
 
+# Protocol Buffers (for firmware <-> cloud communication)
+bazel_dep(name = "protobuf", version = "29.0", repo_name = "com_google_protobuf")
+
 # JavaScript toolchain for lv_font_conv
 bazel_dep(name = "aspect_rules_js", version = "2.4.0")
 

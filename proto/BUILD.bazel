@@ -1,0 +1,21 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+load("@com_google_protobuf//bazel:proto_library.bzl", "proto_library")
+load(
+    "@pigweed//pw_protobuf_compiler:pwpb_proto_library.bzl",
+    "pwpb_proto_library",
+)
+
+package(default_visibility = ["//visibility:public"])
+
+# Common types shared across all proto definitions
+proto_library(
+    name = "common_proto",
+    srcs = ["common.proto"],
+)
+
+pwpb_proto_library(
+    name = "common_pwpb",
+    deps = [":common_proto"],
+)

@@ -1,0 +1,46 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+load("@com_google_protobuf//bazel:proto_library.bzl", "proto_library")
+load(
+    "@pigweed//pw_protobuf_compiler:pwpb_proto_library.bzl",
+    "pwpb_proto_library",
+)
+
+package(default_visibility = ["//visibility:public"])
+
+# Session management and authentication RPCs
+proto_library(
+    name = "session_proto",
+    srcs = ["session.proto"],
+    deps = ["//proto:common_proto"],
+)
+
+pwpb_proto_library(
+    name = "session_pwpb",
+    deps = [":session_proto"],
+)
+
+# Machine usage tracking
+proto_library(
+    name = "usage_proto",
+    srcs = ["usage.proto"],
+    deps = ["//proto:common_proto"],
+)
+
+pwpb_proto_library(
+    name = "usage_pwpb",
+    deps = [":usage_proto"],
+)
+
+# Tag personalization / key diversification
+proto_library(
+    name = "personalization_proto",
+    srcs = ["personalization.proto"],
+    deps = ["//proto:common_proto"],
+)
+
+pwpb_proto_library(
+    name = "personalization_pwpb",
+    deps = [":personalization_proto"],
+)

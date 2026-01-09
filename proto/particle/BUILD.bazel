@@ -1,0 +1,21 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+load("@com_google_protobuf//bazel:proto_library.bzl", "proto_library")
+load(
+    "@pigweed//pw_protobuf_compiler:pwpb_proto_library.bzl",
+    "pwpb_proto_library",
+)
+
+package(default_visibility = ["//visibility:public"])
+
+# Device configuration for Particle Ledger
+proto_library(
+    name = "device_config_proto",
+    srcs = ["device_config.proto"],
+)
+
+pwpb_proto_library(
+    name = "device_config_pwpb",
+    deps = [":device_config_proto"],
+)

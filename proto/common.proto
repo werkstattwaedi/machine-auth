@@ -1,0 +1,26 @@
+// Copyright Offene Werkstatt Wädenswil
+// SPDX-License-Identifier: MIT
+
+syntax = "proto3";
+
+package maco.proto;
+
+// 7-byte NFC tag unique identifier
+message TagUid {
+  bytes uid = 1;  // 7 bytes
+}
+
+// 16-byte AES-128 key
+message KeyBytes {
+  bytes key = 1;  // 16 bytes
+}
+
+// NTAG424 key slot identifiers
+enum Key {
+  KEY_UNSPECIFIED = 0;
+  KEY_APPLICATION = 1;
+  KEY_TERMINAL = 2;
+  KEY_AUTHORIZATION = 3;
+  KEY_RESERVED1 = 4;
+  KEY_RESERVED2 = 5;
+}

@@ -1,0 +1,68 @@
+// Copyright Offene Werkstatt Wädenswil
+// SPDX-License-Identifier: MIT
+
+syntax = "proto3";
+
+package maco.proto.firebase_rpc;
+
+import "proto/common.proto";
+
+// Reason for session checkout
+message CheckOutReason {
+  oneof reason {
+    // Checked out via UI
+    ReasonUi ui = 1;
+    // Another tag/user checked in on the same terminal
+    ReasonCheckInOtherTag other_tag = 2;
+    // User checked in on another machine
+    ReasonCheckInOtherMachine other_machine = 3;
+    // Session timed out
+    ReasonTimeout timeout = 4;
+    // User used self-checkout
+    ReasonSelfCheckout self_checkout = 5;
+  }
+}
+
+message ReasonUi {}
+
+message ReasonCheckInOtherTag {
+  maco.proto.TagUid token_id = 1;
+  string user_id = 2;
+}
+
+message ReasonCheckInOtherMachine {
+  string machine_id = 1;
+}
+
+message ReasonTimeout {}
+
+message ReasonSelfCheckout {}
+
+// Single machine usage record
+message MachineUsage {
+  // Firebase session ID
+  string session_id = 1;
+  // Check-in timestamp (unix timestamp)
+  int64 check_in = 2;
+  // Check-out timestamp (unix timestamp), 0 if still active
+  int64 check_out = 3;
+  // Reason for checkout
+  CheckOutReason reason = 4;
+}
+
+// Collection of usage records for a machine
+message MachineUsageHistory {
+  // Firebase machine ID
+  string machine_id = 1;
+  // Usage records to upload
+  repeated MachineUsage records = 2;
+}
+
+// UploadUsage RPC - uploads machine usage history to Firebase
+message UploadUsageRequest {
+  MachineUsageHistory history = 1;
+}
+
+message UploadUsageResponse {
+  bool success = 1;
+}

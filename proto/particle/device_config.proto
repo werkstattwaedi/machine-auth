@@ -1,0 +1,43 @@
+// Copyright Offene Werkstatt Wädenswil
+// SPDX-License-Identifier: MIT
+
+syntax = "proto3";
+
+package maco.proto.particle;
+
+// Hardware revision of the terminal device
+enum HwRevision {
+  HW_REVISION_UNSPECIFIED = 0;
+  HW_REVISION_BREADBOARD = 1;
+  HW_REVISION_PROTOTYPE = 2;
+}
+
+// Machine control mechanism
+message MachineControl {
+  oneof control {
+    RelayControl relay = 1;
+  }
+}
+
+// Relay-based machine control
+message RelayControl {}
+
+// Machine definition with permissions
+message Machine {
+  // Firebase machine ID
+  string id = 1;
+  // Human-readable label
+  string label = 2;
+  // Firebase permission IDs required to use this machine
+  repeated string required_permissions = 3;
+  // Control mechanism for the machine
+  MachineControl control = 4;
+}
+
+// Terminal device configuration stored in Particle Ledger
+message DeviceConfig {
+  // Hardware revision of the device
+  HwRevision hw_revision = 1;
+  // Machines controlled by this terminal
+  repeated Machine machines = 2;
+}

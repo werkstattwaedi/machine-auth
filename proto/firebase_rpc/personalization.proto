@@ -1,0 +1,20 @@
+// Copyright Offene Werkstatt Wädenswil
+// SPDX-License-Identifier: MIT
+
+syntax = "proto3";
+
+package maco.proto.firebase_rpc;
+
+import "proto/common.proto";
+
+// KeyDiversification RPC - computes diversified keys for tag setup
+message KeyDiversificationRequest {
+  maco.proto.TagUid token_id = 1;
+}
+
+message KeyDiversificationResponse {
+  maco.proto.KeyBytes application_key = 1;
+  maco.proto.KeyBytes authorization_key = 2;
+  maco.proto.KeyBytes reserved1_key = 3;
+  maco.proto.KeyBytes reserved2_key = 4;
+}
