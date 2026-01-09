@@ -4,7 +4,7 @@
 #include "maco_firmware/devices/pn532/pn532_check_present_future.h"
 
 #include "maco_firmware/devices/pn532/pn532_constants.h"
-#include "maco_firmware/devices/pn532/pn532_driver.h"
+#include "maco_firmware/devices/pn532/pn532_nfc_reader.h"
 
 namespace maco::nfc {
 
@@ -12,32 +12,32 @@ using namespace pn532;
 
 Pn532CheckPresentFuture::Pn532CheckPresentFuture(
     pw::async2::SingleFutureProvider<Pn532CheckPresentFuture>& provider,
-    Pn532Driver& driver,
+    Pn532NfcReader& reader,
     pw::chrono::SystemClock::time_point deadline)
     : Base(provider),
-      driver_(&driver),
+      reader_(&reader),
       params_{std::byte{kDiagnoseAttentionRequest}},
-      call_future_(driver.uart(),
+      call_future_(reader.uart(),
                    Pn532Command{kCmdDiagnose, params_},
                    deadline) {}
 
 Pn532CheckPresentFuture::Pn532CheckPresentFuture(
     Pn532CheckPresentFuture&& other) noexcept
     : Base(Base::ConstructedState::kMovedFrom),
-      driver_(other.driver_),
+      reader_(other.reader_),
       params_(other.params_),
       call_future_(std::move(other.call_future_)) {
   Base::MoveFrom(other);
-  other.driver_ = nullptr;
+  other.reader_ = nullptr;
 }
 
 Pn532CheckPresentFuture& Pn532CheckPresentFuture::operator=(
     Pn532CheckPresentFuture&& other) noexcept {
   Base::MoveFrom(other);
-  driver_ = other.driver_;
+  reader_ = other.reader_;
   params_ = other.params_;
   call_future_ = std::move(other.call_future_);
-  other.driver_ = nullptr;
+  other.reader_ = nullptr;
   return *this;
 }
 
@@ -46,7 +46,7 @@ pw::async2::Poll<pw::Result<bool>> Pn532CheckPresentFuture::DoPend(
   using pw::async2::Pending;
   using pw::async2::Ready;
 
-  if (driver_ == nullptr) {
+  if (reader_ == nullptr) {
     return Ready(pw::Status::FailedPrecondition());
   }
 

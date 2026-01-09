@@ -8,7 +8,7 @@
 #include <cstdint>
 
 #include "maco_firmware/devices/pn532/pn532_call_future.h"
-#include "maco_firmware/modules/nfc_reader/nfc_reader_driver.h"
+#include "maco_firmware/devices/pn532/tag_info.h"
 #include "pw_async2/future.h"
 #include "pw_bytes/span.h"
 #include "pw_chrono/system_clock.h"
@@ -17,7 +17,7 @@
 
 namespace maco::nfc {
 
-class Pn532Driver;  // Forward declaration
+class Pn532NfcReader;  // Forward declaration
 
 /// Future for InListPassiveTarget (tag detection).
 ///
@@ -43,12 +43,12 @@ class Pn532DetectTagFuture
   Pn532DetectTagFuture& operator=(const Pn532DetectTagFuture&) = delete;
 
  private:
-  friend class Pn532Driver;
+  friend class Pn532NfcReader;
   friend Base;
 
   Pn532DetectTagFuture(
       pw::async2::SingleFutureProvider<Pn532DetectTagFuture>& provider,
-      Pn532Driver& driver,
+      Pn532NfcReader& reader,
       pw::chrono::SystemClock::time_point deadline);
 
   pw::async2::Poll<pw::Result<TagInfo>> DoPend(pw::async2::Context& cx);
@@ -56,7 +56,7 @@ class Pn532DetectTagFuture
   /// Parse InListPassiveTarget response payload.
   pw::Result<TagInfo> ParseResponse(pw::ConstByteSpan payload);
 
-  Pn532Driver* driver_;
+  Pn532NfcReader* reader_;
 
   // Command params buffer - must be before call_future_
   std::array<std::byte, 2> params_;

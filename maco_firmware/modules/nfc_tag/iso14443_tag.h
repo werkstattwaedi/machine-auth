@@ -6,7 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "maco_firmware/modules/nfc_reader/nfc_reader_driver.h"
+#include "maco_firmware/devices/pn532/tag_info.h"
 #include "maco_firmware/modules/nfc_reader/transceive_request.h"
 #include "maco_firmware/modules/nfc_tag/nfc_tag.h"
 #include "pw_bytes/span.h"

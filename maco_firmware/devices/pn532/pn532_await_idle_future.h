@@ -8,7 +8,7 @@
 
 namespace maco::nfc {
 
-class Pn532Driver;  // Forward declaration
+class Pn532NfcReader;  // Forward declaration
 
 /// Future that completes when no operation is in progress.
 ///
@@ -16,16 +16,16 @@ class Pn532Driver;  // Forward declaration
 /// in progress. Returns Ready immediately if already idle.
 class Pn532AwaitIdleFuture {
  public:
-  explicit Pn532AwaitIdleFuture(Pn532Driver& driver) : driver_(&driver) {}
+  explicit Pn532AwaitIdleFuture(Pn532NfcReader& reader) : reader_(&reader) {}
 
   // Movable
   Pn532AwaitIdleFuture(Pn532AwaitIdleFuture&& other) noexcept
-      : driver_(other.driver_) {
-    other.driver_ = nullptr;
+      : reader_(other.reader_) {
+    other.reader_ = nullptr;
   }
   Pn532AwaitIdleFuture& operator=(Pn532AwaitIdleFuture&& other) noexcept {
-    driver_ = other.driver_;
-    other.driver_ = nullptr;
+    reader_ = other.reader_;
+    other.reader_ = nullptr;
     return *this;
   }
 
@@ -33,11 +33,11 @@ class Pn532AwaitIdleFuture {
   Pn532AwaitIdleFuture(const Pn532AwaitIdleFuture&) = delete;
   Pn532AwaitIdleFuture& operator=(const Pn532AwaitIdleFuture&) = delete;
 
-  /// Poll the future. Returns Ready when driver is idle.
+  /// Poll the future. Returns Ready when reader is idle.
   pw::async2::Poll<> Pend(pw::async2::Context& cx);
 
  private:
-  Pn532Driver* driver_;
+  Pn532NfcReader* reader_;
 };
 
 }  // namespace maco::nfc

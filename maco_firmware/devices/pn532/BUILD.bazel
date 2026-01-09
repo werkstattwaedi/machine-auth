@@ -7,15 +7,26 @@ load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
 package(default_visibility = ["//maco_firmware:__subpackages__"])
 
+# Tag information struct (detected tag metadata)
 cc_library(
-    name = "pn532_driver",
+    name = "tag_info",
+    hdrs = ["tag_info.h"],
+    deps = [
+        "@pigweed//pw_bytes",
+    ],
+)
+
+# PN532 NFC reader (merged driver + reader + FSM)
+cc_library(
+    name = "pn532_nfc_reader",
     srcs = [
         "pn532_await_idle_future.cc",
         "pn532_call_future.cc",
         "pn532_check_present_future.cc",
         "pn532_command.cc",
         "pn532_detect_tag_future.cc",
-        "pn532_driver.cc",
+        "pn532_nfc_reader.cc",
+        "pn532_nfc_reader_fsm.cc",
         "pn532_transceive_future.cc",
     ],
     hdrs = [
@@ -25,13 +36,22 @@ cc_library(
         "pn532_command.h",
         "pn532_constants.h",
         "pn532_detect_tag_future.h",
-        "pn532_driver.h",
+        "pn532_nfc_reader.h",
+        "pn532_nfc_reader_fsm.h",
         "pn532_transceive_future.h",
     ],
     deps = [
-        "//maco_firmware/modules/nfc_reader:nfc_reader_driver",
+        ":tag_info",
+        "//maco_firmware/modules/nfc_reader",
+        "//maco_firmware/modules/nfc_reader:nfc_error",
+        "//maco_firmware/modules/nfc_reader:nfc_event",
+        "//maco_firmware/modules/nfc_reader:transceive_request",
+        "//maco_firmware/modules/nfc_tag",
+        "//third_party/etl",
         "@pigweed//pw_assert:check",
         "@pigweed//pw_async2",
+        "@pigweed//pw_async2:dispatcher",
+        "@pigweed//pw_async2:value_future",
         "@pigweed//pw_bytes",
         "@pigweed//pw_chrono:system_clock",
         "@pigweed//pw_digital_io",
@@ -47,20 +67,8 @@ pw_cc_test(
     name = "pn532_command_test",
     srcs = ["pn532_command_test.cc"],
     deps = [
-        ":pn532_driver",
+        ":pn532_nfc_reader",
         "@pigweed//pw_bytes",
-    ],
-)
-
-pw_cc_test(
-    name = "pn532_driver_test",
-    srcs = ["pn532_driver_test.cc"],
-    deps = [
-        ":pn532_driver",
-        "@pigweed//pw_async2:testing",
-        "@pigweed//pw_bytes",
-        "@pigweed//pw_digital_io:digital_io_mock",
-        "@pigweed//pw_stream",
     ],
 )
 
@@ -70,7 +78,7 @@ particle_cc_test(
     srcs = ["hardware_test.cc"],
     platform = "//maco_firmware/targets/p2:p2",
     deps = [
-        ":pn532_driver",
+        ":pn532_nfc_reader",
         "@particle_bazel//:device_os_headers",
         "@particle_bazel//pw_digital_io_particle:digital_io",
         "@particle_bazel//pw_stream_particle:uart_stream",

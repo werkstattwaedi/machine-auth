@@ -5,7 +5,7 @@
 
 #include <cstring>
 
-#include "maco_firmware/devices/pn532/pn532_driver.h"
+#include "maco_firmware/devices/pn532/pn532_nfc_reader.h"
 #include "pw_log/log.h"
 
 namespace maco::nfc {
@@ -14,26 +14,26 @@ using namespace pn532;
 
 Pn532TransceiveFuture::Pn532TransceiveFuture(
     pw::async2::SingleFutureProvider<Pn532TransceiveFuture>& provider,
-    Pn532Driver& driver,
+    Pn532NfcReader& reader,
     pw::ConstByteSpan command,
     pw::ByteSpan response_buffer,
     pw::chrono::SystemClock::time_point deadline)
     : Base(provider),
-      driver_(&driver),
+      reader_(&reader),
       response_buffer_(response_buffer),
       params_len_(0),
-      call_future_(driver.uart(),
+      call_future_(reader.uart(),
                    Pn532Command{kCmdInDataExchange, {}},  // Placeholder, updated below
                    deadline) {
   // Build params: [Tg][DataOut...]
   if (command.size() + 1 <= params_.size()) {
-    params_[0] = std::byte{driver.current_target_number()};
+    params_[0] = std::byte{reader.current_target_number()};
     std::memcpy(&params_[1], command.data(), command.size());
     params_len_ = command.size() + 1;
 
     // Reinitialize call_future_ with actual params
     call_future_ = Pn532CallFuture(
-        driver.uart(),
+        reader.uart(),
         Pn532Command{kCmdInDataExchange,
                      pw::ConstByteSpan(params_.data(), params_len_)},
         deadline);
@@ -44,24 +44,24 @@ Pn532TransceiveFuture::Pn532TransceiveFuture(
 Pn532TransceiveFuture::Pn532TransceiveFuture(
     Pn532TransceiveFuture&& other) noexcept
     : Base(Base::ConstructedState::kMovedFrom),
-      driver_(other.driver_),
+      reader_(other.reader_),
       response_buffer_(other.response_buffer_),
       params_(other.params_),
       params_len_(other.params_len_),
       call_future_(std::move(other.call_future_)) {
   Base::MoveFrom(other);
-  other.driver_ = nullptr;
+  other.reader_ = nullptr;
 }
 
 Pn532TransceiveFuture& Pn532TransceiveFuture::operator=(
     Pn532TransceiveFuture&& other) noexcept {
   Base::MoveFrom(other);
-  driver_ = other.driver_;
+  reader_ = other.reader_;
   response_buffer_ = other.response_buffer_;
   params_ = other.params_;
   params_len_ = other.params_len_;
   call_future_ = std::move(other.call_future_);
-  other.driver_ = nullptr;
+  other.reader_ = nullptr;
   return *this;
 }
 
@@ -70,7 +70,7 @@ pw::async2::Poll<pw::Result<size_t>> Pn532TransceiveFuture::DoPend(
   using pw::async2::Pending;
   using pw::async2::Ready;
 
-  if (driver_ == nullptr) {
+  if (reader_ == nullptr) {
     return Ready(pw::Status::FailedPrecondition());
   }
 

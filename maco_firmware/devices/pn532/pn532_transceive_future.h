@@ -17,7 +17,7 @@
 
 namespace maco::nfc {
 
-class Pn532Driver;  // Forward declaration
+class Pn532NfcReader;  // Forward declaration
 
 /// Future for InDataExchange (APDU transceive).
 ///
@@ -41,12 +41,12 @@ class Pn532TransceiveFuture
   Pn532TransceiveFuture& operator=(const Pn532TransceiveFuture&) = delete;
 
  private:
-  friend class Pn532Driver;
+  friend class Pn532NfcReader;
   friend Base;
 
   Pn532TransceiveFuture(
       pw::async2::SingleFutureProvider<Pn532TransceiveFuture>& provider,
-      Pn532Driver& driver,
+      Pn532NfcReader& reader,
       pw::ConstByteSpan command,
       pw::ByteSpan response_buffer,
       pw::chrono::SystemClock::time_point deadline);
@@ -56,7 +56,7 @@ class Pn532TransceiveFuture
   /// Parse InDataExchange response and copy data to response_buffer_.
   pw::Result<size_t> ParseResponse(pw::ConstByteSpan payload);
 
-  Pn532Driver* driver_;
+  Pn532NfcReader* reader_;
   pw::ByteSpan response_buffer_;  // Caller's buffer for APDU response
 
   // Command params buffer: [Tg][DataOut...] - must be before call_future_

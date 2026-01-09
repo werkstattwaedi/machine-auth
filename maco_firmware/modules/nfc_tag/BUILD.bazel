@@ -18,7 +18,7 @@ cc_library(
     hdrs = ["iso14443_tag.h"],
     deps = [
         ":nfc_tag",
-        "//maco_firmware/modules/nfc_reader:nfc_reader_driver",
+        "//maco_firmware/devices/pn532:tag_info",
         "//maco_firmware/modules/nfc_reader:transceive_request",
         "@pigweed//pw_bytes",
         "@pigweed//pw_chrono:system_clock",

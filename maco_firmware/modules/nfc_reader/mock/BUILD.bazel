@@ -1,0 +1,21 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "mock_nfc_reader",
+    srcs = ["mock_nfc_reader.cc"],
+    hdrs = ["mock_nfc_reader.h"],
+    deps = [
+        "//maco_firmware/modules/nfc_reader:nfc_event",
+        "//maco_firmware/modules/nfc_reader:nfc_reader",
+        "//maco_firmware/modules/nfc_tag",
+        "@pigweed//pw_async2:value_future",
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_result",
+        "@pigweed//pw_status",
+    ],
+)

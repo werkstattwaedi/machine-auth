@@ -10,7 +10,7 @@
 // - Error Handling: No-card detection, recovery
 
 // Pigweed headers first (avoid macro pollution from HAL)
-#include "maco_firmware/devices/pn532/pn532_driver.h"
+#include "maco_firmware/devices/pn532/pn532_nfc_reader.h"
 #include "pb_digital_io/digital_io.h"
 #include "pb_stream/uart_stream.h"
 #include "pw_async2/dispatcher_for_test.h"
@@ -44,8 +44,22 @@ constexpr auto kShortTimeout = std::chrono::milliseconds(100);
 // Long timeout for interactive tests - PN532 will poll RF field continuously
 constexpr auto kInteractiveTimeout = std::chrono::seconds(30);
 
+/// Testable subclass that exposes protected methods for hardware testing.
+class TestablePn532Reader : public maco::nfc::Pn532NfcReader {
+ public:
+  using Pn532NfcReader::Pn532NfcReader;  // Inherit constructors
+
+  // Expose protected methods for testing
+  using Pn532NfcReader::DoInit;
+  using Pn532NfcReader::DoReset;
+  using Pn532NfcReader::DoDetectTag;
+  using Pn532NfcReader::DoTransceive;
+  using Pn532NfcReader::DoCheckTagPresent;
+  using Pn532NfcReader::RecoverFromDesync;
+};
+
 // Get singleton hardware instances
-maco::nfc::Pn532Driver& GetDriver() {
+TestablePn532Reader& GetDriver() {
   static bool initialized = false;
   static pb::ParticleUartStream uart(HAL_USART_SERIAL1);
   static pb::ParticleDigitalOut reset_pin(kPinNfcReset);
@@ -57,7 +71,7 @@ maco::nfc::Pn532Driver& GetDriver() {
     initialized = true;
   }
 
-  static maco::nfc::Pn532Driver driver(uart, reset_pin);
+  static TestablePn532Reader driver(uart, reset_pin);
   return driver;
 }
 

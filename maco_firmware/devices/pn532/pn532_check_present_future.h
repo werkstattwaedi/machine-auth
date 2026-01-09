@@ -16,7 +16,7 @@
 
 namespace maco::nfc {
 
-class Pn532Driver;  // Forward declaration
+class Pn532NfcReader;  // Forward declaration
 
 /// Future for Diagnose presence check (NumTst=0x06 Attention Request).
 ///
@@ -40,12 +40,12 @@ class Pn532CheckPresentFuture
   Pn532CheckPresentFuture& operator=(const Pn532CheckPresentFuture&) = delete;
 
  private:
-  friend class Pn532Driver;
+  friend class Pn532NfcReader;
   friend Base;
 
   Pn532CheckPresentFuture(
       pw::async2::SingleFutureProvider<Pn532CheckPresentFuture>& provider,
-      Pn532Driver& driver,
+      Pn532NfcReader& reader,
       pw::chrono::SystemClock::time_point deadline);
 
   pw::async2::Poll<pw::Result<bool>> DoPend(pw::async2::Context& cx);
@@ -53,7 +53,7 @@ class Pn532CheckPresentFuture
   /// Parse Diagnose response to determine presence.
   pw::Result<bool> ParseResponse(pw::ConstByteSpan payload);
 
-  Pn532Driver* driver_;
+  Pn532NfcReader* reader_;
 
   // Command params buffer (NumTst=0x06) - must be before call_future_
   std::array<std::byte, 1> params_;

@@ -6,7 +6,7 @@
 #include <cstring>
 
 #include "maco_firmware/devices/pn532/pn532_constants.h"
-#include "maco_firmware/devices/pn532/pn532_driver.h"
+#include "maco_firmware/devices/pn532/pn532_nfc_reader.h"
 #include "pw_log/log.h"
 
 namespace maco::nfc {
@@ -15,32 +15,32 @@ using namespace pn532;
 
 Pn532DetectTagFuture::Pn532DetectTagFuture(
     pw::async2::SingleFutureProvider<Pn532DetectTagFuture>& provider,
-    Pn532Driver& driver,
+    Pn532NfcReader& reader,
     pw::chrono::SystemClock::time_point deadline)
     : Base(provider),
-      driver_(&driver),
+      reader_(&reader),
       params_{std::byte{0x01}, std::byte{0x00}},  // MaxTg=1, BrTy=106kbps Type A
-      call_future_(driver.uart(),
+      call_future_(reader.uart(),
                    Pn532Command{kCmdInListPassiveTarget, params_},
                    deadline) {}
 
 Pn532DetectTagFuture::Pn532DetectTagFuture(
     Pn532DetectTagFuture&& other) noexcept
     : Base(Base::ConstructedState::kMovedFrom),
-      driver_(other.driver_),
+      reader_(other.reader_),
       params_(other.params_),
       call_future_(std::move(other.call_future_)) {
   Base::MoveFrom(other);
-  other.driver_ = nullptr;
+  other.reader_ = nullptr;
 }
 
 Pn532DetectTagFuture& Pn532DetectTagFuture::operator=(
     Pn532DetectTagFuture&& other) noexcept {
   Base::MoveFrom(other);
-  driver_ = other.driver_;
+  reader_ = other.reader_;
   params_ = other.params_;
   call_future_ = std::move(other.call_future_);
-  other.driver_ = nullptr;
+  other.reader_ = nullptr;
   return *this;
 }
 
@@ -49,7 +49,7 @@ pw::async2::Poll<pw::Result<TagInfo>> Pn532DetectTagFuture::DoPend(
   using pw::async2::Pending;
   using pw::async2::Ready;
 
-  if (driver_ == nullptr) {
+  if (reader_ == nullptr) {
     return Ready(pw::Status::FailedPrecondition());
   }
 
@@ -60,8 +60,8 @@ pw::async2::Poll<pw::Result<TagInfo>> Pn532DetectTagFuture::DoPend(
 
   // Timeout waiting for response = no card found
   if (poll.value().status().IsDeadlineExceeded()) {
-    (void)driver_->uart().Write(kAckFrame);  // Abort pending command
-    driver_->DrainReceiveBuffer();
+    (void)reader_->uart().Write(kAckFrame);  // Abort pending command
+    reader_->DrainReceiveBuffer();
     return Ready(pw::Status::NotFound());
   }
 
@@ -106,7 +106,7 @@ pw::Result<TagInfo> Pn532DetectTagFuture::ParseResponse(
   std::memcpy(info.uid.data(), &payload[6], info.uid_length);
   info.supports_iso14443_4 = (info.sak & 0x20) != 0;
 
-  driver_->set_current_target_number(info.target_number);
+  reader_->set_current_target_number(info.target_number);
 
   PW_LOG_INFO("Tag detected: UID=%d bytes, SAK=%02x, ISO14443-4=%s",
               static_cast<int>(info.uid_length), info.sak,
