@@ -23,6 +23,15 @@ class NfcTag {
   /// Get the tag's UID.
   virtual pw::ConstByteSpan uid() const = 0;
 
+  /// Get the UID length.
+  virtual size_t uid_length() const { return uid().size(); }
+
+  /// Get the SAK byte.
+  virtual uint8_t sak() const = 0;
+
+  /// Get the target number (for driver commands).
+  virtual uint8_t target_number() const = 0;
+
   /// Check if this tag supports ISO 14443-4 (APDUs).
   virtual bool supports_iso14443_4() const = 0;
 

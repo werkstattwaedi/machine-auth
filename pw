@@ -29,6 +29,17 @@ case "$1" in
     shift
     exec bazelisk run "$@"
     ;;
+  test)
+    # Run host unit tests without affecting IDE state
+    shift
+    TARGETS="${@:-//maco_firmware/...}"
+    echo "🧪 Running tests..."
+    exec bazelisk \
+      --output_base=${_PW_WORKFLOWS_OUT_DIR} \
+      test \
+      --symlink_prefix=${_PW_WORKFLOWS_OUT_DIR}/bazel- \
+      $TARGETS
+    ;;
 esac
 
 # For all other commands, use the workflows launcher

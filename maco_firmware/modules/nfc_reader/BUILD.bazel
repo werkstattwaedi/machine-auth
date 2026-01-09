@@ -1,6 +1,7 @@
 # Copyright Offene Werkstatt Wädenswil
 # SPDX-License-Identifier: MIT
 
+load("@pigweed//pw_unit_test:pw_cc_test.bzl", "pw_cc_test")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
 package(default_visibility = ["//maco_firmware:__subpackages__"])
@@ -27,14 +28,88 @@ cc_library(
 )
 
 cc_library(
-    name = "nfc_reader",
-    hdrs = ["nfc_reader.h"],
+    name = "nfc_error",
+    hdrs = ["nfc_error.h"],
+    deps = [
+        "@pigweed//pw_status",
+    ],
+)
+
+cc_library(
+    name = "nfc_event",
+    hdrs = ["nfc_event.h"],
+    deps = [
+        "//maco_firmware/modules/nfc_tag",
+    ],
+)
+
+cc_library(
+    name = "nfc_reader_events",
+    hdrs = ["nfc_reader_events.h"],
     deps = [
         ":nfc_reader_driver",
         "//maco_firmware/modules/nfc_tag",
+        "//third_party/etl",
+        "@pigweed//pw_result",
+    ],
+)
+
+cc_library(
+    name = "nfc_reader_fsm",
+    hdrs = ["nfc_reader_fsm.h"],
+    deps = [
+        ":nfc_reader_events",
+        "//third_party/etl",
+    ],
+)
+
+cc_library(
+    name = "transceive_request",
+    hdrs = ["transceive_request.h"],
+    deps = [
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_chrono:system_clock",
+        "@pigweed//pw_result",
+    ],
+)
+
+cc_library(
+    name = "nfc_reader",
+    hdrs = ["nfc_reader.h"],
+    deps = [
+        ":nfc_error",
+        ":nfc_event",
+        ":nfc_reader_driver",
+        ":nfc_reader_events",
+        ":nfc_reader_fsm",
+        ":transceive_request",
+        "//maco_firmware/modules/nfc_tag",
+        "//maco_firmware/modules/nfc_tag:iso14443_tag",
+        "@pigweed//pw_async2:channel",
+        "@pigweed//pw_async2:dispatcher",
+        "@pigweed//pw_async2:poll",
         "@pigweed//pw_chrono:system_clock",
         "@pigweed//pw_log",
         "@pigweed//pw_result",
         "@pigweed//pw_status",
+    ],
+)
+
+pw_cc_test(
+    name = "nfc_error_test",
+    srcs = ["nfc_error_test.cc"],
+    deps = [
+        ":nfc_error",
+    ],
+)
+
+pw_cc_test(
+    name = "nfc_reader_test",
+    srcs = ["nfc_reader_test.cc"],
+    deps = [
+        ":nfc_async_types",
+        ":nfc_reader",
+        ":nfc_reader_driver",
+        "@pigweed//pw_bytes",
     ],
 )
