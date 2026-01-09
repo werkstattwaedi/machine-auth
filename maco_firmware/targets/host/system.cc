@@ -12,6 +12,7 @@
 #include <thread>
 
 #include "lvgl.h"
+#include "maco_firmware/modules/nfc_reader/mock/mock_nfc_reader.h"
 #include "maco_firmware/targets/host/keyboard_input_driver.h"
 #include "maco_firmware/targets/host/sdl_display_driver.h"
 #include "pw_assert/check.h"
@@ -116,6 +117,11 @@ maco::display::TouchButtonDriver& GetTouchButtonDriver() {
 const pw::thread::Options& GetDefaultThreadOptions() {
   static const pw::thread::stl::Options options;
   return options;
+}
+
+maco::nfc::NfcReader& GetNfcReader() {
+  static maco::nfc::MockNfcReader reader;
+  return reader;
 }
 
 }  // namespace maco::system

@@ -19,7 +19,7 @@ cc_library(
     deps = [
         ":nfc_tag",
         "//maco_firmware/devices/pn532:tag_info",
-        "//maco_firmware/modules/nfc_reader:transceive_request",
+        "//maco_firmware/modules/nfc_reader",
         "@pigweed//pw_bytes",
         "@pigweed//pw_chrono:system_clock",
         "@pigweed//pw_result",

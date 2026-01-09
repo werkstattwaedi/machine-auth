@@ -18,7 +18,9 @@
 // Particle and project headers after Pigweed
 #include "maco_firmware/devices/cap_touch/cap_touch_input_driver.h"
 #include "maco_firmware/devices/pico_res28_lcd/pico_res28_lcd_driver.h"
+#include "maco_firmware/devices/pn532/pn532_nfc_reader.h"
 #include "pb_digital_io/digital_io.h"
+#include "pb_stream/uart_stream.h"
 #include "pb_log/log_bridge.h"
 #include "pb_spi/initiator.h"
 #include "pinmap_hal.h"
@@ -40,6 +42,13 @@ constexpr hal_pin_t kPinDisplayBacklight = A5;    // Display backlight
 
 // SPI clock frequency for display (40 MHz typical for ST7789)
 constexpr uint32_t kDisplaySpiClockHz = 40'000'000;
+
+// Pin definitions for PN532 NFC controller
+// S1 (MISO/D16) is shared with LED SPI - ensure SPI1 is not in use
+constexpr hal_pin_t kPinNfcReset = S1;
+
+// UART baud rate for PN532 HSU mode
+constexpr uint32_t kNfcUartBaudRate = 115200;
 
 }  // namespace
 
@@ -114,6 +123,23 @@ maco::display::TouchButtonDriver& GetTouchButtonDriver() {
 const pw::thread::Options& GetDefaultThreadOptions() {
   static const pw::thread::particle::Options options;
   return options;
+}
+
+maco::nfc::NfcReader& GetNfcReader() {
+  // Create UART stream for PN532 communication
+  static pb::ParticleUartStream uart(HAL_USART_SERIAL1);
+  static pb::ParticleDigitalOut reset_pin(kPinNfcReset);
+
+  // Initialize peripherals once
+  static bool initialized = false;
+  if (!initialized) {
+    (void)uart.Init(kNfcUartBaudRate);
+    (void)reset_pin.Enable();
+    initialized = true;
+  }
+
+  static maco::nfc::Pn532NfcReader reader(uart, reset_pin);
+  return reader;
 }
 
 }  // namespace maco::system

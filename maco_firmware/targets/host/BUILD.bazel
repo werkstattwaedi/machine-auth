@@ -59,6 +59,7 @@ cc_library(
         ":keyboard_input_driver",
         ":sdl_display_driver",
         "//maco_firmware/modules/fonts",
+        "//maco_firmware/modules/nfc_reader/mock:mock_nfc_reader",
         "@lvgl//:lvgl",
         "@pigweed//pw_assert:check",
         "@pigweed//pw_channel",

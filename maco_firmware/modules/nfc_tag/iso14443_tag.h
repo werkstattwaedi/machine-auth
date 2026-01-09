@@ -7,7 +7,7 @@
 #include <cstdint>
 
 #include "maco_firmware/devices/pn532/tag_info.h"
-#include "maco_firmware/modules/nfc_reader/transceive_request.h"
+#include "maco_firmware/modules/nfc_reader/nfc_reader.h"
 #include "maco_firmware/modules/nfc_tag/nfc_tag.h"
 #include "pw_bytes/span.h"
 #include "pw_chrono/system_clock.h"
@@ -16,24 +16,17 @@
 
 namespace maco::nfc {
 
-// Forward declaration to avoid circular dependency
-template <typename Driver>
-class NfcReader;
-
 /// ISO 14443-4 compliant tag (supports APDUs).
 ///
 /// This class wraps a detected tag and provides APDU transceive functionality.
 /// Operations are routed through the NfcReader for FSM coordination.
-/// It is templated on the driver type to support the CRTP pattern.
-template <typename Driver>
 class Iso14443Tag : public NfcTag {
  public:
   /// Construct an ISO 14443-4 tag.
   /// @param reader Reference to the NfcReader (for operation routing)
-  /// @param driver Reference to the NFC reader driver
   /// @param info Tag information from detection
-  Iso14443Tag(NfcReader<Driver>& reader, Driver& driver, const TagInfo& info)
-      : reader_(reader), driver_(driver), info_(info) {}
+  Iso14443Tag(NfcReader& reader, const TagInfo& info)
+      : reader_(reader), info_(info) {}
 
   pw::ConstByteSpan uid() const override {
     return pw::ConstByteSpan(info_.uid.data(), info_.uid_length);
@@ -59,17 +52,15 @@ class Iso14443Tag : public NfcTag {
   /// @param response_buffer Buffer for response
   /// @param timeout Maximum time for exchange
   /// @return Future that resolves to response length or error
-  TransceiveRequestFuture Transceive(
+  TransceiveFuture Transceive(
       pw::ConstByteSpan command,
       pw::ByteSpan response_buffer,
-      pw::chrono::SystemClock::duration timeout
-  ) {
+      pw::chrono::SystemClock::duration timeout) {
     return reader_.RequestTransceive(command, response_buffer, timeout);
   }
 
  protected:
-  NfcReader<Driver>& reader_;
-  Driver& driver_;
+  NfcReader& reader_;
   TagInfo info_;
 };
 

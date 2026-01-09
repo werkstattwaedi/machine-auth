@@ -14,6 +14,10 @@ class DisplayDriver;
 class TouchButtonDriver;
 }  // namespace maco::display
 
+namespace maco::nfc {
+class NfcReader;
+}  // namespace maco::nfc
+
 namespace maco::system {
 
 /// Initializes the system, first performing target-specific initialization,
@@ -35,5 +39,9 @@ maco::display::TouchButtonDriver& GetTouchButtonDriver();
 /// Returns the default thread options for the current platform.
 /// Host: pw::thread::stl::Options, P2: pw::thread::particle::Options
 const pw::thread::Options& GetDefaultThreadOptions();
+
+/// Returns the platform-specific NFC reader instance.
+/// Host: MockNfcReader, P2: Pn532NfcReader
+maco::nfc::NfcReader& GetNfcReader();
 
 }  // namespace maco::system
