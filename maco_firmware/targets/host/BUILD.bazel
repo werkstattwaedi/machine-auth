@@ -1,0 +1,73 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+# Host simulator target
+# Runs on development machine with fake/mock drivers
+#
+# Uses:
+# - Pigweed host toolchain
+# - Mock implementations of hardware interfaces
+# - Console-based UI simulation
+
+load("@pigweed//pw_build:compatibility.bzl", "incompatible_with_mcu")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//maco_firmware:__subpackages__"])
+
+# LVGL configuration - now generated from template
+# Use the generated config from //maco_firmware/lvgl_config
+alias(
+    name = "lvgl_conf",
+    actual = "//maco_firmware/lvgl_config:lvgl_conf_host",
+    visibility = ["//visibility:public"],
+)
+
+# SDL-based display driver for host simulator
+cc_library(
+    name = "sdl_display_driver",
+    srcs = ["sdl_display_driver.cc"],
+    hdrs = ["sdl_display_driver.h"],
+    target_compatible_with = incompatible_with_mcu(),
+    deps = [
+        "//maco_firmware/modules/display:display_driver",
+        "//third_party/sdl:sdl2",
+        "@lvgl//:lvgl",
+        "@pigweed//pw_assert:check",
+        "@pigweed//pw_log",
+    ],
+)
+
+# Keyboard input driver for host simulator
+cc_library(
+    name = "keyboard_input_driver",
+    srcs = ["keyboard_input_driver.cc"],
+    hdrs = ["keyboard_input_driver.h"],
+    target_compatible_with = incompatible_with_mcu(),
+    deps = [
+        "//maco_firmware/modules/display:touch_button_driver",
+        "//third_party/sdl:sdl2",
+        "@lvgl//:lvgl",
+        "@pigweed//pw_log",
+    ],
+)
+
+cc_library(
+    name = "system",
+    srcs = ["system.cc"],
+    implementation_deps = [
+        ":keyboard_input_driver",
+        ":sdl_display_driver",
+        "//maco_firmware/modules/fonts",
+        "//maco_firmware/modules/nfc_reader/mock:mock_nfc_reader",
+        "@lvgl//:lvgl",
+        "@pigweed//pw_assert:check",
+        "@pigweed//pw_channel",
+        "@pigweed//pw_channel:stream_channel",
+        "@pigweed//pw_multibuf:simple_allocator",
+        "@pigweed//pw_system:async",
+        "@pigweed//pw_system:io",
+        "@pigweed//pw_thread_stl:options",
+    ],
+    target_compatible_with = incompatible_with_mcu(),
+    deps = ["//maco_firmware/system:headers"],
+)

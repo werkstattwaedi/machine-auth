@@ -1,0 +1,84 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+"""
+LVGL configuration generation for maco_firmware.
+
+This package provides generated lv_conf.h files for different build targets.
+Configuration is centralized in a single template with target-specific overrides.
+
+Usage:
+    # In your BUILD file:
+    load("//maco_firmware/lvgl_config:lv_conf.bzl", "lv_conf_library", "LV_CONF_P2")
+
+    lv_conf_library(
+        name = "my_lvgl_conf",
+        base = LV_CONF_P2,
+        options = {
+            "LV_USE_LOG": 1,  # Enable logging
+        },
+    )
+
+Available presets:
+    - LV_CONF_DEFAULTS: Base defaults (P2-like configuration)
+    - LV_CONF_HOST: Host/simulator configuration (RGB565, logging enabled)
+    - LV_CONF_P2: P2 hardware configuration (RGB565 swapped, logging disabled)
+    - LV_CONF_P2_DEBUG: P2 hardware with logging enabled
+"""
+
+load("@pigweed//pw_build:compatibility.bzl", "incompatible_with_mcu")
+load(":lv_conf.bzl", "LV_CONF_HOST", "LV_CONF_P2", "LV_CONF_P2_DEBUG", "lv_conf_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# Export the template file for the genrule
+exports_files(["lv_conf.h.template"])
+
+# =============================================================================
+# STANDARD CONFIGURATIONS
+# =============================================================================
+
+# Host/Simulator configuration
+# - Standard RGB565 (not byte-swapped)
+# - Logging enabled at WARN level
+# - printf-based log output
+lv_conf_library(
+    name = "lvgl_conf_host",
+    base = LV_CONF_HOST,
+    target_compatible_with = incompatible_with_mcu(),
+)
+
+# P2 Hardware configuration (Production)
+# - RGB565 byte-swapped for hardware display
+# - Logging disabled for performance
+lv_conf_library(
+    name = "lvgl_conf_p2",
+    base = LV_CONF_P2,
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)
+
+# P2 Hardware configuration (Debug)
+# - RGB565 byte-swapped for hardware display
+# - Logging enabled at INFO level
+# - Visual debug overlays enabled
+lv_conf_library(
+    name = "lvgl_conf_p2_debug",
+    base = LV_CONF_P2_DEBUG,
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)
+
+# =============================================================================
+# EXAMPLE: Custom configuration with specific overrides
+# =============================================================================
+#
+# lv_conf_library(
+#     name = "lvgl_conf_profiling",
+#     base = LV_CONF_P2,
+#     options = {
+#         "LV_USE_LOG": 1,
+#         "LV_LOG_LEVEL": "LV_LOG_LEVEL_TRACE",
+#         "LV_USE_REFR_DEBUG": 1,
+#         "LV_USE_LAYER_DEBUG": 1,
+#     },
+#     target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+# )
