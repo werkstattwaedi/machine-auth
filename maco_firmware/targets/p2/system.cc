@@ -133,8 +133,14 @@ maco::nfc::NfcReader& GetNfcReader() {
   // Initialize peripherals once
   static bool initialized = false;
   if (!initialized) {
-    (void)uart.Init(kNfcUartBaudRate);
-    (void)reset_pin.Enable();
+    auto status = uart.Init(kNfcUartBaudRate);
+    if (!status.ok()) {
+      PW_LOG_ERROR("UART init failed for NFC");
+    }
+    status = reset_pin.Enable();
+    if (!status.ok()) {
+      PW_LOG_ERROR("Reset pin enable failed for NFC");
+    }
     initialized = true;
   }
 

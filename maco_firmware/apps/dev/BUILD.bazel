@@ -15,10 +15,15 @@ package(default_visibility = ["//visibility:public"])
 
 DEV_DEPS = [
     "//maco_firmware/modules/display",
+    "//maco_firmware/modules/nfc_reader",
+    "//maco_firmware/modules/nfc_tag",
     "//maco_firmware/system",
     "//maco_firmware/system:headers",
     "@lvgl//:lvgl",
+    "@pigweed//pw_bytes",
+    "@pigweed//pw_function",
     "@pigweed//pw_log",
+    "@pigweed//pw_system:async",
     # Backend implementations required for linking
     "@pigweed//pw_assert:assert_backend_impl",
     "@pigweed//pw_assert:check_backend_impl",
@@ -43,10 +48,15 @@ particle_firmware(
     platform = "//maco_firmware/targets/p2:p2",
     deps = [
         "//maco_firmware/modules/display",
+        "//maco_firmware/modules/nfc_reader",
+        "//maco_firmware/modules/nfc_tag",
         "//maco_firmware/system",
         "//maco_firmware/system:headers",
         "@lvgl//:lvgl",
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_function",
         "@pigweed//pw_log",
+        "@pigweed//pw_system:async",
     ],
 )
 
