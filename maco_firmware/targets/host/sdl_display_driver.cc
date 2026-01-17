@@ -29,8 +29,9 @@ pw::Status SdlDisplayDriver::Init() {
     return pw::Status::Internal();
   }
 
-  renderer_ = SDL_CreateRenderer(
-      window_, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+  // Use software renderer to allow texture updates from render thread
+  // (SDL's OpenGL context is not thread-safe across threads)
+  renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_SOFTWARE);
   if (renderer_ == nullptr) {
     PW_LOG_ERROR("SDL_CreateRenderer failed: %s", SDL_GetError());
     SDL_DestroyWindow(window_);

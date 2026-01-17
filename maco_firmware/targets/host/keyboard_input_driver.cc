@@ -19,7 +19,8 @@ pw::Result<lv_indev_t*> KeyboardInputDriver::CreateLvglInputDevice() {
     return pw::Status::Internal();
   }
 
-  lv_indev_set_type(indev_, LV_INDEV_TYPE_BUTTON);
+  // Use KEYPAD type for keyboard navigation (no screen coordinates needed)
+  lv_indev_set_type(indev_, LV_INDEV_TYPE_KEYPAD);
   lv_indev_set_user_data(indev_, this);
   lv_indev_set_read_cb(indev_, &KeyboardInputDriver::ReadCallback);
 

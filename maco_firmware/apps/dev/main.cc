@@ -25,6 +25,42 @@ void AppInit() {
   auto& display_driver = maco::system::GetDisplayDriver();
   auto& touch_driver = maco::system::GetTouchButtonDriver();
 
+  // Snapshot provider - bridges UI thread to app state
+  auto snapshot_provider = [](maco::app_state::AppStateSnapshot& snapshot) {
+    maco::system::GetAppState().GetSnapshot(snapshot);
+  };
+
+  // Set init callback for LVGL widget creation (runs on render thread)
+  // All LVGL operations must happen on the render thread.
+  static maco::status_bar::StatusBar status_bar;
+  static maco::ui::AppShell app_shell(display, snapshot_provider);
+
+  display.SetInitCallback([&]() {
+    PW_LOG_INFO("Creating UI widgets on render thread...");
+
+    // Initialize status bar (persistent chrome on lv_layer_top)
+    auto status = status_bar.Init();
+    if (!status.ok()) {
+      PW_LOG_WARN("StatusBar init failed (continuing)");
+    }
+
+    // Initialize AppShell (screen stack, button bar chrome, state propagation)
+    status = app_shell.Init();
+    if (!status.ok()) {
+      PW_LOG_ERROR("AppShell init failed");
+      return;
+    }
+
+    // Create and show initial screen
+    status = app_shell.Reset(std::make_unique<maco::dev::NfcTestScreen>());
+    if (!status.ok()) {
+      PW_LOG_ERROR("Failed to set initial screen");
+      return;
+    }
+
+    PW_LOG_INFO("UI initialization complete");
+  });
+
   auto status = display.Init(display_driver, touch_driver);
   if (!status.ok()) {
     PW_LOG_ERROR("Display init failed");
@@ -32,27 +68,7 @@ void AppInit() {
   }
   PW_LOG_INFO("Display initialized: %dx%d", display.width(), display.height());
 
-  // Initialize status bar (persistent chrome on lv_layer_top)
-  static maco::status_bar::StatusBar status_bar;
-  status = status_bar.Init();
-  if (!status.ok()) {
-    PW_LOG_WARN("StatusBar init failed (continuing)");
-  }
-
-  // Snapshot provider - bridges UI thread to app state
-  auto snapshot_provider = [](maco::app_state::AppStateSnapshot& snapshot) {
-    maco::system::GetAppState().GetSnapshot(snapshot);
-  };
-
-  // Initialize AppShell (screen stack, button bar chrome, state propagation)
-  static maco::ui::AppShell app_shell(display, snapshot_provider);
-  status = app_shell.Init();
-  if (!status.ok()) {
-    PW_LOG_ERROR("AppShell init failed");
-    return;
-  }
-
-  // Get and initialize NFC reader
+  // Get and initialize NFC reader (not LVGL related, runs on main thread)
   PW_LOG_INFO("Initializing NFC reader...");
   auto& nfc_reader = maco::system::GetNfcReader();
 
@@ -65,13 +81,6 @@ void AppInit() {
 
   // Start NFC reader task on the system dispatcher
   nfc_reader.Start(pw::System().dispatcher());
-
-  // Create and show initial screen
-  status = app_shell.Reset(std::make_unique<maco::dev::NfcTestScreen>());
-  if (!status.ok()) {
-    PW_LOG_ERROR("Failed to set initial screen");
-    return;
-  }
 
   PW_LOG_INFO("AppInit complete - place a card on the reader");
 }

@@ -22,6 +22,10 @@ namespace maco::display {
 //   display.Init(display_driver, touch_driver);
 class Display {
  public:
+  // Callback invoked once on render thread before main loop starts.
+  // Use for LVGL widget creation (StatusBar, AppShell, Screens).
+  using InitCallback = pw::Function<void()>;
+
   // Callback invoked once per frame before lv_timer_handler()
   using UpdateCallback = pw::Function<void()>;
 
@@ -39,6 +43,12 @@ class Display {
   // - Starts the render thread
   pw::Status Init(DisplayDriver& display_driver,
                   TouchButtonDriver& touch_button_driver);
+
+  // Set callback invoked once on render thread before main loop starts.
+  // Must be called before Init(). Use for LVGL widget creation.
+  void SetInitCallback(InitCallback callback) {
+    init_callback_ = std::move(callback);
+  }
 
   // Set callback invoked once per frame before LVGL rendering.
   // Used by AppShell to update UI state in sync with rendering.
@@ -61,6 +71,7 @@ class Display {
   lv_display_t* lv_display_ = nullptr;
   lv_indev_t* lv_indev_ = nullptr;
   std::atomic<bool> running_{false};
+  InitCallback init_callback_;
   UpdateCallback update_callback_;
 };
 

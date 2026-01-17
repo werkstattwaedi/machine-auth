@@ -4,6 +4,7 @@
 #include "maco_firmware/modules/display/display.h"
 
 #include <chrono>
+#include <cstdio>
 
 #include "maco_firmware/system/system.h"
 #include "pw_chrono/system_clock.h"
@@ -92,6 +93,13 @@ pw::Status Display::Init(
 }
 
 void Display::RenderThread() {
+  // Run init callback once before main loop (for LVGL widget creation)
+  if (init_callback_) {
+    PW_LOG_INFO("Running UI init callback on render thread");
+    init_callback_();
+    init_callback_ = nullptr;  // Clear to avoid re-running
+  }
+
   while (running_.load()) {
     // Call update callback before LVGL rendering (for AppShell UI updates)
     if (update_callback_) {
