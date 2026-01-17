@@ -12,6 +12,7 @@
 #include <thread>
 
 #include "lvgl.h"
+#include "maco_firmware/modules/app_state/app_state.h"
 #include "maco_firmware/modules/nfc_reader/mock/mock_nfc_reader.h"
 #include "maco_firmware/targets/host/keyboard_input_driver.h"
 #include "maco_firmware/targets/host/sdl_display_driver.h"
@@ -122,6 +123,11 @@ const pw::thread::Options& GetDefaultThreadOptions() {
 maco::nfc::NfcReader& GetNfcReader() {
   static maco::nfc::MockNfcReader reader;
   return reader;
+}
+
+maco::app_state::AppState& GetAppState() {
+  static maco::app_state::AppState state;
+  return state;
 }
 
 }  // namespace maco::system

@@ -41,7 +41,7 @@ class Display {
                   TouchButtonDriver& touch_button_driver);
 
   // Set callback invoked once per frame before LVGL rendering.
-  // Used by Navigator to update UI state in sync with rendering.
+  // Used by AppShell to update UI state in sync with rendering.
   void SetUpdateCallback(UpdateCallback callback) {
     update_callback_ = std::move(callback);
   }

@@ -58,6 +58,7 @@ cc_library(
     implementation_deps = [
         ":keyboard_input_driver",
         ":sdl_display_driver",
+        "//maco_firmware/modules/app_state",
         "//maco_firmware/modules/fonts",
         "//maco_firmware/modules/nfc_reader/mock:mock_nfc_reader",
         "@lvgl//:lvgl",

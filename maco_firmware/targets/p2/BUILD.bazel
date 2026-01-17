@@ -86,6 +86,7 @@ cc_library(
         "//maco_firmware/devices/cap_touch",
         "//maco_firmware/devices/pico_res28_lcd",
         "//maco_firmware/devices/pn532:pn532_nfc_reader",
+        "//maco_firmware/modules/app_state",
         "//maco_firmware/modules/fonts",
         "//maco_firmware/system:headers",
         "@particle_bazel//:device_os_headers",

@@ -3,13 +3,11 @@
 
 #include "maco_firmware/apps/dev/screens/nfc_test_screen.h"
 
-#include "maco_firmware/modules/nfc_tag/nfc_tag.h"
 #include "pw_log/log.h"
 
 namespace maco::dev {
 
-NfcTestScreen::NfcTestScreen(nfc::NfcReader& nfc_reader)
-    : Screen("NfcTest"), nfc_reader_(nfc_reader) {
+NfcTestScreen::NfcTestScreen() : Screen("NfcTest") {
   status_text_ << "No card";
 }
 
@@ -60,14 +58,16 @@ void NfcTestScreen::OnDeactivate() {
   PW_LOG_INFO("NfcTestScreen deactivated");
 }
 
-void NfcTestScreen::OnUpdate() {
-  // Update NFC status from reader
-  UpdateNfcStatus();
+void NfcTestScreen::OnUpdate(const app_state::AppStateSnapshot& snapshot) {
+  // Update watched state
+  state_watched_.Set(snapshot.state);
 
-  // Only update LVGL widget if status changed
-  if (status_dirty_ && status_label_) {
-    lv_label_set_text(status_label_, status_text_.c_str());
-    status_dirty_ = false;
+  // Only update LVGL widget if state changed
+  if (state_watched_.CheckAndClearDirty()) {
+    UpdateStatusText(snapshot);
+    if (status_label_) {
+      lv_label_set_text(status_label_, status_text_.c_str());
+    }
   }
 }
 
@@ -76,35 +76,24 @@ ui::ButtonConfig NfcTestScreen::GetButtonConfig() const {
   return {};
 }
 
-void NfcTestScreen::UpdateNfcStatus() {
-  pw::StringBuffer<64> new_status;
-
-  if (nfc_reader_.HasTag()) {
-    auto tag = nfc_reader_.GetCurrentTag();
-    if (tag) {
-      new_status << "Card: ";
-      FormatUidTo(new_status, tag->uid());
-    } else {
-      new_status << "No card";
-    }
+void NfcTestScreen::UpdateStatusText(
+    const app_state::AppStateSnapshot& snapshot) {
+  status_text_.clear();
+  if (snapshot.state == app_state::AppStateId::kHasTag) {
+    status_text_ << "Card: ";
+    FormatUidTo(status_text_, snapshot.tag_uid);
   } else {
-    new_status << "No card";
-  }
-
-  // Only mark dirty if status actually changed
-  if (new_status.view() != status_text_.view()) {
-    status_text_.clear();
-    status_text_ << new_status.view();
-    status_dirty_ = true;
+    status_text_ << "No card";
   }
 }
 
-void NfcTestScreen::FormatUidTo(pw::StringBuilder& out, pw::ConstByteSpan uid) {
-  for (size_t i = 0; i < uid.size(); i++) {
+void NfcTestScreen::FormatUidTo(pw::StringBuilder& out,
+                                const app_state::TagUid& uid) {
+  for (size_t i = 0; i < uid.size; i++) {
     if (i > 0) {
       out << ':';
     }
-    out.Format("%02X", static_cast<unsigned>(uid[i]));
+    out.Format("%02X", static_cast<unsigned>(uid.bytes[i]));
   }
 }
 

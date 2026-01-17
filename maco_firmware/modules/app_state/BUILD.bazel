@@ -1,0 +1,38 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+# Application state management - thread-safe state for UI
+
+load("@pigweed//pw_unit_test:pw_cc_test.bzl", "pw_cc_test")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//maco_firmware:__subpackages__"])
+
+# State identifiers (placeholder FSM)
+cc_library(
+    name = "state_id",
+    hdrs = ["state_id.h"],
+)
+
+# Thread-safe application state
+cc_library(
+    name = "app_state",
+    srcs = ["app_state.cc"],
+    hdrs = ["app_state.h"],
+    deps = [
+        "//maco_firmware/modules/app_state/ui:snapshot",
+        "@pigweed//pw_assert:check",
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_sync:lock_annotations",
+        "@pigweed//pw_sync:mutex",
+    ],
+)
+
+pw_cc_test(
+    name = "app_state_test",
+    srcs = ["app_state_test.cc"],
+    deps = [
+        ":app_state",
+        "@pigweed//pw_bytes",
+    ],
+)

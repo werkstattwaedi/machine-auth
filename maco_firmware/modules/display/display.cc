@@ -93,7 +93,7 @@ pw::Status Display::Init(
 
 void Display::RenderThread() {
   while (running_.load()) {
-    // Call update callback before LVGL rendering (for Navigator UI updates)
+    // Call update callback before LVGL rendering (for AppShell UI updates)
     if (update_callback_) {
       update_callback_();
     }

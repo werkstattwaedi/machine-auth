@@ -19,6 +19,7 @@
 #include "maco_firmware/devices/cap_touch/cap_touch_input_driver.h"
 #include "maco_firmware/devices/pico_res28_lcd/pico_res28_lcd_driver.h"
 #include "maco_firmware/devices/pn532/pn532_nfc_reader.h"
+#include "maco_firmware/modules/app_state/app_state.h"
 #include "pb_digital_io/digital_io.h"
 #include "pb_stream/uart_stream.h"
 #include "pb_log/log_bridge.h"
@@ -146,6 +147,11 @@ maco::nfc::NfcReader& GetNfcReader() {
 
   static maco::nfc::Pn532NfcReader reader(uart, reset_pin);
   return reader;
+}
+
+maco::app_state::AppState& GetAppState() {
+  static maco::app_state::AppState state;
+  return state;
 }
 
 }  // namespace maco::system

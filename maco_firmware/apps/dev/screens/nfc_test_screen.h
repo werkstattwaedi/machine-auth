@@ -3,7 +3,8 @@
 
 #pragma once
 
-#include "maco_firmware/modules/nfc_reader/nfc_reader.h"
+#include "maco_firmware/modules/app_state/ui/snapshot.h"
+#include "maco_firmware/modules/ui/data_binding.h"
 #include "maco_firmware/modules/ui/screen.h"
 #include "pw_string/string_builder.h"
 
@@ -11,24 +12,24 @@ namespace maco::dev {
 
 /// Test screen displaying NFC reader status.
 /// Shows "No card" or the card UID when a tag is present.
+/// Receives state via OnUpdate() from AppShell (no direct NfcReader access).
 class NfcTestScreen : public ui::Screen {
  public:
-  explicit NfcTestScreen(nfc::NfcReader& nfc_reader);
+  NfcTestScreen();
 
   pw::Status OnActivate() override;
   void OnDeactivate() override;
-  void OnUpdate() override;
+  void OnUpdate(const app_state::AppStateSnapshot& snapshot) override;
   ui::ButtonConfig GetButtonConfig() const override;
 
  private:
-  void UpdateNfcStatus();
-  static void FormatUidTo(pw::StringBuilder& out, pw::ConstByteSpan uid);
+  void UpdateStatusText(const app_state::AppStateSnapshot& snapshot);
+  static void FormatUidTo(pw::StringBuilder& out, const app_state::TagUid& uid);
 
-  nfc::NfcReader& nfc_reader_;
   lv_obj_t* status_label_ = nullptr;
 
-  // Status text buffer with dirty flag
-  bool status_dirty_ = true;
+  // Watched state for dirty checking
+  ui::Watched<app_state::AppStateId> state_watched_{app_state::AppStateId::kNoTag};
   pw::StringBuffer<64> status_text_;
 };
 

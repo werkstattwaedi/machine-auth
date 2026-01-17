@@ -1,16 +1,17 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-#include "maco_firmware/modules/ui/navigator.h"
+#include "maco_firmware/modules/ui/app_shell.h"
 
 #include "maco_firmware/modules/ui/widgets/button_bar.h"
 #include "pw_log/log.h"
 
 namespace maco::ui {
 
-Navigator::Navigator(display::Display& display) : display_(display) {}
+AppShell::AppShell(display::Display& display, SnapshotProvider snapshot_provider)
+    : display_(display), snapshot_provider_(snapshot_provider) {}
 
-Navigator::~Navigator() {
+AppShell::~AppShell() {
   // Deactivate and clear all screens
   while (!stack_.empty()) {
     DeactivateScreen(stack_.back().get());
@@ -18,18 +19,18 @@ Navigator::~Navigator() {
   }
 }
 
-pw::Status Navigator::Init() {
+pw::Status AppShell::Init() {
   // Create button bar on lv_layer_top (persistent across screens)
   button_bar_ = std::make_unique<ButtonBar>(lv_layer_top());
 
   // Register update callback with display
   display_.SetUpdateCallback([this]() { Update(); });
 
-  PW_LOG_INFO("Navigator initialized");
+  PW_LOG_INFO("AppShell initialized");
   return pw::OkStatus();
 }
 
-pw::Status Navigator::Push(std::unique_ptr<Screen> screen) {
+pw::Status AppShell::Push(std::unique_ptr<Screen> screen) {
   if (stack_.full()) {
     PW_LOG_ERROR("Navigation stack full");
     return pw::Status::ResourceExhausted();
@@ -49,7 +50,7 @@ pw::Status Navigator::Push(std::unique_ptr<Screen> screen) {
   return pw::OkStatus();
 }
 
-pw::Status Navigator::Pop() {
+pw::Status AppShell::Pop() {
   if (stack_.size() <= 1) {
     PW_LOG_WARN("Cannot pop last screen");
     return pw::Status::FailedPrecondition();
@@ -66,7 +67,7 @@ pw::Status Navigator::Pop() {
   return pw::OkStatus();
 }
 
-pw::Status Navigator::Replace(std::unique_ptr<Screen> screen) {
+pw::Status AppShell::Replace(std::unique_ptr<Screen> screen) {
   if (stack_.empty()) {
     return Push(std::move(screen));
   }
@@ -84,7 +85,7 @@ pw::Status Navigator::Replace(std::unique_ptr<Screen> screen) {
   return pw::OkStatus();
 }
 
-pw::Status Navigator::Reset(std::unique_ptr<Screen> screen) {
+pw::Status AppShell::Reset(std::unique_ptr<Screen> screen) {
   // Deactivate and clear all screens
   while (!stack_.empty()) {
     DeactivateScreen(stack_.back().get());
@@ -100,24 +101,30 @@ pw::Status Navigator::Reset(std::unique_ptr<Screen> screen) {
   return pw::OkStatus();
 }
 
-void Navigator::Update() {
+void AppShell::Update() {
+  // Fetch snapshot into current buffer
+  snapshot_provider_(snapshots_[current_snapshot_]);
+
+  // Update current screen with snapshot
+  if (Screen* screen = current_screen()) {
+    screen->OnUpdate(snapshots_[current_snapshot_]);
+  }
+
+  // Swap buffer for next frame
+  current_snapshot_ ^= 1;
+
   // Update chrome
   UpdateChrome();
-
-  // Update current screen
-  if (Screen* screen = current_screen()) {
-    screen->OnUpdate();
-  }
 }
 
-Screen* Navigator::current_screen() const {
+Screen* AppShell::current_screen() const {
   if (stack_.empty()) {
     return nullptr;
   }
   return stack_.back().get();
 }
 
-void Navigator::ActivateScreen(Screen* screen) {
+void AppShell::ActivateScreen(Screen* screen) {
   if (!screen) {
     return;
   }
@@ -148,7 +155,7 @@ void Navigator::ActivateScreen(Screen* screen) {
   UpdateChrome();
 }
 
-void Navigator::DeactivateScreen(Screen* screen) {
+void AppShell::DeactivateScreen(Screen* screen) {
   if (!screen) {
     return;
   }
@@ -158,7 +165,7 @@ void Navigator::DeactivateScreen(Screen* screen) {
   // Note: LVGL screen object will be deleted when unique_ptr is destroyed
 }
 
-void Navigator::UpdateChrome() {
+void AppShell::UpdateChrome() {
   if (!button_bar_) {
     return;
   }
@@ -173,7 +180,7 @@ void Navigator::UpdateChrome() {
   button_bar_->Update();
 }
 
-void Navigator::HandleEscapeKey() {
+void AppShell::HandleEscapeKey() {
   Screen* screen = current_screen();
   if (!screen) {
     return;

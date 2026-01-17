@@ -1,0 +1,17 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+# UI-facing app state types - read-only snapshot for screens
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//maco_firmware:__subpackages__"])
+
+# Read-only snapshot for UI thread
+cc_library(
+    name = "snapshot",
+    hdrs = ["snapshot.h"],
+    deps = [
+        "//maco_firmware/modules/app_state:state_id",
+    ],
+)

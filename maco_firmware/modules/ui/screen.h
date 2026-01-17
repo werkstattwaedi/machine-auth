@@ -6,6 +6,7 @@
 #include <string_view>
 
 #include "lvgl.h"
+#include "maco_firmware/modules/app_state/ui/snapshot.h"
 #include "maco_firmware/modules/ui/button_spec.h"
 #include "pw_status/status.h"
 
@@ -13,7 +14,7 @@ namespace maco::ui {
 
 /// Base class for all UI screens.
 ///
-/// Screens are owned by Navigator via std::unique_ptr. Dependencies are
+/// Screens are owned by AppShell via std::unique_ptr. Dependencies are
 /// injected via constructor (per ADR-0001).
 ///
 /// Lifecycle:
@@ -39,15 +40,18 @@ class Screen {
   virtual void OnDeactivate() {}
 
   /// Called once per frame while this screen is active.
-  /// Update LVGL widgets based on dirty flags here.
-  virtual void OnUpdate() {}
+  /// Update LVGL widgets based on snapshot and dirty flags here.
+  /// @param snapshot Current app state (thread-safe copy)
+  virtual void OnUpdate(const app_state::AppStateSnapshot& snapshot) {
+    (void)snapshot;  // Default implementation ignores snapshot
+  }
 
   /// Button labels for bottom row (Cancel/OK).
   /// Top row buttons have engraved icons - no on-screen labels needed.
   virtual ButtonConfig GetButtonConfig() const { return {}; }
 
   /// Handle ESC key press. Override to handle differently (e.g., dismiss popup).
-  /// @return true if handled, false to let Navigator pop the screen.
+  /// @return true if handled, false to let AppShell pop the screen.
   virtual bool OnEscapePressed() { return false; }
 
   /// LVGL screen object (created in OnActivate).

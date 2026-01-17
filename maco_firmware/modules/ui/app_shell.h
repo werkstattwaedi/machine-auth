@@ -6,6 +6,7 @@
 #include <memory>
 
 #include "lvgl.h"
+#include "maco_firmware/modules/app_state/app_state.h"
 #include "maco_firmware/modules/display/display.h"
 #include "maco_firmware/modules/ui/screen.h"
 #include "pw_containers/vector.h"
@@ -15,29 +16,35 @@ namespace maco::ui {
 
 class ButtonBar;
 
-/// Navigator manages the screen stack and UI chrome.
+/// Snapshot provider function type - fills snapshot by reference.
+using SnapshotProvider = void (*)(app_state::AppStateSnapshot&);
+
+/// AppShell manages screens, chrome, and state propagation.
 ///
 /// Responsibilities:
 ///   - Screen navigation (push/pop/replace/reset)
 ///   - Screen lifecycle management
 ///   - Button bar chrome (persistent on lv_layer_top)
-///   - Update propagation to current screen
+///   - App state snapshot delivery to screens
 ///
 /// Usage:
-///   Navigator navigator(display);
-///   navigator.Init();
-///   navigator.Reset(std::make_unique<HomeScreen>(navigator, deps...));
-class Navigator {
+///   auto provider = [](auto& s) { system::GetAppState().GetSnapshot(s); };
+///   AppShell shell(display, provider);
+///   shell.Init();
+///   shell.Reset(std::make_unique<HomeScreen>(shell, deps...));
+class AppShell {
  public:
   static constexpr size_t kMaxNavigationDepth = 6;
 
   /// Constructor with dependency injection (per ADR-0001).
-  explicit Navigator(display::Display& display);
-  ~Navigator();
+  /// @param display Display module for UI rendering
+  /// @param snapshot_provider Function to fetch app state snapshot
+  AppShell(display::Display& display, SnapshotProvider snapshot_provider);
+  ~AppShell();
 
   // Non-copyable, non-movable
-  Navigator(const Navigator&) = delete;
-  Navigator& operator=(const Navigator&) = delete;
+  AppShell(const AppShell&) = delete;
+  AppShell& operator=(const AppShell&) = delete;
 
   /// Initialize chrome widgets (button bar on lv_layer_top).
   /// Must be called before any navigation.
@@ -60,7 +67,7 @@ class Navigator {
   pw::Status Reset(std::unique_ptr<Screen> screen);
 
   /// Called once per frame from Display callback.
-  /// Updates chrome and propagates to current screen.
+  /// Fetches snapshot and propagates to current screen.
   void Update();
 
   /// Get the current active screen (top of stack).
@@ -81,6 +88,11 @@ class Navigator {
 
   // Currently active input group
   lv_group_t* active_group_ = nullptr;
+
+  // Snapshot management
+  SnapshotProvider snapshot_provider_;
+  app_state::AppStateSnapshot snapshots_[2];
+  size_t current_snapshot_ = 0;
 };
 
 }  // namespace maco::ui

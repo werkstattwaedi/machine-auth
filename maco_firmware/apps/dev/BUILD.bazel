@@ -20,8 +20,8 @@ cc_library(
     srcs = ["screens/nfc_test_screen.cc"],
     hdrs = ["screens/nfc_test_screen.h"],
     deps = [
-        "//maco_firmware/modules/nfc_reader",
-        "//maco_firmware/modules/nfc_tag",
+        "//maco_firmware/modules/app_state/ui:snapshot",
+        "//maco_firmware/modules/ui:data_binding",
         "//maco_firmware/modules/ui:screen",
         "@lvgl//:lvgl",
         "@pigweed//pw_log",
@@ -31,10 +31,11 @@ cc_library(
 
 DEV_DEPS = [
     ":screens",
+    "//maco_firmware/modules/app_state",
     "//maco_firmware/modules/display",
     "//maco_firmware/modules/nfc_reader",
     "//maco_firmware/modules/status_bar",
-    "//maco_firmware/modules/ui:navigator",
+    "//maco_firmware/modules/ui:app_shell",
     "//maco_firmware/system",
     "//maco_firmware/system:headers",
     "@pigweed//pw_log",
@@ -63,10 +64,11 @@ particle_firmware(
     platform = "//maco_firmware/targets/p2:p2",
     deps = [
         ":screens",
+        "//maco_firmware/modules/app_state",
         "//maco_firmware/modules/display",
         "//maco_firmware/modules/nfc_reader",
         "//maco_firmware/modules/status_bar",
-        "//maco_firmware/modules/ui:navigator",
+        "//maco_firmware/modules/ui:app_shell",
         "//maco_firmware/system",
         "//maco_firmware/system:headers",
         "@pigweed//pw_log",
