@@ -10,18 +10,33 @@
 
 load("@particle_bazel//rules:particle_firmware.bzl", "particle_firmware", "particle_flash_binary")
 load("@pigweed//targets/host_device_simulator:transition.bzl", "host_device_simulator_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
 package(default_visibility = ["//visibility:public"])
 
+# Dev app screens
+cc_library(
+    name = "screens",
+    srcs = ["screens/nfc_test_screen.cc"],
+    hdrs = ["screens/nfc_test_screen.h"],
+    deps = [
+        "//maco_firmware/modules/nfc_reader",
+        "//maco_firmware/modules/nfc_tag",
+        "//maco_firmware/modules/ui:screen",
+        "@lvgl//:lvgl",
+        "@pigweed//pw_log",
+        "@pigweed//pw_string",
+    ],
+)
+
 DEV_DEPS = [
+    ":screens",
     "//maco_firmware/modules/display",
     "//maco_firmware/modules/nfc_reader",
-    "//maco_firmware/modules/nfc_tag",
+    "//maco_firmware/modules/status_bar",
+    "//maco_firmware/modules/ui:navigator",
     "//maco_firmware/system",
     "//maco_firmware/system:headers",
-    "@lvgl//:lvgl",
-    "@pigweed//pw_bytes",
-    "@pigweed//pw_function",
     "@pigweed//pw_log",
     "@pigweed//pw_system:async",
     # Backend implementations required for linking
@@ -47,14 +62,13 @@ particle_firmware(
     srcs = ["main.cc"],
     platform = "//maco_firmware/targets/p2:p2",
     deps = [
+        ":screens",
         "//maco_firmware/modules/display",
         "//maco_firmware/modules/nfc_reader",
-        "//maco_firmware/modules/nfc_tag",
+        "//maco_firmware/modules/status_bar",
+        "//maco_firmware/modules/ui:navigator",
         "//maco_firmware/system",
         "//maco_firmware/system:headers",
-        "@lvgl//:lvgl",
-        "@pigweed//pw_bytes",
-        "@pigweed//pw_function",
         "@pigweed//pw_log",
         "@pigweed//pw_system:async",
     ],

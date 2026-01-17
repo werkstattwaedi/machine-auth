@@ -93,6 +93,10 @@ pw::Status Display::Init(
 
 void Display::RenderThread() {
   while (running_.load()) {
+    // Call update callback before LVGL rendering (for Navigator UI updates)
+    if (update_callback_) {
+      update_callback_();
+    }
     uint32_t time_till_next = lv_timer_handler();
     pw::this_thread::sleep_for(std::chrono::milliseconds(time_till_next));
   }

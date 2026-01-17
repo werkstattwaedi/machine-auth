@@ -9,6 +9,7 @@
 #include "lvgl.h"
 #include "maco_firmware/modules/display/display_driver.h"
 #include "maco_firmware/modules/display/touch_button_driver.h"
+#include "pw_function/function.h"
 #include "pw_status/status.h"
 
 namespace maco::display {
@@ -21,6 +22,9 @@ namespace maco::display {
 //   display.Init(display_driver, touch_driver);
 class Display {
  public:
+  // Callback invoked once per frame before lv_timer_handler()
+  using UpdateCallback = pw::Function<void()>;
+
   Display() = default;
   ~Display() = default;
 
@@ -35,6 +39,12 @@ class Display {
   // - Starts the render thread
   pw::Status Init(DisplayDriver& display_driver,
                   TouchButtonDriver& touch_button_driver);
+
+  // Set callback invoked once per frame before LVGL rendering.
+  // Used by Navigator to update UI state in sync with rendering.
+  void SetUpdateCallback(UpdateCallback callback) {
+    update_callback_ = std::move(callback);
+  }
 
   // Check if display is initialized and running
   bool is_running() const { return running_.load(); }
@@ -51,6 +61,7 @@ class Display {
   lv_display_t* lv_display_ = nullptr;
   lv_indev_t* lv_indev_ = nullptr;
   std::atomic<bool> running_{false};
+  UpdateCallback update_callback_;
 };
 
 }  // namespace maco::display

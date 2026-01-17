@@ -1,0 +1,47 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+# UI framework - screen navigation and chrome management
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//maco_firmware:__subpackages__"])
+
+# Button specification structs
+cc_library(
+    name = "button_spec",
+    hdrs = ["button_spec.h"],
+)
+
+# Dirty-flag data binding template
+cc_library(
+    name = "data_binding",
+    hdrs = ["data_binding.h"],
+)
+
+# Base screen interface
+cc_library(
+    name = "screen",
+    hdrs = ["screen.h"],
+    deps = [
+        ":button_spec",
+        "@lvgl//:lvgl",
+        "@pigweed//pw_status",
+    ],
+)
+
+# Navigator - screen stack and chrome management
+cc_library(
+    name = "navigator",
+    srcs = ["navigator.cc"],
+    hdrs = ["navigator.h"],
+    deps = [
+        ":screen",
+        "//maco_firmware/modules/display",
+        "//maco_firmware/modules/ui/widgets:button_bar",
+        "@lvgl//:lvgl",
+        "@pigweed//pw_containers:vector",
+        "@pigweed//pw_log",
+        "@pigweed//pw_status",
+    ],
+)

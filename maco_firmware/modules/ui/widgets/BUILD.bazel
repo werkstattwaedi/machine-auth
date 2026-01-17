@@ -1,0 +1,19 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+# UI widgets - reusable LVGL components
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//maco_firmware:__subpackages__"])
+
+cc_library(
+    name = "button_bar",
+    srcs = ["button_bar.cc"],
+    hdrs = ["button_bar.h"],
+    deps = [
+        "//maco_firmware/modules/ui:button_spec",
+        "//maco_firmware/modules/ui:data_binding",
+        "@lvgl//:lvgl",
+    ],
+)

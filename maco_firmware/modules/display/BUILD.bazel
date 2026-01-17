@@ -41,6 +41,7 @@ cc_library(
         "//maco_firmware/system:headers",
         "@lvgl//:lvgl",
         "@pigweed//pw_chrono:system_clock",
+        "@pigweed//pw_function",
         "@pigweed//pw_log",
         "@pigweed//pw_status",
         "@pigweed//pw_thread:sleep",
