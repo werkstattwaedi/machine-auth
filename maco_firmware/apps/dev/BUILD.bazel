@@ -9,6 +9,7 @@
 #   bazel run //maco_firmware/apps/dev:flash
 
 load("@particle_bazel//rules:particle_firmware.bzl", "particle_firmware", "particle_flash_binary")
+load("@pigweed//pw_unit_test:pw_cc_test.bzl", "pw_cc_test")
 load("@pigweed//targets/host_device_simulator:transition.bzl", "host_device_simulator_binary")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
@@ -79,4 +80,20 @@ particle_firmware(
 particle_flash_binary(
     name = "flash",
     firmware = ":dev.bin",
+)
+
+# Screenshot tests for dev screens
+pw_cc_test(
+    name = "nfc_test_screen_test",
+    srcs = ["screens/nfc_test_screen_test.cc"],
+    data = glob(
+        ["screens/testdata/*.png"],
+        allow_empty = True,
+    ),
+    deps = [
+        ":screens",
+        "//maco_firmware/modules/display/testing:screenshot_test_harness",
+        "//maco_firmware/modules/fonts",
+        "//maco_firmware/targets/host:lvgl_conf",
+    ],
 )

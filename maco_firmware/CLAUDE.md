@@ -304,6 +304,61 @@ class TestableMyDriver : public MyDriver {
 
 This follows Pigweed's preferred pattern over `FRIEND_TEST` (which couples tests to implementation).
 
+### Screenshot Testing for LVGL UIs
+
+Use `ScreenshotTestHarness` for visual regression testing of LVGL screens without requiring SDL or hardware.
+
+**Framework location**: `//maco_firmware/modules/display/testing`
+
+**Basic usage**:
+
+```cpp
+#include "maco_firmware/modules/display/testing/screenshot_test_harness.h"
+
+class MyScreenTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    ASSERT_EQ(harness_.Init(), pw::OkStatus());
+    screen_ = std::make_unique<MyScreen>();
+    ASSERT_EQ(harness_.ActivateScreen(*screen_), pw::OkStatus());
+  }
+
+  void TearDown() override {
+    if (screen_) screen_->OnDeactivate();
+  }
+
+  display::testing::ScreenshotTestHarness harness_;
+  std::unique_ptr<MyScreen> screen_;
+};
+
+TEST_F(MyScreenTest, InitialState) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.state = app_state::AppStateId::kNoTag;
+
+  screen_->OnUpdate(snapshot);
+  harness_.RenderFrame();
+
+  EXPECT_TRUE(harness_.CompareToGolden(
+      "maco_firmware/path/to/testdata/expected.png",
+      "/tmp/diff.png"));  // Diff output on failure
+}
+```
+
+**Running tests**:
+
+```bash
+bazel test //path/to:screen_test                    # Compare against goldens
+UPDATE_GOLDENS=1 bazel run //path/to:screen_test    # Update golden images
+```
+
+**Important**: Use `bazel run` (not `test`) when updating goldens - `bazel test` runs in a read-only sandbox.
+
+**Golden images**: Store PNG files in `testdata/` directory next to the test file.
+
+**On failure**: Diff images are saved to `/tmp/` showing red pixels where differences occur.
+
+**Example**: See `apps/dev/screens/nfc_test_screen_test.cc` and `apps/dev/screens/testdata/*.png`.
+
 ## Codestyle
 
 **Copyright Header:**
