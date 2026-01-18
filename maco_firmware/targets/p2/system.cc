@@ -75,13 +75,11 @@ void Init(pw::Function<void()> app_init) {
     HAL_Delay_Milliseconds(100);  // Let console stabilize
   }
 
-  PW_LOG_INFO("=== MACO Firmware ===");
-
   app_init();
 
-  PW_LOG_INFO("Initializing communication channel...");
-
-  static std::byte channel_buffer[4096];
+  // Larger buffer for tokenized logging - must handle log backpressure
+  // when console isn't connected or draining slowly.
+  static std::byte channel_buffer[16384];
   static pw::multibuf::SimpleAllocator multibuf_alloc(
       channel_buffer, pw::System().allocator()
   );
@@ -103,11 +101,11 @@ void Init(pw::Function<void()> app_init) {
   // Register RPC services
   static maco::MacoService maco_service;
   pw::System().rpc_server().RegisterService(maco_service);
-  PW_LOG_INFO("MacoService registered");
+
+  PW_LOG_INFO("=== MACO Firmware Starting ===");
 
   // On Particle, we use a custom StartSchedulerAndClobberTheStack from
   // particle-bazel that just loops forever (scheduler is already running).
-  PW_LOG_INFO("Starting system...");
   pw::system::StartAndClobberTheStack(channel->channel());
   PW_UNREACHABLE;
 }

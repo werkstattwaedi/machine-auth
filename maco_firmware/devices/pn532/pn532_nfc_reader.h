@@ -24,7 +24,6 @@
 #include "pw_async2/value_future.h"
 #include "pw_chrono/system_clock.h"
 #include "pw_digital_io/digital_io.h"
-#include "pw_log/log.h"
 #include "pw_result/result.h"
 #include "pw_status/status.h"
 #include "pw_stream/stream.h"
