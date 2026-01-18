@@ -37,6 +37,7 @@ from pw_system.device_connection import (
 )
 import pw_system.console
 from maco_pb import maco_service_pb2
+from maco_pb import nfc_mock_service_pb2
 
 # Pigweed default protos
 from pw_file import file_pb2
@@ -324,13 +325,13 @@ def main() -> int:
             token_databases=args.token_databases or [],
             socket_addr=args.socket_addr,
             serial_debug=args.serial_debug,
-            compiled_protos=[maco_service_pb2],
+            compiled_protos=[maco_service_pb2, nfc_mock_service_pb2],
             rpc_logging=args.rpc_logging,
             hdlc_encoding=args.hdlc_encoding,
             channel_id=args.channel_id,
         )
         return pw_system.console.main(
-            compiled_protos=[maco_service_pb2],
+            compiled_protos=[maco_service_pb2, nfc_mock_service_pb2],
             device_connection=device_connection,
         )
     except KeyboardInterrupt:

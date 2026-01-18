@@ -13,10 +13,11 @@ import sys
 
 from pw_system import device_sim
 from maco_pb import maco_service_pb2
+from maco_pb import nfc_mock_service_pb2
 
 
 def main() -> int:
-    return device_sim.main(compiled_protos=[maco_service_pb2])
+    return device_sim.main(compiled_protos=[maco_service_pb2, nfc_mock_service_pb2])
 
 
 if __name__ == "__main__":

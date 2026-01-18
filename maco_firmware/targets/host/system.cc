@@ -15,6 +15,7 @@
 #include "maco_firmware/modules/app_state/app_state.h"
 #include "maco_firmware/services/maco_service.h"
 #include "maco_firmware/modules/nfc_reader/mock/mock_nfc_reader.h"
+#include "maco_firmware/modules/nfc_reader/mock/nfc_mock_service.h"
 #include "maco_firmware/targets/host/keyboard_input_driver.h"
 #include "maco_firmware/targets/host/sdl_display_driver.h"
 #include "pw_assert/check.h"
@@ -59,6 +60,12 @@ void PwSystemThread() {
   // Register RPC services
   static maco::MacoService maco_service;
   pw::System().rpc_server().RegisterService(maco_service);
+
+  // Register NFC Mock Service (host-only)
+  auto& mock_reader =
+      static_cast<maco::nfc::MockNfcReader&>(maco::system::GetNfcReader());
+  static maco::nfc::NfcMockService nfc_mock_service(mock_reader);
+  pw::System().rpc_server().RegisterService(nfc_mock_service);
 
   pw::system::StartAndClobberTheStack(channel->channel());
 }

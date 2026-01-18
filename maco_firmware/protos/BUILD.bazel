@@ -43,3 +43,35 @@ py_proto_library(
     visibility = ["//visibility:public"],
     deps = [":maco_service_proto"],
 )
+
+# NFC Mock Service - for simulating NFC events in host simulator
+pw_proto_filegroup(
+    name = "nfc_mock_service_proto_and_options",
+    srcs = ["nfc_mock_service.proto"],
+    options_files = ["nfc_mock_service.options"],
+)
+
+proto_library(
+    name = "nfc_mock_service_proto",
+    srcs = [":nfc_mock_service_proto_and_options"],
+    import_prefix = "maco_pb",
+    strip_import_prefix = "/maco_firmware/protos",
+)
+
+pwpb_proto_library(
+    name = "nfc_mock_service_pwpb",
+    deps = [":nfc_mock_service_proto"],
+)
+
+pwpb_rpc_proto_library(
+    name = "nfc_mock_service_pwpb_rpc",
+    pwpb_proto_library_deps = [":nfc_mock_service_pwpb"],
+    deps = [":nfc_mock_service_proto"],
+)
+
+# Python proto bindings for NFC Mock Service
+py_proto_library(
+    name = "nfc_mock_service_py_pb2",
+    visibility = ["//visibility:public"],
+    deps = [":nfc_mock_service_proto"],
+)

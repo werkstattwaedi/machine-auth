@@ -9,6 +9,7 @@ py_binary(
     name = "console",
     srcs = ["console.py"],
     deps = [
+        "//maco_firmware/protos:nfc_mock_service_py_pb2",
         "//maco_firmware/protos:py_pb2",
         "@pigweed//pw_system/py:pw_system_lib",
     ],
@@ -18,6 +19,7 @@ py_binary(
     name = "device_sim",
     srcs = ["device_sim.py"],
     deps = [
+        "//maco_firmware/protos:nfc_mock_service_py_pb2",
         "//maco_firmware/protos:py_pb2",
         "@pigweed//pw_system/py:pw_system_lib",
     ],

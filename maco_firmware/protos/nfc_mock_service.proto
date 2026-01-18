@@ -1,0 +1,33 @@
+// Copyright Offene Werkstatt Wädenswil
+// SPDX-License-Identifier: MIT
+
+syntax = "proto3";
+
+package maco;
+
+// RPC service for simulating NFC tag events in the host simulator.
+// Allows pw_console to inject tag arrival/departure events for testing.
+service NfcMockService {
+  // Simulate a tag arriving in the NFC field.
+  rpc SimulateTagArrival(SimulateTagArrivalRequest) returns (SimulateTagArrivalResponse);
+
+  // Simulate a tag departing from the NFC field.
+  rpc SimulateTagDeparture(SimulateTagDepartureRequest) returns (SimulateTagDepartureResponse);
+}
+
+message SimulateTagArrivalRequest {
+  // Tag UID (4, 7, or 10 bytes)
+  bytes uid = 1;
+
+  // SAK byte (lower 8 bits used)
+  uint32 sak = 2;
+}
+
+message SimulateTagArrivalResponse {
+  // Echo back the UID that was set
+  bytes uid = 1;
+}
+
+message SimulateTagDepartureRequest {}
+
+message SimulateTagDepartureResponse {}
