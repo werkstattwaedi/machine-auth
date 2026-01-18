@@ -8,6 +8,9 @@
 #include "maco_firmware/devices/pn532/pn532_command.h"
 #include "maco_firmware/devices/pn532/pn532_constants.h"
 #include "pw_assert/check.h"
+
+#define PW_LOG_MODULE_NAME "pn532"
+
 #include "pw_log/log.h"
 #include "pw_thread/sleep.h"
 

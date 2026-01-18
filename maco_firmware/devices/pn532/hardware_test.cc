@@ -14,6 +14,9 @@
 #include "pb_digital_io/digital_io.h"
 #include "pb_stream/uart_stream.h"
 #include "pw_async2/dispatcher_for_test.h"
+
+#define PW_LOG_MODULE_NAME "pn532"
+
 #include "pw_log/log.h"
 #include "pw_thread/sleep.h"
 #include "pw_unit_test/framework.h"

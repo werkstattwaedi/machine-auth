@@ -6,6 +6,9 @@
 #include <cstring>
 
 #include "maco_firmware/devices/pn532/pn532_constants.h"
+
+#define PW_LOG_MODULE_NAME "pn532"
+
 #include "pw_log/log.h"
 
 namespace maco::nfc {
@@ -89,10 +92,10 @@ pw::async2::Poll<pw::Result<pw::ConstByteSpan>> Pn532CallFuture::Poll(
 
       if (result.ok() && !result.value().empty()) {
         bytes_received_ += result.value().size();
-        PW_LOG_INFO("ACK: received %u bytes, total %u/%u",
-                    static_cast<unsigned>(result.value().size()),
-                    static_cast<unsigned>(bytes_received_),
-                    static_cast<unsigned>(ack_buffer_.size()));
+        PW_LOG_DEBUG("ACK: received %u bytes, total %u/%u",
+                     static_cast<unsigned>(result.value().size()),
+                     static_cast<unsigned>(bytes_received_),
+                     static_cast<unsigned>(ack_buffer_.size()));
       }
 
       if (bytes_received_ < ack_buffer_.size()) {

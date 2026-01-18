@@ -6,6 +6,9 @@
 #include <cstring>
 
 #include "maco_firmware/devices/pn532/pn532_nfc_reader.h"
+
+#define PW_LOG_MODULE_NAME "pn532"
+
 #include "pw_log/log.h"
 
 namespace maco::nfc {
