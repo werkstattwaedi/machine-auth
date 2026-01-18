@@ -4,6 +4,7 @@ Complete guide to configuring all components of the machine authentication syste
 
 ## Table of Contents
 
+- [Linux Serial Device Setup](#linux-serial-device-setup)
 - [Firebase Project Setup](#firebase-project-setup)
 - [Firebase Functions Configuration](#firebase-functions-configuration)
 - [Admin UI Configuration](#admin-ui-configuration)
@@ -11,6 +12,54 @@ Complete guide to configuring all components of the machine authentication syste
 - [Particle Cloud Setup](#particle-cloud-setup)
 - [Firestore Security Rules](#firestore-security-rules)
 - [Environment Checklist](#environment-checklist)
+
+---
+
+## Linux Serial Device Setup
+
+For reliable console connections on Linux, install a udev rule that creates stable device symlinks.
+
+**Problem:** Particle devices appear as `/dev/ttyACM0`, `/dev/ttyACM1`, etc., and the number changes based on plug-in order.
+
+**Solution:** A udev rule creates `/dev/particle_XXXX` where XXXX is the last 4 hex digits of the device serial number.
+
+### Installation
+
+Create `/etc/udev/rules.d/99-particle.rules`:
+
+```
+# Particle devices - create symlink with last 4 digits of serial
+# e.g., serial 0a10aced202194944a042f04 -> /dev/particle_2f04
+SUBSYSTEM=="tty", ATTRS{idVendor}=="2b04", PROGRAM="/bin/sh -c 'echo $attr{serial} | tail -c 5'", SYMLINK+="particle_%c", MODE="0666"
+```
+
+Then reload udev rules:
+
+```bash
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+```
+
+### Finding Your Device Serial
+
+With device plugged in:
+
+```bash
+udevadm info -a /dev/ttyACM0 | grep serial
+# Look for: ATTRS{serial}=="0a10aced202194944a042f04"
+# Last 4 digits: 2f04 -> /dev/particle_2f04
+```
+
+### Verification
+
+After setting up the rule and plugging in your device:
+
+```bash
+ls -la /dev/particle_*
+# Should show: /dev/particle_2f04 -> ttyACM0
+```
+
+The `./pw console` command automatically detects `/dev/particle_*` devices.
 
 ---
 

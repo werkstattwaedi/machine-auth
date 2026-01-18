@@ -44,6 +44,24 @@ bazel run //maco_firmware/apps/dev:simulator    # Build + run simulator
 
 See [ADR-0009](../docs/adr/0009-local-build-flash-tooling.md) for tooling architecture.
 
+### Console and Debugging
+
+```bash
+./pw console-sim  # Connect to simulator (after running it)
+./pw console      # Connect to P2 device via serial
+```
+
+The console provides:
+- Tokenized log viewing (auto-detokenizes using ELF token database)
+- RPC access via Python REPL (`device.rpcs.maco.MacoService.Echo(data=b'hello')`)
+- Auto-reconnect on device disconnect/reboot
+
+**Prerequisites:**
+- Build target first to generate token database
+- For P2: Install udev rule for stable `/dev/particle_*` names (see [config.md](../docs/config.md#linux-serial-device-setup))
+
+See [ADR-0011](../docs/adr/0011-pw-console-logging-rpc-integration.md) for architecture.
+
 ## Architecture
 
 ### Directory Structure

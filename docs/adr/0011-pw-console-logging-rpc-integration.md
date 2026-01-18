@@ -1,6 +1,6 @@
 # ADR-0011: pw_console with Tokenized Logging and RPC
 
-**Status:** Proposed
+**Status:** Accepted
 
 **Date:** 2026-01-09
 

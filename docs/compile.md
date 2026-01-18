@@ -20,6 +20,40 @@ The new Pigweed-based firmware in `maco_firmware/` uses Bazel.
 The default P2 target is the ELF binary, which generates proper IDE compile commands.
 The `.bin` target is only needed for flashing (and `./pw flash` handles that automatically).
 
+### Console and Debugging
+
+The `./pw console` commands provide interactive debugging with tokenized log viewing and RPC access.
+
+| Command | Target | Description |
+|---------|--------|-------------|
+| `./pw console-sim` | Simulator | Connects via socket to localhost:33000 |
+| `./pw console` | P2 Hardware | Connects via serial to /dev/particle_* |
+
+**Prerequisites:**
+- Build the target first (`./pw build host` or `./pw build p2`) to generate the token database
+- For P2: Install udev rule for stable device names (see [config.md](config.md#linux-serial-device-setup))
+
+**Usage:**
+```bash
+# Start simulator in one terminal:
+bazel run //maco_firmware/apps/dev:simulator
+
+# Connect console in another terminal:
+./pw console-sim
+
+# For P2 hardware:
+./pw console
+```
+
+If multiple Particle devices are connected, you will be prompted to select one.
+
+The console provides:
+- **Tokenized log viewing** - Logs are automatically detokenized using the ELF token database
+- **RPC access** - Python REPL with `device.rpcs.maco.MacoService.Echo(data=b'hello')`
+- **Auto-reconnect** - Automatically reconnects when device disconnects/reboots
+
+See [ADR-0011](adr/0011-pw-console-logging-rpc-integration.md) for architecture details.
+
 ### Important: `bazel` vs `./pw`
 
 - **Use `bazel`** for regular development - auto-updates IDE compile_commands
