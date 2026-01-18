@@ -30,6 +30,8 @@ platform(
         "@pigweed//pw_assert:check_backend": "@pigweed//pw_assert_basic",
         "@pigweed//pw_assert:check_backend_impl": "@pigweed//pw_assert_basic:impl",
         "@pigweed//pw_assert_basic:handler_backend": "@particle_bazel//pw_assert_particle:handler",
+        # Log backend: pw_log_basic for tests (no pw_system dependency)
+        # Firmware apps use p2_system platform which adds tokenized logging
         "@pigweed//pw_log:backend": "@pigweed//pw_log_basic",
         "@pigweed//pw_log:backend_impl": "@pigweed//pw_log_basic:impl",
         "@pigweed//pw_sys_io:backend": "@particle_bazel//pw_sys_io_particle:sys_io",
@@ -58,6 +60,21 @@ platform(
     }),
 )
 
+# P2 platform with pw_system integration (tokenized logging via RPC)
+# Use this for firmware applications that include pw_system.
+platform(
+    name = "p2_system",
+    flags = flags_from_dict({
+        # Tokenized logging via pw_system RPC (ADR-0011)
+        "@pigweed//pw_log:backend": "@pigweed//pw_log_tokenized",
+        "@pigweed//pw_log:backend_impl": "@pigweed//pw_log_tokenized:impl",
+        "@pigweed//pw_log_tokenized:handler_backend": "@pigweed//pw_system:log_backend",
+        # Override extra_platform_libs to include log_backend
+        "@pigweed//pw_system:extra_platform_libs": "//maco_firmware/targets/p2:extra_platform_libs_system",
+    }),
+    parents = [":p2"],
+)
+
 cc_library(
     name = "target_hooks",
     srcs = ["target_hooks.cc"],
@@ -77,6 +94,16 @@ cc_library(
     alwayslink = 1,
 )
 
+# Extra libs for p2_system platform (tokenized logging handler)
+cc_library(
+    name = "extra_platform_libs_system",
+    deps = [
+        ":extra_platform_libs",
+        "@pigweed//pw_system:log_backend",
+    ],
+    alwayslink = 1,
+)
+
 cc_library(
     name = "system",
     srcs = [
@@ -88,6 +115,7 @@ cc_library(
         "//maco_firmware/devices/pn532:pn532_nfc_reader",
         "//maco_firmware/modules/app_state",
         "//maco_firmware/modules/fonts",
+        "//maco_firmware/services:maco_service",
         "//maco_firmware/system:headers",
         "@particle_bazel//:device_os_headers",
         "@particle_bazel//pb_log:log_bridge",

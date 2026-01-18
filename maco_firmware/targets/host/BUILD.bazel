@@ -61,6 +61,7 @@ cc_library(
         "//maco_firmware/modules/app_state",
         "//maco_firmware/modules/fonts",
         "//maco_firmware/modules/nfc_reader/mock:mock_nfc_reader",
+        "//maco_firmware/services:maco_service",
         "@lvgl//:lvgl",
         "@pigweed//pw_assert:check",
         "@pigweed//pw_channel",

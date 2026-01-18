@@ -40,6 +40,71 @@ case "$1" in
       --symlink_prefix=${_PW_WORKFLOWS_OUT_DIR}/bazel- \
       $TARGETS
     ;;
+  console-sim)
+    # Connect to simulator on localhost:33000
+    echo "🖥️  Connecting to simulator..."
+    TOKEN_DB="${_PW_SCRIPT_DIR}/bazel-bin/maco_firmware/apps/dev/simulator_binary"
+    if [[ -f "$TOKEN_DB" ]]; then
+      exec bazelisk run //tools:console -- --socket-addr default --token-databases "$TOKEN_DB"
+    else
+      echo "⚠️  Token database not found. Run 'bazel build //maco_firmware/apps/dev:simulator' first."
+      exec bazelisk run //tools:console -- --socket-addr default
+    fi
+    ;;
+  console)
+    # Connect to Particle device via serial
+    # Probe for /dev/particle_* devices
+    find_particle_device() {
+      local devices=(/dev/particle_*)
+      local timeout=10
+      local elapsed=0
+
+      # If no devices found, wait up to 10 seconds
+      while [[ ! -e "${devices[0]}" ]] && (( elapsed < timeout )); do
+        if (( elapsed == 0 )); then
+          echo "⏳ Waiting for Particle device..."
+        fi
+        sleep 1
+        ((elapsed++))
+        devices=(/dev/particle_*)
+      done
+
+      # Check results
+      if [[ ! -e "${devices[0]}" ]]; then
+        echo "❌ No Particle device found at /dev/particle_*"
+        echo "   Make sure the device is connected and the udev rule is installed."
+        exit 1
+      elif (( ${#devices[@]} == 1 )); then
+        echo "${devices[0]}"
+      else
+        echo "🔌 Multiple Particle devices found:" >&2
+        local i=1
+        for dev in "${devices[@]}"; do
+          echo "   $i) $dev" >&2
+          ((i++))
+        done
+        echo -n "Select device [1-${#devices[@]}]: " >&2
+        read -r selection
+        if [[ "$selection" =~ ^[0-9]+$ ]] && (( selection >= 1 && selection <= ${#devices[@]} )); then
+          echo "${devices[$((selection-1))]}"
+        else
+          echo "❌ Invalid selection" >&2
+          exit 1
+        fi
+      fi
+    }
+
+    DEVICE=$(find_particle_device)
+    echo "🔌 Connecting to $DEVICE..."
+    # Token DB is in the p2_system platform output (platform transition puts it here)
+    TOKEN_DB="${_PW_SCRIPT_DIR}/bazel-out/p2_system-fastbuild/bin/maco_firmware/apps/dev/dev"
+    if [[ -f "$TOKEN_DB" ]]; then
+      exec bazelisk run //tools:console -- --device "$DEVICE" --token-databases "$TOKEN_DB"
+    else
+      echo "⚠️  Token database not found. Run './pw build p2' first."
+      exec bazelisk run //tools:console -- --device "$DEVICE"
+    fi
+    ;;
 esac
 
 # For all other commands, use the workflows launcher

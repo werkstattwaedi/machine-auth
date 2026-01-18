@@ -13,6 +13,7 @@
 
 #include "lvgl.h"
 #include "maco_firmware/modules/app_state/app_state.h"
+#include "maco_firmware/services/maco_service.h"
 #include "maco_firmware/modules/nfc_reader/mock/mock_nfc_reader.h"
 #include "maco_firmware/targets/host/keyboard_input_driver.h"
 #include "maco_firmware/targets/host/sdl_display_driver.h"
@@ -54,6 +55,10 @@ void PwSystemThread() {
       pw::thread::stl::Options(),
       pw::system::GetWriter(),
       pw::thread::stl::Options());
+
+  // Register RPC services
+  static maco::MacoService maco_service;
+  pw::System().rpc_server().RegisterService(maco_service);
 
   pw::system::StartAndClobberTheStack(channel->channel());
 }

@@ -16,6 +16,7 @@
 #include "pw_thread_particle/options.h"
 
 // Particle and project headers after Pigweed
+#include "maco_firmware/services/maco_service.h"
 #include "maco_firmware/devices/cap_touch/cap_touch_input_driver.h"
 #include "maco_firmware/devices/pico_res28_lcd/pico_res28_lcd_driver.h"
 #include "maco_firmware/devices/pn532/pn532_nfc_reader.h"
@@ -65,6 +66,14 @@ void Init(pw::Function<void()> app_init) {
     HAL_Delay_Milliseconds(100);
   }
 
+  // Flush any pending data from console that connected before we were ready.
+  // This prevents crashes when the device reboots with console already attached.
+  if (HAL_USB_USART_Is_Connected(HAL_USB_USART_SERIAL)) {
+    while (HAL_USB_USART_Available_Data(HAL_USB_USART_SERIAL) > 0) {
+      HAL_USB_USART_Receive_Data(HAL_USB_USART_SERIAL, false);
+    }
+    HAL_Delay_Milliseconds(100);  // Let console stabilize
+  }
 
   PW_LOG_INFO("=== MACO Firmware ===");
 
@@ -90,6 +99,11 @@ void Init(pw::Function<void()> app_init) {
           .set_stack_size(4096),
       multibuf_alloc
   );
+
+  // Register RPC services
+  static maco::MacoService maco_service;
+  pw::System().rpc_server().RegisterService(maco_service);
+  PW_LOG_INFO("MacoService registered");
 
   // On Particle, we use a custom StartSchedulerAndClobberTheStack from
   // particle-bazel that just loops forever (scheduler is already running).

@@ -1,0 +1,19 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+load("@rules_python//python:defs.bzl", "py_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+py_binary(
+    name = "console",
+    srcs = ["console.py"],
+    deps = [
+        "//maco_firmware/protos:py_pb2",
+        "@pigweed//pw_system/py:pw_system_lib",
+    ],
+)
+
+exports_files([
+    "gen_token_db.sh",
+])

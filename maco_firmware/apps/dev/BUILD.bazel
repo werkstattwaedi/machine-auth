@@ -62,7 +62,7 @@ host_device_simulator_binary(
 particle_firmware(
     name = "dev",
     srcs = ["main.cc"],
-    platform = "//maco_firmware/targets/p2:p2",
+    platform = "//maco_firmware/targets/p2:p2_system",
     deps = [
         ":screens",
         "//maco_firmware/modules/app_state",
@@ -74,6 +74,10 @@ particle_firmware(
         "//maco_firmware/system:headers",
         "@pigweed//pw_log",
         "@pigweed//pw_system:async",
+        # Tokenized log handler (provides pw_log_tokenized_HandleLog)
+        "@pigweed//pw_system:log_backend",
+        # Includes tokenizer linker script for ELF token database
+        "@pigweed//pw_system:extra_platform_libs",
     ],
 )
 

@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <mutex>
+
 #include "maco_firmware/modules/display/display_driver.h"
 
 // Forward declarations for SDL types
@@ -56,6 +58,9 @@ class SdlDisplayDriver : public DisplayDriver {
   static constexpr size_t kBufferLines = 40;
   void* draw_buf1_ = nullptr;
   void* draw_buf2_ = nullptr;
+
+  // Mutex to protect SDL texture operations between render and main threads
+  std::mutex texture_mutex_;
 };
 
 }  // namespace maco::display

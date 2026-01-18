@@ -79,8 +79,8 @@ compile_commands.json
 .vscode/settings.json
 .clangd
 
-# Claude plugins
-.skills/
+# Claude Code - page images from PDF conversion (large, can be regenerated)
+.claude/agents/*/pages/
 
 # proprietary docs
 docs/proprietary/

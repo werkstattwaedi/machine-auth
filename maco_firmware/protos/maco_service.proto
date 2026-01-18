@@ -1,0 +1,23 @@
+// Copyright Offene Werkstatt Wädenswil
+// SPDX-License-Identifier: MIT
+
+syntax = "proto3";
+
+package maco;
+
+service MacoService {
+  rpc Echo(EchoMessage) returns (EchoMessage);
+  rpc GetDeviceInfo(Empty) returns (DeviceInfoResponse);
+}
+
+message Empty {}
+
+message EchoMessage {
+  bytes data = 1;
+}
+
+message DeviceInfoResponse {
+  string firmware_version = 1;
+  uint32 uptime_ms = 2;
+  string build_target = 3;
+}

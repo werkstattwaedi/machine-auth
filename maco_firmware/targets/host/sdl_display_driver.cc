@@ -147,6 +147,9 @@ void SdlDisplayDriver::Flush(const lv_area_t* area, uint8_t* px_map) {
       .h = h,
   };
 
+  // Lock mutex to synchronize with Present() on main thread
+  std::lock_guard<std::mutex> lock(texture_mutex_);
+
   // px_map is RGB565, pitch is width * 2 bytes per pixel
   SDL_UpdateTexture(texture_, &rect, px_map, w * 2);
 }
@@ -155,6 +158,10 @@ void SdlDisplayDriver::Present() {
   if (renderer_ == nullptr || texture_ == nullptr) {
     return;
   }
+
+  // Lock mutex to synchronize with Flush() on render thread
+  std::lock_guard<std::mutex> lock(texture_mutex_);
+
   SDL_RenderClear(renderer_);
   SDL_RenderCopy(renderer_, texture_, nullptr, nullptr);
   SDL_RenderPresent(renderer_);

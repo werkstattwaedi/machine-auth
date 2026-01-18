@@ -1,0 +1,18 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//maco_firmware:__subpackages__"])
+
+cc_library(
+    name = "maco_service",
+    srcs = ["maco_service.cc"],
+    hdrs = ["maco_service.h"],
+    deps = [
+        "//maco_firmware/protos:maco_service_pwpb_rpc",
+        "@pigweed//pw_chrono:system_clock",
+        "@pigweed//pw_log",
+        "@pigweed//pw_status",
+    ],
+)
