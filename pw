@@ -41,18 +41,14 @@ case "$1" in
       $TARGETS
     ;;
   console-sim)
-    # Connect to simulator on localhost:33000
-    echo "🖥️  Connecting to simulator..."
-    TOKEN_DB="${_PW_SCRIPT_DIR}/bazel-bin/maco_firmware/apps/dev/simulator_binary"
-    if [[ -f "$TOKEN_DB" ]]; then
-      exec bazelisk run //tools:console -- --socket-addr default --token-databases "$TOKEN_DB"
-    else
-      echo "⚠️  Token database not found. Run 'bazel build //maco_firmware/apps/dev:simulator' first."
-      exec bazelisk run //tools:console -- --socket-addr default
-    fi
+    # Launch simulator and connect console
+    # Token database is a Bazel data dependency - always in sync
+    echo "🖥️  Launching simulator with console..."
+    exec bazelisk run //maco_firmware/apps/dev:console_sim
     ;;
   console)
     # Connect to Particle device via serial
+    # Token database is a Bazel data dependency - always in sync
     # Probe for /dev/particle_* devices
     find_particle_device() {
       local devices=(/dev/particle_*)
@@ -96,14 +92,7 @@ case "$1" in
 
     DEVICE=$(find_particle_device)
     echo "🔌 Connecting to $DEVICE..."
-    # Token DB is in the p2_system platform output (platform transition puts it here)
-    TOKEN_DB="${_PW_SCRIPT_DIR}/bazel-out/p2_system-fastbuild/bin/maco_firmware/apps/dev/dev"
-    if [[ -f "$TOKEN_DB" ]]; then
-      exec bazelisk run //tools:console -- --device "$DEVICE" --token-databases "$TOKEN_DB"
-    else
-      echo "⚠️  Token database not found. Run './pw build p2' first."
-      exec bazelisk run //tools:console -- --device "$DEVICE"
-    fi
+    exec bazelisk run //maco_firmware/apps/dev:console -- --device "$DEVICE"
     ;;
 esac
 

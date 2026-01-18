@@ -9,6 +9,7 @@
 #   bazel run //maco_firmware/apps/dev:flash
 
 load("@particle_bazel//rules:particle_firmware.bzl", "particle_firmware", "particle_flash_binary")
+load("@pigweed//pw_system/py:console.bzl", "device_console", "device_simulator_console")
 load("@pigweed//pw_unit_test:pw_cc_test.bzl", "pw_cc_test")
 load("@pigweed//targets/host_device_simulator:transition.bzl", "host_device_simulator_binary")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
@@ -84,6 +85,20 @@ particle_firmware(
 particle_flash_binary(
     name = "flash",
     firmware = ":dev.bin",
+)
+
+# Console for P2 device - depends on :dev ELF for tokens
+device_console(
+    name = "console",
+    script = "//tools:console",
+    binary = ":dev",
+)
+
+# Console for simulator - launches simulator and connects
+device_simulator_console(
+    name = "console_sim",
+    script = "//tools:device_sim",
+    host_binary = ":simulator",
 )
 
 # Screenshot tests for dev screens
