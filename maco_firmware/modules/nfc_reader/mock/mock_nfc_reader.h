@@ -120,8 +120,8 @@ class MockNfcReader : public NfcReader {
   std::vector<std::byte> last_command_;
   size_t transceive_count_ = 0;
 
-  // Event subscription - stores pending event to deliver
-  std::optional<NfcEvent> pending_event_;
+  // Event subscription - ValueProvider for async event delivery
+  pw::async2::ValueProvider<NfcEvent> event_provider_;
 };
 
 }  // namespace maco::nfc

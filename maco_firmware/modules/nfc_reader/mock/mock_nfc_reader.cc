@@ -39,35 +39,24 @@ TransceiveFuture MockNfcReader::RequestTransceive(
 }
 
 EventFuture MockNfcReader::SubscribeOnce() {
-  // If there's a pending event, return it immediately
-  if (pending_event_.has_value()) {
-    NfcEvent event = std::move(*pending_event_);
-    pending_event_.reset();
-    return EventFuture::Resolved(std::move(event));
-  }
-
-  // Otherwise, return a future that will be resolved later
-  // For simplicity in the mock, we just return a pending future
-  // In practice, the mock should be used synchronously (set up event, then
-  // subscribe)
-  //
-  // TODO: Implement proper async event delivery using ValueProvider
-  // For now, this will never resolve if no pending event
-  return EventFuture::Resolved(
-      NfcEvent{NfcEventType::kTagDeparted, nullptr});  // Default event
+  // Return a future from the provider - will be resolved when
+  // SimulateTagArrival() or SimulateTagDeparture() is called
+  return event_provider_.Get();
 }
 
 void MockNfcReader::SimulateTagArrival(std::shared_ptr<NfcTag> tag) {
   current_tag_ = std::move(tag);
-  pending_event_ = NfcEvent{NfcEventType::kTagArrived, current_tag_};
+  NfcEvent event{NfcEventType::kTagArrived, current_tag_};
+  event_provider_.Resolve(std::move(event));
 }
 
 void MockNfcReader::SimulateTagDeparture() {
   if (current_tag_) {
     current_tag_->Invalidate();
-    pending_event_ = NfcEvent{NfcEventType::kTagDeparted, nullptr};
-    current_tag_.reset();
   }
+  NfcEvent event{NfcEventType::kTagDeparted, nullptr};
+  event_provider_.Resolve(std::move(event));
+  current_tag_.reset();
 }
 
 std::shared_ptr<MockTag> MockNfcReader::SimulateTagArrival(

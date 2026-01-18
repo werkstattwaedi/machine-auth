@@ -8,6 +8,7 @@
 #include "maco_firmware/apps/dev/screens/nfc_test_screen.h"
 #include "maco_firmware/modules/app_state/app_state.h"
 #include "maco_firmware/modules/display/display.h"
+#include "maco_firmware/modules/app_state/nfc_event_handler.h"
 #include "maco_firmware/modules/nfc_reader/nfc_reader.h"
 #include "maco_firmware/modules/status_bar/status_bar.h"
 #include "maco_firmware/modules/ui/app_shell.h"
@@ -81,6 +82,11 @@ void AppInit() {
 
   // Start NFC reader task on the system dispatcher
   nfc_reader.Start(pw::System().dispatcher());
+
+  // Start NFC event handler to bridge events to app state
+  static maco::app_state::NfcEventHandler nfc_event_handler(
+      nfc_reader, maco::system::GetAppState());
+  nfc_event_handler.Start(pw::System().dispatcher());
 
   PW_LOG_INFO("AppInit complete - place a card on the reader");
 }

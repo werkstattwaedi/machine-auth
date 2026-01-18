@@ -28,6 +28,22 @@ cc_library(
     ],
 )
 
+# NFC event handler - bridges NFC events to AppState
+cc_library(
+    name = "nfc_event_handler",
+    srcs = ["nfc_event_handler.cc"],
+    hdrs = ["nfc_event_handler.h"],
+    deps = [
+        ":app_state",
+        "//maco_firmware/modules/nfc_reader",
+        "//maco_firmware/modules/nfc_reader:nfc_event",
+        "//maco_firmware/modules/nfc_tag",
+        "@pigweed//pw_async2",
+        "@pigweed//pw_async2:dispatcher",
+        "@pigweed//pw_log",
+    ],
+)
+
 pw_cc_test(
     name = "app_state_test",
     srcs = ["app_state_test.cc"],
