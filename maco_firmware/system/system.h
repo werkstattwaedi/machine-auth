@@ -22,6 +22,14 @@ namespace maco::nfc {
 class NfcReader;
 }  // namespace maco::nfc
 
+namespace maco::firebase {
+class FirebaseClient;
+}  // namespace maco::firebase
+
+namespace maco::gateway {
+class GatewayClient;
+}  // namespace maco::gateway
+
 namespace maco::system {
 
 /// Initializes the system, first performing target-specific initialization,
@@ -51,5 +59,14 @@ maco::nfc::NfcReader& GetNfcReader();
 /// Returns the global application state instance.
 /// Thread-safe: can be read from UI thread, written from main thread.
 maco::app_state::AppState& GetAppState();
+
+/// Returns the gateway client for MACO Gateway communication.
+/// P2: Uses TCP + ASCON encryption via pb_socket
+/// Host: Uses TCP + ASCON encryption via POSIX sockets
+maco::gateway::GatewayClient& GetGatewayClient();
+
+/// Returns the Firebase client for cloud communication.
+/// Uses the gateway client for transport.
+maco::firebase::FirebaseClient& GetFirebaseClient();
 
 }  // namespace maco::system
