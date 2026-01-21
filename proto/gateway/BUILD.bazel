@@ -1,0 +1,42 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+load("@com_google_protobuf//bazel:proto_library.bzl", "proto_library")
+load("@com_google_protobuf//bazel:py_proto_library.bzl", "py_proto_library")
+load(
+    "@pigweed//pw_protobuf_compiler:pwpb_proto_library.bzl",
+    "pwpb_proto_library",
+)
+load(
+    "@pigweed//pw_protobuf_compiler:pwpb_rpc_proto_library.bzl",
+    "pwpb_rpc_proto_library",
+)
+
+package(default_visibility = ["//visibility:public"])
+
+# Gateway service proto definition
+proto_library(
+    name = "gateway_service_proto",
+    srcs = ["gateway_service.proto"],
+    strip_import_prefix = "/proto",
+    deps = ["@pigweed//pw_protobuf:field_options_proto"],
+)
+
+# pw_protobuf generated messages
+pwpb_proto_library(
+    name = "gateway_service_pwpb",
+    deps = [":gateway_service_proto"],
+)
+
+# pw_rpc generated service stubs
+pwpb_rpc_proto_library(
+    name = "gateway_service_pwpb_rpc",
+    pwpb_proto_library_deps = [":gateway_service_pwpb"],
+    deps = [":gateway_service_proto"],
+)
+
+# Python protobuf library
+py_proto_library(
+    name = "gateway_service_py_pb2",
+    deps = [":gateway_service_proto"],
+)

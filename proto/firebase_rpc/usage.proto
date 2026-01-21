@@ -27,11 +27,11 @@ message ReasonUi {}
 
 message ReasonCheckInOtherTag {
   maco.proto.TagUid token_id = 1;
-  string user_id = 2;
+  maco.proto.FirebaseId user_id = 2;
 }
 
 message ReasonCheckInOtherMachine {
-  string machine_id = 1;
+  maco.proto.FirebaseId machine_id = 1;
 }
 
 message ReasonTimeout {}
@@ -41,7 +41,7 @@ message ReasonSelfCheckout {}
 // Single machine usage record
 message MachineUsage {
   // Firebase session ID
-  string session_id = 1;
+  maco.proto.FirebaseId session_id = 1;
   // Check-in timestamp (unix timestamp)
   int64 check_in = 2;
   // Check-out timestamp (unix timestamp), 0 if still active
@@ -53,8 +53,8 @@ message MachineUsage {
 // Collection of usage records for a machine
 message MachineUsageHistory {
   // Firebase machine ID
-  string machine_id = 1;
-  // Usage records to upload
+  maco.proto.FirebaseId machine_id = 1;
+  // Usage records to upload (uses callback since repeated messages can't have max_count)
   repeated MachineUsage records = 2;
 }
 

@@ -1,0 +1,125 @@
+// Copyright Offene Werkstatt Wädenswil
+// SPDX-License-Identifier: MIT
+
+syntax = "proto3";
+
+package maco.gateway;
+
+import "pw_protobuf_protos/field_options.proto";
+
+// Gateway service for MACO device to MACO Gateway communication.
+//
+// The gateway acts as a proxy between MACO devices (P2) and Firebase Cloud
+// Functions. Devices communicate with the gateway over TCP using pw_rpc with
+// ASCON encryption. The gateway forwards requests to Firebase via HTTPS.
+//
+// This design allows:
+// - Adding new Firebase endpoints without gateway changes
+// - Central logging and monitoring on the gateway
+// - Key management isolated to the gateway
+service GatewayService {
+  // Forward a request to Firebase Cloud Functions.
+  //
+  // The endpoint and payload are opaque to the gateway - it simply forwards
+  // the request and returns the response. This allows adding new Firebase
+  // endpoints without updating the gateway.
+  //
+  // Example endpoints:
+  //   "/api/startSession" - Start a new session
+  //   "/api/uploadUsage" - Upload usage data
+  //   "/api/completeAuth" - Complete authentication
+  rpc Forward(ForwardRequest) returns (ForwardResponse);
+
+  // Persist a log entry on the gateway.
+  //
+  // Used for offline logging when Firebase is unreachable. Logs are stored
+  // locally and can be synced later.
+  rpc PersistLog(LogEntry) returns (LogResponse);
+
+  // Ping the gateway to check connectivity.
+  //
+  // Returns the gateway's current timestamp. Can be used for connection
+  // health checks and clock synchronization.
+  rpc Ping(PingRequest) returns (PingResponse);
+}
+
+// Request to forward to Firebase.
+message ForwardRequest {
+  // Firebase endpoint path (e.g., "/api/startSession")
+  string endpoint = 1 [(pw.protobuf.pwpb).max_size = 64];
+
+  // Request payload (serialized protobuf, opaque to gateway)
+  bytes payload = 2 [(pw.protobuf.pwpb).max_size = 512];
+
+  // Optional request ID for correlation
+  uint32 request_id = 3;
+}
+
+// Response from Firebase forwarding.
+message ForwardResponse {
+  // True if Firebase returned a successful response
+  bool success = 1;
+
+  // Response payload (serialized protobuf, opaque to gateway)
+  bytes payload = 2 [(pw.protobuf.pwpb).max_size = 512];
+
+  // HTTP status code from Firebase (0 if not applicable)
+  uint32 http_status = 3;
+
+  // Error message if success is false
+  string error = 4 [(pw.protobuf.pwpb).max_size = 128];
+
+  // Request ID for correlation (echoed from request)
+  uint32 request_id = 5;
+}
+
+// Log entry to persist on gateway.
+message LogEntry {
+  // Log level
+  enum Level {
+    LEVEL_UNSPECIFIED = 0;
+    DEBUG = 1;
+    INFO = 2;
+    WARN = 3;
+    ERROR = 4;
+  }
+
+  // Timestamp (milliseconds since epoch)
+  uint64 timestamp_ms = 1;
+
+  // Log level
+  Level level = 2;
+
+  // Log module/component name
+  string module = 3 [(pw.protobuf.pwpb).max_size = 32];
+
+  // Log message
+  string message = 4 [(pw.protobuf.pwpb).max_size = 256];
+
+  // Optional structured data (JSON)
+  string data = 5 [(pw.protobuf.pwpb).max_size = 256];
+}
+
+// Response to log persistence.
+message LogResponse {
+  // True if log was persisted successfully
+  bool success = 1;
+
+  // Number of pending logs on gateway
+  uint32 pending_count = 2;
+}
+
+// Ping request.
+message PingRequest {
+  // Client timestamp (milliseconds since epoch)
+  uint64 client_timestamp_ms = 1;
+}
+
+// Ping response.
+message PingResponse {
+  // Gateway timestamp (milliseconds since epoch)
+  uint64 gateway_timestamp_ms = 1;
+
+  // Echo of client timestamp
+  uint64 client_timestamp_ms = 2;
+}

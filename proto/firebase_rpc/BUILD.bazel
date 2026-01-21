@@ -14,7 +14,10 @@ proto_library(
     name = "session_proto",
     srcs = ["session.proto"],
     strip_import_prefix = "/proto",
-    deps = ["//proto:common_proto"],
+    deps = [
+        "//proto:common_proto",
+        "@pigweed//pw_protobuf:field_options_proto",
+    ],
 )
 
 pwpb_proto_library(

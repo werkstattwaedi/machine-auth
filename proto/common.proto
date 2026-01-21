@@ -7,12 +7,18 @@ package maco.proto;
 
 // 7-byte NFC tag unique identifier
 message TagUid {
-  bytes uid = 1;  // 7 bytes
+  bytes value = 1;
+}
+
+// Firebase document ID (20 alphanumeric characters)
+// Used for session IDs, user IDs, machine IDs, permission IDs, etc.
+message FirebaseId {
+  string value = 1;
 }
 
 // 16-byte AES-128 key
 message KeyBytes {
-  bytes key = 1;  // 16 bytes
+  bytes value = 1;
 }
 
 // NTAG424 key slot identifiers

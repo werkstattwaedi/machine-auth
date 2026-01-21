@@ -3,16 +3,23 @@
 
 load("@com_google_protobuf//bazel:proto_library.bzl", "proto_library")
 load(
-    "@pigweed//pw_protobuf_compiler:pwpb_proto_library.bzl",
+    "@pigweed//pw_protobuf_compiler:pw_proto_library.bzl",
+    "pw_proto_filegroup",
     "pwpb_proto_library",
 )
 
 package(default_visibility = ["//visibility:public"])
 
 # Common types shared across all proto definitions
+pw_proto_filegroup(
+    name = "common_proto_and_options",
+    srcs = ["common.proto"],
+    options_files = ["common.pwpb_options"],
+)
+
 proto_library(
     name = "common_proto",
-    srcs = ["common.proto"],
+    srcs = [":common_proto_and_options"],
     strip_import_prefix = "/proto",
 )
 
