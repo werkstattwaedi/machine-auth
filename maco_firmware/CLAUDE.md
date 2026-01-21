@@ -190,6 +190,127 @@ void HardwareReset() {
 }
 ```
 
+### Async Code (pw_async2)
+
+**CRITICAL: Never write synchronous/blocking code.** All I/O and waiting must be async using `pw_async2`.
+
+#### Core Pattern: Task + DoPend + Poll
+
+Tasks inherit from `pw::async2::Task` and implement `DoPend()`:
+
+```cpp
+#include "pw_async2/dispatcher.h"
+
+class MyTask : public pw::async2::Task {
+ private:
+  pw::async2::Poll<> DoPend(pw::async2::Context& cx) override {
+    // Poll a future - returns Pending or Ready
+    if (future_->Pend(cx).IsPending()) {
+      return pw::async2::Pending();  // Will be woken when ready
+    }
+    // Future complete - process result
+    auto result = future_->value();
+    return pw::async2::Ready();
+  }
+
+  std::optional<SomeFuture> future_;
+};
+
+// Register task with dispatcher
+dispatcher.Post(my_task);
+```
+
+#### Future Types Used in This Codebase
+
+| Type | Use Case | Example |
+|------|----------|---------|
+| `ValueFuture<T>` / `ValueProvider<T>` | One-shot results (RPC responses) | `firebase_client.h` |
+| `ListableFutureWithWaker<Self, T>` | Custom typed futures | `pn532_detect_tag_future.h` |
+| `SingleFutureProvider<F>` | Enforce one operation at a time | `pn532_nfc_reader.h` |
+
+#### ValueFuture Pattern (for RPC/callbacks)
+
+```cpp
+class MyService {
+ public:
+  // Return a future that will be resolved later
+  pw::async2::ValueFuture<pw::Result<Response>> DoOperation() {
+    return provider_.Get();
+  }
+
+ private:
+  void OnRpcComplete(Response response) {
+    provider_.Resolve(pw::Result<Response>(response));
+  }
+
+  pw::async2::ValueProvider<pw::Result<Response>> provider_;
+};
+```
+
+#### Custom Future Pattern (for protocol state machines)
+
+See `devices/pn532/pn532_call_future.h` for a complete example:
+
+```cpp
+class MyProtocolFuture
+    : public pw::async2::ListableFutureWithWaker<MyProtocolFuture,
+                                                  pw::Result<Data>> {
+ public:
+  using Base = pw::async2::ListableFutureWithWaker<...>;
+  static constexpr const char kWaitReason[] = "MyProtocol";
+
+ private:
+  friend Base;
+  pw::async2::Poll<pw::Result<Data>> DoPend(pw::async2::Context& cx) {
+    // State machine: return Pending() until complete
+    switch (state_) {
+      case kSending:
+        // ... send data, advance state ...
+        return pw::async2::Pending();
+      case kWaitingResponse:
+        // ... check for response ...
+        if (!response_ready_) return pw::async2::Pending();
+        return pw::async2::Ready(ParseResponse());
+    }
+  }
+};
+```
+
+#### Anti-Patterns to Avoid
+
+```cpp
+// BAD: Blocking read
+auto data = uart_.BlockingRead();
+
+// GOOD: Async with future
+PW_TRY_READY_ASSIGN(auto data, read_future_->Pend(cx));
+
+// BAD: Blocking sleep
+pw::this_thread::sleep_for(100ms);
+
+// GOOD: Timer future (in async context)
+timer_ = time_provider_.WaitFor(100ms);
+if (timer_.Pend(cx).IsPending()) return Pending();
+
+// BAD: Synchronous RPC call that waits
+auto response = client_.Call(request);  // Blocks!
+
+// GOOD: Async RPC with callback → future
+call_ = client_.MyMethod(request, [this](auto& response, auto status) {
+  provider_.Resolve(response);
+  std::move(waker_).Wake();
+});
+return Pending();
+```
+
+#### Reference Examples
+
+- **Low-level protocol**: `devices/pn532/pn532_call_future.*` - UART state machine
+- **High-level futures**: `devices/pn532/pn532_detect_tag_future.h` - typed results
+- **Task with FSM**: `devices/pn532/pn532_nfc_reader.*` - ReaderTask + ETL FSM
+- **Event subscription**: `modules/app_state/nfc_event_handler.*` - subscribe/handle pattern
+- **RPC integration**: `modules/firebase/firebase_client.*` - callback → future bridge
+
 ### LVGL Integration
 
 **Inline callbacks with auto parameters:**
@@ -397,6 +518,7 @@ UPDATE_GOLDENS=1 bazel run //path/to:screen_test    # Update golden images
 | Build system | neopo/cmake | Bazel |
 | HAL | Particle Wiring | Pigweed abstractions |
 | Threading | Device OS | pw_thread |
+| Async | Blocking calls | pw_async2 (Poll/Future) |
 | Time | `timeSinceBoot()` wrapper | pw_chrono |
 | Byte handling | Raw arrays | pw::bytes |
 | Error handling | tl::expected | pw::Status + PW_TRY |
