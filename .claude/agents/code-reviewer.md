@@ -28,6 +28,7 @@ Spawn experts with: `Task(subagent_type="<expert>", prompt="Review for <domain>.
 
 ## Your Checks
 
+- If a plan file exists (`.claude/plan.md`), compare changes against the plan and flag deviations
 - Stale references from renames/moves
 - Compilation (use `./pw build` from CLAUDE.md)
 - Style (Google C++ for firmware, TS conventions for functions)
