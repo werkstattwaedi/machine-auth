@@ -1,0 +1,39 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+# MACO Gateway - pw_rpc proxy between MACO devices and Firebase
+#
+# The gateway:
+# - Listens for connections from MACO devices over TCP
+# - Decrypts ASCON-encrypted frames
+# - Forwards requests to Firebase via HTTPS
+# - Returns encrypted responses to devices
+
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+
+package(default_visibility = ["//visibility:public"])
+
+py_library(
+    name = "gateway_lib",
+    srcs = [
+        "maco_gateway/__init__.py",
+        "maco_gateway/ascon_transport.py",
+        "maco_gateway/firebase_client.py",
+        "maco_gateway/gateway_service.py",
+        "maco_gateway/key_store.py",
+    ],
+    deps = [
+        "//proto/gateway:gateway_service_py_pb2",
+        "@pigweed//pw_hdlc/py:pw_hdlc",
+        "@pigweed//pw_rpc/py:pw_rpc",
+    ],
+)
+
+py_binary(
+    name = "gateway",
+    srcs = ["maco_gateway/main.py"],
+    main = "maco_gateway/main.py",
+    deps = [
+        ":gateway_lib",
+    ],
+)
