@@ -1,0 +1,37 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+# Firebase client module - Typed wrappers for Firebase endpoints
+#
+# Provides typed RPC wrappers for Firebase Cloud Functions.
+# Uses the gateway module for transport (TCP + ASCON encryption).
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//maco_firmware:__subpackages__"])
+
+# Firebase client - typed wrappers for Firebase endpoints
+cc_library(
+    name = "firebase_client",
+    srcs = ["firebase_client.cc"],
+    hdrs = ["public/firebase/firebase_client.h"],
+    includes = ["public"],
+    deps = [
+        "//proto:common_pwpb",
+        "//proto/firebase_rpc:session_pwpb",
+        "//proto/firebase_rpc:usage_pwpb",
+        "//proto/gateway:gateway_service_pwpb",
+        "//proto/gateway:gateway_service_pwpb_rpc",
+        "@pigweed//pw_async2:value_future",
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_function",
+        "@pigweed//pw_log",
+        "@pigweed//pw_protobuf",
+        "@pigweed//pw_result",
+        "@pigweed//pw_rpc",
+        "@pigweed//pw_rpc/pwpb:client_api",
+        "@pigweed//pw_status",
+        "@pigweed//pw_stream",
+        "@pigweed//pw_string",
+    ],
+)
