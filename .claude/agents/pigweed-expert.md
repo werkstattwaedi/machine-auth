@@ -5,7 +5,7 @@ tools:
   - Read
   - Grep
   - Glob
-  - Bash
+model: opus
 ---
 
 # Pigweed Expert Agent
