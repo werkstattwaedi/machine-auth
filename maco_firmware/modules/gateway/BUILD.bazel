@@ -1,0 +1,79 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+# Gateway module - MACO Gateway client with platform-specific implementations
+#
+# Provides:
+# - GatewayClient interface for accessing GatewayService
+# - P2 implementation using pb_socket + ASCON
+# - Host implementation using POSIX sockets + ASCON
+# - Mock implementation for testing
+
+load("@pigweed//pw_build:compatibility.bzl", "incompatible_with_mcu")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//maco_firmware:__subpackages__"])
+
+# Public interface - platform independent
+cc_library(
+    name = "gateway_client",
+    hdrs = ["public/gateway/gateway_client.h"],
+    includes = ["public"],
+    deps = [
+        "//proto/gateway:gateway_service_pwpb",
+        "@pigweed//pw_async2:dispatcher",
+        "@pigweed//pw_rpc",
+        "@pigweed//pw_status",
+    ],
+)
+
+# P2 implementation using pb_socket (Device OS sockets)
+cc_library(
+    name = "p2_gateway_client",
+    srcs = ["p2_gateway_client.cc"],
+    hdrs = ["p2_gateway_client.h"],
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+    deps = [
+        ":gateway_client",
+        "@particle_bazel//pb_crypto",
+        "@particle_bazel//pb_socket:tcp_client",
+        "@pigweed//pw_async2:dispatcher",
+        "@pigweed//pw_async2:poll",
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_hdlc",
+        "@pigweed//pw_log",
+        "@pigweed//pw_rpc",
+        "@pigweed//pw_status",
+    ],
+)
+
+# Host implementation using POSIX sockets
+cc_library(
+    name = "host_gateway_client",
+    srcs = ["host_gateway_client.cc"],
+    hdrs = ["host_gateway_client.h"],
+    target_compatible_with = incompatible_with_mcu(),
+    deps = [
+        ":gateway_client",
+        "@particle_bazel//pb_crypto",
+        "@pigweed//pw_async2:dispatcher",
+        "@pigweed//pw_async2:poll",
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_hdlc",
+        "@pigweed//pw_log",
+        "@pigweed//pw_rpc",
+        "@pigweed//pw_status",
+        "@pigweed//pw_stream",
+    ],
+)
+
+# Mock implementation for testing
+cc_library(
+    name = "mock_gateway_client",
+    hdrs = ["mock/mock_gateway_client.h"],
+    deps = [
+        ":gateway_client",
+        "//proto/gateway:gateway_service_pwpb",
+        "@pigweed//pw_rpc",
+    ],
+)
