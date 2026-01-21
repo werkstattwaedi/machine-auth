@@ -151,6 +151,17 @@ firebase deploy --only hosting
 
 See [`docs/requirements/admin-ui-deployment.md`](docs/requirements/admin-ui-deployment.md) for production checklist.
 
+## Implementation Guidelines
+
+**When encountering blockers:**
+
+If an issue requires a significant workaround (global state hacks, skipping functionality, architectural compromises), **stop and discuss it** instead of implementing the workaround. Explain:
+1. What you're trying to do
+2. What's blocking you
+3. What workaround you'd consider and its downsides
+
+This allows deciding together whether to accept the workaround, find a better solution, adjust the design, or defer the feature.
+
 ## Codestyle
 
 **Copyright Header (all new files):**

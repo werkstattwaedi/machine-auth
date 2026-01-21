@@ -1,6 +1,6 @@
 # ADR-0008: P2 Memory Layout and Allocation Strategy
 
-**Status:** Proposed
+**Status:** Accepted
 
 **Date:** 2026-01-02
 

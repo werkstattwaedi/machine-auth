@@ -47,6 +47,10 @@ Brainstorming, research notes, and future work. Use for:
 - Research findings
 - "Someday/maybe" backlog
 
+### `plans/` - Implementation Plans
+
+Detailed implementation plans for features in progress. These are working documents that may become stale after implementation. For permanent decisions, create an ADR instead.
+
 ### `ui-design/` - UI Assets
 
 Design assets, mockups, and brand guidelines.

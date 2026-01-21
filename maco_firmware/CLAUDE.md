@@ -511,6 +511,103 @@ UPDATE_GOLDENS=1 bazel run //path/to:screen_test    # Update golden images
 - Comments describe **why**, not what changed
 - Avoid generic "Manager" suffixes - use specific names like `Crossfade`, `SessionRegistry`
 
+## Pigweed Protobuf (pwpb) Patterns
+
+### Storage Options for Fields
+
+pwpb generates different C++ types based on field options. Without options, bytes/string fields use callbacks (not suitable for embedded).
+
+#### `max_size` - Bounded storage
+
+For strings and bytes fields, `max_size:N` generates inline storage:
+
+```protobuf
+// In .proto file (inline annotation)
+string user_label = 5 [(pw.protobuf.pwpb).max_size = 64];
+bytes ntag_challenge = 2 [(pw.protobuf.pwpb).max_size = 16];
+```
+
+Generated types:
+- `string` with `max_size:N` generates `pw::InlineString<N>`
+- `bytes` with `max_size:N` generates `pw::Vector<std::byte, N>`
+
+#### `fixed_size` - Fixed-length arrays
+
+For bytes fields with known fixed size (UIDs, keys), combine `max_size` with `fixed_size:true`:
+
+```
+// In .pwpb_options file (required for fixed_size - not available inline)
+maco.proto.TagUid.value max_size:7 fixed_size:true
+maco.proto.KeyBytes.value max_size:16 fixed_size:true
+```
+
+Generated type: `std::array<std::byte, N>` instead of `pw::Vector`
+
+#### `max_count` - Repeated scalars only
+
+For repeated scalar fields, `max_count:N` generates `pw::Vector<T, N>`:
+
+```protobuf
+repeated int32 values = 1 [(pw.protobuf.pwpb).max_count = 10];
+```
+
+**Important:** `max_count` cannot be used with repeated message fields - those always use callbacks.
+
+### Options File Format (`.pwpb_options`)
+
+Options files provide field-level configuration without modifying `.proto` files:
+
+```
+// File: common.pwpb_options
+// Format: fully.qualified.field.name option:value [option:value ...]
+
+maco.proto.TagUid.value max_size:7 fixed_size:true
+maco.proto.FirebaseId.value max_size:20
+maco.proto.KeyBytes.value max_size:16 fixed_size:true
+```
+
+Options files are associated with protos in BUILD.bazel:
+```python
+pw_proto_filegroup(
+    name = "maco_service_proto_and_options",
+    srcs = ["maco_service.proto"],
+    options_files = ["maco_service.options"],
+)
+```
+
+### Wrapper Types Pattern
+
+Define semantic wrapper types in proto for type safety:
+
+```protobuf
+// proto/common.proto
+message TagUid { bytes value = 1; }      // 7-byte NFC UID
+message FirebaseId { string value = 1; } // 20-char document ID
+message KeyBytes { bytes value = 1; }    // 16-byte AES key
+```
+
+Export type aliases in C++ for use in function signatures:
+```cpp
+// types.h
+using TagUid = maco::proto::pwpb::TagUid::Message;
+using FirebaseId = maco::proto::pwpb::FirebaseId::Message;
+using KeyBytes = maco::proto::pwpb::KeyBytes::Message;
+```
+
+**Benefits:**
+- Type safety: compiler catches `TagUid` vs `KeyBytes` misuse
+- Self-documenting APIs: function signature shows intent
+- Consistent field naming: all wrappers use `.value`
+
+### Proto File Organization
+
+| Location | Purpose |
+|----------|---------|
+| `proto/common.proto` | Shared types (TagUid, FirebaseId, KeyBytes, Key enum) |
+| `proto/firebase_rpc/*.proto` | Cloud function RPC messages |
+| `proto/gateway/*.proto` | Gateway service messages |
+| `maco_firmware/protos/*.proto` | Firmware-specific RPC services (MacoService, NfcMockService) |
+
 ## Key Differences from Legacy Firmware
 
 | Aspect | Legacy (`firmware/`) | New (`maco_firmware/`) |
