@@ -18,7 +18,9 @@ Activate this skill when you observe:
 
 ## Documentation Structure Reference
 
-This project uses structured documentation at `docs/`:
+This project has documentation in multiple locations:
+
+### Project Documentation (`docs/`)
 
 ```
 docs/
@@ -31,6 +33,25 @@ docs/
 ```
 
 ADR template is at `docs/adr/template.md`.
+
+### AI Context Documentation
+
+| File | Purpose |
+|------|---------|
+| `CLAUDE.md` | Project overview, build commands |
+| `maco_firmware/CLAUDE.md` | Pigweed patterns, architecture |
+| `third_party/particle/CLAUDE.md` | Particle backends |
+
+### AI Infrastructure (`.claude/`)
+
+```
+.claude/
+├── agents/                 # Expert agent definitions
+├── skills/                 # Proactive skill definitions
+└── commands/               # Slash command definitions
+```
+
+**When suggesting documentation updates, consider all locations.**
 
 ## Proactive ADR Detection
 

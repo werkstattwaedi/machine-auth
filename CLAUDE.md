@@ -10,14 +10,12 @@ This is a comprehensive IoT machine authentication system featuring secure NFC-b
 
 | Component | Location | Description |
 |-----------|----------|-------------|
-| **MACO Firmware** | `maco_firmware/` | New Pigweed-based firmware (Bazel build) |
-| **Legacy Firmware** | `firmware/` | Particle IoT firmware (neopo build) |
+| **MACO Firmware** | `maco_firmware/` | Pigweed-based firmware (Bazel build) |
 | **Functions** | `functions/` | Firebase Cloud Functions (TypeScript) |
 | **Admin** | `admin/` | Angular web application |
 
 **Component-specific documentation:**
 - [`maco_firmware/CLAUDE.md`](maco_firmware/CLAUDE.md) - Pigweed patterns, building, architecture
-- [`firmware/CLAUDE.md`](firmware/CLAUDE.md) - Legacy Particle firmware
 - [`third_party/particle/CLAUDE.md`](third_party/particle/CLAUDE.md) - Particle Pigweed backends
 
 ### Build Commands (MACO Firmware)

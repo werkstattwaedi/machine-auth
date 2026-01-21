@@ -46,11 +46,47 @@ Verify:
 - Code references are valid
 - Related ADRs are properly linked
 
+### 6. CLAUDE.md Files
+
+Check AI context documentation:
+- `CLAUDE.md` - Is project overview current?
+- `maco_firmware/CLAUDE.md` - Do build commands work? Are patterns accurate?
+- `third_party/particle/CLAUDE.md` - Accurate for submodule?
+
+### 7. AI Infrastructure (`.claude/`)
+
+Check agent/skill/command definitions:
+
+**Agents** (`.claude/agents/`):
+- Do agent descriptions match their actual capabilities?
+- Are task files consistent with agent instructions?
+- Is knowledge/documentation up to date?
+
+**Skills** (`.claude/skills/`):
+- Are activation triggers accurate?
+- Do skills reference correct file paths?
+
+**Commands** (`.claude/commands/`):
+- Do command descriptions match behavior?
+- Are referenced agent tasks valid?
+
+### 8. Cross-Location Consistency
+
+Verify alignment across documentation locations:
+- CLAUDE.md build commands match actual build system
+- Agent knowledge reflects current codebase state
+- ADRs are consistent with CLAUDE.md patterns
+- Skills reference valid documentation paths
+
 ## Output Format
 
 ### Summary
 - Total documents: X
 - ADRs: Y (Z proposed, W accepted, V deprecated)
+- CLAUDE.md files: W
+- Agent definitions: A (with B task files, C knowledge files)
+- Skills: D
+- Commands: E
 - Health score: Good/Fair/Poor
 
 ### ADR Status

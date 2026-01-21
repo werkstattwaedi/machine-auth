@@ -37,12 +37,24 @@ Compare code against documentation:
 - Does code follow established patterns?
 - Are similar problems solved the same way?
 
+**AI Context Alignment:**
+- Does code follow patterns documented in CLAUDE.md?
+- Are agent knowledge files accurate for this code area?
+- Should skill triggers be updated based on this code?
+
 ### 4. Identify Documentation Gaps
 
 Look for:
 - Significant decisions not captured in ADRs
 - New patterns that should be documented
 - Outdated documentation references
+
+### 5. Check AI Infrastructure
+
+If the code relates to documented patterns:
+- Does it match patterns in relevant `CLAUDE.md`?
+- Should any agent knowledge files be updated?
+- Are there skill definitions that need adjustment?
 
 ## Output Format
 
