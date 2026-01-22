@@ -1,0 +1,28 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//maco_firmware:__subpackages__"])
+
+cc_library(
+    name = "led_driver",
+    hdrs = ["led_driver.h"],
+    deps = [
+        "@pigweed//pw_assert:check",
+        "@pigweed//pw_status",
+    ],
+)
+
+cc_library(
+    name = "led",
+    hdrs = ["led.h"],
+    deps = [
+        ":led_driver",
+        "@pigweed//pw_chrono:system_clock",
+        "@pigweed//pw_log",
+        "@pigweed//pw_status",
+        "@pigweed//pw_thread:sleep",
+        "@pigweed//pw_thread:thread",
+    ],
+)

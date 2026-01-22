@@ -18,8 +18,10 @@
 // Particle and project headers after Pigweed
 #include "maco_firmware/services/maco_service.h"
 #include "maco_firmware/devices/cap_touch/cap_touch_input_driver.h"
+#include "maco_firmware/devices/in4818/in4818_led_driver.h"
 #include "maco_firmware/devices/pico_res28_lcd/pico_res28_lcd_driver.h"
 #include "maco_firmware/devices/pn532/pn532_nfc_reader.h"
+#include "maco_firmware/modules/led/led.h"
 #include "maco_firmware/modules/app_state/app_state.h"
 #include "maco_firmware/modules/gateway/p2_gateway_client.h"
 #include "firebase/firebase_client.h"
@@ -229,6 +231,25 @@ maco::firebase::FirebaseClient& GetFirebaseClient() {
   static maco::firebase::FirebaseClient firebase_client(
       gateway.rpc_client(), gateway.channel_id());
   return firebase_client;
+}
+
+const pw::thread::Options& GetLedThreadOptions() {
+  static const pw::thread::particle::Options options =
+      pw::thread::particle::Options()
+          .set_name("led_render")
+          .set_priority(7)     // Higher than default (5) for smooth animations
+          .set_stack_size(2048);
+  return options;
+}
+
+auto& GetLed() {
+  // SPI interface 0 for LED strip
+  static pb::ParticleSpiInitiator spi_initiator(
+      pb::ParticleSpiInitiator::Interface::kSpi,
+      maco::led::In4818LedDriver<16>::kSpiClockHz);
+  static maco::led::In4818LedDriver<16> driver(spi_initiator);
+  static maco::led::Led<maco::led::In4818LedDriver<16>> led(driver);
+  return led;
 }
 
 }  // namespace maco::system

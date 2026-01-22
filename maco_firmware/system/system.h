@@ -30,6 +30,12 @@ namespace maco::gateway {
 class GatewayClient;
 }  // namespace maco::gateway
 
+namespace maco::led {
+// Forward declaration - concrete types are platform-specific (CRTP templates)
+// Host: Led<SdlLedDriver<16>>
+// P2: Led<In4818LedDriver<16>>
+}  // namespace maco::led
+
 namespace maco::system {
 
 /// Initializes the system, first performing target-specific initialization,
@@ -68,5 +74,13 @@ maco::gateway::GatewayClient& GetGatewayClient();
 /// Returns the Firebase client for cloud communication.
 /// Uses the gateway client for transport.
 maco::firebase::FirebaseClient& GetFirebaseClient();
+
+/// Returns the platform-specific LED module instance.
+/// Host: Led<SdlLedDriver<16>>, P2: Led<In4818LedDriver<16>>
+auto& GetLed();
+
+/// Returns the thread options for the LED render thread.
+/// P2: Higher priority for smooth animations.
+const pw::thread::Options& GetLedThreadOptions();
 
 }  // namespace maco::system

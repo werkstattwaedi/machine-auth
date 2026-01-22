@@ -52,16 +52,31 @@ cc_library(
     ],
 )
 
+# SDL-based LED driver for host simulator
+cc_library(
+    name = "sdl_led_driver",
+    hdrs = ["sdl_led_driver.h"],
+    target_compatible_with = incompatible_with_mcu(),
+    deps = [
+        "//maco_firmware/modules/led:led_driver",
+        "//third_party/sdl:sdl2",
+        "@pigweed//pw_log",
+        "@pigweed//pw_status",
+    ],
+)
+
 cc_library(
     name = "system",
     srcs = ["system.cc"],
     implementation_deps = [
         ":keyboard_input_driver",
         ":sdl_display_driver",
+        ":sdl_led_driver",
         "//maco_firmware/modules/app_state",
         "//maco_firmware/modules/firebase:firebase_client",
         "//maco_firmware/modules/fonts",
         "//maco_firmware/modules/gateway:host_gateway_client",
+        "//maco_firmware/modules/led",
         "//maco_firmware/modules/nfc_reader/mock:mock_nfc_reader",
         "//maco_firmware/modules/nfc_reader/mock:nfc_mock_service",
         "//maco_firmware/services:maco_service",

@@ -17,8 +17,10 @@
 #include "maco_firmware/modules/gateway/host_gateway_client.h"
 #include "maco_firmware/modules/nfc_reader/mock/mock_nfc_reader.h"
 #include "maco_firmware/modules/nfc_reader/mock/nfc_mock_service.h"
+#include "maco_firmware/modules/led/led.h"
 #include "maco_firmware/targets/host/keyboard_input_driver.h"
 #include "maco_firmware/targets/host/sdl_display_driver.h"
+#include "maco_firmware/targets/host/sdl_led_driver.h"
 #include "firebase/firebase_client.h"
 #include "pb_crypto/pb_crypto.h"
 #include "pw_assert/check.h"
@@ -196,6 +198,17 @@ maco::firebase::FirebaseClient& GetFirebaseClient() {
   static maco::firebase::FirebaseClient firebase_client(
       gateway.rpc_client(), gateway.channel_id());
   return firebase_client;
+}
+
+const pw::thread::Options& GetLedThreadOptions() {
+  static const pw::thread::stl::Options options;
+  return options;
+}
+
+auto& GetLed() {
+  static maco::led::SdlLedDriver<16> driver;
+  static maco::led::Led<maco::led::SdlLedDriver<16>> led(driver);
+  return led;
 }
 
 }  // namespace maco::system

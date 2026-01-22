@@ -1,0 +1,31 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+load("@particle_bazel//rules:particle_test.bzl", "particle_cc_test")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//maco_firmware:__subpackages__"])
+
+cc_library(
+    name = "in4818",
+    hdrs = ["in4818_led_driver.h"],
+    deps = [
+        "//maco_firmware/modules/led:led_driver",
+        "@pigweed//pw_span",
+        "@pigweed//pw_spi:initiator",
+        "@pigweed//pw_status",
+    ],
+)
+
+# On-device hardware test (requires P2 with IN4818 LED strip connected)
+particle_cc_test(
+    name = "hardware_test",
+    srcs = ["hardware_test.cc"],
+    platform = "//maco_firmware/targets/p2:p2",
+    deps = [
+        ":in4818",
+        "@particle_bazel//:device_os_headers",
+        "@particle_bazel//pw_spi_particle:initiator",
+        "@pigweed//pw_log",
+    ],
+)
