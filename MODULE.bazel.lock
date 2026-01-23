@@ -600,9 +600,10 @@
     "@@rules_python+//python/extensions:pip.bzl%pip": {
       "general": {
         "bzlTransitiveDigest": "ZVTMsEkfirao/Z6Wr5ihB9pW+8YVDs/t7F6CtoJ+2PY=",
-        "usagesDigest": "gYGvnXnZGNefOCPcBqh0gwNhzddk+HxHp1pN/rCxYK4=",
+        "usagesDigest": "o+dI/ZPV2KTq/ulU2R1gANDeKYg3ajnId56zTPnddN4=",
         "recordedFileInputs": {
           "@@nanopb+//extra/requirements_lock.txt": "2bcdca24f1a4429b4ab0f0bb80cca292a92e12f7bf3d0f46de7c2b14fd97ac25",
+          "@@particle_bazel+//tools/requirements_lock.txt": "523b96e9a22a45d2878eefec325e5cf19ea1388dba19b55994070224f1e4cdd9",
           "@@pigweed+//pw_env_setup/py/pw_env_setup/virtualenv_setup/upstream_requirements_darwin_lock.txt": "affe8afad4cccc4b1fc1e424417dac43202b2dbdf60696dca8c70ffbd52cd450",
           "@@pigweed+//pw_env_setup/py/pw_env_setup/virtualenv_setup/upstream_requirements_linux_lock.txt": "2c083efe31452a3c5edd93266a5bd079051611dabf14c541f6bb76f4e0b7ec5c",
           "@@pigweed+//pw_env_setup/py/pw_env_setup/virtualenv_setup/upstream_requirements_windows_lock.txt": "6e0284a08195eff58f8d932b5c71979c24cac2bc7a2e808bbf05b2ea4666b40b",
@@ -656,6 +657,60 @@
               "python_interpreter_target": "@@rules_python++python+python_3_11_host//:python",
               "repo": "nanopb_pypi_311",
               "requirement": "setuptools==70.0.0 --hash=sha256:54faa7f2e8d2d11bcd2c07bed282eef1046b5c080d1c32add737d7b5817b1ad4 --hash=sha256:f211a66637b8fa059bb28183da127d4e86396c991a942b028c6650d4319c3fd0"
+            }
+          },
+          "particle_pip_311_certifi": {
+            "repoRuleId": "@@rules_python+//python/private/pypi:whl_library.bzl%whl_library",
+            "attributes": {
+              "dep_template": "@particle_pip//{name}:{target}",
+              "python_interpreter_target": "@@rules_python++python+python_3_11_host//:python",
+              "repo": "particle_pip_311",
+              "requirement": "certifi==2024.8.30"
+            }
+          },
+          "particle_pip_311_charset_normalizer": {
+            "repoRuleId": "@@rules_python+//python/private/pypi:whl_library.bzl%whl_library",
+            "attributes": {
+              "dep_template": "@particle_pip//{name}:{target}",
+              "python_interpreter_target": "@@rules_python++python+python_3_11_host//:python",
+              "repo": "particle_pip_311",
+              "requirement": "charset-normalizer==3.4.0"
+            }
+          },
+          "particle_pip_311_idna": {
+            "repoRuleId": "@@rules_python+//python/private/pypi:whl_library.bzl%whl_library",
+            "attributes": {
+              "dep_template": "@particle_pip//{name}:{target}",
+              "python_interpreter_target": "@@rules_python++python+python_3_11_host//:python",
+              "repo": "particle_pip_311",
+              "requirement": "idna==3.10"
+            }
+          },
+          "particle_pip_311_pyserial": {
+            "repoRuleId": "@@rules_python+//python/private/pypi:whl_library.bzl%whl_library",
+            "attributes": {
+              "dep_template": "@particle_pip//{name}:{target}",
+              "python_interpreter_target": "@@rules_python++python+python_3_11_host//:python",
+              "repo": "particle_pip_311",
+              "requirement": "pyserial==3.5"
+            }
+          },
+          "particle_pip_311_requests": {
+            "repoRuleId": "@@rules_python+//python/private/pypi:whl_library.bzl%whl_library",
+            "attributes": {
+              "dep_template": "@particle_pip//{name}:{target}",
+              "python_interpreter_target": "@@rules_python++python+python_3_11_host//:python",
+              "repo": "particle_pip_311",
+              "requirement": "requests==2.32.3"
+            }
+          },
+          "particle_pip_311_urllib3": {
+            "repoRuleId": "@@rules_python+//python/private/pypi:whl_library.bzl%whl_library",
+            "attributes": {
+              "dep_template": "@particle_pip//{name}:{target}",
+              "python_interpreter_target": "@@rules_python++python+python_3_11_host//:python",
+              "repo": "particle_pip_311",
+              "requirement": "urllib3==2.2.3"
             }
           },
           "pigweed_python_packages_310_accessible_pygments_py3_none_any_88ae3211": {
@@ -39324,6 +39379,30 @@
                 "grpcio_tools",
                 "protobuf",
                 "setuptools"
+              ],
+              "groups": {}
+            }
+          },
+          "particle_pip": {
+            "repoRuleId": "@@rules_python+//python/private/pypi:hub_repository.bzl%hub_repository",
+            "attributes": {
+              "repo_name": "particle_pip",
+              "extra_hub_aliases": {},
+              "whl_map": {
+                "certifi": "{\"particle_pip_311_certifi\":[{\"version\":\"3.11\"}]}",
+                "charset_normalizer": "{\"particle_pip_311_charset_normalizer\":[{\"version\":\"3.11\"}]}",
+                "idna": "{\"particle_pip_311_idna\":[{\"version\":\"3.11\"}]}",
+                "pyserial": "{\"particle_pip_311_pyserial\":[{\"version\":\"3.11\"}]}",
+                "requests": "{\"particle_pip_311_requests\":[{\"version\":\"3.11\"}]}",
+                "urllib3": "{\"particle_pip_311_urllib3\":[{\"version\":\"3.11\"}]}"
+              },
+              "packages": [
+                "certifi",
+                "charset_normalizer",
+                "idna",
+                "pyserial",
+                "requests",
+                "urllib3"
               ],
               "groups": {}
             }
