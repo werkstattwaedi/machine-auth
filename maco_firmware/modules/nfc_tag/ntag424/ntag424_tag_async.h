@@ -28,6 +28,9 @@ class Ntag424Tag;
 class SelectApplicationFuture;
 class AuthenticateFuture;
 class GetCardUidFuture;
+class ReadDataFuture;
+class WriteDataFuture;
+class ChangeKeyFuture;
 
 /// NTAG424 DNA APDU command constants.
 namespace ntag424_cmd {
@@ -49,6 +52,13 @@ constexpr uint8_t kAdditionalFrame = 0xAF;
 // ISO commands
 constexpr uint8_t kIsoSelectFile = 0xA4;
 }  // namespace ntag424_cmd
+
+/// Communication mode for file operations.
+enum class CommMode : uint8_t {
+  kPlain = 0x00,  // No encryption or MAC
+  kMac = 0x01,    // Response MAC only
+  kFull = 0x03,   // Full encryption + MAC
+};
 
 /// NTAG424 DNA tag with async operations.
 ///
@@ -97,10 +107,52 @@ class Ntag424Tag : public Iso14443Tag {
   /// @return Future resolving to UID length
   GetCardUidFuture GetCardUid(pw::ByteSpan uid_buffer);
 
+  /// Read data from a file (requires authentication).
+  /// @param file_number File number (0x01-0x03 for standard files)
+  /// @param offset Starting offset within file (3 bytes, 0-255 typically)
+  /// @param length Number of bytes to read (0 = read to end of file)
+  /// @param data_buffer Buffer for read data
+  /// @param comm_mode Communication mode (must match file settings)
+  /// @return Future resolving to bytes read
+  ReadDataFuture ReadData(uint8_t file_number,
+                          uint32_t offset,
+                          uint32_t length,
+                          pw::ByteSpan data_buffer,
+                          CommMode comm_mode = CommMode::kFull);
+
+  /// Write data to a file (requires authentication).
+  /// @param file_number File number (0x01-0x03 for standard files)
+  /// @param offset Starting offset within file
+  /// @param data Data to write
+  /// @param comm_mode Communication mode (must match file settings)
+  /// @return Future resolving to success status
+  WriteDataFuture WriteData(uint8_t file_number,
+                            uint32_t offset,
+                            pw::ConstByteSpan data,
+                            CommMode comm_mode = CommMode::kFull);
+
+  /// Change a key on the tag (requires authentication with key 0).
+  ///
+  /// For changing the authentication key (key 0), only the new key is needed.
+  /// For changing other keys, the old key must be provided for XOR encryption.
+  ///
+  /// @param key_number Key number to change (0-4)
+  /// @param new_key New 16-byte key
+  /// @param new_key_version Key version byte (optional, for key identification)
+  /// @param old_key Old 16-byte key (required for non-key-0 changes)
+  /// @return Future resolving to success status
+  ChangeKeyFuture ChangeKey(uint8_t key_number,
+                            pw::ConstByteSpan new_key,
+                            uint8_t new_key_version = 0x00,
+                            pw::ConstByteSpan old_key = {});
+
  private:
   friend class SelectApplicationFuture;
   friend class AuthenticateFuture;
   friend class GetCardUidFuture;
+  friend class ReadDataFuture;
+  friend class WriteDataFuture;
+  friend class ChangeKeyFuture;
 
   /// Interpret NTAG424 status word as pw::Status.
   static pw::Status InterpretStatusWord(uint8_t sw1, uint8_t sw2);
@@ -128,6 +180,9 @@ class Ntag424Tag : public Iso14443Tag {
   pw::async2::SingleFutureProvider<SelectApplicationFuture> select_provider_;
   pw::async2::SingleFutureProvider<AuthenticateFuture> auth_provider_;
   pw::async2::SingleFutureProvider<GetCardUidFuture> get_uid_provider_;
+  pw::async2::SingleFutureProvider<ReadDataFuture> read_data_provider_;
+  pw::async2::SingleFutureProvider<WriteDataFuture> write_data_provider_;
+  pw::async2::SingleFutureProvider<ChangeKeyFuture> change_key_provider_;
 };
 
 // ============================================================================
@@ -189,7 +244,8 @@ class AuthenticateFuture
                                                     pw::Result<Ntag424Session>>;
   static constexpr const char kWaitReason[] = "Ntag424Auth";
 
-  ~AuthenticateFuture() = default;
+  /// Destructor - securely zeros sensitive key material.
+  ~AuthenticateFuture();
 
   // Move-only
   AuthenticateFuture(AuthenticateFuture&&) noexcept;
@@ -296,6 +352,222 @@ class GetCardUidFuture
 
   // Response: Encrypted UID (16 bytes) + CMACt (8 bytes) + SW (2)
   std::array<std::byte, 28> response_;
+
+  std::optional<TransceiveFuture> transceive_future_;
+};
+
+// ============================================================================
+// ReadDataFuture
+// ============================================================================
+
+/// Future for ReadData operation.
+/// Requires prior authentication. Handles Full communication mode.
+class ReadDataFuture
+    : public pw::async2::ListableFutureWithWaker<ReadDataFuture,
+                                                  pw::Result<size_t>> {
+ public:
+  using Base = pw::async2::ListableFutureWithWaker<ReadDataFuture,
+                                                    pw::Result<size_t>>;
+  static constexpr const char kWaitReason[] = "Ntag424ReadData";
+
+  /// Maximum data that can be read in a single frame.
+  /// NTAG424 frame size is ~60 bytes data + overhead.
+  static constexpr size_t kMaxFrameDataSize = 48;
+
+  ~ReadDataFuture() = default;
+
+  // Move-only
+  ReadDataFuture(ReadDataFuture&&) noexcept;
+  ReadDataFuture& operator=(ReadDataFuture&&) noexcept;
+  ReadDataFuture(const ReadDataFuture&) = delete;
+  ReadDataFuture& operator=(const ReadDataFuture&) = delete;
+
+ private:
+  friend class Ntag424Tag;
+  friend Base;
+
+  ReadDataFuture(
+      pw::async2::SingleFutureProvider<ReadDataFuture>& provider,
+      Ntag424Tag& tag,
+      uint8_t file_number,
+      uint32_t offset,
+      uint32_t length,
+      pw::ByteSpan data_buffer,
+      CommMode comm_mode);
+
+  pw::async2::Poll<pw::Result<size_t>> DoPend(pw::async2::Context& cx);
+
+  /// Process response and decrypt/verify data.
+  pw::Result<size_t> ProcessResponse(size_t response_len);
+
+  enum class State {
+    kSending,
+    kWaiting,
+    kChaining,     // Receiving additional frames (0x91 AF)
+    kCompleted,
+    kFailed,
+  };
+
+  Ntag424Tag* tag_;
+  pw::ByteSpan data_buffer_;
+  uint8_t file_number_;
+  uint32_t offset_;
+  uint32_t length_;
+  CommMode comm_mode_;
+  State state_;
+  size_t total_bytes_read_ = 0;
+
+  // Command: 90 AD 00 00 Lc [FileNo] [Offset(3)] [Length(3)] [CMACt(8)] 00
+  // Lc = 1 + 3 + 3 + 8 = 15
+  std::array<std::byte, 22> command_;
+
+  // Response: max encrypted data (rounded to 16) + CMACt (8) + SW (2) + margin
+  std::array<std::byte, 80> response_;
+
+  std::optional<TransceiveFuture> transceive_future_;
+};
+
+// ============================================================================
+// WriteDataFuture
+// ============================================================================
+
+/// Future for WriteData operation.
+/// Requires prior authentication. Handles Full communication mode.
+class WriteDataFuture
+    : public pw::async2::ListableFutureWithWaker<WriteDataFuture, pw::Status> {
+ public:
+  using Base = pw::async2::ListableFutureWithWaker<WriteDataFuture, pw::Status>;
+  static constexpr const char kWaitReason[] = "Ntag424WriteData";
+
+  /// Maximum data that can be written in a single frame.
+  static constexpr size_t kMaxFrameDataSize = 48;
+
+  ~WriteDataFuture() = default;
+
+  // Move-only
+  WriteDataFuture(WriteDataFuture&&) noexcept;
+  WriteDataFuture& operator=(WriteDataFuture&&) noexcept;
+  WriteDataFuture(const WriteDataFuture&) = delete;
+  WriteDataFuture& operator=(const WriteDataFuture&) = delete;
+
+ private:
+  friend class Ntag424Tag;
+  friend Base;
+
+  WriteDataFuture(
+      pw::async2::SingleFutureProvider<WriteDataFuture>& provider,
+      Ntag424Tag& tag,
+      uint8_t file_number,
+      uint32_t offset,
+      pw::ConstByteSpan data,
+      CommMode comm_mode);
+
+  pw::async2::Poll<pw::Status> DoPend(pw::async2::Context& cx);
+
+  /// Build the initial write command.
+  pw::Status BuildCommand();
+
+  /// Process response and verify MAC.
+  pw::Status ProcessResponse(size_t response_len);
+
+  enum class State {
+    kSending,
+    kWaiting,
+    kCompleted,
+    kFailed,
+  };
+
+  Ntag424Tag* tag_;
+  pw::ConstByteSpan data_;
+  uint8_t file_number_;
+  uint32_t offset_;
+  CommMode comm_mode_;
+  State state_;
+
+  // Command buffer - includes header + encrypted data + CMACt
+  // Max: 5 (APDU header) + 1 (FileNo) + 3 (Offset) + 3 (Length)
+  //      + 64 (padded data) + 8 (CMACt) + 1 (Le) = 85 bytes
+  std::array<std::byte, 96> command_;
+  size_t command_len_ = 0;
+
+  // Response: CMACt (8) + SW (2) = 10 bytes + margin
+  std::array<std::byte, 16> response_;
+
+  std::optional<TransceiveFuture> transceive_future_;
+};
+
+// ============================================================================
+// ChangeKeyFuture
+// ============================================================================
+
+/// Future for ChangeKey operation.
+/// Requires prior authentication (typically with key 0 for changing other keys).
+///
+/// Key change data format:
+/// - Key 0: EncryptedData = AES-CBC(IVCmd, NewKey || Version || Padding)
+/// - Other keys: EncryptedData = AES-CBC(IVCmd, (NewKey XOR OldKey) || Version
+/// || CRC32NK(NewKey) || Padding)
+///
+/// Reference: NXP AN12196 Section 6.4.1 ChangeKey
+class ChangeKeyFuture
+    : public pw::async2::ListableFutureWithWaker<ChangeKeyFuture, pw::Status> {
+ public:
+  using Base = pw::async2::ListableFutureWithWaker<ChangeKeyFuture, pw::Status>;
+  static constexpr const char kWaitReason[] = "Ntag424ChangeKey";
+
+  /// Destructor - securely zeros sensitive key material.
+  ~ChangeKeyFuture();
+
+  // Move-only
+  ChangeKeyFuture(ChangeKeyFuture&&) noexcept;
+  ChangeKeyFuture& operator=(ChangeKeyFuture&&) noexcept;
+  ChangeKeyFuture(const ChangeKeyFuture&) = delete;
+  ChangeKeyFuture& operator=(const ChangeKeyFuture&) = delete;
+
+ private:
+  friend class Ntag424Tag;
+  friend Base;
+
+  ChangeKeyFuture(pw::async2::SingleFutureProvider<ChangeKeyFuture>& provider,
+                  Ntag424Tag& tag,
+                  uint8_t key_number,
+                  pw::ConstByteSpan new_key,
+                  uint8_t new_key_version,
+                  pw::ConstByteSpan old_key);
+
+  pw::async2::Poll<pw::Status> DoPend(pw::async2::Context& cx);
+
+  /// Build the encrypted key change data.
+  pw::Status BuildCommand();
+
+  /// Process response and verify MAC.
+  pw::Status ProcessResponse(size_t response_len);
+
+  enum class State {
+    kSending,
+    kWaiting,
+    kCompleted,
+    kFailed,
+  };
+
+  Ntag424Tag* tag_;
+  uint8_t key_number_;
+  std::array<std::byte, 16> new_key_;
+  uint8_t new_key_version_;
+  std::array<std::byte, 16> old_key_;
+  bool has_old_key_ = false;
+  State state_;
+
+  // Command buffer:
+  // 90 C4 00 00 Lc [KeyNo] [EncryptedData(32)] [CMACt(8)] 00
+  // Lc = 1 + 32 + 8 = 41 for key 0
+  // Lc = 1 + 32 + 8 = 41 for other keys (CRC32 is included in 32-byte encrypted
+  // block)
+  std::array<std::byte, 48> command_;
+  size_t command_len_ = 0;
+
+  // Response: CMACt (8) + SW (2) = 10 bytes + margin
+  std::array<std::byte, 16> response_;
 
   std::optional<TransceiveFuture> transceive_future_;
 };

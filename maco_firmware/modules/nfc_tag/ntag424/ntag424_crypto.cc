@@ -211,4 +211,13 @@ pw::Status XorBytes(pw::ConstByteSpan a,
   return pw::OkStatus();
 }
 
+void SecureZero(pw::ByteSpan data) {
+  // Use volatile pointer to prevent compiler from optimizing away the writes.
+  // This is a common pattern for secure memory zeroing.
+  volatile std::byte* ptr = data.data();
+  for (size_t i = 0; i < data.size(); ++i) {
+    ptr[i] = std::byte{0x00};
+  }
+}
+
 }  // namespace maco::nfc

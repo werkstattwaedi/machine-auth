@@ -65,10 +65,21 @@ cc_library(
     ],
 )
 
+# Random number generator for host simulator (uses std::random_device)
+cc_library(
+    name = "host_random",
+    hdrs = ["host_random.h"],
+    target_compatible_with = incompatible_with_mcu(),
+    deps = [
+        "@pigweed//pw_random",
+    ],
+)
+
 cc_library(
     name = "system",
     srcs = ["system.cc"],
     implementation_deps = [
+        ":host_random",
         ":keyboard_input_driver",
         ":sdl_display_driver",
         ":sdl_led_driver",

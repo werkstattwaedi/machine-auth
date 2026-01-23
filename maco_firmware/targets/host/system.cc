@@ -18,6 +18,7 @@
 #include "maco_firmware/modules/nfc_reader/mock/mock_nfc_reader.h"
 #include "maco_firmware/modules/nfc_reader/mock/nfc_mock_service.h"
 #include "maco_firmware/modules/led/led.h"
+#include "maco_firmware/targets/host/host_random.h"
 #include "maco_firmware/targets/host/keyboard_input_driver.h"
 #include "maco_firmware/targets/host/sdl_display_driver.h"
 #include "maco_firmware/targets/host/sdl_led_driver.h"
@@ -209,6 +210,11 @@ auto& GetLed() {
   static maco::led::SdlLedDriver<16> driver;
   static maco::led::Led<maco::led::SdlLedDriver<16>> led(driver);
   return led;
+}
+
+pw::random::RandomGenerator& GetRandomGenerator() {
+  static maco::HostRandomGenerator generator;
+  return generator;
 }
 
 }  // namespace maco::system

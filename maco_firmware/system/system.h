@@ -4,6 +4,7 @@
 #pragma once
 
 #include "pw_function/function.h"
+#include "pw_random/random.h"
 #include "pw_thread/options.h"
 
 // The functions in this file return specific implementations of singleton types
@@ -82,5 +83,10 @@ auto& GetLed();
 /// Returns the thread options for the LED render thread.
 /// P2: Higher priority for smooth animations.
 const pw::thread::Options& GetLedThreadOptions();
+
+/// Returns the platform-specific random number generator.
+/// P2: Uses HAL RNG (LFSR seeded from ADC noise at boot)
+/// Host: Uses std::random_device (/dev/urandom on Linux)
+pw::random::RandomGenerator& GetRandomGenerator();
 
 }  // namespace maco::system

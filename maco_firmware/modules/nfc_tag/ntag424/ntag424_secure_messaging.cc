@@ -254,6 +254,13 @@ pw::Status SecureMessaging::VerifyResponseCMACWithData(
 pw::Status SecureMessaging::EncryptCommandData(pw::ConstByteSpan plaintext,
                                                 pw::ByteSpan ciphertext_out,
                                                 size_t& ciphertext_len) {
+  // Internal padding buffer - sufficient for all NTAG424 operations.
+  // Max plaintext: 112 bytes → 128 bytes padded.
+  constexpr size_t kMaxPlaintext = 112;
+  if (plaintext.size() > kMaxPlaintext) {
+    return pw::Status::OutOfRange();
+  }
+
   // Apply padding
   std::array<std::byte, 128> padded;
   size_t padded_len;

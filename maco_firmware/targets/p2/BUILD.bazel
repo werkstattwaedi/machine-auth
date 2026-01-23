@@ -104,12 +104,24 @@ cc_library(
     alwayslink = 1,
 )
 
+# Hardware random number generator using Device OS HAL RNG
+cc_library(
+    name = "hardware_random",
+    hdrs = ["hardware_random.h"],
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+    deps = [
+        "@particle_bazel//:device_os_headers",
+        "@pigweed//pw_random",
+    ],
+)
+
 cc_library(
     name = "system",
     srcs = [
         "system.cc",
     ],
     implementation_deps = [
+        ":hardware_random",
         "//maco_firmware/devices/cap_touch",
         "//maco_firmware/devices/in4818",
         "//maco_firmware/devices/pico_res28_lcd",

@@ -24,6 +24,7 @@
 #include "maco_firmware/modules/led/led.h"
 #include "maco_firmware/modules/app_state/app_state.h"
 #include "maco_firmware/modules/gateway/p2_gateway_client.h"
+#include "maco_firmware/targets/p2/hardware_random.h"
 #include "firebase/firebase_client.h"
 #include "pb_crypto/pb_crypto.h"
 #include "pb_digital_io/digital_io.h"
@@ -250,6 +251,11 @@ auto& GetLed() {
   static maco::led::In4818LedDriver<16> driver(spi_initiator);
   static maco::led::Led<maco::led::In4818LedDriver<16>> led(driver);
   return led;
+}
+
+pw::random::RandomGenerator& GetRandomGenerator() {
+  static maco::HardwareRandomGenerator generator;
+  return generator;
 }
 
 }  // namespace maco::system

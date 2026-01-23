@@ -115,4 +115,23 @@ pw::Status XorBytes(pw::ConstByteSpan a,
                     pw::ConstByteSpan b,
                     pw::ByteSpan result);
 
+// ============================================================================
+// Security Utilities
+// ============================================================================
+
+/// Securely zero memory to prevent sensitive data leakage.
+///
+/// Uses volatile writes to prevent compiler optimization from removing
+/// the zeroing. Call this after sensitive data (keys, nonces) is no
+/// longer needed.
+///
+/// @param data Buffer to zero
+void SecureZero(pw::ByteSpan data);
+
+/// Template overload for std::array.
+template <size_t N>
+void SecureZero(std::array<std::byte, N>& data) {
+  SecureZero(pw::ByteSpan(data));
+}
+
 }  // namespace maco::nfc
