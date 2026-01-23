@@ -85,4 +85,34 @@ void RotateLeft1(pw::ConstByteSpan input, pw::ByteSpan output);
 /// @return true if RndA' == rotate_left(RndA, 1)
 bool VerifyRndAPrime(pw::ConstByteSpan rnd_a, pw::ConstByteSpan rnd_a_prime);
 
+// ============================================================================
+// ChangeKey Support Functions
+// ============================================================================
+
+/// Calculate CRC32 for NTAG424 ChangeKey command (CRC32NK).
+///
+/// NTAG424 uses JAMCRC (CRC-32 without final inversion):
+/// - Polynomial: 0x04C11DB7
+/// - Initial value: 0xFFFFFFFF
+/// - Final XOR: 0x00000000 (no inversion)
+/// - Bit order: LSB first (reflected)
+///
+/// Used in ChangeKey for non-zero key numbers:
+/// CRC32NK is computed over (NewKey || KeyVersion).
+///
+/// @param data Input data
+/// @param crc_out 4-byte output buffer (little-endian)
+void CalculateCRC32NK(pw::ConstByteSpan data, pw::ByteSpan crc_out);
+
+/// XOR two equal-length byte arrays.
+/// Used for ChangeKey when changing non-zero keys: NewKey XOR OldKey.
+///
+/// @param a First input
+/// @param b Second input
+/// @param result Output buffer (same size as inputs)
+/// @return OkStatus on success, InvalidArgument if sizes don't match
+pw::Status XorBytes(pw::ConstByteSpan a,
+                    pw::ConstByteSpan b,
+                    pw::ByteSpan result);
+
 }  // namespace maco::nfc

@@ -162,4 +162,53 @@ bool VerifyRndAPrime(pw::ConstByteSpan rnd_a, pw::ConstByteSpan rnd_a_prime) {
   return rnd_a_prime[15] == rnd_a[0];
 }
 
+void CalculateCRC32NK(pw::ConstByteSpan data, pw::ByteSpan crc_out) {
+  PW_CHECK_INT_GE(crc_out.size(), 4);
+
+  // NTAG424 uses JAMCRC (CRC-32 without final inversion)
+  // This is the same as standard CRC-32 but without the final XOR with
+  // 0xFFFFFFFF Polynomial: 0xEDB88320 (reflected form of 0x04C11DB7) Initial:
+  // 0xFFFFFFFF Final XOR: 0x00000000
+
+  uint32_t crc = 0xFFFFFFFF;
+
+  for (size_t i = 0; i < data.size(); ++i) {
+    uint8_t byte = static_cast<uint8_t>(data[i]);
+    crc ^= byte;
+
+    for (int bit = 0; bit < 8; ++bit) {
+      if (crc & 1) {
+        crc = (crc >> 1) ^ 0xEDB88320;
+      } else {
+        crc >>= 1;
+      }
+    }
+  }
+
+  // Note: JAMCRC does NOT invert the final CRC (unlike standard CRC-32)
+  // Output as little-endian
+  crc_out[0] = static_cast<std::byte>(crc & 0xFF);
+  crc_out[1] = static_cast<std::byte>((crc >> 8) & 0xFF);
+  crc_out[2] = static_cast<std::byte>((crc >> 16) & 0xFF);
+  crc_out[3] = static_cast<std::byte>((crc >> 24) & 0xFF);
+}
+
+pw::Status XorBytes(pw::ConstByteSpan a,
+                    pw::ConstByteSpan b,
+                    pw::ByteSpan result) {
+  if (a.size() != b.size()) {
+    return pw::Status::InvalidArgument();
+  }
+  if (result.size() < a.size()) {
+    return pw::Status::ResourceExhausted();
+  }
+
+  for (size_t i = 0; i < a.size(); ++i) {
+    result[i] = static_cast<std::byte>(static_cast<uint8_t>(a[i]) ^
+                                       static_cast<uint8_t>(b[i]));
+  }
+
+  return pw::OkStatus();
+}
+
 }  // namespace maco::nfc

@@ -28,6 +28,7 @@ class Ntag424Session {
 
  private:
   friend class Ntag424TagBase;  // Only tag can create/invalidate sessions
+  friend class Ntag424Tag;      // Async tag implementation
 
   explicit Ntag424Session(uint8_t key_number)
       : key_number_(key_number), valid_(true) {}
