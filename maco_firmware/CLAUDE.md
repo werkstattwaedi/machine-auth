@@ -608,15 +608,3 @@ using KeyBytes = maco::proto::pwpb::KeyBytes::Message;
 | `proto/gateway/*.proto` | Gateway service messages |
 | `maco_firmware/protos/*.proto` | Firmware-specific RPC services (MacoService, NfcMockService) |
 
-## Key Differences from Legacy Firmware
-
-| Aspect | Legacy (`firmware/`) | New (`maco_firmware/`) |
-|--------|---------------------|------------------------|
-| Build system | neopo/cmake | Bazel |
-| HAL | Particle Wiring | Pigweed abstractions |
-| Threading | Device OS | pw_thread |
-| Async | Blocking calls | pw_async2 (Poll/Future) |
-| Time | `timeSinceBoot()` wrapper | pw_chrono |
-| Byte handling | Raw arrays | pw::bytes |
-| Error handling | tl::expected | pw::Status + PW_TRY |
-| Assertions | Custom | PW_CHECK_* |
