@@ -87,6 +87,8 @@ pw::async2::Poll<pw::Result<size_t>> Pn532TransceiveFuture::DoPend(
   }
 
   if (!poll.value().ok()) {
+    // Drain any leftover data to prevent cascading errors
+    reader_->DrainReceiveBuffer();
     return Ready(poll.value().status());
   }
 

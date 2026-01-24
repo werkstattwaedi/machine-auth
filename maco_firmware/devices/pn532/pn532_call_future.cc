@@ -121,7 +121,7 @@ pw::async2::Poll<pw::Result<pw::ConstByteSpan>> Pn532CallFuture::Poll(
 
       if (result.ok() && !result.value().empty()) {
         bytes_received_ += result.value().size();
-        PW_LOG_INFO("RESP: received %u bytes, total %u",
+        PW_LOG_DEBUG("RESP: received %u bytes, total %u",
                     static_cast<unsigned>(result.value().size()),
                     static_cast<unsigned>(bytes_received_));
       }

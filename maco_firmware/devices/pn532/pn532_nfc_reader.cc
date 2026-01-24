@@ -10,6 +10,9 @@
 #include "pw_assert/check.h"
 
 #define PW_LOG_MODULE_NAME "pn532"
+// Override log level to enable debug messages for FSM tracing
+#undef PW_LOG_LEVEL
+#define PW_LOG_LEVEL PW_LOG_LEVEL_DEBUG
 
 #include "pw_log/log.h"
 #include "pw_thread/sleep.h"
@@ -81,6 +84,12 @@ TransceiveFuture Pn532NfcReader::RequestTransceive(
   // Send FSM message
   fsm_.receive(MsgAppRequest{&*pending_request_});
 
+  // Re-post the reader task to ensure it runs and processes the request.
+  // The task may be sleeping in kTagPresent waiting for presence check timer.
+  if (dispatcher_ != nullptr) {
+    dispatcher_->Post(reader_task_);
+  }
+
   // Return a future that will be resolved when operation completes
   return transceive_result_provider_.Get();
 }
@@ -98,12 +107,17 @@ void Pn532NfcReader::StartDetection() {
 }
 
 void Pn532NfcReader::StartProbe(const TagInfo& info) {
+  PW_LOG_DEBUG("StartProbe called, current state=%d",
+               static_cast<int>(GetState()));
   pending_tag_info_ = info;
   current_target_number_ = info.target_number;
   // For now, complete probe immediately (no additional probing needed)
   // In the future, this could do SELECT, RATS, etc.
   auto tag = CompleteProbe();
-  fsm_.receive(MsgProbeComplete{tag});
+  // Store tag for later - can't send MsgProbeComplete from within on_event
+  // because ETL FSM doesn't support nested receives
+  probe_complete_tag_ = std::move(tag);
+  probe_complete_pending_ = true;
 }
 
 std::shared_ptr<NfcTag> Pn532NfcReader::CompleteProbe() {
@@ -118,18 +132,25 @@ void Pn532NfcReader::OnTagProbed(std::shared_ptr<NfcTag> tag) {
 }
 
 void Pn532NfcReader::SendTagArrived() {
+  PW_LOG_DEBUG("SendTagArrived: has_future=%s, tag=%s",
+               event_provider_.has_future() ? "yes" : "no",
+               current_tag_ ? "present" : "null");
   NfcEvent event{NfcEventType::kTagArrived, current_tag_};
   event_provider_.Resolve(std::move(event));
-  // Immediately complete the event sending (no async wait needed)
-  fsm_.receive(MsgEventSent{});
+  // Defer MsgEventSent - can't send from within on_event handler
+  // because ETL FSM doesn't support nested receives
+  event_sent_pending_ = true;
 }
 
 void Pn532NfcReader::SendTagDeparted() {
+  PW_LOG_DEBUG("SendTagDeparted: has_future=%s, tag=%s",
+               event_provider_.has_future() ? "yes" : "no",
+               current_tag_ ? "present" : "null");
   NfcEvent event{NfcEventType::kTagDeparted, current_tag_};
   event_provider_.Resolve(std::move(event));
   current_tag_.reset();
-  // Immediately complete the event sending
-  fsm_.receive(MsgEventSent{});
+  // Note: event_sent_pending_ is set but will be ignored since the FSM
+  // goes directly to kDetecting after tag departure (not through kSendingEvent)
 }
 
 void Pn532NfcReader::SchedulePresenceCheck() {
@@ -160,6 +181,9 @@ void Pn532NfcReader::OnTagRemoved() {
   if (current_tag_) {
     current_tag_->Invalidate();
   }
+  // Drain any leftover data from previous failed operations before
+  // sending InRelease, otherwise the garbage will be read as the response.
+  DrainReceiveBuffer();
   (void)DoReleaseTag(current_target_number_);
   current_target_number_ = 0;
 }
@@ -192,46 +216,73 @@ void Pn532NfcReader::InitFsm() {
 pw::async2::Poll<> Pn532NfcReader::ReaderTask::DoPend(pw::async2::Context& cx) {
   auto& reader = parent_;
   auto state = reader.GetState();
+  bool needs_poll = false;  // Track if we need to re-enqueue
 
   switch (state) {
     case Pn532StateId::kIdle:
-      // Nothing to poll
+      // Nothing to poll, don't re-enqueue
       break;
 
     case Pn532StateId::kDetecting:
       if (reader.detect_future_.has_value()) {
-        auto poll = reader.detect_future_->DoPend(cx);
+        auto poll = reader.detect_future_->Pend(cx);
         if (poll.IsReady()) {
           auto result = std::move(poll.value());
           reader.detect_future_.reset();
           if (result.ok()) {
+            PW_LOG_DEBUG("DoPend: sending MsgTagDetected");
             reader.fsm_.receive(MsgTagDetected{result.value()});
           } else {
             reader.fsm_.receive(MsgTagNotFound{});
           }
+          // State changed, need to poll again
+          needs_poll = true;
+        } else {
+          // Future is pending - keep polling since UART I/O is poll-based
+          // (no interrupt-driven wakers for serial data arrival)
+          needs_poll = true;
         }
       }
       break;
 
     case Pn532StateId::kProbing:
-      // Probe is done synchronously in StartProbe for now
+      // Handle deferred probe completion (from StartProbe)
+      if (reader.probe_complete_pending_) {
+        reader.probe_complete_pending_ = false;
+        PW_LOG_DEBUG("DoPend: sending deferred MsgProbeComplete");
+        reader.fsm_.receive(MsgProbeComplete{reader.probe_complete_tag_});
+        reader.probe_complete_tag_.reset();
+        // State changed, need to poll again
+        needs_poll = true;
+      }
       break;
 
     case Pn532StateId::kSendingEvent:
-      // Event sending is done synchronously
+      // Handle deferred event sent (from SendTagArrived/SendTagDeparted)
+      if (reader.event_sent_pending_) {
+        reader.event_sent_pending_ = false;
+        PW_LOG_DEBUG("DoPend: sending deferred MsgEventSent");
+        reader.fsm_.receive(MsgEventSent{});
+        // State changed, need to poll again
+        needs_poll = true;
+      }
       break;
 
     case Pn532StateId::kTagPresent:
-      // Check for pending transceive request (handled by FSM message)
       // Check if presence check timer expired
       if (pw::chrono::SystemClock::now() >= reader.next_presence_check_) {
         reader.fsm_.receive(MsgPresenceCheckDue{});
+        // State changed, need to poll again
+        needs_poll = true;
       }
+      // Don't re-enqueue just to wait for timer - the dispatcher will
+      // call us again on the next iteration. This prevents busy-looping
+      // which breaks test dispatchers that use RunUntilStalled().
       break;
 
     case Pn532StateId::kCheckingPresence:
       if (reader.check_future_.has_value()) {
-        auto poll = reader.check_future_->DoPend(cx);
+        auto poll = reader.check_future_->Pend(cx);
         if (poll.IsReady()) {
           auto result = std::move(poll.value());
           reader.check_future_.reset();
@@ -240,13 +291,18 @@ pw::async2::Poll<> Pn532NfcReader::ReaderTask::DoPend(pw::async2::Context& cx) {
           } else {
             reader.fsm_.receive(MsgTagGone{});
           }
+          // State changed, need to poll again
+          needs_poll = true;
+        } else {
+          // Future is pending - keep polling since UART I/O is poll-based
+          needs_poll = true;
         }
       }
       break;
 
     case Pn532StateId::kExecutingOp:
       if (reader.transceive_future_.has_value()) {
-        auto poll = reader.transceive_future_->DoPend(cx);
+        auto poll = reader.transceive_future_->Pend(cx);
         if (poll.IsReady()) {
           auto result = std::move(poll.value());
           reader.transceive_future_.reset();
@@ -255,6 +311,11 @@ pw::async2::Poll<> Pn532NfcReader::ReaderTask::DoPend(pw::async2::Context& cx) {
           } else {
             reader.fsm_.receive(MsgOpFailed{});
           }
+          // State changed, need to poll again
+          needs_poll = true;
+        } else {
+          // Future is pending - keep polling since UART I/O is poll-based
+          needs_poll = true;
         }
       }
       break;
@@ -263,8 +324,10 @@ pw::async2::Poll<> Pn532NfcReader::ReaderTask::DoPend(pw::async2::Context& cx) {
       break;
   }
 
-  // Task runs continuously
-  cx.ReEnqueue();
+  // Only re-enqueue if we have work to do
+  if (needs_poll) {
+    cx.ReEnqueue();
+  }
   return pw::async2::Pending();
 }
 

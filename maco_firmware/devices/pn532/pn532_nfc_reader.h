@@ -144,6 +144,25 @@ class Pn532NfcReader : public NfcReader {
   pw::Status DoReleaseTag(uint8_t target_number);
   pw::Status RecoverFromDesync();
 
+  // -- FSM Setup (protected for testing) --
+  void InitFsm();
+
+  // -- Accessors for Testing --
+
+  /// Access the FSM for direct message injection in tests.
+  Pn532NfcReaderFsm& fsm() { return fsm_; }
+
+  /// Check if a deferred probe completion is pending.
+  bool probe_complete_pending() const { return probe_complete_pending_; }
+
+  /// Get the deferred probe tag (for testing verification).
+  std::shared_ptr<NfcTag> probe_complete_tag() const {
+    return probe_complete_tag_;
+  }
+
+  /// Check if an event future is pending (for testing).
+  bool has_pending_event_future() { return event_provider_.has_future(); }
+
  private:
   /// Inner Task for async polling - drives the FSM
   class ReaderTask : public pw::async2::Task {
@@ -169,10 +188,6 @@ class Pn532NfcReader : public NfcReader {
       pw::ByteSpan response_buffer,
       pw::chrono::SystemClock::duration timeout);
   bool ScanForStartSequenceBlocking(pw::chrono::SystemClock::duration timeout);
-
-  // -- FSM Setup --
-
-  void InitFsm();
 
   // -- Members --
 
@@ -221,6 +236,11 @@ class Pn532NfcReader : public NfcReader {
 
   // Presence check timing
   pw::chrono::SystemClock::time_point next_presence_check_;
+
+  // Deferred FSM messages (ETL FSM doesn't support nested receives)
+  std::shared_ptr<NfcTag> probe_complete_tag_;
+  bool probe_complete_pending_ = false;
+  bool event_sent_pending_ = false;
 };
 
 }  // namespace maco::nfc

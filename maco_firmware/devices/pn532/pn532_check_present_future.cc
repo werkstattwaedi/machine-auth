@@ -56,6 +56,8 @@ pw::async2::Poll<pw::Result<bool>> Pn532CheckPresentFuture::DoPend(
   }
 
   if (!poll.value().ok()) {
+    // Drain any leftover data to prevent cascading errors
+    reader_->DrainReceiveBuffer();
     return Ready(poll.value().status());
   }
 

@@ -69,6 +69,8 @@ pw::async2::Poll<pw::Result<TagInfo>> Pn532DetectTagFuture::DoPend(
   }
 
   if (!poll.value().ok()) {
+    // Drain any leftover data to prevent cascading errors
+    reader_->DrainReceiveBuffer();
     return Ready(poll.value().status());
   }
 

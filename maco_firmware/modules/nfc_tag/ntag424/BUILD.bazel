@@ -1,6 +1,7 @@
 # Copyright Offene Werkstatt Wädenswil
 # SPDX-License-Identifier: MIT
 
+load("@particle_bazel//rules:particle_test.bzl", "particle_cc_test")
 load("@pigweed//pw_unit_test:pw_cc_test.bzl", "pw_cc_test")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
@@ -109,5 +110,42 @@ pw_cc_test(
     deps = [
         ":ntag424_secure_messaging",
         "@pigweed//pw_bytes",
+    ],
+)
+
+# On-device hardware integration test for NTAG424 DNA.
+# Requires a tag prepared with the prepare_tag utility.
+particle_cc_test(
+    name = "hardware_test",
+    srcs = ["ntag424_hardware_test.cc"],
+    platform = "//maco_firmware/targets/p2:p2",
+    deps = [
+        ":local_key_provider",
+        ":ntag424_tag_async",
+        "//maco_firmware/devices/pn532:pn532_nfc_reader",
+        "@particle_bazel//:device_os_headers",
+        "@particle_bazel//pw_stream_particle:uart_stream",
+        "@particle_bazel//pw_digital_io_particle:digital_io",
+        "@pigweed//pw_async2:testing",
+        "@pigweed//pw_log",
+        "@pigweed//pw_thread:sleep",
+    ],
+)
+
+# Utility to prepare a fresh NTAG424 tag for integration testing.
+# Changes key 0 from factory default to test key.
+particle_cc_test(
+    name = "prepare_tag",
+    srcs = ["ntag424_prepare_tag.cc"],
+    platform = "//maco_firmware/targets/p2:p2",
+    deps = [
+        ":local_key_provider",
+        ":ntag424_tag_async",
+        "//maco_firmware/devices/pn532:pn532_nfc_reader",
+        "@particle_bazel//:device_os_headers",
+        "@particle_bazel//pw_stream_particle:uart_stream",
+        "@particle_bazel//pw_digital_io_particle:digital_io",
+        "@pigweed//pw_async2:testing",
+        "@pigweed//pw_log",
     ],
 )

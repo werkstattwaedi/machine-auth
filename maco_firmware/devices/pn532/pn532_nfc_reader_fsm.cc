@@ -87,7 +87,12 @@ etl::fsm_state_id_t Pn532StateCheckingPresence::on_event(const MsgTagPresent&) {
 etl::fsm_state_id_t Pn532StateCheckingPresence::on_event(const MsgTagGone&) {
   get_fsm_context().reader->OnTagRemoved();
   get_fsm_context().reader->SendTagDeparted();
-  return Pn532StateId::kSendingEvent;
+  // Go directly to detecting instead of through kSendingEvent→kTagPresent
+  // since the tag is gone and we should restart detection.
+  // Note: SendTagDeparted sets event_sent_pending_ which will be handled
+  // by DoPend in kDetecting state, but we ignore it since we're detecting.
+  get_fsm_context().reader->StartDetection();
+  return Pn532StateId::kDetecting;
 }
 
 //=============================================================================
