@@ -9,19 +9,18 @@
 #include <memory>
 #include <optional>
 
-#include "maco_firmware/devices/pn532/pn532_check_present_future.h"
-#include "maco_firmware/devices/pn532/pn532_detect_tag_future.h"
-#include "maco_firmware/devices/pn532/pn532_nfc_reader_fsm.h"
-#include "maco_firmware/devices/pn532/pn532_transceive_future.h"
-#include "maco_firmware/modules/nfc_reader/nfc_error.h"
+#include "maco_firmware/devices/pn532/pn532_command.h"
+#include "maco_firmware/devices/pn532/tag_info.h"
 #include "maco_firmware/modules/nfc_reader/nfc_event.h"
 #include "maco_firmware/modules/nfc_reader/nfc_reader.h"
-#include "maco_firmware/devices/pn532/tag_info.h"
 #include "maco_firmware/modules/nfc_reader/transceive_request.h"
 #include "maco_firmware/modules/nfc_tag/nfc_tag.h"
+#include "pw_allocator/allocator.h"
+#include "pw_async2/coro.h"
+#include "pw_async2/coro_or_else_task.h"
 #include "pw_async2/dispatcher.h"
-#include "pw_async2/task.h"
 #include "pw_async2/value_future.h"
+#include "pw_bytes/span.h"
 #include "pw_chrono/system_clock.h"
 #include "pw_digital_io/digital_io.h"
 #include "pw_result/result.h"
@@ -49,29 +48,28 @@ struct Pn532ReaderConfig {
       std::chrono::milliseconds(1000);
 };
 
-/// PN532-based NFC reader implementation.
+/// PN532-based NFC reader implementation using C++20 coroutines.
 ///
-/// This class merges the PN532 driver functionality with the NfcReader
-/// interface. It runs as an async task that:
+/// This class implements the NfcReader interface using pw_async2 coroutines.
+/// The main loop runs as a coroutine that:
 /// - Detects tags automatically
-/// - Probes tag type
 /// - Performs presence checks
 /// - Handles application transceive requests
 ///
-/// All NFC operations are non-blocking and driven by an internal Task
-/// that polls futures and drives the FSM.
+/// All NFC operations are non-blocking, using co_await for suspension.
 class Pn532NfcReader : public NfcReader {
  public:
   /// Default timeout at 115200 baud per PN532 User Manual Section 6.2.2
   static constexpr auto kDefaultTimeout = std::chrono::milliseconds(89);
 
   /// Construct a PN532 NFC reader.
-  /// @param uart UART stream for communication (must be configured for 115200
-  /// baud)
+  /// @param uart UART stream for communication (must be 115200 baud)
   /// @param reset_pin Reset pin (active low)
+  /// @param alloc Allocator for coroutine frames (needs ~512 bytes)
   /// @param config Configuration for timing parameters
   Pn532NfcReader(pw::stream::ReaderWriter& uart,
                  pw::digital_io::DigitalOut& reset_pin,
+                 pw::allocator::Allocator& alloc,
                  const Pn532ReaderConfig& config = Pn532ReaderConfig());
 
   // -- NfcReader Interface --
@@ -88,93 +86,51 @@ class Pn532NfcReader : public NfcReader {
 
   EventFuture SubscribeOnce() override;
 
-  // -- Internal Methods (called by FSM states) --
+  // -- Testing Accessors --
 
-  void StartDetection();
-  void StartProbe(const TagInfo& info);
-  std::shared_ptr<NfcTag> CompleteProbe();
-  void OnTagProbed(std::shared_ptr<NfcTag> tag);
-  void SendTagArrived();
-  void SendTagDeparted();
-  void SchedulePresenceCheck();
-  void StartPresenceCheck();
-  void StartOperation(TransceiveRequest* request);
-  void OnOperationComplete(pw::Result<size_t> result);
-  void OnOperationFailed();
-  void OnTagRemoved();
-  void HandleDesync();
+  /// Check if a transceive request is pending.
+  bool has_pending_request() const { return pending_request_.has_value(); }
 
-  // -- State Accessors --
-
-  Pn532StateId GetState() const {
-    return static_cast<Pn532StateId>(fsm_.get_state_id());
-  }
-
-  // -- Driver Accessors (used by futures) --
-
-  /// Get UART stream for frame I/O.
-  pw::stream::ReaderWriter& uart() { return uart_; }
-
-  /// Check if a driver operation is in progress.
-  bool IsBusy() const;
-
-  /// Get current target number for commands.
+  /// Get the current target number.
   uint8_t current_target_number() const { return current_target_number_; }
 
-  /// Set current target number (called by futures after detection).
-  void set_current_target_number(uint8_t target) {
-    current_target_number_ = target;
-  }
-
-  /// Drain the UART receive buffer (used by futures after timeout).
-  void DrainReceiveBuffer();
-
  protected:
-  // -- Driver Methods (protected for testing) --
+  // -- Coroutine Methods --
 
-  pw::Status DoInit();
-  pw::Status DoReset();
-  Pn532DetectTagFuture DoDetectTag(pw::chrono::SystemClock::duration timeout);
-  Pn532TransceiveFuture DoTransceive(
+  /// Main reader loop coroutine.
+  /// Runs continuously: detect → probe → monitor → (tag gone) → repeat
+  pw::async2::Coro<pw::Status> RunLoop(pw::async2::CoroContext& cx);
+
+  /// Send a PN532 command and receive response.
+  /// Handles frame building, ACK, and response parsing.
+  pw::async2::Coro<pw::Result<pw::ConstByteSpan>> SendCommand(
+      pw::async2::CoroContext& cx,
+      const Pn532Command& cmd,
+      pw::chrono::SystemClock::time_point deadline);
+
+  /// Detect a tag using InListPassiveTarget.
+  pw::async2::Coro<pw::Result<TagInfo>> DetectTag(
+      pw::async2::CoroContext& cx,
+      pw::chrono::SystemClock::duration timeout);
+
+  /// Execute an InDataExchange command.
+  pw::async2::Coro<pw::Result<size_t>> Transceive(
+      pw::async2::CoroContext& cx,
       pw::ConstByteSpan command,
       pw::ByteSpan response_buffer,
       pw::chrono::SystemClock::duration timeout);
-  Pn532CheckPresentFuture DoCheckTagPresent(
+
+  /// Check if tag is still present using Diagnose.
+  pw::async2::Coro<pw::Result<bool>> CheckTagPresent(
+      pw::async2::CoroContext& cx,
       pw::chrono::SystemClock::duration timeout);
+
+  // -- Blocking Init Helpers --
+
+  pw::Status DoInit();
+  pw::Status DoReset();
   pw::Status DoReleaseTag(uint8_t target_number);
   pw::Status RecoverFromDesync();
-
-  // -- FSM Setup (protected for testing) --
-  void InitFsm();
-
-  // -- Accessors for Testing --
-
-  /// Access the FSM for direct message injection in tests.
-  Pn532NfcReaderFsm& fsm() { return fsm_; }
-
-  /// Check if a deferred probe completion is pending.
-  bool probe_complete_pending() const { return probe_complete_pending_; }
-
-  /// Get the deferred probe tag (for testing verification).
-  std::shared_ptr<NfcTag> probe_complete_tag() const {
-    return probe_complete_tag_;
-  }
-
-  /// Check if an event future is pending (for testing).
-  bool has_pending_event_future() { return event_provider_.has_future(); }
-
- private:
-  /// Inner Task for async polling - drives the FSM
-  class ReaderTask : public pw::async2::Task {
-   public:
-    explicit ReaderTask(Pn532NfcReader& parent) : parent_(parent) {}
-
-   private:
-    pw::async2::Poll<> DoPend(pw::async2::Context& cx) override;
-    Pn532NfcReader& parent_;
-  };
-
-  // -- Init-only blocking helpers --
 
   pw::Status WriteFrameBlocking(uint8_t command, pw::ConstByteSpan params);
   pw::Status WaitForAckBlocking(pw::chrono::SystemClock::duration timeout);
@@ -189,43 +145,28 @@ class Pn532NfcReader : public NfcReader {
       pw::chrono::SystemClock::duration timeout);
   bool ScanForStartSequenceBlocking(pw::chrono::SystemClock::duration timeout);
 
-  // -- Members --
+  // -- Utility --
 
+  void DrainReceiveBuffer();
+  pw::Result<TagInfo> ParseDetectResponse(pw::ConstByteSpan payload);
+  pw::Result<size_t> ParseTransceiveResponse(pw::ConstByteSpan payload,
+                                              pw::ByteSpan response_buffer);
+  pw::Result<bool> ParseCheckPresentResponse(pw::ConstByteSpan payload);
+
+ private:
   // Hardware
   pw::stream::ReaderWriter& uart_;
   pw::digital_io::DigitalOut& reset_pin_;
   Pn532ReaderConfig config_;
 
-  // Async task
-  ReaderTask reader_task_{*this};
+  // Coroutine infrastructure
+  pw::async2::CoroContext coro_cx_;
+  std::optional<pw::async2::CoroOrElseTask> reader_task_;
   pw::async2::Dispatcher* dispatcher_ = nullptr;
-
-  // FSM and state instances
-  Pn532NfcReaderFsm fsm_;
-  Pn532StateIdle state_idle_;
-  Pn532StateDetecting state_detecting_;
-  Pn532StateProbing state_probing_;
-  Pn532StateSendingEvent state_sending_event_;
-  Pn532StateTagPresent state_tag_present_;
-  Pn532StateCheckingPresence state_checking_presence_;
-  Pn532StateExecutingOp state_executing_op_;
-  etl::ifsm_state* states_[Pn532StateId::kNumberOfStates]{};
 
   // Tag state
   std::shared_ptr<NfcTag> current_tag_;
-  std::optional<TagInfo> pending_tag_info_;
   uint8_t current_target_number_ = 0;
-
-  // Active futures
-  std::optional<Pn532DetectTagFuture> detect_future_;
-  std::optional<Pn532CheckPresentFuture> check_future_;
-  std::optional<Pn532TransceiveFuture> transceive_future_;
-
-  // Future providers (enforce single operation)
-  pw::async2::SingleFutureProvider<Pn532DetectTagFuture> detect_provider_;
-  pw::async2::SingleFutureProvider<Pn532TransceiveFuture> transceive_provider_;
-  pw::async2::SingleFutureProvider<Pn532CheckPresentFuture>
-      check_present_provider_;
 
   // Pending transceive request from application
   std::optional<TransceiveRequest> pending_request_;
@@ -234,13 +175,10 @@ class Pn532NfcReader : public NfcReader {
   // Event subscription
   pw::async2::ValueProvider<NfcEvent> event_provider_;
 
-  // Presence check timing
-  pw::chrono::SystemClock::time_point next_presence_check_;
-
-  // Deferred FSM messages (ETL FSM doesn't support nested receives)
-  std::shared_ptr<NfcTag> probe_complete_tag_;
-  bool probe_complete_pending_ = false;
-  bool event_sent_pending_ = false;
+  // I/O buffers for coroutines (avoids stack allocation in coro frame)
+  std::array<std::byte, 6> ack_buffer_;
+  std::array<std::byte, 265> tx_buffer_;
+  std::array<std::byte, 265> rx_buffer_;
 };
 
 }  // namespace maco::nfc

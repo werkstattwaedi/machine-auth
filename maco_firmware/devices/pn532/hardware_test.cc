@@ -8,17 +8,24 @@
 // - Hardware Validation: Basic initialization, firmware version
 // - RF Operations: Tag detection, APDU exchange
 // - Error Handling: No-card detection, recovery
+//
+// TODO(testing): These tests use *Blocking() helper reimplementations rather
+// than testing the actual production coroutines. To properly test the coroutines:
+// 1. ParticleUartStream needs async/waker support (currently polling-based)
+// 2. Tests should use DispatcherForTest with production DetectTag/Transceive
+// See: https://pigweed.dev/pw_async2/ for async testing patterns
+
+// Must define PW_LOG_MODULE_NAME before including any headers that use pw_log
+#define PW_LOG_MODULE_NAME "pn532"
 
 // Pigweed headers first (avoid macro pollution from HAL)
+#include "maco_firmware/devices/pn532/pn532_command.h"
+#include "maco_firmware/devices/pn532/pn532_constants.h"
 #include "maco_firmware/devices/pn532/pn532_nfc_reader.h"
 #include "pb_digital_io/digital_io.h"
 #include "pb_stream/uart_stream.h"
-#include "pw_async2/dispatcher_for_test.h"
-
-#define PW_LOG_MODULE_NAME "pn532"
-
+#include "pw_allocator/testing.h"
 #include "pw_log/log.h"
-#include "pw_thread/sleep.h"
 #include "pw_unit_test/framework.h"
 
 // HAL headers after Pigweed
@@ -48,18 +55,93 @@ constexpr auto kShortTimeout = std::chrono::milliseconds(100);
 constexpr auto kInteractiveTimeout = std::chrono::seconds(30);
 
 /// Testable subclass that exposes protected methods for hardware testing.
+///
+/// NOTE: Currently uses blocking helper reimplementations (*Blocking methods)
+/// rather than the actual production coroutines (DetectTag, Transceive, etc.).
+/// This is a workaround until ParticleUartStream supports async/waker-based I/O.
+/// The blocking helpers test the low-level PN532 communication but not the
+/// coroutine control flow.
 class TestablePn532Reader : public maco::nfc::Pn532NfcReader {
  public:
   using Pn532NfcReader::Pn532NfcReader;  // Inherit constructors
 
-  // Expose protected methods for testing
+  // Expose blocking helper methods for testing
   using Pn532NfcReader::DoInit;
   using Pn532NfcReader::DoReset;
-  using Pn532NfcReader::DoDetectTag;
-  using Pn532NfcReader::DoTransceive;
-  using Pn532NfcReader::DoCheckTagPresent;
+  using Pn532NfcReader::DoReleaseTag;
   using Pn532NfcReader::RecoverFromDesync;
+
+  // Expose low-level blocking communication for RF operation tests
+  using Pn532NfcReader::SendCommandAndReceiveBlocking;
+  using Pn532NfcReader::ParseDetectResponse;
+  using Pn532NfcReader::ParseTransceiveResponse;
+  using Pn532NfcReader::ParseCheckPresentResponse;
+
+  // Helper: Detect tag using blocking communication
+  pw::Result<maco::nfc::TagInfo> DetectTagBlocking(
+      pw::chrono::SystemClock::duration timeout) {
+    // InListPassiveTarget: MaxTg=1, BrTy=0x00 (106kbps Type A)
+    constexpr auto kParams = pw::bytes::Array<0x01, 0x00>();
+
+    std::array<std::byte, 64> response{};
+    auto result = SendCommandAndReceiveBlocking(
+        maco::nfc::pn532::kCmdInListPassiveTarget, kParams, response, timeout);
+
+    if (!result.ok()) {
+      if (result.status().IsDeadlineExceeded()) {
+        return pw::Status::NotFound();  // No tag detected
+      }
+      return result.status();
+    }
+
+    return ParseDetectResponse(
+        pw::ConstByteSpan(response.data(), result.value()));
+  }
+
+  // Helper: Transceive APDU using blocking communication
+  pw::Result<size_t> TransceiveBlocking(pw::ConstByteSpan command,
+                                         pw::ByteSpan response_buffer,
+                                         pw::chrono::SystemClock::duration timeout) {
+    // Build InDataExchange command: Tg (target 1) + data
+    std::array<std::byte, 265> cmd_buffer{};
+    cmd_buffer[0] = std::byte{0x01};  // Target number
+    std::copy(command.begin(), command.end(), cmd_buffer.begin() + 1);
+
+    auto params = pw::ConstByteSpan(cmd_buffer.data(), 1 + command.size());
+
+    std::array<std::byte, 265> response{};
+    auto result = SendCommandAndReceiveBlocking(
+        maco::nfc::pn532::kCmdInDataExchange, params, response, timeout);
+
+    if (!result.ok()) {
+      return result.status();
+    }
+
+    return ParseTransceiveResponse(
+        pw::ConstByteSpan(response.data(), result.value()), response_buffer);
+  }
+
+  // Helper: Check tag presence using Diagnose command
+  pw::Result<bool> CheckTagPresentBlocking(
+      pw::chrono::SystemClock::duration timeout) {
+    // Diagnose command: NumTst=0x06 (Communication Line Test)
+    constexpr auto kParams = pw::bytes::Array<0x06, 0x01>();
+
+    std::array<std::byte, 16> response{};
+    auto result = SendCommandAndReceiveBlocking(
+        maco::nfc::pn532::kCmdDiagnose, kParams, response, timeout);
+
+    if (!result.ok()) {
+      return result.status();
+    }
+
+    return ParseCheckPresentResponse(
+        pw::ConstByteSpan(response.data(), result.value()));
+  }
 };
+
+// Allocator for the driver (needs space for coroutine frames)
+pw::allocator::test::AllocatorForTest<1024> test_allocator;
 
 // Get singleton hardware instances
 TestablePn532Reader& GetDriver() {
@@ -74,7 +156,7 @@ TestablePn532Reader& GetDriver() {
     initialized = true;
   }
 
-  static TestablePn532Reader driver(uart, reset_pin);
+  static TestablePn532Reader driver(uart, reset_pin, test_allocator);
   return driver;
 }
 
@@ -86,30 +168,7 @@ class Pn532HardwareTest : public ::testing::Test {
     PW_LOG_INFO("=== Pn532HardwareTest::TearDown ===");
     // Reset driver state for next test
     auto& driver = GetDriver();
-    if (driver.IsBusy()) {
-      PW_LOG_WARN("Driver still busy, attempting recovery...");
-      (void)driver.RecoverFromDesync();
-    }
-  }
-
-  /// Poll a future until ready or max iterations reached (iterations * 10ms).
-  /// Uses short-timeout futures to work around RunInTaskUntilStalled spinning
-  /// forever on futures that don't set wakers.
-  template <typename Future>
-  auto PollUntilReady(
-      pw::async2::DispatcherForTest& dispatcher,
-      Future& future,
-      int max_iterations = 200
-  ) {
-    for (int i = 0; i < max_iterations; ++i) {
-      auto poll = dispatcher.RunInTaskUntilStalled(future);
-      if (poll.IsReady()) {
-        return poll;
-      }
-      HAL_Delay_Milliseconds(10);
-    }
-    // Return the last poll result (will be Pending)
-    return dispatcher.RunInTaskUntilStalled(future);
+    (void)driver.RecoverFromDesync();
   }
 };
 
@@ -298,23 +357,12 @@ TEST_F(Pn532HardwareTest, Reset_Succeeds) {
   PW_LOG_INFO("Reset succeeded");
 }
 
-TEST_F(Pn532HardwareTest, IsBusy_InitiallyFalse) {
-  auto& driver = GetDriver();
-
-  // Init first
-  ASSERT_TRUE(driver.DoInit().ok());
-
-  EXPECT_FALSE(driver.IsBusy());
-  PW_LOG_INFO("IsBusy() returns false when idle");
-}
-
 // ============================================================================
 // RF Operations Tests (card may or may not be present)
 // ============================================================================
 
 TEST_F(Pn532HardwareTest, DetectTag_NoCard_ReturnsNotFound) {
   auto& driver = GetDriver();
-  pw::async2::DispatcherForTest dispatcher;
 
   ASSERT_TRUE(driver.DoInit().ok());
 
@@ -324,15 +372,8 @@ TEST_F(Pn532HardwareTest, DetectTag_NoCard_ReturnsNotFound) {
   // Wait a moment for user to remove card if present
   HAL_Delay_Milliseconds(500);
 
-  auto future = driver.DoDetectTag(kShortTimeout);
+  auto result = driver.DetectTagBlocking(kShortTimeout);
 
-  // Should be busy now
-  EXPECT_TRUE(driver.IsBusy());
-
-  auto poll = PollUntilReady(dispatcher, future);
-  ASSERT_TRUE(poll.IsReady()) << "Future did not complete within timeout";
-
-  auto result = poll.value();
   EXPECT_TRUE(result.status().IsNotFound())
       << "Expected NotFound, got: " << static_cast<int>(result.status().code());
   PW_LOG_INFO("DetectTag correctly returned NotFound when no card present");
@@ -340,7 +381,6 @@ TEST_F(Pn532HardwareTest, DetectTag_NoCard_ReturnsNotFound) {
 
 TEST_F(Pn532HardwareTest, DetectTag_WithCard_ReturnsTagInfo) {
   auto& driver = GetDriver();
-  pw::async2::DispatcherForTest dispatcher;
 
   ASSERT_TRUE(driver.DoInit().ok());
 
@@ -352,11 +392,8 @@ TEST_F(Pn532HardwareTest, DetectTag_WithCard_ReturnsTagInfo) {
   // Give user time to place card
   HAL_Delay_Milliseconds(5000);
 
-  auto future = driver.DoDetectTag(kRfOperationTimeout);
-  auto poll = PollUntilReady(dispatcher, future);
-  ASSERT_TRUE(poll.IsReady()) << "Future did not complete";
+  auto result = driver.DetectTagBlocking(kRfOperationTimeout);
 
-  auto result = poll.value();
   if (!result.ok()) {
     PW_LOG_WARN(
         "No card detected (status=%d). Place a card and re-run test.",
@@ -386,34 +423,23 @@ TEST_F(Pn532HardwareTest, DetectTag_WithCard_ReturnsTagInfo) {
 
 TEST_F(Pn532HardwareTest, CheckTagPresent_WithCard) {
   auto& driver = GetDriver();
-  pw::async2::DispatcherForTest dispatcher;
 
   ASSERT_TRUE(driver.DoInit().ok());
 
   PW_LOG_INFO("First detecting a card...");
 
-  // Scope the detect future so it's destroyed before creating check future
-  {
-    auto detect_future = driver.DoDetectTag(kRfOperationTimeout);
-    auto detect_poll = PollUntilReady(dispatcher, detect_future);
-    ASSERT_TRUE(detect_poll.IsReady()) << "DetectTag did not complete";
-
-    if (!detect_poll.value().ok()) {
-      PW_LOG_WARN("No card detected. Place a card and re-run test.");
-      GTEST_SKIP() << "No card present";
-    }
+  auto detect_result = driver.DetectTagBlocking(kRfOperationTimeout);
+  if (!detect_result.ok()) {
+    PW_LOG_WARN("No card detected. Place a card and re-run test.");
+    GTEST_SKIP() << "No card present";
   }
 
   PW_LOG_INFO("Card detected, now checking presence...");
 
-  auto check_future = driver.DoCheckTagPresent(kRfOperationTimeout);
-  auto check_poll = PollUntilReady(dispatcher, check_future);
-  ASSERT_TRUE(check_poll.IsReady()) << "CheckTagPresent did not complete";
+  auto check_result = driver.CheckTagPresentBlocking(kRfOperationTimeout);
+  ASSERT_TRUE(check_result.ok()) << "CheckTagPresent failed";
 
-  auto result = check_poll.value();
-  ASSERT_TRUE(result.ok()) << "CheckTagPresent failed";
-
-  bool present = result.value();
+  bool present = check_result.value();
   PW_LOG_INFO("Tag present: %s", present ? "yes" : "no");
 
   EXPECT_TRUE(present) << "Card should still be present";
@@ -421,26 +447,18 @@ TEST_F(Pn532HardwareTest, CheckTagPresent_WithCard) {
 
 TEST_F(Pn532HardwareTest, Transceive_SelectNdef_WithCard) {
   auto& driver = GetDriver();
-  pw::async2::DispatcherForTest dispatcher;
 
   ASSERT_TRUE(driver.DoInit().ok());
 
   PW_LOG_INFO("Detecting card for APDU test...");
 
-  // Scope the detect future so it's destroyed before creating transceive future
-  bool supports_iso14443_4 = false;
-  {
-    auto detect_future = driver.DoDetectTag(kRfOperationTimeout);
-    auto detect_poll = PollUntilReady(dispatcher, detect_future);
-    ASSERT_TRUE(detect_poll.IsReady()) << "DetectTag did not complete";
-
-    if (!detect_poll.value().ok()) {
-      PW_LOG_WARN("No card detected. Place a card and re-run test.");
-      GTEST_SKIP() << "No card present";
-    }
-
-    supports_iso14443_4 = detect_poll.value().value().supports_iso14443_4;
+  auto detect_result = driver.DetectTagBlocking(kRfOperationTimeout);
+  if (!detect_result.ok()) {
+    PW_LOG_WARN("No card detected. Place a card and re-run test.");
+    GTEST_SKIP() << "No card present";
   }
+
+  bool supports_iso14443_4 = detect_result.value().supports_iso14443_4;
 
   if (!supports_iso14443_4) {
     PW_LOG_WARN("Card does not support ISO14443-4 (APDU). Skipping.");
@@ -468,12 +486,9 @@ TEST_F(Pn532HardwareTest, Transceive_SelectNdef_WithCard) {
 
   std::array<std::byte, 64> response_buffer{};
 
-  auto transceive_future =
-      driver.DoTransceive(kSelectNdefApp, response_buffer, kRfOperationTimeout);
-  auto transceive_poll = PollUntilReady(dispatcher, transceive_future);
-  ASSERT_TRUE(transceive_poll.IsReady()) << "Transceive did not complete";
+  auto result = driver.TransceiveBlocking(
+      kSelectNdefApp, response_buffer, kRfOperationTimeout);
 
-  auto result = transceive_poll.value();
   if (!result.ok()) {
     PW_LOG_WARN(
         "Transceive failed (status=%d) - card may not support NDEF",
@@ -535,7 +550,6 @@ TEST_F(Pn532HardwareTest, MultipleInitCalls_Succeed) {
 
 TEST_F(Pn532HardwareTest, Interactive_CardDetectionCycles) {
   auto& driver = GetDriver();
-  pw::async2::DispatcherForTest dispatcher;
 
   ASSERT_TRUE(driver.DoInit().ok());
 
@@ -550,16 +564,14 @@ TEST_F(Pn532HardwareTest, Interactive_CardDetectionCycles) {
         ">>> Cycle %d/3: PLACE card on reader (30s timeout) <<<", cycle
     );
 
-    // Poll with short timeouts to work around RunInTaskUntilStalled behavior.
-    // Each DoDetectTag creates a fresh InListPassiveTarget command.
+    // Poll with short timeouts
     bool detected = false;
     maco::nfc::TagInfo tag_info{};
     for (int attempt = 0; attempt < 60 && !detected; ++attempt) {
-      auto future = driver.DoDetectTag(kRfOperationTimeout);  // 500ms
-      auto poll = PollUntilReady(dispatcher, future);
-      if (poll.IsReady() && poll.value().ok()) {
+      auto result = driver.DetectTagBlocking(kRfOperationTimeout);
+      if (result.ok()) {
         detected = true;
-        tag_info = poll.value().value();
+        tag_info = result.value();
       } else if (attempt % 10 == 0) {
         PW_LOG_INFO("  Waiting... attempt %d/60", attempt);
       }
@@ -584,27 +596,21 @@ TEST_F(Pn532HardwareTest, Interactive_CardDetectionCycles) {
         ">>> Cycle %d/3: REMOVE card from reader (30s timeout) <<<", cycle
     );
 
-    // Wait for card removal using CheckTagPresent (not DetectTag)
-    // CheckTagPresent sends a command to the existing target to verify it's
-    // still there Throttle to ~5Hz to avoid spamming the PN532
+    // Wait for card removal using CheckTagPresent
     bool removed = false;
-    for (int attempt = 0; attempt < 150 && !removed;
-         ++attempt) {  // 150 * 200ms = 30s
-      auto future = driver.DoCheckTagPresent(kShortTimeout);  // 100ms timeout
-      auto poll = PollUntilReady(dispatcher, future);
-      if (poll.IsReady()) {
-        if (!poll.value().ok()) {
-          // Error (likely card removed mid-transaction) - recover and treat as
-          // removed
-          PW_LOG_INFO("  Error during presence check, recovering...");
-          (void)driver.RecoverFromDesync();
-          removed = true;
-          PW_LOG_INFO("  REMOVED!");
-        } else if (!poll.value().value()) {
-          // Tag explicitly not present
-          removed = true;
-          PW_LOG_INFO("  REMOVED!");
-        }
+    for (int attempt = 0; attempt < 150 && !removed; ++attempt) {
+      auto result = driver.CheckTagPresentBlocking(kShortTimeout);
+      if (!result.ok()) {
+        // Error (likely card removed mid-transaction) - recover and treat as
+        // removed
+        PW_LOG_INFO("  Error during presence check, recovering...");
+        (void)driver.RecoverFromDesync();
+        removed = true;
+        PW_LOG_INFO("  REMOVED!");
+      } else if (!result.value()) {
+        // Tag explicitly not present
+        removed = true;
+        PW_LOG_INFO("  REMOVED!");
       }
       if (!removed) {
         HAL_Delay_Milliseconds(200);  // ~5Hz polling rate

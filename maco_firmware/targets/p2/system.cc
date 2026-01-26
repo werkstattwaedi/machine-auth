@@ -167,7 +167,8 @@ maco::nfc::NfcReader& GetNfcReader() {
     initialized = true;
   }
 
-  static maco::nfc::Pn532NfcReader reader(uart, reset_pin);
+  static maco::nfc::Pn532NfcReader reader(
+      uart, reset_pin, pw::System().allocator());
   return reader;
 }
 

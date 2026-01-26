@@ -16,29 +16,17 @@ cc_library(
     ],
 )
 
-# PN532 NFC reader (merged driver + reader + FSM)
+# PN532 NFC reader (coroutine-based implementation)
 cc_library(
     name = "pn532_nfc_reader",
     srcs = [
-        "pn532_await_idle_future.cc",
-        "pn532_call_future.cc",
-        "pn532_check_present_future.cc",
         "pn532_command.cc",
-        "pn532_detect_tag_future.cc",
         "pn532_nfc_reader.cc",
-        "pn532_nfc_reader_fsm.cc",
-        "pn532_transceive_future.cc",
     ],
     hdrs = [
-        "pn532_await_idle_future.h",
-        "pn532_call_future.h",
-        "pn532_check_present_future.h",
         "pn532_command.h",
         "pn532_constants.h",
-        "pn532_detect_tag_future.h",
         "pn532_nfc_reader.h",
-        "pn532_nfc_reader_fsm.h",
-        "pn532_transceive_future.h",
     ],
     deps = [
         ":tag_info",
@@ -47,9 +35,10 @@ cc_library(
         "//maco_firmware/modules/nfc_reader:nfc_event",
         "//maco_firmware/modules/nfc_reader:transceive_request",
         "//maco_firmware/modules/nfc_tag",
-        "//third_party/etl",
+        "@pigweed//pw_allocator:allocator",
         "@pigweed//pw_assert:check",
-        "@pigweed//pw_async2",
+        "@pigweed//pw_async2:coro",
+        "@pigweed//pw_async2:coro_or_else_task",
         "@pigweed//pw_async2:dispatcher",
         "@pigweed//pw_async2:value_future",
         "@pigweed//pw_bytes",
@@ -83,15 +72,6 @@ pw_cc_test(
     ],
 )
 
-pw_cc_test(
-    name = "pn532_fsm_test",
-    srcs = ["pn532_fsm_test.cc"],
-    deps = [
-        ":pn532_nfc_reader",
-        "//maco_firmware/modules/nfc_reader:nfc_event",
-    ],
-)
-
 # On-device hardware test (requires P2 with PN532 connected)
 particle_cc_test(
     name = "hardware_test",
@@ -102,6 +82,7 @@ particle_cc_test(
         "@particle_bazel//:device_os_headers",
         "@particle_bazel//pw_digital_io_particle:digital_io",
         "@particle_bazel//pw_stream_particle:uart_stream",
+        "@pigweed//pw_allocator:testing",
         "@pigweed//pw_async2:testing",
         "@pigweed//pw_log",
     ],
