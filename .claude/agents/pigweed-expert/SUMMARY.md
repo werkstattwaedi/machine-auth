@@ -94,18 +94,23 @@ The "Sense" tutorial is a complete example project:
 ### pw_async2 - Cooperative Async Framework
 **Purpose:** Enables concurrent programming through cooperative scheduling without threading overhead.
 
-**Key APIs:**
-- `Task` - Unit of work implementing `DoPend(Context&)` returning `Poll<>`
+**Key APIs (prefer coroutines):**
+- **`Coro<T>`** - C++20 coroutine with `co_await`/`co_return` **(preferred for sequential async)**
+- **`CoroContext`** - Allocator wrapper for coroutine frames (~512 bytes)
+- **`CoroOrElseTask`** - Wraps coroutine with error handler for dispatcher
+- `Task` - Manual unit of work implementing `DoPend(Context&)` (use when coroutines not suitable)
 - `Dispatcher` - Coordinates task execution via `Post()` and `RunToCompletion()`
 - `Future<T>` - Async result container
 - Channels (SPSC/SPMC/MPSC/MPMC) - Inter-task communication
 
-**When to use:** Non-blocking I/O, state machines, concurrent operations without threads.
+**When to use:**
+- **`Coro<T>`** - Sequential async operations (preferred)
+- **`Task` + enum/switch** - Only when coroutines not suitable (rare)
 
 **Common mistakes:**
+- Using manual `Task`+enum/switch when coroutines would be cleaner
 - Blocking inside `DoPend()` (should always return quickly)
 - Forgetting to wake the dispatcher when state changes
-- Not handling `Pending` vs `Ready` states correctly
 
 ---
 
@@ -286,7 +291,27 @@ pw::Result<int> GetValue() {
 }
 ```
 
-### Async Task Pattern
+### Async Coroutine Pattern (Preferred)
+```cpp
+pw::async2::Coro<pw::Status> DoOperation(pw::async2::CoroContext& cx) {
+  auto result1 = co_await Step1(cx);
+  if (!result1.ok()) co_return result1.status();
+
+  auto result2 = co_await Step2(cx, *result1);
+  if (!result2.ok()) co_return result2.status();
+
+  co_return pw::OkStatus();
+}
+
+// Start coroutine on dispatcher
+void Start(pw::async2::Dispatcher& dispatcher) {
+  auto coro = DoOperation(coro_cx_);
+  task_.emplace(std::move(coro), [](pw::Status) { /* error handler */ });
+  dispatcher.Post(*task_);
+}
+```
+
+### Async Task Pattern (Manual/Legacy)
 ```cpp
 class MyTask : public pw::async2::Task {
   pw::async2::Poll<> DoPend(pw::async2::Context& cx) override {
@@ -374,8 +399,9 @@ Need to borrow guarded object? → pw::sync::Borrowable<T>
 
 ### Choosing Async Pattern
 ```
+Sequential async operations? → pw_async2::Coro<T> (preferred)
+Complex non-sequential logic? → Task with DoPend + enum/switch (rare)
 Single operation? → Return Future directly
-Multiple sequential ops? → Task with state machine
 Passing data between tasks? → pw_async2 Channel
 ```
 

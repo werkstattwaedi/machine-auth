@@ -194,9 +194,66 @@ void HardwareReset() {
 
 **CRITICAL: Never write synchronous/blocking code.** All I/O and waiting must be async using `pw_async2`.
 
-#### Core Pattern: Task + DoPend + Poll
+See [ADR-0014](../docs/adr/0014-cpp20-coroutines-for-async.md) for architectural decision.
 
-Tasks inherit from `pw::async2::Task` and implement `DoPend()`:
+#### Preferred Pattern: C++20 Coroutines (pw_async2::Coro)
+
+Use coroutines for sequential async operations. They provide readable code flow without manual state tracking:
+
+```cpp
+#include "pw_async2/coro.h"
+#include "pw_async2/coro_or_else_task.h"
+
+class MyReader {
+ public:
+  MyReader(pw::allocator::Allocator& alloc) : coro_cx_(alloc) {}
+
+  void Start(pw::async2::Dispatcher& dispatcher) {
+    auto coro = RunLoop(coro_cx_);
+    task_.emplace(std::move(coro), [](pw::Status s) {
+      PW_LOG_ERROR("Coro failed: %d", static_cast<int>(s.code()));
+    });
+    dispatcher.Post(*task_);
+  }
+
+ private:
+  pw::async2::Coro<pw::Status> RunLoop(pw::async2::CoroContext& cx) {
+    while (true) {
+      auto result = co_await DetectTag(cx, timeout_);
+      if (!result.ok()) continue;
+      // Process tag...
+    }
+    co_return pw::OkStatus();
+  }
+
+  pw::async2::Coro<pw::Result<TagInfo>> DetectTag(
+      pw::async2::CoroContext& cx,
+      pw::chrono::SystemClock::duration timeout) {
+    auto cmd_result = co_await SendCommand(cx, detect_cmd_, deadline);
+    if (!cmd_result.ok()) co_return cmd_result.status();
+    co_return ParseResponse(*cmd_result);
+  }
+
+  pw::async2::CoroContext coro_cx_;  // ~512 bytes from allocator
+  std::optional<pw::async2::CoroOrElseTask> task_;
+};
+```
+
+**Key components:**
+- `CoroContext` - Allocator wrapper for coroutine frames (~512 bytes needed)
+- `Coro<T>` - Coroutine return type (T = return value type)
+- `CoroOrElseTask` - Wraps coroutine with error handler for dispatcher
+- `co_await` - Suspend until sub-coroutine completes
+- `co_return` - Return value from coroutine
+
+**Benefits over enum+switch:**
+- More readable sequential code flow
+- No manual state tracking
+- Compiler handles suspension/resumption
+
+#### Alternative: Manual Task with enum+switch
+
+For rare cases where coroutines aren't suitable, use the manual pattern:
 
 ```cpp
 #include "pw_async2/dispatcher.h"
@@ -305,9 +362,7 @@ return Pending();
 
 #### Reference Examples
 
-- **Low-level protocol**: `devices/pn532/pn532_call_future.*` - UART state machine
-- **High-level futures**: `devices/pn532/pn532_detect_tag_future.h` - typed results
-- **Task with FSM**: `devices/pn532/pn532_nfc_reader.*` - ReaderTask + ETL FSM
+- **Coroutine driver (preferred)**: `devices/pn532/pn532_nfc_reader.*` - C++20 coroutines for sequential NFC operations
 - **Event subscription**: `modules/app_state/nfc_event_handler.*` - subscribe/handle pattern
 - **RPC integration**: `modules/firebase/firebase_client.*` - callback → future bridge
 

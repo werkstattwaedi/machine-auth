@@ -44,7 +44,7 @@ When you see these patterns, suggest Pigweed alternatives:
 
 | Pattern | Issue | Pigweed Solution |
 |---------|-------|-----------------|
-| Hand-rolled state machines | Complex, hard to test | `pw::async2::Coro` |
+| Hand-rolled state machines for async | Complex, hard to test | **`pw::async2::Coro<T>` (preferred)** - use coroutines over manual Task+enum/switch |
 | Custom mutex wrappers | Platform-specific | `pw::sync::Mutex` |
 | Manual time handling | Platform-specific, error-prone | `pw::chrono` |
 | Custom serialization | Reinventing the wheel | `pw::protobuf`, `pw::rpc` |
@@ -79,12 +79,14 @@ PW_LOG_INFO("Sensor value: %d", value);
 PW_LOG_ERROR("Failed: %s", status.str());
 ```
 
-**pw_async2** - Cooperative async without RTOS threads
+**pw_async2** - Cooperative async with C++20 coroutines (preferred)
 ```cpp
-pw::async2::Coro<pw::Status> DoWork(pw::async2::Dispatcher& dispatcher) {
-  co_await SomeAsyncOp();
+pw::async2::Coro<pw::Status> DoWork(pw::async2::CoroContext& cx) {
+  auto result = co_await SomeAsyncOp(cx);
+  if (!result.ok()) co_return result.status();
   co_return pw::OkStatus();
 }
+// Start: task_.emplace(DoWork(coro_cx_), error_handler); dispatcher.Post(*task_);
 ```
 
 ## Design Principles to Enforce

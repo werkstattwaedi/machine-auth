@@ -1,6 +1,6 @@
 # ADR-0010: State Machine Architecture
 
-**Status:** Accepted
+**Status:** Accepted (async task portion superseded by [ADR-0014](0014-cpp20-coroutines-for-async.md))
 
 **Date:** 2026-01-04
 

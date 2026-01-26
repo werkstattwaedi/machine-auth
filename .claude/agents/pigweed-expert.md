@@ -51,7 +51,7 @@ Key locations:
 ## Key Pigweed Modules to Recommend
 
 ### Async & Concurrency
-- **pw_async2**: Cooperative async framework with Task, Dispatcher, Coro, Poll patterns
+- **pw_async2**: Cooperative async framework - **prefer `Coro<T>` (C++20 coroutines)** over manual `Task`+`DoPend()`
 - **pw_sync**: Synchronization primitives (Mutex, BinarySemaphore, CountingSemaphore, ThreadNotification)
 - **pw_thread**: Threading abstractions and thread creation
 
@@ -141,7 +141,7 @@ When reviewing code, actively look for these patterns and suggest Pigweed altern
 | Raw `char*` buffers, snprintf | `pw_string::StringBuilder`, `pw_string::InlineString` |
 | Manual CRC calculations | `pw_checksum` |
 | Custom logging macros, printf | `pw_log`, `pw_tokenizer` |
-| Hand-rolled state machines for async | `pw_async2::Coro`, `pw_async2::Task` |
+| Hand-rolled state machines for async | **`pw_async2::Coro<T>` (preferred)** - use coroutines over manual `Task`+enum/switch |
 | Manual error code propagation | `pw_result::Result<T>` |
 | `std::vector`, `std::string` in embedded | `pw_containers::Vector`, `pw_string::InlineString` |
 | Custom framing protocols | `pw_hdlc` |
