@@ -172,23 +172,26 @@ void PicoRes28LcdDriver::Flush(
   const uint16_t x2 = static_cast<uint16_t>(area->x2);
   const uint16_t y2 = static_cast<uint16_t>(area->y2);
 
+  // Encode coordinates as big-endian bytes at runtime
+  // (pw::bytes::CopyInOrder is constexpr and requires compile-time values in C++20)
+  const std::array<std::byte, 4> column_data = {
+      static_cast<std::byte>(x1 >> 8),
+      static_cast<std::byte>(x1 & 0xFF),
+      static_cast<std::byte>(x2 >> 8),
+      static_cast<std::byte>(x2 & 0xFF),
+  };
+  const std::array<std::byte, 4> row_data = {
+      static_cast<std::byte>(y1 >> 8),
+      static_cast<std::byte>(y1 & 0xFF),
+      static_cast<std::byte>(y2 >> 8),
+      static_cast<std::byte>(y2 & 0xFF),
+  };
+
   // Set column address (CASET)
-  SendData(
-      kCmdColumnAddressSet,
-      pw::bytes::Concat(
-          pw::bytes::CopyInOrder(pw::endian::big, x1),
-          pw::bytes::CopyInOrder(pw::endian::big, x2)
-      )
-  );
+  SendData(kCmdColumnAddressSet, column_data);
 
   // Set row address (RASET)
-  SendData(
-      kCmdRowAddressSet,
-      pw::bytes::Concat(
-          pw::bytes::CopyInOrder(pw::endian::big, y1),
-          pw::bytes::CopyInOrder(pw::endian::big, y2)
-      )
-  );
+  SendData(kCmdRowAddressSet, row_data);
 
   // Memory write (RAMWR) + pixel data
   SendData(kCmdMemoryWrite, pixels);
