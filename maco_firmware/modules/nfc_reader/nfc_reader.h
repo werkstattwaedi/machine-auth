@@ -26,6 +26,9 @@ using TransceiveFuture = pw::async2::ValueFuture<pw::Result<size_t>>;
 /// Type alias for event notification future.
 using EventFuture = pw::async2::ValueFuture<NfcEvent>;
 
+/// Type alias for initialization result future.
+using InitFuture = pw::async2::ValueFuture<pw::Status>;
+
 /// Abstract NFC reader interface.
 ///
 /// Provides a platform-agnostic API for NFC tag detection and communication.
@@ -41,14 +44,14 @@ class NfcReader {
 
   // -- Lifecycle --
 
-  /// Initialize the reader hardware.
-  /// Must be called before Start().
-  virtual pw::Status Init() = 0;
-
-  /// Start the reader task.
-  /// After this call, the reader will begin detecting tags.
+  /// Start the reader task and begin async initialization.
+  ///
+  /// Returns a future that resolves when initialization completes. The reader
+  /// will automatically begin detecting tags once initialized successfully.
+  ///
   /// @param dispatcher The async dispatcher to register the reader task with
-  virtual void Start(pw::async2::Dispatcher& dispatcher) = 0;
+  /// @return Future that resolves with OkStatus on success, or an error status
+  virtual InitFuture Start(pw::async2::Dispatcher& dispatcher) = 0;
 
   // -- Tag Access --
 

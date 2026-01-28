@@ -55,10 +55,9 @@ class MockNfcReader : public NfcReader {
 
   // -- NfcReader Interface --
 
-  pw::Status Init() override { return pw::OkStatus(); }
-
-  void Start(pw::async2::Dispatcher& /*dispatcher*/) override {
+  InitFuture Start(pw::async2::Dispatcher& /*dispatcher*/) override {
     started_ = true;
+    return InitFuture::Resolved(pw::OkStatus());
   }
 
   bool HasTag() const override { return current_tag_ != nullptr; }

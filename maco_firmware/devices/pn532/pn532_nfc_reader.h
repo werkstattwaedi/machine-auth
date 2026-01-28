@@ -25,7 +25,7 @@
 #include "pw_digital_io/digital_io.h"
 #include "pw_result/result.h"
 #include "pw_status/status.h"
-#include "pw_stream/stream.h"
+#include "pb_uart/async_uart.h"
 
 namespace maco::nfc {
 
@@ -63,19 +63,18 @@ class Pn532NfcReader : public NfcReader {
   static constexpr auto kDefaultTimeout = std::chrono::milliseconds(89);
 
   /// Construct a PN532 NFC reader.
-  /// @param uart UART stream for communication (must be 115200 baud)
+  /// @param uart Async UART for communication (must be initialized at 115200 baud)
   /// @param reset_pin Reset pin (active low)
   /// @param alloc Allocator for coroutine frames (needs ~512 bytes)
   /// @param config Configuration for timing parameters
-  Pn532NfcReader(pw::stream::ReaderWriter& uart,
+  Pn532NfcReader(pb::AsyncUart& uart,
                  pw::digital_io::DigitalOut& reset_pin,
                  pw::allocator::Allocator& alloc,
                  const Pn532ReaderConfig& config = Pn532ReaderConfig());
 
   // -- NfcReader Interface --
 
-  pw::Status Init() override;
-  void Start(pw::async2::Dispatcher& dispatcher) override;
+  InitFuture Start(pw::async2::Dispatcher& dispatcher) override;
   bool HasTag() const override { return current_tag_ != nullptr; }
   std::shared_ptr<NfcTag> GetCurrentTag() override { return current_tag_; }
 
@@ -103,10 +102,11 @@ class Pn532NfcReader : public NfcReader {
 
   /// Send a PN532 command and receive response.
   /// Handles frame building, ACK, and response parsing.
+  /// @param timeout_ms Timeout in milliseconds (rounded up for sub-ms precision)
   pw::async2::Coro<pw::Result<pw::ConstByteSpan>> SendCommand(
       pw::async2::CoroContext& cx,
       const Pn532Command& cmd,
-      pw::chrono::SystemClock::time_point deadline);
+      uint32_t timeout_ms);
 
   /// Detect a tag using InListPassiveTarget.
   pw::async2::Coro<pw::Result<TagInfo>> DetectTag(
@@ -125,25 +125,17 @@ class Pn532NfcReader : public NfcReader {
       pw::async2::CoroContext& cx,
       pw::chrono::SystemClock::duration timeout);
 
-  // -- Blocking Init Helpers --
+  // -- Async Init --
 
-  pw::Status DoInit();
-  pw::Status DoReset();
-  pw::Status DoReleaseTag(uint8_t target_number);
-  pw::Status RecoverFromDesync();
+  /// Async initialization coroutine (hardware reset, SAMConfiguration, etc.)
+  pw::async2::Coro<pw::Status> DoAsyncInit(pw::async2::CoroContext& cx);
 
-  pw::Status WriteFrameBlocking(uint8_t command, pw::ConstByteSpan params);
-  pw::Status WaitForAckBlocking(pw::chrono::SystemClock::duration timeout);
-  pw::Result<size_t> ReadFrameBlocking(
-      uint8_t expected_command,
-      pw::ByteSpan response_buffer,
-      pw::chrono::SystemClock::duration timeout);
-  pw::Result<size_t> SendCommandAndReceiveBlocking(
-      uint8_t command,
-      pw::ConstByteSpan params,
-      pw::ByteSpan response_buffer,
-      pw::chrono::SystemClock::duration timeout);
-  bool ScanForStartSequenceBlocking(pw::chrono::SystemClock::duration timeout);
+  /// Release target asynchronously
+  pw::async2::Coro<pw::Status> DoReleaseTag(pw::async2::CoroContext& cx,
+                                             uint8_t target_number);
+
+  /// Recover from protocol desync (sends ACK abort, waits for in-flight data)
+  pw::async2::Coro<pw::Status> RecoverFromDesync(pw::async2::CoroContext& cx);
 
   // -- Utility --
 
@@ -155,7 +147,7 @@ class Pn532NfcReader : public NfcReader {
 
  private:
   // Hardware
-  pw::stream::ReaderWriter& uart_;
+  pb::AsyncUart& uart_;
   pw::digital_io::DigitalOut& reset_pin_;
   Pn532ReaderConfig config_;
 
@@ -163,6 +155,10 @@ class Pn532NfcReader : public NfcReader {
   pw::async2::CoroContext coro_cx_;
   std::optional<pw::async2::CoroOrElseTask> reader_task_;
   pw::async2::Dispatcher* dispatcher_ = nullptr;
+  bool started_ = false;  // Guard against multiple Start() calls
+
+  // Init status provider
+  pw::async2::ValueProvider<pw::Status> init_status_provider_;
 
   // Tag state
   std::shared_ptr<NfcTag> current_tag_;

@@ -28,7 +28,7 @@
 #include "firebase/firebase_client.h"
 #include "pb_crypto/pb_crypto.h"
 #include "pb_digital_io/digital_io.h"
-#include "pb_stream/uart_stream.h"
+#include "pb_uart/async_uart.h"
 #include "pb_log/log_bridge.h"
 #include "pb_spi/initiator.h"
 #include "pinmap_hal.h"
@@ -149,8 +149,14 @@ const pw::thread::Options& GetDefaultThreadOptions() {
 }
 
 maco::nfc::NfcReader& GetNfcReader() {
-  // Create UART stream for PN532 communication
-  static pb::ParticleUartStream uart(HAL_USART_SERIAL1);
+  // UART buffers for PN532 (max normal frame ~262 bytes)
+  // Must be 32-byte aligned for DMA on RTL872x
+  constexpr size_t kUartBufferSize = 265;
+  alignas(32) static std::byte rx_buf[kUartBufferSize];
+  alignas(32) static std::byte tx_buf[kUartBufferSize];
+
+  // Create async UART for PN532 communication
+  static pb::AsyncUart uart(HAL_USART_SERIAL1, rx_buf, tx_buf);
   static pb::ParticleDigitalOut reset_pin(kPinNfcReset);
 
   // Initialize peripherals once

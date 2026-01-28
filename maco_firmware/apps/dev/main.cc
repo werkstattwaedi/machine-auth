@@ -69,19 +69,14 @@ void AppInit() {
   }
   PW_LOG_INFO("Display initialized: %dx%d", display.width(), display.height());
 
-  // Get and initialize NFC reader (not LVGL related, runs on main thread)
-  PW_LOG_INFO("Initializing NFC reader...");
+  // Get and start NFC reader (init happens asynchronously)
+  PW_LOG_INFO("Starting NFC reader...");
   auto& nfc_reader = maco::system::GetNfcReader();
 
-  status = nfc_reader.Init();
-  if (!status.ok()) {
-    PW_LOG_ERROR("NFC reader init failed");
-    return;
-  }
-  PW_LOG_INFO("NFC reader initialized");
-
-  // Start NFC reader task on the system dispatcher
-  nfc_reader.Start(pw::System().dispatcher());
+  // Start returns a future that resolves when init completes
+  // For now, we fire-and-forget - the driver logs errors internally
+  (void)nfc_reader.Start(pw::System().dispatcher());
+  PW_LOG_INFO("NFC reader started (init in progress)");
 
   // Start NFC event handler to bridge events to app state
   static maco::app_state::NfcEventHandler nfc_event_handler(

@@ -39,21 +39,27 @@ void NfcEventHandler::HandleEvent(const nfc::NfcEvent& event) {
 }
 
 pw::async2::Poll<> NfcEventHandler::EventTask::DoPend(pw::async2::Context& cx) {
-  if (parent_.event_future_.has_value()) {
+  // Loop to handle event and poll the new future after re-subscribing.
+  // This ensures we always call Pend() on the current future before returning
+  // Pending(), which is required to store the waker for wake-up.
+  while (parent_.event_future_.has_value()) {
     auto poll = parent_.event_future_->Pend(cx);
-    if (poll.IsReady()) {
-      nfc::NfcEvent event = std::move(poll.value());
-      parent_.event_future_.reset();
-
-      // Handle the event
-      parent_.HandleEvent(event);
-
-      // Re-subscribe for the next event
-      parent_.Subscribe();
+    if (poll.IsPending()) {
+      // Waker was stored by Pend() - safe to return Pending
+      return pw::async2::Pending();
     }
+
+    nfc::NfcEvent event = std::move(poll.value());
+    parent_.event_future_.reset();
+
+    // Handle the event
+    parent_.HandleEvent(event);
+
+    // Re-subscribe for the next event - loop will poll the new future
+    parent_.Subscribe();
   }
 
-  // The future's waker will wake this task when resolved - no need to ReEnqueue
+  // No future subscribed - shouldn't happen in normal operation
   return pw::async2::Pending();
 }
 

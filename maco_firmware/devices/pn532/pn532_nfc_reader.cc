@@ -4,6 +4,10 @@
 // Must define PW_LOG_MODULE_NAME before including any headers that use pw_log
 #define PW_LOG_MODULE_NAME "pn532"
 
+// Uncomment below to enable debug logging for UART diagnostics
+// #undef PW_LOG_LEVEL
+// #define PW_LOG_LEVEL PW_LOG_LEVEL_DEBUG
+
 #include "maco_firmware/devices/pn532/pn532_nfc_reader.h"
 
 #include <cstring>
@@ -11,9 +15,10 @@
 #include "maco_firmware/devices/pn532/pn532_command.h"
 #include "maco_firmware/devices/pn532/pn532_constants.h"
 #include "pw_assert/check.h"
+#include "pw_async2/system_time_provider.h"
+#include "pw_hex_dump/log_bytes.h"
 #include "pw_log/log.h"
 #include "pw_status/try.h"
-#include "pw_thread/sleep.h"
 
 namespace maco::nfc {
 
@@ -49,7 +54,18 @@ class Pn532Tag : public NfcTag {
 // Constructor
 //=============================================================================
 
-Pn532NfcReader::Pn532NfcReader(pw::stream::ReaderWriter& uart,
+// Default timeout for init commands (in milliseconds)
+// More generous for startup commands - they only run once
+constexpr uint32_t kDefaultTimeoutMs = 200;
+
+// Convert duration to milliseconds, rounding up for sub-ms precision
+inline uint32_t ToTimeoutMs(pw::chrono::SystemClock::duration timeout) {
+  auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+      timeout + std::chrono::microseconds(999));
+  return static_cast<uint32_t>(ms.count());
+}
+
+Pn532NfcReader::Pn532NfcReader(pb::AsyncUart& uart,
                                pw::digital_io::DigitalOut& reset_pin,
                                pw::allocator::Allocator& alloc,
                                const Pn532ReaderConfig& config)
@@ -62,9 +78,9 @@ Pn532NfcReader::Pn532NfcReader(pw::stream::ReaderWriter& uart,
 // NfcReader Interface Implementation
 //=============================================================================
 
-pw::Status Pn532NfcReader::Init() { return DoInit(); }
-
-void Pn532NfcReader::Start(pw::async2::Dispatcher& dispatcher) {
+InitFuture Pn532NfcReader::Start(pw::async2::Dispatcher& dispatcher) {
+  PW_CHECK(!started_, "Start() called twice - only one call allowed");
+  started_ = true;
   dispatcher_ = &dispatcher;
 
   // Create the main loop coroutine
@@ -80,6 +96,9 @@ void Pn532NfcReader::Start(pw::async2::Dispatcher& dispatcher) {
       });
 
   dispatcher.Post(*reader_task_);
+
+  // Return future that will be resolved when init completes
+  return init_status_provider_.Get();
 }
 
 TransceiveFuture Pn532NfcReader::RequestTransceive(
@@ -105,6 +124,18 @@ EventFuture Pn532NfcReader::SubscribeOnce() { return event_provider_.Get(); }
 pw::async2::Coro<pw::Status> Pn532NfcReader::RunLoop(
     pw::async2::CoroContext& cx) {
   PW_LOG_INFO("PN532 reader coroutine started");
+
+  auto& time = pw::async2::GetSystemTimeProvider();
+
+  // === INIT PHASE ===
+  auto init_status = co_await DoAsyncInit(cx);
+  init_status_provider_.Resolve(init_status);
+
+  if (!init_status.ok()) {
+    PW_LOG_ERROR("PN532 init failed: %d", static_cast<int>(init_status.code()));
+    co_return init_status;
+  }
+  PW_LOG_INFO("PN532 initialized");
 
   while (true) {
     // === DETECTING ===
@@ -170,8 +201,7 @@ pw::async2::Coro<pw::Status> Pn532NfcReader::RunLoop(
             current_tag_->Invalidate();
           }
           DrainReceiveBuffer();
-          (void)DoReleaseTag(current_target_number_);
-          current_target_number_ = 0;
+          (void)co_await DoReleaseTag(cx, current_target_number_);
 
           event_provider_.Resolve(
               NfcEvent{NfcEventType::kTagDeparted, current_tag_});
@@ -184,14 +214,27 @@ pw::async2::Coro<pw::Status> Pn532NfcReader::RunLoop(
             pw::chrono::SystemClock::now() + config_.presence_check_interval;
       }
 
-      // Short sleep to let other tasks run, then check again.
-      // This is a simple polling approach - the UART I/O is poll-based anyway.
-      pw::this_thread::sleep_for(10ms);
+      // Short async delay to let other tasks run, then check again.
+      co_await time.WaitFor(10ms);
     }
   }
 
   co_return pw::OkStatus();
 }
+
+//=============================================================================
+// Debug Logging Helpers
+//=============================================================================
+
+namespace {
+
+// Log a byte span with prefix using pw_hex_dump
+void LogHex(const char* prefix, pw::ConstByteSpan data) {
+  PW_LOG_DEBUG("%s (%u bytes):", prefix, static_cast<unsigned>(data.size()));
+  pw::dump::LogBytes(PW_LOG_LEVEL_DEBUG, data);
+}
+
+}  // namespace
 
 //=============================================================================
 // SendCommand Coroutine - Core Protocol Handler
@@ -200,35 +243,33 @@ pw::async2::Coro<pw::Status> Pn532NfcReader::RunLoop(
 pw::async2::Coro<pw::Result<pw::ConstByteSpan>> Pn532NfcReader::SendCommand(
     [[maybe_unused]] pw::async2::CoroContext& cx,
     const Pn532Command& cmd,
-    pw::chrono::SystemClock::time_point deadline) {
+    uint32_t timeout_ms) {
   // Build frame
   size_t frame_len = cmd.BuildFrame(tx_buffer_);
   if (frame_len == 0) {
     co_return pw::Status::OutOfRange();  // Command too large
   }
 
-  // Send frame
+  // Send frame FIRST - logging can cause delays that break timing-sensitive wakeup
   auto write_result = uart_.Write(pw::ConstByteSpan(tx_buffer_.data(), frame_len));
+
+  // Log AFTER write to avoid timing gaps
+  PW_LOG_DEBUG("SendCommand 0x%02X, timeout=%ums", cmd.command, static_cast<unsigned>(timeout_ms));
+  LogHex("TX", pw::ConstByteSpan(tx_buffer_.data(), frame_len));
   if (!write_result.ok()) {
+    PW_LOG_DEBUG("TX write failed: %d", static_cast<int>(write_result.code()));
     co_return write_result;
   }
 
-  // Wait for ACK (6 bytes)
-  size_t ack_received = 0;
-  while (ack_received < ack_buffer_.size()) {
-    if (pw::chrono::SystemClock::now() >= deadline) {
-      co_return pw::Status::DeadlineExceeded();
-    }
-
-    auto result = uart_.Read(pw::ByteSpan(ack_buffer_.data() + ack_received,
-                                          ack_buffer_.size() - ack_received));
-    if (result.ok() && !result.value().empty()) {
-      ack_received += result.value().size();
-    } else {
-      // Short sleep and retry
-      pw::this_thread::sleep_for(1ms);
-    }
+  // Wait for ACK (exactly 6 bytes)
+  PW_LOG_DEBUG("Waiting for ACK...");
+  auto ack_future = uart_.ReadWithTimeout(ack_buffer_, 6, timeout_ms);
+  auto ack_result = co_await ack_future;
+  if (!ack_result.ok()) {
+    PW_LOG_DEBUG("ACK read failed: %d", static_cast<int>(ack_result.status().code()));
+    co_return ack_result.status();
   }
+  LogHex("ACK RX", pw::ConstByteSpan(ack_buffer_.data(), ack_result.size()));
 
   // Validate ACK
   if (std::memcmp(ack_buffer_.data(), kAckFrame.data(), kAckFrame.size()) != 0) {
@@ -236,69 +277,79 @@ pw::async2::Coro<pw::Result<pw::ConstByteSpan>> Pn532NfcReader::SendCommand(
     co_return pw::Status::DataLoss();
   }
 
-  // Read response frame
-  size_t rx_received = 0;
-  while (true) {
-    if (pw::chrono::SystemClock::now() >= deadline) {
-      co_return pw::Status::DeadlineExceeded();
-    }
-
-    auto result = uart_.Read(pw::ByteSpan(rx_buffer_.data() + rx_received,
-                                          rx_buffer_.size() - rx_received));
-    if (result.ok() && !result.value().empty()) {
-      rx_received += result.value().size();
-    }
-
-    // Need at least 5 bytes to determine frame length
-    if (rx_received < 5) {
-      pw::this_thread::sleep_for(1ms);
-      continue;
-    }
-
-    // Find start sequence (0x00 0xFF)
-    size_t start_idx = 0;
-    bool found_start = false;
-    for (size_t i = 0; i + 1 < rx_received; ++i) {
-      if (rx_buffer_[i] == std::byte{0x00} &&
-          rx_buffer_[i + 1] == std::byte{0xFF}) {
-        start_idx = i + 2;  // Point to LEN
-        found_start = true;
-        break;
-      }
-    }
-
-    if (!found_start || start_idx + 2 > rx_received) {
-      pw::this_thread::sleep_for(1ms);
-      continue;
-    }
-
-    // Parse length
-    uint8_t len = static_cast<uint8_t>(rx_buffer_[start_idx]);
-    uint8_t lcs = static_cast<uint8_t>(rx_buffer_[start_idx + 1]);
-
-    if (!Pn532Command::ValidateLengthChecksum(len, lcs)) {
-      PW_LOG_ERROR("Invalid LCS for cmd 0x%02x", cmd.command);
-      co_return pw::Status::DataLoss();
-    }
-
-    // Full frame: start_idx + 2 (len/lcs) + len (data) + 1 (dcs) + 1 (postamble)
-    size_t expected_total = start_idx + 2 + len + 2;
-    if (rx_received < expected_total) {
-      pw::this_thread::sleep_for(1ms);
-      continue;
-    }
-
-    // Parse response
-    auto payload = Pn532Command::ParseResponse(
-        cmd.command, pw::ConstByteSpan(rx_buffer_.data(), rx_received));
-
-    if (!payload.ok()) {
-      PW_LOG_ERROR("Parse error for cmd 0x%02x: %d", cmd.command,
-                   static_cast<int>(payload.status().code()));
-    }
-
-    co_return payload;
+  // Read response frame - first read header to get length
+  // Need at least 5 bytes: preamble(1) + start(2) + len(1) + lcs(1)
+  PW_LOG_DEBUG("Waiting for response header...");
+  auto hdr_future = uart_.ReadWithTimeout(rx_buffer_, 5, timeout_ms);
+  auto hdr_result = co_await hdr_future;
+  if (!hdr_result.ok()) {
+    PW_LOG_DEBUG("Response header read failed: %d", static_cast<int>(hdr_result.status().code()));
+    co_return hdr_result.status();
   }
+  size_t rx_received = hdr_result.size();
+  LogHex("RX hdr", pw::ConstByteSpan(rx_buffer_.data(), rx_received));
+
+  // Find start sequence (0x00 0xFF)
+  size_t start_idx = 0;
+  bool found_start = false;
+  for (size_t i = 0; i + 1 < rx_received; ++i) {
+    if (rx_buffer_[i] == std::byte{0x00} &&
+        rx_buffer_[i + 1] == std::byte{0xFF}) {
+      start_idx = i + 2;  // Point to LEN
+      found_start = true;
+      break;
+    }
+  }
+
+  if (!found_start || start_idx + 2 > rx_received) {
+    PW_LOG_ERROR("Start sequence not found for cmd 0x%02x", cmd.command);
+    co_return pw::Status::DataLoss();
+  }
+
+  // Parse length
+  uint8_t len = static_cast<uint8_t>(rx_buffer_[start_idx]);
+  uint8_t lcs = static_cast<uint8_t>(rx_buffer_[start_idx + 1]);
+
+  if (!Pn532Command::ValidateLengthChecksum(len, lcs)) {
+    PW_LOG_ERROR("Invalid LCS for cmd 0x%02x", cmd.command);
+    co_return pw::Status::DataLoss();
+  }
+
+  // Full frame: start_idx + 2 (len/lcs) + len (data) + 1 (dcs) + 1 (postamble)
+  size_t expected_total = start_idx + 2 + len + 2;
+
+  // Read remainder if needed
+  if (rx_received < expected_total) {
+    size_t remaining = expected_total - rx_received;
+    PW_LOG_DEBUG("Reading %u more bytes for response...", static_cast<unsigned>(remaining));
+    auto rest_future = uart_.ReadWithTimeout(
+        pw::ByteSpan(rx_buffer_.data() + rx_received, remaining),
+        remaining,
+        timeout_ms);
+    auto rest_result = co_await rest_future;
+    if (!rest_result.ok()) {
+      PW_LOG_DEBUG("Response remainder read failed: %d",
+                   static_cast<int>(rest_result.status().code()));
+      co_return rest_result.status();
+    }
+    rx_received += rest_result.size();
+  }
+
+  LogHex("RX full", pw::ConstByteSpan(rx_buffer_.data(), rx_received));
+
+  // Parse response
+  auto payload = Pn532Command::ParseResponse(
+      cmd.command, pw::ConstByteSpan(rx_buffer_.data(), rx_received));
+
+  if (!payload.ok()) {
+    PW_LOG_ERROR("Parse error for cmd 0x%02x: %d", cmd.command,
+                 static_cast<int>(payload.status().code()));
+  } else {
+    PW_LOG_DEBUG("Command 0x%02X success, payload %u bytes",
+                 cmd.command, static_cast<unsigned>(payload->size()));
+  }
+
+  co_return payload;
 }
 
 //=============================================================================
@@ -308,13 +359,13 @@ pw::async2::Coro<pw::Result<pw::ConstByteSpan>> Pn532NfcReader::SendCommand(
 pw::async2::Coro<pw::Result<TagInfo>> Pn532NfcReader::DetectTag(
     pw::async2::CoroContext& cx,
     pw::chrono::SystemClock::duration timeout) {
-  auto deadline = pw::chrono::SystemClock::now() + timeout;
+  uint32_t timeout_ms = ToTimeoutMs(timeout);
 
   // InListPassiveTarget: MaxTg=1, BrTy=106kbps Type A
   std::array<std::byte, 2> params = {std::byte{0x01}, std::byte{0x00}};
   Pn532Command cmd{kCmdInListPassiveTarget, params};
 
-  auto result = co_await SendCommand(cx, cmd, deadline);
+  auto result = co_await SendCommand(cx, cmd, timeout_ms);
 
   // Timeout = no card found
   if (result.status().IsDeadlineExceeded()) {
@@ -376,7 +427,7 @@ pw::async2::Coro<pw::Result<size_t>> Pn532NfcReader::Transceive(
     pw::ConstByteSpan command,
     pw::ByteSpan response_buffer,
     pw::chrono::SystemClock::duration timeout) {
-  auto deadline = pw::chrono::SystemClock::now() + timeout;
+  uint32_t timeout_ms = ToTimeoutMs(timeout);
 
   // Build InDataExchange params: [Tg][DataOut...]
   if (command.size() + 1 > kMaxFrameLength) {
@@ -391,7 +442,7 @@ pw::async2::Coro<pw::Result<size_t>> Pn532NfcReader::Transceive(
   Pn532Command cmd{kCmdInDataExchange,
                    pw::ConstByteSpan(params.data(), params_len)};
 
-  auto result = co_await SendCommand(cx, cmd, deadline);
+  auto result = co_await SendCommand(cx, cmd, timeout_ms);
 
   if (!result.ok()) {
     DrainReceiveBuffer();
@@ -435,13 +486,13 @@ pw::Result<size_t> Pn532NfcReader::ParseTransceiveResponse(
 pw::async2::Coro<pw::Result<bool>> Pn532NfcReader::CheckTagPresent(
     pw::async2::CoroContext& cx,
     pw::chrono::SystemClock::duration timeout) {
-  auto deadline = pw::chrono::SystemClock::now() + timeout;
+  uint32_t timeout_ms = ToTimeoutMs(timeout);
 
   // Diagnose: NumTst=0x06 (Attention Request)
   std::array<std::byte, 1> params = {std::byte{kDiagnoseAttentionRequest}};
   Pn532Command cmd{kCmdDiagnose, params};
 
-  auto result = co_await SendCommand(cx, cmd, deadline);
+  auto result = co_await SendCommand(cx, cmd, timeout_ms);
 
   if (!result.ok()) {
     DrainReceiveBuffer();
@@ -470,228 +521,133 @@ pw::Result<bool> Pn532NfcReader::ParseCheckPresentResponse(
 }
 
 //=============================================================================
-// Driver Methods (Init - blocking is OK here)
+// Async Init Coroutine
 //=============================================================================
 
-pw::Status Pn532NfcReader::DoInit() {
-  PW_TRY(DoReset());
+pw::async2::Coro<pw::Status> Pn532NfcReader::DoAsyncInit(
+    pw::async2::CoroContext& cx) {
+  auto& time = pw::async2::GetSystemTimeProvider();
 
-  // After reset, SAMConfiguration must be executed first
+  PW_LOG_DEBUG("Init: starting hardware reset");
+
+  // Hardware reset: active low, hold for 20ms
+  auto status = reset_pin_.SetState(pw::digital_io::State::kInactive);
+  if (!status.ok()) {
+    PW_LOG_ERROR("Init: reset low failed: %d", static_cast<int>(status.code()));
+    co_return status;
+  }
+  co_await time.WaitFor(20ms);
+
+  status = reset_pin_.SetState(pw::digital_io::State::kActive);
+  if (!status.ok()) {
+    PW_LOG_ERROR("Init: reset high failed: %d", static_cast<int>(status.code()));
+    co_return status;
+  }
+  PW_LOG_DEBUG("Init: reset complete, waiting 10ms");
+
+  // Wait for PN532 internal initialization after reset
+  co_await time.WaitFor(10ms);
+
+  // Drain any garbage BEFORE wakeup
+  DrainReceiveBuffer();
+
+  // HSU wakeup with extended preamble.
+  // At 115200 baud: ~11.5 bytes/ms, so 24 bytes = ~2ms preamble.
+  // This covers T_osc_start while the oscillator stabilizes.
+  // uart_.Write() is non-blocking (buffers data), so the preamble and
+  // command frame are sent back-to-back with no gaps.
+  constexpr std::array<std::byte, 24> kWakeupPreamble = {
+      std::byte{0x55}, std::byte{0x55}, std::byte{0x55}, std::byte{0x55},
+      std::byte{0x55}, std::byte{0x55}, std::byte{0x55}, std::byte{0x55},
+      std::byte{0x55}, std::byte{0x55}, std::byte{0x55}, std::byte{0x55},
+      std::byte{0x55}, std::byte{0x55}, std::byte{0x55}, std::byte{0x55},
+      std::byte{0x55}, std::byte{0x55}, std::byte{0x55}, std::byte{0x55},
+      std::byte{0x55}, std::byte{0x55}, std::byte{0x55}, std::byte{0x55}};
+  status = uart_.Write(kWakeupPreamble);
+  if (!status.ok()) {
+    PW_LOG_ERROR("Init: wakeup write failed: %d", static_cast<int>(status.code()));
+    co_return status;
+  }
+
+  // SAMConfiguration - sent immediately after preamble (no delay needed!)
   // Mode=1 (normal), timeout=0x14 (1 second), IRQ=1
   std::array<std::byte, 3> sam_params = {
       std::byte{0x01}, std::byte{0x14}, std::byte{0x01}};
-  std::array<std::byte, 1> response;
+  Pn532Command sam_cmd{kCmdSamConfiguration, sam_params};
 
-  auto result = SendCommandAndReceiveBlocking(kCmdSamConfiguration, sam_params,
-                                              response, kDefaultTimeout);
+  auto result = co_await SendCommand(cx, sam_cmd, kDefaultTimeoutMs);
   if (!result.ok()) {
-    return result.status();
+    PW_LOG_ERROR("SAMConfiguration failed: %d", static_cast<int>(result.status().code()));
+    co_return result.status();
   }
+  PW_LOG_DEBUG("Init: SAMConfiguration OK");
 
-  // Verify firmware version
-  std::array<std::byte, 4> fw_response;
-  result = SendCommandAndReceiveBlocking(kCmdGetFirmwareVersion, {}, fw_response,
-                                         kDefaultTimeout);
+  // GetFirmwareVersion
+  PW_LOG_DEBUG("Init: sending GetFirmwareVersion");
+  Pn532Command fw_cmd{kCmdGetFirmwareVersion, {}};
+  result = co_await SendCommand(cx, fw_cmd, kDefaultTimeoutMs);
   if (!result.ok()) {
-    return result.status();
+    PW_LOG_ERROR("GetFirmwareVersion failed: %d", static_cast<int>(result.status().code()));
+    co_return result.status();
+  }
+  // Log firmware version from payload: [IC][Ver][Rev][Support]
+  if (result->size() >= 4) {
+    auto fw = *result;
+    PW_LOG_INFO("PN532 firmware: IC=0x%02X Ver=%d.%d Support=0x%02X",
+                static_cast<uint8_t>(fw[0]), static_cast<uint8_t>(fw[1]),
+                static_cast<uint8_t>(fw[2]), static_cast<uint8_t>(fw[3]));
   }
 
   // Configure RF parameters for better reliability
-  // CfgItem=0x05: MaxRtyCOM (max retries for communication)
-  std::array<std::byte, 2> rf_params = {std::byte{0x05}, std::byte{0x01}};
-  (void)SendCommandAndReceiveBlocking(kCmdRfConfiguration, rf_params, response,
-                                      kDefaultTimeout);
+  // CfgItem=0x05: MaxRetries (MxRtyATR, MxRtyPSL, MxRtyPassiveActivation)
+  PW_LOG_DEBUG("Init: sending RFConfiguration");
+  std::array<std::byte, 4> rf_params = {
+      std::byte{0x05},  // CfgItem: MaxRetries
+      std::byte{0xFF},  // MxRtyATR: max retries for ATR_REQ
+      std::byte{0x01},  // MxRtyPSL: max retries for PSL_REQ
+      std::byte{0x02}}; // MxRtyPassiveActivation: max retries for InListPassiveTarget
+  Pn532Command rf_cmd{kCmdRfConfiguration, rf_params};
+  (void)co_await SendCommand(cx, rf_cmd, kDefaultTimeoutMs);
 
-  return pw::OkStatus();
+  PW_LOG_DEBUG("Init: complete");
+  co_return pw::OkStatus();
 }
 
-pw::Status Pn532NfcReader::DoReset() {
-  // Hardware reset: active low, hold for 20ms
-  PW_TRY(reset_pin_.SetState(pw::digital_io::State::kInactive));
-  pw::this_thread::sleep_for(20ms);
-  PW_TRY(reset_pin_.SetState(pw::digital_io::State::kActive));
-  pw::this_thread::sleep_for(10ms);
-
-  // HSU wake up: send 0x55 dummy byte for 5th rising edge
-  PW_TRY(uart_.Write(kWakeupByte));
-
-  // T_osc_start: typically a few 100µs, up to 2ms
-  pw::this_thread::sleep_for(2ms);
-
-  return pw::OkStatus();
-}
-
-pw::Status Pn532NfcReader::DoReleaseTag(uint8_t target_number) {
+pw::async2::Coro<pw::Status> Pn532NfcReader::DoReleaseTag(
+    pw::async2::CoroContext& cx, uint8_t target_number) {
+  // InRelease command - properly wait for response to avoid pending data
   std::array<std::byte, 1> params = {std::byte{target_number}};
-  std::array<std::byte, 1> response;
+  Pn532Command cmd{kCmdInRelease, params};
 
-  auto result =
-      SendCommandAndReceiveBlocking(kCmdInRelease, params, response, kDefaultTimeout);
+  auto result = co_await SendCommand(cx, cmd, kDefaultTimeoutMs);
+  current_target_number_ = 0;
+
   if (!result.ok()) {
-    return result.status();
+    // Drain any partial response
+    DrainReceiveBuffer();
+    co_return result.status();
   }
 
-  current_target_number_ = 0;
-  return pw::OkStatus();
+  co_return pw::OkStatus();
 }
 
-pw::Status Pn532NfcReader::RecoverFromDesync() {
-  PW_TRY(uart_.Write(kAckFrame));
+pw::async2::Coro<pw::Status> Pn532NfcReader::RecoverFromDesync(
+    [[maybe_unused]] pw::async2::CoroContext& cx) {
+  auto& time = pw::async2::GetSystemTimeProvider();
+
+  // Send ACK to abort any pending command
+  (void)uart_.Write(kAckFrame);
+
+  // Wait for any in-flight response to complete.
+  // Worst case: 265-byte frame at 115200 baud = ~23ms
+  co_await time.WaitFor(25ms);
+
   DrainReceiveBuffer();
-  return pw::OkStatus();
+  co_return pw::OkStatus();
 }
 
 void Pn532NfcReader::DrainReceiveBuffer() {
-  std::array<std::byte, 64> discard;
-  while (true) {
-    auto result = uart_.Read(discard);
-    if (!result.ok() || result.value().empty()) {
-      break;
-    }
-  }
-}
-
-//=============================================================================
-// Blocking Helpers (Init only)
-//=============================================================================
-
-pw::Status Pn532NfcReader::WriteFrameBlocking(uint8_t command,
-                                              pw::ConstByteSpan params) {
-  std::array<std::byte, 265> tx_buffer;
-  Pn532Command cmd{command, params};
-  size_t frame_len = cmd.BuildFrame(tx_buffer);
-  if (frame_len == 0) {
-    return pw::Status::OutOfRange();
-  }
-  return uart_.Write(pw::ConstByteSpan(tx_buffer.data(), frame_len));
-}
-
-pw::Status Pn532NfcReader::WaitForAckBlocking(
-    pw::chrono::SystemClock::duration timeout) {
-  std::array<std::byte, 6> ack_buffer;
-  size_t bytes_read = 0;
-
-  auto deadline = pw::chrono::SystemClock::now() + timeout;
-
-  while (bytes_read < ack_buffer.size()) {
-    if (pw::chrono::SystemClock::now() >= deadline) {
-      return pw::Status::DeadlineExceeded();
-    }
-
-    auto result = uart_.Read(
-        pw::ByteSpan(ack_buffer.data() + bytes_read, ack_buffer.size() - bytes_read));
-    if (result.ok() && !result.value().empty()) {
-      bytes_read += result.value().size();
-    } else {
-      pw::this_thread::sleep_for(1ms);
-    }
-  }
-
-  if (std::memcmp(ack_buffer.data(), kAckFrame.data(), kAckFrame.size()) != 0) {
-    return pw::Status::DataLoss();
-  }
-
-  return pw::OkStatus();
-}
-
-pw::Result<size_t> Pn532NfcReader::ReadFrameBlocking(
-    uint8_t expected_command,
-    pw::ByteSpan response_buffer,
-    pw::chrono::SystemClock::duration timeout) {
-  std::array<std::byte, 265> rx_buffer;
-  size_t bytes_read = 0;
-
-  auto deadline = pw::chrono::SystemClock::now() + timeout;
-
-  while (true) {
-    if (pw::chrono::SystemClock::now() >= deadline) {
-      return pw::Status::DeadlineExceeded();
-    }
-
-    auto result = uart_.Read(
-        pw::ByteSpan(rx_buffer.data() + bytes_read, rx_buffer.size() - bytes_read));
-    if (result.ok() && !result.value().empty()) {
-      bytes_read += result.value().size();
-    } else {
-      pw::this_thread::sleep_for(1ms);
-      continue;
-    }
-
-    // Need at least 5 bytes
-    if (bytes_read < 5) {
-      continue;
-    }
-
-    // Find start sequence
-    size_t start_idx = 0;
-    bool found_start = false;
-    for (size_t i = 0; i + 1 < bytes_read; ++i) {
-      if (rx_buffer[i] == std::byte{0x00} && rx_buffer[i + 1] == std::byte{0xFF}) {
-        start_idx = i + 2;
-        found_start = true;
-        break;
-      }
-    }
-
-    if (!found_start || start_idx + 2 > bytes_read) {
-      continue;
-    }
-
-    uint8_t len = static_cast<uint8_t>(rx_buffer[start_idx]);
-    uint8_t lcs = static_cast<uint8_t>(rx_buffer[start_idx + 1]);
-
-    if (!Pn532Command::ValidateLengthChecksum(len, lcs)) {
-      return pw::Status::DataLoss();
-    }
-
-    size_t expected_total = start_idx + 2 + len + 2;
-    if (bytes_read < expected_total) {
-      continue;
-    }
-
-    auto payload = Pn532Command::ParseResponse(
-        expected_command, pw::ConstByteSpan(rx_buffer.data(), bytes_read));
-
-    if (!payload.ok()) {
-      return payload.status();
-    }
-
-    size_t copy_len = std::min(payload.value().size(), response_buffer.size());
-    std::memcpy(response_buffer.data(), payload.value().data(), copy_len);
-    return copy_len;
-  }
-}
-
-pw::Result<size_t> Pn532NfcReader::SendCommandAndReceiveBlocking(
-    uint8_t command,
-    pw::ConstByteSpan params,
-    pw::ByteSpan response_buffer,
-    pw::chrono::SystemClock::duration timeout) {
-  PW_TRY(WriteFrameBlocking(command, params));
-  PW_TRY(WaitForAckBlocking(timeout));
-  return ReadFrameBlocking(command, response_buffer, timeout);
-}
-
-bool Pn532NfcReader::ScanForStartSequenceBlocking(
-    pw::chrono::SystemClock::duration timeout) {
-  std::array<std::byte, 1> byte;
-  auto deadline = pw::chrono::SystemClock::now() + timeout;
-  bool found_zero = false;
-
-  while (pw::chrono::SystemClock::now() < deadline) {
-    auto result = uart_.Read(byte);
-    if (!result.ok() || result.value().empty()) {
-      pw::this_thread::sleep_for(1ms);
-      continue;
-    }
-
-    if (found_zero && byte[0] == std::byte{0xFF}) {
-      return true;
-    }
-    found_zero = (byte[0] == std::byte{0x00});
-  }
-
-  return false;
+  uart_.Drain();
 }
 
 }  // namespace maco::nfc

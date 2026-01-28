@@ -9,11 +9,8 @@
 // - RF Operations: Tag detection, APDU exchange
 // - Error Handling: No-card detection, recovery
 //
-// TODO(testing): These tests use *Blocking() helper reimplementations rather
-// than testing the actual production coroutines. To properly test the coroutines:
-// 1. ParticleUartStream needs async/waker support (currently polling-based)
-// 2. Tests should use DispatcherForTest with production DetectTag/Transceive
-// See: https://pigweed.dev/pw_async2/ for async testing patterns
+// These tests use the actual production coroutines with a BasicDispatcher.
+// See RunCoro() helper for the synchronous wrapper pattern.
 
 // Must define PW_LOG_MODULE_NAME before including any headers that use pw_log
 #define PW_LOG_MODULE_NAME "pn532"
@@ -23,17 +20,17 @@
 #include "maco_firmware/devices/pn532/pn532_constants.h"
 #include "maco_firmware/devices/pn532/pn532_nfc_reader.h"
 #include "pb_digital_io/digital_io.h"
-#include "pb_stream/uart_stream.h"
+#include "pb_uart/async_uart.h"
 #include "pw_allocator/testing.h"
+#include "pw_async2/basic_dispatcher.h"
+#include "pw_async2/coro.h"
+#include "pw_async2/system_time_provider.h"
 #include "pw_log/log.h"
 #include "pw_unit_test/framework.h"
 
 // HAL headers after Pigweed
 #include "delay_hal.h"
-#include "gpio_hal.h"
 #include "pinmap_hal.h"
-#include "timer_hal.h"
-#include "usart_hal.h"
 
 namespace {
 using namespace std::chrono_literals;
@@ -56,100 +53,41 @@ constexpr auto kInteractiveTimeout = std::chrono::seconds(30);
 
 /// Testable subclass that exposes protected methods for hardware testing.
 ///
-/// NOTE: Currently uses blocking helper reimplementations (*Blocking methods)
-/// rather than the actual production coroutines (DetectTag, Transceive, etc.).
-/// This is a workaround until ParticleUartStream supports async/waker-based I/O.
-/// The blocking helpers test the low-level PN532 communication but not the
-/// coroutine control flow.
+/// Uses the actual async coroutines with a dispatcher for testing.
 class TestablePn532Reader : public maco::nfc::Pn532NfcReader {
  public:
   using Pn532NfcReader::Pn532NfcReader;  // Inherit constructors
 
-  // Expose blocking helper methods for testing
-  using Pn532NfcReader::DoInit;
-  using Pn532NfcReader::DoReset;
+  // Expose protected methods for testing
   using Pn532NfcReader::DoReleaseTag;
-  using Pn532NfcReader::RecoverFromDesync;
-
-  // Expose low-level blocking communication for RF operation tests
-  using Pn532NfcReader::SendCommandAndReceiveBlocking;
+  using Pn532NfcReader::ParseCheckPresentResponse;
   using Pn532NfcReader::ParseDetectResponse;
   using Pn532NfcReader::ParseTransceiveResponse;
-  using Pn532NfcReader::ParseCheckPresentResponse;
+  using Pn532NfcReader::RecoverFromDesync;
 
-  // Helper: Detect tag using blocking communication
-  pw::Result<maco::nfc::TagInfo> DetectTagBlocking(
-      pw::chrono::SystemClock::duration timeout) {
-    // InListPassiveTarget: MaxTg=1, BrTy=0x00 (106kbps Type A)
-    constexpr auto kParams = pw::bytes::Array<0x01, 0x00>();
-
-    std::array<std::byte, 64> response{};
-    auto result = SendCommandAndReceiveBlocking(
-        maco::nfc::pn532::kCmdInListPassiveTarget, kParams, response, timeout);
-
-    if (!result.ok()) {
-      if (result.status().IsDeadlineExceeded()) {
-        return pw::Status::NotFound();  // No tag detected
-      }
-      return result.status();
-    }
-
-    return ParseDetectResponse(
-        pw::ConstByteSpan(response.data(), result.value()));
-  }
-
-  // Helper: Transceive APDU using blocking communication
-  pw::Result<size_t> TransceiveBlocking(pw::ConstByteSpan command,
-                                         pw::ByteSpan response_buffer,
-                                         pw::chrono::SystemClock::duration timeout) {
-    // Build InDataExchange command: Tg (target 1) + data
-    std::array<std::byte, 265> cmd_buffer{};
-    cmd_buffer[0] = std::byte{0x01};  // Target number
-    std::copy(command.begin(), command.end(), cmd_buffer.begin() + 1);
-
-    auto params = pw::ConstByteSpan(cmd_buffer.data(), 1 + command.size());
-
-    std::array<std::byte, 265> response{};
-    auto result = SendCommandAndReceiveBlocking(
-        maco::nfc::pn532::kCmdInDataExchange, params, response, timeout);
-
-    if (!result.ok()) {
-      return result.status();
-    }
-
-    return ParseTransceiveResponse(
-        pw::ConstByteSpan(response.data(), result.value()), response_buffer);
-  }
-
-  // Helper: Check tag presence using Diagnose command
-  pw::Result<bool> CheckTagPresentBlocking(
-      pw::chrono::SystemClock::duration timeout) {
-    // Diagnose command: NumTst=0x06 (Communication Line Test)
-    constexpr auto kParams = pw::bytes::Array<0x06, 0x01>();
-
-    std::array<std::byte, 16> response{};
-    auto result = SendCommandAndReceiveBlocking(
-        maco::nfc::pn532::kCmdDiagnose, kParams, response, timeout);
-
-    if (!result.ok()) {
-      return result.status();
-    }
-
-    return ParseCheckPresentResponse(
-        pw::ConstByteSpan(response.data(), result.value()));
-  }
+  // Expose the async coroutines
+  using Pn532NfcReader::CheckTagPresent;
+  using Pn532NfcReader::DetectTag;
+  using Pn532NfcReader::DoAsyncInit;
+  using Pn532NfcReader::Transceive;
 };
 
 // Allocator for the driver (needs space for coroutine frames)
-pw::allocator::test::AllocatorForTest<1024> test_allocator;
+pw::allocator::test::AllocatorForTest<2048> test_allocator;
+
+// UART buffer size for PN532 frames (max normal frame ~262 bytes)
+constexpr size_t kUartBufferSize = 265;
 
 // Get singleton hardware instances
 TestablePn532Reader& GetDriver() {
-  static bool initialized = false;
-  static pb::ParticleUartStream uart(HAL_USART_SERIAL1);
+  // UART buffers must be 32-byte aligned for DMA on RTL872x
+  alignas(32) static std::byte rx_buf[kUartBufferSize];
+  alignas(32) static std::byte tx_buf[kUartBufferSize];
+  static pb::AsyncUart uart(HAL_USART_SERIAL1, rx_buf, tx_buf);
   static pb::ParticleDigitalOut reset_pin(kPinNfcReset);
 
-  // Initialize peripherals once (minimal - driver.DoInit() does the rest)
+  // Initialize peripherals once
+  static bool initialized = false;
   if (!initialized) {
     (void)uart.Init(kUartBaudRate);
     (void)reset_pin.Enable();
@@ -160,6 +98,47 @@ TestablePn532Reader& GetDriver() {
   return driver;
 }
 
+// Wrapper task to run a coroutine with arbitrary return type
+template <typename T>
+class CoroRunnerTask : public pw::async2::Task {
+ public:
+  explicit CoroRunnerTask(pw::async2::Coro<T>&& coro)
+      : coro_(std::move(coro)) {}
+
+  bool is_complete() const { return result_.has_value(); }
+  T& result() { return *result_; }
+
+ private:
+  pw::async2::Poll<> DoPend(pw::async2::Context& cx) override {
+    auto poll = coro_.Pend(cx);
+    if (poll.IsPending()) {
+      return pw::async2::Pending();
+    }
+    result_.emplace(std::move(*poll));
+    return pw::async2::Ready();
+  }
+
+  pw::async2::Coro<T> coro_;
+  std::optional<T> result_;
+};
+
+// Helper to run a coroutine synchronously using a dispatcher
+template <typename T>
+T RunCoro(pw::async2::Coro<T> coro) {
+  pw::async2::BasicDispatcher dispatcher;
+  CoroRunnerTask<T> task(std::move(coro));
+
+  dispatcher.Post(task);
+
+  // Run until the coroutine completes
+  while (!task.is_complete()) {
+    dispatcher.RunUntilStalled();
+    HAL_Delay_Milliseconds(1);
+  }
+
+  return std::move(task.result());
+}
+
 class Pn532HardwareTest : public ::testing::Test {
  protected:
   void SetUp() override { PW_LOG_INFO("=== Pn532HardwareTest::SetUp ==="); }
@@ -167,194 +146,61 @@ class Pn532HardwareTest : public ::testing::Test {
   void TearDown() override {
     PW_LOG_INFO("=== Pn532HardwareTest::TearDown ===");
     // Reset driver state for next test
+    (void)DoRecoverFromDesync();
+  }
+
+  // Helper to run init and return status
+  pw::Status DoInit() {
     auto& driver = GetDriver();
-    (void)driver.RecoverFromDesync();
+    return RunCoro(driver.DoAsyncInit(coro_cx_));
   }
+
+  // Helper to detect tag
+  pw::Result<maco::nfc::TagInfo> DetectTag(
+      pw::chrono::SystemClock::duration timeout
+  ) {
+    auto& driver = GetDriver();
+    return RunCoro(driver.DetectTag(coro_cx_, timeout));
+  }
+
+  // Helper to check tag presence
+  pw::Result<bool> CheckTagPresent(pw::chrono::SystemClock::duration timeout) {
+    auto& driver = GetDriver();
+    return RunCoro(driver.CheckTagPresent(coro_cx_, timeout));
+  }
+
+  // Helper to transceive
+  pw::Result<size_t> Transceive(
+      pw::ConstByteSpan command,
+      pw::ByteSpan response_buffer,
+      pw::chrono::SystemClock::duration timeout
+  ) {
+    auto& driver = GetDriver();
+    return RunCoro(
+        driver.Transceive(coro_cx_, command, response_buffer, timeout)
+    );
+  }
+
+  // Helper to recover from desync
+  pw::Status DoRecoverFromDesync() {
+    auto& driver = GetDriver();
+    return RunCoro(driver.RecoverFromDesync(coro_cx_));
+  }
+
+  pw::async2::CoroContext coro_cx_{test_allocator};
 };
-
-// ============================================================================
-// Raw HAL test - bypass ParticleUartStream entirely
-// ============================================================================
-
-TEST_F(Pn532HardwareTest, DISABLED_ParticleUartStreamTest) {
-  // Use ParticleUartStream with same sequence as raw HAL test
-  pb::ParticleUartStream uart(HAL_USART_SERIAL1);
-  ASSERT_TRUE(uart.Init(115200).ok());
-
-  // Init reset pin
-  hal_gpio_mode(kPinNfcReset, OUTPUT);
-
-  // Reset sequence
-  hal_gpio_write(kPinNfcReset, 0);  // LOW
-  HAL_Delay_Milliseconds(20);
-  hal_gpio_write(kPinNfcReset, 1);  // HIGH
-  HAL_Delay_Milliseconds(10);
-
-  // Wakeup
-  std::array<std::byte, 1> wakeup = {std::byte{0x55}};
-  ASSERT_TRUE(uart.Write(wakeup).ok());
-  HAL_Delay_Milliseconds(2);
-
-  // Send SAMConfiguration
-  std::array<std::byte, 12> cmd = {
-      std::byte{0x00},
-      std::byte{0x00},
-      std::byte{0xFF},
-      std::byte{0x05},
-      std::byte{0xFB},
-      std::byte{0xD4},
-      std::byte{0x14},
-      std::byte{0x01},
-      std::byte{0x14},
-      std::byte{0x01},
-      std::byte{0x02},
-      std::byte{0x00}
-  };
-  ASSERT_TRUE(uart.Write(cmd).ok());
-
-  // Wait for response
-  HAL_Delay_Milliseconds(50);
-
-  // Read response
-  std::array<std::byte, 32> response{};
-  auto result = uart.Read(response);
-
-  size_t count = result.ok() ? result.value().size() : 0;
-  PW_LOG_INFO("ParticleUartStream: read %d bytes", static_cast<int>(count));
-
-  if (count > 0) {
-    PW_LOG_INFO(
-        "ParticleUartStream: first bytes: %02x %02x %02x %02x %02x %02x",
-        static_cast<int>(response[0]),
-        static_cast<int>(response[1]),
-        static_cast<int>(response[2]),
-        static_cast<int>(response[3]),
-        static_cast<int>(response[4]),
-        static_cast<int>(response[5])
-    );
-  }
-
-  uart.Deinit();
-  EXPECT_GT(count, 0u) << "Should have received ACK + response";
-}
-
-TEST_F(Pn532HardwareTest, DISABLED_RawHalUartTest) {
-  // Use HAL directly, no ParticleUartStream
-  hal_usart_interface_t serial = HAL_USART_SERIAL1;
-
-  // Init buffers
-  static uint8_t rx_buf[64] = {};
-  static uint8_t tx_buf[64] = {};
-  hal_usart_buffer_config_t config = {
-      .size = sizeof(hal_usart_buffer_config_t),
-      .rx_buffer = rx_buf,
-      .rx_buffer_size = sizeof(rx_buf),
-      .tx_buffer = tx_buf,
-      .tx_buffer_size = sizeof(tx_buf),
-  };
-  hal_usart_init_ex(serial, &config, nullptr);
-  hal_usart_begin_config(serial, 115200, SERIAL_8N1, nullptr);
-
-  // Init reset pin
-  hal_gpio_mode(kPinNfcReset, OUTPUT);
-
-  // Reset sequence
-  hal_gpio_write(kPinNfcReset, 0);  // LOW
-  HAL_Delay_Milliseconds(20);
-  hal_gpio_write(kPinNfcReset, 1);  // HIGH
-  HAL_Delay_Milliseconds(10);
-
-  // Wakeup
-  hal_usart_write(serial, 0x55);
-  hal_usart_flush(serial);
-  HAL_Delay_Milliseconds(2);
-
-  // Send SAMConfiguration: 00 00 FF 05 FB D4 14 01 14 01 02 00
-  const uint8_t cmd[] = {
-      0x00, 0x00, 0xFF, 0x05, 0xFB, 0xD4, 0x14, 0x01, 0x14, 0x01, 0x02, 0x00
-  };
-  for (auto b : cmd) {
-    hal_usart_write(serial, b);
-  }
-  hal_usart_flush(serial);
-
-  // Wait for response
-  HAL_Delay_Milliseconds(50);
-
-  // Check what's available
-  int32_t avail = hal_usart_available(serial);
-  PW_LOG_INFO("Raw HAL: available = %d", static_cast<int>(avail));
-
-  // Read whatever is there
-  uint8_t response[32] = {};
-  int count = 0;
-  while (hal_usart_available(serial) > 0 && count < 32) {
-    int32_t b = hal_usart_read(serial);
-    if (b >= 0) {
-      response[count++] = static_cast<uint8_t>(b);
-    }
-  }
-
-  PW_LOG_INFO("Raw HAL: read %d bytes", count);
-  if (count > 0) {
-    PW_LOG_INFO(
-        "Raw HAL: first bytes: %02x %02x %02x %02x %02x %02x",
-        response[0],
-        response[1],
-        response[2],
-        response[3],
-        response[4],
-        response[5]
-    );
-  }
-
-  // Clean up
-  hal_usart_end(serial);
-
-  EXPECT_GT(count, 0) << "Should have received ACK + response from PN532";
-}
 
 // ============================================================================
 // Hardware Validation Tests (no card required)
 // ============================================================================
 
 TEST_F(Pn532HardwareTest, Init_Succeeds) {
-  auto& driver = GetDriver();
+  PW_LOG_INFO("Calling DoInit()");
+  auto status = DoInit();
 
-  PW_LOG_INFO("Calling driver.DoInit()");
-  auto status = driver.DoInit();
-
-  if (!status.ok()) {
-    PW_LOG_ERROR(
-        "Init failed with status: %d", static_cast<int>(status.code())
-    );
-  }
-
-  ASSERT_TRUE(status.ok());
+  ASSERT_TRUE(status.ok())
+      << "Init failed with status: " << static_cast<int>(status.code());
   PW_LOG_INFO("Init succeeded");
-}
-
-TEST_F(Pn532HardwareTest, Init_ReportsVersion) {
-  auto& driver = GetDriver();
-
-  // Init prints firmware version via PW_LOG_INFO
-  auto status = driver.DoInit();
-  ASSERT_TRUE(status.ok()) << "Init failed";
-
-  // Success - firmware version was logged during Init
-  // Expected: IC=0x32, Ver=1.6, Rev=7
-  PW_LOG_INFO("Check serial output for firmware version");
-}
-
-TEST_F(Pn532HardwareTest, Reset_Succeeds) {
-  auto& driver = GetDriver();
-
-  PW_LOG_INFO("Calling driver.DoReset()");
-  auto status = driver.DoReset();
-
-  ASSERT_TRUE(status.ok()) << "Reset failed with status: "
-                           << static_cast<int>(status.code());
-  PW_LOG_INFO("Reset succeeded");
 }
 
 // ============================================================================
@@ -362,9 +208,7 @@ TEST_F(Pn532HardwareTest, Reset_Succeeds) {
 // ============================================================================
 
 TEST_F(Pn532HardwareTest, DetectTag_NoCard_ReturnsNotFound) {
-  auto& driver = GetDriver();
-
-  ASSERT_TRUE(driver.DoInit().ok());
+  ASSERT_TRUE(DoInit().ok());
 
   PW_LOG_INFO("Testing DetectTag with NO card present...");
   PW_LOG_INFO("(Make sure no card is on the reader!)");
@@ -372,7 +216,7 @@ TEST_F(Pn532HardwareTest, DetectTag_NoCard_ReturnsNotFound) {
   // Wait a moment for user to remove card if present
   HAL_Delay_Milliseconds(500);
 
-  auto result = driver.DetectTagBlocking(kShortTimeout);
+  auto result = DetectTag(kShortTimeout);
 
   EXPECT_TRUE(result.status().IsNotFound())
       << "Expected NotFound, got: " << static_cast<int>(result.status().code());
@@ -380,9 +224,7 @@ TEST_F(Pn532HardwareTest, DetectTag_NoCard_ReturnsNotFound) {
 }
 
 TEST_F(Pn532HardwareTest, DetectTag_WithCard_ReturnsTagInfo) {
-  auto& driver = GetDriver();
-
-  ASSERT_TRUE(driver.DoInit().ok());
+  ASSERT_TRUE(DoInit().ok());
 
   PW_LOG_INFO("=================================================");
   PW_LOG_INFO("PLACE A CARD ON THE READER NOW!");
@@ -392,7 +234,7 @@ TEST_F(Pn532HardwareTest, DetectTag_WithCard_ReturnsTagInfo) {
   // Give user time to place card
   HAL_Delay_Milliseconds(5000);
 
-  auto result = driver.DetectTagBlocking(kRfOperationTimeout);
+  auto result = DetectTag(kRfOperationTimeout);
 
   if (!result.ok()) {
     PW_LOG_WARN(
@@ -422,13 +264,11 @@ TEST_F(Pn532HardwareTest, DetectTag_WithCard_ReturnsTagInfo) {
 }
 
 TEST_F(Pn532HardwareTest, CheckTagPresent_WithCard) {
-  auto& driver = GetDriver();
-
-  ASSERT_TRUE(driver.DoInit().ok());
+  ASSERT_TRUE(DoInit().ok());
 
   PW_LOG_INFO("First detecting a card...");
 
-  auto detect_result = driver.DetectTagBlocking(kRfOperationTimeout);
+  auto detect_result = DetectTag(kRfOperationTimeout);
   if (!detect_result.ok()) {
     PW_LOG_WARN("No card detected. Place a card and re-run test.");
     GTEST_SKIP() << "No card present";
@@ -436,7 +276,7 @@ TEST_F(Pn532HardwareTest, CheckTagPresent_WithCard) {
 
   PW_LOG_INFO("Card detected, now checking presence...");
 
-  auto check_result = driver.CheckTagPresentBlocking(kRfOperationTimeout);
+  auto check_result = CheckTagPresent(kRfOperationTimeout);
   ASSERT_TRUE(check_result.ok()) << "CheckTagPresent failed";
 
   bool present = check_result.value();
@@ -446,13 +286,11 @@ TEST_F(Pn532HardwareTest, CheckTagPresent_WithCard) {
 }
 
 TEST_F(Pn532HardwareTest, Transceive_SelectNdef_WithCard) {
-  auto& driver = GetDriver();
-
-  ASSERT_TRUE(driver.DoInit().ok());
+  ASSERT_TRUE(DoInit().ok());
 
   PW_LOG_INFO("Detecting card for APDU test...");
 
-  auto detect_result = driver.DetectTagBlocking(kRfOperationTimeout);
+  auto detect_result = DetectTag(kRfOperationTimeout);
   if (!detect_result.ok()) {
     PW_LOG_WARN("No card detected. Place a card and re-run test.");
     GTEST_SKIP() << "No card present";
@@ -486,8 +324,8 @@ TEST_F(Pn532HardwareTest, Transceive_SelectNdef_WithCard) {
 
   std::array<std::byte, 64> response_buffer{};
 
-  auto result = driver.TransceiveBlocking(
-      kSelectNdefApp, response_buffer, kRfOperationTimeout);
+  auto result =
+      Transceive(kSelectNdefApp, response_buffer, kRfOperationTimeout);
 
   if (!result.ok()) {
     PW_LOG_WARN(
@@ -519,25 +357,21 @@ TEST_F(Pn532HardwareTest, Transceive_SelectNdef_WithCard) {
 // ============================================================================
 
 TEST_F(Pn532HardwareTest, RecoverFromDesync_Succeeds) {
-  auto& driver = GetDriver();
-
-  ASSERT_TRUE(driver.DoInit().ok());
+  ASSERT_TRUE(DoInit().ok());
 
   PW_LOG_INFO("Testing RecoverFromDesync...");
-  auto status = driver.RecoverFromDesync();
+  auto status = DoRecoverFromDesync();
 
   EXPECT_TRUE(status.ok()) << "RecoverFromDesync failed";
   PW_LOG_INFO("RecoverFromDesync completed");
 }
 
 TEST_F(Pn532HardwareTest, MultipleInitCalls_Succeed) {
-  auto& driver = GetDriver();
-
   PW_LOG_INFO("Testing multiple Init calls...");
 
   for (int i = 0; i < 3; i++) {
     PW_LOG_INFO("Init call %d", i + 1);
-    auto status = driver.DoInit();
+    auto status = DoInit();
     ASSERT_TRUE(status.ok()) << "Init call " << i + 1 << " failed";
   }
 
@@ -549,9 +383,7 @@ TEST_F(Pn532HardwareTest, MultipleInitCalls_Succeed) {
 // ============================================================================
 
 TEST_F(Pn532HardwareTest, Interactive_CardDetectionCycles) {
-  auto& driver = GetDriver();
-
-  ASSERT_TRUE(driver.DoInit().ok());
+  ASSERT_TRUE(DoInit().ok());
 
   PW_LOG_INFO("=================================================");
   PW_LOG_INFO("INTERACTIVE TEST: 3x Card Detection Cycles");
@@ -568,7 +400,7 @@ TEST_F(Pn532HardwareTest, Interactive_CardDetectionCycles) {
     bool detected = false;
     maco::nfc::TagInfo tag_info{};
     for (int attempt = 0; attempt < 60 && !detected; ++attempt) {
-      auto result = driver.DetectTagBlocking(kRfOperationTimeout);
+      auto result = DetectTag(kRfOperationTimeout);
       if (result.ok()) {
         detected = true;
         tag_info = result.value();
@@ -599,12 +431,12 @@ TEST_F(Pn532HardwareTest, Interactive_CardDetectionCycles) {
     // Wait for card removal using CheckTagPresent
     bool removed = false;
     for (int attempt = 0; attempt < 150 && !removed; ++attempt) {
-      auto result = driver.CheckTagPresentBlocking(kShortTimeout);
+      auto result = CheckTagPresent(kShortTimeout);
       if (!result.ok()) {
         // Error (likely card removed mid-transaction) - recover and treat as
         // removed
         PW_LOG_INFO("  Error during presence check, recovering...");
-        (void)driver.RecoverFromDesync();
+        (void)DoRecoverFromDesync();
         removed = true;
         PW_LOG_INFO("  REMOVED!");
       } else if (!result.value()) {
