@@ -3,14 +3,32 @@
 
 #pragma once
 
+#include <array>
+
 #include "maco_firmware/modules/display/display_driver.h"
+#include "pw_bytes/span.h"
+#include "pw_chrono/system_clock.h"
 #include "pw_digital_io/digital_io.h"
-#include "pw_spi/initiator.h"
+#include "pw_thread/thread.h"
+
+// DeviceOS concurrent primitives - these work correctly with LVGL
+// when calling lv_display_flush_ready() from a different thread.
+#include "concurrent_hal.h"
 
 namespace maco::display {
 
+/// Request passed from LVGL callback to flush thread.
+struct FlushRequest {
+  lv_area_t area;
+  const uint8_t* px_map;
+  size_t byte_count;
+};
+
 /// SPI LCD driver for Pico-ResTouch-LCD-2.8 display (Waveshare).
 /// Uses ST7789 controller connected via SPI.
+///
+/// This driver uses direct HAL SPI access for DMA transfers with timeout/cancel
+/// logic to work around DeviceOS SPI DMA deadlock bugs.
 ///
 /// Hardware dependencies are injected via constructor, following Pigweed
 /// patterns. Pin assignments and SPI initialization happen in the platform's
@@ -24,17 +42,23 @@ class PicoRes28LcdDriver : public DisplayDriver {
   static constexpr uint16_t kHeight = 320;
 
   /// Constructor with hardware dependency injection.
-  /// @param spi SPI initiator (already configured with clock speed)
-  /// @param cs Chip select GPIO (directly controlled, not via pw::spi::Device)
+  /// @param hal_spi_interface HAL SPI interface (e.g., HAL_SPI_INTERFACE2)
+  /// @param spi_clock_hz SPI clock frequency in Hz
+  /// @param cs Chip select GPIO (directly controlled)
   /// @param dc Data/Command GPIO (LOW = command, HIGH = data)
   /// @param rst Reset GPIO
   /// @param bl Backlight GPIO
+  /// @param thread_options Thread options for the flush thread
+  /// @param dma_timeout DMA transfer timeout duration
   PicoRes28LcdDriver(
-      pw::spi::Initiator& spi,
+      int hal_spi_interface,
+      uint32_t spi_clock_hz,
       pw::digital_io::DigitalOut& cs,
       pw::digital_io::DigitalOut& dc,
       pw::digital_io::DigitalOut& rst,
-      pw::digital_io::DigitalOut& bl
+      pw::digital_io::DigitalOut& bl,
+      const pw::thread::Options& thread_options,
+      pw::chrono::SystemClock::duration dma_timeout
   );
 
   ~PicoRes28LcdDriver() override = default;
@@ -49,15 +73,10 @@ class PicoRes28LcdDriver : public DisplayDriver {
   uint16_t width() const override { return kWidth; }
   uint16_t height() const override { return kHeight; }
 
- protected:
-  // Protected for testability - allows test subclass to call directly
-  void Flush(const lv_area_t* area, pw::ConstByteSpan pixels);
-
-  /// Core SPI transfer: sends command with DC=low, then optionally data with
-  /// DC=high.
-  /// @param cmd Command byte(s) to send. Must be non-empty.
-  /// @param data Optional data bytes. May be empty.
-  void SendData(pw::ConstByteSpan cmd, pw::ConstByteSpan data);
+  /// Returns the count of DMA transfers that timed out and were cancelled.
+  /// Useful for diagnostics - some hangs are expected, but display should
+  /// recover.
+  uint32_t dma_hang_count() const { return dma_hang_count_; }
 
  private:
   // LVGL flush callback (static, looks up instance from user_data)
@@ -65,17 +84,53 @@ class PicoRes28LcdDriver : public DisplayDriver {
       lv_display_t* disp, const lv_area_t* area, uint8_t* px_map
   );
 
+  // DMA completion callback (static, routes to g_dma_instance)
+  static void DmaCallback();
+
   void HardwareReset();
 
-  // Hardware dependencies (injected)
-  pw::spi::Initiator& spi_;
+  // Flush thread entry point
+  void FlushThreadMain();
+
+  // Process a single flush request
+  void ProcessFlushRequest(const FlushRequest& request);
+
+  // Send command + optional data via HAL SPI (blocking, for small transfers)
+  void SendCommand(pw::ConstByteSpan cmd, pw::ConstByteSpan data);
+
+  // Send pixel data via HAL DMA with timeout/cancel
+  void SendPixelDataDma(pw::ConstByteSpan pixels);
+
+  // Hardware config
+  int hal_spi_interface_;
+  uint32_t spi_clock_hz_;
   pw::digital_io::DigitalOut& cs_;
   pw::digital_io::DigitalOut& dc_;
   pw::digital_io::DigitalOut& rst_;
   pw::digital_io::DigitalOut& bl_;
 
+  // Thread config
+  const pw::thread::Options& thread_options_;
+  pw::chrono::SystemClock::duration dma_timeout_;
+
   // State
   lv_display_t* display_ = nullptr;
+
+  // Flush request queue (DeviceOS queue primitive)
+  // Single-element queue - LVGL waits for flush_ready before next flush
+  os_queue_t flush_queue_ = nullptr;
+
+  // DMA completion synchronization (DeviceOS semaphore)
+  os_semaphore_t dma_complete_ = nullptr;
+
+  // Flush completion synchronization - flush thread signals, main thread waits
+  os_semaphore_t flush_done_ = nullptr;
+
+  // Flush thread (runs forever, no shutdown needed)
+  std::optional<pw::Thread> flush_thread_;
+
+  // Diagnostics
+  uint32_t dma_hang_count_ = 0;
 
   // Draw buffers (1/10 of screen, double buffered, partial rendering), RGB565
   // Aligned for DMA transfers

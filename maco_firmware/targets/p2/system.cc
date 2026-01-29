@@ -33,6 +33,7 @@
 #include "pb_spi/initiator.h"
 #include "pinmap_hal.h"
 #include "delay_hal.h"
+#include "spi_hal.h"
 #include "usb_hal.h"
 
 namespace maco::system {
@@ -121,20 +122,33 @@ void Init(pw::Function<void()> app_init) {
 }
 
 maco::display::DisplayDriver& GetDisplayDriver() {
+  using namespace std::chrono_literals;
+
   // Create GPIO instances for display control
   static pb::ParticleDigitalOut rst_pin(kPinDisplayReset);
   static pb::ParticleDigitalOut cs_pin(kPinDisplayChipSelect);
   static pb::ParticleDigitalOut dc_pin(kPinDisplayDataCommand);
   static pb::ParticleDigitalOut bl_pin(kPinDisplayBacklight);
 
-  // Create SPI initiator for display (using SPI1 = HAL_SPI_INTERFACE2)
-  static pb::ParticleSpiInitiator spi_initiator(
-      pb::ParticleSpiInitiator::Interface::kSpi1,
-      kDisplaySpiClockHz);
+  // Configure flush thread for DMA deadlock workaround
+  // See: https://community.particle.io/t/photon-2-spi-dma-transfer-deadlock-take-2/70300/5
+  static const pw::thread::particle::Options flush_thread_options =
+      pw::thread::particle::Options()
+          .set_name("lcd_flush")
+          .set_priority(3)      // Slightly above default (2)
+          .set_stack_size(1536);  // Minimal - just waits and calls HAL
 
-  // Create and return driver with injected dependencies
+  // Create driver with direct HAL SPI access
   static maco::display::PicoRes28LcdDriver driver(
-      spi_initiator, cs_pin, dc_pin, rst_pin, bl_pin);
+      HAL_SPI_INTERFACE2,  // SPI1
+      kDisplaySpiClockHz,
+      cs_pin,
+      dc_pin,
+      rst_pin,
+      bl_pin,
+      flush_thread_options,
+      20ms  // DMA timeout
+  );
   return driver;
 }
 

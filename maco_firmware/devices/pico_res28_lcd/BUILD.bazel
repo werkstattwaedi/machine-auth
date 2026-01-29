@@ -3,11 +3,11 @@
 
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@particle_bazel//rules:particle_test.bzl", "particle_cc_test")
-load("@pigweed//pw_unit_test:pw_cc_test.bzl", "pw_cc_test")
 
 package(default_visibility = ["//maco_firmware:__subpackages__"])
 
 # SPI LCD driver for Pico-ResTouch-LCD-2.8 (ST7789)
+# This driver uses direct HAL SPI and only compiles for P2.
 cc_library(
     name = "pico_res28_lcd",
     srcs = ["pico_res28_lcd_driver.cc"],
@@ -15,13 +15,16 @@ cc_library(
     deps = [
         "//maco_firmware/modules/display:display_driver",
         "@lvgl//:lvgl",
+        "@particle_bazel//:device_os_headers",
         "@pigweed//pw_bytes",
+        "@pigweed//pw_chrono:system_clock",
         "@pigweed//pw_digital_io",
         "@pigweed//pw_log",
-        "@pigweed//pw_spi:initiator",
         "@pigweed//pw_status",
+        "@pigweed//pw_thread:thread",
         "@pigweed//pw_thread:sleep",
     ],
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
 )
 
 # On-device hardware test (requires P2 with display connected)
@@ -35,21 +38,7 @@ particle_cc_test(
         "@lvgl//:lvgl",
         "@particle_bazel//:device_os_headers",
         "@particle_bazel//pw_digital_io_particle:digital_io",
-        "@particle_bazel//pw_spi_particle:initiator",
+        "@particle_bazel//pw_thread_particle:thread",
         "@pigweed//pw_log",
-    ],
-)
-
-# Host unit test for byte formatting verification
-pw_cc_test(
-    name = "pico_res28_lcd_driver_test",
-    srcs = ["pico_res28_lcd_driver_test.cc"],
-    deps = [
-        ":pico_res28_lcd",
-        "//maco_firmware/modules/fonts",
-        "@lvgl//:lvgl",
-        "@pigweed//pw_bytes",
-        "@pigweed//pw_digital_io:digital_io_mock",
-        "@pigweed//pw_spi:initiator_mock",
     ],
 )

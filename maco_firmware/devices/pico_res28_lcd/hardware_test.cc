@@ -10,10 +10,11 @@
 #include "lvgl.h"
 #include "maco_firmware/devices/pico_res28_lcd/pico_res28_lcd_driver.h"
 #include "pb_digital_io/digital_io.h"
-#include "pb_spi/initiator.h"
 #include "pinmap_hal.h"
 #include "pw_log/log.h"
+#include "pw_thread_particle/options.h"
 #include "pw_unit_test/framework.h"
+#include "spi_hal.h"
 #include "timer_hal.h"
 
 namespace {
@@ -52,17 +53,29 @@ void LvglLogCallback([[maybe_unused]] lv_log_level_t level, const char* buf) {
 
 // Create hardware instances (singleton pattern for test lifetime)
 maco::display::PicoRes28LcdDriver& GetDriver() {
+  using namespace std::chrono_literals;
+
   static pb::ParticleDigitalOut rst_pin(kPinDisplayReset);
   static pb::ParticleDigitalOut cs_pin(kPinDisplayChipSelect);
   static pb::ParticleDigitalOut dc_pin(kPinDisplayDataCommand);
   static pb::ParticleDigitalOut bl_pin(kPinDisplayBacklight);
 
-  static pb::ParticleSpiInitiator spi_initiator(
-      pb::ParticleSpiInitiator::Interface::kSpi1, kDisplaySpiClockHz
-  );
+  // Flush thread options
+  static const pw::thread::particle::Options flush_thread_options =
+      pw::thread::particle::Options()
+          .set_name("lcd_flush")
+          .set_priority(3)
+          .set_stack_size(1536);
 
   static maco::display::PicoRes28LcdDriver driver(
-      spi_initiator, cs_pin, dc_pin, rst_pin, bl_pin
+      HAL_SPI_INTERFACE2,  // SPI1
+      kDisplaySpiClockHz,
+      cs_pin,
+      dc_pin,
+      rst_pin,
+      bl_pin,
+      flush_thread_options,
+      20ms  // DMA timeout
   );
   return driver;
 }
@@ -375,6 +388,10 @@ TEST_F(DisplayTest, StressTestFullScreen) {
       static_cast<unsigned long>(total_frames),
       static_cast<unsigned long>(total_elapsed),
       static_cast<unsigned long>(total_frames * 1000 / total_elapsed)
+  );
+  PW_LOG_INFO(
+      "DMA hang count: %lu (timeouts recovered by cancel)",
+      static_cast<unsigned long>(driver.dma_hang_count())
   );
 }
 
