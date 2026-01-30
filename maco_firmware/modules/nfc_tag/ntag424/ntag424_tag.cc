@@ -9,6 +9,7 @@
 #include <cstring>
 
 #include "pw_log/log.h"
+#include "pw_status/try.h"
 
 namespace maco::nfc {
 
@@ -106,12 +107,7 @@ pw::async2::Coro<pw::Status> Ntag424Tag::SelectApplication(
       std::byte{0x00}};  // Le
 
   std::array<std::byte, 4> response;
-  auto result = co_await DoTransceive(cx, command, response);
-  if (!result.ok()) {
-    co_return result.status();
-  }
-
-  size_t len = result.value();
+  PW_CO_TRY_ASSIGN(size_t len, co_await DoTransceive(cx, command, response));
   if (len < 2) {
     co_return pw::Status::DataLoss();
   }
@@ -149,12 +145,8 @@ pw::async2::Coro<pw::Result<Ntag424Session>> Ntag424Tag::Authenticate(
       std::byte{0x00}};  // Le
 
   std::array<std::byte, 20> part1_response;  // 16 + 2 SW + margin
-  auto part1_result = co_await DoTransceive(cx, part1_command, part1_response);
-  if (!part1_result.ok()) {
-    co_return part1_result.status();
-  }
-
-  size_t part1_len = part1_result.value();
+  PW_CO_TRY_ASSIGN(size_t part1_len,
+                   co_await DoTransceive(cx, part1_command, part1_response));
   if (part1_len < 18) {  // 16 encrypted RndB + 2 SW
     co_return pw::Status::DataLoss();
   }
@@ -170,12 +162,8 @@ pw::async2::Coro<pw::Result<Ntag424Session>> Ntag424Tag::Authenticate(
   pw::ConstByteSpan encrypted_rnd_b(part1_response.data(), 16);
 
   // Key provider creates Part 2 response (generates RndA internally)
-  auto challenge_result =
-      co_await key_provider.CreateNtagChallenge(cx, encrypted_rnd_b);
-  if (!challenge_result.ok()) {
-    co_return challenge_result.status();
-  }
-  auto& part2_data = challenge_result.value();
+  PW_CO_TRY_ASSIGN(auto part2_data,
+                   co_await key_provider.CreateNtagChallenge(cx, encrypted_rnd_b));
 
   // --- Part 2: Send additional frame with encrypted response ---
   // Command: 90 AF 00 00 20 [32 bytes encrypted data] 00
@@ -223,13 +211,10 @@ pw::async2::Coro<pw::Result<Ntag424Session>> Ntag424Tag::Authenticate(
   // Key provider verifies RndA' and computes session keys
   // NOTE: Part3 is decrypted with AuthKey, not session keys!
   pw::ConstByteSpan encrypted_part3(part2_response.data(), 32);
-  auto session_result =
-      co_await key_provider.VerifyAndComputeSessionKeys(cx, encrypted_part3);
-  if (!session_result.ok()) {
-    // CancelAuthentication already called by key provider on failure
-    co_return session_result.status();
-  }
-  auto& session_keys = session_result.value();
+  // CancelAuthentication is called by key provider on failure
+  PW_CO_TRY_ASSIGN(
+      auto session_keys,
+      co_await key_provider.VerifyAndComputeSessionKeys(cx, encrypted_part3));
 
   // Authentication successful - store session state
   secure_messaging_.emplace(session_keys.ses_auth_enc_key,
@@ -249,11 +234,7 @@ pw::async2::Coro<pw::Result<size_t>> Ntag424Tag::GetCardUid(
     pw::async2::CoroContext& cx,
     const Ntag424Session& session,
     pw::ByteSpan uid_buffer) {
-  auto validate_status = ValidateSession(session);
-  if (!validate_status.ok()) {
-    co_return validate_status;
-  }
-
+  PW_CO_TRY(ValidateSession(session));
   auto* sm = secure_messaging();
 
   // Build GetCardUID command with CMAC
@@ -267,22 +248,14 @@ pw::async2::Coro<pw::Result<size_t>> Ntag424Tag::GetCardUid(
 
   // Build CMACt for the command (no command header for GetCardUID)
   pw::ByteSpan cmac_out(command.data() + 5, 8);
-  auto cmac_status =
-      sm->BuildCommandCMAC(ntag424_cmd::kGetCardUid, {}, cmac_out);
-  if (!cmac_status.ok()) {
-    co_return cmac_status;
-  }
+  PW_CO_TRY(sm->BuildCommandCMAC(ntag424_cmd::kGetCardUid, {}, cmac_out));
 
   command[13] = std::byte{0x00};  // Le
 
   // Response: Encrypted UID (16 bytes) + CMACt (8 bytes) + SW (2)
   std::array<std::byte, 28> response;
-  auto result = co_await DoTransceive(cx, command, response);
-  if (!result.ok()) {
-    co_return result.status();
-  }
-
-  size_t response_len = result.value();
+  PW_CO_TRY_ASSIGN(size_t response_len,
+                   co_await DoTransceive(cx, command, response));
 
   // Response format: [EncryptedUID(16)] [CMACt(8)] [SW(2)]
   // Minimum: 16 + 8 + 2 = 26 bytes
@@ -301,26 +274,20 @@ pw::async2::Coro<pw::Result<size_t>> Ntag424Tag::GetCardUid(
   pw::ConstByteSpan encrypted_data(response.data(), 16);
   pw::ConstByteSpan received_cmac(response.data() + 16, 8);
 
-  // Verify response CMAC first (over ciphertext per AN12196 Section 4.4)
-  auto verify_status =
-      sm->VerifyResponseCMACWithData(0x00, encrypted_data, received_cmac);
-  if (!verify_status.ok()) {
-    co_return verify_status;
+  // Increment counter BEFORE verifying response MAC.
+  // The PICC increments CmdCtr before calculating its response MAC,
+  // so we must use CmdCtr+1 when verifying. (AN12196 Section 4.3, Figure 9)
+  if (!sm->IncrementCounter()) {
+    co_return pw::Status::ResourceExhausted();  // Counter overflow
   }
+
+  // Verify response CMAC (over ciphertext per AN12196 Section 4.4)
+  PW_CO_TRY(sm->VerifyResponseCMACWithData(0x00, encrypted_data, received_cmac));
 
   // Decrypt the response after MAC verification
   std::array<std::byte, 16> decrypted;
   size_t plaintext_len;
-  auto decrypt_status =
-      sm->DecryptResponseData(encrypted_data, decrypted, plaintext_len);
-  if (!decrypt_status.ok()) {
-    co_return decrypt_status;
-  }
-
-  // Increment command counter after successful operation
-  if (!sm->IncrementCounter()) {
-    co_return pw::Status::ResourceExhausted();  // Counter overflow
-  }
+  PW_CO_TRY(sm->DecryptResponseData(encrypted_data, decrypted, plaintext_len));
 
   // Copy UID to output buffer (7 bytes)
   if (uid_buffer.size() < plaintext_len) {
@@ -345,21 +312,17 @@ pw::async2::Coro<pw::Result<size_t>> Ntag424Tag::ReadData(
     uint32_t length,
     pw::ByteSpan data_buffer,
     CommMode comm_mode) {
-  auto validate_status = ValidateSession(session);
-  if (!validate_status.ok()) {
-    co_return validate_status;
-  }
-
+  PW_CO_TRY(ValidateSession(session));
   auto* sm = secure_messaging();
 
-  // Build ReadData command: 90 AD 00 00 Lc [FileNo] [Offset(3)] [Length(3)]
-  // [CMACt(8)] 00
+  // Build ReadData command
+  // Full/MAC mode: 90 AD 00 00 Lc [FileNo] [Offset(3)] [Length(3)] [CMACt(8)] 00
+  // Plain mode:    90 AD 00 00 Lc [FileNo] [Offset(3)] [Length(3)] 00
   std::array<std::byte, 22> command;
   command[0] = std::byte{ntag424_cmd::kClaNative};
   command[1] = std::byte{ntag424_cmd::kReadData};
   command[2] = std::byte{0x00};  // P1
   command[3] = std::byte{0x00};  // P2
-  command[4] = std::byte{15};    // Lc: 1 + 3 + 3 + 8 = 15
 
   // File number
   command[5] = std::byte{file_number};
@@ -374,30 +337,35 @@ pw::async2::Coro<pw::Result<size_t>> Ntag424Tag::ReadData(
   command[10] = static_cast<std::byte>((length >> 8) & 0xFF);
   command[11] = static_cast<std::byte>((length >> 16) & 0xFF);
 
-  // Build CMACt for the command header
-  pw::ConstByteSpan cmd_header(command.data() + 5, 7);  // FileNo + Offset + Len
-  pw::ByteSpan cmac_out(command.data() + 12, 8);
-  auto cmac_status =
-      sm->BuildCommandCMAC(ntag424_cmd::kReadData, cmd_header, cmac_out);
-  if (!cmac_status.ok()) {
-    co_return cmac_status;
+  size_t cmd_len;
+  if (comm_mode != CommMode::kPlain) {
+    // Build CMACt for the command header
+    pw::ConstByteSpan cmd_header(command.data() + 5,
+                                 7);  // FileNo + Offset + Len
+    pw::ByteSpan cmac_out(command.data() + 12, 8);
+    PW_CO_TRY(
+        sm->BuildCommandCMAC(ntag424_cmd::kReadData, cmd_header, cmac_out));
+    command[4] = std::byte{15};     // Lc: 1 + 3 + 3 + 8 = 15
+    command[20] = std::byte{0x00};  // Le
+    cmd_len = 21;
+  } else {
+    // Plain mode: no CMACt
+    command[4] = std::byte{7};      // Lc: 1 + 3 + 3 = 7
+    command[12] = std::byte{0x00};  // Le
+    cmd_len = 13;
   }
-
-  command[20] = std::byte{0x00};  // Le
 
   // Response: max encrypted data (rounded to 16) + CMACt (8) + SW (2) + margin
   std::array<std::byte, 80> response;
-  pw::ConstByteSpan cmd_span(command.data(), 21);
-  auto result = co_await DoTransceive(cx, cmd_span, response);
-  if (!result.ok()) {
-    co_return result.status();
-  }
+  pw::ConstByteSpan cmd_span(command.data(), cmd_len);
+  PW_CO_TRY_ASSIGN(size_t response_len,
+                   co_await DoTransceive(cx, cmd_span, response));
 
-  size_t response_len = result.value();
-
-  // Minimum response: encrypted data (16) + CMACt (8) + SW (2) = 26 bytes
-  // For MAC mode: data + CMACt (8) + SW (2)
-  if (response_len < 10) {
+  // Minimum response varies by mode:
+  // Full/MAC: data + CMACt (8) + SW (2) = minimum 10 bytes
+  // Plain: data + SW (2) = minimum 2 bytes
+  size_t min_response = (comm_mode == CommMode::kPlain) ? 2 : 10;
+  if (response_len < min_response) {
     co_return pw::Status::DataLoss();
   }
 
@@ -415,39 +383,49 @@ pw::async2::Coro<pw::Result<size_t>> Ntag424Tag::ReadData(
     co_return InterpretStatusWord(sw1, sw2);
   }
 
-  // Data length = response_len - 2 (SW) - 8 (CMACt)
-  size_t data_with_cmac_len = response_len - 2;
-  if (data_with_cmac_len < 8) {
-    co_return pw::Status::DataLoss();
+  // Calculate data length based on mode
+  size_t data_len;
+  if (comm_mode == CommMode::kPlain) {
+    // Plain mode: response is just [Data][SW]
+    data_len = response_len - 2;
+  } else {
+    // Full/MAC mode: response is [Data][CMACt(8)][SW]
+    size_t data_with_cmac_len = response_len - 2;
+    if (data_with_cmac_len < 8) {
+      co_return pw::Status::DataLoss();
+    }
+    data_len = data_with_cmac_len - 8;
   }
-  size_t encrypted_data_len = data_with_cmac_len - 8;
   size_t total_bytes_read = 0;
 
-  if (comm_mode == CommMode::kFull && encrypted_data_len > 0) {
+  // Increment counter BEFORE verifying response MAC (for Full/MAC modes).
+  // The PICC increments CmdCtr before calculating its response MAC,
+  // so we must use CmdCtr+1 when verifying. (AN12196 Section 4.3, Figure 9)
+  if (comm_mode != CommMode::kPlain) {
+    if (!sm->IncrementCounter()) {
+      co_return pw::Status::ResourceExhausted();  // Counter overflow
+    }
+  }
+
+  if (comm_mode == CommMode::kFull && data_len > 0) {
     // Full mode: Verify CMAC over ciphertext first, then decrypt
-    pw::ConstByteSpan encrypted_data(response.data(), encrypted_data_len);
-    pw::ConstByteSpan received_cmac(response.data() + encrypted_data_len, 8);
+    pw::ConstByteSpan encrypted_data(response.data(), data_len);
+    pw::ConstByteSpan received_cmac(response.data() + data_len, 8);
 
     // Verify response CMAC over ciphertext (per AN12196 Section 4.4)
-    auto verify_status =
-        sm->VerifyResponseCMACWithData(0x00, encrypted_data, received_cmac);
-    if (!verify_status.ok()) {
-      co_return verify_status;
-    }
+    PW_CO_TRY(
+        sm->VerifyResponseCMACWithData(0x00, encrypted_data, received_cmac));
 
     // Decrypt after MAC verification
     std::array<std::byte, 64> decrypted;
-    if (encrypted_data_len > decrypted.size()) {
+    if (data_len > decrypted.size()) {
       co_return pw::Status::ResourceExhausted();
     }
 
     size_t plaintext_len;
-    auto decrypt_status = sm->DecryptResponseData(
-        encrypted_data, pw::ByteSpan(decrypted.data(), encrypted_data_len),
-        plaintext_len);
-    if (!decrypt_status.ok()) {
-      co_return decrypt_status;
-    }
+    PW_CO_TRY(sm->DecryptResponseData(
+        encrypted_data, pw::ByteSpan(decrypted.data(), data_len),
+        plaintext_len));
 
     // Copy to output buffer
     if (data_buffer.size() < plaintext_len) {
@@ -459,38 +437,26 @@ pw::async2::Coro<pw::Result<size_t>> Ntag424Tag::ReadData(
 
   } else if (comm_mode == CommMode::kMac) {
     // MAC mode: Data is plain, just verify CMAC
-    pw::ConstByteSpan plain_data(response.data(), encrypted_data_len);
-    pw::ConstByteSpan received_cmac(response.data() + encrypted_data_len, 8);
+    pw::ConstByteSpan plain_data(response.data(), data_len);
+    pw::ConstByteSpan received_cmac(response.data() + data_len, 8);
 
-    auto verify_status =
-        sm->VerifyResponseCMACWithData(0x00, plain_data, received_cmac);
-    if (!verify_status.ok()) {
-      co_return verify_status;
-    }
+    PW_CO_TRY(sm->VerifyResponseCMACWithData(0x00, plain_data, received_cmac));
 
-    if (data_buffer.size() < encrypted_data_len) {
+    if (data_buffer.size() < data_len) {
       co_return pw::Status::ResourceExhausted();
     }
     std::copy(plain_data.begin(), plain_data.end(), data_buffer.begin());
-    total_bytes_read = encrypted_data_len;
+    total_bytes_read = data_len;
 
   } else {
     // Plain mode: No encryption, no CMAC verification
     // Response is just data + SW
-    size_t data_len = response_len - 2;
     if (data_buffer.size() < data_len) {
       co_return pw::Status::ResourceExhausted();
     }
     std::copy(response.begin(), response.begin() + data_len,
               data_buffer.begin());
     total_bytes_read = data_len;
-  }
-
-  // Increment command counter after successful operation
-  if (comm_mode != CommMode::kPlain) {
-    if (!sm->IncrementCounter()) {
-      co_return pw::Status::ResourceExhausted();  // Counter overflow
-    }
   }
 
   co_return total_bytes_read;
@@ -507,11 +473,7 @@ pw::async2::Coro<pw::Status> Ntag424Tag::WriteData(
     uint32_t offset,
     pw::ConstByteSpan data,
     CommMode comm_mode) {
-  auto validate_status = ValidateSession(session);
-  if (!validate_status.ok()) {
-    co_return validate_status;
-  }
-
+  PW_CO_TRY(ValidateSession(session));
   auto* sm = secure_messaging();
 
   // WriteData command: 90 8D 00 00 Lc [FileNo] [Offset(3)] [Length(3)] [Data]
@@ -550,20 +512,18 @@ pw::async2::Coro<pw::Status> Ntag424Tag::WriteData(
 
   if (comm_mode == CommMode::kFull) {
     // Encrypt the data
-    // Padded size = ((data.size() + 15) / 16) * 16
-    size_t padded_size = ((data.size() + 15) / 16) * 16;
+    // ISO 7816-4 padding ALWAYS adds at least 1 byte, so formula is:
+    // padded_size = ((data.size() / 16) + 1) * 16
+    size_t padded_size = ((data.size() / 16) + 1) * 16;
     if (padded_size > 64) {
       // Data too large for single frame
       co_return pw::Status::OutOfRange();
     }
 
     size_t ciphertext_len;
-    auto encrypt_status = sm->EncryptCommandData(
+    PW_CO_TRY(sm->EncryptCommandData(
         data, pw::ByteSpan(command.data() + kDataStart, padded_size),
-        ciphertext_len);
-    if (!encrypt_status.ok()) {
-      co_return encrypt_status;
-    }
+        ciphertext_len));
     data_in_cmd_len = ciphertext_len;
 
   } else if (comm_mode == CommMode::kMac) {
@@ -590,12 +550,9 @@ pw::async2::Coro<pw::Status> Ntag424Tag::WriteData(
                                   kCmdHeaderSize);
     pw::ConstByteSpan cmd_data(command.data() + kDataStart, data_in_cmd_len);
 
-    auto cmac_status = sm->BuildCommandCMACWithData(
+    PW_CO_TRY(sm->BuildCommandCMACWithData(
         ntag424_cmd::kWriteData, cmd_header, cmd_data,
-        pw::ByteSpan(command.data() + cmac_pos, 8));
-    if (!cmac_status.ok()) {
-      co_return cmac_status;
-    }
+        pw::ByteSpan(command.data() + cmac_pos, 8)));
     cmac_pos += 8;
   }
 
@@ -613,12 +570,8 @@ pw::async2::Coro<pw::Status> Ntag424Tag::WriteData(
   // Response: CMACt (8) + SW (2) = 10 bytes + margin
   std::array<std::byte, 16> response;
   pw::ConstByteSpan cmd_span(command.data(), command_len);
-  auto result = co_await DoTransceive(cx, cmd_span, response);
-  if (!result.ok()) {
-    co_return result.status();
-  }
-
-  size_t response_len = result.value();
+  PW_CO_TRY_ASSIGN(size_t response_len,
+                   co_await DoTransceive(cx, cmd_span, response));
 
   // Response format for Full/MAC mode: [CMACt(8)] [SW(2)] = 10 bytes
   // For Plain mode: [SW(2)] = 2 bytes
@@ -640,18 +593,17 @@ pw::async2::Coro<pw::Status> Ntag424Tag::WriteData(
       co_return pw::Status::DataLoss();
     }
 
-    pw::ConstByteSpan received_cmac(response.data(), 8);
-
-    // For write, response has no data, just verify the empty response CMAC
-    auto verify_status = sm->VerifyResponseCMAC(0x00, received_cmac);
-    if (!verify_status.ok()) {
-      co_return verify_status;
-    }
-
-    // Increment command counter after successful operation
+    // Increment counter BEFORE verifying response MAC.
+    // The PICC increments CmdCtr before calculating its response MAC,
+    // so we must use CmdCtr+1 when verifying. (AN12196 Section 4.3, Figure 9)
     if (!sm->IncrementCounter()) {
       co_return pw::Status::ResourceExhausted();  // Counter overflow
     }
+
+    pw::ConstByteSpan received_cmac(response.data(), 8);
+
+    // For write, response has no data, just verify the empty response CMAC
+    PW_CO_TRY(sm->VerifyResponseCMAC(0x00, received_cmac));
   }
 
   co_return pw::OkStatus();
@@ -668,10 +620,7 @@ pw::async2::Coro<pw::Status> Ntag424Tag::ChangeKey(
     pw::ConstByteSpan new_key,
     uint8_t new_key_version,
     pw::ConstByteSpan old_key) {
-  auto validate_status = ValidateSession(session);
-  if (!validate_status.ok()) {
-    co_return validate_status;
-  }
+  PW_CO_TRY(ValidateSession(session));
 
   // Validate new key size
   if (new_key.size() != 16) {
@@ -737,11 +686,8 @@ pw::async2::Coro<pw::Status> Ntag424Tag::ChangeKey(
   // Encrypt the plaintext (EncryptCommandData applies ISO 7816-4 padding)
   std::array<std::byte, 32> ciphertext;
   size_t ciphertext_len;
-  auto encrypt_status = sm->EncryptCommandData(
-      pw::ConstByteSpan(plaintext.data(), data_len), ciphertext, ciphertext_len);
-  if (!encrypt_status.ok()) {
-    co_return encrypt_status;
-  }
+  PW_CO_TRY(sm->EncryptCommandData(
+      pw::ConstByteSpan(plaintext.data(), data_len), ciphertext, ciphertext_len));
 
   // Build APDU: 90 C4 00 00 Lc [KeyNo] [Ciphertext(32)] [CMACt(8)] 00
   std::array<std::byte, 48> command;
@@ -762,12 +708,9 @@ pw::async2::Coro<pw::Status> Ntag424Tag::ChangeKey(
   pw::ConstByteSpan cmd_header(command.data() + 5, 1);  // KeyNo
   pw::ConstByteSpan cmd_data(command.data() + 6, 32);   // Ciphertext
 
-  auto cmac_status = sm->BuildCommandCMACWithData(
+  PW_CO_TRY(sm->BuildCommandCMACWithData(
       ntag424_cmd::kChangeKey, cmd_header, cmd_data,
-      pw::ByteSpan(command.data() + 38, 8));
-  if (!cmac_status.ok()) {
-    co_return cmac_status;
-  }
+      pw::ByteSpan(command.data() + 38, 8)));
 
   // Le
   command[46] = std::byte{0x00};
@@ -809,6 +752,15 @@ pw::async2::Coro<pw::Status> Ntag424Tag::ChangeKey(
     co_return pw::Status::DataLoss();
   }
 
+  // Increment counter BEFORE verifying response MAC.
+  // The PICC increments CmdCtr before calculating its response MAC,
+  // so we must use CmdCtr+1 when verifying. (AN12196 Section 4.3, Figure 9)
+  if (!sm->IncrementCounter()) {
+    SecureZero(new_key_arr);
+    SecureZero(old_key_arr);
+    co_return pw::Status::ResourceExhausted();  // Counter overflow
+  }
+
   // Verify response CMAC (no response data for ChangeKey)
   pw::ConstByteSpan received_cmac(response.data(), 8);
   auto verify_status = sm->VerifyResponseCMAC(0x00, received_cmac);
@@ -816,13 +768,6 @@ pw::async2::Coro<pw::Status> Ntag424Tag::ChangeKey(
     SecureZero(new_key_arr);
     SecureZero(old_key_arr);
     co_return verify_status;
-  }
-
-  // Increment command counter after successful operation
-  if (!sm->IncrementCounter()) {
-    SecureZero(new_key_arr);
-    SecureZero(old_key_arr);
-    co_return pw::Status::ResourceExhausted();  // Counter overflow
   }
 
   // Important: After changing the authentication key, the session is
@@ -859,12 +804,7 @@ pw::async2::Coro<pw::Status> Ntag424Tag::GetVersion(
   };
 
   std::array<std::byte, 16> response1;
-  auto result1 = co_await DoTransceive(cx, cmd1, response1);
-  if (!result1.ok()) {
-    co_return result1.status();
-  }
-
-  size_t len1 = result1.value();
+  PW_CO_TRY_ASSIGN(size_t len1, co_await DoTransceive(cx, cmd1, response1));
   if (len1 < 9) {
     PW_LOG_ERROR("GetVersion Part1: Response too short (%u)",
                  static_cast<unsigned>(len1));
@@ -898,12 +838,7 @@ pw::async2::Coro<pw::Status> Ntag424Tag::GetVersion(
   };
 
   std::array<std::byte, 16> response2;
-  auto result2 = co_await DoTransceive(cx, cmd2, response2);
-  if (!result2.ok()) {
-    co_return result2.status();
-  }
-
-  size_t len2 = result2.value();
+  PW_CO_TRY_ASSIGN(size_t len2, co_await DoTransceive(cx, cmd2, response2));
   if (len2 < 9) {
     PW_LOG_ERROR("GetVersion Part2: Response too short");
     co_return pw::Status::DataLoss();
@@ -927,12 +862,7 @@ pw::async2::Coro<pw::Status> Ntag424Tag::GetVersion(
 
   // Part 3: Send additional frame for production info
   std::array<std::byte, 16> response3;
-  auto result3 = co_await DoTransceive(cx, cmd2, response3);
-  if (!result3.ok()) {
-    co_return result3.status();
-  }
-
-  size_t len3 = result3.value();
+  PW_CO_TRY_ASSIGN(size_t len3, co_await DoTransceive(cx, cmd2, response3));
   if (len3 < 9) {
     PW_LOG_ERROR("GetVersion Part3: Response too short");
     co_return pw::Status::DataLoss();
