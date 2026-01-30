@@ -90,6 +90,12 @@ SecureMessaging::SecureMessaging(pw::ConstByteSpan ses_auth_enc_key,
   std::copy(ti.begin(), ti.end(), ti_.begin());
 }
 
+SecureMessaging::~SecureMessaging() {
+  // Securely zero session keys to minimize their lifetime in memory
+  SecureZero(ses_auth_enc_key_);
+  SecureZero(ses_auth_mac_key_);
+}
+
 pw::Status SecureMessaging::CalculateIV(std::byte prefix0,
                                          std::byte prefix1,
                                          pw::ByteSpan iv_out) {

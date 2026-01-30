@@ -10,16 +10,18 @@
 // - ReadData: Read file data with Full mode
 // - WriteData: Write and verify file data
 
+// PW_LOG_MODULE_NAME must be defined before any includes
+#define PW_LOG_MODULE_NAME "ntag424"
+
 // Pigweed headers first (avoid macro pollution from HAL)
 #include "maco_firmware/devices/pn532/pn532_nfc_reader.h"
 #include "maco_firmware/modules/nfc_tag/ntag424/local_key_provider.h"
-#include "maco_firmware/modules/nfc_tag/ntag424/ntag424_tag_async.h"
+#include "maco_firmware/modules/nfc_tag/ntag424/ntag424_tag.h"
 #include "pb_digital_io/digital_io.h"
-#include "pb_stream/uart_stream.h"
+#include "pb_uart/async_uart.h"
+#include "pw_allocator/testing.h"
+#include "pw_async2/coro.h"
 #include "pw_async2/dispatcher_for_test.h"
-
-#define PW_LOG_MODULE_NAME "ntag424"
-
 #include "pw_log/log.h"
 #include "pw_thread/sleep.h"
 #include "pw_unit_test/framework.h"
@@ -72,14 +74,6 @@ constexpr std::array<std::byte, 16> kTestPattern = {
 // Hardware Access
 // ============================================================================
 
-/// Testable subclass that exposes protected methods for hardware testing.
-class TestablePn532Reader : public maco::nfc::Pn532NfcReader {
- public:
-  using Pn532NfcReader::Pn532NfcReader;  // Inherit constructors
-  using Pn532NfcReader::DoDetectTag;     // Expose for testing
-  using Pn532NfcReader::DoTransceive;    // Expose for testing
-};
-
 /// Hardware random generator using Device OS HAL.
 class HardwareRng : public pw::random::RandomGenerator {
  public:
@@ -100,24 +94,35 @@ class HardwareRng : public pw::random::RandomGenerator {
   void InjectEntropyBits(uint32_t, uint_fast8_t) override {}
 };
 
-TestablePn532Reader& GetReader() {
-  static bool initialized = false;
-  static pb::ParticleUartStream uart(HAL_USART_SERIAL1);
-  static pb::ParticleDigitalOut reset_pin(kPinNfcReset);
+// Global hardware resources (created once, reused across tests)
+struct HardwareResources {
+  // UART buffers (32-byte aligned for DMA on RTL872x)
+  alignas(32) std::array<std::byte, 265> rx_buffer{};
+  alignas(32) std::array<std::byte, 265> tx_buffer{};
 
-  if (!initialized) {
-    (void)uart.Init(kUartBaudRate);
-    (void)reset_pin.Enable();
-    initialized = true;
-  }
+  // UART (must be constructed with buffers)
+  pb::AsyncUart uart{HAL_USART_SERIAL1, rx_buffer, tx_buffer};
 
-  static TestablePn532Reader reader(uart, reset_pin);
-  return reader;
-}
+  // Reset pin
+  pb::ParticleDigitalOut reset_pin{kPinNfcReset};
 
-HardwareRng& GetRng() {
-  static HardwareRng rng;
-  return rng;
+  // Allocator for reader coroutines
+  pw::allocator::test::AllocatorForTest<2048> reader_allocator;
+
+  // NFC Reader
+  maco::nfc::Pn532NfcReader reader{uart, reset_pin, reader_allocator};
+
+  // Random number generator
+  HardwareRng rng;
+
+  // Initialization state
+  bool uart_initialized = false;
+  bool reader_started = false;
+};
+
+HardwareResources& GetHardware() {
+  static HardwareResources hw;
+  return hw;
 }
 
 // ============================================================================
@@ -128,9 +133,15 @@ class Ntag424HardwareTest : public ::testing::Test {
  protected:
   void SetUp() override {
     PW_LOG_INFO("=== Ntag424HardwareTest::SetUp ===");
-    auto& reader = GetReader();
-    auto status = reader.Init();
-    ASSERT_TRUE(status.ok()) << "Reader init failed";
+    auto& hw = GetHardware();
+
+    // Initialize UART once
+    if (!hw.uart_initialized) {
+      auto status = hw.uart.Init(kUartBaudRate);
+      ASSERT_TRUE(status.ok()) << "UART init failed";
+      (void)hw.reset_pin.Enable();
+      hw.uart_initialized = true;
+    }
   }
 
   void TearDown() override {
@@ -154,20 +165,39 @@ class Ntag424HardwareTest : public ::testing::Test {
     return dispatcher.RunInTaskUntilStalled(future);
   }
 
+  /// Start reader and wait for initialization (only once).
+  bool InitReader(pw::async2::DispatcherForTest& dispatcher) {
+    auto& hw = GetHardware();
+
+    // Only start reader once - it persists across tests
+    if (hw.reader_started) {
+      PW_LOG_INFO("Reader already initialized");
+      return true;
+    }
+
+    auto init_future = hw.reader.Start(dispatcher);
+    auto poll = PollUntilReady(dispatcher, init_future, 100);
+    if (!poll.IsReady() || !poll.value().ok()) {
+      PW_LOG_ERROR("Reader init failed");
+      return false;
+    }
+    hw.reader_started = true;
+    PW_LOG_INFO("Reader initialized");
+    return true;
+  }
+
   /// Wait for a card and return TagInfo (uses proper FSM flow).
   std::optional<maco::nfc::TagInfo> WaitForCard(
-      pw::async2::DispatcherForTest& dispatcher,
-      TestablePn532Reader& reader) {
+      pw::async2::DispatcherForTest& dispatcher) {
+    auto& hw = GetHardware();
+
     PW_LOG_INFO("=================================================");
     PW_LOG_INFO("PLACE PREPARED NTAG424 TAG ON READER");
     PW_LOG_INFO("(Use ntag424_prepare_tag first if needed)");
     PW_LOG_INFO("=================================================");
 
     // Subscribe BEFORE starting the FSM to not miss the first event
-    auto event_future = reader.SubscribeOnce();
-
-    // Start the reader FSM
-    reader.Start(dispatcher);
+    auto event_future = hw.reader.SubscribeOnce();
 
     // Wait for tag arrival event - poll the SAME subscription
     for (int attempt = 0; attempt < 500; ++attempt) {
@@ -189,7 +219,7 @@ class Ntag424HardwareTest : public ::testing::Test {
         if (event.type == maco::nfc::NfcEventType::kTagDeparted) {
           PW_LOG_INFO("  Tag departed, waiting for new tag...");
           // Need a new subscription for the next tag
-          event_future = reader.SubscribeOnce();
+          event_future = hw.reader.SubscribeOnce();
         }
       }
 
@@ -205,28 +235,67 @@ class Ntag424HardwareTest : public ::testing::Test {
     PW_LOG_WARN("No card detected within timeout");
     return std::nullopt;
   }
+
+  // Allocator for coroutine context
+  pw::allocator::test::AllocatorForTest<2048> allocator_;
 };
 
 // ============================================================================
 // Tests
 // ============================================================================
 
-TEST_F(Ntag424HardwareTest, SelectApplication_Succeeds) {
-  auto& reader = GetReader();
+TEST_F(Ntag424HardwareTest, GetVersion_ShowsTagInfo) {
+  auto& hw = GetHardware();
   pw::async2::DispatcherForTest dispatcher;
+  pw::async2::CoroContext coro_cx(allocator_);
 
-  auto tag_info_opt = WaitForCard(dispatcher, reader);
+  ASSERT_TRUE(InitReader(dispatcher)) << "Reader init failed";
+
+  auto tag_info_opt = WaitForCard(dispatcher);
+  if (!tag_info_opt) {
+    GTEST_SKIP() << "No card present";
+  }
+
+  maco::nfc::Ntag424Tag tag(hw.reader, *tag_info_opt);
+
+  // Select application first
+  {
+    auto coro = tag.SelectApplication(coro_cx);
+    auto poll = PollUntilReady(dispatcher, coro);
+    ASSERT_TRUE(poll.IsReady() && poll.value().ok())
+        << "SelectApplication failed";
+  }
+
+  PW_LOG_INFO("Getting tag version info...");
+
+  auto coro = tag.GetVersion(coro_cx);
+  auto poll = PollUntilReady(dispatcher, coro);
+  ASSERT_TRUE(poll.IsReady()) << "GetVersion did not complete";
+
+  auto status = poll.value();
+  EXPECT_TRUE(status.ok()) << "GetVersion failed: "
+                           << static_cast<int>(status.code());
+}
+
+TEST_F(Ntag424HardwareTest, SelectApplication_Succeeds) {
+  auto& hw = GetHardware();
+  pw::async2::DispatcherForTest dispatcher;
+  pw::async2::CoroContext coro_cx(allocator_);
+
+  ASSERT_TRUE(InitReader(dispatcher)) << "Reader init failed";
+
+  auto tag_info_opt = WaitForCard(dispatcher);
   if (!tag_info_opt) {
     GTEST_SKIP() << "No card present";
   }
 
   // Create tag instance
-  maco::nfc::Ntag424Tag tag(reader, *tag_info_opt);
+  maco::nfc::Ntag424Tag tag(hw.reader, *tag_info_opt);
 
   PW_LOG_INFO("Selecting NTAG424 DNA application...");
 
-  auto future = tag.SelectApplication();
-  auto poll = PollUntilReady(dispatcher, future);
+  auto coro = tag.SelectApplication(coro_cx);
+  auto poll = PollUntilReady(dispatcher, coro);
   ASSERT_TRUE(poll.IsReady()) << "SelectApplication did not complete";
 
   auto status = poll.value();
@@ -238,21 +307,80 @@ TEST_F(Ntag424HardwareTest, SelectApplication_Succeeds) {
   }
 }
 
-TEST_F(Ntag424HardwareTest, Authenticate_WithTestKey) {
-  auto& reader = GetReader();
+TEST_F(Ntag424HardwareTest, Authenticate_WithDefaultKey) {
+  // Test with factory default key (all zeros) for fresh tags
+  auto& hw = GetHardware();
   pw::async2::DispatcherForTest dispatcher;
+  pw::async2::CoroContext coro_cx(allocator_);
 
-  auto tag_info_opt = WaitForCard(dispatcher, reader);
+  ASSERT_TRUE(InitReader(dispatcher)) << "Reader init failed";
+
+  auto tag_info_opt = WaitForCard(dispatcher);
   if (!tag_info_opt) {
     GTEST_SKIP() << "No card present";
   }
 
-  maco::nfc::Ntag424Tag tag(reader, *tag_info_opt);
+  maco::nfc::Ntag424Tag tag(hw.reader, *tag_info_opt);
 
   // Select application first
   {
-    auto future = tag.SelectApplication();
-    auto poll = PollUntilReady(dispatcher, future);
+    auto coro = tag.SelectApplication(coro_cx);
+    auto poll = PollUntilReady(dispatcher, coro);
+    ASSERT_TRUE(poll.IsReady() && poll.value().ok())
+        << "SelectApplication failed";
+  }
+
+  // Get version info for debugging
+  {
+    auto coro = tag.GetVersion(coro_cx);
+    auto poll = PollUntilReady(dispatcher, coro);
+    // Don't fail if GetVersion fails, just log it
+    if (!poll.IsReady() || !poll.value().ok()) {
+      PW_LOG_WARN("GetVersion failed (non-fatal)");
+    }
+  }
+
+  PW_LOG_INFO("Authenticating with DEFAULT key (all zeros)...");
+
+  // Create key provider with default key
+  maco::nfc::LocalKeyProvider key_provider(0, kDefaultKey, hw.rng);
+
+  auto coro = tag.Authenticate(coro_cx, key_provider);
+  auto poll = PollUntilReady(dispatcher, coro);
+  ASSERT_TRUE(poll.IsReady()) << "Authenticate did not complete";
+
+  auto result = poll.value();
+  if (!result.ok()) {
+    PW_LOG_ERROR("Authentication with default key failed: %d",
+                 static_cast<int>(result.status().code()));
+    PW_LOG_ERROR("Tag may have a non-default key or use LRP mode");
+  }
+  ASSERT_TRUE(result.ok()) << "Authentication failed with default key";
+
+  PW_LOG_INFO("Authentication with default key succeeded!");
+  // Session token returned - authenticated operations now require it
+  auto session = *result;
+  EXPECT_EQ(session.key_number(), 0);
+}
+
+TEST_F(Ntag424HardwareTest, Authenticate_WithTestKey) {
+  auto& hw = GetHardware();
+  pw::async2::DispatcherForTest dispatcher;
+  pw::async2::CoroContext coro_cx(allocator_);
+
+  ASSERT_TRUE(InitReader(dispatcher)) << "Reader init failed";
+
+  auto tag_info_opt = WaitForCard(dispatcher);
+  if (!tag_info_opt) {
+    GTEST_SKIP() << "No card present";
+  }
+
+  maco::nfc::Ntag424Tag tag(hw.reader, *tag_info_opt);
+
+  // Select application first
+  {
+    auto coro = tag.SelectApplication(coro_cx);
+    auto poll = PollUntilReady(dispatcher, coro);
     ASSERT_TRUE(poll.IsReady() && poll.value().ok())
         << "SelectApplication failed";
   }
@@ -260,10 +388,10 @@ TEST_F(Ntag424HardwareTest, Authenticate_WithTestKey) {
   PW_LOG_INFO("Authenticating with test key (key 0)...");
 
   // Create key provider with test key
-  maco::nfc::LocalKeyProvider key_provider(0, kTestKey);
+  maco::nfc::LocalKeyProvider key_provider(0, kTestKey, hw.rng);
 
-  auto future = tag.Authenticate(key_provider, GetRng());
-  auto poll = PollUntilReady(dispatcher, future);
+  auto coro = tag.Authenticate(coro_cx, key_provider);
+  auto poll = PollUntilReady(dispatcher, coro);
   ASSERT_TRUE(poll.IsReady()) << "Authenticate did not complete";
 
   auto result = poll.value();
@@ -276,39 +404,46 @@ TEST_F(Ntag424HardwareTest, Authenticate_WithTestKey) {
   ASSERT_TRUE(result.ok()) << "Authentication failed - is tag prepared?";
 
   PW_LOG_INFO("Authentication succeeded!");
-  EXPECT_TRUE(tag.is_authenticated());
+  // Session token returned - authenticated operations now require it
+  auto session = *result;
+  EXPECT_EQ(session.key_number(), 0);
 }
 
 TEST_F(Ntag424HardwareTest, GetCardUid_ReturnsValidUid) {
-  auto& reader = GetReader();
+  auto& hw = GetHardware();
   pw::async2::DispatcherForTest dispatcher;
+  pw::async2::CoroContext coro_cx(allocator_);
 
-  auto tag_info_opt = WaitForCard(dispatcher, reader);
+  ASSERT_TRUE(InitReader(dispatcher)) << "Reader init failed";
+
+  auto tag_info_opt = WaitForCard(dispatcher);
   if (!tag_info_opt) {
     GTEST_SKIP() << "No card present";
   }
 
-  maco::nfc::Ntag424Tag tag(reader, *tag_info_opt);
+  maco::nfc::Ntag424Tag tag(hw.reader, *tag_info_opt);
 
   // Select and authenticate
+  std::optional<maco::nfc::Ntag424Session> session;
   {
-    auto future = tag.SelectApplication();
-    auto poll = PollUntilReady(dispatcher, future);
+    auto coro = tag.SelectApplication(coro_cx);
+    auto poll = PollUntilReady(dispatcher, coro);
     ASSERT_TRUE(poll.IsReady() && poll.value().ok());
   }
   {
-    maco::nfc::LocalKeyProvider key_provider(0, kTestKey);
-    auto future = tag.Authenticate(key_provider, GetRng());
-    auto poll = PollUntilReady(dispatcher, future);
+    maco::nfc::LocalKeyProvider key_provider(0, kTestKey, hw.rng);
+    auto coro = tag.Authenticate(coro_cx, key_provider);
+    auto poll = PollUntilReady(dispatcher, coro);
     ASSERT_TRUE(poll.IsReady() && poll.value().ok())
         << "Authentication failed - is tag prepared?";
+    session = *poll.value();
   }
 
   PW_LOG_INFO("Getting encrypted card UID...");
 
   std::array<std::byte, 7> uid_buffer{};
-  auto future = tag.GetCardUid(uid_buffer);
-  auto poll = PollUntilReady(dispatcher, future);
+  auto coro = tag.GetCardUid(coro_cx, *session, uid_buffer);
+  auto poll = PollUntilReady(dispatcher, coro);
   ASSERT_TRUE(poll.IsReady()) << "GetCardUid did not complete";
 
   auto result = poll.value();
@@ -328,28 +463,33 @@ TEST_F(Ntag424HardwareTest, GetCardUid_ReturnsValidUid) {
 }
 
 TEST_F(Ntag424HardwareTest, WriteAndReadData_RoundTrip) {
-  auto& reader = GetReader();
+  auto& hw = GetHardware();
   pw::async2::DispatcherForTest dispatcher;
+  pw::async2::CoroContext coro_cx(allocator_);
 
-  auto tag_info_opt = WaitForCard(dispatcher, reader);
+  ASSERT_TRUE(InitReader(dispatcher)) << "Reader init failed";
+
+  auto tag_info_opt = WaitForCard(dispatcher);
   if (!tag_info_opt) {
     GTEST_SKIP() << "No card present";
   }
 
-  maco::nfc::Ntag424Tag tag(reader, *tag_info_opt);
+  maco::nfc::Ntag424Tag tag(hw.reader, *tag_info_opt);
 
   // Select and authenticate
+  std::optional<maco::nfc::Ntag424Session> session;
   {
-    auto future = tag.SelectApplication();
-    auto poll = PollUntilReady(dispatcher, future);
+    auto coro = tag.SelectApplication(coro_cx);
+    auto poll = PollUntilReady(dispatcher, coro);
     ASSERT_TRUE(poll.IsReady() && poll.value().ok());
   }
   {
-    maco::nfc::LocalKeyProvider key_provider(0, kTestKey);
-    auto future = tag.Authenticate(key_provider, GetRng());
-    auto poll = PollUntilReady(dispatcher, future);
+    maco::nfc::LocalKeyProvider key_provider(0, kTestKey, hw.rng);
+    auto coro = tag.Authenticate(coro_cx, key_provider);
+    auto poll = PollUntilReady(dispatcher, coro);
     ASSERT_TRUE(poll.IsReady() && poll.value().ok())
         << "Authentication failed - is tag prepared?";
+    session = *poll.value();
   }
 
   // Generate unique test data using random number
@@ -363,9 +503,9 @@ TEST_F(Ntag424HardwareTest, WriteAndReadData_RoundTrip) {
 
   // Write data
   {
-    auto future = tag.WriteData(kTestFileNumber, 0, write_data,
-                                maco::nfc::CommMode::kFull);
-    auto poll = PollUntilReady(dispatcher, future);
+    auto coro = tag.WriteData(coro_cx, *session, kTestFileNumber, 0, write_data,
+                              maco::nfc::CommMode::kFull);
+    auto poll = PollUntilReady(dispatcher, coro);
     ASSERT_TRUE(poll.IsReady()) << "WriteData did not complete";
 
     auto status = poll.value();
@@ -377,11 +517,12 @@ TEST_F(Ntag424HardwareTest, WriteAndReadData_RoundTrip) {
   // Need to re-authenticate after counter increment
   // (or we could track the counter, but re-auth is simpler for testing)
   {
-    maco::nfc::LocalKeyProvider key_provider(0, kTestKey);
-    auto future = tag.Authenticate(key_provider, GetRng());
-    auto poll = PollUntilReady(dispatcher, future);
+    maco::nfc::LocalKeyProvider key_provider(0, kTestKey, hw.rng);
+    auto coro = tag.Authenticate(coro_cx, key_provider);
+    auto poll = PollUntilReady(dispatcher, coro);
     ASSERT_TRUE(poll.IsReady() && poll.value().ok())
         << "Re-authentication failed";
+    session = *poll.value();  // Update session after re-auth
   }
 
   PW_LOG_INFO("Reading back data...");
@@ -389,9 +530,9 @@ TEST_F(Ntag424HardwareTest, WriteAndReadData_RoundTrip) {
   // Read data back
   std::array<std::byte, 16> read_buffer{};
   {
-    auto future = tag.ReadData(kTestFileNumber, 0, 16, read_buffer,
-                               maco::nfc::CommMode::kFull);
-    auto poll = PollUntilReady(dispatcher, future);
+    auto coro = tag.ReadData(coro_cx, *session, kTestFileNumber, 0, 16,
+                             read_buffer, maco::nfc::CommMode::kFull);
+    auto poll = PollUntilReady(dispatcher, coro);
     ASSERT_TRUE(poll.IsReady()) << "ReadData did not complete";
 
     auto result = poll.value();

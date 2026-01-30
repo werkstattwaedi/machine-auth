@@ -569,5 +569,368 @@ TEST(Ntag424CryptoTest, XorBytes_OutputTooSmall) {
   EXPECT_EQ(XorBytes(kA, kB, small_result), pw::Status::ResourceExhausted());
 }
 
+// ============================================================================
+// Full Authentication Flow Test (AN12196 Section 5.6)
+// ============================================================================
+// This test simulates the complete AuthenticateEV2First flow using the
+// exact values from AN12196 to identify where our implementation differs.
+
+TEST(Ntag424CryptoTest, AN12196_FullAuthenticationFlow) {
+  // -------------------------------------------------------------------------
+  // Step 1: Part 1 - Tag sends encrypted RndB
+  // -------------------------------------------------------------------------
+  // From AN12196 Section 5.6:
+  // Tag encrypts RndB with AuthKey (all zeros) using AES-CBC with zero IV
+  // We need to verify our decryption produces the correct RndB.
+
+  // Encrypted RndB from tag (this is what we receive in Part 1 response)
+  // AN12196: "Ek(RndB)" - encrypted with AuthKey
+  // We need to encrypt kRndB with kAuthKey to get this value
+  std::array<std::byte, 16> encrypted_rnd_b{};
+  constexpr auto kZeroIv = pw::bytes::Array<
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00>();
+
+  // Encrypt RndB to simulate what the tag sends
+  ASSERT_EQ(AesCbcEncrypt(kAuthKey, kZeroIv, kRndB, encrypted_rnd_b),
+            pw::OkStatus());
+
+  // Now decrypt it back - this is what our code does
+  std::array<std::byte, 16> decrypted_rnd_b{};
+  ASSERT_EQ(AesCbcDecrypt(kAuthKey, kZeroIv, encrypted_rnd_b, decrypted_rnd_b),
+            pw::OkStatus());
+
+  // Verify decryption recovers original RndB
+  EXPECT_EQ(std::memcmp(decrypted_rnd_b.data(), kRndB.data(), 16), 0)
+      << "Step 1 FAILED: RndB decryption mismatch";
+
+  // -------------------------------------------------------------------------
+  // Step 2: PCD computes RndB' (RndB rotated left by 1 byte)
+  // -------------------------------------------------------------------------
+  std::array<std::byte, 16> rnd_b_prime{};
+  RotateLeft1(kRndB, rnd_b_prime);
+
+  constexpr auto kExpectedRndBPrime = pw::bytes::Array<
+      0x8D, 0x1A, 0x22, 0x97, 0xB2, 0xA5, 0x6E, 0x5B,
+      0x71, 0x7F, 0x35, 0xB8, 0x1F, 0x0E, 0x8D, 0x1A>();
+  EXPECT_EQ(std::memcmp(rnd_b_prime.data(), kExpectedRndBPrime.data(), 16), 0)
+      << "Step 2 FAILED: RndB' rotation mismatch";
+
+  // -------------------------------------------------------------------------
+  // Step 3: PCD sends encrypted (RndA || RndB') to tag
+  // -------------------------------------------------------------------------
+  std::array<std::byte, 32> rnd_a_concat_rnd_b_prime{};
+  std::copy(kRndA.begin(), kRndA.end(), rnd_a_concat_rnd_b_prime.begin());
+  std::copy(rnd_b_prime.begin(), rnd_b_prime.end(),
+            rnd_a_concat_rnd_b_prime.begin() + 16);
+
+  std::array<std::byte, 32> encrypted_part2_cmd{};
+  ASSERT_EQ(AesCbcEncrypt(kAuthKey, kZeroIv, rnd_a_concat_rnd_b_prime,
+                          encrypted_part2_cmd),
+            pw::OkStatus());
+
+  // -------------------------------------------------------------------------
+  // Step 4: Derive session keys (this happens on both PCD and tag)
+  // -------------------------------------------------------------------------
+  std::array<std::byte, 16> ses_auth_enc_key{};
+  std::array<std::byte, 16> ses_auth_mac_key{};
+  ASSERT_EQ(DeriveSessionKeys(kAuthKey, kRndA, kRndB,
+                              ses_auth_enc_key, ses_auth_mac_key),
+            pw::OkStatus());
+
+  // Log computed session key for debugging
+  printf("Computed SesAuthEncKey: ");
+  for (size_t i = 0; i < 16; i++) {
+    printf("%02X ", static_cast<unsigned>(ses_auth_enc_key[i]));
+  }
+  printf("\n");
+
+  printf("Expected SesAuthEncKey: ");
+  for (size_t i = 0; i < 16; i++) {
+    printf("%02X ", static_cast<unsigned>(kExpectedSesAuthEncKey[i]));
+  }
+  printf("\n");
+
+  EXPECT_EQ(std::memcmp(ses_auth_enc_key.data(),
+                        kExpectedSesAuthEncKey.data(), 16), 0)
+      << "Step 4 FAILED: SesAuthEncKey derivation mismatch - CMAC bug?";
+
+  EXPECT_EQ(std::memcmp(ses_auth_mac_key.data(),
+                        kExpectedSesAuthMacKey.data(), 16), 0)
+      << "Step 4 FAILED: SesAuthMacKey derivation mismatch";
+
+  // -------------------------------------------------------------------------
+  // Step 5: Tag sends encrypted response: TI || RndA' || PDCap2.1 || PCDCap2.2
+  // -------------------------------------------------------------------------
+  // The tag encrypts with SesAuthEncKey, not AuthKey!
+  // RndA' = RndA rotated left by 1 byte
+
+  // Compute RndA' (what the tag should send back)
+  std::array<std::byte, 16> expected_rnd_a_prime{};
+  RotateLeft1(kRndA, expected_rnd_a_prime);
+
+  printf("Expected RndA' (rotated): ");
+  for (size_t i = 0; i < 16; i++) {
+    printf("%02X ", static_cast<unsigned>(expected_rnd_a_prime[i]));
+  }
+  printf("\n");
+
+  // The tag's response is: TI(4) || RndA'(16) || PDCap2.1(6) || PCDCap2.2(6) = 32 bytes
+  // We'll use dummy TI and caps for simulation
+  std::array<std::byte, 32> tag_response_plaintext{};
+  // TI (4 bytes) - arbitrary for test
+  tag_response_plaintext[0] = std::byte{0xA8};
+  tag_response_plaintext[1] = std::byte{0x9B};
+  tag_response_plaintext[2] = std::byte{0x4E};
+  tag_response_plaintext[3] = std::byte{0xF0};
+  // RndA' (16 bytes)
+  std::copy(expected_rnd_a_prime.begin(), expected_rnd_a_prime.end(),
+            tag_response_plaintext.begin() + 4);
+  // PDCap2.1 and PCDCap2.2 (12 bytes) - zeros for test
+  std::fill(tag_response_plaintext.begin() + 20, tag_response_plaintext.end(),
+            std::byte{0x00});
+
+  // Tag encrypts this with SesAuthEncKey
+  std::array<std::byte, 32> tag_response_encrypted{};
+  ASSERT_EQ(AesCbcEncrypt(ses_auth_enc_key, kZeroIv, tag_response_plaintext,
+                          tag_response_encrypted),
+            pw::OkStatus());
+
+  printf("Simulated tag encrypted response: ");
+  for (size_t i = 0; i < 16; i++) {
+    printf("%02X ", static_cast<unsigned>(tag_response_encrypted[i]));
+  }
+  printf("...\n");
+
+  // -------------------------------------------------------------------------
+  // Step 6: PCD decrypts tag response and verifies RndA'
+  // -------------------------------------------------------------------------
+  std::array<std::byte, 32> decrypted_response{};
+  ASSERT_EQ(AesCbcDecrypt(ses_auth_enc_key, kZeroIv, tag_response_encrypted,
+                          decrypted_response),
+            pw::OkStatus());
+
+  printf("Decrypted response: ");
+  for (size_t i = 0; i < 20; i++) {
+    printf("%02X ", static_cast<unsigned>(decrypted_response[i]));
+  }
+  printf("...\n");
+
+  // Extract RndA' from decrypted response (bytes 4-19)
+  pw::ConstByteSpan decrypted_rnd_a_prime(decrypted_response.data() + 4, 16);
+
+  printf("Decrypted RndA': ");
+  for (size_t i = 0; i < 16; i++) {
+    printf("%02X ", static_cast<unsigned>(decrypted_rnd_a_prime[i]));
+  }
+  printf("\n");
+
+  // Verify RndA'
+  EXPECT_TRUE(VerifyRndAPrime(kRndA, decrypted_rnd_a_prime))
+      << "Step 6 FAILED: RndA' verification failed";
+}
+
+// ============================================================================
+// Debug Test: Actual values from failing authentication (Run 2)
+// ============================================================================
+
+TEST(Ntag424CryptoTest, DebugRealAuthenticationValues_Run2) {
+  // Values from latest device log:
+  constexpr auto kActualRndA = pw::bytes::Array<
+      0xA1, 0x60, 0xB6, 0x1F, 0x96, 0x12, 0x08, 0x41,
+      0x6E, 0xE4, 0x22, 0xF5, 0xF1, 0x75, 0xA9, 0x8D>();
+
+  constexpr auto kActualRndB = pw::bytes::Array<
+      0x8D, 0xB4, 0xF9, 0x91, 0xEB, 0x0D, 0xE0, 0xA7,
+      0xA8, 0x8C, 0xC6, 0x2F, 0x66, 0x8C, 0xC0, 0xAB>();
+
+  constexpr auto kZeroAuthKey = pw::bytes::Array<
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00>();
+
+  // Device-computed session key
+  constexpr auto kDeviceSesAuthEncKey = pw::bytes::Array<
+      0xFF, 0xB1, 0x8D, 0x1B, 0x79, 0x61, 0xE4, 0xE8,
+      0x81, 0x48, 0x60, 0x0E, 0x69, 0xCE, 0xC0, 0x13>();
+
+  // Encrypted response from tag
+  constexpr auto kEncryptedResponse = pw::bytes::Array<
+      0x52, 0x12, 0xD8, 0xF9, 0x4B, 0xF1, 0x95, 0x76,
+      0xC3, 0x71, 0x24, 0x69, 0x5B, 0xEF, 0xA2, 0x8B,
+      0xE0, 0x5A, 0x97, 0x40, 0x44, 0x2C, 0x15, 0x80,
+      0x65, 0x91, 0xD8, 0xC6, 0xE4, 0xCB, 0x61, 0x2F>();
+
+  // Step 1: Compute session key on host
+  std::array<std::byte, 16> host_ses_auth_enc_key{};
+  std::array<std::byte, 16> host_ses_auth_mac_key{};
+  ASSERT_EQ(DeriveSessionKeys(kZeroAuthKey, kActualRndA, kActualRndB,
+                              host_ses_auth_enc_key, host_ses_auth_mac_key),
+            pw::OkStatus());
+
+  printf("Host-computed SesAuthEncKey:   ");
+  for (size_t i = 0; i < 16; i++) {
+    printf("%02X ", static_cast<unsigned>(host_ses_auth_enc_key[i]));
+  }
+  printf("\n");
+
+  printf("Device-computed SesAuthEncKey: ");
+  for (size_t i = 0; i < 16; i++) {
+    printf("%02X ", static_cast<unsigned>(kDeviceSesAuthEncKey[i]));
+  }
+  printf("\n");
+
+  // Check if host and device session keys match
+  bool keys_match = std::memcmp(host_ses_auth_enc_key.data(),
+                                 kDeviceSesAuthEncKey.data(), 16) == 0;
+  printf("Session keys match: %s\n", keys_match ? "YES" : "NO");
+
+  if (!keys_match) {
+    printf("ERROR: Host and device compute different session keys!\n");
+    printf("This indicates a bug in device CMAC implementation.\n");
+  }
+
+  // Step 2: Try decrypting with BOTH keys to see what we get
+  constexpr auto kZeroIv = pw::bytes::Array<
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00>();
+
+  std::array<std::byte, 32> decrypted_with_host_key{};
+  ASSERT_EQ(AesCbcDecrypt(host_ses_auth_enc_key, kZeroIv, kEncryptedResponse,
+                          decrypted_with_host_key),
+            pw::OkStatus());
+
+  printf("\nDecrypted with HOST key:\n");
+  printf("  TI:    %02X %02X %02X %02X\n",
+         static_cast<unsigned>(decrypted_with_host_key[0]),
+         static_cast<unsigned>(decrypted_with_host_key[1]),
+         static_cast<unsigned>(decrypted_with_host_key[2]),
+         static_cast<unsigned>(decrypted_with_host_key[3]));
+  printf("  RndA': ");
+  for (size_t i = 4; i < 20; i++) {
+    printf("%02X ", static_cast<unsigned>(decrypted_with_host_key[i]));
+  }
+  printf("\n");
+
+  // Expected RndA' (RndA rotated left by 1 byte)
+  printf("  Expected RndA': ");
+  for (size_t i = 1; i < 16; i++) {
+    printf("%02X ", static_cast<unsigned>(kActualRndA[i]));
+  }
+  printf("%02X \n", static_cast<unsigned>(kActualRndA[0]));
+
+  // Check if RndA' matches
+  bool rnda_matches = true;
+  for (size_t i = 0; i < 15; i++) {
+    if (decrypted_with_host_key[4 + i] != kActualRndA[i + 1]) {
+      rnda_matches = false;
+      break;
+    }
+  }
+  if (decrypted_with_host_key[19] != kActualRndA[0]) {
+    rnda_matches = false;
+  }
+  printf("  RndA' matches expected: %s\n", rnda_matches ? "YES" : "NO");
+
+  // This tells us whether the tag uses the same session key derivation
+  if (rnda_matches) {
+    printf("\nSUCCESS: Tag uses same session key derivation as AN12196!\n");
+  } else {
+    printf("\nFAILURE: Tag produces different RndA' - session key mismatch.\n");
+    printf("Possible causes:\n");
+    printf("  1. Tag uses different session key derivation (e.g., LRP mode)\n");
+    printf("  2. Tag hardware v3.0 has different algorithm\n");
+    printf("  3. Data corruption in NFC communication\n");
+  }
+}
+
+// ============================================================================
+// Debug Test: Actual values from failing authentication (Run 1)
+// ============================================================================
+// These values were captured from a real authentication attempt that failed.
+// Use this to verify host computation matches what the device should compute.
+
+TEST(Ntag424CryptoTest, DebugRealAuthenticationValues) {
+  // Actual values from device log:
+  constexpr auto kActualRndA = pw::bytes::Array<
+      0x1D, 0x37, 0x55, 0xA0, 0xFA, 0xB9, 0x07, 0x69,
+      0xF0, 0x69, 0xAE, 0x73, 0x69, 0x37, 0x5B, 0x59>();
+
+  constexpr auto kActualRndB = pw::bytes::Array<
+      0xD1, 0x1E, 0x81, 0x45, 0x81, 0xEB, 0xCB, 0x63,
+      0x6B, 0xA9, 0xE8, 0x78, 0x31, 0x1A, 0x86, 0xAA>();
+
+  constexpr auto kZeroAuthKey = pw::bytes::Array<
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00>();
+
+  // Expected SV1 from device log (verified manually):
+  constexpr auto kExpectedSV1 = pw::bytes::Array<
+      0xA5, 0x5A, 0x00, 0x01, 0x00, 0x80, 0x1D, 0x37,
+      0x84, 0xBE, 0x7B, 0xFC, 0x86, 0x82, 0xCB, 0x63,
+      0x6B, 0xA9, 0xE8, 0x78, 0x31, 0x1A, 0x86, 0xAA,
+      0xF0, 0x69, 0xAE, 0x73, 0x69, 0x37, 0x5B, 0x59>();
+
+  // Step 1: Verify SV1 calculation
+  std::array<std::byte, 32> computed_sv1{};
+  CalculateSV1(kActualRndA, kActualRndB, computed_sv1);
+
+  printf("Expected SV1: ");
+  for (size_t i = 0; i < 32; i++) {
+    printf("%02X ", static_cast<unsigned>(kExpectedSV1[i]));
+  }
+  printf("\n");
+
+  printf("Computed SV1: ");
+  for (size_t i = 0; i < 32; i++) {
+    printf("%02X ", static_cast<unsigned>(computed_sv1[i]));
+  }
+  printf("\n");
+
+  EXPECT_EQ(std::memcmp(computed_sv1.data(), kExpectedSV1.data(), 32), 0)
+      << "SV1 calculation mismatch";
+
+  // Step 2: Derive session keys
+  std::array<std::byte, 16> ses_auth_enc_key{};
+  std::array<std::byte, 16> ses_auth_mac_key{};
+  ASSERT_EQ(DeriveSessionKeys(kZeroAuthKey, kActualRndA, kActualRndB,
+                              ses_auth_enc_key, ses_auth_mac_key),
+            pw::OkStatus());
+
+  printf("Host-computed SesAuthEncKey: ");
+  for (size_t i = 0; i < 16; i++) {
+    printf("%02X ", static_cast<unsigned>(ses_auth_enc_key[i]));
+  }
+  printf("\n");
+
+  // Device log showed: SesAuthEncKey=28 F6 98 15 FC 41 3F 27...
+  // If host produces the same value, the algorithm is consistent.
+  // If host produces different value, there's a bug in our formula.
+  printf("Device reported: 28 F6 98 15 FC 41 3F 27...\n");
+
+  // Step 3: Verify RndB' calculation
+  std::array<std::byte, 16> rnd_b_prime{};
+  RotateLeft1(kActualRndB, rnd_b_prime);
+
+  // Expected from log: Part2 plaintext[16:31] = 1E 81 45 81 EB CB 63 6B A9 E8 78 31 1A 86 AA D1
+  constexpr auto kExpectedRndBPrime = pw::bytes::Array<
+      0x1E, 0x81, 0x45, 0x81, 0xEB, 0xCB, 0x63, 0x6B,
+      0xA9, 0xE8, 0x78, 0x31, 0x1A, 0x86, 0xAA, 0xD1>();
+
+  printf("Expected RndB': ");
+  for (size_t i = 0; i < 16; i++) {
+    printf("%02X ", static_cast<unsigned>(kExpectedRndBPrime[i]));
+  }
+  printf("\n");
+
+  printf("Computed RndB': ");
+  for (size_t i = 0; i < 16; i++) {
+    printf("%02X ", static_cast<unsigned>(rnd_b_prime[i]));
+  }
+  printf("\n");
+
+  EXPECT_EQ(std::memcmp(rnd_b_prime.data(), kExpectedRndBPrime.data(), 16), 0)
+      << "RndB' calculation mismatch";
+}
+
 }  // namespace
 }  // namespace maco::nfc

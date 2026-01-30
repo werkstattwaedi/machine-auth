@@ -154,12 +154,18 @@ bool VerifyRndAPrime(pw::ConstByteSpan rnd_a, pw::ConstByteSpan rnd_a_prime) {
 
   // RndA' should be RndA rotated left by 1 byte
   // So RndA'[i] == RndA[i+1] for i < 15, and RndA'[15] == RndA[0]
+  //
+  // Use constant-time comparison to prevent timing side-channel attacks.
+  // An attacker measuring response times could otherwise deduce which
+  // bytes matched, leaking information about RndA.
+  volatile uint8_t diff = 0;
   for (size_t i = 0; i < 15; ++i) {
-    if (rnd_a_prime[i] != rnd_a[i + 1]) {
-      return false;
-    }
+    diff |= static_cast<uint8_t>(rnd_a_prime[i]) ^
+            static_cast<uint8_t>(rnd_a[i + 1]);
   }
-  return rnd_a_prime[15] == rnd_a[0];
+  diff |= static_cast<uint8_t>(rnd_a_prime[15]) ^ static_cast<uint8_t>(rnd_a[0]);
+
+  return diff == 0;
 }
 
 void CalculateCRC32NK(pw::ConstByteSpan data, pw::ByteSpan crc_out) {

@@ -66,6 +66,9 @@ class SecureMessaging {
                   pw::ConstByteSpan ti,
                   uint16_t initial_cmd_ctr = 0);
 
+  /// Destructor securely zeroes session keys.
+  ~SecureMessaging();
+
   // --- IV Calculation ---
 
   /// Calculate command IV.
