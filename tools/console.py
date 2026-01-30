@@ -16,6 +16,7 @@ import argparse
 import glob
 import logging
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -53,6 +54,65 @@ from pw_unit_test_proto import unit_test_pb2
 _LOG = logging.getLogger(__file__)
 
 
+def _get_project_root() -> Path:
+    """Get project root from MACO_PROJECT_ROOT environment variable."""
+    root = os.environ.get("MACO_PROJECT_ROOT")
+    if root:
+        return Path(root)
+    # Fallback: try to find it (may not work from bazel runfiles)
+    path = Path.cwd()
+    while path != path.parent:
+        if (path / "MODULE.bazel").exists():
+            return path
+        path = path.parent
+    raise RuntimeError(
+        "MACO_PROJECT_ROOT not set and could not find project root. "
+        "Run via ./pw console instead of bazel run directly."
+    )
+
+
+def _run_cmd(
+    cmd: list[str],
+    check: bool = False,
+    use_bazel_env: bool = True,
+) -> subprocess.CompletedProcess:
+    """Run a command with output captured to avoid corrupting the TUI.
+
+    Args:
+        cmd: Command and arguments to run.
+        check: If True, raise on non-zero exit.
+        use_bazel_env: If True, set BAZELISK_SKIP_WRAPPER=1.
+
+    Returns:
+        CompletedProcess with captured stdout/stderr.
+    """
+    project_root = _get_project_root()
+    env = os.environ.copy()
+    if use_bazel_env:
+        env["BAZELISK_SKIP_WRAPPER"] = "1"
+
+    _LOG.info("Running: %s", " ".join(cmd))
+    result = subprocess.run(
+        cmd,
+        cwd=project_root,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    if result.returncode != 0:
+        _LOG.error("Command failed (exit %d)", result.returncode)
+        # Log last 20 lines of stderr
+        if result.stderr:
+            for line in result.stderr.strip().split("\n")[-20:]:
+                _LOG.error("%s", line)
+        if check:
+            raise subprocess.CalledProcessError(
+                result.returncode, cmd, result.stdout, result.stderr
+            )
+    return result
+
+
 class ReconnectingSerialClient:
     """Serial client with automatic reconnection on disconnect.
 
@@ -82,6 +142,14 @@ class ReconnectingSerialClient:
 
     def connect(self) -> None:
         """Connect to the serial port."""
+        self.connect_to(self._device)
+
+    def connect_to(self, device: str) -> None:
+        """Connect to a specific serial port.
+
+        Args:
+            device: Path to serial device (e.g., /dev/particle_1234)
+        """
         if self._serial is not None:
             try:
                 self._serial.close()
@@ -94,12 +162,13 @@ class ReconnectingSerialClient:
             else serial.Serial
         )
         self._serial = serial_impl(
-            self._device,
+            device,
             self._baudrate,
             timeout=self._timeout,
         )
+        self._device = device
         self._connected = True
-        _LOG.info("Connected to %s", self._device)
+        _LOG.info("Connected to %s", device)
 
     def write(self, data: bytes) -> int | None:
         """Write data to serial port, handling disconnects."""
@@ -177,8 +246,14 @@ def wait_for_device(device_path: str, timeout: float = 30.0) -> bool:
 class Device(PwSystemDevice):
     """MACO-specific device with convenience methods for RPC calls."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, serial_suffix: str | None = None, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self._serial_suffix = serial_suffix
+
+    @property
+    def serial_suffix(self) -> str | None:
+        """Last 4 digits of device serial number."""
+        return self._serial_suffix
 
     def echo(self, data: bytes) -> bytes:
         """Echo data back from the device."""
@@ -189,6 +264,99 @@ class Device(PwSystemDevice):
         """Get device information (firmware version, uptime, build target)."""
         response = self.rpcs.maco.MacoService.GetDeviceInfo()
         return response.response
+
+    def update(self, target: str | None = None) -> int:
+        """Build and flash firmware, then reconnect.
+
+        Args:
+            target: Bazel target to build/flash. Defaults to P2 workflow build.
+                    If target ends with .bin, flashes that binary directly.
+
+        Returns:
+            Exit code (0 on success)
+        """
+        if target is None:
+            # Default: build p2 workflow then flash
+            _LOG.info("Building P2 firmware...")
+            result = _run_cmd(["./pw", "build", "p2"])
+            if result.returncode != 0:
+                return result.returncode
+            _LOG.info("Flashing...")
+            result = _run_cmd(["./pw", "flash"])
+        elif target.endswith(".bin"):
+            # Direct flash of specific binary
+            _LOG.info("Flashing %s...", target)
+            result = _run_cmd(["bazelisk", "run", target])
+        else:
+            # Build specific target, then flash
+            _LOG.info("Building %s...", target)
+            result = _run_cmd(["bazelisk", "build", target])
+            if result.returncode != 0:
+                return result.returncode
+            _LOG.info("Flashing...")
+            result = _run_cmd(["./pw", "flash"])
+
+        return result.returncode
+        # Note: ReconnectingSerialClient handles reconnection automatically
+
+    def reset(self) -> None:
+        """Reboot the device.
+
+        Device will disconnect and reconnect automatically.
+        """
+        _LOG.info("Resetting device...")
+        self._run_particle_usb_command("reset")
+        # ReconnectingSerialClient handles reconnection
+
+    def dfu(self) -> None:
+        """Enter DFU mode for low-level USB flashing.
+
+        Warning: Console will disconnect. Use `./pw flash` to reflash,
+        or power cycle the device to exit DFU mode.
+        """
+        _LOG.info("Entering DFU mode...")
+        self._run_particle_usb_command("dfu")
+
+    def safe_mode(self) -> None:
+        """Boot into safe mode (Device OS only, no user application).
+
+        Useful for recovering from crashes or updating Device OS.
+        Device will reconnect in safe mode (breathing magenta LED).
+        """
+        _LOG.info("Entering safe mode...")
+        self._run_particle_usb_command("safe-mode")
+
+    def listening_mode(self) -> None:
+        """Enter listening/setup mode for WiFi configuration.
+
+        Device enters setup mode (blinking blue LED).
+        Use Particle app or CLI to configure WiFi.
+        """
+        _LOG.info("Entering listening mode...")
+        self._run_particle_usb_command("start-listening")
+
+    def cloud_status(self) -> str:
+        """Get cloud connection status.
+
+        Returns:
+            Status string: "connected", "connecting", "disconnected", etc.
+        """
+        result = _run_cmd([
+            "bazelisk", "run", "@particle_bazel//tools:particle_cli",
+            "--", "usb", "cloud-status",
+        ])
+        # Parse output like "Cloud status: connected"
+        output = result.stdout.strip()
+        if ":" in output:
+            return output.split(":")[-1].strip().lower()
+        return output.lower()
+
+    def _run_particle_usb_command(self, command: str) -> None:
+        """Run a particle usb command using bazel-provided particle-cli."""
+        _run_cmd([
+            "bazelisk", "run", "@particle_bazel//tools:particle_cli",
+            "--", "usb", command,
+        ], check=True)
 
 
 def create_connection(
@@ -201,6 +369,7 @@ def create_connection(
     rpc_logging: bool = True,
     channel_id: int = rpc.DEFAULT_CHANNEL_ID,
     hdlc_encoding: bool = True,
+    serial_suffix: str | None = None,
 ) -> DeviceConnection:
     """Create a device connection with auto-reconnect for serial devices."""
 
@@ -232,15 +401,24 @@ def create_connection(
 
     if socket_addr is None:
         # Serial connection with auto-reconnect
+        # If we have a serial suffix, reconnect by pattern to handle device path changes
+        device_pattern = f"/dev/particle_*{serial_suffix}" if serial_suffix else device
+
         def disconnect_handler(serial_client: ReconnectingSerialClient) -> None:
             """Attempts to reconnect on disconnected serial."""
             _LOG.error("Serial disconnected. Waiting for device to reappear...")
             while True:
-                if wait_for_device(device, timeout=1.0):
+                if wait_for_device(device_pattern, timeout=1.0):
+                    # Find the matching device
+                    if "*" in device_pattern:
+                        matches = glob.glob(device_pattern)
+                        actual_device = matches[0] if matches else device
+                    else:
+                        actual_device = device
                     try:
                         time.sleep(0.5)  # Let device initialize
-                        serial_client.connect()
-                        _LOG.info("Successfully reconnected to %s", device)
+                        serial_client.connect_to(actual_device)
+                        _LOG.info("Successfully reconnected to %s", actual_device)
                         break
                     except Exception as e:
                         _LOG.debug("Reconnect attempt failed: %s", e)
@@ -282,9 +460,10 @@ def create_connection(
         write = socket_device.write
 
     device_client = Device(
-        channel_id,
-        reader,
-        write,
+        serial_suffix=serial_suffix,
+        channel_id=channel_id,
+        reader=reader,
+        write=write,
         proto_library=protos,
         detokenizer=detokenizer,
         timestamp_decoder=timestamp_parser_ms_since_boot,
@@ -299,12 +478,29 @@ def create_connection(
 def main() -> int:
     pw_cli.log.install(level=logging.DEBUG)
 
+    # First extract --device-serial-suffix (our custom arg)
+    serial_suffix = None
+    filtered_argv = [sys.argv[0]]
+    i = 1
+    while i < len(sys.argv):
+        arg = sys.argv[i]
+        if arg == "--device-serial-suffix" and i + 1 < len(sys.argv):
+            serial_suffix = sys.argv[i + 1]
+            i += 2
+        elif arg.startswith("--device-serial-suffix="):
+            serial_suffix = arg.split("=", 1)[1]
+            i += 1
+        else:
+            filtered_argv.append(arg)
+            i += 1
+
+    # Parse remaining args with standard device args parser
     parser = argparse.ArgumentParser(
         prog="maco-console",
         description=__doc__,
     )
     parser = add_device_args(parser)
-    args, _remaining_args = parser.parse_known_args()
+    args, remaining_args = parser.parse_known_args(filtered_argv[1:])
 
     is_serial = args.device is not None
 
@@ -319,6 +515,9 @@ def main() -> int:
         time.sleep(0.5)
 
     try:
+        if serial_suffix:
+            print(f"🔌 Connected to {args.device} (serial: ...{serial_suffix})")
+
         device_connection = create_connection(
             device=args.device,
             baudrate=args.baudrate,
@@ -329,7 +528,12 @@ def main() -> int:
             rpc_logging=args.rpc_logging,
             hdlc_encoding=args.hdlc_encoding,
             channel_id=args.channel_id,
+            serial_suffix=serial_suffix,
         )
+
+        # Pass args that pw_system.console understands (filtered_argv already excludes --device-serial-suffix)
+        sys.argv = filtered_argv
+
         return pw_system.console.main(
             compiled_protos=[maco_service_pb2, nfc_mock_service_pb2],
             device_connection=device_connection,
