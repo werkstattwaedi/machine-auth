@@ -9,6 +9,15 @@ bazel_dep(name = "rules_cc", version = "0.2.4")
 bazel_dep(name = "bazel_skylib", version = "1.8.1")
 bazel_dep(name = "rules_python", version = "0.40.0")
 
+# Python dependencies for maco_gateway and tests
+pip = use_extension("@rules_python//python/extensions:pip.bzl", "pip")
+pip.parse(
+    hub_name = "maco_pip",
+    python_version = "3.11",
+    requirements_lock = "//tools:requirements_lock.txt",
+)
+use_repo(pip, "maco_pip")
+
 # Crypto library (used by NFC authentication)
 bazel_dep(name = "mbedtls", version = "3.6.0")
 

@@ -1,0 +1,61 @@
+// Copyright Offene Werkstatt Wädenswil
+// SPDX-License-Identifier: MIT
+
+// Test control RPC service for Firebase client integration tests.
+//
+// This proto defines test-specific RPCs that allow the Python test
+// to configure the device and trigger Firebase operations.
+
+syntax = "proto3";
+
+package maco.test.firebase;
+
+import "pw_protobuf_protos/field_options.proto";
+
+// Request to configure the gateway connection.
+message ConfigureGatewayRequest {
+  // Gateway hostname or IP address.
+  string host = 1 [(pw.protobuf.pwpb).max_size = 64];
+
+  // Gateway port number.
+  uint32 port = 2;
+}
+
+// Response to gateway configuration.
+message ConfigureGatewayResponse {
+  // True if configuration was successful.
+  bool success = 1;
+}
+
+// Request to trigger a StartSession RPC.
+message TriggerStartSessionRequest {
+  // Tag UID (7 bytes for NTAG).
+  bytes tag_uid = 1 [(pw.protobuf.pwpb).max_size = 7];
+}
+
+// Response from StartSession operation.
+message TriggerStartSessionResponse {
+  // Overall success status.
+  bool success = 1;
+
+  // True if Firebase returned auth_required (tag not yet authenticated).
+  bool auth_required = 2;
+
+  // Session ID if a session was returned.
+  string session_id = 3 [(pw.protobuf.pwpb).max_size = 24];
+
+  // Error message if failed.
+  string error = 4 [(pw.protobuf.pwpb).max_size = 64];
+}
+
+// Test control service for Firebase client integration tests.
+service TestControl {
+  // Configure the gateway connection parameters.
+  // Called by Python test to point device at mock gateway.
+  rpc ConfigureGateway(ConfigureGatewayRequest)
+      returns (ConfigureGatewayResponse);
+
+  // Trigger a StartSession call to Firebase (via gateway).
+  rpc TriggerStartSession(TriggerStartSessionRequest)
+      returns (TriggerStartSessionResponse);
+}

@@ -1,0 +1,104 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+# Firebase client integration tests
+#
+# These tests run on real P2 hardware with a mock gateway to verify
+# the firmware's Firebase client behavior end-to-end.
+
+load("@com_google_protobuf//bazel:proto_library.bzl", "proto_library")
+load("@com_google_protobuf//bazel:py_proto_library.bzl", "py_proto_library")
+load(
+    "@pigweed//pw_protobuf_compiler:pwpb_proto_library.bzl",
+    "pwpb_proto_library",
+)
+load(
+    "@pigweed//pw_protobuf_compiler:pwpb_rpc_proto_library.bzl",
+    "pwpb_rpc_proto_library",
+)
+load("@rules_python//python:py_test.bzl", "py_test")
+load("@particle_bazel//rules:particle_firmware.bzl", "particle_cc_binary", "particle_firmware_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:private"])
+
+# Proto library for test control service
+proto_library(
+    name = "firebase_client_test_proto",
+    srcs = ["firebase_client_test.proto"],
+    strip_import_prefix = "/maco_firmware/modules/firebase/integration_test",
+    deps = [
+        "@pigweed//pw_protobuf:field_options_proto",
+    ],
+)
+
+# C++ pwpb messages
+pwpb_proto_library(
+    name = "firebase_client_test_pwpb",
+    deps = [":firebase_client_test_proto"],
+)
+
+# C++ pwpb_rpc service stubs
+pwpb_rpc_proto_library(
+    name = "firebase_client_test_pwpb_rpc",
+    pwpb_proto_library_deps = [":firebase_client_test_pwpb"],
+    deps = [":firebase_client_test_proto"],
+)
+
+# Python proto library
+py_proto_library(
+    name = "firebase_client_test_py_proto",
+    deps = [":firebase_client_test_proto"],
+)
+
+# Test firmware library
+cc_library(
+    name = "firebase_client_test_lib",
+    srcs = ["firebase_client_test_main.cc"],
+    deps = [
+        ":firebase_client_test_pwpb_rpc",
+        "//maco_firmware/modules/firebase:firebase_client",
+        "@particle_bazel//pb_integration_tests/firmware:test_system_p2",
+        "@pigweed//pw_log",
+    ],
+    alwayslink = True,
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)
+
+# P2 firmware binary
+# Uses p2_test platform which doesn't set //maco_firmware/system:system,
+# allowing test_system_p2 to provide the system implementation.
+particle_cc_binary(
+    name = "firebase_client_test_firmware",
+    deps = [":firebase_client_test_lib"],
+    platform = "//maco_firmware/targets/p2_test:p2_test",
+)
+
+# Flashable .bin
+particle_firmware_binary(
+    name = "firebase_client_test_firmware.bin",
+    elf = ":firebase_client_test_firmware",
+)
+
+# Python integration test
+py_test(
+    name = "firebase_client_test",
+    srcs = ["firebase_client_test.py"],
+    data = [
+        ":firebase_client_test_firmware",  # ELF for detokenization
+        ":firebase_client_test_firmware.bin.bin",
+        ":firebase_client_test.proto",
+        "//maco_gateway:gateway",  # Gateway binary for GatewayProcess
+    ],
+    deps = [
+        ":firebase_client_test_py_proto",
+        "//maco_gateway:fixtures",
+        "@particle_bazel//pb_integration_tests/harness",
+    ],
+    timeout = "long",
+    tags = [
+        "local",      # Requires USB access
+        "exclusive",  # Don't run in parallel with other device tests
+        "manual",     # Don't run automatically (requires hardware)
+    ],
+)

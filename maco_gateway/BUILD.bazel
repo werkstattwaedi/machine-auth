@@ -22,10 +22,26 @@ py_library(
         "maco_gateway/gateway_service.py",
         "maco_gateway/key_store.py",
     ],
+    imports = ["."],  # Makes maco_gateway package importable
     deps = [
         "//proto/gateway:gateway_service_py_pb2",
+        "@maco_pip//aiohttp",
         "@pigweed//pw_hdlc/py:pw_hdlc",
         "@pigweed//pw_rpc/py:pw_rpc",
+    ],
+)
+
+# Test fixtures for integration tests
+py_library(
+    name = "fixtures",
+    srcs = [
+        "maco_gateway/fixtures/__init__.py",
+        "maco_gateway/fixtures/gateway_process.py",
+        "maco_gateway/fixtures/mock_http_server.py",
+    ],
+    imports = ["."],
+    deps = [
+        "@maco_pip//aiohttp",
     ],
 )
 

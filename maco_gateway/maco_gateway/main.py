@@ -28,10 +28,10 @@ from pw_hdlc import decode as hdlc_decode
 from pw_hdlc import encode as hdlc_encode
 from pw_rpc import callback_client, packets
 
-from .ascon_transport import AsconTransport, NonceTracker
-from .firebase_client import FirebaseClient
-from .gateway_service import GatewayServiceImpl
-from .key_store import KeyStore
+from maco_gateway.ascon_transport import AsconTransport, NonceTracker
+from maco_gateway.firebase_client import FirebaseClient
+from maco_gateway.gateway_service import GatewayServiceImpl
+from maco_gateway.key_store import KeyStore
 
 # Configure logging
 logging.basicConfig(
@@ -174,9 +174,7 @@ class ClientConnection:
         if response:
             await self._send_response(response)
 
-    async def _handle_rpc_request(
-        self, packet: packets.RpcPacket
-    ) -> Optional[bytes]:
+    async def _handle_rpc_request(self, packet) -> Optional[bytes]:
         """Handle an RPC request and return the response packet."""
         # GatewayService service ID (computed from "maco.gateway.GatewayService")
         # Method IDs are computed from method names
