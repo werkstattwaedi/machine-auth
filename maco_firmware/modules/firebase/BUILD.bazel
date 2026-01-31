@@ -6,6 +6,7 @@
 # Provides typed RPC wrappers for Firebase Cloud Functions.
 # Uses the gateway module for transport (TCP + ASCON encryption).
 
+load("@pigweed//pw_unit_test:pw_cc_test.bzl", "pw_cc_test")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
 package(default_visibility = ["//maco_firmware:__subpackages__"])
@@ -22,6 +23,7 @@ cc_library(
         "//proto/firebase_rpc:usage_pwpb",
         "//proto/gateway:gateway_service_pwpb",
         "//proto/gateway:gateway_service_pwpb_rpc",
+        "@pigweed//pw_async2:coro",
         "@pigweed//pw_async2:value_future",
         "@pigweed//pw_bytes",
         "@pigweed//pw_function",
@@ -33,5 +35,22 @@ cc_library(
         "@pigweed//pw_status",
         "@pigweed//pw_stream",
         "@pigweed//pw_string",
+    ],
+)
+
+pw_cc_test(
+    name = "firebase_client_test",
+    srcs = ["firebase_client_test.cc"],
+    deps = [
+        ":firebase_client",
+        "//proto:common_pwpb",
+        "//proto/firebase_rpc:session_pwpb",
+        "//proto/gateway:gateway_service_pwpb",
+        "//proto/gateway:gateway_service_pwpb_rpc",
+        "@pigweed//pw_allocator:testing",
+        "@pigweed//pw_async2:basic_dispatcher",
+        "@pigweed//pw_async2:coro_or_else_task",
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_rpc/pwpb:client_testing",
     ],
 )
