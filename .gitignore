@@ -72,6 +72,10 @@ node_modules/
 bazel-*
 out/
 
+# Python
+__pycache__/
+*.pyc
+
 # Pigweed / IDE
 .compile_commands/
 compile_commands.json
