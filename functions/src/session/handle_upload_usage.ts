@@ -7,7 +7,7 @@ import * as admin from "firebase-admin";
 
 export async function handleUploadUsage(
   request: UploadUsageRequest,
-  options: {
+  _options: {
     masterKey: string;
     systemName: string;
   }
@@ -20,54 +20,46 @@ export async function handleUploadUsage(
 
   logger.info("Processing usage history with", {
     recordCount: request.history.records?.length || 0,
+    machineId: request.history.machineId?.value,
   });
 
-  // Group records by sessionId for efficient updates
-  const recordsBySession = new Map<string, any[]>();
+  const machineId = request.history.machineId?.value;
+  if (!machineId) {
+    throw new Error("Missing machine ID in usage history");
+  }
+
+  const machineRef = admin.firestore().collection("machine").doc(machineId);
+
+  // Create usage records in the new usage collection
+  const batch = admin.firestore().batch();
 
   for (const record of request.history.records || []) {
-    if (!record.sessionId) {
-      logger.warn("Skipping record with missing session ID");
+    if (!record.userId?.value || !record.authenticationId?.value) {
+      logger.warn("Skipping record with missing user or authentication ID");
       continue;
     }
 
-    const sessionId = record.sessionId as string;
-    if (!recordsBySession.has(sessionId)) {
-      recordsBySession.set(sessionId, []);
-    }
-
-    // Convert usage record to the schema format
-    recordsBySession.get(sessionId)!.push({
-      machine: `/machine/unknown`, // Machine ID not provided in current schema, could be added later
-      checkIn: admin.firestore.Timestamp.fromMillis(Number(record.checkIn)),
-      checkOut: admin.firestore.Timestamp.fromMillis(Number(record.checkOut)),
-      metadata: JSON.stringify({
-        reason: record.reason?.reason?.$case,
-        // Add any other metadata from the record
-      })
-    });
-  }
-
-  // Update each session by appending usage records
-  const batch = admin.firestore().batch();
-
-  for (const [sessionId, usageRecords] of recordsBySession) {
-    // Verify session exists before updating
-    const sessionRef = admin.firestore().collection("sessions").doc(sessionId);
-
-    // Add usage records to the session
-    batch.update(sessionRef, {
-      usage: admin.firestore.FieldValue.arrayUnion(...usageRecords)
+    const usageRef = admin.firestore().collection("usage").doc();
+    batch.set(usageRef, {
+      userId: admin.firestore().doc(`users/${record.userId.value}`),
+      authenticationId: admin.firestore().doc(`authentications/${record.authenticationId.value}`),
+      machine: machineRef,
+      checkIn: admin.firestore.Timestamp.fromMillis(Number(record.checkIn) * 1000),
+      checkOut: record.checkOut
+        ? admin.firestore.Timestamp.fromMillis(Number(record.checkOut) * 1000)
+        : null,
+      checkOutReason: record.reason?.reason
+        ? JSON.stringify({ reason: record.reason.reason.$case })
+        : null,
+      checkout: null, // Not paid yet
     });
   }
 
   await batch.commit();
 
   logger.info("Successfully processed usage history", {
-    sessionsUpdated: recordsBySession.size,
     totalRecords: request.history.records?.length || 0,
   });
 
-  // Create success response
   return { success: true };
 }

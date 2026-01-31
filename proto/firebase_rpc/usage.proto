@@ -7,7 +7,7 @@ package maco.proto.firebase_rpc;
 
 import "common.proto";
 
-// Reason for session checkout
+// Reason for usage checkout
 message CheckOutReason {
   oneof reason {
     // Checked out via UI
@@ -40,14 +40,16 @@ message ReasonSelfCheckout {}
 
 // Single machine usage record
 message MachineUsage {
-  // Firebase session ID
-  maco.proto.FirebaseId session_id = 1;
+  // Firebase user ID
+  maco.proto.FirebaseId user_id = 1;
+  // Authentication ID used for this usage
+  maco.proto.FirebaseId authentication_id = 2;
   // Check-in timestamp (unix timestamp)
-  int64 check_in = 2;
+  int64 check_in = 3;
   // Check-out timestamp (unix timestamp), 0 if still active
-  int64 check_out = 3;
+  int64 check_out = 4;
   // Reason for checkout
-  CheckOutReason reason = 4;
+  CheckOutReason reason = 5;
 }
 
 // Collection of usage records for a machine

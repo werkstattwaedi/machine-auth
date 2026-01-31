@@ -4,13 +4,13 @@ import * as logger from "firebase-functions/logger";
 import { defineSecret, defineString } from "firebase-functions/params";
 import { initializeApp } from "firebase-admin/app";
 import {
-  StartSessionRequest,
-  StartSessionResponse,
-  AuthenticateNewSessionRequest,
-  AuthenticateNewSessionResponse,
-  CompleteAuthenticationRequest,
-  CompleteAuthenticationResponse,
-} from "./proto/firebase_rpc/session.js";
+  TerminalCheckinRequest,
+  TerminalCheckinResponse,
+  AuthenticateTagRequest,
+  AuthenticateTagResponse,
+  CompleteTagAuthRequest,
+  CompleteTagAuthResponse,
+} from "./proto/firebase_rpc/auth.js";
 import {
   UploadUsageRequest,
   UploadUsageResponse,
@@ -19,9 +19,9 @@ import {
   KeyDiversificationRequest,
   KeyDiversificationResponse,
 } from "./proto/firebase_rpc/personalization.js";
-import { handleStartSession } from "./session/handle_start_session";
-import { handleAuthenticateNewSession } from "./session/handle_authenticate_new_session";
-import { handleCompleteAuthentication } from "./session/handle_complete_authentication";
+import { handleTerminalCheckin } from "./auth/handle_terminal_checkin";
+import { handleAuthenticateTag } from "./auth/handle_authenticate_tag";
+import { handleCompleteTagAuth } from "./auth/handle_complete_tag_auth";
 import { handleUploadUsage } from "./session/handle_upload_usage";
 import { handleKeyDiversification } from "./personalization/handle_key_diversification";
 import { handleVerifyTagCheckout } from "./checkout/verify_tag";
@@ -97,44 +97,48 @@ app.use(
   }
 );
 
-export const startSessionHandler = async (
+// === Auth Handlers ===
+
+export const terminalCheckinHandler = async (
   req: express.Request,
   res: express.Response
 ) => {
   try {
-    const request = decodeProtoRequest(req, StartSessionRequest.decode);
-    const response = await handleStartSession(request, (req as any).config);
-    sendProtoResponse(req, res, response, StartSessionResponse.encode);
+    const request = decodeProtoRequest(req, TerminalCheckinRequest.decode);
+    const response = await handleTerminalCheckin(request, (req as any).config);
+    sendProtoResponse(req, res, response, TerminalCheckinResponse.encode);
   } catch (error: any) {
     sendHttpError(req, res, error);
   }
 };
 
-export const authenticateNewSessionHandler = async (
+export const authenticateTagHandler = async (
   req: express.Request,
   res: express.Response
 ) => {
   try {
-    const request = decodeProtoRequest(req, AuthenticateNewSessionRequest.decode);
-    const response = await handleAuthenticateNewSession(request, (req as any).config);
-    sendProtoResponse(req, res, response, AuthenticateNewSessionResponse.encode);
+    const request = decodeProtoRequest(req, AuthenticateTagRequest.decode);
+    const response = await handleAuthenticateTag(request, (req as any).config);
+    sendProtoResponse(req, res, response, AuthenticateTagResponse.encode);
   } catch (error: any) {
     sendHttpError(req, res, error);
   }
 };
 
-export const completeAuthenticationHandler = async (
+export const completeTagAuthHandler = async (
   req: express.Request,
   res: express.Response
 ) => {
   try {
-    const request = decodeProtoRequest(req, CompleteAuthenticationRequest.decode);
-    const response = await handleCompleteAuthentication(request, (req as any).config);
-    sendProtoResponse(req, res, response, CompleteAuthenticationResponse.encode);
+    const request = decodeProtoRequest(req, CompleteTagAuthRequest.decode);
+    const response = await handleCompleteTagAuth(request, (req as any).config);
+    sendProtoResponse(req, res, response, CompleteTagAuthResponse.encode);
   } catch (error: any) {
     sendHttpError(req, res, error);
   }
 };
+
+// === Usage Handler ===
 
 export const uploadUsageHandler = async (
   req: express.Request,
@@ -149,6 +153,7 @@ export const uploadUsageHandler = async (
   }
 };
 
+// === Personalization Handler ===
 
 export const keyDiversificationHandler = async (
   req: express.Request,
@@ -163,9 +168,10 @@ export const keyDiversificationHandler = async (
   }
 };
 
-app.post("/startSession", startSessionHandler);
-app.post("/authenticateNewSession", authenticateNewSessionHandler);
-app.post("/completeAuthentication", completeAuthenticationHandler);
+// Register routes
+app.post("/terminalCheckin", terminalCheckinHandler);
+app.post("/authenticateTag", authenticateTagHandler);
+app.post("/completeTagAuth", completeTagAuthHandler);
 app.post("/uploadUsage", uploadUsageHandler);
 app.post("/personalize", keyDiversificationHandler);
 

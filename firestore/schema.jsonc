@@ -14,28 +14,36 @@
       "name": "string" // Human readable permission name (e.g., "Laser Cutter")
     }
   },
-  "sessions": {
-    "{sessionId}": { // generated in AuthenticateNewSessionRequest
-      "userId": "DocumentReference", // DocumentReference to /users/{userId}
-      "startTime": "timestamp", // timestamp the session was created
-      "rndA": { // cloud-generated random bytes for Ntag 3-pass mutual authentication. Used in CompleteAuthentication to verify authenticity
-        "_byteString": "string" // Base64 encoded random bytes
-      },
-
+  "authentications": {
+    "{authId}": { // generated in AuthenticateTag
       "tokenId": "DocumentReference", // DocumentReference to /tokens/{tokenId}
-      "usage": [ // array of individual check-ins / check-outs within the session. Added in UploadUsage
-        {
-          "machine": "DocumentReference", // DocumentReference to /machine/{machineId}
-          "checkIn": "timestamp",
-          "checkOut": "timestamp",
-          "metadata": "string" // json representation of the checkout reason
-        }
-      ],
+      "keySlot": "number", // Which key was used (0-4)
+      "created": "timestamp", // When the authentication was initiated
 
-      "closed": { // map indicating when the session was marked as closed
-         "time": "timestamp", // timestamp the session was created
-         "metadata": "string" // json representation of how the user closed the session (self checkout terminal, app, manually confirmed paid)
-      }
+      // Crypto state for 3-pass mutual auth - set to null once auth completes successfully
+      // If non-null after ~1 min, auth timed out (cleanup via scheduled function)
+      "inProgressAuth": {
+        "rndA": "bytes", // Cloud-generated random (RndA)
+        "rndB": "bytes"  // Tag's random after decryption (RndB)
+      } // | null
+    }
+  },
+  "usage": {
+    "{usageId}": {
+      "userId": "DocumentReference", // DocumentReference to /users/{userId}
+      "authenticationId": "DocumentReference", // DocumentReference to /authentications/{authId}
+      "machine": "DocumentReference", // DocumentReference to /machine/{machineId}
+      "checkIn": "timestamp",
+      "checkOut": "timestamp", // null if still active
+      "checkOutReason": "string", // JSON representation of CheckOutReason proto
+      "checkout": "DocumentReference" // DocumentReference to /checkouts/{checkoutId}, set when paid (null if unpaid)
+    }
+  },
+  "checkouts": {
+    "{checkoutId}": {
+      "userId": "DocumentReference", // DocumentReference to /users/{userId}
+      "time": "timestamp",
+      "totalPrice": "number"
     }
   },
   "maco": {

@@ -1,7 +1,6 @@
 import {
   initializeTestEnvironment,
   RulesTestEnvironment,
-  assertSucceeds,
 } from "@firebase/rules-unit-testing";
 import * as admin from "firebase-admin";
 import { Timestamp } from "firebase-admin/firestore";
@@ -28,7 +27,6 @@ export async function setupEmulator(): Promise<RulesTestEnvironment> {
   }
 
   // Connect admin SDK to emulator
-  const db = admin.firestore();
   if (process.env.FIRESTORE_EMULATOR_HOST !== "127.0.0.1:8080") {
     process.env.FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080";
   }
@@ -99,8 +97,8 @@ export async function seedTestData(data: {
   permissions?: Record<string, any>;
   tokens?: Record<string, any>;
   users?: Record<string, any>;
-  sessions?: Record<string, any>;
   machines?: Record<string, any>;
+  authentications?: Record<string, any>;
 }): Promise<void> {
   const db = admin.firestore();
 
@@ -108,6 +106,17 @@ export async function seedTestData(data: {
   if (data.permissions) {
     for (const [permissionId, permissionData] of Object.entries(data.permissions)) {
       await db.collection("permission").doc(permissionId).set(permissionData);
+    }
+  }
+
+  // Seed users (convert string references to DocumentReferences)
+  if (data.users) {
+    for (const [userId, userData] of Object.entries(data.users)) {
+      const converted = convertReferencesToDocRefs(userData, db);
+      await db.collection("users").doc(userId).set({
+        created: Timestamp.now(),
+        ...converted,
+      });
     }
   }
 
@@ -123,30 +132,22 @@ export async function seedTestData(data: {
     }
   }
 
-  // Seed users (convert string references to DocumentReferences)
-  if (data.users) {
-    for (const [userId, userData] of Object.entries(data.users)) {
-      const converted = convertReferencesToDocRefs(userData, db);
-      await db.collection("users").doc(userId).set({
-        created: Timestamp.now(),
-        ...converted,
-      });
-    }
-  }
-
-  // Seed sessions (convert string references to DocumentReferences)
-  if (data.sessions) {
-    for (const [sessionId, sessionData] of Object.entries(data.sessions)) {
-      const converted = convertReferencesToDocRefs(sessionData, db);
-      await db.collection("sessions").doc(sessionId).set(converted);
-    }
-  }
-
   // Seed machines (convert string references to DocumentReferences)
   if (data.machines) {
     for (const [machineId, machineData] of Object.entries(data.machines)) {
       const converted = convertReferencesToDocRefs(machineData, db);
       await db.collection("machine").doc(machineId).set(converted);
+    }
+  }
+
+  // Seed authentications (convert string references to DocumentReferences)
+  if (data.authentications) {
+    for (const [authId, authData] of Object.entries(data.authentications)) {
+      const converted = convertReferencesToDocRefs(authData, db);
+      await db.collection("authentications").doc(authId).set({
+        created: Timestamp.now(),
+        ...converted,
+      });
     }
   }
 }

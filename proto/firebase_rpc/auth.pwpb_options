@@ -1,0 +1,7 @@
+// Options for auth.proto
+
+// SessionKeys - fixed size for firmware std::array
+maco.proto.firebase_rpc.SessionKeys.ses_auth_enc_key max_size:16 fixed_size:true
+maco.proto.firebase_rpc.SessionKeys.ses_auth_mac_key max_size:16 fixed_size:true
+maco.proto.firebase_rpc.SessionKeys.transaction_identifier max_size:4 fixed_size:true
+maco.proto.firebase_rpc.SessionKeys.picc_capabilities max_size:6 fixed_size:true

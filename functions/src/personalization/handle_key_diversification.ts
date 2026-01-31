@@ -15,18 +15,18 @@ export function handleKeyDiversification(
 ): KeyDiversificationResponse {
   if (
     !req.tokenId ||
-    !req.tokenId.uid ||
-    req.tokenId.uid.length !== 7
+    !req.tokenId.value ||
+    req.tokenId.value.length !== 7
   ) {
     throw new Error("Invalid or missing tag UID");
   }
-  const uidHex = Buffer.from(req.tokenId.uid).toString("hex");
+  const uidHex = Buffer.from(req.tokenId.value).toString("hex");
   const keys = diversifyKeys(config.masterKey, config.systemName, uidHex);
 
   return {
-    applicationKey: { key: new Uint8Array(Buffer.from(keys.application, "hex")) },
-    authorizationKey: { key: new Uint8Array(Buffer.from(keys.authorization, "hex")) },
-    reserved1Key: { key: new Uint8Array(Buffer.from(keys.reserved1, "hex")) },
-    reserved2Key: { key: new Uint8Array(Buffer.from(keys.reserved2, "hex")) },
+    applicationKey: { value: new Uint8Array(Buffer.from(keys.application, "hex")) },
+    authorizationKey: { value: new Uint8Array(Buffer.from(keys.authorization, "hex")) },
+    reserved1Key: { value: new Uint8Array(Buffer.from(keys.reserved1, "hex")) },
+    reserved2Key: { value: new Uint8Array(Buffer.from(keys.reserved2, "hex")) },
   };
 }

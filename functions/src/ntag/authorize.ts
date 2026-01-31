@@ -11,6 +11,7 @@ export function authorizeStep1(
 ): {
   cloudChallenge: Uint8Array;
   encrypted: Uint8Array;
+  rndB: Uint8Array;
 } {
   // const keyBytes = toKeyBytes(key);
   // const ntagChallengeBytes = Buffer.from(ntagChallenge);
@@ -42,7 +43,7 @@ export function authorizeStep1(
     cipher.final(),
   ]);
 
-  return { encrypted, cloudChallenge };
+  return { encrypted, cloudChallenge, rndB: decodedNtagChallenge };
 }
 
 /**

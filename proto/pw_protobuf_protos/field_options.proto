@@ -1,0 +1,20 @@
+// Stub for TypeScript code generation
+// The actual file is in third_party/pigweed/pw_protobuf/pw_protobuf_protos/
+
+syntax = "proto3";
+
+package pw.protobuf;
+
+import "google/protobuf/descriptor.proto";
+
+// Minimal stub for pwpb field options - not used by ts-proto
+extend google.protobuf.FieldOptions {
+  optional PwpbFieldOptions pwpb = 78642058;
+}
+
+message PwpbFieldOptions {
+  optional uint32 max_size = 1;
+  optional uint32 max_count = 2;
+  optional bool fixed_size = 3;
+  optional bool fixed_count = 4;
+}

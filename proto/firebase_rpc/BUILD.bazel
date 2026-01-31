@@ -9,10 +9,10 @@ load(
 
 package(default_visibility = ["//visibility:public"])
 
-# Session management and authentication RPCs
+# Authentication RPCs (terminal checkin, tag auth, session keys)
 proto_library(
-    name = "session_proto",
-    srcs = ["session.proto"],
+    name = "auth_proto",
+    srcs = ["auth.proto"],
     strip_import_prefix = "/proto",
     deps = [
         "//proto:common_proto",
@@ -21,8 +21,8 @@ proto_library(
 )
 
 pwpb_proto_library(
-    name = "session_pwpb",
-    deps = [":session_proto"],
+    name = "auth_pwpb",
+    deps = [":auth_proto"],
 )
 
 # Machine usage tracking

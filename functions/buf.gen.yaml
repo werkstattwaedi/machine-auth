@@ -1,6 +1,6 @@
 version: v2
 plugins:
-  - remote: buf.build/community/stephenh-ts-proto
+  - local: ../functions/node_modules/.bin/protoc-gen-ts_proto
     out: ../functions/src/proto
     opt:
       - esModuleInterop=true

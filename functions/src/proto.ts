@@ -1,19 +1,19 @@
 // Protocol Buffer types barrel export
 // Re-export common types
-export { Key, TagUid, KeyBytes } from "./proto/common.js";
+export { Key, TagUid, KeyBytes, FirebaseId } from "./proto/common.js";
 
-// Re-export session types
+// Re-export auth types
 export {
-  TokenSession,
-  StartSessionRequest,
-  StartSessionResponse,
-  AuthRequired,
+  SessionKeys,
   Rejected,
-  AuthenticateNewSessionRequest,
-  AuthenticateNewSessionResponse,
-  CompleteAuthenticationRequest,
-  CompleteAuthenticationResponse,
-} from "./proto/firebase_rpc/session.js";
+  Authorized,
+  TerminalCheckinRequest,
+  TerminalCheckinResponse,
+  AuthenticateTagRequest,
+  AuthenticateTagResponse,
+  CompleteTagAuthRequest,
+  CompleteTagAuthResponse,
+} from "./proto/firebase_rpc/auth.js";
 
 // Re-export usage types
 export {

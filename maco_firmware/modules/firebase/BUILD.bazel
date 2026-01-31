@@ -19,7 +19,7 @@ cc_library(
     includes = ["public"],
     deps = [
         "//proto:common_pwpb",
-        "//proto/firebase_rpc:session_pwpb",
+        "//proto/firebase_rpc:auth_pwpb",
         "//proto/firebase_rpc:usage_pwpb",
         "//proto/gateway:gateway_service_pwpb",
         "//proto/gateway:gateway_service_pwpb_rpc",
@@ -44,7 +44,7 @@ pw_cc_test(
     deps = [
         ":firebase_client",
         "//proto:common_pwpb",
-        "//proto/firebase_rpc:session_pwpb",
+        "//proto/firebase_rpc:auth_pwpb",
         "//proto/gateway:gateway_service_pwpb",
         "//proto/gateway:gateway_service_pwpb_rpc",
         "@pigweed//pw_allocator:testing",

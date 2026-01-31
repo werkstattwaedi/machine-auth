@@ -1,0 +1,90 @@
+// Copyright Offene Werkstatt Wädenswil
+// SPDX-License-Identifier: MIT
+
+syntax = "proto3";
+
+package maco.proto.firebase_rpc;
+
+import "common.proto";
+import "pw_protobuf_protos/field_options.proto";
+
+// === Shared Types ===
+
+// NTAG424 session keys for secure tag communication
+message SessionKeys {
+  // Derived session encryption key (AES-128)
+  bytes ses_auth_enc_key = 1 [(pw.protobuf.pwpb).max_size = 16];
+  // Derived session MAC key (AES-128)
+  bytes ses_auth_mac_key = 2 [(pw.protobuf.pwpb).max_size = 16];
+  // Transaction identifier from Part 3 response
+  bytes transaction_identifier = 3 [(pw.protobuf.pwpb).max_size = 4];
+  // PICC capabilities (PDcap2) from Part 3 response
+  bytes picc_capabilities = 4 [(pw.protobuf.pwpb).max_size = 6];
+}
+
+// Request was rejected
+message Rejected {
+  // User-readable message
+  string message = 1 [(pw.protobuf.pwpb).max_size = 128];
+}
+
+// === Terminal Check-in (Authorization + Auth Reuse) ===
+
+// TerminalCheckin RPC - checks authorization and returns existing auth if available
+message TerminalCheckinRequest {
+  maco.proto.TagUid token_id = 1;
+}
+
+message TerminalCheckinResponse {
+  oneof result {
+    Authorized authorized = 1;
+    Rejected rejected = 2;
+  }
+}
+
+// User is authorized to use the machine
+message Authorized {
+  // Firebase user ID
+  maco.proto.FirebaseId user_id = 1;
+  // Display name for the user
+  string user_label = 2 [(pw.protobuf.pwpb).max_size = 64];
+  // If set, authentication is already complete and can be reused
+  // If missing/empty, client must do auth flow before activating machine
+  maco.proto.FirebaseId authentication_id = 3;
+}
+
+// === Tag Authentication (3-pass mutual auth) ===
+
+// AuthenticateTag RPC - initiates NTAG424 3-pass mutual authentication
+message AuthenticateTagRequest {
+  // Tag UID to authenticate
+  maco.proto.TagUid tag_id = 1;
+  // Which key slot to authenticate with
+  maco.proto.Key key_slot = 2;
+  // Encrypted RndB from tag (Part 1 response)
+  bytes ntag_challenge = 3 [(pw.protobuf.pwpb).max_size = 16];
+}
+
+message AuthenticateTagResponse {
+  // Ephemeral authentication ID (~1 min validity for crypto completion)
+  maco.proto.FirebaseId auth_id = 1;
+  // Combined challenge response to send to tag (Part 2)
+  bytes cloud_challenge = 2 [(pw.protobuf.pwpb).max_size = 32];
+}
+
+// CompleteTagAuth RPC - completes NTAG424 3-pass mutual authentication
+message CompleteTagAuthRequest {
+  // Authentication ID from AuthenticateTagResponse
+  maco.proto.FirebaseId auth_id = 1;
+  // Encrypted Part 3 response from tag
+  bytes encrypted_tag_response = 2 [(pw.protobuf.pwpb).max_size = 32];
+}
+
+message CompleteTagAuthResponse {
+  oneof result {
+    // Authentication successful
+    SessionKeys session_keys = 1;
+    // Authentication failed
+    Rejected rejected = 2;
+  }
+}

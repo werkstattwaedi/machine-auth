@@ -9,7 +9,7 @@
 #include <array>
 #include <optional>
 
-#include "firebase_rpc/session.pwpb.h"
+#include "firebase_rpc/auth.pwpb.h"
 #include "gateway/gateway_service.pwpb.h"
 #include "gateway/gateway_service.rpc.pwpb.h"
 #include "pw_allocator/testing.h"
@@ -28,15 +28,22 @@ using GatewayService = maco::gateway::pw_rpc::pwpb::GatewayService;
 // Test allocator with sufficient space for coroutine frames
 constexpr size_t kAllocatorSize = 4096;
 
-// Helper to encode an AuthRequired response
-pw::Result<size_t> EncodeAuthRequiredResponse(
-    pw::ByteSpan buffer) {
-  maco::proto::firebase_rpc::pwpb::StartSessionResponse::MemoryEncoder encoder(
-      buffer);
-  // Write an empty AuthRequired message
-  auto status = encoder.WriteAuthRequiredMessage(
-      [](maco::proto::firebase_rpc::pwpb::AuthRequired::StreamEncoder&) {
-        return pw::OkStatus();
+// Helper to encode an Authorized response (no existing auth)
+pw::Result<size_t> EncodeAuthorizedResponse(const char* user_id,
+                                            const char* user_label,
+                                            pw::ByteSpan buffer) {
+  maco::proto::firebase_rpc::pwpb::TerminalCheckinResponse::MemoryEncoder
+      encoder(buffer);
+  auto status = encoder.WriteAuthorizedMessage(
+      [user_id, user_label](
+          maco::proto::firebase_rpc::pwpb::Authorized::StreamEncoder&
+              authorized) {
+        auto st = authorized.WriteUserIdMessage(
+            [user_id](maco::proto::pwpb::FirebaseId::StreamEncoder& id) {
+              return id.WriteValue(user_id);
+            });
+        if (!st.ok()) return st;
+        return authorized.WriteUserLabel(user_label);
       });
   if (!status.ok()) {
     return status;
@@ -45,10 +52,10 @@ pw::Result<size_t> EncodeAuthRequiredResponse(
 }
 
 // Helper to encode a Rejected response
-pw::Result<size_t> EncodeRejectedResponse(
-    const char* message, pw::ByteSpan buffer) {
-  maco::proto::firebase_rpc::pwpb::StartSessionResponse::MemoryEncoder encoder(
-      buffer);
+pw::Result<size_t> EncodeRejectedResponse(const char* message,
+                                          pw::ByteSpan buffer) {
+  maco::proto::firebase_rpc::pwpb::TerminalCheckinResponse::MemoryEncoder
+      encoder(buffer);
   auto status = encoder.WriteRejectedMessage(
       [message](
           maco::proto::firebase_rpc::pwpb::Rejected::StreamEncoder& rejected) {
@@ -60,18 +67,16 @@ pw::Result<size_t> EncodeRejectedResponse(
   return encoder.size();
 }
 
-// Helper to encode an AuthenticateNewSessionResponse
-pw::Result<size_t> EncodeAuthenticateNewSessionResponse(
-    const char* session_id,
-    pw::ConstByteSpan cloud_challenge,
-    pw::ByteSpan buffer) {
-  maco::proto::firebase_rpc::pwpb::AuthenticateNewSessionResponse::MemoryEncoder
+// Helper to encode an AuthenticateTagResponse
+pw::Result<size_t> EncodeAuthenticateTagResponse(const char* auth_id,
+                                                 pw::ConstByteSpan cloud_challenge,
+                                                 pw::ByteSpan buffer) {
+  maco::proto::firebase_rpc::pwpb::AuthenticateTagResponse::MemoryEncoder
       encoder(buffer);
 
-  auto status = encoder.WriteSessionIdMessage(
-      [session_id](
-          maco::proto::pwpb::FirebaseId::StreamEncoder& id_encoder) {
-        return id_encoder.WriteValue(session_id);
+  auto status = encoder.WriteAuthIdMessage(
+      [auth_id](maco::proto::pwpb::FirebaseId::StreamEncoder& id_encoder) {
+        return id_encoder.WriteValue(auth_id);
       });
   if (!status.ok()) {
     return status;
@@ -82,6 +87,31 @@ pw::Result<size_t> EncodeAuthenticateNewSessionResponse(
     return status;
   }
 
+  return encoder.size();
+}
+
+// Helper to encode a CompleteTagAuthResponse with session keys
+pw::Result<size_t> EncodeCompleteTagAuthResponse(pw::ConstByteSpan enc_key,
+                                                 pw::ConstByteSpan mac_key,
+                                                 pw::ConstByteSpan ti,
+                                                 pw::ConstByteSpan picc_cap,
+                                                 pw::ByteSpan buffer) {
+  maco::proto::firebase_rpc::pwpb::CompleteTagAuthResponse::MemoryEncoder
+      encoder(buffer);
+
+  auto status = encoder.WriteSessionKeysMessage(
+      [&](maco::proto::firebase_rpc::pwpb::SessionKeys::StreamEncoder& keys) {
+        auto st = keys.WriteSesAuthEncKey(enc_key);
+        if (!st.ok()) return st;
+        st = keys.WriteSesAuthMacKey(mac_key);
+        if (!st.ok()) return st;
+        st = keys.WriteTransactionIdentifier(ti);
+        if (!st.ok()) return st;
+        return keys.WritePiccCapabilities(picc_cap);
+      });
+  if (!status.ok()) {
+    return status;
+  }
   return encoder.size();
 }
 
@@ -100,8 +130,8 @@ class FirebaseClientTest : public ::testing::Test {
     response.http_status = 200;
     response.payload.assign(payload.begin(), payload.end());
 
-    rpc_ctx_.server().SendResponse<GatewayService::Forward>(
-        response, pw::OkStatus());
+    rpc_ctx_.server().SendResponse<GatewayService::Forward>(response,
+                                                            pw::OkStatus());
   }
 
   // Send an error ForwardResponse
@@ -111,8 +141,8 @@ class FirebaseClientTest : public ::testing::Test {
     response.http_status = http_status;
     response.error = error_message;
 
-    rpc_ctx_.server().SendResponse<GatewayService::Forward>(
-        response, pw::OkStatus());
+    rpc_ctx_.server().SendResponse<GatewayService::Forward>(response,
+                                                            pw::OkStatus());
   }
 
   // Send an RPC-level error
@@ -136,29 +166,30 @@ class FirebaseClientTest : public ::testing::Test {
 };
 
 // ============================================================================
-// StartSession Tests
+// TerminalCheckin Tests
 // ============================================================================
 
-TEST_F(FirebaseClientTest, StartSession_AuthRequired) {
+TEST_F(FirebaseClientTest, TerminalCheckin_Authorized) {
   auto client = CreateClient();
 
   // Result storage
-  std::optional<pw::Result<StartSessionResponse>> result;
+  std::optional<pw::Result<TerminalCheckinResponse>> result;
 
   // Create the test coroutine
   pw::async2::CoroContext coro_cx(test_allocator_);
-  auto test_coro = [&](pw::async2::CoroContext& cx)
-      -> pw::async2::Coro<pw::Status> {
+  auto test_coro =
+      [&](pw::async2::CoroContext& cx) -> pw::async2::Coro<pw::Status> {
     TagUid tag_uid;
-    tag_uid.value = pw::bytes::Array<0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66>();
+    tag_uid.value =
+        pw::bytes::Array<0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66>();
 
-    result = co_await client.StartSession(cx, tag_uid);
+    result = co_await client.TerminalCheckin(cx, tag_uid);
     co_return pw::OkStatus();
   };
 
   auto coro = test_coro(coro_cx);
-  pw::async2::CoroOrElseTask task(
-      std::move(coro), [](pw::Status) { /* Error handler */ });
+  pw::async2::CoroOrElseTask task(std::move(coro),
+                                  [](pw::Status) { /* Error handler */ });
 
   dispatcher_.Post(task);
 
@@ -168,10 +199,10 @@ TEST_F(FirebaseClientTest, StartSession_AuthRequired) {
   // Verify an RPC request was sent
   EXPECT_EQ(rpc_ctx_.output().total_packets(), 1u);
 
-  // Now inject the response - auth required
+  // Now inject the response - authorized
   std::array<std::byte, 256> payload_buffer;
   auto encode_result =
-      EncodeAuthRequiredResponse(payload_buffer);
+      EncodeAuthorizedResponse("user123", "Test User", payload_buffer);
   ASSERT_TRUE(encode_result.ok());
 
   SendForwardResponse(
@@ -183,28 +214,27 @@ TEST_F(FirebaseClientTest, StartSession_AuthRequired) {
   // Verify result
   ASSERT_TRUE(result.has_value());
   EXPECT_TRUE(result->ok());
-  // Note: Detailed field checking requires understanding the OneOf decoder
-  // which uses callbacks. For now we just verify the decode succeeded.
 }
 
-TEST_F(FirebaseClientTest, StartSession_Rejected) {
+TEST_F(FirebaseClientTest, TerminalCheckin_Rejected) {
   auto client = CreateClient();
 
-  std::optional<pw::Result<StartSessionResponse>> result;
+  std::optional<pw::Result<TerminalCheckinResponse>> result;
 
   pw::async2::CoroContext coro_cx(test_allocator_);
-  auto test_coro = [&](pw::async2::CoroContext& cx)
-      -> pw::async2::Coro<pw::Status> {
+  auto test_coro =
+      [&](pw::async2::CoroContext& cx) -> pw::async2::Coro<pw::Status> {
     TagUid tag_uid;
-    tag_uid.value = pw::bytes::Array<0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66>();
+    tag_uid.value =
+        pw::bytes::Array<0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66>();
 
-    result = co_await client.StartSession(cx, tag_uid);
+    result = co_await client.TerminalCheckin(cx, tag_uid);
     co_return pw::OkStatus();
   };
 
   auto coro = test_coro(coro_cx);
-  pw::async2::CoroOrElseTask task(
-      std::move(coro), [](pw::Status) { /* Error handler */ });
+  pw::async2::CoroOrElseTask task(std::move(coro),
+                                  [](pw::Status) { /* Error handler */ });
 
   dispatcher_.Post(task);
   dispatcher_.RunUntilStalled();
@@ -223,24 +253,25 @@ TEST_F(FirebaseClientTest, StartSession_Rejected) {
   EXPECT_TRUE(result->ok());
 }
 
-TEST_F(FirebaseClientTest, StartSession_ForwardError) {
+TEST_F(FirebaseClientTest, TerminalCheckin_ForwardError) {
   auto client = CreateClient();
 
-  std::optional<pw::Result<StartSessionResponse>> result;
+  std::optional<pw::Result<TerminalCheckinResponse>> result;
 
   pw::async2::CoroContext coro_cx(test_allocator_);
-  auto test_coro = [&](pw::async2::CoroContext& cx)
-      -> pw::async2::Coro<pw::Status> {
+  auto test_coro =
+      [&](pw::async2::CoroContext& cx) -> pw::async2::Coro<pw::Status> {
     TagUid tag_uid;
-    tag_uid.value = pw::bytes::Array<0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66>();
+    tag_uid.value =
+        pw::bytes::Array<0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66>();
 
-    result = co_await client.StartSession(cx, tag_uid);
+    result = co_await client.TerminalCheckin(cx, tag_uid);
     co_return pw::OkStatus();
   };
 
   auto coro = test_coro(coro_cx);
-  pw::async2::CoroOrElseTask task(
-      std::move(coro), [](pw::Status) { /* Error handler */ });
+  pw::async2::CoroOrElseTask task(std::move(coro),
+                                  [](pw::Status) { /* Error handler */ });
 
   dispatcher_.Post(task);
   dispatcher_.RunUntilStalled();
@@ -255,24 +286,25 @@ TEST_F(FirebaseClientTest, StartSession_ForwardError) {
   EXPECT_EQ(result->status(), pw::Status::Internal());
 }
 
-TEST_F(FirebaseClientTest, StartSession_RpcError) {
+TEST_F(FirebaseClientTest, TerminalCheckin_RpcError) {
   auto client = CreateClient();
 
-  std::optional<pw::Result<StartSessionResponse>> result;
+  std::optional<pw::Result<TerminalCheckinResponse>> result;
 
   pw::async2::CoroContext coro_cx(test_allocator_);
-  auto test_coro = [&](pw::async2::CoroContext& cx)
-      -> pw::async2::Coro<pw::Status> {
+  auto test_coro =
+      [&](pw::async2::CoroContext& cx) -> pw::async2::Coro<pw::Status> {
     TagUid tag_uid;
-    tag_uid.value = pw::bytes::Array<0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66>();
+    tag_uid.value =
+        pw::bytes::Array<0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66>();
 
-    result = co_await client.StartSession(cx, tag_uid);
+    result = co_await client.TerminalCheckin(cx, tag_uid);
     co_return pw::OkStatus();
   };
 
   auto coro = test_coro(coro_cx);
-  pw::async2::CoroOrElseTask task(
-      std::move(coro), [](pw::Status) { /* Error handler */ });
+  pw::async2::CoroOrElseTask task(std::move(coro),
+                                  [](pw::Status) { /* Error handler */ });
 
   dispatcher_.Post(task);
   dispatcher_.RunUntilStalled();
@@ -288,45 +320,46 @@ TEST_F(FirebaseClientTest, StartSession_RpcError) {
 }
 
 // ============================================================================
-// AuthenticateNewSession Tests
+// AuthenticateTag Tests
 // ============================================================================
 
-TEST_F(FirebaseClientTest, AuthenticateNewSession_Success) {
+TEST_F(FirebaseClientTest, AuthenticateTag_Success) {
   auto client = CreateClient();
 
-  std::optional<pw::Result<AuthenticateNewSessionResponse>> result;
+  std::optional<pw::Result<AuthenticateTagResponse>> result;
 
   pw::async2::CoroContext coro_cx(test_allocator_);
-  auto test_coro = [&](pw::async2::CoroContext& cx)
-      -> pw::async2::Coro<pw::Status> {
+  auto test_coro =
+      [&](pw::async2::CoroContext& cx) -> pw::async2::Coro<pw::Status> {
     TagUid tag_uid;
-    tag_uid.value = pw::bytes::Array<0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66>();
+    tag_uid.value =
+        pw::bytes::Array<0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66>();
 
     auto ntag_challenge =
-        pw::bytes::Array<0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-                         0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10>();
+        pw::bytes::Array<0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09,
+                         0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10>();
 
-    result = co_await client.AuthenticateNewSession(cx, tag_uid, ntag_challenge);
+    result = co_await client.AuthenticateTag(cx, tag_uid, Key::KEY_APPLICATION,
+                                             ntag_challenge);
     co_return pw::OkStatus();
   };
 
   auto coro = test_coro(coro_cx);
-  pw::async2::CoroOrElseTask task(
-      std::move(coro), [](pw::Status) { /* Error handler */ });
+  pw::async2::CoroOrElseTask task(std::move(coro),
+                                  [](pw::Status) { /* Error handler */ });
 
   dispatcher_.Post(task);
   dispatcher_.RunUntilStalled();
 
   // Inject success response
-  constexpr auto kCloudChallenge =
-      pw::bytes::Array<0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x11, 0x22,
-                       0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0x00,
-                       0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
-                       0x99, 0x00, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF>();
+  constexpr auto kCloudChallenge = pw::bytes::Array<
+      0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x11, 0x22, 0x33, 0x44, 0x55,
+      0x66, 0x77, 0x88, 0x99, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66,
+      0x77, 0x88, 0x99, 0x00, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF>();
 
   std::array<std::byte, 256> payload_buffer;
-  auto encode_result = EncodeAuthenticateNewSessionResponse(
-      "new_session_id", kCloudChallenge, payload_buffer);
+  auto encode_result =
+      EncodeAuthenticateTagResponse("auth_id_123", kCloudChallenge, payload_buffer);
   ASSERT_TRUE(encode_result.ok());
 
   SendForwardResponse(
@@ -336,34 +369,90 @@ TEST_F(FirebaseClientTest, AuthenticateNewSession_Success) {
 
   ASSERT_TRUE(result.has_value());
   ASSERT_TRUE(result->ok());
-  EXPECT_EQ(
-      std::string_view(result->value().session_id.value.c_str()),
-      "new_session_id");
+  EXPECT_EQ(std::string_view(result->value().auth_id.value.c_str()),
+            "auth_id_123");
   EXPECT_EQ(result->value().cloud_challenge.size(), 32u);
+}
+
+// ============================================================================
+// CompleteTagAuth Tests
+// ============================================================================
+
+TEST_F(FirebaseClientTest, CompleteTagAuth_Success) {
+  auto client = CreateClient();
+
+  std::optional<pw::Result<CompleteTagAuthResponse>> result;
+
+  pw::async2::CoroContext coro_cx(test_allocator_);
+  auto test_coro =
+      [&](pw::async2::CoroContext& cx) -> pw::async2::Coro<pw::Status> {
+    FirebaseId auth_id;
+    auth_id.value = "auth_id_123";
+
+    auto encrypted_response = pw::bytes::Array<
+        0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B,
+        0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16,
+        0x17, 0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20>();
+
+    result = co_await client.CompleteTagAuth(cx, auth_id, encrypted_response);
+    co_return pw::OkStatus();
+  };
+
+  auto coro = test_coro(coro_cx);
+  pw::async2::CoroOrElseTask task(std::move(coro),
+                                  [](pw::Status) { /* Error handler */ });
+
+  dispatcher_.Post(task);
+  dispatcher_.RunUntilStalled();
+
+  // Inject success response with session keys
+  constexpr auto kEncKey = pw::bytes::Array<0x11, 0x22, 0x33, 0x44, 0x55, 0x66,
+                                            0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC,
+                                            0xDD, 0xEE, 0xFF, 0x00>();
+  constexpr auto kMacKey = pw::bytes::Array<0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF,
+                                            0x00, 0x11, 0x22, 0x33, 0x44, 0x55,
+                                            0x66, 0x77, 0x88, 0x99>();
+  constexpr auto kTi = pw::bytes::Array<0x01, 0x02, 0x03, 0x04>();
+  constexpr auto kPiccCap =
+      pw::bytes::Array<0x05, 0x06, 0x07, 0x08, 0x09, 0x0A>();
+
+  std::array<std::byte, 256> payload_buffer;
+  auto encode_result =
+      EncodeCompleteTagAuthResponse(kEncKey, kMacKey, kTi, kPiccCap, payload_buffer);
+  ASSERT_TRUE(encode_result.ok());
+
+  SendForwardResponse(
+      pw::ConstByteSpan(payload_buffer.data(), *encode_result));
+
+  ASSERT_TRUE(RunUntilComplete(task));
+
+  ASSERT_TRUE(result.has_value());
+  EXPECT_TRUE(result->ok());
 }
 
 // ============================================================================
 // Request Verification Tests
 // ============================================================================
 
-TEST_F(FirebaseClientTest, StartSession_SendsRequest) {
+TEST_F(FirebaseClientTest, TerminalCheckin_SendsRequest) {
   auto client = CreateClient();
 
-  std::optional<pw::Result<StartSessionResponse>> result;
+  std::optional<pw::Result<TerminalCheckinResponse>> result;
 
   pw::async2::CoroContext coro_cx(test_allocator_);
-  auto test_coro = [&](pw::async2::CoroContext& cx)
-      -> pw::async2::Coro<pw::Status> {
+  auto test_coro =
+      [&](pw::async2::CoroContext& cx) -> pw::async2::Coro<pw::Status> {
     TagUid tag_uid;
-    tag_uid.value = pw::bytes::Array<0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66>();
+    tag_uid.value =
+        pw::bytes::Array<0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66>();
 
-    result = co_await client.StartSession(cx, tag_uid);
+    result = co_await client.TerminalCheckin(cx, tag_uid);
     co_return pw::OkStatus();
   };
 
   auto coro = test_coro(coro_cx);
-  pw::async2::CoroOrElseTask task(
-      std::move(coro), [](pw::Status) { /* Error handler */ });
+  pw::async2::CoroOrElseTask task(std::move(coro),
+                                  [](pw::Status) { /* Error handler */ });
 
   dispatcher_.Post(task);
   dispatcher_.RunUntilStalled();
@@ -373,7 +462,8 @@ TEST_F(FirebaseClientTest, StartSession_SendsRequest) {
 
   // Send response to complete the test cleanly
   std::array<std::byte, 256> payload_buffer;
-  auto encode_result = EncodeAuthRequiredResponse(payload_buffer);
+  auto encode_result =
+      EncodeAuthorizedResponse("user123", "Test User", payload_buffer);
   ASSERT_TRUE(encode_result.ok());
 
   SendForwardResponse(
@@ -386,40 +476,42 @@ TEST_F(FirebaseClientTest, StartSession_SendsRequest) {
 // Concurrent Call Tests
 // ============================================================================
 
-TEST_F(FirebaseClientTest, StartSession_ConcurrentCallReturnsUnavailable) {
+TEST_F(FirebaseClientTest, TerminalCheckin_ConcurrentCallReturnsUnavailable) {
   auto client = CreateClient();
 
   // Storage for results from both calls
-  std::optional<pw::Result<StartSessionResponse>> result1;
-  std::optional<pw::Result<StartSessionResponse>> result2;
+  std::optional<pw::Result<TerminalCheckinResponse>> result1;
+  std::optional<pw::Result<TerminalCheckinResponse>> result2;
 
   // First coroutine - starts the call
   pw::async2::CoroContext coro_cx1(test_allocator_);
-  auto test_coro1 = [&](pw::async2::CoroContext& cx)
-      -> pw::async2::Coro<pw::Status> {
+  auto test_coro1 =
+      [&](pw::async2::CoroContext& cx) -> pw::async2::Coro<pw::Status> {
     TagUid tag_uid;
-    tag_uid.value = pw::bytes::Array<0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66>();
-    result1 = co_await client.StartSession(cx, tag_uid);
+    tag_uid.value =
+        pw::bytes::Array<0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66>();
+    result1 = co_await client.TerminalCheckin(cx, tag_uid);
     co_return pw::OkStatus();
   };
 
   // Second coroutine - tries to start while first is in flight
   pw::async2::CoroContext coro_cx2(test_allocator_);
-  auto test_coro2 = [&](pw::async2::CoroContext& cx)
-      -> pw::async2::Coro<pw::Status> {
+  auto test_coro2 =
+      [&](pw::async2::CoroContext& cx) -> pw::async2::Coro<pw::Status> {
     TagUid tag_uid;
-    tag_uid.value = pw::bytes::Array<0x04, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF>();
-    result2 = co_await client.StartSession(cx, tag_uid);
+    tag_uid.value =
+        pw::bytes::Array<0x04, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF>();
+    result2 = co_await client.TerminalCheckin(cx, tag_uid);
     co_return pw::OkStatus();
   };
 
   auto coro1 = test_coro1(coro_cx1);
-  pw::async2::CoroOrElseTask task1(
-      std::move(coro1), [](pw::Status) { /* Error handler */ });
+  pw::async2::CoroOrElseTask task1(std::move(coro1),
+                                   [](pw::Status) { /* Error handler */ });
 
   auto coro2 = test_coro2(coro_cx2);
-  pw::async2::CoroOrElseTask task2(
-      std::move(coro2), [](pw::Status) { /* Error handler */ });
+  pw::async2::CoroOrElseTask task2(std::move(coro2),
+                                   [](pw::Status) { /* Error handler */ });
 
   // Start first call
   dispatcher_.Post(task1);
@@ -442,7 +534,8 @@ TEST_F(FirebaseClientTest, StartSession_ConcurrentCallReturnsUnavailable) {
 
   // Complete the first call
   std::array<std::byte, 256> payload_buffer;
-  auto encode_result = EncodeAuthRequiredResponse(payload_buffer);
+  auto encode_result =
+      EncodeAuthorizedResponse("user123", "Test User", payload_buffer);
   ASSERT_TRUE(encode_result.ok());
   SendForwardResponse(
       pw::ConstByteSpan(payload_buffer.data(), *encode_result));

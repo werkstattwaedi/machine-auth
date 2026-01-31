@@ -42,7 +42,7 @@ describe("/personalize endpoint", () => {
     const tokenId = new Uint8Array([1, 2, 3, 4, 5, 6, 7]);
 
     const req: KeyDiversificationRequest = {
-      tokenId: { uid: tokenId },
+      tokenId: { value: tokenId },
     };
     const encodedRequest = Buffer.from(
       KeyDiversificationRequest.encode(req).finish()
@@ -69,16 +69,16 @@ describe("/personalize endpoint", () => {
       "OwwMachineAuth",
       Buffer.from(tokenId).toString("hex")
     );
-    expect(Array.from(protoResp.applicationKey?.key || [])).to.deep.equal(
+    expect(Array.from(protoResp.applicationKey?.value || [])).to.deep.equal(
       Array.from(Buffer.from(keys.application, "hex"))
     );
-    expect(Array.from(protoResp.authorizationKey?.key || [])).to.deep.equal(
+    expect(Array.from(protoResp.authorizationKey?.value || [])).to.deep.equal(
       Array.from(Buffer.from(keys.authorization, "hex"))
     );
-    expect(Array.from(protoResp.reserved1Key?.key || [])).to.deep.equal(
+    expect(Array.from(protoResp.reserved1Key?.value || [])).to.deep.equal(
       Array.from(Buffer.from(keys.reserved1, "hex"))
     );
-    expect(Array.from(protoResp.reserved2Key?.key || [])).to.deep.equal(
+    expect(Array.from(protoResp.reserved2Key?.value || [])).to.deep.equal(
       Array.from(Buffer.from(keys.reserved2, "hex"))
     );
   });

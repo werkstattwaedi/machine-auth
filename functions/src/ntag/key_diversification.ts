@@ -11,11 +11,13 @@ import { toKeyBytes, toUidBytes } from "./bytebuffer_util";
 
 export type KeyName =
   | "application"
+  | "terminal"
   | "authorization"
   | "reserved1"
   | "reserved2";
 const keyNames: Array<KeyName> = [
   "application",
+  "terminal",
   "authorization",
   "reserved1",
   "reserved2",
@@ -70,9 +72,10 @@ export function diversifyKey(
 // Diversification input. not secret, but affects key diversification.
 const keyIdBytes = {
   application: Buffer.from([0x00, 0x00, 0x01]),
-  authorization: Buffer.from([0x00, 0x00, 0x02]),
-  reserved1: Buffer.from([0x00, 0x00, 0x03]),
-  reserved2: Buffer.from([0x00, 0x00, 0x04]),
+  terminal: Buffer.from([0x00, 0x00, 0x02]),
+  authorization: Buffer.from([0x00, 0x00, 0x03]),
+  reserved1: Buffer.from([0x00, 0x00, 0x04]),
+  reserved2: Buffer.from([0x00, 0x00, 0x05]),
 };
 
 /** For testing only. */
