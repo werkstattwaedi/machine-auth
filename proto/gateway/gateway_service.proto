@@ -5,8 +5,6 @@ syntax = "proto3";
 
 package maco.gateway;
 
-import "pw_protobuf_protos/field_options.proto";
-
 // Gateway service for MACO device to MACO Gateway communication.
 //
 // The gateway acts as a proxy between MACO devices (P2) and Firebase Cloud
@@ -46,10 +44,10 @@ service GatewayService {
 // Request to forward to Firebase.
 message ForwardRequest {
   // Firebase endpoint path (e.g., "/api/startSession")
-  string endpoint = 1 [(pw.protobuf.pwpb).max_size = 64];
+  string endpoint = 1;
 
   // Request payload (serialized protobuf, opaque to gateway)
-  bytes payload = 2 [(pw.protobuf.pwpb).max_size = 512];
+  bytes payload = 2;
 
   // Optional request ID for correlation
   uint32 request_id = 3;
@@ -61,13 +59,13 @@ message ForwardResponse {
   bool success = 1;
 
   // Response payload (serialized protobuf, opaque to gateway)
-  bytes payload = 2 [(pw.protobuf.pwpb).max_size = 512];
+  bytes payload = 2;
 
   // HTTP status code from Firebase (0 if not applicable)
   uint32 http_status = 3;
 
   // Error message if success is false
-  string error = 4 [(pw.protobuf.pwpb).max_size = 128];
+  string error = 4;
 
   // Request ID for correlation (echoed from request)
   uint32 request_id = 5;
@@ -91,13 +89,13 @@ message LogEntry {
   Level level = 2;
 
   // Log module/component name
-  string module = 3 [(pw.protobuf.pwpb).max_size = 32];
+  string module = 3;
 
   // Log message
-  string message = 4 [(pw.protobuf.pwpb).max_size = 256];
+  string message = 4;
 
   // Optional structured data (JSON)
-  string data = 5 [(pw.protobuf.pwpb).max_size = 256];
+  string data = 5;
 }
 
 // Response to log persistence.

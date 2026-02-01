@@ -1,5 +1,5 @@
-// Options for nfc_mock_service.proto
-// Sets max_size for bytes fields to enable fixed-size encoding
+# Options for nfc_mock_service.proto (nanopb format)
+# Sets max_size for bytes fields to enable fixed-size encoding
 
-maco.SimulateTagArrivalRequest.uid max_size:10
-maco.SimulateTagArrivalResponse.uid max_size:10
+maco.SimulateTagArrivalRequest.uid      max_size:10
+maco.SimulateTagArrivalResponse.uid     max_size:10

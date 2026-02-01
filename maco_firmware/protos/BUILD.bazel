@@ -4,9 +4,9 @@
 load("@com_google_protobuf//bazel:proto_library.bzl", "proto_library")
 load(
     "@pigweed//pw_protobuf_compiler:pw_proto_library.bzl",
+    "nanopb_proto_library",
+    "nanopb_rpc_proto_library",
     "pw_proto_filegroup",
-    "pwpb_proto_library",
-    "pwpb_rpc_proto_library",
 )
 load("@rules_python//python:proto.bzl", "py_proto_library")
 
@@ -26,14 +26,14 @@ proto_library(
     strip_import_prefix = "/maco_firmware/protos",
 )
 
-pwpb_proto_library(
-    name = "maco_service_pwpb",
+nanopb_proto_library(
+    name = "maco_service_nanopb",
     deps = [":maco_service_proto"],
 )
 
-pwpb_rpc_proto_library(
-    name = "maco_service_pwpb_rpc",
-    pwpb_proto_library_deps = [":maco_service_pwpb"],
+nanopb_rpc_proto_library(
+    name = "maco_service_nanopb_rpc",
+    nanopb_proto_library_deps = [":maco_service_nanopb"],
     deps = [":maco_service_proto"],
 )
 
@@ -58,14 +58,14 @@ proto_library(
     strip_import_prefix = "/maco_firmware/protos",
 )
 
-pwpb_proto_library(
-    name = "nfc_mock_service_pwpb",
+nanopb_proto_library(
+    name = "nfc_mock_service_nanopb",
     deps = [":nfc_mock_service_proto"],
 )
 
-pwpb_rpc_proto_library(
-    name = "nfc_mock_service_pwpb_rpc",
-    pwpb_proto_library_deps = [":nfc_mock_service_pwpb"],
+nanopb_rpc_proto_library(
+    name = "nfc_mock_service_nanopb_rpc",
+    nanopb_proto_library_deps = [":nfc_mock_service_nanopb"],
     deps = [":nfc_mock_service_proto"],
 )
 

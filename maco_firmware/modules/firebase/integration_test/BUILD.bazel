@@ -9,39 +9,44 @@
 load("@com_google_protobuf//bazel:proto_library.bzl", "proto_library")
 load("@com_google_protobuf//bazel:py_proto_library.bzl", "py_proto_library")
 load(
-    "@pigweed//pw_protobuf_compiler:pwpb_proto_library.bzl",
-    "pwpb_proto_library",
+    "@pigweed//pw_protobuf_compiler:nanopb_proto_library.bzl",
+    "nanopb_proto_library",
 )
 load(
-    "@pigweed//pw_protobuf_compiler:pwpb_rpc_proto_library.bzl",
-    "pwpb_rpc_proto_library",
+    "@pigweed//pw_protobuf_compiler:nanopb_rpc_proto_library.bzl",
+    "nanopb_rpc_proto_library",
 )
+load("@pigweed//pw_protobuf_compiler:pw_proto_filegroup.bzl", "pw_proto_filegroup")
 load("@rules_python//python:py_test.bzl", "py_test")
 load("@particle_bazel//rules:particle_firmware.bzl", "particle_cc_binary", "particle_firmware_binary")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
 package(default_visibility = ["//visibility:private"])
 
+# Proto filegroup with options
+pw_proto_filegroup(
+    name = "firebase_client_test_proto_and_options",
+    srcs = ["firebase_client_test.proto"],
+    options_files = ["firebase_client_test.options"],
+)
+
 # Proto library for test control service
 proto_library(
     name = "firebase_client_test_proto",
-    srcs = ["firebase_client_test.proto"],
+    srcs = [":firebase_client_test_proto_and_options"],
     strip_import_prefix = "/maco_firmware/modules/firebase/integration_test",
-    deps = [
-        "@pigweed//pw_protobuf:field_options_proto",
-    ],
 )
 
-# C++ pwpb messages
-pwpb_proto_library(
-    name = "firebase_client_test_pwpb",
+# C++ nanopb messages
+nanopb_proto_library(
+    name = "firebase_client_test_nanopb",
     deps = [":firebase_client_test_proto"],
 )
 
-# C++ pwpb_rpc service stubs
-pwpb_rpc_proto_library(
-    name = "firebase_client_test_pwpb_rpc",
-    pwpb_proto_library_deps = [":firebase_client_test_pwpb"],
+# C++ nanopb RPC service stubs
+nanopb_rpc_proto_library(
+    name = "firebase_client_test_nanopb_rpc",
+    nanopb_proto_library_deps = [":firebase_client_test_nanopb"],
     deps = [":firebase_client_test_proto"],
 )
 
@@ -56,7 +61,8 @@ cc_library(
     name = "firebase_client_test_lib",
     srcs = ["firebase_client_test_main.cc"],
     deps = [
-        ":firebase_client_test_pwpb_rpc",
+        ":firebase_client_test_nanopb_rpc",
+        "//maco_firmware:types",
         "//maco_firmware/modules/firebase:firebase_client",
         "//maco_firmware/modules/gateway:p2_gateway_client",
         "@particle_bazel//pb_crypto",
@@ -64,7 +70,7 @@ cc_library(
         "@pigweed//pw_async2:coro",
         "@pigweed//pw_async2:coro_or_else_task",
         "@pigweed//pw_log",
-        "@pigweed//pw_rpc/pwpb:server_api",
+        "@pigweed//pw_rpc/nanopb:server_api",
         "@pigweed//pw_system:async",
     ],
     alwayslink = True,

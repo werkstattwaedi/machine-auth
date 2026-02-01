@@ -1,0 +1,20 @@
+# Options for auth.proto (nanopb format)
+
+# SessionKeys - fixed length for embedded arrays
+maco.proto.firebase_rpc.SessionKeys.ses_auth_enc_key        max_size:16 fixed_length:true
+maco.proto.firebase_rpc.SessionKeys.ses_auth_mac_key        max_size:16 fixed_length:true
+maco.proto.firebase_rpc.SessionKeys.transaction_identifier  max_size:4 fixed_length:true
+maco.proto.firebase_rpc.SessionKeys.picc_capabilities       max_size:6 fixed_length:true
+
+# Rejected message
+maco.proto.firebase_rpc.Rejected.message                    max_size:128
+
+# Authorized fields
+maco.proto.firebase_rpc.Authorized.user_label               max_size:64
+
+# AuthenticateTagRequest/Response
+maco.proto.firebase_rpc.AuthenticateTagRequest.ntag_challenge   max_size:16 fixed_length:true
+maco.proto.firebase_rpc.AuthenticateTagResponse.cloud_challenge max_size:32 fixed_length:true
+
+# CompleteTagAuthRequest
+maco.proto.firebase_rpc.CompleteTagAuthRequest.encrypted_tag_response max_size:32 fixed_length:true

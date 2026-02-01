@@ -1,4 +1,17 @@
 # MACO Firmware - Bazel-based Particle P2 firmware
 # Rewrite of firmware/ using Pigweed patterns
 
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
 package(default_visibility = ["//visibility:public"])
+
+# Domain types - type-safe wrappers for common identifiers
+cc_library(
+    name = "types",
+    hdrs = ["types.h"],
+    deps = [
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_result",
+        "@pigweed//pw_string",
+    ],
+)

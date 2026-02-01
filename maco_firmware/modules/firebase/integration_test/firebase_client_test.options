@@ -1,0 +1,6 @@
+# Options for firebase_client_test.proto (nanopb format)
+
+maco.test.firebase.ConfigureGatewayRequest.host              max_size:64
+maco.test.firebase.TriggerStartSessionRequest.tag_uid        max_size:7
+maco.test.firebase.TriggerStartSessionResponse.session_id    max_size:24
+maco.test.firebase.TriggerStartSessionResponse.error         max_size:64

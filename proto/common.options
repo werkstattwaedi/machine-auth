@@ -1,0 +1,10 @@
+# Options for common.proto (nanopb format)
+
+# 7-byte NFC tag UID - fixed length generates fixed array
+maco.proto.TagUid.value             max_size:7 fixed_length:true
+
+# 20-character Firebase document ID
+maco.proto.FirebaseId.value         max_size:20
+
+# 16-byte AES-128 key - fixed length generates fixed array
+maco.proto.KeyBytes.value           max_size:16 fixed_length:true

@@ -1,0 +1,14 @@
+# Options for gateway_service.proto (nanopb format)
+
+# ForwardRequest
+maco.gateway.ForwardRequest.endpoint    max_size:64
+maco.gateway.ForwardRequest.payload     max_size:512
+
+# ForwardResponse
+maco.gateway.ForwardResponse.payload    max_size:512
+maco.gateway.ForwardResponse.error      max_size:128
+
+# LogEntry
+maco.gateway.LogEntry.module            max_size:32
+maco.gateway.LogEntry.message           max_size:256
+maco.gateway.LogEntry.data              max_size:256

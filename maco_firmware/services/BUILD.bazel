@@ -10,7 +10,7 @@ cc_library(
     srcs = ["maco_service.cc"],
     hdrs = ["maco_service.h"],
     deps = [
-        "//maco_firmware/protos:maco_service_pwpb_rpc",
+        "//maco_firmware/protos:maco_service_nanopb_rpc",
         "@pigweed//pw_chrono:system_clock",
         "@pigweed//pw_log",
         "@pigweed//pw_status",

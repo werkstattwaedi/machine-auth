@@ -18,7 +18,7 @@
 
 #include <cstdint>
 
-#include "gateway/gateway_service.pwpb.h"
+#include "gateway/gateway_service.pb.h"
 #include "pw_async2/dispatcher.h"
 #include "pw_rpc/client.h"
 
@@ -78,7 +78,7 @@ class GatewayClient {
   /// Use this to create service clients:
   /// @code
   ///   auto& rpc_client = gateway.rpc_client();
-  ///   maco::gateway::pw_rpc::pwpb::GatewayService::Client service_client(
+  ///   maco::gateway::pw_rpc::nanopb::GatewayService::Client service_client(
   ///       rpc_client, gateway.channel_id());
   /// @endcode
   virtual pw::rpc::Client& rpc_client() = 0;

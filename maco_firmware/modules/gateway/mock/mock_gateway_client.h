@@ -13,7 +13,7 @@
 #include <vector>
 
 #include "gateway/gateway_client.h"
-#include "gateway/gateway_service.pwpb.h"
+#include "gateway/gateway_service.pb.h"
 #include "pw_async2/dispatcher.h"
 #include "pw_rpc/channel.h"
 #include "pw_rpc/internal/fake_channel_output.h"

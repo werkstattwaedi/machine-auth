@@ -4,34 +4,37 @@
 load("@com_google_protobuf//bazel:proto_library.bzl", "proto_library")
 load("@com_google_protobuf//bazel:py_proto_library.bzl", "py_proto_library")
 load(
-    "@pigweed//pw_protobuf_compiler:pwpb_proto_library.bzl",
-    "pwpb_proto_library",
-)
-load(
-    "@pigweed//pw_protobuf_compiler:pwpb_rpc_proto_library.bzl",
-    "pwpb_rpc_proto_library",
+    "@pigweed//pw_protobuf_compiler:pw_proto_library.bzl",
+    "nanopb_proto_library",
+    "nanopb_rpc_proto_library",
+    "pw_proto_filegroup",
 )
 
 package(default_visibility = ["//visibility:public"])
 
 # Gateway service proto definition
-proto_library(
-    name = "gateway_service_proto",
+pw_proto_filegroup(
+    name = "gateway_service_proto_and_options",
     srcs = ["gateway_service.proto"],
-    strip_import_prefix = "/proto",
-    deps = ["@pigweed//pw_protobuf:field_options_proto"],
+    options_files = ["gateway_service.options"],
 )
 
-# pw_protobuf generated messages
-pwpb_proto_library(
-    name = "gateway_service_pwpb",
+proto_library(
+    name = "gateway_service_proto",
+    srcs = [":gateway_service_proto_and_options"],
+    strip_import_prefix = "/proto",
+)
+
+# nanopb generated messages
+nanopb_proto_library(
+    name = "gateway_service_nanopb",
     deps = [":gateway_service_proto"],
 )
 
-# pw_rpc generated service stubs
-pwpb_rpc_proto_library(
-    name = "gateway_service_pwpb_rpc",
-    pwpb_proto_library_deps = [":gateway_service_pwpb"],
+# nanopb RPC service stubs
+nanopb_rpc_proto_library(
+    name = "gateway_service_nanopb_rpc",
+    nanopb_proto_library_deps = [":gateway_service_nanopb"],
     deps = [":gateway_service_proto"],
 )
 

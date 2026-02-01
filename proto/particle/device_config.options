@@ -1,0 +1,9 @@
+# Options for device_config.proto (nanopb format)
+
+# Machine fields
+maco.proto.particle.Machine.id                      max_size:20
+maco.proto.particle.Machine.label                   max_size:64
+maco.proto.particle.Machine.required_permissions    max_count:5 max_size:20
+
+# DeviceConfig
+maco.proto.particle.DeviceConfig.machines           max_count:4

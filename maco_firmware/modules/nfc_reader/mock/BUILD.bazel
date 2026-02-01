@@ -29,7 +29,7 @@ cc_library(
     target_compatible_with = incompatible_with_mcu(),
     deps = [
         ":mock_nfc_reader",
-        "//maco_firmware/protos:nfc_mock_service_pwpb_rpc",
+        "//maco_firmware/protos:nfc_mock_service_nanopb_rpc",
         "@pigweed//pw_bytes",
         "@pigweed//pw_log",
         "@pigweed//pw_status",

@@ -4,8 +4,8 @@
 load("@com_google_protobuf//bazel:proto_library.bzl", "proto_library")
 load(
     "@pigweed//pw_protobuf_compiler:pw_proto_library.bzl",
+    "nanopb_proto_library",
     "pw_proto_filegroup",
-    "pwpb_proto_library",
 )
 
 package(default_visibility = ["//visibility:public"])
@@ -14,7 +14,7 @@ package(default_visibility = ["//visibility:public"])
 pw_proto_filegroup(
     name = "common_proto_and_options",
     srcs = ["common.proto"],
-    options_files = ["common.pwpb_options"],
+    options_files = ["common.options"],
 )
 
 proto_library(
@@ -23,7 +23,7 @@ proto_library(
     strip_import_prefix = "/proto",
 )
 
-pwpb_proto_library(
-    name = "common_pwpb",
+nanopb_proto_library(
+    name = "common_nanopb",
     deps = [":common_proto"],
 )

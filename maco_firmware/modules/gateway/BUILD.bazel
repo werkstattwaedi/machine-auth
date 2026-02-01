@@ -20,7 +20,7 @@ cc_library(
     hdrs = ["public/gateway/gateway_client.h"],
     includes = ["public"],
     deps = [
-        "//proto/gateway:gateway_service_pwpb",
+        "//proto/gateway:gateway_service_nanopb",
         "@pigweed//pw_async2:dispatcher",
         "@pigweed//pw_rpc",
         "@pigweed//pw_status",
@@ -73,7 +73,7 @@ cc_library(
     hdrs = ["mock/mock_gateway_client.h"],
     deps = [
         ":gateway_client",
-        "//proto/gateway:gateway_service_pwpb",
+        "//proto/gateway:gateway_service_nanopb",
         "@pigweed//pw_rpc",
     ],
 )

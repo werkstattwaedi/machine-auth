@@ -3,20 +3,27 @@
 
 load("@com_google_protobuf//bazel:proto_library.bzl", "proto_library")
 load(
-    "@pigweed//pw_protobuf_compiler:pwpb_proto_library.bzl",
-    "pwpb_proto_library",
+    "@pigweed//pw_protobuf_compiler:pw_proto_library.bzl",
+    "nanopb_proto_library",
+    "pw_proto_filegroup",
 )
 
 package(default_visibility = ["//visibility:public"])
 
 # Device configuration for Particle Ledger
+pw_proto_filegroup(
+    name = "device_config_proto_and_options",
+    srcs = ["device_config.proto"],
+    options_files = ["device_config.options"],
+)
+
 proto_library(
     name = "device_config_proto",
-    srcs = ["device_config.proto"],
+    srcs = [":device_config_proto_and_options"],
     strip_import_prefix = "/proto",
 )
 
-pwpb_proto_library(
-    name = "device_config_pwpb",
+nanopb_proto_library(
+    name = "device_config_nanopb",
     deps = [":device_config_proto"],
 )

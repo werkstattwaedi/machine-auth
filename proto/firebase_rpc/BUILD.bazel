@@ -3,25 +3,29 @@
 
 load("@com_google_protobuf//bazel:proto_library.bzl", "proto_library")
 load(
-    "@pigweed//pw_protobuf_compiler:pwpb_proto_library.bzl",
-    "pwpb_proto_library",
+    "@pigweed//pw_protobuf_compiler:pw_proto_library.bzl",
+    "nanopb_proto_library",
+    "pw_proto_filegroup",
 )
 
 package(default_visibility = ["//visibility:public"])
 
 # Authentication RPCs (terminal checkin, tag auth, session keys)
-proto_library(
-    name = "auth_proto",
+pw_proto_filegroup(
+    name = "auth_proto_and_options",
     srcs = ["auth.proto"],
-    strip_import_prefix = "/proto",
-    deps = [
-        "//proto:common_proto",
-        "@pigweed//pw_protobuf:field_options_proto",
-    ],
+    options_files = ["auth.options"],
 )
 
-pwpb_proto_library(
-    name = "auth_pwpb",
+proto_library(
+    name = "auth_proto",
+    srcs = [":auth_proto_and_options"],
+    strip_import_prefix = "/proto",
+    deps = ["//proto:common_proto"],
+)
+
+nanopb_proto_library(
+    name = "auth_nanopb",
     deps = [":auth_proto"],
 )
 
@@ -33,8 +37,8 @@ proto_library(
     deps = ["//proto:common_proto"],
 )
 
-pwpb_proto_library(
-    name = "usage_pwpb",
+nanopb_proto_library(
+    name = "usage_nanopb",
     deps = [":usage_proto"],
 )
 
@@ -46,7 +50,7 @@ proto_library(
     deps = ["//proto:common_proto"],
 )
 
-pwpb_proto_library(
-    name = "personalization_pwpb",
+nanopb_proto_library(
+    name = "personalization_nanopb",
     deps = [":personalization_proto"],
 )

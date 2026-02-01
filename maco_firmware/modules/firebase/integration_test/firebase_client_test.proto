@@ -10,12 +10,10 @@ syntax = "proto3";
 
 package maco.test.firebase;
 
-import "pw_protobuf_protos/field_options.proto";
-
 // Request to configure the gateway connection.
 message ConfigureGatewayRequest {
   // Gateway hostname or IP address.
-  string host = 1 [(pw.protobuf.pwpb).max_size = 64];
+  string host = 1;
 
   // Gateway port number.
   uint32 port = 2;
@@ -30,7 +28,7 @@ message ConfigureGatewayResponse {
 // Request to trigger a StartSession RPC.
 message TriggerStartSessionRequest {
   // Tag UID (7 bytes for NTAG).
-  bytes tag_uid = 1 [(pw.protobuf.pwpb).max_size = 7];
+  bytes tag_uid = 1;
 }
 
 // Response from StartSession operation.
@@ -42,10 +40,10 @@ message TriggerStartSessionResponse {
   bool auth_required = 2;
 
   // Session ID if a session was returned.
-  string session_id = 3 [(pw.protobuf.pwpb).max_size = 24];
+  string session_id = 3;
 
   // Error message if failed.
-  string error = 4 [(pw.protobuf.pwpb).max_size = 64];
+  string error = 4;
 }
 
 // Test control service for Firebase client integration tests.

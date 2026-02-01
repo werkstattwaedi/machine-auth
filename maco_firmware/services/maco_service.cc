@@ -3,6 +3,8 @@
 
 #include "maco_firmware/services/maco_service.h"
 
+#include <cstring>
+
 #include "pw_chrono/system_clock.h"
 #include "pw_log/log.h"
 
@@ -21,20 +23,23 @@ constexpr const char* kBuildTarget = "host";
 
 }  // namespace
 
-pw::Status MacoService::Echo(const ::maco::pwpb::EchoMessage::Message& request,
-                             ::maco::pwpb::EchoMessage::Message& response) {
-  PW_LOG_INFO("Echo RPC called with %zu bytes", request.data.size());
-  response.data.assign(request.data.begin(), request.data.end());
+pw::Status MacoService::Echo(const ::maco_EchoMessage& request,
+                             ::maco_EchoMessage& response) {
+  PW_LOG_INFO("Echo RPC called with %zu bytes",
+              static_cast<size_t>(request.data.size));
+  std::memcpy(response.data.bytes, request.data.bytes, request.data.size);
+  response.data.size = request.data.size;
   return pw::OkStatus();
 }
 
-pw::Status MacoService::GetDeviceInfo(
-    const ::maco::pwpb::Empty::Message& /*request*/,
-    ::maco::pwpb::DeviceInfoResponse::Message& response) {
+pw::Status MacoService::GetDeviceInfo(const ::maco_Empty& /*request*/,
+                                      ::maco_DeviceInfoResponse& response) {
   PW_LOG_INFO("GetDeviceInfo RPC called");
 
   // Set firmware version
-  response.firmware_version.assign(kFirmwareVersion);
+  std::strncpy(response.firmware_version, kFirmwareVersion,
+               sizeof(response.firmware_version) - 1);
+  response.firmware_version[sizeof(response.firmware_version) - 1] = '\0';
 
   // Calculate uptime in milliseconds
   auto now = pw::chrono::SystemClock::now();
@@ -44,7 +49,9 @@ pw::Status MacoService::GetDeviceInfo(
   response.uptime_ms = static_cast<uint32_t>(uptime_ms);
 
   // Set build target
-  response.build_target.assign(kBuildTarget);
+  std::strncpy(response.build_target, kBuildTarget,
+               sizeof(response.build_target) - 1);
+  response.build_target[sizeof(response.build_target) - 1] = '\0';
 
   return pw::OkStatus();
 }

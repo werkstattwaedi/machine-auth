@@ -7,24 +7,26 @@
 #include "firebase/firebase_client.h"
 
 #include <array>
+#include <cstring>
 #include <optional>
 #include <variant>
 
-#include "firebase_rpc/auth.pwpb.h"
-#include "gateway/gateway_service.pwpb.h"
-#include "gateway/gateway_service.rpc.pwpb.h"
+#include "firebase_rpc/auth.pb.h"
+#include "gateway/gateway_service.pb.h"
+#include "gateway/gateway_service.rpc.pb.h"
+#include "pb_encode.h"
 #include "pw_allocator/testing.h"
 #include "pw_async2/basic_dispatcher.h"
 #include "pw_async2/coro_or_else_task.h"
 #include "pw_bytes/array.h"
-#include "pw_rpc/pwpb/client_testing.h"
+#include "pw_rpc/nanopb/client_testing.h"
 #include "pw_unit_test/framework.h"
 
 namespace maco::firebase {
 namespace {
 
 // Alias for the Gateway service client
-using GatewayService = maco::gateway::pw_rpc::pwpb::GatewayService;
+using GatewayService = maco::gateway::pw_rpc::nanopb::GatewayService;
 
 // Test allocator with sufficient space for coroutine frames
 constexpr size_t kAllocatorSize = 4096;
@@ -33,62 +35,74 @@ constexpr size_t kAllocatorSize = 4096;
 pw::Result<size_t> EncodeAuthorizedResponse(const char* user_id,
                                             const char* user_label,
                                             pw::ByteSpan buffer) {
-  maco::proto::firebase_rpc::pwpb::TerminalCheckinResponse::MemoryEncoder
-      encoder(buffer);
-  auto status = encoder.WriteAuthorizedMessage(
-      [user_id, user_label](
-          maco::proto::firebase_rpc::pwpb::Authorized::StreamEncoder&
-              authorized) {
-        auto st = authorized.WriteUserIdMessage(
-            [user_id](maco::proto::pwpb::FirebaseId::StreamEncoder& id) {
-              return id.WriteValue(user_id);
-            });
-        if (!st.ok()) return st;
-        return authorized.WriteUserLabel(user_label);
-      });
-  if (!status.ok()) {
-    return status;
+  maco_proto_firebase_rpc_TerminalCheckinResponse response =
+      maco_proto_firebase_rpc_TerminalCheckinResponse_init_zero;
+
+  response.which_result =
+      maco_proto_firebase_rpc_TerminalCheckinResponse_authorized_tag;
+  response.result.authorized.has_user_id = true;
+  std::strncpy(response.result.authorized.user_id.value, user_id,
+               sizeof(response.result.authorized.user_id.value) - 1);
+  std::strncpy(response.result.authorized.user_label, user_label,
+               sizeof(response.result.authorized.user_label) - 1);
+  // authentication_id left empty (has_authentication_id = false by init_zero)
+
+  pb_ostream_t stream = pb_ostream_from_buffer(
+      reinterpret_cast<pb_byte_t*>(buffer.data()), buffer.size());
+  if (!pb_encode(&stream,
+                 maco_proto_firebase_rpc_TerminalCheckinResponse_fields,
+                 &response)) {
+    return pw::Status::Internal();
   }
-  return encoder.size();
+  return stream.bytes_written;
 }
 
 // Helper to encode a Rejected response
 pw::Result<size_t> EncodeRejectedResponse(const char* message,
                                           pw::ByteSpan buffer) {
-  maco::proto::firebase_rpc::pwpb::TerminalCheckinResponse::MemoryEncoder
-      encoder(buffer);
-  auto status = encoder.WriteRejectedMessage(
-      [message](
-          maco::proto::firebase_rpc::pwpb::Rejected::StreamEncoder& rejected) {
-        return rejected.WriteMessage(message);
-      });
-  if (!status.ok()) {
-    return status;
+  maco_proto_firebase_rpc_TerminalCheckinResponse response =
+      maco_proto_firebase_rpc_TerminalCheckinResponse_init_zero;
+
+  response.which_result =
+      maco_proto_firebase_rpc_TerminalCheckinResponse_rejected_tag;
+  std::strncpy(response.result.rejected.message, message,
+               sizeof(response.result.rejected.message) - 1);
+
+  pb_ostream_t stream = pb_ostream_from_buffer(
+      reinterpret_cast<pb_byte_t*>(buffer.data()), buffer.size());
+  if (!pb_encode(&stream,
+                 maco_proto_firebase_rpc_TerminalCheckinResponse_fields,
+                 &response)) {
+    return pw::Status::Internal();
   }
-  return encoder.size();
+  return stream.bytes_written;
 }
 
 // Helper to encode an AuthenticateTagResponse
-pw::Result<size_t> EncodeAuthenticateTagResponse(const char* auth_id,
-                                                 pw::ConstByteSpan cloud_challenge,
-                                                 pw::ByteSpan buffer) {
-  maco::proto::firebase_rpc::pwpb::AuthenticateTagResponse::MemoryEncoder
-      encoder(buffer);
+pw::Result<size_t> EncodeAuthenticateTagResponse(
+    const char* auth_id,
+    pw::ConstByteSpan cloud_challenge,
+    pw::ByteSpan buffer) {
+  maco_proto_firebase_rpc_AuthenticateTagResponse response =
+      maco_proto_firebase_rpc_AuthenticateTagResponse_init_zero;
 
-  auto status = encoder.WriteAuthIdMessage(
-      [auth_id](maco::proto::pwpb::FirebaseId::StreamEncoder& id_encoder) {
-        return id_encoder.WriteValue(auth_id);
-      });
-  if (!status.ok()) {
-    return status;
+  response.has_auth_id = true;
+  std::strncpy(response.auth_id.value, auth_id,
+               sizeof(response.auth_id.value) - 1);
+
+  if (cloud_challenge.size() <= sizeof(response.cloud_challenge)) {
+    std::memcpy(response.cloud_challenge, cloud_challenge.data(),
+                cloud_challenge.size());
   }
 
-  status = encoder.WriteCloudChallenge(cloud_challenge);
-  if (!status.ok()) {
-    return status;
+  pb_ostream_t stream = pb_ostream_from_buffer(
+      reinterpret_cast<pb_byte_t*>(buffer.data()), buffer.size());
+  if (!pb_encode(&stream,
+                 maco_proto_firebase_rpc_AuthenticateTagResponse_fields,
+                 &response)) {
+    return pw::Status::Internal();
   }
-
-  return encoder.size();
+  return stream.bytes_written;
 }
 
 // Helper to encode a CompleteTagAuthResponse with session keys
@@ -97,23 +111,29 @@ pw::Result<size_t> EncodeCompleteTagAuthResponse(pw::ConstByteSpan enc_key,
                                                  pw::ConstByteSpan ti,
                                                  pw::ConstByteSpan picc_cap,
                                                  pw::ByteSpan buffer) {
-  maco::proto::firebase_rpc::pwpb::CompleteTagAuthResponse::MemoryEncoder
-      encoder(buffer);
+  maco_proto_firebase_rpc_CompleteTagAuthResponse response =
+      maco_proto_firebase_rpc_CompleteTagAuthResponse_init_zero;
 
-  auto status = encoder.WriteSessionKeysMessage(
-      [&](maco::proto::firebase_rpc::pwpb::SessionKeys::StreamEncoder& keys) {
-        auto st = keys.WriteSesAuthEncKey(enc_key);
-        if (!st.ok()) return st;
-        st = keys.WriteSesAuthMacKey(mac_key);
-        if (!st.ok()) return st;
-        st = keys.WriteTransactionIdentifier(ti);
-        if (!st.ok()) return st;
-        return keys.WritePiccCapabilities(picc_cap);
-      });
-  if (!status.ok()) {
-    return status;
+  response.which_result =
+      maco_proto_firebase_rpc_CompleteTagAuthResponse_session_keys_tag;
+
+  std::memcpy(response.result.session_keys.ses_auth_enc_key, enc_key.data(),
+              enc_key.size());
+  std::memcpy(response.result.session_keys.ses_auth_mac_key, mac_key.data(),
+              mac_key.size());
+  std::memcpy(response.result.session_keys.transaction_identifier, ti.data(),
+              ti.size());
+  std::memcpy(response.result.session_keys.picc_capabilities, picc_cap.data(),
+              picc_cap.size());
+
+  pb_ostream_t stream = pb_ostream_from_buffer(
+      reinterpret_cast<pb_byte_t*>(buffer.data()), buffer.size());
+  if (!pb_encode(&stream,
+                 maco_proto_firebase_rpc_CompleteTagAuthResponse_fields,
+                 &response)) {
+    return pw::Status::Internal();
   }
-  return encoder.size();
+  return stream.bytes_written;
 }
 
 // Test fixture for FirebaseClient tests
@@ -126,10 +146,11 @@ class FirebaseClientTest : public ::testing::Test {
 
   // Send a successful ForwardResponse with the given payload
   void SendForwardResponse(pw::ConstByteSpan payload) {
-    maco::gateway::pwpb::ForwardResponse::Message response;
+    maco_gateway_ForwardResponse response = maco_gateway_ForwardResponse_init_zero;
     response.success = true;
     response.http_status = 200;
-    response.payload.assign(payload.begin(), payload.end());
+    std::memcpy(response.payload.bytes, payload.data(), payload.size());
+    response.payload.size = payload.size();
 
     rpc_ctx_.server().SendResponse<GatewayService::Forward>(response,
                                                             pw::OkStatus());
@@ -137,10 +158,10 @@ class FirebaseClientTest : public ::testing::Test {
 
   // Send an error ForwardResponse
   void SendForwardError(uint32_t http_status, const char* error_message) {
-    maco::gateway::pwpb::ForwardResponse::Message response;
+    maco_gateway_ForwardResponse response = maco_gateway_ForwardResponse_init_zero;
     response.success = false;
     response.http_status = http_status;
-    response.error = error_message;
+    std::strncpy(response.error, error_message, sizeof(response.error) - 1);
 
     rpc_ctx_.server().SendResponse<GatewayService::Forward>(response,
                                                             pw::OkStatus());
@@ -161,7 +182,7 @@ class FirebaseClientTest : public ::testing::Test {
     return iterations < max_iterations;
   }
 
-  pw::rpc::PwpbClientTestContext<10, 512, 1024> rpc_ctx_;
+  pw::rpc::NanopbClientTestContext<10, 512, 1024> rpc_ctx_;
   pw::async2::BasicDispatcher dispatcher_;
   pw::allocator::test::AllocatorForTest<kAllocatorSize> test_allocator_;
 };
@@ -176,15 +197,16 @@ TEST_F(FirebaseClientTest, TerminalCheckin_Authorized) {
   // Result storage
   std::optional<pw::Result<CheckinResult>> result;
 
+  // Create TagUid from bytes
+  auto tag_uid_result = TagUid::FromBytes(
+      pw::bytes::Array<0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66>());
+  ASSERT_TRUE(tag_uid_result.ok());
+
   // Create the test coroutine
   pw::async2::CoroContext coro_cx(test_allocator_);
   auto test_coro =
       [&](pw::async2::CoroContext& cx) -> pw::async2::Coro<pw::Status> {
-    TagUid tag_uid;
-    tag_uid.value =
-        pw::bytes::Array<0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66>();
-
-    result = co_await client.TerminalCheckin(cx, tag_uid);
+    result = co_await client.TerminalCheckin(cx, *tag_uid_result);
     co_return pw::OkStatus();
   };
 
@@ -223,14 +245,14 @@ TEST_F(FirebaseClientTest, TerminalCheckin_Rejected) {
 
   std::optional<pw::Result<CheckinResult>> result;
 
+  auto tag_uid_result = TagUid::FromBytes(
+      pw::bytes::Array<0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66>());
+  ASSERT_TRUE(tag_uid_result.ok());
+
   pw::async2::CoroContext coro_cx(test_allocator_);
   auto test_coro =
       [&](pw::async2::CoroContext& cx) -> pw::async2::Coro<pw::Status> {
-    TagUid tag_uid;
-    tag_uid.value =
-        pw::bytes::Array<0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66>();
-
-    result = co_await client.TerminalCheckin(cx, tag_uid);
+    result = co_await client.TerminalCheckin(cx, *tag_uid_result);
     co_return pw::OkStatus();
   };
 
@@ -261,14 +283,14 @@ TEST_F(FirebaseClientTest, TerminalCheckin_ForwardError) {
 
   std::optional<pw::Result<CheckinResult>> result;
 
+  auto tag_uid_result = TagUid::FromBytes(
+      pw::bytes::Array<0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66>());
+  ASSERT_TRUE(tag_uid_result.ok());
+
   pw::async2::CoroContext coro_cx(test_allocator_);
   auto test_coro =
       [&](pw::async2::CoroContext& cx) -> pw::async2::Coro<pw::Status> {
-    TagUid tag_uid;
-    tag_uid.value =
-        pw::bytes::Array<0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66>();
-
-    result = co_await client.TerminalCheckin(cx, tag_uid);
+    result = co_await client.TerminalCheckin(cx, *tag_uid_result);
     co_return pw::OkStatus();
   };
 
@@ -294,14 +316,14 @@ TEST_F(FirebaseClientTest, TerminalCheckin_RpcError) {
 
   std::optional<pw::Result<CheckinResult>> result;
 
+  auto tag_uid_result = TagUid::FromBytes(
+      pw::bytes::Array<0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66>());
+  ASSERT_TRUE(tag_uid_result.ok());
+
   pw::async2::CoroContext coro_cx(test_allocator_);
   auto test_coro =
       [&](pw::async2::CoroContext& cx) -> pw::async2::Coro<pw::Status> {
-    TagUid tag_uid;
-    tag_uid.value =
-        pw::bytes::Array<0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66>();
-
-    result = co_await client.TerminalCheckin(cx, tag_uid);
+    result = co_await client.TerminalCheckin(cx, *tag_uid_result);
     co_return pw::OkStatus();
   };
 
@@ -331,18 +353,19 @@ TEST_F(FirebaseClientTest, AuthenticateTag_Success) {
 
   std::optional<pw::Result<AuthenticateTagResponse>> result;
 
+  auto tag_uid_result = TagUid::FromBytes(
+      pw::bytes::Array<0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66>());
+  ASSERT_TRUE(tag_uid_result.ok());
+
   pw::async2::CoroContext coro_cx(test_allocator_);
   auto test_coro =
       [&](pw::async2::CoroContext& cx) -> pw::async2::Coro<pw::Status> {
-    TagUid tag_uid;
-    tag_uid.value =
-        pw::bytes::Array<0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66>();
-
     auto ntag_challenge =
         pw::bytes::Array<0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09,
                          0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10>();
 
-    result = co_await client.AuthenticateTag(cx, tag_uid, Key::KEY_APPLICATION,
+    result = co_await client.AuthenticateTag(cx, *tag_uid_result,
+                                             Key::KEY_APPLICATION,
                                              ntag_challenge);
     co_return pw::OkStatus();
   };
@@ -362,7 +385,8 @@ TEST_F(FirebaseClientTest, AuthenticateTag_Success) {
 
   std::array<std::byte, 256> payload_buffer;
   auto encode_result =
-      EncodeAuthenticateTagResponse("auth_id_123", kCloudChallenge, payload_buffer);
+      EncodeAuthenticateTagResponse("auth_id_123", kCloudChallenge,
+                                    payload_buffer);
   ASSERT_TRUE(encode_result.ok());
 
   SendForwardResponse(
@@ -372,9 +396,8 @@ TEST_F(FirebaseClientTest, AuthenticateTag_Success) {
 
   ASSERT_TRUE(result.has_value());
   ASSERT_TRUE(result->ok());
-  EXPECT_EQ(std::string_view(result->value().auth_id.value.c_str()),
-            "auth_id_123");
-  EXPECT_EQ(result->value().cloud_challenge.size(), 32u);
+  EXPECT_EQ(result->value().auth_id.value(), "auth_id_123");
+  EXPECT_EQ(result->value().cloud_challenge_size, 32u);
 }
 
 // ============================================================================
@@ -386,18 +409,19 @@ TEST_F(FirebaseClientTest, CompleteTagAuth_Success) {
 
   std::optional<pw::Result<CompleteAuthResult>> result;
 
+  auto auth_id_result = FirebaseId::FromString("auth_id_123");
+  ASSERT_TRUE(auth_id_result.ok());
+
   pw::async2::CoroContext coro_cx(test_allocator_);
   auto test_coro =
       [&](pw::async2::CoroContext& cx) -> pw::async2::Coro<pw::Status> {
-    FirebaseId auth_id;
-    auth_id.value = "auth_id_123";
-
     auto encrypted_response = pw::bytes::Array<
         0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B,
         0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16,
         0x17, 0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20>();
 
-    result = co_await client.CompleteTagAuth(cx, auth_id, encrypted_response);
+    result = co_await client.CompleteTagAuth(cx, *auth_id_result,
+                                             encrypted_response);
     co_return pw::OkStatus();
   };
 
@@ -421,7 +445,8 @@ TEST_F(FirebaseClientTest, CompleteTagAuth_Success) {
 
   std::array<std::byte, 256> payload_buffer;
   auto encode_result =
-      EncodeCompleteTagAuthResponse(kEncKey, kMacKey, kTi, kPiccCap, payload_buffer);
+      EncodeCompleteTagAuthResponse(kEncKey, kMacKey, kTi, kPiccCap,
+                                    payload_buffer);
   ASSERT_TRUE(encode_result.ok());
 
   SendForwardResponse(
@@ -443,14 +468,14 @@ TEST_F(FirebaseClientTest, TerminalCheckin_SendsRequest) {
 
   std::optional<pw::Result<CheckinResult>> result;
 
+  auto tag_uid_result = TagUid::FromBytes(
+      pw::bytes::Array<0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66>());
+  ASSERT_TRUE(tag_uid_result.ok());
+
   pw::async2::CoroContext coro_cx(test_allocator_);
   auto test_coro =
       [&](pw::async2::CoroContext& cx) -> pw::async2::Coro<pw::Status> {
-    TagUid tag_uid;
-    tag_uid.value =
-        pw::bytes::Array<0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66>();
-
-    result = co_await client.TerminalCheckin(cx, tag_uid);
+    result = co_await client.TerminalCheckin(cx, *tag_uid_result);
     co_return pw::OkStatus();
   };
 
@@ -487,14 +512,19 @@ TEST_F(FirebaseClientTest, TerminalCheckin_ConcurrentCallReturnsUnavailable) {
   std::optional<pw::Result<CheckinResult>> result1;
   std::optional<pw::Result<CheckinResult>> result2;
 
+  auto tag_uid_result1 = TagUid::FromBytes(
+      pw::bytes::Array<0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66>());
+  ASSERT_TRUE(tag_uid_result1.ok());
+
+  auto tag_uid_result2 = TagUid::FromBytes(
+      pw::bytes::Array<0x04, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF>());
+  ASSERT_TRUE(tag_uid_result2.ok());
+
   // First coroutine - starts the call
   pw::async2::CoroContext coro_cx1(test_allocator_);
   auto test_coro1 =
       [&](pw::async2::CoroContext& cx) -> pw::async2::Coro<pw::Status> {
-    TagUid tag_uid;
-    tag_uid.value =
-        pw::bytes::Array<0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66>();
-    result1 = co_await client.TerminalCheckin(cx, tag_uid);
+    result1 = co_await client.TerminalCheckin(cx, *tag_uid_result1);
     co_return pw::OkStatus();
   };
 
@@ -502,10 +532,7 @@ TEST_F(FirebaseClientTest, TerminalCheckin_ConcurrentCallReturnsUnavailable) {
   pw::async2::CoroContext coro_cx2(test_allocator_);
   auto test_coro2 =
       [&](pw::async2::CoroContext& cx) -> pw::async2::Coro<pw::Status> {
-    TagUid tag_uid;
-    tag_uid.value =
-        pw::bytes::Array<0x04, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF>();
-    result2 = co_await client.TerminalCheckin(cx, tag_uid);
+    result2 = co_await client.TerminalCheckin(cx, *tag_uid_result2);
     co_return pw::OkStatus();
   };
 

@@ -9,7 +9,7 @@
 // 1. Configure the gateway connection (host/port)
 // 2. Trigger Firebase operations and observe results
 
-#include "firebase_client_test.rpc.pwpb.h"
+#include "firebase_client_test.rpc.pb.h"
 #include "pb_integration_tests/firmware/test_system.h"
 
 #include <array>
@@ -20,18 +20,18 @@
 
 #include "firebase/firebase_client.h"
 #include "maco_firmware/modules/gateway/p2_gateway_client.h"
+#include "maco_firmware/types.h"
 #include "pb_crypto/pb_crypto.h"
 #include "pw_async2/coro.h"
 #include "pw_async2/coro_or_else_task.h"
 #include "pw_bytes/array.h"
 #include "pw_log/log.h"
-#include "pw_rpc/pwpb/server_reader_writer.h"
+#include "pw_rpc/nanopb/server_reader_writer.h"
 #include "pw_system/system.h"
 
 namespace {
 
-namespace msgs = maco::test::firebase::pwpb;
-namespace svc = maco::test::firebase::pw_rpc::pwpb;
+namespace svc = maco::test::firebase::pw_rpc::nanopb;
 
 // Test constants - must match gateway_process.py DEFAULT_TEST_MASTER_KEY
 constexpr std::array<std::byte, 16> kTestMasterSecret = {
@@ -72,7 +72,7 @@ std::array<std::byte, 16> DeriveKey() {
 
 // Type alias for the TriggerStartSession responder
 using StartSessionResponder =
-    pw::rpc::PwpbUnaryResponder<msgs::TriggerStartSessionResponse::Message>;
+    pw::rpc::NanopbUnaryResponder<maco_test_firebase_TriggerStartSessionResponse>;
 
 // TestControl service implementation
 class TestControlServiceImpl
@@ -82,13 +82,13 @@ class TestControlServiceImpl
 
   // RPC: ConfigureGateway
   pw::Status ConfigureGateway(
-      const msgs::ConfigureGatewayRequest::Message& request,
-      msgs::ConfigureGatewayResponse::Message& response) {
-    PW_LOG_INFO("ConfigureGateway: host=%s, port=%u", request.host.c_str(),
+      const maco_test_firebase_ConfigureGatewayRequest& request,
+      maco_test_firebase_ConfigureGatewayResponse& response) {
+    PW_LOG_INFO("ConfigureGateway: host=%s, port=%u", request.host,
                 static_cast<unsigned>(request.port));
 
     // Store gateway configuration for later use
-    gateway_host_ = std::string(request.host.data(), request.host.size());
+    gateway_host_ = std::string(request.host);
     gateway_port_ = request.port;
 
     // Derive the key (same as gateway uses)
@@ -132,24 +132,34 @@ class TestControlServiceImpl
 
   // RPC: TriggerStartSession (async handler)
   void TriggerStartSession(
-      const msgs::TriggerStartSessionRequest::Message& request,
+      const maco_test_firebase_TriggerStartSessionRequest& request,
       StartSessionResponder& responder) {
     PW_LOG_INFO("TriggerStartSession: tag_uid size=%u",
-                static_cast<unsigned>(request.tag_uid.size()));
+                static_cast<unsigned>(request.tag_uid.size));
 
     if (!gateway_.has_value() || !firebase_.has_value()) {
-      msgs::TriggerStartSessionResponse::Message response;
+      maco_test_firebase_TriggerStartSessionResponse response =
+          maco_test_firebase_TriggerStartSessionResponse_init_zero;
       response.success = false;
-      response.error.assign("Gateway not configured");
+      std::strncpy(response.error, "Gateway not configured",
+                   sizeof(response.error) - 1);
       responder.Finish(response, pw::OkStatus()).IgnoreError();
       return;
     }
 
-    // Prepare the tag UID
-    maco::firebase::TagUid tag_uid;
-    size_t uid_size = std::min(request.tag_uid.size(), tag_uid.value.size());
-    std::copy(request.tag_uid.begin(), request.tag_uid.begin() + uid_size,
-              tag_uid.value.begin());
+    // Prepare the tag UID from bytes
+    auto tag_uid_result = maco::TagUid::FromBytes(pw::ConstByteSpan(
+        reinterpret_cast<const std::byte*>(request.tag_uid.bytes),
+        request.tag_uid.size));
+    if (!tag_uid_result.ok()) {
+      maco_test_firebase_TriggerStartSessionResponse response =
+          maco_test_firebase_TriggerStartSessionResponse_init_zero;
+      response.success = false;
+      std::strncpy(response.error, "Invalid tag UID", sizeof(response.error) - 1);
+      responder.Finish(response, pw::OkStatus()).IgnoreError();
+      return;
+    }
+    auto tag_uid = *tag_uid_result;
 
     // Create and post the async handler coroutine
     auto coro = HandleSessionAsync(coro_cx_, tag_uid, std::move(responder));
@@ -163,7 +173,7 @@ class TestControlServiceImpl
   // Coroutine that handles the async Firebase call and finishes the RPC
   pw::async2::Coro<pw::Status> HandleSessionAsync(
       pw::async2::CoroContext& cx,
-      maco::firebase::TagUid tag_uid,
+      maco::TagUid tag_uid,
       StartSessionResponder responder) {
     PW_LOG_INFO("Starting TerminalCheckin coroutine");
 
@@ -171,13 +181,15 @@ class TestControlServiceImpl
 
     PW_LOG_INFO("TerminalCheckin coroutine complete");
 
-    msgs::TriggerStartSessionResponse::Message response;
+    maco_test_firebase_TriggerStartSessionResponse response =
+        maco_test_firebase_TriggerStartSessionResponse_init_zero;
 
     if (!result.ok()) {
       PW_LOG_ERROR("TerminalCheckin failed: %d",
                    static_cast<int>(result.status().code()));
       response.success = false;
-      response.error.assign("TerminalCheckin RPC failed");
+      std::strncpy(response.error, "TerminalCheckin RPC failed",
+                   sizeof(response.error) - 1);
       responder.Finish(response, pw::OkStatus()).IgnoreError();
       co_return pw::OkStatus();
     }
@@ -192,11 +204,12 @@ class TestControlServiceImpl
             response.success = true;
             if (variant.has_existing_auth()) {
               response.auth_required = false;
-              response.session_id.assign(
-                  variant.authentication_id.value.data(),
-                  variant.authentication_id.value.size());
+              auto auth_id_str = variant.authentication_id.value();
+              std::strncpy(response.session_id, auth_id_str.data(),
+                           std::min(auth_id_str.size(),
+                                    sizeof(response.session_id) - 1));
               PW_LOG_INFO("Authorized with existing auth: %s",
-                          response.session_id.c_str());
+                          response.session_id);
             } else {
               response.auth_required = true;
               PW_LOG_INFO("Authorized but auth required");
@@ -204,9 +217,10 @@ class TestControlServiceImpl
           } else if constexpr (std::is_same_v<T,
                                               maco::firebase::CheckinRejected>) {
             response.success = false;
-            response.error.assign(variant.message.data(),
-                                  variant.message.size());
-            PW_LOG_INFO("Rejected: %s", response.error.c_str());
+            auto msg = std::string_view(variant.message);
+            std::strncpy(response.error, msg.data(),
+                         std::min(msg.size(), sizeof(response.error) - 1));
+            PW_LOG_INFO("Rejected: %s", response.error);
           }
         },
         checkin_result);
