@@ -72,6 +72,7 @@ cc_library(
         "@pigweed//pw_log",
         "@pigweed//pw_rpc/nanopb:server_api",
         "@pigweed//pw_system:async",
+        "@pigweed//pw_tokenizer:linker_script",  # Token database for log detokenization
     ],
     alwayslink = True,
     target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
