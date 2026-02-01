@@ -14,8 +14,10 @@ cc_library(
 
 cc_library(
     name = "ntag424_key_provider",
+    srcs = ["ntag424_key_provider.cc"],
     hdrs = ["ntag424_key_provider.h"],
     deps = [
+        ":ntag424_crypto",
         "@pigweed//pw_async2:coro",
         "@pigweed//pw_bytes",
         "@pigweed//pw_result",
@@ -64,6 +66,22 @@ cc_library(
 )
 
 cc_library(
+    name = "cloud_key_provider",
+    srcs = ["cloud_key_provider.cc"],
+    hdrs = ["cloud_key_provider.h"],
+    deps = [
+        ":ntag424_key_provider",
+        "//maco_firmware/modules/firebase:firebase_client",
+        "@pigweed//pw_assert:check",
+        "@pigweed//pw_async2:coro",
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_log",
+        "@pigweed//pw_result",
+        "@pigweed//pw_status",
+    ],
+)
+
+cc_library(
     name = "ntag424_tag",
     srcs = ["ntag424_tag.cc"],
     hdrs = ["ntag424_tag.h"],
@@ -99,6 +117,20 @@ pw_cc_test(
     deps = [
         ":ntag424_secure_messaging",
         "@pigweed//pw_bytes",
+    ],
+)
+
+pw_cc_test(
+    name = "cloud_key_provider_test",
+    srcs = ["cloud_key_provider_test.cc"],
+    deps = [
+        ":cloud_key_provider",
+        "//maco_firmware/modules/firebase:firebase_client",
+        "@pigweed//pw_allocator:testing",
+        "@pigweed//pw_async2:basic_dispatcher",
+        "@pigweed//pw_async2:coro_or_else_task",
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_rpc/pwpb:client_testing",
     ],
 )
 

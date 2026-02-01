@@ -19,13 +19,6 @@ constexpr size_t kBlockSize = 16;
 constexpr std::array<std::byte, kBlockSize> kZeroIv = {};
 }  // namespace
 
-// SessionKeys destructor implementation (defined in ntag424_key_provider.h)
-SessionKeys::~SessionKeys() {
-  // Securely zero session keys to minimize their lifetime in memory
-  SecureZero(ses_auth_enc_key);
-  SecureZero(ses_auth_mac_key);
-}
-
 LocalKeyProvider::LocalKeyProvider(uint8_t key_number,
                                    pw::ConstByteSpan key,
                                    pw::random::RandomGenerator& rng)
