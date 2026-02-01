@@ -54,15 +54,147 @@ pw::Status DecodeResponse(pw::ConstByteSpan payload, ResponseMsg& result) {
   return decoder.Read(result);
 }
 
+// Namespace aliases for proto types
+namespace proto_rpc = maco::proto::firebase_rpc::pwpb;
+
+// Functor for decoding TerminalCheckinResponse oneof.
+// Uses a pointer (4 bytes) to fit in pwpb's inline callback storage.
+struct CheckinDecoder {
+  struct State {
+    CheckinResult result;
+    bool decoded = false;
+  };
+
+  State* state;
+
+  pw::Status operator()(
+      proto_rpc::TerminalCheckinResponse::Fields field,
+      proto_rpc::TerminalCheckinResponse::StreamDecoder& decoder) {
+    using Fields = proto_rpc::TerminalCheckinResponse::Fields;
+    switch (field) {
+      case Fields::kAuthorized: {
+        proto_rpc::Authorized::Message auth;
+        PW_TRY(decoder.GetAuthorizedDecoder().Read(auth));
+        state->result = CheckinAuthorized{
+            .user_id = auth.user_id,
+            .user_label = auth.user_label,
+            .authentication_id = auth.authentication_id,
+        };
+        state->decoded = true;
+        return pw::OkStatus();
+      }
+      case Fields::kRejected: {
+        proto_rpc::Rejected::Message rej;
+        PW_TRY(decoder.GetRejectedDecoder().Read(rej));
+        state->result = CheckinRejected{.message = rej.message};
+        state->decoded = true;
+        return pw::OkStatus();
+      }
+      default:
+        return pw::Status::DataLoss();
+    }
+  }
+};
+
+// Functor for decoding CompleteTagAuthResponse oneof.
+struct CompleteAuthDecoder {
+  struct State {
+    CompleteAuthResult result;
+    bool decoded = false;
+  };
+
+  State* state;
+
+  pw::Status operator()(
+      proto_rpc::CompleteTagAuthResponse::Fields field,
+      proto_rpc::CompleteTagAuthResponse::StreamDecoder& decoder) {
+    using Fields = proto_rpc::CompleteTagAuthResponse::Fields;
+    switch (field) {
+      case Fields::kSessionKeys: {
+        proto_rpc::SessionKeys::Message keys;
+        PW_TRY(decoder.GetSessionKeysDecoder().Read(keys));
+        CompleteAuthSuccess success{};
+        std::copy(keys.ses_auth_enc_key.begin(), keys.ses_auth_enc_key.end(),
+                  success.ses_auth_enc_key.begin());
+        std::copy(keys.ses_auth_mac_key.begin(), keys.ses_auth_mac_key.end(),
+                  success.ses_auth_mac_key.begin());
+        std::copy(keys.transaction_identifier.begin(),
+                  keys.transaction_identifier.end(),
+                  success.transaction_identifier.begin());
+        std::copy(keys.picc_capabilities.begin(), keys.picc_capabilities.end(),
+                  success.picc_capabilities.begin());
+        state->result = success;
+        state->decoded = true;
+        return pw::OkStatus();
+      }
+      case Fields::kRejected: {
+        proto_rpc::Rejected::Message rej;
+        PW_TRY(decoder.GetRejectedDecoder().Read(rej));
+        state->result = CompleteAuthRejected{.message = rej.message};
+        state->decoded = true;
+        return pw::OkStatus();
+      }
+      default:
+        return pw::Status::DataLoss();
+    }
+  }
+};
+
+/// Decode TerminalCheckinResponse with proper oneof handling.
+pw::Result<CheckinResult> DecodeCheckinResponse(pw::ConstByteSpan payload) {
+  pw::stream::MemoryReader reader(payload);
+  proto_rpc::TerminalCheckinResponse::StreamDecoder response_decoder(reader);
+
+  CheckinDecoder::State state;
+  proto_rpc::TerminalCheckinResponse::Message msg;
+  msg.result.SetDecoder(CheckinDecoder{&state});
+
+  auto status = response_decoder.Read(msg);
+  if (!status.ok()) {
+    return status;
+  }
+
+  if (!state.decoded) {
+    PW_LOG_ERROR("TerminalCheckinResponse missing oneof result field");
+    return pw::Status::DataLoss();
+  }
+
+  return std::move(state.result);
+}
+
+/// Decode CompleteTagAuthResponse with proper oneof handling.
+pw::Result<CompleteAuthResult> DecodeCompleteAuthResponse(
+    pw::ConstByteSpan payload) {
+  pw::stream::MemoryReader reader(payload);
+  proto_rpc::CompleteTagAuthResponse::StreamDecoder response_decoder(reader);
+
+  CompleteAuthDecoder::State state;
+  proto_rpc::CompleteTagAuthResponse::Message msg;
+  msg.result.SetDecoder(CompleteAuthDecoder{&state});
+
+  auto status = response_decoder.Read(msg);
+  if (!status.ok()) {
+    return status;
+  }
+
+  if (!state.decoded) {
+    PW_LOG_ERROR("CompleteTagAuthResponse missing oneof result field");
+    return pw::Status::DataLoss();
+  }
+
+  return std::move(state.result);
+}
+
 }  // namespace
 
 FirebaseClient::FirebaseClient(pw::rpc::Client& rpc_client,
                                uint32_t channel_id)
     : rpc_client_(rpc_client), channel_id_(channel_id) {}
 
-pw::async2::Coro<pw::Result<TerminalCheckinResponse>>
-FirebaseClient::TerminalCheckin([[maybe_unused]] pw::async2::CoroContext& cx,
+pw::async2::Coro<pw::Result<CheckinResult>>
+FirebaseClient::TerminalCheckin(pw::async2::CoroContext& cx,
                                 const TagUid& tag_uid) {
+  (void)cx;  // Context available for child coroutines if needed
   if (terminal_checkin_call_.active()) {
     PW_LOG_WARN("TerminalCheckin called while previous call still in flight");
     co_return pw::Status::Unavailable();
@@ -104,19 +236,15 @@ FirebaseClient::TerminalCheckin([[maybe_unused]] pw::async2::CoroContext& cx,
           return;
         }
 
-        TerminalCheckinResponse result;
-        auto decode_status = DecodeResponse<
-            TerminalCheckinResponse,
-            maco::proto::firebase_rpc::pwpb::TerminalCheckinResponse::
-                StreamDecoder>(resp.payload, result);
-        if (!decode_status.ok()) {
+        auto decode_result = DecodeCheckinResponse(resp.payload);
+        if (!decode_result.ok()) {
           PW_LOG_ERROR("Failed to decode TerminalCheckinResponse: %s",
-                       decode_status.str());
-          terminal_checkin_provider_.Resolve(pw::Status::DataLoss());
+                       decode_result.status().str());
+          terminal_checkin_provider_.Resolve(decode_result.status());
           return;
         }
 
-        terminal_checkin_provider_.Resolve(std::move(result));
+        terminal_checkin_provider_.Resolve(std::move(*decode_result));
       },
       [this](pw::Status st) {
         PW_LOG_ERROR("TerminalCheckin RPC error: %s", st.str());
@@ -127,10 +255,11 @@ FirebaseClient::TerminalCheckin([[maybe_unused]] pw::async2::CoroContext& cx,
 }
 
 pw::async2::Coro<pw::Result<AuthenticateTagResponse>>
-FirebaseClient::AuthenticateTag([[maybe_unused]] pw::async2::CoroContext& cx,
+FirebaseClient::AuthenticateTag(pw::async2::CoroContext& cx,
                                 const TagUid& tag_uid,
                                 Key key_slot,
                                 pw::ConstByteSpan ntag_challenge) {
+  (void)cx;  // Context available for child coroutines if needed
   if (authenticate_tag_call_.active()) {
     PW_LOG_WARN("AuthenticateTag called while previous call still in flight");
     co_return pw::Status::Unavailable();
@@ -209,10 +338,11 @@ FirebaseClient::AuthenticateTag([[maybe_unused]] pw::async2::CoroContext& cx,
   co_return co_await authenticate_tag_provider_.Get();
 }
 
-pw::async2::Coro<pw::Result<CompleteTagAuthResponse>>
-FirebaseClient::CompleteTagAuth([[maybe_unused]] pw::async2::CoroContext& cx,
+pw::async2::Coro<pw::Result<CompleteAuthResult>>
+FirebaseClient::CompleteTagAuth(pw::async2::CoroContext& cx,
                                 const FirebaseId& auth_id,
                                 pw::ConstByteSpan encrypted_tag_response) {
+  (void)cx;  // Context available for child coroutines if needed
   if (complete_tag_auth_call_.active()) {
     PW_LOG_WARN("CompleteTagAuth called while previous call still in flight");
     co_return pw::Status::Unavailable();
@@ -263,19 +393,15 @@ FirebaseClient::CompleteTagAuth([[maybe_unused]] pw::async2::CoroContext& cx,
           return;
         }
 
-        CompleteTagAuthResponse result;
-        auto decode_status = DecodeResponse<
-            CompleteTagAuthResponse,
-            maco::proto::firebase_rpc::pwpb::CompleteTagAuthResponse::
-                StreamDecoder>(resp.payload, result);
-        if (!decode_status.ok()) {
+        auto decode_result = DecodeCompleteAuthResponse(resp.payload);
+        if (!decode_result.ok()) {
           PW_LOG_ERROR("Failed to decode CompleteTagAuthResponse: %s",
-                       decode_status.str());
-          complete_tag_auth_provider_.Resolve(pw::Status::DataLoss());
+                       decode_result.status().str());
+          complete_tag_auth_provider_.Resolve(decode_result.status());
           return;
         }
 
-        complete_tag_auth_provider_.Resolve(std::move(result));
+        complete_tag_auth_provider_.Resolve(std::move(*decode_result));
       },
       [this](pw::Status st) {
         PW_LOG_ERROR("CompleteTagAuth RPC error: %s", st.str());

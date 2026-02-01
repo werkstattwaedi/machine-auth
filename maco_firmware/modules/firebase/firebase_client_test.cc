@@ -8,6 +8,7 @@
 
 #include <array>
 #include <optional>
+#include <variant>
 
 #include "firebase_rpc/auth.pwpb.h"
 #include "gateway/gateway_service.pwpb.h"
@@ -173,7 +174,7 @@ TEST_F(FirebaseClientTest, TerminalCheckin_Authorized) {
   auto client = CreateClient();
 
   // Result storage
-  std::optional<pw::Result<TerminalCheckinResponse>> result;
+  std::optional<pw::Result<CheckinResult>> result;
 
   // Create the test coroutine
   pw::async2::CoroContext coro_cx(test_allocator_);
@@ -214,12 +215,13 @@ TEST_F(FirebaseClientTest, TerminalCheckin_Authorized) {
   // Verify result
   ASSERT_TRUE(result.has_value());
   EXPECT_TRUE(result->ok());
+  EXPECT_TRUE(std::holds_alternative<CheckinAuthorized>(result->value()));
 }
 
 TEST_F(FirebaseClientTest, TerminalCheckin_Rejected) {
   auto client = CreateClient();
 
-  std::optional<pw::Result<TerminalCheckinResponse>> result;
+  std::optional<pw::Result<CheckinResult>> result;
 
   pw::async2::CoroContext coro_cx(test_allocator_);
   auto test_coro =
@@ -251,12 +253,13 @@ TEST_F(FirebaseClientTest, TerminalCheckin_Rejected) {
 
   ASSERT_TRUE(result.has_value());
   EXPECT_TRUE(result->ok());
+  EXPECT_TRUE(std::holds_alternative<CheckinRejected>(result->value()));
 }
 
 TEST_F(FirebaseClientTest, TerminalCheckin_ForwardError) {
   auto client = CreateClient();
 
-  std::optional<pw::Result<TerminalCheckinResponse>> result;
+  std::optional<pw::Result<CheckinResult>> result;
 
   pw::async2::CoroContext coro_cx(test_allocator_);
   auto test_coro =
@@ -289,7 +292,7 @@ TEST_F(FirebaseClientTest, TerminalCheckin_ForwardError) {
 TEST_F(FirebaseClientTest, TerminalCheckin_RpcError) {
   auto client = CreateClient();
 
-  std::optional<pw::Result<TerminalCheckinResponse>> result;
+  std::optional<pw::Result<CheckinResult>> result;
 
   pw::async2::CoroContext coro_cx(test_allocator_);
   auto test_coro =
@@ -381,7 +384,7 @@ TEST_F(FirebaseClientTest, AuthenticateTag_Success) {
 TEST_F(FirebaseClientTest, CompleteTagAuth_Success) {
   auto client = CreateClient();
 
-  std::optional<pw::Result<CompleteTagAuthResponse>> result;
+  std::optional<pw::Result<CompleteAuthResult>> result;
 
   pw::async2::CoroContext coro_cx(test_allocator_);
   auto test_coro =
@@ -428,6 +431,7 @@ TEST_F(FirebaseClientTest, CompleteTagAuth_Success) {
 
   ASSERT_TRUE(result.has_value());
   EXPECT_TRUE(result->ok());
+  EXPECT_TRUE(std::holds_alternative<CompleteAuthSuccess>(result->value()));
 }
 
 // ============================================================================
@@ -437,7 +441,7 @@ TEST_F(FirebaseClientTest, CompleteTagAuth_Success) {
 TEST_F(FirebaseClientTest, TerminalCheckin_SendsRequest) {
   auto client = CreateClient();
 
-  std::optional<pw::Result<TerminalCheckinResponse>> result;
+  std::optional<pw::Result<CheckinResult>> result;
 
   pw::async2::CoroContext coro_cx(test_allocator_);
   auto test_coro =
@@ -480,8 +484,8 @@ TEST_F(FirebaseClientTest, TerminalCheckin_ConcurrentCallReturnsUnavailable) {
   auto client = CreateClient();
 
   // Storage for results from both calls
-  std::optional<pw::Result<TerminalCheckinResponse>> result1;
-  std::optional<pw::Result<TerminalCheckinResponse>> result2;
+  std::optional<pw::Result<CheckinResult>> result1;
+  std::optional<pw::Result<CheckinResult>> result2;
 
   // First coroutine - starts the call
   pw::async2::CoroContext coro_cx1(test_allocator_);

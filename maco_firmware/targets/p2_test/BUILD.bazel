@@ -78,6 +78,7 @@ cc_library(
     name = "extra_platform_libs",
     deps = [
         "@particle_bazel//:hal_dynalib",
+        "@pigweed//pw_system:log_backend",  # Tokenized log handler for RPC streaming
         "@pigweed//pw_tokenizer:linker_script",
     ],
     alwayslink = 1,

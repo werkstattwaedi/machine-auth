@@ -25,7 +25,9 @@
 ///   auto result = co_await firebase.TerminalCheckin(coro_cx, tag_uid);
 /// @endcode
 
+#include <array>
 #include <cstdint>
+#include <variant>
 
 #include "common.pwpb.h"
 #include "firebase_rpc/auth.pwpb.h"
@@ -38,6 +40,7 @@
 #include "pw_rpc/client.h"
 #include "pw_rpc/pwpb/client_reader_writer.h"
 #include "pw_status/status.h"
+#include "pw_string/string.h"
 
 namespace maco::firebase {
 
@@ -46,13 +49,61 @@ using TagUid = maco::proto::pwpb::TagUid::Message;
 using FirebaseId = maco::proto::pwpb::FirebaseId::Message;
 using Key = maco::proto::pwpb::Key;
 
-// Type aliases for Firebase RPC response types
-using TerminalCheckinResponse =
-    maco::proto::firebase_rpc::pwpb::TerminalCheckinResponse::Message;
+// Type alias for AuthenticateTag response (no oneof, can use raw pwpb)
 using AuthenticateTagResponse =
     maco::proto::firebase_rpc::pwpb::AuthenticateTagResponse::Message;
-using CompleteTagAuthResponse =
-    maco::proto::firebase_rpc::pwpb::CompleteTagAuthResponse::Message;
+
+// =============================================================================
+// Domain types for TerminalCheckin response (has oneof)
+// =============================================================================
+
+/// User is authorized to use the machine.
+struct CheckinAuthorized {
+  /// Firebase user ID
+  FirebaseId user_id;
+  /// Display name for the user
+  pw::InlineString<64> user_label;
+  /// If non-empty, authentication is already complete and can be reused.
+  /// If empty, client must do auth flow before activating machine.
+  FirebaseId authentication_id;
+
+  /// Returns true if authentication is already complete (can skip auth flow).
+  bool has_existing_auth() const { return !authentication_id.value.empty(); }
+};
+
+/// Tag/user was rejected.
+struct CheckinRejected {
+  /// User-readable rejection message
+  pw::InlineString<128> message;
+};
+
+/// Result of TerminalCheckin - either authorized or rejected.
+using CheckinResult = std::variant<CheckinAuthorized, CheckinRejected>;
+
+// =============================================================================
+// Domain types for CompleteTagAuth response (has oneof)
+// =============================================================================
+
+/// Authentication completed successfully with session keys.
+struct CompleteAuthSuccess {
+  /// Derived session encryption key (AES-128)
+  std::array<std::byte, 16> ses_auth_enc_key;
+  /// Derived session MAC key (AES-128)
+  std::array<std::byte, 16> ses_auth_mac_key;
+  /// Transaction identifier from Part 3 response
+  std::array<std::byte, 4> transaction_identifier;
+  /// PICC capabilities (PDcap2) from Part 3 response
+  std::array<std::byte, 6> picc_capabilities;
+};
+
+/// Authentication was rejected.
+struct CompleteAuthRejected {
+  /// User-readable rejection message
+  pw::InlineString<128> message;
+};
+
+/// Result of CompleteTagAuth - either success with keys or rejected.
+using CompleteAuthResult = std::variant<CompleteAuthSuccess, CompleteAuthRejected>;
 
 /// Firebase client for making typed RPC calls through the gateway.
 ///
@@ -87,8 +138,8 @@ class FirebaseClient {
   ///
   /// @param cx Coroutine context for suspension
   /// @param tag_uid The 7-byte NTAG UID
-  /// @return TerminalCheckinResponse or error status
-  [[nodiscard]] pw::async2::Coro<pw::Result<TerminalCheckinResponse>>
+  /// @return CheckinResult (CheckinAuthorized or CheckinRejected) or error
+  [[nodiscard]] pw::async2::Coro<pw::Result<CheckinResult>>
   TerminalCheckin(pw::async2::CoroContext& cx, const TagUid& tag_uid);
 
   /// Initiate NTAG424 3-pass mutual authentication (coroutine).
@@ -113,8 +164,8 @@ class FirebaseClient {
   /// @param cx Coroutine context for suspension
   /// @param auth_id Authentication ID from AuthenticateTagResponse
   /// @param encrypted_tag_response Encrypted Part 3 response from tag
-  /// @return CompleteTagAuthResponse or error status
-  [[nodiscard]] pw::async2::Coro<pw::Result<CompleteTagAuthResponse>>
+  /// @return CompleteAuthResult (CompleteAuthSuccess or CompleteAuthRejected)
+  [[nodiscard]] pw::async2::Coro<pw::Result<CompleteAuthResult>>
   CompleteTagAuth(pw::async2::CoroContext& cx,
                   const FirebaseId& auth_id,
                   pw::ConstByteSpan encrypted_tag_response);
@@ -132,11 +183,11 @@ class FirebaseClient {
 
   // Value providers for async results - one per method
   // These bridge the callback-based RPC to awaitable futures
-  pw::async2::ValueProvider<pw::Result<TerminalCheckinResponse>>
+  pw::async2::ValueProvider<pw::Result<CheckinResult>>
       terminal_checkin_provider_;
   pw::async2::ValueProvider<pw::Result<AuthenticateTagResponse>>
       authenticate_tag_provider_;
-  pw::async2::ValueProvider<pw::Result<CompleteTagAuthResponse>>
+  pw::async2::ValueProvider<pw::Result<CompleteAuthResult>>
       complete_tag_auth_provider_;
 
   // RPC call handles - must outlive the callbacks
