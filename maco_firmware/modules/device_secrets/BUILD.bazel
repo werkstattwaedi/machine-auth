@@ -1,0 +1,160 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+# Device secrets module - EEPROM-backed storage for factory secrets
+#
+# Provides persistent storage for cryptographic secrets:
+# - Gateway master secret (for ASCON key derivation)
+# - NTAG terminal key (for NFC tag authentication)
+#
+# Secrets are provisioned via RPC during factory setup.
+
+load("@com_google_protobuf//bazel:proto_library.bzl", "proto_library")
+load(
+    "@pigweed//pw_protobuf_compiler:pw_proto_library.bzl",
+    "nanopb_proto_library",
+    "nanopb_rpc_proto_library",
+    "pw_proto_filegroup",
+)
+load("@particle_bazel//rules:particle_test.bzl", "particle_cc_test")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_python//python:proto.bzl", "py_proto_library")
+
+package(default_visibility = ["//maco_firmware:__subpackages__"])
+
+# =============================================================================
+# Public interface - exposes only KeyBytes, no proto details
+# =============================================================================
+
+cc_library(
+    name = "device_secrets",
+    hdrs = ["public/device_secrets/device_secrets.h"],
+    includes = ["public"],
+    deps = [
+        "//maco_firmware:types",
+        "@pigweed//pw_result",
+    ],
+)
+
+# =============================================================================
+# Internal storage proto (not publicly exposed)
+# =============================================================================
+
+pw_proto_filegroup(
+    name = "device_secrets_proto_and_options",
+    srcs = ["device_secrets.proto"],
+    options_files = ["device_secrets.options"],
+)
+
+proto_library(
+    name = "device_secrets_proto",
+    srcs = [":device_secrets_proto_and_options"],
+)
+
+nanopb_proto_library(
+    name = "device_secrets_nanopb",
+    deps = [":device_secrets_proto"],
+)
+
+# =============================================================================
+# RPC service proto
+# =============================================================================
+
+pw_proto_filegroup(
+    name = "device_secrets_service_proto_and_options",
+    srcs = ["device_secrets_service.proto"],
+    options_files = ["device_secrets_service.options"],
+)
+
+proto_library(
+    name = "device_secrets_service_proto",
+    srcs = [":device_secrets_service_proto_and_options"],
+    import_prefix = "maco_pb",
+    strip_import_prefix = "/maco_firmware/modules/device_secrets",
+)
+
+nanopb_proto_library(
+    name = "device_secrets_service_nanopb",
+    deps = [":device_secrets_service_proto"],
+)
+
+nanopb_rpc_proto_library(
+    name = "device_secrets_service_nanopb_rpc",
+    nanopb_proto_library_deps = [":device_secrets_service_nanopb"],
+    deps = [":device_secrets_service_proto"],
+)
+
+# Python proto bindings for pw_console
+py_proto_library(
+    name = "device_secrets_service_py_pb2",
+    visibility = ["//visibility:public"],
+    deps = [":device_secrets_service_proto"],
+)
+
+# =============================================================================
+# EEPROM implementation (P2 target)
+# =============================================================================
+
+cc_library(
+    name = "device_secrets_eeprom",
+    srcs = ["device_secrets_eeprom.cc"],
+    hdrs = ["device_secrets_eeprom.h"],
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+    deps = [
+        ":device_secrets",
+        ":device_secrets_nanopb",
+        "//maco_firmware:types",
+        "@particle_bazel//:device_os_headers",
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_checksum",
+        "@pigweed//pw_log",
+        "@pigweed//pw_result",
+        "@pigweed//pw_span",
+        "@pigweed//pw_status",
+    ],
+)
+
+# =============================================================================
+# RPC service implementation
+# =============================================================================
+
+cc_library(
+    name = "device_secrets_service",
+    srcs = ["device_secrets_service.cc"],
+    hdrs = ["device_secrets_service.h"],
+    deps = [
+        ":device_secrets_eeprom",
+        ":device_secrets_service_nanopb_rpc",
+        "@pigweed//pw_log",
+        "@pigweed//pw_status",
+    ],
+)
+
+# =============================================================================
+# Mock implementation (host target)
+# =============================================================================
+
+cc_library(
+    name = "device_secrets_mock",
+    srcs = ["device_secrets_mock.cc"],
+    hdrs = ["device_secrets_mock.h"],
+    deps = [
+        ":device_secrets",
+        "//maco_firmware:types",
+        "@pigweed//pw_result",
+    ],
+)
+
+# =============================================================================
+# Hardware Tests (run on P2 device)
+# =============================================================================
+
+particle_cc_test(
+    name = "device_secrets_eeprom_test",
+    srcs = ["device_secrets_eeprom_test.cc"],
+    platform = "//maco_firmware/targets/p2:p2",
+    deps = [
+        ":device_secrets_eeprom",
+        "@pigweed//pw_bytes",
+    ],
+)

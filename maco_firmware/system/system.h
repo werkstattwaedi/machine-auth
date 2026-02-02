@@ -31,6 +31,10 @@ namespace maco::gateway {
 class GatewayClient;
 }  // namespace maco::gateway
 
+namespace maco::secrets {
+class DeviceSecrets;
+}  // namespace maco::secrets
+
 namespace maco::led {
 // Forward declaration - concrete types are platform-specific (CRTP templates)
 // Host: Led<SdlLedDriver<16>>
@@ -88,5 +92,10 @@ const pw::thread::Options& GetLedThreadOptions();
 /// P2: Uses HAL RNG (LFSR seeded from ADC noise at boot)
 /// Host: Uses std::random_device (/dev/urandom on Linux)
 pw::random::RandomGenerator& GetRandomGenerator();
+
+/// Returns the device secrets storage instance.
+/// P2: EEPROM-backed persistent storage
+/// Host: Mock implementation for testing
+maco::secrets::DeviceSecrets& GetDeviceSecrets();
 
 }  // namespace maco::system

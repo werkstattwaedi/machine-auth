@@ -16,6 +16,8 @@
 #include "pw_thread_particle/options.h"
 
 // Particle and project headers after Pigweed
+#include "maco_firmware/modules/device_secrets/device_secrets_eeprom.h"
+#include "maco_firmware/modules/device_secrets/device_secrets_service.h"
 #include "maco_firmware/services/maco_service.h"
 #include "maco_firmware/devices/cap_touch/cap_touch_input_driver.h"
 #include "maco_firmware/devices/in4818/in4818_led_driver.h"
@@ -65,6 +67,9 @@ constexpr uint32_t kGatewayChannelId = 1;
 
 }  // namespace
 
+// Forward declaration for device secrets (defined below, needed by Init)
+maco::secrets::DeviceSecretsEeprom& GetDeviceSecretsEeprom();
+
 void Init(pw::Function<void()> app_init) {
   pb::log::InitLogBridge();
 
@@ -112,6 +117,12 @@ void Init(pw::Function<void()> app_init) {
   // Register RPC services
   static maco::MacoService maco_service;
   pw::System().rpc_server().RegisterService(maco_service);
+
+  // Register device secrets RPC service
+  // Uses GetDeviceSecretsEeprom() to get the singleton instance
+  static maco::secrets::DeviceSecretsService device_secrets_service(
+      GetDeviceSecretsEeprom());
+  pw::System().rpc_server().RegisterService(device_secrets_service);
 
   PW_LOG_INFO("=== MACO Firmware Starting ===");
 
@@ -277,6 +288,16 @@ auto& GetLed() {
 pw::random::RandomGenerator& GetRandomGenerator() {
   static maco::HardwareRandomGenerator generator;
   return generator;
+}
+
+// Internal getter for EEPROM implementation (used by RPC service)
+maco::secrets::DeviceSecretsEeprom& GetDeviceSecretsEeprom() {
+  static maco::secrets::DeviceSecretsEeprom storage;
+  return storage;
+}
+
+maco::secrets::DeviceSecrets& GetDeviceSecrets() {
+  return GetDeviceSecretsEeprom();
 }
 
 }  // namespace maco::system

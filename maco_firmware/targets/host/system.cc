@@ -13,6 +13,7 @@
 
 #include "lvgl.h"
 #include "maco_firmware/modules/app_state/app_state.h"
+#include "maco_firmware/modules/device_secrets/device_secrets_mock.h"
 #include "maco_firmware/services/maco_service.h"
 #include "maco_firmware/modules/gateway/host_gateway_client.h"
 #include "maco_firmware/modules/nfc_reader/mock/mock_nfc_reader.h"
@@ -215,6 +216,11 @@ auto& GetLed() {
 pw::random::RandomGenerator& GetRandomGenerator() {
   static maco::HostRandomGenerator generator;
   return generator;
+}
+
+maco::secrets::DeviceSecrets& GetDeviceSecrets() {
+  static maco::secrets::DeviceSecretsMock mock_secrets;
+  return mock_secrets;
 }
 
 }  // namespace maco::system
