@@ -7,6 +7,7 @@
 
 // Pigweed headers first - before Particle headers that define pin macros
 // (D2, D3, etc.) which conflict with Pigweed template parameter names.
+#include "pw_async2/system_time_provider.h"
 #include "pw_assert/check.h"
 #include "pw_channel/stream_channel.h"
 #include "pw_log/log.h"
@@ -26,6 +27,7 @@
 #include "maco_firmware/modules/led/led.h"
 #include "maco_firmware/modules/app_state/app_state.h"
 #include "maco_firmware/modules/gateway/p2_gateway_client.h"
+#include "maco_firmware/modules/machine_relay/latching_machine_relay.h"
 #include "maco_firmware/targets/p2/hardware_random.h"
 #include "firebase/firebase_client.h"
 #include "pb_crypto/pb_crypto.h"
@@ -64,6 +66,9 @@ constexpr uint32_t kNfcUartBaudRate = 115200;
 // pw_rpc channel ID for gateway communication
 // TODO: Gateway TCP client not yet implemented for Device OS
 constexpr uint32_t kGatewayChannelId = 1;
+
+// Pin for machine relay control
+constexpr hal_pin_t kPinMachineRelay = A1;
 
 }  // namespace
 
@@ -298,6 +303,12 @@ maco::secrets::DeviceSecretsEeprom& GetDeviceSecretsEeprom() {
 
 maco::secrets::DeviceSecrets& GetDeviceSecrets() {
   return GetDeviceSecretsEeprom();
+}
+
+maco::machine_relay::MachineRelay& GetMachineRelay() {
+  static maco::machine_relay::LatchingMachineRelay relay(
+      kPinMachineRelay, pw::async2::GetSystemTimeProvider());
+  return relay;
 }
 
 }  // namespace maco::system

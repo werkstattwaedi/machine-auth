@@ -19,6 +19,7 @@
 #include "maco_firmware/modules/nfc_reader/mock/mock_nfc_reader.h"
 #include "maco_firmware/modules/nfc_reader/mock/nfc_mock_service.h"
 #include "maco_firmware/modules/led/led.h"
+#include "maco_firmware/modules/machine_relay/mock/mock_machine_relay.h"
 #include "maco_firmware/targets/host/host_random.h"
 #include "maco_firmware/targets/host/keyboard_input_driver.h"
 #include "maco_firmware/targets/host/sdl_display_driver.h"
@@ -221,6 +222,11 @@ pw::random::RandomGenerator& GetRandomGenerator() {
 maco::secrets::DeviceSecrets& GetDeviceSecrets() {
   static maco::secrets::DeviceSecretsMock mock_secrets;
   return mock_secrets;
+}
+
+maco::machine_relay::MachineRelay& GetMachineRelay() {
+  static maco::machine_relay::MockMachineRelay relay;
+  return relay;
 }
 
 }  // namespace maco::system

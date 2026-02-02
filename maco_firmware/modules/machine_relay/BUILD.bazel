@@ -1,0 +1,53 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+load("@particle_bazel//rules:particle_test.bzl", "particle_cc_test")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//maco_firmware:__subpackages__"])
+
+# Abstract MachineRelay interface
+cc_library(
+    name = "machine_relay",
+    hdrs = ["public/maco_firmware/modules/machine_relay/machine_relay.h"],
+    includes = ["public"],
+    deps = [
+        "@pigweed//pw_async2:coro",
+        "@pigweed//pw_status",
+    ],
+)
+
+# Real implementation for P2 hardware (latching relay with HAL GPIO)
+cc_library(
+    name = "latching_machine_relay",
+    srcs = ["latching_machine_relay.cc"],
+    hdrs = ["latching_machine_relay.h"],
+    target_compatible_with = select({
+        "//maco_firmware/targets/p2:is_p2": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [
+        ":machine_relay",
+        "@particle_bazel//:device_os_headers",
+        "@pigweed//pw_async2:coro",
+        "@pigweed//pw_async2:system_time_provider",
+        "@pigweed//pw_log",
+        "@pigweed//pw_status",
+    ],
+)
+
+# On-device hardware test (requires P2 with relay connected)
+particle_cc_test(
+    name = "hardware_test",
+    srcs = ["hardware_test.cc"],
+    platform = "//maco_firmware/targets/p2:p2",
+    deps = [
+        ":latching_machine_relay",
+        "@particle_bazel//:device_os_headers",
+        "@pigweed//pw_allocator:testing",
+        "@pigweed//pw_async2:basic_dispatcher",
+        "@pigweed//pw_async2:coro",
+        "@pigweed//pw_async2:system_time_provider",
+        "@pigweed//pw_log",
+    ],
+)

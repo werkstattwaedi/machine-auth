@@ -6,6 +6,13 @@ load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
 package(default_visibility = ["//maco_firmware:__subpackages__"])
 
+# Config setting for P2-only targets (latching relay uses HAL GPIO)
+config_setting(
+    name = "is_p2",
+    constraint_values = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+    visibility = ["//visibility:public"],
+)
+
 cc_library(
     name = "lvgl_conf",
     hdrs = ["lv_conf.h"],
@@ -133,6 +140,7 @@ cc_library(
         "//maco_firmware/modules/led",
         "//maco_firmware/modules/device_secrets:device_secrets_eeprom",
         "//maco_firmware/modules/device_secrets:device_secrets_service",
+        "//maco_firmware/modules/machine_relay:latching_machine_relay",
         "//maco_firmware/services:maco_service",
         "//maco_firmware/system:headers",
         "@particle_bazel//:device_os_headers",
@@ -144,6 +152,7 @@ cc_library(
         "@particle_bazel//pw_system_particle:threads",  # Particle scheduler stub
         "@particle_bazel//pw_thread_particle:thread",
         "@pigweed//pw_assert:check",
+        "@pigweed//pw_async2:system_time_provider",
         "@pigweed//pw_channel",
         "@pigweed//pw_channel:stream_channel",
         "@pigweed//pw_digital_io",

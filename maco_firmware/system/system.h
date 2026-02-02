@@ -35,6 +35,10 @@ namespace maco::secrets {
 class DeviceSecrets;
 }  // namespace maco::secrets
 
+namespace maco::machine_relay {
+class MachineRelay;
+}  // namespace maco::machine_relay
+
 namespace maco::led {
 // Forward declaration - concrete types are platform-specific (CRTP templates)
 // Host: Led<SdlLedDriver<16>>
@@ -97,5 +101,10 @@ pw::random::RandomGenerator& GetRandomGenerator();
 /// P2: EEPROM-backed persistent storage
 /// Host: Mock implementation for testing
 maco::secrets::DeviceSecrets& GetDeviceSecrets();
+
+/// Returns the platform-specific machine relay controller.
+/// P2: LatchingMachineRelay with HAL GPIO
+/// Host: MockMachineRelay for simulation
+maco::machine_relay::MachineRelay& GetMachineRelay();
 
 }  // namespace maco::system
