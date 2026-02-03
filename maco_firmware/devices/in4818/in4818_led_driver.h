@@ -43,8 +43,9 @@ class In4818LedDriver
   /// Reset time: 300µs at 3.125 MHz = 937.5 bits ≈ 120 bytes.
   static constexpr size_t kResetBytes = 120;
 
-  /// Total SPI buffer size.
-  static constexpr size_t kBufferSize = kNumLeds * kBytesPerLed + kResetBytes;
+  /// Total SPI buffer size (reset at start + pixel data + reset at end).
+  static constexpr size_t kBufferSize =
+      kResetBytes + kNumLeds * kBytesPerLed + kResetBytes;
 
   /// SPI configuration for WS2812-style timing.
   static constexpr pw::spi::Config kSpiConfig = {
@@ -126,7 +127,8 @@ void In4818LedDriver<kNumLeds>::EncodeByte(uint8_t value, uint8_t* dest) {
 template <uint16_t kNumLeds>
 void In4818LedDriver<kNumLeds>::EncodePixel(uint16_t index) {
   const RgbwColor& pixel = pixels_[index];
-  uint8_t* dest = &spi_buffer_[index * kBytesPerLed];
+  // Offset by kResetBytes to skip the initial reset/latch period
+  uint8_t* dest = &spi_buffer_[kResetBytes + index * kBytesPerLed];
 
   // Apply brightness scaling
   uint8_t g = (pixel.g * brightness_) / 255;

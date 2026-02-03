@@ -29,3 +29,17 @@ particle_cc_test(
         "@pigweed//pw_log",
     ],
 )
+
+# Test for SPI MOSI_ONLY mode - verifies GPIO pins work while SPI uses only MOSI
+particle_cc_test(
+    name = "spi_mosi_only_test",
+    srcs = ["spi_mosi_only_test.cc"],
+    platform = "//maco_firmware/targets/p2:p2",
+    deps = [
+        ":in4818",
+        "@particle_bazel//:device_os_headers",
+        "@particle_bazel//pw_digital_io_particle:digital_io",
+        "@particle_bazel//pw_spi_particle:initiator",
+        "@pigweed//pw_log",
+    ],
+)
