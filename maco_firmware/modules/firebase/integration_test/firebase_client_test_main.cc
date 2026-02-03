@@ -78,23 +78,22 @@ using StartSessionResponder =
 class TestControlServiceImpl
     : public svc::TestControl::Service<TestControlServiceImpl> {
  public:
-  TestControlServiceImpl() : coro_cx_(pw::System().allocator()) {}
+  TestControlServiceImpl() : coro_cx_(pw::System().allocator()) {
+    PW_LOG_INFO("TestControlServiceImpl constructed");
+  }
 
-  // RPC: ConfigureGateway
-  pw::Status ConfigureGateway(
-      const maco_test_firebase_ConfigureGatewayRequest& request,
-      maco_test_firebase_ConfigureGatewayResponse& response) {
-    PW_LOG_INFO("ConfigureGateway: host=%s, port=%u", request.host,
-                static_cast<unsigned>(request.port));
+  // RPC: Ping - simple connectivity test
+  pw::Status Ping(const maco_test_firebase_PingRequest& request,
+                  maco_test_firebase_PingResponse& response) {
+    (void)request;
+    PW_LOG_INFO(">>> Ping received <<<");
+    response.ok = true;
+    return pw::OkStatus();
+  }
 
-    // Store gateway configuration for later use
-    gateway_host_ = std::string(request.host);
-    gateway_port_ = request.port;
-
-    // Derive the key (same as gateway uses)
-    key_ = DeriveKey();
-
-    // Create gateway config
+  // Helper to create gateway - in separate function to reduce stack pressure
+  __attribute__((noinline)) bool CreateGatewayClient() {
+    PW_LOG_INFO("CreateGatewayClient: Creating config...");
     maco::gateway::GatewayConfig config{
         .host = gateway_host_.c_str(),
         .port = static_cast<uint16_t>(gateway_port_),
@@ -105,14 +104,110 @@ class TestControlServiceImpl
         .channel_id = 1,
     };
 
-    // Create gateway and firebase clients (lazy init, kept alive as members)
+    PW_LOG_INFO("CreateGatewayClient: Creating P2GatewayClient...");
     gateway_.emplace(config);
+    PW_LOG_INFO("CreateGatewayClient: Done");
+    return true;
+  }
+
+  // Helper to connect gateway - in separate function to reduce stack pressure
+  __attribute__((noinline)) bool ConnectGateway() {
+    PW_LOG_INFO("ConnectGateway: Creating FirebaseClient...");
     firebase_.emplace(gateway_->rpc_client(), gateway_->channel_id());
 
-    // Start the gateway read task on the system dispatcher
+    PW_LOG_INFO("ConnectGateway: Starting gateway...");
     gateway_->Start(pw::System().dispatcher());
 
+    PW_LOG_INFO("ConnectGateway: Connecting...");
+    auto connect_status = gateway_->Connect();
+    if (!connect_status.ok()) {
+      PW_LOG_ERROR("Failed to connect to gateway: %d",
+                   static_cast<int>(connect_status.code()));
+      gateway_.reset();
+      firebase_.reset();
+      return false;
+    }
+    PW_LOG_INFO("ConnectGateway: Done");
+    return true;
+  }
+
+  // RPC: ConfigureGateway
+  pw::Status ConfigureGateway(
+      const maco_test_firebase_ConfigureGatewayRequest& request,
+      maco_test_firebase_ConfigureGatewayResponse& response) {
+    PW_LOG_INFO(">>> ConfigureGateway ENTRY <<<");
+    PW_LOG_INFO("ConfigureGateway: host=%s, port=%u", request.host,
+                static_cast<unsigned>(request.port));
+
+    // Store gateway configuration for later use
+    gateway_host_ = std::string(request.host);
+    gateway_port_ = request.port;
+
+    // Derive the key (same as gateway uses)
+    key_ = DeriveKey();
+
+    // Create gateway client (in separate function to reduce stack)
+    if (!CreateGatewayClient()) {
+      response.success = false;
+      return pw::OkStatus();
+    }
+
+    // Connect (in separate function to reduce stack)
+    if (!ConnectGateway()) {
+      response.success = false;
+      return pw::OkStatus();
+    }
+
+    PW_LOG_INFO("Connected to gateway at %s:%u", gateway_host_.c_str(),
+                gateway_port_);
+
+    response.success = true;
+    return pw::OkStatus();
+
+#if 0  // Keep disabled code for reference
+    PW_LOG_INFO("ConfigureGateway: host=%s, port=%u", request.host,
+                static_cast<unsigned>(request.port));
+
+    // Store gateway configuration for later use
+    PW_LOG_INFO("Step 1: Storing host string...");
+    gateway_host_ = std::string(request.host);
+    gateway_port_ = request.port;
+    PW_LOG_INFO("Step 1: Done, host=%s", gateway_host_.c_str());
+
+    // Derive the key (same as gateway uses)
+    PW_LOG_INFO("Step 2: Deriving key...");
+    key_ = DeriveKey();
+    PW_LOG_INFO("Step 2: Done");
+
+    // Create gateway config
+    PW_LOG_INFO("Step 3: Creating config...");
+    maco::gateway::GatewayConfig config{
+        .host = gateway_host_.c_str(),
+        .port = static_cast<uint16_t>(gateway_port_),
+        .connect_timeout_ms = 10000,
+        .read_timeout_ms = 5000,
+        .device_id = kTestDeviceId,
+        .key = key_.data(),
+        .channel_id = 1,
+    };
+    PW_LOG_INFO("Step 3: Done");
+
+    // Create gateway and firebase clients (lazy init, kept alive as members)
+    PW_LOG_INFO("Step 4: Creating P2GatewayClient...");
+    gateway_.emplace(config);
+    PW_LOG_INFO("Step 4: Done");
+
+    PW_LOG_INFO("Step 5: Creating FirebaseClient...");
+    firebase_.emplace(gateway_->rpc_client(), gateway_->channel_id());
+    PW_LOG_INFO("Step 5: Done");
+
+    // Start the gateway read task on the system dispatcher
+    PW_LOG_INFO("Step 6: Starting gateway...");
+    gateway_->Start(pw::System().dispatcher());
+    PW_LOG_INFO("Step 6: Done");
+
     // Connect to gateway
+    PW_LOG_INFO("Step 7: Connecting to gateway...");
     auto connect_status = gateway_->Connect();
     if (!connect_status.ok()) {
       PW_LOG_ERROR("Failed to connect to gateway: %d",
@@ -122,12 +217,14 @@ class TestControlServiceImpl
       firebase_.reset();
       return pw::OkStatus();
     }
+    PW_LOG_INFO("Step 7: Done");
 
     PW_LOG_INFO("Connected to gateway at %s:%u", gateway_host_.c_str(),
                 gateway_port_);
 
     response.success = true;
     return pw::OkStatus();
+#endif
   }
 
   // RPC: TriggerStartSession (async handler)
@@ -246,7 +343,9 @@ class TestControlServiceImpl
 TestControlServiceImpl* g_service = nullptr;
 
 void TestInit() {
+  PW_LOG_INFO("TestInit: starting...");
   static TestControlServiceImpl service;
+  PW_LOG_INFO("TestInit: service created");
   g_service = &service;
 
   // Register the test control service

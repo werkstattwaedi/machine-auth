@@ -21,7 +21,7 @@ const thread::Options& RpcThreadOptions() {
   static constexpr auto options =
       pw::thread::particle::Options()
           .set_name("RpcThread")
-          .set_stack_size(8192);
+          .set_stack_size(16384);
   return options;
 }
 
@@ -37,7 +37,7 @@ const thread::Options& WorkQueueThreadOptions() {
   static constexpr auto options =
       pw::thread::particle::Options()
           .set_name("WorkQueueThread")
-          .set_stack_size(2048);
+          .set_stack_size(8192);
   return options;
 }
 

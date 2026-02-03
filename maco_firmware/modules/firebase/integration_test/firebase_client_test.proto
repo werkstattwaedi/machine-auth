@@ -46,8 +46,17 @@ message TriggerStartSessionResponse {
   string error = 4;
 }
 
+// Simple ping for testing RPC connectivity.
+message PingRequest {}
+message PingResponse {
+  bool ok = 1;
+}
+
 // Test control service for Firebase client integration tests.
 service TestControl {
+  // Simple ping to verify RPC works.
+  rpc Ping(PingRequest) returns (PingResponse);
+
   // Configure the gateway connection parameters.
   // Called by Python test to point device at mock gateway.
   rpc ConfigureGateway(ConfigureGatewayRequest)

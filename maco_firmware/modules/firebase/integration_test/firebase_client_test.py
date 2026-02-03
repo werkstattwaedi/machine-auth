@@ -14,8 +14,11 @@ to simulate Firebase Cloud Function behavior.
 """
 
 import asyncio
+import logging
 import unittest
 from pathlib import Path
+
+_LOG = logging.getLogger(__name__)
 
 from maco_gateway.fixtures import MockHttpServer, GatewayProcess, CannedResponse
 from pb_integration_tests.harness import P2DeviceFixture, IntegrationTestHarness
@@ -67,8 +70,14 @@ class FirebaseClientIntegrationTest(unittest.IsolatedAsyncioTestCase):
         await self.gateway.start()
         await self.device.start()
 
+        # Test basic RPC connectivity first
+        _LOG.info("Testing RPC connectivity with Ping...")
+        ping_result = self.device.rpc.rpcs.maco.test.firebase.TestControl.Ping()
+        _LOG.info("Ping result: %s", ping_result)
+
         # Configure device to connect to gateway
         # Note: pw_rpc calls are synchronous (callback-based), not async
+        _LOG.info("Calling ConfigureGateway...")
         self.device.rpc.rpcs.maco.test.firebase.TestControl.ConfigureGateway(
             host=self.gateway.host,
             port=self.gateway.port,

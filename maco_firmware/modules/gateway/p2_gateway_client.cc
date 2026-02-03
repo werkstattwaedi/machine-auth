@@ -64,12 +64,14 @@ class AsconChannelOutput : public pw::rpc::ChannelOutput {
         tcp_socket_(tcp_socket),
         stream_adapter_(stream_adapter),
         device_id_(device_id) {
+    PW_LOG_INFO("AsconChannelOutput: constructing...");
     if (key.size() >= kKeySize) {
       std::copy_n(key.begin(), kKeySize, key_.begin());
     } else {
       std::fill(key_.begin(), key_.end(), std::byte{0});
       std::copy(key.begin(), key.end(), key_.begin());
     }
+    PW_LOG_INFO("AsconChannelOutput: done, nonce_counter initialized");
   }
 
   pw::Status Send(pw::span<const std::byte> buffer) override {
@@ -204,12 +206,14 @@ struct P2GatewayClient::Impl {
         channels{pw::rpc::Channel::Create<1>(&channel_output)},
         rpc_client(channels),
         device_id_(config.device_id) {
+    PW_LOG_INFO("Impl: initializer list done");
     // Copy key for decryption
     if (config.key != nullptr) {
       std::copy_n(config.key, kKeySize, key_.begin());
     } else {
       std::fill(key_.begin(), key_.end(), std::byte{0});
     }
+    PW_LOG_INFO("Impl: key copied, construction complete");
   }
 
   /// Decrypt and process an HDLC frame received from the gateway.
@@ -317,7 +321,9 @@ struct P2GatewayClient::Impl {
 };
 
 P2GatewayClient::P2GatewayClient(const GatewayConfig& config)
-    : impl_(std::make_unique<Impl>(config, *this)), config_(config) {}
+    : impl_(std::make_unique<Impl>(config, *this)), config_(config) {
+  PW_LOG_INFO("P2GatewayClient constructed");
+}
 
 P2GatewayClient::~P2GatewayClient() = default;
 
