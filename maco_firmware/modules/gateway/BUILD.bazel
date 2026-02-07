@@ -36,7 +36,8 @@ cc_library(
     deps = [
         ":gateway_client",
         "@particle_bazel//pb_crypto",
-        "@particle_bazel//pb_socket:tcp_client",
+        "@particle_bazel//pb_socket:particle_tcp_socket",
+        "@particle_bazel//pb_socket:tcp_socket_stream_adapter",
         "@pigweed//pw_async2:dispatcher",
         "@pigweed//pw_async2:poll",
         "@pigweed//pw_bytes",

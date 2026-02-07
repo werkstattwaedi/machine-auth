@@ -1,11 +1,16 @@
 # Copyright Offene Werkstatt Wädenswil
 # SPDX-License-Identifier: MIT
 
-# P2 test platform for integration tests.
+# P2 test platform for maco_firmware integration tests.
 #
 # This platform provides the same backend configuration as p2, but WITHOUT
 # the //maco_firmware/system:system flag. This allows test firmware to
 # provide its own system implementation via @particle_bazel//pb_integration_tests/firmware:test_system_p2.
+#
+# Note: There is a parallel platform at @particle_bazel//targets/p2_test:p2_test
+# for integration tests that live inside the particle_bazel repo. Both platforms
+# provide equivalent configuration but use different label resolution (repo-relative
+# vs absolute @particle_bazel// paths).
 
 load("@pigweed//pw_build:merge_flags.bzl", "flags_from_dict")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")

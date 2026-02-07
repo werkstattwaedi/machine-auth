@@ -7,7 +7,8 @@
 #include <cstring>
 
 #include "pb_crypto/pb_crypto.h"
-#include "pb_socket/tcp_client.h"
+#include "pb_socket/particle_tcp_socket.h"
+#include "pb_socket/tcp_socket_stream_adapter.h"
 #include "pw_async2/context.h"
 #include "pw_async2/poll.h"
 #include "pw_async2/task.h"
@@ -54,12 +55,14 @@ constexpr size_t kMaxHdlcFrameSize =
 /// ASCON-encrypted channel output with automatic reconnection.
 class AsconChannelOutput : public pw::rpc::ChannelOutput {
  public:
-  AsconChannelOutput(pb::socket::TcpStream& tcp_stream,
+  AsconChannelOutput(pb::socket::TcpSocket& tcp_socket,
+                     pb::socket::TcpSocketStreamAdapter& stream_adapter,
                      pw::ConstByteSpan key,
                      uint64_t device_id,
                      const char* channel_name)
       : ChannelOutput(channel_name),
-        tcp_stream_(tcp_stream),
+        tcp_socket_(tcp_socket),
+        stream_adapter_(stream_adapter),
         device_id_(device_id) {
     if (key.size() >= kKeySize) {
       std::copy_n(key.begin(), kKeySize, key_.begin());
@@ -127,12 +130,12 @@ class AsconChannelOutput : public pw::rpc::ChannelOutput {
   size_t MaximumTransmissionUnit() override { return kMaxPayloadSize; }
 
   pw::Status EnsureConnected() {
-    if (tcp_stream_.IsConnected()) {
+    if (tcp_socket_.IsConnected()) {
       return pw::OkStatus();
     }
 
     PW_LOG_INFO("Connecting to gateway...");
-    pw::Status status = tcp_stream_.Connect();
+    pw::Status status = tcp_socket_.Connect();
     if (!status.ok()) {
       PW_LOG_ERROR("Failed to connect: %d", static_cast<int>(status.code()));
       return status;
@@ -144,24 +147,25 @@ class AsconChannelOutput : public pw::rpc::ChannelOutput {
 
  private:
   pw::Status SendFrame(pw::ConstByteSpan frame) {
+    // Use stream adapter for pw_hdlc compatibility
     pw::Status status =
-        pw::hdlc::WriteUIFrame(kHdlcAddress, frame, tcp_stream_);
+        pw::hdlc::WriteUIFrame(kHdlcAddress, frame, stream_adapter_);
     if (status.ok()) {
       return pw::OkStatus();
     }
 
     PW_LOG_WARN("HDLC write failed, attempting reconnect...");
-    tcp_stream_.Disconnect();
+    tcp_socket_.Disconnect();
 
     status = EnsureConnected();
     if (!status.ok()) {
       return status;
     }
 
-    status = pw::hdlc::WriteUIFrame(kHdlcAddress, frame, tcp_stream_);
+    status = pw::hdlc::WriteUIFrame(kHdlcAddress, frame, stream_adapter_);
     if (!status.ok()) {
       PW_LOG_ERROR("HDLC write failed after reconnect");
-      tcp_stream_.Disconnect();
+      tcp_socket_.Disconnect();
     }
     return status;
   }
@@ -175,7 +179,8 @@ class AsconChannelOutput : public pw::rpc::ChannelOutput {
     return nonce;
   }
 
-  pb::socket::TcpStream& tcp_stream_;
+  pb::socket::TcpSocket& tcp_socket_;
+  pb::socket::TcpSocketStreamAdapter& stream_adapter_;
   std::array<std::byte, kKeySize> key_;
   uint64_t device_id_;
   uint64_t nonce_counter_ = GetRandomNonceStart();
@@ -189,8 +194,10 @@ struct P2GatewayClient::Impl {
                    .port = config.port,
                    .connect_timeout_ms = config.connect_timeout_ms,
                    .read_timeout_ms = config.read_timeout_ms},
-        tcp_client(tcp_config),
-        channel_output(tcp_client,
+        tcp_socket(tcp_config),
+        stream_adapter(tcp_socket),
+        channel_output(tcp_socket,
+                       stream_adapter,
                        pw::ConstByteSpan(config.key, kKeySize),
                        config.device_id,
                        "gateway"),
@@ -254,31 +261,29 @@ struct P2GatewayClient::Impl {
    private:
     pw::async2::Poll<> DoPend(pw::async2::Context& cx) override {
       // Ensure connected before reading
-      if (!impl_.tcp_client.IsConnected()) {
+      if (!impl_.tcp_socket.IsConnected()) {
         cx.ReEnqueue();
         return pw::async2::Pending();
       }
 
       // Try to read some bytes (non-blocking via short timeout on socket)
       std::array<std::byte, 64> read_buffer;
-      auto result = impl_.tcp_client.Read(read_buffer);
+      auto result = impl_.tcp_socket.Read(read_buffer);
 
       if (!result.ok()) {
-        // Read error or disconnected - ResourceExhausted means no data yet
-        if (result.status() != pw::Status::ResourceExhausted()) {
-          PW_LOG_WARN("TCP read error: %d",
-                      static_cast<int>(result.status().code()));
-        }
+        PW_LOG_WARN("TCP read error: %d",
+                    static_cast<int>(result.status().code()));
         cx.ReEnqueue();
         return pw::async2::Pending();
       }
 
-      pw::ConstByteSpan data = result.value();
-      if (data.empty()) {
+      if (result.size() == 0) {
         // No data available, keep polling
         cx.ReEnqueue();
         return pw::async2::Pending();
       }
+
+      pw::ConstByteSpan data(read_buffer.data(), result.size());
 
       // Feed bytes to HDLC decoder
       impl_.hdlc_decoder_.Process(
@@ -299,7 +304,8 @@ struct P2GatewayClient::Impl {
 
   P2GatewayClient& parent_;
   pb::socket::TcpConfig tcp_config;
-  pb::socket::ParticleTcpClient tcp_client;
+  pb::socket::ParticleTcpSocket tcp_socket;
+  pb::socket::TcpSocketStreamAdapter stream_adapter;
   AsconChannelOutput channel_output;
   std::array<pw::rpc::Channel, 1> channels;
   pw::rpc::Client rpc_client;
@@ -323,13 +329,13 @@ void P2GatewayClient::Start(pw::async2::Dispatcher& dispatcher) {
 pw::rpc::Client& P2GatewayClient::rpc_client() { return impl_->rpc_client; }
 
 bool P2GatewayClient::IsConnected() const {
-  return impl_->tcp_client.IsConnected();
+  return impl_->tcp_socket.IsConnected();
 }
 
 pw::Status P2GatewayClient::Connect() {
   return impl_->channel_output.EnsureConnected();
 }
 
-void P2GatewayClient::Disconnect() { impl_->tcp_client.Disconnect(); }
+void P2GatewayClient::Disconnect() { impl_->tcp_socket.Disconnect(); }
 
 }  // namespace maco::gateway
