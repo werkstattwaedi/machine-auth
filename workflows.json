@@ -13,7 +13,7 @@
       "name": "host",
       "use_config": "bazel_default",
       "targets": [
-        "//maco_firmware/apps/dev:simulator"
+        "//maco_firmware/..."
       ]
     },
     {

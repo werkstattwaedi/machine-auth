@@ -47,7 +47,7 @@ class CloudKeyProvider : public Ntag424KeyProvider {
   /// @param tag_uid 7-byte NTAG UID
   /// @param key_number Key slot (0-4) to authenticate with
   CloudKeyProvider(firebase::FirebaseClient& firebase_client,
-                   const firebase::TagUid& tag_uid,
+                   const TagUid& tag_uid,
                    uint8_t key_number);
 
   /// Get the key slot number this provider authenticates.
@@ -87,7 +87,7 @@ class CloudKeyProvider : public Ntag424KeyProvider {
   ///
   /// Returns the Firebase auth record ID, used for session tracking.
   /// Only valid after VerifyAndComputeSessionKeys succeeds.
-  const std::optional<firebase::FirebaseId>& auth_id() const {
+  const std::optional<FirebaseId>& auth_id() const {
     return stored_auth_id_;
   }
 
@@ -96,9 +96,9 @@ class CloudKeyProvider : public Ntag424KeyProvider {
   static firebase::Key KeyNumberToEnum(uint8_t key_number);
 
   firebase::FirebaseClient& firebase_client_;
-  firebase::TagUid tag_uid_;
+  TagUid tag_uid_;
   uint8_t key_number_;
-  std::optional<firebase::FirebaseId> stored_auth_id_;
+  std::optional<FirebaseId> stored_auth_id_;
 };
 
 }  // namespace maco::nfc

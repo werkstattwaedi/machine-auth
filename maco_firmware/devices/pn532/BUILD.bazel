@@ -67,7 +67,7 @@ pw_cc_test(
     srcs = ["pn532_event_test.cc"],
     deps = [
         "//maco_firmware/modules/nfc_reader:nfc_event",
-        "@pigweed//pw_async2:pend_func_task",
+        "@pigweed//pw_async2:func_task",
         "@pigweed//pw_async2:testing",
         "@pigweed//pw_async2:value_future",
     ],

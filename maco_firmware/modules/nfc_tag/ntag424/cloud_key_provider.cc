@@ -17,7 +17,7 @@ constexpr size_t kCloudChallengeSize = 32;
 }  // namespace
 
 CloudKeyProvider::CloudKeyProvider(firebase::FirebaseClient& firebase_client,
-                                   const firebase::TagUid& tag_uid,
+                                   const TagUid& tag_uid,
                                    uint8_t key_number)
     : firebase_client_(firebase_client),
       tag_uid_(tag_uid),

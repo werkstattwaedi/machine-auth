@@ -6,24 +6,26 @@
 
 #include "maco_firmware/modules/nfc_tag/ntag424/cloud_key_provider.h"
 
+#include <cstring>
 #include <optional>
 #include <variant>
 
 #include "firebase/firebase_client.h"
-#include "firebase_rpc/auth.pwpb.h"
-#include "gateway/gateway_service.pwpb.h"
-#include "gateway/gateway_service.rpc.pwpb.h"
+#include "firebase_rpc/auth.pb.h"
+#include "gateway/gateway_service.pb.h"
+#include "gateway/gateway_service.rpc.pb.h"
+#include "pb_encode.h"
 #include "pw_allocator/testing.h"
 #include "pw_async2/basic_dispatcher.h"
 #include "pw_async2/coro_or_else_task.h"
 #include "pw_bytes/array.h"
-#include "pw_rpc/pwpb/client_testing.h"
+#include "pw_rpc/nanopb/client_testing.h"
 #include "pw_unit_test/framework.h"
 
 namespace maco::nfc {
 namespace {
 
-using GatewayService = maco::gateway::pw_rpc::pwpb::GatewayService;
+using GatewayService = maco::gateway::pw_rpc::nanopb::GatewayService;
 
 constexpr size_t kAllocatorSize = 4096;
 
@@ -56,23 +58,26 @@ pw::Result<size_t> EncodeAuthenticateTagResponse(
     const char* auth_id,
     pw::ConstByteSpan cloud_challenge,
     pw::ByteSpan buffer) {
-  maco::proto::firebase_rpc::pwpb::AuthenticateTagResponse::MemoryEncoder
-      encoder(buffer);
+  maco_proto_firebase_rpc_AuthenticateTagResponse response =
+      maco_proto_firebase_rpc_AuthenticateTagResponse_init_zero;
 
-  auto status = encoder.WriteAuthIdMessage(
-      [auth_id](maco::proto::pwpb::FirebaseId::StreamEncoder& id_encoder) {
-        return id_encoder.WriteValue(auth_id);
-      });
-  if (!status.ok()) {
-    return status;
+  response.has_auth_id = true;
+  std::strncpy(response.auth_id.value, auth_id,
+               sizeof(response.auth_id.value) - 1);
+
+  if (cloud_challenge.size() <= sizeof(response.cloud_challenge)) {
+    std::memcpy(response.cloud_challenge, cloud_challenge.data(),
+                cloud_challenge.size());
   }
 
-  status = encoder.WriteCloudChallenge(cloud_challenge);
-  if (!status.ok()) {
-    return status;
+  pb_ostream_t stream = pb_ostream_from_buffer(
+      reinterpret_cast<pb_byte_t*>(buffer.data()), buffer.size());
+  if (!pb_encode(&stream,
+                 maco_proto_firebase_rpc_AuthenticateTagResponse_fields,
+                 &response)) {
+    return pw::Status::Internal();
   }
-
-  return encoder.size();
+  return stream.bytes_written;
 }
 
 // Helper to encode a CompleteTagAuthResponse with session keys
@@ -81,40 +86,50 @@ pw::Result<size_t> EncodeCompleteTagAuthResponse(pw::ConstByteSpan enc_key,
                                                  pw::ConstByteSpan ti,
                                                  pw::ConstByteSpan picc_cap,
                                                  pw::ByteSpan buffer) {
-  maco::proto::firebase_rpc::pwpb::CompleteTagAuthResponse::MemoryEncoder
-      encoder(buffer);
+  maco_proto_firebase_rpc_CompleteTagAuthResponse response =
+      maco_proto_firebase_rpc_CompleteTagAuthResponse_init_zero;
 
-  auto status = encoder.WriteSessionKeysMessage(
-      [&](maco::proto::firebase_rpc::pwpb::SessionKeys::StreamEncoder& keys) {
-        auto st = keys.WriteSesAuthEncKey(enc_key);
-        if (!st.ok()) return st;
-        st = keys.WriteSesAuthMacKey(mac_key);
-        if (!st.ok()) return st;
-        st = keys.WriteTransactionIdentifier(ti);
-        if (!st.ok()) return st;
-        return keys.WritePiccCapabilities(picc_cap);
-      });
-  if (!status.ok()) {
-    return status;
+  response.which_result =
+      maco_proto_firebase_rpc_CompleteTagAuthResponse_session_keys_tag;
+
+  std::memcpy(response.result.session_keys.ses_auth_enc_key, enc_key.data(),
+              enc_key.size());
+  std::memcpy(response.result.session_keys.ses_auth_mac_key, mac_key.data(),
+              mac_key.size());
+  std::memcpy(response.result.session_keys.transaction_identifier, ti.data(),
+              ti.size());
+  std::memcpy(response.result.session_keys.picc_capabilities, picc_cap.data(),
+              picc_cap.size());
+
+  pb_ostream_t stream = pb_ostream_from_buffer(
+      reinterpret_cast<pb_byte_t*>(buffer.data()), buffer.size());
+  if (!pb_encode(&stream,
+                 maco_proto_firebase_rpc_CompleteTagAuthResponse_fields,
+                 &response)) {
+    return pw::Status::Internal();
   }
-  return encoder.size();
+  return stream.bytes_written;
 }
 
 // Helper to encode a rejected CompleteTagAuthResponse
 pw::Result<size_t> EncodeCompleteTagAuthRejected(const char* message,
                                                  pw::ByteSpan buffer) {
-  maco::proto::firebase_rpc::pwpb::CompleteTagAuthResponse::MemoryEncoder
-      encoder(buffer);
+  maco_proto_firebase_rpc_CompleteTagAuthResponse response =
+      maco_proto_firebase_rpc_CompleteTagAuthResponse_init_zero;
 
-  auto status = encoder.WriteRejectedMessage(
-      [message](
-          maco::proto::firebase_rpc::pwpb::Rejected::StreamEncoder& rejected) {
-        return rejected.WriteMessage(message);
-      });
-  if (!status.ok()) {
-    return status;
+  response.which_result =
+      maco_proto_firebase_rpc_CompleteTagAuthResponse_rejected_tag;
+  std::strncpy(response.result.rejected.message, message,
+               sizeof(response.result.rejected.message) - 1);
+
+  pb_ostream_t stream = pb_ostream_from_buffer(
+      reinterpret_cast<pb_byte_t*>(buffer.data()), buffer.size());
+  if (!pb_encode(&stream,
+                 maco_proto_firebase_rpc_CompleteTagAuthResponse_fields,
+                 &response)) {
+    return pw::Status::Internal();
   }
-  return encoder.size();
+  return stream.bytes_written;
 }
 
 class CloudKeyProviderTest : public ::testing::Test {
@@ -123,17 +138,15 @@ class CloudKeyProviderTest : public ::testing::Test {
     return firebase::FirebaseClient(rpc_ctx_.client(), rpc_ctx_.channel().id());
   }
 
-  firebase::TagUid CreateTagUid() {
-    firebase::TagUid tag_uid;
-    tag_uid.value = kTagUid;
-    return tag_uid;
-  }
+  TagUid CreateTagUid() { return TagUid::FromArray(kTagUid); }
 
   void SendForwardResponse(pw::ConstByteSpan payload) {
-    maco::gateway::pwpb::ForwardResponse::Message response;
+    maco_gateway_ForwardResponse response =
+        maco_gateway_ForwardResponse_init_zero;
     response.success = true;
     response.http_status = 200;
-    response.payload.assign(payload.begin(), payload.end());
+    std::memcpy(response.payload.bytes, payload.data(), payload.size());
+    response.payload.size = payload.size();
 
     rpc_ctx_.server().SendResponse<GatewayService::Forward>(response,
                                                             pw::OkStatus());
@@ -152,7 +165,7 @@ class CloudKeyProviderTest : public ::testing::Test {
     return iterations < max_iterations;
   }
 
-  pw::rpc::PwpbClientTestContext<10, 512, 1024> rpc_ctx_;
+  pw::rpc::NanopbClientTestContext<10, 512, 1024> rpc_ctx_;
   pw::async2::BasicDispatcher dispatcher_;
   pw::allocator::test::AllocatorForTest<kAllocatorSize> test_allocator_;
 };
@@ -199,7 +212,7 @@ TEST_F(CloudKeyProviderTest, CreateNtagChallenge_Success) {
 
   // Verify auth_id is stored
   ASSERT_TRUE(provider.auth_id().has_value());
-  EXPECT_EQ(std::string_view(provider.auth_id()->value.c_str()), "auth123");
+  EXPECT_EQ(provider.auth_id()->value(), "auth123");
 }
 
 TEST_F(CloudKeyProviderTest, CreateNtagChallenge_InvalidInputSize) {
@@ -331,7 +344,7 @@ TEST_F(CloudKeyProviderTest, VerifyAndComputeSessionKeys_Success) {
 
   // Verify auth_id is still available
   ASSERT_TRUE(provider.auth_id().has_value());
-  EXPECT_EQ(std::string_view(provider.auth_id()->value.c_str()), "auth123");
+  EXPECT_EQ(provider.auth_id()->value(), "auth123");
 }
 
 TEST_F(CloudKeyProviderTest, VerifyAndComputeSessionKeys_Rejected) {
@@ -421,8 +434,6 @@ TEST_F(CloudKeyProviderTest, VerifyAndComputeSessionKeys_InvalidInputSize) {
   auto tag_uid = CreateTagUid();
   CloudKeyProvider provider(firebase_client, tag_uid, /*key_number=*/0);
 
-  // Manually set auth_id to skip CreateNtagChallenge
-  // (We can't do this directly, so we need to go through the full flow)
   std::optional<pw::Result<std::array<std::byte, 32>>> challenge_result;
   std::optional<pw::Result<SessionKeys>> verify_result;
 
@@ -561,12 +572,10 @@ TEST_F(CloudKeyProviderTest, AuthId_AvailableAfterSuccess) {
 
   // Verify auth_id is available and correct
   ASSERT_TRUE(provider.auth_id().has_value());
-  EXPECT_EQ(std::string_view(provider.auth_id()->value.c_str()), "my_auth_id_xyz");
+  EXPECT_EQ(provider.auth_id()->value(), "my_auth_id_xyz");
 }
 
 TEST_F(CloudKeyProviderTest, AuthId_ClearedOnRejection) {
-  // This is already tested in VerifyAndComputeSessionKeys_Rejected,
-  // but we include a focused test for clarity
   auto firebase_client = CreateFirebaseClient();
   auto tag_uid = CreateTagUid();
   CloudKeyProvider provider(firebase_client, tag_uid, /*key_number=*/0);
