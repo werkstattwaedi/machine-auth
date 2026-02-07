@@ -1,0 +1,16 @@
+# Bazel output directories
+bazel-*
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Node modules (managed by Bazel)
+node_modules/
+
+# Editor/IDE files
+.vscode/
+.idea/
+*.swp
+*~

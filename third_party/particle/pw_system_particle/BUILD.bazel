@@ -1,0 +1,22 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+# Particle Device OS replacement for pw_system scheduler startup
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# Replacement for pw_system's scheduler startup.
+# On Particle, the scheduler is already running - we just sleep forever.
+cc_library(
+    name = "threads",
+    srcs = ["threads.cc"],
+    deps = [
+        "//:device_os_headers",
+        "@pigweed//pw_thread:sleep",
+    ],
+    # Must be alwayslink so our implementation is included
+    alwayslink = 1,
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)

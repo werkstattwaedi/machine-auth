@@ -1,0 +1,4 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+# Bazel rules for integration tests

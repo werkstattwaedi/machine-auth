@@ -1,0 +1,120 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+# ParticleTcpSocket integration tests
+#
+# These tests run on real P2 hardware with a TCP echo server to verify
+# the ParticleTcpSocket implementation end-to-end.
+
+load("@com_google_protobuf//bazel:proto_library.bzl", "proto_library")
+load("@com_google_protobuf//bazel:py_proto_library.bzl", "py_proto_library")
+load(
+    "@pigweed//pw_protobuf_compiler:nanopb_proto_library.bzl",
+    "nanopb_proto_library",
+)
+load(
+    "@pigweed//pw_protobuf_compiler:nanopb_rpc_proto_library.bzl",
+    "nanopb_rpc_proto_library",
+)
+load("@pigweed//pw_protobuf_compiler:pw_proto_filegroup.bzl", "pw_proto_filegroup")
+load("@rules_python//python:py_library.bzl", "py_library")
+load("@rules_python//python:py_test.bzl", "py_test")
+load("@particle_bazel//rules:particle_firmware.bzl", "particle_cc_binary", "particle_firmware_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:private"])
+
+# Proto filegroup with options
+pw_proto_filegroup(
+    name = "particle_tcp_socket_test_proto_and_options",
+    srcs = ["particle_tcp_socket_test.proto"],
+    options_files = ["particle_tcp_socket_test.options"],
+)
+
+# Proto library for test control service
+proto_library(
+    name = "particle_tcp_socket_test_proto",
+    srcs = [":particle_tcp_socket_test_proto_and_options"],
+    strip_import_prefix = "/pb_socket/integration_test",
+)
+
+# C++ nanopb messages
+nanopb_proto_library(
+    name = "particle_tcp_socket_test_nanopb",
+    deps = [":particle_tcp_socket_test_proto"],
+)
+
+# C++ nanopb RPC service stubs
+nanopb_rpc_proto_library(
+    name = "particle_tcp_socket_test_nanopb_rpc",
+    nanopb_proto_library_deps = [":particle_tcp_socket_test_nanopb"],
+    deps = [":particle_tcp_socket_test_proto"],
+)
+
+# Python proto library
+py_proto_library(
+    name = "particle_tcp_socket_test_py_proto",
+    deps = [":particle_tcp_socket_test_proto"],
+)
+
+# TCP echo server fixture library
+py_library(
+    name = "tcp_echo_server",
+    srcs = ["tcp_echo_server.py"],
+    imports = ["."],
+)
+
+# Test firmware library
+cc_library(
+    name = "particle_tcp_socket_test_lib",
+    srcs = ["particle_tcp_socket_test_main.cc"],
+    deps = [
+        ":particle_tcp_socket_test_nanopb_rpc",
+        "//pb_socket:particle_tcp_socket",
+        "@particle_bazel//pb_integration_tests/firmware:test_system_p2",
+        "@pigweed//pw_log",
+        "@pigweed//pw_rpc/nanopb:server_api",
+        "@pigweed//pw_sync:binary_semaphore",
+    ],
+    alwayslink = True,
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)
+
+# P2 firmware binary
+# Uses p2_test platform which doesn't set //maco_firmware/system:system,
+# allowing test_system_p2 to provide the system implementation.
+particle_cc_binary(
+    name = "particle_tcp_socket_test_firmware",
+    deps = [":particle_tcp_socket_test_lib"],
+    platform = "//targets/p2_test:p2_test",
+)
+
+# Flashable .bin
+particle_firmware_binary(
+    name = "particle_tcp_socket_test_firmware.bin",
+    elf = ":particle_tcp_socket_test_firmware",
+)
+
+# Python integration test
+py_test(
+    name = "particle_tcp_socket_test",
+    srcs = ["particle_tcp_socket_test.py"],
+    data = [
+        ":particle_tcp_socket_test_firmware",  # ELF for detokenization
+        ":particle_tcp_socket_test_firmware.bin.bin",
+        ":particle_tcp_socket_test.proto",
+    ],
+    imports = ["."],
+    deps = [
+        ":particle_tcp_socket_test_py_proto",
+        ":tcp_echo_server",
+        "//pb_integration_tests/harness",
+        "@pigweed//pw_log:log_proto_py_pb2",
+    ],
+    timeout = "long",
+    tags = [
+        "local",      # Requires USB access
+        "exclusive",  # Don't run in parallel with other device tests
+        "manual",     # Don't run automatically (requires hardware)
+    ],
+)

@@ -1,0 +1,58 @@
+// Copyright Offene Werkstatt Wädenswil
+// SPDX-License-Identifier: MIT
+
+#include "pw_sync/counting_semaphore.h"
+
+#include "concurrent_hal.h"
+#include "pw_assert/check.h"
+#include "pw_chrono/system_clock.h"
+
+using pw::chrono::SystemClock;
+
+namespace pw::sync {
+
+void CountingSemaphore::release(ptrdiff_t update) {
+  // Release (give) the semaphore 'update' times.
+  for (; update > 0; --update) {
+    int result = os_semaphore_give(native_type_, false);
+    PW_DCHECK_INT_EQ(result, 0, "Overflowed counting semaphore.");
+  }
+}
+
+bool CountingSemaphore::try_acquire_for(SystemClock::duration timeout) {
+  // Use non-blocking try_acquire for negative and zero length durations.
+  if (timeout <= SystemClock::duration::zero()) {
+    return try_acquire();
+  }
+
+  // Convert duration to milliseconds for Device OS API, rounding UP to ensure
+  // we wait at least as long as requested.
+  const int64_t timeout_ms =
+      std::chrono::ceil<std::chrono::milliseconds>(timeout).count();
+
+  // Handle timeouts that exceed the max value for system_tick_t.
+  constexpr int64_t kMaxTimeoutMs =
+      static_cast<int64_t>(CONCURRENT_WAIT_FOREVER) - 1;
+
+  if (timeout_ms > kMaxTimeoutMs) {
+    // For very long timeouts, loop with max timeout chunks.
+    int64_t remaining_ms = timeout_ms;
+    while (remaining_ms > kMaxTimeoutMs) {
+      if (os_semaphore_take(native_type_,
+                            static_cast<system_tick_t>(kMaxTimeoutMs),
+                            false) == 0) {
+        return true;
+      }
+      remaining_ms -= kMaxTimeoutMs;
+    }
+    return os_semaphore_take(native_type_,
+                             static_cast<system_tick_t>(remaining_ms),
+                             false) == 0;
+  }
+
+  return os_semaphore_take(native_type_,
+                           static_cast<system_tick_t>(timeout_ms),
+                           false) == 0;
+}
+
+}  // namespace pw::sync

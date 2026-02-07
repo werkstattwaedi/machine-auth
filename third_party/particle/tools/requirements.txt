@@ -1,0 +1,6 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+# Python dependencies for Particle tooling
+requests>=2.28.0
+pyserial>=3.5

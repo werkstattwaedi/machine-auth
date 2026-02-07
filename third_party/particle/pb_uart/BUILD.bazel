@@ -1,0 +1,48 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("//rules:particle_test.bzl", "particle_cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "async_uart",
+    srcs = ["async_uart.cc"],
+    hdrs = ["public/pb_uart/async_uart.h"],
+    includes = ["public"],
+    deps = [
+        "//:device_os_headers",
+        "@pigweed//pw_assert:check",
+        "@pigweed//pw_async2:pw_async2",
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_log",
+        "@pigweed//pw_status",
+        "@pigweed//pw_sync:mutex",
+        "@pigweed//pw_thread:thread",
+        "@particle_bazel//pw_thread_particle:thread",
+    ],
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)
+
+# On-device loopback test - requires TX/RX pins connected for loopback:
+#   For SERIAL2: D4 (TX) -> D5 (RX)
+#
+# Build:  bazel build --config=p2 @particle_bazel//pb_uart:loopback_hardware_test
+# Flash:  bazel run --config=p2 @particle_bazel//pb_uart:loopback_hardware_test_flash
+particle_cc_test(
+    name = "loopback_hardware_test",
+    srcs = ["test/loopback_hardware_test.cc"],
+    deps = [
+        ":async_uart",
+        "//:device_os_headers",
+        "@pigweed//pw_allocator:testing",
+        "@pigweed//pw_async2:basic_dispatcher",
+        "@pigweed//pw_async2:coro",
+        "@pigweed//pw_async2:coro_or_else_task",
+        "@pigweed//pw_async2:system_time_provider",
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_chrono:system_clock",
+        "@pigweed//pw_log",
+    ],
+)

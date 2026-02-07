@@ -1,0 +1,42 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# Test system API header (platform-independent)
+cc_library(
+    name = "test_system",
+    hdrs = ["test_system.h"],
+    includes = [".."],  # Allow including as "pb_integration_tests/firmware/test_system.h"
+    deps = [
+        "@pigweed//pw_function",
+        "@pigweed//pw_rpc",
+    ],
+)
+
+# P2 implementation of the test system
+cc_library(
+    name = "test_system_p2",
+    srcs = ["test_system_p2.cc"],
+    deps = [
+        ":test_system",
+        "@particle_bazel//:device_os_headers",
+        "@particle_bazel//pb_log:log_bridge",
+        "@particle_bazel//pw_system_particle:threads",
+        "@particle_bazel//pw_thread_particle:thread",
+        "@pigweed//pw_channel:stream_channel",
+        "@pigweed//pw_log",
+        "@pigweed//pw_multibuf:simple_allocator",
+        "@pigweed//pw_system:async",
+        "@pigweed//pw_system:io",
+        # Log backend for tokenized logging - must be in alwayslink library
+        # to ensure pw_log_tokenized_HandleLog is linked
+        "@pigweed//pw_system:log_backend",
+        # Linker script to preserve tokenized strings in ELF for detokenization
+        "@pigweed//pw_tokenizer:linker_script",
+    ],
+    alwayslink = True,
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)

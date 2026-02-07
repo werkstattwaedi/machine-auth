@@ -1,0 +1,61 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+# ASCON - Lightweight Authenticated Encryption and Hashing
+# https://ascon.iaik.tugraz.at/
+#
+# This is the NIST Lightweight Cryptography standard for:
+# - ASCON-AEAD128: Authenticated encryption with associated data
+# - ASCON-Hash256: Cryptographic hash function
+#
+# Reference implementation from https://github.com/ascon/ascon-c (CC0 license)
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# Core ASCON implementation (portable C)
+cc_library(
+    name = "ascon",
+    srcs = [
+        "src/ascon.c",
+        "src/permutations.c",
+    ],
+    hdrs = [
+        "include/ascon.h",
+        "include/api.h",
+    ],
+    includes = ["include"],
+    # Portable reference implementation - works on all platforms
+    copts = [
+        "-DASCON_INLINE_MODE=0",  # No inline for portability
+        "-Wno-unused-parameter",
+    ],
+)
+
+# AEAD-128 only (for authenticated encryption)
+cc_library(
+    name = "ascon_aead128",
+    srcs = ["src/aead128.c"],
+    hdrs = ["include/ascon.h"],
+    includes = ["include"],
+    deps = [":ascon"],
+)
+
+# Hash-256 only (for key derivation)
+cc_library(
+    name = "ascon_hash256",
+    srcs = ["src/hash256.c"],
+    hdrs = ["include/ascon.h"],
+    includes = ["include"],
+    deps = [":ascon"],
+)
+
+# Combined library for convenience
+cc_library(
+    name = "ascon_all",
+    deps = [
+        ":ascon_aead128",
+        ":ascon_hash256",
+    ],
+)

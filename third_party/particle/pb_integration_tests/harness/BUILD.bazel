@@ -1,0 +1,34 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+load("@rules_python//python:py_library.bzl", "py_library")
+
+package(default_visibility = ["//visibility:public"])
+
+py_library(
+    name = "harness",
+    srcs = [
+        "__init__.py",
+        "harness.py",
+        "rpc_client.py",
+        "fixtures/__init__.py",
+        "fixtures/base.py",
+        "fixtures/p2_device.py",
+    ],
+    data = [
+        # particle-cli npm package for flashing
+        "//tools:node_modules/particle-cli",
+    ],
+    deps = [
+        "//tools:particle_usb",
+        "@particle_pip//pyserial",
+        "@pigweed//pw_hdlc/py:pw_hdlc",
+        "@pigweed//pw_log:log_proto_py_pb2",
+        "@pigweed//pw_log/py:pw_log",
+        "@pigweed//pw_protobuf_compiler/py:pw_protobuf_compiler",
+        "@pigweed//pw_rpc/py:pw_rpc",
+        "@pigweed//pw_stream/py:pw_stream",
+        "@pigweed//pw_system/py:pw_system_lib",
+        "@pigweed//pw_tokenizer/py:pw_tokenizer",
+    ],
+)

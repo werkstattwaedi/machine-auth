@@ -1,0 +1,106 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+# pb_crypto - Cryptographic operations for authentication and secure communication
+#
+# Provides:
+# - AES-CBC and AES-CMAC with platform-specific backends (for NTAG424)
+# - ASCON-AEAD128 and ASCON-Hash256 (portable, for gateway communication)
+#
+# AES backends:
+# - Particle: Uses Device OS mbedTLS (potentially HW accelerated)
+# - Host: Uses mbedTLS directly
+
+load("@pigweed//pw_unit_test:pw_cc_test.bzl", "pw_cc_test")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# Public interface - depends on backend selection
+cc_library(
+    name = "pb_crypto",
+    hdrs = ["public/pb_crypto/pb_crypto.h"],
+    includes = ["public"],
+    deps = [
+        ":pb_crypto_backend",
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_status",
+    ],
+)
+
+# Backend selection based on platform
+alias(
+    name = "pb_crypto_backend",
+    actual = select({
+        "@pigweed//pw_build/constraints/arm:cortex-m33": ":pb_crypto_particle_impl",
+        "//conditions:default": ":pb_crypto_mbedtls_impl",
+    }),
+)
+
+# ASCON implementation (portable - same for all platforms)
+cc_library(
+    name = "pb_crypto_ascon",
+    srcs = ["pb_crypto_ascon.cc"],
+    hdrs = ["public/pb_crypto/pb_crypto.h"],
+    includes = ["public"],
+    deps = [
+        "//third_party/ascon-c:ascon_all",
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_status",
+    ],
+)
+
+# mbedTLS backend (for host simulator)
+cc_library(
+    name = "pb_crypto_mbedtls_impl",
+    srcs = ["pb_crypto_mbedtls.cc"],
+    hdrs = ["public/pb_crypto/pb_crypto.h"],
+    includes = ["public"],
+    deps = [
+        ":pb_crypto_ascon",
+        "@mbedtls",
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_status",
+    ],
+)
+
+
+# Particle backend (for P2 device)
+# Uses mbedtls_embedded (built from Device OS sources) for AES-CBC and AES-CMAC.
+cc_library(
+    name = "pb_crypto_particle_impl",
+    srcs = ["pb_crypto_particle.cc"],
+    hdrs = ["public/pb_crypto/pb_crypto.h"],
+    includes = ["public"],
+    deps = [
+        ":pb_crypto_ascon",
+        "//:mbedtls_embedded",
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_status",
+    ],
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)
+
+# Unit tests for ASCON
+pw_cc_test(
+    name = "pb_crypto_ascon_test",
+    srcs = ["pb_crypto_ascon_test.cc"],
+    deps = [
+        ":pb_crypto",
+        "@pigweed//pw_bytes",
+    ],
+)
+
+# On-device test for AES-CBC and AES-CMAC
+load("//rules:particle_test.bzl", "particle_cc_test")
+
+particle_cc_test(
+    name = "pb_crypto_device_test",
+    srcs = ["pb_crypto_device_test.cc"],
+    platform = "@particle_bazel//platforms/p2:particle_p2",
+    deps = [
+        ":pb_crypto",
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_log",
+    ],
+)

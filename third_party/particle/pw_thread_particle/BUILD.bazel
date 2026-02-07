@@ -1,0 +1,207 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+# pw_thread backend for Particle Device OS
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# Full thread implementation with thread creation support.
+cc_library(
+    name = "thread",
+    srcs = ["thread.cc"],
+    hdrs = [
+        "thread_public_overrides/pw_thread_backend/thread_inline.h",
+        "thread_public_overrides/pw_thread_backend/thread_native.h",
+    ],
+    includes = ["thread_public_overrides"],
+    deps = [
+        ":thread_private",
+        "//:device_os_headers",
+        "//:hal_dynalib",
+        "@pigweed//pw_assert:check",
+        "@pigweed//pw_preprocessor",
+    ],
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)
+
+cc_library(
+    name = "thread_private",
+    hdrs = [
+        "public/pw_thread_particle/config.h",
+        "public/pw_thread_particle/context.h",
+        "public/pw_thread_particle/options.h",
+        "public/pw_thread_particle/thread_inline.h",
+        "public/pw_thread_particle/thread_native.h",
+    ],
+    includes = ["public"],
+    visibility = ["//visibility:private"],
+    deps = [
+        "//:device_os_headers",
+        "//:hal_dynalib",
+        "@pigweed//pw_assert:assert",
+        "@pigweed//pw_function",
+        "@pigweed//pw_span",
+        "@pigweed//pw_thread:id.facade",
+        "@pigweed//pw_thread:thread.facade",
+        "@pigweed//pw_toolchain:constexpr_tag",
+    ],
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)
+
+cc_library(
+    name = "id",
+    hdrs = [
+        "id_public_overrides/pw_thread_backend/id_inline.h",
+        "id_public_overrides/pw_thread_backend/id_native.h",
+    ],
+    includes = ["id_public_overrides"],
+    deps = [":id_private"],
+)
+
+cc_library(
+    name = "id_private",
+    hdrs = [
+        "public/pw_thread_particle/id_inline.h",
+        "public/pw_thread_particle/id_native.h",
+    ],
+    includes = ["public"],
+    visibility = ["//visibility:private"],
+    deps = [
+        "//:device_os_headers",
+        "//:hal_dynalib",
+        "@pigweed//pw_thread:id.facade",
+    ],
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)
+
+cc_library(
+    name = "yield",
+    hdrs = [
+        "yield_public_overrides/pw_thread_backend/yield_inline.h",
+    ],
+    includes = ["yield_public_overrides"],
+    deps = [":yield_private"],
+)
+
+cc_library(
+    name = "yield_private",
+    hdrs = [
+        "public/pw_thread_particle/yield_inline.h",
+    ],
+    includes = ["public"],
+    visibility = ["//visibility:private"],
+    deps = [
+        "//:device_os_headers",
+        "//:hal_dynalib",
+        "@pigweed//pw_thread:yield.facade",
+    ],
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)
+
+cc_library(
+    name = "sleep",
+    srcs = ["sleep.cc"],
+    hdrs = [
+        "sleep_public_overrides/pw_thread_backend/sleep_inline.h",
+    ],
+    includes = ["sleep_public_overrides"],
+    deps = [
+        ":sleep_private",
+        "//:device_os_headers",
+        "//:hal_dynalib",
+    ],
+)
+
+cc_library(
+    name = "sleep_private",
+    hdrs = [
+        "public/pw_thread_particle/sleep_inline.h",
+    ],
+    includes = ["public"],
+    visibility = ["//visibility:private"],
+    deps = [
+        "//:device_os_headers",
+        "//:hal_dynalib",
+        "@pigweed//pw_chrono:system_clock",
+        "@pigweed//pw_thread:sleep.facade",
+    ],
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)
+
+cc_library(
+    name = "thread_iteration",
+    srcs = ["thread_iteration.cc"],
+    deps = [
+        "//:device_os_headers",
+        "//:hal_dynalib",
+        "@pigweed//pw_span",
+        "@pigweed//pw_status",
+        "@pigweed//pw_thread:thread_info",
+        "@pigweed//pw_thread:thread_iteration.facade",
+    ],
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)
+
+# Core headers needed for thread creation (no facade dependencies)
+cc_library(
+    name = "thread_core_headers",
+    hdrs = [
+        "public/pw_thread_particle/config.h",
+        "public/pw_thread_particle/context.h",
+        "public/pw_thread_particle/options.h",
+    ],
+    includes = ["public"],
+    deps = [
+        "//:device_os_headers",
+        "@pigweed//pw_function",
+        "@pigweed//pw_span",
+        "@pigweed//pw_toolchain:constexpr_tag",
+    ],
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)
+
+# Generic thread creation backend support
+cc_library(
+    name = "thread_context",
+    hdrs = [
+        "thread_creation_public_overrides/pw_thread_backend/context.h",
+        "thread_creation_public_overrides/pw_thread_backend/options.h",
+        "thread_creation_public_overrides/pw_thread_backend/priority.h",
+        "thread_creation_public_overrides/pw_thread_backend/stack.h",
+    ],
+    includes = ["thread_creation_public_overrides"],
+    deps = [
+        ":thread_core_headers",
+        "@pigweed//pw_toolchain:constexpr_tag",
+    ],
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)
+
+# Test thread context for spawning threads in unit tests
+cc_library(
+    name = "test_thread_context",
+    hdrs = [
+        "test_thread_context_public_overrides/pw_thread_backend/test_thread_context_native.h",
+    ],
+    includes = ["test_thread_context_public_overrides"],
+    deps = [
+        ":test_thread_context_private",
+    ],
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)
+
+cc_library(
+    name = "test_thread_context_private",
+    hdrs = [
+        "public/pw_thread_particle/test_thread_context_native.h",
+    ],
+    includes = ["public"],
+    visibility = ["//visibility:private"],
+    deps = [
+        ":thread_private",
+        "@pigweed//pw_thread:test_thread_context.facade",
+    ],
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)

@@ -1,0 +1,202 @@
+// Copyright Offene Werkstatt Wädenswil
+// SPDX-License-Identifier: MIT
+
+// Test control RPC service for ParticleTcpSocket integration tests.
+//
+// This proto defines test-specific RPCs that allow the Python test
+// to configure and control TCP socket operations on the P2 device.
+
+syntax = "proto3";
+
+package maco.test.socket;
+
+// TCP connection state enum (mirrors TcpState in tcp_socket.h).
+enum TcpState {
+  TCP_STATE_DISCONNECTED = 0;
+  TCP_STATE_CONNECTING = 1;
+  TCP_STATE_CONNECTED = 2;
+  TCP_STATE_ERROR = 3;
+}
+
+// Request to configure the TCP endpoint.
+message ConfigureRequest {
+  // Server hostname or IP address.
+  string host = 1;
+
+  // Server port number.
+  uint32 port = 2;
+
+  // Connection timeout in milliseconds.
+  uint32 connect_timeout_ms = 3;
+
+  // Read timeout in milliseconds (0 = non-blocking).
+  uint32 read_timeout_ms = 4;
+}
+
+// Response to configuration.
+message ConfigureResponse {
+  // True if configuration was successful.
+  bool success = 1;
+}
+
+// Request to connect to the configured server.
+message ConnectRequest {}
+
+// Response from connect operation.
+message ConnectResponse {
+  // True if connection succeeded.
+  bool success = 1;
+
+  // Error message if failed.
+  string error = 2;
+
+  // Current state after operation.
+  TcpState state = 3;
+}
+
+// Request to write data to the socket.
+message WriteDataRequest {
+  // Data to write.
+  bytes data = 1;
+}
+
+// Response from write operation.
+message WriteDataResponse {
+  // True if write succeeded.
+  bool success = 1;
+
+  // Number of bytes written.
+  uint32 bytes_written = 2;
+
+  // Error message if failed.
+  string error = 3;
+}
+
+// Request to read data from the socket.
+message ReadDataRequest {
+  // Maximum number of bytes to read.
+  uint32 max_bytes = 1;
+
+  // Timeout in milliseconds (0 = use configured timeout).
+  uint32 timeout_ms = 2;
+}
+
+// Response from read operation.
+message ReadDataResponse {
+  // True if read succeeded (may have read 0 bytes on timeout).
+  bool success = 1;
+
+  // Data read from socket.
+  bytes data = 2;
+
+  // Error message if failed.
+  string error = 3;
+}
+
+// Request to disconnect from the server.
+message DisconnectRequest {}
+
+// Response from disconnect operation.
+message DisconnectResponse {
+  // True if disconnect succeeded.
+  bool success = 1;
+
+  // Current state after operation.
+  TcpState state = 2;
+}
+
+// Request to get current connection state.
+message GetStateRequest {}
+
+// Response with current connection state.
+message GetStateResponse {
+  // Current TCP state.
+  TcpState state = 1;
+
+  // True if currently connected.
+  bool is_connected = 2;
+
+  // Last error code (platform-specific, 0 = no error).
+  int32 last_error = 3;
+}
+
+// Request to test concurrent socket operations.
+// Creates two sockets, connects both, writes different data from each,
+// reads from each, and verifies correct responses.
+message ConcurrentWriteTestRequest {
+  // Server hostname or IP address.
+  string host = 1;
+
+  // Server port number.
+  uint32 port = 2;
+
+  // Data to send from socket 1.
+  bytes data1 = 3;
+
+  // Data to send from socket 2.
+  bytes data2 = 4;
+}
+
+// Response from concurrent write test.
+message ConcurrentWriteTestResponse {
+  // True if all operations succeeded.
+  bool success = 1;
+
+  // Error message if failed.
+  string error = 2;
+
+  // Data received by socket 1.
+  bytes received1 = 3;
+
+  // Data received by socket 2.
+  bytes received2 = 4;
+
+  // True if socket 1 received its own data back.
+  bool socket1_correct = 5;
+
+  // True if socket 2 received its own data back.
+  bool socket2_correct = 6;
+}
+
+// Request to wait for cloud connection.
+message WaitForCloudRequest {
+  // Timeout in milliseconds (0 = wait forever, default 60000).
+  uint32 timeout_ms = 1;
+}
+
+// Response from wait for cloud operation.
+message WaitForCloudResponse {
+  // True if cloud is connected.
+  bool connected = 1;
+}
+
+// Test control service for ParticleTcpSocket integration tests.
+service TestControl {
+  // Wait for the device to connect to the Particle cloud (WiFi).
+  // Call this before Configure to ensure network is ready.
+  rpc WaitForCloud(WaitForCloudRequest) returns (WaitForCloudResponse);
+
+  // Configure the TCP endpoint parameters.
+  // Must be called before Connect.
+  rpc Configure(ConfigureRequest) returns (ConfigureResponse);
+
+  // Connect to the configured server.
+  rpc Connect(ConnectRequest) returns (ConnectResponse);
+
+  // Write data to the socket.
+  rpc WriteData(WriteDataRequest) returns (WriteDataResponse);
+
+  // Read data from the socket.
+  rpc ReadData(ReadDataRequest) returns (ReadDataResponse);
+
+  // Disconnect from the server.
+  rpc Disconnect(DisconnectRequest) returns (DisconnectResponse);
+
+  // Get the current connection state.
+  rpc GetState(GetStateRequest) returns (GetStateResponse);
+
+  // Test concurrent socket operations.
+  // Creates two independent sockets, writes from both, reads from both,
+  // and verifies each socket receives the correct response.
+  rpc ConcurrentWriteTest(ConcurrentWriteTestRequest) returns (ConcurrentWriteTestResponse);
+}

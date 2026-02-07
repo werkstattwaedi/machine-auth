@@ -1,0 +1,17 @@
+# Options for particle_tcp_socket_test.proto (nanopb format)
+
+maco.test.socket.ConfigureRequest.host              max_size:64
+maco.test.socket.ConnectResponse.error              max_size:64
+maco.test.socket.WriteDataRequest.data              max_size:256
+maco.test.socket.WriteDataResponse.error            max_size:64
+maco.test.socket.ReadDataRequest.max_bytes          int_size:16
+maco.test.socket.ReadDataResponse.data              max_size:256
+maco.test.socket.ReadDataResponse.error             max_size:64
+
+# Concurrent write test
+maco.test.socket.ConcurrentWriteTestRequest.host    max_size:64
+maco.test.socket.ConcurrentWriteTestRequest.data1   max_size:64
+maco.test.socket.ConcurrentWriteTestRequest.data2   max_size:64
+maco.test.socket.ConcurrentWriteTestResponse.error  max_size:128
+maco.test.socket.ConcurrentWriteTestResponse.received1  max_size:64
+maco.test.socket.ConcurrentWriteTestResponse.received2  max_size:64

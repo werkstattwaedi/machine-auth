@@ -1,0 +1,36 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+load("//rules:particle_test.bzl", "particle_cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "uart_stream",
+    srcs = ["uart_stream.cc"],
+    hdrs = ["public/pb_stream/uart_stream.h"],
+    includes = ["public"],
+    deps = [
+        "//:device_os_headers",
+        "@pigweed//pw_log",
+        "@pigweed//pw_stream",
+    ],
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)
+
+# On-device loopback test - requires crossover wiring between Serial1 and Serial2:
+#   D8/TX (Serial1 TX) -> D5 (Serial2 RX)
+#   D4 (Serial2 TX) -> D9/RX (Serial1 RX)
+#
+# Build:  bazel build --config=p2 @particle_bazel//pw_stream_particle:loopback_test
+# Flash:  bazel run --config=p2 @particle_bazel//pw_stream_particle:loopback_test_flash
+particle_cc_test(
+    name = "loopback_test",
+    srcs = ["test/loopback_test.cc"],
+    deps = [
+        ":uart_stream",
+        "//:device_os_headers",
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_log",
+    ],
+)

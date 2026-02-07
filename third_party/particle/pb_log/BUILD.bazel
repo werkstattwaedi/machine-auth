@@ -1,0 +1,22 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+# Particle Device OS to pw_log bridge
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "log_bridge",
+    srcs = ["log_bridge.cc"],
+    hdrs = ["public/pb_log/log_bridge.h"],
+    includes = ["public"],
+    deps = [
+        "//:device_os_headers",
+        "//:services_dynalib",
+        "@pigweed//pw_log",
+        "@pigweed//pw_sys_io",
+    ],
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)

@@ -1,0 +1,65 @@
+module(
+    name = "particle_bazel",
+    version = "0.1.0",
+)
+
+# Pigweed - via local submodule in the consuming project
+# The consuming project should set up pigweed via local_path_override
+bazel_dep(name = "pigweed")
+
+git_override(
+    module_name = "pigweed",
+    commit = "dea5f7686bccfe787455863db8f4d8d35ea93dcb",
+    remote = "https://pigweed.googlesource.com/pigweed/pigweed",
+)
+
+
+# Standard dependencies
+bazel_dep(name = "platforms", version = "1.0.0")
+bazel_dep(name = "rules_cc", version = "0.2.4")
+bazel_dep(name = "rules_python", version = "0.40.0")
+bazel_dep(name = "rules_shell", version = "0.4.0")
+
+# Protocol Buffers (for RPC proto definitions)
+bazel_dep(name = "protobuf", version = "29.0", repo_name = "com_google_protobuf")
+
+# Crypto library (for pb_crypto host backend)
+bazel_dep(name = "mbedtls", version = "3.6.0")
+
+# JavaScript toolchain for particle-cli
+bazel_dep(name = "aspect_rules_js", version = "2.4.0")
+
+# Python dependencies for particle tools
+pip = use_extension("@rules_python//python/extensions:pip.bzl", "pip")
+pip.parse(
+    hub_name = "particle_pip",
+    python_version = "3.11",
+    requirements_lock = "//tools:requirements_lock.txt",
+)
+use_repo(pip, "particle_pip")
+
+# Particle CLI via npm (hermetic)
+npm = use_extension("@aspect_rules_js//npm:extensions.bzl", "npm")
+npm.npm_translate_lock(
+    name = "npm_particle_cli",
+    pnpm_lock = "//tools:pnpm-lock.yaml",
+    bins = {
+        # Note: package.json uses ./src/index.js (plain JS, not compiled TS)
+        "particle-cli": ["particle=./src/index.js"],
+    },
+)
+use_repo(npm, "npm_particle_cli")
+
+# Use ARM GCC 10.2.1 toolchain (matching Particle's toolchain version)
+arm_toolchain = use_extension("//toolchain:extensions.bzl", "arm_toolchain")
+use_repo(arm_toolchain, "gcc_arm_none_eabi_toolchain")
+
+# Register Pigweed's ARM GCC toolchain for Cortex-M33
+register_toolchains(
+    "@pigweed//pw_toolchain/arm_gcc:arm_gcc_cc_toolchain_cortex-m33",
+)
+
+# Register host toolchain for tests
+register_toolchains(
+    "@pigweed//pw_toolchain/host_clang:host_cc_toolchain_linux",
+)

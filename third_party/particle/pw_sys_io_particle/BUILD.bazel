@@ -1,0 +1,19 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+# pw_sys_io backend for Particle Device OS
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "sys_io",
+    srcs = ["sys_io.cc"],
+    deps = [
+        "//:device_os_headers",
+        "//:hal_dynalib",
+        "@pigweed//pw_sys_io:pw_sys_io.facade",
+    ],
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)

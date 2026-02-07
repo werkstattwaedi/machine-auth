@@ -1,0 +1,210 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+# pb_cloud - Typed cloud communication APIs for Particle Cloud
+#
+# Provides:
+# - CloudBackend interface for publishing events and subscribing
+# - LedgerBackend interface for persistent cloud-synchronized storage
+# - Serializers for string, binary, and protobuf data
+# - Typed API helpers (PublishTyped, PublishProto, ReadLedgerProto, etc.)
+# - Mock backends for testing
+
+load("@particle_bazel//rules:particle_test.bzl", "particle_cc_test")
+load("@pigweed//pw_unit_test:pw_cc_test.bzl", "pw_cc_test")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# Public interface - core types and backend interface (header-only)
+cc_library(
+    name = "pb_cloud",
+    hdrs = [
+        "public/pb_cloud/cloud.h",
+        "public/pb_cloud/cloud_backend.h",
+        "public/pb_cloud/proto_serializer.h",
+        "public/pb_cloud/serializer.h",
+        "public/pb_cloud/typed_api.h",
+        "public/pb_cloud/types.h",
+    ],
+    includes = ["public"],
+    deps = [
+        "@pigweed//pw_assert:check",
+        "@pigweed//pw_async2:channel",
+        "@pigweed//pw_async2:poll",
+        "@pigweed//pw_async2:value_future",
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_containers:vector",
+        "@pigweed//pw_function",
+        "@pigweed//pw_result",
+        "@pigweed//pw_status",
+        "@pigweed//pw_stream",
+        "@pigweed//pw_string:string",
+    ],
+)
+
+# CBOR encoder/decoder for Particle ledger format
+cc_library(
+    name = "pb_cbor",
+    srcs = ["cbor.cc"],
+    hdrs = ["public/pb_cloud/cbor.h"],
+    includes = ["public"],
+    deps = [
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_result",
+        "@pigweed//pw_status",
+    ],
+)
+
+# Ledger interface - persistent cloud-synchronized storage (header-only)
+cc_library(
+    name = "pb_ledger",
+    hdrs = [
+        "public/pb_cloud/ledger_backend.h",
+        "public/pb_cloud/ledger_editor.h",
+        "public/pb_cloud/ledger_handle.h",
+        "public/pb_cloud/ledger_typed_api.h",
+        "public/pb_cloud/ledger_types.h",
+    ],
+    includes = ["public"],
+    deps = [
+        ":pb_cbor",
+        ":pb_cloud",  # For serializers
+        "@pigweed//pw_async2:channel",
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_containers:vector",
+        "@pigweed//pw_result",
+        "@pigweed//pw_status",
+        "@pigweed//pw_string:string",
+    ],
+)
+
+# Particle cloud backend (for P2 device)
+cc_library(
+    name = "pb_cloud_particle_backend",
+    srcs = ["particle_cloud_backend.cc"],
+    hdrs = ["public/pb_cloud/particle_cloud_backend.h"],
+    includes = ["public"],
+    deps = [
+        ":pb_cloud",
+        "@pigweed//pw_assert:check",
+        "@pigweed//pw_async2:channel",
+        "@pigweed//pw_async2:poll",
+        "@pigweed//pw_async2:value_future",
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_function",
+        "@pigweed//pw_log",
+        "@pigweed//pw_status",
+        "@pigweed//pw_string:string",
+        "//:device_os_headers",
+        "//:system_dynalib",
+    ],
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)
+
+# Particle ledger backend (for P2 device)
+cc_library(
+    name = "pb_ledger_particle_backend",
+    srcs = ["particle_ledger_backend.cc"],
+    hdrs = ["public/pb_cloud/particle_ledger_backend.h"],
+    includes = ["public"],
+    deps = [
+        ":pb_ledger",
+        "@pigweed//pw_async2:channel",
+        "@pigweed//pw_log",
+        "@pigweed//pw_string:string",
+        "//:device_os_headers",
+        "//:system_dynalib",
+    ],
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)
+
+# Mock cloud backend for testing
+cc_library(
+    name = "mock_cloud_backend",
+    hdrs = ["mock/mock_cloud_backend.h"],
+    includes = ["mock"],
+    deps = [
+        ":pb_cloud",
+        "@pigweed//pw_assert:check",
+    ],
+    testonly = True,
+)
+
+# Mock ledger backend for testing
+cc_library(
+    name = "mock_ledger_backend",
+    hdrs = ["mock/mock_ledger_backend.h"],
+    includes = ["mock"],
+    deps = [
+        ":pb_ledger",
+        "@pigweed//pw_assert:check",
+    ],
+    testonly = True,
+)
+
+# Cloud unit tests
+pw_cc_test(
+    name = "pb_cloud_test",
+    srcs = ["pb_cloud_test.cc"],
+    deps = [
+        ":mock_cloud_backend",
+        ":pb_cloud",
+        "@pigweed//pw_unit_test",
+    ],
+)
+
+# CBOR unit tests
+pw_cc_test(
+    name = "cbor_test",
+    srcs = ["cbor_test.cc"],
+    deps = [
+        ":pb_cbor",
+        "@pigweed//pw_unit_test",
+    ],
+)
+
+# Ledger unit tests
+pw_cc_test(
+    name = "pb_ledger_test",
+    srcs = ["pb_ledger_test.cc"],
+    deps = [
+        ":mock_ledger_backend",
+        ":pb_ledger",
+        "@pigweed//pw_unit_test",
+    ],
+)
+
+# On-device cloud integration test (requires P2 with cloud connection)
+# Flash and run: bazel run @particle_bazel//pb_cloud:integration_test_flash
+# See integration_test.cc for manual verification steps via Particle Console.
+particle_cc_test(
+    name = "integration_test",
+    srcs = ["integration_test.cc"],
+    deps = [
+        ":pb_cloud",
+        ":pb_cloud_particle_backend",
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_chrono:system_clock",
+        "@pigweed//pw_log",
+        "@pigweed//pw_string:string",
+    ],
+)
+
+# On-device ledger integration test (requires P2 with cloud connection)
+# Flash and run: bazel run //third_party/particle/pb_cloud:ledger_integration_test_flash
+# See ledger_integration_test.cc for manual verification steps.
+particle_cc_test(
+    name = "ledger_integration_test",
+    srcs = ["ledger_integration_test.cc"],
+    deps = [
+        ":pb_ledger",
+        ":pb_ledger_particle_backend",
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_chrono:system_clock",
+        "@pigweed//pw_containers:vector",
+        "@pigweed//pw_log",
+        "@pigweed//pw_string:string",
+    ],
+)
+

@@ -1,0 +1,9 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+# Integration test framework for P2 firmware tests
+#
+# This package provides infrastructure for testing firmware-gateway-Firebase
+# interactions on real P2 hardware.
+
+package(default_visibility = ["//visibility:public"])

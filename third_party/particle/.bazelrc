@@ -1,0 +1,73 @@
+# Particle Bazel - Common Configuration
+# ======================================
+# Import this file in your project's .bazelrc:
+#   import %workspace%/particle/.bazelrc
+
+# Required Pigweed flags (from setup guide)
+common --incompatible_default_to_explicit_init_py
+common --repo_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
+common --experimental_exclude_defines_from_exec_config
+common --experimental_exclude_starlark_flags_from_exec_config
+build --incompatible_strict_action_env
+common --legacy_external_runfiles=True
+common --incompatible_bazel_test_exec_run_under=True
+common --experimental_platform_in_output_dir=True
+
+# UX improvements
+common --verbose_failures
+build --ui_event_filters=-debug
+test --test_output=errors
+
+# C++ improvements
+common --strip=never
+common --per_file_copt=external/.*,.*\.pb\.cc@-w
+common --host_per_file_copt=external/.*,.*\.pb\.cc@-w
+
+# ============================================
+# Platform configurations
+# ============================================
+
+# Use C++20 globally (dynalib boundary is C-linkage, safe for C++20)
+build --@pigweed//pw_toolchain/cc:cxx_standard=20
+
+# Particle P2 firmware build (Cortex-M33)
+build:p2 --platforms=@particle_bazel//platforms/p2:particle_p2
+
+# C++20 libstdc++ threading support - must be defined before any stdlib headers
+# This enables std::__detail::__thread_relax and atomic wait support
+build:p2 --cxxopt=-D_GLIBCXX_HAS_GTHREADS
+build:p2 --cxxopt=-D_GLIBCXX_USE_SCHED_YIELD
+
+# Pigweed backends for embedded target
+# Note: Most backends are configured in platform definitions, not here.
+# These are kept for compatibility with builds that don't specify a platform.
+build:p2 --@pigweed//pw_assert:check_backend=@pigweed//pw_assert_basic
+build:p2 --@pigweed//pw_assert:assert_backend=@pigweed//pw_assert_basic
+build:p2 --@pigweed//pw_sys_io:backend=@particle_bazel//pw_sys_io_particle:sys_io
+
+# Chrono backend using Particle HAL timer
+build:p2 --@pigweed//pw_chrono:system_clock_backend=@particle_bazel//pw_chrono_particle:system_clock
+
+# Sync backends using Particle HAL concurrent functions
+build:p2 --@pigweed//pw_sync:mutex_backend=@particle_bazel//pw_sync_particle:mutex
+build:p2 --@pigweed//pw_sync:timed_mutex_backend=@particle_bazel//pw_sync_particle:timed_mutex
+build:p2 --@pigweed//pw_sync:binary_semaphore_backend=@particle_bazel//pw_sync_particle:binary_semaphore
+build:p2 --@pigweed//pw_sync:counting_semaphore_backend=@particle_bazel//pw_sync_particle:counting_semaphore
+build:p2 --@pigweed//pw_sync:interrupt_spin_lock_backend=@particle_bazel//pw_sync_particle:interrupt_spin_lock
+build:p2 --@pigweed//pw_sync:thread_notification_backend=@particle_bazel//pw_sync_particle:thread_notification
+build:p2 --@pigweed//pw_sync:timed_thread_notification_backend=@particle_bazel//pw_sync_particle:timed_thread_notification
+
+# Thread backends using Particle HAL concurrent functions
+build:p2 --@pigweed//pw_thread:id_backend=@particle_bazel//pw_thread_particle:id
+build:p2 --@pigweed//pw_thread:yield_backend=@particle_bazel//pw_thread_particle:yield
+build:p2 --@pigweed//pw_thread:sleep_backend=@particle_bazel//pw_thread_particle:sleep
+build:p2 --@pigweed//pw_thread:thread_backend=@particle_bazel//pw_thread_particle:thread
+
+# Host build for tests (uses default host platform)
+# No --platforms needed for host builds
+
+# ============================================
+# Output settings
+# ============================================
+build --show_timestamps
+build --color=yes

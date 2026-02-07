@@ -1,0 +1,52 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+# pw_chrono backend for Particle Device OS
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "system_clock",
+    srcs = ["system_clock.cc"],
+    hdrs = [
+        "public/pw_chrono_particle/system_clock_config.h",
+        "public_overrides/pw_chrono_backend/system_clock_config.h",
+    ],
+    includes = [
+        "public",
+        "public_overrides",
+    ],
+    deps = [
+        "//:device_os_headers",
+        "//:hal_dynalib",
+        "@pigweed//pw_chrono:epoch",
+        "@pigweed//pw_chrono:system_clock.facade",
+    ],
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)
+
+cc_library(
+    name = "system_timer",
+    srcs = ["system_timer.cc"],
+    hdrs = [
+        "public/pw_chrono_particle/system_timer_inline.h",
+        "public/pw_chrono_particle/system_timer_native.h",
+        "public_overrides/pw_chrono_backend/system_timer_inline.h",
+        "public_overrides/pw_chrono_backend/system_timer_native.h",
+    ],
+    implementation_deps = ["@pigweed//pw_assert:check"],
+    includes = [
+        "public",
+        "public_overrides",
+    ],
+    deps = [
+        "//:device_os_headers",
+        "//:hal_dynalib",
+        "@pigweed//pw_chrono:system_clock",
+        "@pigweed//pw_chrono:system_timer.facade",
+        "@pigweed//pw_function",
+    ],
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)

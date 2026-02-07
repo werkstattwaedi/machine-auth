@@ -1,0 +1,151 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+# Tools for Particle firmware development
+
+load("@npm_particle_cli//:defs.bzl", "npm_link_all_packages")
+load("@particle_pip//:requirements.bzl", "requirement")
+
+package(default_visibility = ["//visibility:public"])
+
+# Export lockfiles for MODULE.bazel
+exports_files([
+    "pnpm-lock.yaml",
+    "requirements.txt",
+    "requirements_lock.txt",
+])
+
+# Export scripts for use by particle_flash_binary macro
+exports_files(
+    ["scripts/flash_firmware.py"],
+    visibility = ["//visibility:public"],
+)
+
+# Link npm packages (creates :node_modules/particle-cli)
+npm_link_all_packages()
+
+# -- Existing tools --
+
+py_binary(
+    name = "particle_crc",
+    srcs = ["particle_crc.py"],
+)
+
+py_binary(
+    name = "extract_elf_sizes",
+    srcs = ["extract_elf_sizes.py"],
+)
+
+# -- CLI wrapper module --
+
+py_library(
+    name = "particle_cli_wrapper",
+    srcs = [
+        "cli/__init__.py",
+        "cli/wrapper.py",
+    ],
+    imports = [".."],
+)
+
+# -- Cloud API module --
+
+py_library(
+    name = "particle_cloud",
+    srcs = [
+        "cloud/__init__.py",
+        "cloud/client.py",
+        "cloud/events.py",
+        "cloud/ledger.py",
+    ],
+    imports = [".."],
+    deps = [
+        requirement("requests"),
+    ],
+)
+
+# -- USB operations module --
+
+py_library(
+    name = "particle_usb",
+    srcs = [
+        "usb/__init__.py",
+        "usb/device.py",
+        "usb/flash.py",
+        "usb/serial_port.py",
+    ],
+    imports = [".."],
+    deps = [
+        ":particle_cli_wrapper",
+        requirement("pyserial"),
+    ],
+)
+
+# -- Combined library --
+
+py_library(
+    name = "particle_tools",
+    srcs = [],
+    imports = [".."],
+    deps = [
+        ":particle_cli_wrapper",
+        ":particle_cloud",
+        ":particle_usb",
+    ],
+)
+
+# -- Entry point scripts --
+
+py_binary(
+    name = "flash_firmware",
+    srcs = ["scripts/flash_firmware.py"],
+    main = "scripts/flash_firmware.py",
+    deps = [
+        ":particle_cli_wrapper",
+        ":particle_usb",
+    ],
+    data = [
+        ":node_modules/particle-cli",
+    ],
+    tags = ["local"],  # Bypass sandbox to access USB devices
+)
+
+py_binary(
+    name = "wait_for_device",
+    srcs = ["scripts/wait_for_device.py"],
+    main = "scripts/wait_for_device.py",
+    deps = [
+        ":particle_usb",
+    ],
+    tags = ["local"],  # Bypass sandbox to access USB devices
+)
+
+py_binary(
+    name = "serial_monitor",
+    srcs = ["scripts/serial_monitor.py"],
+    main = "scripts/serial_monitor.py",
+    deps = [
+        ":particle_usb",
+        requirement("pyserial"),
+    ],
+    tags = ["local"],  # Bypass sandbox to access USB devices
+)
+
+# -- Tests --
+
+py_test(
+    name = "test_cloud_client",
+    srcs = ["tests/test_cloud_client.py"],
+    main = "tests/test_cloud_client.py",
+    deps = [
+        ":particle_cloud",
+    ],
+)
+
+py_test(
+    name = "test_cli_wrapper",
+    srcs = ["tests/test_cli_wrapper.py"],
+    main = "tests/test_cli_wrapper.py",
+    deps = [
+        ":particle_cli_wrapper",
+    ],
+)

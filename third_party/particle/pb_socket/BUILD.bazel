@@ -1,0 +1,67 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+# pb_socket - TCP socket abstraction for MACO Gateway communication
+#
+# Provides TCP socket interface with platform-specific implementations:
+# - Particle P2: Uses Device OS socket HAL
+# - Host: Mock implementation for testing
+#
+# TcpSocket uses direct virtual Read/Write methods (not the pw::stream DoXxx
+# pattern) to avoid a virtual dispatch issue on ARM that causes crashes.
+# Use TcpSocketStreamAdapter for pw::stream compatibility with pw_rpc.
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# Abstract TCP socket interface
+cc_library(
+    name = "tcp_socket",
+    hdrs = ["public/pb_socket/tcp_socket.h"],
+    includes = ["public"],
+    deps = [
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_status",
+    ],
+)
+
+# Particle TCP socket implementation
+#
+# Uses a dedicated socket worker thread to avoid deadlocks between pw_rpc
+# handlers and Particle's system thread (both compete for LwIP's lock_tcpip_core).
+cc_library(
+    name = "particle_tcp_socket",
+    srcs = ["particle_tcp_socket.cc"],
+    hdrs = ["public/pb_socket/particle_tcp_socket.h"],
+    includes = ["public"],
+    deps = [
+        ":tcp_socket",
+        "//:device_os_headers",
+        "@pigweed//pw_log",
+        "@pigweed//pw_status",
+        "@pigweed//pw_sync:binary_semaphore",
+    ],
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)
+
+# Mock TCP socket for testing
+cc_library(
+    name = "mock_tcp_socket",
+    hdrs = ["mock/mock_tcp_socket.h"],
+    includes = ["mock"],
+    deps = [
+        ":tcp_socket",
+    ],
+)
+
+# Adapter to use TcpSocket as pw::stream::ReaderWriter
+cc_library(
+    name = "tcp_socket_stream_adapter",
+    hdrs = ["public/pb_socket/tcp_socket_stream_adapter.h"],
+    includes = ["public"],
+    deps = [
+        ":tcp_socket",
+        "@pigweed//pw_stream",
+    ],
+)

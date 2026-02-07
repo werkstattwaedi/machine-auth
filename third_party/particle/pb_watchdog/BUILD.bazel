@@ -1,0 +1,22 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+# Watchdog wrapper for Particle Device OS
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "watchdog",
+    srcs = ["watchdog.cc"],
+    hdrs = ["public/pb_watchdog/watchdog.h"],
+    includes = ["public"],
+    deps = [
+        "//pw_chrono_particle:system_clock",
+        "//:hal_dynalib",
+        "@pigweed//pw_chrono:system_clock",
+        "@pigweed//pw_status",
+    ],
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)

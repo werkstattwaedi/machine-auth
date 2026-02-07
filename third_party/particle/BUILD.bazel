@@ -1,0 +1,369 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+# Particle Bazel - Bazel infrastructure for Particle firmware with Pigweed
+#
+# Device OS SDK for P2 (RTL8721DM / Cortex-M33)
+# Sources from Device OS 6.3.3 submodule
+# License: LGPL v3
+
+package(default_visibility = ["//visibility:public"])
+
+# =============================================================================
+# Configuration
+# =============================================================================
+
+# Platform: P2 (tron)
+PLATFORM_ID = 32
+PLATFORM_NAME = "p2"
+PLATFORM_GEN = 3
+DEVICE_OS_VERSION = 6303  # 6.3.3
+
+# Common defines for all Device OS modules
+DEVICE_OS_DEFINES = [
+    "PLATFORM_ID={}".format(PLATFORM_ID),
+    "PLATFORM_NAME={}".format(PLATFORM_NAME),
+    "PLATFORM_GEN={}".format(PLATFORM_GEN),
+    "MCU_DEVICE",
+    "rtl872x",
+    "CONFIG_PLATFORM_8721D",
+    "MODULAR_FIRMWARE=1",
+    "MODULE_VERSION=6",
+    "MODULE_FUNCTION=5",  # MOD_FUNC_USER_PART
+    "MODULE_INDEX=1",
+    "MODULE_DEPENDENCY=4,1,{}".format(DEVICE_OS_VERSION),
+    "MODULE_DEPENDENCY2=0,0,0",
+    "HAL_PLATFORM_RTL872X=1",
+    "HAL_PLATFORM_MODULE_SUFFIX_EXTENSIONS=1",
+    "HAL_PLATFORM_MODULE_DYNAMIC_LOCATION=1",
+    "PARTICLE_USER_MODULE=1",
+    "_GNU_SOURCE",
+    "USE_STDPERIPH_DRIVER",
+    "PLATFORM_THREADING=1",
+    "RELEASE_BUILD",  # Suppress "Defaulting to Release Build" warning
+    "__FPU_PRESENT=1",  # Cortex-M33 has FPU
+    "ARM_CPU_CORTEX_M33",  # Select correct CMSIS header
+    # C++20 libstdc++ threading support - needed before any stdlib headers
+    "_GLIBCXX_HAS_GTHREADS",
+    "_GLIBCXX_USE_SCHED_YIELD",
+]
+
+# Common compiler flags for Device OS (LTO for compile)
+DEVICE_OS_COPTS = [
+    "-flto",
+    "-ffat-lto-objects",
+    # Relax warnings for vendored Device OS code
+    "-Wno-redundant-decls",
+    "-Wno-switch",
+    "-Wno-unused-parameter",
+    "-Wno-cast-qual",
+    "-Wno-missing-field-initializers",
+    "-Wno-shadow",
+    "-Wno-undef",
+]
+
+# Additional C++ flags
+DEVICE_OS_CXXOPTS = DEVICE_OS_COPTS + [
+    "-fno-exceptions",
+    "-fno-rtti",
+    "-fcheck-new",
+    "-fno-use-cxa-atexit",
+]
+
+# Include directories from Device OS
+DEVICE_OS_INCLUDES = [
+    "third_party/device-os/wiring/inc",
+    "third_party/device-os/hal/inc",
+    "third_party/device-os/hal/shared",
+    "third_party/device-os/hal/src/tron",
+    "third_party/device-os/hal/src/rtl872x",
+    "third_party/device-os/hal/src/rtl872x/lwip",
+    "third_party/device-os/hal/src/rtl872x/freertos",
+    "third_party/device-os/hal/src/rtl872x/mbedtls",
+    "third_party/device-os/hal/src/rtl872x/littlefs",
+    "third_party/device-os/hal/src/rtl872x/posix",
+    "third_party/device-os/hal/src/portable",
+    "third_party/device-os/hal/src/portable/FreeRTOS",
+    "third_party/device-os/hal/src/portable/FreeRTOS/bits",  # For gthr-default.h (C++20)
+    "third_party/device-os/hal/network",
+    "third_party/device-os/hal/network/api",
+    "third_party/device-os/hal/network/lwip",
+    "third_party/device-os/hal/network/lwip/posix",
+    "third_party/device-os/hal/network/lwip/wiznet",
+    "third_party/device-os/hal/network/ncp",
+    "third_party/device-os/hal/network/ncp/at_parser",
+    "third_party/device-os/hal/network/ncp_client",
+    "third_party/device-os/hal/network/util",
+    "third_party/device-os/system/inc",
+    "third_party/device-os/services/inc",
+    "third_party/device-os/dynalib/inc",
+    "third_party/device-os/platform/MCU/rtl872x/inc",
+    "third_party/device-os/modules/shared/rtl872x/inc/user-part",
+    "third_party/device-os/modules/shared/rtl872x/inc",
+    "third_party/device-os/communication/inc",
+    "third_party/device-os/rt-dynalib/inc",
+    # Realtek SDK (ambd_sdk) includes
+    "third_party/device-os/third_party/ambd_sdk",
+    "third_party/device-os/third_party/ambd_sdk/ambd_sdk/component/soc/realtek/amebad",
+    "third_party/device-os/third_party/ambd_sdk/ambd_sdk/component/soc/realtek/amebad/cmsis",
+    "third_party/device-os/third_party/ambd_sdk/ambd_sdk/component/soc/realtek/amebad/fwlib/include",
+    "third_party/device-os/third_party/ambd_sdk/ambd_sdk/component/soc/realtek/amebad/swlib/include",
+    "third_party/device-os/third_party/ambd_sdk/ambd_sdk/component/soc/realtek/amebad/app/monitor/include",
+    "third_party/device-os/third_party/ambd_sdk/ambd_sdk/component/soc/realtek/amebad/misc",
+    "third_party/device-os/third_party/ambd_sdk/ambd_sdk/component/os/os_dep/include",
+    "third_party/device-os/third_party/ambd_sdk/ambd_sdk/component/os/freertos",
+    "third_party/device-os/third_party/ambd_sdk/ambd_sdk/component/os/freertos/freertos_v10.2.0/Source/include",
+    "third_party/device-os/third_party/ambd_sdk/ambd_sdk/component/os/freertos/freertos_v10.2.0/Source/portable/GCC/RTL8721D_HP/non_secure",
+    "third_party/device-os/third_party/ambd_sdk/ambd_sdk/component/common/api",
+    "third_party/device-os/third_party/ambd_sdk/ambd_sdk/component/common/api/platform",
+    "third_party/device-os/third_party/ambd_sdk/ambd_sdk/component/common/api/wifi",
+    # LwIP networking stack
+    "third_party/device-os/third_party/lwip/lwip/src/include",
+]
+
+# =============================================================================
+# Linker Scripts
+# =============================================================================
+
+# Export linker scripts for firmware linking
+filegroup(
+    name = "linker_scripts",
+    srcs = glob([
+        "third_party/device-os/modules/tron/user-part/*.ld",
+        "third_party/device-os/modules/tron/system-part1/*.ld",
+        "third_party/device-os/modules/shared/rtl872x/*.ld",
+        "third_party/device-os/build/arm/linker/*.ld",
+        "third_party/device-os/build/arm/linker/rtl872x/*.ld",
+    ]) + [
+        "//rules:memory_platform_user.ld",
+    ],
+)
+
+# =============================================================================
+# Device OS Headers Library
+# =============================================================================
+
+cc_library(
+    name = "device_os_headers",
+    hdrs = glob(
+        [
+            "third_party/device-os/wiring/inc/**/*.h",
+            "third_party/device-os/hal/inc/**/*.h",
+            "third_party/device-os/hal/shared/**/*.h",
+            "third_party/device-os/hal/src/tron/**/*.h",
+            "third_party/device-os/hal/src/rtl872x/**/*.h",
+            "third_party/device-os/hal/src/portable/**/*.h",
+            "third_party/device-os/hal/network/**/*.h",
+            "third_party/device-os/system/inc/**/*.h",
+            "third_party/device-os/services/inc/**/*.h",
+            "third_party/device-os/dynalib/inc/**/*.h",
+            "third_party/device-os/dynalib/inc/**/*.inc",
+            "third_party/device-os/platform/MCU/rtl872x/inc/**/*.h",
+            "third_party/device-os/modules/shared/rtl872x/inc/**/*.h",
+            "third_party/device-os/modules/shared/rtl872x/inc/**/*.c",  # textual includes
+            "third_party/device-os/modules/shared/rtl872x/inc/**/*.inc",
+            "third_party/device-os/communication/inc/**/*.h",
+            "third_party/device-os/rt-dynalib/inc/**/*.h",
+            # Realtek SDK headers
+            "third_party/device-os/third_party/ambd_sdk/ambd_sdk/component/soc/realtek/amebad/**/*.h",
+            "third_party/device-os/third_party/ambd_sdk/ambd_sdk/component/os/**/*.h",
+            "third_party/device-os/third_party/ambd_sdk/ambd_sdk/component/common/api/**/*.h",
+            # LwIP headers
+            "third_party/device-os/third_party/lwip/lwip/src/include/**/*.h",
+        ],
+        allow_empty = True,
+    ),
+    includes = DEVICE_OS_INCLUDES,
+    defines = DEVICE_OS_DEFINES,
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)
+
+# mbedTLS headers from Device OS third-party
+# Provides crypto functions (AES, SHA, etc.) used by pb_crypto
+cc_library(
+    name = "mbedtls_headers",
+    hdrs = glob(["third_party/device-os/third_party/mbedtls/mbedtls/include/**/*.h"]),
+    includes = ["third_party/device-os/third_party/mbedtls/mbedtls/include"],
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)
+
+
+# Minimal mbedTLS for embedded targets (P2/RTL872x)
+# Only includes AES-CBC and AES-CMAC needed for NTAG424 authentication.
+# Device OS doesn't export crypto via dynalib, so we build it ourselves.
+cc_library(
+    name = "mbedtls_embedded",
+    srcs = [
+        # Core AES implementation
+        "third_party/device-os/third_party/mbedtls/mbedtls/library/aes.c",
+        # Cipher abstraction (required for CMAC)
+        "third_party/device-os/third_party/mbedtls/mbedtls/library/cipher.c",
+        "third_party/device-os/third_party/mbedtls/mbedtls/library/cipher_wrap.c",
+        # CMAC implementation
+        "third_party/device-os/third_party/mbedtls/mbedtls/library/cmac.c",
+        # Platform utilities (not platform.c - that conflicts with Device OS)
+        "third_party/device-os/third_party/mbedtls/mbedtls/library/platform_util.c",
+    ],
+    hdrs = ["mbedtls_config.h"],
+    copts = DEVICE_OS_COPTS + [
+        "-DMBEDTLS_CONFIG_FILE=\\\"mbedtls_config.h\\\"",
+        "-w",  # Suppress warnings from mbedtls code
+    ],
+    includes = [
+        ".",  # For mbedtls_config.h
+    ],
+    deps = [":mbedtls_headers"],
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)
+
+# =============================================================================
+# Wiring Libraries (Private - Not Supported)
+# =============================================================================
+# The Wiring/Arduino API is intentionally not exposed. Use Pigweed (pw_*) and
+# particle-bazel (pb_*) abstractions instead, which provide:
+# - Testable, well-designed APIs
+# - Standard C++ types (no custom String class)
+# - Consistent error handling via pw::Status
+# - Better separation of concerns
+
+cc_library(
+    name = "wiring",
+    srcs = glob(
+        ["third_party/device-os/wiring/src/*.cpp"],
+        exclude = [
+            "third_party/device-os/wiring/src/spark_wiring_thread.cpp",
+            "third_party/device-os/wiring/src/spark_wiring_watchdog.cpp",
+        ],
+    ),
+    copts = DEVICE_OS_CXXOPTS + [
+        "-DLOG_MODULE_CATEGORY='\"wiring\"'",
+        "-fno-builtin-malloc",
+        "-fno-builtin-free",
+        "-fno-builtin-realloc",
+    ],
+    deps = [":device_os_headers"],
+    alwayslink = True,
+    visibility = ["//visibility:private"],
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)
+
+cc_library(
+    name = "wiring_globals",
+    srcs = glob(
+        ["third_party/device-os/wiring_globals/src/*.cpp"],
+        exclude = [
+            "third_party/device-os/wiring_globals/src/spark_wiring_watchdog.cpp",
+        ],
+    ),
+    copts = DEVICE_OS_CXXOPTS,
+    deps = [":device_os_headers", ":wiring"],
+    alwayslink = True,
+    visibility = ["//visibility:private"],
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)
+
+# =============================================================================
+# User-Part Module Glue
+# =============================================================================
+
+cc_library(
+    name = "user_part_glue",
+    srcs = [
+        "third_party/device-os/modules/tron/user-part/src/module_info.c",
+        "third_party/device-os/modules/tron/user-part/src/user_export.c",
+        "third_party/device-os/modules/tron/user-part/src/user_module.c",
+        "third_party/device-os/modules/tron/user-part/src/newlib_stubs.cpp",
+    ],
+    copts = DEVICE_OS_COPTS + [
+        # Add -iquote for quoted includes to find .inc files
+        "-iquote",
+        "external/particle_bazel+/third_party/device-os/modules/shared/rtl872x/inc/user-part",
+        "-iquote",
+        "external/particle_bazel+/third_party/device-os/dynalib/inc",
+    ],
+    includes = DEVICE_OS_INCLUDES,
+    defines = DEVICE_OS_DEFINES,
+    deps = [":device_os_headers"],
+    alwayslink = True,
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)
+
+# =============================================================================
+# Dynalib Export Libraries
+# =============================================================================
+
+cc_library(
+    name = "hal_dynalib",
+    srcs = glob(["third_party/device-os/hal-dynalib/src/*.c"]),  # 27 files
+    copts = DEVICE_OS_COPTS + ["-DDYNALIB_IMPORT"],  # hal-dynalib needs -D, others define it in source
+    deps = [":device_os_headers"],
+    alwayslink = True,
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)
+
+cc_library(
+    name = "services_dynalib",
+    srcs = ["third_party/device-os/services-dynalib/src/services_dynalib.c"],
+    copts = DEVICE_OS_COPTS,
+    deps = [":device_os_headers"],
+    alwayslink = True,
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)
+
+cc_library(
+    name = "system_dynalib",
+    srcs = glob(["third_party/device-os/system-dynalib/src/*.c"]),
+    copts = DEVICE_OS_COPTS,
+    deps = [":device_os_headers"],
+    alwayslink = True,
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)
+
+cc_library(
+    name = "rt_dynalib",
+    srcs = ["third_party/device-os/rt-dynalib/src/rt_dynalib.c"],
+    copts = DEVICE_OS_COPTS,
+    deps = [":device_os_headers"],
+    alwayslink = True,
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)
+
+cc_library(
+    name = "communication_dynalib",
+    srcs = ["third_party/device-os/communication-dynalib/src/communication_dynalib.c"],
+    copts = DEVICE_OS_COPTS,
+    deps = [":device_os_headers"],
+    alwayslink = True,
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)
+
+# =============================================================================
+# Pigweed Entry Point Glue
+# =============================================================================
+# Provides Particle entry points (setup, loop, etc.) that call into main().
+
+cc_library(
+    name = "pigweed_entry",
+    srcs = ["pigweed_entry.cc"],
+    alwayslink = True,
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+    visibility = ["//visibility:public"],
+)
+
+# =============================================================================
+# Combined Device OS User-Part Library
+# =============================================================================
+
+cc_library(
+    name = "device_os_user_part",
+    deps = [
+        ":user_part_glue",
+        ":hal_dynalib",
+        ":services_dynalib",
+        ":system_dynalib",
+        ":rt_dynalib",
+        ":communication_dynalib",
+        ":pigweed_entry",  # Provides setup/loop entry points for Pigweed apps
+    ],
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)
