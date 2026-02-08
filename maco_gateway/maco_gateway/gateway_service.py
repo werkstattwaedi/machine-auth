@@ -45,7 +45,11 @@ class GatewayServiceImpl:
             log_dir.mkdir(parents=True, exist_ok=True)
 
     async def forward(
-        self, endpoint: str, payload: bytes, request_id: int
+        self,
+        endpoint: str,
+        payload: bytes,
+        request_id: int,
+        device_id: Optional[int] = None,
     ) -> dict:
         """Handle Forward RPC.
 
@@ -53,23 +57,25 @@ class GatewayServiceImpl:
             endpoint: Firebase endpoint path
             payload: Request payload bytes
             request_id: Request ID for correlation
+            device_id: MACO device ID (from ASCON-authenticated connection)
 
         Returns:
             Dict with response fields matching ForwardResponse
         """
         logger.info(
-            "Forward request: endpoint=%s, request_id=%d, payload_size=%d",
+            "Forward request: endpoint=%s, request_id=%d, payload_size=%d, device=%s",
             endpoint,
             request_id,
             len(payload),
+            f"{device_id:016X}" if device_id else "unknown",
         )
 
-        result = await self._firebase.forward(endpoint, payload)
+        result = await self._firebase.forward(endpoint, payload, device_id)
 
         return {
             "success": result.success,
             "payload": result.payload,
-            "http_status": 200 if result.success else 500,
+            "http_status": result.http_status,
             "error": result.error,
             "request_id": request_id,
         }

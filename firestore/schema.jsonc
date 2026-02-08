@@ -60,13 +60,14 @@
     }
   },
   "users": {
-    "{userId}": { // user id, will be changed to firebase auth UID, if an user their account to a firebase account
+    "{userId}": { // Random doc ID, linked to Firebase Auth via firebaseUid field
       "created": "timestamp",
-      "firebaseUid": "string",
+      "firebaseUid": "string", // Firebase Auth UID (set when user claims account)
+      "email": "string", // User email (used for account claiming)
       "displayName": "string", // Display name (e.g., "MikeS")
       "name": "string", // Full name (e.g., "Michael Schneider")
       "permissions": ["DocumentReference"], // Array of DocumentReferences to /permission/{permissionId}
-      "roles": ["vereinsmitglid|admin"]
+      "roles": ["vereinsmitglied|admin"]
     }
   }
 }

@@ -1,0 +1,16 @@
+{
+  "name": "oww-maschinenfreigabe",
+  "private": true,
+  "description": "IoT machine authentication system - dev orchestration",
+  "scripts": {
+    "dev": "concurrently -n emu,web -c blue,green \"npm run dev:emulators\" \"npm run dev:web\"",
+    "dev:emulators": "firebase emulators:start --import=./firebase-seed --export-on-exit",
+    "dev:web": "cd web && npm run dev",
+    "dev:gateway": "cd maco_gateway && python -m maco_gateway.main --port 5000 --master-key 000102030405060708090a0b0c0d0e0f --firebase-url http://127.0.0.1:5001/oww-maschinenfreigabe/us-central1/api --gateway-api-key local-gateway-key --verbose",
+    "seed": "npx tsx scripts/seed-emulator.ts"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "tsx": "^4.19.0"
+  }
+}

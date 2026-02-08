@@ -64,6 +64,12 @@ node_modules/
 
 # dotenv environment variables file
 .env
+*.env.local
+!functions/.env.local
+!maco_gateway/.env.local
+
+# Firebase emulator seed data (auto-exported)
+firebase-seed/
 
 # dataconnect generated files
 .dataconnect

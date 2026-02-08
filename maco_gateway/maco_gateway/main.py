@@ -31,6 +31,16 @@ from pw_rpc.descriptors import RpcIds
 from pw_rpc.internal.packet_pb2 import PacketType
 from pw_status import Status
 
+from gateway.gateway_service_pb2 import (
+    ForwardRequest,
+    ForwardResponse,
+    LogEntry,
+    LogResponse,
+    PingRequest,
+    PingResponse,
+)
+from pw_rpc import ids as rpc_ids
+
 from maco_gateway.ascon_transport import AsconTransport, NonceTracker
 from maco_gateway.firebase_client import FirebaseClient
 from maco_gateway.gateway_service import GatewayServiceImpl
@@ -45,6 +55,12 @@ logger = logging.getLogger(__name__)
 
 # pw_rpc channel ID for gateway communication
 GATEWAY_CHANNEL_ID = 1
+
+# Pre-compute RPC IDs from proto names
+_SERVICE_ID = rpc_ids.calculate("maco.gateway.GatewayService")
+_METHOD_FORWARD = rpc_ids.calculate("Forward")
+_METHOD_PERSIST_LOG = rpc_ids.calculate("PersistLog")
+_METHOD_PING = rpc_ids.calculate("Ping")
 
 
 class ClientConnection:
@@ -171,18 +187,81 @@ class ClientConnection:
             logger.debug("Ignoring non-server packet type=%d", packet.type)
             return None
 
-        logger.info(
-            "RPC request: service=%d method=%d call=%d",
-            packet.service_id,
-            packet.method_id,
-            packet.call_id,
-        )
-
-        # TODO: Implement proper RPC dispatch using generated proto code
-        # For now, return UNIMPLEMENTED for all requests
         rpc = RpcIds(packet.channel_id, packet.service_id,
                      packet.method_id, packet.call_id)
-        return packets.encode_server_error(rpc, Status.UNIMPLEMENTED)
+
+        if packet.service_id != _SERVICE_ID:
+            logger.warning("Unknown service: %d", packet.service_id)
+            return packets.encode_server_error(rpc, Status.NOT_FOUND)
+
+        try:
+            if packet.method_id == _METHOD_FORWARD:
+                return await self._handle_forward(rpc, packet.payload)
+            elif packet.method_id == _METHOD_PERSIST_LOG:
+                return self._handle_persist_log(rpc, packet.payload)
+            elif packet.method_id == _METHOD_PING:
+                return self._handle_ping(rpc, packet.payload)
+            else:
+                logger.warning("Unknown method: %d", packet.method_id)
+                return packets.encode_server_error(rpc, Status.UNIMPLEMENTED)
+        except Exception as e:
+            logger.error("RPC handler error: %s", e, exc_info=True)
+            return packets.encode_server_error(rpc, Status.INTERNAL)
+
+    async def _handle_forward(self, rpc: RpcIds, payload: bytes) -> bytes:
+        """Handle Forward RPC: proxy request to Firebase."""
+        req = ForwardRequest()
+        req.MergeFromString(payload)
+
+        result = await self._gateway_service.forward(
+            endpoint=req.endpoint,
+            payload=bytes(req.payload),
+            request_id=req.request_id,
+            device_id=self._device_id,
+        )
+
+        resp = ForwardResponse(
+            success=result["success"],
+            payload=result["payload"],
+            http_status=result["http_status"],
+            error=result["error"],
+            request_id=result["request_id"],
+        )
+        return packets.encode_response(rpc, resp)
+
+    def _handle_persist_log(self, rpc: RpcIds, payload: bytes) -> bytes:
+        """Handle PersistLog RPC: store log entry."""
+        req = LogEntry()
+        req.MergeFromString(payload)
+
+        result = self._gateway_service.persist_log(
+            timestamp_ms=req.timestamp_ms,
+            level=req.level,
+            module=req.module,
+            message=req.message,
+            data=req.data,
+        )
+
+        resp = LogResponse(
+            success=result["success"],
+            pending_count=result["pending_count"],
+        )
+        return packets.encode_response(rpc, resp)
+
+    def _handle_ping(self, rpc: RpcIds, payload: bytes) -> bytes:
+        """Handle Ping RPC: echo with timestamps."""
+        req = PingRequest()
+        req.MergeFromString(payload)
+
+        result = self._gateway_service.ping(
+            client_timestamp_ms=req.client_timestamp_ms,
+        )
+
+        resp = PingResponse(
+            gateway_timestamp_ms=result["gateway_timestamp_ms"],
+            client_timestamp_ms=result["client_timestamp_ms"],
+        )
+        return packets.encode_response(rpc, resp)
 
     async def _send_response(self, response_data: bytes) -> None:
         """Send an encrypted response to the client.
@@ -284,8 +363,13 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--firebase-url",
-        default="https://us-central1-machine-auth.cloudfunctions.net",
+        default="https://us-central1-oww-maschinenfreigabe.cloudfunctions.net/api",
         help="Firebase Cloud Functions URL",
+    )
+    parser.add_argument(
+        "--gateway-api-key",
+        default="",
+        help="API key for authenticating with Firebase (GATEWAY_API_KEY)",
     )
     parser.add_argument(
         "--verbose",
@@ -312,13 +396,20 @@ def main() -> int:
         logger.error("Invalid master key: %s", e)
         return 1
 
+    if not args.gateway_api_key:
+        logger.error("--gateway-api-key is required")
+        return 1
+
     logger.info("Starting MACO Gateway")
     logger.info("  Host: %s", args.host)
     logger.info("  Port: %d", args.port)
     logger.info("  Firebase URL: %s", args.firebase_url)
 
     key_store = KeyStore(master_key)
-    firebase_client = FirebaseClient(args.firebase_url)
+    firebase_client = FirebaseClient(
+        args.firebase_url,
+        api_key=args.gateway_api_key,
+    )
 
     server = GatewayServer(
         host=args.host,

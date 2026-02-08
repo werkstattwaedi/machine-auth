@@ -12,7 +12,8 @@ This is a comprehensive IoT machine authentication system featuring secure NFC-b
 |-----------|----------|-------------|
 | **MACO Firmware** | `maco_firmware/` | Pigweed-based firmware (Bazel build) |
 | **Functions** | `functions/` | Firebase Cloud Functions (TypeScript) |
-| **Admin** | `admin/` | Angular web application |
+| **Web** | `web/` | React + Vite + shadcn/ui web application |
+| **Gateway** | `maco_gateway/` | Python pw_rpc proxy (ASCON + Firebase) |
 
 **Component-specific documentation:**
 - [`maco_firmware/CLAUDE.md`](maco_firmware/CLAUDE.md) - Pigweed patterns, building, architecture
@@ -110,8 +111,11 @@ rm -rf lib/ && npm run build
 See `firestore/schema.jsonc` for complete structure.
 
 **Key Collections:**
-- `users/{userId}`: User profiles + `token/{tokenId}` subcollection
-- `sessions/{sessionId}`: Active and historical sessions
+- `users/{userId}`: User profiles (doc ID != Firebase Auth UID)
+- `tokens/{tokenId}`: NFC tag registrations (top-level, tokenId = tag UID)
+- `authentications/{authId}`: Tag authentication state (3-pass mutual auth)
+- `usage/{usageId}`: Machine usage records
+- `checkouts/{checkoutId}`: Payment/checkout records
 - `machine/{machineId}`: Machine definitions
 - `maco/{deviceId}`: Terminal device registrations
 - `permission/{permissionId}`: Permission definitions
@@ -126,30 +130,54 @@ await sessionRef.set({ userId: userDoc.ref });
 await sessionRef.set({ userId: `/users/${userId}` });
 ```
 
-## Admin Web Application
+## Local Development
 
-Angular 20 SPA in `admin/`
+One-command startup:
 
 ```bash
-cd admin
-npm install
-npm start  # http://localhost:4200 with emulators
+./dev.sh    # Installs deps, builds, starts emulators + web dev server
 ```
 
-**Tech Stack:** Angular 20, Angular Material, Firebase (Firestore + Auth)
+Or manually:
+
+```bash
+npm run dev              # Emulators + web dev server
+npm run dev:gateway      # Gateway (separate terminal)
+npm run seed             # Seed emulator with test data
+```
+
+**Services:**
+- Emulator UI: http://localhost:4000
+- Functions: http://localhost:5001
+- Web app: http://localhost:5173
+- Hosting: http://localhost:5050
+- Gateway: localhost:5000
+
+## Web Application
+
+React SPA in `web/` (Vite + TanStack Router + shadcn/ui + Tailwind)
+
+```bash
+cd web
+npm install
+npm run dev    # http://localhost:5173 with emulators
+npm run build  # Production build to web/dist/
+```
 
 **Key Patterns:**
 - Client-side Firestore (no custom backend)
 - Account claiming (pre-create users, link on sign-in)
+- Three access modes: public (token/NFC), authenticated (email sign-in), admin
 - Role-based access (`admin`, `vereinsmitglied`)
 - German UI throughout
+- Firebase Auth custom claims for Firestore security rules
 
 **Deploy:**
 ```bash
 firebase deploy --only hosting
 ```
 
-See [`docs/requirements/admin-ui-deployment.md`](docs/requirements/admin-ui-deployment.md) for production checklist.
+See [`docs/deployment-checklist.md`](docs/deployment-checklist.md) for production deployment steps.
 
 ## Implementation Guidelines
 

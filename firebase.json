@@ -23,7 +23,7 @@
   ],
   "hosting": {
     "predeploy": [
-      "cd admin && npm install && npm run build"
+      "cd web && npm install && npm run build"
     ],
     "rewrites": [
       {
@@ -31,7 +31,7 @@
         "destination": "/index.html"
       }
     ],
-    "public": "admin/dist/admin/browser",
+    "public": "web/dist",
     "ignore": [
       "firebase.json",
       "**/.*",
@@ -43,7 +43,7 @@
       "port": 9099
     },
     "hosting": {
-      "port": 5000
+      "port": 5050
     },
     "functions": {
       "port": 5001

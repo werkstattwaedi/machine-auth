@@ -32,6 +32,7 @@ initializeApp();
 const diversificationMasterKey = defineSecret("DIVERSIFICATION_MASTER_KEY");
 const diversificationSystemName = defineString("DIVERSIFICATION_SYSTEM_NAME");
 const particleWebhookApiKey = defineSecret("PARTICLE_WEBHOOK_API_KEY");
+const gatewayApiKey = defineSecret("GATEWAY_API_KEY");
 const terminalKey = defineSecret("TERMINAL_KEY");
 
 export const app = express();
@@ -59,14 +60,13 @@ export const verifyTagCheckoutHandler = async (
 
 app.post("/verifyTagCheckout", verifyTagCheckoutHandler);
 
-// Authentication middleware to check for the Particle webhook API key.
+// Authentication middleware - accepts Particle webhook key or gateway key.
 const authMiddleware = (
   req: express.Request,
   res: express.Response,
   next: express.NextFunction
 ) => {
   const authHeader = req.headers.authorization;
-  const apiKey = particleWebhookApiKey.value();
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     logger.warn("Missing or invalid Authorization header.");
@@ -74,7 +74,8 @@ const authMiddleware = (
   }
 
   const token = authHeader.split(" ")[1];
-  if (token !== apiKey) {
+  const validKeys = [particleWebhookApiKey.value(), gatewayApiKey.value()];
+  if (!validKeys.includes(token)) {
     logger.warn("Invalid API key provided.");
     return res.status(403).send({ message: "Forbidden" });
   }
@@ -228,9 +229,12 @@ function sendProtoResponse<T>(
 }
 
 export const api = onRequest(
-  { secrets: [diversificationMasterKey, particleWebhookApiKey, terminalKey] },
+  { secrets: [diversificationMasterKey, particleWebhookApiKey, gatewayApiKey, terminalKey] },
   app
 );
 
 // Export admin API
 export { admin } from "./admin-api";
+
+// Export Firestore triggers
+export { syncCustomClaims } from "./auth/set-custom-claims";

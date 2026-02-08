@@ -7,7 +7,7 @@ Complete guide to configuring all components of the machine authentication syste
 - [Linux Serial Device Setup](#linux-serial-device-setup)
 - [Firebase Project Setup](#firebase-project-setup)
 - [Firebase Functions Configuration](#firebase-functions-configuration)
-- [Admin UI Configuration](#admin-ui-configuration)
+- [Web App Configuration](#web-app-configuration)
 - [Scripts Configuration](#scripts-configuration)
 - [Particle Cloud Setup](#particle-cloud-setup)
 - [Firestore Security Rules](#firestore-security-rules)
@@ -131,6 +131,8 @@ firebase use oww-maschinenfreigabe
 # Set secrets (will prompt for values)
 firebase functions:secrets:set DIVERSIFICATION_MASTER_KEY
 firebase functions:secrets:set PARTICLE_WEBHOOK_API_KEY
+firebase functions:secrets:set GATEWAY_API_KEY
+firebase functions:secrets:set TERMINAL_KEY
 firebase functions:secrets:set PARTICLE_TOKEN
 ```
 
@@ -140,6 +142,8 @@ firebase functions:secrets:set PARTICLE_TOKEN
 |--------|-------------|-----------------|
 | `DIVERSIFICATION_MASTER_KEY` | 32-character hex key for tag personalization | `openssl rand -hex 16` |
 | `PARTICLE_WEBHOOK_API_KEY` | API key for Particle webhook authentication | `openssl rand -hex 32` |
+| `GATEWAY_API_KEY` | API key for MaCo gateway authentication | `openssl rand -hex 32` |
+| `TERMINAL_KEY` | Key for SDM encryption/decryption on terminals | `openssl rand -hex 16` |
 | `PARTICLE_TOKEN` | Particle Cloud access token | `particle token create` (see [Particle Setup](#particle-cloud-setup)) |
 
 ### Required Parameters
@@ -189,48 +193,27 @@ firebase functions:config:get
 
 ---
 
-## Admin UI Configuration
+## Web App Configuration
 
-The admin web app needs Firebase configuration for authentication and Firestore access.
+The web app (`web/`) uses Vite environment files for Firebase configuration. Emulator connections are automatic in dev mode.
 
 ### Development Environment
 
-**File:** `admin/src/environments/environment.ts`
+**File:** `web/.env.development` (checked in, safe values)
 
-```typescript
-export const environment = {
-  production: false,
-  useEmulators: true,
-  firebase: {
-    apiKey: 'fake-api-key-for-emulator',
-    authDomain: 'localhost',
-    projectId: 'oww-maschinenfreigabe',
-    storageBucket: 'oww-maschinenfreigabe.firebasestorage.app',
-    messagingSenderId: 'fake-sender-id',
-    appId: 'fake-app-id-for-emulator',
-  },
-};
-```
-
-**Note:** For local development with emulators, the actual API key doesn't matter.
+Emulator connections are automatic — `web/src/lib/firebase.ts` detects `import.meta.env.DEV` and connects to local emulators.
 
 ### Production Environment
 
-**File:** `admin/src/environments/environment.prod.ts`
+**File:** `web/.env.production`
 
-```typescript
-export const environment = {
-  production: true,
-  useEmulators: false,
-  firebase: {
-    apiKey: 'YOUR_FIREBASE_API_KEY',
-    authDomain: 'oww-maschinenfreigabe.firebaseapp.com',
-    projectId: 'oww-maschinenfreigabe',
-    storageBucket: 'oww-maschinenfreigabe.firebasestorage.app',
-    messagingSenderId: 'YOUR_MESSAGING_SENDER_ID',
-    appId: 'YOUR_APP_ID',
-  },
-};
+```bash
+VITE_FIREBASE_API_KEY=YOUR_FIREBASE_API_KEY
+VITE_FIREBASE_AUTH_DOMAIN=oww-maschinenfreigabe.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=oww-maschinenfreigabe
+VITE_FIREBASE_STORAGE_BUCKET=oww-maschinenfreigabe.firebasestorage.app
+VITE_FIREBASE_MESSAGING_SENDER_ID=YOUR_MESSAGING_SENDER_ID
+VITE_FIREBASE_APP_ID=YOUR_APP_ID
 ```
 
 **How to get these values:**
@@ -238,13 +221,13 @@ export const environment = {
 1. Firebase Console > Project Settings > General
 2. Scroll to "Your apps" > Select your web app
 3. Click "Config" to see the configuration object
-4. Copy values to `environment.prod.ts`
+4. Copy values to `web/.env.production`
 
-**⚠️ IMPORTANT:** The production API key should be **restricted** in Google Cloud Console:
+**Important:** The production API key should be **restricted** in Google Cloud Console:
 - Application restrictions: HTTP referrers (set to your domain)
 - API restrictions: Limit to Firebase APIs only
 
-See [`docs/requirements/admin-ui-deployment.md`](requirements/admin-ui-deployment.md) for deployment checklist.
+See [`docs/deployment-checklist.md`](deployment-checklist.md) for full deployment steps.
 
 ---
 
@@ -378,11 +361,15 @@ particle webhook create particle/terminalRequest_webhook.json
 
 ## Firestore Security Rules
 
-**⚠️ CRITICAL:** Default development rules are **permissive**. Update before production!
-
-**Current status:** Issue #30 - Rules need hardening
-
 **Location:** `firestore/firestore.rules`
+
+Security rules use Firebase Auth **custom claims** for role-based access. The `syncCustomClaims` Cloud Function trigger syncs the `roles[]` field from user documents to Auth custom claims, so rules can check `request.auth.token.admin == true`.
+
+**Key behaviors:**
+- All authenticated users can read most collections
+- Only admins can write to `permission`, `tokens`, `machine`, `maco`, `sessions`
+- Users can update their own user doc but cannot change `roles`, `permissions`, or `firebaseUid`
+- User document creation is open (needed for sign-up account claiming flow)
 
 **Deploy rules:**
 
@@ -390,14 +377,7 @@ particle webhook create particle/terminalRequest_webhook.json
 firebase deploy --only firestore:rules
 ```
 
-**Recommended production rules** (TODO - Issue #30):
-
-- Admin-only write access to `users`, `machines`, `permissions`, `maco`
-- Users can read their own data only
-- Role-based access control
-- Validate document structure
-
-See [`docs/requirements/admin-ui-deployment.md`](requirements/admin-ui-deployment.md) for production checklist.
+**After deploying:** Existing admin users need their custom claims set. Re-save their user doc to trigger `syncCustomClaims`, or set claims manually via Firebase Admin SDK.
 
 ---
 
@@ -408,27 +388,30 @@ Use this checklist when setting up a new environment:
 ### Firebase
 
 - [ ] Firebase project created
-- [ ] Authentication enabled (Google + Email/Password)
+- [ ] Authentication enabled (Email link sign-in)
 - [ ] Firestore database created
 - [ ] Hosting enabled
 - [ ] Service account key downloaded (for scripts/CI)
-- [ ] Firebase configuration copied to `admin/src/environments/environment.prod.ts`
+- [ ] Firebase configuration copied to `web/.env.production`
 
 ### Firebase Functions
 
 - [ ] `DIVERSIFICATION_MASTER_KEY` secret set
 - [ ] `PARTICLE_WEBHOOK_API_KEY` secret set
+- [ ] `GATEWAY_API_KEY` secret set
+- [ ] `TERMINAL_KEY` secret set
 - [ ] `PARTICLE_TOKEN` secret set
 - [ ] `DIVERSIFICATION_SYSTEM_NAME` parameter set
 - [ ] `PARTICLE_PRODUCT_ID` parameter set
 - [ ] Functions deployed: `firebase deploy --only functions`
 
-### Admin UI
+### Web App
 
-- [ ] `environment.prod.ts` configured with Firebase credentials
+- [ ] `web/.env.production` configured with Firebase credentials
 - [ ] Production API key restricted in Google Cloud Console
-- [ ] Admin UI built and deployed: `firebase deploy --only hosting`
+- [ ] Web app built and deployed: `firebase deploy --only hosting`
 - [ ] First admin user created with `roles: ['admin']`
+- [ ] Custom claims set for admin user (via `syncCustomClaims` trigger)
 
 ### Scripts
 
@@ -447,7 +430,7 @@ Use this checklist when setting up a new environment:
 
 ### Security
 
-- [ ] Firestore security rules updated for production (Issue #30)
+- [ ] Firestore security rules deployed (custom claims-based)
 - [ ] Service account keys stored securely (not in git)
 - [ ] Firebase secrets set (not in `.env` files)
 - [ ] Production API key restricted
@@ -493,10 +476,10 @@ firebase functions:config:set \
 # Or use .env files in functions/ directory
 ```
 
-**4. Configure Admin UI**
+**4. Configure Web App**
 ```bash
-cd admin
-# Edit src/environments/environment.prod.ts with Firebase config
+# Edit web/.env.production with Firebase config
+cd web
 npm install
 npm run build
 ```

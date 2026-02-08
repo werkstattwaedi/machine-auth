@@ -1,28 +1,19 @@
-#!/usr/bin/env ts-node
+#!/usr/bin/env npx tsx
 /**
  * Generate DeviceConfig from Firebase and upload to Particle Ledger
- * 
+ *
  * This script:
  * 1. Reads maco (terminal) data from Firebase
- * 2. Finds all machines con  // Get Particle configuration from environment
-  const particleToken = process.env.PARTICLE_TOKEN;
-  if (!particleToken) {
-    throw new Error('PARTICLE_TOKEN not set in .env file. Get with: particle token create');
-  }
-  
-  const productId = process.env.PARTICLE_PRODUCT_ID;
-  if (!productId) {
-    throw new Error('PARTICLE_PRODUCT_ID not set in .env file');
-  } this maco
+ * 2. Finds all machines controlled by this maco
  * 3. Generates a DeviceConfig flatbuffer
  * 4. Uploads it to Particle Cloud ledger
- * 
+ *
  * Usage:
- *   ts-node sync-device-config.ts <particle-device-id>
- * 
+ *   npx tsx sync-device-config.ts <particle-device-id>
+ *
  * Example:
- *   ts-node sync-device-config.ts 0a10aced202194944a042f04
- * 
+ *   npx tsx sync-device-config.ts 0a10aced202194944a042f04
+ *
  * Prerequisites:
  *   - Copy .env.template to .env and fill in your credentials
  *   - Run: npm install

@@ -9,64 +9,50 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      // DEVELOPMENT MODE: Allow all authenticated users
-      // TODO: Implement proper admin role checking
-      //
-      // Problem: User document ID != Firebase Auth UID
-      // User docs use random IDs with a 'firebaseUid' field
-      // Firestore rules can't query by field values (only document paths)
-      //
-      // Solutions for production:
-      // 1. Use Firebase Auth custom claims (preferred)
-      // 2. Restructure: Use Firebase Auth UID as user document ID
-      // 3. Maintain a separate admin list in a known document
-      //
-      // See Issue #30 and docs/requirements/admin-ui-deployment.md
-      return isSignedIn();
+      // Custom claims set by syncCustomClaims Cloud Function
+      // when user doc roles[] includes "admin"
+      return isSignedIn() && request.auth.token.admin == true;
     }
 
     // Validation helpers
     function isDocumentReference(field, collection) {
-      // Check if field is a path (DocumentReference type)
       return field is path;
-      // Note: Can't deeply validate path format in Firestore rules
-      // Rely on client-side validation to ensure correct collection references
     }
 
     function isDocumentReferenceArray(arr, collection) {
-      // Check if it's a list and all elements are paths matching the pattern
       return arr is list && arr.size() >= 0;
-      // Note: Can't validate array contents deeply in rules,
-      // so we rely on application-level validation
     }
 
     // Users collection
     match /users/{userId} {
-      // For development: Allow authenticated users to read/write
-      // TODO: Implement proper admin checks once we have a better auth flow
       allow read: if isSignedIn();
 
-      // Allow creating new users during sign-up (before authentication)
+      // Allow creating new users during sign-up
       allow create: if true &&
                        request.resource.data.permissions is list &&
                        isDocumentReferenceArray(request.resource.data.permissions, 'permission');
 
-      // Allow authenticated users to update
-      allow update, delete: if isSignedIn() &&
-                               request.resource.data.permissions is list &&
-                               isDocumentReferenceArray(request.resource.data.permissions, 'permission');
+      // Users can update their own doc but cannot change roles/permissions/firebaseUid
+      allow update: if isAdmin() ||
+                       (isSignedIn() &&
+                        request.resource.data.firebaseUid == request.auth.uid &&
+                        request.resource.data.roles == resource.data.roles &&
+                        request.resource.data.permissions == resource.data.permissions &&
+                        request.resource.data.firebaseUid == resource.data.firebaseUid);
+
+      allow delete: if isAdmin();
     }
 
-    // Permission collection (singular)
+    // Permission collection
     match /permission/{permissionId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 
-    // Tokens collection (top-level)
+    // Tokens collection
     match /tokens/{tokenId} {
-      allow read, write: if isSignedIn() &&
-                            isDocumentReference(request.resource.data.userId, 'users');
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
     }
 
     // Machines collection
@@ -86,12 +72,10 @@ service cloud.firestore {
     // Sessions collection
     match /sessions/{sessionId} {
       allow read: if isSignedIn();
-      // Validate that userId and tokenId are proper DocumentReferences
       allow create, update: if isAdmin() &&
                                isDocumentReference(request.resource.data.userId, 'users') &&
                                isDocumentReference(request.resource.data.tokenId, 'tokens');
       allow delete: if isAdmin();
-      // TODO: Allow terminals to create/update sessions with proper authentication
     }
   }
 }
