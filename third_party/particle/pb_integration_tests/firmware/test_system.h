@@ -41,6 +41,15 @@ pw::rpc::Server& GetRpcServer();
 ///                      Use this to register RPC services, set up test state, etc.
 [[noreturn]] void TestSystemInit(pw::Function<void()> init_callback);
 
+/// Blocks until WiFi has an IP address and is ready for TCP connections.
+///
+/// This polls network_ready() every 100ms until it returns true,
+/// or until the timeout is reached.
+///
+/// @param timeout_ms Maximum time to wait in milliseconds. 0 = wait forever.
+/// @return true if WiFi is ready, false if timeout reached.
+bool WaitForWiFiConnection(uint32_t timeout_ms = 30000);
+
 /// Blocks until the device is connected to the Particle cloud.
 ///
 /// This polls spark_cloud_flag_connected() every 100ms until it returns true,

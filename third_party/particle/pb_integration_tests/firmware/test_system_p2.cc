@@ -19,6 +19,7 @@
 #include "pb_log/log_bridge.h"
 #include "delay_hal.h"
 #include "system_cloud.h"
+#include "system_network.h"
 #include "usb_hal.h"
 
 namespace pb::test {
@@ -70,6 +71,26 @@ void TestSystemInit(pw::Function<void()> init_callback) {
 
   pw::system::StartAndClobberTheStack(channel->channel());
   PW_UNREACHABLE;
+}
+
+bool WaitForWiFiConnection(uint32_t timeout_ms) {
+  PW_LOG_INFO("Waiting for WiFi connection...");
+  uint32_t elapsed_ms = 0;
+  constexpr uint32_t kPollIntervalMs = 100;
+
+  while (!network_ready(NETWORK_INTERFACE_WIFI_STA, NETWORK_READY_TYPE_IPV4,
+                         nullptr)) {
+    if (timeout_ms > 0 && elapsed_ms >= timeout_ms) {
+      PW_LOG_WARN("WiFi connection timeout after %u ms",
+                  static_cast<unsigned>(elapsed_ms));
+      return false;
+    }
+    HAL_Delay_Milliseconds(kPollIntervalMs);
+    elapsed_ms += kPollIntervalMs;
+  }
+
+  PW_LOG_INFO("WiFi ready after %u ms", static_cast<unsigned>(elapsed_ms));
+  return true;
 }
 
 bool WaitForCloudConnection(uint32_t timeout_ms) {

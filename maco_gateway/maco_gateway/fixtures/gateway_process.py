@@ -187,7 +187,7 @@ class GatewayProcess:
                 line = await self._process.stdout.readline()
                 if not line:
                     break
-                _LOG.debug("Gateway: %s", line.decode("utf-8", errors="replace").strip())
+                _LOG.info("Gateway: %s", line.decode("utf-8", errors="replace").strip())
         except asyncio.CancelledError:
             pass
 

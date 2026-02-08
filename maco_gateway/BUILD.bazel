@@ -26,6 +26,7 @@ py_library(
     deps = [
         "//proto/gateway:gateway_service_py_pb2",
         "@maco_pip//aiohttp",
+        "@maco_pip//ascon",
         "@pigweed//pw_hdlc/py:pw_hdlc",
         "@pigweed//pw_rpc/py:pw_rpc",
     ],

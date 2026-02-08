@@ -88,8 +88,8 @@ class AsconTransport:
         tag = frame_data[-self.TAG_SIZE :]
 
         # Decrypt using ASCON-AEAD128
-        # Associated data: device_id (authenticate but don't encrypt)
-        ad = frame_data[: self.DEVICE_ID_SIZE]
+        # Associated data: device_id + nonce (must match device's encrypt)
+        ad = frame_data[: self.DEVICE_ID_SIZE + self.NONCE_SIZE]
 
         try:
             plaintext = ascon.decrypt(
@@ -130,12 +130,13 @@ class AsconTransport:
         device_id_bytes = struct.pack(">Q", device_id)
 
         # Encrypt using ASCON-AEAD128
-        # Associated data: device_id
+        # Associated data: device_id + nonce (must match device's decrypt)
+        ad = device_id_bytes + nonce
         try:
             ciphertext_with_tag = ascon.encrypt(
                 key=key,
                 nonce=nonce,
-                associateddata=device_id_bytes,
+                associateddata=ad,
                 plaintext=payload,
                 variant="Ascon-128",
             )

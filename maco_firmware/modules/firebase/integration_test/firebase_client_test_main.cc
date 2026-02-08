@@ -28,6 +28,7 @@
 #include "pw_log/log.h"
 #include "pw_rpc/nanopb/server_reader_writer.h"
 #include "pw_system/system.h"
+#include "pw_thread/sleep.h"
 
 namespace {
 
@@ -91,9 +92,16 @@ class TestControlServiceImpl
     return pw::OkStatus();
   }
 
-  // Helper to create gateway - in separate function to reduce stack pressure
+  // RPC: WaitForWiFi - block until WiFi has an IP address
+  pw::Status WaitForWiFi(const maco_test_firebase_WaitForWiFiRequest& request,
+                         maco_test_firebase_WaitForWiFiResponse& response) {
+    uint32_t timeout = request.timeout_ms > 0 ? request.timeout_ms : 30000;
+    response.connected = pb::test::WaitForWiFiConnection(timeout);
+    return pw::OkStatus();
+  }
+
+  // Helper to create gateway client
   __attribute__((noinline)) bool CreateGatewayClient() {
-    PW_LOG_INFO("CreateGatewayClient: Creating config...");
     maco::gateway::GatewayConfig config{
         .host = gateway_host_.c_str(),
         .port = static_cast<uint16_t>(gateway_port_),
@@ -104,30 +112,25 @@ class TestControlServiceImpl
         .channel_id = 1,
     };
 
-    PW_LOG_INFO("CreateGatewayClient: Creating P2GatewayClient...");
+    PW_LOG_INFO("Creating P2GatewayClient...");
     gateway_.emplace(config);
-    PW_LOG_INFO("CreateGatewayClient: Done");
     return true;
   }
 
-  // Helper to connect gateway - in separate function to reduce stack pressure
+  // Helper to connect gateway
   __attribute__((noinline)) bool ConnectGateway() {
-    PW_LOG_INFO("ConnectGateway: Creating FirebaseClient...");
-    firebase_.emplace(gateway_->rpc_client(), gateway_->channel_id());
-
-    PW_LOG_INFO("ConnectGateway: Starting gateway...");
-    gateway_->Start(pw::System().dispatcher());
-
-    PW_LOG_INFO("ConnectGateway: Connecting...");
+    // Connect before starting the read task to avoid a busy-loop
+    // where ReadTask spins on the dispatcher while not connected.
+    PW_LOG_INFO("Connecting to gateway...");
     auto connect_status = gateway_->Connect();
     if (!connect_status.ok()) {
       PW_LOG_ERROR("Failed to connect to gateway: %d",
                    static_cast<int>(connect_status.code()));
-      gateway_.reset();
-      firebase_.reset();
       return false;
     }
-    PW_LOG_INFO("ConnectGateway: Done");
+
+    firebase_.emplace(gateway_->rpc_client(), gateway_->channel_id());
+    gateway_->Start(pw::System().dispatcher());
     return true;
   }
 
@@ -135,24 +138,18 @@ class TestControlServiceImpl
   pw::Status ConfigureGateway(
       const maco_test_firebase_ConfigureGatewayRequest& request,
       maco_test_firebase_ConfigureGatewayResponse& response) {
-    PW_LOG_INFO(">>> ConfigureGateway ENTRY <<<");
     PW_LOG_INFO("ConfigureGateway: host=%s, port=%u", request.host,
                 static_cast<unsigned>(request.port));
 
-    // Store gateway configuration for later use
     gateway_host_ = std::string(request.host);
     gateway_port_ = request.port;
-
-    // Derive the key (same as gateway uses)
     key_ = DeriveKey();
 
-    // Create gateway client (in separate function to reduce stack)
     if (!CreateGatewayClient()) {
       response.success = false;
       return pw::OkStatus();
     }
 
-    // Connect (in separate function to reduce stack)
     if (!ConnectGateway()) {
       response.success = false;
       return pw::OkStatus();
@@ -163,68 +160,6 @@ class TestControlServiceImpl
 
     response.success = true;
     return pw::OkStatus();
-
-#if 0  // Keep disabled code for reference
-    PW_LOG_INFO("ConfigureGateway: host=%s, port=%u", request.host,
-                static_cast<unsigned>(request.port));
-
-    // Store gateway configuration for later use
-    PW_LOG_INFO("Step 1: Storing host string...");
-    gateway_host_ = std::string(request.host);
-    gateway_port_ = request.port;
-    PW_LOG_INFO("Step 1: Done, host=%s", gateway_host_.c_str());
-
-    // Derive the key (same as gateway uses)
-    PW_LOG_INFO("Step 2: Deriving key...");
-    key_ = DeriveKey();
-    PW_LOG_INFO("Step 2: Done");
-
-    // Create gateway config
-    PW_LOG_INFO("Step 3: Creating config...");
-    maco::gateway::GatewayConfig config{
-        .host = gateway_host_.c_str(),
-        .port = static_cast<uint16_t>(gateway_port_),
-        .connect_timeout_ms = 10000,
-        .read_timeout_ms = 5000,
-        .device_id = kTestDeviceId,
-        .key = key_.data(),
-        .channel_id = 1,
-    };
-    PW_LOG_INFO("Step 3: Done");
-
-    // Create gateway and firebase clients (lazy init, kept alive as members)
-    PW_LOG_INFO("Step 4: Creating P2GatewayClient...");
-    gateway_.emplace(config);
-    PW_LOG_INFO("Step 4: Done");
-
-    PW_LOG_INFO("Step 5: Creating FirebaseClient...");
-    firebase_.emplace(gateway_->rpc_client(), gateway_->channel_id());
-    PW_LOG_INFO("Step 5: Done");
-
-    // Start the gateway read task on the system dispatcher
-    PW_LOG_INFO("Step 6: Starting gateway...");
-    gateway_->Start(pw::System().dispatcher());
-    PW_LOG_INFO("Step 6: Done");
-
-    // Connect to gateway
-    PW_LOG_INFO("Step 7: Connecting to gateway...");
-    auto connect_status = gateway_->Connect();
-    if (!connect_status.ok()) {
-      PW_LOG_ERROR("Failed to connect to gateway: %d",
-                   static_cast<int>(connect_status.code()));
-      response.success = false;
-      gateway_.reset();
-      firebase_.reset();
-      return pw::OkStatus();
-    }
-    PW_LOG_INFO("Step 7: Done");
-
-    PW_LOG_INFO("Connected to gateway at %s:%u", gateway_host_.c_str(),
-                gateway_port_);
-
-    response.success = true;
-    return pw::OkStatus();
-#endif
   }
 
   // RPC: TriggerStartSession (async handler)
@@ -252,7 +187,8 @@ class TestControlServiceImpl
       maco_test_firebase_TriggerStartSessionResponse response =
           maco_test_firebase_TriggerStartSessionResponse_init_zero;
       response.success = false;
-      std::strncpy(response.error, "Invalid tag UID", sizeof(response.error) - 1);
+      std::strncpy(response.error, "Invalid tag UID",
+                   sizeof(response.error) - 1);
       responder.Finish(response, pw::OkStatus()).IgnoreError();
       return;
     }

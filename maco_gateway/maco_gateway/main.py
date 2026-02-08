@@ -26,7 +26,10 @@ from typing import Dict, Optional
 
 from pw_hdlc import decode as hdlc_decode
 from pw_hdlc import encode as hdlc_encode
-from pw_rpc import callback_client, packets
+from pw_rpc import packets
+from pw_rpc.descriptors import RpcIds
+from pw_rpc.internal.packet_pb2 import PacketType
+from pw_status import Status
 
 from maco_gateway.ascon_transport import AsconTransport, NonceTracker
 from maco_gateway.firebase_client import FirebaseClient
@@ -84,79 +87,67 @@ class ClientConnection:
             await self._writer.wait_closed()
 
     async def _process_messages(self) -> None:
-        """Process incoming messages from the client."""
-        buffer = bytearray()
+        """Process incoming messages from the client.
 
+        Wire format: HDLC( ASCON( RPC ) )
+        The device wraps ASCON-encrypted frames in HDLC for framing over TCP.
+        We HDLC-decode first to get complete ASCON frames, then decrypt.
+        """
         while True:
             data = await self._reader.read(4096)
             if not data:
                 break
 
-            buffer.extend(data)
             logger.debug("Received %d bytes from %s", len(data), self._addr)
 
-            # Try to process complete frames
-            while len(buffer) >= AsconTransport.MIN_FRAME_SIZE:
-                # Parse device ID to determine key
-                device_id = self._ascon.parse_device_id(bytes(buffer))
-                if device_id is None:
-                    break
+            # Feed bytes to HDLC decoder - it handles framing
+            for frame in self._hdlc_decoder.process_valid_frames(data):
+                await self._process_ascon_frame(bytes(frame.data))
 
-                # Get or validate device key
-                if self._device_id is None:
-                    self._device_id = device_id
-                    self._device_key = self._key_store.get_device_key(device_id)
-                    logger.info(
-                        "Device %016X connected from %s", device_id, self._addr
-                    )
-                elif self._device_id != device_id:
-                    logger.warning(
-                        "Device ID mismatch: expected %016X, got %016X",
-                        self._device_id,
-                        device_id,
-                    )
-                    return
+    async def _process_ascon_frame(self, frame_data: bytes) -> None:
+        """Decrypt an ASCON frame extracted from HDLC and process the RPC payload."""
+        if len(frame_data) < AsconTransport.MIN_FRAME_SIZE:
+            logger.warning("ASCON frame too small: %d bytes", len(frame_data))
+            return
 
-                # Decrypt the frame
-                frame, error = self._ascon.decrypt_frame(
-                    bytes(buffer), self._device_key
-                )
-                if error:
-                    logger.warning("Decrypt error: %s", error)
-                    # Try to find next frame
-                    buffer = buffer[1:]
-                    continue
+        # Parse device ID to look up key
+        device_id = self._ascon.parse_device_id(frame_data)
+        if device_id is None:
+            logger.warning("Failed to parse device ID")
+            return
 
-                if frame is None:
-                    break
+        # Get or validate device key
+        if self._device_id is None:
+            self._device_id = device_id
+            self._device_key = self._key_store.get_device_key(device_id)
+            logger.info(
+                "Device %016X connected from %s", device_id, self._addr
+            )
+        elif self._device_id != device_id:
+            logger.warning(
+                "Device ID mismatch: expected %016X, got %016X",
+                self._device_id,
+                device_id,
+            )
+            return
 
-                # Check nonce for replay protection
-                if not self._nonce_tracker.check_and_update(frame.nonce):
-                    logger.warning("Nonce replay detected, dropping frame")
-                    buffer = buffer[AsconTransport.MIN_FRAME_SIZE:]
-                    continue
+        # Decrypt the ASCON frame
+        frame, error = self._ascon.decrypt_frame(frame_data, self._device_key)
+        if error:
+            logger.warning("Decrypt error: %s", error)
+            return
 
-                # Process HDLC frame
-                frame_size = (
-                    AsconTransport.DEVICE_ID_SIZE
-                    + AsconTransport.NONCE_SIZE
-                    + len(frame.payload)
-                    + AsconTransport.TAG_SIZE
-                )
-                buffer = buffer[frame_size:]
+        if frame is None:
+            logger.warning("Decrypt returned None frame")
+            return
 
-                await self._process_hdlc_payload(frame.payload)
+        # Check nonce for replay protection
+        if not self._nonce_tracker.check_and_update(frame.nonce):
+            logger.warning("Nonce replay detected, dropping frame")
+            return
 
-    async def _process_hdlc_payload(self, payload: bytes) -> None:
-        """Process HDLC-encoded pw_rpc data."""
-        for byte in payload:
-            result = self._hdlc_decoder.process_byte(byte)
-            if result:
-                if result.ok():
-                    hdlc_frame = result.value()
-                    await self._process_rpc_packet(bytes(hdlc_frame.data))
-                else:
-                    logger.warning("HDLC decode error: %s", result.status())
+        # The decrypted payload is a raw pw_rpc packet
+        await self._process_rpc_packet(frame.payload)
 
     async def _process_rpc_packet(self, packet_data: bytes) -> None:
         """Process a pw_rpc packet."""
@@ -176,55 +167,50 @@ class ClientConnection:
 
     async def _handle_rpc_request(self, packet) -> Optional[bytes]:
         """Handle an RPC request and return the response packet."""
-        # GatewayService service ID (computed from "maco.gateway.GatewayService")
-        # Method IDs are computed from method names
+        if not packets.for_server(packet):
+            logger.debug("Ignoring non-server packet type=%d", packet.type)
+            return None
 
-        # For now, handle based on packet type
-        if packet.type == packets.PacketType.REQUEST:
-            # Decode request and dispatch to service
-            # This is simplified - a full implementation would use pw_rpc's
-            # service infrastructure
-            logger.info(
-                "RPC request: service=%d method=%d",
-                packet.service_id,
-                packet.method_id,
-            )
+        logger.info(
+            "RPC request: service=%d method=%d call=%d",
+            packet.service_id,
+            packet.method_id,
+            packet.call_id,
+        )
 
-            # TODO: Implement proper RPC dispatch using generated proto code
-            # For now, return an error response
-            return packets.encode_response(
-                channel_id=packet.channel_id,
-                service_id=packet.service_id,
-                method_id=packet.method_id,
-                status=packets.Status.UNIMPLEMENTED,
-                payload=b"",
-            )
-
-        return None
+        # TODO: Implement proper RPC dispatch using generated proto code
+        # For now, return UNIMPLEMENTED for all requests
+        rpc = RpcIds(packet.channel_id, packet.service_id,
+                     packet.method_id, packet.call_id)
+        return packets.encode_server_error(rpc, Status.UNIMPLEMENTED)
 
     async def _send_response(self, response_data: bytes) -> None:
-        """Send an encrypted response to the client."""
+        """Send an encrypted response to the client.
+
+        Wire format: HDLC( ASCON( RPC ) )
+        We ASCON-encrypt the RPC packet, then wrap in HDLC for framing.
+        """
         if self._device_key is None or self._device_id is None:
             logger.error("Cannot send response: device not identified")
             return
-
-        # HDLC encode the response
-        hdlc_data = hdlc_encode.frame(GATEWAY_CHANNEL_ID, response_data)
 
         # Generate nonce for response
         self._response_nonce_counter += 1
         nonce = self._response_nonce_counter.to_bytes(16, byteorder="big")
 
-        # Encrypt the frame
+        # ASCON encrypt the raw RPC packet
         frame_data, error = self._ascon.encrypt_frame(
-            self._device_id, nonce, hdlc_data, self._device_key
+            self._device_id, nonce, response_data, self._device_key
         )
         if error:
             logger.error("Encrypt error: %s", error)
             return
 
+        # HDLC encode the ASCON frame for TCP framing
+        hdlc_data = hdlc_encode.ui_frame(GATEWAY_CHANNEL_ID, frame_data)
+
         # Send to client
-        self._writer.write(frame_data)
+        self._writer.write(hdlc_data)
         await self._writer.drain()
 
 
@@ -261,16 +247,18 @@ class GatewayServer:
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
         """Handle a new client connection."""
-        conn = ClientConnection(
-            reader, writer, self._key_store, self._gateway_service
-        )
         addr = str(writer.get_extra_info("peername"))
-        self._connections[addr] = conn
-
         try:
+            conn = ClientConnection(
+                reader, writer, self._key_store, self._gateway_service
+            )
+            self._connections[addr] = conn
             await conn.handle()
+        except Exception as e:
+            logger.error("Connection handler error for %s: %s", addr, e,
+                         exc_info=True)
         finally:
-            del self._connections[addr]
+            self._connections.pop(addr, None)
 
 
 def parse_args() -> argparse.Namespace:

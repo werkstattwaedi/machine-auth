@@ -55,6 +55,8 @@ constexpr size_t kMaxHdlcFrameSize =
 /// ASCON-encrypted channel output with automatic reconnection.
 class AsconChannelOutput : public pw::rpc::ChannelOutput {
  public:
+  using ReconnectCallback = void (*)(void*);
+
   AsconChannelOutput(pb::socket::TcpSocket& tcp_socket,
                      pb::socket::TcpSocketStreamAdapter& stream_adapter,
                      pw::ConstByteSpan key,
@@ -64,14 +66,17 @@ class AsconChannelOutput : public pw::rpc::ChannelOutput {
         tcp_socket_(tcp_socket),
         stream_adapter_(stream_adapter),
         device_id_(device_id) {
-    PW_LOG_INFO("AsconChannelOutput: constructing...");
     if (key.size() >= kKeySize) {
       std::copy_n(key.begin(), kKeySize, key_.begin());
     } else {
       std::fill(key_.begin(), key_.end(), std::byte{0});
       std::copy(key.begin(), key.end(), key_.begin());
     }
-    PW_LOG_INFO("AsconChannelOutput: done, nonce_counter initialized");
+  }
+
+  void SetReconnectCallback(ReconnectCallback cb, void* ctx) {
+    reconnect_cb_ = cb;
+    reconnect_ctx_ = ctx;
   }
 
   pw::Status Send(pw::span<const std::byte> buffer) override {
@@ -144,6 +149,9 @@ class AsconChannelOutput : public pw::rpc::ChannelOutput {
     }
 
     PW_LOG_INFO("Connected to gateway");
+    if (reconnect_cb_) {
+      reconnect_cb_(reconnect_ctx_);
+    }
     return pw::OkStatus();
   }
 
@@ -186,6 +194,8 @@ class AsconChannelOutput : public pw::rpc::ChannelOutput {
   std::array<std::byte, kKeySize> key_;
   uint64_t device_id_;
   uint64_t nonce_counter_ = GetRandomNonceStart();
+  ReconnectCallback reconnect_cb_ = nullptr;
+  void* reconnect_ctx_ = nullptr;
 };
 
 /// Implementation details for P2GatewayClient
@@ -206,14 +216,23 @@ struct P2GatewayClient::Impl {
         channels{pw::rpc::Channel::Create<1>(&channel_output)},
         rpc_client(channels),
         device_id_(config.device_id) {
-    PW_LOG_INFO("Impl: initializer list done");
     // Copy key for decryption
     if (config.key != nullptr) {
       std::copy_n(config.key, kKeySize, key_.begin());
     } else {
       std::fill(key_.begin(), key_.end(), std::byte{0});
     }
-    PW_LOG_INFO("Impl: key copied, construction complete");
+
+    // Re-post ReadTask whenever the channel output reconnects
+    channel_output.SetReconnectCallback(&Impl::OnReconnect, this);
+  }
+
+  static void OnReconnect(void* ctx) {
+    auto* impl = static_cast<Impl*>(ctx);
+    if (impl->dispatcher_) {
+      PW_LOG_INFO("Re-posting ReadTask after reconnect");
+      impl->dispatcher_->Post(impl->read_task_);
+    }
   }
 
   /// Decrypt and process an HDLC frame received from the gateway.
@@ -264,29 +283,29 @@ struct P2GatewayClient::Impl {
 
    private:
     pw::async2::Poll<> DoPend(pw::async2::Context& cx) override {
-      // Ensure connected before reading
+      // Stop polling if not connected — will be re-posted on reconnect
       if (!impl_.tcp_socket.IsConnected()) {
-        cx.ReEnqueue();
-        return pw::async2::Pending();
+        PW_LOG_INFO("ReadTask: not connected, stopping");
+        return pw::async2::Ready();
       }
 
-      // Try to read some bytes (non-blocking via short timeout on socket)
+      // Try to read some bytes (non-blocking via MSG_DONTWAIT)
       std::array<std::byte, 64> read_buffer;
       auto result = impl_.tcp_socket.Read(read_buffer);
 
       if (!result.ok()) {
-        PW_LOG_WARN("TCP read error: %d",
+        PW_LOG_WARN("ReadTask: read error %d, stopping",
                     static_cast<int>(result.status().code()));
-        cx.ReEnqueue();
-        return pw::async2::Pending();
+        return pw::async2::Ready();
       }
 
       if (result.size() == 0) {
-        // No data available, keep polling
+        // No data available (EAGAIN), keep polling
         cx.ReEnqueue();
         return pw::async2::Pending();
       }
 
+      PW_LOG_INFO("ReadTask: got %zu bytes", result.size());
       pw::ConstByteSpan data(read_buffer.data(), result.size());
 
       // Feed bytes to HDLC decoder
@@ -322,7 +341,7 @@ struct P2GatewayClient::Impl {
 
 P2GatewayClient::P2GatewayClient(const GatewayConfig& config)
     : impl_(std::make_unique<Impl>(config, *this)), config_(config) {
-  PW_LOG_INFO("P2GatewayClient constructed");
+  PW_LOG_INFO("P2GatewayClient: constructed");
 }
 
 P2GatewayClient::~P2GatewayClient() = default;
@@ -339,7 +358,17 @@ bool P2GatewayClient::IsConnected() const {
 }
 
 pw::Status P2GatewayClient::Connect() {
-  return impl_->channel_output.EnsureConnected();
+  if (impl_->tcp_socket.IsConnected()) {
+    return pw::OkStatus();
+  }
+  PW_LOG_INFO("Connecting to gateway...");
+  pw::Status status = impl_->tcp_socket.Connect();
+  if (!status.ok()) {
+    PW_LOG_ERROR("Failed to connect: %d", static_cast<int>(status.code()));
+    return status;
+  }
+  PW_LOG_INFO("Connected to gateway");
+  return pw::OkStatus();
 }
 
 void P2GatewayClient::Disconnect() { impl_->tcp_socket.Disconnect(); }

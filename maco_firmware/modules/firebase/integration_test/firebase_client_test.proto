@@ -52,10 +52,24 @@ message PingResponse {
   bool ok = 1;
 }
 
+// Request to wait for WiFi connection.
+message WaitForWiFiRequest {
+  // Maximum time to wait in milliseconds. 0 = wait forever.
+  uint32 timeout_ms = 1;
+}
+
+// Response from WiFi wait.
+message WaitForWiFiResponse {
+  bool connected = 1;
+}
+
 // Test control service for Firebase client integration tests.
 service TestControl {
   // Simple ping to verify RPC works.
   rpc Ping(PingRequest) returns (PingResponse);
+
+  // Wait for WiFi to be ready (IP address obtained).
+  rpc WaitForWiFi(WaitForWiFiRequest) returns (WaitForWiFiResponse);
 
   // Configure the gateway connection parameters.
   // Called by Python test to point device at mock gateway.

@@ -10,6 +10,7 @@
 #include <cstring>
 
 #include "concurrent_hal.h"
+
 #include "inet_hal_posix.h"
 #include "netdb_hal.h"
 #include "pw_log/log.h"
@@ -305,8 +306,6 @@ void SocketThreadMain(void* /*arg*/) {
       }
 
       case SocketOp::kRecv: {
-        PW_LOG_DEBUG("SocketThread: Recv up to %zu bytes (fd=%d)", req->recv_size,
-                     req->socket_fd);
         if (req->state != TcpState::kConnected || req->socket_fd < 0) {
           req->result = -1;
           req->error_code = ENOTCONN;
@@ -316,8 +315,48 @@ void SocketThreadMain(void* /*arg*/) {
           break;
         }
 
-        // Use MSG_DONTWAIT to avoid blocking on the LwIP lock.
-        // The caller can retry if EAGAIN is returned.
+        // Use poll() to check socket state before recv.
+        // LwIP's recv with MSG_DONTWAIT may return 0 spuriously on a
+        // freshly connected socket. poll() gives a reliable indication
+        // of whether data is available vs connection closed.
+        struct pollfd pfd;
+        pfd.fd = req->socket_fd;
+        pfd.events = POLLIN;
+        pfd.revents = 0;
+
+        int poll_ret = sock_poll(&pfd, 1, 0);
+
+        if (poll_ret == 0) {
+          // No events — no data and connection still alive
+          req->result = -1;
+          req->error_code = EAGAIN;
+          req->done->release();
+          break;
+        }
+
+        if (poll_ret < 0) {
+          req->error_code = errno;
+          req->result = -1;
+          req->last_error = errno;
+          req->state = TcpState::kError;
+          PW_LOG_WARN("SocketThread: poll error %d (fd=%d)", errno,
+                      req->socket_fd);
+          req->done->release();
+          break;
+        }
+
+        // poll_ret > 0: check what happened
+        if (pfd.revents & (POLLHUP | POLLERR | POLLNVAL)) {
+          PW_LOG_WARN("SocketThread: poll revents=0x%x (fd=%d) — closed",
+                      static_cast<unsigned>(pfd.revents), req->socket_fd);
+          req->result = 0;
+          req->error_code = 0;
+          req->state = TcpState::kDisconnected;
+          req->done->release();
+          break;
+        }
+
+        // POLLIN: data available, do the recv
         ssize_t received = sock_recv(req->socket_fd, req->recv_buffer,
                                      req->recv_size, MSG_DONTWAIT);
 
@@ -425,6 +464,7 @@ pw::Status ParticleTcpSocket::Connect() {
   req.read_timeout_ms = config_.read_timeout_ms;
   req.done = &done;
 
+  PW_LOG_INFO("Connect: %s:%u", config_.host, config_.port);
   SocketRequest* req_ptr = &req;
   os_queue_put(g_socket_queue, &req_ptr, CONCURRENT_WAIT_FOREVER, nullptr);
   done.acquire();

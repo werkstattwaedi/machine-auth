@@ -15,9 +15,14 @@ to simulate Firebase Cloud Function behavior.
 
 import asyncio
 import logging
+import os
 import unittest
 from pathlib import Path
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
 _LOG = logging.getLogger(__name__)
 
 from maco_gateway.fixtures import MockHttpServer, GatewayProcess, CannedResponse
@@ -55,7 +60,12 @@ class FirebaseClientIntegrationTest(unittest.IsolatedAsyncioTestCase):
         await self.mock_server.start()
 
         # Now create gateway with mock server URL
-        self.gateway = GatewayProcess(firebase_url=self.mock_server.url)
+        # Listen on 0.0.0.0:19283 so P2 can reach us via port forwarding (WSL2)
+        self.gateway = GatewayProcess(
+            firebase_url=self.mock_server.url,
+            host="0.0.0.0",
+            port=19283,
+        )
         self.harness.add_fixture("gateway", self.gateway)
 
         # Create device fixture with test firmware
@@ -75,12 +85,24 @@ class FirebaseClientIntegrationTest(unittest.IsolatedAsyncioTestCase):
         ping_result = self.device.rpc.rpcs.maco.test.firebase.TestControl.Ping()
         _LOG.info("Ping result: %s", ping_result)
 
+        # Wait for WiFi before configuring gateway
+        _LOG.info("Waiting for device WiFi connection...")
+        wifi_result = self.device.rpc.rpcs.maco.test.firebase.TestControl.WaitForWiFi(
+            timeout_ms=30000,
+            pw_rpc_timeout_s=35.0,
+        )
+        if not wifi_result.response.connected:
+            raise RuntimeError("Device failed to connect to WiFi within 30 seconds")
+        _LOG.info("Device WiFi ready!")
+
         # Configure device to connect to gateway
-        # Note: pw_rpc calls are synchronous (callback-based), not async
-        _LOG.info("Calling ConfigureGateway...")
+        # TCP_TEST_HOST: IP the P2 uses to reach us (required on WSL2)
+        device_host = os.environ.get("TCP_TEST_HOST", self.gateway.host)
+        device_port = self.gateway.port
+        _LOG.info("Calling ConfigureGateway(host=%s, port=%d)...", device_host, device_port)
         self.device.rpc.rpcs.maco.test.firebase.TestControl.ConfigureGateway(
-            host=self.gateway.host,
-            port=self.gateway.port,
+            host=device_host,
+            port=device_port,
         )
 
     async def asyncTearDown(self):
@@ -92,22 +114,22 @@ class FirebaseClientIntegrationTest(unittest.IsolatedAsyncioTestCase):
         await self.gateway.stop()
         await self.mock_server.stop()
 
-    async def test_start_session_not_implemented_yet(self):
-        """Test that TriggerStartSession returns 'not implemented' for now.
+    async def test_terminal_checkin_unimplemented(self):
+        """Test that TerminalCheckin returns an error from the gateway.
 
-        This is a placeholder test to verify the integration test framework
-        is working. The actual implementation will come later.
+        The gateway currently returns UNIMPLEMENTED for all RPCs.
+        This test verifies the full end-to-end path:
+        P2 → HDLC/ASCON → Gateway → UNIMPLEMENTED response → P2.
         """
-        # Trigger a StartSession call
-        # Note: pw_rpc calls are synchronous (callback-based), not async
         response = self.device.rpc.rpcs.maco.test.firebase.TestControl.TriggerStartSession(
             tag_uid=b"\x04\x01\x02\x03\x04\x05\x06",
+            pw_rpc_timeout_s=15.0,
         )
         result = response.response
 
-        # For now, expect "not implemented" response
+        # Gateway returns UNIMPLEMENTED, which the device maps to an error
         self.assertFalse(result.success)
-        self.assertIn("Not yet implemented", result.error)
+        self.assertIn("RPC failed", result.error)
 
 
 # Future tests to implement:
