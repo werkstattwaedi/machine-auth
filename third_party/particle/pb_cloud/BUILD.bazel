@@ -131,7 +131,7 @@ cc_library(
     testonly = True,
 )
 
-# Mock ledger backend for testing
+# Mock ledger backend for testing and host simulator
 cc_library(
     name = "mock_ledger_backend",
     hdrs = ["mock/mock_ledger_backend.h"],
@@ -140,7 +140,6 @@ cc_library(
         ":pb_ledger",
         "@pigweed//pw_assert:check",
     ],
-    testonly = True,
 )
 
 # Cloud unit tests

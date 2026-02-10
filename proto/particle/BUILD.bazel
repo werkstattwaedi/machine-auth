@@ -21,6 +21,7 @@ proto_library(
     name = "device_config_proto",
     srcs = [":device_config_proto_and_options"],
     strip_import_prefix = "/proto",
+    deps = ["//proto:common_proto"],
 )
 
 nanopb_proto_library(

@@ -6,6 +6,8 @@
 #include <array>
 #include <cstring>
 
+#include "maco_firmware/types.h"
+
 #include "pb_crypto/pb_crypto.h"
 #include "pb_socket/particle_tcp_socket.h"
 #include "pb_socket/tcp_socket_stream_adapter.h"
@@ -16,6 +18,7 @@
 #include "pw_hdlc/decoder.h"
 #include "pw_hdlc/encoder.h"
 #include "pw_rpc/channel.h"
+#include "pw_string/string.h"
 #include "rng_hal.h"
 
 #define PW_LOG_MODULE_NAME "gateway"
@@ -40,7 +43,7 @@ uint64_t GetRandomNonceStart() {
 constexpr size_t kMaxPayloadSize = 512;
 
 // Size constants for ASCON
-constexpr size_t kDeviceIdSize = 8;
+constexpr size_t kDeviceIdSize = DeviceId::kSize;  // 12 bytes
 constexpr size_t kNonceSize = 16;
 constexpr size_t kTagSize = 16;
 constexpr size_t kKeySize = 16;
@@ -59,20 +62,14 @@ class AsconChannelOutput : public pw::rpc::ChannelOutput {
 
   AsconChannelOutput(pb::socket::TcpSocket& tcp_socket,
                      pb::socket::TcpSocketStreamAdapter& stream_adapter,
-                     pw::ConstByteSpan key,
-                     uint64_t device_id,
+                     const std::array<std::byte, kKeySize>& key,
+                     const DeviceId& device_id,
                      const char* channel_name)
       : ChannelOutput(channel_name),
         tcp_socket_(tcp_socket),
         stream_adapter_(stream_adapter),
-        device_id_(device_id) {
-    if (key.size() >= kKeySize) {
-      std::copy_n(key.begin(), kKeySize, key_.begin());
-    } else {
-      std::fill(key_.begin(), key_.end(), std::byte{0});
-      std::copy(key.begin(), key.end(), key_.begin());
-    }
-  }
+        key_(key),
+        device_id_(device_id) {}
 
   void SetReconnectCallback(ReconnectCallback cb, void* ctx) {
     reconnect_cb_ = cb;
@@ -104,9 +101,9 @@ class AsconChannelOutput : public pw::rpc::ChannelOutput {
       return pw::Status::ResourceExhausted();
     }
 
-    // Write device ID (big-endian)
-    auto device_id_bytes = pw::bytes::CopyInOrder(pw::endian::big, device_id_);
-    std::copy(device_id_bytes.begin(), device_id_bytes.end(), frame_buffer.begin());
+    // Write device ID
+    auto id_bytes = device_id_.bytes();
+    std::copy(id_bytes.begin(), id_bytes.end(), frame_buffer.begin());
 
     // Build and write nonce
     auto nonce = BuildNonce();
@@ -182,18 +179,20 @@ class AsconChannelOutput : public pw::rpc::ChannelOutput {
 
   std::array<std::byte, kNonceSize> BuildNonce() const {
     std::array<std::byte, kNonceSize> nonce{};
-    auto device_id_bytes = pw::bytes::CopyInOrder(pw::endian::big, device_id_);
-    auto counter_bytes = pw::bytes::CopyInOrder(pw::endian::big, nonce_counter_);
-    std::copy(device_id_bytes.begin(), device_id_bytes.end(), nonce.begin());
-    std::copy(counter_bytes.begin(), counter_bytes.end(), nonce.begin() + 8);
+    auto id_bytes = device_id_.bytes();
+    std::copy(id_bytes.begin(), id_bytes.end(), nonce.begin());
+    auto counter_bytes =
+        pw::bytes::CopyInOrder(pw::endian::big, nonce_counter_);
+    std::copy(counter_bytes.begin(), counter_bytes.end(),
+              nonce.begin() + DeviceId::kSize);
     return nonce;
   }
 
   pb::socket::TcpSocket& tcp_socket_;
   pb::socket::TcpSocketStreamAdapter& stream_adapter_;
   std::array<std::byte, kKeySize> key_;
-  uint64_t device_id_;
-  uint64_t nonce_counter_ = GetRandomNonceStart();
+  DeviceId device_id_;
+  uint32_t nonce_counter_ = static_cast<uint32_t>(GetRandomNonceStart());
   ReconnectCallback reconnect_cb_ = nullptr;
   void* reconnect_ctx_ = nullptr;
 };
@@ -202,7 +201,8 @@ class AsconChannelOutput : public pw::rpc::ChannelOutput {
 struct P2GatewayClient::Impl {
   Impl(const GatewayConfig& config, P2GatewayClient& parent)
       : parent_(parent),
-        tcp_config{.host = config.host,
+        host_(config.host),
+        tcp_config{.host = host_.c_str(),
                    .port = config.port,
                    .connect_timeout_ms = config.connect_timeout_ms,
                    .read_timeout_ms = config.read_timeout_ms},
@@ -210,19 +210,13 @@ struct P2GatewayClient::Impl {
         stream_adapter(tcp_socket),
         channel_output(tcp_socket,
                        stream_adapter,
-                       pw::ConstByteSpan(config.key, kKeySize),
+                       config.key,
                        config.device_id,
                        "gateway"),
         channels{pw::rpc::Channel::Create<1>(&channel_output)},
         rpc_client(channels),
+        key_(config.key),
         device_id_(config.device_id) {
-    // Copy key for decryption
-    if (config.key != nullptr) {
-      std::copy_n(config.key, kKeySize, key_.begin());
-    } else {
-      std::fill(key_.begin(), key_.end(), std::byte{0});
-    }
-
     // Re-post ReadTask whenever the channel output reconnects
     channel_output.SetReconnectCallback(&Impl::OnReconnect, this);
   }
@@ -326,14 +320,15 @@ struct P2GatewayClient::Impl {
   };
 
   P2GatewayClient& parent_;
+  pw::InlineString<64> host_;  // Owns the host string for tcp_config
   pb::socket::TcpConfig tcp_config;
   pb::socket::ParticleTcpSocket tcp_socket;
   pb::socket::TcpSocketStreamAdapter stream_adapter;
   AsconChannelOutput channel_output;
   std::array<pw::rpc::Channel, 1> channels;
   pw::rpc::Client rpc_client;
-  uint64_t device_id_;
   std::array<std::byte, kKeySize> key_;
+  DeviceId device_id_;
   pw::hdlc::DecoderBuffer<kMaxHdlcFrameSize> hdlc_decoder_;
   ReadTask read_task_{*this};
   pw::async2::Dispatcher* dispatcher_ = nullptr;

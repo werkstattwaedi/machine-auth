@@ -5,6 +5,8 @@ syntax = "proto3";
 
 package maco.proto.particle;
 
+import "common.proto";
+
 // Hardware revision of the terminal device
 enum HwRevision {
   HW_REVISION_UNSPECIFIED = 0;
@@ -25,11 +27,11 @@ message RelayControl {}
 // Machine definition with permissions
 message Machine {
   // Firebase machine ID
-  string id = 1;
+  maco.proto.FirebaseId id = 1;
   // Human-readable label
   string label = 2;
   // Firebase permission IDs required to use this machine
-  repeated string required_permissions = 3;
+  repeated maco.proto.FirebaseId required_permissions = 3;
   // Control mechanism for the machine
   MachineControl control = 4;
 }
@@ -40,4 +42,8 @@ message DeviceConfig {
   HwRevision hw_revision = 1;
   // Machines controlled by this terminal
   repeated Machine machines = 2;
+  // Gateway server hostname or IP address
+  string gateway_host = 3;
+  // Gateway server port
+  uint32 gateway_port = 4;
 }

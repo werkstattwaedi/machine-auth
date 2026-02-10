@@ -83,6 +83,44 @@ class FirebaseId {
   pw::InlineString<kMaxSize> value_;
 };
 
+/// 12-byte device identifier (P2 hardware ID).
+class DeviceId {
+ public:
+  static constexpr size_t kSize = 12;
+
+  /// Create from bytes (must be exactly 12 bytes).
+  static pw::Result<DeviceId> FromBytes(pw::ConstByteSpan bytes) {
+    if (bytes.size() != kSize) {
+      return pw::Status::InvalidArgument();
+    }
+    std::array<std::byte, kSize> arr;
+    std::copy(bytes.begin(), bytes.end(), arr.begin());
+    return DeviceId(arr);
+  }
+
+  /// Create from a std::array directly.
+  static constexpr DeviceId FromArray(std::array<std::byte, kSize> value) {
+    return DeviceId(value);
+  }
+
+  /// Access the underlying bytes.
+  pw::ConstByteSpan bytes() const {
+    return pw::ConstByteSpan(value_.data(), value_.size());
+  }
+
+  /// Access the raw array.
+  constexpr const std::array<std::byte, kSize>& array() const {
+    return value_;
+  }
+
+  bool operator==(const DeviceId& other) const = default;
+
+ private:
+  explicit constexpr DeviceId(std::array<std::byte, kSize> value)
+      : value_(value) {}
+  std::array<std::byte, kSize> value_;
+};
+
 /// 16-byte AES-128 key.
 class KeyBytes {
  public:

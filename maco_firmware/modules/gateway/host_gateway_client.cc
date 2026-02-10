@@ -16,6 +16,8 @@
 #include <cstring>
 #include <random>
 
+#include "maco_firmware/types.h"
+
 #include "pb_crypto/pb_crypto.h"
 #include "pw_async2/context.h"
 #include "pw_async2/poll.h"
@@ -25,6 +27,7 @@
 #include "pw_hdlc/encoder.h"
 #include "pw_rpc/channel.h"
 #include "pw_stream/stream.h"
+#include "pw_string/string.h"
 
 #define PW_LOG_MODULE_NAME "gateway"
 #include "pw_log/log.h"
@@ -43,7 +46,7 @@ uint64_t GetRandomNonceStart() {
   return dist(rd);
 }
 constexpr size_t kMaxPayloadSize = 512;
-constexpr size_t kDeviceIdSize = 8;
+constexpr size_t kDeviceIdSize = DeviceId::kSize;  // 12 bytes
 constexpr size_t kNonceSize = 16;
 constexpr size_t kTagSize = 16;
 constexpr size_t kKeySize = 16;
@@ -54,8 +57,8 @@ constexpr size_t kMaxHdlcFrameSize =
 /// Simple POSIX TCP stream for host.
 class HostTcpStream : public pw::stream::NonSeekableReaderWriter {
  public:
-  HostTcpStream(const char* host, uint16_t port, uint32_t connect_timeout_ms,
-                uint32_t read_timeout_ms)
+  HostTcpStream(std::string_view host, uint16_t port,
+                uint32_t connect_timeout_ms, uint32_t read_timeout_ms)
       : host_(host),
         port_(port),
         connect_timeout_ms_(connect_timeout_ms),
@@ -92,7 +95,7 @@ class HostTcpStream : public pw::stream::NonSeekableReaderWriter {
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(port_);
 
-    if (inet_pton(AF_INET, host_, &server_addr.sin_addr) != 1) {
+    if (inet_pton(AF_INET, host_.c_str(), &server_addr.sin_addr) != 1) {
       // Try hostname resolution
       struct addrinfo hints;
       struct addrinfo* result = nullptr;
@@ -100,9 +103,9 @@ class HostTcpStream : public pw::stream::NonSeekableReaderWriter {
       hints.ai_family = AF_INET;
       hints.ai_socktype = SOCK_STREAM;
 
-      int err = getaddrinfo(host_, nullptr, &hints, &result);
+      int err = getaddrinfo(host_.c_str(), nullptr, &hints, &result);
       if (err != 0 || result == nullptr) {
-        PW_LOG_ERROR("Failed to resolve hostname '%s'", host_);
+        PW_LOG_ERROR("Failed to resolve hostname '%s'", host_.c_str());
         close(socket_fd_);
         socket_fd_ = -1;
         return pw::Status::NotFound();
@@ -156,7 +159,7 @@ class HostTcpStream : public pw::stream::NonSeekableReaderWriter {
     fcntl(socket_fd_, F_SETFL, flags);
 
     connected_ = true;
-    PW_LOG_INFO("Connected to %s:%u", host_, port_);
+    PW_LOG_INFO("Connected to %s:%u", host_.c_str(), port_);
     return pw::OkStatus();
   }
 
@@ -254,7 +257,7 @@ class HostTcpStream : public pw::stream::NonSeekableReaderWriter {
     return pw::OkStatus();
   }
 
-  const char* host_;
+  pw::InlineString<64> host_;
   uint16_t port_;
   uint32_t connect_timeout_ms_;
   uint32_t read_timeout_ms_;
@@ -265,18 +268,13 @@ class HostTcpStream : public pw::stream::NonSeekableReaderWriter {
 /// ASCON channel output for host.
 class AsconChannelOutput : public pw::rpc::ChannelOutput {
  public:
-  AsconChannelOutput(HostTcpStream& tcp_stream, pw::ConstByteSpan key,
-                     uint64_t device_id, const char* channel_name)
+  AsconChannelOutput(HostTcpStream& tcp_stream,
+                     const std::array<std::byte, kKeySize>& key,
+                     const DeviceId& device_id, const char* channel_name)
       : ChannelOutput(channel_name),
         tcp_stream_(tcp_stream),
-        device_id_(device_id) {
-    if (key.size() >= kKeySize) {
-      std::copy_n(key.begin(), kKeySize, key_.begin());
-    } else {
-      std::fill(key_.begin(), key_.end(), std::byte{0});
-      std::copy(key.begin(), key.end(), key_.begin());
-    }
-  }
+        key_(key),
+        device_id_(device_id) {}
 
   pw::Status Send(pw::span<const std::byte> buffer) override {
     if (buffer.size() > kMaxPayloadSize) {
@@ -295,8 +293,8 @@ class AsconChannelOutput : public pw::rpc::ChannelOutput {
                kDeviceIdSize + kNonceSize + kMaxPayloadSize + kTagSize>
         frame_buffer;
 
-    auto device_id_bytes = pw::bytes::CopyInOrder(pw::endian::big, device_id_);
-    std::copy(device_id_bytes.begin(), device_id_bytes.end(), frame_buffer.begin());
+    auto id_bytes = device_id_.bytes();
+    std::copy(id_bytes.begin(), id_bytes.end(), frame_buffer.begin());
 
     auto nonce = BuildNonce();
     std::copy(nonce.begin(), nonce.end(), frame_buffer.begin() + kDeviceIdSize);
@@ -352,37 +350,32 @@ class AsconChannelOutput : public pw::rpc::ChannelOutput {
 
   std::array<std::byte, kNonceSize> BuildNonce() const {
     std::array<std::byte, kNonceSize> nonce{};
-    auto device_id_bytes = pw::bytes::CopyInOrder(pw::endian::big, device_id_);
-    auto counter_bytes = pw::bytes::CopyInOrder(pw::endian::big, nonce_counter_);
-    std::copy(device_id_bytes.begin(), device_id_bytes.end(), nonce.begin());
-    std::copy(counter_bytes.begin(), counter_bytes.end(), nonce.begin() + 8);
+    auto id_bytes = device_id_.bytes();
+    std::copy(id_bytes.begin(), id_bytes.end(), nonce.begin());
+    auto counter_bytes =
+        pw::bytes::CopyInOrder(pw::endian::big, nonce_counter_);
+    std::copy(counter_bytes.begin(), counter_bytes.end(),
+              nonce.begin() + DeviceId::kSize);
     return nonce;
   }
 
   HostTcpStream& tcp_stream_;
   std::array<std::byte, kKeySize> key_;
-  uint64_t device_id_;
-  uint64_t nonce_counter_ = GetRandomNonceStart();
+  DeviceId device_id_;
+  uint32_t nonce_counter_ = static_cast<uint32_t>(GetRandomNonceStart());
 };
 
 }  // namespace
 
 struct HostGatewayClient::Impl {
   Impl(const GatewayConfig& config)
-      : tcp_stream(config.host, config.port, config.connect_timeout_ms,
-                   config.read_timeout_ms),
-        channel_output(tcp_stream, pw::ConstByteSpan(config.key, kKeySize),
-                       config.device_id, "gateway"),
+      : tcp_stream(std::string_view(config.host), config.port,
+                   config.connect_timeout_ms, config.read_timeout_ms),
+        channel_output(tcp_stream, config.key, config.device_id, "gateway"),
         channels{pw::rpc::Channel::Create<1>(&channel_output)},
         rpc_client(channels),
-        device_id_(config.device_id) {
-    // Copy key for decryption
-    if (config.key != nullptr) {
-      std::copy_n(config.key, kKeySize, key_.begin());
-    } else {
-      std::fill(key_.begin(), key_.end(), std::byte{0});
-    }
-  }
+        key_(config.key),
+        device_id_(config.device_id) {}
 
   /// Decrypt and process an HDLC frame received from the gateway.
   void ProcessReceivedFrame(const pw::hdlc::Frame& frame) {
@@ -477,8 +470,8 @@ struct HostGatewayClient::Impl {
   AsconChannelOutput channel_output;
   std::array<pw::rpc::Channel, 1> channels;
   pw::rpc::Client rpc_client;
-  uint64_t device_id_;
   std::array<std::byte, kKeySize> key_;
+  DeviceId device_id_;
   pw::hdlc::DecoderBuffer<kMaxHdlcFrameSize> hdlc_decoder_;
   ReadTask read_task_{*this};
   pw::async2::Dispatcher* dispatcher_ = nullptr;

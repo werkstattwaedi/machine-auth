@@ -16,18 +16,21 @@
 /// - Host: Uses POSIX sockets for TCP
 /// - Mock: For testing without network
 
+#include <array>
 #include <cstdint>
 
 #include "gateway/gateway_service.pb.h"
+#include "maco_firmware/types.h"
 #include "pw_async2/dispatcher.h"
 #include "pw_rpc/client.h"
+#include "pw_string/string.h"
 
 namespace maco::gateway {
 
 /// Configuration for the gateway connection.
 struct GatewayConfig {
   /// Gateway IP address or hostname
-  const char* host = nullptr;
+  pw::InlineString<64> host;
 
   /// Gateway port
   uint16_t port = 5000;
@@ -38,11 +41,11 @@ struct GatewayConfig {
   /// Read timeout in milliseconds
   uint32_t read_timeout_ms = 5000;
 
-  /// Device ID for identification and key derivation
-  uint64_t device_id = 0;
+  /// Device ID for identification and frame headers
+  DeviceId device_id = DeviceId::FromArray({});
 
   /// 16-byte ASCON encryption key (derived from master secret + device_id)
-  const std::byte* key = nullptr;
+  std::array<std::byte, 16> key = {};
 
   /// pw_rpc channel ID for the gateway
   uint32_t channel_id = 1;

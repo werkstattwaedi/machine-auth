@@ -1,0 +1,24 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//maco_firmware:__subpackages__"])
+
+cc_library(
+    name = "device_config",
+    srcs = ["device_config.cc"],
+    hdrs = ["public/device_config/device_config.h"],
+    includes = ["public"],
+    deps = [
+        "//maco_firmware:types",
+        "//proto/particle:device_config_nanopb",
+        "@particle_bazel//pb_cloud:pb_ledger",
+        "@pigweed//pw_async2:dispatcher",
+        "@pigweed//pw_containers:vector",
+        "@pigweed//pw_function",
+        "@pigweed//pw_log",
+        "@pigweed//pw_status",
+        "@pigweed//pw_string",
+    ],
+)

@@ -4,14 +4,16 @@
 """ASCON-AEAD128 transport layer encryption/decryption.
 
 Frame format over TCP:
-    [Device ID: 8 bytes] [Nonce: 16 bytes] [Encrypted Payload: N bytes] [Tag: 16 bytes]
+    [Device ID: 12 bytes] [Nonce: 16 bytes] [Encrypted Payload: N bytes] [Tag: 16 bytes]
+
+Nonce construction:
+    [Device ID: 12 bytes] [Counter: 4 bytes BE]
 
 The device ID is transmitted in the clear to allow the gateway to look up the
 per-device key. The nonce is counter-based for replay protection.
 """
 
 import logging
-import struct
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -30,7 +32,7 @@ logger = logging.getLogger(__name__)
 class AsconFrame:
     """A decrypted ASCON frame."""
 
-    device_id: int
+    device_id: bytes
     nonce: bytes
     payload: bytes
 
@@ -39,7 +41,7 @@ class AsconTransport:
     """ASCON-AEAD128 transport layer for encrypting/decrypting frames."""
 
     # Frame component sizes
-    DEVICE_ID_SIZE = 8
+    DEVICE_ID_SIZE = 12
     NONCE_SIZE = 16
     TAG_SIZE = 16
     KEY_SIZE = 16
@@ -78,7 +80,7 @@ class AsconTransport:
             return None, f"Invalid key size: {len(key)} != {self.KEY_SIZE}"
 
         # Parse frame header
-        device_id = struct.unpack(">Q", frame_data[: self.DEVICE_ID_SIZE])[0]
+        device_id = frame_data[: self.DEVICE_ID_SIZE]
         nonce = frame_data[self.DEVICE_ID_SIZE : self.DEVICE_ID_SIZE + self.NONCE_SIZE]
 
         # Extract ciphertext and tag
@@ -107,12 +109,12 @@ class AsconTransport:
         return AsconFrame(device_id=device_id, nonce=nonce, payload=plaintext), None
 
     def encrypt_frame(
-        self, device_id: int, nonce: bytes, payload: bytes, key: bytes
+        self, device_id: bytes, nonce: bytes, payload: bytes, key: bytes
     ) -> Tuple[Optional[bytes], Optional[str]]:
         """Encrypt a frame for sending to a device.
 
         Args:
-            device_id: 64-bit device identifier
+            device_id: 12-byte device identifier
             nonce: 16-byte nonce (must be unique per message)
             payload: Plaintext payload to encrypt
             key: 16-byte encryption key for this device
@@ -120,18 +122,18 @@ class AsconTransport:
         Returns:
             Tuple of (frame_bytes, None) on success, or (None, error_message) on failure
         """
+        if len(device_id) != self.DEVICE_ID_SIZE:
+            return None, f"Invalid device_id size: {len(device_id)} != {self.DEVICE_ID_SIZE}"
+
         if len(nonce) != self.NONCE_SIZE:
             return None, f"Invalid nonce size: {len(nonce)} != {self.NONCE_SIZE}"
 
         if len(key) != self.KEY_SIZE:
             return None, f"Invalid key size: {len(key)} != {self.KEY_SIZE}"
 
-        # Build frame header
-        device_id_bytes = struct.pack(">Q", device_id)
-
         # Encrypt using ASCON-AEAD128
         # Associated data: device_id + nonce (must match device's decrypt)
-        ad = device_id_bytes + nonce
+        ad = device_id + nonce
         try:
             ciphertext_with_tag = ascon.encrypt(
                 key=key,
@@ -144,10 +146,10 @@ class AsconTransport:
             return None, f"ASCON encryption error: {e}"
 
         # Build complete frame
-        frame = device_id_bytes + nonce + ciphertext_with_tag
+        frame = device_id + nonce + ciphertext_with_tag
         return frame, None
 
-    def parse_device_id(self, frame_data: bytes) -> Optional[int]:
+    def parse_device_id(self, frame_data: bytes) -> Optional[bytes]:
         """Extract device ID from frame without decryption.
 
         This allows looking up the device key before full decryption.
@@ -156,11 +158,11 @@ class AsconTransport:
             frame_data: Raw frame bytes
 
         Returns:
-            Device ID or None if frame is too short
+            12-byte device ID or None if frame is too short
         """
         if len(frame_data) < self.DEVICE_ID_SIZE:
             return None
-        return struct.unpack(">Q", frame_data[: self.DEVICE_ID_SIZE])[0]
+        return frame_data[: self.DEVICE_ID_SIZE]
 
 
 class NonceTracker:

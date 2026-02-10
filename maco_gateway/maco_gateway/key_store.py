@@ -27,7 +27,7 @@ class KeyStore:
 
     # Key and device ID sizes
     KEY_SIZE = 16  # 128-bit keys
-    DEVICE_ID_SIZE = 8  # 64-bit device IDs
+    DEVICE_ID_SIZE = 12  # 12-byte hardware device IDs
 
     def __init__(self, master_key: bytes) -> None:
         """Initialize the key store with a master secret.
@@ -40,16 +40,16 @@ class KeyStore:
                 f"Master key must be {self.KEY_SIZE} bytes, got {len(master_key)}"
             )
         self._master_key = master_key
-        self._key_cache: Dict[int, bytes] = {}
+        self._key_cache: Dict[bytes, bytes] = {}
 
-    def get_device_key(self, device_id: int) -> bytes:
+    def get_device_key(self, device_id: bytes) -> bytes:
         """Get the encryption key for a device.
 
         Keys are derived using ASCON-Hash:
             device_key = ASCON-Hash(master_key || device_id)[0:16]
 
         Args:
-            device_id: 64-bit device identifier
+            device_id: 12-byte device identifier
 
         Returns:
             16-byte device-specific encryption key
@@ -58,8 +58,7 @@ class KeyStore:
             return self._key_cache[device_id]
 
         # Derive key: Hash(master_key || device_id)
-        device_id_bytes = device_id.to_bytes(self.DEVICE_ID_SIZE, byteorder="big")
-        input_data = self._master_key + device_id_bytes
+        input_data = self._master_key + device_id
 
         if _HAVE_ASCON:
             # Use ASCON-Hash (32-byte output, truncate to 16)

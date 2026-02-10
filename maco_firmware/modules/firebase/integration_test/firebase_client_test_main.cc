@@ -19,9 +19,9 @@
 #include <variant>
 
 #include "firebase/firebase_client.h"
+#include "maco_firmware/modules/gateway/derive_ascon_key.h"
 #include "maco_firmware/modules/gateway/p2_gateway_client.h"
 #include "maco_firmware/types.h"
-#include "pb_crypto/pb_crypto.h"
 #include "pw_async2/coro.h"
 #include "pw_async2/coro_or_else_task.h"
 #include "pw_bytes/array.h"
@@ -42,34 +42,12 @@ constexpr std::array<std::byte, 16> kTestMasterSecret = {
     std::byte{0x0C}, std::byte{0x0D}, std::byte{0x0E}, std::byte{0x0F},
 };
 
-// Device ID for testing
-constexpr uint64_t kTestDeviceId = 0x0001020304050607ULL;
-
-/// Derive the ASCON key from master secret and device ID.
-/// key = ASCON-Hash256(master_secret || device_id)[0:16]
-std::array<std::byte, 16> DeriveKey() {
-  std::array<std::byte, 24> key_material;  // 16 + 8 bytes
-  std::copy(kTestMasterSecret.begin(), kTestMasterSecret.end(),
-            key_material.begin());
-
-  // Append device ID in big-endian
-  for (int i = 7; i >= 0; --i) {
-    key_material[16 + (7 - i)] =
-        static_cast<std::byte>((kTestDeviceId >> (i * 8)) & 0xFF);
-  }
-
-  std::array<std::byte, pb::crypto::kAsconHashSize> hash;
-  auto status = pb::crypto::AsconHash256(key_material, hash);
-  if (!status.ok()) {
-    PW_LOG_ERROR("Key derivation failed: %d", static_cast<int>(status.code()));
-    return {};
-  }
-
-  // Use first 16 bytes of hash as ASCON key
-  std::array<std::byte, pb::crypto::kAsconKeySize> key;
-  std::copy(hash.begin(), hash.begin() + key.size(), key.begin());
-  return key;
-}
+// 12-byte test device ID
+constexpr auto kTestDeviceId = maco::DeviceId::FromArray({
+    std::byte{0x00}, std::byte{0x01}, std::byte{0x02}, std::byte{0x03},
+    std::byte{0x04}, std::byte{0x05}, std::byte{0x06}, std::byte{0x07},
+    std::byte{0x08}, std::byte{0x09}, std::byte{0x0A}, std::byte{0x0B},
+});
 
 // Type alias for the TriggerStartSession responder
 using StartSessionResponder =
@@ -108,7 +86,7 @@ class TestControlServiceImpl
         .connect_timeout_ms = 10000,
         .read_timeout_ms = 5000,
         .device_id = kTestDeviceId,
-        .key = key_.data(),
+        .key = key_,
         .channel_id = 1,
     };
 
@@ -143,7 +121,7 @@ class TestControlServiceImpl
 
     gateway_host_ = std::string(request.host);
     gateway_port_ = request.port;
-    key_ = DeriveKey();
+    key_ = maco::gateway::DeriveAsconKey(kTestMasterSecret, kTestDeviceId);
 
     if (!CreateGatewayClient()) {
       response.success = false;

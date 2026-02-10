@@ -84,8 +84,8 @@ SyncEventReceiver ParticleLedgerBackend::SubscribeToSync(
     std::string_view name) {
   Subscription* sub = FindOrCreateSubscription(name);
   if (sub == nullptr) {
-    PW_LOG_ERROR("Failed to create subscription for '%.*s'",
-                 static_cast<int>(name.size()), name.data());
+    pw::InlineString<kMaxLedgerNameSize> name_str(name);
+    PW_LOG_ERROR("Failed to create subscription for '%s'", name_str.c_str());
     // Return a dummy receiver - caller will get closed channel
     static pw::async2::ChannelStorage<SyncEvent, 1> dummy_storage;
     auto [h, s, r] = pw::async2::CreateSpscChannel<SyncEvent>(dummy_storage);

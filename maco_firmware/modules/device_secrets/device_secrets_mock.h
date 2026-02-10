@@ -22,10 +22,12 @@ namespace maco::secrets {
 /// - Host simulator (no EEPROM available)
 /// - Unit tests requiring controlled secret values
 ///
-/// Secrets can be set programmatically via SetSecrets().
+/// Ships with well-known test secrets by default (IsProvisioned() == true).
+/// Use Clear() or SetSecrets() to override.
 class DeviceSecretsMock : public DeviceSecrets {
  public:
-  DeviceSecretsMock() = default;
+  /// Construct with well-known test secrets.
+  DeviceSecretsMock();
 
   // DeviceSecrets interface
   bool IsProvisioned() const override;

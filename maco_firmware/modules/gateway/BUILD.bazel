@@ -20,10 +20,26 @@ cc_library(
     hdrs = ["public/gateway/gateway_client.h"],
     includes = ["public"],
     deps = [
+        "//maco_firmware:types",
         "//proto/gateway:gateway_service_nanopb",
         "@pigweed//pw_async2:dispatcher",
         "@pigweed//pw_rpc",
         "@pigweed//pw_status",
+        "@pigweed//pw_string",
+    ],
+)
+
+# ASCON key derivation - shared between P2, host, and tests
+cc_library(
+    name = "derive_ascon_key",
+    srcs = ["derive_ascon_key.cc"],
+    hdrs = ["derive_ascon_key.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//maco_firmware:types",
+        "@particle_bazel//pb_crypto",
+        "@pigweed//pw_assert:check",
+        "@pigweed//pw_bytes",
     ],
 )
 

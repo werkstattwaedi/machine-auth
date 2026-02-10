@@ -83,7 +83,7 @@ class ClientConnection:
         self._nonce_tracker = NonceTracker()
         self._hdlc_decoder = hdlc_decode.FrameDecoder()
 
-        self._device_id: Optional[int] = None
+        self._device_id: Optional[bytes] = None
         self._device_key: Optional[bytes] = None
         self._response_nonce_counter = 0
 
@@ -137,13 +137,13 @@ class ClientConnection:
             self._device_id = device_id
             self._device_key = self._key_store.get_device_key(device_id)
             logger.info(
-                "Device %016X connected from %s", device_id, self._addr
+                "Device %s connected from %s", device_id.hex(), self._addr
             )
         elif self._device_id != device_id:
             logger.warning(
-                "Device ID mismatch: expected %016X, got %016X",
-                self._device_id,
-                device_id,
+                "Device ID mismatch: expected %s, got %s",
+                self._device_id.hex(),
+                device_id.hex(),
             )
             return
 
@@ -273,9 +273,11 @@ class ClientConnection:
             logger.error("Cannot send response: device not identified")
             return
 
-        # Generate nonce for response
+        # Generate nonce for response: [device_id: 12] [counter: 4 BE]
         self._response_nonce_counter += 1
-        nonce = self._response_nonce_counter.to_bytes(16, byteorder="big")
+        nonce = self._device_id + self._response_nonce_counter.to_bytes(
+            4, byteorder="big"
+        )
 
         # ASCON encrypt the raw RPC packet
         frame_data, error = self._ascon.encrypt_frame(

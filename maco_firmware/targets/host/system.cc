@@ -11,22 +11,25 @@
 #include <functional>
 #include <thread>
 
+#include "device_config/device_config.h"
 #include "lvgl.h"
 #include "maco_firmware/modules/app_state/app_state.h"
 #include "maco_firmware/modules/device_secrets/device_secrets_mock.h"
-#include "maco_firmware/services/maco_service.h"
+#include "maco_firmware/modules/gateway/derive_ascon_key.h"
 #include "maco_firmware/modules/gateway/host_gateway_client.h"
-#include "maco_firmware/modules/nfc_reader/mock/mock_nfc_reader.h"
-#include "maco_firmware/modules/nfc_reader/mock/nfc_mock_service.h"
 #include "maco_firmware/modules/led/led.h"
 #include "maco_firmware/modules/machine_relay/mock/mock_machine_relay.h"
+#include "maco_firmware/modules/nfc_reader/mock/mock_nfc_reader.h"
+#include "maco_firmware/modules/nfc_reader/mock/nfc_mock_service.h"
+#include "maco_firmware/services/maco_service.h"
 #include "maco_firmware/targets/host/host_random.h"
 #include "maco_firmware/targets/host/keyboard_input_driver.h"
 #include "maco_firmware/targets/host/sdl_display_driver.h"
 #include "maco_firmware/targets/host/sdl_led_driver.h"
+#include "mock_ledger_backend.h"
 #include "firebase/firebase_client.h"
-#include "pb_crypto/pb_crypto.h"
 #include "pw_assert/check.h"
+#include "pw_log/log.h"
 #include "pw_channel/stream_channel.h"
 #include "pw_multibuf/simple_allocator.h"
 #include "pw_system/io.h"
@@ -150,45 +153,53 @@ maco::app_state::AppState& GetAppState() {
   return state;
 }
 
-maco::gateway::GatewayClient& GetGatewayClient() {
-  // Master secret for key derivation (same as P2 for testing)
-  static constexpr std::array<std::byte, 16> kMasterSecret = {
+pb::cloud::MockLedgerBackend& GetMockLedgerBackend() {
+  static pb::cloud::MockLedgerBackend backend;
+  return backend;
+}
+
+maco::config::DeviceConfig& GetDeviceConfig() {
+  // Well-known test device ID (12 bytes)
+  static constexpr auto kTestDeviceId = std::array<std::byte, 12>{
       std::byte{0x00}, std::byte{0x01}, std::byte{0x02}, std::byte{0x03},
       std::byte{0x04}, std::byte{0x05}, std::byte{0x06}, std::byte{0x07},
       std::byte{0x08}, std::byte{0x09}, std::byte{0x0A}, std::byte{0x0B},
-      std::byte{0x0C}, std::byte{0x0D}, std::byte{0x0E}, std::byte{0x0F},
   };
+  static auto device_id = maco::DeviceId::FromArray(kTestDeviceId);
 
-  static constexpr uint64_t kDeviceId = 0x0001020304050607ULL;
+  static maco::config::DeviceConfig config(
+      GetMockLedgerBackend(), device_id,
+      [] { PW_LOG_INFO("Config updated, would reboot"); });
 
-  // Derive per-device ASCON key
-  static auto derive_key = []() {
-    std::array<std::byte, 24> key_material;
-    std::copy(kMasterSecret.begin(), kMasterSecret.end(), key_material.begin());
+  static bool loaded = false;
+  if (!loaded) {
+    // Pre-populate mock ledger with test gateway config
+    // MockLedgerBackend auto-creates ledgers, so Init() will read defaults
+    config.Init().IgnoreError();
+    loaded = true;
+  }
+  return config;
+}
 
-    for (int i = 7; i >= 0; --i) {
-      key_material[16 + (7 - i)] =
-          static_cast<std::byte>((kDeviceId >> (i * 8)) & 0xFF);
-    }
+maco::gateway::GatewayClient& GetGatewayClient() {
+  auto& dc = GetDeviceConfig();
+  auto secret = GetDeviceSecrets().GetGatewayMasterSecret();
+  PW_CHECK_OK(secret.status(), "Mock secrets not available");
+  static const auto ascon_key =
+      maco::gateway::DeriveAsconKey(secret->bytes(), dc.device_id());
 
-    std::array<std::byte, pb::crypto::kAsconHashSize> hash;
-    auto status = pb::crypto::AsconHash256(key_material, hash);
-    PW_CHECK_OK(status, "Key derivation failed");
+  // Use defaults if ledger was empty
+  auto host = dc.gateway_host();
+  auto port = dc.gateway_port();
 
-    std::array<std::byte, pb::crypto::kAsconKeySize> key;
-    std::copy(hash.begin(), hash.begin() + key.size(), key.begin());
-    return key;
-  };
-  static const auto ascon_key = derive_key();
-
-  // Gateway configuration - connect to local gateway for testing
   static maco::gateway::GatewayConfig config{
-      .host = "127.0.0.1",
-      .port = 5000,
+      .host = host.empty() ? "127.0.0.1" : host,
+      .port = port != 0 ? static_cast<uint16_t>(port)
+                         : static_cast<uint16_t>(5000),
       .connect_timeout_ms = 5000,
       .read_timeout_ms = 5000,
-      .device_id = kDeviceId,
-      .key = ascon_key.data(),
+      .device_id = dc.device_id(),
+      .key = ascon_key,
       .channel_id = 1,
   };
 

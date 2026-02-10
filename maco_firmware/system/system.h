@@ -27,6 +27,10 @@ namespace maco::firebase {
 class FirebaseClient;
 }  // namespace maco::firebase
 
+namespace maco::config {
+class DeviceConfig;
+}  // namespace maco::config
+
 namespace maco::gateway {
 class GatewayClient;
 }  // namespace maco::gateway
@@ -74,6 +78,11 @@ maco::nfc::NfcReader& GetNfcReader();
 /// Returns the global application state instance.
 /// Thread-safe: can be read from UI thread, written from main thread.
 maco::app_state::AppState& GetAppState();
+
+/// Returns the cloud-configurable device configuration.
+/// P2: Reads from Particle Ledger with hardware device ID
+/// Host: Mock ledger with test data
+maco::config::DeviceConfig& GetDeviceConfig();
 
 /// Returns the gateway client for MACO Gateway communication.
 /// P2: Uses TCP + ASCON encryption via pb_socket
