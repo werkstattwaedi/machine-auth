@@ -20,10 +20,14 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig)
 export const auth = getAuth(app)
-// Auto-detect long-polling to avoid WebChannel transport detection delays
-// that can cause slow initial page loads (especially with emulators).
+// Force long-polling in dev to avoid WebChannel issues with the emulator
+// (the auto-detect transport switch triggers Firestore watch stream assertion
+// errors during React StrictMode's rapid mount/unmount cycles).
+// In production, auto-detect avoids slow initial loads from transport probing.
 export const db = initializeFirestore(app, {
-  experimentalAutoDetectLongPolling: true,
+  ...(import.meta.env.DEV
+    ? { experimentalForceLongPolling: true }
+    : { experimentalAutoDetectLongPolling: true }),
 })
 export const functions = getFunctions(app)
 
