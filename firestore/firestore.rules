@@ -77,5 +77,44 @@ service cloud.firestore {
                                isDocumentReference(request.resource.data.tokenId, 'tokens');
       allow delete: if isAdmin();
     }
+
+    // Machine usage (from MaCo terminals)
+    match /usage_machine/{usageId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Material usage (from QR scans + manual entry)
+    match /usage_material/{usageId} {
+      allow read: if isSignedIn();
+      allow create: if true;
+      allow update: if isSignedIn();
+      allow delete: if isAdmin();
+    }
+
+    // Checkouts
+    match /checkouts/{checkoutId} {
+      allow create: if true;
+      allow read: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    // Materials catalog (public read for QR scan page)
+    match /materials/{materialId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Audit log (admin read only, no client writes)
+    match /audit_log/{logId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // Machine issue reports
+    match /machine_reports/{reportId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
   }
 }

@@ -3,7 +3,10 @@
 
 import { initializeApp } from "firebase/app"
 import { connectAuthEmulator, getAuth } from "firebase/auth"
-import { connectFirestoreEmulator, getFirestore } from "firebase/firestore"
+import {
+  connectFirestoreEmulator,
+  initializeFirestore,
+} from "firebase/firestore"
 import { connectFunctionsEmulator, getFunctions } from "firebase/functions"
 
 const firebaseConfig = {
@@ -17,7 +20,11 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig)
 export const auth = getAuth(app)
-export const db = getFirestore(app)
+// Auto-detect long-polling to avoid WebChannel transport detection delays
+// that can cause slow initial page loads (especially with emulators).
+export const db = initializeFirestore(app, {
+  experimentalAutoDetectLongPolling: true,
+})
 export const functions = getFunctions(app)
 
 if (import.meta.env.DEV) {

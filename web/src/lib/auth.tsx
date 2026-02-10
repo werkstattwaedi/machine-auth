@@ -36,13 +36,18 @@ export interface UserDoc {
   roles: string[]
   permissions: string[] // permission doc IDs (resolved from refs)
   firebaseUid?: string
+  termsAcceptedAt?: { toDate(): Date } | null
+  userType?: string // "erwachsen" | "kind" | "firma"
 }
 
 interface AuthContextValue {
   user: User | null
   userDoc: UserDoc | null
   isAdmin: boolean
+  /** True until Firebase Auth state resolves (fast, local check). */
   loading: boolean
+  /** True while the Firestore user doc is being fetched (may be slow). */
+  userDocLoading: boolean
   signInWithEmail: (email: string) => Promise<void>
   completeSignIn: () => Promise<boolean>
   signOut: () => Promise<void>
@@ -54,6 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [userDoc, setUserDoc] = useState<UserDoc | null>(null)
   const [loading, setLoading] = useState(true)
+  const [userDocLoading, setUserDocLoading] = useState(false)
 
   // Listen to Firebase Auth state
   useEffect(() => {
@@ -61,8 +67,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(firebaseUser)
       if (!firebaseUser) {
         setUserDoc(null)
-        setLoading(false)
       }
+      // Always resolve auth loading immediately - don't wait for Firestore
+      setLoading(false)
+      setUserDocLoading(!!firebaseUser)
     })
   }, [])
 
@@ -89,9 +97,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             (ref: { id: string }) => ref.id
           ),
           firebaseUid: data.firebaseUid,
+          termsAcceptedAt: data.termsAcceptedAt ?? null,
+          userType: data.userType ?? "erwachsen",
         })
       }
-      setLoading(false)
+      setUserDocLoading(false)
     })
   }, [user])
 
@@ -137,6 +147,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       userDoc,
       isAdmin,
       loading,
+      userDocLoading,
       signInWithEmail,
       completeSignIn,
       signOut,

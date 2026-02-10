@@ -238,3 +238,16 @@ export { admin } from "./admin-api";
 
 // Export Firestore triggers
 export { syncCustomClaims } from "./auth/set-custom-claims";
+
+// Export audit triggers
+export {
+  auditUsers,
+  auditTokens,
+  auditMachine,
+  auditPermission,
+  auditMaco,
+  auditUsageMachine,
+  auditUsageMaterial,
+  auditCheckouts,
+  auditMaterials,
+} from "./audit/audit-trigger";

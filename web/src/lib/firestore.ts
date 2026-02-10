@@ -25,14 +25,21 @@ interface UseDocumentResult<T> {
 }
 
 export function useCollection<T = DocumentData>(
-  path: string,
+  path: string | null,
   ...constraints: QueryConstraint[]
 ): UseCollectionResult<T> {
   const [data, setData] = useState<(T & { id: string })[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!!path)
   const [error, setError] = useState<Error | null>(null)
 
   useEffect(() => {
+    if (!path) {
+      setData([])
+      setLoading(false)
+      return
+    }
+
+    setLoading(true)
     const ref = collection(db, path)
     const q = constraints.length > 0 ? query(ref, ...constraints) : ref
 

@@ -92,5 +92,7 @@ compile_commands.json
 # Claude Code - page images from PDF conversion (large, can be regenerated)
 .claude/agents/*/pages/
 
+.playwright-mcp
+
 # proprietary docs
 docs/proprietary/
