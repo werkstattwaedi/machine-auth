@@ -11,7 +11,7 @@ service cloud.firestore {
     function isAdmin() {
       // Custom claims set by syncCustomClaims Cloud Function
       // when user doc roles[] includes "admin"
-      return isSignedIn() && request.auth.token.admin == true;
+      return isSignedIn() && request.auth.token.get('admin', false) == true;
     }
 
     // Validation helpers

@@ -59,7 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Listen to Firebase Auth state
   useEffect(() => {
-    return onAuthStateChanged(auth, (firebaseUser) => {
+    return onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser)
       if (!firebaseUser) {
         setUserDoc(null)
@@ -76,23 +76,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const userDocRef = doc(db, "users", user.uid)
 
-    return onSnapshot(userDocRef, (docSnap) => {
+    return onSnapshot(userDocRef, async (docSnap) => {
       if (!docSnap.exists()) {
         setUserDoc(null)
       } else {
         const data = docSnap.data()
+        const roles: string[] = data.roles ?? []
         setUserDoc({
           id: docSnap.id,
           displayName: data.displayName ?? "",
           name: data.name ?? "",
           email: data.email,
-          roles: data.roles ?? [],
+          roles,
           permissions: (data.permissions ?? []).map(
             (ref: { id: string }) => ref.id
           ),
           termsAcceptedAt: data.termsAcceptedAt ?? null,
           userType: data.userType ?? "erwachsen",
         })
+
+        // If user doc says admin but token doesn't have the claim,
+        // force a token refresh so Firestore rules see the updated claims.
+        if (roles.includes("admin")) {
+          const tokenResult = await user.getIdTokenResult()
+          if (!tokenResult.claims.admin) {
+            await user.getIdToken(true)
+          }
+        }
       }
       setUserDocLoading(false)
     })

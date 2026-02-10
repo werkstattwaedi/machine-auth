@@ -107,6 +107,8 @@ async function seed() {
 
   await db.collection("users").doc(ID.userAdmin).set(adminUser);
   await db.collection("users").doc(ID.userMike).set(regularUser);
+  // Set custom claims directly (don't rely on trigger timing)
+  await auth.setCustomUserClaims(ID.userAdmin, { admin: true });
   console.log("  Created 2 users (admin + regular)");
 
   // --- Tokens (NFC tag UIDs as doc IDs) ---
