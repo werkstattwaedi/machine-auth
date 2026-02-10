@@ -7,7 +7,6 @@ import { DocumentReference, Timestamp } from "firebase-admin/firestore";
 
 export interface UserEntity {
   created: Timestamp;
-  firebaseUid?: string;
   displayName: string;
   name: string;
   permissions: DocumentReference[]; // References to /permission/{permissionId}

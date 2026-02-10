@@ -39,7 +39,6 @@ interface UserDoc {
   email?: string
   roles: string[]
   permissions: (DocumentReference | { id: string })[]
-  firebaseUid?: string
   termsAcceptedAt?: { toDate(): Date } | null
   userType?: string
 }

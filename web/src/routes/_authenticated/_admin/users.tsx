@@ -23,7 +23,6 @@ interface UserListDoc {
   email?: string
   roles: string[]
   permissions: { id: string }[]
-  firebaseUid?: string
 }
 
 const columns: ColumnDef<UserListDoc & { id: string }>[] = [

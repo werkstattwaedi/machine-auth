@@ -41,22 +41,17 @@ const adminAuthMiddleware = async (
     const decodedToken = await getAuth().verifyIdToken(token);
     const uid = decodedToken.uid;
 
-    // Get user document to check role
+    // Get user document (doc ID = Auth UID)
     const db = getFirestore();
-    const usersSnapshot = await db
-      .collection("users")
-      .where("firebaseUid", "==", uid)
-      .limit(1)
-      .get();
+    const userDoc = await db.doc(`users/${uid}`).get();
 
-    if (usersSnapshot.empty) {
+    if (!userDoc.exists) {
       logger.warn(`Admin API: User not found for uid: ${uid}`);
       res.status(403).send({ error: "User not found" });
       return;
     }
 
-    const userDoc = usersSnapshot.docs[0];
-    const userData = userDoc.data();
+    const userData = userDoc.data()!;
 
     // Check if user has admin role
     if (!userData.roles || !userData.roles.includes("admin")) {
@@ -68,7 +63,7 @@ const adminAuthMiddleware = async (
     // Attach user info to request
     (req as any).user = {
       uid,
-      userId: userDoc.id,
+      userId: uid,
       ...userData,
     };
 

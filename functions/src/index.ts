@@ -236,6 +236,9 @@ export const api = onRequest(
 // Export admin API
 export { admin } from "./admin-api";
 
+// Export callable functions
+export { createUser } from "./auth/create-user";
+
 // Export Firestore triggers
 export { syncCustomClaims } from "./auth/set-custom-claims";
 

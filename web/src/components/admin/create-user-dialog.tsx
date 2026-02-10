@@ -1,7 +1,6 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { useFirestoreMutation } from "@/hooks/use-firestore-mutation"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -13,7 +12,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useForm } from "react-hook-form"
 import { Loader2 } from "lucide-react"
-import { serverTimestamp } from "firebase/firestore"
+import { httpsCallable } from "firebase/functions"
+import { functions } from "@/lib/firebase"
+import { useState } from "react"
+import { toast } from "sonner"
 
 interface CreateUserDialogProps {
   open: boolean
@@ -27,24 +29,24 @@ interface CreateUserFormValues {
 }
 
 export function CreateUserDialog({ open, onOpenChange }: CreateUserDialogProps) {
-  const { add, loading } = useFirestoreMutation()
+  const [loading, setLoading] = useState(false)
   const { register, handleSubmit, reset } = useForm<CreateUserFormValues>({
     defaultValues: { displayName: "", name: "", email: "" },
   })
 
   const onSubmit = async (values: CreateUserFormValues) => {
-    await add("users", {
-      ...values,
-      roles: ["vereinsmitglied"],
-      permissions: [],
-      created: serverTimestamp(),
-      termsAcceptedAt: null,
-      userType: "erwachsen",
-    }, {
-      successMessage: "Benutzer erstellt",
-    })
-    reset()
-    onOpenChange(false)
+    setLoading(true)
+    try {
+      const createUser = httpsCallable(functions, "createUser")
+      await createUser(values)
+      toast.success("Benutzer erstellt")
+      reset()
+      onOpenChange(false)
+    } catch (error: any) {
+      toast.error(error.message ?? "Benutzer konnte nicht erstellt werden")
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (

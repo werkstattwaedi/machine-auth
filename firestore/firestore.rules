@@ -23,22 +23,21 @@ service cloud.firestore {
       return arr is list && arr.size() >= 0;
     }
 
-    // Users collection
+    // Users collection (doc ID = Firebase Auth UID)
     match /users/{userId} {
       allow read: if isSignedIn();
 
-      // Allow creating new users during sign-up
-      allow create: if true &&
+      // Allow creating own user doc during self-registration
+      allow create: if isSignedIn() && userId == request.auth.uid &&
                        request.resource.data.permissions is list &&
                        isDocumentReferenceArray(request.resource.data.permissions, 'permission');
 
-      // Users can update their own doc but cannot change roles/permissions/firebaseUid
+      // Users can update their own doc but cannot change roles/permissions
       allow update: if isAdmin() ||
                        (isSignedIn() &&
-                        request.resource.data.firebaseUid == request.auth.uid &&
+                        userId == request.auth.uid &&
                         request.resource.data.roles == resource.data.roles &&
-                        request.resource.data.permissions == resource.data.permissions &&
-                        request.resource.data.firebaseUid == resource.data.firebaseUid);
+                        request.resource.data.permissions == resource.data.permissions);
 
       allow delete: if isAdmin();
     }

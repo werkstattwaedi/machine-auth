@@ -4,9 +4,9 @@
 /**
  * Firestore trigger: sync user roles to Firebase Auth custom claims.
  *
- * When a user document is written and has both `firebaseUid` and `roles`,
- * this sets custom claims on the corresponding Auth user so that
- * Firestore security rules can check `request.auth.token.admin`.
+ * When a user document is written, this sets custom claims on the
+ * corresponding Auth user (doc ID = Auth UID) so that Firestore
+ * security rules can check `request.auth.token.admin`.
  */
 
 import * as logger from "firebase-functions/logger";
@@ -26,31 +26,29 @@ export const syncCustomClaims = onDocumentWritten(
     const after = event.data?.after?.data();
     if (!after) return; // Document deleted
 
-    const firebaseUid = after.firebaseUid as string | undefined;
+    const authUid = event.params.userId; // Doc ID = Firebase Auth UID
     const roles = after.roles as string[] | undefined;
-
-    if (!firebaseUid) return; // Not linked to Firebase Auth yet
 
     const isAdmin = roles?.includes("admin") ?? false;
 
     try {
       const auth = getAuth();
-      const currentUser = await auth.getUser(firebaseUid);
+      const currentUser = await auth.getUser(authUid);
       const currentClaims = currentUser.customClaims ?? {};
 
       // Only update if claims actually changed
       if (currentClaims.admin === isAdmin) return;
 
-      await auth.setCustomUserClaims(firebaseUid, {
+      await auth.setCustomUserClaims(authUid, {
         ...currentClaims,
         admin: isAdmin,
       });
 
       logger.info(
-        `Custom claims updated for ${firebaseUid}: admin=${isAdmin}`
+        `Custom claims updated for ${authUid}: admin=${isAdmin}`
       );
     } catch (error) {
-      logger.error(`Failed to set custom claims for ${firebaseUid}`, error);
+      logger.error(`Failed to set custom claims for ${authUid}`, error);
     }
   }
 );

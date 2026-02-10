@@ -17,13 +17,10 @@ import {
   type User,
 } from "firebase/auth"
 import {
-  collection,
-  query,
-  where,
   onSnapshot,
   setDoc,
   doc,
-  getDocs,
+  getDoc,
   serverTimestamp,
 } from "firebase/firestore"
 import { auth, db } from "./firebase"
@@ -35,7 +32,6 @@ export interface UserDoc {
   email?: string
   roles: string[]
   permissions: string[] // permission doc IDs (resolved from refs)
-  firebaseUid?: string
   termsAcceptedAt?: { toDate(): Date } | null
   userType?: string // "erwachsen" | "kind" | "firma"
 }
@@ -74,18 +70,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
-  // Listen to Firestore user doc when authenticated
+  // Listen to Firestore user doc when authenticated (doc ID = Auth UID)
   useEffect(() => {
     if (!user) return
 
-    const usersRef = collection(db, "users")
-    const q = query(usersRef, where("firebaseUid", "==", user.uid))
+    const userDocRef = doc(db, "users", user.uid)
 
-    return onSnapshot(q, (snapshot) => {
-      if (snapshot.empty) {
+    return onSnapshot(userDocRef, (docSnap) => {
+      if (!docSnap.exists()) {
         setUserDoc(null)
       } else {
-        const docSnap = snapshot.docs[0]
         const data = docSnap.data()
         setUserDoc({
           id: docSnap.id,
@@ -96,7 +90,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           permissions: (data.permissions ?? []).map(
             (ref: { id: string }) => ref.id
           ),
-          firebaseUid: data.firebaseUid,
           termsAcceptedAt: data.termsAcceptedAt ?? null,
           userType: data.userType ?? "erwachsen",
         })
@@ -164,46 +157,25 @@ export function useAuth(): AuthContextValue {
 }
 
 /**
- * Account claiming: link Firebase Auth user to existing Firestore user doc,
- * or create a new one.
+ * Self-registration: if no user doc exists for this Auth UID, create one.
+ * Admin-created users already have a doc, so this is a no-op for them.
  */
 async function handleSignIn(user: User): Promise<void> {
   if (!user.email) throw new Error("E-Mail-Adresse benötigt")
 
-  const usersRef = collection(db, "users")
+  const userDocRef = doc(db, "users", user.uid)
+  const snapshot = await getDoc(userDocRef)
+  if (snapshot.exists()) return
 
-  // Check if already linked
-  const uidQuery = query(usersRef, where("firebaseUid", "==", user.uid))
-  const uidSnapshot = await getDocs(uidQuery)
-  if (!uidSnapshot.empty) return
-
-  // Check for unclaimed account with matching email
-  const emailQuery = query(usersRef, where("email", "==", user.email))
-  const emailSnapshot = await getDocs(emailQuery)
-
-  if (!emailSnapshot.empty) {
-    // Claim existing account
-    const existingRef = emailSnapshot.docs[0].ref
-    await setDoc(
-      existingRef,
-      {
-        firebaseUid: user.uid,
-        displayName:
-          user.displayName || emailSnapshot.docs[0].data().displayName,
-      },
-      { merge: true }
-    )
-  } else {
-    // Create new user document
-    const newUserRef = doc(usersRef)
-    await setDoc(newUserRef, {
-      firebaseUid: user.uid,
-      email: user.email,
-      displayName: user.displayName || "New User",
-      name: "",
-      created: serverTimestamp(),
-      roles: ["vereinsmitglied"],
-      permissions: [],
-    })
-  }
+  // Create new user document with Auth UID as doc ID
+  await setDoc(userDocRef, {
+    email: user.email,
+    displayName: user.displayName || "New User",
+    name: "",
+    created: serverTimestamp(),
+    roles: ["vereinsmitglied"],
+    permissions: [],
+    termsAcceptedAt: null,
+    userType: "erwachsen",
+  })
 }

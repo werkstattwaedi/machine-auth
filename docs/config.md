@@ -368,8 +368,8 @@ Security rules use Firebase Auth **custom claims** for role-based access. The `s
 **Key behaviors:**
 - All authenticated users can read most collections
 - Only admins can write to `permission`, `tokens`, `machine`, `maco`, `sessions`
-- Users can update their own user doc but cannot change `roles`, `permissions`, or `firebaseUid`
-- User document creation is open (needed for sign-up account claiming flow)
+- Users can update their own user doc (doc ID = Auth UID) but cannot change `roles` or `permissions`
+- User document creation requires authentication and the doc ID must match the Auth UID
 
 **Deploy rules:**
 

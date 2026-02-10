@@ -60,10 +60,9 @@
     }
   },
   "users": {
-    "{userId}": { // Random doc ID, linked to Firebase Auth via firebaseUid field
+    "{userId}": { // Doc ID = Firebase Auth UID
       "created": "timestamp",
-      "firebaseUid": "string", // Firebase Auth UID (set when user claims account)
-      "email": "string", // User email (used for account claiming)
+      "email": "string", // User email
       "displayName": "string", // Display name (e.g., "MikeS")
       "name": "string", // Full name (e.g., "Michael Schneider")
       "permissions": ["DocumentReference"], // Array of DocumentReferences to /permission/{permissionId}

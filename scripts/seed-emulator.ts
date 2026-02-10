@@ -31,13 +31,9 @@ const ID = {
   permLathe:   "00perm0lathe00000003",
   perm3dprint: "00perm3dprint0000004",
 
-  // users
+  // users (doc ID = Firebase Auth UID)
   userAdmin:   "00user00admin0000001",
   userMike:    "00user00mikes0000002",
-
-  // firebase auth UIDs
-  authAdmin:   "00auth00admin0000001",
-  authMike:    "00auth00mikes0000002",
 
   // tokens (NFC tag UIDs — 7-byte hex, not Firebase IDs)
   tokenAdmin:  "04c339aa1e1890",
@@ -67,15 +63,15 @@ async function seed() {
   }
   console.log(`  Created ${Object.keys(permissions).length} permissions`);
 
-  // --- Auth users (must exist before Firestore writes so syncCustomClaims works) ---
+  // --- Auth users (UID = Firestore doc ID) ---
   await auth.createUser({
-    uid: ID.authAdmin,
+    uid: ID.userAdmin,
     email: "admin@example.com",
     password: "admin123",
     displayName: "Test Admin",
   });
   await auth.createUser({
-    uid: ID.authMike,
+    uid: ID.userMike,
     email: "mike@example.com",
     password: "mike1234",
     displayName: "Mike Schneider",
@@ -85,7 +81,6 @@ async function seed() {
   // --- Users ---
   const adminUser = {
     created: Timestamp.now(),
-    firebaseUid: ID.authAdmin,
     displayName: "Admin",
     name: "Test Admin",
     email: "admin@example.com",
@@ -100,7 +95,6 @@ async function seed() {
 
   const regularUser = {
     created: Timestamp.now(),
-    firebaseUid: ID.authMike,
     displayName: "MikeS",
     name: "Mike Schneider",
     email: "mike@example.com",
