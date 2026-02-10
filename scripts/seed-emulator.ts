@@ -6,14 +6,13 @@
  *
  * Usage: FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npx tsx scripts/seed-emulator.ts
  *    or: npm run seed  (from root, emulators must be running)
+ *
+ * Document IDs are hardcoded 20-char Firebase-style IDs for reproducibility.
  */
 
-import { initializeApp, cert, applicationDefault } from "firebase-admin/app";
-import {
-  getFirestore,
-  Timestamp,
-  FieldValue,
-} from "firebase-admin/firestore";
+import { initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
+import { getFirestore, Timestamp } from "firebase-admin/firestore";
 
 // Connect to emulator
 process.env.FIRESTORE_EMULATOR_HOST ??= "127.0.0.1:8080";
@@ -21,16 +20,46 @@ process.env.FIREBASE_AUTH_EMULATOR_HOST ??= "127.0.0.1:9099";
 
 initializeApp({ projectId: "oww-maschinenfreigabe" });
 const db = getFirestore();
+const auth = getAuth();
+
+// -- Hardcoded 20-char document IDs (readable but Firebase-shaped) ----------
+
+const ID = {
+  // permissions
+  permLaser:   "00perm0laser00000001",
+  permCnc:     "00perm000cnc00000002",
+  permLathe:   "00perm0lathe00000003",
+  perm3dprint: "00perm3dprint0000004",
+
+  // users
+  userAdmin:   "00user00admin0000001",
+  userMike:    "00user00mikes0000002",
+
+  // firebase auth UIDs
+  authAdmin:   "00auth00admin0000001",
+  authMike:    "00auth00mikes0000002",
+
+  // tokens (NFC tag UIDs — 7-byte hex, not Firebase IDs)
+  tokenAdmin:  "04c339aa1e1890",
+  tokenMike:   "04d449bb2f2901",
+
+  // maco terminals
+  macoDevterm: "00maco00devterm00001",
+
+  // machines
+  machineLaser: "00machine0laser00001",
+  machineCnc:   "00machine000cnc00002",
+} as const;
 
 async function seed() {
   console.log("Seeding Firestore emulator...");
 
   // --- Permissions ---
   const permissions: Record<string, { name: string }> = {
-    laser: { name: "Laserschneiden" },
-    cnc: { name: "CNC Fräsen" },
-    lathe: { name: "Drehbank" },
-    "3dprint": { name: "3D Drucker" },
+    [ID.permLaser]:   { name: "Laserschneiden" },
+    [ID.permCnc]:     { name: "CNC Fräsen" },
+    [ID.permLathe]:   { name: "Drehbank" },
+    [ID.perm3dprint]: { name: "3D Drucker" },
   };
 
   for (const [id, data] of Object.entries(permissions)) {
@@ -38,45 +67,63 @@ async function seed() {
   }
   console.log(`  Created ${Object.keys(permissions).length} permissions`);
 
+  // --- Auth users (must exist before Firestore writes so syncCustomClaims works) ---
+  await auth.createUser({
+    uid: ID.authAdmin,
+    email: "admin@example.com",
+    password: "admin123",
+    displayName: "Test Admin",
+  });
+  await auth.createUser({
+    uid: ID.authMike,
+    email: "mike@example.com",
+    password: "mike1234",
+    displayName: "Mike Schneider",
+  });
+  console.log("  Created 2 Auth users (admin@example.com / admin123, mike@example.com / mike1234)");
+
   // --- Users ---
   const adminUser = {
     created: Timestamp.now(),
-    firebaseUid: "admin-uid-001",
+    firebaseUid: ID.authAdmin,
     displayName: "Admin",
     name: "Test Admin",
     email: "admin@example.com",
     permissions: [
-      db.doc("permission/laser"),
-      db.doc("permission/cnc"),
-      db.doc("permission/lathe"),
-      db.doc("permission/3dprint"),
+      db.doc(`permission/${ID.permLaser}`),
+      db.doc(`permission/${ID.permCnc}`),
+      db.doc(`permission/${ID.permLathe}`),
+      db.doc(`permission/${ID.perm3dprint}`),
     ],
     roles: ["admin", "vereinsmitglied"],
   };
 
   const regularUser = {
     created: Timestamp.now(),
-    firebaseUid: "user-uid-002",
+    firebaseUid: ID.authMike,
     displayName: "MikeS",
     name: "Mike Schneider",
     email: "mike@example.com",
-    permissions: [db.doc("permission/laser"), db.doc("permission/3dprint")],
+    permissions: [
+      db.doc(`permission/${ID.permLaser}`),
+      db.doc(`permission/${ID.perm3dprint}`),
+    ],
     roles: ["vereinsmitglied"],
   };
 
-  await db.collection("users").doc("test-admin").set(adminUser);
-  await db.collection("users").doc("test-user").set(regularUser);
+  await db.collection("users").doc(ID.userAdmin).set(adminUser);
+  await db.collection("users").doc(ID.userMike).set(regularUser);
   console.log("  Created 2 users (admin + regular)");
 
-  // --- Tokens ---
+  // --- Tokens (NFC tag UIDs as doc IDs) ---
   const tokens: Record<string, any> = {
-    "04c339aa1e1890": {
-      userId: db.doc("users/test-admin"),
+    [ID.tokenAdmin]: {
+      userId: db.doc(`users/${ID.userAdmin}`),
       registered: Timestamp.now(),
       label: "Admin Schlüssel",
     },
-    "04d449bb2f2901": {
-      userId: db.doc("users/test-user"),
+    [ID.tokenMike]: {
+      userId: db.doc(`users/${ID.userMike}`),
       registered: Timestamp.now(),
       label: "Mike Tag",
     },
@@ -88,22 +135,22 @@ async function seed() {
   console.log(`  Created ${Object.keys(tokens).length} tokens`);
 
   // --- MaCo (terminal device) ---
-  await db.collection("maco").doc("test-device-001").set({
+  await db.collection("maco").doc(ID.macoDevterm).set({
     name: "Dev Terminal 01",
   });
   console.log("  Created 1 MaCo device");
 
-  // --- Machine ---
-  await db.collection("machine").doc("laser-01").set({
+  // --- Machines ---
+  await db.collection("machine").doc(ID.machineLaser).set({
     name: "Laser Cutter",
-    requiredPermission: [db.doc("permission/laser")],
-    maco: db.doc("maco/test-device-001"),
+    requiredPermission: [db.doc(`permission/${ID.permLaser}`)],
+    maco: db.doc(`maco/${ID.macoDevterm}`),
     control: {},
   });
-  await db.collection("machine").doc("cnc-01").set({
+  await db.collection("machine").doc(ID.machineCnc).set({
     name: "CNC Fräse",
-    requiredPermission: [db.doc("permission/cnc")],
-    maco: db.doc("maco/test-device-001"),
+    requiredPermission: [db.doc(`permission/${ID.permCnc}`)],
+    maco: db.doc(`maco/${ID.macoDevterm}`),
     control: {},
   });
   console.log("  Created 2 machines");

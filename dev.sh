@@ -16,6 +16,13 @@ info() { echo -e "${GREEN}[dev]${NC} $1"; }
 warn() { echo -e "${YELLOW}[dev]${NC} $1"; }
 error() { echo -e "${RED}[dev]${NC} $1"; exit 1; }
 
+FRESH=false
+for arg in "$@"; do
+  case "$arg" in
+    --fresh) FRESH=true ;;
+  esac
+done
+
 # Check prerequisites
 command -v node >/dev/null 2>&1 || error "node is required. Install Node.js 22+."
 command -v firebase >/dev/null 2>&1 || error "firebase CLI is required. Run: npm i -g firebase-tools"
@@ -49,6 +56,18 @@ if [ -d "web" ] && [ ! -d "web/node_modules" ]; then
   (cd web && npm install)
 fi
 
+if [ "$FRESH" = true ]; then
+  warn "Fresh start requested — clearing persisted emulator data..."
+  rm -rf firebase-data
+fi
+
+if [ -d "firebase-data" ]; then
+  info "Restoring emulator data from previous session."
+else
+  info "No persisted data found — starting with empty emulators."
+  info "  Run 'npm run seed' after startup to populate test data."
+fi
+
 info "Starting dev environment..."
 info "  Emulator UI:  http://localhost:4000"
 info "  Functions:    http://localhost:5001"
@@ -56,6 +75,7 @@ info "  Web app:      http://localhost:5173"
 info "  Hosting:      http://localhost:5050"
 info ""
 info "Press Ctrl+C to stop all services."
+info "  Tip: use './dev.sh --fresh' to start with empty emulators."
 echo ""
 
 npm run dev

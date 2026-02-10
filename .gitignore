@@ -68,8 +68,10 @@ node_modules/
 !functions/.env.local
 !maco_gateway/.env.local
 
-# Firebase emulator seed data (auto-exported)
+# Firebase emulator data (auto-exported, persisted between runs)
 firebase-seed/
+firebase-data/
+firebase-export-*
 
 # dataconnect generated files
 .dataconnect
