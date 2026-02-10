@@ -1,21 +1,11 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import { Separator } from "@/components/ui/separator"
 import { Label } from "@/components/ui/label"
 import { formatCHF } from "@/lib/format"
-import { USER_TYPE_LABELS, USAGE_TYPE_LABELS } from "@/lib/pricing"
-import { ArrowLeft, Loader2, Send } from "lucide-react"
+import { USER_TYPE_LABELS } from "@/lib/pricing"
+import { ArrowLeft, Loader2 } from "lucide-react"
 import type { CheckoutState, CheckoutAction } from "./use-checkout-state"
 
 interface StepCheckoutProps {
@@ -39,123 +29,124 @@ export function StepCheckout({
   const total = personFees + materialTotal + state.tip
 
   return (
-    <div className="space-y-4">
-      <h2 className="text-lg font-semibold">Check Out</h2>
+    <div className="space-y-6">
+      <h4 className="text-sm font-semibold text-muted-foreground">
+        Zusammenfassung
+      </h4>
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Zusammenfassung</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <h3 className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">
-            Nutzungsgebühren
-          </h3>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Typ</TableHead>
-                <TableHead>Nutzung</TableHead>
-                <TableHead className="text-right">Gebühr</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {state.persons.map((p) => (
-                <TableRow key={p.id}>
-                  <TableCell className="text-sm">
-                    {p.firstName} {p.lastName}
-                  </TableCell>
-                  <TableCell className="text-sm">
-                    {USER_TYPE_LABELS[p.userType]}
-                  </TableCell>
-                  <TableCell className="text-sm">
-                    {USAGE_TYPE_LABELS[p.usageType]}
-                  </TableCell>
-                  <TableCell className="text-sm text-right">
-                    {formatCHF(p.fee)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+      <div>
+        <h2 className="text-xl font-bold font-body underline decoration-cog-teal decoration-2 underline-offset-4 mb-4"
+>
+          Nutzungsgebühren
+        </h2>
+        <div className="space-y-3">
+          {state.persons.map((p) => (
+            <div key={p.id} className="flex items-center gap-6 text-sm">
+              <span className="w-40">
+                {p.firstName} {p.lastName}
+              </span>
+              <span className="w-40">{p.email}</span>
+              <span className="w-28">{USER_TYPE_LABELS[p.userType]}</span>
+              <span>{formatCHF(p.fee)}</span>
+            </div>
+          ))}
+        </div>
+        <div className="text-right font-bold text-lg mt-2">
+          {formatCHF(personFees)}
+        </div>
+      </div>
 
-          {materialTotal > 0 && (
-            <>
-              <h3 className="text-xs font-medium text-muted-foreground mb-2 mt-4 uppercase tracking-wide">
-                Materialkosten
-              </h3>
-              <div className="flex justify-between text-sm">
-                <span>Material ({state.materialUsage.length} Posten)</span>
-                <span>{formatCHF(materialTotal)}</span>
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="pt-4 space-y-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Trinkgeld / Spenden (CHF)</Label>
-            <Input
-              type="number"
-              step="0.50"
-              min="0"
-              value={state.tip || ""}
-              onChange={(e) =>
-                dispatch({
-                  type: "SET_TIP",
-                  amount: parseFloat(e.target.value) || 0,
-                })
-              }
-              placeholder="0.00"
-            />
-            <p className="text-xs text-muted-foreground">
-              Hast du bei uns einen tollen Tag erlebt? Wir freuen uns über
-              jede Unterstützung!
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="pt-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm text-muted-foreground">Total</div>
-              <div className="text-2xl font-bold">{formatCHF(total)}</div>
-              <div className="text-xs text-muted-foreground">keine MWST.</div>
+      {materialTotal > 0 && (
+        <>
+          <Separator />
+          <div>
+            <h2 className="text-xl font-bold font-body underline decoration-cog-teal decoration-2 underline-offset-4 mb-4"
+    >
+              Materialkosten
+            </h2>
+            <div className="flex justify-between text-sm">
+              <span>Material ({state.materialUsage.length} Posten)</span>
+              <span className="font-semibold">{formatCHF(materialTotal)}</span>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </>
+      )}
 
-      <p className="text-xs text-muted-foreground text-center">
-        Der Betrieb der Werkstatt basiert auf Vertrauen. Bitte gib deine
-        Nutzung fair und ehrlich an.
-      </p>
+      <Separator />
+
+      <div>
+        <h2 className="text-xl font-bold font-body underline decoration-cog-teal decoration-2 underline-offset-4 mb-4"
+>
+          Trinkgeld/Spenden
+        </h2>
+        <div className="space-y-2">
+          <Label className="text-sm font-bold">Betrag (CHF)</Label>
+          <input
+            type="number"
+            step="0.50"
+            min="0"
+            value={state.tip || ""}
+            onChange={(e) =>
+              dispatch({
+                type: "SET_TIP",
+                amount: parseFloat(e.target.value) || 0,
+              })
+            }
+            placeholder="0.00"
+            className="flex h-9 w-full max-w-xs rounded-none border border-[#ccc] bg-background px-3 py-1 text-sm outline-none focus:border-cog-teal"
+          />
+          <p className="text-sm text-muted-foreground">
+            Hast du bei uns einen tollen Tag erlebt, dir wurde von unseren
+            erfahrenen Vereinsmitgliedern geholfen oder am Fachabend konntest du
+            von unseren Profis profitieren? Dann freuen wir uns über einen
+            Zustupf.
+          </p>
+        </div>
+      </div>
+
+      <Separator />
+
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-bold font-body">
+          Total
+        </h2>
+        <h2 className="text-xl font-bold font-body underline decoration-cog-teal decoration-2 underline-offset-4"
+>
+          {formatCHF(total)}
+        </h2>
+      </div>
+      <p className="text-sm text-muted-foreground text-right">keine MWST.</p>
+
+      <Separator />
+
+      <div className="bg-[rgba(204,204,204,0.2)] p-[25px]">
+        <h4 className="font-bold text-sm mb-1">Fair & sauber</h4>
+        <p className="text-sm">
+          Der Betrieb der Werkstatt basiert auf Vertrauen.
+          <br />
+          Vielen Dank dass du <strong>fair abrechnest</strong> und deinen{" "}
+          <strong>Platz sauber</strong> hinterlässt.
+        </p>
+      </div>
 
       <div className="flex gap-3">
-        <Button
-          variant="outline"
-          className="flex-1"
+        <button
+          type="button"
+          className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-cog-teal border border-cog-teal rounded-[3px] bg-white hover:bg-cog-teal-light transition-colors"
           onClick={() => dispatch({ type: "SET_STEP", step: 1 })}
         >
-          <ArrowLeft className="h-4 w-4 mr-2" />
+          <ArrowLeft className="h-4 w-4" />
           Zurück
-        </Button>
-        <Button
-          className="flex-1"
+        </button>
+        <button
+          type="button"
+          className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-white bg-cog-teal rounded-[3px] hover:bg-cog-teal-dark transition-colors disabled:opacity-50"
           onClick={onSubmit}
           disabled={submitting || total < 0}
         >
-          {submitting ? (
-            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-          ) : (
-            <Send className="h-4 w-4 mr-2" />
-          )}
+          {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
           Senden & zur Kasse
-        </Button>
+        </button>
       </div>
     </div>
   )

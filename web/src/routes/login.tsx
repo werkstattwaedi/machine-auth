@@ -5,7 +5,6 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
 import { useAuth } from "@/lib/auth"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
 import { Loader2, Mail } from "lucide-react"
@@ -71,15 +70,21 @@ function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle>Offene Werkstatt Wädenswil</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <div className="w-full max-w-sm space-y-8">
+        <div className="flex flex-col items-center gap-4">
+          <img
+            src="/logo_oww.png"
+            alt="Offene Werkstatt Wädenswil"
+            className="h-14"
+          />
+        </div>
+
+        <div className="border border-border rounded p-6 space-y-4">
+          <h2 className="text-lg font-bold text-center">Anmelden</h2>
           {linkSent ? (
-            <div className="text-center space-y-2">
-              <Mail className="h-8 w-8 mx-auto text-muted-foreground" />
-              <p>Anmelde-Link wurde an <strong>{email}</strong> gesendet.</p>
+            <div className="text-center space-y-3">
+              <Mail className="h-10 w-10 mx-auto text-cog-teal" />
+              <p className="text-sm">Anmelde-Link wurde an <strong>{email}</strong> gesendet.</p>
               <p className="text-sm text-muted-foreground">
                 Prüfe dein Postfach und klicke auf den Link.
               </p>
@@ -93,7 +98,11 @@ function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
               />
-              <Button type="submit" className="w-full" disabled={sending}>
+              <Button
+                type="submit"
+                className="w-full bg-cog-teal hover:bg-cog-teal-dark text-white font-semibold"
+                disabled={sending}
+              >
                 {sending ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
                 ) : null}
@@ -101,8 +110,8 @@ function LoginPage() {
               </Button>
             </form>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   )
 }

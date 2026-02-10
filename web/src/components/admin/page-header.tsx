@@ -14,7 +14,7 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, backTo, backLabel, action }: PageHeaderProps) {
   return (
-    <div className="flex items-center justify-between mb-6">
+    <div className="flex items-center justify-between mb-8">
       <div className="flex items-center gap-3">
         {backTo && (
           <Link
@@ -25,7 +25,11 @@ export function PageHeader({ title, backTo, backLabel, action }: PageHeaderProps
             <span className="sr-only">{backLabel ?? "Zurück"}</span>
           </Link>
         )}
-        <h1 className="text-2xl font-bold">{title}</h1>
+        <h1 className="text-2xl font-bold">
+          <span className="decoration-cog-teal underline decoration-2 underline-offset-6">
+            {title}
+          </span>
+        </h1>
       </div>
       {action && <div>{action}</div>}
     </div>

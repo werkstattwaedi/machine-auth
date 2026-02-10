@@ -1,7 +1,6 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { Button } from "@/components/ui/button"
 import { UsageSummaryList } from "./usage-summary-list"
 import { ArrowLeft, ArrowRight } from "lucide-react"
 import type { CheckoutState, CheckoutAction } from "./use-checkout-state"
@@ -18,8 +17,10 @@ export function StepWorkshops({
   isAnonymous,
 }: StepWorkshopsProps) {
   return (
-    <div className="space-y-4">
-      <h2 className="text-lg font-semibold">Kosten Werkstätten</h2>
+    <div className="space-y-6">
+      <h2 className="text-xl font-bold font-body">
+        Kosten Werkstätten
+      </h2>
 
       {isAnonymous ? (
         <p className="text-sm text-muted-foreground">
@@ -39,21 +40,22 @@ export function StepWorkshops({
       )}
 
       <div className="flex gap-3">
-        <Button
-          variant="outline"
-          className="flex-1"
+        <button
+          type="button"
+          className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-cog-teal border border-cog-teal rounded-[3px] bg-white hover:bg-cog-teal-light transition-colors"
           onClick={() => dispatch({ type: "SET_STEP", step: 0 })}
         >
-          <ArrowLeft className="h-4 w-4 mr-2" />
+          <ArrowLeft className="h-4 w-4" />
           Zurück
-        </Button>
-        <Button
-          className="flex-1"
+        </button>
+        <button
+          type="button"
+          className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-white bg-cog-teal rounded-[3px] hover:bg-cog-teal-dark transition-colors"
           onClick={() => dispatch({ type: "SET_STEP", step: 2 })}
         >
-          Weiter
-          <ArrowRight className="h-4 w-4 ml-2" />
-        </Button>
+          Check-Out
+          <ArrowRight className="h-4 w-4" />
+        </button>
       </div>
     </div>
   )

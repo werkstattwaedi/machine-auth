@@ -2,12 +2,11 @@
 // SPDX-License-Identifier: MIT
 
 import { cn } from "@/lib/utils"
-import { Check } from "lucide-react"
 
 const STEPS = [
-  { label: "Check In" },
-  { label: "Kosten" },
-  { label: "Check Out" },
+  { label: "1. Check In" },
+  { label: "2. Kosten Werkstätten" },
+  { label: "3. Check Out" },
 ]
 
 interface CheckoutProgressProps {
@@ -16,43 +15,31 @@ interface CheckoutProgressProps {
 
 export function CheckoutProgress({ currentStep }: CheckoutProgressProps) {
   return (
-    <div className="flex items-center justify-between mb-8">
-      {STEPS.map((step, i) => (
-        <div key={i} className="flex items-center flex-1 last:flex-none">
-          <div className="flex flex-col items-center">
+    <div className="mb-10">
+      <div className="flex gap-2">
+        {STEPS.map((step, i) => (
+          <div key={i} className="flex-1 flex flex-col">
             <div
               className={cn(
-                "w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium border-2 transition-colors",
-                i < currentStep
-                  ? "bg-primary border-primary text-primary-foreground"
-                  : i === currentStep
-                    ? "border-primary text-primary"
-                    : "border-muted-foreground/30 text-muted-foreground/50"
+                "h-[3px] mb-2 transition-colors",
+                i <= currentStep ? "bg-cog-teal" : "bg-[#ccc]"
               )}
-            >
-              {i < currentStep ? <Check className="h-4 w-4" /> : i + 1}
-            </div>
+            />
             <span
               className={cn(
-                "text-xs mt-1",
-                i <= currentStep
-                  ? "text-foreground font-medium"
-                  : "text-muted-foreground/50"
+                "text-sm",
+                i === currentStep
+                  ? "text-foreground font-semibold"
+                  : i < currentStep
+                    ? "text-cog-teal font-medium"
+                    : "text-muted-foreground"
               )}
             >
               {step.label}
             </span>
           </div>
-          {i < STEPS.length - 1 && (
-            <div
-              className={cn(
-                "flex-1 h-0.5 mx-2 mt-[-1rem]",
-                i < currentStep ? "bg-primary" : "bg-muted-foreground/20"
-              )}
-            />
-          )}
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   )
 }
