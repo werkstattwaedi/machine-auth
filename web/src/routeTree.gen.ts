@@ -30,7 +30,12 @@ import { Route as AuthenticatedAdminMaterialsRouteImport } from "./routes/_authe
 import { Route as AuthenticatedAdminMachinesRouteImport } from "./routes/_authenticated/_admin/machines"
 import { Route as AuthenticatedAdminCheckoutsRouteImport } from "./routes/_authenticated/_admin/checkouts"
 import { Route as AuthenticatedAdminAuditRouteImport } from "./routes/_authenticated/_admin/audit"
+import { Route as AuthenticatedAdminUsersIndexRouteImport } from "./routes/_authenticated/_admin/users/index"
+import { Route as AuthenticatedAdminPermissionsIndexRouteImport } from "./routes/_authenticated/_admin/permissions/index"
+import { Route as AuthenticatedAdminMaterialsIndexRouteImport } from "./routes/_authenticated/_admin/materials/index"
+import { Route as AuthenticatedAdminMachinesIndexRouteImport } from "./routes/_authenticated/_admin/machines/index"
 import { Route as AuthenticatedAdminUsersUserIdRouteImport } from "./routes/_authenticated/_admin/users/$userId"
+import { Route as AuthenticatedAdminPermissionsPermissionIdRouteImport } from "./routes/_authenticated/_admin/permissions/$permissionId"
 import { Route as AuthenticatedAdminMaterialsMaterialIdRouteImport } from "./routes/_authenticated/_admin/materials/$materialId"
 import { Route as AuthenticatedAdminMachinesMachineIdRouteImport } from "./routes/_authenticated/_admin/machines/$machineId"
 
@@ -140,11 +145,41 @@ const AuthenticatedAdminAuditRoute = AuthenticatedAdminAuditRouteImport.update({
   path: "/audit",
   getParentRoute: () => AuthenticatedAdminRoute,
 } as any)
+const AuthenticatedAdminUsersIndexRoute =
+  AuthenticatedAdminUsersIndexRouteImport.update({
+    id: "/",
+    path: "/",
+    getParentRoute: () => AuthenticatedAdminUsersRoute,
+  } as any)
+const AuthenticatedAdminPermissionsIndexRoute =
+  AuthenticatedAdminPermissionsIndexRouteImport.update({
+    id: "/",
+    path: "/",
+    getParentRoute: () => AuthenticatedAdminPermissionsRoute,
+  } as any)
+const AuthenticatedAdminMaterialsIndexRoute =
+  AuthenticatedAdminMaterialsIndexRouteImport.update({
+    id: "/",
+    path: "/",
+    getParentRoute: () => AuthenticatedAdminMaterialsRoute,
+  } as any)
+const AuthenticatedAdminMachinesIndexRoute =
+  AuthenticatedAdminMachinesIndexRouteImport.update({
+    id: "/",
+    path: "/",
+    getParentRoute: () => AuthenticatedAdminMachinesRoute,
+  } as any)
 const AuthenticatedAdminUsersUserIdRoute =
   AuthenticatedAdminUsersUserIdRouteImport.update({
     id: "/$userId",
     path: "/$userId",
     getParentRoute: () => AuthenticatedAdminUsersRoute,
+  } as any)
+const AuthenticatedAdminPermissionsPermissionIdRoute =
+  AuthenticatedAdminPermissionsPermissionIdRouteImport.update({
+    id: "/$permissionId",
+    path: "/$permissionId",
+    getParentRoute: () => AuthenticatedAdminPermissionsRoute,
   } as any)
 const AuthenticatedAdminMaterialsMaterialIdRoute =
   AuthenticatedAdminMaterialsMaterialIdRouteImport.update({
@@ -171,14 +206,19 @@ export interface FileRoutesByFullPath {
   "/checkouts": typeof AuthenticatedAdminCheckoutsRoute
   "/machines": typeof AuthenticatedAdminMachinesRouteWithChildren
   "/materials": typeof AuthenticatedAdminMaterialsRouteWithChildren
-  "/permissions": typeof AuthenticatedAdminPermissionsRoute
+  "/permissions": typeof AuthenticatedAdminPermissionsRouteWithChildren
   "/sessions": typeof AuthenticatedAdminSessionsRoute
   "/terminals": typeof AuthenticatedAdminTerminalsRoute
   "/users": typeof AuthenticatedAdminUsersRouteWithChildren
   "/material/add": typeof MaterialMaterialAddRoute
   "/machines/$machineId": typeof AuthenticatedAdminMachinesMachineIdRoute
   "/materials/$materialId": typeof AuthenticatedAdminMaterialsMaterialIdRoute
+  "/permissions/$permissionId": typeof AuthenticatedAdminPermissionsPermissionIdRoute
   "/users/$userId": typeof AuthenticatedAdminUsersUserIdRoute
+  "/machines/": typeof AuthenticatedAdminMachinesIndexRoute
+  "/materials/": typeof AuthenticatedAdminMaterialsIndexRoute
+  "/permissions/": typeof AuthenticatedAdminPermissionsIndexRoute
+  "/users/": typeof AuthenticatedAdminUsersIndexRoute
 }
 export interface FileRoutesByTo {
   "/": typeof AuthenticatedIndexRoute
@@ -190,16 +230,17 @@ export interface FileRoutesByTo {
   "/report": typeof ReportReportRoute
   "/audit": typeof AuthenticatedAdminAuditRoute
   "/checkouts": typeof AuthenticatedAdminCheckoutsRoute
-  "/machines": typeof AuthenticatedAdminMachinesRouteWithChildren
-  "/materials": typeof AuthenticatedAdminMaterialsRouteWithChildren
-  "/permissions": typeof AuthenticatedAdminPermissionsRoute
   "/sessions": typeof AuthenticatedAdminSessionsRoute
   "/terminals": typeof AuthenticatedAdminTerminalsRoute
-  "/users": typeof AuthenticatedAdminUsersRouteWithChildren
   "/material/add": typeof MaterialMaterialAddRoute
   "/machines/$machineId": typeof AuthenticatedAdminMachinesMachineIdRoute
   "/materials/$materialId": typeof AuthenticatedAdminMaterialsMaterialIdRoute
+  "/permissions/$permissionId": typeof AuthenticatedAdminPermissionsPermissionIdRoute
   "/users/$userId": typeof AuthenticatedAdminUsersUserIdRoute
+  "/machines": typeof AuthenticatedAdminMachinesIndexRoute
+  "/materials": typeof AuthenticatedAdminMaterialsIndexRoute
+  "/permissions": typeof AuthenticatedAdminPermissionsIndexRoute
+  "/users": typeof AuthenticatedAdminUsersIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -219,14 +260,19 @@ export interface FileRoutesById {
   "/_authenticated/_admin/checkouts": typeof AuthenticatedAdminCheckoutsRoute
   "/_authenticated/_admin/machines": typeof AuthenticatedAdminMachinesRouteWithChildren
   "/_authenticated/_admin/materials": typeof AuthenticatedAdminMaterialsRouteWithChildren
-  "/_authenticated/_admin/permissions": typeof AuthenticatedAdminPermissionsRoute
+  "/_authenticated/_admin/permissions": typeof AuthenticatedAdminPermissionsRouteWithChildren
   "/_authenticated/_admin/sessions": typeof AuthenticatedAdminSessionsRoute
   "/_authenticated/_admin/terminals": typeof AuthenticatedAdminTerminalsRoute
   "/_authenticated/_admin/users": typeof AuthenticatedAdminUsersRouteWithChildren
   "/_material/material/add": typeof MaterialMaterialAddRoute
   "/_authenticated/_admin/machines/$machineId": typeof AuthenticatedAdminMachinesMachineIdRoute
   "/_authenticated/_admin/materials/$materialId": typeof AuthenticatedAdminMaterialsMaterialIdRoute
+  "/_authenticated/_admin/permissions/$permissionId": typeof AuthenticatedAdminPermissionsPermissionIdRoute
   "/_authenticated/_admin/users/$userId": typeof AuthenticatedAdminUsersUserIdRoute
+  "/_authenticated/_admin/machines/": typeof AuthenticatedAdminMachinesIndexRoute
+  "/_authenticated/_admin/materials/": typeof AuthenticatedAdminMaterialsIndexRoute
+  "/_authenticated/_admin/permissions/": typeof AuthenticatedAdminPermissionsIndexRoute
+  "/_authenticated/_admin/users/": typeof AuthenticatedAdminUsersIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -249,7 +295,12 @@ export interface FileRouteTypes {
     | "/material/add"
     | "/machines/$machineId"
     | "/materials/$materialId"
+    | "/permissions/$permissionId"
     | "/users/$userId"
+    | "/machines/"
+    | "/materials/"
+    | "/permissions/"
+    | "/users/"
   fileRoutesByTo: FileRoutesByTo
   to:
     | "/"
@@ -261,16 +312,17 @@ export interface FileRouteTypes {
     | "/report"
     | "/audit"
     | "/checkouts"
-    | "/machines"
-    | "/materials"
-    | "/permissions"
     | "/sessions"
     | "/terminals"
-    | "/users"
     | "/material/add"
     | "/machines/$machineId"
     | "/materials/$materialId"
+    | "/permissions/$permissionId"
     | "/users/$userId"
+    | "/machines"
+    | "/materials"
+    | "/permissions"
+    | "/users"
   id:
     | "__root__"
     | "/_authenticated"
@@ -296,7 +348,12 @@ export interface FileRouteTypes {
     | "/_material/material/add"
     | "/_authenticated/_admin/machines/$machineId"
     | "/_authenticated/_admin/materials/$materialId"
+    | "/_authenticated/_admin/permissions/$permissionId"
     | "/_authenticated/_admin/users/$userId"
+    | "/_authenticated/_admin/machines/"
+    | "/_authenticated/_admin/materials/"
+    | "/_authenticated/_admin/permissions/"
+    | "/_authenticated/_admin/users/"
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -456,12 +513,47 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthenticatedAdminAuditRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
+    "/_authenticated/_admin/users/": {
+      id: "/_authenticated/_admin/users/"
+      path: "/"
+      fullPath: "/users/"
+      preLoaderRoute: typeof AuthenticatedAdminUsersIndexRouteImport
+      parentRoute: typeof AuthenticatedAdminUsersRoute
+    }
+    "/_authenticated/_admin/permissions/": {
+      id: "/_authenticated/_admin/permissions/"
+      path: "/"
+      fullPath: "/permissions/"
+      preLoaderRoute: typeof AuthenticatedAdminPermissionsIndexRouteImport
+      parentRoute: typeof AuthenticatedAdminPermissionsRoute
+    }
+    "/_authenticated/_admin/materials/": {
+      id: "/_authenticated/_admin/materials/"
+      path: "/"
+      fullPath: "/materials/"
+      preLoaderRoute: typeof AuthenticatedAdminMaterialsIndexRouteImport
+      parentRoute: typeof AuthenticatedAdminMaterialsRoute
+    }
+    "/_authenticated/_admin/machines/": {
+      id: "/_authenticated/_admin/machines/"
+      path: "/"
+      fullPath: "/machines/"
+      preLoaderRoute: typeof AuthenticatedAdminMachinesIndexRouteImport
+      parentRoute: typeof AuthenticatedAdminMachinesRoute
+    }
     "/_authenticated/_admin/users/$userId": {
       id: "/_authenticated/_admin/users/$userId"
       path: "/$userId"
       fullPath: "/users/$userId"
       preLoaderRoute: typeof AuthenticatedAdminUsersUserIdRouteImport
       parentRoute: typeof AuthenticatedAdminUsersRoute
+    }
+    "/_authenticated/_admin/permissions/$permissionId": {
+      id: "/_authenticated/_admin/permissions/$permissionId"
+      path: "/$permissionId"
+      fullPath: "/permissions/$permissionId"
+      preLoaderRoute: typeof AuthenticatedAdminPermissionsPermissionIdRouteImport
+      parentRoute: typeof AuthenticatedAdminPermissionsRoute
     }
     "/_authenticated/_admin/materials/$materialId": {
       id: "/_authenticated/_admin/materials/$materialId"
@@ -482,12 +574,14 @@ declare module "@tanstack/react-router" {
 
 interface AuthenticatedAdminMachinesRouteChildren {
   AuthenticatedAdminMachinesMachineIdRoute: typeof AuthenticatedAdminMachinesMachineIdRoute
+  AuthenticatedAdminMachinesIndexRoute: typeof AuthenticatedAdminMachinesIndexRoute
 }
 
 const AuthenticatedAdminMachinesRouteChildren: AuthenticatedAdminMachinesRouteChildren =
   {
     AuthenticatedAdminMachinesMachineIdRoute:
       AuthenticatedAdminMachinesMachineIdRoute,
+    AuthenticatedAdminMachinesIndexRoute: AuthenticatedAdminMachinesIndexRoute,
   }
 
 const AuthenticatedAdminMachinesRouteWithChildren =
@@ -497,12 +591,15 @@ const AuthenticatedAdminMachinesRouteWithChildren =
 
 interface AuthenticatedAdminMaterialsRouteChildren {
   AuthenticatedAdminMaterialsMaterialIdRoute: typeof AuthenticatedAdminMaterialsMaterialIdRoute
+  AuthenticatedAdminMaterialsIndexRoute: typeof AuthenticatedAdminMaterialsIndexRoute
 }
 
 const AuthenticatedAdminMaterialsRouteChildren: AuthenticatedAdminMaterialsRouteChildren =
   {
     AuthenticatedAdminMaterialsMaterialIdRoute:
       AuthenticatedAdminMaterialsMaterialIdRoute,
+    AuthenticatedAdminMaterialsIndexRoute:
+      AuthenticatedAdminMaterialsIndexRoute,
   }
 
 const AuthenticatedAdminMaterialsRouteWithChildren =
@@ -510,13 +607,33 @@ const AuthenticatedAdminMaterialsRouteWithChildren =
     AuthenticatedAdminMaterialsRouteChildren,
   )
 
+interface AuthenticatedAdminPermissionsRouteChildren {
+  AuthenticatedAdminPermissionsPermissionIdRoute: typeof AuthenticatedAdminPermissionsPermissionIdRoute
+  AuthenticatedAdminPermissionsIndexRoute: typeof AuthenticatedAdminPermissionsIndexRoute
+}
+
+const AuthenticatedAdminPermissionsRouteChildren: AuthenticatedAdminPermissionsRouteChildren =
+  {
+    AuthenticatedAdminPermissionsPermissionIdRoute:
+      AuthenticatedAdminPermissionsPermissionIdRoute,
+    AuthenticatedAdminPermissionsIndexRoute:
+      AuthenticatedAdminPermissionsIndexRoute,
+  }
+
+const AuthenticatedAdminPermissionsRouteWithChildren =
+  AuthenticatedAdminPermissionsRoute._addFileChildren(
+    AuthenticatedAdminPermissionsRouteChildren,
+  )
+
 interface AuthenticatedAdminUsersRouteChildren {
   AuthenticatedAdminUsersUserIdRoute: typeof AuthenticatedAdminUsersUserIdRoute
+  AuthenticatedAdminUsersIndexRoute: typeof AuthenticatedAdminUsersIndexRoute
 }
 
 const AuthenticatedAdminUsersRouteChildren: AuthenticatedAdminUsersRouteChildren =
   {
     AuthenticatedAdminUsersUserIdRoute: AuthenticatedAdminUsersUserIdRoute,
+    AuthenticatedAdminUsersIndexRoute: AuthenticatedAdminUsersIndexRoute,
   }
 
 const AuthenticatedAdminUsersRouteWithChildren =
@@ -529,7 +646,7 @@ interface AuthenticatedAdminRouteChildren {
   AuthenticatedAdminCheckoutsRoute: typeof AuthenticatedAdminCheckoutsRoute
   AuthenticatedAdminMachinesRoute: typeof AuthenticatedAdminMachinesRouteWithChildren
   AuthenticatedAdminMaterialsRoute: typeof AuthenticatedAdminMaterialsRouteWithChildren
-  AuthenticatedAdminPermissionsRoute: typeof AuthenticatedAdminPermissionsRoute
+  AuthenticatedAdminPermissionsRoute: typeof AuthenticatedAdminPermissionsRouteWithChildren
   AuthenticatedAdminSessionsRoute: typeof AuthenticatedAdminSessionsRoute
   AuthenticatedAdminTerminalsRoute: typeof AuthenticatedAdminTerminalsRoute
   AuthenticatedAdminUsersRoute: typeof AuthenticatedAdminUsersRouteWithChildren
@@ -541,7 +658,8 @@ const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
   AuthenticatedAdminMachinesRoute: AuthenticatedAdminMachinesRouteWithChildren,
   AuthenticatedAdminMaterialsRoute:
     AuthenticatedAdminMaterialsRouteWithChildren,
-  AuthenticatedAdminPermissionsRoute: AuthenticatedAdminPermissionsRoute,
+  AuthenticatedAdminPermissionsRoute:
+    AuthenticatedAdminPermissionsRouteWithChildren,
   AuthenticatedAdminSessionsRoute: AuthenticatedAdminSessionsRoute,
   AuthenticatedAdminTerminalsRoute: AuthenticatedAdminTerminalsRoute,
   AuthenticatedAdminUsersRoute: AuthenticatedAdminUsersRouteWithChildren,

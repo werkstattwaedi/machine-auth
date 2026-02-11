@@ -3,6 +3,7 @@
 
 import { createFileRoute } from "@tanstack/react-router"
 import { useAuth } from "@/lib/auth"
+import { useCollection } from "@/lib/firestore"
 import { useFirestoreMutation } from "@/hooks/use-firestore-mutation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -24,6 +25,8 @@ interface ProfileFormValues {
 
 function ProfilePage() {
   const { user, userDoc } = useAuth()
+  const { data: permDocs } = useCollection<{ name: string }>("permission")
+  const permNames = new Map(permDocs.map((d) => [d.id, d.name]))
   const { update, loading: saving } = useFirestoreMutation()
 
   const { register, handleSubmit, reset, formState: { isDirty } } = useForm<ProfileFormValues>({
@@ -96,7 +99,7 @@ function ProfilePage() {
               <div className="flex gap-1">
                 {userDoc?.permissions?.length ? (
                   userDoc.permissions.map((perm) => (
-                    <Badge key={perm} variant="outline">{perm}</Badge>
+                    <Badge key={perm} variant="outline">{permNames.get(perm) ?? perm}</Badge>
                   ))
                 ) : (
                   <span className="text-sm text-muted-foreground">–</span>

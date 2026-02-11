@@ -1,6 +1,7 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
+import type { ReactNode } from "react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,10 +17,12 @@ interface ConfirmDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   title: string
-  description: string
+  description: ReactNode
   confirmLabel?: string
   onConfirm: () => void
   destructive?: boolean
+  /** When true, the confirm button is disabled. */
+  confirmDisabled?: boolean
 }
 
 export function ConfirmDialog({
@@ -30,6 +33,7 @@ export function ConfirmDialog({
   confirmLabel = "Bestätigen",
   onConfirm,
   destructive,
+  confirmDisabled,
 }: ConfirmDialogProps) {
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -42,6 +46,7 @@ export function ConfirmDialog({
           <AlertDialogCancel>Abbrechen</AlertDialogCancel>
           <AlertDialogAction
             onClick={onConfirm}
+            disabled={confirmDisabled}
             className={destructive ? "bg-destructive text-white hover:bg-destructive/90" : undefined}
           >
             {confirmLabel}

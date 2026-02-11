@@ -3,6 +3,7 @@
 
 import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router"
 import { useAuth } from "@/lib/auth"
+import { LookupProvider } from "@/lib/lookup"
 import { useEffect } from "react"
 
 export const Route = createFileRoute("/_authenticated/_admin")({
@@ -21,5 +22,9 @@ function AdminLayout() {
 
   if (!isAdmin) return null
 
-  return <Outlet />
+  return (
+    <LookupProvider>
+      <Outlet />
+    </LookupProvider>
+  )
 }
