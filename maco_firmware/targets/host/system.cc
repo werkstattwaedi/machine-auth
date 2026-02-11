@@ -75,7 +75,8 @@ void PwSystemThread() {
   // Register NFC Mock Service (host-only)
   auto& mock_reader =
       static_cast<maco::nfc::MockNfcReader&>(maco::system::GetNfcReader());
-  static maco::nfc::NfcMockService nfc_mock_service(mock_reader);
+  static maco::nfc::NfcMockService nfc_mock_service(
+      mock_reader, maco::system::GetRandomGenerator());
   pw::System().rpc_server().RegisterService(nfc_mock_service);
 
   pw::system::StartAndClobberTheStack(channel->channel());

@@ -13,6 +13,9 @@ service NfcMockService {
 
   // Simulate a tag departing from the NFC field.
   rpc SimulateTagDeparture(SimulateTagDepartureRequest) returns (SimulateTagDepartureResponse);
+
+  // Simulate an NTAG424 DNA tag arriving with full authentication support.
+  rpc SimulateNtag424Arrival(SimulateNtag424ArrivalRequest) returns (SimulateNtag424ArrivalResponse);
 }
 
 message SimulateTagArrivalRequest {
@@ -31,3 +34,23 @@ message SimulateTagArrivalResponse {
 message SimulateTagDepartureRequest {}
 
 message SimulateTagDepartureResponse {}
+
+message SimulateNtag424ArrivalRequest {
+  // Anti-collision UID (7 bytes, random for NTAG424)
+  bytes uid = 1;
+
+  // Real 7-byte card UID (returned by GetCardUid after auth)
+  bytes real_uid = 3;
+
+  // Key slots 0-4 (16 bytes AES-128 each)
+  bytes key0 = 4;
+  bytes key1 = 5;
+  bytes key2 = 6;
+  bytes key3 = 7;
+  bytes key4 = 8;
+}
+
+message SimulateNtag424ArrivalResponse {
+  // Echo back the real UID
+  bytes real_uid = 1;
+}

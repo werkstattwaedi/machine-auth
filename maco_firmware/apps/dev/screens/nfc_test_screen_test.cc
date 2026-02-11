@@ -33,7 +33,7 @@ class NfcTestScreenTest : public ::testing::Test {
 TEST_F(NfcTestScreenTest, NoCardState) {
   // Initial state is "No card"
   app_state::AppStateSnapshot snapshot;
-  snapshot.state = app_state::AppStateId::kNoTag;
+  snapshot.state = app_state::AppStateId::kIdle;
 
   screen_->OnUpdate(snapshot);
   harness_.RenderFrame();
@@ -44,9 +44,9 @@ TEST_F(NfcTestScreenTest, NoCardState) {
 }
 
 TEST_F(NfcTestScreenTest, HasCardState) {
-  // Simulate a card being present
+  // Simulate a detected card (RF-layer UID)
   app_state::AppStateSnapshot snapshot;
-  snapshot.state = app_state::AppStateId::kHasTag;
+  snapshot.state = app_state::AppStateId::kTagDetected;
   snapshot.tag_uid.size = 7;
   snapshot.tag_uid.bytes[0] = std::byte{0x04};
   snapshot.tag_uid.bytes[1] = std::byte{0xAB};

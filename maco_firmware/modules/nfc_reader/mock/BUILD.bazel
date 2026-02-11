@@ -13,7 +13,8 @@ cc_library(
     deps = [
         "//maco_firmware/modules/nfc_reader:nfc_event",
         "//maco_firmware/modules/nfc_reader:nfc_reader",
-        "//maco_firmware/modules/nfc_tag",
+        "//maco_firmware/modules/nfc_tag:iso14443_tag_mock",
+        "//maco_firmware/modules/nfc_tag:mock_tag",
         "@pigweed//pw_async2:value_future",
         "@pigweed//pw_bytes",
         "@pigweed//pw_result",
@@ -29,9 +30,11 @@ cc_library(
     target_compatible_with = incompatible_with_mcu(),
     deps = [
         ":mock_nfc_reader",
+        "//maco_firmware/modules/nfc_tag/ntag424:ntag424_tag_mock",
         "//maco_firmware/protos:nfc_mock_service_nanopb_rpc",
         "@pigweed//pw_bytes",
         "@pigweed//pw_log",
+        "@pigweed//pw_random",
         "@pigweed//pw_status",
     ],
 )

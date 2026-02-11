@@ -3,3 +3,13 @@
 
 maco.SimulateTagArrivalRequest.uid      max_size:10
 maco.SimulateTagArrivalResponse.uid     max_size:10
+
+maco.SimulateNtag424ArrivalRequest.uid       max_size:10
+maco.SimulateNtag424ArrivalRequest.real_uid  max_size:7
+maco.SimulateNtag424ArrivalRequest.key0      max_size:16
+maco.SimulateNtag424ArrivalRequest.key1      max_size:16
+maco.SimulateNtag424ArrivalRequest.key2      max_size:16
+maco.SimulateNtag424ArrivalRequest.key3      max_size:16
+maco.SimulateNtag424ArrivalRequest.key4      max_size:16
+
+maco.SimulateNtag424ArrivalResponse.real_uid max_size:7

@@ -10,8 +10,7 @@
 
 namespace maco::dev {
 
-/// Test screen displaying NFC reader status.
-/// Shows "No card" or the card UID when a tag is present.
+/// Test screen displaying NFC reader status and tag verification.
 /// Receives state via OnUpdate() from AppShell (no direct NfcReader access).
 class NfcTestScreen : public ui::Screen {
  public:
@@ -29,7 +28,8 @@ class NfcTestScreen : public ui::Screen {
   lv_obj_t* status_label_ = nullptr;
 
   // Watched state for dirty checking
-  ui::Watched<app_state::AppStateId> state_watched_{app_state::AppStateId::kNoTag};
+  ui::Watched<app_state::AppStateId> state_watched_{
+      app_state::AppStateId::kIdle};
   pw::StringBuffer<64> status_text_;
 };
 

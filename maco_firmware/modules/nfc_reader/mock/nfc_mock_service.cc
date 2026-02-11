@@ -40,4 +40,45 @@ pw::Status NfcMockService::SimulateTagDeparture(
   return pw::OkStatus();
 }
 
+pw::Status NfcMockService::SimulateNtag424Arrival(
+    const ::maco_SimulateNtag424ArrivalRequest& request,
+    ::maco_SimulateNtag424ArrivalResponse& response) {
+  pw::ConstByteSpan uid(reinterpret_cast<const std::byte*>(request.uid.bytes),
+                        request.uid.size);
+
+  // NTAG424 DNA always has SAK=0x20 (ISO 14443-4 compliant)
+  constexpr uint8_t kNtag424Sak = 0x20;
+
+  // Build config from request
+  Ntag424TagMock::Config config{};
+
+  if (request.real_uid.size == 7) {
+    std::memcpy(config.real_uid.data(), request.real_uid.bytes, 7);
+  }
+
+  auto copy_key = [](const auto& src, std::array<std::byte, 16>& dst) {
+    if (src.size == 16) {
+      std::memcpy(dst.data(), src.bytes, 16);
+    }
+  };
+  copy_key(request.key0, config.keys[0]);
+  copy_key(request.key1, config.keys[1]);
+  copy_key(request.key2, config.keys[2]);
+  copy_key(request.key3, config.keys[3]);
+  copy_key(request.key4, config.keys[4]);
+
+  PW_LOG_INFO("SimulateNtag424Arrival: UID size=%zu", uid.size());
+
+  ntag424_tag_ =
+      std::make_shared<Ntag424TagMock>(uid, kNtag424Sak, config, rng_);
+  mock_reader_.SimulateTagArrival(
+      std::static_pointer_cast<MockTag>(ntag424_tag_));
+
+  // Echo back real UID
+  std::memcpy(response.real_uid.bytes, config.real_uid.data(), 7);
+  response.real_uid.size = 7;
+
+  return pw::OkStatus();
+}
+
 }  // namespace maco::nfc

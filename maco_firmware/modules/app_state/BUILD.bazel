@@ -8,7 +8,7 @@ load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
 package(default_visibility = ["//maco_firmware:__subpackages__"])
 
-# State identifiers (placeholder FSM)
+# State identifiers
 cc_library(
     name = "state_id",
     hdrs = ["state_id.h"],
@@ -28,19 +28,26 @@ cc_library(
     ],
 )
 
-# NFC event handler - bridges NFC events to AppState
+# Tag verifier - authenticates NTAG424 tags and reads real UID
 cc_library(
-    name = "nfc_event_handler",
-    srcs = ["nfc_event_handler.cc"],
-    hdrs = ["nfc_event_handler.h"],
+    name = "tag_verifier",
+    srcs = ["tag_verifier.cc"],
+    hdrs = ["tag_verifier.h"],
     deps = [
         ":app_state",
+        "//maco_firmware/devices/pn532:tag_info",
+        "//maco_firmware/modules/device_secrets",
         "//maco_firmware/modules/nfc_reader",
         "//maco_firmware/modules/nfc_reader:nfc_event",
         "//maco_firmware/modules/nfc_tag",
-        "@pigweed//pw_async2",
+        "//maco_firmware/modules/nfc_tag/ntag424:local_key_provider",
+        "//maco_firmware/modules/nfc_tag/ntag424:ntag424_tag",
+        "@pigweed//pw_allocator:allocator",
+        "@pigweed//pw_async2:coro",
+        "@pigweed//pw_async2:coro_or_else_task",
         "@pigweed//pw_async2:dispatcher",
         "@pigweed//pw_log",
+        "@pigweed//pw_random",
     ],
 )
 
@@ -50,5 +57,22 @@ pw_cc_test(
     deps = [
         ":app_state",
         "@pigweed//pw_bytes",
+    ],
+)
+
+pw_cc_test(
+    name = "tag_verifier_test",
+    srcs = ["tag_verifier_test.cc"],
+    deps = [
+        ":app_state",
+        ":tag_verifier",
+        "//maco_firmware/modules/device_secrets:device_secrets_mock",
+        "//maco_firmware/modules/nfc_reader/mock:mock_nfc_reader",
+        "//maco_firmware/modules/nfc_tag:iso14443_tag_mock",
+        "//maco_firmware/modules/nfc_tag/ntag424:ntag424_tag_mock",
+        "@pigweed//pw_allocator:testing",
+        "@pigweed//pw_async2:basic_dispatcher",
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_random",
     ],
 )

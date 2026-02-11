@@ -102,6 +102,21 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "ntag424_tag_mock",
+    srcs = ["ntag424_tag_mock.cc"],
+    hdrs = ["ntag424_tag_mock.h"],
+    deps = [
+        ":ntag424_crypto",
+        ":ntag424_secure_messaging",
+        "//maco_firmware/modules/nfc_tag:mock_tag",
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_log",
+        "@pigweed//pw_random",
+        "@pigweed//pw_result",
+    ],
+)
+
 pw_cc_test(
     name = "ntag424_crypto_test",
     srcs = ["ntag424_crypto_test.cc"],

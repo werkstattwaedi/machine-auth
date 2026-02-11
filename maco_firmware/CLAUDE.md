@@ -363,7 +363,7 @@ return Pending();
 #### Reference Examples
 
 - **Coroutine driver (preferred)**: `devices/pn532/pn532_nfc_reader.*` - C++20 coroutines for sequential NFC operations
-- **Event subscription**: `modules/app_state/nfc_event_handler.*` - subscribe/handle pattern
+- **Tag verification**: `modules/app_state/tag_verifier.*` - NFC event subscription + NTAG424 auth coroutine
 - **RPC integration**: `modules/firebase/firebase_client.*` - callback → future bridge
 
 ### LVGL Integration

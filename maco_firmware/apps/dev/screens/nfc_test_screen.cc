@@ -79,11 +79,24 @@ ui::ButtonConfig NfcTestScreen::GetButtonConfig() const {
 void NfcTestScreen::UpdateStatusText(
     const app_state::AppStateSnapshot& snapshot) {
   status_text_.clear();
-  if (snapshot.state == app_state::AppStateId::kHasTag) {
-    status_text_ << "Card: ";
-    FormatUidTo(status_text_, snapshot.tag_uid);
-  } else {
-    status_text_ << "No card";
+  switch (snapshot.state) {
+    case app_state::AppStateId::kIdle:
+      status_text_ << "No card";
+      break;
+    case app_state::AppStateId::kTagDetected:
+      status_text_ << "Card: ";
+      FormatUidTo(status_text_, snapshot.tag_uid);
+      break;
+    case app_state::AppStateId::kVerifying:
+      status_text_ << "Verifying...";
+      break;
+    case app_state::AppStateId::kGenuine:
+      status_text_ << "Verified: ";
+      FormatUidTo(status_text_, snapshot.ntag_uid);
+      break;
+    case app_state::AppStateId::kUnknownTag:
+      status_text_ << "Unknown tag";
+      break;
   }
 }
 

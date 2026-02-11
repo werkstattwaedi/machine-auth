@@ -5,10 +5,12 @@
 
 namespace maco::app_state {
 
-// Placeholder states - validates threading pattern; real HFSM designed later
 enum class AppStateId {
-  kNoTag,   // No tag present
-  kHasTag,  // Tag detected (UID available in snapshot)
+  kIdle,        // No tag present
+  kTagDetected, // Tag at RF layer, checking capabilities
+  kVerifying,   // Terminal key auth in progress
+  kGenuine,     // Verified OWW tag, real UID known
+  kUnknownTag,  // Not ISO 14443-4, or auth failed
 };
 
 }  // namespace maco::app_state

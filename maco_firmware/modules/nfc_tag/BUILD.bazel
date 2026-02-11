@@ -26,3 +26,24 @@ cc_library(
         "@pigweed//pw_status",
     ],
 )
+
+cc_library(
+    name = "mock_tag",
+    hdrs = ["mock_tag.h"],
+    deps = [
+        ":nfc_tag",
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_result",
+    ],
+)
+
+cc_library(
+    name = "iso14443_tag_mock",
+    hdrs = ["iso14443_tag_mock.h"],
+    deps = [
+        ":mock_tag",
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_result",
+        "@pigweed//pw_status",
+    ],
+)

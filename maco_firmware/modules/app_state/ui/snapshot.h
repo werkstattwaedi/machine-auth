@@ -24,8 +24,9 @@ struct TagUid {
 // Snapshot for UI thread - copied by value, no dangling references.
 // This is the read-only view of app state that screens receive.
 struct AppStateSnapshot {
-  AppStateId state = AppStateId::kNoTag;
-  TagUid tag_uid;  // Valid when state == kHasTag
+  AppStateId state = AppStateId::kIdle;
+  TagUid tag_uid;   // RF-layer UID (kTagDetected onward)
+  TagUid ntag_uid;  // Real 7-byte NTAG424 UID from GetCardUid (kGenuine only)
 };
 
 }  // namespace maco::app_state
