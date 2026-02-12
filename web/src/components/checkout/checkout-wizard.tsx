@@ -10,11 +10,12 @@ import {
   addDoc,
   collection,
   serverTimestamp,
-  updateDoc,
+  writeBatch,
   doc,
 } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import { userRef } from "@/lib/firestore-helpers"
+import { usePricingConfig } from "@/lib/workshop-config"
 import { PageLoading } from "@/components/page-loading"
 import { CheckoutProgress } from "./checkout-progress"
 import { StepCheckin } from "./step-checkin"
@@ -44,7 +45,21 @@ interface UsageMachineDoc {
 
 interface UsageMaterialDoc {
   description: string
-  details?: { totalPrice?: number; category?: string; quantity?: number }
+  type?: "material" | "machine_hours" | "service"
+  details?: {
+    totalPrice?: number
+    category?: string
+    quantity?: number
+    lengthCm?: number
+    widthCm?: number
+    unitPrice?: number
+    discountLevel?: string
+    objectSize?: string
+    weight_g?: number
+    materialType?: string
+    serviceDescription?: string
+    serviceCost?: number
+  }
   created: { toDate(): Date }
   checkout?: { id: string } | null
   workshop?: string
@@ -58,6 +73,7 @@ export function CheckoutWizard({ picc, cmac }: CheckoutWizardProps) {
   )
   const { state, dispatch } = useCheckoutState()
   const [submitting, setSubmitting] = useState(false)
+  const { data: pricingConfig, loading: loadingConfig } = usePricingConfig()
 
   // Determine auth mode
   const isA3 = !!user && !!userDoc
@@ -118,11 +134,12 @@ export function CheckoutWizard({ picc, cmac }: CheckoutWizardProps) {
       totalPrice: u.details?.totalPrice ?? 0,
       category: u.details?.category ?? "",
       quantity: u.details?.quantity ?? 0,
+      type: u.type ?? "material",
     }))
     dispatch({ type: "SET_MATERIAL_USAGE", items })
   }, [rawMaterialUsage, loadingMaterial, dispatch])
 
-  if (tokenLoading || loadingMachine || loadingMaterial) {
+  if (tokenLoading || loadingMachine || loadingMaterial || loadingConfig) {
     return <PageLoading />
   }
 
@@ -139,13 +156,26 @@ export function CheckoutWizard({ picc, cmac }: CheckoutWizardProps) {
     setSubmitting(true)
     try {
       const personFees = state.persons.reduce((sum, p) => sum + p.fee, 0)
-      const materialTotal = state.materialUsage.reduce(
-        (sum, u) => sum + u.totalPrice,
-        0,
+      const firestoreMaterialTotal = state.materialUsage.reduce(
+        (sum, u) => sum + u.totalPrice, 0,
       )
-      const total = personFees + materialTotal + state.tip
+      const localMaterialTotal = state.localMaterialUsage.reduce(
+        (sum, u) => sum + (u.details.totalPrice ?? 0), 0,
+      )
+      const total = personFees + firestoreMaterialTotal + localMaterialTotal + state.tip
 
-      // Create checkout document
+      // Pre-generate refs for local material items
+      const localDocRefs = state.localMaterialUsage.map(() =>
+        doc(collection(db, "usage_material")),
+      )
+
+      // Combine Firestore-synced refs with new local refs
+      const allMaterialRefs = [
+        ...state.materialUsage.map((u) => doc(db, "usage_material", u.id)),
+        ...localDocRefs,
+      ]
+
+      // Create checkout document first (needed as ref for usage records)
       const checkoutDocRef = await addDoc(collection(db, "checkouts"), {
         userId: identifiedUserRef ?? null,
         time: serverTimestamp(),
@@ -155,13 +185,19 @@ export function CheckoutWizard({ picc, cmac }: CheckoutWizardProps) {
           userType: p.userType,
           usageType: p.usageType,
           fee: p.fee,
+          ...(p.billingCompany ? {
+            billingAddress: {
+              company: p.billingCompany,
+              street: p.billingStreet ?? "",
+              zip: p.billingZip ?? "",
+              city: p.billingCity ?? "",
+            },
+          } : {}),
         })),
         machineUsageRefs: state.machineUsage.map((u) =>
           doc(db, "usage_machine", u.id),
         ),
-        materialUsageRefs: state.materialUsage.map((u) =>
-          doc(db, "usage_material", u.id),
-        ),
+        materialUsageRefs: allMaterialRefs,
         tip: state.tip,
         totalPrice: total,
         notes: null,
@@ -169,16 +205,30 @@ export function CheckoutWizard({ picc, cmac }: CheckoutWizardProps) {
         modifiedAt: serverTimestamp(),
       })
 
-      // Mark usage records as checked out
+      // Batch: create local material docs + mark all usage as checked out
       const coRef = doc(db, "checkouts", checkoutDocRef.id)
-      await Promise.all([
-        ...state.machineUsage.map((u) =>
-          updateDoc(doc(db, "usage_machine", u.id), { checkout: coRef }),
-        ),
-        ...state.materialUsage.map((u) =>
-          updateDoc(doc(db, "usage_material", u.id), { checkout: coRef }),
-        ),
-      ])
+      const batch = writeBatch(db)
+
+      state.localMaterialUsage.forEach((item, i) => {
+        batch.set(localDocRefs[i], {
+          userId: identifiedUserRef ?? null,
+          workshop: item.workshop,
+          description: item.description,
+          type: item.type,
+          details: item.details,
+          created: serverTimestamp(),
+          checkout: coRef,
+        })
+      })
+
+      for (const u of state.machineUsage) {
+        batch.update(doc(db, "usage_machine", u.id), { checkout: coRef })
+      }
+      for (const u of state.materialUsage) {
+        batch.update(doc(db, "usage_material", u.id), { checkout: coRef })
+      }
+
+      await batch.commit()
 
       dispatch({
         type: "SET_SUBMITTED",
@@ -189,6 +239,15 @@ export function CheckoutWizard({ picc, cmac }: CheckoutWizardProps) {
       setSubmitting(false)
     }
   }
+
+  // Build raw material docs for step-workshops (with full details for CRUD)
+  const rawMaterialForWorkshops = rawMaterialUsage.map((u) => ({
+    id: u.id,
+    description: u.description,
+    workshop: u.workshop,
+    type: u.type,
+    details: u.details,
+  }))
 
   return (
     <div>
@@ -205,6 +264,8 @@ export function CheckoutWizard({ picc, cmac }: CheckoutWizardProps) {
           state={state}
           dispatch={dispatch}
           isAnonymous={isAnonymous}
+          config={pricingConfig}
+          rawMaterialUsage={rawMaterialForWorkshops}
         />
       )}
       {state.step === 2 && (
@@ -213,6 +274,7 @@ export function CheckoutWizard({ picc, cmac }: CheckoutWizardProps) {
           dispatch={dispatch}
           onSubmit={handleSubmit}
           submitting={submitting}
+          localMaterialUsage={state.localMaterialUsage}
         />
       )}
     </div>

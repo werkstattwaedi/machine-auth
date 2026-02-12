@@ -6,13 +6,14 @@ import { Label } from "@/components/ui/label"
 import { formatCHF } from "@/lib/format"
 import { USER_TYPE_LABELS } from "@/lib/pricing"
 import { ArrowLeft, Loader2 } from "lucide-react"
-import type { CheckoutState, CheckoutAction } from "./use-checkout-state"
+import type { CheckoutState, CheckoutAction, LocalMaterialItem } from "./use-checkout-state"
 
 interface StepCheckoutProps {
   state: CheckoutState
   dispatch: React.Dispatch<CheckoutAction>
   onSubmit: () => Promise<void>
   submitting: boolean
+  localMaterialUsage: LocalMaterialItem[]
 }
 
 export function StepCheckout({
@@ -20,13 +21,30 @@ export function StepCheckout({
   dispatch,
   onSubmit,
   submitting,
+  localMaterialUsage,
 }: StepCheckoutProps) {
   const personFees = state.persons.reduce((sum, p) => sum + p.fee, 0)
-  const materialTotal = state.materialUsage.reduce(
-    (sum, u) => sum + u.totalPrice,
-    0
-  )
-  const total = personFees + materialTotal + state.tip
+
+  // Combine Firestore-synced and local items into a unified display list
+  const localAsDisplay = localMaterialUsage.map((l) => ({
+    id: l.id,
+    description: l.description,
+    workshop: l.workshop,
+    totalPrice: l.details.totalPrice ?? 0,
+    category: l.details.category ?? "",
+    quantity: l.details.quantity ?? 0,
+    type: l.type,
+  }))
+  const allItems = [...state.materialUsage, ...localAsDisplay]
+
+  // Split into machine hours and material/service
+  const machineHoursItems = allItems.filter((u) => u.type === "machine_hours")
+  const materialItems = allItems.filter((u) => u.type !== "machine_hours")
+  const machineHoursTotal = machineHoursItems.reduce((sum, u) => sum + u.totalPrice, 0)
+  const materialTotal = materialItems.reduce((sum, u) => sum + u.totalPrice, 0)
+  const allMaterialTotal = allItems.reduce((sum, u) => sum + u.totalPrice, 0)
+
+  const total = personFees + allMaterialTotal + state.tip
 
   return (
     <div className="space-y-6">
@@ -56,6 +74,27 @@ export function StepCheckout({
         </div>
       </div>
 
+      {machineHoursTotal > 0 && (
+        <>
+          <Separator />
+          <div>
+            <h2 className="text-xl font-bold font-body underline decoration-cog-teal decoration-2 underline-offset-4 mb-4"
+    >
+              Maschinenkosten
+            </h2>
+            {machineHoursItems.map((u) => (
+              <div key={u.id} className="flex justify-between text-sm">
+                <span>{u.description} ({u.workshop})</span>
+                <span className="font-semibold">{formatCHF(u.totalPrice)}</span>
+              </div>
+            ))}
+            <div className="text-right font-bold text-lg mt-2">
+              {formatCHF(machineHoursTotal)}
+            </div>
+          </div>
+        </>
+      )}
+
       {materialTotal > 0 && (
         <>
           <Separator />
@@ -64,9 +103,14 @@ export function StepCheckout({
     >
               Materialkosten
             </h2>
-            <div className="flex justify-between text-sm">
-              <span>Material ({state.materialUsage.length} Posten)</span>
-              <span className="font-semibold">{formatCHF(materialTotal)}</span>
+            {materialItems.map((u) => (
+              <div key={u.id} className="flex justify-between text-sm">
+                <span>{u.description} ({u.workshop})</span>
+                <span className="font-semibold">{formatCHF(u.totalPrice)}</span>
+              </div>
+            ))}
+            <div className="text-right font-bold text-lg mt-2">
+              {formatCHF(materialTotal)}
             </div>
           </div>
         </>

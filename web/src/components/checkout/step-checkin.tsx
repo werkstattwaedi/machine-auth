@@ -18,7 +18,13 @@ export function StepCheckin({ state, dispatch, isAnonymous }: StepCheckinProps) 
       p.firstName.trim() &&
       p.lastName.trim() &&
       p.email.trim() &&
-      (p.isPreFilled || !isAnonymous || p.termsAccepted)
+      (p.isPreFilled || !isAnonymous || p.termsAccepted) &&
+      (p.userType !== "firma" || (
+        p.billingCompany?.trim() &&
+        p.billingStreet?.trim() &&
+        p.billingZip?.trim() &&
+        p.billingCity?.trim()
+      ))
   )
 
   return (

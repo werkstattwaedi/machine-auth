@@ -40,6 +40,10 @@ export function checkoutRef(id: string): DocumentReference {
   return doc(db, "checkouts", id)
 }
 
+export function configRef(id: string): DocumentReference {
+  return doc(db, "config", id)
+}
+
 /** Extract the document ID from a DocumentReference or path string */
 export function refId(ref: DocumentReference | { id: string } | string): string {
   if (typeof ref === "string") return ref.split("/").pop() ?? ref
