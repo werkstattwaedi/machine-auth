@@ -23,6 +23,10 @@ service cloud.firestore {
       return arr is list && arr.size() >= 0;
     }
 
+    function isOwner(userId) {
+      return resource.data.userId == /databases/$(database)/documents/users/$(userId);
+    }
+
     // Users collection (doc ID = Firebase Auth UID)
     match /users/{userId} {
       allow read: if isSignedIn();
@@ -88,7 +92,8 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if true;
       allow update: if isSignedIn();
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() ||
+        (isSignedIn() && isOwner(request.auth.uid) && resource.data.checkout == null);
     }
 
     // Checkouts
@@ -96,6 +101,12 @@ service cloud.firestore {
       allow create: if true;
       allow read: if isSignedIn();
       allow update, delete: if isAdmin();
+    }
+
+    // Config collection (pricing, etc.)
+    match /config/{configId} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
     // Materials catalog (public read for QR scan page)

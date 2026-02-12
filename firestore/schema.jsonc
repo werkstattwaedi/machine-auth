@@ -5,7 +5,6 @@
       "requiredPermission": ["DocumentReference"], // Array of DocumentReferences to /permission/{permissionId}
       "maco": "DocumentReference", // DocumentReference to /maco/{deviceID}
       "control": { // map with metadata on how to control the machine.
-
       }
     }
   },
@@ -28,22 +27,124 @@
       } // | null
     }
   },
-  "usage": {
+  "usage_machine": {
     "{usageId}": {
       "userId": "DocumentReference", // DocumentReference to /users/{userId}
-      "authenticationId": "DocumentReference", // DocumentReference to /authentications/{authId}
       "machine": "DocumentReference", // DocumentReference to /machine/{machineId}
+      "workshop": "string", // Workshop ID (e.g., "holz", "metall")
       "checkIn": "timestamp",
-      "checkOut": "timestamp", // null if still active
+      "checkOut": "timestamp | null", // null if still active
       "checkOutReason": "string", // JSON representation of CheckOutReason proto
-      "checkout": "DocumentReference" // DocumentReference to /checkouts/{checkoutId}, set when paid (null if unpaid)
+      "checkout": "DocumentReference | null" // DocumentReference to /checkouts/{checkoutId}, null if unpaid
+    }
+  },
+  "usage_material": {
+    "{usageId}": {
+      "userId": "DocumentReference | null", // DocumentReference to /users/{userId}, null for anonymous
+      "workshop": "string", // Workshop ID (e.g., "holz", "metall", "makerspace")
+      "description": "string", // Human-readable item description
+      "type": "material | machine_hours | service",
+      "details": {
+        "category": "string", // Unit category: "m2", "m", "stk", "h", "kg", "g", "l", "obj", "chf"
+        "quantity": "number",
+        "lengthCm": "number | null", // For area-based materials
+        "widthCm": "number | null", // For area-based materials
+        "unitPrice": "number",
+        "totalPrice": "number",
+        "discountLevel": "string | null", // "none" | "member" | "intern"
+        "objectSize": "string | null", // "klein" | "mittel" | "gross" (sandblasting)
+        "weight_g": "number | null", // For 3D printing
+        "materialType": "string | null", // "PLA" | "PETG" | "ABS" (3D printing)
+        "serviceDescription": "string | null", // For service items
+        "serviceCost": "number | null" // For service items
+      },
+      "created": "timestamp",
+      "checkout": "DocumentReference | null", // DocumentReference to /checkouts/{checkoutId}, null if unpaid
+      "modifiedBy": "string | null", // Firebase Auth UID of last modifier
+      "modifiedAt": "timestamp | null"
     }
   },
   "checkouts": {
     "{checkoutId}": {
-      "userId": "DocumentReference", // DocumentReference to /users/{userId}
+      "userId": "DocumentReference | null", // DocumentReference to /users/{userId}, null for anonymous
       "time": "timestamp",
-      "totalPrice": "number"
+      "persons": [{ // Array of person entries
+        "name": "string",
+        "email": "string",
+        "userType": "erwachsen | kind | firma",
+        "usageType": "regular | ermaessigt | materialbezug | intern | hangenmoos",
+        "fee": "number",
+        "billingAddress": { // Optional, for firma userType
+          "company": "string",
+          "street": "string",
+          "zip": "string",
+          "city": "string"
+        }
+      }],
+      "machineUsageRefs": ["DocumentReference"], // Array of DocumentReferences to /usage_machine/{usageId}
+      "materialUsageRefs": ["DocumentReference"], // Array of DocumentReferences to /usage_material/{usageId}
+      "tip": "number",
+      "totalPrice": "number",
+      "notes": "string | null",
+      "modifiedBy": "string | null", // Firebase Auth UID
+      "modifiedAt": "timestamp"
+    }
+  },
+  "config": {
+    "pricing": {
+      "workshops": {
+        "{workshopId}": { // e.g., "holz", "metall", "makerspace"
+          "label": "string", // Display name (e.g., "Holzwerkstatt")
+          "order": "number", // Sort order
+          "machines": [{ // Array of machine configs
+            "id": "string",
+            "label": "string",
+            "unit": "string",
+            "pricingType": "hourly | objectSize | 3dprint",
+            "hourlyRate": "number", // For hourly pricing
+            "materialPrices": {}, // Map of material type to price (3D print)
+            "objectSizePrices": {} // Map of object size to price (sandblasting)
+          }],
+          "materialCategories": ["string"], // Unit categories available (e.g., "m2", "stk", "kg")
+          "hasServiceItems": "boolean" // Whether free-form service items are allowed
+        }
+      },
+      "unitLabels": {}, // Map of unit category to display label (e.g., "m2": "m²")
+      "discountLabels": {}, // Map of discount level to display label
+      "objectSizeLabels": {} // Map of object size to display label
+    }
+  },
+  "sessions": {
+    "{sessionId}": {
+      "userId": "DocumentReference", // DocumentReference to /users/{userId}
+      "tokenId": "DocumentReference" // DocumentReference to /tokens/{tokenId}
+    }
+  },
+  "materials": {
+    "{materialId}": {
+      "name": "string", // Material name
+      "workshop": "string", // Workshop ID
+      "category": "string", // Unit category (e.g., "m2", "m", "stk")
+      "unitPrice": "number",
+      "unit": "string", // Display unit
+      "active": "boolean",
+      "shortlistGroup": "string | null" // Optional grouping for quick-select lists
+    }
+  },
+  "audit_log": {
+    "{logId}": {
+      "collection": "string", // Collection name being audited
+      "docId": "string", // Document ID in that collection
+      "operation": "create | update | delete",
+      "actorUid": "string | null", // Firebase Auth UID of actor
+      "before": "object | null", // Serialized document before change
+      "after": "object | null", // Serialized document after change
+      "timestamp": "timestamp"
+    }
+  },
+  "machine_reports": {
+    "{reportId}": {
+      // User-submitted machine issue reports (public create, admin read/update/delete)
     }
   },
   "maco": {

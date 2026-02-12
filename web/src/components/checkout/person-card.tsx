@@ -30,6 +30,8 @@ export function PersonCard({
   const update = (updates: Partial<CheckoutPerson>) =>
     dispatch({ type: "UPDATE_PERSON", id: person.id, updates })
 
+  const showBillingAddress = person.userType === "firma"
+
   return (
     <div className="bg-[rgba(204,204,204,0.2)] rounded-none p-[25px] space-y-4">
       <div className="flex items-center justify-between">
@@ -145,6 +147,47 @@ export function PersonCard({
           <p className="text-sm pt-1">{formatCHF(person.fee)}</p>
         </div>
       </div>
+
+      {/* Billing address for Firma */}
+      {showBillingAddress && (
+        <div className="space-y-3 border-t pt-4">
+          <Label className="text-sm font-bold">Rechnungsadresse</Label>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <Label className="text-sm">Firma<span className="text-[#cc2a24]">*</span></Label>
+              <input
+                value={(person as any).billingCompany ?? ""}
+                onChange={(e) => update({ billingCompany: e.target.value } as any)}
+                className="flex h-9 w-full rounded-none border border-[#ccc] bg-background px-3 py-1 text-sm outline-none focus:border-cog-teal"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-sm">Strasse / Nr.<span className="text-[#cc2a24]">*</span></Label>
+              <input
+                value={(person as any).billingStreet ?? ""}
+                onChange={(e) => update({ billingStreet: e.target.value } as any)}
+                className="flex h-9 w-full rounded-none border border-[#ccc] bg-background px-3 py-1 text-sm outline-none focus:border-cog-teal"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-sm">PLZ<span className="text-[#cc2a24]">*</span></Label>
+              <input
+                value={(person as any).billingZip ?? ""}
+                onChange={(e) => update({ billingZip: e.target.value } as any)}
+                className="flex h-9 w-full rounded-none border border-[#ccc] bg-background px-3 py-1 text-sm outline-none focus:border-cog-teal"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-sm">Ort<span className="text-[#cc2a24]">*</span></Label>
+              <input
+                value={(person as any).billingCity ?? ""}
+                onChange={(e) => update({ billingCity: e.target.value } as any)}
+                className="flex h-9 w-full rounded-none border border-[#ccc] bg-background px-3 py-1 text-sm outline-none focus:border-cog-teal"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
