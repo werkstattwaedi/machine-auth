@@ -16,5 +16,8 @@ frozenlist==1.4.1
 multidict==6.0.5
 yarl==1.9.4
 
+# AES-128 for NTAG key diversification (used by simulator console)
+pycryptodome==3.21.0
+
 # Common dependencies
 idna==3.10

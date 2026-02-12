@@ -32,6 +32,7 @@ import pw_system.console
 
 from maco_pb import maco_service_pb2
 from maco_pb import nfc_mock_service_pb2
+from ntag_key_diversification import diversify_keys
 
 # Pigweed default protos
 from pw_file import file_pb2
@@ -48,6 +49,67 @@ _LOG = logging.getLogger(__file__)
 
 # Default socket address for simulator (matches pw_system defaults)
 DEFAULT_SOCKET_ADDR = "localhost:33000"
+
+# Diversification parameters — match functions/.env.local
+_MASTER_KEY = bytes.fromhex("c025f541727ecd8b6eb92055c88a2a70")
+_SYSTEM_NAME = "OwwMachineAuth"
+
+# Shared terminal key (same on all tags, NOT diversified) — matches
+# functions/.env.local TERMINAL_KEY and DeviceSecretsMock::kDefaultNtagTerminalKey.
+_TERMINAL_KEY = bytes.fromhex("f5e4b999d5aa629f193a874529c4aa2f")
+
+
+def _make_ntag424_preset(
+    anti_collision_uid: bytes,
+    real_uid: bytes,
+    terminal_key: bytes = _TERMINAL_KEY,
+) -> dict:
+    """Build an NTAG424 preset with diversified keys.
+
+    key1 (application) and key3 (authorization) are diversified from the
+    master key + tag UID.  key2 (terminal) is the shared terminal key.
+    """
+    keys = diversify_keys(_MASTER_KEY, _SYSTEM_NAME, real_uid)
+    return {
+        "uid": anti_collision_uid,
+        "real_uid": real_uid,
+        "key1": keys["application"],
+        "key2": terminal_key,
+        "key3": keys["authorization"],
+    }
+
+
+# Tag presets for quick interactive testing.
+# Real UIDs match scripts/seed-emulator.ts token IDs so that terminal checkin
+# finds the corresponding Firestore documents.
+TAG_PRESETS = {
+    # Admin's tag (seed user: admin@example.com)
+    "admin": _make_ntag424_preset(
+        anti_collision_uid=b'\x04\xAA\xBB\xCC\xDD\xEE\x01',
+        real_uid=bytes.fromhex("04c339aa1e1890"),
+    ),
+    # Mike's tag (seed user: mike@example.com)
+    "mike": _make_ntag424_preset(
+        anti_collision_uid=b'\x04\xAA\xBB\xCC\xDD\xEE\x02',
+        real_uid=bytes.fromhex("04d449bb2f2901"),
+    ),
+    # Valid NTAG424 auth but UID not registered in Firestore
+    "unregistered": _make_ntag424_preset(
+        anti_collision_uid=b'\x04\xAA\xBB\xCC\xDD\xEE\x03',
+        real_uid=bytes.fromhex("04FFFFFFFFFFFF"),
+    ),
+    # Wrong terminal key - firmware auth will fail
+    "wrong_key": _make_ntag424_preset(
+        anti_collision_uid=b'\x04\xAA\xBB\xCC\xDD\xEE\x04',
+        real_uid=bytes.fromhex("04c339aa1e1890"),
+        terminal_key=b'\xFF' * 16,
+    ),
+    # Simple ISO tag (not NTAG424) - detected as unknown
+    "simple": {
+        "uid": b'\x04\x01\x02\x03\x04\x05\x06',
+        "sak": 0x00,
+    },
+}
 
 
 def _get_project_root() -> Path:
@@ -161,6 +223,47 @@ class SimDevice(PwSystemDevice):
         """Get device information (firmware version, uptime, build target)."""
         response = self.rpcs.maco.MacoService.GetDeviceInfo()
         return response.response
+
+    def present_tag(self, preset: str | int = "admin"):
+        """Present a preset NFC tag. Use remove_tag() to remove it.
+
+        Args:
+            preset: Name from TAG_PRESETS or integer index (1-based).
+                    Available: "admin", "mike", "unregistered",
+                    "wrong_key", "simple"
+        """
+        if isinstance(preset, int):
+            names = list(TAG_PRESETS.keys())
+            if preset < 1 or preset > len(names):
+                _LOG.error("Invalid index %d. Use 1-%d.", preset, len(names))
+                return
+            preset = names[preset - 1]
+
+        tag = TAG_PRESETS.get(preset)
+        if tag is None:
+            _LOG.error("Unknown preset %r. Available: %s",
+                       preset, ", ".join(TAG_PRESETS.keys()))
+            return
+
+        if "real_uid" in tag:
+            _LOG.info("Presenting NTAG424 tag %r", preset)
+            return self.rpcs.maco.NfcMockService.SimulateNtag424Arrival(**tag)
+        else:
+            _LOG.info("Presenting simple tag %r", preset)
+            return self.rpcs.maco.NfcMockService.SimulateTagArrival(**tag)
+
+    def remove_tag(self):
+        """Remove the current tag from the NFC field."""
+        return self.rpcs.maco.NfcMockService.SimulateTagDeparture()
+
+    def list_tags(self):
+        """Print available tag presets."""
+        for i, (name, tag) in enumerate(TAG_PRESETS.items(), 1):
+            if "real_uid" in tag:
+                uid_hex = tag["real_uid"].hex()
+                print(f"  {i}. {name:14s} NTAG424  uid={uid_hex}")
+            else:
+                print(f"  {i}. {name:14s} simple")
 
     def update(self, target: str | None = None) -> int:
         """Rebuild and restart simulator.
@@ -323,6 +426,7 @@ def main() -> int:
 
     print("🖥️  Simulator started, connecting console...")
     print("💡 Use device.update() to rebuild and hot-restart the simulator")
+    print("💡 Use device.present_tag() / device.remove_tag() for NFC testing")
 
     try:
         device_connection = create_sim_connection(

@@ -15,11 +15,13 @@ constexpr std::array<std::byte, KeyBytes::kSize> kDefaultGatewayMasterSecret = {
     std::byte{0x0C}, std::byte{0x0D}, std::byte{0x0E}, std::byte{0x0F},
 };
 
+// Shared terminal key matching functions/.env.local TERMINAL_KEY.
+// Same key on all tags — enables local auth + real UID retrieval.
 constexpr std::array<std::byte, KeyBytes::kSize> kDefaultNtagTerminalKey = {
-    std::byte{0x10}, std::byte{0x11}, std::byte{0x12}, std::byte{0x13},
-    std::byte{0x14}, std::byte{0x15}, std::byte{0x16}, std::byte{0x17},
-    std::byte{0x18}, std::byte{0x19}, std::byte{0x1A}, std::byte{0x1B},
-    std::byte{0x1C}, std::byte{0x1D}, std::byte{0x1E}, std::byte{0x1F},
+    std::byte{0xF5}, std::byte{0xE4}, std::byte{0xB9}, std::byte{0x99},
+    std::byte{0xD5}, std::byte{0xAA}, std::byte{0x62}, std::byte{0x9F},
+    std::byte{0x19}, std::byte{0x3A}, std::byte{0x87}, std::byte{0x45},
+    std::byte{0x29}, std::byte{0xC4}, std::byte{0xAA}, std::byte{0x2F},
 };
 
 }  // namespace

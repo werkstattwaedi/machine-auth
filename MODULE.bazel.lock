@@ -1126,7 +1126,7 @@
         "bzlTransitiveDigest": "ZVTMsEkfirao/Z6Wr5ihB9pW+8YVDs/t7F6CtoJ+2PY=",
         "usagesDigest": "GQZ+4FK05jr+dpNg0cYzGgyhDyrGBxhGaKe5kCyXyTQ=",
         "recordedFileInputs": {
-          "@@//tools/requirements_lock.txt": "ca716e495c478984b94357460d7c5e3d4296b4bf50097c98f61eec19f28b127e",
+          "@@//tools/requirements_lock.txt": "e91d70fe7ea611768b597a580ba909eb937c85acdb7b69d7da1beef244011fb1",
           "@@nanopb+//extra/requirements_lock.txt": "2bcdca24f1a4429b4ab0f0bb80cca292a92e12f7bf3d0f46de7c2b14fd97ac25",
           "@@particle_bazel+//tools/requirements_lock.txt": "523b96e9a22a45d2878eefec325e5cf19ea1388dba19b55994070224f1e4cdd9",
           "@@pigweed+//pw_env_setup/py/pw_env_setup/virtualenv_setup/upstream_requirements_darwin_lock.txt": "affe8afad4cccc4b1fc1e424417dac43202b2dbdf60696dca8c70ffbd52cd450",
@@ -1218,6 +1218,15 @@
               "python_interpreter_target": "@@rules_python++python+python_3_11_host//:python",
               "repo": "maco_pip_311",
               "requirement": "multidict==6.0.5"
+            }
+          },
+          "maco_pip_311_pycryptodome": {
+            "repoRuleId": "@@rules_python+//python/private/pypi:whl_library.bzl%whl_library",
+            "attributes": {
+              "dep_template": "@maco_pip//{name}:{target}",
+              "python_interpreter_target": "@@rules_python++python+python_3_11_host//:python",
+              "repo": "maco_pip_311",
+              "requirement": "pycryptodome==3.21.0"
             }
           },
           "maco_pip_311_yarl": {
@@ -39983,6 +39992,7 @@
                 "frozenlist": "{\"maco_pip_311_frozenlist\":[{\"version\":\"3.11\"}]}",
                 "idna": "{\"maco_pip_311_idna\":[{\"version\":\"3.11\"}]}",
                 "multidict": "{\"maco_pip_311_multidict\":[{\"version\":\"3.11\"}]}",
+                "pycryptodome": "{\"maco_pip_311_pycryptodome\":[{\"version\":\"3.11\"}]}",
                 "yarl": "{\"maco_pip_311_yarl\":[{\"version\":\"3.11\"}]}"
               },
               "packages": [
@@ -39994,6 +40004,7 @@
                 "frozenlist",
                 "idna",
                 "multidict",
+                "pycryptodome",
                 "yarl"
               ],
               "groups": {}

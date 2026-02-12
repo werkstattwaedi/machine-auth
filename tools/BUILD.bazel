@@ -1,7 +1,7 @@
 # Copyright Offene Werkstatt Wädenswil
 # SPDX-License-Identifier: MIT
 
-load("@rules_python//python:defs.bzl", "py_binary")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -15,10 +15,24 @@ py_binary(
     ],
 )
 
+py_library(
+    name = "ntag_key_diversification",
+    srcs = ["ntag_key_diversification.py"],
+    imports = ["."],
+    deps = ["@maco_pip//pycryptodome"],
+)
+
+py_test(
+    name = "ntag_key_diversification_test",
+    srcs = ["ntag_key_diversification_test.py"],
+    deps = [":ntag_key_diversification"],
+)
+
 py_binary(
     name = "device_sim",
     srcs = ["device_sim.py"],
     deps = [
+        ":ntag_key_diversification",
         "//maco_firmware/protos:nfc_mock_service_py_pb2",
         "//maco_firmware/protos:py_pb2",
         "@pigweed//pw_system/py:pw_system_lib",
