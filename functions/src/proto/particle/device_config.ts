@@ -6,6 +6,7 @@
 
 /* eslint-disable */
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
+import { FirebaseId } from "../common";
 
 export const protobufPackage = "maco.proto.particle";
 
@@ -29,11 +30,13 @@ export interface RelayControl {
 /** Machine definition with permissions */
 export interface Machine {
   /** Firebase machine ID */
-  id: string;
+  id:
+    | FirebaseId
+    | undefined;
   /** Human-readable label */
   label: string;
   /** Firebase permission IDs required to use this machine */
-  requiredPermissions: string[];
+  requiredPermissions: FirebaseId[];
   /** Control mechanism for the machine */
   control: MachineControl | undefined;
 }
@@ -44,6 +47,10 @@ export interface DeviceConfig {
   hwRevision: HwRevision;
   /** Machines controlled by this terminal */
   machines: Machine[];
+  /** Gateway server hostname or IP address */
+  gatewayHost: string;
+  /** Gateway server port */
+  gatewayPort: number;
 }
 
 function createBaseMachineControl(): MachineControl {
@@ -136,19 +143,19 @@ export const RelayControl: MessageFns<RelayControl> = {
 };
 
 function createBaseMachine(): Machine {
-  return { id: "", label: "", requiredPermissions: [], control: undefined };
+  return { id: undefined, label: "", requiredPermissions: [], control: undefined };
 }
 
 export const Machine: MessageFns<Machine> = {
   encode(message: Machine, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.id !== "") {
-      writer.uint32(10).string(message.id);
+    if (message.id !== undefined) {
+      FirebaseId.encode(message.id, writer.uint32(10).fork()).join();
     }
     if (message.label !== "") {
       writer.uint32(18).string(message.label);
     }
     for (const v of message.requiredPermissions) {
-      writer.uint32(26).string(v!);
+      FirebaseId.encode(v!, writer.uint32(26).fork()).join();
     }
     if (message.control !== undefined) {
       MachineControl.encode(message.control, writer.uint32(34).fork()).join();
@@ -168,7 +175,7 @@ export const Machine: MessageFns<Machine> = {
             break;
           }
 
-          message.id = reader.string();
+          message.id = FirebaseId.decode(reader, reader.uint32());
           continue;
         }
         case 2: {
@@ -184,7 +191,7 @@ export const Machine: MessageFns<Machine> = {
             break;
           }
 
-          message.requiredPermissions.push(reader.string());
+          message.requiredPermissions.push(FirebaseId.decode(reader, reader.uint32()));
           continue;
         }
         case 4: {
@@ -209,9 +216,9 @@ export const Machine: MessageFns<Machine> = {
   },
   fromPartial(object: DeepPartial<Machine>): Machine {
     const message = createBaseMachine();
-    message.id = object.id ?? "";
+    message.id = (object.id !== undefined && object.id !== null) ? FirebaseId.fromPartial(object.id) : undefined;
     message.label = object.label ?? "";
-    message.requiredPermissions = object.requiredPermissions?.map((e) => e) || [];
+    message.requiredPermissions = object.requiredPermissions?.map((e) => FirebaseId.fromPartial(e)) || [];
     message.control = (object.control !== undefined && object.control !== null)
       ? MachineControl.fromPartial(object.control)
       : undefined;
@@ -220,7 +227,7 @@ export const Machine: MessageFns<Machine> = {
 };
 
 function createBaseDeviceConfig(): DeviceConfig {
-  return { hwRevision: 0, machines: [] };
+  return { hwRevision: 0, machines: [], gatewayHost: "", gatewayPort: 0 };
 }
 
 export const DeviceConfig: MessageFns<DeviceConfig> = {
@@ -230,6 +237,12 @@ export const DeviceConfig: MessageFns<DeviceConfig> = {
     }
     for (const v of message.machines) {
       Machine.encode(v!, writer.uint32(18).fork()).join();
+    }
+    if (message.gatewayHost !== "") {
+      writer.uint32(26).string(message.gatewayHost);
+    }
+    if (message.gatewayPort !== 0) {
+      writer.uint32(32).uint32(message.gatewayPort);
     }
     return writer;
   },
@@ -257,6 +270,22 @@ export const DeviceConfig: MessageFns<DeviceConfig> = {
           message.machines.push(Machine.decode(reader, reader.uint32()));
           continue;
         }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.gatewayHost = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.gatewayPort = reader.uint32();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -273,6 +302,8 @@ export const DeviceConfig: MessageFns<DeviceConfig> = {
     const message = createBaseDeviceConfig();
     message.hwRevision = object.hwRevision ?? 0;
     message.machines = object.machines?.map((e) => Machine.fromPartial(e)) || [];
+    message.gatewayHost = object.gatewayHost ?? "";
+    message.gatewayPort = object.gatewayPort ?? 0;
     return message;
   },
 };
