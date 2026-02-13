@@ -24,10 +24,12 @@ This is a comprehensive IoT machine authentication system featuring secure NFC-b
 **For Claude (AI assistant) - always use `./pw`:**
 
 ```bash
-./pw build host    # Build simulator (no IDE change)
-./pw build p2      # Build P2 firmware (no IDE change)
-./pw flash         # Flash to device
-./pw build asan    # Address Sanitizer
+./pw build host       # Build simulator (no IDE change)
+./pw build p2         # Build P2 firmware (no IDE change)
+./pw flash            # Flash to device
+./pw build asan       # Address Sanitizer
+./pw factory-flash    # Flash factory test firmware
+./pw factory-console  # Factory test TUI (interactive checklist)
 ```
 
 **For human developers:**
