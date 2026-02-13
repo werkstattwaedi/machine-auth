@@ -19,7 +19,6 @@
 // Particle and project headers after Pigweed
 #include "device_config/device_config.h"
 #include "maco_firmware/modules/device_secrets/device_secrets_eeprom.h"
-#include "maco_firmware/modules/device_secrets/device_secrets_service.h"
 #include "maco_firmware/modules/gateway/derive_ascon_key.h"
 #include "maco_firmware/services/maco_service.h"
 #include "maco_firmware/devices/cap_touch/cap_touch_input_driver.h"
@@ -78,9 +77,6 @@ constexpr hal_pin_t kPinMachineRelay = A1;
 
 }  // namespace
 
-// Forward declaration for device secrets (defined below, needed by Init)
-maco::secrets::DeviceSecretsEeprom& GetDeviceSecretsEeprom();
-
 void Init(pw::Function<void()> app_init) {
   pb::log::InitLogBridge();
 
@@ -128,12 +124,6 @@ void Init(pw::Function<void()> app_init) {
   // Register RPC services
   static maco::MacoService maco_service;
   pw::System().rpc_server().RegisterService(maco_service);
-
-  // Register device secrets RPC service
-  // Uses GetDeviceSecretsEeprom() to get the singleton instance
-  static maco::secrets::DeviceSecretsService device_secrets_service(
-      GetDeviceSecretsEeprom());
-  pw::System().rpc_server().RegisterService(device_secrets_service);
 
   PW_LOG_INFO("=== MACO Firmware Starting ===");
 
@@ -296,7 +286,6 @@ pw::random::RandomGenerator& GetRandomGenerator() {
   return generator;
 }
 
-// Internal getter for EEPROM implementation (used by RPC service)
 maco::secrets::DeviceSecretsEeprom& GetDeviceSecretsEeprom() {
   static maco::secrets::DeviceSecretsEeprom storage;
   return storage;

@@ -30,6 +30,7 @@
       },
       "targets": [
         "//maco_firmware/apps/dev:dev",
+        "//maco_firmware/apps/factory:factory",
         "//maco_firmware/devices/pn532:hardware_test",
         "@particle_bazel//pw_stream_particle:loopback_test",
         "@particle_bazel//pb_uart:loopback_hardware_test"

@@ -1,0 +1,3 @@
+# Options for factory_test_service.proto (nanopb format)
+
+maco.factory.TestResponse.message max_size:64

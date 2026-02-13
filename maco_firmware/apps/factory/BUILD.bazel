@@ -1,0 +1,109 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+# Factory firmware for hardware bring-up, testing, and provisioning.
+# Minimal app: display + LED + factory test RPCs + device secrets RPCs.
+# No NFC reader, cloud connection, or full application stack.
+#
+# Usage:
+#   ./pw factory-flash    # Flash factory firmware to P2
+#   ./pw factory-console  # Connect console for interactive testing
+
+load("@com_google_protobuf//bazel:proto_library.bzl", "proto_library")
+load(
+    "@pigweed//pw_protobuf_compiler:pw_proto_library.bzl",
+    "nanopb_proto_library",
+    "nanopb_rpc_proto_library",
+    "pw_proto_filegroup",
+)
+load("@particle_bazel//rules:particle_firmware.bzl", "particle_firmware", "particle_flash_binary")
+load("@pigweed//pw_system/py:console.bzl", "device_console")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_python//python:proto.bzl", "py_proto_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# =============================================================================
+# Factory test service proto
+# =============================================================================
+
+pw_proto_filegroup(
+    name = "factory_test_service_proto_and_options",
+    srcs = ["factory_test_service.proto"],
+    options_files = ["factory_test_service.options"],
+)
+
+proto_library(
+    name = "factory_test_service_proto",
+    srcs = [":factory_test_service_proto_and_options"],
+    import_prefix = "maco_pb",
+    strip_import_prefix = "/maco_firmware/apps/factory",
+)
+
+nanopb_proto_library(
+    name = "factory_test_service_nanopb",
+    deps = [":factory_test_service_proto"],
+)
+
+nanopb_rpc_proto_library(
+    name = "factory_test_service_nanopb_rpc",
+    nanopb_proto_library_deps = [":factory_test_service_nanopb"],
+    deps = [":factory_test_service_proto"],
+)
+
+py_proto_library(
+    name = "factory_test_service_py_pb2",
+    deps = [":factory_test_service_proto"],
+)
+
+# =============================================================================
+# Factory test service implementation
+# =============================================================================
+
+cc_library(
+    name = "factory_test_service",
+    srcs = ["factory_test_service.cc"],
+    hdrs = ["factory_test_service.h"],
+    deps = [
+        ":factory_test_service_nanopb_rpc",
+        "@lvgl//:lvgl",
+        "@pigweed//pw_log",
+        "@pigweed//pw_status",
+    ],
+)
+
+# =============================================================================
+# Factory firmware (P2 only)
+# =============================================================================
+
+particle_firmware(
+    name = "factory",
+    srcs = ["main.cc"],
+    platform = "//maco_firmware/targets/p2:p2_system",
+    deps = [
+        ":factory_test_service",
+        "//maco_firmware/devices/in4818",
+        "//maco_firmware/modules/device_secrets:device_secrets_eeprom",
+        "//maco_firmware/modules/device_secrets:device_secrets_service",
+        "//maco_firmware/modules/display",
+        "//maco_firmware/modules/led",
+        "//maco_firmware/system",
+        "//maco_firmware/system:headers",
+        "@particle_bazel//pw_spi_particle:initiator",
+        "@pigweed//pw_log",
+        "@pigweed//pw_system:async",
+        "@pigweed//pw_system:log_backend",
+        "@pigweed//pw_system:extra_platform_libs",
+    ],
+)
+
+particle_flash_binary(
+    name = "flash",
+    firmware = ":factory.bin",
+)
+
+device_console(
+    name = "console",
+    script = "//tools:factory_console",
+    binary = ":factory",
+)

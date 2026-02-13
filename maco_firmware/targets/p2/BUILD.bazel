@@ -141,7 +141,6 @@ cc_library(
         "//maco_firmware/modules/gateway:p2_gateway_client",
         "//maco_firmware/modules/led",
         "//maco_firmware/modules/device_secrets:device_secrets_eeprom",
-        "//maco_firmware/modules/device_secrets:device_secrets_service",
         "//maco_firmware/modules/machine_relay:latching_machine_relay",
         "//maco_firmware/services:maco_service",
         "//maco_firmware/system:headers",

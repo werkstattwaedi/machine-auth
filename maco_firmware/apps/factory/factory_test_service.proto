@@ -1,0 +1,61 @@
+// Copyright Offene Werkstatt Wädenswil
+// SPDX-License-Identifier: MIT
+
+syntax = "proto3";
+
+package maco.factory;
+
+// RPC service for factory hardware testing.
+// Used during bring-up and QA to verify individual hardware subsystems
+// (LEDs, display, etc.) without running the full application stack.
+service FactoryTestService {
+  // Set all LEDs to a single color.
+  rpc LedSetAll(LedColorRequest) returns (TestResponse);
+
+  // Set a single LED pixel.
+  rpc LedSetPixel(LedPixelRequest) returns (TestResponse);
+
+  // Clear all LEDs (turn off).
+  rpc LedClear(Empty) returns (TestResponse);
+
+  // Set display backlight brightness.
+  rpc DisplaySetBrightness(BrightnessRequest) returns (TestResponse);
+
+  // Fill entire display with a solid color.
+  rpc DisplayFillColor(DisplayColorRequest) returns (TestResponse);
+
+  // Show vertical color bar test pattern (R/G/B/W/C/M/Y).
+  rpc DisplayColorBars(Empty) returns (TestResponse);
+}
+
+message Empty {}
+
+message TestResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message LedColorRequest {
+  uint32 r = 1;
+  uint32 g = 2;
+  uint32 b = 3;
+  uint32 w = 4;
+}
+
+message LedPixelRequest {
+  uint32 index = 1;
+  uint32 r = 2;
+  uint32 g = 3;
+  uint32 b = 4;
+  uint32 w = 5;
+}
+
+message BrightnessRequest {
+  uint32 brightness = 1;  // 0-255
+}
+
+message DisplayColorRequest {
+  uint32 r = 1;
+  uint32 g = 2;
+  uint32 b = 3;
+}

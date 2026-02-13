@@ -29,6 +29,21 @@ py_test(
 )
 
 py_binary(
+    name = "factory_console",
+    srcs = [
+        "factory_console.py",
+        "factory_test_pane.py",
+    ],
+    deps = [
+        "//maco_firmware/apps/factory:factory_test_service_py_pb2",
+        "//maco_firmware/modules/device_secrets:device_secrets_service_py_pb2",
+        "//maco_firmware/protos:py_pb2",
+        "@pigweed//pw_console/py:pw_console",
+        "@pigweed//pw_system/py:pw_system_lib",
+    ],
+)
+
+py_binary(
     name = "device_sim",
     srcs = ["device_sim.py"],
     deps = [
