@@ -49,7 +49,7 @@ class GatewayServiceImpl:
         endpoint: str,
         payload: bytes,
         request_id: int,
-        device_id: Optional[int] = None,
+        device_id: Optional[bytes] = None,
     ) -> dict:
         """Handle Forward RPC.
 
@@ -67,7 +67,7 @@ class GatewayServiceImpl:
             endpoint,
             request_id,
             len(payload),
-            f"{device_id:016X}" if device_id else "unknown",
+            device_id.hex() if device_id else "unknown",
         )
 
         result = await self._firebase.forward(endpoint, payload, device_id)

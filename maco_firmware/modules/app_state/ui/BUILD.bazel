@@ -12,6 +12,8 @@ cc_library(
     name = "snapshot",
     hdrs = ["snapshot.h"],
     deps = [
+        "//maco_firmware:types",
         "//maco_firmware/modules/app_state:state_id",
+        "@pigweed//pw_string",
     ],
 )

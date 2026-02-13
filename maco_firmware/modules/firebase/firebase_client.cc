@@ -40,6 +40,7 @@ pw::Result<size_t> EncodeTerminalCheckinRequest(const TagUid& tag_uid,
       maco_proto_firebase_rpc_TerminalCheckinRequest_init_zero;
 
   // Copy tag UID bytes
+  request.has_token_id = true;
   auto tag_bytes = tag_uid.bytes();
   std::memcpy(request.token_id.value, tag_bytes.data(), TagUid::kSize);
 
@@ -61,6 +62,7 @@ pw::Result<size_t> EncodeAuthenticateTagRequest(const TagUid& tag_uid,
       maco_proto_firebase_rpc_AuthenticateTagRequest_init_zero;
 
   // Copy tag UID bytes
+  request.has_tag_id = true;
   auto tag_bytes = tag_uid.bytes();
   std::memcpy(request.tag_id.value, tag_bytes.data(), TagUid::kSize);
 
@@ -92,6 +94,7 @@ pw::Result<size_t> EncodeCompleteTagAuthRequest(
       maco_proto_firebase_rpc_CompleteTagAuthRequest_init_zero;
 
   // Copy auth_id string
+  request.has_auth_id = true;
   auto auth_id_str = auth_id.value();
   if (auth_id_str.size() >= sizeof(request.auth_id.value)) {
     return pw::Status::InvalidArgument();
@@ -126,7 +129,8 @@ pw::Result<CheckinResult> DecodeCheckinResponse(pw::ConstByteSpan payload) {
   if (!pb_decode(&stream,
                  maco_proto_firebase_rpc_TerminalCheckinResponse_fields,
                  &response)) {
-    PW_LOG_ERROR("Failed to decode TerminalCheckinResponse");
+    PW_LOG_ERROR("Failed to decode TerminalCheckinResponse: %s",
+                 PB_GET_ERROR(&stream));
     return pw::Status::DataLoss();
   }
 

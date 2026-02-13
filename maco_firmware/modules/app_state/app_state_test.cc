@@ -152,6 +152,113 @@ TEST(AppStateTest, SnapshotIsCopy) {
   EXPECT_EQ(snapshot.tag_uid.size, 3u);
 }
 
+TEST(AppStateTest, OnAuthorizingTransitionsToAuthorizing) {
+  AppState state;
+  AppStateSnapshot snapshot;
+
+  constexpr auto kRfUid = pw::bytes::Array<0x04, 0x11, 0x22>();
+  constexpr auto kNtagUid =
+      pw::bytes::Array<0x04, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF>();
+
+  state.OnTagDetected(kRfUid);
+  state.OnVerifying();
+  state.OnTagVerified(kNtagUid);
+  state.OnAuthorizing();
+  state.GetSnapshot(snapshot);
+
+  EXPECT_EQ(snapshot.state, AppStateId::kAuthorizing);
+  // UIDs still preserved
+  EXPECT_EQ(snapshot.tag_uid.size, kRfUid.size());
+  EXPECT_EQ(snapshot.ntag_uid.size, kNtagUid.size());
+}
+
+TEST(AppStateTest, OnAuthorizedTransitionsToAuthorized) {
+  AppState state;
+  AppStateSnapshot snapshot;
+
+  constexpr auto kRfUid = pw::bytes::Array<0x04, 0x11, 0x22>();
+  constexpr auto kNtagUid =
+      pw::bytes::Array<0x04, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF>();
+
+  auto auth_id = *maco::FirebaseId::FromString("auth_id_123");
+
+  state.OnTagDetected(kRfUid);
+  state.OnVerifying();
+  state.OnTagVerified(kNtagUid);
+  state.OnAuthorizing();
+  state.OnAuthorized("Test User", auth_id);
+  state.GetSnapshot(snapshot);
+
+  EXPECT_EQ(snapshot.state, AppStateId::kAuthorized);
+  EXPECT_EQ(std::string_view(snapshot.user_label), "Test User");
+  EXPECT_EQ(snapshot.auth_id.value(), "auth_id_123");
+}
+
+TEST(AppStateTest, OnUnauthorizedTransitionsToUnauthorized) {
+  AppState state;
+  AppStateSnapshot snapshot;
+
+  constexpr auto kRfUid = pw::bytes::Array<0x04, 0x11, 0x22>();
+  constexpr auto kNtagUid =
+      pw::bytes::Array<0x04, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF>();
+
+  state.OnTagDetected(kRfUid);
+  state.OnVerifying();
+  state.OnTagVerified(kNtagUid);
+  state.OnAuthorizing();
+  state.OnUnauthorized();
+  state.GetSnapshot(snapshot);
+
+  EXPECT_EQ(snapshot.state, AppStateId::kUnauthorized);
+}
+
+TEST(AppStateTest, OnTagDetectedClearsAuthFields) {
+  AppState state;
+  AppStateSnapshot snapshot;
+
+  constexpr auto kRfUid = pw::bytes::Array<0x04, 0x11, 0x22>();
+  constexpr auto kNtagUid =
+      pw::bytes::Array<0x04, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF>();
+
+  auto auth_id = *maco::FirebaseId::FromString("auth_id_123");
+
+  state.OnTagDetected(kRfUid);
+  state.OnVerifying();
+  state.OnTagVerified(kNtagUid);
+  state.OnAuthorized("Test User", auth_id);
+
+  // New tag detected
+  constexpr auto kNewRfUid = pw::bytes::Array<0x04, 0x99, 0x88>();
+  state.OnTagDetected(kNewRfUid);
+  state.GetSnapshot(snapshot);
+
+  EXPECT_TRUE(snapshot.user_label.empty());
+  EXPECT_TRUE(snapshot.auth_id.empty());
+}
+
+TEST(AppStateTest, OnTagRemovedClearsAuthFields) {
+  AppState state;
+  AppStateSnapshot snapshot;
+
+  constexpr auto kRfUid = pw::bytes::Array<0x04, 0x11, 0x22>();
+  constexpr auto kNtagUid =
+      pw::bytes::Array<0x04, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF>();
+
+  auto auth_id = *maco::FirebaseId::FromString("auth_id_123");
+
+  state.OnTagDetected(kRfUid);
+  state.OnVerifying();
+  state.OnTagVerified(kNtagUid);
+  state.OnAuthorized("Test User", auth_id);
+
+  state.OnTagRemoved();
+  state.GetSnapshot(snapshot);
+
+  EXPECT_EQ(snapshot.state, AppStateId::kIdle);
+  EXPECT_TRUE(snapshot.user_label.empty());
+  EXPECT_TRUE(snapshot.auth_id.empty());
+}
+
 TEST(AppStateTest, OnTagDetectedClearsStaleNtagUid) {
   AppState state;
   AppStateSnapshot snapshot;

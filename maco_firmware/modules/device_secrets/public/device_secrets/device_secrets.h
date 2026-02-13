@@ -40,7 +40,7 @@ class DeviceSecrets {
   /// @return 16-byte master secret, or NotFound if not provisioned
   virtual pw::Result<KeyBytes> GetGatewayMasterSecret() const = 0;
 
-  /// Get the NTAG 424 DNA terminal key (KEY_TERMINAL, slot 2).
+  /// Get the NTAG 424 DNA terminal key (KEY_TERMINAL, NTAG slot 1).
   ///
   /// This key is used for mutual authentication with NTAG 424 tags
   /// during terminal check-in. The key must match the key provisioned

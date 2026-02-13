@@ -66,16 +66,17 @@ def _make_ntag424_preset(
 ) -> dict:
     """Build an NTAG424 preset with diversified keys.
 
-    key1 (application) and key3 (authorization) are diversified from the
-    master key + tag UID.  key2 (terminal) is the shared terminal key.
+    Proto fields key0-key4 map to 0-indexed NTAG424 key slots:
+      key0 (slot 0) = application, key1 (slot 1) = terminal,
+      key2 (slot 2) = authorization.
     """
     keys = diversify_keys(_MASTER_KEY, _SYSTEM_NAME, real_uid)
     return {
         "uid": anti_collision_uid,
         "real_uid": real_uid,
-        "key1": keys["application"],
-        "key2": terminal_key,
-        "key3": keys["authorization"],
+        "key0": keys["application"],
+        "key1": terminal_key,
+        "key2": keys["authorization"],
     }
 
 

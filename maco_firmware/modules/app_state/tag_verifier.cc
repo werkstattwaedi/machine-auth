@@ -5,26 +5,34 @@
 
 #include "maco_firmware/modules/app_state/tag_verifier.h"
 
+#include <variant>
+
 #include "device_secrets/device_secrets.h"
+#include "firebase/firebase_client.h"
 #include "maco_firmware/devices/pn532/tag_info.h"
 #include "maco_firmware/modules/nfc_reader/nfc_event.h"
+#include "maco_firmware/modules/nfc_tag/ntag424/cloud_key_provider.h"
 #include "maco_firmware/modules/nfc_tag/ntag424/local_key_provider.h"
 #include "maco_firmware/modules/nfc_tag/ntag424/ntag424_tag.h"
+#include "pw_chrono/system_clock.h"
 #include "pw_log/log.h"
 
 namespace maco::app_state {
 
-// Terminal key slot on NTAG424 (matches DeviceSecrets::GetNtagTerminalKey)
-constexpr uint8_t kTerminalKeyNumber = 2;
+// NTAG424 key slots (slot number = proto enum value - 1)
+constexpr uint8_t kTerminalKeyNumber = 1;
+constexpr uint8_t kAuthorizationKeyNumber = 2;
 
 TagVerifier::TagVerifier(nfc::NfcReader& reader,
                          AppState& app_state,
                          secrets::DeviceSecrets& device_secrets,
+                         firebase::FirebaseClient& firebase_client,
                          pw::random::RandomGenerator& rng,
                          pw::allocator::Allocator& allocator)
     : reader_(reader),
       app_state_(app_state),
       device_secrets_(device_secrets),
+      firebase_client_(firebase_client),
       rng_(rng),
       coro_cx_(allocator) {}
 
@@ -134,6 +142,106 @@ pw::async2::Coro<pw::Status> TagVerifier::VerifyTag(
   PW_LOG_INFO("Tag verified, real UID: %u bytes",
               static_cast<unsigned>(*uid_result));
   app_state_.OnTagVerified(real_uid);
+
+  // Step 6: Authorize with cloud
+  auto tag_uid_result = maco::TagUid::FromBytes(real_uid);
+  if (!tag_uid_result.ok()) {
+    PW_LOG_ERROR("Invalid UID size for TagUid");
+    app_state_.OnUnauthorized();
+    co_return pw::OkStatus();
+  }
+
+  auto auth_status = co_await AuthorizeTag(cx, ntag, *tag_uid_result);
+  if (!auth_status.ok()) {
+    PW_LOG_WARN("Authorization failed: %d",
+                static_cast<int>(auth_status.code()));
+  }
+
+  co_return pw::OkStatus();
+}
+
+pw::async2::Coro<pw::Status> TagVerifier::AuthorizeTag(
+    pw::async2::CoroContext& cx,
+    nfc::Ntag424Tag& ntag,
+    const maco::TagUid& tag_uid) {
+  // Check cache first
+  auto now = pw::chrono::SystemClock::now();
+  auto cached = auth_cache_.Lookup(tag_uid, now);
+  if (cached) {
+    PW_LOG_INFO("Cache hit - skipping cloud authorization");
+    app_state_.OnAuthorized(std::string_view(cached->user_label),
+                            cached->auth_id);
+    co_return pw::OkStatus();
+  }
+
+  // Cache miss - call cloud
+  app_state_.OnAuthorizing();
+
+  auto checkin_result =
+      co_await firebase_client_.TerminalCheckin(cx, tag_uid);
+  if (!checkin_result.ok()) {
+    PW_LOG_ERROR("TerminalCheckin failed: %d",
+                 static_cast<int>(checkin_result.status().code()));
+    app_state_.OnUnauthorized();
+    co_return pw::OkStatus();
+  }
+
+  // Check if rejected
+  if (std::holds_alternative<firebase::CheckinRejected>(*checkin_result)) {
+    const auto& rejected =
+        std::get<firebase::CheckinRejected>(*checkin_result);
+    PW_LOG_WARN("TerminalCheckin rejected: %s", rejected.message.c_str());
+    app_state_.OnUnauthorized();
+    co_return pw::OkStatus();
+  }
+
+  const auto& authorized =
+      std::get<firebase::CheckinAuthorized>(*checkin_result);
+
+  // If checkin returned an existing auth_id, use it directly
+  if (authorized.has_existing_auth()) {
+    PW_LOG_INFO("Using existing auth from checkin");
+    auth_cache_.Insert(tag_uid, authorized.authentication_id,
+                       std::string_view(authorized.user_label), now);
+    app_state_.OnAuthorized(std::string_view(authorized.user_label),
+                            authorized.authentication_id);
+    co_return pw::OkStatus();
+  }
+
+  // No existing auth - do key-2 cloud authentication to get one
+  PW_LOG_INFO("No existing auth, performing cloud key auth");
+
+  // Re-select application to reset tag state for new authentication
+  auto reselect_status = co_await ntag.SelectApplication(cx);
+  if (!reselect_status.ok()) {
+    PW_LOG_ERROR("Re-select failed: %d",
+                 static_cast<int>(reselect_status.code()));
+    app_state_.OnUnauthorized();
+    co_return pw::OkStatus();
+  }
+
+  nfc::CloudKeyProvider cloud_key_provider(
+      firebase_client_, tag_uid, kAuthorizationKeyNumber);
+
+  auto cloud_auth_result = co_await ntag.Authenticate(cx, cloud_key_provider);
+  if (!cloud_auth_result.ok()) {
+    PW_LOG_WARN("Cloud key auth failed: %d",
+                static_cast<int>(cloud_auth_result.status().code()));
+    app_state_.OnUnauthorized();
+    co_return pw::OkStatus();
+  }
+
+  // Get auth_id from the cloud key provider
+  if (!cloud_key_provider.auth_id()) {
+    PW_LOG_ERROR("Cloud auth succeeded but no auth_id");
+    app_state_.OnUnauthorized();
+    co_return pw::OkStatus();
+  }
+
+  const auto& auth_id = *cloud_key_provider.auth_id();
+  auth_cache_.Insert(tag_uid, auth_id,
+                     std::string_view(authorized.user_label), now);
+  app_state_.OnAuthorized(std::string_view(authorized.user_label), auth_id);
 
   co_return pw::OkStatus();
 }
