@@ -7,6 +7,8 @@
 #include <cstddef>
 
 #include "maco_firmware/modules/app_state/state_id.h"
+#include "maco_firmware/types.h"
+#include "pw_string/string.h"
 
 namespace maco::app_state {
 
@@ -27,6 +29,10 @@ struct AppStateSnapshot {
   AppStateId state = AppStateId::kIdle;
   TagUid tag_uid;   // RF-layer UID (kTagDetected onward)
   TagUid ntag_uid;  // Real 7-byte NTAG424 UID from GetCardUid (kGenuine only)
+
+  // Authorization fields (kAuthorized only)
+  pw::InlineString<64> user_label;
+  maco::FirebaseId auth_id = maco::FirebaseId::Empty();
 };
 
 }  // namespace maco::app_state

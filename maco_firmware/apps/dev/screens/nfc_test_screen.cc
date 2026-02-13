@@ -97,6 +97,16 @@ void NfcTestScreen::UpdateStatusText(
     case app_state::AppStateId::kUnknownTag:
       status_text_ << "Unknown tag";
       break;
+    case app_state::AppStateId::kAuthorizing:
+      status_text_ << "Authorizing...";
+      break;
+    case app_state::AppStateId::kAuthorized:
+      status_text_ << "Authorized: ";
+      status_text_ << snapshot.user_label;
+      break;
+    case app_state::AppStateId::kUnauthorized:
+      status_text_ << "Not authorized";
+      break;
   }
 }
 

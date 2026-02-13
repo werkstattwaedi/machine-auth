@@ -12,6 +12,8 @@ The client handles:
 - Error handling and response formatting
 """
 
+import base64
+import json
 import logging
 from dataclasses import dataclass
 from typing import Optional
@@ -63,7 +65,7 @@ class FirebaseClient:
         self,
         endpoint: str,
         payload: bytes,
-        device_id: Optional[int] = None,
+        device_id: Optional[bytes] = None,
     ) -> ForwardResult:
         """Forward a request to Firebase.
 
@@ -79,31 +81,37 @@ class FirebaseClient:
         logger.debug("Forwarding request to %s (%d bytes)", url, len(payload))
 
         headers = {
-            "Content-Type": "application/x-protobuf",
-            "Accept": "application/x-protobuf",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
             "Authorization": f"Bearer {self._api_key}",
         }
         if device_id is not None:
-            headers["X-Device-Id"] = f"{device_id:016X}"
+            headers["X-Device-Id"] = device_id.hex()
+
+        # Wrap protobuf payload in JSON envelope expected by Firebase functions
+        json_body = {"data": base64.b64encode(payload).decode("ascii")}
 
         try:
             session = await self._get_session()
             async with session.post(
                 url,
-                data=payload,
+                json=json_body,
                 headers=headers,
             ) as response:
                 response_body = await response.read()
 
                 if response.status == 200:
+                    # Unwrap JSON envelope: {"data": "<base64>"}
+                    body_json = json.loads(response_body)
+                    proto_bytes = base64.b64decode(body_json.get("data", ""))
                     logger.debug(
-                        "Firebase response: %d (%d bytes)",
+                        "Firebase response: %d (%d bytes proto)",
                         response.status,
-                        len(response_body),
+                        len(proto_bytes),
                     )
                     return ForwardResult(
                         success=True,
-                        payload=response_body,
+                        payload=proto_bytes,
                         http_status=response.status,
                         error="",
                     )

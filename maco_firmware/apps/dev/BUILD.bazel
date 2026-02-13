@@ -25,7 +25,7 @@ cc_library(
         "//maco_firmware/modules/app_state/ui:snapshot",
         "//maco_firmware/modules/ui:data_binding",
         "//maco_firmware/modules/ui:screen",
-        "@lvgl//:lvgl",
+        "@lvgl",
         "@pigweed//pw_log",
         "@pigweed//pw_string",
     ],
@@ -35,6 +35,7 @@ DEV_DEPS = [
     ":screens",
     "//maco_firmware/modules/app_state",
     "//maco_firmware/modules/display",
+    "//maco_firmware/modules/gateway:gateway_client",
     "//maco_firmware/modules/app_state:tag_verifier",
     "//maco_firmware/modules/nfc_reader",
     "//maco_firmware/modules/status_bar",
@@ -70,6 +71,7 @@ particle_firmware(
         "//maco_firmware/modules/app_state",
         "//maco_firmware/modules/display",
         "//maco_firmware/modules/app_state:tag_verifier",
+        "//maco_firmware/modules/gateway:gateway_client",
         "//maco_firmware/modules/nfc_reader",
         "//maco_firmware/modules/status_bar",
         "//maco_firmware/modules/ui:app_shell",
@@ -92,15 +94,15 @@ particle_flash_binary(
 # Console for P2 device - depends on :dev ELF for tokens
 device_console(
     name = "console",
-    script = "//tools:console",
     binary = ":dev",
+    script = "//tools:console",
 )
 
 # Console for simulator - launches simulator and connects
 device_simulator_console(
     name = "console_sim",
-    script = "//tools:device_sim",
     host_binary = ":simulator",
+    script = "//tools:device_sim",
 )
 
 # Screenshot tests for dev screens
