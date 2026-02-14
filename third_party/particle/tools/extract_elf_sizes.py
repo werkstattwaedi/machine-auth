@@ -95,6 +95,8 @@ def main():
                         help="Path to output JSON file with size info")
     parser.add_argument("--output-ld", required=True,
                         help="Path to output linker script")
+    parser.add_argument("--sram-hard-limit", type=int, default=131072,
+                        help="Max SRAM bytes before Bus Fault (Device OS reservation, default 128K)")
     args = parser.parse_args()
 
     # Verify ELF exists
@@ -125,6 +127,17 @@ def main():
     # Add alignment padding to account for linker section placement
     sram_size = align_8(data_size + bss_size)
     psram_size = align_8(psram_text + data_alt + bss_alt + dynalib)
+
+    # Hard limit: Device OS system part 1 reserves this much SRAM for user part.
+    # Exceeding it causes module_user_pre_init() to corrupt system heap → Bus Fault.
+    if args.sram_hard_limit > 0 and sram_size > args.sram_hard_limit:
+        print(f"\n{'='*60}", file=sys.stderr)
+        print("FATAL: User SRAM ({:,} bytes) exceeds Device OS reservation "
+              "({:,} bytes).".format(sram_size, args.sram_hard_limit), file=sys.stderr)
+        print("Firmware will Bus Fault before main(). Move data to PSRAM "
+              "(.psram.bss) or reduce usage.", file=sys.stderr)
+        print(f"{'='*60}\n", file=sys.stderr)
+        sys.exit(1)
 
     # Flash size: (module_end - module_start + 16), aligned to 4KB
     # The +16 accounts for module metadata overhead

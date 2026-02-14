@@ -9,6 +9,7 @@
 #include "maco_firmware/modules/device_secrets/device_secrets_service.h"
 #include "maco_firmware/modules/display/display.h"
 #include "maco_firmware/modules/led/led.h"
+#include "maco_firmware/modules/stack_monitor/stack_monitor.h"
 #include "maco_firmware/system/system.h"
 #include "pb_spi/initiator.h"
 #include "pw_log/log.h"
@@ -31,19 +32,18 @@ auto& GetFactoryLed() {
 void AppInit() {
   PW_LOG_INFO("MACO Factory Firmware initializing...");
 
-  // This crashed here and in the firmware!
-  // // Initialize display for visual feedback during testing
-  // static maco::display::Display display;
-  // auto status = display.Init(
-  //     maco::system::GetDisplayDriver(),
-  //     maco::system::GetTouchButtonDriver());
-  // if (!status.ok()) {
-  //   PW_LOG_ERROR("Display init failed");
-  // }
+  // Initialize display for visual feedback during testing
+  static maco::display::Display display;
+  auto status = display.Init(
+      maco::system::GetDisplayDriver(),
+      maco::system::GetTouchButtonDriver());
+  if (!status.ok()) {
+    PW_LOG_ERROR("Display init failed");
+  }
 
   // Initialize LEDs
   auto& led = GetFactoryLed();
- auto  status = led.Init(maco::system::GetLedThreadOptions());
+  status = led.Init(maco::system::GetLedThreadOptions());
   if (!status.ok()) {
     PW_LOG_ERROR("LED init failed");
   }
@@ -61,8 +61,6 @@ void AppInit() {
       .led_count = maco::led::In4818LedDriver<16>::kLedCount,
   };
 
-
-
   // Register factory-specific RPC services
   static maco::factory::FactoryTestService factory_test_service(led_ops);
   pw::System().rpc_server().RegisterService(factory_test_service);
@@ -71,6 +69,8 @@ void AppInit() {
       maco::system::GetDeviceSecrets());
   static maco::secrets::DeviceSecretsService device_secrets_service(secrets);
   pw::System().rpc_server().RegisterService(device_secrets_service);
+
+  maco::StartStackMonitor();
 
   PW_LOG_INFO("MACO Factory Firmware ready");
 }

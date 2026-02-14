@@ -75,6 +75,10 @@ constexpr uint32_t kGatewayChannelId = 1;
 // Pin for machine relay control
 constexpr hal_pin_t kPinMachineRelay = A1;
 
+// Sequential access (log drain) — negligible latency impact in PSRAM.
+__attribute__((section(".psram.bss")))
+std::byte channel_buffer[16384];
+
 }  // namespace
 
 void Init(pw::Function<void()> app_init) {
@@ -99,10 +103,6 @@ void Init(pw::Function<void()> app_init) {
   }
 
   app_init();
-
-  // Larger buffer for tokenized logging - must handle log backpressure
-  // when console isn't connected or draining slowly.
-  static std::byte channel_buffer[16384];
   static pw::multibuf::SimpleAllocator multibuf_alloc(
       channel_buffer, pw::System().allocator()
   );
@@ -171,6 +171,15 @@ maco::display::TouchButtonDriver& GetTouchButtonDriver() {
 
 const pw::thread::Options& GetDefaultThreadOptions() {
   static const pw::thread::particle::Options options;
+  return options;
+}
+
+const pw::thread::Options& GetDisplayRenderThreadOptions() {
+  static const pw::thread::particle::Options options =
+      pw::thread::particle::Options()
+          .set_name("lvgl_render")
+          .set_priority(3)
+          .set_stack_size(8192);
   return options;
 }
 

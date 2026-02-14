@@ -193,7 +193,8 @@ python3 {extract_script} \
     --objdump {objdump} \
     --elf {intermediate_elf} \
     --output-json {sizes_json} \
-    --output-ld {precise_ld}
+    --output-ld {precise_ld} \
+    --sram-hard-limit 131072
 
 # === PASS 2: Re-link with precise values ===
 echo "Pass 2: Re-linking with precise memory values..."

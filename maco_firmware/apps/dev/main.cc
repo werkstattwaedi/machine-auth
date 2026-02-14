@@ -8,9 +8,11 @@
 #include "maco_firmware/apps/dev/screens/nfc_test_screen.h"
 #include "maco_firmware/modules/app_state/app_state.h"
 #include "maco_firmware/modules/app_state/tag_verifier.h"
+#include "device_secrets/device_secrets.h"
 #include "maco_firmware/modules/display/display.h"
 #include "gateway/gateway_client.h"
 #include "maco_firmware/modules/nfc_reader/nfc_reader.h"
+#include "maco_firmware/modules/stack_monitor/stack_monitor.h"
 #include "maco_firmware/modules/status_bar/status_bar.h"
 #include "maco_firmware/modules/ui/app_shell.h"
 #include "maco_firmware/system/system.h"
@@ -79,18 +81,25 @@ void AppInit() {
   (void)nfc_reader.Start(pw::System().dispatcher());
   PW_LOG_INFO("NFC reader started (init in progress)");
 
-  // Start gateway client read task (processes incoming RPC responses)
-  maco::system::GetGatewayClient().Start(pw::System().dispatcher());
+  // Check provisioning before starting cloud services.
+  // GetGatewayClient() has PW_CHECK_OK that would crash before logs are up.
+  auto secret = maco::system::GetDeviceSecrets().GetGatewayMasterSecret();
+  if (!secret.ok()) {
+    PW_LOG_ERROR("Device not provisioned - skipping gateway/cloud services");
+  } else {
+    maco::system::GetGatewayClient().Start(pw::System().dispatcher());
 
-  // Start tag verifier to authenticate NFC tags and update app state
-  static maco::app_state::TagVerifier tag_verifier(
-      nfc_reader,
-      maco::system::GetAppState(),
-      maco::system::GetDeviceSecrets(),
-      maco::system::GetFirebaseClient(),
-      maco::system::GetRandomGenerator(),
-      pw::System().allocator());
-  tag_verifier.Start(pw::System().dispatcher());
+    static maco::app_state::TagVerifier tag_verifier(
+        nfc_reader,
+        maco::system::GetAppState(),
+        maco::system::GetDeviceSecrets(),
+        maco::system::GetFirebaseClient(),
+        maco::system::GetRandomGenerator(),
+        pw::System().allocator());
+    tag_verifier.Start(pw::System().dispatcher());
+  }
+
+  maco::StartStackMonitor();
 
   PW_LOG_INFO("AppInit complete - place a card on the reader");
 }

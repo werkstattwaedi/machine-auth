@@ -71,6 +71,11 @@ maco::display::TouchButtonDriver& GetTouchButtonDriver();
 /// Host: pw::thread::stl::Options, P2: pw::thread::particle::Options
 const pw::thread::Options& GetDefaultThreadOptions();
 
+/// Returns thread options for the display render thread.
+/// Needs a larger stack than default for LVGL's render pipeline.
+/// Host: pw::thread::stl::Options, P2: 8KB stack
+const pw::thread::Options& GetDisplayRenderThreadOptions();
+
 /// Returns the platform-specific NFC reader instance.
 /// Host: MockNfcReader, P2: Pn532NfcReader
 maco::nfc::NfcReader& GetNfcReader();

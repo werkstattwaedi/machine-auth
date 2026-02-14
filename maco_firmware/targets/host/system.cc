@@ -144,6 +144,11 @@ const pw::thread::Options& GetDefaultThreadOptions() {
   return options;
 }
 
+const pw::thread::Options& GetDisplayRenderThreadOptions() {
+  static const pw::thread::stl::Options options;
+  return options;
+}
+
 maco::nfc::NfcReader& GetNfcReader() {
   static maco::nfc::MockNfcReader reader;
   return reader;

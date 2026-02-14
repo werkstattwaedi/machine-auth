@@ -17,6 +17,7 @@ load(
     "pw_proto_filegroup",
 )
 load("@particle_bazel//rules:particle_firmware.bzl", "particle_firmware", "particle_flash_binary")
+load("@particle_bazel//rules:particle_memory_budget.bzl", "particle_memory_budget")
 load("@pigweed//pw_system/py:console.bzl", "device_console")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_python//python:proto.bzl", "py_proto_library")
@@ -87,6 +88,7 @@ particle_firmware(
         "//maco_firmware/modules/device_secrets:device_secrets_service",
         "//maco_firmware/modules/display",
         "//maco_firmware/modules/led",
+        "//maco_firmware/modules/stack_monitor",
         "//maco_firmware/system",
         "//maco_firmware/system:headers",
         "@particle_bazel//pw_spi_particle:initiator",
@@ -100,6 +102,16 @@ particle_firmware(
 particle_flash_binary(
     name = "flash",
     firmware = ":factory.bin",
+)
+
+particle_memory_budget(
+    name = "memory_budget",
+    elf = ":factory",
+    # Set just above current watermark. Bump consciously when adding features.
+    sram_limit = 75000,
+    psram_limit = 382000,
+    flash_limit = 396000,
+    golden = "testdata/memory_budget.txt",
 )
 
 device_console(

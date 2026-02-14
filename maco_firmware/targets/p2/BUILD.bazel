@@ -15,7 +15,10 @@ config_setting(
 
 cc_library(
     name = "lvgl_conf",
-    hdrs = ["lv_conf.h"],
+    hdrs = [
+        "lv_conf.h",
+        "lvgl_psram_pool.h",
+    ],
     includes = ["."],
     target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
     visibility = ["//visibility:public"],

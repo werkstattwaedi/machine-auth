@@ -36,6 +36,11 @@ py_binary(
     srcs = ["extract_elf_sizes.py"],
 )
 
+exports_files(
+    ["memory_budget.py"],
+    visibility = ["//visibility:public"],
+)
+
 # -- CLI wrapper module --
 
 py_library(
