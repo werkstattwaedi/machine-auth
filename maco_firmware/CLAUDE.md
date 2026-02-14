@@ -47,14 +47,18 @@ See [ADR-0009](../docs/adr/0009-local-build-flash-tooling.md) for tooling archit
 ### Console and Debugging
 
 ```bash
-./pw console-sim  # Connect to simulator (after running it)
-./pw console      # Connect to P2 device via serial
+./pw console-sim     # Connect to simulator (after running it)
+./pw console         # Connect to P2 device via serial
+./pw factory-flash   # Flash factory test firmware
+./pw factory-console # Factory test TUI (interactive checklist)
 ```
 
 The console provides:
 - Tokenized log viewing (auto-detokenizes using ELF token database)
 - RPC access via Python REPL (`device.rpcs.maco.MacoService.Echo(data=b'hello')`)
 - Auto-reconnect on device disconnect/reboot
+
+The factory console adds an interactive checklist pane (LED tests, display tests, secrets provisioning) using a custom `WindowPane` plugin. See [ADR-0015](../docs/adr/0015-factory-console-pw-console-plugins.md).
 
 **Prerequisites:**
 - Build target first to generate token database
@@ -69,7 +73,8 @@ See [ADR-0011](../docs/adr/0011-pw-console-logging-rpc-integration.md) for archi
 ```
 maco_firmware/
 ├── apps/                # Application binaries
-│   └── dev/             # Development app (firmware + simulator targets)
+│   ├── dev/             # Development app (firmware + simulator targets)
+│   └── factory/         # Factory test firmware (LED, display, provisioning)
 ├── devices/             # Device-specific drivers (display, touch, etc.)
 │   └── pico_res28_lcd/  # ST7789 display driver
 ├── modules/             # Platform-agnostic abstractions
