@@ -28,6 +28,7 @@
 #include "maco_firmware/modules/led/led.h"
 #include "maco_firmware/modules/app_state/app_state.h"
 #include "maco_firmware/modules/gateway/p2_gateway_client.h"
+#include "maco_firmware/modules/buzzer/tone_buzzer.h"
 #include "maco_firmware/modules/machine_relay/latching_machine_relay.h"
 #include "maco_firmware/targets/p2/hardware_random.h"
 #include "firebase/firebase_client.h"
@@ -74,6 +75,9 @@ constexpr uint32_t kGatewayChannelId = 1;
 
 // Pin for machine relay control
 constexpr hal_pin_t kPinMachineRelay = A1;
+
+// Pin for PWM buzzer
+constexpr hal_pin_t kPinBuzzer = A2;
 
 // Sequential access (log drain) — negligible latency impact in PSRAM.
 __attribute__((section(".psram.bss")))
@@ -308,6 +312,12 @@ maco::machine_relay::MachineRelay& GetMachineRelay() {
   static maco::machine_relay::LatchingMachineRelay relay(
       kPinMachineRelay, pw::async2::GetSystemTimeProvider());
   return relay;
+}
+
+maco::buzzer::Buzzer& GetBuzzer() {
+  static maco::buzzer::ToneBuzzer buzzer(
+      kPinBuzzer, pw::async2::GetSystemTimeProvider());
+  return buzzer;
 }
 
 }  // namespace maco::system

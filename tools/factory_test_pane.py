@@ -120,6 +120,7 @@ class FactoryTestPane(WindowPane, PluginMixin):
             TestStep("LED Blue", StepMode.VISUAL),
             TestStep("LED White", StepMode.VISUAL),
             TestStep("LED Clear", StepMode.AUTO),
+            TestStep("Buzzer Beep", StepMode.VISUAL),
             TestStep("Display White", StepMode.VISUAL),
             TestStep("Display Color Bars", StepMode.VISUAL),
             TestStep("Check Secrets", StepMode.AUTO),
@@ -329,17 +330,22 @@ class FactoryTestPane(WindowPane, PluginMixin):
             step.status = StepStatus.PASSED
             step.message = "LEDs cleared"
 
-        elif idx == 6:  # Display White
+        elif idx == 6:  # Buzzer Beep
+            factory.BuzzerBeep(frequency_hz=2000, duration_ms=500)
+            step.status = StepStatus.CONFIRM
+            step.message = "Verify buzzer tone is audible"
+
+        elif idx == 7:  # Display White
             factory.DisplayFillColor(r=255, g=255, b=255)
             step.status = StepStatus.CONFIRM
             step.message = "Verify display is WHITE"
 
-        elif idx == 7:  # Display Color Bars
+        elif idx == 8:  # Display Color Bars
             factory.DisplayColorBars()
             step.status = StepStatus.CONFIRM
             step.message = "Verify color bars on display"
 
-        elif idx == 8:  # Check Secrets
+        elif idx == 9:  # Check Secrets
             resp = secrets.GetStatus()
             provisioned = resp.response.is_provisioned
             step.status = StepStatus.PASSED
@@ -347,7 +353,7 @@ class FactoryTestPane(WindowPane, PluginMixin):
                 "PROVISIONED" if provisioned else "NOT PROVISIONED"
             )
 
-        elif idx == 9:  # Provision Secrets
+        elif idx == 10:  # Provision Secrets
             gw_hex = os.environ.get("FACTORY_GATEWAY_SECRET", "")
             ntag_hex = os.environ.get("FACTORY_NTAG_KEY", "")
             if not gw_hex or not ntag_hex:
@@ -371,7 +377,7 @@ class FactoryTestPane(WindowPane, PluginMixin):
                 step.status = StepStatus.FAILED
                 step.message = resp.response.error or "Provision failed"
 
-        elif idx == 10:  # Verify Provisioned
+        elif idx == 11:  # Verify Provisioned
             resp = secrets.GetStatus()
             if resp.response.is_provisioned:
                 step.status = StepStatus.PASSED

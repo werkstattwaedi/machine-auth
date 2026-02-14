@@ -67,6 +67,7 @@ cc_library(
     hdrs = ["factory_test_service.h"],
     deps = [
         ":factory_test_service_nanopb_rpc",
+        "//maco_firmware/modules/buzzer",
         "@lvgl//:lvgl",
         "@pigweed//pw_log",
         "@pigweed//pw_status",
