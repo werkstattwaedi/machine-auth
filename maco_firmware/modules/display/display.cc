@@ -82,12 +82,12 @@ pw::Status Display::Init(
     }
   }
 
-  // Start render thread
+  // Start render thread (needs larger stack for LVGL render pipeline)
   running_.store(true);
-  pw::thread::DetachedThread(maco::system::GetDefaultThreadOptions(), [this]() {
-    RenderThread();
-  });
-  PW_LOG_INFO("Render thread started");
+  pw::thread::DetachedThread(
+      maco::system::GetDisplayRenderThreadOptions(), [this]() {
+        RenderThread();
+      });
 
   return pw::OkStatus();
 }

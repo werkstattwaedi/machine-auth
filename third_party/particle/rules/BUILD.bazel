@@ -12,5 +12,6 @@ exports_files([
     "memory_platform_user.ld",
     "memory_platform_user_defaults.ld",
     "particle_firmware.bzl",
+    "particle_memory_budget.bzl",
     "particle_test.bzl",
 ])

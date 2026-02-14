@@ -107,12 +107,66 @@ class FirebaseClientIntegrationTest(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         """Clean up test environment."""
+        # Check stack watermarks after exercising worst-case code paths
+        self._check_stack_watermarks()
+
         # Stop fixtures in reverse order (device, gateway, mock_server)
         # Note: We started these manually, not via harness.start(),
         # so we need to stop them manually too.
         await self.device.stop()
         await self.gateway.stop()
         await self.mock_server.stop()
+
+    def _check_stack_watermarks(self):
+        """Query device stack watermarks and assert headroom > 20%.
+
+        Uses pw.thread.proto.ThreadSnapshotService.GetPeakStackUsage RPC
+        which is registered by default in pw_system. The Particle backend
+        populates watermarks from os_thread_dump() → FreeRTOS uxTaskGetStackHighWaterMark.
+        """
+        try:
+            snapshot_service = (
+                self.device.rpc.rpcs.pw.thread.proto.ThreadSnapshotService
+            )
+            _status, responses = snapshot_service.GetPeakStackUsage()
+        except Exception as e:
+            _LOG.warning("Could not query stack watermarks: %s", e)
+            return
+
+        for response in responses:
+            for thread in response.threads:
+                name = thread.name.decode("utf-8", errors="replace")
+                if not (
+                    thread.stack_start_pointer
+                    and thread.stack_end_pointer
+                    and thread.stack_pointer_est_peak
+                ):
+                    continue
+
+                total = abs(
+                    thread.stack_end_pointer - thread.stack_start_pointer
+                )
+                # Stack grows down on Cortex-M: peak is lowest address reached
+                peak_used = (
+                    thread.stack_end_pointer - thread.stack_pointer_est_peak
+                )
+                headroom_pct = (
+                    100.0 * (total - peak_used) / total if total else 0
+                )
+
+                _LOG.info(
+                    "Stack [%s]: %d/%d bytes peak (%.0f%% headroom)",
+                    name,
+                    peak_used,
+                    total,
+                    headroom_pct,
+                )
+                self.assertGreater(
+                    headroom_pct,
+                    20.0,
+                    f"Thread '{name}' stack headroom {headroom_pct:.0f}% "
+                    f"below 20% threshold ({peak_used}/{total} bytes used)",
+                )
 
     async def test_terminal_checkin_unimplemented(self):
         """Test that TerminalCheckin returns an error from the gateway.

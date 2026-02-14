@@ -24,8 +24,7 @@ common:ubsan --@pigweed//pw_toolchain/host_clang:ubsan
 # Suppress DEBUG log messages (filters "Dispatcher running task" spam)
 build --copt=-DPW_LOG_LEVEL=PW_LOG_LEVEL_INFO
 
-# Increase pw_system dispatcher thread stack for P2 coroutines.
-# Default is 2048 which is too small for coroutines that do
-# ASCON encryption + HDLC encoding + TCP socket operations.
-build --copt=-DPW_SYSTEM_ASYNC_DISPATCHER_THREAD_STACK_SIZE_BYTES=16384
+# pw_system async dispatcher needs more stack on Cortex-M33 than the 2KB default.
+# Global because the define must reach pw_system compilation, not just user code.
+build --copt=-DPW_SYSTEM_ASYNC_DISPATCHER_THREAD_STACK_SIZE_BYTES=4096
 
