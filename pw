@@ -131,16 +131,63 @@ case "$1" in
     ;;
   factory-console)
     # Connect factory console to Particle device via serial
-    # Usage: ./pw factory-console [--device-serial=XXXX]
+    # Usage: ./pw factory-console [--device-serial=XXXX] [--prod]
 
     DEVICE_SERIAL=""
+    PROD_MODE=""
     for arg in "$@"; do
       case "$arg" in
         --device-serial=*)
           DEVICE_SERIAL="${arg#*=}"
           ;;
+        --prod)
+          PROD_MODE=1
+          ;;
       esac
     done
+
+    # Load secrets for factory provisioning
+    if [[ -n "$PROD_MODE" ]]; then
+      echo "🔑 Loading prod secrets from Google Cloud Secret Manager..."
+      if ! command -v gcloud &>/dev/null; then
+        echo "❌ gcloud CLI not installed. Install: https://cloud.google.com/sdk/docs/install" >&2
+        exit 1
+      fi
+      FACTORY_GATEWAY_SECRET=$(gcloud secrets versions access latest --secret=GATEWAY_ASCON_MASTER_KEY 2>&1) || {
+        echo "❌ Failed to fetch GATEWAY_ASCON_MASTER_KEY: $FACTORY_GATEWAY_SECRET" >&2
+        echo "   Check: gcloud config get-value project" >&2
+        exit 1
+      }
+      FACTORY_NTAG_KEY=$(gcloud secrets versions access latest --secret=TERMINAL_KEY 2>&1) || {
+        echo "❌ Failed to fetch TERMINAL_KEY: $FACTORY_NTAG_KEY" >&2
+        echo "   Check: gcloud config get-value project" >&2
+        exit 1
+      }
+    else
+      echo "🔑 Loading dev secrets from local env files..."
+      GW_ENV="$_PW_SCRIPT_DIR/maco_gateway/.env.local"
+      FN_ENV="$_PW_SCRIPT_DIR/functions/.env.local"
+      if [[ ! -f "$GW_ENV" ]]; then
+        echo "❌ Missing $GW_ENV" >&2
+        exit 1
+      fi
+      if [[ ! -f "$FN_ENV" ]]; then
+        echo "❌ Missing $FN_ENV" >&2
+        exit 1
+      fi
+      FACTORY_GATEWAY_SECRET=$(grep -m1 '^MASTER_KEY=' "$GW_ENV" | cut -d= -f2-)
+      FACTORY_NTAG_KEY=$(grep -m1 '^TERMINAL_KEY=' "$FN_ENV" | cut -d= -f2-)
+      if [[ -z "$FACTORY_GATEWAY_SECRET" ]]; then
+        echo "❌ MASTER_KEY not found in $GW_ENV" >&2
+        exit 1
+      fi
+      if [[ -z "$FACTORY_NTAG_KEY" ]]; then
+        echo "❌ TERMINAL_KEY not found in $FN_ENV" >&2
+        exit 1
+      fi
+    fi
+    export FACTORY_GATEWAY_SECRET
+    export FACTORY_NTAG_KEY
 
     find_particle_device() {
       local serial_filter="$1"

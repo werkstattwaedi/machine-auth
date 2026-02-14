@@ -9,6 +9,8 @@ Complete guide to configuring all components of the machine authentication syste
 - [Firebase Functions Configuration](#firebase-functions-configuration)
 - [Web App Configuration](#web-app-configuration)
 - [Scripts Configuration](#scripts-configuration)
+- [MaCo Gateway Configuration](#maco-gateway-configuration)
+- [Factory Provisioning](#factory-provisioning)
 - [Particle Cloud Setup](#particle-cloud-setup)
 - [Firestore Security Rules](#firestore-security-rules)
 - [Environment Checklist](#environment-checklist)
@@ -298,6 +300,73 @@ See [`scripts/README.md`](../scripts/README.md) for detailed usage.
 
 ---
 
+## MaCo Gateway Configuration
+
+The MaCo gateway uses a separate secret stored in **Google Cloud Secret Manager** (not Firebase Functions secrets).
+
+### Secrets
+
+| GCP Secret | Description | How to Generate |
+|------------|-------------|-----------------|
+| `GATEWAY_ASCON_MASTER_KEY` | ASCON encryption key between terminal and gateway | `openssl rand -hex 16` |
+
+This is distinct from the Firebase Functions secrets:
+- `GATEWAY_ASCON_MASTER_KEY` — shared secret for ASCON-encrypted communication between the terminal firmware and the gateway
+- `DIVERSIFICATION_MASTER_KEY` — master key for NTAG 424 key diversification (Firebase Functions secret)
+- `TERMINAL_KEY` — key for SDM encryption/decryption on terminals (Firebase Functions secret)
+
+### Set the Secret
+
+```bash
+# Ensure correct project
+gcloud config set project oww-maschinenfreigabe
+
+# Create the secret
+echo -n "YOUR_HEX_KEY" | gcloud secrets create GATEWAY_ASCON_MASTER_KEY --data-file=-
+
+# Or update an existing secret
+echo -n "YOUR_HEX_KEY" | gcloud secrets versions add GATEWAY_ASCON_MASTER_KEY --data-file=-
+```
+
+### Local Development
+
+For local development, the gateway reads `MASTER_KEY` from `maco_gateway/.env.local`:
+
+```bash
+MASTER_KEY=000102030405060708090a0b0c0d0e0f
+```
+
+---
+
+## Factory Provisioning
+
+The factory console (`./pw factory-console`) provisions devices with two secrets. These are loaded automatically based on the mode:
+
+### Secret Mapping
+
+| Factory env var | Local source | GCP Secret Manager |
+|----------------|-------------|-------------------|
+| `FACTORY_GATEWAY_SECRET` | `maco_gateway/.env.local` → `MASTER_KEY` | `GATEWAY_ASCON_MASTER_KEY` |
+| `FACTORY_NTAG_KEY` | `functions/.env.local` → `TERMINAL_KEY` | `TERMINAL_KEY` |
+
+### Local Dev (default)
+
+```bash
+./pw factory-console
+```
+
+Reads secrets from local `.env.local` files. Requires `maco_gateway/.env.local` and `functions/.env.local` to exist with the respective keys.
+
+### Production
+
+```bash
+./pw factory-console --prod
+```
+
+Fetches secrets from Google Cloud Secret Manager. Requires `gcloud` CLI installed and authenticated with access to the project.
+
+---
+
 ## Particle Cloud Setup
 
 The system integrates with Particle IoT for device management.
@@ -420,6 +489,11 @@ Use this checklist when setting up a new environment:
 - [ ] Firebase authentication configured (service account or ADC)
 - [ ] Dependencies installed: `npm install`
 - [ ] Test sync: `npm run sync-config -- <device-id>`
+
+### MaCo Gateway
+
+- [ ] `GATEWAY_ASCON_MASTER_KEY` set in Google Cloud Secret Manager
+- [ ] `maco_gateway/.env.local` configured for local dev
 
 ### Particle Cloud
 
