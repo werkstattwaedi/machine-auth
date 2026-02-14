@@ -18,7 +18,7 @@ import logging
 from dataclasses import dataclass
 from typing import Optional
 
-import aiohttp
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -52,14 +52,14 @@ class FirebaseClient:
         """
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
-        self._timeout = aiohttp.ClientTimeout(total=timeout)
-        self._session: Optional[aiohttp.ClientSession] = None
+        self._timeout = httpx.Timeout(timeout)
+        self._client: Optional[httpx.AsyncClient] = None
 
-    async def _get_session(self) -> aiohttp.ClientSession:
-        """Get or create the HTTP session."""
-        if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession(timeout=self._timeout)
-        return self._session
+    async def _get_client(self) -> httpx.AsyncClient:
+        """Get or create the HTTP client."""
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(timeout=self._timeout)
+        return self._client
 
     async def forward(
         self,
@@ -92,47 +92,46 @@ class FirebaseClient:
         json_body = {"data": base64.b64encode(payload).decode("ascii")}
 
         try:
-            session = await self._get_session()
-            async with session.post(
+            client = await self._get_client()
+            response = await client.post(
                 url,
                 json=json_body,
                 headers=headers,
-            ) as response:
-                response_body = await response.read()
+            )
 
-                if response.status == 200:
-                    # Unwrap JSON envelope: {"data": "<base64>"}
-                    body_json = json.loads(response_body)
-                    proto_bytes = base64.b64decode(body_json.get("data", ""))
-                    logger.debug(
-                        "Firebase response: %d (%d bytes proto)",
-                        response.status,
-                        len(proto_bytes),
-                    )
-                    return ForwardResult(
-                        success=True,
-                        payload=proto_bytes,
-                        http_status=response.status,
-                        error="",
-                    )
-                else:
-                    error_text = response_body.decode("utf-8", errors="replace")
-                    logger.warning(
-                        "Firebase error: %d - %s", response.status, error_text
-                    )
-                    return ForwardResult(
-                        success=False,
-                        payload=b"",
-                        http_status=response.status,
-                        error=f"HTTP {response.status}: {error_text}",
-                    )
+            if response.status_code == 200:
+                # Unwrap JSON envelope: {"data": "<base64>"}
+                body_json = json.loads(response.content)
+                proto_bytes = base64.b64decode(body_json.get("data", ""))
+                logger.debug(
+                    "Firebase response: %d (%d bytes proto)",
+                    response.status_code,
+                    len(proto_bytes),
+                )
+                return ForwardResult(
+                    success=True,
+                    payload=proto_bytes,
+                    http_status=response.status_code,
+                    error="",
+                )
+            else:
+                error_text = response.content.decode("utf-8", errors="replace")
+                logger.warning(
+                    "Firebase error: %d - %s", response.status_code, error_text
+                )
+                return ForwardResult(
+                    success=False,
+                    payload=b"",
+                    http_status=response.status_code,
+                    error=f"HTTP {response.status_code}: {error_text}",
+                )
 
-        except aiohttp.ClientConnectionError as e:
+        except httpx.ConnectError as e:
             logger.error("Connection error to Firebase: %s", e)
             return ForwardResult(
                 success=False, payload=b"", http_status=0, error=f"Connection error: {e}"
             )
-        except aiohttp.ClientError as e:
+        except httpx.HTTPError as e:
             logger.error("HTTP client error: %s", e)
             return ForwardResult(
                 success=False, payload=b"", http_status=0, error=f"Client error: {e}"
@@ -149,10 +148,10 @@ class FirebaseClient:
             )
 
     async def close(self) -> None:
-        """Close the HTTP session."""
-        if self._session and not self._session.closed:
-            await self._session.close()
-            self._session = None
+        """Close the HTTP client."""
+        if self._client and not self._client.is_closed:
+            await self._client.aclose()
+            self._client = None
 
     async def __aenter__(self) -> "FirebaseClient":
         """Async context manager entry."""

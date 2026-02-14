@@ -1126,7 +1126,7 @@
         "bzlTransitiveDigest": "ZVTMsEkfirao/Z6Wr5ihB9pW+8YVDs/t7F6CtoJ+2PY=",
         "usagesDigest": "GQZ+4FK05jr+dpNg0cYzGgyhDyrGBxhGaKe5kCyXyTQ=",
         "recordedFileInputs": {
-          "@@//tools/requirements_lock.txt": "e91d70fe7ea611768b597a580ba909eb937c85acdb7b69d7da1beef244011fb1",
+          "@@//tools/requirements_lock.txt": "046394b92373b51ae239f6cae935d513d226c64452bf7dd12a624f75be9eff85",
           "@@nanopb+//extra/requirements_lock.txt": "2bcdca24f1a4429b4ab0f0bb80cca292a92e12f7bf3d0f46de7c2b14fd97ac25",
           "@@particle_bazel+//tools/requirements_lock.txt": "523b96e9a22a45d2878eefec325e5cf19ea1388dba19b55994070224f1e4cdd9",
           "@@pigweed+//pw_env_setup/py/pw_env_setup/virtualenv_setup/upstream_requirements_darwin_lock.txt": "affe8afad4cccc4b1fc1e424417dac43202b2dbdf60696dca8c70ffbd52cd450",
@@ -1148,22 +1148,13 @@
           "RULES_PYTHON_REPO_DEBUG_VERBOSITY": null
         },
         "generatedRepoSpecs": {
-          "maco_pip_311_aiohttp": {
+          "maco_pip_311_anyio": {
             "repoRuleId": "@@rules_python+//python/private/pypi:whl_library.bzl%whl_library",
             "attributes": {
               "dep_template": "@maco_pip//{name}:{target}",
               "python_interpreter_target": "@@rules_python++python+python_3_11_host//:python",
               "repo": "maco_pip_311",
-              "requirement": "aiohttp==3.9.5"
-            }
-          },
-          "maco_pip_311_aiosignal": {
-            "repoRuleId": "@@rules_python+//python/private/pypi:whl_library.bzl%whl_library",
-            "attributes": {
-              "dep_template": "@maco_pip//{name}:{target}",
-              "python_interpreter_target": "@@rules_python++python+python_3_11_host//:python",
-              "repo": "maco_pip_311",
-              "requirement": "aiosignal==1.3.1"
+              "requirement": "anyio==4.12.1"
             }
           },
           "maco_pip_311_ascon": {
@@ -1175,31 +1166,40 @@
               "requirement": "ascon==0.0.9"
             }
           },
-          "maco_pip_311_async_timeout": {
+          "maco_pip_311_certifi": {
             "repoRuleId": "@@rules_python+//python/private/pypi:whl_library.bzl%whl_library",
             "attributes": {
               "dep_template": "@maco_pip//{name}:{target}",
               "python_interpreter_target": "@@rules_python++python+python_3_11_host//:python",
               "repo": "maco_pip_311",
-              "requirement": "async-timeout==4.0.3"
+              "requirement": "certifi==2026.1.4"
             }
           },
-          "maco_pip_311_attrs": {
+          "maco_pip_311_h11": {
             "repoRuleId": "@@rules_python+//python/private/pypi:whl_library.bzl%whl_library",
             "attributes": {
               "dep_template": "@maco_pip//{name}:{target}",
               "python_interpreter_target": "@@rules_python++python+python_3_11_host//:python",
               "repo": "maco_pip_311",
-              "requirement": "attrs==23.2.0"
+              "requirement": "h11==0.16.0"
             }
           },
-          "maco_pip_311_frozenlist": {
+          "maco_pip_311_httpcore": {
             "repoRuleId": "@@rules_python+//python/private/pypi:whl_library.bzl%whl_library",
             "attributes": {
               "dep_template": "@maco_pip//{name}:{target}",
               "python_interpreter_target": "@@rules_python++python+python_3_11_host//:python",
               "repo": "maco_pip_311",
-              "requirement": "frozenlist==1.4.1"
+              "requirement": "httpcore==1.0.9"
+            }
+          },
+          "maco_pip_311_httpx": {
+            "repoRuleId": "@@rules_python+//python/private/pypi:whl_library.bzl%whl_library",
+            "attributes": {
+              "dep_template": "@maco_pip//{name}:{target}",
+              "python_interpreter_target": "@@rules_python++python+python_3_11_host//:python",
+              "repo": "maco_pip_311",
+              "requirement": "httpx==0.28.1"
             }
           },
           "maco_pip_311_idna": {
@@ -1211,15 +1211,6 @@
               "requirement": "idna==3.10"
             }
           },
-          "maco_pip_311_multidict": {
-            "repoRuleId": "@@rules_python+//python/private/pypi:whl_library.bzl%whl_library",
-            "attributes": {
-              "dep_template": "@maco_pip//{name}:{target}",
-              "python_interpreter_target": "@@rules_python++python+python_3_11_host//:python",
-              "repo": "maco_pip_311",
-              "requirement": "multidict==6.0.5"
-            }
-          },
           "maco_pip_311_pycryptodome": {
             "repoRuleId": "@@rules_python+//python/private/pypi:whl_library.bzl%whl_library",
             "attributes": {
@@ -1229,13 +1220,22 @@
               "requirement": "pycryptodome==3.21.0"
             }
           },
-          "maco_pip_311_yarl": {
+          "maco_pip_311_sniffio": {
             "repoRuleId": "@@rules_python+//python/private/pypi:whl_library.bzl%whl_library",
             "attributes": {
               "dep_template": "@maco_pip//{name}:{target}",
               "python_interpreter_target": "@@rules_python++python+python_3_11_host//:python",
               "repo": "maco_pip_311",
-              "requirement": "yarl==1.9.4"
+              "requirement": "sniffio==1.3.1"
+            }
+          },
+          "maco_pip_311_typing_extensions": {
+            "repoRuleId": "@@rules_python+//python/private/pypi:whl_library.bzl%whl_library",
+            "attributes": {
+              "dep_template": "@maco_pip//{name}:{target}",
+              "python_interpreter_target": "@@rules_python++python+python_3_11_host//:python",
+              "repo": "maco_pip_311",
+              "requirement": "typing_extensions==4.15.0"
             }
           },
           "nanopb_pypi_311_grpcio": {
@@ -39984,28 +39984,28 @@
               "repo_name": "maco_pip",
               "extra_hub_aliases": {},
               "whl_map": {
-                "aiohttp": "{\"maco_pip_311_aiohttp\":[{\"version\":\"3.11\"}]}",
-                "aiosignal": "{\"maco_pip_311_aiosignal\":[{\"version\":\"3.11\"}]}",
+                "anyio": "{\"maco_pip_311_anyio\":[{\"version\":\"3.11\"}]}",
                 "ascon": "{\"maco_pip_311_ascon\":[{\"version\":\"3.11\"}]}",
-                "async_timeout": "{\"maco_pip_311_async_timeout\":[{\"version\":\"3.11\"}]}",
-                "attrs": "{\"maco_pip_311_attrs\":[{\"version\":\"3.11\"}]}",
-                "frozenlist": "{\"maco_pip_311_frozenlist\":[{\"version\":\"3.11\"}]}",
+                "certifi": "{\"maco_pip_311_certifi\":[{\"version\":\"3.11\"}]}",
+                "h11": "{\"maco_pip_311_h11\":[{\"version\":\"3.11\"}]}",
+                "httpcore": "{\"maco_pip_311_httpcore\":[{\"version\":\"3.11\"}]}",
+                "httpx": "{\"maco_pip_311_httpx\":[{\"version\":\"3.11\"}]}",
                 "idna": "{\"maco_pip_311_idna\":[{\"version\":\"3.11\"}]}",
-                "multidict": "{\"maco_pip_311_multidict\":[{\"version\":\"3.11\"}]}",
                 "pycryptodome": "{\"maco_pip_311_pycryptodome\":[{\"version\":\"3.11\"}]}",
-                "yarl": "{\"maco_pip_311_yarl\":[{\"version\":\"3.11\"}]}"
+                "sniffio": "{\"maco_pip_311_sniffio\":[{\"version\":\"3.11\"}]}",
+                "typing_extensions": "{\"maco_pip_311_typing_extensions\":[{\"version\":\"3.11\"}]}"
               },
               "packages": [
-                "aiohttp",
-                "aiosignal",
+                "anyio",
                 "ascon",
-                "async_timeout",
-                "attrs",
-                "frozenlist",
+                "certifi",
+                "h11",
+                "httpcore",
+                "httpx",
                 "idna",
-                "multidict",
                 "pycryptodome",
-                "yarl"
+                "sniffio",
+                "typing_extensions"
               ],
               "groups": {}
             }

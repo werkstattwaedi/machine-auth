@@ -48,6 +48,7 @@ class GatewayProcess:
         host: str = "127.0.0.1",
         port: int = 0,
         master_key: str = DEFAULT_TEST_MASTER_KEY,
+        gateway_api_key: str = "test-api-key",
         gateway_binary: Optional[str] = None,
     ) -> None:
         """Initialize the gateway process fixture.
@@ -57,12 +58,14 @@ class GatewayProcess:
             host: Host for gateway to listen on.
             port: Port for gateway to listen on (0 for auto-assign).
             master_key: ASCON master key (hex string).
+            gateway_api_key: API key for gateway authentication.
             gateway_binary: Path to gateway binary (relative to runfiles).
         """
         self._firebase_url = firebase_url
         self._host = host
         self._port = port
         self._master_key = master_key
+        self._gateway_api_key = gateway_api_key
         self._gateway_binary = gateway_binary or DEFAULT_GATEWAY_BINARY
 
         self._process: Optional[asyncio.subprocess.Process] = None
@@ -111,6 +114,8 @@ class GatewayProcess:
             self._master_key,
             "--firebase-url",
             self._firebase_url,
+            "--gateway-api-key",
+            self._gateway_api_key,
             "--verbose",
         ]
 

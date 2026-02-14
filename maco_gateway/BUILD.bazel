@@ -25,7 +25,7 @@ py_library(
     imports = ["."],  # Makes maco_gateway package importable
     deps = [
         "//proto/gateway:gateway_service_py_pb2",
-        "@maco_pip//aiohttp",
+        "@maco_pip//httpx",
         "@maco_pip//ascon",
         "@pigweed//pw_hdlc/py:pw_hdlc",
         "@pigweed//pw_rpc/py:pw_rpc",
@@ -41,9 +41,7 @@ py_library(
         "maco_gateway/fixtures/mock_http_server.py",
     ],
     imports = ["."],
-    deps = [
-        "@maco_pip//aiohttp",
-    ],
+    deps = [],
 )
 
 py_binary(

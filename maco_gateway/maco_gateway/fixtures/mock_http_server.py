@@ -5,14 +5,16 @@
 
 Provides canned responses for Firebase Cloud Function endpoints,
 allowing tests to run without a real Firebase backend.
+
+Uses stdlib http.server in a background thread (no external dependencies).
 """
 
-import asyncio
 import logging
+import threading
 from dataclasses import dataclass
+from http import HTTPStatus
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Optional
-
-from aiohttp import web
 
 _LOG = logging.getLogger(__name__)
 
@@ -60,8 +62,8 @@ class MockHttpServer:
         self._port = port
         self._responses: dict[str, CannedResponse] = {}
         self._requests: list[tuple[str, bytes]] = []
-        self._runner: Optional[web.AppRunner] = None
-        self._actual_port: Optional[int] = None
+        self._server: Optional[HTTPServer] = None
+        self._thread: Optional[threading.Thread] = None
 
     def set_response(self, path: str, response: CannedResponse) -> None:
         """Set canned response for a path."""
@@ -84,9 +86,9 @@ class MockHttpServer:
     @property
     def port(self) -> int:
         """Get the actual bound port."""
-        if self._actual_port is None:
+        if self._server is None:
             raise RuntimeError("Server not started")
-        return self._actual_port
+        return self._server.server_address[1]
 
     @property
     def url(self) -> str:
@@ -94,52 +96,71 @@ class MockHttpServer:
         return f"http://{self._host}:{self.port}"
 
     async def start(self) -> None:
-        """Start the HTTP server."""
-        if self._runner is not None:
+        """Start the HTTP server in a background thread."""
+        if self._server is not None:
             raise RuntimeError("Server already started")
 
-        app = web.Application()
-        app.router.add_route("*", "/{path:.*}", self._handle_request)
+        owner = self
 
-        self._runner = web.AppRunner(app)
-        await self._runner.setup()
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self) -> None:
+                self._handle()
 
-        site = web.TCPSite(self._runner, self._host, self._port)
-        await site.start()
+            def do_GET(self) -> None:
+                self._handle()
 
-        # Get actual port
-        self._actual_port = site._server.sockets[0].getsockname()[1]
-        _LOG.info("Mock HTTP server listening on %s:%d", self._host, self._actual_port)
+            def do_PUT(self) -> None:
+                self._handle()
+
+            def _handle(self) -> None:
+                content_length = int(self.headers.get("Content-Length", 0))
+                body = self.rfile.read(content_length) if content_length else b""
+
+                _LOG.debug(
+                    "Request: %s %s (%d bytes)", self.command, self.path, len(body)
+                )
+                owner._requests.append((self.path, body))
+
+                response = owner._responses.get(self.path)
+                if response:
+                    _LOG.debug("Returning canned response for %s", self.path)
+                    self.send_response(response.status)
+                    self.send_header("Content-Type", response.content_type)
+                    self.send_header("Content-Length", str(len(response.payload)))
+                    self.end_headers()
+                    self.wfile.write(response.payload)
+                else:
+                    _LOG.warning("No response configured for %s", self.path)
+                    msg = f"No mock response for {self.path}".encode()
+                    self.send_response(HTTPStatus.NOT_FOUND)
+                    self.send_header("Content-Type", "text/plain")
+                    self.send_header("Content-Length", str(len(msg)))
+                    self.end_headers()
+                    self.wfile.write(msg)
+
+            def log_message(self, format: str, *args: object) -> None:
+                # Suppress default stderr logging
+                pass
+
+        self._server = HTTPServer((self._host, self._port), Handler)
+        self._thread = threading.Thread(
+            target=self._server.serve_forever, daemon=True
+        )
+        self._thread.start()
+
+        _LOG.info(
+            "Mock HTTP server listening on %s:%d", self._host, self.port
+        )
 
     async def stop(self) -> None:
         """Stop the HTTP server."""
-        if self._runner:
-            await self._runner.cleanup()
-            self._runner = None
-            self._actual_port = None
+        if self._server:
+            self._server.shutdown()
+            self._thread.join(timeout=5)
+            self._server.server_close()
+            self._server = None
+            self._thread = None
         _LOG.info("Mock HTTP server stopped")
-
-    async def _handle_request(self, request: web.Request) -> web.Response:
-        """Handle incoming HTTP request."""
-        path = "/" + request.match_info["path"]
-        body = await request.read()
-
-        _LOG.debug("Request: %s %s (%d bytes)", request.method, path, len(body))
-        self._requests.append((path, body))
-
-        # Find matching response
-        response = self._responses.get(path)
-        if response:
-            _LOG.debug("Returning canned response for %s", path)
-            return web.Response(
-                body=response.payload,
-                status=response.status,
-                content_type=response.content_type,
-            )
-
-        # Default: 404
-        _LOG.warning("No response configured for %s", path)
-        return web.Response(status=404, text=f"No mock response for {path}")
 
     async def __aenter__(self) -> "MockHttpServer":
         await self.start()
