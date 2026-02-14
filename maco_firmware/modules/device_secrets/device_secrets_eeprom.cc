@@ -13,70 +13,80 @@
 #include "pw_checksum/crc32.h"
 #include "pw_log/log.h"
 
-// Device OS HAL - only included for P2 target
+// Device OS HAL - raw flash storage bypasses LittleFS FsLock.
+// PARTICLE_USE_UNSTABLE_API exposes hal_storage_* declarations
+// that are otherwise hidden from user modules.
 #if defined(__arm__)
-extern "C" {
-#include "eeprom_hal.h"
-}
+#define PARTICLE_USE_UNSTABLE_API
+#include "storage_hal.h"
 #endif
 
 namespace maco::secrets {
 
 namespace {
 
-// Default EEPROM functions using Device OS HAL
-void HalEepromGet([[maybe_unused]] uint32_t index,
-                  void* data,
-                  size_t length) {
+// Default flash storage functions using hal_storage API.
+// These bypass LittleFS entirely, avoiding the FsLock deadlock
+// with Device OS system thread.
+int HalStorageRead([[maybe_unused]] uintptr_t addr,
+                   uint8_t* data,
+                   size_t length) {
 #if defined(__arm__)
-  HAL_EEPROM_Get(index, data, length);
+  return hal_storage_read(HAL_STORAGE_ID_EXTERNAL_FLASH, addr, data, length);
 #else
-  // Host fallback - fill with 0xFF (unprogrammed EEPROM)
+  // Host fallback - fill with 0xFF (erased flash)
   std::memset(data, 0xFF, length);
+  return static_cast<int>(length);
 #endif
 }
 
-void HalEepromPut(uint32_t index, const void* data, size_t length) {
+int HalStorageWrite([[maybe_unused]] uintptr_t addr,
+                    [[maybe_unused]] const uint8_t* data,
+                    [[maybe_unused]] size_t length) {
 #if defined(__arm__)
-  HAL_EEPROM_Put(index, data, length);
+  return hal_storage_write(HAL_STORAGE_ID_EXTERNAL_FLASH, addr, data, length);
 #else
   // Host fallback - no-op
-  (void)index;
-  (void)data;
-  (void)length;
+  return static_cast<int>(length);
+#endif
+}
+
+int HalStorageErase([[maybe_unused]] uintptr_t addr,
+                    [[maybe_unused]] size_t length) {
+#if defined(__arm__)
+  return hal_storage_erase(HAL_STORAGE_ID_EXTERNAL_FLASH, addr, length);
+#else
+  // Host fallback - no-op
+  return 0;
 #endif
 }
 
 }  // namespace
 
 DeviceSecretsEeprom::DeviceSecretsEeprom()
-    : eeprom_get_(HalEepromGet),
-      eeprom_put_(HalEepromPut),
-      eeprom_offset_(kDefaultEepromOffset) {}
+    : read_fn_(HalStorageRead),
+      write_fn_(HalStorageWrite),
+      erase_fn_(HalStorageErase),
+      flash_address_(kDefaultFlashAddress) {}
 
-DeviceSecretsEeprom::DeviceSecretsEeprom(EepromGetFn get_fn, EepromPutFn put_fn, size_t eeprom_offset)
-    : eeprom_get_(std::move(get_fn)),
-      eeprom_put_(std::move(put_fn)),
-      eeprom_offset_(eeprom_offset) {}
-
-DeviceSecretsEeprom::EepromGetFn DeviceSecretsEeprom::DefaultEepromGet() {
-  return HalEepromGet;
-}
-
-DeviceSecretsEeprom::EepromPutFn DeviceSecretsEeprom::DefaultEepromPut() {
-  return HalEepromPut;
-}
+DeviceSecretsEeprom::DeviceSecretsEeprom(ReadFn read_fn, WriteFn write_fn,
+                                          EraseFn erase_fn,
+                                          uintptr_t flash_address)
+    : read_fn_(std::move(read_fn)),
+      write_fn_(std::move(write_fn)),
+      erase_fn_(std::move(erase_fn)),
+      flash_address_(flash_address) {}
 
 bool DeviceSecretsEeprom::IsProvisioned() const {
   if (!loaded_) {
-    LoadFromEeprom();
+    LoadFromFlash();
   }
   return valid_;
 }
 
 pw::Result<KeyBytes> DeviceSecretsEeprom::GetGatewayMasterSecret() const {
   if (!loaded_) {
-    LoadFromEeprom();
+    LoadFromFlash();
   }
   if (!valid_) {
     return pw::Status::NotFound();
@@ -86,7 +96,7 @@ pw::Result<KeyBytes> DeviceSecretsEeprom::GetGatewayMasterSecret() const {
 
 pw::Result<KeyBytes> DeviceSecretsEeprom::GetNtagTerminalKey() const {
   if (!loaded_) {
-    LoadFromEeprom();
+    LoadFromFlash();
   }
   if (!valid_) {
     return pw::Status::NotFound();
@@ -111,10 +121,14 @@ pw::Status DeviceSecretsEeprom::Provision(const KeyBytes& gateway_master_secret,
               ntag_terminal_key.array().data(),
               KeyBytes::kSize);
 
-  // Encode proto
-  std::array<std::byte, kMaxProtoSize> proto_buffer{};
-  pb_ostream_t stream = pb_ostream_from_buffer(
-      reinterpret_cast<uint8_t*>(proto_buffer.data()), proto_buffer.size());
+  // Encode proto into a contiguous buffer: [header | proto | crc]
+  std::array<uint8_t, kMaxTotalSize> write_buffer{};
+  size_t write_pos = 0;
+
+  // Encode proto portion first (need size for header)
+  std::array<uint8_t, kMaxProtoSize> proto_buffer{};
+  pb_ostream_t stream = pb_ostream_from_buffer(proto_buffer.data(),
+                                                proto_buffer.size());
 
   if (!pb_encode(&stream, maco_secrets_DeviceSecretsStorage_fields, &storage)) {
     PW_LOG_ERROR("Failed to encode device secrets proto");
@@ -132,14 +146,37 @@ pw::Status DeviceSecretsEeprom::Provision(const KeyBytes& gateway_master_secret,
 
   // Compute CRC over header + proto
   const uint32_t crc = ComputeCrc(
-      header, pw::span<const std::byte>(proto_buffer.data(), proto_size));
+      header, pw::span<const std::byte>(
+          reinterpret_cast<const std::byte*>(proto_buffer.data()), proto_size));
 
-  // Write to EEPROM: header, proto, CRC
-  eeprom_put_(eeprom_offset_, &header, sizeof(header));
-  eeprom_put_(eeprom_offset_ + kHeaderSize, proto_buffer.data(), proto_size);
-  eeprom_put_(eeprom_offset_ + kHeaderSize + proto_size, &crc, sizeof(crc));
+  // Assemble into single contiguous buffer
+  std::memcpy(&write_buffer[write_pos], &header, sizeof(header));
+  write_pos += sizeof(header);
+  std::memcpy(&write_buffer[write_pos], proto_buffer.data(), proto_size);
+  write_pos += proto_size;
+  std::memcpy(&write_buffer[write_pos], &crc, sizeof(crc));
+  write_pos += sizeof(crc);
 
-  PW_LOG_INFO("Device secrets provisioned successfully");
+  // Erase flash sector (required before writing - flash can only go 1→0)
+  int result = erase_fn_(flash_address_, kSectorSize);
+  if (result < 0) {
+    PW_LOG_ERROR("Flash erase failed: %d", result);
+    loaded_ = false;
+    valid_ = false;
+    return pw::Status::Internal();
+  }
+
+  // Write all data in a single flash operation
+  result = write_fn_(flash_address_, write_buffer.data(), write_pos);
+  if (result < 0) {
+    PW_LOG_ERROR("Flash write failed: %d", result);
+    loaded_ = false;
+    valid_ = false;
+    return pw::Status::Internal();
+  }
+
+  PW_LOG_INFO("Device secrets provisioned successfully (%zu bytes at 0x%X)",
+              write_pos, static_cast<unsigned>(flash_address_));
 
   // Update cached state
   std::copy(gateway_master_secret.array().begin(),
@@ -155,9 +192,11 @@ pw::Status DeviceSecretsEeprom::Provision(const KeyBytes& gateway_master_secret,
 }
 
 void DeviceSecretsEeprom::Clear() {
-  // Write invalid magic to mark as unprovisioned
-  const uint32_t invalid_magic = 0xFFFFFFFF;
-  eeprom_put_(eeprom_offset_, &invalid_magic, sizeof(invalid_magic));
+  // Erase the flash sector (all 0xFF = invalid magic)
+  int result = erase_fn_(flash_address_, kSectorSize);
+  if (result < 0) {
+    PW_LOG_ERROR("Flash erase failed during Clear: %d", result);
+  }
 
   // Clear cached state
   gateway_master_secret_.fill(std::byte{0});
@@ -168,13 +207,18 @@ void DeviceSecretsEeprom::Clear() {
   PW_LOG_INFO("Device secrets cleared");
 }
 
-bool DeviceSecretsEeprom::LoadFromEeprom() const {
+bool DeviceSecretsEeprom::LoadFromFlash() const {
   loaded_ = true;
   valid_ = false;
 
   // Read header
   Header header{};
-  eeprom_get_(eeprom_offset_, &header, sizeof(header));
+  int result = read_fn_(flash_address_,
+                         reinterpret_cast<uint8_t*>(&header), sizeof(header));
+  if (result < 0) {
+    PW_LOG_DEBUG("Device secrets: flash read failed: %d", result);
+    return false;
+  }
 
   // Validate magic
   if (header.magic != kMagic) {
@@ -200,15 +244,27 @@ bool DeviceSecretsEeprom::LoadFromEeprom() const {
   }
 
   // Read proto data
-  std::array<std::byte, kMaxProtoSize> proto_buffer{};
-  eeprom_get_(eeprom_offset_ + kHeaderSize, proto_buffer.data(), header.length);
+  std::array<uint8_t, kMaxProtoSize> proto_buffer{};
+  result = read_fn_(flash_address_ + kHeaderSize,
+                     proto_buffer.data(), header.length);
+  if (result < 0) {
+    PW_LOG_WARN("Device secrets: flash read failed for proto: %d", result);
+    return false;
+  }
 
   // Read and verify CRC
   uint32_t stored_crc = 0;
-  eeprom_get_(eeprom_offset_ + kHeaderSize + header.length, &stored_crc, sizeof(stored_crc));
+  result = read_fn_(flash_address_ + kHeaderSize + header.length,
+                     reinterpret_cast<uint8_t*>(&stored_crc), sizeof(stored_crc));
+  if (result < 0) {
+    PW_LOG_WARN("Device secrets: flash read failed for CRC: %d", result);
+    return false;
+  }
 
   const uint32_t computed_crc = ComputeCrc(
-      header, pw::span<const std::byte>(proto_buffer.data(), header.length));
+      header, pw::span<const std::byte>(
+          reinterpret_cast<const std::byte*>(proto_buffer.data()),
+          header.length));
 
   if (stored_crc != computed_crc) {
     PW_LOG_WARN("Device secrets: CRC mismatch (stored=0x%08X, computed=0x%08X)",
@@ -219,10 +275,10 @@ bool DeviceSecretsEeprom::LoadFromEeprom() const {
 
   // Decode proto
   maco_secrets_DeviceSecretsStorage storage = maco_secrets_DeviceSecretsStorage_init_zero;
-  pb_istream_t stream = pb_istream_from_buffer(
-      reinterpret_cast<const uint8_t*>(proto_buffer.data()), header.length);
+  pb_istream_t istream = pb_istream_from_buffer(proto_buffer.data(),
+                                                 header.length);
 
-  if (!pb_decode(&stream, maco_secrets_DeviceSecretsStorage_fields, &storage)) {
+  if (!pb_decode(&istream, maco_secrets_DeviceSecretsStorage_fields, &storage)) {
     PW_LOG_ERROR("Device secrets: failed to decode proto");
     return false;
   }
@@ -236,7 +292,8 @@ bool DeviceSecretsEeprom::LoadFromEeprom() const {
               KeyBytes::kSize);
 
   valid_ = true;
-  PW_LOG_INFO("Device secrets loaded from EEPROM");
+  PW_LOG_INFO("Device secrets loaded from flash (0x%X)",
+              static_cast<unsigned>(flash_address_));
   return true;
 }
 

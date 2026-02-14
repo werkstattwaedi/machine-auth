@@ -4,9 +4,14 @@
 #pragma once
 
 /// @file device_secrets_eeprom.h
-/// @brief EEPROM-backed implementation of DeviceSecrets for P2.
+/// @brief Flash-backed implementation of DeviceSecrets for P2.
 ///
-/// Storage format:
+/// Uses raw external flash via hal_storage API to bypass LittleFS.
+/// LittleFS filesystem mutex (FsLock) deadlocks when Device OS system
+/// thread holds it for cloud/ledger operations. Raw flash only uses the
+/// lower-level ExFlashLock which is short-lived.
+///
+/// Storage format (single 4K flash sector):
 /// @code
 /// ┌─────────────────────────────────────────────┐
 /// │ Offset 0x00: Magic (4 bytes) = "MAC0"       │
@@ -35,13 +40,13 @@
 
 namespace maco::secrets {
 
-/// EEPROM-backed device secrets storage.
+/// Flash-backed device secrets storage.
 ///
-/// This implementation reads/writes secrets to EEPROM using the Device OS
-/// HAL. Secrets are validated on read using CRC32 and magic bytes.
+/// On P2, uses raw external flash via hal_storage_* (bypasses LittleFS).
+/// On host, uses injectable read/write functions for testing.
 ///
-/// Thread safety: All public methods are thread-safe (EEPROM HAL is
-/// internally synchronized).
+/// Thread safety: All public methods are thread-safe (flash HAL uses
+/// its own mutex, separate from the filesystem mutex).
 class DeviceSecretsEeprom : public DeviceSecrets {
  public:
   /// Storage format constants.
@@ -51,34 +56,33 @@ class DeviceSecretsEeprom : public DeviceSecrets {
   static constexpr size_t kMaxProtoSize = 64;  // More than enough for 2x16 byte keys
   static constexpr size_t kCrcSize = 4;
   static constexpr size_t kMaxTotalSize = kHeaderSize + kMaxProtoSize + kCrcSize;
+  static constexpr size_t kSectorSize = 4096;
 
-  /// EEPROM storage offset (configurable for testing).
-  static constexpr size_t kDefaultEepromOffset = 0;
+  /// Reserved flash sector for device secrets.
+  /// Located in the gap between OTA region (ends 0x3E0000) and user
+  /// firmware region (starts 0x480000) in the P2 external flash map.
+  static constexpr uintptr_t kDefaultFlashAddress = 0x3E0000;
 
-  /// Type for EEPROM read/write functions (for testability).
-  using EepromGetFn = std::function<void(uint32_t index, void* data, size_t length)>;
-  using EepromPutFn = std::function<void(uint32_t index, const void* data, size_t length)>;
+  /// Type for storage read/write/erase functions (for testability).
+  using ReadFn = std::function<int(uintptr_t addr, uint8_t* data, size_t length)>;
+  using WriteFn = std::function<int(uintptr_t addr, const uint8_t* data, size_t length)>;
+  using EraseFn = std::function<int(uintptr_t addr, size_t length)>;
 
   /// Construct with default Device OS HAL functions.
   DeviceSecretsEeprom();
 
-  /// Construct with custom EEPROM functions (for testing).
-  DeviceSecretsEeprom(EepromGetFn get_fn, EepromPutFn put_fn, size_t eeprom_offset = kDefaultEepromOffset);
-
-  /// Get the default EEPROM read function (Device OS HAL).
-  /// Useful for testing with custom offset.
-  static EepromGetFn DefaultEepromGet();
-
-  /// Get the default EEPROM write function (Device OS HAL).
-  /// Useful for testing with custom offset.
-  static EepromPutFn DefaultEepromPut();
+  /// Construct with custom storage functions (for testing).
+  DeviceSecretsEeprom(ReadFn read_fn, WriteFn write_fn, EraseFn erase_fn,
+                      uintptr_t flash_address = kDefaultFlashAddress);
 
   // DeviceSecrets interface
   bool IsProvisioned() const override;
   pw::Result<KeyBytes> GetGatewayMasterSecret() const override;
   pw::Result<KeyBytes> GetNtagTerminalKey() const override;
 
-  /// Provision secrets to EEPROM.
+  /// Provision secrets to flash.
+  ///
+  /// Erases the flash sector, then writes header + proto + CRC.
   ///
   /// @param gateway_master_secret 16-byte master secret
   /// @param ntag_terminal_key 16-byte terminal key
@@ -88,7 +92,7 @@ class DeviceSecretsEeprom : public DeviceSecrets {
 
   /// Clear all stored secrets.
   ///
-  /// Writes invalid magic bytes to mark storage as unprovisioned.
+  /// Erases the flash sector (all 0xFF = invalid magic).
   void Clear();
 
  private:
@@ -102,17 +106,18 @@ class DeviceSecretsEeprom : public DeviceSecrets {
 
   static_assert(sizeof(Header) == kHeaderSize, "Header size mismatch");
 
-  /// Load and validate secrets from EEPROM.
+  /// Load and validate secrets from flash.
   ///
   /// @return true if secrets were loaded successfully
-  bool LoadFromEeprom() const;
+  bool LoadFromFlash() const;
 
   /// Compute CRC32 over header and proto data.
   uint32_t ComputeCrc(const Header& header, pw::span<const std::byte> proto_data) const;
 
-  EepromGetFn eeprom_get_;
-  EepromPutFn eeprom_put_;
-  size_t eeprom_offset_;
+  ReadFn read_fn_;
+  WriteFn write_fn_;
+  EraseFn erase_fn_;
+  uintptr_t flash_address_;
 
   // Cached state (mutable for lazy loading in const methods)
   mutable bool loaded_ = false;

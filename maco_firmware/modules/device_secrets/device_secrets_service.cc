@@ -38,8 +38,8 @@ pw::Status DeviceSecretsService::Provision(
 
   // Validate key sizes (should be enforced by proto options, but double-check)
   constexpr size_t kExpectedKeySize = 16;
-  if (sizeof(request.gateway_master_secret) != kExpectedKeySize ||
-      sizeof(request.ntag_terminal_key) != kExpectedKeySize) {
+  if (request.gateway_master_secret.size != kExpectedKeySize ||
+      request.ntag_terminal_key.size != kExpectedKeySize) {
     std::strncpy(response.error, "Invalid key size",
                  sizeof(response.error) - 1);
     response.error[sizeof(response.error) - 1] = '\0';
