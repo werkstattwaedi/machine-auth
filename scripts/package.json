@@ -14,7 +14,6 @@
     "dotenv": "^16.4.5",
     "execa": "^8.0.1",
     "firebase-admin": "^13.6.0",
-    "flatbuffers": "^25.9.23",
     "particle-api-js": "^11.1.7"
   },
   "devDependencies": {

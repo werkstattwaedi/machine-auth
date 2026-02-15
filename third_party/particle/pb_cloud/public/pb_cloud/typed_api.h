@@ -14,9 +14,10 @@
 /// // Publish a string (uses Serializer<std::string_view>)
 /// auto future = PublishTyped(cloud, "device/status", std::string_view("online"));
 ///
-/// // Publish a protobuf message
-/// SensorReading::Message reading{.temperature = 25};
-/// auto future = PublishProto<SensorReading>(cloud, "sensor/reading", reading);
+/// // Publish a protobuf message (nanopb struct)
+/// maco_proto_particle_DeviceConfig config = {};
+/// auto future = PublishProto<maco_proto_particle_DeviceConfig>(
+///     cloud, "sensor/reading", config);
 ///
 /// // Poll the future in async loop
 /// auto poll = future.Pend(cx);
@@ -74,22 +75,22 @@ PublishFuture PublishTyped(CloudBackend& cloud,
 /// Publish a protobuf message.
 ///
 /// Convenience wrapper around PublishTyped using ProtoSerializer.
+/// T is the nanopb message struct type (must have NanopbFields<T> specialized).
 ///
-/// @tparam Proto Proto type (e.g., SensorReading from sensor_reading.pwpb.h)
+/// @tparam T Nanopb message struct type
 /// @tparam kBufSize Serialization buffer size (default 256)
 /// @param cloud Cloud backend to use
 /// @param name Event name
 /// @param message Message to serialize and publish
 /// @param options Publish options (optional)
 /// @return Future that resolves when publish completes
-template <typename Proto, size_t kBufSize = 256>
+template <typename T, size_t kBufSize = 256>
 PublishFuture PublishProto(CloudBackend& cloud,
                            std::string_view name,
-                           const typename Proto::Message& message,
+                           const T& message,
                            const PublishOptions& options = {}) {
-  return PublishTyped<typename Proto::Message,
-                      ProtoSerializer<Proto>,
-                      kBufSize>(cloud, name, message, options);
+  return PublishTyped<T, ProtoSerializer<T>, kBufSize>(
+      cloud, name, message, options);
 }
 
 /// Deserialize a received event to a typed value.
@@ -108,16 +109,15 @@ pw::Result<T> DeserializeEvent(const ReceivedEvent& event) {
 
 /// Deserialize a received event to a protobuf message.
 ///
-/// Convenience wrapper for protobuf deserialization.
+/// Convenience wrapper for nanopb protobuf deserialization.
+/// T is the nanopb message struct type (must have NanopbFields<T> specialized).
 ///
-/// @tparam Proto Proto type
+/// @tparam T Nanopb message struct type
 /// @param event Received event
 /// @return Deserialized message, or error
-template <typename Proto>
-pw::Result<typename Proto::Message> DeserializeProtoEvent(
-    const ReceivedEvent& event) {
-  return DeserializeEvent<typename Proto::Message, ProtoSerializer<Proto>>(
-      event);
+template <typename T>
+pw::Result<T> DeserializeProtoEvent(const ReceivedEvent& event) {
+  return DeserializeEvent<T, ProtoSerializer<T>>(event);
 }
 
 }  // namespace pb::cloud

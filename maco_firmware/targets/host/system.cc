@@ -11,6 +11,8 @@
 #include <functional>
 #include <thread>
 
+#include <cstring>
+
 #include "device_config/device_config.h"
 #include "lvgl.h"
 #include "maco_firmware/modules/app_state/app_state.h"
@@ -27,7 +29,9 @@
 #include "maco_firmware/targets/host/keyboard_input_driver.h"
 #include "maco_firmware/targets/host/sdl_display_driver.h"
 #include "maco_firmware/targets/host/sdl_led_driver.h"
+#include "device_config/device_config_nanopb_fields.h"
 #include "mock_ledger_backend.h"
+#include "pb_cloud/ledger_typed_api.h"
 #include "firebase/firebase_client.h"
 #include "pw_assert/check.h"
 #include "pw_log/log.h"
@@ -180,8 +184,24 @@ maco::config::DeviceConfig& GetDeviceConfig() {
 
   static bool loaded = false;
   if (!loaded) {
-    // Pre-populate mock ledger with test gateway config
-    // MockLedgerBackend auto-creates ledgers, so Init() will read defaults
+    // Pre-populate mock ledger with CBOR-wrapped base64 protobuf test config
+    maco_proto_particle_DeviceConfig test_config =
+        maco_proto_particle_DeviceConfig_init_zero;
+    test_config.hw_revision =
+        maco_proto_particle_HwRevision_HW_REVISION_PROTOTYPE;
+    std::strncpy(test_config.gateway_host, "127.0.0.1",
+                 sizeof(test_config.gateway_host) - 1);
+    test_config.gateway_port = 5000;
+
+    auto write_status =
+        pb::cloud::WriteLedgerProtoB64<maco_proto_particle_DeviceConfig>(
+            GetMockLedgerBackend(), "terminal-config",
+            "device_config.proto.b64", test_config);
+    if (!write_status.ok()) {
+      PW_LOG_WARN("Failed to write test config: %d",
+                  static_cast<int>(write_status.code()));
+    }
+
     config.Init().IgnoreError();
     loaded = true;
   }

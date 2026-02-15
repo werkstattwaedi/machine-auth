@@ -8,10 +8,13 @@
     "dev:emulators": "firebase emulators:start --import=./firebase-data --export-on-exit=./firebase-data",
     "dev:web": "cd web && npm run dev",
     "dev:gateway": "bazel run //maco_gateway:gateway -- --port 5000 --master-key 000102030405060708090a0b0c0d0e0f --firebase-url http://127.0.0.1:5001/oww-maschinenfreigabe/us-central1 --gateway-api-key local-gateway-key --verbose",
-    "seed": "npx tsx scripts/seed-emulator.ts"
+    "seed": "npx tsx scripts/seed-emulator.ts",
+    "sync-config": "npx tsx scripts/sync-device-config.ts"
   },
   "devDependencies": {
+    "@bufbuild/protobuf": "^2.10.2",
     "concurrently": "^9.1.0",
+    "dotenv": "^16.4.5",
     "firebase-admin": "^13.6.1",
     "tsx": "^4.19.0"
   }

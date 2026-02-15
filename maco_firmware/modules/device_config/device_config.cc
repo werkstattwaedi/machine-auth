@@ -3,9 +3,8 @@
 
 #include "device_config/device_config.h"
 
-#include "pb_decode.h"
-
-#include "particle/device_config.pb.h"
+#include "device_config/device_config_nanopb_fields.h"
+#include "pb_cloud/ledger_typed_api.h"
 
 #define PW_LOG_MODULE_NAME "config"
 #include "pw_log/log.h"
@@ -15,6 +14,7 @@ namespace maco::config {
 namespace {
 
 constexpr const char* kLedgerName = "terminal-config";
+constexpr const char* kProtoKey = "device_config.proto.b64";
 
 HwRevision ConvertHwRevision(maco_proto_particle_HwRevision proto) {
   switch (proto) {
@@ -60,39 +60,20 @@ DeviceConfig::DeviceConfig(pb::cloud::LedgerBackend& backend,
       on_update_(std::move(on_update)) {}
 
 pw::Status DeviceConfig::Init() {
-  // Get ledger handle
-  auto ledger_result = backend_.GetLedger(kLedgerName);
-  if (!ledger_result.ok()) {
-    PW_LOG_WARN("Failed to open ledger: %d",
-                static_cast<int>(ledger_result.status().code()));
-    return ledger_result.status();
+  auto result =
+      pb::cloud::ReadLedgerProtoB64<maco_proto_particle_DeviceConfig>(
+          backend_, kLedgerName, kProtoKey);
+  if (!result.ok()) {
+    if (result.status() == pw::Status::NotFound()) {
+      PW_LOG_INFO("No config in ledger, using defaults");
+      return pw::OkStatus();
+    }
+    PW_LOG_WARN("Config read failed: %d",
+                static_cast<int>(result.status().code()));
+    return result.status();
   }
 
-  // Read raw bytes
-  std::array<std::byte, 512> buffer;
-  auto read_result = ledger_result.value().Read(buffer);
-  if (!read_result.ok()) {
-    PW_LOG_WARN("Ledger read failed: %d (using defaults)",
-                static_cast<int>(read_result.status().code()));
-    return read_result.status();
-  }
-
-  size_t data_size = read_result.value();
-  if (data_size == 0) {
-    PW_LOG_INFO("Ledger empty, using defaults");
-    return pw::OkStatus();
-  }
-
-  // Decode nanopb
-  maco_proto_particle_DeviceConfig proto =
-      maco_proto_particle_DeviceConfig_init_zero;
-  pb_istream_t stream = pb_istream_from_buffer(
-      reinterpret_cast<const pb_byte_t*>(buffer.data()), data_size);
-  if (!pb_decode(&stream, maco_proto_particle_DeviceConfig_fields, &proto)) {
-    PW_LOG_WARN("Proto decode failed");
-    return pw::Status::DataLoss();
-  }
-
+  const auto& proto = result.value();
   hw_revision_ = ConvertHwRevision(proto.hw_revision);
 
   machines_.clear();

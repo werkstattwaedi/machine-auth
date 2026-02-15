@@ -8,11 +8,15 @@ package(default_visibility = ["//maco_firmware:__subpackages__"])
 cc_library(
     name = "device_config",
     srcs = ["device_config.cc"],
-    hdrs = ["public/device_config/device_config.h"],
+    hdrs = [
+        "public/device_config/device_config.h",
+        "public/device_config/device_config_nanopb_fields.h",
+    ],
     includes = ["public"],
     deps = [
         "//maco_firmware:types",
         "//proto/particle:device_config_nanopb",
+        "@particle_bazel//pb_cloud:pb_cloud",
         "@particle_bazel//pb_cloud:pb_ledger",
         "@pigweed//pw_async2:dispatcher",
         "@pigweed//pw_containers:vector",
