@@ -1,10 +1,6 @@
 [submodule "third_party/pigweed"]
 	path = third_party/pigweed
 	url = https://pigweed.googlesource.com/pigweed/pigweed
-[submodule "third_party/lvgl"]
-	path = third_party/lvgl
-	url = https://github.com/werkstattwaedi/lvgl.git
-	branch = bazel-9.4
 [submodule "third_party/sdl/SDL"]
 	path = third_party/sdl/SDL
 	url = https://github.com/libsdl-org/SDL.git
@@ -18,3 +14,7 @@
 [submodule "third_party/particle/third_party/docs"]
 	path = third_party/particle/third_party/docs
 	url = https://github.com/particle-iot/docs
+[submodule "third_party/lvgl/lvgl"]
+	path = third_party/lvgl/lvgl
+	url = https://github.com/lvgl/lvgl.git
+	branch = release/v9.4

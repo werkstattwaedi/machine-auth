@@ -26,7 +26,7 @@ cc_library(
         "//maco_firmware/modules/app_state/ui:snapshot",
         "//maco_firmware/modules/ui:data_binding",
         "//maco_firmware/modules/ui:screen",
-        "@lvgl",
+        "//third_party/lvgl",
         "@pigweed//pw_log",
         "@pigweed//pw_string",
     ],

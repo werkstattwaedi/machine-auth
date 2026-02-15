@@ -32,7 +32,7 @@ cc_library(
     deps = [
         "//maco_firmware/modules/display:display_driver",
         "//third_party/sdl:sdl2",
-        "@lvgl//:lvgl",
+        "//third_party/lvgl",
         "@pigweed//pw_assert:check",
         "@pigweed//pw_log",
     ],
@@ -47,7 +47,7 @@ cc_library(
     deps = [
         "//maco_firmware/modules/display:touch_button_driver",
         "//third_party/sdl:sdl2",
-        "@lvgl//:lvgl",
+        "//third_party/lvgl",
         "@pigweed//pw_log",
     ],
 )
@@ -96,8 +96,8 @@ cc_library(
         "//maco_firmware/modules/nfc_reader/mock:nfc_mock_service",
         "//maco_firmware/modules/device_secrets:device_secrets_mock",
         "//maco_firmware/services:maco_service",
+        "//third_party/lvgl",
         "//proto/particle:device_config_nanopb",
-        "@lvgl//:lvgl",
         "@particle_bazel//pb_cloud:mock_ledger_backend",
         "@particle_bazel//pb_cloud:pb_ledger",
         "@pigweed//pw_assert:check",

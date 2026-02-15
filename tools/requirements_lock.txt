@@ -19,5 +19,9 @@ typing_extensions==4.15.0
 # AES-128 for NTAG key diversification (used by simulator console)
 pycryptodome==3.21.0
 
+# LVGL image converter (scripts/LVGLImage.py)
+pypng==0.20220715.0
+lz4==4.4.5
+
 # Common dependencies
 idna==3.10

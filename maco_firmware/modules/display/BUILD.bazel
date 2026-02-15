@@ -12,7 +12,7 @@ cc_library(
     name = "display_driver",
     hdrs = ["display_driver.h"],
     deps = [
-        "@lvgl//:lvgl",
+        "//third_party/lvgl",
         "@pigweed//pw_result",
         "@pigweed//pw_status",
     ],
@@ -23,7 +23,7 @@ cc_library(
     name = "touch_button_driver",
     hdrs = ["touch_button_driver.h"],
     deps = [
-        "@lvgl//:lvgl",
+        "//third_party/lvgl",
         "@pigweed//pw_result",
         "@pigweed//pw_status",
     ],
@@ -39,7 +39,7 @@ cc_library(
         ":touch_button_driver",
         "//maco_firmware/modules/fonts",
         "//maco_firmware/system:headers",
-        "@lvgl//:lvgl",
+        "//third_party/lvgl",
         "@pigweed//pw_chrono:system_clock",
         "@pigweed//pw_function",
         "@pigweed//pw_log",

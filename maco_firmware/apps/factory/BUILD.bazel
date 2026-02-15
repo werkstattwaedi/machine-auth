@@ -68,7 +68,7 @@ cc_library(
     deps = [
         ":factory_test_service_nanopb_rpc",
         "//maco_firmware/modules/buzzer",
-        "@lvgl//:lvgl",
+        "//third_party/lvgl",
         "@pigweed//pw_log",
         "@pigweed//pw_status",
     ],

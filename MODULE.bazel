@@ -30,7 +30,7 @@ bazel_dep(name = "aspect_rules_js", version = "2.4.0")
 npm = use_extension("@aspect_rules_js//npm:extensions.bzl", "npm")
 npm.npm_translate_lock(
     name = "npm",
-    pnpm_lock = "//third_party/lv_font_conv:pnpm-lock.yaml",
+    pnpm_lock = "//third_party/lvgl:pnpm-lock.yaml",
     bins = {
         "lv_font_conv": ["lv_font_conv=./lv_font_conv.js"],
     },
@@ -49,13 +49,6 @@ bazel_dep(name = "pigweed")
 local_path_override(
     module_name = "pigweed",
     path = "third_party/pigweed",
-)
-
-# LVGL graphics library
-bazel_dep(name = "lvgl")
-local_path_override(
-    module_name = "lvgl",
-    path = "third_party/lvgl",
 )
 
 # System SDL2 library (for host simulator)

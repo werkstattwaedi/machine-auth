@@ -1,0 +1,75 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+# LVGL library, image converter, and font converter — unified wrapper.
+#
+# Upstream LVGL lives in the lvgl/ submodule (release/v9.4).
+# This package provides:
+#   :lvgl                 — C library
+#   :lvgl_image_converter — Python image-to-C converter
+#   :node_modules/*       — lv_font_conv npm package
+#
+# lv_conf.h is provided via label_flag. Consuming projects must set:
+#   --//third_party/lvgl:lv_conf=//path/to:your_lv_conf
+# Or configure in platform flags / .bazelrc
+
+load("@npm//:defs.bzl", "npm_link_all_packages")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_python//python:defs.bzl", "py_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+# --- npm (lv_font_conv) ---------------------------------------------------
+
+# Export lockfile for MODULE.bazel npm_translate_lock
+exports_files(["pnpm-lock.yaml"])
+
+# Link npm packages (creates :node_modules/lv_font_conv)
+npm_link_all_packages()
+
+# --- lv_conf label flag ----------------------------------------------------
+
+label_flag(
+    name = "lv_conf",
+    build_setting_default = ":lv_conf_unset",
+)
+
+cc_library(
+    name = "lv_conf_unset",
+    hdrs = ["lv_conf_unset.h"],
+)
+
+# --- LVGL C library --------------------------------------------------------
+
+cc_library(
+    name = "lvgl",
+    srcs = glob(["lvgl/src/**/*.c"]),
+    hdrs = glob(
+        [
+            "lvgl/src/**/*.h",
+            "lvgl/*.h",
+        ],
+        exclude = ["lvgl/lv_conf_template.h"],
+    ),
+    copts = [
+        # Suppress warnings in upstream third-party code
+        "-w",
+    ],
+    includes = [
+        "lvgl",
+        "lvgl/src",
+    ],
+    deps = [":lv_conf"],
+)
+
+# --- Image converter -------------------------------------------------------
+
+py_binary(
+    name = "lvgl_image_converter",
+    srcs = ["lvgl/scripts/LVGLImage.py"],
+    main = "lvgl/scripts/LVGLImage.py",
+    deps = [
+        "@maco_pip//lz4",
+        "@maco_pip//pypng",
+    ],
+)

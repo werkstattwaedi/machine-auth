@@ -14,7 +14,7 @@ cc_library(
     hdrs = ["pico_res28_lcd_driver.h"],
     deps = [
         "//maco_firmware/modules/display:display_driver",
-        "@lvgl//:lvgl",
+        "//third_party/lvgl",
         "@particle_bazel//:device_os_headers",
         "@pigweed//pw_bytes",
         "@pigweed//pw_chrono:system_clock",
@@ -35,7 +35,7 @@ particle_cc_test(
     deps = [
         ":pico_res28_lcd",
         "//maco_firmware/modules/fonts",
-        "@lvgl//:lvgl",
+        "//third_party/lvgl",
         "@particle_bazel//:device_os_headers",
         "@particle_bazel//pw_digital_io_particle:digital_io",
         "@particle_bazel//pw_thread_particle:thread",

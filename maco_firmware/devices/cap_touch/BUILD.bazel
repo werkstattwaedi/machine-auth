@@ -12,7 +12,7 @@ cc_library(
     hdrs = ["cap_touch_input_driver.h"],
     deps = [
         "//maco_firmware/modules/display:touch_button_driver",
-        "@lvgl//:lvgl",
+        "//third_party/lvgl",
         "@pigweed//pw_log",
     ],
 )

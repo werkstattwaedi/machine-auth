@@ -26,7 +26,7 @@ cc_library(
     deps = [
         ":button_spec",
         "//maco_firmware/modules/app_state/ui:snapshot",
-        "@lvgl//:lvgl",
+        "//third_party/lvgl",
         "@pigweed//pw_status",
     ],
 )
@@ -41,7 +41,7 @@ cc_library(
         "//maco_firmware/modules/app_state",
         "//maco_firmware/modules/display",
         "//maco_firmware/modules/ui/widgets:button_bar",
-        "@lvgl//:lvgl",
+        "//third_party/lvgl",
         "@pigweed//pw_containers:vector",
         "@pigweed//pw_log",
         "@pigweed//pw_status",
