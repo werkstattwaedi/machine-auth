@@ -14,6 +14,6 @@ cc_library(
     deps = [
         "//maco_firmware/modules/ui:button_spec",
         "//maco_firmware/modules/ui:data_binding",
-        "@lvgl//:lvgl",
+        "//third_party/lvgl",
     ],
 )

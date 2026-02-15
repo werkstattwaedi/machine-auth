@@ -11,7 +11,7 @@ common --experimental_platform_in_output_dir=True
 common --@pigweed//pw_toolchain/host_clang:layering_check
 
 # LVGL configuration (host default - P2 overrides via platform flags)
-build --@lvgl//:lv_conf=//maco_firmware/targets/host:lvgl_conf
+build --//third_party/lvgl:lv_conf=//maco_firmware/targets/host:lvgl_conf
 
 # Log backend: pw_log_basic is the default for host builds and tests.
 # P2 firmware uses p2_system platform which enables tokenized logging via RPC.

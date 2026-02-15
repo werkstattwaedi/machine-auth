@@ -33,7 +33,7 @@ platform(
     ],
     flags = flags_from_dict({
         # LVGL configuration for P2 hardware
-        "@lvgl//:lv_conf": "//maco_firmware/targets/p2:lvgl_conf",
+        "//third_party/lvgl:lv_conf": "//maco_firmware/targets/p2:lvgl_conf",
         "//maco_firmware/system:system": "//maco_firmware/targets/p2:system",
         # Pigweed backend bindings for P2 (from particle-bazel)
         "@pigweed//pw_assert:assert_backend": "@pigweed//pw_assert_basic",

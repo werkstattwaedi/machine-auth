@@ -6,7 +6,7 @@
 Uses aspect_rules_js for hermetic npm package management.
 
 Example usage:
-    load("//third_party/lv_font_conv:font.bzl", "lvgl_font")
+    load("//third_party/lvgl:font.bzl", "lvgl_font")
 
     lvgl_font(
         name = "roboto_24",
@@ -41,7 +41,7 @@ def lvgl_font(
     # Use genrule to run lv_font_conv via node from the linked npm package
     # The :dir target points to the package directory
     cmd = """
-PKG_DIR=$(location //third_party/lv_font_conv:node_modules/lv_font_conv/dir)
+PKG_DIR=$(location //third_party/lvgl:node_modules/lv_font_conv/dir)
 node $$PKG_DIR/lv_font_conv.js \\
     --bpp {bpp} \\
     --size {size} \\
@@ -63,7 +63,7 @@ node $$PKG_DIR/lv_font_conv.js \\
         name = name + "_gen",
         srcs = [
             ttf,
-            "//third_party/lv_font_conv:node_modules/lv_font_conv/dir",
+            "//third_party/lvgl:node_modules/lv_font_conv/dir",
         ],
         outs = [output_c],
         cmd = cmd,
@@ -72,7 +72,7 @@ node $$PKG_DIR/lv_font_conv.js \\
     native.cc_library(
         name = name,
         srcs = [output_c],
-        deps = ["@lvgl//:lvgl"],
+        deps = ["//third_party/lvgl"],
         alwayslink = True,
         visibility = visibility,
     )

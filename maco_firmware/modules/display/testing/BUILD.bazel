@@ -30,7 +30,7 @@ cc_library(
     target_compatible_with = incompatible_with_mcu(),
     deps = [
         "//maco_firmware/modules/display:display_driver",
-        "@lvgl//:lvgl",
+        "//third_party/lvgl",
         "@pigweed//pw_assert:check",
         "@pigweed//pw_span",
     ],
@@ -46,7 +46,7 @@ cc_library(
         ":png_image",
         ":screenshot_display_driver",
         "//maco_firmware/modules/ui:screen",
-        "@lvgl//:lvgl",
+        "//third_party/lvgl",
         "@pigweed//pw_log",
         "@pigweed//pw_status",
     ],

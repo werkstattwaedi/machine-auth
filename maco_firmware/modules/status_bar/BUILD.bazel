@@ -12,7 +12,7 @@ cc_library(
     srcs = ["status_bar.cc"],
     hdrs = ["status_bar.h"],
     deps = [
-        "@lvgl//:lvgl",
+        "//third_party/lvgl",
         "@pigweed//pw_log",
         "@pigweed//pw_status",
     ],

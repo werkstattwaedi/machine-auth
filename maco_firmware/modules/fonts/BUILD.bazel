@@ -1,7 +1,7 @@
 # Copyright Offene Werkstatt Wädenswil
 # SPDX-License-Identifier: MIT
 
-load("//third_party/lv_font_conv:font.bzl", "lvgl_font")
+load("//third_party/lvgl:font.bzl", "lvgl_font")
 
 package(default_visibility = ["//maco_firmware:__subpackages__"])
 
