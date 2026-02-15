@@ -20,6 +20,7 @@
 #include "maco_firmware/modules/gateway/derive_ascon_key.h"
 #include "maco_firmware/modules/gateway/host_gateway_client.h"
 #include "maco_firmware/modules/led/led.h"
+#include "maco_firmware/modules/buzzer/mock/mock_buzzer.h"
 #include "maco_firmware/modules/machine_relay/mock/mock_machine_relay.h"
 #include "maco_firmware/modules/nfc_reader/mock/mock_nfc_reader.h"
 #include "maco_firmware/modules/nfc_reader/mock/nfc_mock_service.h"
@@ -264,6 +265,11 @@ maco::secrets::DeviceSecrets& GetDeviceSecrets() {
 maco::machine_relay::MachineRelay& GetMachineRelay() {
   static maco::machine_relay::MockMachineRelay relay;
   return relay;
+}
+
+maco::buzzer::Buzzer& GetBuzzer() {
+  static maco::buzzer::MockBuzzer buzzer;
+  return buzzer;
 }
 
 }  // namespace maco::system

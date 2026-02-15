@@ -1,0 +1,37 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//maco_firmware:__subpackages__"])
+
+# Abstract Buzzer interface
+cc_library(
+    name = "buzzer",
+    hdrs = ["public/maco_firmware/modules/buzzer/buzzer.h"],
+    includes = ["public"],
+    deps = [
+        "@pigweed//pw_async2:coro",
+        "@pigweed//pw_span",
+        "@pigweed//pw_status",
+    ],
+)
+
+# Real implementation for P2 hardware (PWM tone via HAL)
+cc_library(
+    name = "tone_buzzer",
+    srcs = ["tone_buzzer.cc"],
+    hdrs = ["tone_buzzer.h"],
+    target_compatible_with = select({
+        "//maco_firmware/targets/p2:is_p2": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [
+        ":buzzer",
+        "@particle_bazel//:device_os_headers",
+        "@pigweed//pw_async2:coro",
+        "@pigweed//pw_async2:system_time_provider",
+        "@pigweed//pw_log",
+        "@pigweed//pw_status",
+    ],
+)

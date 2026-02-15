@@ -90,6 +90,7 @@ cc_library(
         "//maco_firmware/modules/gateway:derive_ascon_key",
         "//maco_firmware/modules/gateway:host_gateway_client",
         "//maco_firmware/modules/led",
+        "//maco_firmware/modules/buzzer/mock:mock_buzzer",
         "//maco_firmware/modules/machine_relay/mock:mock_machine_relay",
         "//maco_firmware/modules/nfc_reader/mock:mock_nfc_reader",
         "//maco_firmware/modules/nfc_reader/mock:nfc_mock_service",

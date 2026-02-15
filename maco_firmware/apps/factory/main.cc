@@ -61,8 +61,16 @@ void AppInit() {
       .led_count = maco::led::In4818LedDriver<16>::kLedCount,
   };
 
+  // Initialize buzzer
+  auto& buzzer = maco::system::GetBuzzer();
+  status = buzzer.Init();
+  if (!status.ok()) {
+    PW_LOG_ERROR("Buzzer init failed");
+  }
+
   // Register factory-specific RPC services
-  static maco::factory::FactoryTestService factory_test_service(led_ops);
+  static maco::factory::FactoryTestService factory_test_service(led_ops,
+                                                                buzzer);
   pw::System().rpc_server().RegisterService(factory_test_service);
 
   auto& secrets = static_cast<maco::secrets::DeviceSecretsEeprom&>(

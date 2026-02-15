@@ -3,6 +3,7 @@
 
 #include "maco_firmware/apps/factory/factory_test_service.h"
 
+#include <chrono>
 #include <cstring>
 
 #include "lvgl.h"
@@ -134,6 +135,27 @@ pw::Status FactoryTestService::DisplayColorBars(
 
   lv_obj_invalidate(screen);
   PW_LOG_INFO("Display color bars shown");
+  SetOk(response);
+  return pw::OkStatus();
+}
+
+pw::Status FactoryTestService::BuzzerBeep(
+    const ::maco_factory_BuzzerBeepRequest& request,
+    ::maco_factory_TestResponse& response) {
+  buzzer_.Beep(request.frequency_hz,
+               std::chrono::milliseconds(request.duration_ms));
+  PW_LOG_INFO("Buzzer beep: %u Hz, %u ms",
+              static_cast<unsigned>(request.frequency_hz),
+              static_cast<unsigned>(request.duration_ms));
+  SetOk(response);
+  return pw::OkStatus();
+}
+
+pw::Status FactoryTestService::BuzzerStop(
+    const ::maco_factory_Empty& /*request*/,
+    ::maco_factory_TestResponse& response) {
+  buzzer_.Stop();
+  PW_LOG_INFO("Buzzer stop");
   SetOk(response);
   return pw::OkStatus();
 }

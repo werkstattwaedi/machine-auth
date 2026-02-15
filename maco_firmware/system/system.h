@@ -43,6 +43,10 @@ namespace maco::machine_relay {
 class MachineRelay;
 }  // namespace maco::machine_relay
 
+namespace maco::buzzer {
+class Buzzer;
+}  // namespace maco::buzzer
+
 namespace maco::led {
 // Forward declaration - concrete types are platform-specific (CRTP templates)
 // Host: Led<SdlLedDriver<16>>
@@ -120,5 +124,10 @@ maco::secrets::DeviceSecrets& GetDeviceSecrets();
 /// P2: LatchingMachineRelay with HAL GPIO
 /// Host: MockMachineRelay for simulation
 maco::machine_relay::MachineRelay& GetMachineRelay();
+
+/// Returns the platform-specific buzzer controller.
+/// P2: ToneBuzzer with HAL PWM tone
+/// Host: MockBuzzer for simulation
+maco::buzzer::Buzzer& GetBuzzer();
 
 }  // namespace maco::system
