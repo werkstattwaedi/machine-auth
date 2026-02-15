@@ -5,12 +5,13 @@
     "moduleResolution": "nodenext",
     "noImplicitReturns": true,
     "noUnusedLocals": false,
-    "outDir": "dist",
     "sourceMap": true,
     "strict": true,
     "target": "ES2022",
     "skipLibCheck": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true
   },
   "include": [
     "*.ts"

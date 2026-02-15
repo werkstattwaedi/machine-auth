@@ -2,12 +2,14 @@
 // SPDX-License-Identifier: MIT
 
 #include <array>
+#include <cstring>
 
 #include "mock_ledger_backend.h"
 #include "pb_cloud/cbor.h"
 #include "pb_cloud/ledger_backend.h"
 #include "pb_cloud/ledger_typed_api.h"
 #include "pb_cloud/ledger_types.h"
+#include "pb_cloud/proto_serializer.h"
 #include "pw_unit_test/framework.h"
 
 namespace pb::cloud {
@@ -643,6 +645,128 @@ TEST(LedgerEditor, RoundTripLargeString) {
     ASSERT_TRUE(result.ok());
     EXPECT_EQ(result.value(), 100u);
   }
+}
+
+// -- ProtoB64 Typed API Tests --
+//
+// Uses a trivial struct with a custom NanopbFields specialization
+// that simply copies raw bytes (no real proto encoding needed).
+// This tests the base64+CBOR wrapping logic, not nanopb itself.
+
+struct TestBlob {
+  uint8_t data[16];
+  size_t size;
+};
+
+}  // namespace
+
+// Custom NanopbFields for TestBlob: just copies raw bytes.
+template <>
+struct NanopbFields<TestBlob> {
+  static const pb_msgdesc_t* fields() { return nullptr; }
+  static TestBlob init_zero() { return TestBlob{{}, 0}; }
+};
+
+// Custom ProtoSerializer for TestBlob (bypasses nanopb).
+template <>
+struct ProtoSerializer<TestBlob> {
+  static pw::Result<size_t> Serialize(const TestBlob& value,
+                                       pw::ByteSpan buffer) {
+    if (buffer.size() < value.size) return pw::Status::ResourceExhausted();
+    std::memcpy(buffer.data(), value.data, value.size);
+    return value.size;
+  }
+  static pw::Result<TestBlob> Deserialize(pw::ConstByteSpan data) {
+    TestBlob msg{};
+    if (data.size() > sizeof(msg.data)) return pw::Status::ResourceExhausted();
+    std::memcpy(msg.data, data.data(), data.size());
+    msg.size = data.size();
+    return msg;
+  }
+  static constexpr ContentType kContentType = ContentType::kStructured;
+};
+
+namespace {
+
+TEST(LedgerProtoB64, WriteAndReadRoundTrip) {
+  MockLedgerBackend backend;
+
+  TestBlob original{};
+  original.data[0] = 0xDE;
+  original.data[1] = 0xAD;
+  original.data[2] = 0xBE;
+  original.data[3] = 0xEF;
+  original.size = 4;
+
+  auto write_status = WriteLedgerProtoB64<TestBlob>(
+      backend, "test-ledger", "test.proto.b64", original);
+  ASSERT_TRUE(write_status.ok())
+      << "Write failed: " << static_cast<int>(write_status.code());
+
+  auto read_result = ReadLedgerProtoB64<TestBlob>(
+      backend, "test-ledger", "test.proto.b64");
+  ASSERT_TRUE(read_result.ok())
+      << "Read failed: " << static_cast<int>(read_result.status().code());
+
+  EXPECT_EQ(read_result.value().size, 4u);
+  EXPECT_EQ(read_result.value().data[0], 0xDE);
+  EXPECT_EQ(read_result.value().data[1], 0xAD);
+  EXPECT_EQ(read_result.value().data[2], 0xBE);
+  EXPECT_EQ(read_result.value().data[3], 0xEF);
+}
+
+TEST(LedgerProtoB64, ReadMissingKeyReturnsNotFound) {
+  MockLedgerBackend backend;
+
+  // Write some other property so the ledger exists but key is missing
+  auto handle = backend.GetLedger("test-ledger");
+  ASSERT_TRUE(handle.ok());
+  std::array<std::byte, 256> buf{};
+  auto editor = handle.value().Edit(buf);
+  ASSERT_TRUE(editor.ok());
+  ASSERT_TRUE(editor.value().SetBool("other", true).ok());
+  ASSERT_TRUE(editor.value().Commit().ok());
+
+  auto result = ReadLedgerProtoB64<TestBlob>(
+      backend, "test-ledger", "test.proto.b64");
+  EXPECT_FALSE(result.ok());
+  EXPECT_EQ(result.status(), pw::Status::NotFound());
+}
+
+TEST(LedgerProtoB64, ReadEmptyLedgerReturnsNotFound) {
+  MockLedgerBackend backend;
+
+  auto result = ReadLedgerProtoB64<TestBlob>(
+      backend, "empty-ledger", "test.proto.b64");
+  EXPECT_FALSE(result.ok());
+  EXPECT_EQ(result.status(), pw::Status::NotFound());
+}
+
+TEST(LedgerProtoB64, OverwriteExistingConfig) {
+  MockLedgerBackend backend;
+
+  // Write first value
+  TestBlob first{};
+  first.data[0] = 0x01;
+  first.size = 1;
+  ASSERT_TRUE(WriteLedgerProtoB64<TestBlob>(
+      backend, "test-ledger", "key", first).ok());
+
+  // Overwrite with second value
+  TestBlob second{};
+  second.data[0] = 0x02;
+  second.data[1] = 0x03;
+  second.size = 2;
+  ASSERT_TRUE(WriteLedgerProtoB64<TestBlob>(
+      backend, "test-ledger", "key", second).ok());
+
+  // Read back - should get second value
+  auto result = ReadLedgerProtoB64<TestBlob>(
+      backend, "test-ledger", "key");
+  ASSERT_TRUE(result.ok());
+  EXPECT_EQ(result.value().size, 2u);
+  EXPECT_EQ(result.value().data[0], 0x02);
+  EXPECT_EQ(result.value().data[1], 0x03);
 }
 
 }  // namespace

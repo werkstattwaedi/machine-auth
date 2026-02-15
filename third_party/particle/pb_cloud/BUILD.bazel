@@ -29,6 +29,7 @@ cc_library(
     ],
     includes = ["public"],
     deps = [
+        "@nanopb//:nanopb",
         "@pigweed//pw_assert:check",
         "@pigweed//pw_async2:channel",
         "@pigweed//pw_async2:poll",
@@ -38,7 +39,6 @@ cc_library(
         "@pigweed//pw_function",
         "@pigweed//pw_result",
         "@pigweed//pw_status",
-        "@pigweed//pw_stream",
         "@pigweed//pw_string:string",
     ],
 )
@@ -71,6 +71,7 @@ cc_library(
         ":pb_cbor",
         ":pb_cloud",  # For serializers
         "@pigweed//pw_async2:channel",
+        "@pigweed//pw_base64",
         "@pigweed//pw_bytes",
         "@pigweed//pw_containers:vector",
         "@pigweed//pw_result",
@@ -169,7 +170,9 @@ pw_cc_test(
     srcs = ["pb_ledger_test.cc"],
     deps = [
         ":mock_ledger_backend",
+        ":pb_cloud",
         ":pb_ledger",
+        "@nanopb//:nanopb",
         "@pigweed//pw_unit_test",
     ],
 )
