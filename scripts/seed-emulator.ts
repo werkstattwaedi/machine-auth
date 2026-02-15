@@ -30,21 +30,32 @@ const ID = {
   permCnc:     "00perm000cnc00000002",
   permLathe:   "00perm0lathe00000003",
   perm3dprint: "00perm3dprint0000004",
+  permHolz:    "00perm00holz00000005",
 
   // users (doc ID = Firebase Auth UID)
   userAdmin:   "00user00admin0000001",
   userMike:    "00user00mikes0000002",
+  userMarco:   "00user0marco00000003",
+  userSimon:   "00user0simon00000004",
 
   // tokens (NFC tag UIDs — 7-byte hex, not Firebase IDs)
-  tokenAdmin:  "04c339aa1e1890",
-  tokenMike:   "04d449bb2f2901",
+  tokenAdmin:   "04c339aa1e1890",
+  tokenMike:    "04d449bb2f2901",
+  tokenMike1:   "04c439aa1e1890",
+  tokenMike2:   "042d15322b1690",
+  tokenSimon:   "049a3aaa1e1890",
+  tokenMarco:   "042315322b1690",
 
   // maco terminals
-  macoDevterm: "00maco00devterm00001",
+  macoDevterm:    "00maco00devterm00001",
+  macoFraese:     "0a10aced202194944a042f04",
+  macoLasercutter:"0a10aced202194944a042eb0",
 
   // machines
-  machineLaser: "00machine0laser00001",
-  machineCnc:   "00machine000cnc00002",
+  machineLaserVirtual: "00machine0laser00001",
+  machineCnc:          "00machine000cnc00002",
+  machineFraese:       "00machine0fraese0003",
+  machineLasercutter:  "00machine0laser00004",
 } as const;
 
 async function seed() {
@@ -56,6 +67,7 @@ async function seed() {
     [ID.permCnc]:     { name: "CNC Fräsen" },
     [ID.permLathe]:   { name: "Drehbank" },
     [ID.perm3dprint]: { name: "3D Drucker" },
+    [ID.permHolz]:    { name: "Holzwerkstatt" },
   };
 
   for (const [id, data] of Object.entries(permissions)) {
@@ -72,11 +84,23 @@ async function seed() {
   });
   await auth.createUser({
     uid: ID.userMike,
-    email: "mike@example.com",
+    email: "mike@werkstattwaedi.ch",
     password: "mike1234",
     displayName: "Mike Schneider",
   });
-  console.log("  Created 2 Auth users (admin@example.com / admin123, mike@example.com / mike1234)");
+  await auth.createUser({
+    uid: ID.userMarco,
+    email: "marco@werkstattwaedi.ch",
+    password: "marco1234",
+    displayName: "Marco",
+  });
+  await auth.createUser({
+    uid: ID.userSimon,
+    email: "simon@werkstattwaedi.ch",
+    password: "simon1234",
+    displayName: "Simon",
+  });
+  console.log("  Created 4 Auth users");
 
   // --- Users ---
   const adminUser = {
@@ -89,27 +113,55 @@ async function seed() {
       db.doc(`permission/${ID.permCnc}`),
       db.doc(`permission/${ID.permLathe}`),
       db.doc(`permission/${ID.perm3dprint}`),
+      db.doc(`permission/${ID.permHolz}`),
     ],
     roles: ["admin", "vereinsmitglied"],
   };
 
-  const regularUser = {
+  const mikeUser = {
     created: Timestamp.now(),
     displayName: "MikeS",
     name: "Mike Schneider",
-    email: "mike@example.com",
+    email: "mike@werkstattwaedi.ch",
     permissions: [
       db.doc(`permission/${ID.permLaser}`),
       db.doc(`permission/${ID.perm3dprint}`),
+      db.doc(`permission/${ID.permHolz}`),
+    ],
+    roles: ["admin", "vereinsmitglied"],
+  };
+
+  const marcoUser = {
+    created: Timestamp.now(),
+    displayName: "Marco",
+    name: "Marco",
+    email: "marco@werkstattwaedi.ch",
+    permissions: [
+      db.doc(`permission/${ID.permHolz}`),
+    ],
+    roles: ["admin", "vereinsmitglied"],
+  };
+
+  const simonUser = {
+    created: Timestamp.now(),
+    displayName: "Simon",
+    name: "Simon",
+    email: "simon@werkstattwaedi.ch",
+    permissions: [
+      db.doc(`permission/${ID.permLaser}`),
     ],
     roles: ["vereinsmitglied"],
   };
 
   await db.collection("users").doc(ID.userAdmin).set(adminUser);
-  await db.collection("users").doc(ID.userMike).set(regularUser);
+  await db.collection("users").doc(ID.userMike).set(mikeUser);
+  await db.collection("users").doc(ID.userMarco).set(marcoUser);
+  await db.collection("users").doc(ID.userSimon).set(simonUser);
   // Set custom claims directly (don't rely on trigger timing)
   await auth.setCustomUserClaims(ID.userAdmin, { admin: true });
-  console.log("  Created 2 users (admin + regular)");
+  await auth.setCustomUserClaims(ID.userMike, { admin: true });
+  await auth.setCustomUserClaims(ID.userMarco, { admin: true });
+  console.log("  Created 4 users (3 admin + 1 regular)");
 
   // --- Tokens (NFC tag UIDs as doc IDs) ---
   const tokens: Record<string, any> = {
@@ -121,7 +173,27 @@ async function seed() {
     [ID.tokenMike]: {
       userId: db.doc(`users/${ID.userMike}`),
       registered: Timestamp.now(),
-      label: "Mike Tag",
+      label: "Mike Tag (old)",
+    },
+    [ID.tokenMike1]: {
+      userId: db.doc(`users/${ID.userMike}`),
+      registered: Timestamp.now(),
+      label: "Mike Tag 1",
+    },
+    [ID.tokenMike2]: {
+      userId: db.doc(`users/${ID.userMike}`),
+      registered: Timestamp.now(),
+      label: "Mike Tag 2",
+    },
+    [ID.tokenSimon]: {
+      userId: db.doc(`users/${ID.userSimon}`),
+      registered: Timestamp.now(),
+      label: "Simon Tag",
+    },
+    [ID.tokenMarco]: {
+      userId: db.doc(`users/${ID.userMarco}`),
+      registered: Timestamp.now(),
+      label: "Marco Tag",
     },
   };
 
@@ -130,15 +202,21 @@ async function seed() {
   }
   console.log(`  Created ${Object.keys(tokens).length} tokens`);
 
-  // --- MaCo (terminal device) ---
+  // --- MaCo (terminal devices) ---
   await db.collection("maco").doc(ID.macoDevterm).set({
     name: "Dev Terminal 01",
   });
-  console.log("  Created 1 MaCo device");
+  await db.collection("maco").doc(ID.macoFraese).set({
+    name: "Fräse Holzwerkstatt",
+  });
+  await db.collection("maco").doc(ID.macoLasercutter).set({
+    name: "Laser Cutter",
+  });
+  console.log("  Created 3 MaCo devices");
 
   // --- Machines ---
-  await db.collection("machine").doc(ID.machineLaser).set({
-    name: "Laser Cutter",
+  await db.collection("machine").doc(ID.machineLaserVirtual).set({
+    name: "Laser Cutter (Virtual)",
     requiredPermission: [db.doc(`permission/${ID.permLaser}`)],
     maco: db.doc(`maco/${ID.macoDevterm}`),
     control: {},
@@ -149,7 +227,19 @@ async function seed() {
     maco: db.doc(`maco/${ID.macoDevterm}`),
     control: {},
   });
-  console.log("  Created 2 machines");
+  await db.collection("machine").doc(ID.machineFraese).set({
+    name: "Fräse",
+    requiredPermission: [db.doc(`permission/${ID.permHolz}`)],
+    maco: db.doc(`maco/${ID.macoFraese}`),
+    control: {},
+  });
+  await db.collection("machine").doc(ID.machineLasercutter).set({
+    name: "Laser Cutter",
+    requiredPermission: [db.doc(`permission/${ID.permLaser}`)],
+    maco: db.doc(`maco/${ID.macoLasercutter}`),
+    control: {},
+  });
+  console.log("  Created 4 machines");
 
   // --- Config: Pricing ---
   await db.collection("config").doc("pricing").set({
