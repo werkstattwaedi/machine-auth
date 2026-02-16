@@ -650,7 +650,7 @@ pw::async2::Coro<pw::Status> Ntag424Tag::ChangeKey(
   std::array<std::byte, 32> plaintext{};
   size_t data_len = 0;
 
-  bool is_auth_key = (key_number == authenticated_key_number_);
+  bool is_auth_key = (key_number == 0);
 
   if (is_auth_key) {
     // Changing the authentication key: NewKey || KeyVer
@@ -745,36 +745,36 @@ pw::async2::Coro<pw::Status> Ntag424Tag::ChangeKey(
     co_return InterpretStatusWord(sw1, sw2);
   }
 
-  // Response format for success: [CMACt(8)] [SW(2)] = 10 bytes
-  if (response_len < 10) {
-    SecureZero(new_key_arr);
-    SecureZero(old_key_arr);
-    co_return pw::Status::DataLoss();
-  }
-
-  // Increment counter BEFORE verifying response MAC.
-  // The PICC increments CmdCtr before calculating its response MAC,
-  // so we must use CmdCtr+1 when verifying. (AN12196 Section 4.3, Figure 9)
-  if (!sm->IncrementCounter()) {
-    SecureZero(new_key_arr);
-    SecureZero(old_key_arr);
-    co_return pw::Status::ResourceExhausted();  // Counter overflow
-  }
-
-  // Verify response CMAC (no response data for ChangeKey)
-  pw::ConstByteSpan received_cmac(response.data(), 8);
-  auto verify_status = sm->VerifyResponseCMAC(0x00, received_cmac);
-  if (!verify_status.ok()) {
-    SecureZero(new_key_arr);
-    SecureZero(old_key_arr);
-    co_return verify_status;
-  }
-
-  // Important: After changing the authentication key, the session is
-  // invalidated. The caller should re-authenticate with the new key.
-  // For non-auth key changes, the session remains valid.
-  if (key_number == authenticated_key_number_) {
+  if (is_auth_key) {
+    // Changing the auth key invalidates the session immediately.
+    // The tag returns only [SW(2)] with no response CMAC.
     ClearSession();
+  } else {
+    // Non-auth key change: verify response CMAC.
+    // Response format: [CMACt(8)] [SW(2)] = 10 bytes
+    if (response_len < 10) {
+      SecureZero(new_key_arr);
+      SecureZero(old_key_arr);
+      co_return pw::Status::DataLoss();
+    }
+
+    // Increment counter BEFORE verifying response MAC.
+    // The PICC increments CmdCtr before calculating its response MAC,
+    // so we must use CmdCtr+1 when verifying. (AN12196 Section 4.3, Figure 9)
+    if (!sm->IncrementCounter()) {
+      SecureZero(new_key_arr);
+      SecureZero(old_key_arr);
+      co_return pw::Status::ResourceExhausted();  // Counter overflow
+    }
+
+    // Verify response CMAC (no response data for ChangeKey)
+    pw::ConstByteSpan received_cmac(response.data(), 8);
+    auto verify_status = sm->VerifyResponseCMAC(0x00, received_cmac);
+    if (!verify_status.ok()) {
+      SecureZero(new_key_arr);
+      SecureZero(old_key_arr);
+      co_return verify_status;
+    }
   }
 
   // Securely zero sensitive key material

@@ -75,3 +75,28 @@ py_proto_library(
     visibility = ["//visibility:public"],
     deps = [":nfc_mock_service_proto"],
 )
+
+# Personalization Service - for tag key provisioning
+proto_library(
+    name = "personalization_service_proto",
+    srcs = ["personalization_service.proto"],
+    import_prefix = "maco_pb",
+    strip_import_prefix = "/maco_firmware/protos",
+)
+
+nanopb_proto_library(
+    name = "personalization_service_nanopb",
+    deps = [":personalization_service_proto"],
+)
+
+nanopb_rpc_proto_library(
+    name = "personalization_service_nanopb_rpc",
+    nanopb_proto_library_deps = [":personalization_service_nanopb"],
+    deps = [":personalization_service_proto"],
+)
+
+py_proto_library(
+    name = "personalization_service_py_pb2",
+    visibility = ["//visibility:public"],
+    deps = [":personalization_service_proto"],
+)

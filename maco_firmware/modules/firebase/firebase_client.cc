@@ -11,6 +11,7 @@
 
 #include "common.pb.h"
 #include "firebase_rpc/auth.pb.h"
+#include "firebase_rpc/personalization.pb.h"
 #include "gateway/gateway_service.pb.h"
 #include "gateway/gateway_service.rpc.pb.h"
 #include "pb_decode.h"
@@ -26,6 +27,7 @@ namespace {
 constexpr const char* kTerminalCheckinEndpoint = "/api/terminalCheckin";
 constexpr const char* kAuthenticateTagEndpoint = "/api/authenticateTag";
 constexpr const char* kCompleteTagAuthEndpoint = "/api/completeTagAuth";
+constexpr const char* kKeyDiversificationEndpoint = "/api/personalize";
 
 // Maximum payload size for serialization.
 constexpr size_t kMaxPayloadSize = 512;
@@ -238,6 +240,60 @@ pw::Result<CompleteAuthResult> DecodeCompleteAuthResponse(
   }
 }
 
+/// Encode a KeyDiversificationRequest with the given tag UID.
+pw::Result<size_t> EncodeKeyDiversificationRequest(const TagUid& tag_uid,
+                                                    pw::ByteSpan buffer) {
+  maco_proto_firebase_rpc_KeyDiversificationRequest request =
+      maco_proto_firebase_rpc_KeyDiversificationRequest_init_zero;
+
+  request.has_token_id = true;
+  auto tag_bytes = tag_uid.bytes();
+  std::memcpy(request.token_id.value, tag_bytes.data(), TagUid::kSize);
+
+  pb_ostream_t stream = pb_ostream_from_buffer(
+      reinterpret_cast<pb_byte_t*>(buffer.data()), buffer.size());
+  if (!pb_encode(
+          &stream,
+          maco_proto_firebase_rpc_KeyDiversificationRequest_fields,
+          &request)) {
+    return pw::Status::Internal();
+  }
+  return stream.bytes_written;
+}
+
+/// Decode KeyDiversificationResponse.
+pw::Result<KeyDiversificationResult> DecodeKeyDiversificationResponse(
+    pw::ConstByteSpan payload) {
+  maco_proto_firebase_rpc_KeyDiversificationResponse response =
+      maco_proto_firebase_rpc_KeyDiversificationResponse_init_zero;
+
+  pb_istream_t stream = pb_istream_from_buffer(
+      reinterpret_cast<const pb_byte_t*>(payload.data()), payload.size());
+  if (!pb_decode(
+          &stream,
+          maco_proto_firebase_rpc_KeyDiversificationResponse_fields,
+          &response)) {
+    PW_LOG_ERROR("Failed to decode KeyDiversificationResponse: %s",
+                 PB_GET_ERROR(&stream));
+    return pw::Status::DataLoss();
+  }
+
+  KeyDiversificationResult result{};
+  std::memcpy(result.application_key.data(),
+              response.application_key.value,
+              sizeof(result.application_key));
+  std::memcpy(result.authorization_key.data(),
+              response.authorization_key.value,
+              sizeof(result.authorization_key));
+  std::memcpy(result.reserved1_key.data(),
+              response.reserved1_key.value,
+              sizeof(result.reserved1_key));
+  std::memcpy(result.reserved2_key.data(),
+              response.reserved2_key.value,
+              sizeof(result.reserved2_key));
+  return result;
+}
+
 }  // namespace
 
 FirebaseClient::FirebaseClient(pw::rpc::Client& rpc_client, uint32_t channel_id)
@@ -429,6 +485,69 @@ pw::async2::Coro<pw::Result<CompleteAuthResult>> FirebaseClient::CompleteTagAuth
       });
 
   co_return co_await complete_tag_auth_provider_.Get();
+}
+
+pw::async2::Coro<pw::Result<KeyDiversificationResult>>
+FirebaseClient::KeyDiversification(pw::async2::CoroContext& cx,
+                                   const TagUid& tag_uid) {
+  (void)cx;
+  if (key_diversification_call_.active()) {
+    PW_LOG_WARN(
+        "KeyDiversification called while previous call still in flight");
+    co_return pw::Status::Unavailable();
+  }
+
+  // Serialize the request payload
+  std::array<std::byte, kMaxPayloadSize> payload_buffer;
+  auto encode_result =
+      EncodeKeyDiversificationRequest(tag_uid, payload_buffer);
+  if (!encode_result.ok()) {
+    PW_LOG_ERROR("Failed to encode KeyDiversificationRequest");
+    co_return encode_result.status();
+  }
+
+  // Build ForwardRequest
+  maco_gateway_ForwardRequest request = maco_gateway_ForwardRequest_init_zero;
+  std::strncpy(request.endpoint, kKeyDiversificationEndpoint,
+               sizeof(request.endpoint) - 1);
+  std::memcpy(request.payload.bytes, payload_buffer.data(), *encode_result);
+  request.payload.size = *encode_result;
+
+  GatewayClient client(rpc_client_, channel_id_);
+  key_diversification_call_ = client.Forward(
+      request,
+      [this](const maco_gateway_ForwardResponse& resp, pw::Status st) {
+        if (!st.ok()) {
+          PW_LOG_ERROR("KeyDiversification RPC failed: %s", st.str());
+          key_diversification_provider_.Resolve(st);
+          return;
+        }
+        if (!resp.success) {
+          PW_LOG_ERROR("KeyDiversification returned error (http %u): %s",
+                       static_cast<unsigned>(resp.http_status), resp.error);
+          key_diversification_provider_.Resolve(pw::Status::Internal());
+          return;
+        }
+
+        auto decode_result =
+            DecodeKeyDiversificationResponse(pw::ConstByteSpan(
+                reinterpret_cast<const std::byte*>(resp.payload.bytes),
+                resp.payload.size));
+        if (!decode_result.ok()) {
+          PW_LOG_ERROR("Failed to decode KeyDiversificationResponse: %s",
+                       decode_result.status().str());
+          key_diversification_provider_.Resolve(decode_result.status());
+          return;
+        }
+
+        key_diversification_provider_.Resolve(std::move(*decode_result));
+      },
+      [this](pw::Status st) {
+        PW_LOG_ERROR("KeyDiversification RPC error: %s", st.str());
+        key_diversification_provider_.Resolve(st);
+      });
+
+  co_return co_await key_diversification_provider_.Get();
 }
 
 }  // namespace maco::firebase
