@@ -128,11 +128,27 @@ pw::async2::Coro<pw::Status> Pn532NfcReader::RunLoop(
   auto& time = pw::async2::GetSystemTimeProvider();
 
   // === INIT PHASE ===
-  auto init_status = co_await DoAsyncInit(cx);
+  // Retry init up to 5 times - the PN532 goes back to sleep if the
+  // SAMConfiguration command doesn't arrive quickly enough after wakeup,
+  // which can happen due to coroutine scheduling delays.
+  constexpr int kMaxInitRetries = 5;
+  pw::Status init_status;
+  for (int attempt = 1; attempt <= kMaxInitRetries; ++attempt) {
+    init_status = co_await DoAsyncInit(cx);
+    if (init_status.ok()) {
+      break;
+    }
+    PW_LOG_WARN("PN532 init attempt %d/%d failed: %d",
+                attempt, kMaxInitRetries,
+                static_cast<int>(init_status.code()));
+    if (attempt < kMaxInitRetries) {
+      co_await time.WaitFor(100ms);
+    }
+  }
   init_status_provider_.Resolve(init_status);
 
   if (!init_status.ok()) {
-    PW_LOG_ERROR("PN532 init failed: %d", static_cast<int>(init_status.code()));
+    PW_LOG_ERROR("PN532 init failed after %d attempts", kMaxInitRetries);
     co_return init_status;
   }
   PW_LOG_INFO("PN532 initialized");
