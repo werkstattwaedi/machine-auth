@@ -24,6 +24,7 @@ cc_library(
         "//maco_firmware:types",
         "//proto:common_nanopb",
         "//proto/firebase_rpc:auth_nanopb",
+        "//proto/firebase_rpc:personalization_nanopb",
         "//proto/firebase_rpc:usage_nanopb",
         "//proto/gateway:gateway_service_nanopb",
         "//proto/gateway:gateway_service_nanopb_rpc",

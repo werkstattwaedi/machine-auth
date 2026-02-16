@@ -1,0 +1,17 @@
+// Copyright Offene Werkstatt Wädenswil
+// SPDX-License-Identifier: MIT
+
+syntax = "proto3";
+
+package maco;
+
+service PersonalizationService {
+  // Arm personalization for the next tag tap
+  rpc PersonalizeNextTag(PersonalizeNextTagRequest) returns (PersonalizeNextTagResponse);
+}
+
+message PersonalizeNextTagRequest {}
+
+message PersonalizeNextTagResponse {
+  bool armed = 1;  // true if successfully armed
+}

@@ -115,6 +115,18 @@ class FirebaseClient {
       const FirebaseId& auth_id,
       pw::ConstByteSpan encrypted_tag_response);
 
+  /// Get diversified keys for tag personalization (coroutine).
+  ///
+  /// Calls the /api/personalize Firebase endpoint.
+  /// Returns 4 diversified AES-128 keys for the given tag UID.
+  ///
+  /// @param cx Coroutine context for suspension
+  /// @param tag_uid The 7-byte NTAG UID to diversify keys for
+  /// @return KeyDiversificationResult with 4 keys, or error status
+  [[nodiscard]] pw::async2::Coro<pw::Result<KeyDiversificationResult>>
+  KeyDiversification(pw::async2::CoroContext& cx,
+                     const TagUid& tag_uid);
+
   /// Get the channel ID.
   uint32_t channel_id() const { return channel_id_; }
 
@@ -135,10 +147,14 @@ class FirebaseClient {
   pw::async2::ValueProvider<pw::Result<CompleteAuthResult>>
       complete_tag_auth_provider_;
 
+  pw::async2::ValueProvider<pw::Result<KeyDiversificationResult>>
+      key_diversification_provider_;
+
   // RPC call handles - must outlive the callbacks
   ForwardCall terminal_checkin_call_;
   ForwardCall authenticate_tag_call_;
   ForwardCall complete_tag_auth_call_;
+  ForwardCall key_diversification_call_;
 };
 
 }  // namespace maco::firebase

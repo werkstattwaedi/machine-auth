@@ -10,6 +10,7 @@ py_binary(
     srcs = ["console.py"],
     deps = [
         "//maco_firmware/protos:nfc_mock_service_py_pb2",
+        "//maco_firmware/protos:personalization_service_py_pb2",
         "//maco_firmware/protos:py_pb2",
         "@pigweed//pw_system/py:pw_system_lib",
     ],

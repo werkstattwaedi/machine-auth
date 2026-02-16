@@ -85,4 +85,16 @@ struct CompleteAuthRejected {
 using CompleteAuthResult =
     std::variant<CompleteAuthSuccess, CompleteAuthRejected>;
 
+// =============================================================================
+// Domain types for KeyDiversification response
+// =============================================================================
+
+/// Diversified keys for tag personalization.
+struct KeyDiversificationResult {
+  std::array<std::byte, 16> application_key;
+  std::array<std::byte, 16> authorization_key;
+  std::array<std::byte, 16> reserved1_key;
+  std::array<std::byte, 16> reserved2_key;
+};
+
 }  // namespace maco::firebase

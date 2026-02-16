@@ -24,6 +24,68 @@ case "$1" in
     echo "🔌 Flashing firmware..."
     exec bazelisk run //maco_firmware/apps/dev:flash
     ;;
+  personalize-flash)
+    echo "🔌 Flashing personalize firmware..."
+    exec bazelisk run //maco_firmware/apps/personalize:flash
+    ;;
+  personalize-console)
+    # Connect console for personalize firmware
+    # Usage: ./pw personalize-console [--device-serial=XXXX]
+
+    DEVICE_SERIAL=""
+    for arg in "$@"; do
+      case "$arg" in
+        --device-serial=*)
+          DEVICE_SERIAL="${arg#*=}"
+          ;;
+      esac
+    done
+
+    find_particle_device() {
+      local serial_filter="$1"
+      local timeout=30
+      local elapsed=0
+
+      while (( elapsed < timeout )); do
+        local devices=(/dev/particle_*)
+
+        if [[ -e "${devices[0]}" ]]; then
+          if [[ -n "$serial_filter" ]]; then
+            for dev in "${devices[@]}"; do
+              if [[ "$dev" == *"$serial_filter" ]]; then
+                echo "$dev"
+                return 0
+              fi
+            done
+          elif (( ${#devices[@]} == 1 )); then
+            echo "${devices[0]}"
+            return 0
+          fi
+        fi
+
+        if (( elapsed == 0 )); then
+          if [[ -n "$serial_filter" ]]; then
+            echo "⏳ Waiting for device *$serial_filter..." >&2
+          else
+            echo "⏳ Waiting for Particle device..." >&2
+          fi
+        fi
+        sleep 1
+        ((elapsed++))
+      done
+
+      echo "❌ No matching Particle device found" >&2
+      return 1
+    }
+
+    DEVICE=$(find_particle_device "$DEVICE_SERIAL") || exit 1
+    SERIAL_SUFFIX="${DEVICE##*/dev/particle_}"
+
+    echo "🏷️  Personalize console -> $DEVICE (serial: ...$SERIAL_SUFFIX)..."
+    MACO_PROJECT_ROOT="$_PW_SCRIPT_DIR" exec bazelisk run //maco_firmware/apps/personalize:console -- \
+      --device "$DEVICE" \
+      --device-serial-suffix "$SERIAL_SUFFIX"
+    ;;
   run)
     # Allow running arbitrary targets: ./pw run //target
     shift

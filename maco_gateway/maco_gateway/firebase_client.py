@@ -32,6 +32,13 @@ class ForwardResult:
     http_status: int
     error: str
 
+    # nanopb ForwardResponse.error field has max_size:128
+    MAX_ERROR_LENGTH = 120
+
+    def __post_init__(self) -> None:
+        if len(self.error) > self.MAX_ERROR_LENGTH:
+            self.error = self.error[: self.MAX_ERROR_LENGTH - 3] + "..."
+
 
 class FirebaseClient:
     """Async HTTP client for Firebase Cloud Functions."""
