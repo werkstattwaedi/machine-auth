@@ -32,11 +32,8 @@ void AppInit() {
   auto& display_driver = maco::system::GetDisplayDriver();
   auto& touch_driver = maco::system::GetTouchButtonDriver();
 
-  // AppState snapshot provider is a no-op — screen uses its own snapshot
-  auto snapshot_provider = [](maco::app_state::AppStateSnapshot&) {};
-
-  // Personalize snapshot provider bridges tag prober to screen
-  auto personalize_provider =
+  // Snapshot provider bridges tag prober to screen
+  auto snapshot_provider =
       [](maco::personalize::PersonalizeSnapshot& snapshot) {
         if (g_tag_prober) {
           g_tag_prober->GetSnapshot(snapshot);
@@ -44,7 +41,8 @@ void AppInit() {
       };
 
   static maco::status_bar::StatusBar status_bar;
-  static maco::ui::AppShell app_shell(display, snapshot_provider);
+  static maco::ui::AppShell<maco::personalize::PersonalizeSnapshot> app_shell(
+      display, snapshot_provider);
 
   display.SetInitCallback([&]() {
     PW_LOG_INFO("Creating UI widgets on render thread...");
@@ -61,8 +59,7 @@ void AppInit() {
     }
 
     status = app_shell.Reset(
-        std::make_unique<maco::personalize::PersonalizeScreen>(
-            personalize_provider));
+        std::make_unique<maco::personalize::PersonalizeScreen>());
     if (!status.ok()) {
       PW_LOG_ERROR("Failed to set initial screen");
       return;

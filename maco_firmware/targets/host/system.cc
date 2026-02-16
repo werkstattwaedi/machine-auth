@@ -15,7 +15,6 @@
 
 #include "device_config/device_config.h"
 #include "lvgl.h"
-#include "maco_firmware/modules/app_state/app_state.h"
 #include "maco_firmware/modules/device_secrets/device_secrets_mock.h"
 #include "maco_firmware/modules/gateway/derive_ascon_key.h"
 #include "maco_firmware/modules/gateway/host_gateway_client.h"
@@ -157,11 +156,6 @@ const pw::thread::Options& GetDisplayRenderThreadOptions() {
 maco::nfc::NfcReader& GetNfcReader() {
   static maco::nfc::MockNfcReader reader;
   return reader;
-}
-
-maco::app_state::AppState& GetAppState() {
-  static maco::app_state::AppState state;
-  return state;
 }
 
 pb::cloud::MockLedgerBackend& GetMockLedgerBackend() {

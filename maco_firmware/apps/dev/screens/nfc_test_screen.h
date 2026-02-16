@@ -12,7 +12,7 @@ namespace maco::dev {
 
 /// Test screen displaying NFC reader status and tag verification.
 /// Receives state via OnUpdate() from AppShell (no direct NfcReader access).
-class NfcTestScreen : public ui::Screen {
+class NfcTestScreen : public ui::Screen<app_state::AppStateSnapshot> {
  public:
   NfcTestScreen();
 
@@ -22,14 +22,15 @@ class NfcTestScreen : public ui::Screen {
   ui::ButtonConfig GetButtonConfig() const override;
 
  private:
-  void UpdateStatusText(const app_state::AppStateSnapshot& snapshot);
-  static void FormatUidTo(pw::StringBuilder& out, const app_state::TagUid& uid);
+  void UpdateStatusText(const app_state::TagVerificationSnapshot& verification);
+  static void FormatUidTo(pw::StringBuilder& out,
+                          const app_state::TagUid& uid);
 
   lv_obj_t* status_label_ = nullptr;
 
   // Watched state for dirty checking
-  ui::Watched<app_state::AppStateId> state_watched_{
-      app_state::AppStateId::kIdle};
+  ui::Watched<app_state::TagVerificationState> state_watched_{
+      app_state::TagVerificationState::kIdle};
   pw::StringBuffer<64> status_text_;
 };
 

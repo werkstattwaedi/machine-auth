@@ -136,7 +136,6 @@ cc_library(
         "//maco_firmware/devices/in4818",
         "//maco_firmware/devices/pico_res28_lcd",
         "//maco_firmware/devices/pn532:pn532_nfc_reader",
-        "//maco_firmware/modules/app_state",
         "//maco_firmware/modules/device_config",
         "//maco_firmware/modules/firebase:firebase_client",
         "//maco_firmware/modules/fonts",

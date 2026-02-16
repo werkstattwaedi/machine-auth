@@ -10,10 +10,6 @@
 // The functions in this file return specific implementations of singleton types
 // provided by the system.
 
-namespace maco::app_state {
-class AppState;
-}  // namespace maco::app_state
-
 namespace maco::display {
 class DisplayDriver;
 class TouchButtonDriver;
@@ -83,10 +79,6 @@ const pw::thread::Options& GetDisplayRenderThreadOptions();
 /// Returns the platform-specific NFC reader instance.
 /// Host: MockNfcReader, P2: Pn532NfcReader
 maco::nfc::NfcReader& GetNfcReader();
-
-/// Returns the global application state instance.
-/// Thread-safe: can be read from UI thread, written from main thread.
-maco::app_state::AppState& GetAppState();
 
 /// Returns the cloud-configurable device configuration.
 /// P2: Reads from Particle Ledger with hardware device ID

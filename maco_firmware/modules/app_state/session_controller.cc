@@ -1,9 +1,9 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-#define PW_LOG_MODULE_NAME "SEVP"
+#define PW_LOG_MODULE_NAME "SCTL"
 
-#include "maco_firmware/modules/app_state/session_event_pump.h"
+#include "maco_firmware/modules/app_state/session_controller.h"
 
 #include "pw_log/log.h"
 
@@ -11,25 +11,35 @@ namespace maco::app_state {
 
 using namespace std::chrono_literals;
 
-SessionEventPump::SessionEventPump(
+SessionController::SessionController(
+    TagVerifier& tag_verifier,
     SessionFsm& fsm,
     pw::async2::TimeProvider<pw::chrono::SystemClock>& time_provider,
     pw::allocator::Allocator& allocator)
-    : fsm_(fsm), time_provider_(time_provider), coro_cx_(allocator) {}
+    : tag_verifier_(tag_verifier),
+      fsm_(fsm),
+      time_provider_(time_provider),
+      coro_cx_(allocator) {}
 
-void SessionEventPump::Start(pw::async2::Dispatcher& dispatcher) {
+void SessionController::Start(pw::async2::Dispatcher& dispatcher) {
   auto coro = Run(coro_cx_);
   task_.emplace(std::move(coro), [](pw::Status s) {
-    PW_LOG_ERROR("SessionEventPump failed: %d", static_cast<int>(s.code()));
+    PW_LOG_ERROR("SessionController failed: %d", static_cast<int>(s.code()));
   });
   dispatcher.Post(*task_);
 }
 
-void SessionEventPump::PostUiAction(SessionAction action) {
+void SessionController::PostUiAction(SessionAction action) {
   ui_action_.store(action, std::memory_order_relaxed);
 }
 
-pw::async2::Coro<pw::Status> SessionEventPump::Run(pw::async2::CoroContext&) {
+void SessionController::GetSnapshot(AppStateSnapshot& out) const {
+  tag_verifier_.GetSnapshot(out.verification);
+  fsm_.GetSnapshot(out.session);
+}
+
+pw::async2::Coro<pw::Status> SessionController::Run(
+    pw::async2::CoroContext&) {
   while (true) {
     // Poll UI action atomic and convert to FSM event
     auto action =

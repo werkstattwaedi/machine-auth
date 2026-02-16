@@ -42,7 +42,23 @@ class ScreenshotTestHarness {
 
   /// Activate a screen for testing.
   /// Calls OnActivate() and loads the screen into LVGL.
-  pw::Status ActivateScreen(ui::Screen& screen);
+  template <typename Snapshot>
+  pw::Status ActivateScreen(ui::Screen<Snapshot>& screen) {
+    if (!initialized_) {
+      return pw::Status::FailedPrecondition();
+    }
+
+    auto status = screen.OnActivate();
+    if (!status.ok()) {
+      return status;
+    }
+
+    if (screen.lv_screen() != nullptr) {
+      lv_screen_load(screen.lv_screen());
+    }
+
+    return pw::OkStatus();
+  }
 
   /// Advance LVGL time and render a frame.
   /// @param tick_ms Time to advance in milliseconds (default: 1 frame at 60fps)

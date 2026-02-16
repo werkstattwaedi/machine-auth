@@ -12,7 +12,7 @@ namespace maco::app_state {
 /// Observer interface for TagVerifier state transitions.
 ///
 /// Default empty implementations allow each observer to override only
-/// the events it cares about. Methods map 1:1 to AppStateId transitions.
+/// the events it cares about. Methods map 1:1 to TagVerificationState transitions.
 class TagVerifierObserver {
  public:
   virtual ~TagVerifierObserver() = default;

@@ -19,26 +19,23 @@ cc_library(
     hdrs = ["data_binding.h"],
 )
 
-# Base screen interface
+# Base screen interface (header-only template)
 cc_library(
     name = "screen",
     hdrs = ["screen.h"],
     deps = [
         ":button_spec",
-        "//maco_firmware/modules/app_state/ui:snapshot",
         "//third_party/lvgl",
         "@pigweed//pw_status",
     ],
 )
 
-# AppShell - screen stack, chrome, and state propagation
+# AppShell - screen stack, chrome, and state propagation (header-only template)
 cc_library(
     name = "app_shell",
-    srcs = ["app_shell.cc"],
     hdrs = ["app_shell.h"],
     deps = [
         ":screen",
-        "//maco_firmware/modules/app_state",
         "//maco_firmware/modules/display",
         "//maco_firmware/modules/ui/widgets:button_bar",
         "//third_party/lvgl",

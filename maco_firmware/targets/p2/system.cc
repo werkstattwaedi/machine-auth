@@ -26,7 +26,6 @@
 #include "maco_firmware/devices/pico_res28_lcd/pico_res28_lcd_driver.h"
 #include "maco_firmware/devices/pn532/pn532_nfc_reader.h"
 #include "maco_firmware/modules/led/led.h"
-#include "maco_firmware/modules/app_state/app_state.h"
 #include "maco_firmware/modules/gateway/p2_gateway_client.h"
 #include "maco_firmware/modules/buzzer/tone_buzzer.h"
 #include "maco_firmware/modules/machine_relay/latching_machine_relay.h"
@@ -215,11 +214,6 @@ maco::nfc::NfcReader& GetNfcReader() {
   static maco::nfc::Pn532NfcReader reader(
       uart, reset_pin, pw::System().allocator());
   return reader;
-}
-
-maco::app_state::AppState& GetAppState() {
-  static maco::app_state::AppState state;
-  return state;
 }
 
 maco::config::DeviceConfig& GetDeviceConfig() {

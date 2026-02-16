@@ -57,20 +57,6 @@ pw::Status ScreenshotTestHarness::Init() {
   return pw::OkStatus();
 }
 
-pw::Status ScreenshotTestHarness::ActivateScreen(ui::Screen& screen) {
-  if (!initialized_) {
-    return pw::Status::FailedPrecondition();
-  }
-
-  PW_TRY(screen.OnActivate());
-
-  if (screen.lv_screen() != nullptr) {
-    lv_screen_load(screen.lv_screen());
-  }
-
-  return pw::OkStatus();
-}
-
 void ScreenshotTestHarness::RenderFrame(uint32_t tick_ms) {
   tick_ms_ += tick_ms;
   g_tick_ms = tick_ms_;

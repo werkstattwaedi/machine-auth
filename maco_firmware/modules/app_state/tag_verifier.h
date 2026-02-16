@@ -8,6 +8,7 @@
 
 #include "maco_firmware/modules/app_state/auth_cache.h"
 #include "maco_firmware/modules/app_state/tag_verifier_observer.h"
+#include "maco_firmware/modules/app_state/ui/snapshot.h"
 #include "maco_firmware/modules/nfc_reader/nfc_reader.h"
 #include "maco_firmware/modules/nfc_tag/nfc_tag.h"
 #include "maco_firmware/modules/nfc_tag/ntag424/ntag424_tag.h"
@@ -17,6 +18,8 @@
 #include "pw_async2/coro_or_else_task.h"
 #include "pw_async2/dispatcher.h"
 #include "pw_random/random.h"
+#include "pw_sync/lock_annotations.h"
+#include "pw_sync/mutex.h"
 
 namespace maco::secrets {
 class DeviceSecrets;
@@ -53,6 +56,10 @@ class TagVerifier {
 
   void Start(pw::async2::Dispatcher& dispatcher);
 
+  /// Thread-safe read of verification state for UI.
+  void GetSnapshot(TagVerificationSnapshot& out) const
+      PW_LOCKS_EXCLUDED(snapshot_mutex_);
+
  private:
   static constexpr size_t kMaxObservers = 4;
 
@@ -86,6 +93,9 @@ class TagVerifier {
   AuthCache auth_cache_;
   pw::async2::CoroContext coro_cx_;
   std::optional<pw::async2::CoroOrElseTask> task_;
+
+  mutable pw::sync::Mutex snapshot_mutex_;
+  TagVerificationSnapshot snapshot_ PW_GUARDED_BY(snapshot_mutex_);
 };
 
 }  // namespace maco::app_state
