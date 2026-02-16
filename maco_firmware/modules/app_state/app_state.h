@@ -5,6 +5,7 @@
 
 #include <string_view>
 
+#include "maco_firmware/modules/app_state/tag_verifier_observer.h"
 #include "maco_firmware/modules/app_state/ui/snapshot.h"
 #include "maco_firmware/types.h"
 #include "pw_bytes/span.h"
@@ -16,38 +17,31 @@ namespace maco::app_state {
 
 /// Thread-safe application state.
 ///
-/// State lives on the main thread, is updated via events from TagVerifier,
+/// Implements TagVerifierObserver to receive verification state transitions.
+/// State lives on the main thread, is updated via observer callbacks,
 /// and can be safely read from the UI thread using the snapshot pattern.
-class AppState {
+class AppState : public TagVerifierObserver {
  public:
   /// Thread-safe read - fills snapshot under lock.
   /// Can be called from any thread (typically UI thread).
   void GetSnapshot(AppStateSnapshot& out) const PW_LOCKS_EXCLUDED(mutex_);
 
-  /// Tag detected at RF layer - transitions to kTagDetected.
-  void OnTagDetected(pw::ConstByteSpan uid) PW_LOCKS_EXCLUDED(mutex_);
+  // --- TagVerifierObserver overrides ---
 
-  /// Verification in progress - transitions to kVerifying.
-  void OnVerifying() PW_LOCKS_EXCLUDED(mutex_);
-
-  /// Tag verified as genuine OWW tag - transitions to kGenuine.
-  void OnTagVerified(pw::ConstByteSpan ntag_uid) PW_LOCKS_EXCLUDED(mutex_);
-
-  /// Tag is not a recognized OWW tag - transitions to kUnknownTag.
-  void OnUnknownTag() PW_LOCKS_EXCLUDED(mutex_);
-
-  /// Cloud authorization in progress - transitions to kAuthorizing.
-  void OnAuthorizing() PW_LOCKS_EXCLUDED(mutex_);
-
-  /// Cloud authorized the user - transitions to kAuthorized.
-  void OnAuthorized(std::string_view user_label,
-                    const FirebaseId& auth_id) PW_LOCKS_EXCLUDED(mutex_);
-
-  /// Cloud rejected the user - transitions to kUnauthorized.
-  void OnUnauthorized() PW_LOCKS_EXCLUDED(mutex_);
-
-  /// Tag removed from field - transitions to kIdle.
-  void OnTagRemoved() PW_LOCKS_EXCLUDED(mutex_);
+  void OnTagDetected(pw::ConstByteSpan uid) override
+      PW_LOCKS_EXCLUDED(mutex_);
+  void OnVerifying() override PW_LOCKS_EXCLUDED(mutex_);
+  void OnTagVerified(pw::ConstByteSpan ntag_uid) override
+      PW_LOCKS_EXCLUDED(mutex_);
+  void OnUnknownTag() override PW_LOCKS_EXCLUDED(mutex_);
+  void OnAuthorizing() override PW_LOCKS_EXCLUDED(mutex_);
+  void OnAuthorized(const maco::TagUid& tag_uid,
+                    const maco::FirebaseId& user_id,
+                    const pw::InlineString<64>& user_label,
+                    const maco::FirebaseId& auth_id) override
+      PW_LOCKS_EXCLUDED(mutex_);
+  void OnUnauthorized() override PW_LOCKS_EXCLUDED(mutex_);
+  void OnTagRemoved() override PW_LOCKS_EXCLUDED(mutex_);
 
  private:
   mutable pw::sync::Mutex mutex_;

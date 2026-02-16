@@ -4,6 +4,7 @@
 #include "maco_firmware/modules/app_state/app_state.h"
 
 #include "pw_bytes/array.h"
+#include "pw_string/string.h"
 #include "pw_unit_test/framework.h"
 
 namespace maco::app_state {
@@ -186,7 +187,8 @@ TEST(AppStateTest, OnAuthorizedTransitionsToAuthorized) {
   state.OnVerifying();
   state.OnTagVerified(kNtagUid);
   state.OnAuthorizing();
-  state.OnAuthorized("Test User", auth_id);
+  state.OnAuthorized(maco::TagUid::FromArray({}), maco::FirebaseId::Empty(),
+                     pw::InlineString<64>("Test User"), auth_id);
   state.GetSnapshot(snapshot);
 
   EXPECT_EQ(snapshot.state, AppStateId::kAuthorized);
@@ -225,7 +227,8 @@ TEST(AppStateTest, OnTagDetectedClearsAuthFields) {
   state.OnTagDetected(kRfUid);
   state.OnVerifying();
   state.OnTagVerified(kNtagUid);
-  state.OnAuthorized("Test User", auth_id);
+  state.OnAuthorized(maco::TagUid::FromArray({}), maco::FirebaseId::Empty(),
+                     pw::InlineString<64>("Test User"), auth_id);
 
   // New tag detected
   constexpr auto kNewRfUid = pw::bytes::Array<0x04, 0x99, 0x88>();
@@ -249,7 +252,8 @@ TEST(AppStateTest, OnTagRemovedClearsAuthFields) {
   state.OnTagDetected(kRfUid);
   state.OnVerifying();
   state.OnTagVerified(kNtagUid);
-  state.OnAuthorized("Test User", auth_id);
+  state.OnAuthorized(maco::TagUid::FromArray({}), maco::FirebaseId::Empty(),
+                     pw::InlineString<64>("Test User"), auth_id);
 
   state.OnTagRemoved();
   state.GetSnapshot(snapshot);

@@ -20,6 +20,7 @@ cc_library(
     srcs = ["app_state.cc"],
     hdrs = ["app_state.h"],
     deps = [
+        ":tag_verifier_observer",
         "//maco_firmware:types",
         "//maco_firmware/modules/app_state/ui:snapshot",
         "@pigweed//pw_assert:check",
@@ -27,6 +28,17 @@ cc_library(
         "@pigweed//pw_string",
         "@pigweed//pw_sync:lock_annotations",
         "@pigweed//pw_sync:mutex",
+    ],
+)
+
+# Observer interface for TagVerifier state transitions
+cc_library(
+    name = "tag_verifier_observer",
+    hdrs = ["tag_verifier_observer.h"],
+    deps = [
+        "//maco_firmware:types",
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_string",
     ],
 )
 
@@ -59,6 +71,7 @@ cc_library(
     hdrs = ["session_fsm.h"],
     deps = [
         ":session_events",
+        ":tag_verifier_observer",
         "//maco_firmware:types",
         "//maco_firmware/modules/app_state/ui:snapshot",
         "//third_party/etl",
@@ -94,9 +107,8 @@ cc_library(
     srcs = ["tag_verifier.cc"],
     hdrs = ["tag_verifier.h"],
     deps = [
-        ":app_state",
         ":auth_cache",
-        ":session_fsm",
+        ":tag_verifier_observer",
         "//maco_firmware:types",
         "//maco_firmware/devices/pn532:tag_info",
         "//maco_firmware/modules/device_secrets",
@@ -108,6 +120,7 @@ cc_library(
         "//maco_firmware/modules/nfc_tag/ntag424:local_key_provider",
         "//maco_firmware/modules/nfc_tag/ntag424:ntag424_tag",
         "@pigweed//pw_allocator:allocator",
+        "@pigweed//pw_assert:check",
         "@pigweed//pw_async2:coro",
         "@pigweed//pw_async2:coro_or_else_task",
         "@pigweed//pw_async2:dispatcher",
@@ -123,6 +136,7 @@ pw_cc_test(
     deps = [
         ":app_state",
         "@pigweed//pw_bytes",
+        "@pigweed//pw_string",
     ],
 )
 
@@ -150,6 +164,7 @@ pw_cc_test(
     deps = [
         ":app_state",
         ":tag_verifier",
+        ":tag_verifier_observer",
         "//maco_firmware/modules/device_secrets:device_secrets_mock",
         "//maco_firmware/modules/firebase:firebase_client",
         "//maco_firmware/modules/nfc_reader/mock:mock_nfc_reader",

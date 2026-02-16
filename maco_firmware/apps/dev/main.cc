@@ -104,12 +104,12 @@ void AppInit() {
 
     static maco::app_state::TagVerifier tag_verifier(
         nfc_reader,
-        maco::system::GetAppState(),
         maco::system::GetDeviceSecrets(),
         maco::system::GetFirebaseClient(),
         maco::system::GetRandomGenerator(),
         pw::System().allocator());
-    tag_verifier.SetSessionFsm(session_fsm);
+    tag_verifier.AddObserver(&maco::system::GetAppState());
+    tag_verifier.AddObserver(&session_fsm);
     tag_verifier.Start(pw::System().dispatcher());
 
     // Session event pump - drives timeouts, hold detection, UI action bridge

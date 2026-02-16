@@ -7,6 +7,7 @@
 
 #include "etl/hfsm.h"
 #include "maco_firmware/modules/app_state/session_events.h"
+#include "maco_firmware/modules/app_state/tag_verifier_observer.h"
 #include "maco_firmware/modules/app_state/ui/snapshot.h"
 #include "maco_firmware/types.h"
 #include "pw_assert/check.h"
@@ -175,7 +176,7 @@ class TakeoverPending
 //   by SyncSnapshot(), which must be called after any state-mutating
 //   operation (receive(), SetTagPresent()).
 
-class SessionFsm : public etl::hfsm {
+class SessionFsm : public etl::hfsm, public TagVerifierObserver {
  public:
   SessionFsm();
 
@@ -190,6 +191,14 @@ class SessionFsm : public etl::hfsm {
 
   // Flag for chained takeover transition (main thread only)
   bool has_pending_takeover = false;
+
+  // --- TagVerifierObserver overrides ---
+  void OnTagDetected(pw::ConstByteSpan uid) override;
+  void OnTagRemoved() override;
+  void OnAuthorized(const maco::TagUid& tag_uid,
+                    const maco::FirebaseId& user_id,
+                    const pw::InlineString<64>& user_label,
+                    const maco::FirebaseId& auth_id) override;
 
   // --- Tag presence (main thread only, use accessors) ---
   void SetTagPresent(bool present);

@@ -50,6 +50,28 @@ void SessionFsm::NotifySessionEnded(const SessionInfo& session,
   }
 }
 
+// --- TagVerifierObserver overrides ---
+
+void SessionFsm::OnTagDetected(pw::ConstByteSpan /*uid*/) {
+  SetTagPresent(true);
+  receive(session_event::TagPresence(true));
+  SyncSnapshot();
+}
+
+void SessionFsm::OnTagRemoved() {
+  SetTagPresent(false);
+  receive(session_event::TagPresence(false));
+  SyncSnapshot();
+}
+
+void SessionFsm::OnAuthorized(const maco::TagUid& tag_uid,
+                               const maco::FirebaseId& user_id,
+                               const pw::InlineString<64>& user_label,
+                               const maco::FirebaseId& auth_id) {
+  receive(session_event::UserAuthorized(tag_uid, user_id, user_label, auth_id));
+  SyncSnapshot();
+}
+
 void SessionFsm::SetTagPresent(bool present) {
   tag_present_ = present;
   if (present) {

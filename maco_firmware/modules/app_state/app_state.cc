@@ -55,11 +55,13 @@ void AppState::OnAuthorizing() {
   state_ = AppStateId::kAuthorizing;
 }
 
-void AppState::OnAuthorized(std::string_view user_label,
-                             const FirebaseId& auth_id) {
+void AppState::OnAuthorized(const maco::TagUid& /*tag_uid*/,
+                             const maco::FirebaseId& /*user_id*/,
+                             const pw::InlineString<64>& user_label,
+                             const maco::FirebaseId& auth_id) {
   std::lock_guard lock(mutex_);
   state_ = AppStateId::kAuthorized;
-  user_label_ = pw::InlineString<64>(user_label);
+  user_label_ = user_label;
   auth_id_ = auth_id;
 }
 

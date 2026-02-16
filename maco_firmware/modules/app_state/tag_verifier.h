@@ -3,10 +3,11 @@
 
 #pragma once
 
+#include <array>
 #include <optional>
 
-#include "maco_firmware/modules/app_state/app_state.h"
 #include "maco_firmware/modules/app_state/auth_cache.h"
+#include "maco_firmware/modules/app_state/tag_verifier_observer.h"
 #include "maco_firmware/modules/nfc_reader/nfc_reader.h"
 #include "maco_firmware/modules/nfc_tag/nfc_tag.h"
 #include "maco_firmware/modules/nfc_tag/ntag424/ntag424_tag.h"
@@ -27,8 +28,6 @@ class FirebaseClient;
 
 namespace maco::app_state {
 
-class SessionFsm;
-
 /// Subscribes to NFC events and verifies tags via NTAG424 authentication,
 /// then authorizes with the cloud before activating the machine.
 ///
@@ -39,23 +38,24 @@ class SessionFsm;
 /// 4. Reads the real card UID (anti-collision UID is random on NTAG424)
 /// 5. Checks cloud authorization (TerminalCheckin / key-2 cloud auth)
 ///
-/// Updates AppState at each step so the UI can reflect progress.
-/// If a SessionFsm is set, also sends events for session management.
+/// Notifies registered observers at each step so the UI, session FSM,
+/// LEDs, etc. can react to state transitions.
 class TagVerifier {
  public:
   TagVerifier(nfc::NfcReader& reader,
-              AppState& app_state,
               secrets::DeviceSecrets& device_secrets,
               firebase::FirebaseClient& firebase_client,
               pw::random::RandomGenerator& rng,
               pw::allocator::Allocator& allocator);
 
-  /// Set the session FSM to receive authorization events.
-  void SetSessionFsm(SessionFsm& session_fsm);
+  /// Register an observer. Max 4, PW_CHECK on overflow.
+  void AddObserver(TagVerifierObserver* observer);
 
   void Start(pw::async2::Dispatcher& dispatcher);
 
  private:
+  static constexpr size_t kMaxObservers = 4;
+
   pw::async2::Coro<pw::Status> Run(pw::async2::CoroContext& cx);
   pw::async2::Coro<pw::Status> VerifyTag(pw::async2::CoroContext& cx,
                                           nfc::NfcTag& tag);
@@ -63,12 +63,25 @@ class TagVerifier {
                                              nfc::Ntag424Tag& ntag,
                                              const maco::TagUid& tag_uid);
 
+  void NotifyTagDetected(pw::ConstByteSpan uid);
+  void NotifyVerifying();
+  void NotifyTagVerified(pw::ConstByteSpan ntag_uid);
+  void NotifyUnknownTag();
+  void NotifyAuthorizing();
+  void NotifyAuthorized(const maco::TagUid& tag_uid,
+                        const maco::FirebaseId& user_id,
+                        const pw::InlineString<64>& user_label,
+                        const maco::FirebaseId& auth_id);
+  void NotifyUnauthorized();
+  void NotifyTagRemoved();
+
   nfc::NfcReader& reader_;
-  AppState& app_state_;
   secrets::DeviceSecrets& device_secrets_;
   firebase::FirebaseClient& firebase_client_;
   pw::random::RandomGenerator& rng_;
-  SessionFsm* session_fsm_ = nullptr;
+
+  std::array<TagVerifierObserver*, kMaxObservers> observers_{};
+  size_t observer_count_ = 0;
 
   AuthCache auth_cache_;
   pw::async2::CoroContext coro_cx_;
