@@ -59,12 +59,10 @@ void NfcTestScreen::OnDeactivate() {
 }
 
 void NfcTestScreen::OnUpdate(const app_state::AppStateSnapshot& snapshot) {
-  // Update watched state
-  state_watched_.Set(snapshot.state);
+  state_watched_.Set(snapshot.verification.state);
 
-  // Only update LVGL widget if state changed
   if (state_watched_.CheckAndClearDirty()) {
-    UpdateStatusText(snapshot);
+    UpdateStatusText(snapshot.verification);
     if (status_label_) {
       lv_label_set_text(status_label_, status_text_.c_str());
     }
@@ -72,39 +70,38 @@ void NfcTestScreen::OnUpdate(const app_state::AppStateSnapshot& snapshot) {
 }
 
 ui::ButtonConfig NfcTestScreen::GetButtonConfig() const {
-  // No button actions for this simple test screen
   return {};
 }
 
 void NfcTestScreen::UpdateStatusText(
-    const app_state::AppStateSnapshot& snapshot) {
+    const app_state::TagVerificationSnapshot& v) {
   status_text_.clear();
-  switch (snapshot.state) {
-    case app_state::AppStateId::kIdle:
+  switch (v.state) {
+    case app_state::TagVerificationState::kIdle:
       status_text_ << "No card";
       break;
-    case app_state::AppStateId::kTagDetected:
+    case app_state::TagVerificationState::kTagDetected:
       status_text_ << "Card: ";
-      FormatUidTo(status_text_, snapshot.tag_uid);
+      FormatUidTo(status_text_, v.tag_uid);
       break;
-    case app_state::AppStateId::kVerifying:
+    case app_state::TagVerificationState::kVerifying:
       status_text_ << "Verifying...";
       break;
-    case app_state::AppStateId::kGenuine:
+    case app_state::TagVerificationState::kGenuine:
       status_text_ << "Verified: ";
-      FormatUidTo(status_text_, snapshot.ntag_uid);
+      FormatUidTo(status_text_, v.ntag_uid);
       break;
-    case app_state::AppStateId::kUnknownTag:
+    case app_state::TagVerificationState::kUnknownTag:
       status_text_ << "Unknown tag";
       break;
-    case app_state::AppStateId::kAuthorizing:
+    case app_state::TagVerificationState::kAuthorizing:
       status_text_ << "Authorizing...";
       break;
-    case app_state::AppStateId::kAuthorized:
+    case app_state::TagVerificationState::kAuthorized:
       status_text_ << "Authorized: ";
-      status_text_ << snapshot.user_label;
+      status_text_ << v.user_label;
       break;
-    case app_state::AppStateId::kUnauthorized:
+    case app_state::TagVerificationState::kUnauthorized:
       status_text_ << "Not authorized";
       break;
   }

@@ -6,13 +6,12 @@
 #include <string_view>
 
 #include "lvgl.h"
-#include "maco_firmware/modules/app_state/ui/snapshot.h"
 #include "maco_firmware/modules/ui/button_spec.h"
 #include "pw_status/status.h"
 
 namespace maco::ui {
 
-/// Base class for all UI screens.
+/// Base class for all UI screens, templated on the snapshot type.
 ///
 /// Screens are owned by AppShell via std::unique_ptr. Dependencies are
 /// injected via constructor (per ADR-0001).
@@ -23,6 +22,7 @@ namespace maco::ui {
 ///   3. OnUpdate() - Called once per frame while active
 ///   4. OnDeactivate() - Called when navigating away
 ///   5. Destruction - Screen popped from stack
+template <typename Snapshot>
 class Screen {
  public:
   explicit Screen(std::string_view debug_name) : debug_name_(debug_name) {}
@@ -42,7 +42,7 @@ class Screen {
   /// Called once per frame while this screen is active.
   /// Update LVGL widgets based on snapshot and dirty flags here.
   /// @param snapshot Current app state (thread-safe copy)
-  virtual void OnUpdate(const app_state::AppStateSnapshot& snapshot) {
+  virtual void OnUpdate(const Snapshot& snapshot) {
     (void)snapshot;  // Default implementation ignores snapshot
   }
 

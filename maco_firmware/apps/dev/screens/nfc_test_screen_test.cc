@@ -33,7 +33,7 @@ class NfcTestScreenTest : public ::testing::Test {
 TEST_F(NfcTestScreenTest, NoCardState) {
   // Initial state is "No card"
   app_state::AppStateSnapshot snapshot;
-  snapshot.state = app_state::AppStateId::kIdle;
+  snapshot.verification.state = app_state::TagVerificationState::kIdle;
 
   screen_->OnUpdate(snapshot);
   harness_.RenderFrame();
@@ -46,15 +46,15 @@ TEST_F(NfcTestScreenTest, NoCardState) {
 TEST_F(NfcTestScreenTest, HasCardState) {
   // Simulate a detected card (RF-layer UID)
   app_state::AppStateSnapshot snapshot;
-  snapshot.state = app_state::AppStateId::kTagDetected;
-  snapshot.tag_uid.size = 7;
-  snapshot.tag_uid.bytes[0] = std::byte{0x04};
-  snapshot.tag_uid.bytes[1] = std::byte{0xAB};
-  snapshot.tag_uid.bytes[2] = std::byte{0xCD};
-  snapshot.tag_uid.bytes[3] = std::byte{0x12};
-  snapshot.tag_uid.bytes[4] = std::byte{0x34};
-  snapshot.tag_uid.bytes[5] = std::byte{0x56};
-  snapshot.tag_uid.bytes[6] = std::byte{0x78};
+  snapshot.verification.state = app_state::TagVerificationState::kTagDetected;
+  snapshot.verification.tag_uid.size = 7;
+  snapshot.verification.tag_uid.bytes[0] = std::byte{0x04};
+  snapshot.verification.tag_uid.bytes[1] = std::byte{0xAB};
+  snapshot.verification.tag_uid.bytes[2] = std::byte{0xCD};
+  snapshot.verification.tag_uid.bytes[3] = std::byte{0x12};
+  snapshot.verification.tag_uid.bytes[4] = std::byte{0x34};
+  snapshot.verification.tag_uid.bytes[5] = std::byte{0x56};
+  snapshot.verification.tag_uid.bytes[6] = std::byte{0x78};
 
   screen_->OnUpdate(snapshot);
   harness_.RenderFrame();

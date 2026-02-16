@@ -11,7 +11,8 @@
 #include "gateway/gateway_service.pb.h"
 #include "gateway/gateway_service.rpc.pb.h"
 #include "gtest/gtest.h"
-#include "maco_firmware/modules/app_state/app_state.h"
+#include "maco_firmware/modules/app_state/tag_verifier_observer.h"
+#include "maco_firmware/modules/app_state/ui/snapshot.h"
 #include "maco_firmware/modules/device_secrets/device_secrets_mock.h"
 #include "maco_firmware/modules/nfc_reader/mock/mock_nfc_reader.h"
 #include "maco_firmware/modules/nfc_tag/iso14443_tag_mock.h"
@@ -108,11 +109,50 @@ pw::Result<size_t> EncodeRejectedResponse(const char* message,
   return stream.bytes_written;
 }
 
+/// Mock observer that records which callbacks were invoked.
+class MockTagVerifierObserver : public TagVerifierObserver {
+ public:
+  void OnTagDetected(pw::ConstByteSpan uid) override {
+    tag_detected_count++;
+    last_uid_size = uid.size();
+  }
+  void OnVerifying() override { verifying_count++; }
+  void OnTagVerified(pw::ConstByteSpan ntag_uid) override {
+    tag_verified_count++;
+    last_ntag_uid_size = ntag_uid.size();
+  }
+  void OnUnknownTag() override { unknown_tag_count++; }
+  void OnAuthorizing() override { authorizing_count++; }
+  void OnAuthorized(const maco::TagUid& /*tag_uid*/,
+                    const maco::FirebaseId& /*user_id*/,
+                    const pw::InlineString<64>& user_label,
+                    const maco::FirebaseId& auth_id) override {
+    authorized_count++;
+    last_user_label = std::string_view(user_label);
+    last_auth_id = auth_id.value();
+  }
+  void OnUnauthorized() override { unauthorized_count++; }
+  void OnTagRemoved() override { tag_removed_count++; }
+
+  int tag_detected_count = 0;
+  int verifying_count = 0;
+  int tag_verified_count = 0;
+  int unknown_tag_count = 0;
+  int authorizing_count = 0;
+  int authorized_count = 0;
+  int unauthorized_count = 0;
+  int tag_removed_count = 0;
+  size_t last_uid_size = 0;
+  size_t last_ntag_uid_size = 0;
+  pw::InlineString<64> last_user_label;
+  pw::InlineString<20> last_auth_id;
+};
+
 class TagVerifierTest : public ::testing::Test {
  protected:
   void SetUp() override {
     firebase_client_.emplace(rpc_ctx_.client(), rpc_ctx_.channel().id());
-    verifier_.emplace(reader_, app_state_, device_secrets_, *firebase_client_,
+    verifier_.emplace(reader_, device_secrets_, *firebase_client_,
                       rng_, test_allocator_);
     verifier_->Start(dispatcher_);
     // Let the coroutine start and reach SubscribeOnce
@@ -124,9 +164,9 @@ class TagVerifierTest : public ::testing::Test {
     firebase_client_.reset();
   }
 
-  AppStateSnapshot GetSnapshot() {
-    AppStateSnapshot snapshot;
-    app_state_.GetSnapshot(snapshot);
+  TagVerificationSnapshot GetSnapshot() {
+    TagVerificationSnapshot snapshot;
+    verifier_->GetSnapshot(snapshot);
     return snapshot;
   }
 
@@ -169,7 +209,6 @@ class TagVerifierTest : public ::testing::Test {
   pw::async2::BasicDispatcher dispatcher_;
   pw::allocator::test::AllocatorForTest<4096> test_allocator_;
   nfc::MockNfcReader reader_;
-  AppState app_state_;
   secrets::DeviceSecretsMock device_secrets_;
   pw::random::XorShiftStarRng64 rng_{0x12345678};
   std::optional<firebase::FirebaseClient> firebase_client_;
@@ -191,14 +230,14 @@ TEST_F(TagVerifierTest, HappyPath) {
   dispatcher_.RunUntilStalled();
 
   // After terminal auth, coroutine suspends at TerminalCheckin RPC
-  EXPECT_EQ(GetSnapshot().state, AppStateId::kAuthorizing);
+  EXPECT_EQ(GetSnapshot().state, TagVerificationState::kAuthorizing);
 
   // Inject authorized response with existing auth
   SendCheckinAuthorizedWithAuth("user123", "Test User", "auth_abc");
   dispatcher_.RunUntilStalled();
 
   auto snapshot = GetSnapshot();
-  EXPECT_EQ(snapshot.state, AppStateId::kAuthorized);
+  EXPECT_EQ(snapshot.state, TagVerificationState::kAuthorized);
   EXPECT_EQ(std::string_view(snapshot.user_label), "Test User");
   EXPECT_EQ(snapshot.auth_id.value(), "auth_abc");
 
@@ -220,7 +259,7 @@ TEST_F(TagVerifierTest, NonIsoTag) {
   reader_.SimulateTagArrival(std::static_pointer_cast<nfc::MockTag>(tag));
   dispatcher_.RunUntilStalled();
 
-  EXPECT_EQ(GetSnapshot().state, AppStateId::kUnknownTag);
+  EXPECT_EQ(GetSnapshot().state, TagVerificationState::kUnknownTag);
 }
 
 // ============================================================================
@@ -235,7 +274,7 @@ TEST_F(TagVerifierTest, SelectFails) {
   reader_.SimulateTagArrival(std::static_pointer_cast<nfc::MockTag>(tag));
   dispatcher_.RunUntilStalled();
 
-  EXPECT_EQ(GetSnapshot().state, AppStateId::kUnknownTag);
+  EXPECT_EQ(GetSnapshot().state, TagVerificationState::kUnknownTag);
 }
 
 // ============================================================================
@@ -252,7 +291,7 @@ TEST_F(TagVerifierTest, AuthFails) {
   reader_.SimulateTagArrival(std::static_pointer_cast<nfc::MockTag>(tag));
   dispatcher_.RunUntilStalled();
 
-  EXPECT_EQ(GetSnapshot().state, AppStateId::kUnknownTag);
+  EXPECT_EQ(GetSnapshot().state, TagVerificationState::kUnknownTag);
 }
 
 // ============================================================================
@@ -268,18 +307,18 @@ TEST_F(TagVerifierTest, TagDeparture) {
 
   reader_.SimulateTagArrival(std::static_pointer_cast<nfc::MockTag>(tag));
   dispatcher_.RunUntilStalled();
-  ASSERT_EQ(GetSnapshot().state, AppStateId::kAuthorizing);
+  ASSERT_EQ(GetSnapshot().state, TagVerificationState::kAuthorizing);
 
   // Complete authorization
   SendCheckinAuthorizedWithAuth("user123", "User", "auth_abc");
   dispatcher_.RunUntilStalled();
-  ASSERT_EQ(GetSnapshot().state, AppStateId::kAuthorized);
+  ASSERT_EQ(GetSnapshot().state, TagVerificationState::kAuthorized);
 
   // Tag departs
   reader_.SimulateTagDeparture();
   dispatcher_.RunUntilStalled();
 
-  EXPECT_EQ(GetSnapshot().state, AppStateId::kIdle);
+  EXPECT_EQ(GetSnapshot().state, TagVerificationState::kIdle);
 }
 
 // ============================================================================
@@ -298,7 +337,7 @@ TEST_F(TagVerifierTest, SecretsNotProvisioned) {
   reader_.SimulateTagArrival(std::static_pointer_cast<nfc::MockTag>(tag));
   dispatcher_.RunUntilStalled();
 
-  EXPECT_EQ(GetSnapshot().state, AppStateId::kUnknownTag);
+  EXPECT_EQ(GetSnapshot().state, TagVerificationState::kUnknownTag);
 }
 
 // ============================================================================
@@ -314,13 +353,13 @@ TEST_F(TagVerifierTest, CheckinRejected) {
 
   reader_.SimulateTagArrival(std::static_pointer_cast<nfc::MockTag>(tag));
   dispatcher_.RunUntilStalled();
-  ASSERT_EQ(GetSnapshot().state, AppStateId::kAuthorizing);
+  ASSERT_EQ(GetSnapshot().state, TagVerificationState::kAuthorizing);
 
   // Inject rejected response
   SendCheckinRejected("User not authorized");
   dispatcher_.RunUntilStalled();
 
-  EXPECT_EQ(GetSnapshot().state, AppStateId::kUnauthorized);
+  EXPECT_EQ(GetSnapshot().state, TagVerificationState::kUnauthorized);
 }
 
 // ============================================================================
@@ -336,13 +375,13 @@ TEST_F(TagVerifierTest, CheckinRpcFailure) {
 
   reader_.SimulateTagArrival(std::static_pointer_cast<nfc::MockTag>(tag));
   dispatcher_.RunUntilStalled();
-  ASSERT_EQ(GetSnapshot().state, AppStateId::kAuthorizing);
+  ASSERT_EQ(GetSnapshot().state, TagVerificationState::kAuthorizing);
 
   // Inject RPC-level error
   SendRpcError(pw::Status::Unavailable());
   dispatcher_.RunUntilStalled();
 
-  EXPECT_EQ(GetSnapshot().state, AppStateId::kUnauthorized);
+  EXPECT_EQ(GetSnapshot().state, TagVerificationState::kUnauthorized);
 }
 
 // ============================================================================
@@ -360,16 +399,16 @@ TEST_F(TagVerifierTest, CacheHit) {
 
     reader_.SimulateTagArrival(std::static_pointer_cast<nfc::MockTag>(tag));
     dispatcher_.RunUntilStalled();
-    ASSERT_EQ(GetSnapshot().state, AppStateId::kAuthorizing);
+    ASSERT_EQ(GetSnapshot().state, TagVerificationState::kAuthorizing);
 
     SendCheckinAuthorizedWithAuth("user123", "Cached User", "auth_cached");
     dispatcher_.RunUntilStalled();
-    ASSERT_EQ(GetSnapshot().state, AppStateId::kAuthorized);
+    ASSERT_EQ(GetSnapshot().state, TagVerificationState::kAuthorized);
 
     // Remove tag
     reader_.SimulateTagDeparture();
     dispatcher_.RunUntilStalled();
-    ASSERT_EQ(GetSnapshot().state, AppStateId::kIdle);
+    ASSERT_EQ(GetSnapshot().state, TagVerificationState::kIdle);
   }
 
   // Second tap: should use cache (no RPC call)
@@ -383,7 +422,7 @@ TEST_F(TagVerifierTest, CacheHit) {
 
     // Should go directly to kAuthorized (cache hit skips kAuthorizing)
     auto snapshot = GetSnapshot();
-    EXPECT_EQ(snapshot.state, AppStateId::kAuthorized);
+    EXPECT_EQ(snapshot.state, TagVerificationState::kAuthorized);
     EXPECT_EQ(std::string_view(snapshot.user_label), "Cached User");
     EXPECT_EQ(snapshot.auth_id.value(), "auth_cached");
   }
@@ -402,7 +441,7 @@ TEST_F(TagVerifierTest, TagDepartureDuringAuthorizing) {
 
   reader_.SimulateTagArrival(std::static_pointer_cast<nfc::MockTag>(tag));
   dispatcher_.RunUntilStalled();
-  ASSERT_EQ(GetSnapshot().state, AppStateId::kAuthorizing);
+  ASSERT_EQ(GetSnapshot().state, TagVerificationState::kAuthorizing);
 
   // Tag departs while coroutine is suspended at RPC.
   // MockNfcReader uses ValueProvider (not a queue), so the departure
@@ -411,14 +450,113 @@ TEST_F(TagVerifierTest, TagDepartureDuringAuthorizing) {
   dispatcher_.RunUntilStalled();
 
   // State is still kAuthorizing (coroutine blocked on RPC)
-  EXPECT_EQ(GetSnapshot().state, AppStateId::kAuthorizing);
+  EXPECT_EQ(GetSnapshot().state, TagVerificationState::kAuthorizing);
 
   // RPC response arrives - authorization completes.
   // Departure was lost, so state goes to kAuthorized.
   SendCheckinAuthorizedWithAuth("user123", "Late", "auth_late");
   dispatcher_.RunUntilStalled();
 
-  EXPECT_EQ(GetSnapshot().state, AppStateId::kAuthorized);
+  EXPECT_EQ(GetSnapshot().state, TagVerificationState::kAuthorized);
+}
+
+// ============================================================================
+// Observer notifications on happy path
+// ============================================================================
+
+TEST_F(TagVerifierTest, ObserverNotifiedOnHappyPath) {
+  MockTagVerifierObserver mock_observer;
+  verifier_->AddObserver(&mock_observer);
+
+  auto config = MakeConfig(kRealUid, kTerminalKey);
+
+  pw::random::XorShiftStarRng64 tag_rng{0xABCDEF01};
+  auto tag = std::make_shared<nfc::Ntag424TagMock>(
+      kAntiCollisionUid, kNtag424Sak, config, tag_rng);
+
+  reader_.SimulateTagArrival(std::static_pointer_cast<nfc::MockTag>(tag));
+  dispatcher_.RunUntilStalled();
+
+  // After tag arrival + terminal auth, should have received these callbacks
+  EXPECT_EQ(mock_observer.tag_detected_count, 1);
+  EXPECT_EQ(mock_observer.verifying_count, 1);
+  EXPECT_EQ(mock_observer.tag_verified_count, 1);
+  EXPECT_EQ(mock_observer.authorizing_count, 1);
+
+  // Complete authorization
+  SendCheckinAuthorizedWithAuth("user123", "Observer User", "auth_obs");
+  dispatcher_.RunUntilStalled();
+
+  EXPECT_EQ(mock_observer.authorized_count, 1);
+  EXPECT_EQ(std::string_view(mock_observer.last_user_label), "Observer User");
+  EXPECT_EQ(std::string_view(mock_observer.last_auth_id), "auth_obs");
+  EXPECT_EQ(mock_observer.unauthorized_count, 0);
+}
+
+// ============================================================================
+// Observer notified on tag departure
+// ============================================================================
+
+TEST_F(TagVerifierTest, ObserverNotifiedOnTagDeparture) {
+  MockTagVerifierObserver mock_observer;
+  verifier_->AddObserver(&mock_observer);
+
+  auto config = MakeConfig(kRealUid, kTerminalKey);
+
+  pw::random::XorShiftStarRng64 tag_rng{0xABCDEF01};
+  auto tag = std::make_shared<nfc::Ntag424TagMock>(
+      kAntiCollisionUid, kNtag424Sak, config, tag_rng);
+
+  reader_.SimulateTagArrival(std::static_pointer_cast<nfc::MockTag>(tag));
+  dispatcher_.RunUntilStalled();
+  SendCheckinAuthorizedWithAuth("user123", "User", "auth_abc");
+  dispatcher_.RunUntilStalled();
+
+  reader_.SimulateTagDeparture();
+  dispatcher_.RunUntilStalled();
+
+  EXPECT_EQ(mock_observer.tag_removed_count, 1);
+}
+
+// ============================================================================
+// Multiple observers all receive the same notifications
+// ============================================================================
+
+TEST_F(TagVerifierTest, MultipleObserversAllNotified) {
+  MockTagVerifierObserver observer_a;
+  MockTagVerifierObserver observer_b;
+  verifier_->AddObserver(&observer_a);
+  verifier_->AddObserver(&observer_b);
+
+  auto config = MakeConfig(kRealUid, kTerminalKey);
+
+  pw::random::XorShiftStarRng64 tag_rng{0xABCDEF01};
+  auto tag = std::make_shared<nfc::Ntag424TagMock>(
+      kAntiCollisionUid, kNtag424Sak, config, tag_rng);
+
+  reader_.SimulateTagArrival(std::static_pointer_cast<nfc::MockTag>(tag));
+  dispatcher_.RunUntilStalled();
+
+  SendCheckinAuthorizedWithAuth("user123", "Multi User", "auth_multi");
+  dispatcher_.RunUntilStalled();
+
+  // Verify via GetSnapshot
+  EXPECT_EQ(GetSnapshot().state, TagVerificationState::kAuthorized);
+
+  for (auto* obs : {&observer_a, &observer_b}) {
+    EXPECT_EQ(obs->tag_detected_count, 1);
+    EXPECT_EQ(obs->verifying_count, 1);
+    EXPECT_EQ(obs->tag_verified_count, 1);
+    EXPECT_EQ(obs->authorizing_count, 1);
+    EXPECT_EQ(obs->authorized_count, 1);
+    EXPECT_EQ(std::string_view(obs->last_user_label), "Multi User");
+  }
+
+  reader_.SimulateTagDeparture();
+  dispatcher_.RunUntilStalled();
+
+  EXPECT_EQ(observer_a.tag_removed_count, 1);
+  EXPECT_EQ(observer_b.tag_removed_count, 1);
 }
 
 }  // namespace

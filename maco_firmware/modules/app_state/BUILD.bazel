@@ -8,25 +8,20 @@ load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
 package(default_visibility = ["//maco_firmware:__subpackages__"])
 
-# State identifiers
+# Tag verification state enum
 cc_library(
     name = "state_id",
-    hdrs = ["state_id.h"],
+    hdrs = ["tag_verification_state.h"],
 )
 
-# Thread-safe application state
+# Observer interface for TagVerifier state transitions
 cc_library(
-    name = "app_state",
-    srcs = ["app_state.cc"],
-    hdrs = ["app_state.h"],
+    name = "tag_verifier_observer",
+    hdrs = ["tag_verifier_observer.h"],
     deps = [
         "//maco_firmware:types",
-        "//maco_firmware/modules/app_state/ui:snapshot",
-        "@pigweed//pw_assert:check",
         "@pigweed//pw_bytes",
         "@pigweed//pw_string",
-        "@pigweed//pw_sync:lock_annotations",
-        "@pigweed//pw_sync:mutex",
     ],
 )
 
@@ -59,6 +54,7 @@ cc_library(
     hdrs = ["session_fsm.h"],
     deps = [
         ":session_events",
+        ":tag_verifier_observer",
         "//maco_firmware:types",
         "//maco_firmware/modules/app_state/ui:snapshot",
         "//third_party/etl",
@@ -71,13 +67,15 @@ cc_library(
     ],
 )
 
-# Session event pump - timeout, hold detection, UI action bridge
+# Session controller - timeout, hold detection, UI action bridge, combined snapshot
 cc_library(
-    name = "session_event_pump",
-    srcs = ["session_event_pump.cc"],
-    hdrs = ["session_event_pump.h"],
+    name = "session_controller",
+    srcs = ["session_controller.cc"],
+    hdrs = ["session_controller.h"],
     deps = [
         ":session_fsm",
+        ":tag_verifier",
+        "//maco_firmware/modules/app_state/ui:snapshot",
         "@pigweed//pw_allocator:allocator",
         "@pigweed//pw_async2:coro",
         "@pigweed//pw_async2:coro_or_else_task",
@@ -94,11 +92,11 @@ cc_library(
     srcs = ["tag_verifier.cc"],
     hdrs = ["tag_verifier.h"],
     deps = [
-        ":app_state",
         ":auth_cache",
-        ":session_fsm",
+        ":tag_verifier_observer",
         "//maco_firmware:types",
         "//maco_firmware/devices/pn532:tag_info",
+        "//maco_firmware/modules/app_state/ui:snapshot",
         "//maco_firmware/modules/device_secrets",
         "//maco_firmware/modules/firebase:firebase_client",
         "//maco_firmware/modules/nfc_reader",
@@ -108,21 +106,15 @@ cc_library(
         "//maco_firmware/modules/nfc_tag/ntag424:local_key_provider",
         "//maco_firmware/modules/nfc_tag/ntag424:ntag424_tag",
         "@pigweed//pw_allocator:allocator",
+        "@pigweed//pw_assert:check",
         "@pigweed//pw_async2:coro",
         "@pigweed//pw_async2:coro_or_else_task",
         "@pigweed//pw_async2:dispatcher",
         "@pigweed//pw_chrono:system_clock",
         "@pigweed//pw_log",
         "@pigweed//pw_random",
-    ],
-)
-
-pw_cc_test(
-    name = "app_state_test",
-    srcs = ["app_state_test.cc"],
-    deps = [
-        ":app_state",
-        "@pigweed//pw_bytes",
+        "@pigweed//pw_sync:lock_annotations",
+        "@pigweed//pw_sync:mutex",
     ],
 )
 
@@ -148,8 +140,9 @@ pw_cc_test(
     name = "tag_verifier_test",
     srcs = ["tag_verifier_test.cc"],
     deps = [
-        ":app_state",
         ":tag_verifier",
+        ":tag_verifier_observer",
+        "//maco_firmware/modules/app_state/ui:snapshot",
         "//maco_firmware/modules/device_secrets:device_secrets_mock",
         "//maco_firmware/modules/firebase:firebase_client",
         "//maco_firmware/modules/nfc_reader/mock:mock_nfc_reader",

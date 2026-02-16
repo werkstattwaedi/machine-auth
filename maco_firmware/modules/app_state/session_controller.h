@@ -7,6 +7,8 @@
 #include <optional>
 
 #include "maco_firmware/modules/app_state/session_fsm.h"
+#include "maco_firmware/modules/app_state/tag_verifier.h"
+#include "maco_firmware/modules/app_state/ui/snapshot.h"
 #include "pw_allocator/allocator.h"
 #include "pw_async2/coro.h"
 #include "pw_async2/coro_or_else_task.h"
@@ -16,25 +18,24 @@
 
 namespace maco::app_state {
 
-/// Actions the UI can post to the session event pump.
+/// Actions the UI can post to the session controller.
 enum class SessionAction : uint8_t {
   kNone = 0,
   kConfirm = 1,
   kCancel = 2,
 };
 
-/// Bridges timeouts, hold detection, and UI actions to SessionFsm events.
+/// Single coordinator between TagVerifier, SessionFsm, and the UI.
 ///
-/// Runs as a coroutine on the main thread dispatcher. Polls at different
-/// rates depending on FSM state:
-/// - Pending states: 100ms (responsive hold detection)
-/// - Running/NoSession: 500ms (low overhead)
+/// Provides a combined GetSnapshot() that composes TagVerificationSnapshot
+/// + SessionSnapshotUi into an AppStateSnapshot for the screen layer.
 ///
-/// UI thread posts actions via atomic flag; the pump converts them
-/// to FSM receive() calls on the main thread.
-class SessionEventPump {
+/// Also bridges timeouts, hold detection, and UI actions to SessionFsm events.
+/// Runs as a coroutine on the main thread dispatcher.
+class SessionController {
  public:
-  SessionEventPump(
+  SessionController(
+      TagVerifier& tag_verifier,
       SessionFsm& fsm,
       pw::async2::TimeProvider<pw::chrono::SystemClock>& time_provider,
       pw::allocator::Allocator& allocator);
@@ -44,9 +45,13 @@ class SessionEventPump {
   /// Thread-safe: UI posts actions here.
   void PostUiAction(SessionAction action);
 
+  /// Thread-safe combined snapshot for UI.
+  void GetSnapshot(AppStateSnapshot& out) const;
+
  private:
   pw::async2::Coro<pw::Status> Run(pw::async2::CoroContext&);
 
+  TagVerifier& tag_verifier_;
   SessionFsm& fsm_;
   pw::async2::TimeProvider<pw::chrono::SystemClock>& time_provider_;
   std::atomic<SessionAction> ui_action_{SessionAction::kNone};

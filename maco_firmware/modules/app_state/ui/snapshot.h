@@ -6,7 +6,7 @@
 #include <array>
 #include <cstddef>
 
-#include "maco_firmware/modules/app_state/state_id.h"
+#include "maco_firmware/modules/app_state/tag_verification_state.h"
 #include "maco_firmware/types.h"
 #include "pw_chrono/system_clock.h"
 #include "pw_string/string.h"
@@ -43,18 +43,21 @@ struct SessionSnapshotUi {
   bool tag_present = false;
 };
 
-// Snapshot for UI thread - copied by value, no dangling references.
-// This is the read-only view of app state that screens receive.
-struct AppStateSnapshot {
-  AppStateId state = AppStateId::kIdle;
+// Tag verification snapshot - the portion owned by TagVerifier.
+struct TagVerificationSnapshot {
+  TagVerificationState state = TagVerificationState::kIdle;
   TagUid tag_uid;   // RF-layer UID (kTagDetected onward)
   TagUid ntag_uid;  // Real 7-byte NTAG424 UID from GetCardUid (kGenuine only)
 
   // Authorization fields (kAuthorized only)
   pw::InlineString<64> user_label;
   maco::FirebaseId auth_id = maco::FirebaseId::Empty();
+};
 
-  // Session state
+// Combined snapshot for the dev app UI thread.
+// Composed from tag verification + session state.
+struct AppStateSnapshot {
+  TagVerificationSnapshot verification;
   SessionSnapshotUi session;
 };
 

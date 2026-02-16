@@ -5,16 +5,18 @@
 
 #include "maco_firmware/modules/app_state/tag_verifier.h"
 
+#include <algorithm>
+#include <mutex>
 #include <variant>
 
 #include "device_secrets/device_secrets.h"
 #include "firebase/firebase_client.h"
 #include "maco_firmware/devices/pn532/tag_info.h"
-#include "maco_firmware/modules/app_state/session_fsm.h"
 #include "maco_firmware/modules/nfc_reader/nfc_event.h"
 #include "maco_firmware/modules/nfc_tag/ntag424/cloud_key_provider.h"
 #include "maco_firmware/modules/nfc_tag/ntag424/local_key_provider.h"
 #include "maco_firmware/modules/nfc_tag/ntag424/ntag424_tag.h"
+#include "pw_assert/check.h"
 #include "pw_chrono/system_clock.h"
 #include "pw_log/log.h"
 
@@ -25,20 +27,22 @@ constexpr uint8_t kTerminalKeyNumber = 1;
 constexpr uint8_t kAuthorizationKeyNumber = 2;
 
 TagVerifier::TagVerifier(nfc::NfcReader& reader,
-                         AppState& app_state,
                          secrets::DeviceSecrets& device_secrets,
                          firebase::FirebaseClient& firebase_client,
                          pw::random::RandomGenerator& rng,
                          pw::allocator::Allocator& allocator)
     : reader_(reader),
-      app_state_(app_state),
       device_secrets_(device_secrets),
       firebase_client_(firebase_client),
       rng_(rng),
       coro_cx_(allocator) {}
 
-void TagVerifier::SetSessionFsm(SessionFsm& session_fsm) {
-  session_fsm_ = &session_fsm;
+void TagVerifier::AddObserver(TagVerifierObserver* observer) {
+  PW_CHECK_NOTNULL(observer);
+  PW_CHECK(observer_count_ < kMaxObservers,
+           "Too many tag verifier observers (max %u)",
+           static_cast<unsigned>(kMaxObservers));
+  observers_[observer_count_++] = observer;
 }
 
 void TagVerifier::Start(pw::async2::Dispatcher& dispatcher) {
@@ -48,6 +52,124 @@ void TagVerifier::Start(pw::async2::Dispatcher& dispatcher) {
   });
   dispatcher.Post(*task_);
 }
+
+void TagVerifier::GetSnapshot(TagVerificationSnapshot& out) const {
+  std::lock_guard lock(snapshot_mutex_);
+  out = snapshot_;
+}
+
+// --- Notify helpers ---
+
+void TagVerifier::NotifyTagDetected(pw::ConstByteSpan uid) {
+  PW_CHECK(uid.size() <= kMaxTagUidSize, "Tag UID too large");
+
+  {
+    std::lock_guard lock(snapshot_mutex_);
+    snapshot_.state = TagVerificationState::kTagDetected;
+    snapshot_.tag_uid.size = uid.size();
+    std::copy(uid.begin(), uid.end(), snapshot_.tag_uid.bytes.begin());
+    snapshot_.ntag_uid = {};
+    snapshot_.user_label.clear();
+    snapshot_.auth_id = FirebaseId::Empty();
+  }
+
+  for (size_t i = 0; i < observer_count_; ++i) {
+    observers_[i]->OnTagDetected(uid);
+  }
+}
+
+void TagVerifier::NotifyVerifying() {
+  {
+    std::lock_guard lock(snapshot_mutex_);
+    snapshot_.state = TagVerificationState::kVerifying;
+  }
+
+  for (size_t i = 0; i < observer_count_; ++i) {
+    observers_[i]->OnVerifying();
+  }
+}
+
+void TagVerifier::NotifyTagVerified(pw::ConstByteSpan ntag_uid) {
+  PW_CHECK(ntag_uid.size() <= kMaxTagUidSize, "NTAG UID too large");
+
+  {
+    std::lock_guard lock(snapshot_mutex_);
+    snapshot_.state = TagVerificationState::kGenuine;
+    snapshot_.ntag_uid.size = ntag_uid.size();
+    std::copy(ntag_uid.begin(), ntag_uid.end(),
+              snapshot_.ntag_uid.bytes.begin());
+  }
+
+  for (size_t i = 0; i < observer_count_; ++i) {
+    observers_[i]->OnTagVerified(ntag_uid);
+  }
+}
+
+void TagVerifier::NotifyUnknownTag() {
+  {
+    std::lock_guard lock(snapshot_mutex_);
+    snapshot_.state = TagVerificationState::kUnknownTag;
+  }
+
+  for (size_t i = 0; i < observer_count_; ++i) {
+    observers_[i]->OnUnknownTag();
+  }
+}
+
+void TagVerifier::NotifyAuthorizing() {
+  {
+    std::lock_guard lock(snapshot_mutex_);
+    snapshot_.state = TagVerificationState::kAuthorizing;
+  }
+
+  for (size_t i = 0; i < observer_count_; ++i) {
+    observers_[i]->OnAuthorizing();
+  }
+}
+
+void TagVerifier::NotifyAuthorized(const maco::TagUid& tag_uid,
+                                   const maco::FirebaseId& user_id,
+                                   const pw::InlineString<64>& user_label,
+                                   const maco::FirebaseId& auth_id) {
+  {
+    std::lock_guard lock(snapshot_mutex_);
+    snapshot_.state = TagVerificationState::kAuthorized;
+    snapshot_.user_label = user_label;
+    snapshot_.auth_id = auth_id;
+  }
+
+  for (size_t i = 0; i < observer_count_; ++i) {
+    observers_[i]->OnAuthorized(tag_uid, user_id, user_label, auth_id);
+  }
+}
+
+void TagVerifier::NotifyUnauthorized() {
+  {
+    std::lock_guard lock(snapshot_mutex_);
+    snapshot_.state = TagVerificationState::kUnauthorized;
+  }
+
+  for (size_t i = 0; i < observer_count_; ++i) {
+    observers_[i]->OnUnauthorized();
+  }
+}
+
+void TagVerifier::NotifyTagRemoved() {
+  {
+    std::lock_guard lock(snapshot_mutex_);
+    snapshot_.state = TagVerificationState::kIdle;
+    snapshot_.tag_uid = {};
+    snapshot_.ntag_uid = {};
+    snapshot_.user_label.clear();
+    snapshot_.auth_id = FirebaseId::Empty();
+  }
+
+  for (size_t i = 0; i < observer_count_; ++i) {
+    observers_[i]->OnTagRemoved();
+  }
+}
+
+// --- Main loop ---
 
 pw::async2::Coro<pw::Status> TagVerifier::Run(pw::async2::CoroContext& cx) {
   while (true) {
@@ -62,13 +184,7 @@ pw::async2::Coro<pw::Status> TagVerifier::Run(pw::async2::CoroContext& cx) {
         }
         PW_LOG_INFO("Tag arrived: %u bytes UID",
                     static_cast<unsigned>(event.tag->uid().size()));
-        app_state_.OnTagDetected(event.tag->uid());
-
-        if (session_fsm_) {
-          session_fsm_->SetTagPresent(true);
-          session_fsm_->receive(session_event::TagPresence(true));
-          session_fsm_->SyncSnapshot();
-        }
+        NotifyTagDetected(event.tag->uid());
 
         auto status = co_await VerifyTag(cx, *event.tag);
         if (!status.ok()) {
@@ -80,13 +196,7 @@ pw::async2::Coro<pw::Status> TagVerifier::Run(pw::async2::CoroContext& cx) {
 
       case nfc::NfcEventType::kTagDeparted:
         PW_LOG_INFO("Tag departed");
-        app_state_.OnTagRemoved();
-
-        if (session_fsm_) {
-          session_fsm_->SetTagPresent(false);
-          session_fsm_->receive(session_event::TagPresence(false));
-          session_fsm_->SyncSnapshot();
-        }
+        NotifyTagRemoved();
         break;
     }
   }
@@ -99,7 +209,7 @@ pw::async2::Coro<pw::Status> TagVerifier::VerifyTag(
   // Step 1: Check ISO 14443-4 support
   if (!tag.supports_iso14443_4()) {
     PW_LOG_INFO("Tag does not support ISO 14443-4");
-    app_state_.OnUnknownTag();
+    NotifyUnknownTag();
     co_return pw::OkStatus();
   }
 
@@ -119,17 +229,17 @@ pw::async2::Coro<pw::Status> TagVerifier::VerifyTag(
   if (!select_status.ok()) {
     PW_LOG_INFO("SelectApplication failed: %d",
                 static_cast<int>(select_status.code()));
-    app_state_.OnUnknownTag();
+    NotifyUnknownTag();
     co_return pw::OkStatus();
   }
 
   // Step 4: Authenticate with terminal key
-  app_state_.OnVerifying();
+  NotifyVerifying();
 
   auto key_result = device_secrets_.GetNtagTerminalKey();
   if (!key_result.ok()) {
     PW_LOG_ERROR("Terminal key not provisioned");
-    app_state_.OnUnknownTag();
+    NotifyUnknownTag();
     co_return pw::OkStatus();
   }
 
@@ -140,7 +250,7 @@ pw::async2::Coro<pw::Status> TagVerifier::VerifyTag(
   if (!auth_result.ok()) {
     PW_LOG_INFO("Authentication failed: %d",
                 static_cast<int>(auth_result.status().code()));
-    app_state_.OnUnknownTag();
+    NotifyUnknownTag();
     co_return pw::OkStatus();
   }
 
@@ -151,20 +261,20 @@ pw::async2::Coro<pw::Status> TagVerifier::VerifyTag(
   if (!uid_result.ok()) {
     PW_LOG_INFO("GetCardUid failed: %d",
                 static_cast<int>(uid_result.status().code()));
-    app_state_.OnUnknownTag();
+    NotifyUnknownTag();
     co_return pw::OkStatus();
   }
 
   pw::ConstByteSpan real_uid(uid_buffer.data(), *uid_result);
   PW_LOG_INFO("Tag verified, real UID: %u bytes",
               static_cast<unsigned>(*uid_result));
-  app_state_.OnTagVerified(real_uid);
+  NotifyTagVerified(real_uid);
 
   // Step 6: Authorize with cloud
   auto tag_uid_result = maco::TagUid::FromBytes(real_uid);
   if (!tag_uid_result.ok()) {
     PW_LOG_ERROR("Invalid UID size for TagUid");
-    app_state_.OnUnauthorized();
+    NotifyUnauthorized();
     co_return pw::OkStatus();
   }
 
@@ -186,26 +296,21 @@ pw::async2::Coro<pw::Status> TagVerifier::AuthorizeTag(
   auto cached = auth_cache_.Lookup(tag_uid, now);
   if (cached) {
     PW_LOG_INFO("Cache hit - skipping cloud authorization");
-    app_state_.OnAuthorized(std::string_view(cached->user_label),
-                            cached->auth_id);
-    if (session_fsm_) {
-      session_fsm_->receive(session_event::UserAuthorized(
-          tag_uid, maco::FirebaseId::Empty(), cached->user_label,
-          cached->auth_id));
-      session_fsm_->SyncSnapshot();
-    }
+    NotifyAuthorized(tag_uid, maco::FirebaseId::Empty(),
+                     pw::InlineString<64>(cached->user_label),
+                     cached->auth_id);
     co_return pw::OkStatus();
   }
 
   // Cache miss - call cloud
-  app_state_.OnAuthorizing();
+  NotifyAuthorizing();
 
   auto checkin_result =
       co_await firebase_client_.TerminalCheckin(cx, tag_uid);
   if (!checkin_result.ok()) {
     PW_LOG_ERROR("TerminalCheckin failed: %d",
                  static_cast<int>(checkin_result.status().code()));
-    app_state_.OnUnauthorized();
+    NotifyUnauthorized();
     co_return pw::OkStatus();
   }
 
@@ -214,7 +319,7 @@ pw::async2::Coro<pw::Status> TagVerifier::AuthorizeTag(
     const auto& rejected =
         std::get<firebase::CheckinRejected>(*checkin_result);
     PW_LOG_WARN("TerminalCheckin rejected: %s", rejected.message.c_str());
-    app_state_.OnUnauthorized();
+    NotifyUnauthorized();
     co_return pw::OkStatus();
   }
 
@@ -226,14 +331,9 @@ pw::async2::Coro<pw::Status> TagVerifier::AuthorizeTag(
     PW_LOG_INFO("Using existing auth from checkin");
     auth_cache_.Insert(tag_uid, authorized.authentication_id,
                        std::string_view(authorized.user_label), now);
-    app_state_.OnAuthorized(std::string_view(authorized.user_label),
-                            authorized.authentication_id);
-    if (session_fsm_) {
-      session_fsm_->receive(session_event::UserAuthorized(
-          tag_uid, authorized.user_id, authorized.user_label,
-          authorized.authentication_id));
-      session_fsm_->SyncSnapshot();
-    }
+    NotifyAuthorized(tag_uid, authorized.user_id,
+                     authorized.user_label,
+                     authorized.authentication_id);
     co_return pw::OkStatus();
   }
 
@@ -245,7 +345,7 @@ pw::async2::Coro<pw::Status> TagVerifier::AuthorizeTag(
   if (!reselect_status.ok()) {
     PW_LOG_ERROR("Re-select failed: %d",
                  static_cast<int>(reselect_status.code()));
-    app_state_.OnUnauthorized();
+    NotifyUnauthorized();
     co_return pw::OkStatus();
   }
 
@@ -256,26 +356,22 @@ pw::async2::Coro<pw::Status> TagVerifier::AuthorizeTag(
   if (!cloud_auth_result.ok()) {
     PW_LOG_WARN("Cloud key auth failed: %d",
                 static_cast<int>(cloud_auth_result.status().code()));
-    app_state_.OnUnauthorized();
+    NotifyUnauthorized();
     co_return pw::OkStatus();
   }
 
   // Get auth_id from the cloud key provider
   if (!cloud_key_provider.auth_id()) {
     PW_LOG_ERROR("Cloud auth succeeded but no auth_id");
-    app_state_.OnUnauthorized();
+    NotifyUnauthorized();
     co_return pw::OkStatus();
   }
 
   const auto& auth_id = *cloud_key_provider.auth_id();
   auth_cache_.Insert(tag_uid, auth_id,
                      std::string_view(authorized.user_label), now);
-  app_state_.OnAuthorized(std::string_view(authorized.user_label), auth_id);
-  if (session_fsm_) {
-    session_fsm_->receive(session_event::UserAuthorized(
-        tag_uid, authorized.user_id, authorized.user_label, auth_id));
-    session_fsm_->SyncSnapshot();
-  }
+  NotifyAuthorized(tag_uid, authorized.user_id,
+                   authorized.user_label, auth_id);
 
   co_return pw::OkStatus();
 }

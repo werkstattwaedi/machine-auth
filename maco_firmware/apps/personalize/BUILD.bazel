@@ -20,7 +20,6 @@ cc_library(
     srcs = ["screens/personalize_screen.cc"],
     hdrs = ["screens/personalize_screen.h"],
     deps = [
-        "//maco_firmware/modules/app_state/ui:snapshot",
         "//maco_firmware/modules/ui:data_binding",
         "//maco_firmware/modules/ui:screen",
         "//third_party/lvgl",

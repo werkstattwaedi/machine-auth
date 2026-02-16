@@ -6,9 +6,8 @@
 #include <memory>
 
 #include "maco_firmware/apps/dev/screens/nfc_test_screen.h"
-#include "maco_firmware/modules/app_state/app_state.h"
+#include "maco_firmware/modules/app_state/session_controller.h"
 #include "maco_firmware/modules/app_state/session_fsm.h"
-#include "maco_firmware/modules/app_state/session_event_pump.h"
 #include "maco_firmware/modules/app_state/tag_verifier.h"
 #include "maco_firmware/modules/machine_relay/relay_controller.h"
 #include "device_secrets/device_secrets.h"
@@ -24,6 +23,9 @@
 #include "pw_system/system.h"
 
 namespace {
+
+// Global controller pointer for snapshot provider lambda
+maco::app_state::SessionController* g_controller = nullptr;
 
 void AppInit() {
   PW_LOG_INFO("MACO Dev Firmware initializing...");
@@ -41,16 +43,18 @@ void AppInit() {
   session_fsm.AddObserver(&relay_controller);
   relay_controller.Start(pw::System().dispatcher());
 
-  // Snapshot provider - bridges UI thread to app state
+  // Snapshot provider - bridges UI thread to combined state
   auto snapshot_provider = [](maco::app_state::AppStateSnapshot& snapshot) {
-    maco::system::GetAppState().GetSnapshot(snapshot);
-    session_fsm.GetSnapshot(snapshot.session);
+    if (g_controller) {
+      g_controller->GetSnapshot(snapshot);
+    }
   };
 
   // Set init callback for LVGL widget creation (runs on render thread)
   // All LVGL operations must happen on the render thread.
   static maco::status_bar::StatusBar status_bar;
-  static maco::ui::AppShell app_shell(display, snapshot_provider);
+  static maco::ui::AppShell<maco::app_state::AppStateSnapshot> app_shell(
+      display, snapshot_provider);
 
   display.SetInitCallback([&]() {
     PW_LOG_INFO("Creating UI widgets on render thread...");
@@ -104,19 +108,19 @@ void AppInit() {
 
     static maco::app_state::TagVerifier tag_verifier(
         nfc_reader,
-        maco::system::GetAppState(),
         maco::system::GetDeviceSecrets(),
         maco::system::GetFirebaseClient(),
         maco::system::GetRandomGenerator(),
         pw::System().allocator());
-    tag_verifier.SetSessionFsm(session_fsm);
+    tag_verifier.AddObserver(&session_fsm);
     tag_verifier.Start(pw::System().dispatcher());
 
-    // Session event pump - drives timeouts, hold detection, UI action bridge
-    static maco::app_state::SessionEventPump session_event_pump(
-        session_fsm, pw::async2::GetSystemTimeProvider(),
+    // Session controller - drives timeouts, hold detection, UI action bridge
+    static maco::app_state::SessionController controller(
+        tag_verifier, session_fsm, pw::async2::GetSystemTimeProvider(),
         pw::System().allocator());
-    session_event_pump.Start(pw::System().dispatcher());
+    g_controller = &controller;
+    controller.Start(pw::System().dispatcher());
   }
 
   maco::StartStackMonitor();

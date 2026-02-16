@@ -34,9 +34,8 @@ cc_library(
 
 DEV_DEPS = [
     ":screens",
-    "//maco_firmware/modules/app_state",
+    "//maco_firmware/modules/app_state:session_controller",
     "//maco_firmware/modules/app_state:session_fsm",
-    "//maco_firmware/modules/app_state:session_event_pump",
     "//maco_firmware/modules/display",
     "//maco_firmware/modules/gateway:gateway_client",
     "//maco_firmware/modules/app_state:tag_verifier",
@@ -74,9 +73,8 @@ particle_firmware(
     platform = "//maco_firmware/targets/p2:p2_system",
     deps = [
         ":screens",
-        "//maco_firmware/modules/app_state",
+        "//maco_firmware/modules/app_state:session_controller",
         "//maco_firmware/modules/app_state:session_fsm",
-        "//maco_firmware/modules/app_state:session_event_pump",
         "//maco_firmware/modules/display",
         "//maco_firmware/modules/app_state:tag_verifier",
         "//maco_firmware/modules/gateway:gateway_client",

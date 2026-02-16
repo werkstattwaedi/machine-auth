@@ -7,8 +7,7 @@
 
 namespace maco::personalize {
 
-PersonalizeScreen::PersonalizeScreen(PersonalizeSnapshotProvider provider)
-    : Screen("Personalize"), snapshot_provider_(provider) {
+PersonalizeScreen::PersonalizeScreen() : Screen("Personalize") {
   status_text_ << "Ready - tap a tag";
 }
 
@@ -62,17 +61,11 @@ void PersonalizeScreen::OnDeactivate() {
   PW_LOG_INFO("PersonalizeScreen deactivated");
 }
 
-void PersonalizeScreen::OnUpdate(
-    const app_state::AppStateSnapshot& /*snapshot*/) {
-  // Ignore AppStateSnapshot — fetch from tag prober instead
-  PersonalizeSnapshot ps;
-  snapshot_provider_(ps);
-
-  state_watched_.Set(ps.state);
-  last_snapshot_ = ps;
+void PersonalizeScreen::OnUpdate(const PersonalizeSnapshot& snapshot) {
+  state_watched_.Set(snapshot.state);
 
   if (state_watched_.CheckAndClearDirty()) {
-    UpdateStatusText(ps);
+    UpdateStatusText(snapshot);
     if (status_label_) {
       lv_label_set_text(status_label_, status_text_.c_str());
     }

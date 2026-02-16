@@ -83,7 +83,6 @@ cc_library(
         ":keyboard_input_driver",
         ":sdl_display_driver",
         ":sdl_led_driver",
-        "//maco_firmware/modules/app_state",
         "//maco_firmware/modules/device_config",
         "//maco_firmware/modules/firebase:firebase_client",
         "//maco_firmware/modules/fonts",

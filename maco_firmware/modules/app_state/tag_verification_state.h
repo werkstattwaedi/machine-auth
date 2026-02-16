@@ -5,7 +5,7 @@
 
 namespace maco::app_state {
 
-enum class AppStateId {
+enum class TagVerificationState {
   kIdle,         // No tag present
   kTagDetected,  // Tag at RF layer, checking capabilities
   kVerifying,    // Terminal key auth in progress

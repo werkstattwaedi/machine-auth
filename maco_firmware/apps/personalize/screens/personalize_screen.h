@@ -33,19 +33,15 @@ struct PersonalizeSnapshot {
   pw::InlineString<128> error_message;
 };
 
-/// Function type for fetching personalize state.
-using PersonalizeSnapshotProvider = void (*)(PersonalizeSnapshot&);
-
 /// Screen showing tag personalization status.
-/// Uses OnUpdate() to poll the tag prober via a snapshot provider,
-/// independent of the AppState system.
-class PersonalizeScreen : public ui::Screen {
+/// Receives PersonalizeSnapshot directly via OnUpdate().
+class PersonalizeScreen : public ui::Screen<PersonalizeSnapshot> {
  public:
-  explicit PersonalizeScreen(PersonalizeSnapshotProvider provider);
+  PersonalizeScreen();
 
   pw::Status OnActivate() override;
   void OnDeactivate() override;
-  void OnUpdate(const app_state::AppStateSnapshot& snapshot) override;
+  void OnUpdate(const PersonalizeSnapshot& snapshot) override;
   ui::ButtonConfig GetButtonConfig() const override;
 
  private:
@@ -54,12 +50,10 @@ class PersonalizeScreen : public ui::Screen {
                           const std::array<std::byte, 7>& uid,
                           size_t size);
 
-  PersonalizeSnapshotProvider snapshot_provider_;
   lv_obj_t* status_label_ = nullptr;
 
   ui::Watched<PersonalizeStateId> state_watched_{
       PersonalizeStateId::kIdle};
-  PersonalizeSnapshot last_snapshot_;
   pw::StringBuffer<128> status_text_;
 };
 
