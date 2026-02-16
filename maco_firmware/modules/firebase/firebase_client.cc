@@ -324,6 +324,12 @@ pw::async2::Coro<pw::Result<CheckinResult>> FirebaseClient::TerminalCheckin(
   std::memcpy(request.payload.bytes, payload_buffer.data(), *encode_result);
   request.payload.size = *encode_result;
 
+  // Register future BEFORE starting the RPC. If the channel send fails,
+  // pw_rpc calls the error callback synchronously during Forward().
+  // ValueProvider::Resolve() silently drops the value if no future is
+  // registered, so the future must exist before any callback can fire.
+  auto future = terminal_checkin_provider_.Get();
+
   GatewayClient client(rpc_client_, channel_id_);
   terminal_checkin_call_ = client.Forward(
       request,
@@ -357,7 +363,7 @@ pw::async2::Coro<pw::Result<CheckinResult>> FirebaseClient::TerminalCheckin(
         terminal_checkin_provider_.Resolve(st);
       });
 
-  co_return co_await terminal_checkin_provider_.Get();
+  co_return co_await std::move(future);
 }
 
 pw::async2::Coro<pw::Result<AuthenticateTagResponse>>
@@ -387,6 +393,8 @@ FirebaseClient::AuthenticateTag(pw::async2::CoroContext& cx,
                sizeof(request.endpoint) - 1);
   std::memcpy(request.payload.bytes, payload_buffer.data(), *encode_result);
   request.payload.size = *encode_result;
+
+  auto future = authenticate_tag_provider_.Get();
 
   GatewayClient client(rpc_client_, channel_id_);
   authenticate_tag_call_ = client.Forward(
@@ -421,7 +429,7 @@ FirebaseClient::AuthenticateTag(pw::async2::CoroContext& cx,
         authenticate_tag_provider_.Resolve(st);
       });
 
-  co_return co_await authenticate_tag_provider_.Get();
+  co_return co_await std::move(future);
 }
 
 pw::async2::Coro<pw::Result<CompleteAuthResult>> FirebaseClient::CompleteTagAuth(
@@ -450,6 +458,8 @@ pw::async2::Coro<pw::Result<CompleteAuthResult>> FirebaseClient::CompleteTagAuth
                sizeof(request.endpoint) - 1);
   std::memcpy(request.payload.bytes, payload_buffer.data(), *encode_result);
   request.payload.size = *encode_result;
+
+  auto future = complete_tag_auth_provider_.Get();
 
   GatewayClient client(rpc_client_, channel_id_);
   complete_tag_auth_call_ = client.Forward(
@@ -484,7 +494,7 @@ pw::async2::Coro<pw::Result<CompleteAuthResult>> FirebaseClient::CompleteTagAuth
         complete_tag_auth_provider_.Resolve(st);
       });
 
-  co_return co_await complete_tag_auth_provider_.Get();
+  co_return co_await std::move(future);
 }
 
 pw::async2::Coro<pw::Result<KeyDiversificationResult>>
