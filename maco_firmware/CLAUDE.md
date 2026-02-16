@@ -74,7 +74,8 @@ See [ADR-0011](../docs/adr/0011-pw-console-logging-rpc-integration.md) for archi
 maco_firmware/
 ├── apps/                # Application binaries
 │   ├── dev/             # Development app (firmware + simulator targets)
-│   └── factory/         # Factory test firmware (LED, display, provisioning)
+│   ├── factory/         # Factory test firmware (LED, display, provisioning)
+│   └── personalize/     # Tag personalization (NFC keys + SDM config)
 ├── devices/             # Device-specific drivers (display, touch, etc.)
 │   └── pico_res28_lcd/  # ST7789 display driver
 ├── modules/             # Platform-agnostic abstractions

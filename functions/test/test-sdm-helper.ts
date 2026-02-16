@@ -147,9 +147,8 @@ export function generateValidPICCAndCMAC(
   // Parse inputs
   const uidBuffer = Buffer.from(uid, "hex");
   const counterBuffer = Buffer.alloc(3);
-  counterBuffer.writeUIntBE(counter, 0, 3);
+  counterBuffer.writeUIntLE(counter, 0, 3);  // NTAG424 counter is little-endian
   const terminalKeyBuffer = Buffer.from(terminalKey, "hex");
-  const masterKeyBuffer = Buffer.from(masterKey, "hex");
 
   // Validate inputs
   if (uidBuffer.length !== 7) {
@@ -160,9 +159,6 @@ export function generateValidPICCAndCMAC(
   }
   if (terminalKeyBuffer.length !== 16) {
     throw new Error("Terminal key must be 16 bytes (32 hex characters)");
-  }
-  if (masterKeyBuffer.length !== 16) {
-    throw new Error("Master key must be 16 bytes (32 hex characters)");
   }
 
   // 1. Encrypt PICC data (UID + Counter + padding) with terminal key
@@ -183,13 +179,13 @@ export function generateValidPICCAndCMAC(
     cipher.final(),
   ]);
 
-  // 2. Derive SV2 from terminal key
-  // Note: SDM CMAC verification uses session keys derived from terminal_key.
-  // Key diversification (reserved1) is only used for 3-pass mutual authentication.
-  const sv2 = deriveSV2(terminalKeyBuffer, uidBuffer, counterBuffer);
+  // 2. Derive SDM MAC key (diversified Key 3) from UID
+  const sdmMacKey = diversifyKey(masterKey, systemName, uidBuffer, "sdm_mac");
+  const sdmMacKeyBuffer = Buffer.from(sdmMacKey, "hex");
 
-  // 3. Derive session keys from SV2
-  const sessionKeys = deriveSessionKeys(terminalKeyBuffer, sv2);
+  // 3. Derive SV2 and session keys from SDM MAC key (not terminal key)
+  const sv2 = deriveSV2(sdmMacKeyBuffer, uidBuffer, counterBuffer);
+  const sessionKeys = deriveSessionKeys(sdmMacKeyBuffer, sv2);
 
   // 4. Compute CMAC over UID + Counter using session MAC key
   const dataToMAC = Buffer.concat([uidBuffer, counterBuffer]);

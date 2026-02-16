@@ -18,7 +18,7 @@ export interface KeyDiversificationRequest {
 export interface KeyDiversificationResponse {
   applicationKey: KeyBytes | undefined;
   authorizationKey: KeyBytes | undefined;
-  reserved1Key: KeyBytes | undefined;
+  sdmMacKey: KeyBytes | undefined;
   reserved2Key: KeyBytes | undefined;
 }
 
@@ -71,7 +71,7 @@ export const KeyDiversificationRequest: MessageFns<KeyDiversificationRequest> = 
 };
 
 function createBaseKeyDiversificationResponse(): KeyDiversificationResponse {
-  return { applicationKey: undefined, authorizationKey: undefined, reserved1Key: undefined, reserved2Key: undefined };
+  return { applicationKey: undefined, authorizationKey: undefined, sdmMacKey: undefined, reserved2Key: undefined };
 }
 
 export const KeyDiversificationResponse: MessageFns<KeyDiversificationResponse> = {
@@ -82,8 +82,8 @@ export const KeyDiversificationResponse: MessageFns<KeyDiversificationResponse> 
     if (message.authorizationKey !== undefined) {
       KeyBytes.encode(message.authorizationKey, writer.uint32(18).fork()).join();
     }
-    if (message.reserved1Key !== undefined) {
-      KeyBytes.encode(message.reserved1Key, writer.uint32(26).fork()).join();
+    if (message.sdmMacKey !== undefined) {
+      KeyBytes.encode(message.sdmMacKey, writer.uint32(26).fork()).join();
     }
     if (message.reserved2Key !== undefined) {
       KeyBytes.encode(message.reserved2Key, writer.uint32(34).fork()).join();
@@ -119,7 +119,7 @@ export const KeyDiversificationResponse: MessageFns<KeyDiversificationResponse> 
             break;
           }
 
-          message.reserved1Key = KeyBytes.decode(reader, reader.uint32());
+          message.sdmMacKey = KeyBytes.decode(reader, reader.uint32());
           continue;
         }
         case 4: {
@@ -150,8 +150,8 @@ export const KeyDiversificationResponse: MessageFns<KeyDiversificationResponse> 
     message.authorizationKey = (object.authorizationKey !== undefined && object.authorizationKey !== null)
       ? KeyBytes.fromPartial(object.authorizationKey)
       : undefined;
-    message.reserved1Key = (object.reserved1Key !== undefined && object.reserved1Key !== null)
-      ? KeyBytes.fromPartial(object.reserved1Key)
+    message.sdmMacKey = (object.sdmMacKey !== undefined && object.sdmMacKey !== null)
+      ? KeyBytes.fromPartial(object.sdmMacKey)
       : undefined;
     message.reserved2Key = (object.reserved2Key !== undefined && object.reserved2Key !== null)
       ? KeyBytes.fromPartial(object.reserved2Key)

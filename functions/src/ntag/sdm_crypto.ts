@@ -29,9 +29,9 @@ interface SessionKeys {
  * Derives SV2 value for session key generation
  * SV2 = CMAC(key, 0x3CC3 || 0x0001 || 0x0080 || UID || Counter)
  *
- * @param key - SDMFileReadKey (terminal key)
+ * @param key - SDMFileReadKey (Key 3, diversified per-tag)
  * @param uid - 7-byte UID
- * @param counter - 3-byte read counter
+ * @param counter - 3-byte read counter (little-endian)
  * @returns 16-byte SV2 value
  */
 function deriveSV2(key: Buffer, uid: Buffer, counter: Buffer): Buffer {
@@ -54,7 +54,7 @@ function deriveSV2(key: Buffer, uid: Buffer, counter: Buffer): Buffer {
  * SesAuthEncKey = CMAC(key, 0x01 || SV2[0..15])
  * SesAuthMACKey = CMAC(key, 0x02 || SV2[0..15])
  *
- * @param key - SDMFileReadKey (terminal key)
+ * @param key - SDMFileReadKey (Key 3, diversified per-tag)
  * @param sv2 - 16-byte SV2 value
  * @returns Session encryption and MAC keys
  */
@@ -214,32 +214,33 @@ export function decryptPICCData(
 /**
  * Verifies CMAC signature of SDM message
  *
- * Note: SDM CMAC verification uses session keys derived from the terminal key.
- * Key diversification is only used for 3-pass mutual authentication, not SDM checkout.
+ * The tag generates the CMAC using SDMFileReadKey (Key 3, diversified per-tag).
+ * The caller must derive Key 3 from the UID (obtained by decrypting PICC data
+ * with the static terminal key) before calling this function.
  *
  * @param cmac - Hex-encoded CMAC from URL (8 bytes = truncated CMAC)
  * @param piccData - Decrypted PICC data
- * @param terminalKey - Hex-encoded terminal key for session key derivation (32 hex chars)
+ * @param sdmFileReadKey - Hex-encoded SDMFileReadKey (diversified Key 3, 32 hex chars)
  * @returns true if CMAC is valid
  */
 export function verifyCMAC(
   cmac: string,
   piccData: PICCData,
-  terminalKey: string
+  sdmFileReadKey: string
 ): boolean {
   const cmacBytes = Buffer.from(cmac, "hex");
-  const terminalKeyBytes = Buffer.from(terminalKey, "hex");
+  const sdmKeyBytes = Buffer.from(sdmFileReadKey, "hex");
 
   if (cmacBytes.length !== 8) {
     throw new Error("CMAC must be 8 bytes (16 hex characters)");
   }
-  if (terminalKeyBytes.length !== 16) {
-    throw new Error("Terminal key must be 16 bytes (32 hex characters)");
+  if (sdmKeyBytes.length !== 16) {
+    throw new Error("SDMFileReadKey must be 16 bytes (32 hex characters)");
   }
 
-  // Derive SV2 and session keys from terminal key
-  const sv2 = deriveSV2(terminalKeyBytes, piccData.uid, piccData.counter);
-  const sessionKeys = deriveSessionKeys(terminalKeyBytes, sv2);
+  // Derive SV2 and session keys from SDMFileReadKey (diversified Key 3)
+  const sv2 = deriveSV2(sdmKeyBytes, piccData.uid, piccData.counter);
+  const sessionKeys = deriveSessionKeys(sdmKeyBytes, sv2);
 
   // Compute CMAC over UID || Counter using session MAC key
   const dataToMAC = Buffer.concat([piccData.uid, piccData.counter]);

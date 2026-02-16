@@ -60,24 +60,7 @@ See [`docs/adr/0009-local-build-flash-tooling.md`](docs/adr/0009-local-build-fla
 3. Backend verifies user permissions and creates/returns session
 4. Machine activates relay to enable equipment
 5. Usage data tracked locally and synced to cloud
-6. Sessions closed via UI, self-checkout, timeout, or new tag
-
-## Flatbuffer Schema Generation
-
-Shared flatbuffers for cross-platform serialization:
-
-**Schema Files:**
-- `schema/ntag.fbs`: Tag UID and key definitions
-- `schema/token_session.fbs`: Session RPC service and types
-- `schema/machine_usage.fbs`: Usage tracking and checkout reasons
-- `schema/ledger_terminal-config.fbs`: Device configuration
-- `schema/personalization.fbs`: Tag personalization during setup
-
-**Generate Code:**
-```bash
-cd schema/
-make  # Generates C++ headers and TypeScript
-```
+6. Sessions closed via UI, self-checkout (NFC tag tap on phone via SDM), timeout, or new tag
 
 ## Cloud Integration
 

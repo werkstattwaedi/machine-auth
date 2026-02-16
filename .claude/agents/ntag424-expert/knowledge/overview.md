@@ -202,24 +202,41 @@ Change access parameters of a file.
 | 6 | SDM | Enable Secure Dynamic Messaging |
 | 0-5 | CommMode | 00=Plain, 01=MAC, 11=Full |
 
-### SDMOptions Byte (Datasheet p.65-66, AN12196 p.10)
+### SDMOptions Byte (Datasheet p.65, Table 69)
 | Bit | Name | Description |
 |-----|------|-------------|
-| 0 | ASCII | ASCII encoding (1) vs binary (0) |
-| 1 | UID | Include UID in PICCData |
-| 2 | SDMReadCtr | Include read counter |
-| 4 | SDMReadCtrLimit | Enable counter limit |
-| 5 | SDMENCFileData | Encrypt file data portion |
-| 6 | reserved | |
-| 7 | reserved | |
+| 7 | UID | UID mirroring (1=enabled, 0=disabled) |
+| 6 | SDMReadCtr | Read counter mirroring (1=enabled, 0=disabled) |
+| 5 | SDMReadCtrLimit | Enable read counter limit (requires 3-byte limit value!) |
+| 4 | SDMENCFileData | Encrypt file data (requires SDMENCOffset+SDMENCLength!) |
+| 3-1 | RFU | Must be 000. Setting → 0x9E Parameter Error |
+| 0 | ASCII | Encoding mode (1=ASCII hex, 0=binary) |
 
-### SDMAccessRights (2 bytes, Datasheet p.66)
+**IMPORTANT:**
+- Bits 3-1 are reserved and MUST be 0. Setting them causes 0x9E Parameter Error.
+- Bit 7 (UID) and bit 6 (SDMReadCtr) control WHAT is mirrored. SDMMetaRead controls HOW
+  (encrypted vs plain). Both bits must be set to include UID+ReadCtr.
+- When SDMMetaRead != Eh (encrypted mode): PICCDataOffset replaces UIDOffset+SDMReadCtrOffset.
+  But UID/ReadCtr bits must still be set, or PICCDataOffset won't be expected → 0x7E Length Error.
+- For encrypted PICC data (UID+ReadCtr) + CMAC: SDMOptions = 0xC1 (bits 0, 6, 7).
+  This matches AN12196 personalization example.
+
+### SDMAccessRights (2 bytes LE, Datasheet p.66)
+
+16-bit field (little-endian on wire, low byte first):
 | Bits | Field | Description |
 |------|-------|-------------|
-| 0-3 | SDMCtrRet | Key for counter retrieval |
-| 4-7 | SDMMetaRead | Key for PICCData decryption |
-| 8-11 | SDMFileRead | Key for CMAC verification |
-| 12-15 | reserved | Set to Fh |
+| 15-12 | SDMMetaRead | Key for PICCData (0-4=key, E=plain, F=none) |
+| 11-8 | SDMFileRead | Key for CMAC verification (0-4=key, E=free, F=none) |
+| 7-4 | RFU | Set to Fh |
+| 3-0 | SDMCtrRet | Key for counter retrieval (0-4=key, E=free, F=none) |
+
+**Wire byte order (little-endian):**
+- Byte 0 (low) = `[RFU:4][SDMCtrRet:4]`
+- Byte 1 (high) = `[SDMMetaRead:4][SDMFileRead:4]`
+
+Example: MetaRead=1, FileRead=3, RFU=F, CtrRet=E → 16-bit=0x13FE → wire=**0xFE 0x13**
+AN12196 example: MetaRead=2, FileRead=1, RFU=F, CtrRet=1 → 16-bit=0x21F1 → wire=**0xF1 0x21** (displayed as "F121")
 
 ---
 

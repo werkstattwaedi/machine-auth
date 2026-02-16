@@ -16,6 +16,7 @@
 #include "pw_async2/dispatcher.h"
 #include "pw_random/random.h"
 #include "pw_sync/interrupt_spin_lock.h"
+#include "pw_sync/lock_annotations.h"
 
 namespace maco::secrets {
 class DeviceSecrets;
@@ -27,38 +28,45 @@ class FirebaseClient;
 
 namespace maco::personalize {
 
-/// Probes NFC tags to classify them (factory/MaCo/unknown) and
-/// optionally personalizes factory tags with cloud-derived keys.
-class TagProber {
+/// Orchestrates NFC tag identification, key provisioning, and SDM
+/// configuration. Replaces the monolithic TagProber class.
+class PersonalizeCoordinator {
  public:
-  TagProber(nfc::NfcReader& reader,
-            secrets::DeviceSecrets& device_secrets,
-            firebase::FirebaseClient& firebase_client,
-            pw::random::RandomGenerator& rng,
-            pw::allocator::Allocator& allocator);
+  PersonalizeCoordinator(nfc::NfcReader& reader,
+                         secrets::DeviceSecrets& device_secrets,
+                         firebase::FirebaseClient& firebase_client,
+                         pw::random::RandomGenerator& rng,
+                         pw::allocator::Allocator& allocator);
 
   void Start(pw::async2::Dispatcher& dispatcher);
 
   /// Arm personalization for the next factory tag tap.
-  /// Called from the RPC service (possibly different thread).
-  void RequestPersonalization();
+  void RequestPersonalization() PW_LOCKS_EXCLUDED(lock_);
 
   /// Get a snapshot of the current state (thread-safe).
-  void GetSnapshot(PersonalizeSnapshot& snapshot);
+  void GetSnapshot(PersonalizeSnapshot& snapshot) PW_LOCKS_EXCLUDED(lock_);
 
  private:
   pw::async2::Coro<pw::Status> Run(pw::async2::CoroContext& cx);
-  pw::async2::Coro<pw::Status> ProbeTag(pw::async2::CoroContext& cx,
-                                         nfc::NfcTag& tag);
-  pw::async2::Coro<pw::Status> PersonalizeTag(pw::async2::CoroContext& cx,
-                                               nfc::Ntag424Tag& ntag,
-                                               const maco::TagUid& tag_uid);
 
-  void SetState(PersonalizeStateId state);
+  pw::async2::Coro<pw::Status> HandleTag(pw::async2::CoroContext& cx,
+                                          nfc::NfcTag& tag);
+
+  /// Attempt armed personalization: provision keys + configure SDM.
+  /// Returns the verified UID on success for state reporting.
+  pw::async2::Coro<pw::Status> TryPersonalize(
+      pw::async2::CoroContext& cx,
+      nfc::NfcTag& tag,
+      const maco::TagUid& tag_uid);
+
+  void SetState(PersonalizeStateId state) PW_LOCKS_EXCLUDED(lock_);
   void SetStateWithUid(PersonalizeStateId state,
                        const std::array<std::byte, 7>& uid,
-                       size_t uid_size);
-  void SetError(std::string_view message);
+                       size_t uid_size) PW_LOCKS_EXCLUDED(lock_);
+  void SetError(std::string_view message) PW_LOCKS_EXCLUDED(lock_);
+
+  bool IsArmed() PW_LOCKS_EXCLUDED(lock_);
+  void Disarm() PW_LOCKS_EXCLUDED(lock_);
 
   nfc::NfcReader& reader_;
   secrets::DeviceSecrets& device_secrets_;
@@ -68,10 +76,9 @@ class TagProber {
   pw::async2::CoroContext coro_cx_;
   std::optional<pw::async2::CoroOrElseTask> task_;
 
-  // Shared state protected by lock
   pw::sync::InterruptSpinLock lock_;
-  PersonalizeSnapshot snapshot_;
-  bool personalize_armed_ = false;
+  PersonalizeSnapshot snapshot_ PW_GUARDED_BY(lock_);
+  bool personalize_armed_ PW_GUARDED_BY(lock_) = false;
 };
 
 }  // namespace maco::personalize

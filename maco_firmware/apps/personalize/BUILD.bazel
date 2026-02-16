@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 # Tag personalization firmware (P2 only).
-# Probes NFC tags and sets diversified keys via cloud.
+# Probes NFC tags, sets diversified keys via cloud, and configures SDM.
 #
 # Usage:
 #   ./pw build p2                    # Build (included in p2 target)
@@ -29,13 +29,77 @@ cc_library(
     ],
 )
 
-# Tag prober - NFC tag classification and personalization
+# SDM constants - NDEF template and SDM configuration bytes
 cc_library(
-    name = "tag_prober",
-    srcs = ["tag_prober.cc"],
-    hdrs = ["tag_prober.h"],
+    name = "sdm_constants",
+    hdrs = ["sdm_constants.h"],
     deps = [
+        "@pigweed//pw_bytes",
+    ],
+)
+
+# Tag identification - classify tags as factory/MaCo/unknown
+cc_library(
+    name = "tag_identifier",
+    srcs = ["tag_identifier.cc"],
+    hdrs = ["tag_identifier.h"],
+    deps = [
+        "//maco_firmware/devices/pn532:tag_info",
+        "//maco_firmware/modules/device_secrets",
+        "//maco_firmware/modules/nfc_reader",
+        "//maco_firmware/modules/nfc_tag:nfc_tag",
+        "//maco_firmware/modules/nfc_tag/ntag424:local_key_provider",
+        "//maco_firmware/modules/nfc_tag/ntag424:ntag424_tag",
+        "@pigweed//pw_async2:coro",
+        "@pigweed//pw_log",
+        "@pigweed//pw_random",
+        "@pigweed//pw_result",
+    ],
+)
+
+# Key provisioning - idempotent key changes on NTAG424 tags
+cc_library(
+    name = "key_updater",
+    srcs = ["key_updater.cc"],
+    hdrs = ["key_updater.h"],
+    deps = [
+        "//maco_firmware/modules/firebase:firebase_client",
+        "//maco_firmware/modules/nfc_tag/ntag424:local_key_provider",
+        "//maco_firmware/modules/nfc_tag/ntag424:ntag424_session",
+        "//maco_firmware/modules/nfc_tag/ntag424:ntag424_tag",
+        "@pigweed//pw_async2:coro",
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_log",
+        "@pigweed//pw_random",
+        "@pigweed//pw_result",
+    ],
+)
+
+# SDM configurator - NDEF write + ChangeFileSettings
+cc_library(
+    name = "sdm_configurator",
+    srcs = ["sdm_configurator.cc"],
+    hdrs = ["sdm_configurator.h"],
+    deps = [
+        ":sdm_constants",
+        "//maco_firmware/modules/nfc_tag/ntag424:ntag424_session",
+        "//maco_firmware/modules/nfc_tag/ntag424:ntag424_tag",
+        "@pigweed//pw_async2:coro",
+        "@pigweed//pw_log",
+        "@pigweed//pw_status",
+    ],
+)
+
+# Personalization coordinator - orchestrates identification, keys, and SDM
+cc_library(
+    name = "personalize_coordinator",
+    srcs = ["personalize_coordinator.cc"],
+    hdrs = ["personalize_coordinator.h"],
+    deps = [
+        ":key_updater",
         ":screens",
+        ":sdm_configurator",
+        ":tag_identifier",
         "//maco_firmware:types",
         "//maco_firmware/devices/pn532:tag_info",
         "//maco_firmware/modules/device_secrets",
@@ -43,7 +107,6 @@ cc_library(
         "//maco_firmware/modules/nfc_reader",
         "//maco_firmware/modules/nfc_tag:nfc_tag",
         "//maco_firmware/modules/nfc_tag/ntag424:ntag424_tag",
-        "//maco_firmware/modules/nfc_tag/ntag424:local_key_provider",
         "@pigweed//pw_allocator",
         "@pigweed//pw_async2:coro",
         "@pigweed//pw_async2:coro_or_else_task",
@@ -51,6 +114,7 @@ cc_library(
         "@pigweed//pw_log",
         "@pigweed//pw_random",
         "@pigweed//pw_sync:interrupt_spin_lock",
+        "@pigweed//pw_sync:lock_annotations",
     ],
 )
 
@@ -60,7 +124,7 @@ cc_library(
     srcs = ["personalization_rpc_service.cc"],
     hdrs = ["personalization_rpc_service.h"],
     deps = [
-        ":tag_prober",
+        ":personalize_coordinator",
         "//maco_firmware/protos:personalization_service_nanopb_rpc",
         "@pigweed//pw_log",
     ],
@@ -73,8 +137,8 @@ particle_firmware(
     platform = "//maco_firmware/targets/p2:p2_system",
     deps = [
         ":personalization_rpc_service",
+        ":personalize_coordinator",
         ":screens",
-        ":tag_prober",
         "//maco_firmware/modules/display",
         "//maco_firmware/modules/gateway:gateway_client",
         "//maco_firmware/modules/nfc_reader",

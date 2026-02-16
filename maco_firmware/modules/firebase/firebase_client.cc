@@ -285,9 +285,9 @@ pw::Result<KeyDiversificationResult> DecodeKeyDiversificationResponse(
   std::memcpy(result.authorization_key.data(),
               response.authorization_key.value,
               sizeof(result.authorization_key));
-  std::memcpy(result.reserved1_key.data(),
-              response.reserved1_key.value,
-              sizeof(result.reserved1_key));
+  std::memcpy(result.sdm_mac_key.data(),
+              response.sdm_mac_key.value,
+              sizeof(result.sdm_mac_key));
   std::memcpy(result.reserved2_key.data(),
               response.reserved2_key.value,
               sizeof(result.reserved2_key));

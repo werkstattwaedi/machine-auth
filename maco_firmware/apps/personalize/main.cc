@@ -6,8 +6,8 @@
 #include <memory>
 
 #include "maco_firmware/apps/personalize/personalization_rpc_service.h"
+#include "maco_firmware/apps/personalize/personalize_coordinator.h"
 #include "maco_firmware/apps/personalize/screens/personalize_screen.h"
-#include "maco_firmware/apps/personalize/tag_prober.h"
 #include "device_secrets/device_secrets.h"
 #include "maco_firmware/modules/display/display.h"
 #include "gateway/gateway_client.h"
@@ -21,8 +21,8 @@
 
 namespace {
 
-// Global tag prober pointer for snapshot provider lambda
-maco::personalize::TagProber* g_tag_prober = nullptr;
+// Global coordinator pointer for snapshot provider lambda
+maco::personalize::PersonalizeCoordinator* g_coordinator = nullptr;
 
 void AppInit() {
   PW_LOG_INFO("MACO Personalize Firmware initializing...");
@@ -35,11 +35,11 @@ void AppInit() {
   // AppState snapshot provider is a no-op — screen uses its own snapshot
   auto snapshot_provider = [](maco::app_state::AppStateSnapshot&) {};
 
-  // Personalize snapshot provider bridges tag prober to screen
+  // Personalize snapshot provider bridges coordinator to screen
   auto personalize_provider =
       [](maco::personalize::PersonalizeSnapshot& snapshot) {
-        if (g_tag_prober) {
-          g_tag_prober->GetSnapshot(snapshot);
+        if (g_coordinator) {
+          g_coordinator->GetSnapshot(snapshot);
         }
       };
 
@@ -91,17 +91,17 @@ void AppInit() {
   } else {
     maco::system::GetGatewayClient().Start(pw::System().dispatcher());
 
-    static maco::personalize::TagProber tag_prober(
+    static maco::personalize::PersonalizeCoordinator coordinator(
         nfc_reader,
         maco::system::GetDeviceSecrets(),
         maco::system::GetFirebaseClient(),
         maco::system::GetRandomGenerator(),
         pw::System().allocator());
-    g_tag_prober = &tag_prober;
-    tag_prober.Start(pw::System().dispatcher());
+    g_coordinator = &coordinator;
+    coordinator.Start(pw::System().dispatcher());
 
     static maco::personalize::PersonalizationRpcService rpc_service(
-        tag_prober);
+        coordinator);
     pw::System().rpc_server().RegisterService(rpc_service);
   }
 

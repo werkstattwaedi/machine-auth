@@ -13,13 +13,13 @@ export type KeyName =
   | "application"
   | "terminal"
   | "authorization"
-  | "reserved1"
+  | "sdm_mac"
   | "reserved2";
 const keyNames: Array<KeyName> = [
   "application",
   "terminal",
   "authorization",
-  "reserved1",
+  "sdm_mac",
   "reserved2",
 ];
 
@@ -74,7 +74,7 @@ const keyIdBytes = {
   application: Buffer.from([0x00, 0x00, 0x01]),
   terminal: Buffer.from([0x00, 0x00, 0x02]),
   authorization: Buffer.from([0x00, 0x00, 0x03]),
-  reserved1: Buffer.from([0x00, 0x00, 0x04]),
+  sdm_mac: Buffer.from([0x00, 0x00, 0x04]),
   reserved2: Buffer.from([0x00, 0x00, 0x05]),
 };
 

@@ -14,7 +14,7 @@ pw::Status PersonalizationRpcService::PersonalizeNextTag(
     ::maco_PersonalizeNextTagResponse& response) {
   (void)request;
   PW_LOG_INFO("PersonalizeNextTag RPC called - arming");
-  tag_prober_.RequestPersonalization();
+  coordinator_.RequestPersonalization();
   response.armed = true;
   return pw::OkStatus();
 }

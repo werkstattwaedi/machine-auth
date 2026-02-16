@@ -21,6 +21,8 @@ describe("handleVerifyTagCheckout (Integration)", () => {
 
   const mockConfig = {
     terminalKey: TEST_TERMINAL_KEY,
+    masterKey: TEST_MASTER_KEY,
+    systemName: TEST_SYSTEM_NAME,
   };
 
   before(async function () {

@@ -25,8 +25,8 @@ describe("handleKeyDiversification", () => {
     expect(Array.from(res.authorizationKey?.value || [])).to.deep.equal(
       Array.from(Buffer.from(expected.authorization, "hex"))
     );
-    expect(Array.from(res.reserved1Key?.value || [])).to.deep.equal(
-      Array.from(Buffer.from(expected.reserved1, "hex"))
+    expect(Array.from(res.sdmMacKey?.value || [])).to.deep.equal(
+      Array.from(Buffer.from(expected.sdm_mac, "hex"))
     );
     expect(Array.from(res.reserved2Key?.value || [])).to.deep.equal(
       Array.from(Buffer.from(expected.reserved2, "hex"))

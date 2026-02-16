@@ -8,12 +8,15 @@
 import { getFirestore } from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
 import { decryptPICCData, verifyCMAC } from "../ntag/sdm_crypto";
+import { diversifyKey } from "../ntag/key_diversification";
 
 /**
  * Configuration passed from middleware
  */
 export interface Config {
   terminalKey: string;
+  masterKey: string;
+  systemName: string;
 }
 
 /**
@@ -37,9 +40,9 @@ export interface VerifyTagResponse {
  * Verifies tag-based checkout request
  *
  * Flow:
- * 1. Decrypt PICC data using terminal key → extract UID + counter
+ * 1. Decrypt PICC data using terminal key (static Key 1) → extract UID + counter
  * 2. Look up token in Firestore by UID
- * 3. Verify CMAC signature using terminal key
+ * 3. Derive SDM MAC key (diversified Key 3) from UID, verify CMAC
  * 4. Return token and user information
  *
  * @param request - Request containing encrypted PICC and CMAC
@@ -52,7 +55,7 @@ export async function handleVerifyTagCheckout(
   config: Config
 ): Promise<VerifyTagResponse> {
   const { picc, cmac } = request;
-  const { terminalKey } = config;
+  const { terminalKey, masterKey, systemName } = config;
 
   // Validate inputs
   if (!picc || typeof picc !== "string") {
@@ -101,10 +104,11 @@ export async function handleVerifyTagCheckout(
 
   const userId = userRef.id;
 
-  // Step 3: Verify CMAC signature
+  // Step 3: Derive SDM MAC key (diversified Key 3) and verify CMAC
   let isValid;
   try {
-    isValid = verifyCMAC(cmac, piccData, terminalKey);
+    const sdmMacKey = diversifyKey(masterKey, systemName, piccData.uid, "sdm_mac");
+    isValid = verifyCMAC(cmac, piccData, sdmMacKey);
   } catch (error: any) {
     logger.error("CMAC verification failed", { error: error.message });
     throw new Error(`CMAC verification failed: ${error.message}`);

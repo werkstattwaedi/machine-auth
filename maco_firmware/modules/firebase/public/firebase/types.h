@@ -93,7 +93,7 @@ using CompleteAuthResult =
 struct KeyDiversificationResult {
   std::array<std::byte, 16> application_key;
   std::array<std::byte, 16> authorization_key;
-  std::array<std::byte, 16> reserved1_key;
+  std::array<std::byte, 16> sdm_mac_key;
   std::array<std::byte, 16> reserved2_key;
 };
 

@@ -14,7 +14,7 @@ KEY_IDS: dict[str, bytes] = {
     "application": b"\x00\x00\x01",
     "terminal": b"\x00\x00\x02",
     "authorization": b"\x00\x00\x03",
-    "reserved1": b"\x00\x00\x04",
+    "sdm_mac": b"\x00\x00\x04",
     "reserved2": b"\x00\x00\x05",
 }
 
@@ -67,7 +67,7 @@ def diversify_key(
         system_name: System identifier string (e.g. "OwwMachineAuth").
         tag_uid: 7-byte tag UID.
         key_name: One of "application", "terminal", "authorization",
-                  "reserved1", "reserved2".
+                  "sdm_mac", "reserved2".
 
     Returns:
         16-byte diversified key.

@@ -398,13 +398,10 @@ pw::async2::Coro<pw::Result<size_t>> Ntag424Tag::ReadData(
   }
   size_t total_bytes_read = 0;
 
-  // Increment counter BEFORE verifying response MAC (for Full/MAC modes).
-  // The PICC increments CmdCtr before calculating its response MAC,
-  // so we must use CmdCtr+1 when verifying. (AN12196 Section 4.3, Figure 9)
-  if (comm_mode != CommMode::kPlain) {
-    if (!sm->IncrementCounter()) {
-      co_return pw::Status::ResourceExhausted();  // Counter overflow
-    }
+  // Increment CmdCtr for every successful command. The PICC always increments
+  // regardless of CommMode; we must stay in sync.
+  if (!sm->IncrementCounter()) {
+    co_return pw::Status::ResourceExhausted();
   }
 
   if (comm_mode == CommMode::kFull && data_len > 0) {
@@ -587,22 +584,302 @@ pw::async2::Coro<pw::Status> Ntag424Tag::WriteData(
     co_return InterpretStatusWord(sw1, sw2);
   }
 
+  // Increment CmdCtr for every successful command. The PICC always increments
+  // regardless of CommMode; we must stay in sync.
+  if (!sm->IncrementCounter()) {
+    co_return pw::Status::ResourceExhausted();
+  }
+
   // Verify response CMAC for Full and MAC modes
   if (comm_mode != CommMode::kPlain) {
     if (response_len < 10) {
       co_return pw::Status::DataLoss();
     }
 
-    // Increment counter BEFORE verifying response MAC.
-    // The PICC increments CmdCtr before calculating its response MAC,
-    // so we must use CmdCtr+1 when verifying. (AN12196 Section 4.3, Figure 9)
-    if (!sm->IncrementCounter()) {
-      co_return pw::Status::ResourceExhausted();  // Counter overflow
-    }
-
     pw::ConstByteSpan received_cmac(response.data(), 8);
 
     // For write, response has no data, just verify the empty response CMAC
+    PW_CO_TRY(sm->VerifyResponseCMAC(0x00, received_cmac));
+  }
+
+  co_return pw::OkStatus();
+}
+
+// ============================================================================
+// GetFileSettings
+// ============================================================================
+
+pw::async2::Coro<pw::Result<size_t>> Ntag424Tag::GetFileSettings(
+    pw::async2::CoroContext& cx,
+    const Ntag424Session& session,
+    uint8_t file_number,
+    pw::ByteSpan settings_buffer,
+    CommMode comm_mode) {
+  PW_CO_TRY(ValidateSession(session));
+  auto* sm = secure_messaging();
+
+  // Build GetFileSettings command
+  // Full mode: 90 F5 00 00 09 [FileNo] [CMACt(8)] 00
+  // Plain mode: 90 F5 00 00 01 [FileNo] 00
+  std::array<std::byte, 16> command;
+  command[0] = std::byte{ntag424_cmd::kClaNative};
+  command[1] = std::byte{ntag424_cmd::kGetFileSettings};
+  command[2] = std::byte{0x00};  // P1
+  command[3] = std::byte{0x00};  // P2
+
+  command[5] = std::byte{file_number};
+
+  size_t cmd_len;
+
+  if (comm_mode == CommMode::kFull) {
+    command[4] = std::byte{9};  // Lc: 1 (FileNo) + 8 (CMACt)
+
+    // Build CMACt over command header (FileNo)
+    pw::ConstByteSpan cmd_header(command.data() + 5, 1);
+    pw::ByteSpan cmac_out(command.data() + 6, 8);
+    PW_CO_TRY(sm->BuildCommandCMAC(ntag424_cmd::kGetFileSettings, cmd_header,
+                                    cmac_out));
+
+    command[14] = std::byte{0x00};  // Le
+    cmd_len = 15;
+  } else {
+    command[4] = std::byte{1};  // Lc: 1 (FileNo only)
+    command[6] = std::byte{0x00};  // Le
+    cmd_len = 7;
+  }
+
+  // Response: up to 32 bytes data + optional CMACt(8) + SW(2)
+  std::array<std::byte, 48> response;
+  pw::ConstByteSpan cmd_span(command.data(), cmd_len);
+  PW_CO_TRY_ASSIGN(size_t response_len,
+                   co_await DoTransceive(cx, cmd_span, response));
+
+  if (response_len < 2) {
+    co_return pw::Status::DataLoss();
+  }
+
+  uint8_t sw1 = static_cast<uint8_t>(response[response_len - 2]);
+  uint8_t sw2 = static_cast<uint8_t>(response[response_len - 1]);
+  if (sw1 != 0x91 || sw2 != 0x00) {
+    PW_LOG_WARN("GetFileSettings SW=%02X %02X", sw1, sw2);
+    co_return InterpretStatusWord(sw1, sw2);
+  }
+
+  // Increment CmdCtr for every successful command. The PICC always increments
+  // regardless of CommMode; we must stay in sync.
+  if (!sm->IncrementCounter()) {
+    co_return pw::Status::ResourceExhausted();
+  }
+
+  if (comm_mode == CommMode::kFull) {
+    // Response format: [EncryptedData(N)] [CMACt(8)] [SW(2)]
+    size_t data_with_cmac_len = response_len - 2;
+    if (data_with_cmac_len < 8) {
+      co_return pw::Status::DataLoss();
+    }
+    size_t encrypted_len = data_with_cmac_len - 8;
+
+    pw::ConstByteSpan encrypted_data(response.data(), encrypted_len);
+    pw::ConstByteSpan received_cmac(response.data() + encrypted_len, 8);
+
+    PW_CO_TRY(
+        sm->VerifyResponseCMACWithData(0x00, encrypted_data, received_cmac));
+
+    std::array<std::byte, 32> decrypted;
+    if (encrypted_len > decrypted.size()) {
+      co_return pw::Status::ResourceExhausted();
+    }
+
+    size_t plaintext_len;
+    PW_CO_TRY(sm->DecryptResponseData(
+        encrypted_data, pw::ByteSpan(decrypted.data(), encrypted_len),
+        plaintext_len));
+
+    if (settings_buffer.size() < plaintext_len) {
+      co_return pw::Status::ResourceExhausted();
+    }
+    std::copy(decrypted.begin(), decrypted.begin() + plaintext_len,
+              settings_buffer.begin());
+    co_return plaintext_len;
+
+  } else {
+    // Plain mode: [SettingsData(N)] [SW(2)]
+    size_t data_len = response_len - 2;
+    if (settings_buffer.size() < data_len) {
+      co_return pw::Status::ResourceExhausted();
+    }
+    std::copy(response.begin(), response.begin() + data_len,
+              settings_buffer.begin());
+    co_return data_len;
+  }
+}
+
+// ============================================================================
+// ChangeFileSettings
+// ============================================================================
+
+pw::async2::Coro<pw::Status> Ntag424Tag::ChangeFileSettings(
+    pw::async2::CoroContext& cx,
+    const Ntag424Session& session,
+    uint8_t file_number,
+    pw::ConstByteSpan settings,
+    CommMode response_comm_mode) {
+  PW_CO_TRY(ValidateSession(session));
+  auto* sm = secure_messaging();
+
+  // Command data is always encrypted (NTAG424 spec requirement)
+  size_t padded_size = ((settings.size() / 16) + 1) * 16;
+  if (padded_size > 32) {
+    co_return pw::Status::OutOfRange();
+  }
+
+  std::array<std::byte, 32> ciphertext;
+  size_t ciphertext_len;
+  PW_CO_TRY(sm->EncryptCommandData(settings, ciphertext, ciphertext_len));
+
+  // Build APDU: 90 5F 00 00 Lc [FileNo] [Ciphertext] [CMACt(8)] 00
+  std::array<std::byte, 48> command;
+  command[0] = std::byte{ntag424_cmd::kClaNative};
+  command[1] = std::byte{ntag424_cmd::kChangeFileSettings};
+  command[2] = std::byte{0x00};  // P1
+  command[3] = std::byte{0x00};  // P2
+
+  // FileNo (not encrypted, part of command header)
+  command[5] = std::byte{file_number};
+
+  // Copy ciphertext after FileNo
+  std::copy(ciphertext.begin(), ciphertext.begin() + ciphertext_len,
+            command.begin() + 6);
+
+  // Build CMACt over [FileNo | Ciphertext]
+  pw::ConstByteSpan cmd_header(command.data() + 5, 1);  // FileNo
+  pw::ConstByteSpan cmd_data(command.data() + 6, ciphertext_len);
+
+  size_t cmac_pos = 6 + ciphertext_len;
+  PW_CO_TRY(sm->BuildCommandCMACWithData(
+      ntag424_cmd::kChangeFileSettings, cmd_header, cmd_data,
+      pw::ByteSpan(command.data() + cmac_pos, 8)));
+
+  // Lc = 1 (FileNo) + ciphertext_len + 8 (CMACt)
+  command[4] = static_cast<std::byte>(1 + ciphertext_len + 8);
+
+  // Le
+  size_t total_len = cmac_pos + 8;
+  command[total_len] = std::byte{0x00};
+  total_len += 1;
+
+  // Response depends on file's current CommMode:
+  // Full: [CMACt(8)] [SW(2)] = 10 bytes
+  // Plain: [SW(2)] = 2 bytes
+  std::array<std::byte, 16> response;
+  pw::ConstByteSpan cmd_span(command.data(), total_len);
+  PW_CO_TRY_ASSIGN(size_t response_len,
+                   co_await DoTransceive(cx, cmd_span, response));
+
+  if (response_len < 2) {
+    co_return pw::Status::DataLoss();
+  }
+
+  uint8_t sw1 = static_cast<uint8_t>(response[response_len - 2]);
+  uint8_t sw2 = static_cast<uint8_t>(response[response_len - 1]);
+  if (sw1 != 0x91 || sw2 != 0x00) {
+    PW_LOG_WARN("ChangeFileSettings SW=%02X %02X", sw1, sw2);
+    co_return InterpretStatusWord(sw1, sw2);
+  }
+
+  // Increment CmdCtr for every successful command. The PICC always increments
+  // regardless of CommMode; we must stay in sync.
+  if (!sm->IncrementCounter()) {
+    co_return pw::Status::ResourceExhausted();
+  }
+
+  // Verify response CMAC (only for Full/MAC response mode)
+  if (response_comm_mode != CommMode::kPlain) {
+    if (response_len < 10) {
+      co_return pw::Status::DataLoss();
+    }
+
+    pw::ConstByteSpan received_cmac(response.data(), 8);
+    PW_CO_TRY(sm->VerifyResponseCMAC(0x00, received_cmac));
+  }
+
+  co_return pw::OkStatus();
+}
+
+// ============================================================================
+// EnableRandomUid (SetConfiguration Option 0x00)
+// ============================================================================
+
+pw::async2::Coro<pw::Status> Ntag424Tag::EnableRandomUid(
+    pw::async2::CoroContext& cx,
+    const Ntag424Session& session) {
+  PW_CO_TRY(ValidateSession(session));
+  auto* sm = secure_messaging();
+
+  // PICCConfig: bit1 = UseRID (random UID)
+  constexpr std::array<std::byte, 1> config_data = {
+      std::byte{0x02},
+  };
+
+  // Encrypt only the config data (always Full mode)
+  std::array<std::byte, 16> ciphertext;
+  size_t ciphertext_len;
+  PW_CO_TRY(sm->EncryptCommandData(config_data, ciphertext, ciphertext_len));
+
+  // Build APDU: 90 5C 00 00 Lc [Option(plaintext)] [Enc(Data)] [CMACt(8)] Le
+  // Option byte is CmdHeader (not encrypted), same pattern as ChangeFileSettings
+  std::array<std::byte, 32> command;
+  command[0] = std::byte{ntag424_cmd::kClaNative};
+  command[1] = std::byte{ntag424_cmd::kSetConfiguration};
+  command[2] = std::byte{0x00};  // P1
+  command[3] = std::byte{0x00};  // P2
+
+  // Option byte (plaintext command header)
+  command[5] = std::byte{0x00};  // Option 0x00: PICC configuration
+
+  // Copy ciphertext after Option
+  std::copy(ciphertext.begin(), ciphertext.begin() + ciphertext_len,
+            command.begin() + 6);
+
+  // Build CMACt over [Option | Ciphertext]
+  pw::ConstByteSpan cmd_header(command.data() + 5, 1);  // Option
+  pw::ConstByteSpan cmd_data(command.data() + 6, ciphertext_len);
+  size_t cmac_pos = 6 + ciphertext_len;
+  PW_CO_TRY(sm->BuildCommandCMACWithData(
+      ntag424_cmd::kSetConfiguration, cmd_header, cmd_data,
+      pw::ByteSpan(command.data() + cmac_pos, 8)));
+
+  // Lc = 1 (Option) + ciphertext_len + 8 (CMACt)
+  command[4] = static_cast<std::byte>(1 + ciphertext_len + 8);
+
+  // Le
+  size_t total_len = cmac_pos + 8;
+  command[total_len] = std::byte{0x00};
+  total_len += 1;
+
+  std::array<std::byte, 16> response;
+  pw::ConstByteSpan cmd_span(command.data(), total_len);
+  PW_CO_TRY_ASSIGN(size_t response_len,
+                   co_await DoTransceive(cx, cmd_span, response));
+
+  if (response_len < 2) {
+    co_return pw::Status::DataLoss();
+  }
+
+  uint8_t sw1 = static_cast<uint8_t>(response[response_len - 2]);
+  uint8_t sw2 = static_cast<uint8_t>(response[response_len - 1]);
+  if (sw1 != 0x91 || sw2 != 0x00) {
+    PW_LOG_WARN("SetConfiguration SW=%02X %02X", sw1, sw2);
+    co_return InterpretStatusWord(sw1, sw2);
+  }
+
+  if (!sm->IncrementCounter()) {
+    co_return pw::Status::ResourceExhausted();
+  }
+
+  // Verify response CMAC
+  if (response_len >= 10) {
+    pw::ConstByteSpan received_cmac(response.data(), 8);
     PW_CO_TRY(sm->VerifyResponseCMAC(0x00, received_cmac));
   }
 

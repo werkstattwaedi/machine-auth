@@ -15,6 +15,6 @@ message KeyDiversificationRequest {
 message KeyDiversificationResponse {
   maco.proto.KeyBytes application_key = 1;
   maco.proto.KeyBytes authorization_key = 2;
-  maco.proto.KeyBytes reserved1_key = 3;
+  maco.proto.KeyBytes sdm_mac_key = 3;
   maco.proto.KeyBytes reserved2_key = 4;
 }

@@ -47,6 +47,8 @@ export const verifyTagCheckoutHandler = async (
   try {
     const result = await handleVerifyTagCheckout(req.body, {
       terminalKey: terminalKey.value(),
+      masterKey: diversificationMasterKey.value(),
+      systemName: diversificationSystemName.value(),
     });
 
     res.status(200).contentType("application/json").send(result);

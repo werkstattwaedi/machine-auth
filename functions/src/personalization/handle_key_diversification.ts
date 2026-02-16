@@ -26,7 +26,7 @@ export function handleKeyDiversification(
   return {
     applicationKey: { value: new Uint8Array(Buffer.from(keys.application, "hex")) },
     authorizationKey: { value: new Uint8Array(Buffer.from(keys.authorization, "hex")) },
-    reserved1Key: { value: new Uint8Array(Buffer.from(keys.reserved1, "hex")) },
+    sdmMacKey: { value: new Uint8Array(Buffer.from(keys.sdm_mac, "hex")) },
     reserved2Key: { value: new Uint8Array(Buffer.from(keys.reserved2, "hex")) },
   };
 }

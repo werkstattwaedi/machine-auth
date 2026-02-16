@@ -75,8 +75,8 @@ describe("/personalize endpoint", () => {
     expect(Array.from(protoResp.authorizationKey?.value || [])).to.deep.equal(
       Array.from(Buffer.from(keys.authorization, "hex"))
     );
-    expect(Array.from(protoResp.reserved1Key?.value || [])).to.deep.equal(
-      Array.from(Buffer.from(keys.reserved1, "hex"))
+    expect(Array.from(protoResp.sdmMacKey?.value || [])).to.deep.equal(
+      Array.from(Buffer.from(keys.sdm_mac, "hex"))
     );
     expect(Array.from(protoResp.reserved2Key?.value || [])).to.deep.equal(
       Array.from(Buffer.from(keys.reserved2, "hex"))

@@ -37,6 +37,7 @@ constexpr uint8_t kReadData = 0xAD;
 constexpr uint8_t kWriteData = 0x8D;
 constexpr uint8_t kChangeKey = 0xC4;
 constexpr uint8_t kGetVersion = 0x60;
+constexpr uint8_t kSetConfiguration = 0x5C;
 constexpr uint8_t kAdditionalFrame = 0xAF;
 
 // ISO commands
@@ -152,6 +153,62 @@ class Ntag424Tag : public Iso14443Tag {
                                           uint32_t offset,
                                           pw::ConstByteSpan data,
                                           CommMode comm_mode = CommMode::kFull);
+
+  /// Get file settings for a file.
+  ///
+  /// The comm_mode must match the file's current CommMode setting:
+  /// - Plain: command has no CMAC, response is unencrypted
+  /// - Full: command includes CMAC, response is encrypted + MACed
+  ///
+  /// @param cx Coroutine context for frame allocation
+  /// @param session Proof token from Authenticate()
+  /// @param file_number File number (0x01-0x03 for standard files)
+  /// @param settings_buffer Buffer for settings (at least 32 bytes)
+  /// @param comm_mode Communication mode (must match file's CommMode)
+  /// @return Coroutine resolving to number of settings bytes
+  pw::async2::Coro<pw::Result<size_t>> GetFileSettings(
+      pw::async2::CoroContext& cx,
+      const Ntag424Session& session,
+      uint8_t file_number,
+      pw::ByteSpan settings_buffer,
+      CommMode comm_mode = CommMode::kFull);
+
+  /// Change file settings.
+  ///
+  /// The settings payload is provided as plaintext and encrypted by this
+  /// method (command is always Full mode per NTAG424 spec). The file number
+  /// is part of the command header (not encrypted).
+  ///
+  /// The response CommMode follows the file's CURRENT settings (before
+  /// change). Use response_comm_mode to match.
+  ///
+  /// @param cx Coroutine context for frame allocation
+  /// @param session Proof token from Authenticate()
+  /// @param file_number File number (0x01-0x03 for standard files)
+  /// @param settings Plaintext settings (FileOption through offsets)
+  /// @param response_comm_mode Expected response mode (file's current CommMode)
+  /// @return Coroutine resolving to success status
+  pw::async2::Coro<pw::Status> ChangeFileSettings(
+      pw::async2::CoroContext& cx,
+      const Ntag424Session& session,
+      uint8_t file_number,
+      pw::ConstByteSpan settings,
+      CommMode response_comm_mode = CommMode::kFull);
+
+  /// Enable random UID during anticollision (privacy feature).
+  ///
+  /// Uses SetConfiguration (Option 0x00, PICCConfig bit 1). Always CommMode.Full.
+  /// Requires authentication with Key 0 (AppMasterKey). Reversible.
+  ///
+  /// When enabled, the tag returns a random UID during ISO 14443-3 anticollision.
+  /// The real UID is only available via GetCardUid after authentication.
+  ///
+  /// @param cx Coroutine context for frame allocation
+  /// @param session Proof token from Authenticate() with Key 0
+  /// @return Coroutine resolving to success status
+  pw::async2::Coro<pw::Status> EnableRandomUid(
+      pw::async2::CoroContext& cx,
+      const Ntag424Session& session);
 
   /// Change a key on the tag (requires authentication with key 0).
   ///
