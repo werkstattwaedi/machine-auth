@@ -17,6 +17,24 @@ cc_library(
     ],
 )
 
+# Session-driven relay controller (observer pattern)
+cc_library(
+    name = "relay_controller",
+    srcs = ["relay_controller.cc"],
+    hdrs = ["relay_controller.h"],
+    deps = [
+        ":machine_relay",
+        "//maco_firmware/modules/app_state:session_fsm",
+        "@pigweed//pw_allocator:allocator",
+        "@pigweed//pw_async2:coro",
+        "@pigweed//pw_async2:coro_or_else_task",
+        "@pigweed//pw_async2:dispatcher",
+        "@pigweed//pw_async2:time_provider",
+        "@pigweed//pw_chrono:system_clock",
+        "@pigweed//pw_log",
+    ],
+)
+
 # Real implementation for P2 hardware (latching relay with HAL GPIO)
 cc_library(
     name = "latching_machine_relay",

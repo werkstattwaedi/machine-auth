@@ -27,6 +27,8 @@ class FirebaseClient;
 
 namespace maco::app_state {
 
+class SessionFsm;
+
 /// Subscribes to NFC events and verifies tags via NTAG424 authentication,
 /// then authorizes with the cloud before activating the machine.
 ///
@@ -38,6 +40,7 @@ namespace maco::app_state {
 /// 5. Checks cloud authorization (TerminalCheckin / key-2 cloud auth)
 ///
 /// Updates AppState at each step so the UI can reflect progress.
+/// If a SessionFsm is set, also sends events for session management.
 class TagVerifier {
  public:
   TagVerifier(nfc::NfcReader& reader,
@@ -46,6 +49,9 @@ class TagVerifier {
               firebase::FirebaseClient& firebase_client,
               pw::random::RandomGenerator& rng,
               pw::allocator::Allocator& allocator);
+
+  /// Set the session FSM to receive authorization events.
+  void SetSessionFsm(SessionFsm& session_fsm);
 
   void Start(pw::async2::Dispatcher& dispatcher);
 
@@ -62,6 +68,7 @@ class TagVerifier {
   secrets::DeviceSecrets& device_secrets_;
   firebase::FirebaseClient& firebase_client_;
   pw::random::RandomGenerator& rng_;
+  SessionFsm* session_fsm_ = nullptr;
 
   AuthCache auth_cache_;
   pw::async2::CoroContext coro_cx_;

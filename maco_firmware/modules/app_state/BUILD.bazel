@@ -41,6 +41,53 @@ cc_library(
     ],
 )
 
+# Session event types for the session HFSM
+cc_library(
+    name = "session_events",
+    hdrs = ["session_events.h"],
+    deps = [
+        "//maco_firmware:types",
+        "//third_party/etl",
+        "@pigweed//pw_string",
+    ],
+)
+
+# Session hierarchical finite state machine (ETL HFSM)
+cc_library(
+    name = "session_fsm",
+    srcs = ["session_fsm.cc"],
+    hdrs = ["session_fsm.h"],
+    deps = [
+        ":session_events",
+        "//maco_firmware:types",
+        "//maco_firmware/modules/app_state/ui:snapshot",
+        "//third_party/etl",
+        "@pigweed//pw_assert:check",
+        "@pigweed//pw_chrono:system_clock",
+        "@pigweed//pw_log",
+        "@pigweed//pw_string",
+        "@pigweed//pw_sync:lock_annotations",
+        "@pigweed//pw_sync:mutex",
+    ],
+)
+
+# Session event pump - timeout, hold detection, UI action bridge
+cc_library(
+    name = "session_event_pump",
+    srcs = ["session_event_pump.cc"],
+    hdrs = ["session_event_pump.h"],
+    deps = [
+        ":session_fsm",
+        "@pigweed//pw_allocator:allocator",
+        "@pigweed//pw_async2:coro",
+        "@pigweed//pw_async2:coro_or_else_task",
+        "@pigweed//pw_async2:dispatcher",
+        "@pigweed//pw_async2:time_provider",
+        "@pigweed//pw_chrono:system_clock",
+        "@pigweed//pw_log",
+    ],
+)
+
 # Tag verifier - authenticates NTAG424 tags, reads real UID, and authorizes
 cc_library(
     name = "tag_verifier",
@@ -49,6 +96,7 @@ cc_library(
     deps = [
         ":app_state",
         ":auth_cache",
+        ":session_fsm",
         "//maco_firmware:types",
         "//maco_firmware/devices/pn532:tag_info",
         "//maco_firmware/modules/device_secrets",
@@ -84,6 +132,15 @@ pw_cc_test(
     deps = [
         ":auth_cache",
         "@pigweed//pw_chrono:system_clock",
+    ],
+)
+
+pw_cc_test(
+    name = "session_fsm_test",
+    srcs = ["session_fsm_test.cc"],
+    deps = [
+        ":session_fsm",
+        "@pigweed//pw_bytes",
     ],
 )
 

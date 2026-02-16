@@ -10,6 +10,7 @@
 #include "device_secrets/device_secrets.h"
 #include "firebase/firebase_client.h"
 #include "maco_firmware/devices/pn532/tag_info.h"
+#include "maco_firmware/modules/app_state/session_fsm.h"
 #include "maco_firmware/modules/nfc_reader/nfc_event.h"
 #include "maco_firmware/modules/nfc_tag/ntag424/cloud_key_provider.h"
 #include "maco_firmware/modules/nfc_tag/ntag424/local_key_provider.h"
@@ -36,6 +37,10 @@ TagVerifier::TagVerifier(nfc::NfcReader& reader,
       rng_(rng),
       coro_cx_(allocator) {}
 
+void TagVerifier::SetSessionFsm(SessionFsm& session_fsm) {
+  session_fsm_ = &session_fsm;
+}
+
 void TagVerifier::Start(pw::async2::Dispatcher& dispatcher) {
   auto coro = Run(coro_cx_);
   task_.emplace(std::move(coro), [](pw::Status s) {
@@ -59,6 +64,12 @@ pw::async2::Coro<pw::Status> TagVerifier::Run(pw::async2::CoroContext& cx) {
                     static_cast<unsigned>(event.tag->uid().size()));
         app_state_.OnTagDetected(event.tag->uid());
 
+        if (session_fsm_) {
+          session_fsm_->SetTagPresent(true);
+          session_fsm_->receive(session_event::TagPresence(true));
+          session_fsm_->SyncSnapshot();
+        }
+
         auto status = co_await VerifyTag(cx, *event.tag);
         if (!status.ok()) {
           PW_LOG_WARN("Tag verification failed: %d",
@@ -70,6 +81,12 @@ pw::async2::Coro<pw::Status> TagVerifier::Run(pw::async2::CoroContext& cx) {
       case nfc::NfcEventType::kTagDeparted:
         PW_LOG_INFO("Tag departed");
         app_state_.OnTagRemoved();
+
+        if (session_fsm_) {
+          session_fsm_->SetTagPresent(false);
+          session_fsm_->receive(session_event::TagPresence(false));
+          session_fsm_->SyncSnapshot();
+        }
         break;
     }
   }
@@ -171,6 +188,12 @@ pw::async2::Coro<pw::Status> TagVerifier::AuthorizeTag(
     PW_LOG_INFO("Cache hit - skipping cloud authorization");
     app_state_.OnAuthorized(std::string_view(cached->user_label),
                             cached->auth_id);
+    if (session_fsm_) {
+      session_fsm_->receive(session_event::UserAuthorized(
+          tag_uid, maco::FirebaseId::Empty(), cached->user_label,
+          cached->auth_id));
+      session_fsm_->SyncSnapshot();
+    }
     co_return pw::OkStatus();
   }
 
@@ -205,6 +228,12 @@ pw::async2::Coro<pw::Status> TagVerifier::AuthorizeTag(
                        std::string_view(authorized.user_label), now);
     app_state_.OnAuthorized(std::string_view(authorized.user_label),
                             authorized.authentication_id);
+    if (session_fsm_) {
+      session_fsm_->receive(session_event::UserAuthorized(
+          tag_uid, authorized.user_id, authorized.user_label,
+          authorized.authentication_id));
+      session_fsm_->SyncSnapshot();
+    }
     co_return pw::OkStatus();
   }
 
@@ -242,6 +271,11 @@ pw::async2::Coro<pw::Status> TagVerifier::AuthorizeTag(
   auth_cache_.Insert(tag_uid, auth_id,
                      std::string_view(authorized.user_label), now);
   app_state_.OnAuthorized(std::string_view(authorized.user_label), auth_id);
+  if (session_fsm_) {
+    session_fsm_->receive(session_event::UserAuthorized(
+        tag_uid, authorized.user_id, authorized.user_label, auth_id));
+    session_fsm_->SyncSnapshot();
+  }
 
   co_return pw::OkStatus();
 }
