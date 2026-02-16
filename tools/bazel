@@ -1,0 +1,35 @@
+#!/bin/sh
+set -u
+
+OVERWRITE_THRESHOLD=$(date +%s)
+
+"$BAZEL_REAL" "$@"
+BAZEL_EXIT_CODE=$?
+
+if [ -n "${PW_IDE_VERBOSE-}" ]; then
+  QUIET_BUILD=""
+  VERBOSE_FLAG="--verbose"
+else
+  QUIET_BUILD="--quiet"
+  VERBOSE_FLAG=""
+fi
+
+if [ "$#" -gt 0 ]; then
+  case "$1" in
+    build|run|test)
+      if [ "$BAZEL_EXIT_CODE" -eq 0 ]; then
+        echo "🔄 Refreshing compile commands..." >&2
+        "$BAZEL_REAL" ${QUIET_BUILD} run --show_result=0 --experimental_convenience_symlinks=ignore @pigweed//pw_ide/bazel:update_compile_commands -- ${VERBOSE_FLAG} --overwrite-threshold="${OVERWRITE_THRESHOLD}" -- "$@"
+        STATUS=$?
+        if [ "$STATUS" -eq 0 ]; then
+          mkdir -p ".compile_commands"
+          echo "$*" > ".compile_commands/pwLastBazelCommand.txt"
+        else
+          echo "⚠️ Compile commands generation failed (exit code $STATUS)" >&2
+        fi
+      fi
+      ;;
+  esac
+fi
+
+exit "$BAZEL_EXIT_CODE"
