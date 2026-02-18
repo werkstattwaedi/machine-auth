@@ -6,12 +6,65 @@ syntax = "proto3";
 package maco;
 
 service PersonalizationService {
-  // Arm personalization for the next tag tap
-  rpc PersonalizeNextTag(PersonalizeNextTagRequest) returns (PersonalizeNextTagResponse);
+  // Subscribe to tag arrival/departure and personalization result events.
+  rpc SubscribeTagEvents(SubscribeTagEventsRequest) returns (stream TagEvent);
+
+  // Poll the current coordinator state (tag type, UID, status).
+  rpc GetPersonalizeState(GetPersonalizeStateRequest) returns (GetPersonalizeStateResponse);
+
+  // Deliver pre-diversified keys for the current tag.
+  rpc PersonalizeTag(PersonalizeTagRequest) returns (PersonalizeTagResponse);
 }
 
-message PersonalizeNextTagRequest {}
+message SubscribeTagEventsRequest {}
 
-message PersonalizeNextTagResponse {
-  bool armed = 1;  // true if successfully armed
+message TagEvent {
+  enum EventType {
+    UNKNOWN = 0;
+    TAG_ARRIVED = 1;
+    TAG_DEPARTED = 2;
+    PERSONALIZATION_COMPLETE = 3;
+    PERSONALIZATION_FAILED = 4;
+  }
+  enum TagType {
+    TAG_UNKNOWN = 0;
+    TAG_FACTORY = 1;
+    TAG_MACO = 2;
+  }
+  EventType event_type = 1;
+  TagType tag_type = 2;
+  bytes uid = 3;
+  string message = 4;
+}
+
+message PersonalizeTagRequest {
+  bytes uid = 1;               // 7-byte UID (verification)
+  bytes application_key = 2;   // 16-byte (key 0)
+  bytes terminal_key = 3;      // 16-byte (key 1)
+  bytes authorization_key = 4; // 16-byte (key 2)
+  bytes sdm_mac_key = 5;       // 16-byte (key 3)
+  bytes reserved2_key = 6;     // 16-byte (key 4)
+}
+
+message GetPersonalizeStateRequest {}
+
+message GetPersonalizeStateResponse {
+  enum State {
+    IDLE = 0;
+    PROBING = 1;
+    FACTORY_TAG = 2;
+    MACO_TAG = 3;
+    UNKNOWN_TAG = 4;
+    AWAITING_KEYS = 5;
+    PERSONALIZING = 6;
+    PERSONALIZED = 7;
+    ERROR = 8;
+  }
+  State state = 1;
+  bytes uid = 2;
+  string error_message = 3;
+}
+
+message PersonalizeTagResponse {
+  bool success = 1;
 }

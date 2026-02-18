@@ -8,9 +8,7 @@
 #include "maco_firmware/apps/personalize/personalization_rpc_service.h"
 #include "maco_firmware/apps/personalize/personalize_coordinator.h"
 #include "maco_firmware/apps/personalize/screens/personalize_screen.h"
-#include "device_secrets/device_secrets.h"
 #include "maco_firmware/modules/display/display.h"
-#include "gateway/gateway_client.h"
 #include "maco_firmware/modules/nfc_reader/nfc_reader.h"
 #include "maco_firmware/modules/stack_monitor/stack_monitor.h"
 #include "maco_firmware/modules/status_bar/status_bar.h"
@@ -32,7 +30,7 @@ void AppInit() {
   auto& display_driver = maco::system::GetDisplayDriver();
   auto& touch_driver = maco::system::GetTouchButtonDriver();
 
-  // Snapshot provider bridges tag prober to screen
+  // Snapshot provider bridges coordinator to screen
   auto snapshot_provider =
       [](maco::personalize::PersonalizeSnapshot& snapshot) {
         if (g_coordinator) {
@@ -81,26 +79,16 @@ void AppInit() {
   (void)nfc_reader.Start(pw::System().dispatcher());
   PW_LOG_INFO("NFC reader started (init in progress)");
 
-  // Require provisioned device for cloud services
-  auto secret = maco::system::GetDeviceSecrets().GetGatewayMasterSecret();
-  if (!secret.ok()) {
-    PW_LOG_ERROR("Device not provisioned - skipping gateway/cloud services");
-  } else {
-    maco::system::GetGatewayClient().Start(pw::System().dispatcher());
+  // Start coordinator — keys come from console over RPC, no cloud needed
+  static maco::personalize::PersonalizeCoordinator coordinator(
+      nfc_reader,
+      maco::system::GetRandomGenerator(),
+      pw::System().allocator());
+  g_coordinator = &coordinator;
+  coordinator.Start(pw::System().dispatcher());
 
-    static maco::personalize::PersonalizeCoordinator coordinator(
-        nfc_reader,
-        maco::system::GetDeviceSecrets(),
-        maco::system::GetFirebaseClient(),
-        maco::system::GetRandomGenerator(),
-        pw::System().allocator());
-    g_coordinator = &coordinator;
-    coordinator.Start(pw::System().dispatcher());
-
-    static maco::personalize::PersonalizationRpcService rpc_service(
-        coordinator);
-    pw::System().rpc_server().RegisterService(rpc_service);
-  }
+  static maco::personalize::PersonalizationRpcService rpc_service(coordinator);
+  pw::System().rpc_server().RegisterService(rpc_service);
 
   maco::StartStackMonitor();
 
