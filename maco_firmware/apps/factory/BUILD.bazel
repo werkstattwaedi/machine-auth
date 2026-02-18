@@ -69,8 +69,11 @@ cc_library(
         ":factory_test_service_nanopb_rpc",
         "//maco_firmware/modules/buzzer",
         "//third_party/lvgl",
+        "@pigweed//pw_chrono:system_clock",
         "@pigweed//pw_log",
         "@pigweed//pw_status",
+        "@pigweed//pw_string",
+        "@pigweed//pw_thread:sleep",
     ],
 )
 

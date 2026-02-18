@@ -8,7 +8,7 @@
 
 namespace maco::personalize {
 
-/// RPC service for triggering tag personalization.
+/// RPC service for console-driven tag personalization.
 class PersonalizationRpcService final
     : public ::maco::pw_rpc::nanopb::PersonalizationService::Service<
           PersonalizationRpcService> {
@@ -16,9 +16,17 @@ class PersonalizationRpcService final
   explicit PersonalizationRpcService(PersonalizeCoordinator& coordinator)
       : coordinator_(coordinator) {}
 
-  pw::Status PersonalizeNextTag(
-      const ::maco_PersonalizeNextTagRequest& request,
-      ::maco_PersonalizeNextTagResponse& response);
+  void SubscribeTagEvents(
+      const ::maco_SubscribeTagEventsRequest& request,
+      ServerWriter<::maco_TagEvent>& writer);
+
+  pw::Status GetPersonalizeState(
+      const ::maco_GetPersonalizeStateRequest& request,
+      ::maco_GetPersonalizeStateResponse& response);
+
+  pw::Status PersonalizeTag(
+      const ::maco_PersonalizeTagRequest& request,
+      ::maco_PersonalizeTagResponse& response);
 
  private:
   PersonalizeCoordinator& coordinator_;

@@ -121,6 +121,10 @@ class FactoryTestPane(WindowPane, PluginMixin):
             TestStep("LED White", StepMode.VISUAL),
             TestStep("LED Clear", StepMode.AUTO),
             TestStep("Buzzer Beep", StepMode.VISUAL),
+            TestStep("Button UP", StepMode.AUTO),
+            TestStep("Button DOWN", StepMode.AUTO),
+            TestStep("Button OK", StepMode.AUTO),
+            TestStep("Button Cancel", StepMode.AUTO),
             TestStep("Display White", StepMode.VISUAL),
             TestStep("Display Color Bars", StepMode.VISUAL),
             TestStep("Check Secrets", StepMode.AUTO),
@@ -335,17 +339,27 @@ class FactoryTestPane(WindowPane, PluginMixin):
             step.status = StepStatus.CONFIRM
             step.message = "Verify buzzer tone is audible"
 
-        elif idx == 7:  # Display White
+        elif idx in (7, 8, 9, 10):  # Button tests
+            button_map = {
+                7: ("button_up", "UP"),
+                8: ("button_down", "DOWN"),
+                9: ("button_ok", "OK"),
+                10: ("button_cancel", "Cancel"),
+            }
+            field, label = button_map[idx]
+            self._poll_button(factory, step, field, label)
+
+        elif idx == 11:  # Display White
             factory.DisplayFillColor(r=255, g=255, b=255)
             step.status = StepStatus.CONFIRM
             step.message = "Verify display is WHITE"
 
-        elif idx == 8:  # Display Color Bars
+        elif idx == 12:  # Display Color Bars
             factory.DisplayColorBars()
             step.status = StepStatus.CONFIRM
             step.message = "Verify color bars on display"
 
-        elif idx == 9:  # Check Secrets
+        elif idx == 13:  # Check Secrets
             resp = secrets.GetStatus()
             provisioned = resp.response.is_provisioned
             step.status = StepStatus.PASSED
@@ -353,7 +367,7 @@ class FactoryTestPane(WindowPane, PluginMixin):
                 "PROVISIONED" if provisioned else "NOT PROVISIONED"
             )
 
-        elif idx == 10:  # Provision Secrets
+        elif idx == 14:  # Provision Secrets
             gw_hex = os.environ.get("FACTORY_GATEWAY_SECRET", "")
             ntag_hex = os.environ.get("FACTORY_NTAG_KEY", "")
             if not gw_hex or not ntag_hex:
@@ -377,7 +391,7 @@ class FactoryTestPane(WindowPane, PluginMixin):
                 step.status = StepStatus.FAILED
                 step.message = resp.response.error or "Provision failed"
 
-        elif idx == 11:  # Verify Provisioned
+        elif idx == 15:  # Verify Provisioned
             resp = secrets.GetStatus()
             if resp.response.is_provisioned:
                 step.status = StepStatus.PASSED
@@ -385,6 +399,25 @@ class FactoryTestPane(WindowPane, PluginMixin):
             else:
                 step.status = StepStatus.FAILED
                 step.message = "NOT provisioned"
+
+    def _poll_button(self, factory, step: TestStep, field: str,
+                     label: str, timeout_ms: int = 10000) -> None:
+        """Long-poll TouchRead until the expected button is pressed or timeout."""
+        step.status = StepStatus.CONFIRM
+        step.message = f"Press {label}..."
+        get_pw_console_app().redraw_ui()
+
+        resp = factory.TouchRead(timeout_ms=timeout_ms,
+                                 pw_rpc_timeout_s=timeout_ms / 1000 + 2)
+        if resp.status.ok() and getattr(resp.response, field, False):
+            step.status = StepStatus.PASSED
+            step.message = f"{label} detected (raw=0x{resp.response.raw_bitmask:02x})"
+        else:
+            if resp.status.ok():
+                step.message = f"{label} not pressed (raw=0x{resp.response.raw_bitmask:02x})"
+            else:
+                step.message = f"{label} not pressed (rpc error)"
+            step.status = StepStatus.FAILED
 
     # ── Rendering ─────────────────────────────────────────────────────
 

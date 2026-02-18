@@ -1,0 +1,15 @@
+# Options for personalization_service.proto (nanopb format)
+# Sets max_size for bytes/string fields to enable fixed-size encoding
+
+maco.TagEvent.uid                          max_size:7
+maco.TagEvent.message                      max_size:128
+
+maco.GetPersonalizeStateResponse.uid       max_size:7
+maco.GetPersonalizeStateResponse.error_message max_size:128
+
+maco.PersonalizeTagRequest.uid             max_size:7
+maco.PersonalizeTagRequest.application_key max_size:16
+maco.PersonalizeTagRequest.terminal_key    max_size:16
+maco.PersonalizeTagRequest.authorization_key max_size:16
+maco.PersonalizeTagRequest.sdm_mac_key     max_size:16
+maco.PersonalizeTagRequest.reserved2_key   max_size:16

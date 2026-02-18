@@ -61,6 +61,13 @@ void AppInit() {
       .led_count = maco::led::In4818LedDriver<16>::kLedCount,
   };
 
+  // Wire touch operations for factory test service
+  static constexpr maco::factory::TouchOps touch_ops{
+      .read_touched = []() -> uint8_t {
+        return maco::system::GetTouchButtonDriver().Touched();
+      },
+  };
+
   // Initialize buzzer
   auto& buzzer = maco::system::GetBuzzer();
   status = buzzer.Init();
@@ -69,8 +76,8 @@ void AppInit() {
   }
 
   // Register factory-specific RPC services
-  static maco::factory::FactoryTestService factory_test_service(led_ops,
-                                                                buzzer);
+  static maco::factory::FactoryTestService factory_test_service(
+      led_ops, touch_ops, buzzer);
   pw::System().rpc_server().RegisterService(factory_test_service);
 
   auto& secrets = static_cast<maco::secrets::DeviceSecretsEeprom&>(

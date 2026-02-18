@@ -151,6 +151,7 @@ cc_library(
         "@particle_bazel//pb_cloud:pb_ledger_particle_backend",
         "@particle_bazel//pb_log:log_bridge",
         "@particle_bazel//pw_digital_io_particle:digital_io",
+        "@particle_bazel//pw_i2c_particle:initiator",
         "@particle_bazel//pw_spi_particle:initiator",
         "@particle_bazel//pb_uart:async_uart",
         "@particle_bazel//pw_system_particle:threads",  # Particle scheduler stub

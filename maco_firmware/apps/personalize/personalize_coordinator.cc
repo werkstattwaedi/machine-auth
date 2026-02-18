@@ -5,12 +5,11 @@
 
 #include "maco_firmware/apps/personalize/personalize_coordinator.h"
 
-#include "device_secrets/device_secrets.h"
-#include "firebase/firebase_client.h"
 #include "maco_firmware/apps/personalize/key_updater.h"
 #include "maco_firmware/apps/personalize/sdm_configurator.h"
-#include "maco_firmware/apps/personalize/tag_identifier.h"
+#include "maco_firmware/apps/personalize/tag_identifier.h"  // TagInfoFromNfcTag
 #include "maco_firmware/modules/nfc_reader/nfc_event.h"
+#include "maco_firmware/modules/nfc_tag/ntag424/local_key_provider.h"
 #include "maco_firmware/modules/nfc_tag/ntag424/ntag424_tag.h"
 #include "pw_log/log.h"
 
@@ -18,13 +17,9 @@ namespace maco::personalize {
 
 PersonalizeCoordinator::PersonalizeCoordinator(
     nfc::NfcReader& reader,
-    secrets::DeviceSecrets& device_secrets,
-    firebase::FirebaseClient& firebase_client,
     pw::random::RandomGenerator& rng,
     pw::allocator::Allocator& allocator)
     : reader_(reader),
-      device_secrets_(device_secrets),
-      firebase_client_(firebase_client),
       rng_(rng),
       coro_cx_(allocator) {}
 
@@ -37,12 +32,15 @@ void PersonalizeCoordinator::Start(pw::async2::Dispatcher& dispatcher) {
   dispatcher.Post(*task_);
 }
 
-void PersonalizeCoordinator::RequestPersonalization() {
+void PersonalizeCoordinator::SetTagEventWriter(
+    pw::rpc::NanopbServerWriter<maco_TagEvent>&& writer) {
   std::lock_guard guard(lock_);
-  personalize_armed_ = true;
-  snapshot_.state = PersonalizeStateId::kAwaitingTag;
-  snapshot_.error_message.clear();
-  PW_LOG_INFO("Personalization armed - waiting for next factory tag");
+  tag_event_writer_ = std::move(writer);
+  PW_LOG_INFO("Tag event stream connected");
+}
+
+void PersonalizeCoordinator::DeliverKeys(const PersonalizationKeys& keys) {
+  keys_provider_.Resolve(keys);
 }
 
 void PersonalizeCoordinator::GetSnapshot(PersonalizeSnapshot& snapshot) {
@@ -71,26 +69,40 @@ void PersonalizeCoordinator::SetError(std::string_view message) {
   snapshot_.error_message.assign(message.data(), message.size());
 }
 
-bool PersonalizeCoordinator::IsArmed() {
+void PersonalizeCoordinator::StreamTagEvent(
+    maco_TagEvent_EventType event_type,
+    maco_TagEvent_TagType tag_type,
+    pw::ConstByteSpan uid,
+    std::string_view message) {
   std::lock_guard guard(lock_);
-  return personalize_armed_;
-}
+  if (!tag_event_writer_.active()) {
+    return;
+  }
 
-void PersonalizeCoordinator::Disarm() {
-  std::lock_guard guard(lock_);
-  personalize_armed_ = false;
+  maco_TagEvent event = maco_TagEvent_init_zero;
+  event.event_type = event_type;
+  event.tag_type = tag_type;
+
+  size_t uid_len = std::min(uid.size(), sizeof(event.uid.bytes));
+  std::memcpy(event.uid.bytes, uid.data(), uid_len);
+  event.uid.size = uid_len;
+
+  size_t msg_len =
+      std::min(message.size(), sizeof(event.message) - 1);
+  std::memcpy(event.message, message.data(), msg_len);
+  event.message[msg_len] = '\0';
+
+  auto status = tag_event_writer_.Write(event);
+  if (!status.ok()) {
+    PW_LOG_WARN("Failed to stream tag event: %d",
+                static_cast<int>(status.code()));
+  }
 }
 
 pw::async2::Coro<pw::Status> PersonalizeCoordinator::Run(
     pw::async2::CoroContext& cx) {
   while (true) {
-    {
-      std::lock_guard guard(lock_);
-      if (personalize_armed_ &&
-          snapshot_.state != PersonalizeStateId::kAwaitingTag) {
-        snapshot_.state = PersonalizeStateId::kAwaitingTag;
-      }
-    }
+    SetState(PersonalizeStateId::kIdle);
 
     auto event_future = reader_.SubscribeOnce();
     nfc::NfcEvent event = co_await event_future;
@@ -115,11 +127,10 @@ pw::async2::Coro<pw::Status> PersonalizeCoordinator::Run(
 
       case nfc::NfcEventType::kTagDeparted:
         PW_LOG_INFO("Tag departed");
-        if (IsArmed()) {
-          SetState(PersonalizeStateId::kAwaitingTag);
-        } else {
-          SetState(PersonalizeStateId::kIdle);
-        }
+        StreamTagEvent(maco_TagEvent_EventType_TAG_DEPARTED,
+                       maco_TagEvent_TagType_TAG_UNKNOWN,
+                       {}, "");
+        SetState(PersonalizeStateId::kIdle);
         break;
     }
   }
@@ -129,56 +140,90 @@ pw::async2::Coro<pw::Status> PersonalizeCoordinator::Run(
 pw::async2::Coro<pw::Status> PersonalizeCoordinator::HandleTag(
     pw::async2::CoroContext& cx,
     nfc::NfcTag& tag) {
-  auto id_result =
-      co_await IdentifyTag(cx, tag, reader_, device_secrets_, rng_);
-  if (!id_result.ok()) {
+  // IdentifyTag still needs device_secrets for the terminal key probe.
+  // With the new architecture, the tag identifier uses the reader's
+  // factory-default key probe only (no terminal key check needed for
+  // classification — factory tags have default keys, MaCo tags don't).
+  // However, the existing IdentifyTag requires DeviceSecrets. Since we
+  // no longer have it, we do a simplified identification: try default key 0.
+  // If auth succeeds → factory tag. If fails → already personalized (MaCo)
+  // or unknown.
+
+  auto tag_info = TagInfoFromNfcTag(tag);
+  nfc::Ntag424Tag ntag(reader_, tag_info);
+
+  // Try to select the NTAG424 application
+  auto select_status = co_await ntag.SelectApplication(cx);
+  if (!select_status.ok()) {
     SetState(PersonalizeStateId::kUnknownTag);
-    co_return id_result.status();
+    StreamTagEvent(maco_TagEvent_EventType_TAG_ARRIVED,
+                   maco_TagEvent_TagType_TAG_UNKNOWN,
+                   tag.uid(), "Not an NTAG424 tag");
+    co_return pw::OkStatus();
   }
 
-  const auto& id = *id_result;
+  // Try authenticating with default key 0
+  constexpr std::array<std::byte, 16> kDefaultKey = {};
+  nfc::LocalKeyProvider default_provider(0, kDefaultKey, rng_);
+  auto auth_result = co_await ntag.Authenticate(cx, default_provider);
 
-  switch (id.type) {
-    case TagType::kFactory:
-    case TagType::kMaCo: {
-      if (IsArmed()) {
-        if (id.uid_size == maco::TagUid::kSize) {
-          auto tag_uid = maco::TagUid::FromArray(id.uid);
-          co_await TryPersonalize(cx, tag, tag_uid);
-        } else {
-          SetError("Invalid UID size for personalization");
-        }
-      } else {
-        auto state = id.type == TagType::kFactory
-                         ? PersonalizeStateId::kFactoryTag
-                         : PersonalizeStateId::kMacoTag;
-        SetStateWithUid(state, id.uid, id.uid_size);
-      }
-      break;
-    }
+  TagType tag_type;
+  std::array<std::byte, 7> uid_buffer{};
+  size_t uid_size = 0;
 
-    case TagType::kUnknown: {
-      if (IsArmed()) {
-        // Unknown tag while armed: may be partially personalized (key 0
-        // changed but authentication with terminal key failed). Use
-        // anti-collision UID for key diversification; after UpdateKeys
-        // succeeds, GetCardUid provides the authenticated UID.
-        auto ac_uid = tag.uid();
-        if (ac_uid.size() == maco::TagUid::kSize) {
-          std::array<std::byte, 7> uid_buffer{};
-          std::copy(ac_uid.begin(), ac_uid.end(), uid_buffer.begin());
-          auto tag_uid = maco::TagUid::FromArray(uid_buffer);
-          PW_LOG_INFO(
-              "Armed: unknown tag, attempting with anti-collision UID");
-          co_await TryPersonalize(cx, tag, tag_uid);
-        } else {
-          SetState(PersonalizeStateId::kUnknownTag);
-        }
-      } else {
-        SetState(PersonalizeStateId::kUnknownTag);
-      }
-      break;
+  if (auth_result.ok()) {
+    // Default key works → factory tag
+    tag_type = TagType::kFactory;
+
+    // Get authenticated UID
+    auto uid_result = co_await ntag.GetCardUid(
+        cx, *auth_result, pw::ByteSpan(uid_buffer));
+    if (uid_result.ok()) {
+      uid_size = *uid_result;
+    } else {
+      // Fall back to anti-collision UID
+      auto ac_uid = tag.uid();
+      uid_size = std::min(ac_uid.size(), uid_buffer.size());
+      std::copy_n(ac_uid.begin(), uid_size, uid_buffer.begin());
     }
+  } else {
+    // Default key failed → assume already personalized (MaCo tag)
+    tag_type = TagType::kMaCo;
+    auto ac_uid = tag.uid();
+    uid_size = std::min(ac_uid.size(), uid_buffer.size());
+    std::copy_n(ac_uid.begin(), uid_size, uid_buffer.begin());
+  }
+
+  auto stream_tag_type = tag_type == TagType::kFactory
+                             ? maco_TagEvent_TagType_TAG_FACTORY
+                             : maco_TagEvent_TagType_TAG_MACO;
+  auto screen_state = tag_type == TagType::kFactory
+                          ? PersonalizeStateId::kFactoryTag
+                          : PersonalizeStateId::kMacoTag;
+
+  SetStateWithUid(screen_state, uid_buffer, uid_size);
+  StreamTagEvent(maco_TagEvent_EventType_TAG_ARRIVED,
+                 stream_tag_type,
+                 pw::ConstByteSpan(uid_buffer.data(), uid_size), "");
+
+  // Wait for keys from the console
+  SetState(PersonalizeStateId::kAwaitingTag);
+  PW_LOG_INFO("Waiting for keys from console...");
+
+  auto keys_future = keys_provider_.Get();
+  PersonalizationKeys keys = co_await keys_future;
+
+  PW_LOG_INFO("Keys received from console, personalizing...");
+
+  if (uid_size == maco::TagUid::kSize) {
+    auto tag_uid = maco::TagUid::FromArray(uid_buffer);
+    co_await TryPersonalize(cx, tag, tag_uid, keys);
+  } else {
+    SetError("Invalid UID size for personalization");
+    StreamTagEvent(maco_TagEvent_EventType_PERSONALIZATION_FAILED,
+                   stream_tag_type,
+                   pw::ConstByteSpan(uid_buffer.data(), uid_size),
+                   "Invalid UID size");
   }
 
   co_return pw::OkStatus();
@@ -187,40 +232,25 @@ pw::async2::Coro<pw::Status> PersonalizeCoordinator::HandleTag(
 pw::async2::Coro<pw::Status> PersonalizeCoordinator::TryPersonalize(
     pw::async2::CoroContext& cx,
     nfc::NfcTag& tag,
-    const maco::TagUid& tag_uid) {
+    const maco::TagUid& tag_uid,
+    const PersonalizationKeys& keys) {
   SetState(PersonalizeStateId::kPersonalizing);
   PW_LOG_INFO("Starting tag personalization...");
 
   auto tag_info = TagInfoFromNfcTag(tag);
   nfc::Ntag424Tag ntag(reader_, tag_info);
 
-  // Get diversified keys from Firebase
-  auto keys_result =
-      co_await firebase_client_.KeyDiversification(cx, tag_uid);
-  if (!keys_result.ok()) {
-    PW_LOG_ERROR("KeyDiversification failed: %d",
-                 static_cast<int>(keys_result.status().code()));
-    SetError("Key diversification failed");
-    co_return keys_result.status();
-  }
-
-  // Get terminal key from device secrets
-  auto terminal_key_result = device_secrets_.GetNtagTerminalKey();
-  if (!terminal_key_result.ok()) {
-    PW_LOG_ERROR("Terminal key not provisioned");
-    SetError("Terminal key not provisioned");
-    co_return terminal_key_result.status();
-  }
-
   // Provision keys (idempotent)
-  auto session_result = co_await UpdateKeys(
-      cx, ntag, *keys_result, terminal_key_result->bytes(), rng_);
+  auto session_result = co_await UpdateKeys(cx, ntag, keys, rng_);
   if (!session_result.ok()) {
     SetError("Key provisioning failed");
+    StreamTagEvent(maco_TagEvent_EventType_PERSONALIZATION_FAILED,
+                   maco_TagEvent_TagType_TAG_FACTORY,
+                   tag_uid.bytes(), "Key provisioning failed");
     co_return session_result.status();
   }
 
-  // SEC-4: Get authenticated UID via GetCardUid (prefer over anti-collision)
+  // Get authenticated UID via GetCardUid
   std::array<std::byte, 7> verified_uid{};
   size_t verified_uid_size = 0;
   auto uid_result = co_await ntag.GetCardUid(
@@ -228,7 +258,6 @@ pw::async2::Coro<pw::Status> PersonalizeCoordinator::TryPersonalize(
   if (uid_result.ok()) {
     verified_uid_size = *uid_result;
   } else {
-    // Fall back to input UID if GetCardUid fails
     PW_LOG_WARN("GetCardUid failed after key provisioning, using input UID");
     auto uid_bytes = tag_uid.bytes();
     std::copy(uid_bytes.begin(), uid_bytes.end(), verified_uid.begin());
@@ -239,22 +268,28 @@ pw::async2::Coro<pw::Status> PersonalizeCoordinator::TryPersonalize(
   auto sdm_status = co_await ConfigureSdm(cx, ntag, *session_result);
   if (!sdm_status.ok()) {
     SetError("SDM configuration failed");
+    StreamTagEvent(maco_TagEvent_EventType_PERSONALIZATION_FAILED,
+                   maco_TagEvent_TagType_TAG_FACTORY,
+                   pw::ConstByteSpan(verified_uid.data(), verified_uid_size),
+                   "SDM configuration failed");
     co_return sdm_status;
   }
 
-  // Enable random UID for privacy (tag returns random UID during anticollision)
+  // Enable random UID for privacy
   PW_LOG_INFO("Enabling random UID...");
   auto rid_status = co_await ntag.EnableRandomUid(cx, *session_result);
   if (!rid_status.ok()) {
     PW_LOG_WARN("EnableRandomUid failed: %d (non-fatal)",
                 static_cast<int>(rid_status.code()));
-    // Non-fatal: tag works without random UID, just less private
   }
 
   PW_LOG_INFO("Tag personalization complete!");
   SetStateWithUid(
       PersonalizeStateId::kPersonalized, verified_uid, verified_uid_size);
-  Disarm();
+  StreamTagEvent(maco_TagEvent_EventType_PERSONALIZATION_COMPLETE,
+                 maco_TagEvent_TagType_TAG_MACO,
+                 pw::ConstByteSpan(verified_uid.data(), verified_uid_size),
+                 "");
   co_return pw::OkStatus();
 }
 

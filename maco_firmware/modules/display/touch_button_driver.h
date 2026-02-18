@@ -25,6 +25,10 @@ class TouchButtonDriver {
   // The driver sets up read callback internally
   // Returns the lv_indev_t* on success
   virtual pw::Result<lv_indev_t*> CreateLvglInputDevice() = 0;
+
+  // Read raw touch bitmask for direct access (e.g. factory tests).
+  // Returns 0 if unsupported or no touch detected.
+  virtual uint8_t Touched() { return 0; }
 };
 
 }  // namespace maco::display

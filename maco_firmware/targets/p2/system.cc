@@ -36,7 +36,9 @@
 #include "pb_digital_io/digital_io.h"
 #include "pb_uart/async_uart.h"
 #include "pb_log/log_bridge.h"
+#include "pb_i2c/initiator.h"
 #include "pb_spi/initiator.h"
+#include "i2c_hal.h"
 #include "pinmap_hal.h"
 #include "core_hal.h"
 #include "delay_hal.h"
@@ -168,7 +170,9 @@ maco::display::DisplayDriver& GetDisplayDriver() {
 }
 
 maco::display::TouchButtonDriver& GetTouchButtonDriver() {
-  static maco::display::CapTouchInputDriver driver;
+  static pb::ParticleI2cInitiator i2c(
+      pb::ParticleI2cInitiator::Interface::kWire, CLOCK_SPEED_400KHZ);
+  static maco::display::CapTouchInputDriver driver(i2c);
   return driver;
 }
 

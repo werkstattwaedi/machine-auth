@@ -32,6 +32,10 @@ service FactoryTestService {
 
   // Stop buzzer immediately.
   rpc BuzzerStop(Empty) returns (TestResponse);
+
+  // Read capacitive touch button state.
+  // Long-polls: blocks until a touch is detected or timeout_ms expires.
+  rpc TouchRead(TouchReadRequest) returns (TouchReadResponse);
 }
 
 message Empty {}
@@ -69,4 +73,16 @@ message DisplayColorRequest {
 message BuzzerBeepRequest {
   uint32 frequency_hz = 1;
   uint32 duration_ms = 2;
+}
+
+message TouchReadRequest {
+  uint32 timeout_ms = 1;  // Max wait time in ms (0 = single immediate read)
+}
+
+message TouchReadResponse {
+  uint32 raw_bitmask = 1;
+  bool button_up = 2;
+  bool button_down = 3;
+  bool button_ok = 4;
+  bool button_cancel = 5;
 }

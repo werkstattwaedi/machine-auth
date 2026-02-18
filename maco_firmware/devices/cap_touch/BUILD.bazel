@@ -5,14 +5,33 @@ load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
 package(default_visibility = ["//maco_firmware:__subpackages__"])
 
-# Capacitive touch input driver
+# CAP1296 capacitive touch controller driver
+cc_library(
+    name = "cap1296",
+    srcs = ["cap1296.cc"],
+    hdrs = ["cap1296.h"],
+    deps = [
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_i2c:initiator",
+        "@pigweed//pw_i2c:register_device",
+        "@pigweed//pw_log",
+        "@pigweed//pw_result",
+        "@pigweed//pw_status",
+    ],
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)
+
+# Capacitive touch input driver (LVGL KEYPAD integration)
 cc_library(
     name = "cap_touch",
     srcs = ["cap_touch_input_driver.cc"],
     hdrs = ["cap_touch_input_driver.h"],
     deps = [
+        ":cap1296",
         "//maco_firmware/modules/display:touch_button_driver",
         "//third_party/lvgl",
+        "@pigweed//pw_i2c:initiator",
         "@pigweed//pw_log",
     ],
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
 )

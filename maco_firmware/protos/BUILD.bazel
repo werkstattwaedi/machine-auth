@@ -77,9 +77,15 @@ py_proto_library(
 )
 
 # Personalization Service - for tag key provisioning
+pw_proto_filegroup(
+    name = "personalization_service_proto_and_options",
+    srcs = ["personalization_service.proto"],
+    options_files = ["personalization_service.options"],
+)
+
 proto_library(
     name = "personalization_service_proto",
-    srcs = ["personalization_service.proto"],
+    srcs = [":personalization_service_proto_and_options"],
     import_prefix = "maco_pb",
     strip_import_prefix = "/maco_firmware/protos",
 )
