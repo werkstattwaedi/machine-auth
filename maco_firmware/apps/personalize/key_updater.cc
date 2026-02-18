@@ -5,7 +5,6 @@
 
 #include "maco_firmware/apps/personalize/key_updater.h"
 
-#include "firebase/types.h"
 #include "maco_firmware/modules/nfc_tag/ntag424/local_key_provider.h"
 #include "pw_log/log.h"
 
@@ -23,8 +22,7 @@ constexpr uint8_t kReserved2KeyNumber = 4;
 pw::async2::Coro<pw::Result<nfc::Ntag424Session>> UpdateKeys(
     pw::async2::CoroContext& cx,
     nfc::Ntag424Tag& ntag,
-    const firebase::KeyDiversificationResult& keys,
-    pw::ConstByteSpan terminal_key,
+    const PersonalizationKeys& keys,
     pw::random::RandomGenerator& rng) {
   PW_LOG_INFO("Starting key provisioning...");
 
@@ -75,7 +73,7 @@ pw::async2::Coro<pw::Result<nfc::Ntag424Session>> UpdateKeys(
   };
 
   const KeyChange key_changes[] = {
-      {kTerminalKeyNumber, "terminal", terminal_key},
+      {kTerminalKeyNumber, "terminal", keys.terminal_key},
       {kAuthorizationKeyNumber, "authorization", keys.authorization_key},
       {kSdmMacKeyNumber, "sdm_mac", keys.sdm_mac_key},
       {kReserved2KeyNumber, "reserved2", keys.reserved2_key},
