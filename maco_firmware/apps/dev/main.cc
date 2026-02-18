@@ -3,29 +3,22 @@
 
 #define PW_LOG_MODULE_NAME "MAIN"
 
-#include <memory>
-
-#include "maco_firmware/apps/dev/screens/nfc_test_screen.h"
+#include "device_secrets/device_secrets.h"
+#include "gateway/gateway_client.h"
 #include "maco_firmware/modules/app_state/session_controller.h"
 #include "maco_firmware/modules/app_state/session_fsm.h"
 #include "maco_firmware/modules/app_state/tag_verifier.h"
-#include "maco_firmware/modules/machine_relay/relay_controller.h"
-#include "device_secrets/device_secrets.h"
 #include "maco_firmware/modules/display/display.h"
-#include "gateway/gateway_client.h"
+#include "maco_firmware/modules/machine_relay/relay_controller.h"
 #include "maco_firmware/modules/nfc_reader/nfc_reader.h"
 #include "maco_firmware/modules/stack_monitor/stack_monitor.h"
-#include "maco_firmware/modules/status_bar/status_bar.h"
-#include "maco_firmware/modules/ui/app_shell.h"
+#include "maco_firmware/modules/terminal_ui/terminal_ui.h"
 #include "maco_firmware/system/system.h"
 #include "pw_async2/system_time_provider.h"
 #include "pw_log/log.h"
 #include "pw_system/system.h"
 
 namespace {
-
-// Global controller pointer for snapshot provider lambda
-maco::app_state::SessionController* g_controller = nullptr;
 
 void AppInit() {
   PW_LOG_INFO("MACO Dev Firmware initializing...");
@@ -35,52 +28,8 @@ void AppInit() {
   auto& display_driver = maco::system::GetDisplayDriver();
   auto& touch_driver = maco::system::GetTouchButtonDriver();
 
-  // Session state machine and observers
-  static maco::app_state::SessionFsm session_fsm;
-  static maco::machine_relay::RelayController relay_controller(
-      maco::system::GetMachineRelay(), pw::async2::GetSystemTimeProvider(),
-      pw::System().allocator());
-  session_fsm.AddObserver(&relay_controller);
-  relay_controller.Start(pw::System().dispatcher());
-
-  // Snapshot provider - bridges UI thread to combined state
-  auto snapshot_provider = [](maco::app_state::AppStateSnapshot& snapshot) {
-    if (g_controller) {
-      g_controller->GetSnapshot(snapshot);
-    }
-  };
-
-  // Set init callback for LVGL widget creation (runs on render thread)
-  // All LVGL operations must happen on the render thread.
-  static maco::status_bar::StatusBar status_bar;
-  static maco::ui::AppShell<maco::app_state::AppStateSnapshot> app_shell(
-      display, snapshot_provider);
-
-  display.SetInitCallback([&]() {
-    PW_LOG_INFO("Creating UI widgets on render thread...");
-
-    // Initialize status bar (persistent chrome on lv_layer_top)
-    auto status = status_bar.Init();
-    if (!status.ok()) {
-      PW_LOG_WARN("StatusBar init failed (continuing)");
-    }
-
-    // Initialize AppShell (screen stack, button bar chrome, state propagation)
-    status = app_shell.Init();
-    if (!status.ok()) {
-      PW_LOG_ERROR("AppShell init failed");
-      return;
-    }
-
-    // Create and show initial screen
-    status = app_shell.Reset(std::make_unique<maco::dev::NfcTestScreen>());
-    if (!status.ok()) {
-      PW_LOG_ERROR("Failed to set initial screen");
-      return;
-    }
-
-    PW_LOG_INFO("UI initialization complete");
-  });
+  // Terminal UI coordinator (owns AppShell, StatusBar, and screen management).
+  static maco::terminal_ui::TerminalUi terminal_ui(display);
 
   auto status = display.Init(display_driver, touch_driver);
   if (!status.ok()) {
@@ -88,6 +37,16 @@ void AppInit() {
     return;
   }
   PW_LOG_INFO("Display initialized: %dx%d", display.width(), display.height());
+
+  // Session state machine and observers
+  static maco::app_state::SessionFsm session_fsm;
+  static maco::machine_relay::RelayController relay_controller(
+      maco::system::GetMachineRelay(),
+      pw::async2::GetSystemTimeProvider(),
+      pw::System().allocator()
+  );
+  session_fsm.AddObserver(&relay_controller);
+  relay_controller.Start(pw::System().dispatcher());
 
   // Get and start NFC reader (init happens asynchronously)
   PW_LOG_INFO("Starting NFC reader...");
@@ -103,6 +62,7 @@ void AppInit() {
   auto secret = maco::system::GetDeviceSecrets().GetGatewayMasterSecret();
   if (!secret.ok()) {
     PW_LOG_ERROR("Device not provisioned - skipping gateway/cloud services");
+    terminal_ui.SetController(nullptr);
   } else {
     maco::system::GetGatewayClient().Start(pw::System().dispatcher());
 
@@ -111,16 +71,20 @@ void AppInit() {
         maco::system::GetDeviceSecrets(),
         maco::system::GetFirebaseClient(),
         maco::system::GetRandomGenerator(),
-        pw::System().allocator());
+        pw::System().allocator()
+    );
     tag_verifier.AddObserver(&session_fsm);
     tag_verifier.Start(pw::System().dispatcher());
 
     // Session controller - drives timeouts, hold detection, UI action bridge
     static maco::app_state::SessionController controller(
-        tag_verifier, session_fsm, pw::async2::GetSystemTimeProvider(),
-        pw::System().allocator());
-    g_controller = &controller;
+        tag_verifier,
+        session_fsm,
+        pw::async2::GetSystemTimeProvider(),
+        pw::System().allocator()
+    );
     controller.Start(pw::System().dispatcher());
+    terminal_ui.SetController(&controller);
   }
 
   maco::StartStackMonitor();

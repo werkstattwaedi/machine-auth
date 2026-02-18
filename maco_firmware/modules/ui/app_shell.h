@@ -10,6 +10,7 @@
 #include "maco_firmware/modules/ui/screen.h"
 #include "maco_firmware/modules/ui/widgets/button_bar.h"
 #include "pw_containers/vector.h"
+#include "pw_function/function.h"
 #include "pw_log/log.h"
 #include "pw_status/status.h"
 
@@ -35,13 +36,13 @@ class AppShell {
  public:
   static constexpr size_t kMaxNavigationDepth = 6;
 
-  using SnapshotProvider = void (*)(Snapshot&);
+  using SnapshotProvider = pw::Function<void(Snapshot&)>;
 
   /// Constructor with dependency injection (per ADR-0001).
   /// @param display Display module for UI rendering
   /// @param snapshot_provider Function to fetch snapshot
   AppShell(display::Display& display, SnapshotProvider snapshot_provider)
-      : display_(display), snapshot_provider_(snapshot_provider) {}
+      : display_(display), snapshot_provider_(std::move(snapshot_provider)) {}
 
   ~AppShell() {
     while (!stack_.empty()) {
@@ -58,7 +59,6 @@ class AppShell {
   /// Must be called before any navigation.
   pw::Status Init() {
     button_bar_ = std::make_unique<ButtonBar>(lv_layer_top());
-    display_.SetUpdateCallback([this]() { Update(); });
     PW_LOG_INFO("AppShell initialized");
     return pw::OkStatus();
   }
@@ -164,7 +164,7 @@ class AppShell {
 
     if (screen->lv_screen()) {
       lv_screen_load_anim(
-          screen->lv_screen(), LV_SCREEN_LOAD_ANIM_FADE_IN, 200, 0, false);
+          screen->lv_screen(), LV_SCREEN_LOAD_ANIM_FADE_IN, 200, 0, true);
     }
 
     if (screen->lv_group()) {

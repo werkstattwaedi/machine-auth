@@ -1,0 +1,148 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+# Terminal UI module - production screens for MACO terminal
+
+load("//third_party/lvgl:image.bzl", "lvgl_image")
+load("@pigweed//pw_build:compatibility.bzl", "incompatible_with_mcu")
+load("@pigweed//pw_unit_test:pw_cc_test.bzl", "pw_cc_test")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//maco_firmware:__subpackages__"])
+
+# UiAction enum and callback type
+cc_library(
+    name = "ui_action",
+    hdrs = ["ui_action.h"],
+    deps = [
+        "@pigweed//pw_function",
+    ],
+)
+
+# Theme constants (colors, layout)
+cc_library(
+    name = "theme",
+    hdrs = ["theme.h"],
+)
+
+# OWW logo converted to LVGL C array
+lvgl_image(
+    name = "oww_logo",
+    src = "assets/oww_logo.png",
+)
+
+# Splash screen
+cc_library(
+    name = "splash_screen",
+    srcs = ["screens/splash_screen.cc"],
+    hdrs = ["screens/splash_screen.h"],
+    deps = [
+        ":oww_logo",
+        ":theme",
+        "//maco_firmware/modules/app_state/ui:snapshot",
+        "//maco_firmware/modules/ui:screen",
+        "//third_party/lvgl",
+        "@pigweed//pw_log",
+    ],
+)
+
+# Main screen (idle mode)
+cc_library(
+    name = "main_screen",
+    srcs = ["screens/main_screen.cc"],
+    hdrs = ["screens/main_screen.h"],
+    deps = [
+        ":theme",
+        ":ui_action",
+        "//maco_firmware/modules/app_state/ui:snapshot",
+        "//maco_firmware/modules/ui:data_binding",
+        "//maco_firmware/modules/ui:screen",
+        "//third_party/lvgl",
+        "@pigweed//pw_log",
+    ],
+)
+
+# Menu screen
+cc_library(
+    name = "menu_screen",
+    srcs = ["screens/menu_screen.cc"],
+    hdrs = ["screens/menu_screen.h"],
+    deps = [
+        ":theme",
+        ":ui_action",
+        "//maco_firmware/modules/app_state/ui:snapshot",
+        "//maco_firmware/modules/ui:screen",
+        "//third_party/lvgl",
+        "@pigweed//pw_containers:vector",
+        "@pigweed//pw_log",
+        "@pigweed//pw_span",
+    ],
+)
+
+# TerminalUi coordinator
+cc_library(
+    name = "terminal_ui",
+    srcs = ["terminal_ui.cc"],
+    hdrs = ["terminal_ui.h"],
+    deps = [
+        ":main_screen",
+        ":menu_screen",
+        ":splash_screen",
+        ":theme",
+        ":ui_action",
+        "//maco_firmware/modules/app_state:session_controller",
+        "//maco_firmware/modules/app_state/ui:snapshot",
+        "//maco_firmware/modules/display",
+        "//maco_firmware/modules/status_bar",
+        "//maco_firmware/modules/ui:app_shell",
+        "//third_party/lvgl",
+        "@pigweed//pw_log",
+        "@pigweed//pw_status",
+    ],
+)
+
+# Screenshot tests
+pw_cc_test(
+    name = "splash_screen_test",
+    srcs = ["screens/splash_screen_test.cc"],
+    data = glob(
+        ["testdata/*.png"],
+        allow_empty = True,
+    ),
+    deps = [
+        ":splash_screen",
+        "//maco_firmware/modules/display/testing:screenshot_test_harness",
+        "//maco_firmware/modules/fonts",
+        "//maco_firmware/targets/host:lvgl_conf",
+    ],
+)
+
+pw_cc_test(
+    name = "main_screen_test",
+    srcs = ["screens/main_screen_test.cc"],
+    data = glob(
+        ["testdata/*.png"],
+        allow_empty = True,
+    ),
+    deps = [
+        ":main_screen",
+        "//maco_firmware/modules/display/testing:screenshot_test_harness",
+        "//maco_firmware/modules/fonts",
+        "//maco_firmware/targets/host:lvgl_conf",
+    ],
+)
+
+pw_cc_test(
+    name = "menu_screen_test",
+    srcs = ["screens/menu_screen_test.cc"],
+    data = glob(
+        ["testdata/*.png"],
+        allow_empty = True,
+    ),
+    deps = [
+        ":menu_screen",
+        "//maco_firmware/modules/display/testing:screenshot_test_harness",
+        "//maco_firmware/modules/fonts",
+        "//maco_firmware/targets/host:lvgl_conf",
+    ],
+)

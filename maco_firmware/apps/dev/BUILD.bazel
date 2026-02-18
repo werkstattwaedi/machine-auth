@@ -33,7 +33,7 @@ cc_library(
 )
 
 DEV_DEPS = [
-    ":screens",
+    "//maco_firmware/modules/terminal_ui",
     "//maco_firmware/modules/app_state:session_controller",
     "//maco_firmware/modules/app_state:session_fsm",
     "//maco_firmware/modules/display",
@@ -42,8 +42,6 @@ DEV_DEPS = [
     "//maco_firmware/modules/machine_relay:relay_controller",
     "//maco_firmware/modules/nfc_reader",
     "//maco_firmware/modules/stack_monitor",
-    "//maco_firmware/modules/status_bar",
-    "//maco_firmware/modules/ui:app_shell",
     "//maco_firmware/system",
     "//maco_firmware/system:headers",
     "@pigweed//pw_async2:system_time_provider",
@@ -72,7 +70,7 @@ particle_firmware(
     srcs = ["main.cc"],
     platform = "//maco_firmware/targets/p2:p2_system",
     deps = [
-        ":screens",
+        "//maco_firmware/modules/terminal_ui",
         "//maco_firmware/modules/app_state:session_controller",
         "//maco_firmware/modules/app_state:session_fsm",
         "//maco_firmware/modules/display",
@@ -81,8 +79,6 @@ particle_firmware(
         "//maco_firmware/modules/machine_relay:relay_controller",
         "//maco_firmware/modules/nfc_reader",
         "//maco_firmware/modules/stack_monitor",
-        "//maco_firmware/modules/status_bar",
-        "//maco_firmware/modules/ui:app_shell",
         "//maco_firmware/system",
         "//maco_firmware/system:headers",
         "@pigweed//pw_async2:system_time_provider",
@@ -105,8 +101,8 @@ particle_memory_budget(
     elf = ":dev",
     # Set just above current watermark. Bump consciously when adding features.
     sram_limit = 82000,
-    psram_limit = 461000,
-    flash_limit = 478000,
+    psram_limit = 496000,
+    flash_limit = 513000,
     golden = "testdata/memory_budget.txt",
 )
 
