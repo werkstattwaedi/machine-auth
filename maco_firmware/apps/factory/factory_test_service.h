@@ -20,14 +20,20 @@ struct LedOps {
   uint16_t led_count;
 };
 
+/// Function table for touch button operations.
+struct TouchOps {
+  uint8_t (*read_touched)();
+};
+
 /// RPC service for factory hardware testing.
 /// Provides direct control over LEDs, display, and buzzer for bring-up and QA.
 class FactoryTestService final
     : public ::maco::factory::pw_rpc::nanopb::FactoryTestService::Service<
           FactoryTestService> {
  public:
-  FactoryTestService(const LedOps& led_ops, maco::buzzer::Buzzer& buzzer)
-      : led_ops_(led_ops), buzzer_(buzzer) {}
+  FactoryTestService(const LedOps& led_ops, const TouchOps& touch_ops,
+                     maco::buzzer::Buzzer& buzzer)
+      : led_ops_(led_ops), touch_ops_(touch_ops), buzzer_(buzzer) {}
 
   pw::Status LedSetAll(const ::maco_factory_LedColorRequest& request,
                        ::maco_factory_TestResponse& response);
@@ -55,8 +61,12 @@ class FactoryTestService final
   pw::Status BuzzerStop(const ::maco_factory_Empty& request,
                         ::maco_factory_TestResponse& response);
 
+  pw::Status TouchRead(const ::maco_factory_TouchReadRequest& request,
+                       ::maco_factory_TouchReadResponse& response);
+
  private:
   LedOps led_ops_;
+  TouchOps touch_ops_;
   maco::buzzer::Buzzer& buzzer_;
 };
 

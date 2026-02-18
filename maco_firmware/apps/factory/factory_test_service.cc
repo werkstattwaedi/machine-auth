@@ -1,27 +1,30 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
+#define PW_LOG_MODULE_NAME "FACTORY"
+
 #include "maco_firmware/apps/factory/factory_test_service.h"
 
 #include <chrono>
-#include <cstring>
+#include <iterator>
 
 #include "lvgl.h"
+#include "pw_chrono/system_clock.h"
 #include "pw_log/log.h"
+#include "pw_string/string_builder.h"
+#include "pw_thread/sleep.h"
 
 namespace maco::factory {
 namespace {
 
 void SetOk(maco_factory_TestResponse& response, const char* msg = "OK") {
   response.success = true;
-  std::strncpy(response.message, msg, sizeof(response.message) - 1);
-  response.message[sizeof(response.message) - 1] = '\0';
+  pw::StringBuilder(response.message) << msg;
 }
 
 void SetError(maco_factory_TestResponse& response, const char* msg) {
   response.success = false;
-  std::strncpy(response.message, msg, sizeof(response.message) - 1);
-  response.message[sizeof(response.message) - 1] = '\0';
+  pw::StringBuilder(response.message) << msg;
 }
 
 }  // namespace
@@ -116,7 +119,7 @@ pw::Status FactoryTestService::DisplayColorBars(
       0xFF0000, 0x00FF00, 0x0000FF, 0xFFFFFF,
       0x00FFFF, 0xFF00FF, 0xFFFF00,
   };
-  constexpr int kBarCount = sizeof(kColors) / sizeof(kColors[0]);
+  constexpr int kBarCount = std::size(kColors);
   int32_t screen_width = lv_obj_get_width(screen);
   int32_t screen_height = lv_obj_get_height(screen);
   int32_t bar_width = screen_width / kBarCount;
@@ -157,6 +160,39 @@ pw::Status FactoryTestService::BuzzerStop(
   buzzer_.Stop();
   PW_LOG_INFO("Buzzer stop");
   SetOk(response);
+  return pw::OkStatus();
+}
+
+pw::Status FactoryTestService::TouchRead(
+    const ::maco_factory_TouchReadRequest& request,
+    ::maco_factory_TouchReadResponse& response) {
+  using namespace std::chrono_literals;
+
+  const auto timeout = std::chrono::milliseconds(request.timeout_ms);
+  const auto deadline =
+      pw::chrono::SystemClock::now() + std::chrono::duration_cast<
+          pw::chrono::SystemClock::duration>(timeout);
+
+  do {
+    const uint8_t touched = touch_ops_.read_touched();
+    if (touched != 0) {
+      response.raw_bitmask = touched;
+      response.button_ok = (touched & (1 << 0)) != 0;
+      response.button_down = (touched & (1 << 1)) != 0;
+      response.button_up = (touched & (1 << 3)) != 0;
+      response.button_cancel = (touched & (1 << 4)) != 0;
+      return pw::OkStatus();
+    }
+
+    if (request.timeout_ms == 0) {
+      break;
+    }
+
+    pw::this_thread::sleep_for(50ms);
+  } while (pw::chrono::SystemClock::now() < deadline);
+
+  // Timeout with no touch
+  response.raw_bitmask = 0;
   return pw::OkStatus();
 }
 
