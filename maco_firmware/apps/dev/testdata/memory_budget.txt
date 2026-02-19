@@ -1,8 +1,8 @@
 PARTICLE P2 MEMORY BUDGET
 ============================================================
- SRAM:    81,812 /    82,000 bytes (100%)  ███████████████████░
-PSRAM:   495,024 /   496,000 bytes (100%)  ███████████████████░
-Flash:   512,000 /   513,000 bytes (100%)  ███████████████████░
+ SRAM:    81,960 /    83,000 bytes ( 99%)  ███████████████████░
+PSRAM:   499,024 /   500,000 bytes (100%)  ███████████████████░
+Flash:   516,096 /   517,000 bytes (100%)  ███████████████████░
 
 SRAM breakdown (symbols > 512 bytes):
      SIZE   SECTION  SOURCE                           SYMBOL
@@ -20,12 +20,12 @@ SRAM breakdown (symbols > 512 bytes):
     1,248   .bss     (unknown)                        (anonymous namespace)::AppInit()::tag_verifier
     1,180   .bss     (unknown)                        pw::system::(anonymous namespace)::system_thread_snapshot_service
     1,060   .bss     (unknown)                        maco::system::GetDeviceConfig()::config
+      768   .bss     (unknown)                        (anonymous namespace)::AppInit()::terminal_ui
       720   .bss     (unknown)                        (anonymous namespace)::AppInit()::session_fsm
       708   .bss     (unknown)                        maco::(anonymous namespace)::GetSnapshot()::snapshot
-      704   .bss     (unknown)                        (anonymous namespace)::AppInit()::terminal_ui
       696   .bss     (unknown)                        maco::system::GetNfcReader()::reader
       512   .bss     (unknown)                        pw::system::(anonymous namespace)::encode_buffer
       512   .bss     (unknown)                        pw::rpc::internal::encoding_buffer
   ─────
-   81,812   total (.data=14,928, .bss=66,884)
+   81,960   total (.data=14,924, .bss=67,036)
 ============================================================

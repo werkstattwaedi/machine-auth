@@ -6,6 +6,7 @@
 #include <atomic>
 
 #include "maco_firmware/modules/app_state/session_controller.h"
+#include "maco_firmware/modules/app_state/system_state.h"
 #include "maco_firmware/modules/app_state/ui/snapshot.h"
 #include "maco_firmware/modules/display/display.h"
 #include "maco_firmware/modules/status_bar/status_bar.h"
@@ -26,7 +27,8 @@ namespace maco::terminal_ui {
 class TerminalUi {
  public:
   /// Registers the display init callback. Construct before display.Init().
-  explicit TerminalUi(display::Display& display);
+  TerminalUi(display::Display& display,
+             app_state::SystemState& system_state);
 
   /// Set the session controller and signal that the system is ready.
   /// Ends the splash screen and transitions to MainScreen.
@@ -40,6 +42,7 @@ class TerminalUi {
   void TransitionToMain();
 
   display::Display& display_;
+  app_state::SystemState& system_state_;
   app_state::SessionController* controller_ = nullptr;
 
   status_bar::StatusBar status_bar_;

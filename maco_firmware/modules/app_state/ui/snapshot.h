@@ -54,11 +54,39 @@ struct TagVerificationSnapshot {
   maco::FirebaseId auth_id = maco::FirebaseId::Empty();
 };
 
+// System-level connectivity and boot state for UI display
+enum class BootState : uint8_t { kBooting = 0, kReady = 1 };
+enum class WifiState : uint8_t {
+  kDisconnected = 0,
+  kConnecting = 1,
+  kConnected = 2,
+};
+enum class CloudState : uint8_t {
+  kDisconnected = 0,
+  kConnecting = 1,
+  kConnected = 2,
+};
+
+struct SystemStateSnapshot {
+  BootState boot_state = BootState::kBooting;
+  WifiState wifi_state = WifiState::kDisconnected;
+  CloudState cloud_state = CloudState::kDisconnected;
+  bool gateway_connected = false;
+
+  // Wall clock is UTC (read from SystemClock::now() at snapshot time).
+  // time_synced indicates whether the clock has been set from a reliable source.
+  // utc_offset_seconds converts to local time: local = utc + offset.
+  bool time_synced = false;
+  pw::chrono::SystemClock::time_point wall_clock;
+  int32_t utc_offset_seconds = 0;
+};
+
 // Combined snapshot for the dev app UI thread.
-// Composed from tag verification + session state.
+// Composed from tag verification + session + system state.
 struct AppStateSnapshot {
   TagVerificationSnapshot verification;
   SessionSnapshotUi session;
+  SystemStateSnapshot system;
 };
 
 }  // namespace maco::app_state

@@ -7,6 +7,7 @@
 #include "gateway/gateway_client.h"
 #include "maco_firmware/modules/app_state/session_controller.h"
 #include "maco_firmware/modules/app_state/session_fsm.h"
+#include "maco_firmware/modules/app_state/system_state.h"
 #include "maco_firmware/modules/app_state/tag_verifier.h"
 #include "maco_firmware/modules/display/display.h"
 #include "maco_firmware/modules/machine_relay/relay_controller.h"
@@ -23,13 +24,17 @@ namespace {
 void AppInit() {
   PW_LOG_INFO("MACO Dev Firmware initializing...");
 
+  // System state (boot progress, connectivity, time)
+  auto& monitor_backend = maco::system::GetSystemMonitorBackend();
+  static maco::app_state::SystemState system_state(monitor_backend);
+
   // Initialize display module (handles LVGL init, drivers, render thread)
   static maco::display::Display display;
   auto& display_driver = maco::system::GetDisplayDriver();
   auto& touch_driver = maco::system::GetTouchButtonDriver();
 
   // Terminal UI coordinator (owns AppShell, StatusBar, and screen management).
-  static maco::terminal_ui::TerminalUi terminal_ui(display);
+  static maco::terminal_ui::TerminalUi terminal_ui(display, system_state);
 
   auto status = display.Init(display_driver, touch_driver);
   if (!status.ok()) {
@@ -37,6 +42,9 @@ void AppInit() {
     return;
   }
   PW_LOG_INFO("Display initialized: %dx%d", display.width(), display.height());
+
+  // Start system monitor (subscribes to platform events)
+  system_state.Start(pw::System().dispatcher());
 
   // Session state machine and observers
   static maco::app_state::SessionFsm session_fsm;
@@ -65,6 +73,7 @@ void AppInit() {
     terminal_ui.SetController(nullptr);
   } else {
     maco::system::GetGatewayClient().Start(pw::System().dispatcher());
+    system_state.SetGatewayClient(&maco::system::GetGatewayClient());
 
     static maco::app_state::TagVerifier tag_verifier(
         nfc_reader,
@@ -86,6 +95,8 @@ void AppInit() {
     controller.Start(pw::System().dispatcher());
     terminal_ui.SetController(&controller);
   }
+
+  system_state.SetReady();
 
   maco::StartStackMonitor();
 

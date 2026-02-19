@@ -30,6 +30,7 @@
 #include "maco_firmware/modules/buzzer/tone_buzzer.h"
 #include "maco_firmware/modules/machine_relay/latching_machine_relay.h"
 #include "maco_firmware/targets/p2/hardware_random.h"
+#include "maco_firmware/targets/p2/p2_system_monitor.h"
 #include "firebase/firebase_client.h"
 #include "maco_firmware/types.h"
 #include "pb_cloud/particle_ledger_backend.h"
@@ -316,6 +317,11 @@ maco::buzzer::Buzzer& GetBuzzer() {
   static maco::buzzer::ToneBuzzer buzzer(
       kPinBuzzer, pw::async2::GetSystemTimeProvider());
   return buzzer;
+}
+
+maco::app_state::SystemMonitorBackend& GetSystemMonitorBackend() {
+  static maco::P2SystemMonitor monitor;
+  return monitor;
 }
 
 }  // namespace maco::system

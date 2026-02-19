@@ -8,6 +8,7 @@
 #include "maco_firmware/apps/personalize/personalization_rpc_service.h"
 #include "maco_firmware/apps/personalize/personalize_coordinator.h"
 #include "maco_firmware/apps/personalize/screens/personalize_screen.h"
+#include "maco_firmware/modules/app_state/system_state.h"
 #include "maco_firmware/modules/display/display.h"
 #include "maco_firmware/modules/nfc_reader/nfc_reader.h"
 #include "maco_firmware/modules/stack_monitor/stack_monitor.h"
@@ -25,6 +26,10 @@ maco::personalize::PersonalizeCoordinator* g_coordinator = nullptr;
 void AppInit() {
   PW_LOG_INFO("MACO Personalize Firmware initializing...");
 
+  // System state (boot progress, connectivity, time)
+  auto& monitor_backend = maco::system::GetSystemMonitorBackend();
+  static maco::app_state::SystemState system_state(monitor_backend);
+
   // Initialize display with StatusBar + AppShell
   static maco::display::Display display;
   auto& display_driver = maco::system::GetDisplayDriver();
@@ -38,7 +43,7 @@ void AppInit() {
         }
       };
 
-  static maco::status_bar::StatusBar status_bar;
+  static maco::status_bar::StatusBar status_bar(system_state);
   static maco::ui::AppShell<maco::personalize::PersonalizeSnapshot> app_shell(
       display, snapshot_provider);
 
@@ -66,12 +71,20 @@ void AppInit() {
     PW_LOG_INFO("UI initialization complete");
   });
 
+  display.SetUpdateCallback([&]() {
+    status_bar.Update();
+    app_shell.Update();
+  });
+
   auto status = display.Init(display_driver, touch_driver);
   if (!status.ok()) {
     PW_LOG_ERROR("Display init failed");
     return;
   }
   PW_LOG_INFO("Display initialized: %dx%d", display.width(), display.height());
+
+  // Start system monitor (subscribes to platform events)
+  system_state.Start(pw::System().dispatcher());
 
   // Start NFC reader
   PW_LOG_INFO("Starting NFC reader...");
@@ -89,6 +102,8 @@ void AppInit() {
 
   static maco::personalize::PersonalizationRpcService rpc_service(coordinator);
   pw::System().rpc_server().RegisterService(rpc_service);
+
+  system_state.SetReady();
 
   maco::StartStackMonitor();
 

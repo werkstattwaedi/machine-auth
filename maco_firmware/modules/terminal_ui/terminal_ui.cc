@@ -21,12 +21,16 @@ constexpr MenuItem kMenuItems[] = {
 
 }  // namespace
 
-TerminalUi::TerminalUi(display::Display& display)
+TerminalUi::TerminalUi(display::Display& display,
+                       app_state::SystemState& system_state)
     : display_(display),
+      system_state_(system_state),
+      status_bar_(system_state),
       app_shell_(display, [this](app_state::AppStateSnapshot& snapshot) {
         if (controller_) {
           controller_->GetSnapshot(snapshot);
         }
+        system_state_.GetSnapshot(snapshot.system);
       }) {
   display_.SetInitCallback([this]() {
     auto status = Init();
@@ -72,6 +76,7 @@ pw::Status TerminalUi::Init() {
     if (in_splash_ && ready_.load(std::memory_order_acquire)) {
       TransitionToMain();
     }
+    status_bar_.Update();
     app_shell_.Update();
   });
 

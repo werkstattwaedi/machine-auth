@@ -36,6 +36,7 @@ DEV_DEPS = [
     "//maco_firmware/modules/terminal_ui",
     "//maco_firmware/modules/app_state:session_controller",
     "//maco_firmware/modules/app_state:session_fsm",
+    "//maco_firmware/modules/app_state:system_state",
     "//maco_firmware/modules/display",
     "//maco_firmware/modules/gateway:gateway_client",
     "//maco_firmware/modules/app_state:tag_verifier",
@@ -73,6 +74,7 @@ particle_firmware(
         "//maco_firmware/modules/terminal_ui",
         "//maco_firmware/modules/app_state:session_controller",
         "//maco_firmware/modules/app_state:session_fsm",
+        "//maco_firmware/modules/app_state:system_state",
         "//maco_firmware/modules/display",
         "//maco_firmware/modules/app_state:tag_verifier",
         "//maco_firmware/modules/gateway:gateway_client",
@@ -100,9 +102,9 @@ particle_memory_budget(
     name = "memory_budget",
     elf = ":dev",
     # Set just above current watermark. Bump consciously when adding features.
-    sram_limit = 82000,
-    psram_limit = 496000,
-    flash_limit = 513000,
+    sram_limit = 83000,
+    psram_limit = 500000,
+    flash_limit = 517000,
     golden = "testdata/memory_budget.txt",
 )
 

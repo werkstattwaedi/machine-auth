@@ -147,6 +147,7 @@ particle_firmware(
         ":personalization_rpc_service",
         ":personalize_coordinator",
         ":screens",
+        "//maco_firmware/modules/app_state:system_state",
         "//maco_firmware/modules/display",
         "//maco_firmware/modules/nfc_reader",
         "//maco_firmware/modules/stack_monitor",

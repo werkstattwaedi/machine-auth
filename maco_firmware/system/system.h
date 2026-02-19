@@ -43,6 +43,10 @@ namespace maco::buzzer {
 class Buzzer;
 }  // namespace maco::buzzer
 
+namespace maco::app_state {
+class SystemMonitorBackend;
+}  // namespace maco::app_state
+
 namespace maco::led {
 // Forward declaration - concrete types are platform-specific (CRTP templates)
 // Host: Led<SdlLedDriver<16>>
@@ -121,5 +125,10 @@ maco::machine_relay::MachineRelay& GetMachineRelay();
 /// P2: ToneBuzzer with HAL PWM tone
 /// Host: MockBuzzer for simulation
 maco::buzzer::Buzzer& GetBuzzer();
+
+/// Returns the platform-specific system monitor backend.
+/// P2: Subscribes to Device OS network/cloud/time events
+/// Host: Stub that reports everything connected
+maco::app_state::SystemMonitorBackend& GetSystemMonitorBackend();
 
 }  // namespace maco::system

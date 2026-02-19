@@ -25,6 +25,7 @@
 #include "maco_firmware/modules/nfc_reader/mock/nfc_mock_service.h"
 #include "maco_firmware/services/maco_service.h"
 #include "maco_firmware/targets/host/host_random.h"
+#include "maco_firmware/targets/host/host_system_monitor.h"
 #include "maco_firmware/targets/host/keyboard_input_driver.h"
 #include "maco_firmware/targets/host/sdl_display_driver.h"
 #include "maco_firmware/targets/host/sdl_led_driver.h"
@@ -264,6 +265,11 @@ maco::machine_relay::MachineRelay& GetMachineRelay() {
 maco::buzzer::Buzzer& GetBuzzer() {
   static maco::buzzer::MockBuzzer buzzer;
   return buzzer;
+}
+
+maco::app_state::SystemMonitorBackend& GetSystemMonitorBackend() {
+  static maco::HostSystemMonitor monitor;
+  return monitor;
 }
 
 }  // namespace maco::system

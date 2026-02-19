@@ -114,6 +114,21 @@ cc_library(
     alwayslink = 1,
 )
 
+# System monitor for P2 - subscribes to Device OS system events
+cc_library(
+    name = "p2_system_monitor",
+    srcs = ["p2_system_monitor.cc"],
+    hdrs = ["p2_system_monitor.h"],
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+    deps = [
+        "//maco_firmware/modules/app_state:system_monitor_backend",
+        "//maco_firmware/modules/app_state:system_state_updater",
+        "@particle_bazel//:device_os_headers",
+        "@pigweed//pw_assert:check",
+        "@pigweed//pw_log",
+    ],
+)
+
 # Hardware random number generator using Device OS HAL RNG
 cc_library(
     name = "hardware_random",
@@ -132,6 +147,7 @@ cc_library(
     ],
     implementation_deps = [
         ":hardware_random",
+        ":p2_system_monitor",
         "//maco_firmware/devices/cap_touch",
         "//maco_firmware/devices/in4818",
         "//maco_firmware/devices/pico_res28_lcd",

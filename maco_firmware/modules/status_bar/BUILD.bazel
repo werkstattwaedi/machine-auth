@@ -12,6 +12,7 @@ cc_library(
     srcs = ["status_bar.cc"],
     hdrs = ["status_bar.h"],
     deps = [
+        "//maco_firmware/modules/app_state:system_state",
         "//third_party/lvgl",
         "@pigweed//pw_log",
         "@pigweed//pw_status",

@@ -14,6 +14,42 @@ cc_library(
     hdrs = ["tag_verification_state.h"],
 )
 
+# Setter-only interface for system state backends
+cc_library(
+    name = "system_state_updater",
+    hdrs = ["system_state_updater.h"],
+    deps = [
+        "//maco_firmware/modules/app_state/ui:snapshot",
+    ],
+)
+
+# Backend interface for platform-specific system monitoring
+cc_library(
+    name = "system_monitor_backend",
+    hdrs = ["system_monitor_backend.h"],
+    deps = [
+        ":system_state_updater",
+        "@pigweed//pw_async2:dispatcher",
+    ],
+)
+
+# Thread-safe system state (boot, connectivity, time)
+cc_library(
+    name = "system_state",
+    srcs = ["system_state.cc"],
+    hdrs = ["system_state.h"],
+    deps = [
+        ":system_monitor_backend",
+        ":system_state_updater",
+        "//maco_firmware/modules/app_state/ui:snapshot",
+        "//maco_firmware/modules/gateway:gateway_client",
+        "@pigweed//pw_chrono:system_clock",
+        "@pigweed//pw_log",
+        "@pigweed//pw_sync:lock_annotations",
+        "@pigweed//pw_sync:mutex",
+    ],
+)
+
 # Observer interface for TagVerifier state transitions
 cc_library(
     name = "tag_verifier_observer",

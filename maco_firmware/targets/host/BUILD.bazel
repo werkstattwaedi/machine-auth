@@ -75,11 +75,24 @@ cc_library(
     ],
 )
 
+# System monitor stub for host simulator
+cc_library(
+    name = "host_system_monitor",
+    srcs = ["host_system_monitor.cc"],
+    hdrs = ["host_system_monitor.h"],
+    target_compatible_with = incompatible_with_mcu(),
+    deps = [
+        "//maco_firmware/modules/app_state:system_monitor_backend",
+        "//maco_firmware/modules/app_state:system_state_updater",
+    ],
+)
+
 cc_library(
     name = "system",
     srcs = ["system.cc"],
     implementation_deps = [
         ":host_random",
+        ":host_system_monitor",
         ":keyboard_input_driver",
         ":sdl_display_driver",
         ":sdl_led_driver",
