@@ -28,9 +28,11 @@ cc_library(
     name = "sdl_display_driver",
     srcs = ["sdl_display_driver.cc"],
     hdrs = ["sdl_display_driver.h"],
+    data = ["MacoTerminal.png"],
     target_compatible_with = incompatible_with_mcu(),
     deps = [
         "//maco_firmware/modules/display:display_driver",
+        "//third_party/lodepng",
         "//third_party/sdl:sdl2",
         "//third_party/lvgl",
         "@pigweed//pw_assert:check",
@@ -45,6 +47,7 @@ cc_library(
     hdrs = ["keyboard_input_driver.h"],
     target_compatible_with = incompatible_with_mcu(),
     deps = [
+        ":sdl_display_driver",
         "//maco_firmware/modules/display:touch_button_driver",
         "//third_party/sdl:sdl2",
         "//third_party/lvgl",
