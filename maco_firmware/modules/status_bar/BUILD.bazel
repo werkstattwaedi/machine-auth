@@ -8,10 +8,22 @@ load("@rules_cc//cc:cc_library.bzl", "cc_library")
 package(default_visibility = ["//maco_firmware:__subpackages__"])
 
 cc_library(
+    name = "status_icon",
+    srcs = ["status_icon.cc"],
+    hdrs = ["status_icon.h"],
+    deps = [
+        "//third_party/lvgl",
+        "@pigweed//pw_assert:check",
+        "@pigweed//pw_span",
+    ],
+)
+
+cc_library(
     name = "status_bar",
     srcs = ["status_bar.cc"],
     hdrs = ["status_bar.h"],
     deps = [
+        ":status_icon",
         "//maco_firmware/modules/app_state:system_state",
         "//maco_firmware/modules/time:zurich_timezone",
         "//third_party/lvgl",

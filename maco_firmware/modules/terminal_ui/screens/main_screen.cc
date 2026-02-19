@@ -9,6 +9,36 @@
 
 namespace maco::terminal_ui {
 
+namespace {
+
+// Shared label styles, initialized once on first OnActivate() call.
+lv_style_t g_style_nfc_icon;   // teal + material_symbols_24
+lv_style_t g_style_title;      // primary text color + roboto_24
+lv_style_t g_style_instruction;  // muted text color + roboto_12
+
+void EnsureStylesInit() {
+  static bool initialized = false;
+  if (initialized) return;
+
+  lv_style_init(&g_style_nfc_icon);
+  lv_style_set_text_color(&g_style_nfc_icon,
+                           lv_color_hex(theme::kColorTeal));
+  lv_style_set_text_font(&g_style_nfc_icon, &material_symbols_24);
+
+  lv_style_init(&g_style_title);
+  lv_style_set_text_color(&g_style_title, lv_color_hex(theme::kColorText));
+  lv_style_set_text_font(&g_style_title, &roboto_24);
+
+  lv_style_init(&g_style_instruction);
+  lv_style_set_text_color(&g_style_instruction,
+                           lv_color_hex(theme::kColorMuted));
+  lv_style_set_text_font(&g_style_instruction, &roboto_12);
+
+  initialized = true;
+}
+
+}  // namespace
+
 MainScreen::MainScreen(ActionCallback action_callback)
     : Screen("Main"), action_callback_(std::move(action_callback)) {}
 
@@ -19,32 +49,27 @@ pw::Status MainScreen::OnActivate() {
   }
 
   lv_group_ = lv_group_create();
+  EnsureStylesInit();
 
   lv_obj_set_style_bg_color(
       lv_screen_, lv_color_hex(theme::kColorBg), LV_PART_MAIN);
 
-  // NFC icon (using LVGL symbol as placeholder)
+  // NFC tap icon using Material Symbols Rounded (U+E1BB nfc)
   nfc_icon_ = lv_label_create(lv_screen_);
-  lv_label_set_text(nfc_icon_, LV_SYMBOL_WIFI);
-  lv_obj_set_style_text_color(
-      nfc_icon_, lv_color_hex(theme::kColorTeal), LV_PART_MAIN);
-  lv_obj_set_style_text_font(nfc_icon_, &roboto_24, LV_PART_MAIN);
+  lv_label_set_text(nfc_icon_, "\xEE\x86\xBB");
+  lv_obj_add_style(nfc_icon_, &g_style_nfc_icon, LV_PART_MAIN);
   lv_obj_align(nfc_icon_, LV_ALIGN_CENTER, 0, -30);
 
   // Main prompt
   title_label_ = lv_label_create(lv_screen_);
   lv_label_set_text(title_label_, "Mit Badge anmelden");
-  lv_obj_set_style_text_color(
-      title_label_, lv_color_hex(theme::kColorText), LV_PART_MAIN);
-  lv_obj_set_style_text_font(title_label_, &roboto_24, LV_PART_MAIN);
+  lv_obj_add_style(title_label_, &g_style_title, LV_PART_MAIN);
   lv_obj_align(title_label_, LV_ALIGN_CENTER, 0, 10);
 
   // Instruction text
   instruction_label_ = lv_label_create(lv_screen_);
   lv_label_set_text(instruction_label_, "Badge an Leser halten");
-  lv_obj_set_style_text_color(
-      instruction_label_, lv_color_hex(theme::kColorMuted), LV_PART_MAIN);
-  lv_obj_set_style_text_font(instruction_label_, &roboto_12, LV_PART_MAIN);
+  lv_obj_add_style(instruction_label_, &g_style_instruction, LV_PART_MAIN);
   lv_obj_align(instruction_label_, LV_ALIGN_CENTER, 0, 40);
 
   // Invisible button to capture OK key press for menu

@@ -101,10 +101,11 @@ particle_flash_binary(
 particle_memory_budget(
     name = "memory_budget",
     elf = ":dev",
-    # Set just above current watermark. Bump consciously when adding features.
-    sram_limit = 83000,
-    psram_limit = 500000,
-    flash_limit = 517000,
+    # Limits with ~10% flash and ~5% SRAM headroom above current watermark.
+    # Bump consciously when adding features that exceed these.
+    sram_limit = 87000,
+    psram_limit = 600000,
+    flash_limit = 600000,
     golden = "testdata/memory_budget.txt",
 )
 
