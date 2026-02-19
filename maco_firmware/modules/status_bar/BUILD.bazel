@@ -25,8 +25,10 @@ cc_library(
     deps = [
         ":status_icon",
         "//maco_firmware/modules/app_state:system_state",
+        "//maco_firmware/modules/time:zurich_timezone",
         "//third_party/lvgl",
         "@pigweed//pw_log",
         "@pigweed//pw_status",
+        "@pigweed//pw_string",
     ],
 )

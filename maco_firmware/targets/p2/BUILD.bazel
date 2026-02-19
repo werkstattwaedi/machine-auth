@@ -125,6 +125,7 @@ cc_library(
         "//maco_firmware/modules/app_state:system_state_updater",
         "@particle_bazel//:device_os_headers",
         "@pigweed//pw_assert:check",
+        "@pigweed//pw_chrono:system_clock",
         "@pigweed//pw_log",
     ],
 )

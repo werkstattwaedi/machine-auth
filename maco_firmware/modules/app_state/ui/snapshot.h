@@ -73,12 +73,11 @@ struct SystemStateSnapshot {
   CloudState cloud_state = CloudState::kDisconnected;
   bool gateway_connected = false;
 
-  // Wall clock is UTC (read from SystemClock::now() at snapshot time).
-  // time_synced indicates whether the clock has been set from a reliable source.
-  // utc_offset_seconds converts to local time: local = utc + offset.
+  // wall_clock holds actual UTC time (time_since_epoch = Unix epoch seconds,
+  // expressed in SystemClock::duration units). Only valid when time_synced.
+  // Use zurich_timezone.h to convert to local time.
   bool time_synced = false;
   pw::chrono::SystemClock::time_point wall_clock;
-  int32_t utc_offset_seconds = 0;
 };
 
 // Combined snapshot for the dev app UI thread.

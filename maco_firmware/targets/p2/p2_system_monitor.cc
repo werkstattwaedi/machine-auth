@@ -3,8 +3,11 @@
 
 #include "maco_firmware/targets/p2/p2_system_monitor.h"
 
+#include <sys/time.h>
+
 #include "maco_firmware/modules/app_state/system_state_updater.h"
 #include "pw_assert/check.h"
+#include "pw_chrono/system_clock.h"
 #include "pw_log/log.h"
 #include "rtc_hal.h"
 #include "system_cloud.h"
@@ -19,6 +22,16 @@ namespace {
 // push state changes. Safe because Start() is called once at boot and
 // the updater outlives the subscription.
 app_state::SystemStateUpdater* g_updater = nullptr;
+
+// Read the RTC and push a UTC boot offset if the clock is valid.
+void SyncTimeIfValid(app_state::SystemStateUpdater& updater) {
+  if (!hal_rtc_time_is_valid(nullptr)) return;
+  struct timeval tv;
+  if (hal_rtc_get_time(&tv, nullptr) != 0) return;
+  int64_t boot_secs = std::chrono::duration_cast<std::chrono::seconds>(
+      pw::chrono::SystemClock::now().time_since_epoch()).count();
+  updater.SetUtcBootOffsetSeconds(tv.tv_sec - boot_secs);
+}
 
 void OnSystemEvent(system_event_t event, int param, void* /*pointer*/,
                    void* /*context*/) {
@@ -61,7 +74,7 @@ void OnSystemEvent(system_event_t event, int param, void* /*pointer*/,
         break;
     }
   } else if (event == time_changed) {
-    g_updater->SetTimeSynced(true);
+    SyncTimeIfValid(*g_updater);
   }
 }
 
@@ -79,9 +92,7 @@ void P2SystemMonitor::Start(app_state::SystemStateUpdater& updater,
   if (spark_cloud_flag_connected()) {
     updater.SetCloudState(app_state::CloudState::kConnected);
   }
-  if (hal_rtc_time_is_valid(nullptr)) {
-    updater.SetTimeSynced(true);
-  }
+  SyncTimeIfValid(updater);
 
   // Subscribe to ongoing changes
   int rc = system_subscribe_event(

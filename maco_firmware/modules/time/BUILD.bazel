@@ -1,0 +1,13 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+# Time utilities - timezone conversion and helpers
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//maco_firmware:__subpackages__"])
+
+cc_library(
+    name = "zurich_timezone",
+    hdrs = ["zurich_timezone.h"],
+)
