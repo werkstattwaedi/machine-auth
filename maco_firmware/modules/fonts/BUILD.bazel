@@ -20,10 +20,28 @@ lvgl_font(
     size = 24,
 )
 
+# Material Symbols Rounded icon font - include only glyphs that are used
+lvgl_font(
+    name = "material_symbols_24",
+    ttf = "MaterialSymbolsRounded.ttf",
+    size = 24,
+    range = "0x20,0xe1bb,0xe2bf,0xe2c1,0xe4ca,0xe4d9,0xe63e,0xe648,0xf15c",
+    # 0x20    space        (for formatting)
+    # 0xe1bb  nfc
+    # 0xe2bf  cloud_done
+    # 0xe2c1  cloud_off
+    # 0xe4ca  wifi_1_bar   (connecting animation frame 1)
+    # 0xe4d9  wifi_2_bar   (connecting animation frame 2)
+    # 0xe63e  wifi         (connected / connecting animation frame 3)
+    # 0xe648  wifi_off
+    # 0xf15c  cloud        (cloud connecting / gateway not ready)
+)
+
 # Combined fonts library
 cc_library(
     name = "fonts",
     deps = [
+        ":material_symbols_24",
         ":roboto_12",
         ":roboto_24",
     ],
