@@ -7,12 +7,13 @@
 
 namespace maco::display {
 
-// Keyboard-based input driver for host simulator
-// Maps keyboard keys to touch buttons
-// TODO: Implement when SDL2 Bazel dependency is configured
+class SdlDisplayDriver;
+
+// Keyboard and mouse input driver for host simulator.
+// Maps keyboard keys and mouse clicks on button regions to LVGL keys.
 class KeyboardInputDriver : public TouchButtonDriver {
  public:
-  KeyboardInputDriver() = default;
+  explicit KeyboardInputDriver(SdlDisplayDriver& display);
   ~KeyboardInputDriver() override = default;
 
   pw::Status Init() override;
@@ -21,7 +22,9 @@ class KeyboardInputDriver : public TouchButtonDriver {
  private:
   static void ReadCallback(lv_indev_t* indev, lv_indev_data_t* data);
 
+  SdlDisplayDriver& display_;
   lv_indev_t* indev_ = nullptr;
+  uint32_t last_key_ = 0;
 };
 
 }  // namespace maco::display

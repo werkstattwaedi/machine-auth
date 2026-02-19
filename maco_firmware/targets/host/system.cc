@@ -139,7 +139,9 @@ maco::display::DisplayDriver& GetDisplayDriver() {
 }
 
 maco::display::TouchButtonDriver& GetTouchButtonDriver() {
-  static maco::display::KeyboardInputDriver driver;
+  auto& display =
+      static_cast<maco::display::SdlDisplayDriver&>(GetDisplayDriver());
+  static maco::display::KeyboardInputDriver driver(display);
   return driver;
 }
 
