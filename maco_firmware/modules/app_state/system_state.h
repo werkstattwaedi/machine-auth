@@ -4,6 +4,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 
 #include "gateway/gateway_client.h"
 #include "maco_firmware/modules/app_state/system_monitor_backend.h"
@@ -34,8 +35,7 @@ class SystemState : public SystemStateUpdater {
   // SystemStateUpdater overrides (backend calls these)
   void SetWifiState(WifiState state) override;
   void SetCloudState(CloudState state) override;
-  void SetTimeSynced(bool synced) override;
-  void SetUtcOffsetSeconds(int32_t offset) override;
+  void SetUtcBootOffsetSeconds(int64_t offset) override;
 
   /// Thread-safe snapshot for UI. Reads SystemClock::now() and
   /// GatewayClient::IsConnected() at call time.
@@ -49,8 +49,7 @@ class SystemState : public SystemStateUpdater {
   BootState boot_state_ PW_GUARDED_BY(mutex_) = BootState::kBooting;
   WifiState wifi_state_ PW_GUARDED_BY(mutex_) = WifiState::kDisconnected;
   CloudState cloud_state_ PW_GUARDED_BY(mutex_) = CloudState::kDisconnected;
-  bool time_synced_ PW_GUARDED_BY(mutex_) = false;
-  int32_t utc_offset_seconds_ PW_GUARDED_BY(mutex_) = 0;
+  std::optional<int64_t> utc_boot_offset_seconds_ PW_GUARDED_BY(mutex_);
 };
 
 }  // namespace maco::app_state

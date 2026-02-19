@@ -37,26 +37,33 @@ void SystemState::SetCloudState(CloudState state) {
   cloud_state_ = state;
 }
 
-void SystemState::SetTimeSynced(bool synced) {
+void SystemState::SetUtcBootOffsetSeconds(int64_t offset) {
   std::lock_guard lock(mutex_);
-  time_synced_ = synced;
-}
-
-void SystemState::SetUtcOffsetSeconds(int32_t offset) {
-  std::lock_guard lock(mutex_);
-  utc_offset_seconds_ = offset;
+  utc_boot_offset_seconds_ = offset;
 }
 
 void SystemState::GetSnapshot(SystemStateSnapshot& out) const {
+  using std::chrono::duration_cast;
+  using std::chrono::seconds;
+
   std::lock_guard lock(mutex_);
   out.boot_state = boot_state_;
   out.wifi_state = wifi_state_;
   out.cloud_state = cloud_state_;
-  out.time_synced = time_synced_;
-  out.utc_offset_seconds = utc_offset_seconds_;
-  out.wall_clock = pw::chrono::SystemClock::now();
   out.gateway_connected =
       gateway_client_ != nullptr && gateway_client_->IsConnected();
+
+  if (utc_boot_offset_seconds_.has_value()) {
+    out.time_synced = true;
+    int64_t boot_secs = duration_cast<seconds>(
+        pw::chrono::SystemClock::now().time_since_epoch()).count();
+    int64_t utc_secs = boot_secs + *utc_boot_offset_seconds_;
+    out.wall_clock = pw::chrono::SystemClock::time_point(
+        duration_cast<pw::chrono::SystemClock::duration>(seconds(utc_secs)));
+  } else {
+    out.time_synced = false;
+    out.wall_clock = pw::chrono::SystemClock::time_point{};
+  }
 }
 
 }  // namespace maco::app_state

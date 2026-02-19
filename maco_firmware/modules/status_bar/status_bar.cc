@@ -3,9 +3,9 @@
 
 #include "maco_firmware/modules/status_bar/status_bar.h"
 
-#include <cstdio>
-
+#include "maco_firmware/modules/time/zurich_timezone.h"
 #include "pw_log/log.h"
+#include "pw_string/string_builder.h"
 
 namespace maco::status_bar {
 
@@ -93,26 +93,25 @@ void StatusBar::Update() {
   system_state_.GetSnapshot(snapshot);
 
   // Update connectivity icons
-  char status_buf[32];
-  std::snprintf(status_buf, sizeof(status_buf), "%s  %s  %s",
-                WifiIcon(snapshot.wifi_state),
-                CloudIcon(snapshot.cloud_state),
-                snapshot.gateway_connected ? LV_SYMBOL_OK : LV_SYMBOL_CLOSE);
-  lv_label_set_text(status_label_, status_buf);
+  pw::StringBuffer<32> status_buf;
+  status_buf << WifiIcon(snapshot.wifi_state) << "  "
+             << CloudIcon(snapshot.cloud_state) << "  "
+             << (snapshot.gateway_connected ? LV_SYMBOL_OK : LV_SYMBOL_CLOSE);
+  lv_label_set_text(status_label_, status_buf.c_str());
 
   // Update time display
   if (snapshot.time_synced) {
     using namespace std::chrono;
-    auto epoch_secs = duration_cast<seconds>(
-        snapshot.wall_clock.time_since_epoch());
-    auto local_secs = epoch_secs.count() + snapshot.utc_offset_seconds;
-    int day_seconds =
-        static_cast<int>(((local_secs % 86400) + 86400) % 86400);
+    auto utc_secs = duration_cast<seconds>(
+        snapshot.wall_clock.time_since_epoch()).count();
+    std::time_t local = maco::time::ZurichLocalTime(
+        static_cast<std::time_t>(utc_secs));
+    int day_seconds = static_cast<int>(((local % 86400) + 86400) % 86400);
     int hours = day_seconds / 3600;
     int minutes = (day_seconds % 3600) / 60;
-    char time_buf[8];
-    std::snprintf(time_buf, sizeof(time_buf), "%02d:%02d", hours, minutes);
-    lv_label_set_text(time_label_, time_buf);
+    pw::StringBuffer<8> time_buf;
+    time_buf.Format("%02d:%02d", hours, minutes);
+    lv_label_set_text(time_label_, time_buf.c_str());
   } else {
     lv_label_set_text(time_label_, "--:--");
   }

@@ -87,6 +87,7 @@ cc_library(
     deps = [
         "//maco_firmware/modules/app_state:system_monitor_backend",
         "//maco_firmware/modules/app_state:system_state_updater",
+        "@pigweed//pw_chrono:system_clock",
     ],
 )
 

@@ -17,8 +17,9 @@ class SystemStateUpdater {
   virtual ~SystemStateUpdater() = default;
   virtual void SetWifiState(WifiState state) = 0;
   virtual void SetCloudState(CloudState state) = 0;
-  virtual void SetTimeSynced(bool synced) = 0;
-  virtual void SetUtcOffsetSeconds(int32_t offset) = 0;
+  // Set the offset between SystemClock ticks (boot-relative, seconds) and
+  // UTC Unix epoch seconds. Presence of this value implies time is synced.
+  virtual void SetUtcBootOffsetSeconds(int64_t offset) = 0;
 };
 
 }  // namespace maco::app_state
