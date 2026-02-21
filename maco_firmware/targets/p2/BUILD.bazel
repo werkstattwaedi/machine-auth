@@ -1,6 +1,7 @@
 # Copyright Offene Werkstatt Wädenswil
 # SPDX-License-Identifier: MIT
 
+load("@particle_bazel//rules:particle_test.bzl", "particle_cc_test")
 load("@pigweed//pw_build:merge_flags.bzl", "flags_from_dict")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
@@ -126,6 +127,20 @@ cc_library(
         "@particle_bazel//:device_os_headers",
         "@pigweed//pw_assert:check",
         "@pigweed//pw_chrono:system_clock",
+        "@pigweed//pw_log",
+    ],
+)
+
+# On-device test for P2SystemMonitor (requires P2 with WiFi configured)
+particle_cc_test(
+    name = "hardware_test",
+    srcs = ["hardware_test.cc"],
+    platform = "//maco_firmware/targets/p2:p2",
+    deps = [
+        ":p2_system_monitor",
+        "//maco_firmware/modules/app_state:system_state_updater",
+        "@particle_bazel//:device_os_headers",
+        "@pigweed//pw_async2:basic_dispatcher",
         "@pigweed//pw_log",
     ],
 )

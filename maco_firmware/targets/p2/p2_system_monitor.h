@@ -4,6 +4,7 @@
 #pragma once
 
 #include "maco_firmware/modules/app_state/system_monitor_backend.h"
+#include "system_event.h"
 
 namespace maco {
 
@@ -16,6 +17,12 @@ class P2SystemMonitor : public app_state::SystemMonitorBackend {
  public:
   void Start(app_state::SystemStateUpdater& updater,
              pw::async2::Dispatcher& dispatcher) override;
+
+ private:
+  void SyncTimeIfValid();
+  void OnSystemEvent(system_event_t event, int param);
+
+  app_state::SystemStateUpdater* updater_ = nullptr;
 };
 
 }  // namespace maco

@@ -11,47 +11,39 @@
 #include "pw_log/log.h"
 #include "rtc_hal.h"
 #include "system_cloud.h"
-#include "system_event.h"
 #include "system_network.h"
 
 namespace maco {
 
-namespace {
-
-// Module-level pointer set once in Start(). Event callbacks use this to
-// push state changes. Safe because Start() is called once at boot and
-// the updater outlives the subscription.
-app_state::SystemStateUpdater* g_updater = nullptr;
-
-// Read the RTC and push a UTC boot offset if the clock is valid.
-void SyncTimeIfValid(app_state::SystemStateUpdater& updater) {
-  if (!hal_rtc_time_is_valid(nullptr)) return;
+void P2SystemMonitor::SyncTimeIfValid() {
+  if (!hal_rtc_time_is_valid(nullptr))
+    return;
   struct timeval tv;
-  if (hal_rtc_get_time(&tv, nullptr) != 0) return;
+  if (hal_rtc_get_time(&tv, nullptr) != 0)
+    return;
   int64_t boot_secs = std::chrono::duration_cast<std::chrono::seconds>(
-      pw::chrono::SystemClock::now().time_since_epoch()).count();
-  updater.SetUtcBootOffsetSeconds(tv.tv_sec - boot_secs);
+                          pw::chrono::SystemClock::now().time_since_epoch()
+  )
+                          .count();
+  updater_->SetUtcBootOffsetSeconds(tv.tv_sec - boot_secs);
 }
 
-void OnSystemEvent(system_event_t event, int param, void* /*pointer*/,
-                   void* /*context*/) {
-  if (!g_updater) return;
-
+void P2SystemMonitor::OnSystemEvent(system_event_t event, int param) {
   if (event == network_status) {
     switch (param) {
       case network_status_connected:
-        g_updater->SetWifiState(app_state::WifiState::kConnected);
+        updater_->SetWifiState(app_state::WifiState::kConnected);
         break;
       case network_status_powering_on:
       case network_status_on:
       case network_status_connecting:
-        g_updater->SetWifiState(app_state::WifiState::kConnecting);
+        updater_->SetWifiState(app_state::WifiState::kConnecting);
         break;
       case network_status_disconnected:
       case network_status_disconnecting:
       case network_status_off:
       case network_status_powering_off:
-        g_updater->SetWifiState(app_state::WifiState::kDisconnected);
+        updater_->SetWifiState(app_state::WifiState::kDisconnected);
         break;
       default:
         break;
@@ -59,45 +51,59 @@ void OnSystemEvent(system_event_t event, int param, void* /*pointer*/,
   } else if (event == cloud_status) {
     switch (param) {
       case cloud_status_connected:
-        g_updater->SetCloudState(app_state::CloudState::kConnected);
+        updater_->SetCloudState(app_state::CloudState::kConnected);
         break;
       case cloud_status_connecting:
       case cloud_status_handshake:
       case cloud_status_session_resume:
-        g_updater->SetCloudState(app_state::CloudState::kConnecting);
+        updater_->SetCloudState(app_state::CloudState::kConnecting);
         break;
       case cloud_status_disconnected:
       case cloud_status_disconnecting:
-        g_updater->SetCloudState(app_state::CloudState::kDisconnected);
+        updater_->SetCloudState(app_state::CloudState::kDisconnected);
         break;
       default:
         break;
     }
   } else if (event == time_changed) {
-    SyncTimeIfValid(*g_updater);
+    SyncTimeIfValid();
   }
 }
 
-}  // namespace
-
-void P2SystemMonitor::Start(app_state::SystemStateUpdater& updater,
-                            pw::async2::Dispatcher& /*dispatcher*/) {
-  PW_CHECK(g_updater == nullptr, "P2SystemMonitor::Start called twice");
-  g_updater = &updater;
+void P2SystemMonitor::Start(
+    app_state::SystemStateUpdater& updater,
+    pw::async2::Dispatcher& /*dispatcher*/
+) {
+  PW_CHECK(updater_ == nullptr, "P2SystemMonitor::Start() called twice");
+  updater_ = &updater;
 
   // Set initial state from current Device OS status
   if (network_ready(NIF_DEFAULT, NETWORK_READY_TYPE_ANY, nullptr)) {
-    updater.SetWifiState(app_state::WifiState::kConnected);
+    updater_->SetWifiState(app_state::WifiState::kConnected);
   }
   if (spark_cloud_flag_connected()) {
-    updater.SetCloudState(app_state::CloudState::kConnected);
+    updater_->SetCloudState(app_state::CloudState::kConnected);
   }
-  SyncTimeIfValid(updater);
+  SyncTimeIfValid();
 
-  // Subscribe to ongoing changes
+  // Subscribe to ongoing changes via C trampoline.
+  // Device OS copies the SystemEventContext into the subscription and passes
+  // &copy as the handler's void* context.  We stash `this` in the `callable`
+  // field so the callback can recover the P2SystemMonitor pointer.
+  SystemEventContext ctx = {};
+  ctx.version = SYSTEM_EVENT_CONTEXT_VERSION;
+  ctx.size = sizeof(SystemEventContext);
+  ctx.callable = this;
+  ctx.destructor = nullptr;
   int rc = system_subscribe_event(
       network_status + cloud_status + time_changed,
-      OnSystemEvent, nullptr);
+      [](system_event_t event, int param, void* /*pointer*/, void* context) {
+        auto* self = static_cast<P2SystemMonitor*>(
+            static_cast<SystemEventContext*>(context)->callable);
+        self->OnSystemEvent(event, param);
+      },
+      &ctx
+  );
   if (rc != 0) {
     PW_LOG_ERROR("system_subscribe_event failed: %d", rc);
   }
