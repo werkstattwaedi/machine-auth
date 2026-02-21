@@ -42,6 +42,7 @@ struct SessionSnapshotUi {
   pw::chrono::SystemClock::time_point pending_since;
   pw::chrono::SystemClock::time_point pending_deadline;
   pw::chrono::SystemClock::time_point tag_present_since;
+  pw::chrono::SystemClock::time_point session_started_at;
   bool tag_present = false;
 };
 
@@ -77,6 +78,9 @@ struct SystemStateSnapshot {
 
   // Zurich local time, already converted from UTC. nullopt if time not synced.
   std::optional<time::LocalTime> local_time;
+
+  // Machine label from device config (e.g. "Fräse").
+  pw::InlineString<64> machine_label;
 };
 
 // Combined snapshot for the dev app UI thread.

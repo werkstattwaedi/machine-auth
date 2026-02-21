@@ -102,6 +102,7 @@ void SessionFsm::SyncSnapshot() {
   snapshot_.pending_since = pending_since;
   snapshot_.pending_deadline = pending_deadline;
   snapshot_.tag_present_since = tag_present_since_;
+  snapshot_.session_started_at = active_session.started_at;
   snapshot_.tag_present = tag_present_;
 }
 

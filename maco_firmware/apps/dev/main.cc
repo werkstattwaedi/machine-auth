@@ -16,6 +16,7 @@
 #include "maco_firmware/modules/stack_monitor/stack_monitor.h"
 #include "maco_firmware/modules/terminal_ui/terminal_ui.h"
 #include "maco_firmware/system/system.h"
+#include "device_config/device_config.h"
 #include "pw_async2/system_time_provider.h"
 #include "pw_log/log.h"
 #include "pw_system/system.h"
@@ -33,6 +34,12 @@ void AppInit() {
   static maco::display::Display display;
   auto& display_driver = maco::system::GetDisplayDriver();
   auto& touch_driver = maco::system::GetTouchButtonDriver();
+
+  // Read machine label from device config into system state
+  auto& config = maco::system::GetDeviceConfig();
+  system_state.SetMachineLabel(config.machine_count() > 0
+                                   ? config.machine(0).label()
+                                   : "MaCo");
 
   // Terminal UI coordinator (owns AppShell, StatusBar, and screen management).
   static maco::terminal_ui::TerminalUi terminal_ui(display, system_state);

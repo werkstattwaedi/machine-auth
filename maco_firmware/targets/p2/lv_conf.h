@@ -639,7 +639,7 @@
  *  #define LV_FONT_CUSTOM_DECLARE   LV_FONT_DECLARE(my_font_1) LV_FONT_DECLARE(my_font_2)
  *  @endcode
  */
-#define LV_FONT_CUSTOM_DECLARE LV_FONT_DECLARE(roboto_24) LV_FONT_DECLARE(roboto_12) LV_FONT_DECLARE(material_symbols_24)
+#define LV_FONT_CUSTOM_DECLARE LV_FONT_DECLARE(roboto_24) LV_FONT_DECLARE(roboto_12) LV_FONT_DECLARE(roboto_36) LV_FONT_DECLARE(material_symbols_24) LV_FONT_DECLARE(material_symbols_64)
 
 /*Always set a default font*/
 #define LV_FONT_DEFAULT &roboto_24

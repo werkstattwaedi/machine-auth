@@ -46,7 +46,7 @@ cc_library(
     ],
 )
 
-# Main screen (idle mode)
+# Main screen (state-driven: idle, active, denied)
 cc_library(
     name = "main_screen",
     srcs = ["screens/main_screen.cc"],
@@ -58,7 +58,9 @@ cc_library(
         "//maco_firmware/modules/ui:data_binding",
         "//maco_firmware/modules/ui:screen",
         "//third_party/lvgl",
+        "@pigweed//pw_chrono:system_clock",
         "@pigweed//pw_log",
+        "@pigweed//pw_string",
     ],
 )
 
@@ -127,9 +129,11 @@ pw_cc_test(
     ),
     deps = [
         ":main_screen",
+        ":theme",
         "//maco_firmware/modules/display/testing:screenshot_test_harness",
         "//maco_firmware/modules/fonts",
         "//maco_firmware/targets/host:lvgl_conf",
+        "@pigweed//pw_chrono:system_clock",
     ],
 )
 
@@ -142,6 +146,7 @@ pw_cc_test(
     ),
     deps = [
         ":menu_screen",
+        ":theme",
         "//maco_firmware/modules/display/testing:screenshot_test_harness",
         "//maco_firmware/modules/fonts",
         "//maco_firmware/targets/host:lvgl_conf",

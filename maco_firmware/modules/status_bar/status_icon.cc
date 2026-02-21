@@ -74,4 +74,10 @@ void StatusIcon::OnTimer(lv_timer_t* timer) {
   lv_label_set_text(self->label_, self->frames_[self->frame_index_]);
 }
 
+void StatusIcon::SetColor(lv_color_t color) {
+  if (label_) {
+    lv_obj_set_style_text_color(label_, color, LV_PART_MAIN);
+  }
+}
+
 }  // namespace maco::status_bar

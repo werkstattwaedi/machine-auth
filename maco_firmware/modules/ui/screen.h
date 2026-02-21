@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <string_view>
 
 #include "lvgl.h"
@@ -10,6 +11,11 @@
 #include "pw_status/status.h"
 
 namespace maco::ui {
+
+/// Visual style hints from the active screen to chrome (status bar, etc.).
+struct ScreenStyle {
+  uint32_t bg_color = 0xFFFFFF;  // Screen background color
+};
 
 /// Base class for all UI screens, templated on the snapshot type.
 ///
@@ -46,9 +52,12 @@ class Screen {
     (void)snapshot;  // Default implementation ignores snapshot
   }
 
-  /// Button labels for bottom row (Cancel/OK).
+  /// Button labels for bottom row (OK/Cancel).
   /// Top row buttons have engraved icons - no on-screen labels needed.
   virtual ButtonConfig GetButtonConfig() const { return {}; }
+
+  /// Screen visual style for chrome adaptation (status bar color, etc.).
+  virtual ScreenStyle GetScreenStyle() const { return {}; }
 
   /// Handle ESC key press. Override to handle differently (e.g., dismiss popup).
   /// @return true if handled, false to let AppShell pop the screen.
