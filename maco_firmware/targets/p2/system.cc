@@ -48,7 +48,7 @@
 #include "usb_hal.h"
 
 #ifndef WAIT_FOR_USART_CONNECTION
-#define WAIT_FOR_USART_CONNECTION 0
+#define WAIT_FOR_USART_CONNECTION 1
 #endif
 
 namespace maco::system {

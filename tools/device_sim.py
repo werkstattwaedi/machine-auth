@@ -440,7 +440,8 @@ def main() -> int:
         sys.argv = [sys.argv[0]] + remaining_args
 
         return pw_system.console.main(
-            compiled_protos=[maco_service_pb2, nfc_mock_service_pb2],
+            compiled_protos=[maco_service_pb2, nfc_mock_service_pb2,
+                             metric_service_pb2],
             device_connection=device_connection,
         )
     except KeyboardInterrupt:

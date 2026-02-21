@@ -3,6 +3,8 @@
 
 #include "maco_firmware/targets/p2/p2_system_monitor.h"
 
+#define PW_LOG_MODULE_NAME "sys_mon"
+
 #include <sys/time.h>
 
 #include "maco_firmware/modules/app_state/system_state_updater.h"
@@ -32,40 +34,73 @@ void P2SystemMonitor::OnSystemEvent(system_event_t event, int param) {
   if (event == network_status) {
     switch (param) {
       case network_status_connected:
+        PW_LOG_INFO("network_status: connected");
         updater_->SetWifiState(app_state::WifiState::kConnected);
         break;
       case network_status_powering_on:
+        PW_LOG_INFO("network_status: powering_on -> connecting");
+        updater_->SetWifiState(app_state::WifiState::kConnecting);
+        break;
       case network_status_on:
+        PW_LOG_INFO("network_status: on -> connecting");
+        updater_->SetWifiState(app_state::WifiState::kConnecting);
+        break;
       case network_status_connecting:
+        PW_LOG_INFO("network_status: connecting");
         updater_->SetWifiState(app_state::WifiState::kConnecting);
         break;
       case network_status_disconnected:
+        PW_LOG_INFO("network_status: disconnected");
+        updater_->SetWifiState(app_state::WifiState::kDisconnected);
+        break;
       case network_status_disconnecting:
+        PW_LOG_INFO("network_status: disconnecting");
+        updater_->SetWifiState(app_state::WifiState::kDisconnected);
+        break;
       case network_status_off:
+        PW_LOG_INFO("network_status: off");
+        updater_->SetWifiState(app_state::WifiState::kDisconnected);
+        break;
       case network_status_powering_off:
+        PW_LOG_INFO("network_status: powering_off");
         updater_->SetWifiState(app_state::WifiState::kDisconnected);
         break;
       default:
+        PW_LOG_INFO("network_status: unknown param %d", param);
         break;
     }
   } else if (event == cloud_status) {
     switch (param) {
       case cloud_status_connected:
+        PW_LOG_INFO("cloud_status: connected");
         updater_->SetCloudState(app_state::CloudState::kConnected);
         break;
       case cloud_status_connecting:
+        PW_LOG_INFO("cloud_status: connecting");
+        updater_->SetCloudState(app_state::CloudState::kConnecting);
+        break;
       case cloud_status_handshake:
+        PW_LOG_INFO("cloud_status: handshake");
+        updater_->SetCloudState(app_state::CloudState::kConnecting);
+        break;
       case cloud_status_session_resume:
+        PW_LOG_INFO("cloud_status: session_resume");
         updater_->SetCloudState(app_state::CloudState::kConnecting);
         break;
       case cloud_status_disconnected:
+        PW_LOG_INFO("cloud_status: disconnected");
+        updater_->SetCloudState(app_state::CloudState::kDisconnected);
+        break;
       case cloud_status_disconnecting:
+        PW_LOG_INFO("cloud_status: disconnecting");
         updater_->SetCloudState(app_state::CloudState::kDisconnected);
         break;
       default:
+        PW_LOG_INFO("cloud_status: unknown param %d", param);
         break;
     }
   } else if (event == time_changed) {
+    PW_LOG_INFO("time_changed: syncing RTC");
     SyncTimeIfValid();
   }
 }
