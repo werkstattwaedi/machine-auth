@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cstdio>
 
+#include "maco_firmware/modules/display/display_metrics.h"
 #include "maco_firmware/system/system.h"
 #include "pw_chrono/system_clock.h"
 #include "pw_log/log.h"
@@ -105,7 +106,15 @@ void Display::RenderThread() {
     if (update_callback_) {
       update_callback_();
     }
+
+    auto start = pw::chrono::SystemClock::now();
     uint32_t time_till_next = lv_timer_handler();
+    int64_t elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                             pw::chrono::SystemClock::now() - start)
+                             .count();
+
+    metrics::OnFrameRendered(elapsed_us);
+
     pw::this_thread::sleep_for(std::chrono::milliseconds(time_till_next));
   }
 }

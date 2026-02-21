@@ -5,6 +5,7 @@
 
 #include <drivers/display/lcd/lv_lcd_generic_mipi.h>
 
+#include "maco_firmware/modules/display/display_metrics.h"
 #include "pw_assert/check.h"
 #include "pw_bytes/array.h"
 #include "pw_bytes/span.h"
@@ -212,6 +213,8 @@ void PicoRes28LcdDriver::FlushCallback(
   const size_t pixel_count = lv_area_get_size(area);
   const size_t byte_count = pixel_count * 2;  // RGB565 = 2 bytes per pixel
 
+  metrics::OnFlushRegion(area->x2 - area->x1 + 1, area->y2 - area->y1 + 1);
+
   FlushRequest request{
       .area = *area,
       .px_map = px_map,
@@ -339,6 +342,7 @@ void PicoRes28LcdDriver::SendPixelDataDma(pw::ConstByteSpan pixels) {
   if (result != 0) {
     // DMA hung - cancel and count it
     ++dma_hang_count_;
+    metrics::OnDmaHang();
     PW_LOG_WARN(
         "DMA transfer timed out (hang count: %lu)",
         static_cast<unsigned long>(dma_hang_count_)

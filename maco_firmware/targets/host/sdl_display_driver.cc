@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "lodepng.h"
+#include "maco_firmware/modules/display/display_metrics.h"
 #include "pw_assert/check.h"
 #include "pw_log/log.h"
 
@@ -189,6 +190,8 @@ void SdlDisplayDriver::Flush(const lv_area_t* area, uint8_t* px_map) {
   // Calculate area dimensions
   lv_coord_t w = lv_area_get_width(area);
   lv_coord_t h = lv_area_get_height(area);
+
+  metrics::OnFlushRegion(w, h);
 
   // Update the texture region with the new pixels
   SDL_Rect rect = {

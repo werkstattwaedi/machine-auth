@@ -32,6 +32,7 @@ cc_library(
     target_compatible_with = incompatible_with_mcu(),
     deps = [
         "//maco_firmware/modules/display:display_driver",
+        "//maco_firmware/modules/display:display_metrics",
         "//third_party/lodepng",
         "//third_party/sdl:sdl2",
         "//third_party/lvgl",
@@ -121,6 +122,8 @@ cc_library(
         "@pigweed//pw_channel",
         "@pigweed//pw_channel:stream_channel",
         "@pigweed//pw_multibuf:simple_allocator",
+        "@pigweed//pw_metric:global",
+        "@pigweed//pw_metric:metric_service_nanopb",
         "@pigweed//pw_rpc",
         "@pigweed//pw_system:async",
         "@pigweed//pw_system:io",

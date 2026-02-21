@@ -19,10 +19,12 @@ namespace {
 
 constexpr float kMinHeadroomPercent = 20.0f;
 
-// Collect thread info first, log after ForEachThread returns.
-// The ForEachThread callback may run with the scheduler disabled, so it must
-// not call anything that could block (PW_LOG may acquire a mutex or block on
-// UART). We copy the data we need into a local array and log afterwards.
+// Written once before thread start, read only by the monitor thread.
+// Thread creation on FreeRTOS implies a full memory barrier, establishing
+// a happens-before relationship. Function-local statics avoid capture
+// (pw_function inline limit is 4 bytes on ARM).
+pw::chrono::SystemClock::duration monitor_interval;
+ThreadWatermarkCallback thread_metric_callback;
 
 struct ThreadRecord {
   char name[32];
@@ -45,6 +47,12 @@ ThreadSnapshot& GetSnapshot() {
   return snapshot;
 }
 
+// Collect thread info first, log after ForEachThread returns.
+// The ForEachThread callback may run with the scheduler disabled, so it must
+// not call anything that could block (PW_LOG may acquire a mutex or block on
+// UART). We copy the data we need into a local array and log afterwards.
+// The per-thread metric callback is also invoked after ForEachThread returns,
+// so it too is safe to call blocking APIs.
 void LogStackWatermarks() {
   auto& snapshot = GetSnapshot();
   snapshot.count = 0;
@@ -111,19 +119,20 @@ void LogStackWatermarks() {
                   static_cast<double>(rec.headroom_pct),
                   static_cast<double>(kMinHeadroomPercent));
     }
+
+    if (thread_metric_callback != nullptr) {
+      uint32_t free_words = (rec.total - rec.peak_used) / sizeof(uint32_t);
+      thread_metric_callback(rec.name, free_words);
+    }
   }
 }
 
-// Written once before thread start, read only by the monitor thread.
-// Thread creation on FreeRTOS implies a full memory barrier, establishing
-// a happens-before relationship. Function-local static avoids capture
-// (pw_function inline limit is 4 bytes on ARM).
-pw::chrono::SystemClock::duration monitor_interval;
-
 }  // namespace
 
-void StartStackMonitor(pw::chrono::SystemClock::duration interval) {
+void StartStackMonitor(pw::chrono::SystemClock::duration interval,
+                       ThreadWatermarkCallback per_thread_callback) {
   monitor_interval = interval;
+  thread_metric_callback = per_thread_callback;
 
   pw::thread::DetachedThread(
       maco::system::GetDefaultThreadOptions(), []() {
