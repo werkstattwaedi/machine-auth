@@ -29,6 +29,17 @@ cc_library(
     ],
 )
 
+# Lightweight pw_metric instrumentation for display runtime characteristics
+cc_library(
+    name = "display_metrics",
+    srcs = ["display_metrics.cc"],
+    hdrs = ["display_metrics.h"],
+    deps = [
+        "@pigweed//pw_metric:global",
+        "@pigweed//pw_metric:metric",
+    ],
+)
+
 # Display manager - LVGL lifecycle and render thread
 cc_library(
     name = "display",
@@ -36,6 +47,7 @@ cc_library(
     hdrs = ["display.h"],
     deps = [
         ":display_driver",
+        ":display_metrics",
         ":touch_button_driver",
         "//maco_firmware/modules/fonts",
         "//maco_firmware/system:headers",

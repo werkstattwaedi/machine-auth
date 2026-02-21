@@ -34,8 +34,10 @@
 #include "pb_cloud/ledger_typed_api.h"
 #include "firebase/firebase_client.h"
 #include "pw_assert/check.h"
-#include "pw_log/log.h"
 #include "pw_channel/stream_channel.h"
+#include "pw_log/log.h"
+#include "pw_metric/global.h"
+#include "pw_metric/metric_service_nanopb.h"
 #include "pw_multibuf/simple_allocator.h"
 #include "pw_system/io.h"
 #include "pw_system/system.h"
@@ -76,6 +78,10 @@ void PwSystemThread() {
   // Register RPC services
   static maco::MacoService maco_service;
   pw::System().rpc_server().RegisterService(maco_service);
+
+  static pw::metric::MetricService metric_service(pw::metric::global_metrics,
+                                                  pw::metric::global_groups);
+  pw::System().rpc_server().RegisterService(metric_service);
 
   // Register NFC Mock Service (host-only)
   auto& mock_reader =

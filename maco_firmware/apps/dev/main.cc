@@ -10,6 +10,7 @@
 #include "maco_firmware/modules/app_state/system_state.h"
 #include "maco_firmware/modules/app_state/tag_verifier.h"
 #include "maco_firmware/modules/display/display.h"
+#include "maco_firmware/modules/display/display_metrics.h"
 #include "maco_firmware/modules/machine_relay/relay_controller.h"
 #include "maco_firmware/modules/nfc_reader/nfc_reader.h"
 #include "maco_firmware/modules/stack_monitor/stack_monitor.h"
@@ -98,7 +99,8 @@ void AppInit() {
 
   system_state.SetReady();
 
-  maco::StartStackMonitor();
+  maco::StartStackMonitor(std::chrono::seconds(30),
+                          maco::display::metrics::OnThreadStackScan);
 
   PW_LOG_INFO("AppInit complete - place a card on the reader");
 }

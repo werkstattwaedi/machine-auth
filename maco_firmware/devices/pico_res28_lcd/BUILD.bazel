@@ -14,6 +14,7 @@ cc_library(
     hdrs = ["pico_res28_lcd_driver.h"],
     deps = [
         "//maco_firmware/modules/display:display_driver",
+        "//maco_firmware/modules/display:display_metrics",
         "//third_party/lvgl",
         "@particle_bazel//:device_os_headers",
         "@pigweed//pw_bytes",
