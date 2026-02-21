@@ -3,9 +3,14 @@
 
 #pragma once
 
+#include <optional>
+#include <utility>
+
 #include "lvgl.h"
 #include "maco_firmware/modules/app_state/system_state.h"
 #include "maco_firmware/modules/status_bar/status_icon.h"
+#include "maco_firmware/modules/time/local_time.h"
+#include "maco_firmware/modules/ui/data_binding.h"
 #include "pw_status/status.h"
 
 namespace maco::status_bar {
@@ -51,12 +56,12 @@ class StatusBar {
   StatusIcon wifi_icon_;
   StatusIcon cloud_icon_;
 
-  // Previous connectivity state — used to avoid restarting animations every
-  // frame when nothing has changed.
-  app_state::WifiState prev_wifi_state_ = app_state::WifiState::kConnected;
-  app_state::CloudState prev_cloud_state_ = app_state::CloudState::kConnected;
-  bool prev_gateway_connected_ = true;
-  bool icons_initialized_ = false;
+  // Watched state — only update LVGL widgets when values actually change.
+  using CloudKey = std::pair<app_state::CloudState, bool>;
+  ui::Watched<app_state::WifiState> wifi_state_{app_state::WifiState::kDisconnected};
+  ui::Watched<CloudKey> cloud_state_{{app_state::CloudState::kDisconnected, false}};
+  ui::Watched<app_state::BootState> boot_state_{app_state::BootState::kBooting};
+  ui::Watched<std::optional<time::LocalTime>> local_time_{std::nullopt};
 };
 
 }  // namespace maco::status_bar

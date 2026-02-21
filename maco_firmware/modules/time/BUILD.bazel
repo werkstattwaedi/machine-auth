@@ -3,11 +3,24 @@
 
 # Time utilities - timezone conversion and helpers
 
+load("@pigweed//pw_unit_test:pw_cc_test.bzl", "pw_cc_test")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
 package(default_visibility = ["//maco_firmware:__subpackages__"])
 
 cc_library(
+    name = "local_time",
+    hdrs = ["local_time.h"],
+)
+
+cc_library(
     name = "zurich_timezone",
     hdrs = ["zurich_timezone.h"],
+    deps = [":local_time"],
+)
+
+pw_cc_test(
+    name = "zurich_timezone_test",
+    srcs = ["zurich_timezone_test.cc"],
+    deps = [":zurich_timezone"],
 )

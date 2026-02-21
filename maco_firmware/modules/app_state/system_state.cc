@@ -3,6 +3,7 @@
 
 #include "maco_firmware/modules/app_state/system_state.h"
 
+#include "maco_firmware/modules/time/zurich_timezone.h"
 #include "pw_chrono/system_clock.h"
 #include "pw_log/log.h"
 
@@ -54,15 +55,12 @@ void SystemState::GetSnapshot(SystemStateSnapshot& out) const {
       gateway_client_ != nullptr && gateway_client_->IsConnected();
 
   if (utc_boot_offset_seconds_.has_value()) {
-    out.time_synced = true;
     int64_t boot_secs = duration_cast<seconds>(
         pw::chrono::SystemClock::now().time_since_epoch()).count();
     int64_t utc_secs = boot_secs + *utc_boot_offset_seconds_;
-    out.wall_clock = pw::chrono::SystemClock::time_point(
-        duration_cast<pw::chrono::SystemClock::duration>(seconds(utc_secs)));
+    out.local_time = time::ToZurichLocalTime(static_cast<std::time_t>(utc_secs));
   } else {
-    out.time_synced = false;
-    out.wall_clock = pw::chrono::SystemClock::time_point{};
+    out.local_time.reset();
   }
 }
 

@@ -5,8 +5,10 @@
 
 #include <array>
 #include <cstddef>
+#include <optional>
 
 #include "maco_firmware/modules/app_state/tag_verification_state.h"
+#include "maco_firmware/modules/time/local_time.h"
 #include "maco_firmware/types.h"
 #include "pw_chrono/system_clock.h"
 #include "pw_string/string.h"
@@ -73,11 +75,8 @@ struct SystemStateSnapshot {
   CloudState cloud_state = CloudState::kDisconnected;
   bool gateway_connected = false;
 
-  // wall_clock holds actual UTC time (time_since_epoch = Unix epoch seconds,
-  // expressed in SystemClock::duration units). Only valid when time_synced.
-  // Use zurich_timezone.h to convert to local time.
-  bool time_synced = false;
-  pw::chrono::SystemClock::time_point wall_clock;
+  // Zurich local time, already converted from UTC. nullopt if time not synced.
+  std::optional<time::LocalTime> local_time;
 };
 
 // Combined snapshot for the dev app UI thread.

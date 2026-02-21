@@ -3,7 +3,6 @@
 
 #include "maco_firmware/modules/status_bar/status_bar.h"
 
-#include "maco_firmware/modules/time/zurich_timezone.h"
 #include "pw_log/log.h"
 
 namespace maco::status_bar {
@@ -103,42 +102,32 @@ void StatusBar::Update() {
   app_state::SystemStateSnapshot snapshot;
   system_state_.GetSnapshot(snapshot);
 
-  // Update icons only when state changes (avoids restarting animation timers).
-  if (!icons_initialized_ || snapshot.wifi_state != prev_wifi_state_) {
-    prev_wifi_state_ = snapshot.wifi_state;
-    UpdateWifiIcon(snapshot.wifi_state);
+  wifi_state_.Set(snapshot.wifi_state);
+  if (wifi_state_.CheckAndClearDirty()) {
+    UpdateWifiIcon(wifi_state_.Get());
   }
 
-  bool cloud_changed = snapshot.cloud_state != prev_cloud_state_ ||
-                       snapshot.gateway_connected != prev_gateway_connected_;
-  if (!icons_initialized_ || cloud_changed) {
-    prev_cloud_state_ = snapshot.cloud_state;
-    prev_gateway_connected_ = snapshot.gateway_connected;
-    UpdateCloudIcon(snapshot.cloud_state, snapshot.gateway_connected);
+  cloud_state_.Set({snapshot.cloud_state, snapshot.gateway_connected});
+  if (cloud_state_.CheckAndClearDirty()) {
+    auto [cloud, gw] = cloud_state_.Get();
+    UpdateCloudIcon(cloud, gw);
   }
 
-  icons_initialized_ = true;
-
-  // Update time display
-  if (snapshot.time_synced) {
-    using namespace std::chrono;
-    auto utc_secs =
-        duration_cast<seconds>(snapshot.wall_clock.time_since_epoch()).count();
-    std::time_t local =
-        maco::time::ZurichLocalTime(static_cast<std::time_t>(utc_secs));
-    int day_seconds = static_cast<int>(((local % 86400) + 86400) % 86400);
-    int hours = day_seconds / 3600;
-    int minutes = (day_seconds % 3600) / 60;
-    lv_label_set_text_fmt(time_label_, "%02d:%02d", hours, minutes);
-  } else {
-    lv_label_set_text(time_label_, "--:--");
+  boot_state_.Set(snapshot.boot_state);
+  if (boot_state_.CheckAndClearDirty()) {
+    lv_label_set_text(title_label_,
+                      boot_state_.Get() == app_state::BootState::kBooting
+                          ? "MACO..."
+                          : "MACO");
   }
 
-  // Update title based on boot state
-  if (snapshot.boot_state == app_state::BootState::kBooting) {
-    lv_label_set_text(title_label_, "MACO...");
-  } else {
-    lv_label_set_text(title_label_, "MACO");
+  local_time_.Set(snapshot.local_time);
+  if (local_time_.CheckAndClearDirty()) {
+    if (auto& lt = local_time_.Get(); lt.has_value()) {
+      lv_label_set_text_fmt(time_label_, "%02d:%02d", lt->hour, lt->minute);
+    } else {
+      lv_label_set_text(time_label_, "--:--");
+    }
   }
 }
 

@@ -14,6 +14,8 @@
 
 #include <ctime>
 
+#include "maco_firmware/modules/time/local_time.h"
+
 namespace maco::time {
 
 // Returns the day-of-month of the last Sunday in the given month/year.
@@ -45,9 +47,23 @@ inline int ZurichUtcOffsetSeconds(std::time_t utc) {
   return IsZurichDst(utc) ? 2 * 3600 : 1 * 3600;
 }
 
-// Converts a UTC Unix timestamp to Zurich local time.
+// Converts a UTC Unix timestamp to Zurich local time (Unix timestamp).
 inline std::time_t ZurichLocalTime(std::time_t utc) {
   return utc + ZurichUtcOffsetSeconds(utc);
+}
+
+// Converts a UTC Unix timestamp to broken-down Zurich local time.
+inline LocalTime ToZurichLocalTime(std::time_t utc) {
+  std::time_t local = ZurichLocalTime(utc);
+  std::tm t{};
+  gmtime_r(&local, &t);  // gmtime on adjusted value = local time fields
+  return LocalTime{
+      .year = static_cast<int16_t>(t.tm_year + 1900),
+      .month = static_cast<uint8_t>(t.tm_mon + 1),
+      .day = static_cast<uint8_t>(t.tm_mday),
+      .hour = static_cast<uint8_t>(t.tm_hour),
+      .minute = static_cast<uint8_t>(t.tm_min),
+  };
 }
 
 }  // namespace maco::time
