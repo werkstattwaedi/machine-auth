@@ -27,6 +27,15 @@ namespace maco::led_animator {
 //   Right side descends (5=LED12 at top-right gap → 9=LED0 at bottom-right)
 static constexpr uint16_t kRingLeds[10] = {5, 6, 7, 8, 9, 12, 13, 14, 15, 0};
 
+// Physical angular positions of ring LEDs in radians.
+// 0 = top center of device, increases clockwise. Bottom center ≈ π.
+// Derived from mapped-rectangle pixel positions; top-center gap midpoint
+// (between ring pos 4 and 5) defines the 0/2π reference.
+static constexpr float kRingAngles[10] = {
+    3.772f, 4.515f, 5.271f, 5.695f, 6.035f,  // left side (bottom-left → top)
+    0.249f, 0.590f, 1.013f, 1.769f, 2.511f,  // right side (top → bottom-right)
+};
+
 // Button LEDs: 0=top-left(10), 1=top-right(11), 2=btm-left(4), 3=btm-right(1)
 static constexpr uint16_t kButtonLeds[4] = {10, 11, 4, 1};
 
@@ -38,12 +47,35 @@ static constexpr uint16_t kNfcLeds[2] = {3, 2};
 // ---------------------------------------------------------------------------
 
 /// A single moving hotspot on the ambient ring.
-/// Each hotspot contributes linearly to adjacent ring positions (radius = 1.0).
+/// All angular quantities are in radians: 0 = top center, increases clockwise.
+/// Bottom center = π; one full revolution = 2π.
 struct HotspotConfig {
   Waveform waveform;
-  float start_position = 0.0f;  // Initial ring position [0, 10)
-  float velocity = 0.0f;        // Ring positions/second; positive = clockwise
+  float start_position = 0.0f;  // Initial angle [0, 2π); 0 = top center
+  float velocity = 0.0f;        // rad/s; positive = clockwise
   float phase_offset = 0.0f;    // Waveform phase at startup (0–1 of period)
+
+  // Hotspot spread in radians (default ≈ one average LED step = 2π/10).
+  float radius = 0.6f;
+
+  // Falloff exponent applied to (1 − normalised_distance).
+  // 1.0 = linear, < 1 (e.g. 0.5) = wide flat top that drops quickly at edge,
+  // > 1 (e.g. 2–3) = bright peak at centre with soft shoulders.
+  float falloff_shape = 1.0f;
+
+  // Sweep motion. When sweep_arc != 0, velocity-based motion is replaced by
+  // an oscillating sweep: the hotspot moves from start_position by sweep_arc
+  // radians (positive = clockwise, negative = counter-clockwise) and returns.
+  // velocity controls the outward speed (rad/s; must be > 0).
+  //
+  // return_multiplier scales the return time relative to the full-circle
+  // traversal time at that speed (2π / |velocity|):
+  //   0.05 → fast snap-back; 0.5 → return at same speed as outward sweep.
+  //
+  // LEDs outside [start_position … start_position + sweep_arc] (in the sweep
+  // direction) always receive zero contribution from this hotspot.
+  float sweep_arc = 0.0f;
+  float return_multiplier = 0.1f;
 };
 
 /// Configuration for a single button LED.
@@ -67,8 +99,9 @@ class LedAnimatorBase {
 
   /// Set the effect for a single button. Immediately interruptible.
   /// Thread-safe: may be called from any thread.
-  virtual void SetButtonEffect(maco::Button button,
-                               const ButtonConfig& config) = 0;
+  virtual void SetButtonEffect(
+      maco::Button button, const ButtonConfig& config
+  ) = 0;
 
   /// Set the ambient ring effect (all 10 hotspot positions).
   /// Hotspots finish their current transition before starting a new one;
@@ -98,8 +131,9 @@ class LedAnimator : public LedAnimatorBase, public maco::led::LedFrameRenderer {
 
   // LedAnimatorBase
 
-  void SetButtonEffect(maco::Button button,
-                       const ButtonConfig& config) override {
+  void SetButtonEffect(
+      maco::Button button, const ButtonConfig& config
+  ) override {
     std::lock_guard<pw::sync::Mutex> lock(mutex_);
     StartButtonTransition(static_cast<int>(button), config);
   }
@@ -137,7 +171,7 @@ class LedAnimator : public LedAnimatorBase, public maco::led::LedFrameRenderer {
   // -------------------------------------------------------------------------
 
   struct HotspotState {
-    float position = 0.0f;   // Current ring position [0, 10)
+    float position = 0.0f;   // Current angle [0, 2π); 0 = top center, CW
     float elapsed_s = 0.0f;  // Accumulated waveform time (seconds)
   };
 
@@ -146,8 +180,8 @@ class LedAnimator : public LedAnimatorBase, public maco::led::LedFrameRenderer {
   struct ZoneTransition {
     maco::led::RgbwColor from_color;  // Blended output at transition start
     Waveform target_waveform;
-    float target_elapsed_s = 0.0f;   // Elapsed time in target waveform
-    float progress = 0.0f;           // 0 → 1
+    float target_elapsed_s = 0.0f;  // Elapsed time in target waveform
+    float progress = 0.0f;          // 0 → 1
     float duration_s = kTransitionDuration;
   };
 
@@ -272,7 +306,9 @@ class LedAnimator : public LedAnimatorBase, public maco::led::LedFrameRenderer {
   // Ambient ring (hotspot) rendering
   // -------------------------------------------------------------------------
 
-  void StartHotspotTransition(const HotspotConfig (&new_hotspots)[kNumHotspots]) {
+  void StartHotspotTransition(
+      const HotspotConfig (&new_hotspots)[kNumHotspots]
+  ) {
     HotspotTransition transition;
     for (int h = 0; h < kNumHotspots; ++h) {
       transition.from_configs[h] = current_hotspots_[h];
@@ -337,36 +373,98 @@ class LedAnimator : public LedAnimatorBase, public maco::led::LedFrameRenderer {
   // Static helpers
   // -------------------------------------------------------------------------
 
-  static void AdvanceHotspotStates(const HotspotConfig* configs,
-                                   HotspotState* states,
-                                   float dt_s) {
+  static void AdvanceHotspotStates(
+      const HotspotConfig* configs, HotspotState* states, float dt_s
+  ) {
     for (int h = 0; h < kNumHotspots; ++h) {
       states[h].elapsed_s += dt_s;
-      states[h].position += configs[h].velocity * dt_s;
-      // Wrap to [0, 10)
-      while (states[h].position >= 10.0f) states[h].position -= 10.0f;
-      while (states[h].position < 0.0f) states[h].position += 10.0f;
+      if (configs[h].sweep_arc != 0.0f) {
+        // Sweep motion: position (radians) computed deterministically from
+        // elapsed_s. T_full_circle = 2π / speed (time for one revolution).
+        float arc = std::abs(configs[h].sweep_arc);
+        float speed = std::max(0.0001f, std::abs(configs[h].velocity));
+        float t_full_circle = 2.0f * kPi / speed;
+        float t_forward = arc / speed;
+        float t_return =
+            std::max(0.0001f, configs[h].return_multiplier) * t_full_circle;
+        float t_cycle = t_forward + t_return;
+        float phase = std::fmod(states[h].elapsed_s, t_cycle);
+        float t;  // [0, 1]: 0 = origin, 1 = end of arc
+        if (phase < t_forward) {
+          t = phase / t_forward;
+        } else {
+          t = 1.0f - (phase - t_forward) / t_return;
+        }
+        float dir = configs[h].sweep_arc > 0.0f ? 1.0f : -1.0f;
+        states[h].position = configs[h].start_position + t * arc * dir;
+        states[h].position = std::fmod(states[h].position, 2.0f * kPi);
+        if (states[h].position < 0.0f)
+          states[h].position += 2.0f * kPi;
+      } else {
+        // Velocity-based motion (rad/s).
+        states[h].position += configs[h].velocity * dt_s;
+        states[h].position = std::fmod(states[h].position, 2.0f * kPi);
+        if (states[h].position < 0.0f)
+          states[h].position += 2.0f * kPi;
+      }
     }
   }
 
-  static void RenderHotspots(const HotspotConfig* configs,
-                              const HotspotState* states,
-                              maco::led::RgbwColor ring[kNumRing]) {
+  static void RenderHotspots(
+      const HotspotConfig* configs,
+      const HotspotState* states,
+      maco::led::RgbwColor ring[kNumRing]
+  ) {
     for (int h = 0; h < kNumHotspots; ++h) {
-      float t_norm = std::fmod(states[h].elapsed_s,
-                               SafePeriod(configs[h].waveform.period_s)) /
-                     SafePeriod(configs[h].waveform.period_s);
+      float t_norm =
+          std::fmod(
+              states[h].elapsed_s, SafePeriod(configs[h].waveform.period_s)
+          ) /
+          SafePeriod(configs[h].waveform.period_s);
       maco::led::RgbwColor hcolor = configs[h].waveform.Evaluate(t_norm);
       if (hcolor.r == 0 && hcolor.g == 0 && hcolor.b == 0 && hcolor.w == 0) {
         continue;  // Skip dark hotspots (no contribution)
       }
+      // In sweep mode, the return phase is invisible — the hotspot resets
+      // position silently so the next outward sweep starts from the origin.
+      if (configs[h].sweep_arc != 0.0f) {
+        float arc = std::abs(configs[h].sweep_arc);
+        float speed = std::max(0.0001f, std::abs(configs[h].velocity));
+        float t_forward = arc / speed;
+        float t_return = std::max(0.0001f, configs[h].return_multiplier) *
+                         (2.0f * kPi / speed);
+        float phase = std::fmod(states[h].elapsed_s, t_forward + t_return);
+        if (phase >= t_forward) continue;  // returning: no contribution
+      }
+      // position IS the physical angle (radians, top-center = 0, CW).
+      float hotspot_angle = states[h].position;
       for (int i = 0; i < kNumRing; ++i) {
-        float diff = states[h].position - static_cast<float>(i);
-        // Wrap distance to (-5, 5] for a 10-position ring
-        if (diff > 5.0f) diff -= 10.0f;
-        else if (diff <= -5.0f) diff += 10.0f;
-        float contribution = std::max(0.0f, 1.0f - std::abs(diff));
-        if (contribution <= 0.0f) continue;
+        // In sweep mode, LEDs outside the swept arc receive no contribution
+        // (angle-space check, independent of radius).
+        if (configs[h].sweep_arc != 0.0f) {
+          float start = configs[h].start_position;
+          float arc = configs[h].sweep_arc;
+          float led_angle = kRingAngles[i];
+          if (arc > 0.0f) {
+            float cw =
+                std::fmod(led_angle - start + 2.0f * kPi, 2.0f * kPi);
+            if (cw > arc) continue;
+          } else {
+            float ccw =
+                std::fmod(start - led_angle + 2.0f * kPi, 2.0f * kPi);
+            if (ccw > -arc) continue;
+          }
+        }
+        float diff = hotspot_angle - kRingAngles[i];
+        if (diff > kPi)
+          diff -= 2.0f * kPi;
+        else if (diff < -kPi)
+          diff += 2.0f * kPi;
+        // radius is in radians directly.
+        float t = std::abs(diff) / configs[h].radius;  // normalised dist [0, ∞)
+        if (t >= 1.0f)
+          continue;  // outside hotspot radius
+        float contribution = std::pow(1.0f - t, configs[h].falloff_shape);
         ring[i].r = ClampAdd(ring[i].r, hcolor.r, contribution);
         ring[i].g = ClampAdd(ring[i].g, hcolor.g, contribution);
         ring[i].b = ClampAdd(ring[i].b, hcolor.b, contribution);
@@ -376,25 +474,31 @@ class LedAnimator : public LedAnimatorBase, public maco::led::LedFrameRenderer {
   }
 
   static maco::led::RgbwColor EvalWaveform(const Waveform& w, float elapsed_s) {
-    float t = std::fmod(elapsed_s, SafePeriod(w.period_s)) /
-              SafePeriod(w.period_s);
+    float t =
+        std::fmod(elapsed_s, SafePeriod(w.period_s)) / SafePeriod(w.period_s);
     return w.Evaluate(t);
   }
 
-  static maco::led::RgbwColor LerpColor(maco::led::RgbwColor a,
-                                        maco::led::RgbwColor b,
-                                        float t) {
+  static maco::led::RgbwColor LerpColor(
+      maco::led::RgbwColor a, maco::led::RgbwColor b, float t
+  ) {
     return {
-        static_cast<uint8_t>(static_cast<int>(a.r) +
-                             static_cast<int>(t * (b.r - a.r))),
-        static_cast<uint8_t>(static_cast<int>(a.g) +
-                             static_cast<int>(t * (b.g - a.g))),
-        static_cast<uint8_t>(static_cast<int>(a.b) +
-                             static_cast<int>(t * (b.b - a.b))),
-        static_cast<uint8_t>(static_cast<int>(a.w) +
-                             static_cast<int>(t * (b.w - a.w))),
+        static_cast<uint8_t>(
+            static_cast<int>(a.r) + static_cast<int>(t * (b.r - a.r))
+        ),
+        static_cast<uint8_t>(
+            static_cast<int>(a.g) + static_cast<int>(t * (b.g - a.g))
+        ),
+        static_cast<uint8_t>(
+            static_cast<int>(a.b) + static_cast<int>(t * (b.b - a.b))
+        ),
+        static_cast<uint8_t>(
+            static_cast<int>(a.w) + static_cast<int>(t * (b.w - a.w))
+        ),
     };
   }
+
+  static constexpr float kPi = 3.14159265f;
 
   static float Smoothstep(float t) {
     t = std::max(0.0f, std::min(1.0f, t));

@@ -3,6 +3,7 @@
 
 #define PW_LOG_MODULE_NAME "MAIN"
 
+#include "device_config/device_config.h"
 #include "device_secrets/device_secrets.h"
 #include "gateway/gateway_client.h"
 #include "maco_firmware/modules/app_state/session_controller.h"
@@ -10,16 +11,15 @@
 #include "maco_firmware/modules/app_state/system_state.h"
 #include "maco_firmware/modules/app_state/tag_verifier.h"
 #include "maco_firmware/modules/display/display.h"
+#include "maco_firmware/modules/display/display_metrics.h"
 #include "maco_firmware/modules/led_animator/ambient_effects.h"
 #include "maco_firmware/modules/led_animator/button_effects.h"
 #include "maco_firmware/modules/led_animator/nfc_effects.h"
-#include "maco_firmware/modules/display/display_metrics.h"
 #include "maco_firmware/modules/machine_relay/relay_controller.h"
 #include "maco_firmware/modules/nfc_reader/nfc_reader.h"
 #include "maco_firmware/modules/stack_monitor/stack_monitor.h"
 #include "maco_firmware/modules/terminal_ui/terminal_ui.h"
 #include "maco_firmware/system/system.h"
-#include "device_config/device_config.h"
 #include "pw_async2/system_time_provider.h"
 #include "pw_log/log.h"
 #include "pw_system/system.h"
@@ -31,15 +31,17 @@ void AppInit() {
 
   // Initialize LED animator and set idle effect.
   auto& led = maco::system::GetLedAnimator();
-  led.SetAmbientEffect(maco::led_animator::BreathingAmbient(
-      maco::led::RgbwColor{0, 0, 80, 0}, 3.0f, 0.05f));
-  auto idle_button = maco::led_animator::BreathingButton(
-      maco::led::RgbwColor{0, 0, 0, 40}, 3.0f, 0.05f);
+  led.SetAmbientEffect(
+      maco::led_animator::UpwardAmbient(
+          maco::led::RgbwColor{0, 0, 0, 255}, 4.0f
+      )
+  );
+
+  auto idle_button = maco::led_animator::OffButton();
   for (maco::Button b : maco::kAllButtons) {
     led.SetButtonEffect(b, idle_button);
   }
-  led.SetNfcEffect(maco::led_animator::BreathingNfc(
-      maco::led::RgbwColor{0, 0, 60, 0}, 3.0f, 0.05f));
+  led.SetNfcEffect(maco::led_animator::OffNfc());
 
   // System state (boot progress, connectivity, time)
   auto& monitor_backend = maco::system::GetSystemMonitorBackend();
@@ -52,9 +54,9 @@ void AppInit() {
 
   // Read machine label from device config into system state
   auto& config = maco::system::GetDeviceConfig();
-  system_state.SetMachineLabel(config.machine_count() > 0
-                                   ? config.machine(0).label()
-                                   : "MaCo");
+  system_state.SetMachineLabel(
+      config.machine_count() > 0 ? config.machine(0).label() : "MaCo"
+  );
 
   // Terminal UI coordinator (owns AppShell, StatusBar, and screen management).
   static maco::terminal_ui::TerminalUi terminal_ui(display, system_state);
@@ -124,9 +126,15 @@ void AppInit() {
   }
 
   system_state.SetReady();
+  led.SetAmbientEffect(
+      maco::led_animator::BreathingAmbient(
+          maco::led::RgbwColor{0, 0, 0, 192}, 5.0f, 0.3f
+      )
+  );
 
-  maco::StartStackMonitor(std::chrono::seconds(30),
-                          maco::display::metrics::OnThreadStackScan);
+  maco::StartStackMonitor(
+      std::chrono::seconds(30), maco::display::metrics::OnThreadStackScan
+  );
 
   PW_LOG_INFO("AppInit complete - place a card on the reader");
 }
