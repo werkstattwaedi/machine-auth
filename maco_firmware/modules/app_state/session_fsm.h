@@ -103,11 +103,13 @@ class NoSession
 /// on_exit_state fires once when leaving to NoSession.
 class Active
     : public etl::fsm_state<SessionFsm, Active, SessionStateId::kActive,
-                            session_event::UserAuthorized> {
+                            session_event::UserAuthorized,
+                            session_event::StopSession> {
  public:
   etl::fsm_state_id_t on_enter_state();
   void on_exit_state();
   etl::fsm_state_id_t on_event(const session_event::UserAuthorized& e);
+  etl::fsm_state_id_t on_event(const session_event::StopSession&);
   etl::fsm_state_id_t on_event_unknown(const etl::imessage&) {
     return No_State_Change;
   }
@@ -116,9 +118,11 @@ class Active
 /// Default child of Active: normal running session.
 class Running
     : public etl::fsm_state<SessionFsm, Running, SessionStateId::kRunning,
-                            session_event::UserAuthorized> {
+                            session_event::UserAuthorized,
+                            session_event::StopSession> {
  public:
   etl::fsm_state_id_t on_event(const session_event::UserAuthorized&);
+  etl::fsm_state_id_t on_event(const session_event::StopSession&);
   etl::fsm_state_id_t on_event_unknown(const etl::imessage&) {
     return No_State_Change;
   }
@@ -130,14 +134,15 @@ class CheckoutPending
                             SessionStateId::kCheckoutPending,
                             session_event::HoldConfirmed,
                             session_event::UiConfirm, session_event::UiCancel,
-                            session_event::TagPresence,
-                            session_event::Timeout> {
+                            session_event::TagPresence, session_event::Timeout,
+                            session_event::StopSession> {
  public:
   etl::fsm_state_id_t on_event(const session_event::HoldConfirmed&);
   etl::fsm_state_id_t on_event(const session_event::UiConfirm&);
   etl::fsm_state_id_t on_event(const session_event::UiCancel&);
   etl::fsm_state_id_t on_event(const session_event::TagPresence& e);
   etl::fsm_state_id_t on_event(const session_event::Timeout&);
+  etl::fsm_state_id_t on_event(const session_event::StopSession&);
   etl::fsm_state_id_t on_event_unknown(const etl::imessage&) {
     return No_State_Change;
   }
@@ -149,14 +154,15 @@ class TakeoverPending
                             SessionStateId::kTakeoverPending,
                             session_event::HoldConfirmed,
                             session_event::UiConfirm, session_event::UiCancel,
-                            session_event::TagPresence,
-                            session_event::Timeout> {
+                            session_event::TagPresence, session_event::Timeout,
+                            session_event::StopSession> {
  public:
   etl::fsm_state_id_t on_event(const session_event::HoldConfirmed&);
   etl::fsm_state_id_t on_event(const session_event::UiConfirm&);
   etl::fsm_state_id_t on_event(const session_event::UiCancel&);
   etl::fsm_state_id_t on_event(const session_event::TagPresence&);
   etl::fsm_state_id_t on_event(const session_event::Timeout&);
+  etl::fsm_state_id_t on_event(const session_event::StopSession&);
   etl::fsm_state_id_t on_event_unknown(const etl::imessage&) {
     return No_State_Change;
   }

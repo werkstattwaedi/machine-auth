@@ -166,6 +166,13 @@ void Active::on_exit_state() {
   PW_LOG_INFO("Active: relay OFF");
 }
 
+etl::fsm_state_id_t Active::on_event(const session_event::StopSession&) {
+  auto& ctx = get_fsm_context();
+  ctx.checkout_reason = CheckoutReason::kUiCheckout;
+  PW_LOG_INFO("Session stopped by user");
+  return SessionStateId::kNoSession;
+}
+
 etl::fsm_state_id_t Active::on_event(
     const session_event::UserAuthorized& e) {
   auto& ctx = get_fsm_context();
@@ -198,6 +205,10 @@ etl::fsm_state_id_t Active::on_event(
 etl::fsm_state_id_t Running::on_event(
     const session_event::UserAuthorized&) {
   // Bubble up to Active parent for same-user vs different-user logic
+  return Pass_To_Parent;
+}
+
+etl::fsm_state_id_t Running::on_event(const session_event::StopSession&) {
   return Pass_To_Parent;
 }
 
@@ -240,6 +251,11 @@ etl::fsm_state_id_t CheckoutPending::on_event(
   return SessionStateId::kRunning;
 }
 
+etl::fsm_state_id_t CheckoutPending::on_event(
+    const session_event::StopSession&) {
+  return Pass_To_Parent;
+}
+
 // --- TakeoverPending ---
 
 etl::fsm_state_id_t TakeoverPending::on_event(
@@ -268,6 +284,11 @@ etl::fsm_state_id_t TakeoverPending::on_event(
     const session_event::Timeout&) {
   PW_LOG_INFO("Takeover timed out: original session continues");
   return SessionStateId::kRunning;
+}
+
+etl::fsm_state_id_t TakeoverPending::on_event(
+    const session_event::StopSession&) {
+  return Pass_To_Parent;
 }
 
 etl::fsm_state_id_t TakeoverPending::ConfirmTakeover() {

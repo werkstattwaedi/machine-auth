@@ -184,7 +184,11 @@ ui::ButtonConfig MainScreen::GetButtonConfig() const {
       };
     case VisualState::kActive:
       return {
-          .ok = {},
+          .ok = {.label = "Menü",
+                 .led_effect = led_animator::SolidButton(
+                     led::RgbwColor::FromRgb(theme::kColorYellow)),
+                 .bg_color = theme::kColorYellow,
+                 .text_color = theme::kColorDarkText},
           .cancel = {.label = "Stopp",
                      .led_effect = led_animator::SolidButton(
                          led::RgbwColor::FromRgb(theme::kColorBtnRed)),
@@ -236,6 +240,10 @@ void MainScreen::SetVisualState(VisualState state) {
       bg_color = theme::kColorGreen;
       lv_obj_remove_flag(user_name_label_, LV_OBJ_FLAG_HIDDEN);
       lv_obj_remove_flag(timer_label_, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_remove_flag(menu_btn_, LV_OBJ_FLAG_HIDDEN);
+      if (lv_group_) {
+        lv_group_focus_obj(menu_btn_);
+      }
       break;
     case VisualState::kDenied:
       bg_color = theme::kColorRed;

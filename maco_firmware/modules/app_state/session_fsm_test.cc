@@ -384,6 +384,71 @@ TEST(SessionFsmTest, NewSessionAfterCheckout) {
   EXPECT_EQ(std::string_view(observer.last_started_label), "Bob");
 }
 
+// --- StopSession (UI stop button) ---
+
+TEST(SessionFsmTest, StopSessionFromRunningEndsSession) {
+  SessionFsm fsm;
+  MockObserver observer;
+  fsm.AddObserver(&observer);
+  auto tag = MakeTagUid(std::byte{0x01});
+
+  fsm.receive(MakeAuthEvent(tag, "Alice"));
+  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kRunning);
+
+  fsm.receive(session_event::StopSession{});
+
+  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kNoSession);
+  EXPECT_EQ(observer.end_count, 1);
+  EXPECT_EQ(observer.last_checkout_reason, CheckoutReason::kUiCheckout);
+}
+
+TEST(SessionFsmTest, StopSessionFromCheckoutPendingEndsSession) {
+  SessionFsm fsm;
+  MockObserver observer;
+  fsm.AddObserver(&observer);
+  auto tag = MakeTagUid(std::byte{0x01});
+
+  fsm.receive(MakeAuthEvent(tag));
+  fsm.receive(MakeAuthEvent(tag));  // → CheckoutPending
+  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kCheckoutPending);
+
+  fsm.receive(session_event::StopSession{});
+
+  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kNoSession);
+  EXPECT_EQ(observer.end_count, 1);
+  EXPECT_EQ(observer.last_checkout_reason, CheckoutReason::kUiCheckout);
+}
+
+TEST(SessionFsmTest, StopSessionFromTakeoverPendingEndsSession) {
+  SessionFsm fsm;
+  MockObserver observer;
+  fsm.AddObserver(&observer);
+  auto tag1 = MakeTagUid(std::byte{0x01});
+  auto tag2 = MakeTagUid(std::byte{0x02});
+
+  fsm.receive(MakeAuthEvent(tag1, "Alice"));
+  fsm.receive(MakeAuthEvent(tag2, "Bob"));  // → TakeoverPending
+  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kTakeoverPending);
+
+  fsm.receive(session_event::StopSession{});
+
+  // Original session ended, no new session started
+  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kNoSession);
+  EXPECT_EQ(observer.end_count, 1);
+  EXPECT_EQ(observer.last_checkout_reason, CheckoutReason::kUiCheckout);
+}
+
+TEST(SessionFsmTest, StopSessionIgnoredWhenNoSession) {
+  SessionFsm fsm;
+  MockObserver observer;
+  fsm.AddObserver(&observer);
+
+  fsm.receive(session_event::StopSession{});
+
+  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kNoSession);
+  EXPECT_EQ(observer.end_count, 0);
+}
+
 // --- Tag presence accessors ---
 
 TEST(SessionFsmTest, SetTagPresent) {

@@ -17,6 +17,7 @@ struct Id {
     kUiCancel = 3,
     kHoldConfirmed = 4,
     kTimeout = 5,
+    kStopSession = 6,
   };
 };
 
@@ -56,5 +57,8 @@ class HoldConfirmed : public etl::message<Id::kHoldConfirmed> {};
 
 /// Pending confirmation timed out.
 class Timeout : public etl::message<Id::kTimeout> {};
+
+/// UI explicitly stopped the active session.
+class StopSession : public etl::message<Id::kStopSession> {};
 
 }  // namespace maco::app_state::session_event

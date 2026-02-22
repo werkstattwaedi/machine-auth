@@ -72,7 +72,8 @@ TEST_F(MainScreenTest, ActiveState) {
       "/tmp/main_active_diff.png"));
 
   auto config = screen_->GetButtonConfig();
-  EXPECT_TRUE(config.ok.label.empty());
+  EXPECT_EQ(config.ok.label, "Menü");
+  EXPECT_EQ(config.ok.bg_color, theme::kColorYellow);
   EXPECT_EQ(config.cancel.label, "Stopp");
   EXPECT_EQ(config.cancel.bg_color, theme::kColorBtnRed);
 }

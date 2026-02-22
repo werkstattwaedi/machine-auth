@@ -23,6 +23,7 @@ enum class SessionAction : uint8_t {
   kNone = 0,
   kConfirm = 1,
   kCancel = 2,
+  kStop = 3,
 };
 
 /// Single coordinator between TagVerifier, SessionFsm, and the UI.

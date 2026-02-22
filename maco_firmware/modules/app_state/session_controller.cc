@@ -50,6 +50,9 @@ pw::async2::Coro<pw::Status> SessionController::Run(
     } else if (action == SessionAction::kCancel) {
       fsm_.receive(session_event::UiCancel{});
       fsm_.SyncSnapshot();
+    } else if (action == SessionAction::kStop) {
+      fsm_.receive(session_event::StopSession{});
+      fsm_.SyncSnapshot();
     }
 
     auto state_id = fsm_.get_state_id();
