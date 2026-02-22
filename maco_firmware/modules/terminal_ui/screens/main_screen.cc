@@ -4,6 +4,7 @@
 #include "maco_firmware/modules/terminal_ui/screens/main_screen.h"
 
 #include "lvgl.h"
+#include "maco_firmware/modules/led_animator/button_effects.h"
 #include "maco_firmware/modules/terminal_ui/theme.h"
 #include "pw_log/log.h"
 
@@ -170,7 +171,8 @@ ui::ButtonConfig MainScreen::GetButtonConfig() const {
     case VisualState::kIdle:
       return {
           .ok = {.label = "Menü",
-                 .led_color = theme::kColorYellow,
+                 .led_effect = led_animator::SolidButton(
+                     led::RgbwColor::FromRgb(theme::kColorYellow)),
                  .bg_color = theme::kColorYellow,
                  .text_color = theme::kColorDarkText},
           .cancel = {},
@@ -179,14 +181,16 @@ ui::ButtonConfig MainScreen::GetButtonConfig() const {
       return {
           .ok = {},
           .cancel = {.label = "Stopp",
-                     .led_color = theme::kColorBtnRed,
+                     .led_effect = led_animator::SolidButton(
+                         led::RgbwColor::FromRgb(theme::kColorBtnRed)),
                      .bg_color = theme::kColorBtnRed,
                      .text_color = 0xFFFFFF},
       };
     case VisualState::kDenied:
       return {
           .ok = {.label = "Zurück",
-                 .led_color = theme::kColorYellow,
+                 .led_effect = led_animator::SolidButton(
+                     led::RgbwColor::FromRgb(theme::kColorYellow)),
                  .bg_color = theme::kColorYellow,
                  .text_color = theme::kColorDarkText},
           .cancel = {},

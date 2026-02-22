@@ -25,7 +25,24 @@ struct RgbwColor {
   static constexpr RgbwColor Yellow() { return {255, 255, 0, 0}; }
   static constexpr RgbwColor Cyan() { return {0, 255, 255, 0}; }
   static constexpr RgbwColor Magenta() { return {255, 0, 255, 0}; }
+
+  /// Construct from a packed 0xRRGGBB value (W=0).
+  static constexpr RgbwColor FromRgb(uint32_t rgb) {
+    return {
+        static_cast<uint8_t>(rgb >> 16),
+        static_cast<uint8_t>((rgb >> 8) & 0xFF),
+        static_cast<uint8_t>(rgb & 0xFF),
+        0,
+    };
+  }
 };
+
+inline bool operator==(const RgbwColor& a, const RgbwColor& b) {
+  return a.r == b.r && a.g == b.g && a.b == b.b && a.w == b.w;
+}
+inline bool operator!=(const RgbwColor& a, const RgbwColor& b) {
+  return !(a == b);
+}
 
 /// CRTP base for LED drivers. Provides high-bandwidth inline access.
 ///

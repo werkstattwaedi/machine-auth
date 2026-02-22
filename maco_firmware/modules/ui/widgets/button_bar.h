@@ -51,7 +51,7 @@ class ButtonBar {
 
 // Equality operators for ButtonConfig (needed by Watched<T>)
 inline bool operator==(const ButtonSpec& a, const ButtonSpec& b) {
-  return a.label == b.label && a.led_color == b.led_color &&
+  return a.label == b.label && a.led_effect == b.led_effect &&
          a.bg_color == b.bg_color && a.text_color == b.text_color;
 }
 

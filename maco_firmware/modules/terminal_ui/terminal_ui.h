@@ -9,6 +9,7 @@
 #include "maco_firmware/modules/app_state/system_state.h"
 #include "maco_firmware/modules/app_state/ui/snapshot.h"
 #include "maco_firmware/modules/display/display.h"
+#include "maco_firmware/modules/led_animator/led_animator.h"
 #include "maco_firmware/modules/status_bar/status_bar.h"
 #include "maco_firmware/modules/terminal_ui/ui_action.h"
 #include "maco_firmware/modules/ui/app_shell.h"
@@ -28,7 +29,8 @@ class TerminalUi {
  public:
   /// Registers the display init callback. Construct before display.Init().
   TerminalUi(display::Display& display,
-             app_state::SystemState& system_state);
+             app_state::SystemState& system_state,
+             led_animator::LedAnimatorBase& animator);
 
   /// Set the session controller and signal that the system is ready.
   /// Ends the splash screen and transitions to MainScreen.
@@ -43,6 +45,7 @@ class TerminalUi {
 
   display::Display& display_;
   app_state::SystemState& system_state_;
+  led_animator::LedAnimatorBase& animator_;
   app_state::SessionController* controller_ = nullptr;
 
   status_bar::StatusBar status_bar_;

@@ -4,6 +4,7 @@
 #include "maco_firmware/modules/terminal_ui/screens/menu_screen.h"
 
 #include "lvgl.h"
+#include "maco_firmware/modules/led_animator/button_effects.h"
 #include "maco_firmware/modules/terminal_ui/theme.h"
 #include "pw_log/log.h"
 
@@ -100,11 +101,13 @@ void MenuScreen::OnDeactivate() {
 ui::ButtonConfig MenuScreen::GetButtonConfig() const {
   return {
       .ok = {.label = "Wählen",
-             .led_color = theme::kColorBtnGreen,
+             .led_effect = led_animator::SolidButton(
+                 led::RgbwColor::FromRgb(theme::kColorBtnGreen)),
              .bg_color = theme::kColorBtnGreen,
              .text_color = 0xFFFFFF},
       .cancel = {.label = "Zurück",
-                 .led_color = theme::kColorYellow,
+                 .led_effect = led_animator::SolidButton(
+                     led::RgbwColor::FromRgb(theme::kColorYellow)),
                  .bg_color = theme::kColorYellow,
                  .text_color = theme::kColorDarkText},
   };

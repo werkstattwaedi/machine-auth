@@ -97,26 +97,26 @@ maco_firmware/modules/ui/screens/
 ### Button Specification
 
 ```cpp
-// modules/ui/button_spec.h
-#include <string_view>
+// modules/ui/button_spec.h (simplified; see actual file for full definition)
 
 namespace maco::ui {
 
 struct ButtonSpec {
-  std::string_view label;          // On-screen label (empty = hidden)
-  uint32_t led_color = 0x000000;   // RGB for button LED
+  std::string_view label;                 // On-screen label (empty = hidden)
+  led_animator::ButtonConfig led_effect;  // LED waveform for this button
+  uint32_t bg_color = 0x000000;
+  uint32_t text_color = 0xFFFFFF;
 };
 
-// Bottom row buttons only - top row has engraved icons (no on-screen labels)
 struct ButtonConfig {
-  ButtonSpec cancel;   // Bottom-left button
-  ButtonSpec ok;       // Bottom-right button
+  ButtonSpec ok;      // Bottom-left button (ENTER key)
+  ButtonSpec cancel;  // Bottom-right button (ESC key)
 };
 
 }  // namespace maco::ui
 ```
 
-Top row buttons (Up/Down) have engraved icons on the physical buttons - no on-screen representation needed.
+Top row buttons (Up/Down) have engraved icons on the physical buttons - no on-screen pill labels needed. Their LEDs are driven automatically by `AppShell::UpdateChrome()`: it counts the active LVGL group's focusable (non-hidden, non-disabled) objects, and shows a white solid effect on both top buttons when there is more than one focusable object (i.e., Up/Down navigation is meaningful). Screens do not declare top-button LED effects.
 
 ### Screen Base Class
 

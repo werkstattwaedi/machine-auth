@@ -6,7 +6,10 @@
 #include <memory>
 
 #include "lvgl.h"
+#include "maco_firmware/hardware.h"
 #include "maco_firmware/modules/display/display.h"
+#include "maco_firmware/modules/led_animator/button_effects.h"
+#include "maco_firmware/modules/led_animator/led_animator.h"
 #include "maco_firmware/modules/ui/screen.h"
 #include "maco_firmware/modules/ui/widgets/button_bar.h"
 #include "pw_containers/vector.h"
@@ -41,8 +44,13 @@ class AppShell {
   /// Constructor with dependency injection (per ADR-0001).
   /// @param display Display module for UI rendering
   /// @param snapshot_provider Function to fetch snapshot
-  AppShell(display::Display& display, SnapshotProvider snapshot_provider)
-      : display_(display), snapshot_provider_(std::move(snapshot_provider)) {}
+  /// @param animator Optional LED animator for driving button LEDs (may be null)
+  AppShell(display::Display& display,
+           SnapshotProvider snapshot_provider,
+           led_animator::LedAnimatorBase* animator = nullptr)
+      : display_(display),
+        snapshot_provider_(std::move(snapshot_provider)),
+        animator_(animator) {}
 
   ~AppShell() {
     while (!stack_.empty()) {
@@ -205,6 +213,43 @@ class AppShell {
 
     button_bar_->SetConfig(config);
     button_bar_->Update();
+
+    if (animator_) {
+      if (led_config_ != config) {
+        led_config_ = config;
+        animator_->SetButtonEffect(maco::Button::kBottomLeft,
+                                   config.ok.led_effect);
+        animator_->SetButtonEffect(maco::Button::kBottomRight,
+                                   config.cancel.led_effect);
+      }
+
+      // Top-button LEDs reflect navigation availability: white when there is
+      // more than one focusable object in the active group, off otherwise.
+      led_animator::ButtonConfig nav_effect =
+          (FocusableCount(active_group_) > 1)
+              ? led_animator::SolidButton(led::RgbwColor::White())
+              : led_animator::OffButton();
+      if (nav_led_config_ != nav_effect) {
+        nav_led_config_ = nav_effect;
+        animator_->SetButtonEffect(maco::Button::kTopLeft, nav_effect);
+        animator_->SetButtonEffect(maco::Button::kTopRight, nav_effect);
+      }
+    }
+  }
+
+  /// Count objects in the group that are neither hidden nor disabled.
+  static uint32_t FocusableCount(lv_group_t* group) {
+    if (!group) return 0;
+    uint32_t count = 0;
+    uint32_t total = lv_group_get_obj_count(group);
+    for (uint32_t i = 0; i < total; i++) {
+      lv_obj_t* obj = lv_group_get_obj_by_index(group, i);
+      if (!lv_obj_has_flag(obj, LV_OBJ_FLAG_HIDDEN) &&
+          !lv_obj_has_state(obj, LV_STATE_DISABLED)) {
+        count++;
+      }
+    }
+    return count;
   }
 
   void HandleEscapeKey() {
@@ -229,6 +274,10 @@ class AppShell {
   SnapshotProvider snapshot_provider_;
   Snapshot snapshots_[2];
   size_t current_snapshot_ = 0;
+
+  led_animator::LedAnimatorBase* animator_ = nullptr;
+  ButtonConfig led_config_{};                      // Last applied bottom-button LED config
+  led_animator::ButtonConfig nav_led_config_{};    // Last applied top-button nav LED config
 };
 
 }  // namespace maco::ui

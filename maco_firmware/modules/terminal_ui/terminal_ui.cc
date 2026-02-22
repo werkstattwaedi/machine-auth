@@ -24,16 +24,20 @@ constexpr MenuItem kMenuItems[] = {
 }  // namespace
 
 TerminalUi::TerminalUi(display::Display& display,
-                       app_state::SystemState& system_state)
+                       app_state::SystemState& system_state,
+                       led_animator::LedAnimatorBase& animator)
     : display_(display),
       system_state_(system_state),
+      animator_(animator),
       status_bar_(system_state),
-      app_shell_(display, [this](app_state::AppStateSnapshot& snapshot) {
-        if (controller_) {
-          controller_->GetSnapshot(snapshot);
-        }
-        system_state_.GetSnapshot(snapshot.system);
-      }) {
+      app_shell_(display,
+                 [this](app_state::AppStateSnapshot& snapshot) {
+                   if (controller_) {
+                     controller_->GetSnapshot(snapshot);
+                   }
+                   system_state_.GetSnapshot(snapshot.system);
+                 },
+                 &animator_) {
   display_.SetInitCallback([this]() {
     auto status = Init();
     if (!status.ok()) {

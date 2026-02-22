@@ -13,7 +13,6 @@
 #include "maco_firmware/modules/display/display.h"
 #include "maco_firmware/modules/display/display_metrics.h"
 #include "maco_firmware/modules/led_animator/ambient_effects.h"
-#include "maco_firmware/modules/led_animator/button_effects.h"
 #include "maco_firmware/modules/led_animator/nfc_effects.h"
 #include "maco_firmware/modules/machine_relay/relay_controller.h"
 #include "maco_firmware/modules/nfc_reader/nfc_reader.h"
@@ -59,7 +58,7 @@ void AppInit() {
   );
 
   // Terminal UI coordinator (owns AppShell, StatusBar, and screen management).
-  static maco::terminal_ui::TerminalUi terminal_ui(display, system_state);
+  static maco::terminal_ui::TerminalUi terminal_ui(display, system_state, led);
 
   auto status = display.Init(display_driver, touch_driver);
   if (!status.ok()) {

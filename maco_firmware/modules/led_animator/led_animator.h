@@ -84,6 +84,13 @@ struct ButtonConfig {
   float phase_offset = 0.0f;  // Waveform phase at startup (0–1 of period)
 };
 
+inline bool operator==(const ButtonConfig& a, const ButtonConfig& b) {
+  return a.waveform == b.waveform && a.phase_offset == b.phase_offset;
+}
+inline bool operator!=(const ButtonConfig& a, const ButtonConfig& b) {
+  return !(a == b);
+}
+
 /// Groups all 10 hotspot configurations for the ambient ring.
 struct AmbientEffect {
   HotspotConfig hotspots[10];

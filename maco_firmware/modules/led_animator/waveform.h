@@ -54,4 +54,16 @@ struct Waveform {
   }
 };
 
+// Float fields are compared with == intentionally: this operator is used only
+// for change-detection against literal constants (e.g. 2.0f, 0.5f), never
+// between accumulated/computed values, so bitwise equality is correct.
+inline bool operator==(const Waveform& a, const Waveform& b) {
+  return a.shape == b.shape && a.color == b.color &&
+         a.period_s == b.period_s && a.duty_cycle == b.duty_cycle &&
+         a.min_brightness == b.min_brightness;
+}
+inline bool operator!=(const Waveform& a, const Waveform& b) {
+  return !(a == b);
+}
+
 }  // namespace maco::led_animator

@@ -11,6 +11,9 @@ package(default_visibility = ["//maco_firmware:__subpackages__"])
 cc_library(
     name = "button_spec",
     hdrs = ["button_spec.h"],
+    deps = [
+        "//maco_firmware/modules/led_animator:led_animator",
+    ],
 )
 
 # Dirty-flag data binding template
@@ -36,7 +39,10 @@ cc_library(
     hdrs = ["app_shell.h"],
     deps = [
         ":screen",
+        "//maco_firmware:hardware",
         "//maco_firmware/modules/display",
+        "//maco_firmware/modules/led_animator:button_effects",
+        "//maco_firmware/modules/led_animator:led_animator",
         "//maco_firmware/modules/ui/widgets:button_bar",
         "//third_party/lvgl",
         "@pigweed//pw_containers:vector",
