@@ -33,6 +33,7 @@ cc_library(
     deps = [
         "//maco_firmware/modules/display:display_driver",
         "//maco_firmware/modules/display:display_metrics",
+        "//maco_firmware/modules/led:led_driver",
         "//third_party/lodepng",
         "//third_party/sdl:sdl2",
         "//third_party/lvgl",
@@ -62,8 +63,8 @@ cc_library(
     hdrs = ["sdl_led_driver.h"],
     target_compatible_with = incompatible_with_mcu(),
     deps = [
+        ":sdl_display_driver",
         "//maco_firmware/modules/led:led_driver",
-        "//third_party/sdl:sdl2",
         "@pigweed//pw_log",
         "@pigweed//pw_status",
     ],

@@ -256,7 +256,10 @@ const pw::thread::Options& GetLedThreadOptions() {
 
 namespace {
 auto& GetLedImpl() {
-  static maco::led::SdlLedDriver<16> driver;
+  // LED driver passes pixel state to the display driver for overlay rendering.
+  auto& display =
+      static_cast<maco::display::SdlDisplayDriver&>(GetDisplayDriver());
+  static maco::led::SdlLedDriver<16> driver(display);
   static maco::led::Led<maco::led::SdlLedDriver<16>> led(driver);
   return led;
 }
