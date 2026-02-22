@@ -68,6 +68,15 @@ pw::Status StatusBar::Init() {
   return pw::OkStatus();
 }
 
+void StatusBar::SetVisible(bool visible) {
+  if (!container_) return;
+  if (visible) {
+    lv_obj_clear_flag(container_, LV_OBJ_FLAG_HIDDEN);
+  } else {
+    lv_obj_add_flag(container_, LV_OBJ_FLAG_HIDDEN);
+  }
+}
+
 void StatusBar::SetBackgroundColor(uint32_t screen_bg) {
   if (!container_) return;
 

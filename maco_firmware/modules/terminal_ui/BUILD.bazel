@@ -29,6 +29,7 @@ cc_library(
 lvgl_image(
     name = "oww_logo",
     src = "assets/oww_logo.png",
+    background = "0xffffff",
 )
 
 # Splash screen

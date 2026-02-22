@@ -51,6 +51,10 @@ void AppInit() {
   }
   PW_LOG_INFO("Display initialized: %dx%d", display.width(), display.height());
 
+  // Wait for USB serial after splash screen is visible so the user sees
+  // something while the device waits for a console connection.
+  maco::system::WaitForUsbSerial();
+
   // Start system monitor (subscribes to platform events)
   system_state.Start(pw::System().dispatcher());
 

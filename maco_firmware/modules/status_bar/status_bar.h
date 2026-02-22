@@ -34,6 +34,9 @@ class StatusBar {
   /// Initialize and create LVGL widgets on lv_layer_top().
   pw::Status Init();
 
+  /// Show or hide the status bar.
+  void SetVisible(bool visible);
+
   /// Adapt status bar colors to the current screen background.
   /// Darkens the given color for the bar bg, picks white or dark text.
   void SetBackgroundColor(uint32_t screen_bg);

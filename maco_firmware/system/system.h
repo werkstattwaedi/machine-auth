@@ -63,6 +63,13 @@ namespace maco::system {
 /// This function never returns, and should be called from the start of `main`.
 [[noreturn]] void Init(pw::Function<void()> app_init);
 
+/// Waits up to 10 seconds for a USB serial connection, then flushes any
+/// pending data. Useful for ensuring log output is visible during development.
+/// Call this after the splash screen is shown so the user sees something
+/// while the device waits.
+/// P2: Polls HAL_USB_USART, Host: no-op.
+void WaitForUsbSerial();
+
 /// Returns the platform-specific display driver instance.
 /// Host: SdlDisplayDriver, P2: PicoRes28LcdDriver
 maco::display::DisplayDriver& GetDisplayDriver();

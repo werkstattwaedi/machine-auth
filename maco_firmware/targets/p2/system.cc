@@ -47,10 +47,6 @@
 #include "spi_hal.h"
 #include "usb_hal.h"
 
-#ifndef WAIT_FOR_USART_CONNECTION
-#define WAIT_FOR_USART_CONNECTION 1
-#endif
-
 namespace maco::system {
 
 using maco::DeviceId;
@@ -93,28 +89,6 @@ __attribute__((section(".psram.bss"))) std::byte channel_buffer[16384];
 void Init(pw::Function<void()> app_init) {
   pb::log::InitLogBridge();
 
-#if WAIT_FOR_USART_CONNECTION == 1
-  // Dev firmware waits up to 10s for USB serial connection (for logs).
-  // TODO - this must be controlled from the APP, not here.
-
-  for (int i = 0; i < 100; i++) {
-    if (HAL_USB_USART_Is_Connected(HAL_USB_USART_SERIAL)) {
-      break;
-    }
-    HAL_Delay_Milliseconds(100);
-  }
-#endif
-
-  // Flush any pending data from console that connected before we were ready.
-  // This prevents crashes when the device reboots with console already
-  // attached.
-  if (HAL_USB_USART_Is_Connected(HAL_USB_USART_SERIAL)) {
-    while (HAL_USB_USART_Available_Data(HAL_USB_USART_SERIAL) > 0) {
-      HAL_USB_USART_Receive_Data(HAL_USB_USART_SERIAL, false);
-    }
-    HAL_Delay_Milliseconds(100);  // Let console stabilize
-  }
-
   app_init();
   static pw::multibuf::SimpleAllocator multibuf_alloc(
       channel_buffer, pw::System().allocator()
@@ -144,6 +118,25 @@ void Init(pw::Function<void()> app_init) {
   // particle-bazel that just loops forever (scheduler is already running).
   pw::system::StartAndClobberTheStack(channel->channel());
   PW_UNREACHABLE;
+}
+
+void WaitForUsbSerial() {
+  for (int i = 0; i < 100; i++) {
+    if (HAL_USB_USART_Is_Connected(HAL_USB_USART_SERIAL)) {
+      break;
+    }
+    HAL_Delay_Milliseconds(100);
+  }
+
+  // Flush any pending data from console that connected before we were ready.
+  // This prevents crashes when the device reboots with console already
+  // attached.
+  if (HAL_USB_USART_Is_Connected(HAL_USB_USART_SERIAL)) {
+    while (HAL_USB_USART_Available_Data(HAL_USB_USART_SERIAL) > 0) {
+      HAL_USB_USART_Receive_Data(HAL_USB_USART_SERIAL, false);
+    }
+    HAL_Delay_Milliseconds(100);  // Let console stabilize
+  }
 }
 
 maco::display::DisplayDriver& GetDisplayDriver() {

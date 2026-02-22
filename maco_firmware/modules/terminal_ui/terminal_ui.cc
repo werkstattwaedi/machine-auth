@@ -63,6 +63,9 @@ pw::Status TerminalUi::Init() {
     return status;
   }
 
+  // Hide status bar during splash — shown after transition to main screen.
+  status_bar_.SetVisible(false);
+
   // Show splash screen via AppShell. auto_del=true in
   // lv_screen_load_anim ensures the splash LVGL screen survives
   // for the crossfade when transitioning to MainScreen.
@@ -93,6 +96,7 @@ pw::Status TerminalUi::Init() {
 
 void TerminalUi::TransitionToMain() {
   in_splash_ = false;
+  status_bar_.SetVisible(true);
 
   auto s = app_shell_.Replace(
       std::make_unique<MainScreen>(
