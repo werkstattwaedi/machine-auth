@@ -15,10 +15,16 @@ cc_library(
 )
 
 cc_library(
+    name = "led_frame_renderer",
+    hdrs = ["led_frame_renderer.h"],
+)
+
+cc_library(
     name = "led",
     hdrs = ["led.h"],
     deps = [
         ":led_driver",
+        ":led_frame_renderer",
         "@pigweed//pw_chrono:system_clock",
         "@pigweed//pw_log",
         "@pigweed//pw_status",

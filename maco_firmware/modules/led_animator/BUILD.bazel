@@ -1,0 +1,38 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//maco_firmware:__subpackages__"])
+
+cc_library(
+    name = "led_animator",
+    hdrs = [
+        "led_animator.h",
+        "waveform.h",
+    ],
+    deps = [
+        "//maco_firmware:hardware",
+        "//maco_firmware/modules/led:led_driver",
+        "//maco_firmware/modules/led:led_frame_renderer",
+        "@pigweed//pw_sync:mutex",
+    ],
+)
+
+cc_library(
+    name = "ambient_effects",
+    hdrs = ["ambient_effects.h"],
+    deps = [":led_animator"],
+)
+
+cc_library(
+    name = "button_effects",
+    hdrs = ["button_effects.h"],
+    deps = [":led_animator"],
+)
+
+cc_library(
+    name = "nfc_effects",
+    hdrs = ["nfc_effects.h"],
+    deps = [":led_animator"],
+)

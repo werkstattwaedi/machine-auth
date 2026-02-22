@@ -3,10 +3,12 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <mutex>
 
 #include "maco_firmware/modules/display/display_driver.h"
+#include "maco_firmware/modules/led/led_driver.h"
 
 // Forward declarations for SDL types
 struct SDL_Window;
@@ -31,6 +33,9 @@ class SdlDisplayDriver : public DisplayDriver {
   /// Offset of the LVGL display within the background image
   static constexpr int kDisplayOffsetX = 187;
   static constexpr int kDisplayOffsetY = 274;
+
+  /// Number of LEDs tracked for overlay rendering
+  static constexpr int kNumLeds = 16;
 
   /// Button regions in image coordinates (for mouse hit-testing)
   struct ButtonRegion {
@@ -70,6 +75,11 @@ class SdlDisplayDriver : public DisplayDriver {
   /// Returns the SDL renderer (for coordinate conversion in input driver)
   SDL_Renderer* renderer() const { return renderer_; }
 
+  /// Update LED pixel state for overlay rendering.
+  /// Thread-safe: called from the LED render thread at 30fps.
+  void UpdateLedPixels(const led::RgbwColor* pixels, int count,
+                       uint8_t brightness);
+
  private:
   static void FlushCallback(lv_display_t* disp,
                              const lv_area_t* area,
@@ -77,6 +87,9 @@ class SdlDisplayDriver : public DisplayDriver {
   void Flush(const lv_area_t* area, uint8_t* px_map);
 
   bool LoadBackgroundImage();
+
+  void RenderLedOverlays(const std::array<led::RgbwColor, kNumLeds>& pixels,
+                         uint8_t brightness);
 
   lv_display_t* display_ = nullptr;
   SDL_Window* window_ = nullptr;
@@ -92,6 +105,11 @@ class SdlDisplayDriver : public DisplayDriver {
 
   // Mutex to protect SDL texture operations between render and main threads
   std::mutex texture_mutex_;
+
+  // LED overlay state (updated from LED thread, read on main/display thread)
+  std::array<led::RgbwColor, kNumLeds> led_pixels_{};
+  uint8_t led_brightness_ = 255;
+  std::mutex led_mutex_;
 };
 
 }  // namespace maco::display
