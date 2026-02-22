@@ -131,6 +131,12 @@ class AppShell {
 
   /// Called once per frame from Display callback.
   void Update() {
+    // Process deferred ESC from LVGL event handler (set during previous frame)
+    if (escape_pending_) {
+      escape_pending_ = false;
+      HandleEscapeKey();
+    }
+
     snapshot_provider_(snapshots_[current_snapshot_]);
 
     if (Screen<Snapshot>* screen = current_screen()) {
@@ -173,6 +179,20 @@ class AppShell {
     if (screen->lv_screen()) {
       lv_screen_load_anim(
           screen->lv_screen(), LV_SCREEN_LOAD_ANIM_FADE_IN, 200, 0, true);
+
+      // LVGL translates LV_KEY_ESC into LV_EVENT_CANCEL on the focused
+      // widget. With EVENT_BUBBLE (set in AddToGroup), it propagates here.
+      // Deferred to Update() to avoid modifying the screen stack during
+      // LVGL event dispatch (which could corrupt group iteration state).
+      lv_obj_add_event_cb(
+          screen->lv_screen(),
+          [](lv_event_t* e) {
+            auto* self =
+                static_cast<AppShell*>(lv_event_get_user_data(e));
+            self->escape_pending_ = true;
+          },
+          LV_EVENT_CANCEL,
+          this);
     }
 
     if (screen->lv_group()) {
@@ -225,6 +245,7 @@ class AppShell {
 
   std::unique_ptr<ButtonBar> button_bar_;
   lv_group_t* active_group_ = nullptr;
+  bool escape_pending_ = false;
 
   SnapshotProvider snapshot_provider_;
   Snapshot snapshots_[2];

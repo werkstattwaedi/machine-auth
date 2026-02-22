@@ -96,6 +96,11 @@ pw::Status MainScreen::OnActivate() {
   lv_obj_align(denied_label_, LV_ALIGN_CENTER, 0, 30);
   lv_obj_add_flag(denied_label_, LV_OBJ_FLAG_HIDDEN);
 
+  // Initialize widget visibility for the starting state. Without this,
+  // widgets created hidden above won't be unhidden because OnUpdate()'s
+  // guard (new_state != visual_state_) skips the initial kIdle→kIdle case.
+  SetVisualState(visual_state_);
+
   PW_LOG_INFO("MainScreen activated");
   return pw::OkStatus();
 }
@@ -217,6 +222,11 @@ void MainScreen::SetVisualState(VisualState state) {
       lv_obj_remove_flag(machine_name_label_, LV_OBJ_FLAG_HIDDEN);
       lv_obj_remove_flag(instruction_label_, LV_OBJ_FLAG_HIDDEN);
       lv_obj_remove_flag(menu_btn_, LV_OBJ_FLAG_HIDDEN);
+      // LVGL doesn't auto-focus objects that become visible. Explicitly
+      // set focus so LV_KEY_ENTER reaches the menu button.
+      if (lv_group_) {
+        lv_group_focus_obj(menu_btn_);
+      }
       break;
     case VisualState::kActive:
       bg_color = theme::kColorGreen;

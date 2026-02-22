@@ -10,10 +10,10 @@
 namespace maco::display {
 
 // Button-to-channel mapping (CAP1296 channels → LVGL keys):
-//   Channel 0 (lower right) → LV_KEY_ENTER (OK)
+//   Channel 0 (lower right) → LV_KEY_ESC   (Cancel)
 //   Channel 1 (top right)   → LV_KEY_NEXT  (Down)
 //   Channel 3 (top left)    → LV_KEY_PREV  (Up)
-//   Channel 4 (lower left)  → LV_KEY_ESC   (Cancel)
+//   Channel 4 (lower left)  → LV_KEY_ENTER (OK)
 
 CapTouchInputDriver::CapTouchInputDriver(pw::i2c::Initiator& i2c)
     : cap1296_(i2c) {}
@@ -42,9 +42,9 @@ void CapTouchInputDriver::ReadCallback(lv_indev_t* indev,
 
   // First-pressed-wins priority mapping
   uint32_t key = 0;
-  if (touched & (1 << 0)) {
+  if (touched & (1 << 4)) {
     key = LV_KEY_ENTER;
-  } else if (touched & (1 << 4)) {
+  } else if (touched & (1 << 0)) {
     key = LV_KEY_ESC;
   } else if (touched & (1 << 3)) {
     key = LV_KEY_PREV;
