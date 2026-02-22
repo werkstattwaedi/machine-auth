@@ -129,6 +129,9 @@ class PicoRes28LcdDriver : public DisplayDriver {
   // Flush thread (runs forever, no shutdown needed)
   std::optional<pw::Thread> flush_thread_;
 
+  // First-frame tracking: display is blanked (0x28) until first flush
+  bool display_on_pending_ = false;
+
   // Diagnostics
   uint32_t dma_hang_count_ = 0;
 

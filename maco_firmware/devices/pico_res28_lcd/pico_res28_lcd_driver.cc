@@ -26,6 +26,8 @@ PicoRes28LcdDriver* g_dma_instance = nullptr;
 constexpr auto kCmdColumnAddressSet = pw::bytes::Array<0x2A>();  // CASET
 constexpr auto kCmdRowAddressSet = pw::bytes::Array<0x2B>();     // RASET
 constexpr auto kCmdMemoryWrite = pw::bytes::Array<0x2C>();       // RAMWR
+constexpr auto kCmdSetDisplayOff = pw::bytes::Array<0x28>();     // DISPOFF
+constexpr auto kCmdSetDisplayOn = pw::bytes::Array<0x29>();      // DISPON
 
 // Helper to convert uint8_t pointer (from LVGL) to std::byte span
 inline pw::ConstByteSpan AsBytes(const uint8_t* data, size_t size) {
@@ -85,7 +87,6 @@ pw::Status PicoRes28LcdDriver::Init() {
   PW_TRY(cs_.Enable());
   PW_TRY(dc_.Enable());
   PW_TRY(rst_.Enable());
-  PW_TRY(bl_.Enable());
 
   // Initialize and configure HAL SPI
   hal_spi_init(hal_if);
@@ -94,16 +95,15 @@ pw::Status PicoRes28LcdDriver::Init() {
   // Calculate clock divider and configure SPI: Mode 0, MSB first
   const int divider = hal_spi_get_clock_divider(hal_if, spi_clock_hz_, nullptr);
   PW_CHECK(divider >= 0, "Failed to calculate SPI clock divider");
-  hal_spi_set_settings(hal_if, 0, static_cast<uint8_t>(divider), MSBFIRST, SPI_MODE0, nullptr);
+  hal_spi_set_settings(
+      hal_if, 0, static_cast<uint8_t>(divider), MSBFIRST, SPI_MODE0, nullptr
+  );
 
   // CS high (inactive) initially
   PW_TRY(cs_.SetState(pw::digital_io::State::kActive));
 
   // Hardware reset
   HardwareReset();
-
-  // Turn on backlight
-  PW_TRY(bl_.SetState(pw::digital_io::State::kActive));
 
   PW_LOG_INFO("ST7789 hardware initialized");
   return pw::OkStatus();
@@ -154,6 +154,15 @@ pw::Result<lv_display_t*> PicoRes28LcdDriver::CreateLvglDisplay() {
   // ST7789 typically needs inversion enabled
   lv_lcd_generic_mipi_set_invert(display_, true);
 
+  // Blank the display output until the first LVGL frame is flushed.
+  // The MIPI init sequence ends with DISPON, so we send DISPOFF here
+  // to avoid showing stale RAM contents. The first FlushCallback will
+  // re-enable it.
+  SendCommand(kCmdSetDisplayOff, {});
+  PW_TRY(bl_.Enable());
+
+  display_on_pending_ = true;
+
   // Override flush callback with our custom one for DMA transfers
   lv_display_set_flush_cb(display_, &PicoRes28LcdDriver::FlushCallback);
 
@@ -169,10 +178,7 @@ pw::Result<lv_display_t*> PicoRes28LcdDriver::CreateLvglDisplay() {
 
   // Start flush thread
   PW_LOG_INFO("Starting display flush thread");
-  flush_thread_.emplace(
-      thread_options_,
-      [this]() { FlushThreadMain(); }
-  );
+  flush_thread_.emplace(thread_options_, [this]() { FlushThreadMain(); });
   flush_thread_->detach();
 
   return display_;
@@ -223,7 +229,8 @@ void PicoRes28LcdDriver::FlushCallback(
 
   // Post to flush thread via DeviceOS queue
   int result = os_queue_put(
-      self->flush_queue_, &request, CONCURRENT_WAIT_FOREVER, nullptr);
+      self->flush_queue_, &request, CONCURRENT_WAIT_FOREVER, nullptr
+  );
   if (result != 0) {
     PW_LOG_ERROR("Failed to queue flush request!");
     lv_display_flush_ready(disp);
@@ -232,6 +239,13 @@ void PicoRes28LcdDriver::FlushCallback(
 
   // Wait for flush thread to complete processing
   os_semaphore_take(self->flush_done_, CONCURRENT_WAIT_FOREVER, false);
+
+  // After the last partial flush of the first frame, send DISPON so the
+  // user sees a clean image instead of stale display RAM.
+  if (self->display_on_pending_ && lv_display_flush_is_last(disp)) {
+    self->SendCommand(kCmdSetDisplayOn, {});
+    self->display_on_pending_ = false;
+  }
 
   // Call flush_ready from MAIN thread (same thread as lv_timer_handler)
   // LVGL requires flush_ready to be called from the same thread context.
@@ -263,7 +277,8 @@ void PicoRes28LcdDriver::FlushThreadMain() {
   while (true) {
     // Wait for flush request from LVGL callback
     FlushRequest request;
-    int result = os_queue_take(flush_queue_, &request, CONCURRENT_WAIT_FOREVER, nullptr);
+    int result =
+        os_queue_take(flush_queue_, &request, CONCURRENT_WAIT_FOREVER, nullptr);
     if (result != 0) {
       continue;  // Shouldn't happen with WAIT_FOREVER
     }

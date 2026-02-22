@@ -89,6 +89,14 @@ class Screen {
   void AddToGroup(lv_obj_t* widget) {
     if (lv_group_) {
       lv_group_add_obj(lv_group_, widget);
+      // Bubble events through the entire parent chain up to the screen root
+      // so AppShell's LV_EVENT_CANCEL handler on lv_screen_ can intercept
+      // ESC. Without this, events stop at intermediate containers (e.g.
+      // lv_list) that don't have the bubble flag.
+      for (lv_obj_t* obj = widget; obj && obj != lv_screen_;
+           obj = lv_obj_get_parent(obj)) {
+        lv_obj_add_flag(obj, LV_OBJ_FLAG_EVENT_BUBBLE);
+      }
     }
   }
 
