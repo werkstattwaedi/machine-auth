@@ -5,6 +5,12 @@ load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
 package(default_visibility = ["//visibility:public"])
 
+# Physical hardware layout constants (button positions, etc.)
+cc_library(
+    name = "hardware",
+    hdrs = ["hardware.h"],
+)
+
 # Domain types - type-safe wrappers for common identifiers
 cc_library(
     name = "types",

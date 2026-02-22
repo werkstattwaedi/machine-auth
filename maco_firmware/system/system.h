@@ -53,6 +53,10 @@ namespace maco::led {
 // P2: Led<In4818LedDriver<16>>
 }  // namespace maco::led
 
+namespace maco::led_animator {
+class LedAnimatorBase;
+}  // namespace maco::led_animator
+
 namespace maco::system {
 
 /// Initializes the system, first performing target-specific initialization,
@@ -105,6 +109,10 @@ auto& GetLed();
 /// Returns the thread options for the LED render thread.
 /// P2: Higher priority for smooth animations.
 const pw::thread::Options& GetLedThreadOptions();
+
+/// Returns the LED animator. Initializes the LED module on first call.
+/// The animator is pre-wired as the LED frame renderer.
+maco::led_animator::LedAnimatorBase& GetLedAnimator();
 
 /// Returns the platform-specific random number generator.
 /// P2: Uses HAL RNG (LFSR seeded from ADC noise at boot)

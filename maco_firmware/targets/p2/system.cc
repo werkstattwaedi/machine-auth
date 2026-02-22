@@ -32,6 +32,7 @@
 #include "maco_firmware/modules/gateway/derive_ascon_key.h"
 #include "maco_firmware/modules/gateway/p2_gateway_client.h"
 #include "maco_firmware/modules/led/led.h"
+#include "maco_firmware/modules/led_animator/led_animator.h"
 #include "maco_firmware/modules/machine_relay/latching_machine_relay.h"
 #include "maco_firmware/services/maco_service.h"
 #include "maco_firmware/targets/p2/hardware_random.h"
@@ -299,15 +300,31 @@ const pw::thread::Options& GetLedThreadOptions() {
   return options;
 }
 
-auto& GetLed() {
+namespace {
+auto& GetLedImpl() {
   // SPI interface 0 for LED strip
   static pb::ParticleSpiInitiator spi_initiator(
       pb::ParticleSpiInitiator::Interface::kSpi,
-      maco::led::In4818LedDriver<16>::kSpiClockHz
-  );
+      maco::led::In4818LedDriver<16>::kSpiClockHz);
   static maco::led::In4818LedDriver<16> driver(spi_initiator);
   static maco::led::Led<maco::led::In4818LedDriver<16>> led(driver);
   return led;
+}
+}  // namespace
+
+auto& GetLed() { return GetLedImpl(); }
+
+maco::led_animator::LedAnimatorBase& GetLedAnimator() {
+  auto& led = GetLedImpl();
+  static maco::led_animator::LedAnimator<maco::led::In4818LedDriver<16>>
+      animator(led.driver());
+  static bool initialized = [&]() {
+    led.set_frame_renderer(&animator);
+    (void)led.Init(GetLedThreadOptions());
+    return true;
+  }();
+  (void)initialized;
+  return animator;
 }
 
 pw::random::RandomGenerator& GetRandomGenerator() {

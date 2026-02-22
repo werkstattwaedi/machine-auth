@@ -10,6 +10,9 @@
 #include "maco_firmware/modules/app_state/system_state.h"
 #include "maco_firmware/modules/app_state/tag_verifier.h"
 #include "maco_firmware/modules/display/display.h"
+#include "maco_firmware/modules/led_animator/ambient_effects.h"
+#include "maco_firmware/modules/led_animator/button_effects.h"
+#include "maco_firmware/modules/led_animator/nfc_effects.h"
 #include "maco_firmware/modules/display/display_metrics.h"
 #include "maco_firmware/modules/machine_relay/relay_controller.h"
 #include "maco_firmware/modules/nfc_reader/nfc_reader.h"
@@ -24,6 +27,18 @@ namespace {
 
 void AppInit() {
   PW_LOG_INFO("MACO Dev Firmware initializing...");
+
+  // Initialize LED animator and set idle effect.
+  auto& led = maco::system::GetLedAnimator();
+  led.SetAmbientEffect(maco::led_animator::BreathingAmbient(
+      maco::led::RgbwColor{0, 0, 80, 0}, 3.0f, 0.05f));
+  auto idle_button = maco::led_animator::BreathingButton(
+      maco::led::RgbwColor{0, 0, 0, 40}, 3.0f, 0.05f);
+  for (maco::Button b : maco::kAllButtons) {
+    led.SetButtonEffect(b, idle_button);
+  }
+  led.SetNfcEffect(maco::led_animator::BreathingNfc(
+      maco::led::RgbwColor{0, 0, 60, 0}, 3.0f, 0.05f));
 
   // System state (boot progress, connectivity, time)
   auto& monitor_backend = maco::system::GetSystemMonitorBackend();

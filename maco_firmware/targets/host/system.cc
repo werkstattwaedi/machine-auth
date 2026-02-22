@@ -19,6 +19,7 @@
 #include "maco_firmware/modules/gateway/derive_ascon_key.h"
 #include "maco_firmware/modules/gateway/host_gateway_client.h"
 #include "maco_firmware/modules/led/led.h"
+#include "maco_firmware/modules/led_animator/led_animator.h"
 #include "maco_firmware/modules/buzzer/mock/mock_buzzer.h"
 #include "maco_firmware/modules/machine_relay/mock/mock_machine_relay.h"
 #include "maco_firmware/modules/nfc_reader/mock/mock_nfc_reader.h"
@@ -249,10 +250,27 @@ const pw::thread::Options& GetLedThreadOptions() {
   return options;
 }
 
-auto& GetLed() {
+namespace {
+auto& GetLedImpl() {
   static maco::led::SdlLedDriver<16> driver;
   static maco::led::Led<maco::led::SdlLedDriver<16>> led(driver);
   return led;
+}
+}  // namespace
+
+auto& GetLed() { return GetLedImpl(); }
+
+maco::led_animator::LedAnimatorBase& GetLedAnimator() {
+  auto& led = GetLedImpl();
+  static maco::led_animator::LedAnimator<maco::led::SdlLedDriver<16>> animator(
+      led.driver());
+  static bool initialized = [&]() {
+    led.set_frame_renderer(&animator);
+    (void)led.Init(GetLedThreadOptions());
+    return true;
+  }();
+  (void)initialized;
+  return animator;
 }
 
 pw::random::RandomGenerator& GetRandomGenerator() {

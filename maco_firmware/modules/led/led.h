@@ -6,6 +6,7 @@
 #include <atomic>
 #include <chrono>
 
+#include "maco_firmware/modules/led/led_frame_renderer.h"
 #include "pw_chrono/system_clock.h"
 #include "pw_log/log.h"
 #include "pw_status/status.h"
@@ -39,6 +40,12 @@ class Led {
     return pw::OkStatus();
   }
 
+  /// Register a frame renderer. Must be set before Init() to avoid races.
+  /// The renderer's OnFrame() is called once per frame before Show().
+  void set_frame_renderer(LedFrameRenderer* renderer) {
+    renderer_ = renderer;
+  }
+
   /// Direct access to driver for setting pixels.
   ///
   /// Note: No synchronization. Pixel changes may be partially visible
@@ -48,11 +55,24 @@ class Led {
   const Driver& driver() const { return driver_; }
 
  private:
+  // Maximum dt passed to renderer; caps first-frame jitter at startup.
+  static constexpr float kMaxDt =
+      std::chrono::duration<float>(2 * kFramePeriod).count();
+
   void RenderThread() {
     auto next_frame = pw::chrono::SystemClock::now();
+    auto last_frame = next_frame;
 
     while (running_.load(std::memory_order_relaxed)) {
       next_frame += kFramePeriod;
+
+      auto now = pw::chrono::SystemClock::now();
+      float dt_s = std::chrono::duration<float>(now - last_frame).count();
+      if (dt_s > kMaxDt) dt_s = kMaxDt;
+      last_frame = now;
+
+      // Let the renderer update pixel state before we push it.
+      if (renderer_ != nullptr) renderer_->OnFrame(dt_s);
 
       // Push current pixel state to hardware
       if (pw::Status status = driver_.Show(); !status.ok()) {
@@ -65,6 +85,7 @@ class Led {
   }
 
   Driver& driver_;
+  LedFrameRenderer* renderer_ = nullptr;
   std::atomic<bool> running_{true};
 };
 
