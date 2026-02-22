@@ -5,6 +5,7 @@
 
 #include "gtest/gtest.h"
 #include "maco_firmware/modules/display/testing/screenshot_test_harness.h"
+#include "maco_firmware/modules/terminal_ui/theme.h"
 
 namespace maco::terminal_ui {
 namespace {
@@ -15,8 +16,10 @@ UiAction last_action = UiAction::kNone;
 void TestActionCallback(UiAction action) { last_action = action; }
 
 constexpr MenuItem kTestItems[] = {
-    {"Info", UiAction::kNone},
-    {"Einstellungen", UiAction::kNone},
+    {"Hilfe", UiAction::kNone},
+    {"Letzte Nutzung", UiAction::kNone},
+    {"MaCo Info", UiAction::kNone},
+    {"Netzwerk", UiAction::kNone},
 };
 
 class MenuScreenTest : public ::testing::Test {
@@ -61,7 +64,14 @@ TEST_F(MenuScreenTest, FocusedItem) {
 TEST_F(MenuScreenTest, ButtonConfig) {
   auto config = screen_->GetButtonConfig();
   EXPECT_EQ(config.cancel.label, "Zurück");
-  EXPECT_EQ(config.ok.label, "OK");
+  EXPECT_EQ(config.ok.label, "Wählen");
+  EXPECT_EQ(config.ok.bg_color, theme::kColorBtnGreen);
+  EXPECT_EQ(config.cancel.bg_color, theme::kColorYellow);
+}
+
+TEST_F(MenuScreenTest, ScreenStyle) {
+  auto style = screen_->GetScreenStyle();
+  EXPECT_EQ(style.bg_color, theme::kColorWhiteBg);
 }
 
 }  // namespace

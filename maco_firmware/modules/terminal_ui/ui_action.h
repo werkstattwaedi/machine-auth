@@ -16,6 +16,7 @@ enum class UiAction : uint8_t {
   kCloseMenu,
   kConfirm,
   kCancel,
+  kStopSession,
 };
 
 /// Callback type for screens to emit actions.

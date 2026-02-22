@@ -120,6 +120,10 @@ void PwSystemThread() {
 
 namespace maco::system {
 
+void WaitForUsbSerial() {
+  // No-op on host - no USB serial to wait for.
+}
+
 void Init(pw::Function<void()> app_init) {
   app_init();
 

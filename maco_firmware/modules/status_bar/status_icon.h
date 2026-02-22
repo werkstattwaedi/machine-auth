@@ -35,6 +35,9 @@ class StatusIcon {
   /// The frames span must outlive the animation.
   void SetAnimation(pw::span<const char* const> frames, uint32_t interval_ms);
 
+  /// Override the icon text color (for status bar theme adaptation).
+  void SetColor(lv_color_t color);
+
  private:
   void StopAnimation();
   static void OnTimer(lv_timer_t* timer);

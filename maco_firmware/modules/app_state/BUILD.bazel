@@ -46,6 +46,7 @@ cc_library(
         "//maco_firmware/modules/time:zurich_timezone",
         "@pigweed//pw_chrono:system_clock",
         "@pigweed//pw_log",
+        "@pigweed//pw_string",
         "@pigweed//pw_sync:lock_annotations",
         "@pigweed//pw_sync:mutex",
     ],

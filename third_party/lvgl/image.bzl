@@ -19,6 +19,7 @@ def lvgl_image(
         name,
         src,
         cf = None,
+        background = None,
         visibility = None):
     """Convert a PNG image to an LVGL C array.
 
@@ -27,23 +28,27 @@ def lvgl_image(
         src: Source PNG file
         cf: Color format override (e.g., "RGB565", "RGB888"). If None,
             auto-selects RGB565_SWAPPED for P2, RGB565 for host.
+        background: Background color hex (e.g., "ffffff") for compositing
+            alpha onto opaque formats.
         visibility: Bazel visibility
     """
 
     output_c = name + ".c"
+    bg_flag = " --background {bg}".format(bg = background) if background else ""
 
     if cf:
         # Explicit color format - no platform select needed
-        cmd = "$(location //third_party/lvgl:lvgl_image_converter) --ofmt C --cf {cf} --name {name} -o $(@D) $(location {src})".format(
+        cmd = "$(location //third_party/lvgl:lvgl_image_converter) --ofmt C --cf {cf}{bg} --name {name} -o $(@D) $(location {src})".format(
             cf = cf,
+            bg = bg_flag,
             name = name,
             src = src,
         )
     else:
         # Auto-select based on target platform
         cmd = select({
-            "//maco_firmware/targets/p2:is_p2": "$(location //third_party/lvgl:lvgl_image_converter) --ofmt C --cf RGB565_SWAPPED --name {name} -o $(@D) $(location {src})".format(name = name, src = src),
-            "//conditions:default": "$(location //third_party/lvgl:lvgl_image_converter) --ofmt C --cf RGB565 --name {name} -o $(@D) $(location {src})".format(name = name, src = src),
+            "//maco_firmware/targets/p2:is_p2": "$(location //third_party/lvgl:lvgl_image_converter) --ofmt C --cf RGB565_SWAPPED{bg} --name {name} -o $(@D) $(location {src})".format(bg = bg_flag, name = name, src = src),
+            "//conditions:default": "$(location //third_party/lvgl:lvgl_image_converter) --ofmt C --cf RGB565{bg} --name {name} -o $(@D) $(location {src})".format(bg = bg_flag, name = name, src = src),
         })
 
     native.genrule(

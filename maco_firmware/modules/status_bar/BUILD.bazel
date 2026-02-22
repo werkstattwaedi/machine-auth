@@ -25,6 +25,7 @@ cc_library(
     deps = [
         ":status_icon",
         "//maco_firmware/modules/app_state:system_state",
+        "//maco_firmware/modules/terminal_ui:theme",
         "//maco_firmware/modules/time:local_time",
         "//maco_firmware/modules/ui:data_binding",
         "//third_party/lvgl",

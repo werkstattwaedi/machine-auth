@@ -43,6 +43,11 @@ void SystemState::SetUtcBootOffsetSeconds(int64_t offset) {
   utc_boot_offset_seconds_ = offset;
 }
 
+void SystemState::SetMachineLabel(std::string_view label) {
+  std::lock_guard lock(mutex_);
+  machine_label_ = label;
+}
+
 void SystemState::GetSnapshot(SystemStateSnapshot& out) const {
   using std::chrono::duration_cast;
   using std::chrono::seconds;
@@ -53,6 +58,7 @@ void SystemState::GetSnapshot(SystemStateSnapshot& out) const {
   out.cloud_state = cloud_state_;
   out.gateway_connected =
       gateway_client_ != nullptr && gateway_client_->IsConnected();
+  out.machine_label = machine_label_;
 
   if (utc_boot_offset_seconds_.has_value()) {
     int64_t boot_secs = duration_cast<seconds>(

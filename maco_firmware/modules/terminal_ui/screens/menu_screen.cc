@@ -25,23 +25,16 @@ pw::Status MenuScreen::OnActivate() {
 
   lv_group_ = lv_group_create();
 
+  // White background
   lv_obj_set_style_bg_color(
-      lv_screen_, lv_color_hex(theme::kColorBg), LV_PART_MAIN);
+      lv_screen_, lv_color_hex(theme::kColorWhiteBg), LV_PART_MAIN);
 
-  // Title
-  lv_obj_t* title = lv_label_create(lv_screen_);
-  lv_label_set_text(title, "Menu");
-  lv_obj_set_style_text_color(
-      title, lv_color_hex(theme::kColorText), LV_PART_MAIN);
-  lv_obj_set_style_text_font(title, &roboto_24, LV_PART_MAIN);
-  lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 50);
-
-  // List container
+  // List container (no title — matches mockup)
   list_ = lv_list_create(lv_screen_);
-  lv_obj_set_size(list_, 220, 160);
-  lv_obj_align(list_, LV_ALIGN_CENTER, 0, 20);
+  lv_obj_set_size(list_, 220, 200);
+  lv_obj_align(list_, LV_ALIGN_CENTER, 0, 0);
   lv_obj_set_style_bg_color(
-      list_, lv_color_hex(theme::kColorBg), LV_PART_MAIN);
+      list_, lv_color_hex(theme::kColorWhiteBg), LV_PART_MAIN);
   lv_obj_set_style_border_width(list_, 0, LV_PART_MAIN);
   lv_obj_set_style_pad_row(list_, 4, LV_PART_MAIN);
 
@@ -49,23 +42,25 @@ pw::Status MenuScreen::OnActivate() {
   for (size_t i = 0; i < items_.size(); i++) {
     lv_obj_t* btn = lv_list_add_button(list_, nullptr, items_[i].label.data());
 
-    // Item styling
+    // Item styling: light background, dark text, subtle border
     lv_obj_set_style_bg_color(
-        btn, lv_color_hex(theme::kColorCard), LV_PART_MAIN);
+        btn, lv_color_hex(theme::kColorWhiteBg), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_text_color(
-        btn, lv_color_hex(theme::kColorText), LV_PART_MAIN);
+        btn, lv_color_hex(theme::kColorDarkText), LV_PART_MAIN);
     lv_obj_set_style_text_font(btn, &roboto_12, LV_PART_MAIN);
     lv_obj_set_style_border_color(
-        btn, lv_color_hex(theme::kColorBorder), LV_PART_MAIN);
+        btn, lv_color_hex(theme::kColorLightGray), LV_PART_MAIN);
     lv_obj_set_style_border_width(btn, theme::kBorderWidth, LV_PART_MAIN);
     lv_obj_set_style_radius(btn, theme::kRadius, LV_PART_MAIN);
     lv_obj_set_style_pad_all(btn, theme::kPadding, LV_PART_MAIN);
 
-    // Focus styling (teal border accent)
-    lv_obj_set_style_border_color(
-        btn, lv_color_hex(theme::kColorTeal), LV_STATE_FOCUSED);
-    lv_obj_set_style_border_width(btn, 2, LV_STATE_FOCUSED);
+    // Focus styling: blue background, white text
+    lv_obj_set_style_bg_color(
+        btn, lv_color_hex(theme::kColorBlue), LV_STATE_FOCUSED);
+    lv_obj_set_style_text_color(
+        btn, lv_color_white(), LV_STATE_FOCUSED);
+    lv_obj_set_style_border_width(btn, 0, LV_STATE_FOCUSED);
 
     // Store item index in user data for click handler
     lv_obj_set_user_data(btn, reinterpret_cast<void*>(i));
@@ -97,8 +92,6 @@ void MenuScreen::OnDeactivate() {
     lv_group_delete(lv_group_);
     lv_group_ = nullptr;
   }
-  // lv_screen_ is not deleted here - LVGL's auto_del in
-  // lv_screen_load_anim() handles cleanup after the crossfade.
   lv_screen_ = nullptr;
   list_ = nullptr;
   PW_LOG_INFO("MenuScreen deactivated");
@@ -106,9 +99,19 @@ void MenuScreen::OnDeactivate() {
 
 ui::ButtonConfig MenuScreen::GetButtonConfig() const {
   return {
-      .cancel = {.label = "Zurück"},
-      .ok = {.label = "OK", .led_color = theme::kColorTeal},
+      .ok = {.label = "Wählen",
+             .led_color = theme::kColorBtnGreen,
+             .bg_color = theme::kColorBtnGreen,
+             .text_color = 0xFFFFFF},
+      .cancel = {.label = "Zurück",
+                 .led_color = theme::kColorYellow,
+                 .bg_color = theme::kColorYellow,
+                 .text_color = theme::kColorDarkText},
   };
+}
+
+ui::ScreenStyle MenuScreen::GetScreenStyle() const {
+  return {.bg_color = theme::kColorWhiteBg};
 }
 
 }  // namespace maco::terminal_ui

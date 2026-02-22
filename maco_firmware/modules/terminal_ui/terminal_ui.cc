@@ -15,8 +15,10 @@ namespace maco::terminal_ui {
 namespace {
 
 constexpr MenuItem kMenuItems[] = {
-    {"Info", UiAction::kNone},
-    {"Einstellungen", UiAction::kNone},
+    {"Hilfe", UiAction::kNone},
+    {"Letzte Nutzung", UiAction::kNone},
+    {"MaCo Info", UiAction::kNone},
+    {"Netzwerk", UiAction::kNone},
 };
 
 }  // namespace
@@ -61,6 +63,9 @@ pw::Status TerminalUi::Init() {
     return status;
   }
 
+  // Hide status bar during splash — shown after transition to main screen.
+  status_bar_.SetVisible(false);
+
   // Show splash screen via AppShell. auto_del=true in
   // lv_screen_load_anim ensures the splash LVGL screen survives
   // for the crossfade when transitioning to MainScreen.
@@ -76,6 +81,11 @@ pw::Status TerminalUi::Init() {
     if (in_splash_ && ready_.load(std::memory_order_acquire)) {
       TransitionToMain();
     }
+
+    // Propagate current screen style to status bar
+    auto style = app_shell_.GetCurrentScreenStyle();
+    status_bar_.SetBackgroundColor(style.bg_color);
+
     status_bar_.Update();
     app_shell_.Update();
   });
@@ -86,6 +96,7 @@ pw::Status TerminalUi::Init() {
 
 void TerminalUi::TransitionToMain() {
   in_splash_ = false;
+  status_bar_.SetVisible(true);
 
   auto s = app_shell_.Replace(
       std::make_unique<MainScreen>(
@@ -119,6 +130,13 @@ void TerminalUi::HandleAction(UiAction action) {
       break;
 
     case UiAction::kCancel:
+      if (controller_) {
+        controller_->PostUiAction(app_state::SessionAction::kCancel);
+      }
+      break;
+
+    case UiAction::kStopSession:
+      PW_LOG_INFO("Stop session requested");
       if (controller_) {
         controller_->PostUiAction(app_state::SessionAction::kCancel);
       }

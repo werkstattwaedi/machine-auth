@@ -21,20 +21,21 @@ pw::Status SplashScreen::OnActivate() {
   }
 
   lv_obj_set_style_bg_color(
-      lv_screen_, lv_color_hex(theme::kColorBg), LV_PART_MAIN);
+      lv_screen_, lv_color_hex(theme::kColorWhiteBg), LV_PART_MAIN);
+  lv_obj_set_style_border_width(lv_screen_, 0, LV_PART_MAIN);
 
-  // OWW logo centered in upper area
+  // OWW logo centered
   lv_obj_t* logo = lv_image_create(lv_screen_);
   lv_image_set_src(logo, &oww_logo);
-  lv_obj_align(logo, LV_ALIGN_CENTER, 0, -20);
+  lv_obj_center(logo);
 
-  // "MACO" subtitle below logo
+  // "Starte..." label near the bottom
   lv_obj_t* subtitle = lv_label_create(lv_screen_);
-  lv_label_set_text(subtitle, "MACO");
+  lv_label_set_text(subtitle, "Starte...");
   lv_obj_set_style_text_color(
       subtitle, lv_color_hex(theme::kColorMuted), LV_PART_MAIN);
   lv_obj_set_style_text_font(subtitle, &roboto_12, LV_PART_MAIN);
-  lv_obj_align_to(subtitle, logo, LV_ALIGN_OUT_BOTTOM_MID, 0, 12);
+  lv_obj_align(subtitle, LV_ALIGN_BOTTOM_MID, 0, -16);
 
   PW_LOG_INFO("SplashScreen activated");
   return pw::OkStatus();

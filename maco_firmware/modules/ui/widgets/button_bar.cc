@@ -5,6 +5,28 @@
 
 namespace maco::ui {
 
+namespace {
+
+constexpr int kPillRadius = 8;
+constexpr int kPillOverflow = 8;  // Extends below screen edge
+constexpr int kPillPadH = 12;     // Horizontal padding inside pill
+constexpr int kPillPadV = 6;      // Vertical padding inside pill
+
+lv_obj_t* CreatePill(lv_obj_t* parent) {
+  lv_obj_t* pill = lv_obj_create(parent);
+  lv_obj_set_size(pill, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+  lv_obj_set_style_radius(pill, kPillRadius, LV_PART_MAIN);
+  lv_obj_set_style_border_width(pill, 0, LV_PART_MAIN);
+  lv_obj_set_style_pad_left(pill, kPillPadH, LV_PART_MAIN);
+  lv_obj_set_style_pad_right(pill, kPillPadH, LV_PART_MAIN);
+  lv_obj_set_style_pad_top(pill, kPillPadV, LV_PART_MAIN);
+  lv_obj_set_style_pad_bottom(pill, kPillPadV + kPillOverflow, LV_PART_MAIN);
+  lv_obj_clear_flag(pill, LV_OBJ_FLAG_SCROLLABLE);
+  return pill;
+}
+
+}  // namespace
+
 ButtonBar::ButtonBar(lv_obj_t* parent) {
   // Create container at bottom of parent
   container_ = lv_obj_create(parent);
@@ -14,19 +36,22 @@ ButtonBar::ButtonBar(lv_obj_t* parent) {
   // Style: transparent background, no border
   lv_obj_set_style_bg_opa(container_, LV_OPA_TRANSP, LV_PART_MAIN);
   lv_obj_set_style_border_width(container_, 0, LV_PART_MAIN);
-  lv_obj_set_style_pad_all(container_, 8, LV_PART_MAIN);
+  lv_obj_set_style_pad_left(container_, 8, LV_PART_MAIN);
+  lv_obj_set_style_pad_right(container_, 8, LV_PART_MAIN);
+  lv_obj_set_style_pad_top(container_, 0, LV_PART_MAIN);
+  lv_obj_set_style_pad_bottom(container_, 0, LV_PART_MAIN);
 
-  // Cancel label (bottom-left)
-  cancel_label_ = lv_label_create(container_);
-  lv_obj_align(cancel_label_, LV_ALIGN_BOTTOM_LEFT, 0, 0);
-  lv_obj_set_style_text_color(cancel_label_, lv_color_white(), LV_PART_MAIN);
-  lv_label_set_text(cancel_label_, "");
+  // OK pill (bottom-left, matching physical ENTER button)
+  ok_pill_ = CreatePill(container_);
+  lv_obj_align(ok_pill_, LV_ALIGN_BOTTOM_LEFT, 0, kPillOverflow);
+  ok_label_ = lv_label_create(ok_pill_);
+  lv_obj_center(ok_label_);
 
-  // OK label (bottom-right)
-  ok_label_ = lv_label_create(container_);
-  lv_obj_align(ok_label_, LV_ALIGN_BOTTOM_RIGHT, 0, 0);
-  lv_obj_set_style_text_color(ok_label_, lv_color_white(), LV_PART_MAIN);
-  lv_label_set_text(ok_label_, "");
+  // Cancel pill (bottom-right, matching physical ESC button)
+  cancel_pill_ = CreatePill(container_);
+  lv_obj_align(cancel_pill_, LV_ALIGN_BOTTOM_RIGHT, 0, kPillOverflow);
+  cancel_label_ = lv_label_create(cancel_pill_);
+  lv_obj_center(cancel_label_);
 }
 
 ButtonBar::~ButtonBar() {
@@ -44,24 +69,27 @@ void ButtonBar::Update() {
   }
 
   const auto& config = config_.Get();
+  UpdatePill(ok_pill_, ok_label_, config.ok);
+  UpdatePill(cancel_pill_, cancel_label_, config.cancel);
+}
 
-  // Update cancel label
-  if (config.cancel.label.empty()) {
-    lv_obj_add_flag(cancel_label_, LV_OBJ_FLAG_HIDDEN);
-  } else {
-    lv_obj_remove_flag(cancel_label_, LV_OBJ_FLAG_HIDDEN);
-    lv_label_set_text(cancel_label_, config.cancel.label.data());
+void ButtonBar::UpdatePill(lv_obj_t* pill, lv_obj_t* label,
+                           const ButtonSpec& spec) {
+  if (spec.label.empty() || spec.bg_color == 0) {
+    lv_obj_add_flag(pill, LV_OBJ_FLAG_HIDDEN);
+    return;
   }
 
-  // Update OK label
-  if (config.ok.label.empty()) {
-    lv_obj_add_flag(ok_label_, LV_OBJ_FLAG_HIDDEN);
-  } else {
-    lv_obj_remove_flag(ok_label_, LV_OBJ_FLAG_HIDDEN);
-    lv_label_set_text(ok_label_, config.ok.label.data());
-  }
+  lv_obj_remove_flag(pill, LV_OBJ_FLAG_HIDDEN);
 
-  // TODO: Update button LED colors via system interface
+  // Set pill background color
+  lv_obj_set_style_bg_color(pill, lv_color_hex(spec.bg_color), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(pill, LV_OPA_COVER, LV_PART_MAIN);
+
+  // Set label text and color
+  lv_label_set_text(label, spec.label.data());
+  lv_obj_set_style_text_color(label, lv_color_hex(spec.text_color),
+                              LV_PART_MAIN);
 }
 
 }  // namespace maco::ui

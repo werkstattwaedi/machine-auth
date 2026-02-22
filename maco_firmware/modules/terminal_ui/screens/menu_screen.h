@@ -29,6 +29,7 @@ class MenuScreen : public ui::Screen<app_state::AppStateSnapshot> {
   pw::Status OnActivate() override;
   void OnDeactivate() override;
   ui::ButtonConfig GetButtonConfig() const override;
+  ui::ScreenStyle GetScreenStyle() const override;
 
  private:
   pw::Vector<MenuItem, kMaxMenuItems> items_;

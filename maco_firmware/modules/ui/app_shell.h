@@ -149,6 +149,14 @@ class AppShell {
     return stack_.back().get();
   }
 
+  /// Get the current screen's visual style (background color, etc.).
+  ScreenStyle GetCurrentScreenStyle() const {
+    if (Screen<Snapshot>* screen = current_screen()) {
+      return screen->GetScreenStyle();
+    }
+    return {};
+  }
+
  private:
   void ActivateScreen(Screen<Snapshot>* screen) {
     if (!screen) {
