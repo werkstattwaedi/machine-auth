@@ -87,6 +87,7 @@ pw::Status PicoRes28LcdDriver::Init() {
   PW_TRY(cs_.Enable());
   PW_TRY(dc_.Enable());
   PW_TRY(rst_.Enable());
+  PW_TRY(bl_.Enable());
 
   // Initialize and configure HAL SPI
   hal_spi_init(hal_if);
@@ -101,6 +102,7 @@ pw::Status PicoRes28LcdDriver::Init() {
 
   // CS high (inactive) initially
   PW_TRY(cs_.SetState(pw::digital_io::State::kActive));
+  PW_TRY(bl_.SetState(pw::digital_io::State::kInactive));
 
   // Hardware reset
   HardwareReset();
@@ -159,7 +161,7 @@ pw::Result<lv_display_t*> PicoRes28LcdDriver::CreateLvglDisplay() {
   // to avoid showing stale RAM contents. The first FlushCallback will
   // re-enable it.
   SendCommand(kCmdSetDisplayOff, {});
-  PW_TRY(bl_.Enable());
+  PW_TRY(bl_.SetState(pw::digital_io::State::kActive));
 
   display_on_pending_ = true;
 
