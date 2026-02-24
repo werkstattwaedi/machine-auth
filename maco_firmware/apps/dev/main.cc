@@ -12,11 +12,12 @@
 #include "maco_firmware/modules/app_state/tag_verifier.h"
 #include "maco_firmware/modules/display/display.h"
 #include "maco_firmware/modules/display/display_metrics.h"
-#include "maco_firmware/modules/led_animator/ambient_effects.h"
+#include "maco_firmware/modules/led_animator/button_effects.h"
 #include "maco_firmware/modules/led_animator/nfc_effects.h"
 #include "maco_firmware/modules/machine_relay/relay_controller.h"
 #include "maco_firmware/modules/nfc_reader/nfc_reader.h"
 #include "maco_firmware/modules/stack_monitor/stack_monitor.h"
+#include "maco_firmware/modules/terminal_led_effects/terminal_led_effects.h"
 #include "maco_firmware/modules/terminal_ui/terminal_ui.h"
 #include "maco_firmware/system/system.h"
 #include "pw_async2/system_time_provider.h"
@@ -28,17 +29,11 @@ namespace {
 void AppInit() {
   PW_LOG_INFO("MACO Dev Firmware initializing...");
 
-  // Initialize LED animator and set idle effect.
+  // Initialize LED animator: buttons and NFC off until system is ready.
+  // The ambient ring boot animation is started by TerminalLedEffects::Start().
   auto& led = maco::system::GetLedAnimator();
-  led.SetAmbientEffect(
-      maco::led_animator::UpwardAmbient(
-          maco::led::RgbwColor{0, 0, 0, 255}, 4.0f
-      )
-  );
-
-  auto idle_button = maco::led_animator::OffButton();
   for (maco::Button b : maco::kAllButtons) {
-    led.SetButtonEffect(b, idle_button);
+    led.SetButtonEffect(b, maco::led_animator::OffButton());
   }
   led.SetNfcEffect(maco::led_animator::OffNfc());
 
@@ -67,12 +62,23 @@ void AppInit() {
   }
   PW_LOG_INFO("Display initialized: %dx%d", display.width(), display.height());
 
+  // Start system monitor (subscribes to platform events)
+  system_state.Start(pw::System().dispatcher());
+
+  // LED ring effects driven by session and tag-verification state.
+  // Start() begins the boot animation immediately; the coroutine transitions
+  // to idle once system_state reports kReady.
+  static maco::terminal_led_effects::TerminalLedEffects terminal_led_effects(
+      led,
+      system_state,
+      pw::async2::GetSystemTimeProvider(),
+      pw::System().allocator()
+  );
+  terminal_led_effects.Start(pw::System().dispatcher());
+
   // Wait for USB serial after splash screen is visible so the user sees
   // something while the device waits for a console connection.
   maco::system::WaitForUsbSerial();
-
-  // Start system monitor (subscribes to platform events)
-  system_state.Start(pw::System().dispatcher());
 
   // Session state machine and observers
   static maco::app_state::SessionFsm session_fsm;
@@ -83,6 +89,7 @@ void AppInit() {
   );
   session_fsm.AddObserver(&relay_controller);
   relay_controller.Start(pw::System().dispatcher());
+  session_fsm.AddObserver(&terminal_led_effects);
 
   // Get and start NFC reader (init happens asynchronously)
   PW_LOG_INFO("Starting NFC reader...");
@@ -111,6 +118,7 @@ void AppInit() {
         pw::System().allocator()
     );
     tag_verifier.AddObserver(&session_fsm);
+    tag_verifier.AddObserver(&terminal_led_effects);
     tag_verifier.Start(pw::System().dispatcher());
 
     // Session controller - drives timeouts, hold detection, UI action bridge
@@ -125,11 +133,6 @@ void AppInit() {
   }
 
   system_state.SetReady();
-  led.SetAmbientEffect(
-      maco::led_animator::BreathingAmbient(
-          maco::led::RgbwColor{0, 0, 0, 192}, 5.0f, 0.3f
-      )
-  );
 
   maco::StartStackMonitor(
       std::chrono::seconds(30), maco::display::metrics::OnThreadStackScan

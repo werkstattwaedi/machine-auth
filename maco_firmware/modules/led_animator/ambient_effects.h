@@ -16,6 +16,29 @@ inline AmbientEffect OffAmbient() {
   return {};  // Default-constructed: all Black/kFixed, no motion
 }
 
+inline AmbientEffect BlinkAmbient(
+    maco::led::RgbwColor color,
+    float period_s = 0.75f,
+    float min_brightness = 0.2f
+) {
+  AmbientEffect effect;
+
+  effect.hotspots[0] = HotspotConfig{
+      .waveform =
+          {
+              .shape = Waveform::Shape::kBlinking,
+              .color = color,
+              .period_s = period_s,
+              .min_brightness = min_brightness,
+          },
+      .start_position = kPi,  // anchor at bottom-left
+      .velocity = 0,
+      .radius = kPi * 2,
+      .falloff_shape = 0,
+  };
+  return effect;
+}
+
 /// Uniform breathing ring: all 10 hotspots at fixed integer positions.
 inline AmbientEffect BreathingAmbient(
     maco::led::RgbwColor color,

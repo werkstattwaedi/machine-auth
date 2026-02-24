@@ -1,0 +1,27 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//maco_firmware:__subpackages__"])
+
+cc_library(
+    name = "terminal_led_effects",
+    srcs = ["terminal_led_effects.cc"],
+    hdrs = ["terminal_led_effects.h"],
+    deps = [
+        "//maco_firmware/modules/app_state:session_fsm",
+        "//maco_firmware/modules/app_state:system_state",
+        "//maco_firmware/modules/app_state:tag_verifier_observer",
+        "//maco_firmware/modules/app_state/ui:snapshot",
+        "//maco_firmware/modules/led_animator:ambient_effects",
+        "//maco_firmware/modules/led_animator:led_animator",
+        "@pigweed//pw_allocator:allocator",
+        "@pigweed//pw_async2:coro",
+        "@pigweed//pw_async2:coro_or_else_task",
+        "@pigweed//pw_async2:dispatcher",
+        "@pigweed//pw_async2:time_provider",
+        "@pigweed//pw_chrono:system_clock",
+        "@pigweed//pw_log",
+    ],
+)
