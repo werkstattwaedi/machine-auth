@@ -23,6 +23,8 @@
 #include "maco_firmware/modules/terminal_ui/terminal_ui.h"
 #include "maco_firmware/services/maco_service.h"
 #include "maco_firmware/system/system.h"
+#include "session_upload/session_store.h"
+#include "session_upload/usage_uploader.h"
 #include "pw_async2/system_time_provider.h"
 #include "pw_log/log.h"
 #include "pw_metric/global.h"
@@ -30,6 +32,60 @@
 #include "pw_system/system.h"
 
 namespace {
+
+/// Check for an orphaned session from a prior device reset.
+/// If the reset was involuntary (watchdog/panic) and the relay is still on,
+/// resume the session. Otherwise close it and queue the usage for upload.
+void RecoverOrphanedSession(
+    maco::session_upload::SessionStore& store,
+    maco::app_state::SessionFsm& fsm,
+    maco::machine_control::MachineToggle& toggle) {
+  if (!store.HasOrphanedSession()) {
+    return;
+  }
+
+  auto reset_reason = maco::system::GetResetReason();
+  bool relay_on = toggle.IsEnabled();
+
+  if ((reset_reason == maco::system::ResetReason::kWatchdog ||
+       reset_reason == maco::system::ResetReason::kPanic) &&
+      relay_on) {
+    // Machine still running after involuntary reset - resume session
+    auto session = store.LoadOrphanedSession();
+    if (session.ok()) {
+      PW_LOG_INFO("Resuming session for %s after device reset",
+                  session->user_label.c_str());
+      fsm.receive(maco::app_state::session_event::SessionResume(
+          session->tag_uid, session->user_id, session->user_label,
+          session->auth_id, session->started_at));
+      fsm.SyncSnapshot();
+    }
+  } else {
+    // Close orphaned session with estimated end time
+    auto session = store.LoadOrphanedSession();
+    auto last_seen = store.LoadOrphanedLastSeenUnix();
+    if (session.ok()) {
+      PW_LOG_INFO("Closing orphaned session for %s",
+                  session->user_label.c_str());
+      maco::app_state::MachineUsage usage;
+      usage.user_id = session->user_id;
+      usage.auth_id = session->auth_id;
+      usage.check_in = session->started_at;
+      // Use last_seen as check_out (already in unix seconds)
+      usage.check_out = pw::chrono::SystemClock::time_point(
+          std::chrono::seconds(last_seen.ok() ? *last_seen : 0));
+      usage.reason = maco::app_state::CheckoutReason::kDeviceReset;
+      // utc_offset=0 because timestamps are already unix seconds
+      auto store_status =
+          store.StoreCompletedUsage(usage, /*utc_offset=*/0);
+      if (!store_status.ok()) {
+        PW_LOG_WARN("Failed to queue orphaned usage: %d",
+                    static_cast<int>(store_status.code()));
+      }
+    }
+    store.ClearActiveSession().IgnoreError();
+  }
+}
 
 void AppInit() {
   PW_LOG_INFO("MACO Dev Firmware initializing...");
@@ -89,6 +145,12 @@ void AppInit() {
   static maco::app_state::SessionFsm session_fsm;
   auto& machine_toggle = maco::system::GetMachineToggle();
   PW_CHECK_OK(machine_toggle.Init());
+
+  // Session persistence store (KVS-backed)
+  static maco::session_upload::SessionStore session_store(
+      maco::system::GetSessionKvs());
+
+  RecoverOrphanedSession(session_store, session_fsm, machine_toggle);
 
   static maco::machine_control::MachineController machine_controller(
       machine_toggle,
@@ -157,6 +219,18 @@ void AppInit() {
     );
     controller.Start(pw::System().dispatcher());
     terminal_ui.SetController(&controller);
+
+    // Usage uploader - persists sessions and uploads usage to Firebase
+    static maco::session_upload::UsageUploader usage_uploader(
+        session_store,
+        maco::system::GetFirebaseClient(),
+        system_state,
+        config,
+        pw::async2::GetSystemTimeProvider(),
+        pw::System().allocator()
+    );
+    session_fsm.AddObserver(&usage_uploader);
+    usage_uploader.Start(pw::System().dispatcher());
   }
 
   // Register RPC services

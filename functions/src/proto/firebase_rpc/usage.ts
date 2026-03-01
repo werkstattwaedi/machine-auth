@@ -28,6 +28,9 @@ export interface CheckOutReason {
     | //
     /** User used self-checkout */
     { $case: "selfCheckout"; selfCheckout: ReasonSelfCheckout }
+    | //
+    /** Session closed due to device reset (watchdog, power loss, etc.) */
+    { $case: "deviceReset"; deviceReset: ReasonDeviceReset }
     | undefined;
 }
 
@@ -47,6 +50,9 @@ export interface ReasonTimeout {
 }
 
 export interface ReasonSelfCheckout {
+}
+
+export interface ReasonDeviceReset {
 }
 
 /** Single machine usage record */
@@ -108,6 +114,9 @@ export const CheckOutReason: MessageFns<CheckOutReason> = {
       case "selfCheckout":
         ReasonSelfCheckout.encode(message.reason.selfCheckout, writer.uint32(42).fork()).join();
         break;
+      case "deviceReset":
+        ReasonDeviceReset.encode(message.reason.deviceReset, writer.uint32(50).fork()).join();
+        break;
     }
     return writer;
   },
@@ -162,6 +171,14 @@ export const CheckOutReason: MessageFns<CheckOutReason> = {
           message.reason = { $case: "selfCheckout", selfCheckout: ReasonSelfCheckout.decode(reader, reader.uint32()) };
           continue;
         }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.reason = { $case: "deviceReset", deviceReset: ReasonDeviceReset.decode(reader, reader.uint32()) };
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -209,6 +226,15 @@ export const CheckOutReason: MessageFns<CheckOutReason> = {
           message.reason = {
             $case: "selfCheckout",
             selfCheckout: ReasonSelfCheckout.fromPartial(object.reason.selfCheckout),
+          };
+        }
+        break;
+      }
+      case "deviceReset": {
+        if (object.reason?.deviceReset !== undefined && object.reason?.deviceReset !== null) {
+          message.reason = {
+            $case: "deviceReset",
+            deviceReset: ReasonDeviceReset.fromPartial(object.reason.deviceReset),
           };
         }
         break;
@@ -426,6 +452,40 @@ export const ReasonSelfCheckout: MessageFns<ReasonSelfCheckout> = {
   },
   fromPartial(_: DeepPartial<ReasonSelfCheckout>): ReasonSelfCheckout {
     const message = createBaseReasonSelfCheckout();
+    return message;
+  },
+};
+
+function createBaseReasonDeviceReset(): ReasonDeviceReset {
+  return {};
+}
+
+export const ReasonDeviceReset: MessageFns<ReasonDeviceReset> = {
+  encode(_: ReasonDeviceReset, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ReasonDeviceReset {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseReasonDeviceReset();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create(base?: DeepPartial<ReasonDeviceReset>): ReasonDeviceReset {
+    return ReasonDeviceReset.fromPartial(base ?? {});
+  },
+  fromPartial(_: DeepPartial<ReasonDeviceReset>): ReasonDeviceReset {
+    const message = createBaseReasonDeviceReset();
     return message;
   },
 };

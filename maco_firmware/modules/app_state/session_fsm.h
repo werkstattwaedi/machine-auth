@@ -40,6 +40,7 @@ enum class CheckoutReason {
   kOtherTag = 2,      // Different tag took over
   kUiCheckout = 3,    // UI button
   kTimeout = 4,       // Session timeout (future)
+  kDeviceReset = 5,   // Session closed due to device reset
 };
 
 // --- Session data ---
@@ -94,10 +95,12 @@ class SessionFsm;
 /// Root state: no session active. Relay OFF.
 class NoSession
     : public etl::fsm_state<SessionFsm, NoSession, SessionStateId::kNoSession,
-                            session_event::UserAuthorized> {
+                            session_event::UserAuthorized,
+                            session_event::SessionResume> {
  public:
   etl::fsm_state_id_t on_enter_state();
   etl::fsm_state_id_t on_event(const session_event::UserAuthorized& e);
+  etl::fsm_state_id_t on_event(const session_event::SessionResume& e);
   etl::fsm_state_id_t on_event_unknown(const etl::imessage&) {
     return No_State_Change;
   }

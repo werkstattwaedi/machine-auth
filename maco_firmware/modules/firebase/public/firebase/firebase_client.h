@@ -127,6 +127,18 @@ class FirebaseClient {
   KeyDiversification(pw::async2::CoroContext& cx,
                      const TagUid& tag_uid);
 
+  /// Upload machine usage records (coroutine).
+  ///
+  /// Calls the /api/uploadUsage Firebase endpoint.
+  /// Takes a pre-encoded UploadUsageRequest payload.
+  ///
+  /// @param cx Coroutine context for suspension
+  /// @param payload Pre-encoded UploadUsageRequest bytes
+  /// @return OkStatus on success, or error status
+  [[nodiscard]] pw::async2::Coro<pw::Status> UploadUsage(
+      pw::async2::CoroContext& cx,
+      pw::ConstByteSpan payload);
+
   /// Get the channel ID.
   uint32_t channel_id() const { return channel_id_; }
 
@@ -150,11 +162,14 @@ class FirebaseClient {
   pw::async2::ValueProvider<pw::Result<KeyDiversificationResult>>
       key_diversification_provider_;
 
+  pw::async2::ValueProvider<pw::Status> upload_usage_provider_;
+
   // RPC call handles - must outlive the callbacks
   ForwardCall terminal_checkin_call_;
   ForwardCall authenticate_tag_call_;
   ForwardCall complete_tag_auth_call_;
   ForwardCall key_diversification_call_;
+  ForwardCall upload_usage_call_;
 };
 
 }  // namespace maco::firebase

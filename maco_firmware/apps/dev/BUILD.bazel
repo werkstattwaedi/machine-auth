@@ -31,6 +31,8 @@ DEV_DEPS = [
     "//maco_firmware/modules/machine_control:default_machine_sensor",
     "//maco_firmware/modules/machine_control:machine_controller",
     "//maco_firmware/modules/nfc_reader",
+    "//maco_firmware/modules/session_upload:session_store",
+    "//maco_firmware/modules/session_upload:usage_uploader",
     "//maco_firmware/modules/stack_monitor",
     "//maco_firmware/modules/led_animator:button_effects",
     "//maco_firmware/modules/led_animator:nfc_effects",
@@ -79,6 +81,8 @@ particle_firmware(
         "//maco_firmware/modules/machine_control:default_machine_sensor",
         "//maco_firmware/modules/machine_control:machine_controller",
         "//maco_firmware/modules/nfc_reader",
+        "//maco_firmware/modules/session_upload:session_store",
+        "//maco_firmware/modules/session_upload:usage_uploader",
         "//maco_firmware/modules/stack_monitor",
         "//maco_firmware/modules/led_animator:button_effects",
         "//maco_firmware/modules/led_animator:nfc_effects",
@@ -110,7 +114,7 @@ particle_memory_budget(
     # Bump consciously when adding features that exceed these.
     sram_limit = 87000,
     psram_limit = 600000,
-    flash_limit = 600000,
+    flash_limit = 680000,
     golden = "testdata/memory_budget.txt",
 )
 

@@ -34,6 +34,9 @@
 #include "pb_cloud/ledger_typed_api.h"
 #include "firebase/firebase_client.h"
 #include "pw_assert/check.h"
+#include "pw_kvs/crc16_checksum.h"
+#include "pw_kvs/fake_flash_memory.h"
+#include "pw_kvs/key_value_store.h"
 #include "pw_channel/stream_channel.h"
 #include "pw_log/log.h"
 #include "pw_multibuf/simple_allocator.h"
@@ -292,6 +295,26 @@ maco::buzzer::Buzzer& GetBuzzer() {
 maco::app_state::SystemMonitorBackend& GetSystemMonitorBackend() {
   static maco::HostSystemMonitor monitor;
   return monitor;
+}
+
+ResetReason GetResetReason() {
+  return ResetReason::kPowerCycle;
+}
+
+pw::kvs::KeyValueStore& GetSessionKvs() {
+  static pw::kvs::FakeFlashMemoryBuffer<4096, 8> flash;
+  static pw::kvs::FlashPartition partition(&flash);
+  static pw::kvs::ChecksumCrc16 checksum;
+  static const pw::kvs::EntryFormat format = {.magic = 0xba5eba11,
+                                               .checksum = &checksum};
+  static pw::kvs::KeyValueStoreBuffer<16, 8> kvs(&partition, format);
+  static bool initialized = false;
+  if (!initialized) {
+    PW_CHECK_OK(partition.Erase());
+    PW_CHECK_OK(kvs.Init());
+    initialized = true;
+  }
+  return kvs;
 }
 
 }  // namespace maco::system

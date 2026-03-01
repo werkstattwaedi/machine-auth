@@ -80,6 +80,7 @@ cc_library(
     deps = [
         "//maco_firmware:types",
         "//third_party/etl",
+        "@pigweed//pw_chrono:system_clock",
         "@pigweed//pw_string",
     ],
 )

@@ -159,6 +159,18 @@ etl::fsm_state_id_t NoSession::on_event(
   return SessionStateId::kRunning;
 }
 
+etl::fsm_state_id_t NoSession::on_event(
+    const session_event::SessionResume& e) {
+  auto& ctx = get_fsm_context();
+  ctx.active_session.tag_uid = e.tag_uid;
+  ctx.active_session.user_id = e.user_id;
+  ctx.active_session.user_label = e.user_label;
+  ctx.active_session.auth_id = e.auth_id;
+  ctx.active_session.started_at = e.started_at;
+  PW_LOG_INFO("Session resumed for %s", e.user_label.c_str());
+  return SessionStateId::kRunning;
+}
+
 // --- Active ---
 
 etl::fsm_state_id_t Active::on_enter_state() {

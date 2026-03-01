@@ -43,6 +43,9 @@ class SystemState : public SystemStateUpdater {
   /// Thread-safe snapshot for UI. Reads SystemClock::now() at call time.
   void GetSnapshot(SystemStateSnapshot& out) const;
 
+  /// Get the UTC boot offset in seconds, or 0 if time not yet synced.
+  int64_t GetUtcBootOffsetSeconds() const;
+
  private:
   SystemMonitorBackend& backend_;
   bool gateway_connected_ PW_GUARDED_BY(mutex_) = false;

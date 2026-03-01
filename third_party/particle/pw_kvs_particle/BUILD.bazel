@@ -1,0 +1,18 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "flash_memory",
+    srcs = ["flash_memory.cc"],
+    hdrs = ["public/pb_kvs/flash_memory.h"],
+    includes = ["public"],
+    deps = [
+        "//:device_os_headers",
+        "@pigweed//pw_kvs",
+        "@pigweed//pw_log",
+        "@pigweed//pw_status",
+    ],
+    target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
+)

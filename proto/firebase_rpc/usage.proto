@@ -20,6 +20,8 @@ message CheckOutReason {
     ReasonTimeout timeout = 4;
     // User used self-checkout
     ReasonSelfCheckout self_checkout = 5;
+    // Session closed due to device reset (watchdog, power loss, etc.)
+    ReasonDeviceReset device_reset = 6;
   }
 }
 
@@ -37,6 +39,8 @@ message ReasonCheckInOtherMachine {
 message ReasonTimeout {}
 
 message ReasonSelfCheckout {}
+
+message ReasonDeviceReset {}
 
 // Single machine usage record
 message MachineUsage {

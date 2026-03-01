@@ -1,0 +1,85 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+# Session persistence and usage upload module.
+# SessionStore handles KVS-backed flash storage; UsageUploader is the
+# SessionObserver that drives persistence and cloud upload.
+
+load("@com_google_protobuf//bazel:proto_library.bzl", "proto_library")
+load("@pigweed//pw_protobuf_compiler:nanopb_proto_library.bzl", "nanopb_proto_library")
+load("@pigweed//pw_protobuf_compiler:pw_proto_filegroup.bzl", "pw_proto_filegroup")
+load("@pigweed//pw_unit_test:pw_cc_test.bzl", "pw_cc_test")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//maco_firmware:__subpackages__"])
+
+# Session store nanopb proto (internal storage format, not RPC)
+pw_proto_filegroup(
+    name = "session_store_proto_and_options",
+    srcs = ["session_store.proto"],
+    options_files = ["session_store.options"],
+)
+
+proto_library(
+    name = "session_store_proto",
+    srcs = [":session_store_proto_and_options"],
+    deps = ["//proto:common_proto"],
+)
+
+nanopb_proto_library(
+    name = "session_store_nanopb",
+    deps = [":session_store_proto"],
+)
+
+# Session persistence layer (KVS-backed)
+cc_library(
+    name = "session_store",
+    srcs = ["session_store.cc"],
+    hdrs = ["public/session_upload/session_store.h"],
+    includes = ["public"],
+    deps = [
+        ":session_store_nanopb",
+        "//maco_firmware:types",
+        "//maco_firmware/modules/app_state:session_fsm",
+        "@pigweed//pw_chrono:system_clock",
+        "@pigweed//pw_kvs",
+        "@pigweed//pw_log",
+        "@pigweed//pw_result",
+        "@pigweed//pw_status",
+    ],
+)
+
+# Usage uploader (SessionObserver + coroutine-based upload)
+cc_library(
+    name = "usage_uploader",
+    srcs = ["usage_uploader.cc"],
+    hdrs = ["public/session_upload/usage_uploader.h"],
+    includes = ["public"],
+    deps = [
+        ":session_store",
+        "//maco_firmware/modules/app_state:session_fsm",
+        "//maco_firmware/modules/app_state:system_state",
+        "//maco_firmware/modules/device_config",
+        "//maco_firmware/modules/firebase:firebase_client",
+        "//proto:common_nanopb",
+        "//proto/firebase_rpc:usage_nanopb",
+        "@pigweed//pw_allocator:allocator",
+        "@pigweed//pw_async2:coro",
+        "@pigweed//pw_async2:coro_or_else_task",
+        "@pigweed//pw_async2:dispatcher",
+        "@pigweed//pw_async2:time_provider",
+        "@pigweed//pw_chrono:system_clock",
+        "@pigweed//pw_log",
+        "@pigweed//pw_status",
+    ],
+)
+
+pw_cc_test(
+    name = "session_store_test",
+    srcs = ["session_store_test.cc"],
+    deps = [
+        ":session_store",
+        "@pigweed//pw_kvs:crc16",
+        "@pigweed//pw_kvs:fake_flash",
+    ],
+)
