@@ -82,6 +82,93 @@ inline AmbientEffect AccessDeniedAmbientEffect() {
   );
 }
 
+// Green drains to white from top to bottom during stop/checkout countdown.
+inline AmbientEffect StopPendingAmbientEffect() {
+  auto white = maco::led::RgbwColor{0, 0, 0, 200};
+  auto active_color = maco::led::RgbwColor{0, 180, 0, 0};
+
+  AmbientEffect effect;
+  effect.hotspots[0] = HotspotConfig{
+      .waveform =
+          {
+              .shape = Waveform::Shape::kBreathing,
+              .color = active_color,
+              .period_s = 5.0f,
+              .min_brightness = .3f,
+          },
+      .start_position = kPi,  // anchor at bottom-left
+      .velocity = 0,
+      .radius = kPi * 2,
+      .falloff_shape = 0,
+  };
+
+  // White sweep down the right side (CW from top to bottom)
+  effect.hotspots[1] = HotspotConfig{
+      .waveform = Waveform{.shape = Waveform::Shape::kFixed, .color = white},
+      .start_position = 0,  // top
+      .velocity = 1.1f,     // π/1.1 ≈ 2.85s forward
+      .radius = kPi / 2,
+      .falloff_shape = 2.0f,
+      .sweep_arc = kPi,  // CW half: top → bottom
+      .return_multiplier = 1.0f,
+      .sweep_phase_offset = 0.8f,  // start in return phase → fade in
+  };
+
+  // White sweep down the left side (CCW from top to bottom)
+  effect.hotspots[2] = HotspotConfig{
+      .waveform = Waveform{.shape = Waveform::Shape::kFixed, .color = white},
+      .start_position = 0,  // top
+      .velocity = -1.1f,
+      .radius = kPi / 2,
+      .falloff_shape = 2.0f,
+      .sweep_arc = -kPi,  // CCW half: top → bottom
+      .return_multiplier = 1.0f,
+      .sweep_phase_offset = 0.8f,  // start in return phase → fade in
+  };
+
+  return effect;
+}
+
+// Takeover: white base with green rising from bottom, pushing white up.
+inline AmbientEffect TakeoverPendingAmbientEffect() {
+  auto green = maco::led::RgbwColor{0, 180, 0, 0};
+  auto white = maco::led::RgbwColor{0, 0, 0, 160};
+
+  AmbientEffect effect;
+  // White base (neutral, incoming user)
+  effect.hotspots[0] = HotspotConfig{
+      .waveform = Waveform{.shape = Waveform::Shape::kFixed, .color = white},
+      .start_position = kPi,
+      .velocity = 0,
+      .radius = kPi * 2,
+      .falloff_shape = 0,
+  };
+
+  // Green sweep up the left side (CW from bottom to top)
+  effect.hotspots[1] = HotspotConfig{
+      .waveform = Waveform{.shape = Waveform::Shape::kFixed, .color = green},
+      .start_position = kPi,  // bottom
+      .velocity = 1.1f,
+      .radius = kPi / 2.5f,
+      .falloff_shape = 2.0f,
+      .sweep_arc = kPi,  // CW: bottom → top (left side)
+      .return_multiplier = 0.05f,
+  };
+
+  // Green sweep up the right side (CCW from bottom to top)
+  effect.hotspots[2] = HotspotConfig{
+      .waveform = Waveform{.shape = Waveform::Shape::kFixed, .color = green},
+      .start_position = kPi,  // bottom
+      .velocity = 1.1f,
+      .radius = kPi / 2.5f,
+      .falloff_shape = 2.0f,
+      .sweep_arc = -kPi,  // CCW: bottom → top (right side)
+      .return_multiplier = 0.05f,
+  };
+
+  return effect;
+}
+
 TerminalLedEffects::TerminalLedEffects(
     led_animator::LedAnimatorBase& led,
     app_state::SystemState& system_state,
@@ -118,6 +205,12 @@ void TerminalLedEffects::OnSessionEnded(
 ) {
   session_active_.store(false, std::memory_order_relaxed);
   pending_command_.store(Command::kSessionEnded, std::memory_order_relaxed);
+}
+
+void TerminalLedEffects::OnSessionUiStateChanged(
+    app_state::SessionStateUi state
+) {
+  session_ui_state_.store(state, std::memory_order_relaxed);
 }
 
 // --- TagVerifierObserver ---
@@ -176,41 +269,68 @@ pw::async2::Coro<pw::Status> TerminalLedEffects::Run(
   pending_command_.store(Command::kNone, std::memory_order_relaxed);
   ApplySessionEffect();
 
+  bool pending_effect_active = false;
+  app_state::SessionStateUi pending_effect_state =
+      app_state::SessionStateUi::kNoSession;
+
   while (true) {
     auto cmd =
         pending_command_.exchange(Command::kNone, std::memory_order_relaxed);
 
-    switch (cmd) {
-      case Command::kSessionStarted:
-      case Command::kSessionEnded:
-        ApplySessionEffect();
-        break;
+    // Check if we should show a pending-state LED effect.
+    auto ui_state = session_ui_state_.load(std::memory_order_relaxed);
+    bool is_pending =
+        (ui_state == app_state::SessionStateUi::kStopPending ||
+         ui_state == app_state::SessionStateUi::kCheckoutPending ||
+         ui_state == app_state::SessionStateUi::kTakeoverPending);
 
-      case Command::kTagVerified:
-        // NTAG424 mutual auth succeeded, cloud query starting.
-        // Light, warm yellow: reassuring but not conclusive.
-        led_.SetAmbientEffect(AuthorizingTagAmbientEffect());
-        break;
-
-      case Command::kUnauthorized:
-        // ~2.5 red blinks at 0.6 s period over 1.5 s, then revert.
-        led_.SetAmbientEffect(AccessDeniedAmbientEffect());
-        co_await time_provider_.WaitFor(1500ms);
-        // Only revert here if no newer command arrived during the blink.
-        // If a command is pending it will be picked up on the next iteration.
-        if (pending_command_.load(std::memory_order_relaxed) ==
-            Command::kNone) {
-          ApplySessionEffect();
+    if (is_pending) {
+      // Enter or switch pending effect
+      if (!pending_effect_active || pending_effect_state != ui_state) {
+        pending_effect_active = true;
+        pending_effect_state = ui_state;
+        if (ui_state == app_state::SessionStateUi::kTakeoverPending) {
+          led_.SetAmbientEffect(TakeoverPendingAmbientEffect());
+        } else {
+          led_.SetAmbientEffect(StopPendingAmbientEffect());
         }
-        break;
-
-      case Command::kAuthorized:
-      case Command::kTagRemoved:
+      }
+      // Skip ambient-changing commands while in a pending state
+    } else {
+      if (pending_effect_active) {
+        // Left pending state — revert to session effect
+        pending_effect_active = false;
         ApplySessionEffect();
-        break;
+      }
 
-      case Command::kNone:
-        break;
+      // Process commands normally
+      switch (cmd) {
+        case Command::kSessionStarted:
+        case Command::kSessionEnded:
+          ApplySessionEffect();
+          break;
+
+        case Command::kTagVerified:
+          led_.SetAmbientEffect(AuthorizingTagAmbientEffect());
+          break;
+
+        case Command::kUnauthorized:
+          led_.SetAmbientEffect(AccessDeniedAmbientEffect());
+          co_await time_provider_.WaitFor(1500ms);
+          if (pending_command_.load(std::memory_order_relaxed) ==
+              Command::kNone) {
+            ApplySessionEffect();
+          }
+          break;
+
+        case Command::kAuthorized:
+        case Command::kTagRemoved:
+          ApplySessionEffect();
+          break;
+
+        case Command::kNone:
+          break;
+      }
     }
 
     co_await time_provider_.WaitFor(50ms);

@@ -76,6 +76,11 @@ struct HotspotConfig {
   // direction) always receive zero contribution from this hotspot.
   float sweep_arc = 0.0f;
   float return_multiplier = 0.1f;
+
+  // Initial phase within the sweep cycle (0–1). 0 = start of forward sweep,
+  // values past (t_forward / t_cycle) land in the invisible return phase,
+  // so the hotspot appears to fade in when the next forward sweep begins.
+  float sweep_phase_offset = 0.0f;
 };
 
 /// Configuration for a single button LED.
@@ -321,10 +326,23 @@ class LedAnimator : public LedAnimatorBase, public maco::led::LedFrameRenderer {
       transition.from_configs[h] = current_hotspots_[h];
       transition.from_states[h] = hotspot_states_[h];
       transition.target_configs[h] = new_hotspots[h];
+      float initial_elapsed = new_hotspots[h].phase_offset *
+                              SafePeriod(new_hotspots[h].waveform.period_s);
+      if (new_hotspots[h].sweep_arc != 0.0f &&
+          new_hotspots[h].sweep_phase_offset != 0.0f) {
+        float arc = std::abs(new_hotspots[h].sweep_arc);
+        float speed =
+            std::max(0.0001f, std::abs(new_hotspots[h].velocity));
+        float t_forward = arc / speed;
+        float t_return =
+            std::max(0.0001f, new_hotspots[h].return_multiplier) *
+            (2.0f * kPi / speed);
+        initial_elapsed += new_hotspots[h].sweep_phase_offset *
+                           (t_forward + t_return);
+      }
       transition.target_states[h] = HotspotState{
           .position = new_hotspots[h].start_position,
-          .elapsed_s = new_hotspots[h].phase_offset *
-                       SafePeriod(new_hotspots[h].waveform.period_s),
+          .elapsed_s = initial_elapsed,
       };
     }
     transition.progress = 0.0f;
