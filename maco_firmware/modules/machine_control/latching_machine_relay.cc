@@ -3,12 +3,12 @@
 
 #define PW_LOG_MODULE_NAME "relay"
 
-#include "maco_firmware/modules/machine_relay/latching_machine_relay.h"
+#include "maco_firmware/modules/machine_control/latching_machine_relay.h"
 
 #include "gpio_hal.h"
 #include "pw_log/log.h"
 
-namespace maco::machine_relay {
+namespace maco::machine_control {
 
 using namespace std::chrono_literals;
 
@@ -88,4 +88,4 @@ pw::async2::Coro<pw::Status> LatchingMachineRelay::DoSetState(
   co_return pw::OkStatus();
 }
 
-}  // namespace maco::machine_relay
+}  // namespace maco::machine_control

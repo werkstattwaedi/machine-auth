@@ -1,0 +1,25 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "mock_machine_toggle",
+    hdrs = ["mock_machine_toggle.h"],
+    deps = [
+        "//maco_firmware/modules/machine_control:machine_toggle",
+        "@pigweed//pw_async2:coro",
+        "@pigweed//pw_status",
+    ],
+)
+
+cc_library(
+    name = "mock_machine_sensor",
+    hdrs = ["mock_machine_sensor.h"],
+    deps = [
+        "//maco_firmware/modules/machine_control:machine_sensor",
+        "@pigweed//pw_async2:dispatcher",
+    ],
+)

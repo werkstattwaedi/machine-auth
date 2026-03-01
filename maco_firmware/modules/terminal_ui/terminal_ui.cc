@@ -36,6 +36,12 @@ TerminalUi::TerminalUi(display::Display& display,
                      controller_->GetSnapshot(snapshot);
                    }
                    system_state_.GetSnapshot(snapshot.system);
+                   if (machine_controller_) {
+                     snapshot.machine.toggle_enabled =
+                         machine_controller_->IsToggleEnabled();
+                     snapshot.machine.machine_running =
+                         machine_controller_->IsMachineRunning();
+                   }
                  },
                  &animator_) {
   display_.SetInitCallback([this]() {
@@ -44,6 +50,11 @@ TerminalUi::TerminalUi(display::Display& display,
       PW_LOG_ERROR("TerminalUi init failed");
     }
   });
+}
+
+void TerminalUi::SetMachineController(
+    machine_control::MachineController* controller) {
+  machine_controller_ = controller;
 }
 
 void TerminalUi::SetController(app_state::SessionController* controller) {

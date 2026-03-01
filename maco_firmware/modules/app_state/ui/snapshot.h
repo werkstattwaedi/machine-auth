@@ -83,12 +83,19 @@ struct SystemStateSnapshot {
   pw::InlineString<64> machine_label;
 };
 
+// Machine control state for UI display
+struct MachineControlSnapshot {
+  bool toggle_enabled = false;
+  bool machine_running = false;
+};
+
 // Combined snapshot for the dev app UI thread.
-// Composed from tag verification + session + system state.
+// Composed from tag verification + session + system + machine control state.
 struct AppStateSnapshot {
   TagVerificationSnapshot verification;
   SessionSnapshotUi session;
   SystemStateSnapshot system;
+  MachineControlSnapshot machine;
 };
 
 }  // namespace maco::app_state

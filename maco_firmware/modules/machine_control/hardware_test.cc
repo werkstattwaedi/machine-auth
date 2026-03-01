@@ -16,7 +16,7 @@
 #define PW_LOG_MODULE_NAME "relay_test"
 
 // Pigweed headers first (avoid macro pollution from HAL)
-#include "maco_firmware/modules/machine_relay/latching_machine_relay.h"
+#include "maco_firmware/modules/machine_control/latching_machine_relay.h"
 #include "pw_allocator/testing.h"
 #include "pw_async2/basic_dispatcher.h"
 #include "pw_async2/coro.h"
@@ -38,8 +38,8 @@ constexpr hal_pin_t kPinMachineRelay = A1;
 pw::allocator::test::AllocatorForTest<1024> test_allocator;
 
 // Get singleton relay instance
-maco::machine_relay::LatchingMachineRelay& GetRelay() {
-  static maco::machine_relay::LatchingMachineRelay relay(
+maco::machine_control::LatchingMachineRelay& GetRelay() {
+  static maco::machine_control::LatchingMachineRelay relay(
       kPinMachineRelay, pw::async2::GetSystemTimeProvider());
   return relay;
 }

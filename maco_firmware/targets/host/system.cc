@@ -21,7 +21,7 @@
 #include "maco_firmware/modules/led/led.h"
 #include "maco_firmware/modules/led_animator/led_animator.h"
 #include "maco_firmware/modules/buzzer/mock/mock_buzzer.h"
-#include "maco_firmware/modules/machine_relay/mock/mock_machine_relay.h"
+#include "maco_firmware/modules/machine_control/mock/mock_machine_toggle.h"
 #include "maco_firmware/modules/nfc_reader/mock/mock_nfc_reader.h"
 #include "maco_firmware/modules/nfc_reader/mock/nfc_mock_service.h"
 #include "maco_firmware/services/maco_service.h"
@@ -75,14 +75,6 @@ void PwSystemThread() {
       pw::thread::stl::Options(),
       pw::system::GetWriter(),
       pw::thread::stl::Options());
-
-  // Register RPC services
-  static maco::MacoService maco_service;
-  pw::System().rpc_server().RegisterService(maco_service);
-
-  static pw::metric::MetricService metric_service(pw::metric::global_metrics,
-                                                  pw::metric::global_groups);
-  pw::System().rpc_server().RegisterService(metric_service);
 
   // Register NFC Mock Service (host-only)
   auto& mock_reader =
@@ -290,9 +282,9 @@ maco::secrets::DeviceSecrets& GetDeviceSecrets() {
   return mock_secrets;
 }
 
-maco::machine_relay::MachineRelay& GetMachineRelay() {
-  static maco::machine_relay::MockMachineRelay relay;
-  return relay;
+maco::machine_control::MachineToggle& GetMachineToggle() {
+  static maco::machine_control::MockMachineToggle toggle;
+  return toggle;
 }
 
 maco::buzzer::Buzzer& GetBuzzer() {

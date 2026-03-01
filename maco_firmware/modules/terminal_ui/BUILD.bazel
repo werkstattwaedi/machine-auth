@@ -97,6 +97,7 @@ cc_library(
         ":ui_action",
         "//maco_firmware/modules/app_state:session_controller",
         "//maco_firmware/modules/app_state:system_state",
+        "//maco_firmware/modules/machine_control:machine_controller",
         "//maco_firmware/modules/app_state/ui:snapshot",
         "//maco_firmware/modules/display",
         "//maco_firmware/modules/led_animator:led_animator",

@@ -35,9 +35,9 @@ namespace maco::secrets {
 class DeviceSecrets;
 }  // namespace maco::secrets
 
-namespace maco::machine_relay {
-class MachineRelay;
-}  // namespace maco::machine_relay
+namespace maco::machine_control {
+class MachineToggle;
+}  // namespace maco::machine_control
 
 namespace maco::buzzer {
 class Buzzer;
@@ -131,10 +131,10 @@ pw::random::RandomGenerator& GetRandomGenerator();
 /// Host: Mock implementation for testing
 maco::secrets::DeviceSecrets& GetDeviceSecrets();
 
-/// Returns the platform-specific machine relay controller.
+/// Returns the platform-specific machine toggle controller.
 /// P2: LatchingMachineRelay with HAL GPIO
-/// Host: MockMachineRelay for simulation
-maco::machine_relay::MachineRelay& GetMachineRelay();
+/// Host: MockMachineToggle for simulation
+maco::machine_control::MachineToggle& GetMachineToggle();
 
 /// Returns the platform-specific buzzer controller.
 /// P2: ToneBuzzer with HAL PWM tone

@@ -6,6 +6,7 @@
 #include <atomic>
 
 #include "maco_firmware/modules/app_state/session_controller.h"
+#include "maco_firmware/modules/machine_control/machine_controller.h"
 #include "maco_firmware/modules/app_state/system_state.h"
 #include "maco_firmware/modules/app_state/ui/snapshot.h"
 #include "maco_firmware/modules/display/display.h"
@@ -32,6 +33,9 @@ class TerminalUi {
              app_state::SystemState& system_state,
              led_animator::LedAnimatorBase& animator);
 
+  /// Set the machine controller for snapshot composition.
+  void SetMachineController(machine_control::MachineController* controller);
+
   /// Set the session controller and signal that the system is ready.
   /// Ends the splash screen and transitions to MainScreen.
   /// May be called with nullptr (e.g. device not provisioned).
@@ -47,6 +51,7 @@ class TerminalUi {
   app_state::SystemState& system_state_;
   led_animator::LedAnimatorBase& animator_;
   app_state::SessionController* controller_ = nullptr;
+  machine_control::MachineController* machine_controller_ = nullptr;
 
   status_bar::StatusBar status_bar_;
   ui::AppShell<app_state::AppStateSnapshot> app_shell_;

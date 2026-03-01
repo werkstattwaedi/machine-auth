@@ -6,32 +6,32 @@
 #include "pw_async2/coro.h"
 #include "pw_status/status.h"
 
-namespace maco::machine_relay {
+namespace maco::machine_control {
 
-/// Controls the power relay for the machine tool.
+/// Controls the power toggle for the machine tool.
 ///
-/// Implementations handle the specific relay hardware (latching, standard, etc.)
-/// The relay enables/disables power to the controlled machine equipment.
+/// Implementations handle the specific hardware (relay, TCP/IP, I2C, etc.)
+/// The toggle enables/disables power to the controlled machine equipment.
 ///
 /// Typical usage (within a coroutine):
 /// @code
-///   auto& relay = maco::system::GetMachineRelay();
-///   relay.Init();
+///   auto& toggle = maco::system::GetMachineToggle();
+///   toggle.Init();
 ///
 ///   // Enable machine power
-///   auto status = co_await relay.Enable(cx);
+///   auto status = co_await toggle.Enable(cx);
 ///   if (!status.ok()) { /* handle error */ }
 ///
 ///   // ... machine in use ...
 ///
 ///   // Disable machine power
-///   status = co_await relay.Disable(cx);
+///   status = co_await toggle.Disable(cx);
 /// @endcode
-class MachineRelay {
+class MachineToggle {
  public:
-  virtual ~MachineRelay() = default;
+  virtual ~MachineToggle() = default;
 
-  /// Initialize the relay and read current state.
+  /// Initialize the toggle and read current state.
   /// @return OkStatus on success, error otherwise
   virtual pw::Status Init() = 0;
 
@@ -49,4 +49,4 @@ class MachineRelay {
   virtual pw::async2::Coro<pw::Status> Disable(pw::async2::CoroContext& cx) = 0;
 };
 
-}  // namespace maco::machine_relay
+}  // namespace maco::machine_control

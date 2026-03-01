@@ -110,7 +110,7 @@ cc_library(
         "//maco_firmware/modules/led",
         "//maco_firmware/modules/led_animator:led_animator",
         "//maco_firmware/modules/buzzer/mock:mock_buzzer",
-        "//maco_firmware/modules/machine_relay/mock:mock_machine_relay",
+        "//maco_firmware/modules/machine_control/mock:mock_machine_toggle",
         "//maco_firmware/modules/nfc_reader/mock:mock_nfc_reader",
         "//maco_firmware/modules/nfc_reader/mock:nfc_mock_service",
         "//maco_firmware/modules/device_secrets:device_secrets_mock",

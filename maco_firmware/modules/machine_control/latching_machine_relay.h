@@ -5,13 +5,13 @@
 
 #include <chrono>
 
-#include "maco_firmware/modules/machine_relay/machine_relay.h"
+#include "maco_firmware/modules/machine_control/machine_toggle.h"
 #include "pinmap_hal.h"
 #include "pw_async2/coro.h"
 #include "pw_async2/system_time_provider.h"
 #include "pw_status/status.h"
 
-namespace maco::machine_relay {
+namespace maco::machine_control {
 
 /// Latching relay implementation for P2 hardware.
 ///
@@ -20,7 +20,7 @@ namespace maco::machine_relay {
 /// 2. To toggle: OUTPUT mode -> write value -> wait 50ms -> INPUT mode -> verify
 ///
 /// Uses async wait via coroutines to avoid blocking the cooperative scheduler.
-class LatchingMachineRelay : public MachineRelay {
+class LatchingMachineRelay : public MachineToggle {
  public:
   static constexpr std::chrono::milliseconds kPulseDuration{50};
 
@@ -47,4 +47,4 @@ class LatchingMachineRelay : public MachineRelay {
   bool initialized_ = false;
 };
 
-}  // namespace maco::machine_relay
+}  // namespace maco::machine_control

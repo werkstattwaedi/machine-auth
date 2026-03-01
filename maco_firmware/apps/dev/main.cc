@@ -14,11 +14,13 @@
 #include "maco_firmware/modules/display/display_metrics.h"
 #include "maco_firmware/modules/led_animator/button_effects.h"
 #include "maco_firmware/modules/led_animator/nfc_effects.h"
-#include "maco_firmware/modules/machine_relay/relay_controller.h"
+#include "maco_firmware/modules/machine_control/default_machine_sensor.h"
+#include "maco_firmware/modules/machine_control/machine_controller.h"
 #include "maco_firmware/modules/nfc_reader/nfc_reader.h"
 #include "maco_firmware/modules/stack_monitor/stack_monitor.h"
 #include "maco_firmware/modules/terminal_led_effects/terminal_led_effects.h"
 #include "maco_firmware/modules/terminal_ui/terminal_ui.h"
+#include "maco_firmware/services/maco_service.h"
 #include "maco_firmware/system/system.h"
 #include "pw_async2/system_time_provider.h"
 #include "pw_log/log.h"
@@ -82,15 +84,28 @@ void AppInit() {
 
   // Session state machine and observers
   static maco::app_state::SessionFsm session_fsm;
-  auto& machine_relay = maco::system::GetMachineRelay();
-  PW_CHECK_OK(machine_relay.Init());
-  static maco::machine_relay::RelayController relay_controller(
-      machine_relay,
+  auto& machine_toggle = maco::system::GetMachineToggle();
+  PW_CHECK_OK(machine_toggle.Init());
+
+  static maco::machine_control::MachineController machine_controller(
+      machine_toggle,
       pw::async2::GetSystemTimeProvider(),
       pw::System().allocator()
   );
-  session_fsm.AddObserver(&relay_controller);
-  relay_controller.Start(pw::System().dispatcher());
+
+  static maco::machine_control::DefaultMachineSensor default_sensor(
+      machine_toggle,
+      pw::async2::GetSystemTimeProvider(),
+      pw::System().allocator()
+  );
+  default_sensor.SetCallback([](bool running) {
+    machine_controller.OnMachineRunning(running);
+  });
+
+  session_fsm.AddObserver(&machine_controller);
+  machine_controller.Start(pw::System().dispatcher());
+  default_sensor.Start(pw::System().dispatcher());
+  terminal_ui.SetMachineController(&machine_controller);
   session_fsm.AddObserver(&terminal_led_effects);
 
   // Get and start NFC reader (init happens asynchronously)
@@ -134,6 +149,13 @@ void AppInit() {
     terminal_ui.SetController(&controller);
   }
 
+  // Register RPC services
+  static maco::MacoService maco_service;
+  pw::System().rpc_server().RegisterService(maco_service);
+
+  static pw::metric::MetricService metric_service(pw::metric::global_metrics,
+                                                  pw::metric::global_groups);
+  pw::System().rpc_server().RegisterService(metric_service);
   system_state.SetReady();
 
   maco::StartStackMonitor(

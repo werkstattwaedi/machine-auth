@@ -33,7 +33,7 @@
 #include "maco_firmware/modules/gateway/p2_gateway_client.h"
 #include "maco_firmware/modules/led/led.h"
 #include "maco_firmware/modules/led_animator/led_animator.h"
-#include "maco_firmware/modules/machine_relay/latching_machine_relay.h"
+#include "maco_firmware/modules/machine_control/latching_machine_relay.h"
 #include "maco_firmware/services/maco_service.h"
 #include "maco_firmware/targets/p2/hardware_random.h"
 #include "maco_firmware/targets/p2/p2_system_monitor.h"
@@ -334,8 +334,8 @@ maco::secrets::DeviceSecrets& GetDeviceSecrets() {
   return GetDeviceSecretsEeprom();
 }
 
-maco::machine_relay::MachineRelay& GetMachineRelay() {
-  static maco::machine_relay::LatchingMachineRelay relay(
+maco::machine_control::MachineToggle& GetMachineToggle() {
+  static maco::machine_control::LatchingMachineRelay relay(
       kPinMachineRelay, pw::async2::GetSystemTimeProvider()
   );
   return relay;

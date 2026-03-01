@@ -6,19 +6,19 @@
 #include <cstddef>
 #include <optional>
 
-#include "maco_firmware/modules/machine_relay/machine_relay.h"
+#include "maco_firmware/modules/machine_control/machine_toggle.h"
 #include "pw_async2/coro.h"
 #include "pw_status/status.h"
 
-namespace maco::machine_relay {
+namespace maco::machine_control {
 
-/// Mock relay implementation for host simulator and unit tests.
+/// Mock toggle implementation for host simulator and unit tests.
 ///
 /// Provides instant state changes with no delays. Supports error injection
 /// for testing error handling paths.
-class MockMachineRelay : public MachineRelay {
+class MockMachineToggle : public MachineToggle {
  public:
-  MockMachineRelay() = default;
+  MockMachineToggle() = default;
 
   pw::Status Init() override {
     initialized_ = true;
@@ -82,4 +82,4 @@ class MockMachineRelay : public MachineRelay {
   std::optional<pw::Status> next_error_;
 };
 
-}  // namespace maco::machine_relay
+}  // namespace maco::machine_control
