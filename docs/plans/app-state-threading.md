@@ -8,7 +8,7 @@ Implement thread-safe application state management using `pw::sync::Mutex` with 
 
 **Module:** `modules/app_state/` - Central firmware state management
 
-**Validation:** Modify `nfc_test_screen.cc` to read state from AppState (UI thread) instead of directly from NfcReader (cross-thread).
+**Validation:** Validated via `main_screen.cc` which reads state from AppState (UI thread) instead of directly from NfcReader (cross-thread). (Originally validated with `nfc_test_screen.cc`, since removed.)
 
 ## Architecture
 

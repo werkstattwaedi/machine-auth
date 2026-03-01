@@ -574,7 +574,7 @@ UPDATE_GOLDENS=1 bazel run //path/to:screen_test    # Update golden images
 
 **On failure**: Diff images are saved to `/tmp/` showing red pixels where differences occur.
 
-**Example**: See `apps/dev/screens/nfc_test_screen_test.cc` and `apps/dev/screens/testdata/*.png`.
+**Example**: See `modules/terminal_ui/screens/main_screen_test.cc` and `modules/terminal_ui/screens/testdata/*.png`.
 
 ## Codestyle
 
