@@ -30,11 +30,12 @@
   "usage_machine": {
     "{usageId}": {
       "userId": "DocumentReference", // DocumentReference to /users/{userId}
+      "authenticationId": "DocumentReference | null", // DocumentReference to /authentications/{authId}, set by machine upload
       "machine": "DocumentReference", // DocumentReference to /machine/{machineId}
-      "workshop": "string", // Workshop ID (e.g., "holz", "metall")
+      "workshop": "string | null", // Workshop ID (e.g., "holz", "metall"), null for machine-uploaded records
       "checkIn": "timestamp",
       "checkOut": "timestamp | null", // null if still active
-      "checkOutReason": "string", // JSON representation of CheckOutReason proto
+      "checkOutReason": "string | null", // JSON representation of CheckOutReason proto
       "checkout": "DocumentReference | null" // DocumentReference to /checkouts/{checkoutId}, null if unpaid
     }
   },
