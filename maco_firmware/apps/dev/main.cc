@@ -24,6 +24,8 @@
 #include "maco_firmware/system/system.h"
 #include "pw_async2/system_time_provider.h"
 #include "pw_log/log.h"
+#include "pw_metric/global.h"
+#include "pw_metric/metric_service_nanopb.h"
 #include "pw_system/system.h"
 
 namespace {

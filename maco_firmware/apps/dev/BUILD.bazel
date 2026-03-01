@@ -56,6 +56,7 @@ DEV_DEPS = [
     "@pigweed//pw_log",
     "@pigweed//pw_system:async",
     "@pigweed//pw_metric:global",
+    "@pigweed//pw_metric:metric_service_nanopb",
     # Backend implementations required for linking
     "@pigweed//pw_assert:assert_backend_impl",
     "@pigweed//pw_assert:check_backend_impl",
@@ -95,10 +96,13 @@ particle_firmware(
         "//maco_firmware/modules/led_animator:button_effects",
         "//maco_firmware/modules/led_animator:nfc_effects",
         "//maco_firmware/modules/terminal_led_effects",
+        "//maco_firmware/services:maco_service",
         "//maco_firmware/system",
         "//maco_firmware/system:headers",
         "@pigweed//pw_async2:system_time_provider",
         "@pigweed//pw_log",
+        "@pigweed//pw_metric:global",
+        "@pigweed//pw_metric:metric_service_nanopb",
         "@pigweed//pw_system:async",
         # Tokenized log handler (provides pw_log_tokenized_HandleLog)
         "@pigweed//pw_system:log_backend",

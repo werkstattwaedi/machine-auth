@@ -178,7 +178,6 @@ cc_library(
         "//maco_firmware/modules/device_secrets:device_secrets_eeprom",
         "//maco_firmware/modules/buzzer:tone_buzzer",
         "//maco_firmware/modules/machine_control:latching_machine_relay",
-        "//maco_firmware/services:maco_service",
         "//maco_firmware/system:headers",
         "@particle_bazel//:device_os_headers",
         "@particle_bazel//pb_cloud:pb_ledger_particle_backend",

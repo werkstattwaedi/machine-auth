@@ -31,6 +31,7 @@ from pw_hdlc import rpc
 from pw_log.log_decoder import timestamp_parser_ms_since_boot
 from pw_stream import stream_readers
 from pw_tokenizer import detokenize
+from pw_metric import metric_parser
 from pw_system.device import Device as PwSystemDevice
 from pw_system.device_connection import (
     add_device_args,
@@ -255,6 +256,12 @@ class Device(PwSystemDevice):
     def serial_suffix(self) -> str | None:
         """Last 4 digits of device serial number."""
         return self._serial_suffix
+
+    def metrics(self) -> dict:
+        """Get all metrics, detokenized into a readable dict."""
+        return metric_parser.parse_metrics(
+            self.rpcs, self.detokenizer, self.rpc_timeout_s
+        )
 
     def echo(self, data: bytes) -> bytes:
         """Echo data back from the device."""
