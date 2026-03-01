@@ -102,6 +102,9 @@ pw::Status MainScreen::OnActivate() {
   // guard (new_state != visual_state_) skips the initial kIdle→kIdle case.
   SetVisualState(visual_state_);
 
+  // Widgets were recreated — force Watched values to re-push on next OnUpdate()
+  machine_label_.MarkDirty();
+
   PW_LOG_INFO("MainScreen activated");
   return pw::OkStatus();
 }

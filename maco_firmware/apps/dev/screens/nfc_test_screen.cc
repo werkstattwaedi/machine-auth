@@ -42,6 +42,9 @@ pw::Status NfcTestScreen::OnActivate() {
   lv_obj_set_style_text_color(instruction, lv_color_hex(0x888888), LV_PART_MAIN);
   lv_obj_align(instruction, LV_ALIGN_BOTTOM_MID, 0, -80);
 
+  // Widgets were recreated — force Watched values to re-push on next OnUpdate()
+  state_watched_.MarkDirty();
+
   PW_LOG_INFO("NfcTestScreen activated");
   return pw::OkStatus();
 }

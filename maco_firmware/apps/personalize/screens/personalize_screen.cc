@@ -45,6 +45,9 @@ pw::Status PersonalizeScreen::OnActivate() {
                               LV_PART_MAIN);
   lv_obj_align(instruction, LV_ALIGN_BOTTOM_MID, 0, -80);
 
+  // Widgets were recreated — force Watched values to re-push on next OnUpdate()
+  state_watched_.MarkDirty();
+
   PW_LOG_INFO("PersonalizeScreen activated");
   return pw::OkStatus();
 }

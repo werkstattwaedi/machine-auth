@@ -396,6 +396,23 @@ display_ = lv_lcd_generic_mipi_create(
 
 Use `[[maybe_unused]]` for unused lambda parameters.
 
+### `ui::Watched<T>` and Screen Lifecycle
+
+`Watched<T>` (`modules/ui/data_binding.h`) skips LVGL updates when the value hasn't changed. But screen widgets are destroyed in `OnDeactivate()` and recreated in `OnActivate()` — the new widgets start empty while `Watched` still holds the old value and won't re-push it.
+
+**Rule: Call `MarkDirty()` on every `Watched` member in `OnActivate()`.**
+
+```cpp
+pw::Status MyScreen::OnActivate() {
+  // ... create LVGL widgets ...
+
+  // Force Watched values to re-push to the new widgets on next OnUpdate()
+  my_label_.MarkDirty();
+  my_state_.MarkDirty();
+  return pw::OkStatus();
+}
+```
+
 ## Unit Testing
 
 ### Host Unit Tests (`pw_cc_test`)
