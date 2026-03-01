@@ -82,8 +82,10 @@ void AppInit() {
 
   // Session state machine and observers
   static maco::app_state::SessionFsm session_fsm;
+  auto& machine_relay = maco::system::GetMachineRelay();
+  PW_CHECK_OK(machine_relay.Init());
   static maco::machine_relay::RelayController relay_controller(
-      maco::system::GetMachineRelay(),
+      machine_relay,
       pw::async2::GetSystemTimeProvider(),
       pw::System().allocator()
   );
