@@ -27,7 +27,8 @@ struct SessionStateId {
     kRunning = 2,       // Default child of Active
     kCheckoutPending = 3,
     kTakeoverPending = 4,
-    kNumberOfStates = 5,
+    kStopPending = 5,
+    kNumberOfStates = 6,
   };
 };
 
@@ -69,6 +70,9 @@ class SessionObserver {
   virtual void OnSessionStarted(const SessionInfo& session) = 0;
   virtual void OnSessionEnded(const SessionInfo& session,
                               const MachineUsage& usage) = 0;
+  // Called when the session UI state changes (e.g. Running → StopPending).
+  // Default no-op so existing observers don't need to implement it.
+  virtual void OnSessionUiStateChanged(SessionStateUi /*state*/) {}
 };
 
 // --- FSM ID ---
@@ -77,8 +81,9 @@ inline constexpr etl::message_router_id_t kSessionFsmId = 0;
 
 // --- Confirmation timeout ---
 
-inline constexpr auto kConfirmationTimeout = std::chrono::seconds(15);
-inline constexpr auto kHoldDuration = std::chrono::seconds(5);
+inline constexpr auto kAutoConfirmDuration = std::chrono::seconds(3);
+inline constexpr auto kHoldDuration = std::chrono::seconds(3);
+inline constexpr auto kTakeoverTimeout = std::chrono::seconds(10);
 
 // --- Forward declaration of FSM context ---
 
@@ -171,6 +176,23 @@ class TakeoverPending
   etl::fsm_state_id_t ConfirmTakeover();
 };
 
+/// Child of Active: UI stop button pressed, awaiting auto-confirm countdown.
+class StopPending
+    : public etl::fsm_state<SessionFsm, StopPending,
+                            SessionStateId::kStopPending,
+                            session_event::UiCancel, session_event::Timeout,
+                            session_event::StopSession,
+                            session_event::UserAuthorized> {
+ public:
+  etl::fsm_state_id_t on_event(const session_event::UiCancel&);
+  etl::fsm_state_id_t on_event(const session_event::Timeout&);
+  etl::fsm_state_id_t on_event(const session_event::StopSession&);
+  etl::fsm_state_id_t on_event(const session_event::UserAuthorized&);
+  etl::fsm_state_id_t on_event_unknown(const etl::imessage&) {
+    return No_State_Change;
+  }
+};
+
 // --- SessionFsm ---
 //
 // Threading model:
@@ -236,18 +258,22 @@ class SessionFsm : public etl::hfsm, public TagVerifierObserver {
   bool tag_present_ = false;
   pw::chrono::SystemClock::time_point tag_present_since_;
 
+  // Tracks last notified UI state for change detection (main thread only)
+  SessionStateUi last_notified_ui_state_ = SessionStateUi::kNoSession;
+
   // State instances
   NoSession no_session_;
   Active active_;
   Running running_;
   CheckoutPending checkout_pending_;
   TakeoverPending takeover_pending_;
+  StopPending stop_pending_;
 
   // State list for ETL FSM
   etl::ifsm_state* state_list_[SessionStateId::kNumberOfStates];
 
   // Child state list for Active parent
-  etl::ifsm_state* active_children_[3];
+  etl::ifsm_state* active_children_[4];
 
   mutable pw::sync::Mutex snapshot_mutex_;
   SessionSnapshotUi snapshot_ PW_GUARDED_BY(snapshot_mutex_);

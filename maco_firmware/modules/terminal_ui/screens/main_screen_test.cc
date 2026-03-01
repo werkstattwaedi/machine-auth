@@ -125,5 +125,119 @@ TEST_F(MainScreenTest, StopSessionAction) {
   EXPECT_EQ(last_action, UiAction::kStopSession);
 }
 
+// --- Pending state tests ---
+
+TEST_F(MainScreenTest, CheckoutPendingState) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.session.state = app_state::SessionStateUi::kCheckoutPending;
+  snapshot.session.session_user_label = "Simon Flepp";
+  snapshot.session.pending_deadline =
+      pw::chrono::SystemClock::now() + std::chrono::seconds(3);
+  screen_->OnUpdate(snapshot);
+  harness_.RenderFrame();
+
+  EXPECT_TRUE(harness_.CompareToGolden(
+      "maco_firmware/modules/terminal_ui/testdata/main_checkout_pending.png",
+      "/tmp/main_checkout_pending_diff.png"));
+}
+
+TEST_F(MainScreenTest, CheckoutPendingButtonConfig) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.session.state = app_state::SessionStateUi::kCheckoutPending;
+  screen_->OnUpdate(snapshot);
+
+  auto config = screen_->GetButtonConfig();
+  EXPECT_TRUE(config.ok.label.empty());
+  EXPECT_EQ(config.cancel.label, "Abbrechen");
+  EXPECT_EQ(config.cancel.bg_color, theme::kColorBtnRed);
+}
+
+TEST_F(MainScreenTest, CheckoutPendingScreenStyle) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.session.state = app_state::SessionStateUi::kCheckoutPending;
+  screen_->OnUpdate(snapshot);
+
+  auto style = screen_->GetScreenStyle();
+  EXPECT_EQ(style.bg_color, theme::kColorGreen);
+}
+
+TEST_F(MainScreenTest, TakeoverPendingState) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.session.state = app_state::SessionStateUi::kTakeoverPending;
+  snapshot.session.session_user_label = "Simon Flepp";
+  snapshot.session.pending_user_label = "Bob";
+  snapshot.session.pending_deadline =
+      pw::chrono::SystemClock::now() + std::chrono::seconds(10);
+  screen_->OnUpdate(snapshot);
+  harness_.RenderFrame();
+
+  EXPECT_TRUE(harness_.CompareToGolden(
+      "maco_firmware/modules/terminal_ui/testdata/main_takeover_pending.png",
+      "/tmp/main_takeover_pending_diff.png"));
+}
+
+TEST_F(MainScreenTest, TakeoverPendingScreenStyle) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.session.state = app_state::SessionStateUi::kTakeoverPending;
+  screen_->OnUpdate(snapshot);
+
+  auto style = screen_->GetScreenStyle();
+  EXPECT_EQ(style.bg_color, theme::kColorWhiteBg);
+}
+
+TEST_F(MainScreenTest, StopPendingState) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.session.state = app_state::SessionStateUi::kStopPending;
+  snapshot.session.session_user_label = "Simon Flepp";
+  snapshot.session.pending_deadline =
+      pw::chrono::SystemClock::now() + std::chrono::seconds(3);
+  screen_->OnUpdate(snapshot);
+  harness_.RenderFrame();
+
+  EXPECT_TRUE(harness_.CompareToGolden(
+      "maco_firmware/modules/terminal_ui/testdata/main_stop_pending.png",
+      "/tmp/main_stop_pending_diff.png"));
+}
+
+TEST_F(MainScreenTest, StopPendingButtonConfig) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.session.state = app_state::SessionStateUi::kStopPending;
+  screen_->OnUpdate(snapshot);
+
+  auto config = screen_->GetButtonConfig();
+  EXPECT_TRUE(config.ok.label.empty());
+  EXPECT_EQ(config.cancel.label, "Abbrechen");
+  EXPECT_EQ(config.cancel.bg_color, theme::kColorBtnRed);
+}
+
+TEST_F(MainScreenTest, StopPendingScreenStyle) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.session.state = app_state::SessionStateUi::kStopPending;
+  screen_->OnUpdate(snapshot);
+
+  auto style = screen_->GetScreenStyle();
+  EXPECT_EQ(style.bg_color, theme::kColorGreen);
+}
+
+TEST_F(MainScreenTest, CancelActionFromStopPending) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.session.state = app_state::SessionStateUi::kStopPending;
+  screen_->OnUpdate(snapshot);
+
+  bool handled = screen_->OnEscapePressed();
+  EXPECT_TRUE(handled);
+  EXPECT_EQ(last_action, UiAction::kCancel);
+}
+
+TEST_F(MainScreenTest, CancelActionFromCheckoutPending) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.session.state = app_state::SessionStateUi::kCheckoutPending;
+  screen_->OnUpdate(snapshot);
+
+  bool handled = screen_->OnEscapePressed();
+  EXPECT_TRUE(handled);
+  EXPECT_EQ(last_action, UiAction::kCancel);
+}
+
 }  // namespace
 }  // namespace maco::terminal_ui

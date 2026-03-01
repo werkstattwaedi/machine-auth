@@ -27,7 +27,14 @@ class MainScreen : public ui::Screen<app_state::AppStateSnapshot> {
   ui::ScreenStyle GetScreenStyle() const override;
 
  private:
-  enum class VisualState { kIdle, kActive, kDenied };
+  enum class VisualState {
+    kIdle,
+    kActive,
+    kDenied,
+    kCheckoutPending,
+    kTakeoverPending,
+    kStopPending,
+  };
 
   void SetVisualState(VisualState state);
   void HideAllWidgets();
@@ -48,6 +55,10 @@ class MainScreen : public ui::Screen<app_state::AppStateSnapshot> {
   // Denied widgets
   lv_obj_t* denied_icon_ = nullptr;
   lv_obj_t* denied_label_ = nullptr;
+
+  // Pending widgets (checkout, takeover, stop)
+  lv_obj_t* pending_title_label_ = nullptr;
+  lv_obj_t* countdown_label_ = nullptr;
 };
 
 }  // namespace maco::terminal_ui

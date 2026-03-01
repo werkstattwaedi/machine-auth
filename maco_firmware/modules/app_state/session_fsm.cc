@@ -18,13 +18,15 @@ SessionFsm::SessionFsm() : etl::hfsm(kSessionFsmId) {
   state_list_[SessionStateId::kRunning] = &running_;
   state_list_[SessionStateId::kCheckoutPending] = &checkout_pending_;
   state_list_[SessionStateId::kTakeoverPending] = &takeover_pending_;
+  state_list_[SessionStateId::kStopPending] = &stop_pending_;
 
   // Set up hierarchy: Active is parent of Running, CheckoutPending,
-  // TakeoverPending. First child added becomes the default child.
+  // TakeoverPending, StopPending. First child added becomes the default child.
   active_children_[0] = &running_;
   active_children_[1] = &checkout_pending_;
   active_children_[2] = &takeover_pending_;
-  active_.set_child_states(active_children_, 3);
+  active_children_[3] = &stop_pending_;
+  active_.set_child_states(active_children_, 4);
 
   set_states(state_list_, SessionStateId::kNumberOfStates);
   start();
@@ -88,6 +90,8 @@ SessionStateUi MapStateId(etl::fsm_state_id_t id) {
       return SessionStateUi::kCheckoutPending;
     case SessionStateId::kTakeoverPending:
       return SessionStateUi::kTakeoverPending;
+    case SessionStateId::kStopPending:
+      return SessionStateUi::kStopPending;
     default:
       return SessionStateUi::kNoSession;
   }
@@ -95,8 +99,18 @@ SessionStateUi MapStateId(etl::fsm_state_id_t id) {
 }  // namespace
 
 void SessionFsm::SyncSnapshot() {
+  SessionStateUi new_ui_state = MapStateId(get_state_id());
+
+  // Notify observers on UI state change (main thread only, before lock)
+  if (new_ui_state != last_notified_ui_state_) {
+    last_notified_ui_state_ = new_ui_state;
+    for (size_t i = 0; i < observer_count_; ++i) {
+      observers_[i]->OnSessionUiStateChanged(new_ui_state);
+    }
+  }
+
   std::lock_guard lock(snapshot_mutex_);
-  snapshot_.state = MapStateId(get_state_id());
+  snapshot_.state = new_ui_state;
   snapshot_.session_user_label = active_session.user_label;
   snapshot_.pending_user_label = pending_session.user_label;
   snapshot_.pending_since = pending_since;
@@ -168,9 +182,12 @@ void Active::on_exit_state() {
 
 etl::fsm_state_id_t Active::on_event(const session_event::StopSession&) {
   auto& ctx = get_fsm_context();
+  auto now = pw::chrono::SystemClock::now();
+  ctx.pending_since = now;
+  ctx.pending_deadline = now + kAutoConfirmDuration;
   ctx.checkout_reason = CheckoutReason::kUiCheckout;
-  PW_LOG_INFO("Session stopped by user");
-  return SessionStateId::kNoSession;
+  PW_LOG_INFO("Stop pending: countdown started");
+  return SessionStateId::kStopPending;
 }
 
 etl::fsm_state_id_t Active::on_event(
@@ -179,9 +196,9 @@ etl::fsm_state_id_t Active::on_event(
   auto now = pw::chrono::SystemClock::now();
 
   if (e.tag_uid == ctx.active_session.tag_uid) {
-    // Same user re-tapped → checkout flow
+    // Same user re-tapped → checkout flow (auto-confirm countdown)
     ctx.pending_since = now;
-    ctx.pending_deadline = now + kConfirmationTimeout;
+    ctx.pending_deadline = now + kAutoConfirmDuration;
     ctx.checkout_reason = CheckoutReason::kSelfCheckout;
     PW_LOG_INFO("Same tag: checkout pending");
     return SessionStateId::kCheckoutPending;
@@ -194,7 +211,7 @@ etl::fsm_state_id_t Active::on_event(
   ctx.pending_session.auth_id = e.auth_id;
   ctx.pending_session.started_at = now;
   ctx.pending_since = now;
-  ctx.pending_deadline = now + kConfirmationTimeout;
+  ctx.pending_deadline = now + kTakeoverTimeout;
   PW_LOG_INFO("Different tag: takeover pending (%s)",
               e.user_label.c_str());
   return SessionStateId::kTakeoverPending;
@@ -247,8 +264,10 @@ etl::fsm_state_id_t CheckoutPending::on_event(
 
 etl::fsm_state_id_t CheckoutPending::on_event(
     const session_event::Timeout&) {
-  PW_LOG_INFO("Checkout timed out: back to running");
-  return SessionStateId::kRunning;
+  auto& ctx = get_fsm_context();
+  ctx.checkout_reason = CheckoutReason::kSelfCheckout;
+  PW_LOG_INFO("Checkout auto-confirmed (countdown)");
+  return SessionStateId::kNoSession;
 }
 
 etl::fsm_state_id_t CheckoutPending::on_event(
@@ -299,6 +318,30 @@ etl::fsm_state_id_t TakeoverPending::ConfirmTakeover() {
   // Transition to NoSession exits Active (fires OnSessionEnded),
   // then NoSession::on_enter_state chains into Running with new user.
   return SessionStateId::kNoSession;
+}
+
+// --- StopPending ---
+
+etl::fsm_state_id_t StopPending::on_event(const session_event::UiCancel&) {
+  PW_LOG_INFO("Stop cancelled");
+  return SessionStateId::kRunning;
+}
+
+etl::fsm_state_id_t StopPending::on_event(const session_event::Timeout&) {
+  auto& ctx = get_fsm_context();
+  ctx.checkout_reason = CheckoutReason::kUiCheckout;
+  PW_LOG_INFO("Stop confirmed (countdown)");
+  return SessionStateId::kNoSession;
+}
+
+etl::fsm_state_id_t StopPending::on_event(
+    const session_event::StopSession&) {
+  return Pass_To_Parent;
+}
+
+etl::fsm_state_id_t StopPending::on_event(
+    const session_event::UserAuthorized&) {
+  return Pass_To_Parent;
 }
 
 }  // namespace maco::app_state

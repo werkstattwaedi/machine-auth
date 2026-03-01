@@ -58,13 +58,14 @@ pw::async2::Coro<pw::Status> SessionController::Run(
     auto state_id = fsm_.get_state_id();
     bool is_pending =
         (state_id == SessionStateId::kCheckoutPending) ||
-        (state_id == SessionStateId::kTakeoverPending);
+        (state_id == SessionStateId::kTakeoverPending) ||
+        (state_id == SessionStateId::kStopPending);
 
     if (is_pending) {
       auto now = pw::chrono::SystemClock::now();
 
-      // Check if tag held long enough for confirmation
-      if (fsm_.tag_present()) {
+      // Check if tag held long enough for confirmation (not for stop pending)
+      if (state_id != SessionStateId::kStopPending && fsm_.tag_present()) {
         auto hold_duration = now - fsm_.tag_present_since();
         if (hold_duration >= kHoldDuration) {
           fsm_.receive(session_event::HoldConfirmed{});

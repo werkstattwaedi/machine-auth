@@ -173,15 +173,19 @@ TEST(SessionFsmTest, CheckoutTagRemovedReturnsToRunning) {
   EXPECT_EQ(fsm.get_state_id(), SessionStateId::kRunning);
 }
 
-TEST(SessionFsmTest, CheckoutTimeoutReturnsToRunning) {
+TEST(SessionFsmTest, CheckoutTimeoutAutoConfirms) {
   SessionFsm fsm;
+  MockObserver observer;
+  fsm.AddObserver(&observer);
   auto tag = MakeTagUid(std::byte{0x01});
 
-  fsm.receive(MakeAuthEvent(tag));
+  fsm.receive(MakeAuthEvent(tag, "Alice"));
   fsm.receive(MakeAuthEvent(tag));
   fsm.receive(session_event::Timeout{});
 
-  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kRunning);
+  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kNoSession);
+  EXPECT_EQ(observer.end_count, 1);
+  EXPECT_EQ(observer.last_checkout_reason, CheckoutReason::kSelfCheckout);
 }
 
 // --- Takeover flow (different tag) ---
@@ -386,7 +390,7 @@ TEST(SessionFsmTest, NewSessionAfterCheckout) {
 
 // --- StopSession (UI stop button) ---
 
-TEST(SessionFsmTest, StopSessionFromRunningEndsSession) {
+TEST(SessionFsmTest, StopSessionFromRunningEntersStopPending) {
   SessionFsm fsm;
   MockObserver observer;
   fsm.AddObserver(&observer);
@@ -397,12 +401,11 @@ TEST(SessionFsmTest, StopSessionFromRunningEndsSession) {
 
   fsm.receive(session_event::StopSession{});
 
-  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kNoSession);
-  EXPECT_EQ(observer.end_count, 1);
-  EXPECT_EQ(observer.last_checkout_reason, CheckoutReason::kUiCheckout);
+  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kStopPending);
+  EXPECT_EQ(observer.end_count, 0);  // Session still active during countdown
 }
 
-TEST(SessionFsmTest, StopSessionFromCheckoutPendingEndsSession) {
+TEST(SessionFsmTest, StopSessionFromCheckoutPendingEntersStopPending) {
   SessionFsm fsm;
   MockObserver observer;
   fsm.AddObserver(&observer);
@@ -414,12 +417,11 @@ TEST(SessionFsmTest, StopSessionFromCheckoutPendingEndsSession) {
 
   fsm.receive(session_event::StopSession{});
 
-  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kNoSession);
-  EXPECT_EQ(observer.end_count, 1);
-  EXPECT_EQ(observer.last_checkout_reason, CheckoutReason::kUiCheckout);
+  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kStopPending);
+  EXPECT_EQ(observer.end_count, 0);  // Session still active
 }
 
-TEST(SessionFsmTest, StopSessionFromTakeoverPendingEndsSession) {
+TEST(SessionFsmTest, StopSessionFromTakeoverPendingEntersStopPending) {
   SessionFsm fsm;
   MockObserver observer;
   fsm.AddObserver(&observer);
@@ -432,10 +434,8 @@ TEST(SessionFsmTest, StopSessionFromTakeoverPendingEndsSession) {
 
   fsm.receive(session_event::StopSession{});
 
-  // Original session ended, no new session started
-  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kNoSession);
-  EXPECT_EQ(observer.end_count, 1);
-  EXPECT_EQ(observer.last_checkout_reason, CheckoutReason::kUiCheckout);
+  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kStopPending);
+  EXPECT_EQ(observer.end_count, 0);  // Session still active
 }
 
 TEST(SessionFsmTest, StopSessionIgnoredWhenNoSession) {
@@ -461,6 +461,82 @@ TEST(SessionFsmTest, SetTagPresent) {
 
   fsm.SetTagPresent(false);
   EXPECT_FALSE(fsm.tag_present());
+}
+
+// --- StopPending tests ---
+
+TEST(SessionFsmTest, StopPendingTimeoutEndsSession) {
+  SessionFsm fsm;
+  MockObserver observer;
+  fsm.AddObserver(&observer);
+  auto tag = MakeTagUid(std::byte{0x01});
+
+  fsm.receive(MakeAuthEvent(tag, "Alice"));
+  fsm.receive(session_event::StopSession{});
+  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kStopPending);
+
+  fsm.receive(session_event::Timeout{});
+
+  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kNoSession);
+  EXPECT_EQ(observer.end_count, 1);
+  EXPECT_EQ(observer.last_checkout_reason, CheckoutReason::kUiCheckout);
+}
+
+TEST(SessionFsmTest, StopPendingCancelReturnsToRunning) {
+  SessionFsm fsm;
+  MockObserver observer;
+  fsm.AddObserver(&observer);
+  auto tag = MakeTagUid(std::byte{0x01});
+
+  fsm.receive(MakeAuthEvent(tag, "Alice"));
+  fsm.receive(session_event::StopSession{});
+  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kStopPending);
+
+  fsm.receive(session_event::UiCancel{});
+
+  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kRunning);
+  EXPECT_EQ(observer.end_count, 0);  // Session still active
+}
+
+TEST(SessionFsmTest, StopPendingBadgeTapStartsCheckout) {
+  SessionFsm fsm;
+  auto tag = MakeTagUid(std::byte{0x01});
+
+  fsm.receive(MakeAuthEvent(tag, "Alice"));
+  fsm.receive(session_event::StopSession{});
+  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kStopPending);
+
+  // Same tag during stop pending → bubbles to Active → checkout
+  fsm.receive(MakeAuthEvent(tag));
+  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kCheckoutPending);
+}
+
+TEST(SessionFsmTest, StopPendingDifferentTagStartsTakeover) {
+  SessionFsm fsm;
+  auto tag1 = MakeTagUid(std::byte{0x01});
+  auto tag2 = MakeTagUid(std::byte{0x02});
+
+  fsm.receive(MakeAuthEvent(tag1, "Alice"));
+  fsm.receive(session_event::StopSession{});
+  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kStopPending);
+
+  // Different tag during stop pending → bubbles to Active → takeover
+  fsm.receive(MakeAuthEvent(tag2, "Bob"));
+  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kTakeoverPending);
+}
+
+TEST(SessionFsmTest, SnapshotDuringStopPending) {
+  SessionFsm fsm;
+  auto tag = MakeTagUid(std::byte{0x01});
+
+  fsm.receive(MakeAuthEvent(tag, "Alice"));
+  fsm.receive(session_event::StopSession{});
+  fsm.SyncSnapshot();
+
+  SessionSnapshotUi snapshot;
+  fsm.GetSnapshot(snapshot);
+  EXPECT_EQ(snapshot.state, SessionStateUi::kStopPending);
+  EXPECT_EQ(std::string_view(snapshot.session_user_label), "Alice");
 }
 
 }  // namespace

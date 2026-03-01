@@ -15,6 +15,10 @@ namespace {
 // Material Symbols UTF-8: U+E5C9 cancel
 constexpr const char kIconCancel[] = "\xEE\x97\x89";
 
+// Hold duration for takeover countdown display (must match kHoldDuration in
+// session_fsm.h)
+constexpr auto kHoldDurationDisplay = std::chrono::seconds(3);
+
 }  // namespace
 
 MainScreen::MainScreen(ActionCallback action_callback)
@@ -97,6 +101,25 @@ pw::Status MainScreen::OnActivate() {
   lv_obj_align(denied_label_, LV_ALIGN_CENTER, 0, 30);
   lv_obj_add_flag(denied_label_, LV_OBJ_FLAG_HIDDEN);
 
+  // --- Pending widgets (hidden initially) ---
+  pending_title_label_ = lv_label_create(lv_screen_);
+  lv_label_set_text(pending_title_label_, "");
+  lv_obj_set_style_text_font(pending_title_label_, &roboto_24, LV_PART_MAIN);
+  lv_obj_set_style_text_color(pending_title_label_, lv_color_white(),
+                              LV_PART_MAIN);
+  lv_obj_align(pending_title_label_, LV_ALIGN_TOP_LEFT, 16, 56);
+  lv_obj_add_flag(pending_title_label_, LV_OBJ_FLAG_HIDDEN);
+
+  countdown_label_ = lv_label_create(lv_screen_);
+  lv_label_set_text(countdown_label_, "");
+  lv_obj_set_style_text_font(countdown_label_, &roboto_36, LV_PART_MAIN);
+  lv_obj_set_style_text_color(countdown_label_, lv_color_white(),
+                              LV_PART_MAIN);
+  lv_obj_set_width(countdown_label_, 208);  // 240 - 2*16px padding
+  lv_label_set_long_mode(countdown_label_, LV_LABEL_LONG_WRAP);
+  lv_obj_align(countdown_label_, LV_ALIGN_TOP_LEFT, 16, 90);
+  lv_obj_add_flag(countdown_label_, LV_OBJ_FLAG_HIDDEN);
+
   // Initialize widget visibility for the starting state. Without this,
   // widgets created hidden above won't be unhidden because OnUpdate()'s
   // guard (new_state != visual_state_) skips the initial kIdle→kIdle case.
@@ -122,13 +145,23 @@ void MainScreen::OnDeactivate() {
   timer_label_ = nullptr;
   denied_icon_ = nullptr;
   denied_label_ = nullptr;
+  pending_title_label_ = nullptr;
+  countdown_label_ = nullptr;
   PW_LOG_INFO("MainScreen deactivated");
 }
 
 void MainScreen::OnUpdate(const app_state::AppStateSnapshot& snapshot) {
   // Derive visual state from snapshot
   VisualState new_state;
-  if (snapshot.session.state == app_state::SessionStateUi::kRunning) {
+  if (snapshot.session.state == app_state::SessionStateUi::kCheckoutPending) {
+    new_state = VisualState::kCheckoutPending;
+  } else if (snapshot.session.state ==
+             app_state::SessionStateUi::kTakeoverPending) {
+    new_state = VisualState::kTakeoverPending;
+  } else if (snapshot.session.state ==
+             app_state::SessionStateUi::kStopPending) {
+    new_state = VisualState::kStopPending;
+  } else if (snapshot.session.state == app_state::SessionStateUi::kRunning) {
     new_state = VisualState::kActive;
   } else if (snapshot.verification.state ==
              app_state::TagVerificationState::kUnauthorized) {
@@ -158,12 +191,47 @@ void MainScreen::OnUpdate(const app_state::AppStateSnapshot& snapshot) {
     lv_label_set_text_fmt(timer_label_, "%d min",
                           static_cast<int>(minutes.count()));
   }
+
+  // Update countdown for pending states
+  if (visual_state_ == VisualState::kCheckoutPending ||
+      visual_state_ == VisualState::kStopPending) {
+    auto now = pw::chrono::SystemClock::now();
+    auto remaining = snapshot.session.pending_deadline - now;
+    auto secs =
+        std::chrono::duration_cast<std::chrono::seconds>(remaining).count();
+    if (secs < 0) secs = 0;
+    lv_label_set_text_fmt(countdown_label_, "%ds...",
+                          static_cast<int>(secs));
+  } else if (visual_state_ == VisualState::kTakeoverPending) {
+    lv_label_set_text_fmt(pending_title_label_, "%s übernimmt",
+                          snapshot.session.pending_user_label.c_str());
+    if (snapshot.session.tag_present) {
+      auto now = pw::chrono::SystemClock::now();
+      auto held = now - snapshot.session.tag_present_since;
+      auto hold_secs = kHoldDurationDisplay -
+                        std::chrono::duration_cast<std::chrono::seconds>(held);
+      auto secs = hold_secs.count();
+      if (secs < 0) secs = 0;
+      lv_label_set_text_fmt(countdown_label_, "Badge halten %ds...",
+                            static_cast<int>(secs));
+    } else {
+      lv_label_set_text(countdown_label_, "Badge auflegen");
+    }
+  }
 }
 
 bool MainScreen::OnEscapePressed() {
   if (visual_state_ == VisualState::kActive) {
     if (action_callback_) {
       action_callback_(UiAction::kStopSession);
+    }
+    return true;
+  }
+  if (visual_state_ == VisualState::kStopPending ||
+      visual_state_ == VisualState::kCheckoutPending ||
+      visual_state_ == VisualState::kTakeoverPending) {
+    if (action_callback_) {
+      action_callback_(UiAction::kCancel);
     }
     return true;
   }
@@ -207,6 +275,17 @@ ui::ButtonConfig MainScreen::GetButtonConfig() const {
                  .text_color = theme::kColorDarkText},
           .cancel = {},
       };
+    case VisualState::kCheckoutPending:
+    case VisualState::kTakeoverPending:
+    case VisualState::kStopPending:
+      return {
+          .ok = {},
+          .cancel = {.label = "Abbrechen",
+                     .led_effect = led_animator::SolidButton(
+                         led::RgbwColor::FromRgb(theme::kColorBtnRed)),
+                     .bg_color = theme::kColorBtnRed,
+                     .text_color = 0xFFFFFF},
+      };
   }
   return {};
 }
@@ -216,9 +295,13 @@ ui::ScreenStyle MainScreen::GetScreenStyle() const {
     case VisualState::kIdle:
       return {.bg_color = theme::kColorWhiteBg};
     case VisualState::kActive:
+    case VisualState::kCheckoutPending:
+    case VisualState::kStopPending:
       return {.bg_color = theme::kColorGreen};
     case VisualState::kDenied:
       return {.bg_color = theme::kColorRed};
+    case VisualState::kTakeoverPending:
+      return {.bg_color = theme::kColorWhiteBg};
   }
   return {};
 }
@@ -253,6 +336,37 @@ void MainScreen::SetVisualState(VisualState state) {
       lv_obj_remove_flag(denied_icon_, LV_OBJ_FLAG_HIDDEN);
       lv_obj_remove_flag(denied_label_, LV_OBJ_FLAG_HIDDEN);
       break;
+    case VisualState::kCheckoutPending:
+      bg_color = theme::kColorGreen;
+      lv_label_set_text(pending_title_label_, "Abmelden in");
+      lv_obj_set_style_text_color(pending_title_label_, lv_color_white(),
+                                  LV_PART_MAIN);
+      lv_obj_set_style_text_color(countdown_label_, lv_color_white(),
+                                  LV_PART_MAIN);
+      lv_obj_remove_flag(pending_title_label_, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_remove_flag(countdown_label_, LV_OBJ_FLAG_HIDDEN);
+      break;
+    case VisualState::kStopPending:
+      bg_color = theme::kColorGreen;
+      lv_label_set_text(pending_title_label_, "Beenden in");
+      lv_obj_set_style_text_color(pending_title_label_, lv_color_white(),
+                                  LV_PART_MAIN);
+      lv_obj_set_style_text_color(countdown_label_, lv_color_white(),
+                                  LV_PART_MAIN);
+      lv_obj_remove_flag(pending_title_label_, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_remove_flag(countdown_label_, LV_OBJ_FLAG_HIDDEN);
+      break;
+    case VisualState::kTakeoverPending:
+      bg_color = theme::kColorWhiteBg;
+      lv_obj_set_style_text_color(pending_title_label_,
+                                  lv_color_hex(theme::kColorDarkText),
+                                  LV_PART_MAIN);
+      lv_obj_set_style_text_color(countdown_label_,
+                                  lv_color_hex(theme::kColorDarkText),
+                                  LV_PART_MAIN);
+      lv_obj_remove_flag(pending_title_label_, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_remove_flag(countdown_label_, LV_OBJ_FLAG_HIDDEN);
+      break;
   }
 
   lv_obj_set_style_bg_color(lv_screen_, lv_color_hex(bg_color), LV_PART_MAIN);
@@ -267,6 +381,8 @@ void MainScreen::HideAllWidgets() {
   lv_obj_add_flag(timer_label_, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(denied_icon_, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(denied_label_, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_add_flag(pending_title_label_, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_add_flag(countdown_label_, LV_OBJ_FLAG_HIDDEN);
 }
 
 }  // namespace maco::terminal_ui

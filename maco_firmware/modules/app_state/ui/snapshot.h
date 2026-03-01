@@ -32,6 +32,7 @@ enum class SessionStateUi : uint8_t {
   kRunning = 1,
   kCheckoutPending = 2,
   kTakeoverPending = 3,
+  kStopPending = 4,
 };
 
 // Session snapshot for UI - confirmation progress and user labels

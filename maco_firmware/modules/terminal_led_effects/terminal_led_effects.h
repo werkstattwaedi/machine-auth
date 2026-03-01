@@ -56,6 +56,7 @@ class TerminalLedEffects : public app_state::SessionObserver,
       const app_state::SessionInfo& session,
       const app_state::MachineUsage& usage
   ) override;
+  void OnSessionUiStateChanged(app_state::SessionStateUi state) override;
 
   // TagVerifierObserver
   // OnTagDetected / OnVerifying: deliberately not overridden — no effect yet.
@@ -92,6 +93,10 @@ class TerminalLedEffects : public app_state::SessionObserver,
   // accurate even when the corresponding LED command is overwritten by a
   // rapid subsequent event (e.g. kSessionStarted clobbered by kTagVerified).
   std::atomic<bool> session_active_{false};
+
+  // Current session UI state for pending-effect tracking.
+  std::atomic<app_state::SessionStateUi> session_ui_state_{
+      app_state::SessionStateUi::kNoSession};
 
   std::atomic<Command> pending_command_{Command::kNone};
 
