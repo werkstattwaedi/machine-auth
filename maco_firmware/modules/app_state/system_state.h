@@ -6,7 +6,6 @@
 #include <cstdint>
 #include <optional>
 
-#include "gateway/gateway_client.h"
 #include "maco_firmware/modules/app_state/system_monitor_backend.h"
 #include "maco_firmware/modules/app_state/system_state_updater.h"
 #include "maco_firmware/modules/app_state/ui/snapshot.h"
@@ -19,7 +18,7 @@ namespace maco::app_state {
 /// Thread-safe system state for boot progress, connectivity, and time.
 ///
 /// Each setter individually acquires the mutex. GetSnapshot() reads
-/// SystemClock::now() and GatewayClient::IsConnected() at call time.
+/// SystemClock::now() at call time.
 class SystemState : public SystemStateUpdater {
  public:
   explicit SystemState(SystemMonitorBackend& backend);
@@ -33,21 +32,20 @@ class SystemState : public SystemStateUpdater {
   /// Set the machine label from device config.
   void SetMachineLabel(std::string_view label);
 
-  /// Set the gateway client for live connectivity checks.
-  void SetGatewayClient(gateway::GatewayClient* client);
+  /// Update gateway connectivity state (called by GatewayConnectionCheck).
+  void SetGatewayConnected(bool connected);
 
   // SystemStateUpdater overrides (backend calls these)
   void SetWifiState(WifiState state) override;
   void SetCloudState(CloudState state) override;
   void SetUtcBootOffsetSeconds(int64_t offset) override;
 
-  /// Thread-safe snapshot for UI. Reads SystemClock::now() and
-  /// GatewayClient::IsConnected() at call time.
+  /// Thread-safe snapshot for UI. Reads SystemClock::now() at call time.
   void GetSnapshot(SystemStateSnapshot& out) const;
 
  private:
   SystemMonitorBackend& backend_;
-  gateway::GatewayClient* gateway_client_ PW_GUARDED_BY(mutex_) = nullptr;
+  bool gateway_connected_ PW_GUARDED_BY(mutex_) = false;
 
   mutable pw::sync::Mutex mutex_;
   BootState boot_state_ PW_GUARDED_BY(mutex_) = BootState::kBooting;

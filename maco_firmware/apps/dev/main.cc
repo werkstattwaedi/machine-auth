@@ -6,6 +6,7 @@
 #include "device_config/device_config.h"
 #include "device_secrets/device_secrets.h"
 #include "gateway/gateway_client.h"
+#include "gateway/gateway_connection_check.h"
 #include "maco_firmware/modules/app_state/session_controller.h"
 #include "maco_firmware/modules/app_state/session_fsm.h"
 #include "maco_firmware/modules/app_state/system_state.h"
@@ -125,9 +126,16 @@ void AppInit() {
   if (!secret.ok()) {
     PW_LOG_ERROR("Device not provisioned - skipping gateway/cloud services");
     terminal_ui.SetController(nullptr);
+    system_state.SetReady();
   } else {
     maco::system::GetGatewayClient().Start(pw::System().dispatcher());
-    system_state.SetGatewayClient(&maco::system::GetGatewayClient());
+
+    static maco::gateway::GatewayConnectionCheck gateway_connection_check(
+        maco::system::GetGatewayClient(),
+        system_state,
+        pw::async2::GetSystemTimeProvider(),
+        pw::System().allocator());
+    gateway_connection_check.Start(pw::System().dispatcher());
 
     static maco::app_state::TagVerifier tag_verifier(
         nfc_reader,
@@ -158,7 +166,9 @@ void AppInit() {
   static pw::metric::MetricService metric_service(pw::metric::global_metrics,
                                                   pw::metric::global_groups);
   pw::System().rpc_server().RegisterService(metric_service);
-  system_state.SetReady();
+
+  // SetReady() is called by GatewayConnectionCheck on first successful ping,
+  // or immediately above if the device is not provisioned.
 
   maco::StartStackMonitor(
       std::chrono::seconds(30), maco::display::metrics::OnThreadStackScan

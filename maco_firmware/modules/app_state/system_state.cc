@@ -23,9 +23,9 @@ void SystemState::SetReady() {
   PW_LOG_INFO("System ready");
 }
 
-void SystemState::SetGatewayClient(gateway::GatewayClient* client) {
+void SystemState::SetGatewayConnected(bool connected) {
   std::lock_guard lock(mutex_);
-  gateway_client_ = client;
+  gateway_connected_ = connected;
 }
 
 void SystemState::SetWifiState(WifiState state) {
@@ -56,8 +56,7 @@ void SystemState::GetSnapshot(SystemStateSnapshot& out) const {
   out.boot_state = boot_state_;
   out.wifi_state = wifi_state_;
   out.cloud_state = cloud_state_;
-  out.gateway_connected =
-      gateway_client_ != nullptr && gateway_client_->IsConnected();
+  out.gateway_connected = gateway_connected_;
   out.machine_label = machine_label_;
 
   if (utc_boot_offset_seconds_.has_value()) {

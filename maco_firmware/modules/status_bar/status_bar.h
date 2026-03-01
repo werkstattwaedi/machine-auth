@@ -18,8 +18,8 @@ namespace maco::status_bar {
 /// Status bar displayed at the top of the screen.
 ///
 /// Lives on lv_layer_top() and persists across screen transitions.
-/// Shows time (left) and wifi icon (right). Background color adapts
-/// to the current screen's background via SetBackgroundColor().
+/// Shows time (left) and gateway/wifi icons (right). Background color
+/// adapts to the current screen's background via SetBackgroundColor().
 class StatusBar {
  public:
   static constexpr int kHeight = 40;
@@ -47,6 +47,7 @@ class StatusBar {
 
  private:
   void UpdateWifiIcon(app_state::WifiState state);
+  void UpdateGatewayIcon(bool connected);
 
   app_state::SystemState& system_state_;
 
@@ -57,9 +58,11 @@ class StatusBar {
   lv_obj_t* time_label_ = nullptr;
 
   // Icon state — declared after container_ (destroyed first, before container)
+  StatusIcon gateway_icon_;
   StatusIcon wifi_icon_;
 
   // Watched state — only update LVGL widgets when values actually change.
+  ui::Watched<bool> gateway_connected_{false};
   ui::Watched<app_state::WifiState> wifi_state_{app_state::WifiState::kDisconnected};
   ui::Watched<std::optional<time::LocalTime>> local_time_{std::nullopt};
 };

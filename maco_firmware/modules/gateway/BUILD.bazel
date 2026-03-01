@@ -10,6 +10,7 @@
 # - Mock implementation for testing
 
 load("@pigweed//pw_build:compatibility.bzl", "incompatible_with_mcu")
+load("@pigweed//pw_unit_test:pw_cc_test.bzl", "pw_cc_test")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
 package(default_visibility = ["//maco_firmware:__subpackages__"])
@@ -84,6 +85,29 @@ cc_library(
     ],
 )
 
+# Periodic gateway health check via Ping RPC
+cc_library(
+    name = "gateway_connection_check",
+    srcs = ["gateway_connection_check.cc"],
+    hdrs = ["public/gateway/gateway_connection_check.h"],
+    includes = ["public"],
+    deps = [
+        ":gateway_client",
+        "//maco_firmware/modules/app_state:system_state",
+        "//proto/gateway:gateway_service_nanopb",
+        "//proto/gateway:gateway_service_nanopb_rpc",
+        "@pigweed//pw_allocator:allocator",
+        "@pigweed//pw_async2:coro",
+        "@pigweed//pw_async2:coro_or_else_task",
+        "@pigweed//pw_async2:time_provider",
+        "@pigweed//pw_async2:value_future",
+        "@pigweed//pw_chrono:system_clock",
+        "@pigweed//pw_log",
+        "@pigweed//pw_rpc/nanopb:client_api",
+        "@pigweed//pw_status",
+    ],
+)
+
 # Mock implementation for testing
 cc_library(
     name = "mock_gateway_client",
@@ -92,5 +116,23 @@ cc_library(
         ":gateway_client",
         "//proto/gateway:gateway_service_nanopb",
         "@pigweed//pw_rpc",
+    ],
+)
+
+pw_cc_test(
+    name = "gateway_connection_check_test",
+    srcs = ["gateway_connection_check_test.cc"],
+    target_compatible_with = incompatible_with_mcu(),
+    deps = [
+        ":gateway_client",
+        ":gateway_connection_check",
+        "//maco_firmware/modules/app_state:system_monitor_backend",
+        "//maco_firmware/modules/app_state:system_state",
+        "//proto/gateway:gateway_service_nanopb",
+        "//proto/gateway:gateway_service_nanopb_rpc",
+        "@pigweed//pw_allocator:testing",
+        "@pigweed//pw_async2:basic_dispatcher",
+        "@pigweed//pw_async2:simulated_time_provider",
+        "@pigweed//pw_rpc/nanopb:client_testing",
     ],
 )
