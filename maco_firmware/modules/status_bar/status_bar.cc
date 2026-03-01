@@ -15,6 +15,8 @@ constexpr const char kIconWifi1Bar[] = "\xEE\x93\x8A";   // U+E4CA wifi_1_bar
 constexpr const char kIconWifi2Bar[] = "\xEE\x93\x99";   // U+E4D9 wifi_2_bar
 constexpr const char kIconWifi[] = "\xEE\x98\xBE";       // U+E63E wifi
 constexpr const char kIconWifiOff[] = "\xEE\x99\x88";    // U+E648 wifi_off
+constexpr const char kIconCloudDone[] = "\xEE\x8A\xBF";  // U+E2BF cloud_done
+constexpr const char kIconCloudOff[] = "\xEE\x8B\x81";   // U+E2C1 cloud_off
 
 // Frames for the wifi connecting animation (500ms per step).
 constexpr const char* kWifiConnectingFrames[] = {
@@ -55,13 +57,15 @@ pw::Status StatusBar::Init() {
   lv_obj_set_flex_align(container_, LV_FLEX_ALIGN_SPACE_BETWEEN,
                         LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-  // Time label (left)
+  // Time label (left, flex-grow pushes icons to the right)
   time_label_ = lv_label_create(container_);
   lv_label_set_text(time_label_, "--:--");
   lv_obj_set_style_text_color(time_label_, lv_color_hex(0x212121),
                               LV_PART_MAIN);
+  lv_obj_set_flex_grow(time_label_, 1);
 
-  // Wifi icon (right)
+  // Icons (right)
+  gateway_icon_.Init(container_);
   wifi_icon_.Init(container_);
 
   PW_LOG_INFO("StatusBar initialized");
@@ -88,6 +92,7 @@ void StatusBar::SetBackgroundColor(uint32_t screen_bg) {
                               ? lv_color_hex(0x212121)
                               : lv_color_white();
   lv_obj_set_style_text_color(time_label_, text_color, LV_PART_MAIN);
+  gateway_icon_.SetColor(text_color);
   wifi_icon_.SetColor(text_color);
 }
 
@@ -96,6 +101,11 @@ void StatusBar::Update() {
 
   app_state::SystemStateSnapshot snapshot;
   system_state_.GetSnapshot(snapshot);
+
+  gateway_connected_.Set(snapshot.gateway_connected);
+  if (gateway_connected_.CheckAndClearDirty()) {
+    UpdateGatewayIcon(gateway_connected_.Get());
+  }
 
   wifi_state_.Set(snapshot.wifi_state);
   if (wifi_state_.CheckAndClearDirty()) {
@@ -110,6 +120,10 @@ void StatusBar::Update() {
       lv_label_set_text(time_label_, "--:--");
     }
   }
+}
+
+void StatusBar::UpdateGatewayIcon(bool connected) {
+  gateway_icon_.SetIcon(connected ? kIconCloudDone : kIconCloudOff);
 }
 
 void StatusBar::UpdateWifiIcon(app_state::WifiState state) {

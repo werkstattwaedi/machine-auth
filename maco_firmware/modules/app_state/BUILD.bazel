@@ -42,7 +42,6 @@ cc_library(
         ":system_monitor_backend",
         ":system_state_updater",
         "//maco_firmware/modules/app_state/ui:snapshot",
-        "//maco_firmware/modules/gateway:gateway_client",
         "//maco_firmware/modules/time:zurich_timezone",
         "@pigweed//pw_chrono:system_clock",
         "@pigweed//pw_log",

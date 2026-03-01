@@ -80,10 +80,14 @@ pw::Status TerminalUi::Init() {
   }
   in_splash_ = true;
 
-  // Render loop: splash stays until SetController() signals readiness
+  // Render loop: splash stays until controller is set AND system is ready
   display_.SetUpdateCallback([this]() {
     if (in_splash_ && ready_.load(std::memory_order_acquire)) {
-      TransitionToMain();
+      app_state::SystemStateSnapshot sys;
+      system_state_.GetSnapshot(sys);
+      if (sys.boot_state == app_state::BootState::kReady) {
+        TransitionToMain();
+      }
     }
 
     // Propagate current screen style to status bar
