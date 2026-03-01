@@ -299,7 +299,7 @@ struct P2GatewayClient::Impl {
         return pw::async2::Pending();
       }
 
-      PW_LOG_INFO("ReadTask: got %zu bytes", result.size());
+      PW_LOG_DEBUG("ReadTask: got %zu bytes", result.size());
       pw::ConstByteSpan data(read_buffer.data(), result.size());
 
       // Feed bytes to HDLC decoder
