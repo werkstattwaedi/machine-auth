@@ -360,7 +360,7 @@ void PicoRes28LcdDriver::SendPixelDataDma(pw::ConstByteSpan pixels) {
     // DMA hung - cancel and count it
     ++dma_hang_count_;
     metrics::OnDmaHang();
-    PW_LOG_WARN(
+    PW_LOG_DEBUG(
         "DMA transfer timed out (hang count: %lu)",
         static_cast<unsigned long>(dma_hang_count_)
     );
