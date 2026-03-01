@@ -10,6 +10,8 @@
 #include "pw_assert/check.h"
 #include "pw_async2/system_time_provider.h"
 #include "pw_channel/stream_channel.h"
+#include "pw_kvs/crc16_checksum.h"
+#include "pw_kvs/key_value_store.h"
 #include "pw_log/log.h"
 #include "pw_multibuf/simple_allocator.h"
 #include "pw_system/io.h"
@@ -19,6 +21,7 @@
 // Particle and project headers after Pigweed
 #include "core_hal.h"
 #include "delay_hal.h"
+#include "system_defs.h"
 #include "device_config/device_config.h"
 #include "deviceid_hal.h"
 #include "firebase/firebase_client.h"
@@ -37,6 +40,7 @@
 #include "maco_firmware/targets/p2/hardware_random.h"
 #include "maco_firmware/targets/p2/p2_system_monitor.h"
 #include "maco_firmware/types.h"
+#include "pb_kvs/flash_memory.h"
 #include "pb_cloud/particle_ledger_backend.h"
 #include "pb_digital_io/digital_io.h"
 #include "pb_i2c/initiator.h"
@@ -346,6 +350,50 @@ maco::buzzer::Buzzer& GetBuzzer() {
 maco::app_state::SystemMonitorBackend& GetSystemMonitorBackend() {
   static maco::P2SystemMonitor monitor;
   return monitor;
+}
+
+ResetReason GetResetReason() {
+  int reason = 0;
+  HAL_Core_Get_Last_Reset_Info(&reason, nullptr, nullptr);
+  switch (reason) {
+    case RESET_REASON_WATCHDOG:
+      return ResetReason::kWatchdog;
+    case RESET_REASON_PANIC:
+      return ResetReason::kPanic;
+    case RESET_REASON_POWER_MANAGEMENT:
+    case RESET_REASON_POWER_DOWN:
+    case RESET_REASON_POWER_BROWNOUT:
+    case RESET_REASON_PIN_RESET:
+      return ResetReason::kPowerCycle;
+    case RESET_REASON_UPDATE:
+      return ResetReason::kOtaUpdate;
+    case RESET_REASON_USER:
+      return ResetReason::kUserRequested;
+    default:
+      return ResetReason::kUnknown;
+  }
+}
+
+pw::kvs::KeyValueStore& GetSessionKvs() {
+  // Dedicated flash region for session KVS: 59 sectors at 0x3E1000
+  // (after LittleFS user filesystem, before DCT/system areas)
+  static pb::kvs::ParticleFlashMemory flash(0x3E1000, 59);
+  static pw::kvs::FlashPartition partition(&flash);
+  static pw::kvs::ChecksumCrc16 checksum;
+  static const pw::kvs::EntryFormat format = {.magic = 0xba5eba11,
+                                               .checksum = &checksum};
+  static pw::kvs::KeyValueStoreBuffer<16, 59> kvs(&partition, format);
+  static bool initialized = false;
+  if (!initialized) {
+    auto status = kvs.Init();
+    if (!status.ok()) {
+      PW_LOG_WARN("Session KVS init failed, erasing and retrying");
+      PW_CHECK_OK(partition.Erase());
+      PW_CHECK_OK(kvs.Init());
+    }
+    initialized = true;
+  }
+  return kvs;
 }
 
 }  // namespace maco::system

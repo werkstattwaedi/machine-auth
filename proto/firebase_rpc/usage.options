@@ -1,0 +1,4 @@
+# Nanopb options for usage.proto
+
+# MachineUsageHistory: up to 10 records per upload
+maco.proto.firebase_rpc.MachineUsageHistory.records     max_count:10

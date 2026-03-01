@@ -30,9 +30,15 @@ nanopb_proto_library(
 )
 
 # Machine usage tracking
+pw_proto_filegroup(
+    name = "usage_proto_and_options",
+    srcs = ["usage.proto"],
+    options_files = ["usage.options"],
+)
+
 proto_library(
     name = "usage_proto",
-    srcs = ["usage.proto"],
+    srcs = [":usage_proto_and_options"],
     strip_import_prefix = "/proto",
     deps = ["//proto:common_proto"],
 )

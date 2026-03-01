@@ -1,0 +1,44 @@
+// Copyright Offene Werkstatt Wädenswil
+// SPDX-License-Identifier: MIT
+
+syntax = "proto3";
+
+package maco.session_upload;
+
+import "common.proto";
+
+// Persisted active session state (written to KVS on session start).
+// This is NOT an RPC message — only used for flash serialization.
+message PersistedSession {
+  // NFC tag UID (7 bytes)
+  maco.proto.TagUid tag_uid = 1;
+  // Firebase user ID
+  maco.proto.FirebaseId user_id = 2;
+  // User display label
+  string user_label = 3;
+  // Firebase authentication ID
+  maco.proto.FirebaseId auth_id = 4;
+  // Session start time (unix timestamp seconds)
+  int64 started_at = 5;
+  // Last heartbeat time (unix timestamp seconds)
+  int64 last_seen = 6;
+}
+
+// Persisted completed usage record awaiting upload.
+message PersistedUsage {
+  // Firebase user ID
+  maco.proto.FirebaseId user_id = 1;
+  // Firebase authentication ID
+  maco.proto.FirebaseId auth_id = 2;
+  // Check-in timestamp (unix seconds)
+  int64 check_in = 3;
+  // Check-out timestamp (unix seconds)
+  int64 check_out = 4;
+  // Maps to CheckoutReason enum value
+  int32 reason = 5;
+}
+
+// Queue of completed usage records awaiting upload.
+message PendingUsageQueue {
+  repeated PersistedUsage records = 1;
+}

@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <cstdint>
+
 #include "pw_function/function.h"
 #include "pw_random/random.h"
 #include "pw_thread/options.h"
@@ -47,6 +49,10 @@ namespace maco::app_state {
 class SystemMonitorBackend;
 }  // namespace maco::app_state
 
+namespace pw::kvs {
+class KeyValueStore;
+}  // namespace pw::kvs
+
 namespace maco::led {
 // Forward declaration - concrete types are platform-specific (CRTP templates)
 // Host: Led<SdlLedDriver<16>>
@@ -58,6 +64,16 @@ class LedAnimatorBase;
 }  // namespace maco::led_animator
 
 namespace maco::system {
+
+/// Reason for the most recent device reset.
+enum class ResetReason : uint8_t {
+  kUnknown,
+  kWatchdog,
+  kPanic,
+  kPowerCycle,
+  kOtaUpdate,
+  kUserRequested,
+};
 
 /// Initializes the system, first performing target-specific initialization,
 /// and then invoking the app_init continuation function to perform app-specific
@@ -145,5 +161,15 @@ maco::buzzer::Buzzer& GetBuzzer();
 /// P2: Subscribes to Device OS network/cloud/time events
 /// Host: Stub that reports everything connected
 maco::app_state::SystemMonitorBackend& GetSystemMonitorBackend();
+
+/// Returns the reason for the most recent device reset.
+/// P2: Maps HAL_Core_Get_Last_Reset_Info() to ResetReason
+/// Host: Always returns kPowerCycle
+ResetReason GetResetReason();
+
+/// Returns the KVS instance for session persistence.
+/// P2: External flash via ParticleFlashMemory
+/// Host: RAM-backed FakeFlash
+pw::kvs::KeyValueStore& GetSessionKvs();
 
 }  // namespace maco::system

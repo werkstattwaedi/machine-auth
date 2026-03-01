@@ -5,6 +5,7 @@
 
 #include "etl/message.h"
 #include "maco_firmware/types.h"
+#include "pw_chrono/system_clock.h"
 #include "pw_string/string.h"
 
 namespace maco::app_state::session_event {
@@ -18,6 +19,7 @@ struct Id {
     kHoldConfirmed = 4,
     kTimeout = 5,
     kStopSession = 6,
+    kSessionResume = 7,
   };
 };
 
@@ -60,5 +62,26 @@ class Timeout : public etl::message<Id::kTimeout> {};
 
 /// UI explicitly stopped the active session.
 class StopSession : public etl::message<Id::kStopSession> {};
+
+/// Resume a session after device reset (restored from persistent storage).
+class SessionResume : public etl::message<Id::kSessionResume> {
+ public:
+  SessionResume(maco::TagUid tag_uid_in,
+                maco::FirebaseId user_id_in,
+                const pw::InlineString<64>& user_label_in,
+                maco::FirebaseId auth_id_in,
+                pw::chrono::SystemClock::time_point started_at_in)
+      : tag_uid(tag_uid_in),
+        user_id(user_id_in),
+        user_label(user_label_in),
+        auth_id(auth_id_in),
+        started_at(started_at_in) {}
+
+  maco::TagUid tag_uid;
+  maco::FirebaseId user_id;
+  pw::InlineString<64> user_label;
+  maco::FirebaseId auth_id;
+  pw::chrono::SystemClock::time_point started_at;
+};
 
 }  // namespace maco::app_state::session_event

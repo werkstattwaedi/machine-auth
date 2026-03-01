@@ -69,4 +69,9 @@ void SystemState::GetSnapshot(SystemStateSnapshot& out) const {
   }
 }
 
+int64_t SystemState::GetUtcBootOffsetSeconds() const {
+  std::lock_guard lock(mutex_);
+  return utc_boot_offset_seconds_.value_or(0);
+}
+
 }  // namespace maco::app_state

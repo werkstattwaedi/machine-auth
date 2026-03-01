@@ -1,0 +1,7 @@
+# Nanopb options for session_store.proto
+
+# PersistedSession: user_label is the only raw string field remaining
+maco.session_upload.PersistedSession.user_label   max_size:65
+
+# PendingUsageQueue: up to 10 completed usage records
+maco.session_upload.PendingUsageQueue.records     max_count:10

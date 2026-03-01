@@ -28,6 +28,7 @@ constexpr const char* kTerminalCheckinEndpoint = "/api/terminalCheckin";
 constexpr const char* kAuthenticateTagEndpoint = "/api/authenticateTag";
 constexpr const char* kCompleteTagAuthEndpoint = "/api/completeTagAuth";
 constexpr const char* kKeyDiversificationEndpoint = "/api/personalize";
+constexpr const char* kUploadUsageEndpoint = "/api/uploadUsage";
 
 // Maximum payload size for serialization.
 constexpr size_t kMaxPayloadSize = 512;
@@ -558,6 +559,53 @@ FirebaseClient::KeyDiversification(pw::async2::CoroContext& cx,
       });
 
   co_return co_await key_diversification_provider_.Get();
+}
+
+pw::async2::Coro<pw::Status> FirebaseClient::UploadUsage(
+    pw::async2::CoroContext& cx,
+    pw::ConstByteSpan payload) {
+  (void)cx;
+  if (upload_usage_call_.active()) {
+    PW_LOG_WARN("UploadUsage called while previous call still in flight");
+    co_return pw::Status::Unavailable();
+  }
+
+  // Build ForwardRequest with pre-encoded payload
+  maco_gateway_ForwardRequest request = maco_gateway_ForwardRequest_init_zero;
+  std::strncpy(request.endpoint, kUploadUsageEndpoint,
+               sizeof(request.endpoint) - 1);
+  if (payload.size() > sizeof(request.payload.bytes)) {
+    PW_LOG_ERROR("UploadUsage payload too large: %zu", payload.size());
+    co_return pw::Status::ResourceExhausted();
+  }
+  std::memcpy(request.payload.bytes, payload.data(), payload.size());
+  request.payload.size = payload.size();
+
+  auto future = upload_usage_provider_.Get();
+
+  GatewayClient client(rpc_client_, channel_id_);
+  upload_usage_call_ = client.Forward(
+      request,
+      [this](const maco_gateway_ForwardResponse& resp, pw::Status st) {
+        if (!st.ok()) {
+          PW_LOG_ERROR("UploadUsage RPC failed: %s", st.str());
+          upload_usage_provider_.Resolve(st);
+          return;
+        }
+        if (!resp.success) {
+          PW_LOG_ERROR("UploadUsage returned error (http %u): %s",
+                       static_cast<unsigned>(resp.http_status), resp.error);
+          upload_usage_provider_.Resolve(pw::Status::Internal());
+          return;
+        }
+        upload_usage_provider_.Resolve(pw::OkStatus());
+      },
+      [this](pw::Status st) {
+        PW_LOG_ERROR("UploadUsage RPC error: %s", st.str());
+        upload_usage_provider_.Resolve(st);
+      });
+
+  co_return co_await std::move(future);
 }
 
 }  // namespace maco::firebase
