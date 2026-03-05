@@ -4,6 +4,7 @@ import {
 } from "../proto/firebase_rpc/usage.js";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
+import { Timestamp } from "firebase-admin/firestore";
 
 export async function handleUploadUsage(
   request: UploadUsageRequest,
@@ -30,7 +31,7 @@ export async function handleUploadUsage(
 
   const machineRef = admin.firestore().collection("machine").doc(machineId);
 
-  // Create usage records in the new usage collection
+  // Create usage_machine records from device-uploaded history
   const batch = admin.firestore().batch();
 
   for (const record of request.history.records || []) {
@@ -39,14 +40,14 @@ export async function handleUploadUsage(
       continue;
     }
 
-    const usageRef = admin.firestore().collection("usage").doc();
+    const usageRef = admin.firestore().collection("usage_machine").doc();
     batch.set(usageRef, {
       userId: admin.firestore().doc(`users/${record.userId.value}`),
       authenticationId: admin.firestore().doc(`authentications/${record.authenticationId.value}`),
       machine: machineRef,
-      checkIn: admin.firestore.Timestamp.fromMillis(Number(record.checkIn) * 1000),
+      checkIn: Timestamp.fromMillis(Number(record.checkIn) * 1000),
       checkOut: record.checkOut
-        ? admin.firestore.Timestamp.fromMillis(Number(record.checkOut) * 1000)
+        ? Timestamp.fromMillis(Number(record.checkOut) * 1000)
         : null,
       checkOutReason: record.reason?.reason
         ? JSON.stringify({ reason: record.reason.reason.$case })

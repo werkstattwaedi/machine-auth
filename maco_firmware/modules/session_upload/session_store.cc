@@ -7,6 +7,7 @@
 
 #include <cstring>
 
+#include "maco_firmware/system/psram.h"
 #include "pb_decode.h"
 #include "pb_encode.h"
 #include "pw_log/log.h"
@@ -14,6 +15,14 @@
 namespace maco::session_upload {
 
 namespace {
+
+// Shared scratch space for PendingUsageQueue serialization.
+// All callers run on the single-threaded dispatcher, so sharing is safe.
+// .psram.bss is NOT zeroed at boot; always re-initialise before use.
+PSRAM_BSS maco_session_upload_PendingUsageQueue queue_scratch_;
+PSRAM_BSS std::array<std::byte,
+                     maco_session_upload_PendingUsageQueue_size + 16>
+    queue_buffer_;
 
 /// Encode a PersistedSession to a buffer.
 pw::Result<size_t> EncodeSession(
@@ -55,18 +64,17 @@ pw::Result<size_t> EncodeQueue(
   return stream.bytes_written;
 }
 
-/// Decode a PendingUsageQueue from a buffer.
-pw::Result<maco_session_upload_PendingUsageQueue> DecodeQueue(
-    pw::ConstByteSpan data) {
-  maco_session_upload_PendingUsageQueue queue =
-      maco_session_upload_PendingUsageQueue_init_zero;
+/// Decode a PendingUsageQueue in-place (avoids large return-by-value).
+pw::Status DecodeQueue(
+    pw::ConstByteSpan data, maco_session_upload_PendingUsageQueue& queue) {
+  queue = maco_session_upload_PendingUsageQueue_init_zero;
   pb_istream_t stream = pb_istream_from_buffer(
       reinterpret_cast<const pb_byte_t*>(data.data()), data.size());
   if (!pb_decode(&stream, maco_session_upload_PendingUsageQueue_fields,
                  &queue)) {
     return pw::Status::DataLoss();
   }
-  return queue;
+  return pw::OkStatus();
 }
 
 }  // namespace
@@ -229,19 +237,16 @@ pw::Result<int64_t> SessionStore::LoadOrphanedLastSeenUnix() const {
 
 pw::Status SessionStore::StoreCompletedUsage(
     const app_state::MachineUsage& usage, int64_t utc_offset) {
-  // Load existing queue (or start empty)
-  maco_session_upload_PendingUsageQueue queue =
-      maco_session_upload_PendingUsageQueue_init_zero;
-
-  std::array<std::byte, maco_session_upload_PendingUsageQueue_size + 16>
-      buffer;
-  auto read_result = kvs_.Get(kPendingKey, pw::span(buffer));
+  // Load existing queue (or start empty).
+  // Uses file-scope scratch to stay off the 2 KB work-queue stack.
+  auto& queue = queue_scratch_;
+  queue = maco_session_upload_PendingUsageQueue_init_zero;
+  auto read_result = kvs_.Get(kPendingKey, pw::span(queue_buffer_));
   if (read_result.ok()) {
-    auto decode_result =
-        DecodeQueue(pw::ConstByteSpan(buffer.data(), read_result.size()));
-    if (decode_result.ok()) {
-      queue = *decode_result;
-    }
+    // Decode failure means corrupt KVS data; proceed with empty queue
+    // to self-heal on next write-back.
+    (void)DecodeQueue(
+        pw::ConstByteSpan(queue_buffer_.data(), read_result.size()), queue);
   }
 
   if (queue.records_count >= kMaxPendingRecords) {
@@ -275,7 +280,7 @@ pw::Status SessionStore::StoreCompletedUsage(
   queue.records_count++;
 
   // Write back
-  auto encode_result = EncodeQueue(queue, buffer);
+  auto encode_result = EncodeQueue(queue, queue_buffer_);
   if (!encode_result.ok()) {
     PW_LOG_ERROR("Failed to encode pending usage queue");
     return encode_result.status();
@@ -283,7 +288,7 @@ pw::Status SessionStore::StoreCompletedUsage(
 
   auto status = kvs_.Put(
       kPendingKey,
-      pw::span<const std::byte>(buffer.data(), *encode_result));
+      pw::span<const std::byte>(queue_buffer_.data(), *encode_result));
   if (!status.ok()) {
     PW_LOG_ERROR("Failed to write pending usage to KVS");
   } else {
@@ -293,33 +298,35 @@ pw::Status SessionStore::StoreCompletedUsage(
   return status;
 }
 
-size_t SessionStore::PendingUsageCount() const {
-  std::array<std::byte, maco_session_upload_PendingUsageQueue_size + 16>
-      buffer;
-  auto read_result = kvs_.Get(kPendingKey, pw::span(buffer));
+size_t SessionStore::PendingUsageCount() {
+  auto read_result = kvs_.Get(kPendingKey, pw::span(queue_buffer_));
   if (!read_result.ok()) {
     return 0;
   }
 
-  auto decode_result =
-      DecodeQueue(pw::ConstByteSpan(buffer.data(), read_result.size()));
-  if (!decode_result.ok()) {
+  if (!DecodeQueue(
+          pw::ConstByteSpan(queue_buffer_.data(), read_result.size()),
+          queue_scratch_).ok()) {
     return 0;
   }
 
-  return decode_result->records_count;
+  return queue_scratch_.records_count;
 }
 
 pw::Result<maco_session_upload_PendingUsageQueue>
-SessionStore::LoadPendingUsage() const {
-  std::array<std::byte, maco_session_upload_PendingUsageQueue_size + 16>
-      buffer;
-  auto read_result = kvs_.Get(kPendingKey, pw::span(buffer));
+SessionStore::LoadPendingUsage() {
+  auto read_result = kvs_.Get(kPendingKey, pw::span(queue_buffer_));
   if (!read_result.ok()) {
     return read_result.status();
   }
 
-  return DecodeQueue(pw::ConstByteSpan(buffer.data(), read_result.size()));
+  auto status = DecodeQueue(
+      pw::ConstByteSpan(queue_buffer_.data(), read_result.size()),
+      queue_scratch_);
+  if (!status.ok()) {
+    return status;
+  }
+  return queue_scratch_;
 }
 
 pw::Status SessionStore::ClearPendingUsage() {

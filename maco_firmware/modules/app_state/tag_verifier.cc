@@ -296,7 +296,7 @@ pw::async2::Coro<pw::Status> TagVerifier::AuthorizeTag(
   auto cached = auth_cache_.Lookup(tag_uid, now);
   if (cached) {
     PW_LOG_INFO("Cache hit - skipping cloud authorization");
-    NotifyAuthorized(tag_uid, maco::FirebaseId::Empty(),
+    NotifyAuthorized(tag_uid, cached->user_id,
                      pw::InlineString<64>(cached->user_label),
                      cached->auth_id);
     co_return pw::OkStatus();
@@ -329,7 +329,8 @@ pw::async2::Coro<pw::Status> TagVerifier::AuthorizeTag(
   // If checkin returned an existing auth_id, use it directly
   if (authorized.has_existing_auth()) {
     PW_LOG_INFO("Using existing auth from checkin");
-    auth_cache_.Insert(tag_uid, authorized.authentication_id,
+    auth_cache_.Insert(tag_uid, authorized.user_id,
+                       authorized.authentication_id,
                        std::string_view(authorized.user_label), now);
     NotifyAuthorized(tag_uid, authorized.user_id,
                      authorized.user_label,
@@ -368,7 +369,7 @@ pw::async2::Coro<pw::Status> TagVerifier::AuthorizeTag(
   }
 
   const auto& auth_id = *cloud_key_provider.auth_id();
-  auth_cache_.Insert(tag_uid, auth_id,
+  auth_cache_.Insert(tag_uid, authorized.user_id, auth_id,
                      std::string_view(authorized.user_label), now);
   NotifyAuthorized(tag_uid, authorized.user_id,
                    authorized.user_label, auth_id);

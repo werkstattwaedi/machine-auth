@@ -55,10 +55,12 @@ class SessionStore {
                                  int64_t utc_offset);
 
   /// Get the count of pending usage records.
-  size_t PendingUsageCount() const;
+  /// NOTE: Mutates file-scope PSRAM scratch buffers (single-threaded).
+  size_t PendingUsageCount();
 
   /// Load all pending usage records.
-  pw::Result<maco_session_upload_PendingUsageQueue> LoadPendingUsage() const;
+  /// NOTE: Mutates file-scope PSRAM scratch buffers (single-threaded).
+  pw::Result<maco_session_upload_PendingUsageQueue> LoadPendingUsage();
 
   /// Clear all pending usage records (after successful upload).
   pw::Status ClearPendingUsage();

@@ -10,6 +10,7 @@ package(default_visibility = ["//maco_firmware:__subpackages__"])
 cc_library(
     name = "headers",
     hdrs = [
+        "psram.h",
         "system.h",
     ],
     includes = [".."],  # Allow includes like "maco_firmware/system/system.h"

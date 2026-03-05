@@ -17,7 +17,7 @@ maco::TagUid MakeTagUid(uint8_t last_byte) {
        std::byte{0x44}, std::byte{0x55}, std::byte{last_byte}});
 }
 
-maco::FirebaseId MakeAuthId(const char* str) {
+maco::FirebaseId MakeId(const char* str) {
   return *maco::FirebaseId::FromString(str);
 }
 
@@ -33,10 +33,11 @@ TEST(AuthCacheTest, InsertAndLookup) {
   auto now = Clock::now();
   auto uid = MakeTagUid(0x01);
 
-  cache.Insert(uid, MakeAuthId("auth123"), "Test User", now);
+  cache.Insert(uid, MakeId("user1"), MakeId("auth123"), "Test User", now);
 
   auto result = cache.Lookup(uid, now);
   ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result->user_id.value(), "user1");
   EXPECT_EQ(result->auth_id.value(), "auth123");
   EXPECT_EQ(std::string_view(result->user_label), "Test User");
 }
@@ -47,7 +48,7 @@ TEST(AuthCacheTest, Expiry) {
   auto uid = MakeTagUid(0x01);
   auto ttl = std::chrono::hours(1);
 
-  cache.Insert(uid, MakeAuthId("auth123"), "User", now, ttl);
+  cache.Insert(uid, MakeId("user1"), MakeId("auth123"), "User", now, ttl);
 
   // Before expiry
   auto result = cache.Lookup(uid, now + std::chrono::minutes(59));
@@ -67,8 +68,8 @@ TEST(AuthCacheTest, UpdateExisting) {
   auto now = Clock::now();
   auto uid = MakeTagUid(0x01);
 
-  cache.Insert(uid, MakeAuthId("old_auth"), "Old Name", now);
-  cache.Insert(uid, MakeAuthId("new_auth"), "New Name", now);
+  cache.Insert(uid, MakeId("user1"), MakeId("old_auth"), "Old Name", now);
+  cache.Insert(uid, MakeId("user1"), MakeId("new_auth"), "New Name", now);
 
   auto result = cache.Lookup(uid, now);
   ASSERT_TRUE(result.has_value());
@@ -82,12 +83,12 @@ TEST(AuthCacheTest, EvictionWhenFull) {
 
   // Fill all 8 slots
   for (uint8_t i = 0; i < AuthCache::kCapacity; i++) {
-    cache.Insert(MakeTagUid(i), MakeAuthId("auth"), "User",
+    cache.Insert(MakeTagUid(i), MakeId("user"), MakeId("auth"), "User",
                  now + std::chrono::seconds(i));
   }
 
   // Insert one more - should evict the oldest (tag 0x00)
-  cache.Insert(MakeTagUid(0xFF), MakeAuthId("new"), "New User",
+  cache.Insert(MakeTagUid(0xFF), MakeId("user"), MakeId("new"), "New User",
                now + std::chrono::seconds(AuthCache::kCapacity));
 
   // Oldest entry should be gone
@@ -107,7 +108,7 @@ TEST(AuthCacheTest, Clear) {
   auto now = Clock::now();
   auto uid = MakeTagUid(0x01);
 
-  cache.Insert(uid, MakeAuthId("auth123"), "User", now);
+  cache.Insert(uid, MakeId("user1"), MakeId("auth123"), "User", now);
   cache.Clear();
 
   auto result = cache.Lookup(uid, now);
@@ -120,8 +121,8 @@ TEST(AuthCacheTest, DifferentTagsDontInterfere) {
   auto uid1 = MakeTagUid(0x01);
   auto uid2 = MakeTagUid(0x02);
 
-  cache.Insert(uid1, MakeAuthId("auth1"), "User 1", now);
-  cache.Insert(uid2, MakeAuthId("auth2"), "User 2", now);
+  cache.Insert(uid1, MakeId("user1"), MakeId("auth1"), "User 1", now);
+  cache.Insert(uid2, MakeId("user2"), MakeId("auth2"), "User 2", now);
 
   auto r1 = cache.Lookup(uid1, now);
   auto r2 = cache.Lookup(uid2, now);

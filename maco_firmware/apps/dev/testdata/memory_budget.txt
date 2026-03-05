@@ -1,8 +1,8 @@
 PARTICLE P2 MEMORY BUDGET
 ============================================================
- SRAM:   115,652 /   122,000 bytes ( 95%)  ██████████████████░░
-PSRAM:   602,340 /   605,000 bytes (100%)  ███████████████████░
-Flash:   622,592 /   680,000 bytes ( 92%)  ██████████████████░░
+ SRAM:   115,908 /   122,000 bytes ( 95%)  ███████████████████░
+PSRAM:   606,564 /   640,000 bytes ( 95%)  ██████████████████░░
+Flash:   626,688 /   680,000 bytes ( 92%)  ██████████████████░░
 
 SRAM breakdown (symbols > 512 bytes):
      SIZE   SECTION  SOURCE                           SYMBOL
@@ -18,7 +18,7 @@ SRAM breakdown (symbols > 512 bytes):
     2,080   .data    (unknown)                        pw::system::AsyncCore::Init(pw::channel::Channel<(pw::channel::DataType)0, (pw::channel::Property)2, (pw::channel::Property)4>&)::rpc_thread
     2,080   .data    (unknown)                        pw::system::AsyncCore::Init(pw::channel::Channel<(pw::channel::DataType)0, (pw::channel::Property)2, (pw::channel::Property)4>&)::work_queue_thread
     1,912   .bss     (unknown)                        pw::system::(anonymous namespace)::transfer_thread
-    1,248   .bss     (unknown)                        (anonymous namespace)::AppInit()::tag_verifier
+    1,504   .bss     (unknown)                        (anonymous namespace)::AppInit()::tag_verifier
     1,180   .bss     (unknown)                        pw::system::(anonymous namespace)::system_thread_snapshot_service
     1,088   .bss     (unknown)                        (anonymous namespace)::AppInit()::terminal_ui
     1,060   .bss     (unknown)                        maco::system::GetDeviceConfig()::config
@@ -29,5 +29,5 @@ SRAM breakdown (symbols > 512 bytes):
       512   .bss     (unknown)                        pw::system::(anonymous namespace)::encode_buffer
       512   .bss     (unknown)                        pw::rpc::internal::encoding_buffer
   ─────
-  115,652   total (.data=19,024, .bss=96,628)
+  115,908   total (.data=19,024, .bss=96,884)
 ============================================================
