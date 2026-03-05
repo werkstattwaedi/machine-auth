@@ -84,15 +84,15 @@ def _make_ntag424_preset(
 # Real UIDs match scripts/seed-emulator.ts token IDs so that terminal checkin
 # finds the corresponding Firestore documents.
 TAG_PRESETS = {
-    # Admin's tag (seed user: admin@example.com)
+    # Admin Schlüssel
     "admin": _make_ntag424_preset(
         anti_collision_uid=b'\x04\xAA\xBB\xCC\xDD\xEE\x01',
         real_uid=bytes.fromhex("04c339aa1e1890"),
     ),
-    # Mike's tag (seed user: mike@example.com)
-    "mike": _make_ntag424_preset(
+    # Mike Tag 2
+    "mike2": _make_ntag424_preset(
         anti_collision_uid=b'\x04\xAA\xBB\xCC\xDD\xEE\x02',
-        real_uid=bytes.fromhex("04d449bb2f2901"),
+        real_uid=bytes.fromhex("042d1f322b1690"),
     ),
     # Valid NTAG424 auth but UID not registered in Firestore
     "unregistered": _make_ntag424_preset(
@@ -105,6 +105,16 @@ TAG_PRESETS = {
         real_uid=bytes.fromhex("04c339aa1e1890"),
         terminal_key=b'\xFF' * 16,
     ),
+    # Marco Tag
+    "marco": _make_ntag424_preset(
+        anti_collision_uid=b'\x04\xAA\xBB\xCC\xDD\xEE\x05',
+        real_uid=bytes.fromhex("04231f322b1690"),
+    ),   
+     # Mike Tag 1
+    "mike1": _make_ntag424_preset(
+        anti_collision_uid=b'\x04\xAA\xBB\xCC\xDD\xEE\x05',
+        real_uid=bytes.fromhex("04c439aa1e1890"),
+    ), 
     # Simple ISO tag (not NTAG424) - detected as unknown
     "simple": {
         "uid": b'\x04\x01\x02\x03\x04\x05\x06',

@@ -1,15 +1,15 @@
 PARTICLE P2 MEMORY BUDGET
 ============================================================
- SRAM:    87,236 /    88,000 bytes ( 99%)  ███████████████████░
-PSRAM:   601,852 /   640,000 bytes ( 94%)  ██████████████████░░
-Flash:   618,496 /   680,000 bytes ( 91%)  ██████████████████░░
+ SRAM:   115,908 /   122,000 bytes ( 95%)  ███████████████████░
+PSRAM:   600,788 /   640,000 bytes ( 94%)  ██████████████████░░
+Flash:   622,592 /   680,000 bytes ( 92%)  ██████████████████░░
 
 SRAM breakdown (symbols > 512 bytes):
      SIZE   SECTION  SOURCE                           SYMBOL
+   32,768   .bss     (unknown)                        pw::system::AsyncCore::allocator()::buffer
    30,792   .bss     (unknown)                        maco::system::GetDisplayDriver()::driver
-    8,192   .bss     (unknown)                        pw::system::AsyncCore::allocator()::buffer
+    8,224   .data    (unknown)                        pw::system::AsyncCore::Init(pw::channel::Channel<(pw::channel::DataType)0, (pw::channel::Property)2, (pw::channel::Property)4>&)::dispatcher_thread
     4,128   .data    (unknown)                        pw::system::AsyncCore::InitTask(pw::async2::Context&)::log_thread
-    4,128   .data    (unknown)                        pw::system::AsyncCore::Init(pw::channel::Channel<(pw::channel::DataType)0, (pw::channel::Property)2, (pw::channel::Property)4>&)::dispatcher_thread
     4,096   .bss     (unknown)                        pw::system::(anonymous namespace)::log_buffer
     4,048   .bss     (unknown)                        pw::system::(anonymous namespace)::packet_io_
     4,036   .bss     (unknown)                        pb::cloud::ParticleLedgerBackend::Instance()::instance
@@ -29,5 +29,5 @@ SRAM breakdown (symbols > 512 bytes):
       512   .bss     (unknown)                        pw::system::(anonymous namespace)::encode_buffer
       512   .bss     (unknown)                        pw::rpc::internal::encoding_buffer
   ─────
-   87,236   total (.data=14,928, .bss=72,308)
+  115,908   total (.data=19,024, .bss=96,884)
 ============================================================
