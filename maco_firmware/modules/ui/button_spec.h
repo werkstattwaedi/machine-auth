@@ -16,6 +16,7 @@ struct ButtonSpec {
   led_animator::ButtonConfig led_effect;       // LED waveform for this button
   uint32_t bg_color = 0x000000;               // Pill background (0 = hidden/transparent)
   uint32_t text_color = 0xFFFFFF;             // Text color on pill
+  uint8_t fill_progress = 0;                  // 0=no fill, 1-100=percentage
 };
 
 /// Configuration for bottom row buttons (OK/Cancel).

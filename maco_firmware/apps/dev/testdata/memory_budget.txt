@@ -1,8 +1,8 @@
 PARTICLE P2 MEMORY BUDGET
 ============================================================
  SRAM:   115,652 /   122,000 bytes ( 95%)  ██████████████████░░
-PSRAM:   597,580 /   600,000 bytes (100%)  ███████████████████░
-Flash:   618,496 /   680,000 bytes ( 91%)  ██████████████████░░
+PSRAM:   602,340 /   605,000 bytes (100%)  ███████████████████░
+Flash:   622,592 /   680,000 bytes ( 92%)  ██████████████████░░
 
 SRAM breakdown (symbols > 512 bytes):
      SIZE   SECTION  SOURCE                           SYMBOL
@@ -20,7 +20,7 @@ SRAM breakdown (symbols > 512 bytes):
     1,912   .bss     (unknown)                        pw::system::(anonymous namespace)::transfer_thread
     1,248   .bss     (unknown)                        (anonymous namespace)::AppInit()::tag_verifier
     1,180   .bss     (unknown)                        pw::system::(anonymous namespace)::system_thread_snapshot_service
-    1,080   .bss     (unknown)                        (anonymous namespace)::AppInit()::terminal_ui
+    1,088   .bss     (unknown)                        (anonymous namespace)::AppInit()::terminal_ui
     1,060   .bss     (unknown)                        maco::system::GetDeviceConfig()::config
       760   .bss     (unknown)                        (anonymous namespace)::AppInit()::session_fsm
       708   .bss     (unknown)                        maco::(anonymous namespace)::GetSnapshot()::snapshot

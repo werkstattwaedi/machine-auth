@@ -7,6 +7,7 @@
 #include "maco_firmware/modules/terminal_ui/ui_action.h"
 #include "maco_firmware/modules/ui/data_binding.h"
 #include "maco_firmware/modules/ui/screen.h"
+#include "pw_chrono/system_clock.h"
 #include "pw_string/string.h"
 
 namespace maco::terminal_ui {
@@ -59,6 +60,15 @@ class MainScreen : public ui::Screen<app_state::AppStateSnapshot> {
   // Pending widgets (checkout, takeover, stop)
   lv_obj_t* pending_title_label_ = nullptr;
   lv_obj_t* countdown_label_ = nullptr;
+  lv_obj_t* confirm_btn_ = nullptr;  // Invisible OK handler for pending states
+
+  uint8_t ComputePendingProgress() const;
+
+  // Cached pending state for progress calculation in GetButtonConfig()
+  pw::chrono::SystemClock::time_point cached_pending_since_;
+  pw::chrono::SystemClock::time_point cached_pending_deadline_;
+  pw::chrono::SystemClock::time_point cached_session_started_at_;
+  bool cached_tag_present_ = false;
 };
 
 }  // namespace maco::terminal_ui

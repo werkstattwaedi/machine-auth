@@ -10,6 +10,7 @@
 #include "maco_firmware/modules/status_bar/status_bar.h"
 #include "maco_firmware/modules/terminal_ui/theme.h"
 #include "maco_firmware/modules/ui/widgets/button_bar.h"
+#include "pw_chrono/system_clock.h"
 
 namespace maco::terminal_ui {
 namespace {
@@ -33,11 +34,17 @@ class MainScreenTest : public ::testing::Test {
     last_action = UiAction::kNone;
     ASSERT_EQ(harness_.Init(), pw::OkStatus());
 
-    // Set up status bar with static state (wifi+gateway connected, 14:30)
+    // Set up status bar with static state (wifi+gateway connected, 14:30 CET)
+    // Compute offset so GetSnapshot() always yields 14:30 CET (= 13:30 UTC).
+    // Target: 2026-01-15 13:30:00 UTC (CET = UTC+1, so 14:30 local)
+    constexpr int64_t kTargetUtcSecs = 1768483800;  // 2026-01-15 13:30 UTC
+    auto boot_secs =
+        std::chrono::duration_cast<std::chrono::seconds>(
+            pw::chrono::SystemClock::now().time_since_epoch())
+            .count();
     system_state_.SetWifiState(app_state::WifiState::kConnected);
     system_state_.SetGatewayConnected(true);
-    system_state_.SetUtcBootOffsetSeconds(
-        14 * 3600 + 30 * 60);  // ~14:30 UTC (boot clock starts near 0)
+    system_state_.SetUtcBootOffsetSeconds(kTargetUtcSecs - boot_secs);
     status_bar_ = std::make_unique<status_bar::StatusBar>(system_state_);
     ASSERT_EQ(status_bar_->Init(), pw::OkStatus());
     status_bar_->SetVisible(true);
@@ -170,8 +177,12 @@ TEST_F(MainScreenTest, CheckoutPendingState) {
   app_state::AppStateSnapshot snapshot;
   snapshot.session.state = app_state::SessionStateUi::kCheckoutPending;
   snapshot.session.session_user_label = "Simon Flepp";
-  snapshot.session.pending_deadline =
-      pw::chrono::SystemClock::now() + std::chrono::seconds(3);
+  snapshot.session.session_started_at =
+      pw::chrono::SystemClock::now() - std::chrono::minutes(47);
+  auto now = pw::chrono::SystemClock::now();
+  snapshot.session.pending_since = now;
+  snapshot.session.pending_deadline = now + std::chrono::seconds(3);
+  snapshot.session.tag_present = true;
   screen_->OnUpdate(snapshot);
   RenderFrame();
 
@@ -183,12 +194,20 @@ TEST_F(MainScreenTest, CheckoutPendingState) {
 TEST_F(MainScreenTest, CheckoutPendingButtonConfig) {
   app_state::AppStateSnapshot snapshot;
   snapshot.session.state = app_state::SessionStateUi::kCheckoutPending;
+  auto now = pw::chrono::SystemClock::now();
+  snapshot.session.pending_since = now;
+  snapshot.session.pending_deadline = now + std::chrono::seconds(3);
+  snapshot.session.tag_present = true;
   screen_->OnUpdate(snapshot);
 
   auto config = screen_->GetButtonConfig();
-  EXPECT_TRUE(config.ok.label.empty());
-  EXPECT_EQ(config.cancel.label, "Abbrechen");
+  EXPECT_EQ(config.ok.label, "Ja");
+  EXPECT_EQ(config.ok.bg_color, theme::kColorBtnGreen);
+  EXPECT_EQ(config.cancel.label, "Nein");
   EXPECT_EQ(config.cancel.bg_color, theme::kColorBtnRed);
+  // With tag present, ok has progress, cancel does not
+  EXPECT_GE(config.ok.fill_progress, 1);
+  EXPECT_EQ(config.cancel.fill_progress, 0);
 }
 
 TEST_F(MainScreenTest, CheckoutPendingScreenStyle) {
@@ -228,8 +247,11 @@ TEST_F(MainScreenTest, StopPendingState) {
   app_state::AppStateSnapshot snapshot;
   snapshot.session.state = app_state::SessionStateUi::kStopPending;
   snapshot.session.session_user_label = "Simon Flepp";
-  snapshot.session.pending_deadline =
-      pw::chrono::SystemClock::now() + std::chrono::seconds(3);
+  snapshot.session.session_started_at =
+      pw::chrono::SystemClock::now() - std::chrono::minutes(47);
+  auto now = pw::chrono::SystemClock::now();
+  snapshot.session.pending_since = now;
+  snapshot.session.pending_deadline = now + std::chrono::seconds(3);
   screen_->OnUpdate(snapshot);
   RenderFrame();
 
@@ -241,12 +263,18 @@ TEST_F(MainScreenTest, StopPendingState) {
 TEST_F(MainScreenTest, StopPendingButtonConfig) {
   app_state::AppStateSnapshot snapshot;
   snapshot.session.state = app_state::SessionStateUi::kStopPending;
+  auto now = pw::chrono::SystemClock::now();
+  snapshot.session.pending_since = now;
+  snapshot.session.pending_deadline = now + std::chrono::seconds(3);
   screen_->OnUpdate(snapshot);
 
   auto config = screen_->GetButtonConfig();
-  EXPECT_TRUE(config.ok.label.empty());
-  EXPECT_EQ(config.cancel.label, "Abbrechen");
+  EXPECT_EQ(config.ok.label, "Ja");
+  EXPECT_EQ(config.ok.bg_color, theme::kColorBtnGreen);
+  EXPECT_GE(config.ok.fill_progress, 1);
+  EXPECT_EQ(config.cancel.label, "Nein");
   EXPECT_EQ(config.cancel.bg_color, theme::kColorBtnRed);
+  EXPECT_EQ(config.cancel.fill_progress, 0);
 }
 
 TEST_F(MainScreenTest, StopPendingScreenStyle) {
@@ -276,6 +304,79 @@ TEST_F(MainScreenTest, CancelActionFromCheckoutPending) {
   bool handled = screen_->OnEscapePressed();
   EXPECT_TRUE(handled);
   EXPECT_EQ(last_action, UiAction::kCancel);
+}
+
+// --- Progress fill screenshot tests ---
+
+TEST_F(MainScreenTest, StopPendingProgress0) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.session.state = app_state::SessionStateUi::kStopPending;
+  snapshot.session.session_user_label = "Simon Flepp";
+  snapshot.session.session_started_at =
+      pw::chrono::SystemClock::now() - std::chrono::minutes(47);
+  auto now = pw::chrono::SystemClock::now();
+  snapshot.session.pending_since = now;
+  snapshot.session.pending_deadline = now + std::chrono::seconds(3);
+  screen_->OnUpdate(snapshot);
+  RenderFrame();
+
+  EXPECT_TRUE(harness_.CompareToGolden(
+      "maco_firmware/modules/terminal_ui/testdata/stop_pending_progress_0.png",
+      "/tmp/stop_pending_progress_0_diff.png"));
+}
+
+TEST_F(MainScreenTest, StopPendingProgress33) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.session.state = app_state::SessionStateUi::kStopPending;
+  snapshot.session.session_user_label = "Simon Flepp";
+  snapshot.session.session_started_at =
+      pw::chrono::SystemClock::now() - std::chrono::minutes(47);
+  auto now = pw::chrono::SystemClock::now();
+  // 1s elapsed out of 3s = 33%
+  snapshot.session.pending_since = now - std::chrono::seconds(1);
+  snapshot.session.pending_deadline = now + std::chrono::seconds(2);
+  screen_->OnUpdate(snapshot);
+  RenderFrame();
+
+  EXPECT_TRUE(harness_.CompareToGolden(
+      "maco_firmware/modules/terminal_ui/testdata/stop_pending_progress_33.png",
+      "/tmp/stop_pending_progress_33_diff.png"));
+}
+
+TEST_F(MainScreenTest, StopPendingProgress66) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.session.state = app_state::SessionStateUi::kStopPending;
+  snapshot.session.session_user_label = "Simon Flepp";
+  snapshot.session.session_started_at =
+      pw::chrono::SystemClock::now() - std::chrono::minutes(47);
+  auto now = pw::chrono::SystemClock::now();
+  // 2s elapsed out of 3s = 66%
+  snapshot.session.pending_since = now - std::chrono::seconds(2);
+  snapshot.session.pending_deadline = now + std::chrono::seconds(1);
+  screen_->OnUpdate(snapshot);
+  RenderFrame();
+
+  EXPECT_TRUE(harness_.CompareToGolden(
+      "maco_firmware/modules/terminal_ui/testdata/stop_pending_progress_66.png",
+      "/tmp/stop_pending_progress_66_diff.png"));
+}
+
+TEST_F(MainScreenTest, StopPendingProgress100) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.session.state = app_state::SessionStateUi::kStopPending;
+  snapshot.session.session_user_label = "Simon Flepp";
+  snapshot.session.session_started_at =
+      pw::chrono::SystemClock::now() - std::chrono::minutes(47);
+  auto now = pw::chrono::SystemClock::now();
+  // 3s elapsed out of 3s = 100%
+  snapshot.session.pending_since = now - std::chrono::seconds(3);
+  snapshot.session.pending_deadline = now;
+  screen_->OnUpdate(snapshot);
+  RenderFrame();
+
+  EXPECT_TRUE(harness_.CompareToGolden(
+      "maco_firmware/modules/terminal_ui/testdata/stop_pending_progress_100.png",
+      "/tmp/stop_pending_progress_100_diff.png"));
 }
 
 }  // namespace

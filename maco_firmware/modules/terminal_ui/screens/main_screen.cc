@@ -3,6 +3,8 @@
 
 #include "maco_firmware/modules/terminal_ui/screens/main_screen.h"
 
+#include <algorithm>
+
 #include "lvgl.h"
 #include "maco_firmware/modules/led_animator/button_effects.h"
 #include "maco_firmware/modules/terminal_ui/theme.h"
@@ -120,6 +122,22 @@ pw::Status MainScreen::OnActivate() {
   lv_obj_align(countdown_label_, LV_ALIGN_TOP_LEFT, 16, 90);
   lv_obj_add_flag(countdown_label_, LV_OBJ_FLAG_HIDDEN);
 
+  // Invisible button to capture OK key press for pending confirm
+  confirm_btn_ = lv_button_create(lv_screen_);
+  lv_obj_set_size(confirm_btn_, 0, 0);
+  lv_obj_add_flag(confirm_btn_, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_add_event_cb(
+      confirm_btn_,
+      [](lv_event_t* e) {
+        auto* cb = static_cast<ActionCallback*>(lv_event_get_user_data(e));
+        if (*cb) {
+          (*cb)(UiAction::kConfirm);
+        }
+      },
+      LV_EVENT_CLICKED,
+      &action_callback_);
+  AddToGroup(confirm_btn_);
+
   // Initialize widget visibility for the starting state. Without this,
   // widgets created hidden above won't be unhidden because OnUpdate()'s
   // guard (new_state != visual_state_) skips the initial kIdle→kIdle case.
@@ -147,6 +165,7 @@ void MainScreen::OnDeactivate() {
   denied_label_ = nullptr;
   pending_title_label_ = nullptr;
   countdown_label_ = nullptr;
+  confirm_btn_ = nullptr;
   PW_LOG_INFO("MainScreen deactivated");
 }
 
@@ -192,16 +211,25 @@ void MainScreen::OnUpdate(const app_state::AppStateSnapshot& snapshot) {
                           static_cast<int>(minutes.count()));
   }
 
-  // Update countdown for pending states
+  // Update pending states
   if (visual_state_ == VisualState::kCheckoutPending ||
       visual_state_ == VisualState::kStopPending) {
+    // Show user name + session duration
     auto now = pw::chrono::SystemClock::now();
-    auto remaining = snapshot.session.pending_deadline - now;
-    auto secs =
-        std::chrono::duration_cast<std::chrono::seconds>(remaining).count();
-    if (secs < 0) secs = 0;
-    lv_label_set_text_fmt(countdown_label_, "%ds...",
-                          static_cast<int>(secs));
+    auto elapsed = now - snapshot.session.session_started_at;
+    auto minutes = std::chrono::duration_cast<std::chrono::minutes>(elapsed);
+    lv_label_set_text_fmt(countdown_label_, "%s\n%d min",
+                          snapshot.session.session_user_label.c_str(),
+                          static_cast<int>(minutes.count()));
+
+    // Cache for GetButtonConfig() progress calculation
+    cached_pending_since_ = snapshot.session.pending_since;
+    cached_pending_deadline_ = snapshot.session.pending_deadline;
+    cached_tag_present_ = snapshot.session.tag_present;
+    cached_session_started_at_ = snapshot.session.session_started_at;
+
+    // Progress changes need button bar redraw
+    MarkDirty();
   } else if (visual_state_ == VisualState::kTakeoverPending) {
     lv_label_set_text_fmt(pending_title_label_, "%s übernimmt",
                           snapshot.session.pending_user_label.c_str());
@@ -242,6 +270,20 @@ bool MainScreen::OnEscapePressed() {
   return false;
 }
 
+uint8_t MainScreen::ComputePendingProgress() const {
+  auto now = pw::chrono::SystemClock::now();
+  auto total = cached_pending_deadline_ - cached_pending_since_;
+  auto elapsed = now - cached_pending_since_;
+  int total_ms =
+      std::chrono::duration_cast<std::chrono::milliseconds>(total).count();
+  int elapsed_ms =
+      std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
+  // Clamp to 1-100: 0 means "no progress bar", 1 = just started
+  if (total_ms <= 0) return 1;
+  return static_cast<uint8_t>(
+      std::max(1, std::min(100, elapsed_ms * 100 / total_ms)));
+}
+
 ui::ButtonConfig MainScreen::GetButtonConfig() const {
   switch (visual_state_) {
     case VisualState::kIdle:
@@ -275,9 +317,56 @@ ui::ButtonConfig MainScreen::GetButtonConfig() const {
                  .text_color = theme::kColorDarkText},
           .cancel = {},
       };
-    case VisualState::kCheckoutPending:
+    case VisualState::kStopPending: {
+      uint8_t progress = ComputePendingProgress();
+      return {
+          .ok = {.label = "Ja",
+                 .led_effect = led_animator::SolidButton(
+                     led::RgbwColor::FromRgb(theme::kColorBtnGreen)),
+                 .bg_color = theme::kColorBtnGreen,
+                 .text_color = 0xFFFFFF,
+                 .fill_progress = progress},
+          .cancel = {.label = "Nein",
+                     .led_effect = led_animator::SolidButton(
+                         led::RgbwColor::FromRgb(theme::kColorBtnRed)),
+                     .bg_color = theme::kColorBtnRed,
+                     .text_color = 0xFFFFFF},
+      };
+    }
+    case VisualState::kCheckoutPending: {
+      uint8_t progress = ComputePendingProgress();
+      if (cached_tag_present_) {
+        // Badge present: Ja fills (confirm countdown)
+        return {
+            .ok = {.label = "Ja",
+                   .led_effect = led_animator::SolidButton(
+                       led::RgbwColor::FromRgb(theme::kColorBtnGreen)),
+                   .bg_color = theme::kColorBtnGreen,
+                   .text_color = 0xFFFFFF,
+                   .fill_progress = progress},
+            .cancel = {.label = "Nein",
+                       .led_effect = led_animator::SolidButton(
+                           led::RgbwColor::FromRgb(theme::kColorBtnRed)),
+                       .bg_color = theme::kColorBtnRed,
+                       .text_color = 0xFFFFFF},
+        };
+      }
+      // Badge removed: Nein fills (cancel countdown)
+      return {
+          .ok = {.label = "Ja",
+                 .led_effect = led_animator::SolidButton(
+                     led::RgbwColor::FromRgb(theme::kColorBtnGreen)),
+                 .bg_color = theme::kColorBtnGreen,
+                 .text_color = 0xFFFFFF},
+          .cancel = {.label = "Nein",
+                     .led_effect = led_animator::SolidButton(
+                         led::RgbwColor::FromRgb(theme::kColorBtnRed)),
+                     .bg_color = theme::kColorBtnRed,
+                     .text_color = 0xFFFFFF,
+                     .fill_progress = progress},
+      };
+    }
     case VisualState::kTakeoverPending:
-    case VisualState::kStopPending:
       return {
           .ok = {},
           .cancel = {.label = "Abbrechen",
@@ -338,23 +427,31 @@ void MainScreen::SetVisualState(VisualState state) {
       break;
     case VisualState::kCheckoutPending:
       bg_color = theme::kColorGreen;
-      lv_label_set_text(pending_title_label_, "Abmelden in");
+      lv_label_set_text(pending_title_label_, "Abmelden?");
       lv_obj_set_style_text_color(pending_title_label_, lv_color_white(),
                                   LV_PART_MAIN);
       lv_obj_set_style_text_color(countdown_label_, lv_color_white(),
                                   LV_PART_MAIN);
       lv_obj_remove_flag(pending_title_label_, LV_OBJ_FLAG_HIDDEN);
       lv_obj_remove_flag(countdown_label_, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_remove_flag(confirm_btn_, LV_OBJ_FLAG_HIDDEN);
+      if (lv_group_) {
+        lv_group_focus_obj(confirm_btn_);
+      }
       break;
     case VisualState::kStopPending:
       bg_color = theme::kColorGreen;
-      lv_label_set_text(pending_title_label_, "Beenden in");
+      lv_label_set_text(pending_title_label_, "Benutzung beenden?");
       lv_obj_set_style_text_color(pending_title_label_, lv_color_white(),
                                   LV_PART_MAIN);
       lv_obj_set_style_text_color(countdown_label_, lv_color_white(),
                                   LV_PART_MAIN);
       lv_obj_remove_flag(pending_title_label_, LV_OBJ_FLAG_HIDDEN);
       lv_obj_remove_flag(countdown_label_, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_remove_flag(confirm_btn_, LV_OBJ_FLAG_HIDDEN);
+      if (lv_group_) {
+        lv_group_focus_obj(confirm_btn_);
+      }
       break;
     case VisualState::kTakeoverPending:
       bg_color = theme::kColorWhiteBg;
@@ -383,6 +480,7 @@ void MainScreen::HideAllWidgets() {
   lv_obj_add_flag(denied_label_, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(pending_title_label_, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(countdown_label_, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_add_flag(confirm_btn_, LV_OBJ_FLAG_HIDDEN);
 }
 
 }  // namespace maco::terminal_ui

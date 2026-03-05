@@ -22,6 +22,13 @@ class ButtonBar {
  public:
   static constexpr int kHeight = 50;
 
+  /// Data for the draw callback that renders the split background.
+  struct FillData {
+    uint32_t fill_color = 0;
+    uint32_t track_color = 0;
+    uint8_t progress = 0;  // 0=no fill, 1-100=percentage
+  };
+
   /// Create button bar on the given parent (typically lv_layer_top()).
   explicit ButtonBar(lv_obj_t* parent);
   ~ButtonBar();
@@ -38,7 +45,8 @@ class ButtonBar {
   void Update();
 
  private:
-  void UpdatePill(lv_obj_t* pill, lv_obj_t* label, const ButtonSpec& spec);
+  void UpdatePill(lv_obj_t* pill, lv_obj_t* label, FillData& fill_data,
+                  const ButtonSpec& spec);
 
   lv_obj_t* container_ = nullptr;
   lv_obj_t* ok_pill_ = nullptr;       // Bottom-left pill
@@ -46,13 +54,16 @@ class ButtonBar {
   lv_obj_t* cancel_pill_ = nullptr;   // Bottom-right pill
   lv_obj_t* cancel_label_ = nullptr;
 
+  FillData ok_fill_data_;
+  FillData cancel_fill_data_;
   Watched<ButtonConfig> config_{{}};
 };
 
 // Equality operators for ButtonConfig (needed by Watched<T>)
 inline bool operator==(const ButtonSpec& a, const ButtonSpec& b) {
   return a.label == b.label && a.led_effect == b.led_effect &&
-         a.bg_color == b.bg_color && a.text_color == b.text_color;
+         a.bg_color == b.bg_color && a.text_color == b.text_color &&
+         a.fill_progress == b.fill_progress;
 }
 
 inline bool operator!=(const ButtonSpec& a, const ButtonSpec& b) {

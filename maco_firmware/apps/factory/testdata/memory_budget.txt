@@ -2,7 +2,7 @@ PARTICLE P2 MEMORY BUDGET
 ============================================================
  SRAM:   101,188 /   107,000 bytes ( 95%)  ██████████████████░░
 PSRAM:   371,056 /   382,000 bytes ( 97%)  ███████████████████░
-Flash:   393,216 /   396,000 bytes ( 99%)  ███████████████████░
+Flash:   397,312 /   400,000 bytes ( 99%)  ███████████████████░
 
 SRAM breakdown (symbols > 512 bytes):
      SIZE   SECTION  SOURCE                           SYMBOL

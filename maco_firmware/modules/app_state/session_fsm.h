@@ -183,10 +183,11 @@ class TakeoverPending
 class StopPending
     : public etl::fsm_state<SessionFsm, StopPending,
                             SessionStateId::kStopPending,
-                            session_event::UiCancel, session_event::Timeout,
-                            session_event::StopSession,
+                            session_event::UiConfirm, session_event::UiCancel,
+                            session_event::Timeout, session_event::StopSession,
                             session_event::UserAuthorized> {
  public:
+  etl::fsm_state_id_t on_event(const session_event::UiConfirm&);
   etl::fsm_state_id_t on_event(const session_event::UiCancel&);
   etl::fsm_state_id_t on_event(const session_event::Timeout&);
   etl::fsm_state_id_t on_event(const session_event::StopSession&);

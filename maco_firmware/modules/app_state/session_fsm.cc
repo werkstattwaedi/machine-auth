@@ -267,9 +267,17 @@ etl::fsm_state_id_t CheckoutPending::on_event(
 
 etl::fsm_state_id_t CheckoutPending::on_event(
     const session_event::TagPresence& e) {
+  auto& ctx = get_fsm_context();
+  auto now = pw::chrono::SystemClock::now();
+  ctx.pending_since = now;
+  ctx.pending_deadline = now + kAutoConfirmDuration;
   if (!e.present) {
-    PW_LOG_INFO("Tag removed during checkout: back to running");
-    return SessionStateId::kRunning;
+    // Badge removed: start cancel countdown (Nein fills)
+    PW_LOG_INFO("Tag removed during checkout: cancel countdown started");
+    ctx.SyncSnapshot();
+  } else {
+    // Badge (re-)presented: restart confirm countdown (Ja fills)
+    PW_LOG_INFO("Tag presented during checkout: confirm countdown restarted");
   }
   return No_State_Change;
 }
@@ -277,9 +285,15 @@ etl::fsm_state_id_t CheckoutPending::on_event(
 etl::fsm_state_id_t CheckoutPending::on_event(
     const session_event::Timeout&) {
   auto& ctx = get_fsm_context();
-  ctx.checkout_reason = CheckoutReason::kSelfCheckout;
-  PW_LOG_INFO("Checkout auto-confirmed (countdown)");
-  return SessionStateId::kNoSession;
+  if (ctx.tag_present()) {
+    // Badge held → confirm checkout
+    ctx.checkout_reason = CheckoutReason::kSelfCheckout;
+    PW_LOG_INFO("Checkout auto-confirmed (badge held)");
+    return SessionStateId::kNoSession;
+  }
+  // Badge removed + cancel countdown expired → back to Running
+  PW_LOG_INFO("Checkout cancelled (badge removed timeout)");
+  return SessionStateId::kRunning;
 }
 
 etl::fsm_state_id_t CheckoutPending::on_event(
@@ -333,6 +347,13 @@ etl::fsm_state_id_t TakeoverPending::ConfirmTakeover() {
 }
 
 // --- StopPending ---
+
+etl::fsm_state_id_t StopPending::on_event(const session_event::UiConfirm&) {
+  auto& ctx = get_fsm_context();
+  ctx.checkout_reason = CheckoutReason::kUiCheckout;
+  PW_LOG_INFO("Stop confirmed (UI confirm)");
+  return SessionStateId::kNoSession;
+}
 
 etl::fsm_state_id_t StopPending::on_event(const session_event::UiCancel&) {
   PW_LOG_INFO("Stop cancelled");

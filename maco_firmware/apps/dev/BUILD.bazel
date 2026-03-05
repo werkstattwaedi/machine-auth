@@ -113,7 +113,7 @@ particle_memory_budget(
     # Limits with ~10% flash and ~5% SRAM headroom above current watermark.
     # Bump consciously when adding features that exceed these.
     sram_limit = 122000,
-    psram_limit = 600000,
+    psram_limit = 605000,
     flash_limit = 680000,
     golden = "testdata/memory_budget.txt",
 )

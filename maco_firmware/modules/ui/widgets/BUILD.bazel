@@ -12,6 +12,7 @@ cc_library(
     srcs = ["button_bar.cc"],
     hdrs = ["button_bar.h"],
     deps = [
+        "//maco_firmware/modules/terminal_ui:theme",
         "//maco_firmware/modules/ui:button_spec",
         "//maco_firmware/modules/ui:data_binding",
         "//third_party/lvgl",

@@ -162,7 +162,7 @@ TEST(SessionFsmTest, CheckoutCancelReturnsToRunning) {
   EXPECT_EQ(observer.end_count, 0);  // Session still active
 }
 
-TEST(SessionFsmTest, CheckoutTagRemovedReturnsToRunning) {
+TEST(SessionFsmTest, CheckoutTagRemovedStaysInCheckoutPending) {
   SessionFsm fsm;
   auto tag = MakeTagUid(std::byte{0x01});
 
@@ -170,10 +170,11 @@ TEST(SessionFsmTest, CheckoutTagRemovedReturnsToRunning) {
   fsm.receive(MakeAuthEvent(tag));
   fsm.receive(session_event::TagPresence(false));
 
-  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kRunning);
+  // Badge removed starts cancel countdown, stays in CheckoutPending
+  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kCheckoutPending);
 }
 
-TEST(SessionFsmTest, CheckoutTimeoutAutoConfirms) {
+TEST(SessionFsmTest, CheckoutTagRemovedTimeoutReturnsToRunning) {
   SessionFsm fsm;
   MockObserver observer;
   fsm.AddObserver(&observer);
@@ -181,8 +182,50 @@ TEST(SessionFsmTest, CheckoutTimeoutAutoConfirms) {
 
   fsm.receive(MakeAuthEvent(tag, "Alice"));
   fsm.receive(MakeAuthEvent(tag));
+  fsm.SetTagPresent(false);
+  fsm.receive(session_event::TagPresence(false));
   fsm.receive(session_event::Timeout{});
 
+  // Badge removed + cancel countdown expired → back to Running
+  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kRunning);
+  EXPECT_EQ(observer.end_count, 0);
+}
+
+TEST(SessionFsmTest, CheckoutTagPresentTimeoutConfirms) {
+  SessionFsm fsm;
+  MockObserver observer;
+  fsm.AddObserver(&observer);
+  auto tag = MakeTagUid(std::byte{0x01});
+
+  fsm.receive(MakeAuthEvent(tag, "Alice"));
+  fsm.receive(MakeAuthEvent(tag));
+  fsm.SetTagPresent(true);
+  fsm.receive(session_event::TagPresence(true));
+  fsm.receive(session_event::Timeout{});
+
+  // Badge held → confirm checkout
+  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kNoSession);
+  EXPECT_EQ(observer.end_count, 1);
+  EXPECT_EQ(observer.last_checkout_reason, CheckoutReason::kSelfCheckout);
+}
+
+TEST(SessionFsmTest, CheckoutBadgeRemovedThenRepresentedConfirms) {
+  SessionFsm fsm;
+  MockObserver observer;
+  fsm.AddObserver(&observer);
+  auto tag = MakeTagUid(std::byte{0x01});
+
+  fsm.receive(MakeAuthEvent(tag, "Alice"));
+  fsm.receive(MakeAuthEvent(tag));
+  // Badge removed → starts cancel countdown
+  fsm.SetTagPresent(false);
+  fsm.receive(session_event::TagPresence(false));
+  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kCheckoutPending);
+  // Badge re-presented → restarts confirm countdown
+  fsm.SetTagPresent(true);
+  fsm.receive(session_event::TagPresence(true));
+  // Timeout while badge held → confirms checkout
+  fsm.receive(session_event::Timeout{});
   EXPECT_EQ(fsm.get_state_id(), SessionStateId::kNoSession);
   EXPECT_EQ(observer.end_count, 1);
   EXPECT_EQ(observer.last_checkout_reason, CheckoutReason::kSelfCheckout);
@@ -476,6 +519,23 @@ TEST(SessionFsmTest, StopPendingTimeoutEndsSession) {
   EXPECT_EQ(fsm.get_state_id(), SessionStateId::kStopPending);
 
   fsm.receive(session_event::Timeout{});
+
+  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kNoSession);
+  EXPECT_EQ(observer.end_count, 1);
+  EXPECT_EQ(observer.last_checkout_reason, CheckoutReason::kUiCheckout);
+}
+
+TEST(SessionFsmTest, StopPendingUiConfirmEndsSession) {
+  SessionFsm fsm;
+  MockObserver observer;
+  fsm.AddObserver(&observer);
+  auto tag = MakeTagUid(std::byte{0x01});
+
+  fsm.receive(MakeAuthEvent(tag, "Alice"));
+  fsm.receive(session_event::StopSession{});
+  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kStopPending);
+
+  fsm.receive(session_event::UiConfirm{});
 
   EXPECT_EQ(fsm.get_state_id(), SessionStateId::kNoSession);
   EXPECT_EQ(observer.end_count, 1);

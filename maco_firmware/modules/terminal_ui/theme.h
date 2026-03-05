@@ -64,4 +64,16 @@ constexpr bool IsLightColor(uint32_t rgb) {
   return luminance > 128;
 }
 
+/// Lighten an RGB color by blending each channel toward 255.
+/// factor=0 means no change, factor=51 means ~20% lighter.
+constexpr uint32_t LightenColor(uint32_t rgb, uint8_t factor = 51) {
+  uint32_t r = (rgb >> 16) & 0xFF;
+  uint32_t g = (rgb >> 8) & 0xFF;
+  uint32_t b = rgb & 0xFF;
+  r = r + ((255 - r) * factor) / 256;
+  g = g + ((255 - g) * factor) / 256;
+  b = b + ((255 - b) * factor) / 256;
+  return (r << 16) | (g << 8) | b;
+}
+
 }  // namespace maco::terminal_ui::theme
