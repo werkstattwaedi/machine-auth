@@ -112,7 +112,7 @@ particle_memory_budget(
     name = "memory_budget",
     elf = ":factory",
     # Set just above current watermark. Bump consciously when adding features.
-    sram_limit = 75000,
+    sram_limit = 107000,
     psram_limit = 382000,
     flash_limit = 396000,
     golden = "testdata/memory_budget.txt",

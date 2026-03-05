@@ -28,3 +28,7 @@ build --copt=-DPW_LOG_LEVEL=PW_LOG_LEVEL_INFO
 # Global because the define must reach pw_system compilation, not just user code.
 build --copt=-DPW_SYSTEM_ASYNC_DISPATCHER_THREAD_STACK_SIZE_BYTES=8192
 
+# pw_system allocator heap (default 8KB) backs all coroutine frame allocations.
+# ~10 concurrent coroutines need more than 8KB; 32KB gives comfortable headroom.
+build --copt=-DPW_SYSTEM_ALLOCATOR_HEAP_SIZE_BYTES=32768
+
