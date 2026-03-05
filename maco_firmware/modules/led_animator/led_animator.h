@@ -321,11 +321,14 @@ class LedAnimator : public LedAnimatorBase, public maco::led::LedFrameRenderer {
   void StartHotspotTransition(
       const HotspotConfig (&new_hotspots)[kNumHotspots]
   ) {
-    HotspotTransition transition;
+    // Build directly in the member to avoid ~1.2 KB stack local
+    // (HotspotTransition contains 20 HotspotConfigs + 20 HotspotStates).
+    hotspot_transition_.emplace();
+    auto& t = hotspot_transition_.value();
     for (int h = 0; h < kNumHotspots; ++h) {
-      transition.from_configs[h] = current_hotspots_[h];
-      transition.from_states[h] = hotspot_states_[h];
-      transition.target_configs[h] = new_hotspots[h];
+      t.from_configs[h] = current_hotspots_[h];
+      t.from_states[h] = hotspot_states_[h];
+      t.target_configs[h] = new_hotspots[h];
       float initial_elapsed = new_hotspots[h].phase_offset *
                               SafePeriod(new_hotspots[h].waveform.period_s);
       if (new_hotspots[h].sweep_arc != 0.0f &&
@@ -340,14 +343,13 @@ class LedAnimator : public LedAnimatorBase, public maco::led::LedFrameRenderer {
         initial_elapsed += new_hotspots[h].sweep_phase_offset *
                            (t_forward + t_return);
       }
-      transition.target_states[h] = HotspotState{
+      t.target_states[h] = HotspotState{
           .position = new_hotspots[h].start_position,
           .elapsed_s = initial_elapsed,
       };
     }
-    transition.progress = 0.0f;
-    transition.duration_s = kTransitionDuration;
-    hotspot_transition_ = transition;
+    t.progress = 0.0f;
+    t.duration_s = kTransitionDuration;
     for (int h = 0; h < kNumHotspots; ++h) {
       current_hotspots_[h] = new_hotspots[h];
     }
