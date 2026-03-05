@@ -4,13 +4,24 @@
 #include "maco_firmware/modules/terminal_ui/screens/main_screen.h"
 
 #include "gtest/gtest.h"
+#include "maco_firmware/modules/app_state/system_monitor_backend.h"
+#include "maco_firmware/modules/app_state/system_state.h"
 #include "maco_firmware/modules/display/testing/screenshot_test_harness.h"
+#include "maco_firmware/modules/status_bar/status_bar.h"
 #include "maco_firmware/modules/terminal_ui/theme.h"
+#include "maco_firmware/modules/ui/widgets/button_bar.h"
 
 namespace maco::terminal_ui {
 namespace {
 
 using display::testing::ScreenshotTestHarness;
+
+// Trivial backend stub — Start() is a no-op.
+class NullSystemMonitorBackend : public app_state::SystemMonitorBackend {
+ public:
+  void Start(app_state::SystemStateUpdater&,
+             pw::async2::Dispatcher&) override {}
+};
 
 // Track actions emitted by the screen
 UiAction last_action = UiAction::kNone;
@@ -22,6 +33,18 @@ class MainScreenTest : public ::testing::Test {
     last_action = UiAction::kNone;
     ASSERT_EQ(harness_.Init(), pw::OkStatus());
 
+    // Set up status bar with static state (wifi+gateway connected, 14:30)
+    system_state_.SetWifiState(app_state::WifiState::kConnected);
+    system_state_.SetGatewayConnected(true);
+    system_state_.SetUtcBootOffsetSeconds(
+        14 * 3600 + 30 * 60);  // ~14:30 UTC (boot clock starts near 0)
+    status_bar_ = std::make_unique<status_bar::StatusBar>(system_state_);
+    ASSERT_EQ(status_bar_->Init(), pw::OkStatus());
+    status_bar_->SetVisible(true);
+
+    // Set up button bar
+    button_bar_ = std::make_unique<ui::ButtonBar>(lv_layer_top());
+
     screen_ = std::make_unique<MainScreen>(TestActionCallback);
     ASSERT_EQ(harness_.ActivateScreen(*screen_), pw::OkStatus());
   }
@@ -30,9 +53,25 @@ class MainScreenTest : public ::testing::Test {
     if (screen_) {
       screen_->OnDeactivate();
     }
+    button_bar_.reset();
+    status_bar_.reset();
   }
 
+  /// Render a frame with status bar and button bar chrome.
+  void RenderFrame() {
+    auto style = screen_->GetScreenStyle();
+    status_bar_->SetBackgroundColor(style.bg_color);
+    status_bar_->Update();
+    button_bar_->SetConfig(screen_->GetButtonConfig());
+    button_bar_->Update();
+    harness_.RenderFrame();
+  }
+
+  NullSystemMonitorBackend monitor_backend_;
+  app_state::SystemState system_state_{monitor_backend_};
   ScreenshotTestHarness harness_;
+  std::unique_ptr<status_bar::StatusBar> status_bar_;
+  std::unique_ptr<ui::ButtonBar> button_bar_;
   std::unique_ptr<MainScreen> screen_;
 };
 
@@ -40,7 +79,7 @@ TEST_F(MainScreenTest, Idle) {
   app_state::AppStateSnapshot snapshot;
   snapshot.system.machine_label = "Fräse";
   screen_->OnUpdate(snapshot);
-  harness_.RenderFrame();
+  RenderFrame();
 
   EXPECT_TRUE(harness_.CompareToGolden(
       "maco_firmware/modules/terminal_ui/testdata/main_idle.png",
@@ -65,7 +104,7 @@ TEST_F(MainScreenTest, ActiveState) {
   snapshot.session.session_user_label = "Simon Flepp";
   snapshot.session.session_started_at = pw::chrono::SystemClock::now();
   screen_->OnUpdate(snapshot);
-  harness_.RenderFrame();
+  RenderFrame();
 
   EXPECT_TRUE(harness_.CompareToGolden(
       "maco_firmware/modules/terminal_ui/testdata/main_active.png",
@@ -92,7 +131,7 @@ TEST_F(MainScreenTest, DeniedState) {
   snapshot.verification.state =
       app_state::TagVerificationState::kUnauthorized;
   screen_->OnUpdate(snapshot);
-  harness_.RenderFrame();
+  RenderFrame();
 
   EXPECT_TRUE(harness_.CompareToGolden(
       "maco_firmware/modules/terminal_ui/testdata/main_denied.png",
@@ -134,7 +173,7 @@ TEST_F(MainScreenTest, CheckoutPendingState) {
   snapshot.session.pending_deadline =
       pw::chrono::SystemClock::now() + std::chrono::seconds(3);
   screen_->OnUpdate(snapshot);
-  harness_.RenderFrame();
+  RenderFrame();
 
   EXPECT_TRUE(harness_.CompareToGolden(
       "maco_firmware/modules/terminal_ui/testdata/main_checkout_pending.png",
@@ -169,7 +208,7 @@ TEST_F(MainScreenTest, TakeoverPendingState) {
   snapshot.session.pending_deadline =
       pw::chrono::SystemClock::now() + std::chrono::seconds(10);
   screen_->OnUpdate(snapshot);
-  harness_.RenderFrame();
+  RenderFrame();
 
   EXPECT_TRUE(harness_.CompareToGolden(
       "maco_firmware/modules/terminal_ui/testdata/main_takeover_pending.png",
@@ -192,7 +231,7 @@ TEST_F(MainScreenTest, StopPendingState) {
   snapshot.session.pending_deadline =
       pw::chrono::SystemClock::now() + std::chrono::seconds(3);
   screen_->OnUpdate(snapshot);
-  harness_.RenderFrame();
+  RenderFrame();
 
   EXPECT_TRUE(harness_.CompareToGolden(
       "maco_firmware/modules/terminal_ui/testdata/main_stop_pending.png",

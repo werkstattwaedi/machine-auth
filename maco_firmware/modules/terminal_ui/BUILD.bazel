@@ -135,8 +135,12 @@ pw_cc_test(
     deps = [
         ":main_screen",
         ":theme",
+        "//maco_firmware/modules/app_state:system_monitor_backend",
+        "//maco_firmware/modules/app_state:system_state",
         "//maco_firmware/modules/display/testing:screenshot_test_harness",
         "//maco_firmware/modules/fonts",
+        "//maco_firmware/modules/status_bar",
+        "//maco_firmware/modules/ui/widgets:button_bar",
         "//maco_firmware/targets/host:lvgl_conf",
         "@pigweed//pw_chrono:system_clock",
     ],
