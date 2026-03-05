@@ -26,5 +26,5 @@ build --copt=-DPW_LOG_LEVEL=PW_LOG_LEVEL_INFO
 
 # pw_system async dispatcher needs more stack on Cortex-M33 than the 2KB default.
 # Global because the define must reach pw_system compilation, not just user code.
-build --copt=-DPW_SYSTEM_ASYNC_DISPATCHER_THREAD_STACK_SIZE_BYTES=4096
+build --copt=-DPW_SYSTEM_ASYNC_DISPATCHER_THREAD_STACK_SIZE_BYTES=8192
 
