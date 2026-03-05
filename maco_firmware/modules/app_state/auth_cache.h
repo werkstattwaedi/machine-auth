@@ -14,6 +14,7 @@ namespace maco::app_state {
 
 /// Cached authorization result for a tag.
 struct CachedAuth {
+  maco::FirebaseId user_id;
   maco::FirebaseId auth_id;
   pw::InlineString<64> user_label;
 };
@@ -38,7 +39,7 @@ class AuthCache {
           entry.valid = false;
           return std::nullopt;
         }
-        return CachedAuth{entry.auth_id, entry.user_label};
+        return CachedAuth{entry.user_id, entry.auth_id, entry.user_label};
       }
     }
     return std::nullopt;
@@ -46,6 +47,7 @@ class AuthCache {
 
   /// Insert or update an entry. Evicts oldest entry when full.
   void Insert(const maco::TagUid& tag_uid,
+              const maco::FirebaseId& user_id,
               const maco::FirebaseId& auth_id,
               std::string_view user_label,
               pw::chrono::SystemClock::time_point now,
@@ -53,6 +55,7 @@ class AuthCache {
     // Update existing entry if present
     for (auto& entry : entries_) {
       if (entry.valid && entry.tag_uid == tag_uid) {
+        entry.user_id = user_id;
         entry.auth_id = auth_id;
         entry.user_label = pw::InlineString<64>(user_label);
         entry.inserted_at = now;
@@ -66,6 +69,7 @@ class AuthCache {
       if (!entry.valid) {
         entry = Entry{
             .tag_uid = tag_uid,
+            .user_id = user_id,
             .auth_id = auth_id,
             .user_label = pw::InlineString<64>(user_label),
             .inserted_at = now,
@@ -85,6 +89,7 @@ class AuthCache {
     }
     *oldest = Entry{
         .tag_uid = tag_uid,
+        .user_id = user_id,
         .auth_id = auth_id,
         .user_label = pw::InlineString<64>(user_label),
         .inserted_at = now,
@@ -103,6 +108,7 @@ class AuthCache {
  private:
   struct Entry {
     maco::TagUid tag_uid = maco::TagUid::FromArray({});
+    maco::FirebaseId user_id = maco::FirebaseId::Empty();
     maco::FirebaseId auth_id = maco::FirebaseId::Empty();
     pw::InlineString<64> user_label;
     pw::chrono::SystemClock::time_point inserted_at{};

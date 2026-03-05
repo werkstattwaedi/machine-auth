@@ -9,6 +9,7 @@
 
 #include "common.pb.h"
 #include "firebase_rpc/usage.pb.h"
+#include "maco_firmware/system/psram.h"
 #include "pb_encode.h"
 #include "pw_log/log.h"
 
@@ -50,8 +51,10 @@ pw::Result<size_t> EncodeUploadRequest(
     const maco_session_upload_PendingUsageQueue& queue,
     const FirebaseId& machine_id,
     pw::ByteSpan buffer) {
-  maco_proto_firebase_rpc_UploadUsageRequest request =
-      maco_proto_firebase_rpc_UploadUsageRequest_init_zero;
+  // UploadUsageRequest contains repeated MachineUsage — keep off stack.
+  // .psram.bss is NOT zeroed at boot; always re-initialise before use.
+  static PSRAM_BSS maco_proto_firebase_rpc_UploadUsageRequest request;
+  request = maco_proto_firebase_rpc_UploadUsageRequest_init_zero;
 
   request.has_history = true;
 
@@ -209,8 +212,10 @@ pw::async2::Coro<pw::Status> UsageUploader::TryUpload(
   }
   const auto& machine_id = config_.machine(0).id();
 
-  // Encode UploadUsageRequest
-  std::array<std::byte, maco_proto_firebase_rpc_UploadUsageRequest_size + 16>
+  // Encode UploadUsageRequest (static buffer — only one TryUpload runs
+  // at a time on the single-threaded dispatcher).
+  static PSRAM_BSS std::array<std::byte,
+                              maco_proto_firebase_rpc_UploadUsageRequest_size + 16>
       buffer;
   auto encode_result = EncodeUploadRequest(*queue_result, machine_id, buffer);
   if (!encode_result.ok()) {
