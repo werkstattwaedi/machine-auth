@@ -223,7 +223,7 @@ etl::fsm_state_id_t Active::on_event(
   ctx.pending_session.auth_id = e.auth_id;
   ctx.pending_session.started_at = now;
   ctx.pending_since = now;
-  ctx.pending_deadline = now + kTakeoverTimeout;
+  ctx.pending_deadline = now + kAutoConfirmDuration;
   PW_LOG_INFO("Different tag: takeover pending (%s)",
               e.user_label.c_str());
   return SessionStateId::kTakeoverPending;
@@ -320,14 +320,27 @@ etl::fsm_state_id_t TakeoverPending::on_event(
 }
 
 etl::fsm_state_id_t TakeoverPending::on_event(
-    const session_event::TagPresence&) {
-  // Tag removed during takeover - keep prompt open (UI can still confirm)
+    const session_event::TagPresence& e) {
+  auto& ctx = get_fsm_context();
+  auto now = pw::chrono::SystemClock::now();
+  ctx.pending_since = now;
+  ctx.pending_deadline = now + kAutoConfirmDuration;
+  if (!e.present) {
+    PW_LOG_INFO("Tag removed during takeover: cancel countdown started");
+    ctx.SyncSnapshot();
+  } else {
+    PW_LOG_INFO("Tag presented during takeover: confirm countdown restarted");
+  }
   return No_State_Change;
 }
 
 etl::fsm_state_id_t TakeoverPending::on_event(
     const session_event::Timeout&) {
-  PW_LOG_INFO("Takeover timed out: original session continues");
+  auto& ctx = get_fsm_context();
+  if (ctx.tag_present()) {
+    return ConfirmTakeover();
+  }
+  PW_LOG_INFO("Takeover cancelled (badge removed timeout)");
   return SessionStateId::kRunning;
 }
 

@@ -110,6 +110,7 @@ TEST_F(MainScreenTest, ActiveState) {
   snapshot.session.state = app_state::SessionStateUi::kRunning;
   snapshot.session.session_user_label = "Simon Flepp";
   snapshot.session.session_started_at = pw::chrono::SystemClock::now();
+  snapshot.system.machine_label = "Fräse";
   screen_->OnUpdate(snapshot);
   RenderFrame();
 
@@ -131,6 +132,21 @@ TEST_F(MainScreenTest, ActiveScreenStyle) {
 
   auto style = screen_->GetScreenStyle();
   EXPECT_EQ(style.bg_color, theme::kColorGreen);
+}
+
+TEST_F(MainScreenTest, ActiveTimeHours) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.session.state = app_state::SessionStateUi::kRunning;
+  snapshot.session.session_user_label = "Simon Flepp";
+  snapshot.session.session_started_at =
+      pw::chrono::SystemClock::now() - std::chrono::minutes(125);
+  snapshot.system.machine_label = "Fräse";
+  screen_->OnUpdate(snapshot);
+  RenderFrame();
+
+  EXPECT_TRUE(harness_.CompareToGolden(
+      "maco_firmware/modules/terminal_ui/testdata/main_active_hours.png",
+      "/tmp/main_active_hours_diff.png"));
 }
 
 TEST_F(MainScreenTest, DeniedState) {
@@ -179,6 +195,7 @@ TEST_F(MainScreenTest, CheckoutPendingState) {
   snapshot.session.session_user_label = "Simon Flepp";
   snapshot.session.session_started_at =
       pw::chrono::SystemClock::now() - std::chrono::minutes(47);
+  snapshot.system.machine_label = "Fräse";
   auto now = pw::chrono::SystemClock::now();
   snapshot.session.pending_since = now;
   snapshot.session.pending_deadline = now + std::chrono::seconds(3);
@@ -223,9 +240,14 @@ TEST_F(MainScreenTest, TakeoverPendingState) {
   app_state::AppStateSnapshot snapshot;
   snapshot.session.state = app_state::SessionStateUi::kTakeoverPending;
   snapshot.session.session_user_label = "Simon Flepp";
-  snapshot.session.pending_user_label = "Bob";
-  snapshot.session.pending_deadline =
-      pw::chrono::SystemClock::now() + std::chrono::seconds(10);
+  snapshot.session.pending_user_label = "Mike";
+  snapshot.session.session_started_at =
+      pw::chrono::SystemClock::now() - std::chrono::minutes(47);
+  snapshot.system.machine_label = "Fräse";
+  auto now = pw::chrono::SystemClock::now();
+  snapshot.session.pending_since = now;
+  snapshot.session.pending_deadline = now + std::chrono::seconds(3);
+  snapshot.session.tag_present = true;
   screen_->OnUpdate(snapshot);
   RenderFrame();
 
@@ -234,13 +256,49 @@ TEST_F(MainScreenTest, TakeoverPendingState) {
       "/tmp/main_takeover_pending_diff.png"));
 }
 
+TEST_F(MainScreenTest, TakeoverPendingButtonConfig) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.session.state = app_state::SessionStateUi::kTakeoverPending;
+  auto now = pw::chrono::SystemClock::now();
+  snapshot.session.pending_since = now;
+  snapshot.session.pending_deadline = now + std::chrono::seconds(3);
+  snapshot.session.tag_present = true;
+  screen_->OnUpdate(snapshot);
+
+  auto config = screen_->GetButtonConfig();
+  EXPECT_EQ(config.ok.label, "Ja");
+  EXPECT_EQ(config.ok.bg_color, theme::kColorBtnGreen);
+  EXPECT_EQ(config.cancel.label, "Nein");
+  EXPECT_EQ(config.cancel.bg_color, theme::kColorBtnRed);
+  // With tag present, ok (Ja) has progress
+  EXPECT_GE(config.ok.fill_progress, 1);
+  EXPECT_EQ(config.cancel.fill_progress, 0);
+}
+
+TEST_F(MainScreenTest, TakeoverPendingButtonConfigBadgeRemoved) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.session.state = app_state::SessionStateUi::kTakeoverPending;
+  auto now = pw::chrono::SystemClock::now();
+  snapshot.session.pending_since = now;
+  snapshot.session.pending_deadline = now + std::chrono::seconds(3);
+  snapshot.session.tag_present = false;
+  screen_->OnUpdate(snapshot);
+
+  auto config = screen_->GetButtonConfig();
+  EXPECT_EQ(config.ok.label, "Ja");
+  EXPECT_EQ(config.cancel.label, "Nein");
+  // With tag removed, cancel (Nein) has progress
+  EXPECT_EQ(config.ok.fill_progress, 0);
+  EXPECT_GE(config.cancel.fill_progress, 1);
+}
+
 TEST_F(MainScreenTest, TakeoverPendingScreenStyle) {
   app_state::AppStateSnapshot snapshot;
   snapshot.session.state = app_state::SessionStateUi::kTakeoverPending;
   screen_->OnUpdate(snapshot);
 
   auto style = screen_->GetScreenStyle();
-  EXPECT_EQ(style.bg_color, theme::kColorWhiteBg);
+  EXPECT_EQ(style.bg_color, theme::kColorGreen);
 }
 
 TEST_F(MainScreenTest, StopPendingState) {
@@ -249,6 +307,7 @@ TEST_F(MainScreenTest, StopPendingState) {
   snapshot.session.session_user_label = "Simon Flepp";
   snapshot.session.session_started_at =
       pw::chrono::SystemClock::now() - std::chrono::minutes(47);
+  snapshot.system.machine_label = "Fräse";
   auto now = pw::chrono::SystemClock::now();
   snapshot.session.pending_since = now;
   snapshot.session.pending_deadline = now + std::chrono::seconds(3);
@@ -314,6 +373,7 @@ TEST_F(MainScreenTest, StopPendingProgress0) {
   snapshot.session.session_user_label = "Simon Flepp";
   snapshot.session.session_started_at =
       pw::chrono::SystemClock::now() - std::chrono::minutes(47);
+  snapshot.system.machine_label = "Fräse";
   auto now = pw::chrono::SystemClock::now();
   snapshot.session.pending_since = now;
   snapshot.session.pending_deadline = now + std::chrono::seconds(3);
@@ -331,6 +391,7 @@ TEST_F(MainScreenTest, StopPendingProgress33) {
   snapshot.session.session_user_label = "Simon Flepp";
   snapshot.session.session_started_at =
       pw::chrono::SystemClock::now() - std::chrono::minutes(47);
+  snapshot.system.machine_label = "Fräse";
   auto now = pw::chrono::SystemClock::now();
   // 1s elapsed out of 3s = 33%
   snapshot.session.pending_since = now - std::chrono::seconds(1);
@@ -349,6 +410,7 @@ TEST_F(MainScreenTest, StopPendingProgress66) {
   snapshot.session.session_user_label = "Simon Flepp";
   snapshot.session.session_started_at =
       pw::chrono::SystemClock::now() - std::chrono::minutes(47);
+  snapshot.system.machine_label = "Fräse";
   auto now = pw::chrono::SystemClock::now();
   // 2s elapsed out of 3s = 66%
   snapshot.session.pending_since = now - std::chrono::seconds(2);
@@ -367,6 +429,7 @@ TEST_F(MainScreenTest, StopPendingProgress100) {
   snapshot.session.session_user_label = "Simon Flepp";
   snapshot.session.session_started_at =
       pw::chrono::SystemClock::now() - std::chrono::minutes(47);
+  snapshot.system.machine_label = "Fräse";
   auto now = pw::chrono::SystemClock::now();
   // 3s elapsed out of 3s = 100%
   snapshot.session.pending_since = now - std::chrono::seconds(3);

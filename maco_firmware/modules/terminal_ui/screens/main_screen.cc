@@ -14,12 +14,31 @@ namespace maco::terminal_ui {
 
 namespace {
 
-// Material Symbols UTF-8: U+E5C9 cancel
-constexpr const char kIconCancel[] = "\xEE\x97\x89";
+// Material Symbols UTF-8 codepoints
+constexpr const char kIconCancel[] = "\xEE\x97\x89";    // U+E5C9
+constexpr const char kIconSchedule[] = "\xEE\xBF\x96";  // U+EFD6
 
-// Hold duration for takeover countdown display (must match kHoldDuration in
-// session_fsm.h)
-constexpr auto kHoldDurationDisplay = std::chrono::seconds(3);
+constexpr int kContentPadding = 16;
+constexpr int kUsableWidth = 208;   // 240 - 2*16px padding
+constexpr int kTimerLabelX = 44;    // kContentPadding + 24px icon + 4px gap
+
+// Format elapsed time: "< 1 min", "47 min", "1h05", "2h30"
+void FormatElapsedTime(char* buf, size_t buf_size,
+                       pw::chrono::SystemClock::time_point started_at) {
+  auto now = pw::chrono::SystemClock::now();
+  auto elapsed = now - started_at;
+  auto total_minutes =
+      std::chrono::duration_cast<std::chrono::minutes>(elapsed).count();
+  if (total_minutes < 1) {
+    lv_snprintf(buf, buf_size, "< 1 min");
+  } else if (total_minutes < 60) {
+    lv_snprintf(buf, buf_size, "%d min", static_cast<int>(total_minutes));
+  } else {
+    int hours = static_cast<int>(total_minutes / 60);
+    int mins = static_cast<int>(total_minutes % 60);
+    lv_snprintf(buf, buf_size, "%dh%02d", hours, mins);
+  }
+}
 
 }  // namespace
 
@@ -46,7 +65,9 @@ pw::Status MainScreen::OnActivate() {
   lv_obj_set_style_text_color(machine_name_label_,
                               lv_color_hex(theme::kColorDarkText),
                               LV_PART_MAIN);
-  lv_obj_align(machine_name_label_, LV_ALIGN_TOP_LEFT, 16, 56);
+  lv_obj_set_width(machine_name_label_, kUsableWidth);
+  lv_label_set_long_mode(machine_name_label_, LV_LABEL_LONG_DOT);
+  lv_obj_align(machine_name_label_, LV_ALIGN_TOP_LEFT, kContentPadding, 56);
 
   instruction_label_ = lv_label_create(lv_screen_);
   lv_label_set_text(instruction_label_, "Mit Badge\nanmelden");
@@ -54,7 +75,7 @@ pw::Status MainScreen::OnActivate() {
   lv_obj_set_style_text_color(instruction_label_,
                               lv_color_hex(theme::kColorDarkText),
                               LV_PART_MAIN);
-  lv_obj_align(instruction_label_, LV_ALIGN_TOP_LEFT, 16, 110);
+  lv_obj_align(instruction_label_, LV_ALIGN_TOP_LEFT, kContentPadding, 110);
 
   // Invisible button to capture OK key press for menu
   menu_btn_ = lv_button_create(lv_screen_);
@@ -75,17 +96,26 @@ pw::Status MainScreen::OnActivate() {
   // --- Active widgets (hidden initially) ---
   user_name_label_ = lv_label_create(lv_screen_);
   lv_label_set_text(user_name_label_, "");
-  lv_obj_set_style_text_font(user_name_label_, &roboto_24, LV_PART_MAIN);
+  lv_obj_set_style_text_font(user_name_label_, &roboto_36, LV_PART_MAIN);
   lv_obj_set_style_text_color(user_name_label_, lv_color_white(),
                               LV_PART_MAIN);
-  lv_obj_align(user_name_label_, LV_ALIGN_TOP_LEFT, 16, 56);
+  lv_obj_set_width(user_name_label_, kUsableWidth);
+  lv_label_set_long_mode(user_name_label_, LV_LABEL_LONG_DOT);
+  lv_obj_align(user_name_label_, LV_ALIGN_TOP_LEFT, kContentPadding, 78);
   lv_obj_add_flag(user_name_label_, LV_OBJ_FLAG_HIDDEN);
 
+  timer_icon_ = lv_label_create(lv_screen_);
+  lv_label_set_text(timer_icon_, kIconSchedule);
+  lv_obj_set_style_text_font(timer_icon_, &material_symbols_24, LV_PART_MAIN);
+  lv_obj_set_style_text_color(timer_icon_, lv_color_white(), LV_PART_MAIN);
+  lv_obj_align(timer_icon_, LV_ALIGN_TOP_LEFT, kContentPadding, 126);
+  lv_obj_add_flag(timer_icon_, LV_OBJ_FLAG_HIDDEN);
+
   timer_label_ = lv_label_create(lv_screen_);
-  lv_label_set_text(timer_label_, "0 min");
-  lv_obj_set_style_text_font(timer_label_, &roboto_36, LV_PART_MAIN);
+  lv_label_set_text(timer_label_, "< 1 min");
+  lv_obj_set_style_text_font(timer_label_, &roboto_16, LV_PART_MAIN);
   lv_obj_set_style_text_color(timer_label_, lv_color_white(), LV_PART_MAIN);
-  lv_obj_align(timer_label_, LV_ALIGN_TOP_LEFT, 16, 90);
+  lv_obj_align(timer_label_, LV_ALIGN_TOP_LEFT, kTimerLabelX, 126);
   lv_obj_add_flag(timer_label_, LV_OBJ_FLAG_HIDDEN);
 
   // --- Denied widgets (hidden initially) ---
@@ -109,18 +139,10 @@ pw::Status MainScreen::OnActivate() {
   lv_obj_set_style_text_font(pending_title_label_, &roboto_24, LV_PART_MAIN);
   lv_obj_set_style_text_color(pending_title_label_, lv_color_white(),
                               LV_PART_MAIN);
-  lv_obj_align(pending_title_label_, LV_ALIGN_TOP_LEFT, 16, 56);
+  lv_obj_set_width(pending_title_label_, kUsableWidth);
+  lv_label_set_long_mode(pending_title_label_, LV_LABEL_LONG_DOT);
+  lv_obj_align(pending_title_label_, LV_ALIGN_TOP_LEFT, kContentPadding, 176);
   lv_obj_add_flag(pending_title_label_, LV_OBJ_FLAG_HIDDEN);
-
-  countdown_label_ = lv_label_create(lv_screen_);
-  lv_label_set_text(countdown_label_, "");
-  lv_obj_set_style_text_font(countdown_label_, &roboto_36, LV_PART_MAIN);
-  lv_obj_set_style_text_color(countdown_label_, lv_color_white(),
-                              LV_PART_MAIN);
-  lv_obj_set_width(countdown_label_, 208);  // 240 - 2*16px padding
-  lv_label_set_long_mode(countdown_label_, LV_LABEL_LONG_WRAP);
-  lv_obj_align(countdown_label_, LV_ALIGN_TOP_LEFT, 16, 90);
-  lv_obj_add_flag(countdown_label_, LV_OBJ_FLAG_HIDDEN);
 
   // Invisible button to capture OK key press for pending confirm
   confirm_btn_ = lv_button_create(lv_screen_);
@@ -160,11 +182,11 @@ void MainScreen::OnDeactivate() {
   instruction_label_ = nullptr;
   menu_btn_ = nullptr;
   user_name_label_ = nullptr;
+  timer_icon_ = nullptr;
   timer_label_ = nullptr;
   denied_icon_ = nullptr;
   denied_label_ = nullptr;
   pending_title_label_ = nullptr;
-  countdown_label_ = nullptr;
   confirm_btn_ = nullptr;
   PW_LOG_INFO("MainScreen deactivated");
 }
@@ -204,23 +226,22 @@ void MainScreen::OnUpdate(const app_state::AppStateSnapshot& snapshot) {
     lv_label_set_text(user_name_label_,
                       snapshot.session.session_user_label.c_str());
 
-    auto now = pw::chrono::SystemClock::now();
-    auto elapsed = now - snapshot.session.session_started_at;
-    auto minutes = std::chrono::duration_cast<std::chrono::minutes>(elapsed);
-    lv_label_set_text_fmt(timer_label_, "%d min",
-                          static_cast<int>(minutes.count()));
+    char time_buf[16];
+    FormatElapsedTime(time_buf, sizeof(time_buf),
+                      snapshot.session.session_started_at);
+    lv_label_set_text(timer_label_, time_buf);
   }
 
   // Update pending states
   if (visual_state_ == VisualState::kCheckoutPending ||
       visual_state_ == VisualState::kStopPending) {
-    // Show user name + session duration
-    auto now = pw::chrono::SystemClock::now();
-    auto elapsed = now - snapshot.session.session_started_at;
-    auto minutes = std::chrono::duration_cast<std::chrono::minutes>(elapsed);
-    lv_label_set_text_fmt(countdown_label_, "%s\n%d min",
-                          snapshot.session.session_user_label.c_str(),
-                          static_cast<int>(minutes.count()));
+    lv_label_set_text(user_name_label_,
+                      snapshot.session.session_user_label.c_str());
+
+    char time_buf[16];
+    FormatElapsedTime(time_buf, sizeof(time_buf),
+                      snapshot.session.session_started_at);
+    lv_label_set_text(timer_label_, time_buf);
 
     // Cache for GetButtonConfig() progress calculation
     cached_pending_since_ = snapshot.session.pending_since;
@@ -231,20 +252,25 @@ void MainScreen::OnUpdate(const app_state::AppStateSnapshot& snapshot) {
     // Progress changes need button bar redraw
     MarkDirty();
   } else if (visual_state_ == VisualState::kTakeoverPending) {
-    lv_label_set_text_fmt(pending_title_label_, "%s übernimmt",
+    // Show current session owner and pending user in prompt
+    lv_label_set_text(user_name_label_,
+                      snapshot.session.session_user_label.c_str());
+
+    char time_buf[16];
+    FormatElapsedTime(time_buf, sizeof(time_buf),
+                      snapshot.session.session_started_at);
+    lv_label_set_text(timer_label_, time_buf);
+
+    lv_label_set_text_fmt(pending_title_label_, "%s anmelden?",
                           snapshot.session.pending_user_label.c_str());
-    if (snapshot.session.tag_present) {
-      auto now = pw::chrono::SystemClock::now();
-      auto held = now - snapshot.session.tag_present_since;
-      auto hold_secs = kHoldDurationDisplay -
-                        std::chrono::duration_cast<std::chrono::seconds>(held);
-      auto secs = hold_secs.count();
-      if (secs < 0) secs = 0;
-      lv_label_set_text_fmt(countdown_label_, "Badge halten %ds...",
-                            static_cast<int>(secs));
-    } else {
-      lv_label_set_text(countdown_label_, "Badge auflegen");
-    }
+
+    // Cache for GetButtonConfig() progress calculation
+    cached_pending_since_ = snapshot.session.pending_since;
+    cached_pending_deadline_ = snapshot.session.pending_deadline;
+    cached_tag_present_ = snapshot.session.tag_present;
+    cached_session_started_at_ = snapshot.session.session_started_at;
+
+    MarkDirty();
   }
 }
 
@@ -366,15 +392,39 @@ ui::ButtonConfig MainScreen::GetButtonConfig() const {
                      .fill_progress = progress},
       };
     }
-    case VisualState::kTakeoverPending:
+    case VisualState::kTakeoverPending: {
+      uint8_t progress = ComputePendingProgress();
+      if (cached_tag_present_) {
+        // Badge present: Ja fills (confirm countdown)
+        return {
+            .ok = {.label = "Ja",
+                   .led_effect = led_animator::SolidButton(
+                       led::RgbwColor::FromRgb(theme::kColorBtnGreen)),
+                   .bg_color = theme::kColorBtnGreen,
+                   .text_color = 0xFFFFFF,
+                   .fill_progress = progress},
+            .cancel = {.label = "Nein",
+                       .led_effect = led_animator::SolidButton(
+                           led::RgbwColor::FromRgb(theme::kColorBtnRed)),
+                       .bg_color = theme::kColorBtnRed,
+                       .text_color = 0xFFFFFF},
+        };
+      }
+      // Badge removed: Nein fills (cancel countdown)
       return {
-          .ok = {},
-          .cancel = {.label = "Abbrechen",
+          .ok = {.label = "Ja",
+                 .led_effect = led_animator::SolidButton(
+                     led::RgbwColor::FromRgb(theme::kColorBtnGreen)),
+                 .bg_color = theme::kColorBtnGreen,
+                 .text_color = 0xFFFFFF},
+          .cancel = {.label = "Nein",
                      .led_effect = led_animator::SolidButton(
                          led::RgbwColor::FromRgb(theme::kColorBtnRed)),
                      .bg_color = theme::kColorBtnRed,
-                     .text_color = 0xFFFFFF},
+                     .text_color = 0xFFFFFF,
+                     .fill_progress = progress},
       };
+    }
   }
   return {};
 }
@@ -390,9 +440,22 @@ ui::ScreenStyle MainScreen::GetScreenStyle() const {
     case VisualState::kDenied:
       return {.bg_color = theme::kColorRed};
     case VisualState::kTakeoverPending:
-      return {.bg_color = theme::kColorWhiteBg};
+      return {.bg_color = theme::kColorGreen};
   }
   return {};
+}
+
+void MainScreen::ConfigureMachineLabel(bool idle_mode) {
+  if (idle_mode) {
+    lv_obj_set_style_text_font(machine_name_label_, &roboto_36, LV_PART_MAIN);
+    lv_obj_set_style_text_color(machine_name_label_,
+                                lv_color_hex(theme::kColorDarkText),
+                                LV_PART_MAIN);
+    lv_obj_align(machine_name_label_, LV_ALIGN_TOP_LEFT, kContentPadding, 56);
+  } else {
+    lv_obj_set_style_text_font(machine_name_label_, &roboto_24, LV_PART_MAIN);
+    lv_obj_align(machine_name_label_, LV_ALIGN_TOP_LEFT, kContentPadding, 44);
+  }
 }
 
 void MainScreen::SetVisualState(VisualState state) {
@@ -402,6 +465,7 @@ void MainScreen::SetVisualState(VisualState state) {
   uint32_t bg_color = theme::kColorWhiteBg;
   switch (state) {
     case VisualState::kIdle:
+      ConfigureMachineLabel(true);
       lv_obj_remove_flag(machine_name_label_, LV_OBJ_FLAG_HIDDEN);
       lv_obj_remove_flag(instruction_label_, LV_OBJ_FLAG_HIDDEN);
       lv_obj_remove_flag(menu_btn_, LV_OBJ_FLAG_HIDDEN);
@@ -413,7 +477,16 @@ void MainScreen::SetVisualState(VisualState state) {
       break;
     case VisualState::kActive:
       bg_color = theme::kColorGreen;
+      ConfigureMachineLabel(false);
+      lv_obj_set_style_text_color(machine_name_label_, lv_color_white(),
+                                  LV_PART_MAIN);
+      lv_obj_set_style_text_color(user_name_label_, lv_color_white(),
+                                  LV_PART_MAIN);
+      lv_obj_set_style_text_color(timer_icon_, lv_color_white(), LV_PART_MAIN);
+      lv_obj_set_style_text_color(timer_label_, lv_color_white(), LV_PART_MAIN);
+      lv_obj_remove_flag(machine_name_label_, LV_OBJ_FLAG_HIDDEN);
       lv_obj_remove_flag(user_name_label_, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_remove_flag(timer_icon_, LV_OBJ_FLAG_HIDDEN);
       lv_obj_remove_flag(timer_label_, LV_OBJ_FLAG_HIDDEN);
       lv_obj_remove_flag(menu_btn_, LV_OBJ_FLAG_HIDDEN);
       if (lv_group_) {
@@ -427,13 +500,21 @@ void MainScreen::SetVisualState(VisualState state) {
       break;
     case VisualState::kCheckoutPending:
       bg_color = theme::kColorGreen;
-      lv_label_set_text(pending_title_label_, "Abmelden?");
+      ConfigureMachineLabel(false);
+      lv_obj_set_style_text_color(machine_name_label_, lv_color_white(),
+                                  LV_PART_MAIN);
+      lv_obj_set_style_text_color(user_name_label_, lv_color_white(),
+                                  LV_PART_MAIN);
+      lv_obj_set_style_text_color(timer_icon_, lv_color_white(), LV_PART_MAIN);
+      lv_obj_set_style_text_color(timer_label_, lv_color_white(), LV_PART_MAIN);
+      lv_label_set_text(pending_title_label_, "Beenden?");
       lv_obj_set_style_text_color(pending_title_label_, lv_color_white(),
                                   LV_PART_MAIN);
-      lv_obj_set_style_text_color(countdown_label_, lv_color_white(),
-                                  LV_PART_MAIN);
+      lv_obj_remove_flag(machine_name_label_, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_remove_flag(user_name_label_, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_remove_flag(timer_icon_, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_remove_flag(timer_label_, LV_OBJ_FLAG_HIDDEN);
       lv_obj_remove_flag(pending_title_label_, LV_OBJ_FLAG_HIDDEN);
-      lv_obj_remove_flag(countdown_label_, LV_OBJ_FLAG_HIDDEN);
       lv_obj_remove_flag(confirm_btn_, LV_OBJ_FLAG_HIDDEN);
       if (lv_group_) {
         lv_group_focus_obj(confirm_btn_);
@@ -441,28 +522,46 @@ void MainScreen::SetVisualState(VisualState state) {
       break;
     case VisualState::kStopPending:
       bg_color = theme::kColorGreen;
-      lv_label_set_text(pending_title_label_, "Benutzung beenden?");
+      ConfigureMachineLabel(false);
+      lv_obj_set_style_text_color(machine_name_label_, lv_color_white(),
+                                  LV_PART_MAIN);
+      lv_obj_set_style_text_color(user_name_label_, lv_color_white(),
+                                  LV_PART_MAIN);
+      lv_obj_set_style_text_color(timer_icon_, lv_color_white(), LV_PART_MAIN);
+      lv_obj_set_style_text_color(timer_label_, lv_color_white(), LV_PART_MAIN);
+      lv_label_set_text(pending_title_label_, "Beenden?");
       lv_obj_set_style_text_color(pending_title_label_, lv_color_white(),
                                   LV_PART_MAIN);
-      lv_obj_set_style_text_color(countdown_label_, lv_color_white(),
-                                  LV_PART_MAIN);
+      lv_obj_remove_flag(machine_name_label_, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_remove_flag(user_name_label_, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_remove_flag(timer_icon_, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_remove_flag(timer_label_, LV_OBJ_FLAG_HIDDEN);
       lv_obj_remove_flag(pending_title_label_, LV_OBJ_FLAG_HIDDEN);
-      lv_obj_remove_flag(countdown_label_, LV_OBJ_FLAG_HIDDEN);
       lv_obj_remove_flag(confirm_btn_, LV_OBJ_FLAG_HIDDEN);
       if (lv_group_) {
         lv_group_focus_obj(confirm_btn_);
       }
       break;
     case VisualState::kTakeoverPending:
-      bg_color = theme::kColorWhiteBg;
-      lv_obj_set_style_text_color(pending_title_label_,
-                                  lv_color_hex(theme::kColorDarkText),
+      bg_color = theme::kColorGreen;
+      ConfigureMachineLabel(false);
+      lv_obj_set_style_text_color(machine_name_label_, lv_color_white(),
                                   LV_PART_MAIN);
-      lv_obj_set_style_text_color(countdown_label_,
-                                  lv_color_hex(theme::kColorDarkText),
+      lv_obj_set_style_text_color(user_name_label_, lv_color_white(),
                                   LV_PART_MAIN);
+      lv_obj_set_style_text_color(timer_icon_, lv_color_white(), LV_PART_MAIN);
+      lv_obj_set_style_text_color(timer_label_, lv_color_white(), LV_PART_MAIN);
+      lv_obj_set_style_text_color(pending_title_label_, lv_color_white(),
+                                  LV_PART_MAIN);
+      lv_obj_remove_flag(machine_name_label_, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_remove_flag(user_name_label_, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_remove_flag(timer_icon_, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_remove_flag(timer_label_, LV_OBJ_FLAG_HIDDEN);
       lv_obj_remove_flag(pending_title_label_, LV_OBJ_FLAG_HIDDEN);
-      lv_obj_remove_flag(countdown_label_, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_remove_flag(confirm_btn_, LV_OBJ_FLAG_HIDDEN);
+      if (lv_group_) {
+        lv_group_focus_obj(confirm_btn_);
+      }
       break;
   }
 
@@ -475,11 +574,11 @@ void MainScreen::HideAllWidgets() {
   lv_obj_add_flag(instruction_label_, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(menu_btn_, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(user_name_label_, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_add_flag(timer_icon_, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(timer_label_, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(denied_icon_, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(denied_label_, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(pending_title_label_, LV_OBJ_FLAG_HIDDEN);
-  lv_obj_add_flag(countdown_label_, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(confirm_btn_, LV_OBJ_FLAG_HIDDEN);
 }
 

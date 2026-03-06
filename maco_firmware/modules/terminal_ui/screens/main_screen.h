@@ -51,6 +51,7 @@ class MainScreen : public ui::Screen<app_state::AppStateSnapshot> {
 
   // Active widgets
   lv_obj_t* user_name_label_ = nullptr;
+  lv_obj_t* timer_icon_ = nullptr;
   lv_obj_t* timer_label_ = nullptr;
 
   // Denied widgets
@@ -59,8 +60,9 @@ class MainScreen : public ui::Screen<app_state::AppStateSnapshot> {
 
   // Pending widgets (checkout, takeover, stop)
   lv_obj_t* pending_title_label_ = nullptr;
-  lv_obj_t* countdown_label_ = nullptr;
   lv_obj_t* confirm_btn_ = nullptr;  // Invisible OK handler for pending states
+
+  void ConfigureMachineLabel(bool idle_mode);
 
   uint8_t ComputePendingProgress() const;
 

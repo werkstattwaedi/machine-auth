@@ -84,7 +84,6 @@ inline constexpr etl::message_router_id_t kSessionFsmId = 0;
 
 inline constexpr auto kAutoConfirmDuration = std::chrono::seconds(3);
 inline constexpr auto kHoldDuration = std::chrono::seconds(3);
-inline constexpr auto kTakeoverTimeout = std::chrono::seconds(10);
 
 // --- Forward declaration of FSM context ---
 
