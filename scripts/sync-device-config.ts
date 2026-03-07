@@ -178,7 +178,7 @@ async function main() {
   const args = process.argv.slice(2);
   const prod = args.includes("--prod");
   const positionalArgs: string[] = [];
-  let gatewayHost = "192.168.87.7";
+  let gatewayHost = "maco-gateway.internal";
   let gatewayPort = 5000;
 
   for (let i = 0; i < args.length; i++) {
