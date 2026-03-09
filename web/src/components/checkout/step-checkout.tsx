@@ -4,16 +4,21 @@
 import { Separator } from "@/components/ui/separator"
 import { Label } from "@/components/ui/label"
 import { formatCHF } from "@/lib/format"
-import { USER_TYPE_LABELS } from "@/lib/pricing"
+import { USER_TYPE_LABELS, USAGE_TYPE_LABELS, calculateFee } from "@/lib/pricing"
+import type { PricingConfig } from "@/lib/workshop-config"
 import { ArrowLeft, Loader2 } from "lucide-react"
-import type { CheckoutState, CheckoutAction, LocalMaterialItem } from "./use-checkout-state"
+import type { CheckoutState, CheckoutAction } from "./use-checkout-state"
+import type { CheckoutItemLocal } from "@/components/usage/inline-rows"
+import { SELECT_CLS } from "@/components/usage/inline-rows"
+import type { UsageType } from "@/lib/pricing"
 
 interface StepCheckoutProps {
   state: CheckoutState
   dispatch: React.Dispatch<CheckoutAction>
   onSubmit: () => Promise<void>
   submitting: boolean
-  localMaterialUsage: LocalMaterialItem[]
+  items: CheckoutItemLocal[]
+  config: PricingConfig | null
 }
 
 export function StepCheckout({
@@ -21,30 +26,22 @@ export function StepCheckout({
   dispatch,
   onSubmit,
   submitting,
-  localMaterialUsage,
+  items,
+  config,
 }: StepCheckoutProps) {
-  const personFees = state.persons.reduce((sum, p) => sum + p.fee, 0)
+  // Entry fees from persons + usage type
+  const personFees = state.persons.reduce(
+    (sum, p) => sum + calculateFee(p.userType, state.usageType, config),
+    0,
+  )
 
-  // Combine Firestore-synced and local items into a unified display list
-  const localAsDisplay = localMaterialUsage.map((l) => ({
-    id: l.id,
-    description: l.description,
-    workshop: l.workshop,
-    totalPrice: l.details.totalPrice ?? 0,
-    category: l.details.category ?? "",
-    quantity: l.details.quantity ?? 0,
-    type: l.type,
-  }))
-  const allItems = [...state.materialUsage, ...localAsDisplay]
+  // Split items into NFC machine hours and manual/material
+  const nfcItems = items.filter((i) => i.origin === "nfc")
+  const manualItems = items.filter((i) => i.origin !== "nfc")
+  const machineCost = nfcItems.reduce((sum, i) => sum + i.totalPrice, 0)
+  const materialCost = manualItems.reduce((sum, i) => sum + i.totalPrice, 0)
 
-  // Split into machine hours and material/service
-  const machineHoursItems = allItems.filter((u) => u.type === "machine_hours")
-  const materialItems = allItems.filter((u) => u.type !== "machine_hours")
-  const machineHoursTotal = machineHoursItems.reduce((sum, u) => sum + u.totalPrice, 0)
-  const materialTotal = materialItems.reduce((sum, u) => sum + u.totalPrice, 0)
-  const allMaterialTotal = allItems.reduce((sum, u) => sum + u.totalPrice, 0)
-
-  const total = personFees + allMaterialTotal + state.tip
+  const total = personFees + machineCost + materialCost + state.tip
 
   return (
     <div className="space-y-6">
@@ -52,65 +49,100 @@ export function StepCheckout({
         Zusammenfassung
       </h4>
 
+      {/* Usage type selector */}
       <div>
-        <h2 className="text-xl font-bold font-body underline decoration-cog-teal decoration-2 underline-offset-4 mb-4"
->
-          Nutzungsgebühren
+        <h2 className="text-xl font-bold font-body underline decoration-cog-teal decoration-2 underline-offset-4 mb-4">
+          Nutzungsart
+        </h2>
+        <select
+          value={state.usageType}
+          onChange={(e) =>
+            dispatch({
+              type: "SET_USAGE_TYPE",
+              usageType: e.target.value as UsageType,
+            })
+          }
+          className={SELECT_CLS + " max-w-xs"}
+        >
+          {Object.entries(USAGE_TYPE_LABELS).map(([key, label]) => (
+            <option key={key} value={key}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <Separator />
+
+      {/* Entry fees */}
+      <div>
+        <h2 className="text-xl font-bold font-body underline decoration-cog-teal decoration-2 underline-offset-4 mb-4">
+          Eintrittsgebühren
         </h2>
         <div className="space-y-3">
-          {state.persons.map((p) => (
-            <div key={p.id} className="flex items-center gap-6 text-sm">
-              <span className="w-40">
-                {p.firstName} {p.lastName}
-              </span>
-              <span className="w-40">{p.email}</span>
-              <span className="w-28">{USER_TYPE_LABELS[p.userType]}</span>
-              <span>{formatCHF(p.fee)}</span>
-            </div>
-          ))}
+          {state.persons.map((p) => {
+            const fee = calculateFee(p.userType, state.usageType, config)
+            return (
+              <div key={p.id} className="flex items-center gap-6 text-sm">
+                <span className="w-40">
+                  {p.firstName} {p.lastName}
+                </span>
+                <span className="w-40">{p.email}</span>
+                <span className="w-28">{USER_TYPE_LABELS[p.userType]}</span>
+                <span>{formatCHF(fee)}</span>
+              </div>
+            )
+          })}
         </div>
         <div className="text-right font-bold text-lg mt-2">
           {formatCHF(personFees)}
         </div>
       </div>
 
-      {machineHoursTotal > 0 && (
+      {/* Machine costs (NFC) */}
+      {machineCost > 0 && (
         <>
           <Separator />
           <div>
-            <h2 className="text-xl font-bold font-body underline decoration-cog-teal decoration-2 underline-offset-4 mb-4"
-    >
+            <h2 className="text-xl font-bold font-body underline decoration-cog-teal decoration-2 underline-offset-4 mb-4">
               Maschinenkosten
             </h2>
-            {machineHoursItems.map((u) => (
-              <div key={u.id} className="flex justify-between text-sm">
-                <span>{u.description} ({u.workshop})</span>
-                <span className="font-semibold">{formatCHF(u.totalPrice)}</span>
+            {nfcItems.map((item) => (
+              <div key={item.id} className="flex justify-between text-sm">
+                <span>
+                  {item.description} ({item.workshop})
+                  <span className="text-muted-foreground ml-2">
+                    {Math.round(item.quantity * 60)} min
+                  </span>
+                </span>
+                <span className="font-semibold">{formatCHF(item.totalPrice)}</span>
               </div>
             ))}
             <div className="text-right font-bold text-lg mt-2">
-              {formatCHF(machineHoursTotal)}
+              {formatCHF(machineCost)}
             </div>
           </div>
         </>
       )}
 
-      {materialTotal > 0 && (
+      {/* Material costs */}
+      {materialCost > 0 && (
         <>
           <Separator />
           <div>
-            <h2 className="text-xl font-bold font-body underline decoration-cog-teal decoration-2 underline-offset-4 mb-4"
-    >
+            <h2 className="text-xl font-bold font-body underline decoration-cog-teal decoration-2 underline-offset-4 mb-4">
               Materialkosten
             </h2>
-            {materialItems.map((u) => (
-              <div key={u.id} className="flex justify-between text-sm">
-                <span>{u.description} ({u.workshop})</span>
-                <span className="font-semibold">{formatCHF(u.totalPrice)}</span>
+            {manualItems.map((item) => (
+              <div key={item.id} className="flex justify-between text-sm">
+                <span>
+                  {item.description} ({item.workshop})
+                </span>
+                <span className="font-semibold">{formatCHF(item.totalPrice)}</span>
               </div>
             ))}
             <div className="text-right font-bold text-lg mt-2">
-              {formatCHF(materialTotal)}
+              {formatCHF(materialCost)}
             </div>
           </div>
         </>
@@ -118,9 +150,9 @@ export function StepCheckout({
 
       <Separator />
 
+      {/* Tip */}
       <div>
-        <h2 className="text-xl font-bold font-body underline decoration-cog-teal decoration-2 underline-offset-4 mb-4"
->
+        <h2 className="text-xl font-bold font-body underline decoration-cog-teal decoration-2 underline-offset-4 mb-4">
           Trinkgeld/Spenden
         </h2>
         <div className="space-y-2">
@@ -150,12 +182,12 @@ export function StepCheckout({
 
       <Separator />
 
+      {/* Total */}
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold font-body">
           Total
         </h2>
-        <h2 className="text-xl font-bold font-body underline decoration-cog-teal decoration-2 underline-offset-4"
->
+        <h2 className="text-xl font-bold font-body underline decoration-cog-teal decoration-2 underline-offset-4">
           {formatCHF(total)}
         </h2>
       </div>

@@ -56,6 +56,19 @@ const ID = {
   machineCnc:          "00machine000cnc00002",
   machineFraese:       "00machine0fraese0003",
   machineLasercutter:  "00machine0laser00004",
+
+  // catalog
+  catStationaer:   "00catalog0station001",
+  catDrechselbank: "00catalog0drechs002",
+  catSchweissen:   "00catalog0schweis03",
+  catPlasma:       "00catalog0plasma004",
+  catSandblastK:   "00catalog0sandblk05",
+  catSandblastG:   "00catalog0sandblg06",
+  cat3dPLA:        "00catalog03dpla0007",
+  cat3dPETG:       "00catalog03dpetg008",
+  catSperrholz:    "00catalog0sperrh009",
+  catKantholz:     "00catalog0kanth0010",
+  catLaser:        "00catalog0laser0012",
 } as const;
 
 async function seed() {
@@ -103,7 +116,7 @@ async function seed() {
   console.log("  Created 4 Auth users");
 
   // --- Users ---
-  const adminUser = {
+  await db.collection("users").doc(ID.userAdmin).set({
     created: Timestamp.now(),
     displayName: "Admin",
     name: "Test Admin",
@@ -116,9 +129,8 @@ async function seed() {
       db.doc(`permission/${ID.permHolz}`),
     ],
     roles: ["admin", "vereinsmitglied"],
-  };
-
-  const mikeUser = {
+  });
+  await db.collection("users").doc(ID.userMike).set({
     created: Timestamp.now(),
     displayName: "MikeS",
     name: "Mike Schneider",
@@ -129,35 +141,23 @@ async function seed() {
       db.doc(`permission/${ID.permHolz}`),
     ],
     roles: ["admin", "vereinsmitglied"],
-  };
-
-  const marcoUser = {
+  });
+  await db.collection("users").doc(ID.userMarco).set({
     created: Timestamp.now(),
     displayName: "Marco",
     name: "Marco",
     email: "marco@werkstattwaedi.ch",
-    permissions: [
-      db.doc(`permission/${ID.permHolz}`),
-    ],
+    permissions: [db.doc(`permission/${ID.permHolz}`)],
     roles: ["admin", "vereinsmitglied"],
-  };
-
-  const simonUser = {
+  });
+  await db.collection("users").doc(ID.userSimon).set({
     created: Timestamp.now(),
     displayName: "Simon",
     name: "Simon",
     email: "simon@werkstattwaedi.ch",
-    permissions: [
-      db.doc(`permission/${ID.permLaser}`),
-    ],
+    permissions: [db.doc(`permission/${ID.permLaser}`)],
     roles: ["vereinsmitglied"],
-  };
-
-  await db.collection("users").doc(ID.userAdmin).set(adminUser);
-  await db.collection("users").doc(ID.userMike).set(mikeUser);
-  await db.collection("users").doc(ID.userMarco).set(marcoUser);
-  await db.collection("users").doc(ID.userSimon).set(simonUser);
-  // Set custom claims directly (don't rely on trigger timing)
+  });
   await auth.setCustomUserClaims(ID.userAdmin, { admin: true });
   await auth.setCustomUserClaims(ID.userMike, { admin: true });
   await auth.setCustomUserClaims(ID.userMarco, { admin: true });
@@ -203,178 +203,212 @@ async function seed() {
   console.log(`  Created ${Object.keys(tokens).length} tokens`);
 
   // --- MaCo (terminal devices) ---
-  await db.collection("maco").doc(ID.macoDevterm).set({
-    name: "Dev Terminal 01",
-  });
-  await db.collection("maco").doc(ID.macoFraese).set({
-    name: "Fräse Holzwerkstatt",
-  });
-  await db.collection("maco").doc(ID.macoLasercutter).set({
-    name: "Laser Cutter",
-  });
+  await db.collection("maco").doc(ID.macoDevterm).set({ name: "Dev Terminal 01" });
+  await db.collection("maco").doc(ID.macoFraese).set({ name: "Fräse Holzwerkstatt" });
+  await db.collection("maco").doc(ID.macoLasercutter).set({ name: "Laser Cutter" });
   console.log("  Created 3 MaCo devices");
 
-  // --- Machines ---
+  // --- Catalog (unified billable items) ---
+  const catalog: Record<string, any> = {
+    [ID.catStationaer]: {
+      code: "1001",
+      name: "Stationäre Maschinen",
+      workshops: ["holz"],
+      pricingModel: "time",
+      unitPrice: { none: 10, member: 5, intern: 0 },
+      active: true,
+      userCanAdd: false,
+      description: "Holzbearbeitungsmaschinen (Kreissäge, Bandsäge, etc.)",
+    },
+    [ID.catLaser]: {
+      code: "1012",
+      name: "Laser Cutter",
+      workshops: ["makerspace"],
+      pricingModel: "time",
+      unitPrice: { none: 10, member: 5, intern: 0 },
+      active: true,
+      userCanAdd: false,
+      description: "CO2 Laser Cutter",
+    },
+    [ID.catDrechselbank]: {
+      code: "1002",
+      name: "Drechselbank",
+      workshops: ["holz"],
+      pricingModel: "time",
+      unitPrice: { none: 10, member: 5, intern: 0 },
+      active: true,
+      userCanAdd: false,
+    },
+    [ID.catSchweissen]: {
+      code: "2001",
+      name: "Maschinen / Schweissanlage",
+      workshops: ["metall"],
+      pricingModel: "time",
+      unitPrice: { none: 15, member: 7, intern: 0 },
+      active: true,
+      userCanAdd: false,
+    },
+    [ID.catPlasma]: {
+      code: "2002",
+      name: "Plasmaschneider / Brenner",
+      workshops: ["metall"],
+      pricingModel: "time",
+      unitPrice: { none: 20, member: 10, intern: 0 },
+      active: true,
+      userCanAdd: true,
+    },
+    [ID.catSandblastK]: {
+      code: "2003",
+      name: "Sandstrahlen Klein",
+      workshops: ["metall", "glas"],
+      pricingModel: "count",
+      unitPrice: { none: 5, member: 5, intern: 0 },
+      active: true,
+      userCanAdd: true,
+    },
+    [ID.catSandblastG]: {
+      code: "2004",
+      name: "Sandstrahlen Gross",
+      workshops: ["metall", "glas"],
+      pricingModel: "count",
+      unitPrice: { none: 20, member: 20, intern: 0 },
+      active: true,
+      userCanAdd: true,
+    },
+    [ID.cat3dPLA]: {
+      code: "9001",
+      name: "PLA (3D Druck)",
+      workshops: ["makerspace"],
+      pricingModel: "weight",
+      unitPrice: { none: 50, member: 50, intern: 0 },
+      active: true,
+      userCanAdd: true,
+    },
+    [ID.cat3dPETG]: {
+      code: "9002",
+      name: "PETG (3D Druck)",
+      workshops: ["makerspace"],
+      pricingModel: "weight",
+      unitPrice: { none: 70, member: 70, intern: 0 },
+      active: true,
+      userCanAdd: true,
+    },
+    [ID.catSperrholz]: {
+      code: "3001",
+      name: "Sperrholz Birke 4mm",
+      workshops: ["holz"],
+      pricingModel: "area",
+      unitPrice: { none: 45, member: 45, intern: 0 },
+      active: true,
+      userCanAdd: true,
+    },
+    [ID.catKantholz]: {
+      code: "3002",
+      name: "Kantholz Fichte",
+      workshops: ["holz"],
+      pricingModel: "length",
+      unitPrice: { none: 12, member: 12, intern: 0 },
+      active: true,
+      userCanAdd: true,
+    },
+  };
+
+  for (const [id, data] of Object.entries(catalog)) {
+    await db.collection("catalog").doc(id).set(data);
+  }
+  console.log(`  Created ${Object.keys(catalog).length} catalog entries`);
+
+  // --- Machines (with checkoutTemplateId + workshop) ---
   await db.collection("machine").doc(ID.machineLaserVirtual).set({
     name: "Laser Cutter (Virtual)",
+    workshop: "makerspace",
+    checkoutTemplateId: db.doc(`catalog/${ID.catLaser}`),
     requiredPermission: [db.doc(`permission/${ID.permLaser}`)],
     maco: db.doc(`maco/${ID.macoDevterm}`),
     control: {},
   });
   await db.collection("machine").doc(ID.machineCnc).set({
     name: "CNC Fräse",
+    workshop: "holz",
+    checkoutTemplateId: db.doc(`catalog/${ID.catStationaer}`),
     requiredPermission: [db.doc(`permission/${ID.permCnc}`)],
     maco: db.doc(`maco/${ID.macoDevterm}`),
     control: {},
   });
   await db.collection("machine").doc(ID.machineFraese).set({
     name: "Fräse",
+    workshop: "holz",
+    checkoutTemplateId: db.doc(`catalog/${ID.catStationaer}`),
     requiredPermission: [db.doc(`permission/${ID.permHolz}`)],
     maco: db.doc(`maco/${ID.macoFraese}`),
     control: {},
   });
   await db.collection("machine").doc(ID.machineLasercutter).set({
     name: "Laser Cutter",
+    workshop: "makerspace",
+    checkoutTemplateId: db.doc(`catalog/${ID.catLaser}`),
     requiredPermission: [db.doc(`permission/${ID.permLaser}`)],
     maco: db.doc(`maco/${ID.macoLasercutter}`),
     control: {},
   });
   console.log("  Created 4 machines");
 
-  // --- Config: Pricing ---
+  // --- Config: Pricing (simplified — no machine configs) ---
   await db.collection("config").doc("pricing").set({
     entryFees: {
-      erwachsen: { regular: 15, ermaessigt: 7.5, materialbezug: 0, intern: 0, hangenmoos: 15 },
-      kind: { regular: 7.5, ermaessigt: 3.75, materialbezug: 0, intern: 0, hangenmoos: 7.5 },
-      firma: { regular: 30, ermaessigt: 15, materialbezug: 0, intern: 0, hangenmoos: 30 },
+      erwachsen: { regular: 15, materialbezug: 0, intern: 0, hangenmoos: 15 },
+      kind: { regular: 7.5, materialbezug: 0, intern: 0, hangenmoos: 7.5 },
+      firma: { regular: 30, materialbezug: 0, intern: 0, hangenmoos: 30 },
     },
     workshops: {
-      holz: {
-        label: "Holzwerkstatt", order: 1,
-        machines: [
-          { id: "holz_stationaer", label: "Stationäre Maschinen", unit: "h",
-            prices: { none: 10, member: 5, intern: 0 } },
-          { id: "holz_drechselbank", label: "Drechselbank", unit: "h",
-            prices: { none: 10, member: 5, intern: 0 } },
-        ],
-        materialCategories: ["m2", "m", "stk", "chf"],
-      },
-      metall: {
-        label: "Metallwerkstatt", order: 2,
-        machines: [
-          { id: "metall_schweissen", label: "Maschinen / Schweissanlage", unit: "h",
-            prices: { none: 15, member: 7, intern: 0 } },
-          { id: "metall_plasma", label: "Plasmaschneider / Brenner", unit: "h",
-            prices: { none: 20, member: 10, intern: 0 } },
-          { id: "metall_sandstrahlen", label: "Sandstrahlen Metall", unit: "obj",
-            pricingType: "objectSize",
-            objectSizePrices: { klein: 5, mittel: 10, gross: 20 } },
-        ],
-        materialCategories: ["m2", "m", "stk", "chf"],
-      },
-      textil: {
-        label: "Textil Atelier", order: 3,
-        machines: [],
-        materialCategories: ["m", "kg", "stk"],
-      },
-      keramik: {
-        label: "Keramik Atelier", order: 4,
-        machines: [],
-        materialCategories: ["kg", "stk"],
-      },
-      schmuck: {
-        label: "Schmuck Atelier", order: 5,
-        machines: [
-          { id: "schmuck_loeten", label: "Lötstation", unit: "h",
-            prices: { none: 10, member: 5, intern: 0 } },
-        ],
-        materialCategories: ["g", "stk"],
-      },
-      glas: {
-        label: "Glas Atelier", order: 6,
-        machines: [
-          { id: "glas_perlen", label: "Glasperlenstation", unit: "h",
-            prices: { none: 10, member: 5, intern: 0 } },
-          { id: "glas_sandstrahlen", label: "Sandstrahlen", unit: "obj",
-            pricingType: "objectSize",
-            objectSizePrices: { klein: 5, mittel: 10, gross: 20 } },
-        ],
-        materialCategories: ["m2", "stk"],
-      },
-      stein: {
-        label: "Stein Atelier", order: 7,
-        machines: [
-          { id: "stein_schleifen", label: "Schleifmaschinen", unit: "h",
-            prices: { none: 10, member: 5, intern: 0 } },
-        ],
-        materialCategories: ["stk"],
-      },
-      malen: {
-        label: "Malen und Basteln", order: 8,
-        machines: [],
-        materialCategories: ["m2", "m", "kg", "l"],
-      },
-      makerspace: {
-        label: "Maker Space", order: 9,
-        machines: [
-          { id: "makerspace_fdm", label: "FDM 3D-Drucker", unit: "g",
-            pricingType: "3dprint",
-            materialPrices: { PLA: 0.05, PETG: 0.07, ABS: 0.06 } },
-        ],
-        materialCategories: [],
-        hasServiceItems: true,
-      },
-      diverses: {
-        label: "Diverses", order: 10,
-        machines: [],
-        materialCategories: [],
-        hasServiceItems: true,
-      },
+      holz:      { label: "Holzwerkstatt",     order: 1 },
+      metall:    { label: "Metallwerkstatt",    order: 2 },
+      textil:    { label: "Textil Atelier",     order: 3 },
+      keramik:   { label: "Keramik Atelier",    order: 4 },
+      schmuck:   { label: "Schmuck Atelier",    order: 5 },
+      glas:      { label: "Glas Atelier",       order: 6 },
+      stein:     { label: "Stein Atelier",      order: 7 },
+      malen:     { label: "Malen und Basteln",  order: 8 },
+      makerspace:{ label: "Maker Space",        order: 9 },
+      diverses:  { label: "Diverses",           order: 10 },
     },
-    unitLabels: { m2: "m²", m: "m", stk: "Stk.", chf: "CHF", h: "Std.", kg: "kg", g: "g", l: "l", obj: "Objekt" },
-    discountLabels: { none: "Kein Rabatt", member: "Mitglied OWW", intern: "Intern" },
-    objectSizeLabels: { klein: "Klein", mittel: "Mittel", gross: "Gross" },
+    labels: {
+      units: { m2: "m²", m: "m", stk: "Stk.", chf: "CHF", h: "Std.", kg: "kg", g: "g", l: "l" },
+      discounts: { none: "Kein Rabatt", member: "Mitglied OWW", intern: "Intern" },
+    },
   });
   console.log("  Created config/pricing");
 
-  // --- Sample usage_material items for Mike ---
+  // --- Sample open checkout with items for Mike ---
   const mikeRef = db.doc(`users/${ID.userMike}`);
-  await db.collection("usage_material").add({
+  const checkoutRef = db.collection("checkouts").doc("00checkout0mike00001");
+  await checkoutRef.set({
     userId: mikeRef,
-    workshop: "holz",
-    description: "Stationäre Maschinen",
-    type: "machine_hours",
-    details: {
-      category: "h",
-      quantity: 2,
-      unitPrice: 5,
-      totalPrice: 10,
-      discountLevel: "member",
-    },
+    status: "open",
+    usageType: "regular",
     created: Timestamp.now(),
-    checkout: null,
-    modifiedBy: ID.userMike,
+    workshopsVisited: ["holz"],
+    persons: [],
+    modifiedBy: null,
     modifiedAt: Timestamp.now(),
   });
-  await db.collection("usage_material").add({
-    userId: mikeRef,
+
+  // Add a material item to the checkout
+  await checkoutRef.collection("items").add({
     workshop: "holz",
-    description: "Sperrholz Birke",
-    type: "material",
-    details: {
-      category: "m2",
-      quantity: 0.24,
-      lengthCm: 60,
-      widthCm: 40,
-      unitPrice: 45,
-      totalPrice: 10.8,
-    },
+    description: "Sperrholz Birke 4mm",
+    origin: "manual",
+    catalogId: db.doc(`catalog/${ID.catSperrholz}`),
     created: Timestamp.now(),
-    checkout: null,
-    modifiedBy: ID.userMike,
-    modifiedAt: Timestamp.now(),
+    quantity: 0.24,
+    unitPrice: 45,
+    totalPrice: 10.8,
+    formInputs: [
+      { quantity: 60, unit: "cm" },
+      { quantity: 40, unit: "cm" },
+    ],
   });
-  console.log("  Created 2 sample usage_material items for Mike");
+  console.log("  Created open checkout with 1 item for Mike");
 
   console.log("Done! Emulator seeded successfully.");
 }

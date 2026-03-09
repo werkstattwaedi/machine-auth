@@ -6,102 +6,103 @@ import { useDocument } from "@/lib/firestore"
 import { useFirestoreMutation } from "@/hooks/use-firestore-mutation"
 import { PageLoading } from "@/components/page-loading"
 import { PageHeader } from "@/components/admin/page-header"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useForm } from "react-hook-form"
-import { Loader2, Save, QrCode } from "lucide-react"
-import { useEffect, useState } from "react"
-import { QRCodeSVG } from "qrcode.react"
+import { Loader2, Save } from "lucide-react"
+import { useEffect } from "react"
 
 export const Route = createFileRoute(
   "/_authenticated/_admin/materials/$materialId",
 )({
-  component: MaterialDetailPage,
+  component: CatalogDetailPage,
 })
 
-interface MaterialDoc {
+interface CatalogDoc {
+  code: string
   name: string
-  description?: string | null
-  workshop: string
-  category: string
-  unitPrice: number
-  unit: string
+  workshops: string[]
+  pricingModel: string
+  unitPrice: { none: number; member: number; intern: number }
   active: boolean
-  shortlistGroup?: string | null
+  userCanAdd: boolean
+  description?: string | null
 }
 
-interface MaterialFormValues {
+interface CatalogFormValues {
+  code: string
   name: string
   description: string
-  workshop: string
-  category: string
-  unitPrice: string
-  unit: string
+  workshops: string
+  pricingModel: string
+  priceNone: string
+  priceMember: string
+  priceIntern: string
   active: boolean
-  shortlistGroup: string
+  userCanAdd: boolean
 }
 
-function MaterialDetailPage() {
+function CatalogDetailPage() {
   const { materialId } = Route.useParams()
-  const { data: material, loading } = useDocument<MaterialDoc>(
-    `materials/${materialId}`,
+  const { data: catalog, loading } = useDocument<CatalogDoc>(
+    `catalog/${materialId}`,
   )
   const { update, loading: saving } = useFirestoreMutation()
-  const [showQr, setShowQr] = useState(false)
 
-  const { register, handleSubmit, reset } = useForm<MaterialFormValues>()
+  const { register, handleSubmit, reset } = useForm<CatalogFormValues>()
 
   useEffect(() => {
-    if (material) {
+    if (catalog) {
       reset({
-        name: material.name,
-        description: material.description ?? "",
-        workshop: material.workshop,
-        category: material.category,
-        unitPrice: String(material.unitPrice),
-        unit: material.unit,
-        active: material.active,
-        shortlistGroup: material.shortlistGroup ?? "",
+        code: catalog.code,
+        name: catalog.name,
+        description: catalog.description ?? "",
+        workshops: catalog.workshops?.join(", ") ?? "",
+        pricingModel: catalog.pricingModel,
+        priceNone: String(catalog.unitPrice?.none ?? 0),
+        priceMember: String(catalog.unitPrice?.member ?? 0),
+        priceIntern: String(catalog.unitPrice?.intern ?? 0),
+        active: catalog.active,
+        userCanAdd: catalog.userCanAdd,
       })
     }
-  }, [material, reset])
+  }, [catalog, reset])
 
   if (loading) return <PageLoading />
-  if (!material) return <div>Material nicht gefunden.</div>
+  if (!catalog) return <div>Katalogeintrag nicht gefunden.</div>
 
-  const onSubmit = async (values: MaterialFormValues) => {
+  const onSubmit = async (values: CatalogFormValues) => {
     await update(
-      "materials",
+      "catalog",
       materialId,
       {
+        code: values.code,
         name: values.name,
         description: values.description || null,
-        workshop: values.workshop,
-        category: values.category,
-        unitPrice: parseFloat(values.unitPrice) || 0,
-        unit: values.unit,
+        workshops: values.workshops.split(",").map((w) => w.trim()).filter(Boolean),
+        pricingModel: values.pricingModel,
+        unitPrice: {
+          none: parseFloat(values.priceNone) || 0,
+          member: parseFloat(values.priceMember) || 0,
+          intern: parseFloat(values.priceIntern) || 0,
+        },
         active: values.active,
-        shortlistGroup: values.shortlistGroup || null,
+        userCanAdd: values.userCanAdd,
       },
       {
-        successMessage: "Material gespeichert",
+        successMessage: "Katalogeintrag gespeichert",
       },
     )
   }
 
-  const qrUrl = `${window.location.origin}/material/add?id=${materialId}`
-  const groupQrUrl = material.shortlistGroup
-    ? `${window.location.origin}/material/add?group=${material.shortlistGroup}`
-    : null
-
   return (
     <div className="space-y-4">
       <PageHeader
-        title={material.name || "Material"}
+        title={catalog.name || "Katalogeintrag"}
         backTo="/materials"
-        backLabel="Zurück zu Materialien"
+        backLabel="Zurück zum Katalog"
       />
 
       <Card>
@@ -110,9 +111,15 @@ function MaterialDetailPage() {
             onSubmit={handleSubmit(onSubmit)}
             className="space-y-4 max-w-lg"
           >
-            <div className="space-y-2">
-              <Label>Name</Label>
-              <Input {...register("name")} />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Code</Label>
+                <Input {...register("code")} />
+              </div>
+              <div className="space-y-2">
+                <Label>Name</Label>
+                <Input {...register("name")} />
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Beschreibung</Label>
@@ -120,51 +127,47 @@ function MaterialDetailPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Werkstatt</Label>
-                <select
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                  {...register("workshop")}
-                >
-                  <option value="holz">Holz</option>
-                  <option value="metall">Metall</option>
-                  <option value="textil">Textil</option>
-                  <option value="elektronik">Elektronik</option>
-                  <option value="allgemein">Allgemein</option>
-                </select>
+                <Label>Werkstätten (kommagetrennt)</Label>
+                <Input {...register("workshops")} />
               </div>
               <div className="space-y-2">
-                <Label>Kategorie</Label>
+                <Label>Preismodell</Label>
                 <select
                   className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                  {...register("category")}
+                  {...register("pricingModel")}
                 >
-                  <option value="m2">m²</option>
-                  <option value="m">m</option>
-                  <option value="stk">Stk.</option>
-                  <option value="chf">CHF</option>
+                  <option value="time">Zeit (Std.)</option>
+                  <option value="area">Fläche (m²)</option>
+                  <option value="length">Länge (m)</option>
+                  <option value="count">Stück</option>
+                  <option value="weight">Gewicht (kg)</option>
+                  <option value="direct">Betrag (CHF)</option>
                 </select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label>Preis pro Einheit (CHF)</Label>
-                <Input type="number" step="0.01" {...register("unitPrice")} />
+                <Label>Preis (Voll)</Label>
+                <Input type="number" step="0.01" {...register("priceNone")} />
               </div>
               <div className="space-y-2">
-                <Label>Einheit (Anzeige)</Label>
-                <Input {...register("unit")} />
+                <Label>Preis (Mitglied)</Label>
+                <Input type="number" step="0.01" {...register("priceMember")} />
+              </div>
+              <div className="space-y-2">
+                <Label>Preis (Intern)</Label>
+                <Input type="number" step="0.01" {...register("priceIntern")} />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label>Shortlist-Gruppe</Label>
-              <Input
-                placeholder="z.B. sperrholz"
-                {...register("shortlistGroup")}
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <input type="checkbox" id="active" {...register("active")} />
-              <Label htmlFor="active">Aktiv</Label>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <input type="checkbox" id="active" {...register("active")} />
+                <Label htmlFor="active">Aktiv</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <input type="checkbox" id="userCanAdd" {...register("userCanAdd")} />
+                <Label htmlFor="userCanAdd">Benutzer kann hinzufügen</Label>
+              </div>
             </div>
             <Button type="submit" disabled={saving}>
               {saving ? (
@@ -176,46 +179,6 @@ function MaterialDetailPage() {
             </Button>
           </form>
         </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base">QR-Codes</CardTitle>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowQr(!showQr)}
-            >
-              <QrCode className="h-4 w-4 mr-2" />
-              {showQr ? "Ausblenden" : "Anzeigen"}
-            </Button>
-          </div>
-        </CardHeader>
-        {showQr && (
-          <CardContent>
-            <div className="flex gap-8">
-              <div className="text-center">
-                <p className="text-sm font-medium mb-2">Einzelnes Material</p>
-                <QRCodeSVG value={qrUrl} size={160} />
-                <p className="text-xs text-muted-foreground mt-1 break-all max-w-[160px]">
-                  {qrUrl}
-                </p>
-              </div>
-              {groupQrUrl && (
-                <div className="text-center">
-                  <p className="text-sm font-medium mb-2">
-                    Shortlist: {material.shortlistGroup}
-                  </p>
-                  <QRCodeSVG value={groupQrUrl} size={160} />
-                  <p className="text-xs text-muted-foreground mt-1 break-all max-w-[160px]">
-                    {groupQrUrl}
-                  </p>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        )}
       </Card>
     </div>
   )

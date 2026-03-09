@@ -3,7 +3,7 @@
 
 import { createFileRoute } from "@tanstack/react-router"
 import { z } from "zod"
-import { useCollection, useDocument } from "@/lib/firestore"
+import { useDocument } from "@/lib/firestore"
 import { useAuth } from "@/lib/auth"
 import { userRef } from "@/lib/firestore-helpers"
 import { formatCHF } from "@/lib/format"
@@ -12,15 +12,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { where } from "firebase/firestore"
-import { addDoc, collection, serverTimestamp } from "firebase/firestore"
+import { where, addDoc, collection, doc, serverTimestamp, getDocs, query } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import { CheckCircle, Loader2, Package } from "lucide-react"
 import { useState } from "react"
 
 const materialSearchSchema = z.object({
   id: z.string().optional(),
-  group: z.string().optional(),
 })
 
 export const Route = createFileRoute("/_material/material/add")({
@@ -28,46 +26,32 @@ export const Route = createFileRoute("/_material/material/add")({
   component: MaterialAddPage,
 })
 
-interface MaterialDoc {
+interface CatalogDoc {
   name: string
   description?: string | null
-  workshop: string
-  category: string
-  unitPrice: number
-  unit: string
+  workshops: string[]
+  pricingModel: string
+  unitPrice: { none: number; member: number; intern: number }
   active: boolean
-  shortlistGroup?: string | null
+  userCanAdd: boolean
 }
 
 function MaterialAddPage() {
-  const { id, group } = Route.useSearch()
+  const { id } = Route.useSearch()
   const { userDoc } = useAuth()
 
-  // Single material mode
-  const { data: singleMaterial, loading: loadingSingle } = useDocument<MaterialDoc>(
-    id ? `materials/${id}` : null
+  const { data: catalogItem, loading } = useDocument<CatalogDoc>(
+    id ? `catalog/${id}` : null,
   )
 
-  // Group mode
-  const { data: groupMaterials, loading: loadingGroup } = useCollection<MaterialDoc>(
-    group ? "materials" : null,
-    ...(group ? [where("shortlistGroup", "==", group), where("active", "==", true)] : [])
-  )
-
-  const [selectedMaterial, setSelectedMaterial] = useState<(MaterialDoc & { id: string }) | null>(null)
   const [quantity, setQuantity] = useState("1")
   const [lengthCm, setLengthCm] = useState("")
   const [widthCm, setWidthCm] = useState("")
+  const [weightG, setWeightG] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [success, setSuccess] = useState(false)
 
-  const loading = loadingSingle || loadingGroup
-
   if (loading) return <PageLoading />
-
-  // Determine the active material
-  const material = selectedMaterial ?? (singleMaterial ? { ...singleMaterial } : null)
-  const isGroupMode = !!group && !selectedMaterial
 
   if (success) {
     return (
@@ -76,7 +60,15 @@ function MaterialAddPage() {
           <CheckCircle className="h-12 w-12 text-green-600 mx-auto" />
           <h2 className="text-lg font-semibold">Material hinzugefügt</h2>
           <div className="flex flex-col gap-2">
-            <Button onClick={() => { setSuccess(false); setSelectedMaterial(null); setQuantity("1") }}>
+            <Button
+              onClick={() => {
+                setSuccess(false)
+                setQuantity("1")
+                setLengthCm("")
+                setWidthCm("")
+                setWeightG("")
+              }}
+            >
               Weiteres Material erfassen
             </Button>
           </div>
@@ -85,38 +77,7 @@ function MaterialAddPage() {
     )
   }
 
-  // Group selection mode
-  if (isGroupMode) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Material auswählen</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {groupMaterials.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Keine Materialien in dieser Gruppe gefunden.</p>
-          ) : (
-            <div className="space-y-2">
-              {groupMaterials.map((m) => (
-                <button
-                  key={m.id}
-                  className="w-full text-left p-3 rounded-md border hover:bg-accent transition-colors"
-                  onClick={() => setSelectedMaterial(m)}
-                >
-                  <div className="font-medium text-sm">{m.name}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {formatCHF(m.unitPrice)}/{m.unit}
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    )
-  }
-
-  if (!material) {
+  if (!catalogItem || !id) {
     return (
       <Card>
         <CardContent className="pt-6 text-center">
@@ -129,40 +90,107 @@ function MaterialAddPage() {
     )
   }
 
-  const isArea = material.category === "m2"
-  const qty = parseFloat(quantity) || 0
-  let totalPrice = 0
-  if (isArea) {
-    const l = parseFloat(lengthCm) || 0
-    const w = parseFloat(widthCm) || 0
-    totalPrice = (l / 100) * (w / 100) * material.unitPrice
-  } else {
-    totalPrice = qty * material.unitPrice
+  if (!userDoc) {
+    return (
+      <Card>
+        <CardContent className="pt-6 text-center space-y-4">
+          <Package className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
+          <p className="text-sm text-muted-foreground">
+            Bitte melde dich an, um Material zu erfassen.
+          </p>
+        </CardContent>
+      </Card>
+    )
   }
 
+  // Determine discount level
+  const discountLevel: "none" | "member" | "intern" = userDoc.roles?.includes(
+    "vereinsmitglied",
+  )
+    ? "member"
+    : "none"
+  const unitPrice = catalogItem.unitPrice[discountLevel] ?? catalogItem.unitPrice.none ?? 0
+
+  // Compute quantity and price based on pricing model
+  const pm = catalogItem.pricingModel
+  let computedQty = 0
+  let totalPrice = 0
+  let formInputs: { quantity: number; unit: string }[] = []
+
+  if (pm === "area") {
+    const l = parseFloat(lengthCm) || 0
+    const w = parseFloat(widthCm) || 0
+    computedQty = (l / 100) * (w / 100) // m²
+    totalPrice = computedQty * unitPrice
+    formInputs = [
+      { quantity: l, unit: "cm" },
+      { quantity: w, unit: "cm" },
+    ]
+  } else if (pm === "length") {
+    const l = parseFloat(lengthCm) || 0
+    computedQty = l / 100 // m
+    totalPrice = computedQty * unitPrice
+    formInputs = [{ quantity: l, unit: "cm" }]
+  } else if (pm === "weight") {
+    const g = parseFloat(weightG) || 0
+    computedQty = g / 1000 // kg
+    totalPrice = computedQty * unitPrice
+    formInputs = [{ quantity: g, unit: "g" }]
+  } else if (pm === "direct") {
+    const chf = parseFloat(quantity) || 0
+    computedQty = 1
+    totalPrice = chf
+  } else {
+    // count, time
+    const qty = parseFloat(quantity) || 0
+    computedQty = qty
+    totalPrice = qty * unitPrice
+    formInputs = [{ quantity: qty, unit: pm === "time" ? "h" : "Stk." }]
+  }
+
+  totalPrice = Math.round(totalPrice * 100) / 100
+
   const handleSubmit = async () => {
+    if (totalPrice <= 0) return
     setSubmitting(true)
     try {
-      const anonymousSessionId = getAnonymousSessionId()
+      const uRef = userRef(userDoc.id)
 
-      await addDoc(collection(db, "usage_material"), {
-        userId: userDoc ? userRef(userDoc.id) : null,
-        anonymousSessionId: userDoc ? null : anonymousSessionId,
-        materialId: material.id ? (await import("@/lib/firestore-helpers")).materialRef(material.id!) : null,
-        workshop: material.workshop,
-        description: material.name,
-        details: {
-          category: material.category,
-          quantity: isArea ? 1 : qty,
-          lengthCm: isArea ? parseFloat(lengthCm) || null : null,
-          widthCm: isArea ? parseFloat(widthCm) || null : null,
-          unitPrice: material.unitPrice,
-          totalPrice,
-        },
+      // Find or create open checkout
+      const coQuery = query(
+        collection(db, "checkouts"),
+        where("userId", "==", uRef),
+        where("status", "==", "open"),
+      )
+      const coSnap = await getDocs(coQuery)
+      let checkoutId: string
+      if (coSnap.empty) {
+        const coRef = await addDoc(collection(db, "checkouts"), {
+          userId: uRef,
+          status: "open",
+          usageType: "regular",
+          created: serverTimestamp(),
+          workshopsVisited: catalogItem.workshops.length > 0 ? [catalogItem.workshops[0]] : [],
+          persons: [],
+          modifiedBy: null,
+          modifiedAt: serverTimestamp(),
+        })
+        checkoutId = coRef.id
+      } else {
+        checkoutId = coSnap.docs[0].id
+      }
+
+      // Add item to checkout
+      await addDoc(collection(db, "checkouts", checkoutId, "items"), {
+        workshop: catalogItem.workshops[0] ?? "",
+        description: catalogItem.name,
+        origin: "qr",
+        catalogId: doc(db, "catalog", id),
         created: serverTimestamp(),
-        checkout: null,
-        modifiedBy: null,
-        modifiedAt: serverTimestamp(),
+        quantity: computedQty,
+        unitPrice,
+        totalPrice,
+        formInputs: formInputs.length > 0 ? formInputs : null,
       })
       setSuccess(true)
     } finally {
@@ -170,21 +198,36 @@ function MaterialAddPage() {
     }
   }
 
+  const unitLabel =
+    pm === "area"
+      ? "m²"
+      : pm === "length"
+        ? "m"
+        : pm === "weight"
+          ? "kg"
+          : pm === "time"
+            ? "Std."
+            : pm === "count"
+              ? "Stk."
+              : "CHF"
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">{material.name}</CardTitle>
-        {material.description && (
-          <p className="text-sm text-muted-foreground">{material.description}</p>
+        <CardTitle className="text-base">{catalogItem.name}</CardTitle>
+        {catalogItem.description && (
+          <p className="text-sm text-muted-foreground">
+            {catalogItem.description}
+          </p>
         )}
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="text-sm">
           <span className="text-muted-foreground">Preis: </span>
-          {formatCHF(material.unitPrice)}/{material.unit}
+          {formatCHF(unitPrice)}/{unitLabel}
         </div>
 
-        {isArea ? (
+        {pm === "area" ? (
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label>Länge (cm)</Label>
@@ -205,9 +248,42 @@ function MaterialAddPage() {
               />
             </div>
           </div>
+        ) : pm === "length" ? (
+          <div className="space-y-1">
+            <Label>Länge (cm)</Label>
+            <Input
+              type="number"
+              inputMode="decimal"
+              value={lengthCm}
+              onChange={(e) => setLengthCm(e.target.value)}
+            />
+          </div>
+        ) : pm === "weight" ? (
+          <div className="space-y-1">
+            <Label>Gewicht (g)</Label>
+            <Input
+              type="number"
+              inputMode="decimal"
+              value={weightG}
+              onChange={(e) => setWeightG(e.target.value)}
+            />
+          </div>
+        ) : pm === "direct" ? (
+          <div className="space-y-1">
+            <Label>Betrag (CHF)</Label>
+            <Input
+              type="number"
+              inputMode="decimal"
+              step="0.05"
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+            />
+          </div>
         ) : (
           <div className="space-y-1">
-            <Label>Menge ({material.unit})</Label>
+            <Label>
+              Menge ({pm === "time" ? "Std." : "Stk."})
+            </Label>
             <Input
               type="number"
               inputMode="decimal"
@@ -221,21 +297,17 @@ function MaterialAddPage() {
           {formatCHF(totalPrice)}
         </div>
 
-        <Button className="w-full" onClick={handleSubmit} disabled={submitting || totalPrice <= 0}>
-          {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+        <Button
+          className="w-full"
+          onClick={handleSubmit}
+          disabled={submitting || totalPrice <= 0}
+        >
+          {submitting ? (
+            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+          ) : null}
           Hinzufügen
         </Button>
       </CardContent>
     </Card>
   )
-}
-
-function getAnonymousSessionId(): string {
-  const key = "oww-anonymous-session"
-  let id = localStorage.getItem(key)
-  if (!id) {
-    id = crypto.randomUUID()
-    localStorage.setItem(key, id)
-  }
-  return id
 }

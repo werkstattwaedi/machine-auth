@@ -88,6 +88,5 @@ export const auditMachine = createAuditTrigger("machine", "machine/{docId}");
 export const auditPermission = createAuditTrigger("permission", "permission/{docId}");
 export const auditMaco = createAuditTrigger("maco", "maco/{docId}");
 export const auditUsageMachine = createAuditTrigger("usage_machine", "usage_machine/{docId}");
-export const auditUsageMaterial = createAuditTrigger("usage_material", "usage_material/{docId}");
 export const auditCheckouts = createAuditTrigger("checkouts", "checkouts/{docId}");
-export const auditMaterials = createAuditTrigger("materials", "materials/{docId}");
+export const auditCatalog = createAuditTrigger("catalog", "catalog/{docId}");

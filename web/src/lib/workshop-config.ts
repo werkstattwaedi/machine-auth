@@ -1,7 +1,8 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { useDocument } from "./firestore"
+import { useDocument, useCollection } from "./firestore"
+import { where } from "firebase/firestore"
 
 export type WorkshopId =
   | "holz"
@@ -15,28 +16,12 @@ export type WorkshopId =
   | "makerspace"
   | "diverses"
 
-export type UnitCategory = "m2" | "m" | "stk" | "chf" | "h" | "kg" | "g" | "l" | "obj"
 export type DiscountLevel = "none" | "member" | "intern"
-export type ObjectSize = "klein" | "mittel" | "gross"
-export type PrintMaterial = "PLA" | "PETG" | "ABS"
-export type PricingType = "objectSize" | "3dprint"
-
-export interface MachineConfig {
-  id: string
-  label: string
-  unit: UnitCategory
-  prices?: Record<DiscountLevel, number>
-  pricingType?: PricingType
-  objectSizePrices?: Record<ObjectSize, number>
-  materialPrices?: Record<PrintMaterial, number>
-}
+export type PricingModel = "time" | "area" | "length" | "count" | "weight" | "direct"
 
 export interface WorkshopConfig {
   label: string
   order: number
-  machines: MachineConfig[]
-  materialCategories: UnitCategory[]
-  hasServiceItems?: boolean
 }
 
 export interface EntryFees {
@@ -45,12 +30,27 @@ export interface EntryFees {
   firma: Record<string, number>
 }
 
+export interface PricingLabels {
+  units: Record<string, string>
+  discounts: Record<DiscountLevel, string>
+}
+
 export interface PricingConfig {
   entryFees: EntryFees
   workshops: Record<WorkshopId, WorkshopConfig>
-  unitLabels: Record<UnitCategory, string>
-  discountLabels: Record<DiscountLevel, string>
-  objectSizeLabels: Record<ObjectSize, string>
+  labels: PricingLabels
+}
+
+export interface CatalogItem {
+  id: string
+  code: string
+  name: string
+  workshops: string[]
+  pricingModel: PricingModel
+  unitPrice: Record<DiscountLevel, number>
+  active: boolean
+  userCanAdd: boolean
+  description?: string | null
 }
 
 export function usePricingConfig() {
@@ -64,4 +64,31 @@ export function getSortedWorkshops(
   return (
     Object.entries(config.workshops) as [WorkshopId, WorkshopConfig][]
   ).sort((a, b) => a[1].order - b[1].order)
+}
+
+/** Get user-addable catalog items for a workshop */
+export function useCatalogForWorkshop(workshopId: string | null) {
+  return useCollection<CatalogItem>(
+    workshopId ? "catalog" : null,
+    ...(workshopId
+      ? [
+          where("active", "==", true),
+          where("userCanAdd", "==", true),
+          where("workshops", "array-contains", workshopId),
+        ]
+      : []),
+  )
+}
+
+/** Get unit display label */
+export function getUnitLabel(config: PricingConfig, pricingModel: PricingModel): string {
+  const map: Record<PricingModel, string> = {
+    time: config.labels?.units?.h ?? "Std.",
+    area: config.labels?.units?.m2 ?? "m²",
+    length: config.labels?.units?.m ?? "m",
+    count: config.labels?.units?.stk ?? "Stk.",
+    weight: config.labels?.units?.kg ?? "kg",
+    direct: config.labels?.units?.chf ?? "CHF",
+  }
+  return map[pricingModel] ?? pricingModel
 }

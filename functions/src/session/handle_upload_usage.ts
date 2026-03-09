@@ -4,7 +4,13 @@ import {
 } from "../proto/firebase_rpc/usage.js";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
-import { Timestamp } from "firebase-admin/firestore";
+import { Timestamp, FieldValue } from "firebase-admin/firestore";
+import type {
+  MachineEntity,
+  CatalogEntity,
+  UserEntity,
+  DiscountLevel,
+} from "../types/firestore_entities.js";
 
 export async function handleUploadUsage(
   request: UploadUsageRequest,
@@ -29,10 +35,12 @@ export async function handleUploadUsage(
     throw new Error("Missing machine ID in usage history");
   }
 
-  const machineRef = admin.firestore().collection("machine").doc(machineId);
+  const db = admin.firestore();
+  const machineRef = db.collection("machine").doc(machineId);
 
   // Create usage_machine records from device-uploaded history
-  const batch = admin.firestore().batch();
+  const batch = db.batch();
+  const usageRefs: admin.firestore.DocumentReference[] = [];
 
   for (const record of request.history.records || []) {
     if (!record.userId?.value || !record.authenticationId?.value) {
@@ -40,10 +48,11 @@ export async function handleUploadUsage(
       continue;
     }
 
-    const usageRef = admin.firestore().collection("usage_machine").doc();
+    const usageRef = db.collection("usage_machine").doc();
+    usageRefs.push(usageRef);
     batch.set(usageRef, {
-      userId: admin.firestore().doc(`users/${record.userId.value}`),
-      authenticationId: admin.firestore().doc(`authentications/${record.authenticationId.value}`),
+      userId: db.doc(`users/${record.userId.value}`),
+      authenticationId: db.doc(`authentications/${record.authenticationId.value}`),
       machine: machineRef,
       checkIn: Timestamp.fromMillis(Number(record.checkIn) * 1000),
       checkOut: record.checkOut
@@ -52,15 +61,225 @@ export async function handleUploadUsage(
       checkOutReason: record.reason?.reason
         ? JSON.stringify({ reason: record.reason.reason.$case })
         : null,
-      checkout: null, // Not paid yet
+      checkout: null, // Will be set by accumulation logic
     });
   }
 
   await batch.commit();
+
+  // Accumulate usage into checkout items
+  await accumulateUsageIntoCheckout(db, machineRef, request);
 
   logger.info("Successfully processed usage history", {
     totalRecords: request.history.records?.length || 0,
   });
 
   return { success: true };
+}
+
+/**
+ * NFC session → checkout item accumulation.
+ *
+ * For each user in the upload:
+ * 1. Look up machine → get workshop + checkoutTemplateId (catalog ref)
+ * 2. Find user's open checkout (or create one)
+ * 3. Query items subcollection where catalogId == checkoutTemplateId
+ * 4. Sum all usage_machine hours for this checkout + catalog entry
+ * 5. Update/create checkout item with new totals
+ * 6. Link usage_machine records to checkout
+ */
+async function accumulateUsageIntoCheckout(
+  db: admin.firestore.Firestore,
+  machineRef: admin.firestore.DocumentReference,
+  request: UploadUsageRequest,
+): Promise<void> {
+  // Load machine doc to get catalog template and workshop
+  const machineDoc = await machineRef.get();
+  if (!machineDoc.exists) {
+    logger.warn("Machine not found for accumulation", { machineId: machineRef.id });
+    return;
+  }
+
+  const machineData = machineDoc.data() as MachineEntity;
+  if (!machineData.checkoutTemplateId) {
+    logger.info("Machine has no checkoutTemplateId, skipping accumulation", {
+      machineId: machineRef.id,
+    });
+    return;
+  }
+
+  const catalogRef = machineData.checkoutTemplateId;
+  const workshop = machineData.workshop;
+
+  // Guard: checkoutTemplateId must be a DocumentReference
+  if (typeof catalogRef?.get !== "function") {
+    logger.warn("checkoutTemplateId is not a DocumentReference", {
+      machineId: machineRef.id,
+      checkoutTemplateId: String(catalogRef),
+    });
+    return;
+  }
+
+  // Load catalog entry for pricing
+  const catalogDoc = await catalogRef.get();
+  if (!catalogDoc.exists) {
+    logger.warn("Catalog entry not found", { catalogId: catalogRef.id });
+    return;
+  }
+  const catalogData = catalogDoc.data() as CatalogEntity;
+
+  // Group records by userId
+  const userRecords = new Map<string, NonNullable<typeof request.history>["records"]>();
+  for (const record of request.history?.records || []) {
+    if (!record.userId?.value) continue;
+    const uid = record.userId.value;
+    if (!userRecords.has(uid)) userRecords.set(uid, []);
+    userRecords.get(uid)!.push(record);
+  }
+
+  for (const [userId] of userRecords) {
+    try {
+      await accumulateForUser(db, userId, catalogRef, catalogData, workshop);
+    } catch (error) {
+      logger.error("Failed to accumulate usage for user", {
+        userId,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined,
+      });
+    }
+  }
+}
+
+async function accumulateForUser(
+  db: admin.firestore.Firestore,
+  userId: string,
+  catalogRef: admin.firestore.DocumentReference,
+  catalogData: CatalogEntity,
+  workshop: string,
+): Promise<void> {
+  const userRef = db.doc(`users/${userId}`);
+
+  // Determine discount level from user roles
+  const userDoc = await userRef.get();
+  let discountLevel: DiscountLevel = "none";
+  if (userDoc.exists) {
+    const userData = userDoc.data() as UserEntity;
+    if (userData.roles?.includes("vereinsmitglied")) {
+      discountLevel = "member";
+    }
+  }
+
+  const unitPrice = catalogData.unitPrice?.[discountLevel] ?? catalogData.unitPrice?.none ?? 0;
+
+  // Find or create open checkout
+  const checkoutsQuery = await db.collection("checkouts")
+    .where("userId", "==", userRef)
+    .where("status", "==", "open")
+    .limit(1)
+    .get();
+
+  let checkoutRef: admin.firestore.DocumentReference;
+  if (checkoutsQuery.empty) {
+    checkoutRef = db.collection("checkouts").doc();
+    await checkoutRef.set({
+      userId: userRef,
+      status: "open",
+      usageType: "regular",
+      created: Timestamp.now(),
+      workshopsVisited: [workshop],
+      persons: [],
+      modifiedBy: null,
+      modifiedAt: Timestamp.now(),
+    });
+    logger.info("Created open checkout for user", { userId, checkoutId: checkoutRef.id });
+  } else {
+    checkoutRef = checkoutsQuery.docs[0].ref;
+    // Ensure workshop is in workshopsVisited
+    const checkoutData = checkoutsQuery.docs[0].data();
+    const visited: string[] = checkoutData.workshopsVisited || [];
+    if (!visited.includes(workshop)) {
+      await checkoutRef.update({
+        workshopsVisited: FieldValue.arrayUnion(workshop),
+        modifiedAt: Timestamp.now(),
+      });
+    }
+  }
+
+  // Find existing checkout item for this catalog entry
+  const itemsQuery = await checkoutRef.collection("items")
+    .where("catalogId", "==", catalogRef)
+    .limit(1)
+    .get();
+
+  // Sum all usage_machine hours for this user + catalog entry (across all machines that share this template)
+  // Find all machines that use this catalog template
+  const machinesWithTemplate = await db.collection("machine")
+    .where("checkoutTemplateId", "==", catalogRef)
+    .get();
+
+  const machineRefs = machinesWithTemplate.docs.map(d => d.ref);
+
+  let totalHours = 0;
+  for (const mRef of machineRefs) {
+    const usageQuery = await db.collection("usage_machine")
+      .where("userId", "==", userRef)
+      .where("machine", "==", mRef)
+      .where("checkout", "==", null)
+      .get();
+
+    for (const usageDoc of usageQuery.docs) {
+      const data = usageDoc.data();
+      if (data.checkIn && data.checkOut) {
+        const checkIn = (data.checkIn as Timestamp).toMillis();
+        const checkOut = (data.checkOut as Timestamp).toMillis();
+        totalHours += (checkOut - checkIn) / (1000 * 60 * 60);
+      }
+    }
+  }
+
+  // Round to 2 decimal places
+  totalHours = Math.round(totalHours * 100) / 100;
+  const totalPrice = Math.round(totalHours * unitPrice * 100) / 100;
+
+  if (itemsQuery.empty) {
+    // Create new checkout item
+    await checkoutRef.collection("items").add({
+      workshop,
+      description: catalogData.name,
+      origin: "nfc",
+      catalogId: catalogRef,
+      created: Timestamp.now(),
+      quantity: totalHours,
+      unitPrice,
+      totalPrice,
+    });
+  } else {
+    // Update existing item
+    await itemsQuery.docs[0].ref.update({
+      quantity: totalHours,
+      totalPrice,
+    });
+  }
+
+  // Link all unlinked usage_machine records for this user to the checkout
+  for (const mRef of machineRefs) {
+    const unlinkedUsage = await db.collection("usage_machine")
+      .where("userId", "==", userRef)
+      .where("machine", "==", mRef)
+      .where("checkout", "==", null)
+      .get();
+
+    const linkBatch = db.batch();
+    for (const usageDoc of unlinkedUsage.docs) {
+      linkBatch.update(usageDoc.ref, { checkout: checkoutRef });
+    }
+    await linkBatch.commit();
+  }
+
+  logger.info("Accumulated usage into checkout", {
+    userId,
+    checkoutId: checkoutRef.id,
+    totalHours,
+    totalPrice,
+  });
 }

@@ -1,7 +1,26 @@
 {
+  "catalog": {
+    "{itemId}": { // Auto-generated Firebase ID — unified billable items
+      "code": "string", // Unique human-manageable lookup code (e.g., "1042")
+      "name": "string", // e.g., "Stationäre Maschinen", "Sperrholz Birke 4mm"
+      "workshops": ["string"], // e.g., ["holz"], ["holz", "metall"]
+      "pricingModel": "time | area | length | count | weight | direct",
+      // time → hours, area → m², length → meters, count → pieces, weight → kg, direct → CHF
+      "unitPrice": { // Conditional price per base unit by discount level
+        "none": "number",
+        "member": "number",
+        "intern": "number"
+      },
+      "active": "boolean",
+      "userCanAdd": "boolean", // true = users can add to checkout, false = system-only (NFC machine hours)
+      "description": "string | null"
+    }
+  },
   "machine": {
     "{machineId}" : {
       "name": "string", // Human readable label
+      "workshop": "string", // Workshop ID (e.g., "holz", "metall")
+      "checkoutTemplateId": "DocumentReference", // DocumentReference to /catalog/{itemId}
       "requiredPermission": ["DocumentReference"], // Array of DocumentReferences to /permission/{permissionId}
       "maco": "DocumentReference", // DocumentReference to /maco/{deviceID}
       "control": { // map with metadata on how to control the machine.
@@ -30,51 +49,26 @@
   "usage_machine": {
     "{usageId}": {
       "userId": "DocumentReference", // DocumentReference to /users/{userId}
-      "authenticationId": "DocumentReference | null", // DocumentReference to /authentications/{authId}, set by machine upload
+      "authenticationId": "DocumentReference | null", // DocumentReference to /authentications/{authId}
       "machine": "DocumentReference", // DocumentReference to /machine/{machineId}
-      "workshop": "string | null", // Workshop ID (e.g., "holz", "metall"), null for machine-uploaded records
       "checkIn": "timestamp",
       "checkOut": "timestamp | null", // null if still active
       "checkOutReason": "string | null", // JSON representation of CheckOutReason proto
-      "checkout": "DocumentReference | null" // DocumentReference to /checkouts/{checkoutId}, null if unpaid
-    }
-  },
-  "usage_material": {
-    "{usageId}": {
-      "userId": "DocumentReference | null", // DocumentReference to /users/{userId}, null for anonymous
-      "workshop": "string", // Workshop ID (e.g., "holz", "metall", "makerspace")
-      "description": "string", // Human-readable item description
-      "type": "material | machine_hours | service",
-      "details": {
-        "category": "string", // Unit category: "m2", "m", "stk", "h", "kg", "g", "l", "obj", "chf"
-        "quantity": "number",
-        "lengthCm": "number | null", // For area-based materials
-        "widthCm": "number | null", // For area-based materials
-        "unitPrice": "number",
-        "totalPrice": "number",
-        "discountLevel": "string | null", // "none" | "member" | "intern"
-        "objectSize": "string | null", // "klein" | "mittel" | "gross" (sandblasting)
-        "weight_g": "number | null", // For 3D printing
-        "materialType": "string | null", // "PLA" | "PETG" | "ABS" (3D printing)
-        "serviceDescription": "string | null", // For service items
-        "serviceCost": "number | null" // For service items
-      },
-      "created": "timestamp",
-      "checkout": "DocumentReference | null", // DocumentReference to /checkouts/{checkoutId}, null if unpaid
-      "modifiedBy": "string | null", // Firebase Auth UID of last modifier
-      "modifiedAt": "timestamp | null"
+      "checkout": "DocumentReference | null" // DocumentReference to /checkouts/{checkoutId}
     }
   },
   "checkouts": {
     "{checkoutId}": {
-      "userId": "DocumentReference | null", // DocumentReference to /users/{userId}, null for anonymous
-      "time": "timestamp",
+      // --- Always present ---
+      "userId": "DocumentReference", // DocumentReference to /users/{userId}
+      "status": "open | closed",
+      "usageType": "regular | materialbezug | intern | hangenmoos",
+      "created": "timestamp",
+      "workshopsVisited": ["string"], // e.g., ["holz", "metall"]
       "persons": [{ // Array of person entries
         "name": "string",
         "email": "string",
         "userType": "erwachsen | kind | firma",
-        "usageType": "regular | ermaessigt | materialbezug | intern | hangenmoos",
-        "fee": "number",
         "billingAddress": { // Optional, for firma userType
           "company": "string",
           "street": "string",
@@ -82,54 +76,64 @@
           "city": "string"
         }
       }],
-      "machineUsageRefs": ["DocumentReference"], // Array of DocumentReferences to /usage_machine/{usageId}
-      "materialUsageRefs": ["DocumentReference"], // Array of DocumentReferences to /usage_material/{usageId}
-      "tip": "number",
-      "totalPrice": "number",
-      "notes": "string | null",
       "modifiedBy": "string | null", // Firebase Auth UID
-      "modifiedAt": "timestamp"
+      "modifiedAt": "timestamp",
+
+      // --- Only present when status == "closed" ---
+      "closedAt": "timestamp",
+      "notes": "string | null",
+      "summary": {
+        "totalPrice": "number",
+        "entryFees": "number",
+        "machineCost": "number",
+        "materialCost": "number",
+        "tip": "number"
+      },
+      "items": {
+        "{itemId}": { // Auto-generated — subcollection of checkouts/{checkoutId}
+          "workshop": "string", // e.g., "holz"
+          "description": "string", // Human-readable label (from catalog.name)
+          "origin": "nfc | manual | qr",
+          "catalogId": "DocumentReference | null", // DocumentReference to /catalog/{itemId}, null for free-form
+          "created": "timestamp",
+
+          // Pricing & quantity
+          "quantity": "number", // Amount in item's base unit (hours, m², meters, kg, pieces)
+          "unitPrice": "number", // Set at creation from catalog.unitPrice[discount]
+          "totalPrice": "number", // quantity × unitPrice
+
+          // Form state (for re-populating input fields)
+          "formInputs": [{ // Optional array of user-entered values before conversion
+            "quantity": "number",
+            "unit": "string"
+          }]
+        }
+      }
     }
   },
   "config": {
     "pricing": {
+      "entryFees": {
+        "erwachsen": { "regular": "number", "materialbezug": "number", "intern": "number", "hangenmoos": "number" },
+        "kind": { "regular": "number", "materialbezug": "number", "intern": "number", "hangenmoos": "number" },
+        "firma": { "regular": "number", "materialbezug": "number", "intern": "number", "hangenmoos": "number" }
+      },
       "workshops": {
         "{workshopId}": { // e.g., "holz", "metall", "makerspace"
           "label": "string", // Display name (e.g., "Holzwerkstatt")
-          "order": "number", // Sort order
-          "machines": [{ // Array of machine configs
-            "id": "string",
-            "label": "string",
-            "unit": "string",
-            "pricingType": "hourly | objectSize | 3dprint",
-            "hourlyRate": "number", // For hourly pricing
-            "materialPrices": {}, // Map of material type to price (3D print)
-            "objectSizePrices": {} // Map of object size to price (sandblasting)
-          }],
-          "materialCategories": ["string"], // Unit categories available (e.g., "m2", "stk", "kg")
-          "hasServiceItems": "boolean" // Whether free-form service items are allowed
+          "order": "number" // Sort order
         }
       },
-      "unitLabels": {}, // Map of unit category to display label (e.g., "m2": "m²")
-      "discountLabels": {}, // Map of discount level to display label
-      "objectSizeLabels": {} // Map of object size to display label
+      "labels": {
+        "units": {}, // Map of unit key to display label (e.g., "m2": "m²", "h": "Std.")
+        "discounts": {} // Map of discount level to display label (e.g., "none": "Kein Rabatt")
+      }
     }
   },
   "sessions": {
     "{sessionId}": {
       "userId": "DocumentReference", // DocumentReference to /users/{userId}
       "tokenId": "DocumentReference" // DocumentReference to /tokens/{tokenId}
-    }
-  },
-  "materials": {
-    "{materialId}": {
-      "name": "string", // Material name
-      "workshop": "string", // Workshop ID
-      "category": "string", // Unit category (e.g., "m2", "m", "stk")
-      "unitPrice": "number",
-      "unit": "string", // Display unit
-      "active": "boolean",
-      "shortlistGroup": "string | null" // Optional grouping for quick-select lists
     }
   },
   "audit_log": {

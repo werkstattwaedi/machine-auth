@@ -252,7 +252,6 @@ export {
   auditPermission,
   auditMaco,
   auditUsageMachine,
-  auditUsageMaterial,
   auditCheckouts,
-  auditMaterials,
+  auditCatalog,
 } from "./audit/audit-trigger";

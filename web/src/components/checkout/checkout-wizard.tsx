@@ -1,21 +1,23 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useAuth } from "@/lib/auth"
 import { useTokenAuth } from "@/lib/token-auth"
 import { useCollection } from "@/lib/firestore"
 import {
   where,
+  orderBy,
   addDoc,
+  updateDoc,
   collection,
   serverTimestamp,
-  writeBatch,
   doc,
 } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import { userRef } from "@/lib/firestore-helpers"
 import { usePricingConfig } from "@/lib/workshop-config"
+import { calculateFee } from "@/lib/pricing"
 import { PageLoading } from "@/components/page-loading"
 import { CheckoutProgress } from "./checkout-progress"
 import { StepCheckin } from "./step-checkin"
@@ -25,44 +27,33 @@ import { PaymentResult } from "./payment-result"
 import {
   useCheckoutState,
   type CheckoutAction,
-  type UsageMachineItem,
-  type UsageMaterialItem,
 } from "./use-checkout-state"
-import type { UserType } from "@/lib/pricing"
+import type { UserType, UsageType } from "@/lib/pricing"
+import type { CheckoutItemLocal } from "@/components/usage/inline-rows"
+import type { PricingModel } from "@/lib/workshop-config"
 
 interface CheckoutWizardProps {
   picc?: string
   cmac?: string
 }
 
-interface UsageMachineDoc {
-  machine: { id: string }
-  checkIn: { toDate(): Date }
-  checkOut?: { toDate(): Date } | null
-  checkout?: { id: string } | null
-  workshop?: string
+interface CheckoutDoc {
+  userId: { id: string }
+  status: "open" | "closed"
+  usageType: string
+  workshopsVisited: string[]
 }
 
-interface UsageMaterialDoc {
+interface CheckoutItemDoc {
+  workshop: string
   description: string
-  type?: "material" | "machine_hours" | "service"
-  details?: {
-    totalPrice?: number
-    category?: string
-    quantity?: number
-    lengthCm?: number
-    widthCm?: number
-    unitPrice?: number
-    discountLevel?: string
-    objectSize?: string
-    weight_g?: number
-    materialType?: string
-    serviceDescription?: string
-    serviceCost?: number
-  }
-  created: { toDate(): Date }
-  checkout?: { id: string } | null
-  workshop?: string
+  origin: "nfc" | "manual" | "qr"
+  catalogId: { id: string } | null
+  pricingModel?: string | null
+  quantity: number
+  unitPrice: number
+  totalPrice: number
+  formInputs?: { quantity: number; unit: string }[]
 }
 
 export function CheckoutWizard({ picc, cmac }: CheckoutWizardProps) {
@@ -84,62 +75,59 @@ export function CheckoutWizard({ picc, cmac }: CheckoutWizardProps) {
     ? userRef(identifiedUserDoc.id)
     : undefined
 
-  // Fetch unchecked-out machine usage for identified users (null path = disabled)
-  const { data: rawMachineUsage, loading: loadingMachine } =
-    useCollection<UsageMachineDoc>(
-      identifiedUserRef ? "usage_machine" : null,
+  // Find open checkout for identified user
+  const { data: openCheckouts, loading: loadingCheckout } =
+    useCollection<CheckoutDoc>(
+      identifiedUserRef ? "checkouts" : null,
       ...(identifiedUserRef
         ? [
             where("userId", "==", identifiedUserRef),
-            where("checkout", "==", null),
+            where("status", "==", "open"),
           ]
         : []),
+    )
+  const openCheckout = openCheckouts[0] ?? null
+  const checkoutId = openCheckout?.id ?? null
+
+  // Load checkout items
+  const { data: checkoutItems, loading: loadingItems } =
+    useCollection<CheckoutItemDoc>(
+      checkoutId ? `checkouts/${checkoutId}/items` : null,
+      orderBy("created"),
     )
 
-  // Fetch unchecked-out material usage for identified users (null path = disabled)
-  const { data: rawMaterialUsage, loading: loadingMaterial } =
-    useCollection<UsageMaterialDoc>(
-      identifiedUserRef ? "usage_material" : null,
-      ...(identifiedUserRef
-        ? [
-            where("userId", "==", identifiedUserRef),
-            where("checkout", "==", null),
-          ]
-        : []),
-    )
+  // Map to local shape
+  const items: CheckoutItemLocal[] = useMemo(
+    () =>
+      checkoutItems.map((item) => ({
+        id: item.id,
+        workshop: item.workshop,
+        description: item.description,
+        origin: item.origin,
+        catalogId: item.catalogId?.id ?? null,
+        pricingModel: (item.pricingModel as PricingModel) ?? null,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        totalPrice: item.totalPrice,
+        formInputs: item.formInputs,
+      })),
+    [checkoutItems],
+  )
+
+  // Merge Firestore items with local items (for anonymous users)
+  const effectiveItems = isAnonymous ? state.localItems : items
 
   // Pre-fill primary person for A3 (logged-in) users
   usePreFillPerson(identifiedUserDoc, dispatch, state.persons)
 
-  // Sync usage data into state
+  // Sync usageType from open checkout
   useEffect(() => {
-    if (loadingMachine) return
-    const items: UsageMachineItem[] = rawMachineUsage.map((u) => ({
-      id: u.id,
-      machineId: u.machine?.id ?? "",
-      machineName: u.machine?.id ?? "Unbekannt",
-      workshop: u.workshop ?? "",
-      checkIn: u.checkIn?.toDate() ?? new Date(),
-      checkOut: u.checkOut?.toDate() ?? null,
-    }))
-    dispatch({ type: "SET_MACHINE_USAGE", items })
-  }, [rawMachineUsage, loadingMachine, dispatch])
+    if (openCheckout?.usageType) {
+      dispatch({ type: "SET_USAGE_TYPE", usageType: openCheckout.usageType as UsageType })
+    }
+  }, [openCheckout?.usageType, dispatch])
 
-  useEffect(() => {
-    if (loadingMaterial) return
-    const items: UsageMaterialItem[] = rawMaterialUsage.map((u) => ({
-      id: u.id,
-      description: u.description,
-      workshop: u.workshop ?? "",
-      totalPrice: u.details?.totalPrice ?? 0,
-      category: u.details?.category ?? "",
-      quantity: u.details?.quantity ?? 0,
-      type: u.type ?? "material",
-    }))
-    dispatch({ type: "SET_MATERIAL_USAGE", items })
-  }, [rawMaterialUsage, loadingMaterial, dispatch])
-
-  if (tokenLoading || loadingMachine || loadingMaterial || loadingConfig) {
+  if (tokenLoading || loadingCheckout || loadingItems || loadingConfig) {
     return <PageLoading />
   }
 
@@ -155,99 +143,106 @@ export function CheckoutWizard({ picc, cmac }: CheckoutWizardProps) {
   const handleSubmit = async () => {
     setSubmitting(true)
     try {
-      const personFees = state.persons.reduce((sum, p) => sum + p.fee, 0)
-      const firestoreMaterialTotal = state.materialUsage.reduce(
-        (sum, u) => sum + u.totalPrice, 0,
-      )
-      const localMaterialTotal = state.localMaterialUsage.reduce(
-        (sum, u) => sum + (u.details.totalPrice ?? 0), 0,
-      )
-      const total = personFees + firestoreMaterialTotal + localMaterialTotal + state.tip
-
-      // Pre-generate refs for local material items
-      const localDocRefs = state.localMaterialUsage.map(() =>
-        doc(collection(db, "usage_material")),
+      // Calculate entry fees
+      const entryFees = state.persons.reduce(
+        (sum, p) => sum + calculateFee(p.userType, state.usageType, pricingConfig),
+        0,
       )
 
-      // Combine Firestore-synced refs with new local refs
-      const allMaterialRefs = [
-        ...state.materialUsage.map((u) => doc(db, "usage_material", u.id)),
-        ...localDocRefs,
-      ]
+      const nfcItems = effectiveItems.filter((i) => i.origin === "nfc")
+      const materialItems = effectiveItems.filter((i) => i.origin !== "nfc")
+      const machineCost = nfcItems.reduce((sum, i) => sum + i.totalPrice, 0)
+      const materialCost = materialItems.reduce((sum, i) => sum + i.totalPrice, 0)
+      const total = entryFees + machineCost + materialCost + state.tip
 
-      // Create checkout document first (needed as ref for usage records)
-      const checkoutDocRef = await addDoc(collection(db, "checkouts"), {
-        userId: identifiedUserRef ?? null,
-        time: serverTimestamp(),
-        persons: state.persons.map((p) => ({
-          name: `${p.firstName} ${p.lastName}`,
-          email: p.email,
-          userType: p.userType,
-          usageType: p.usageType,
-          fee: p.fee,
-          ...(p.billingCompany ? {
-            billingAddress: {
-              company: p.billingCompany,
-              street: p.billingStreet ?? "",
-              zip: p.billingZip ?? "",
-              city: p.billingCity ?? "",
-            },
-          } : {}),
-        })),
-        machineUsageRefs: state.machineUsage.map((u) =>
-          doc(db, "usage_machine", u.id),
-        ),
-        materialUsageRefs: allMaterialRefs,
+      const persons = state.persons.map((p) => ({
+        name: `${p.firstName} ${p.lastName}`,
+        email: p.email,
+        userType: p.userType,
+        ...(p.billingCompany
+          ? {
+              billingAddress: {
+                company: p.billingCompany,
+                street: p.billingStreet ?? "",
+                zip: p.billingZip ?? "",
+                city: p.billingCity ?? "",
+              },
+            }
+          : {}),
+      }))
+
+      const summary = {
+        totalPrice: total,
+        entryFees,
+        machineCost,
+        materialCost,
         tip: state.tip,
-        totalPrice: total,
-        notes: null,
-        modifiedBy: user?.uid ?? null,
-        modifiedAt: serverTimestamp(),
-      })
+      }
 
-      // Batch: create local material docs + mark all usage as checked out
-      const coRef = doc(db, "checkouts", checkoutDocRef.id)
-      const batch = writeBatch(db)
-
-      state.localMaterialUsage.forEach((item, i) => {
-        batch.set(localDocRefs[i], {
-          userId: identifiedUserRef ?? null,
-          workshop: item.workshop,
-          description: item.description,
-          type: item.type,
-          details: item.details,
-          created: serverTimestamp(),
-          checkout: coRef,
+      if (checkoutId) {
+        // Close existing open checkout
+        await updateDoc(doc(db, "checkouts", checkoutId), {
+          status: "closed",
+          usageType: state.usageType,
+          persons,
+          closedAt: serverTimestamp(),
+          notes: null,
+          summary,
+          modifiedBy: user?.uid ?? null,
+          modifiedAt: serverTimestamp(),
         })
-      })
 
-      for (const u of state.machineUsage) {
-        batch.update(doc(db, "usage_machine", u.id), { checkout: coRef })
+        dispatch({
+          type: "SET_SUBMITTED",
+          checkoutId,
+          totalPrice: total,
+        })
+      } else {
+        // Anonymous checkout — create closed checkout in one shot
+        const checkoutDocRef = await addDoc(collection(db, "checkouts"), {
+          userId: identifiedUserRef ?? null,
+          status: "closed",
+          usageType: state.usageType,
+          created: serverTimestamp(),
+          workshopsVisited: [...new Set(effectiveItems.map((i) => i.workshop))],
+          persons,
+          closedAt: serverTimestamp(),
+          notes: null,
+          summary,
+          modifiedBy: user?.uid ?? null,
+          modifiedAt: serverTimestamp(),
+        })
+
+        // Create items in subcollection for anonymous
+        for (const item of effectiveItems) {
+          await addDoc(
+            collection(db, "checkouts", checkoutDocRef.id, "items"),
+            {
+              workshop: item.workshop,
+              description: item.description,
+              origin: item.origin,
+              catalogId: item.catalogId
+                ? doc(db, "catalog", item.catalogId)
+                : null,
+              created: serverTimestamp(),
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              totalPrice: item.totalPrice,
+              formInputs: item.formInputs ?? null,
+            },
+          )
+        }
+
+        dispatch({
+          type: "SET_SUBMITTED",
+          checkoutId: checkoutDocRef.id,
+          totalPrice: total,
+        })
       }
-      for (const u of state.materialUsage) {
-        batch.update(doc(db, "usage_material", u.id), { checkout: coRef })
-      }
-
-      await batch.commit()
-
-      dispatch({
-        type: "SET_SUBMITTED",
-        checkoutId: checkoutDocRef.id,
-        totalPrice: total,
-      })
     } finally {
       setSubmitting(false)
     }
   }
-
-  // Build raw material docs for step-workshops (with full details for CRUD)
-  const rawMaterialForWorkshops = rawMaterialUsage.map((u) => ({
-    id: u.id,
-    description: u.description,
-    workshop: u.workshop,
-    type: u.type,
-    details: u.details,
-  }))
 
   return (
     <div>
@@ -265,7 +260,14 @@ export function CheckoutWizard({ picc, cmac }: CheckoutWizardProps) {
           dispatch={dispatch}
           isAnonymous={isAnonymous}
           config={pricingConfig}
-          rawMaterialUsage={rawMaterialForWorkshops}
+          items={effectiveItems}
+          checkoutId={checkoutId}
+          userRef={identifiedUserRef ?? null}
+          discountLevel={
+            identifiedUserDoc?.roles?.includes("vereinsmitglied")
+              ? "member"
+              : "none"
+          }
         />
       )}
       {state.step === 2 && (
@@ -274,7 +276,8 @@ export function CheckoutWizard({ picc, cmac }: CheckoutWizardProps) {
           dispatch={dispatch}
           onSubmit={handleSubmit}
           submitting={submitting}
-          localMaterialUsage={state.localMaterialUsage}
+          items={effectiveItems}
+          config={pricingConfig}
         />
       )}
     </div>
@@ -283,10 +286,16 @@ export function CheckoutWizard({ picc, cmac }: CheckoutWizardProps) {
 
 /**
  * Pre-fill the primary person card with data from an identified user doc.
- * Only runs once when the userDoc becomes available and the person hasn't been pre-filled.
  */
 function usePreFillPerson(
-  userDoc: { id: string; name: string; displayName: string; email?: string; userType?: string; termsAcceptedAt?: unknown } | null,
+  userDoc: {
+    id: string
+    name: string
+    displayName: string
+    email?: string
+    userType?: string
+    termsAcceptedAt?: unknown
+  } | null,
   dispatch: React.Dispatch<CheckoutAction>,
   persons: { id: string; isPreFilled: boolean }[],
 ) {

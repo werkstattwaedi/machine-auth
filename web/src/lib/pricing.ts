@@ -6,8 +6,8 @@ import type { PricingConfig } from "./workshop-config"
 /** User type affects base fee */
 export type UserType = "erwachsen" | "kind" | "firma"
 
-/** Usage type affects fee calculation */
-export type UsageType = "regular" | "ermaessigt" | "materialbezug" | "intern" | "hangenmoos"
+/** Usage type affects fee calculation — top-level on checkout */
+export type UsageType = "regular" | "materialbezug" | "intern" | "hangenmoos"
 
 export const USER_TYPE_LABELS: Record<UserType, string> = {
   erwachsen: "Erwachsen",
@@ -17,7 +17,6 @@ export const USER_TYPE_LABELS: Record<UserType, string> = {
 
 export const USAGE_TYPE_LABELS: Record<UsageType, string> = {
   regular: "Reguläre Nutzung",
-  ermaessigt: "Ermässigte Nutzung (KulturLegi)",
   materialbezug: "Nur Materialbezug",
   intern: "Interne Nutzung",
   hangenmoos: "Hangenmoos AG",
@@ -27,21 +26,18 @@ export const USAGE_TYPE_LABELS: Record<UsageType, string> = {
 const FEES: Record<UserType, Record<UsageType, number>> = {
   erwachsen: {
     regular: 15,
-    ermaessigt: 7.5,
     materialbezug: 0,
     intern: 0,
     hangenmoos: 15,
   },
   kind: {
     regular: 7.5,
-    ermaessigt: 3.75,
     materialbezug: 0,
     intern: 0,
     hangenmoos: 7.5,
   },
   firma: {
     regular: 30,
-    ermaessigt: 15,
     materialbezug: 0,
     intern: 0,
     hangenmoos: 30,
@@ -61,20 +57,4 @@ export function calculateFee(
     }
   }
   return FEES[userType]?.[usageType] ?? 0
-}
-
-export interface CheckoutPerson {
-  name: string
-  email: string
-  userType: UserType
-  usageType: UsageType
-  fee: number
-}
-
-export function calculateTotal(
-  persons: CheckoutPerson[],
-  tip: number,
-): number {
-  const personFees = persons.reduce((sum, p) => sum + p.fee, 0)
-  return personFees + Math.max(0, tip)
 }

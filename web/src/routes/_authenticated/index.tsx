@@ -5,10 +5,21 @@ import { useState, useMemo } from "react"
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { useAuth, type UserDoc } from "@/lib/auth"
 import { useCollection } from "@/lib/firestore"
-import { where, serverTimestamp } from "firebase/firestore"
+import {
+  where,
+  orderBy,
+  arrayUnion,
+  arrayRemove,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+  collection,
+  serverTimestamp,
+} from "firebase/firestore"
+import { db } from "@/lib/firebase"
 import { userRef } from "@/lib/firestore-helpers"
-import { useFirestoreMutation } from "@/hooks/use-firestore-mutation"
-import { formatCHF, formatDateTime } from "@/lib/format"
+import { formatCHF } from "@/lib/format"
 import { PageLoading } from "@/components/page-loading"
 import { EmptyState } from "@/components/empty-state"
 import { Card, CardContent } from "@/components/ui/card"
@@ -25,46 +36,40 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { ShoppingCart, Coffee } from "lucide-react"
-import { usePricingConfig, getSortedWorkshops } from "@/lib/workshop-config"
-import type { WorkshopId } from "@/lib/workshop-config"
+import {
+  usePricingConfig,
+  getSortedWorkshops,
+  useCatalogForWorkshop,
+} from "@/lib/workshop-config"
+import type { WorkshopId, DiscountLevel, PricingModel, PricingConfig } from "@/lib/workshop-config"
 import {
   WorkshopInlineSection,
+  type CheckoutItemLocal,
   type ItemCallbacks,
-  type LocalMaterialItem,
 } from "@/components/usage/inline-rows"
 
 export const Route = createFileRoute("/_authenticated/")({
   component: DashboardPage,
 })
 
-interface UsageMachineDoc {
-  machine: { id: string }
-  checkIn: { toDate(): Date }
-  checkOut?: { toDate(): Date } | null
-  checkout?: { id: string } | null
-  workshop?: string
+interface CheckoutDoc {
+  userId: { id: string }
+  status: "open" | "closed"
+  usageType: string
+  workshopsVisited: string[]
+  created: { toDate(): Date }
 }
 
-interface UsageMaterialDoc {
+interface CheckoutItemDoc {
+  workshop: string
   description: string
-  type?: "material" | "machine_hours" | "service"
-  details?: {
-    category?: string
-    quantity?: number
-    lengthCm?: number
-    widthCm?: number
-    unitPrice?: number
-    totalPrice?: number
-    discountLevel?: string
-    objectSize?: string
-    weight_g?: number
-    materialType?: string
-    serviceDescription?: string
-    serviceCost?: number
-  }
-  created: { toDate(): Date }
-  checkout?: { id: string } | null
-  workshop?: string
+  origin: "nfc" | "manual" | "qr"
+  catalogId: { id: string; path: string } | null
+  pricingModel?: string | null
+  quantity: number
+  unitPrice: number
+  totalPrice: number
+  formInputs?: { quantity: number; unit: string }[]
 }
 
 function DashboardPage() {
@@ -87,58 +92,101 @@ function DashboardPage() {
 function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
   const ref = userRef(userDoc.id)
   const { data: pricingConfig, loading: loadingConfig } = usePricingConfig()
-  const mutation = useFirestoreMutation()
 
-  // Workshop selection state (must be before early returns for hook rules)
+  // Workshop selection state
   const [selectedWorkshops, setSelectedWorkshops] = useState<Set<WorkshopId>>(new Set())
   const [uncheckConfirm, setUncheckConfirm] = useState<WorkshopId | null>(null)
 
-  // Unchecked-out machine usage
-  const { data: machineUsage, loading: loadingMachine } = useCollection<UsageMachineDoc>(
-    "usage_machine",
-    where("userId", "==", ref), where("checkout", "==", null),
+  // Find user's open checkout
+  const { data: openCheckouts, loading: loadingCheckout } = useCollection<CheckoutDoc>(
+    "checkouts",
+    where("userId", "==", ref),
+    where("status", "==", "open"),
+  )
+  const openCheckout = openCheckouts[0] ?? null
+  const checkoutId = openCheckout?.id ?? null
+
+  // Load checkout items
+  const { data: checkoutItems, loading: loadingItems } = useCollection<CheckoutItemDoc>(
+    checkoutId ? `checkouts/${checkoutId}/items` : null,
+    orderBy("created"),
   )
 
-  // Unchecked-out material usage
-  const { data: materialUsage, loading: loadingMaterial } = useCollection<UsageMaterialDoc>(
-    "usage_material",
-    where("userId", "==", ref), where("checkout", "==", null),
+  // Determine user's discount level
+  const discountLevel: DiscountLevel = userDoc.roles?.includes("vereinsmitglied")
+    ? "member"
+    : "none"
+
+  // Map Firestore items → local shape
+  const items: CheckoutItemLocal[] = useMemo(
+    () =>
+      checkoutItems.map((item) => ({
+        id: item.id,
+        workshop: item.workshop,
+        description: item.description,
+        origin: item.origin,
+        catalogId: item.catalogId?.id ?? null,
+        pricingModel: (item.pricingModel as PricingModel) ?? null,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        totalPrice: item.totalPrice,
+        formInputs: item.formInputs,
+      })),
+    [checkoutItems],
   )
 
-  // Strip undefined values — Firestore rejects them in updateDoc/addDoc
-  const clean = (obj: Record<string, unknown>) =>
-    Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined))
-
-  // Firestore-backed callbacks (onBlurSave writes to Firestore)
+  // Firestore-backed item callbacks
   const callbacks: ItemCallbacks = useMemo(
     () => ({
-      addItem: (item: LocalMaterialItem) => {
-        mutation.add("usage_material", {
-          userId: ref,
+      addItem: async (item: CheckoutItemLocal) => {
+        let coId = checkoutId
+        // Create checkout if needed
+        if (!coId) {
+          const coRef = await addDoc(collection(db, "checkouts"), {
+            userId: ref,
+            status: "open",
+            usageType: "regular",
+            created: serverTimestamp(),
+            workshopsVisited: [item.workshop],
+            persons: [],
+            modifiedBy: null,
+            modifiedAt: serverTimestamp(),
+          })
+          coId = coRef.id
+        }
+        await addDoc(collection(db, "checkouts", coId, "items"), {
           workshop: item.workshop,
           description: item.description,
-          type: item.type,
-          details: clean(item.details as Record<string, unknown>),
+          origin: item.origin,
+          catalogId: item.catalogId ? doc(db, "catalog", item.catalogId) : null,
+          pricingModel: item.pricingModel ?? null,
           created: serverTimestamp(),
-          checkout: null,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          totalPrice: item.totalPrice,
+          formInputs: item.formInputs ?? null,
         })
       },
-      updateItem: (_id: string, item: LocalMaterialItem) => {
-        mutation.update("usage_material", item.id, {
+      updateItem: (_id: string, item: CheckoutItemLocal) => {
+        if (!checkoutId) return
+        updateDoc(doc(db, "checkouts", checkoutId, "items", item.id), {
           description: item.description,
-          type: item.type,
-          details: clean(item.details as Record<string, unknown>),
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          totalPrice: item.totalPrice,
+          formInputs: item.formInputs ?? null,
         })
       },
       removeItem: (id: string) => {
-        mutation.remove("usage_material", id)
+        if (!checkoutId) return
+        deleteDoc(doc(db, "checkouts", checkoutId, "items", id))
       },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ref],
+    [checkoutId, ref],
   )
 
-  if (loadingMachine || loadingMaterial || loadingConfig) return <PageLoading />
+  if (loadingCheckout || loadingItems || loadingConfig) return <PageLoading />
 
   if (!pricingConfig) {
     return (
@@ -152,44 +200,22 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
 
   const sortedWorkshops = getSortedWorkshops(pricingConfig)
 
-  // Workshops that have existing Firestore items (always shown)
+  // Workshops that have existing items (always shown)
   const workshopsWithItems = new Set<WorkshopId>()
-  for (const u of machineUsage) {
-    if (u.workshop) workshopsWithItems.add(u.workshop as WorkshopId)
+  for (const item of items) {
+    if (item.workshop) workshopsWithItems.add(item.workshop as WorkshopId)
   }
-  for (const u of materialUsage) {
-    if (u.workshop) workshopsWithItems.add(u.workshop as WorkshopId)
+  // Also include workshopsVisited from checkout
+  if (openCheckout?.workshopsVisited) {
+    for (const ws of openCheckout.workshopsVisited) {
+      workshopsWithItems.add(ws as WorkshopId)
+    }
   }
 
-  // Effective set: workshops with existing items + manually selected
   const effectiveWorkshops = new Set([...workshopsWithItems, ...selectedWorkshops])
   const hasUsage = effectiveWorkshops.size > 0
 
-  // Map Firestore material docs → LocalMaterialItem shape for inline rows
-  const materialAsLocal: LocalMaterialItem[] = materialUsage.map((u) => ({
-    id: u.id,
-    description: u.description,
-    workshop: u.workshop ?? "",
-    type: u.type ?? "material",
-    details: {
-      category: u.details?.category,
-      quantity: u.details?.quantity,
-      lengthCm: u.details?.lengthCm,
-      widthCm: u.details?.widthCm,
-      unitPrice: u.details?.unitPrice,
-      totalPrice: u.details?.totalPrice,
-      discountLevel: u.details?.discountLevel,
-      objectSize: u.details?.objectSize,
-      weight_g: u.details?.weight_g,
-      materialType: u.details?.materialType,
-      serviceDescription: u.details?.serviceDescription,
-      serviceCost: u.details?.serviceCost,
-    },
-  }))
-
-  const materialTotal = materialUsage.reduce(
-    (sum, u) => sum + (u.details?.totalPrice ?? 0), 0,
-  )
+  const itemsTotal = items.reduce((sum, i) => sum + i.totalPrice, 0)
 
   const toggleWorkshop = (wsId: WorkshopId) => {
     const hasExistingItems = workshopsWithItems.has(wsId)
@@ -207,16 +233,32 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
       })
     } else {
       setSelectedWorkshops((prev) => new Set(prev).add(wsId))
+      // Update workshopsVisited on checkout if it exists
+      if (checkoutId) {
+        updateDoc(doc(db, "checkouts", checkoutId), {
+          workshopsVisited: arrayUnion(wsId),
+          modifiedAt: serverTimestamp(),
+        })
+      }
     }
   }
 
   const confirmUncheckWorkshop = async () => {
-    if (!uncheckConfirm) return
+    if (!uncheckConfirm || !checkoutId) return
     const wsId = uncheckConfirm
-    const itemsToDelete = materialAsLocal.filter((i) => i.workshop === wsId)
-    await Promise.all(
-      itemsToDelete.map((i) => mutation.remove("usage_material", i.id)),
+    const itemsToDelete = items.filter(
+      (i) => i.workshop === wsId && i.origin !== "nfc",
     )
+    await Promise.all(
+      itemsToDelete.map((i) =>
+        deleteDoc(doc(db, "checkouts", checkoutId, "items", i.id)),
+      ),
+    )
+    // Update workshopsVisited
+    await updateDoc(doc(db, "checkouts", checkoutId), {
+      workshopsVisited: arrayRemove(wsId),
+      modifiedAt: serverTimestamp(),
+    })
     setSelectedWorkshops((prev) => {
       const next = new Set(prev)
       next.delete(wsId)
@@ -238,60 +280,38 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
           Für welche Werkstätten möchtest du Kosten erfassen?
         </p>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {sortedWorkshops.map(([wsId, ws]) => (
-            <label key={wsId} className="flex items-center gap-2 cursor-pointer">
-              <Checkbox
-                checked={effectiveWorkshops.has(wsId)}
-                onCheckedChange={() => toggleWorkshop(wsId)}
-              />
-              <span className="text-sm">{ws.label}</span>
-            </label>
-          ))}
+          {sortedWorkshops.map(([wsId, ws]) => {
+            const hasItems = workshopsWithItems.has(wsId)
+            return (
+              <label key={wsId} className={`flex items-center gap-2 ${hasItems ? "cursor-default" : "cursor-pointer"}`}>
+                <Checkbox
+                  checked={effectiveWorkshops.has(wsId)}
+                  disabled={hasItems}
+                  onCheckedChange={() => toggleWorkshop(wsId)}
+                />
+                <span className="text-sm">{ws.label}</span>
+              </label>
+            )
+          })}
         </div>
       </div>
-
-      {/* NFC machine usage (read-only) */}
-      {machineUsage.length > 0 && (
-        <Card>
-          <CardContent className="py-3">
-            <h3 className="text-sm font-bold mb-2">Maschinennutzung (NFC)</h3>
-            {machineUsage.map((u) => (
-              <div
-                key={u.id}
-                className="flex items-center gap-3 py-1 text-sm border-b border-dashed last:border-0"
-              >
-                <span className="flex-1">
-                  {u.machine?.id ?? "Maschine"} ({u.workshop})
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {formatDateTime(u.checkIn)}
-                  {u.checkOut
-                    ? ` – ${formatDateTime(u.checkOut)}`
-                    : <span className="text-green-600 ml-1">Aktiv</span>}
-                </span>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
 
       {/* Per-workshop inline sections */}
       {sortedWorkshops
         .filter(([wsId]) => effectiveWorkshops.has(wsId))
         .map(([wsId, wsConfig]) => (
-          <WorkshopInlineSection
+          <WorkshopSectionWithCatalog
             key={wsId}
             workshopId={wsId}
             workshop={wsConfig}
             config={pricingConfig}
-            localItems={materialAsLocal.filter((i) => i.workshop === wsId)}
-            existingItems={[]}
+            items={items.filter((i) => i.workshop === wsId)}
             callbacks={callbacks}
-            onBlurSave
+            discountLevel={discountLevel}
           />
         ))}
 
-      {/* Empty state when no workshops selected */}
+      {/* Empty state */}
       {!hasUsage && (
         <EmptyState
           icon={Coffee}
@@ -309,7 +329,7 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
                 <div className="text-sm text-muted-foreground">
                   Kosten (laufend)
                 </div>
-                <div className="text-xl font-bold">{formatCHF(materialTotal)}</div>
+                <div className="text-xl font-bold">{formatCHF(itemsTotal)}</div>
               </div>
               <Link to="/checkout">
                 <Button className="bg-cog-teal hover:bg-cog-teal-dark">
@@ -340,5 +360,54 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  )
+}
+
+/** Workshop section that loads catalog items for the workshop */
+function WorkshopSectionWithCatalog({
+  workshopId,
+  workshop,
+  config,
+  items,
+  callbacks,
+  discountLevel,
+}: {
+  workshopId: WorkshopId
+  workshop: { label: string; order: number }
+  config: PricingConfig
+  items: CheckoutItemLocal[]
+  callbacks: ItemCallbacks
+  discountLevel: DiscountLevel
+}) {
+  const { data: rawCatalog, loading } = useCatalogForWorkshop(workshopId)
+
+  if (loading) return <PageLoading />
+
+  // Override addItem to inject discount-level pricing
+  const wrappedCallbacks: ItemCallbacks = {
+    ...callbacks,
+    addItem: (item: CheckoutItemLocal) => {
+      let resolved = item
+      if (item.catalogId) {
+        const cat = rawCatalog.find((c) => c.id === item.catalogId)
+        if (cat) {
+          resolved = { ...item, unitPrice: cat.unitPrice[discountLevel] ?? cat.unitPrice.none ?? 0 }
+        }
+      }
+      callbacks.addItem(resolved)
+    },
+  }
+
+  return (
+    <WorkshopInlineSection
+      workshopId={workshopId}
+      workshop={workshop}
+      config={config}
+      items={items}
+      catalogItems={rawCatalog}
+      callbacks={wrappedCallbacks}
+      discountLevel={discountLevel}
+      onBlurSave
+    />
   )
 }

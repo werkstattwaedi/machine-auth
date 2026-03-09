@@ -9,6 +9,7 @@ export interface UserEntity {
   created: Timestamp;
   displayName: string;
   name: string;
+  email?: string;
   permissions: DocumentReference[]; // References to /permission/{permissionId}
   roles: string[];
 }
@@ -45,6 +46,8 @@ export interface PermissionEntity {
 
 export interface MachineEntity {
   name: string;
+  workshop: string; // Workshop ID (e.g., "holz", "metall")
+  checkoutTemplateId: DocumentReference; // Reference to /catalog/{itemId}
   requiredPermission: DocumentReference[]; // References to /permission/{permissionId}
   maco: DocumentReference; // Reference to /maco/{deviceId}
   control: Record<string, unknown>;
@@ -71,23 +74,88 @@ export interface AuthenticationEntity {
 }
 
 /**
- * Usage entity for machine usage tracking.
+ * Usage entity for machine usage tracking (audit trail).
  */
-export interface UsageEntity {
+export interface UsageMachineEntity {
   userId: DocumentReference; // Reference to /users/{userId}
-  authenticationId: DocumentReference; // Reference to /authentications/{authId}
+  authenticationId: DocumentReference | null; // Reference to /authentications/{authId}
   machine: DocumentReference; // Reference to /machine/{machineId}
   checkIn: Timestamp;
   checkOut?: Timestamp;
   checkOutReason?: string; // JSON of CheckOutReason
-  checkout?: DocumentReference; // Reference to /checkouts/{checkoutId} when paid
+  checkout?: DocumentReference; // Reference to /checkouts/{checkoutId} when billed
 }
 
-/**
- * Checkout entity for payment tracking.
- */
+/** @deprecated Use UsageMachineEntity instead */
+export type UsageEntity = UsageMachineEntity;
+
+// --- Catalog ---
+
+export type PricingModel = "time" | "area" | "length" | "count" | "weight" | "direct";
+export type DiscountLevel = "none" | "member" | "intern";
+
+export interface CatalogEntity {
+  code: string;
+  name: string;
+  workshops: string[];
+  pricingModel: PricingModel;
+  unitPrice: Record<DiscountLevel, number>;
+  active: boolean;
+  userCanAdd: boolean;
+  description?: string | null;
+}
+
+// --- Checkouts ---
+
+export type CheckoutStatus = "open" | "closed";
+export type UsageType = "regular" | "materialbezug" | "intern" | "hangenmoos";
+
+export interface CheckoutPersonEntity {
+  name: string;
+  email: string;
+  userType: "erwachsen" | "kind" | "firma";
+  billingAddress?: {
+    company: string;
+    street: string;
+    zip: string;
+    city: string;
+  };
+}
+
+export interface CheckoutSummaryEntity {
+  totalPrice: number;
+  entryFees: number;
+  machineCost: number;
+  materialCost: number;
+  tip: number;
+}
+
 export interface CheckoutEntity {
   userId: DocumentReference; // Reference to /users/{userId}
-  time: Timestamp;
+  status: CheckoutStatus;
+  usageType: UsageType;
+  created: Timestamp;
+  workshopsVisited: string[];
+  persons: CheckoutPersonEntity[];
+  modifiedBy: string | null;
+  modifiedAt: Timestamp;
+
+  // Only present when status == "closed"
+  closedAt?: Timestamp;
+  notes?: string | null;
+  summary?: CheckoutSummaryEntity;
+}
+
+export type ItemOrigin = "nfc" | "manual" | "qr";
+
+export interface CheckoutItemEntity {
+  workshop: string;
+  description: string;
+  origin: ItemOrigin;
+  catalogId: DocumentReference | null; // Reference to /catalog/{itemId}, null for free-form
+  created: Timestamp;
+  quantity: number;
+  unitPrice: number;
   totalPrice: number;
+  formInputs?: { quantity: number; unit: string }[];
 }

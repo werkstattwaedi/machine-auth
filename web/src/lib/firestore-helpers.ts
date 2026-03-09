@@ -1,7 +1,7 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { doc, type DocumentReference } from "firebase/firestore"
+import { doc, collection, type DocumentReference } from "firebase/firestore"
 import { db } from "./firebase"
 
 export function userRef(id: string): DocumentReference {
@@ -24,20 +24,24 @@ export function macoRef(id: string): DocumentReference {
   return doc(db, "maco", id)
 }
 
-export function materialRef(id: string): DocumentReference {
-  return doc(db, "materials", id)
+export function catalogRef(id: string): DocumentReference {
+  return doc(db, "catalog", id)
 }
 
 export function usageMachineRef(id: string): DocumentReference {
   return doc(db, "usage_machine", id)
 }
 
-export function usageMaterialRef(id: string): DocumentReference {
-  return doc(db, "usage_material", id)
-}
-
 export function checkoutRef(id: string): DocumentReference {
   return doc(db, "checkouts", id)
+}
+
+export function checkoutItemRef(checkoutId: string, itemId: string): DocumentReference {
+  return doc(db, "checkouts", checkoutId, "items", itemId)
+}
+
+export function checkoutItemsCollection(checkoutId: string) {
+  return collection(db, "checkouts", checkoutId, "items")
 }
 
 export function configRef(id: string): DocumentReference {

@@ -5,11 +5,8 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import {
   USER_TYPE_LABELS,
-  USAGE_TYPE_LABELS,
   type UserType,
-  type UsageType,
 } from "@/lib/pricing"
-import { formatCHF } from "@/lib/format"
 import { X } from "lucide-react"
 import type { CheckoutPerson, CheckoutAction } from "./use-checkout-state"
 
@@ -103,48 +100,24 @@ export function PersonCard({
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-4">
-        <div className="space-y-1">
-          <Label className="text-sm font-bold">Nutzer:in</Label>
-          <div className="flex gap-3 pt-1">
-            {(Object.entries(USER_TYPE_LABELS) as [UserType, string][]).map(
-              ([value, label]) => (
-                <label key={value} className="flex items-center gap-1.5 text-sm cursor-pointer">
-                  <input
-                    type="radio"
-                    name={`userType-${person.id}`}
-                    checked={person.userType === value}
-                    onChange={() => update({ userType: value })}
-                    className="accent-cog-teal"
-                    disabled={person.isPreFilled}
-                  />
-                  {label}
-                </label>
-              )
-            )}
-          </div>
-        </div>
-        <div className="space-y-1">
-          <Label className="text-sm font-bold">Nutzungsart</Label>
-          <select
-            className="flex h-9 w-full rounded-none border border-[#ccc] bg-background px-3 py-1 text-sm"
-            value={person.usageType}
-            onChange={(e) =>
-              update({ usageType: e.target.value as UsageType })
-            }
-          >
-            {(
-              Object.entries(USAGE_TYPE_LABELS) as [UsageType, string][]
-            ).map(([value, label]) => (
-              <option key={value} value={value}>
+      <div className="space-y-1">
+        <Label className="text-sm font-bold">Nutzer:in</Label>
+        <div className="flex gap-3 pt-1">
+          {(Object.entries(USER_TYPE_LABELS) as [UserType, string][]).map(
+            ([value, label]) => (
+              <label key={value} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                <input
+                  type="radio"
+                  name={`userType-${person.id}`}
+                  checked={person.userType === value}
+                  onChange={() => update({ userType: value })}
+                  className="accent-cog-teal"
+                  disabled={person.isPreFilled}
+                />
                 {label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="space-y-1">
-          <Label className="text-sm font-bold">Nutzungsgebühr</Label>
-          <p className="text-sm pt-1">{formatCHF(person.fee)}</p>
+              </label>
+            )
+          )}
         </div>
       </div>
 
@@ -156,32 +129,32 @@ export function PersonCard({
             <div className="space-y-1">
               <Label className="text-sm">Firma<span className="text-[#cc2a24]">*</span></Label>
               <input
-                value={(person as any).billingCompany ?? ""}
-                onChange={(e) => update({ billingCompany: e.target.value } as any)}
+                value={person.billingCompany ?? ""}
+                onChange={(e) => update({ billingCompany: e.target.value })}
                 className="flex h-9 w-full rounded-none border border-[#ccc] bg-background px-3 py-1 text-sm outline-none focus:border-cog-teal"
               />
             </div>
             <div className="space-y-1">
               <Label className="text-sm">Strasse / Nr.<span className="text-[#cc2a24]">*</span></Label>
               <input
-                value={(person as any).billingStreet ?? ""}
-                onChange={(e) => update({ billingStreet: e.target.value } as any)}
+                value={person.billingStreet ?? ""}
+                onChange={(e) => update({ billingStreet: e.target.value })}
                 className="flex h-9 w-full rounded-none border border-[#ccc] bg-background px-3 py-1 text-sm outline-none focus:border-cog-teal"
               />
             </div>
             <div className="space-y-1">
               <Label className="text-sm">PLZ<span className="text-[#cc2a24]">*</span></Label>
               <input
-                value={(person as any).billingZip ?? ""}
-                onChange={(e) => update({ billingZip: e.target.value } as any)}
+                value={person.billingZip ?? ""}
+                onChange={(e) => update({ billingZip: e.target.value })}
                 className="flex h-9 w-full rounded-none border border-[#ccc] bg-background px-3 py-1 text-sm outline-none focus:border-cog-teal"
               />
             </div>
             <div className="space-y-1">
               <Label className="text-sm">Ort<span className="text-[#cc2a24]">*</span></Label>
               <input
-                value={(person as any).billingCity ?? ""}
-                onChange={(e) => update({ billingCity: e.target.value } as any)}
+                value={person.billingCity ?? ""}
+                onChange={(e) => update({ billingCity: e.target.value })}
                 className="flex h-9 w-full rounded-none border border-[#ccc] bg-background px-3 py-1 text-sm outline-none focus:border-cog-teal"
               />
             </div>

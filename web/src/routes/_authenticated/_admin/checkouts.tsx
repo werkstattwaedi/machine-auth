@@ -7,6 +7,7 @@ import { useLookup, resolveRef } from "@/lib/lookup"
 import { PageLoading } from "@/components/page-loading"
 import { DataTable, ColumnHeader } from "@/components/data-table"
 import { PageHeader } from "@/components/admin/page-header"
+import { Badge } from "@/components/ui/badge"
 import { formatDateTime, formatCHF } from "@/lib/format"
 import { type ColumnDef } from "@tanstack/react-table"
 import { useMemo } from "react"
@@ -17,10 +18,19 @@ export const Route = createFileRoute("/_authenticated/_admin/checkouts")({
 
 interface CheckoutDoc {
   userId?: { id: string } | null
-  time?: { toDate(): Date }
-  totalPrice?: number
-  tip?: number
+  status: "open" | "closed"
+  usageType?: string
+  created?: { toDate(): Date }
+  closedAt?: { toDate(): Date }
+  workshopsVisited?: string[]
   persons?: { name: string; email: string }[]
+  summary?: {
+    totalPrice: number
+    entryFees: number
+    machineCost: number
+    materialCost: number
+    tip: number
+  }
 }
 
 function CheckoutsPage() {
@@ -30,9 +40,24 @@ function CheckoutsPage() {
   const columns = useMemo<ColumnDef<CheckoutDoc & { id: string }>[]>(
     () => [
       {
-        accessorKey: "time",
-        header: ({ column }) => <ColumnHeader column={column} title="Datum" />,
-        cell: ({ row }) => formatDateTime(row.original.time),
+        accessorKey: "status",
+        header: "Status",
+        cell: ({ row }) =>
+          row.original.status === "open" ? (
+            <Badge variant="secondary">Offen</Badge>
+          ) : (
+            <Badge variant="outline">Geschlossen</Badge>
+          ),
+      },
+      {
+        accessorKey: "created",
+        header: ({ column }) => <ColumnHeader column={column} title="Erstellt" />,
+        cell: ({ row }) => formatDateTime(row.original.created),
+      },
+      {
+        accessorKey: "closedAt",
+        header: ({ column }) => <ColumnHeader column={column} title="Geschlossen" />,
+        cell: ({ row }) => formatDateTime(row.original.closedAt),
       },
       {
         accessorKey: "persons",
@@ -57,16 +82,31 @@ function CheckoutsPage() {
         enableSorting: false,
       },
       {
-        accessorKey: "totalPrice",
-        header: ({ column }) => <ColumnHeader column={column} title="Total" />,
-        cell: ({ row }) =>
-          row.original.totalPrice != null ? formatCHF(row.original.totalPrice) : "–",
+        accessorKey: "usageType",
+        header: "Nutzungsart",
+        cell: ({ row }) => row.original.usageType ?? "–",
       },
       {
-        accessorKey: "tip",
+        accessorKey: "workshopsVisited",
+        header: "Werkstätten",
+        cell: ({ row }) =>
+          row.original.workshopsVisited?.join(", ") ?? "–",
+      },
+      {
+        id: "totalPrice",
+        header: ({ column }) => <ColumnHeader column={column} title="Total" />,
+        cell: ({ row }) =>
+          row.original.summary?.totalPrice != null
+            ? formatCHF(row.original.summary.totalPrice)
+            : "–",
+      },
+      {
+        id: "tip",
         header: "Trinkgeld",
         cell: ({ row }) =>
-          row.original.tip != null && row.original.tip > 0 ? formatCHF(row.original.tip) : "–",
+          row.original.summary?.tip != null && row.original.summary.tip > 0
+            ? formatCHF(row.original.summary.tip)
+            : "–",
       },
     ],
     [users]
@@ -77,7 +117,7 @@ function CheckoutsPage() {
   return (
     <div>
       <PageHeader title="Checkouts" />
-      <DataTable columns={columns} data={data} searchKey="time" searchPlaceholder="Checkout suchen..." />
+      <DataTable columns={columns} data={data} searchKey="status" searchPlaceholder="Checkout suchen..." />
     </div>
   )
 }

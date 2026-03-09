@@ -61,9 +61,7 @@ service cloud.firestore {
     // Machines collection
     match /machine/{machineId} {
       allow read: if isSignedIn();
-      allow write: if isAdmin() &&
-                      isDocumentReference(request.resource.data.maco, 'maco') &&
-                      isDocumentReferenceArray(request.resource.data.requiredPermission, 'permission');
+      allow write: if isAdmin();
     }
 
     // MaCo (terminals) collection
@@ -87,30 +85,47 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Material usage (from QR scans + manual entry)
-    match /usage_material/{usageId} {
-      allow read: if isSignedIn();
-      allow create: if true;
-      allow update: if isSignedIn();
-      allow delete: if isAdmin() ||
-        (isSignedIn() && isOwner(request.auth.uid) && resource.data.checkout == null);
-    }
-
-    // Checkouts
-    match /checkouts/{checkoutId} {
-      allow create: if true;
-      allow read: if isSignedIn();
-      allow update, delete: if isAdmin();
-    }
-
-    // Config collection (pricing, etc.)
-    match /config/{configId} {
+    // Catalog (unified billable items — public read for QR/material lookup)
+    match /catalog/{itemId} {
       allow read: if true;
       allow write: if isAdmin();
     }
 
-    // Materials catalog (public read for QR scan page)
-    match /materials/{materialId} {
+    // Checkouts (shopping cart)
+    match /checkouts/{checkoutId} {
+      // Anonymous can create (walk-in checkout)
+      allow create: if true;
+      allow read: if isSignedIn();
+      // Owner can update their own open checkout, admin can update any
+      allow update: if isAdmin() ||
+        (isSignedIn() && isOwner(request.auth.uid) && resource.data.status == "open");
+      allow delete: if isAdmin();
+
+      // Checkout items subcollection
+      match /items/{itemId} {
+        allow read: if isSignedIn();
+        // Owner can create items on their open checkout; anonymous checkouts (userId == null) also allowed
+        allow create: if isAdmin() ||
+          (isSignedIn() &&
+           get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId ==
+             /databases/$(database)/documents/users/$(request.auth.uid) &&
+           get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.status == "open") ||
+          get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId == null;
+        allow update: if isAdmin() ||
+          (isSignedIn() &&
+           get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId ==
+             /databases/$(database)/documents/users/$(request.auth.uid) &&
+           get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.status == "open");
+        allow delete: if isAdmin() ||
+          (isSignedIn() &&
+           get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId ==
+             /databases/$(database)/documents/users/$(request.auth.uid) &&
+           get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.status == "open");
+      }
+    }
+
+    // Config collection (pricing, etc.)
+    match /config/{configId} {
       allow read: if true;
       allow write: if isAdmin();
     }
