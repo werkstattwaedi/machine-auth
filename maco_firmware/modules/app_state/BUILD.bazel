@@ -131,6 +131,7 @@ cc_library(
     hdrs = ["tag_verifier.h"],
     deps = [
         ":auth_cache",
+        ":system_state",
         ":tag_verifier_observer",
         "//maco_firmware:types",
         "//maco_firmware/devices/pn532:tag_info",
@@ -178,6 +179,7 @@ pw_cc_test(
     name = "tag_verifier_test",
     srcs = ["tag_verifier_test.cc"],
     deps = [
+        ":system_state",
         ":tag_verifier",
         ":tag_verifier_observer",
         "//maco_firmware/modules/app_state/ui:snapshot",

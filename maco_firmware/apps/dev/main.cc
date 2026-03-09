@@ -204,6 +204,7 @@ void AppInit() {
         maco::system::GetDeviceSecrets(),
         maco::system::GetFirebaseClient(),
         maco::system::GetRandomGenerator(),
+        system_state,
         pw::System().allocator()
     );
     tag_verifier.AddObserver(&session_fsm);

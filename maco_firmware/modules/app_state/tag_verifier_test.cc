@@ -11,6 +11,8 @@
 #include "gateway/gateway_service.pb.h"
 #include "gateway/gateway_service.rpc.pb.h"
 #include "gtest/gtest.h"
+#include "maco_firmware/modules/app_state/system_monitor_backend.h"
+#include "maco_firmware/modules/app_state/system_state.h"
 #include "maco_firmware/modules/app_state/tag_verifier_observer.h"
 #include "maco_firmware/modules/app_state/ui/snapshot.h"
 #include "maco_firmware/modules/device_secrets/device_secrets_mock.h"
@@ -148,12 +150,18 @@ class MockTagVerifierObserver : public TagVerifierObserver {
   pw::InlineString<20> last_auth_id;
 };
 
+class NullSystemMonitorBackend : public SystemMonitorBackend {
+ public:
+  void Start(SystemStateUpdater&, pw::async2::Dispatcher&) override {}
+};
+
 class TagVerifierTest : public ::testing::Test {
  protected:
   void SetUp() override {
+    system_state_.SetReady();
     firebase_client_.emplace(rpc_ctx_.client(), rpc_ctx_.channel().id());
     verifier_.emplace(reader_, device_secrets_, *firebase_client_,
-                      rng_, test_allocator_);
+                      rng_, system_state_, test_allocator_);
     verifier_->Start(dispatcher_);
     // Let the coroutine start and reach SubscribeOnce
     dispatcher_.RunUntilStalled();
@@ -211,6 +219,8 @@ class TagVerifierTest : public ::testing::Test {
   nfc::MockNfcReader reader_;
   secrets::DeviceSecretsMock device_secrets_;
   pw::random::XorShiftStarRng64 rng_{0x12345678};
+  NullSystemMonitorBackend monitor_backend_;
+  SystemState system_state_{monitor_backend_};
   std::optional<firebase::FirebaseClient> firebase_client_;
   std::optional<TagVerifier> verifier_;
 };

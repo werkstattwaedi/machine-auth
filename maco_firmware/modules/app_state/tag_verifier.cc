@@ -30,11 +30,13 @@ TagVerifier::TagVerifier(nfc::NfcReader& reader,
                          secrets::DeviceSecrets& device_secrets,
                          firebase::FirebaseClient& firebase_client,
                          pw::random::RandomGenerator& rng,
+                         SystemState& system_state,
                          pw::allocator::Allocator& allocator)
     : reader_(reader),
       device_secrets_(device_secrets),
       firebase_client_(firebase_client),
       rng_(rng),
+      system_state_(system_state),
       coro_cx_(allocator) {}
 
 void TagVerifier::AddObserver(TagVerifierObserver* observer) {
@@ -175,6 +177,16 @@ pw::async2::Coro<pw::Status> TagVerifier::Run(pw::async2::CoroContext& cx) {
   while (true) {
     auto event_future = reader_.SubscribeOnce();
     nfc::NfcEvent event = co_await event_future;
+
+    // Ignore NFC events until system is ready.
+    {
+      SystemStateSnapshot snapshot;
+      system_state_.GetSnapshot(snapshot);
+      if (snapshot.boot_state != BootState::kReady) {
+        PW_LOG_DEBUG("Ignoring NFC event before system ready");
+        continue;
+      }
+    }
 
     switch (event.type) {
       case nfc::NfcEventType::kTagArrived: {
