@@ -47,12 +47,30 @@ cc_library(
     ],
 )
 
+# Confirmation overlay (pending state bottom sheet)
+cc_library(
+    name = "confirmation_overlay",
+    srcs = ["screens/confirmation_overlay.cc"],
+    hdrs = ["screens/confirmation_overlay.h"],
+    deps = [
+        ":theme",
+        ":ui_action",
+        "//maco_firmware/modules/app_state/ui:snapshot",
+        "//maco_firmware/modules/led_animator:button_effects",
+        "//maco_firmware/modules/ui:button_spec",
+        "//third_party/lvgl",
+        "@pigweed//pw_assert:check",
+        "@pigweed//pw_chrono:system_clock",
+    ],
+)
+
 # Main screen (state-driven: idle, active, denied)
 cc_library(
     name = "main_screen",
     srcs = ["screens/main_screen.cc"],
     hdrs = ["screens/main_screen.h"],
     deps = [
+        ":confirmation_overlay",
         ":theme",
         ":ui_action",
         "//maco_firmware/modules/app_state/ui:snapshot",

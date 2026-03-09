@@ -121,6 +121,7 @@ ButtonBar::ButtonBar(lv_obj_t* parent) {
                         LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_START);
   lv_obj_set_style_pad_column(container_, kPillGap, LV_PART_MAIN);
   lv_obj_add_flag(container_, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+  lv_obj_clear_flag(container_, LV_OBJ_FLAG_SCROLLABLE);
 
   // OK pill (left)
   ok_pill_ = CreatePill(container_);
@@ -193,7 +194,7 @@ void ButtonBar::UpdatePill(lv_obj_t* pill, lv_obj_t* label,
       fill_data.fill_color = spec.bg_color;
     } else {
       fill_data.track_color = spec.bg_color;
-      fill_data.fill_color = DarkenColor(spec.bg_color, kFillContrast);
+      fill_data.fill_color = LightenColor(spec.bg_color, kFillContrast);
     }
     fill_data.progress = spec.fill_progress;
 
