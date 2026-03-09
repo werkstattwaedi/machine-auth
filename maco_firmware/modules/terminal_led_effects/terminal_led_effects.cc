@@ -8,6 +8,7 @@
 #include "maco_firmware/modules/app_state/system_state.h"
 #include "maco_firmware/modules/app_state/ui/snapshot.h"
 #include "maco_firmware/modules/led_animator/ambient_effects.h"
+#include "maco_firmware/modules/led_animator/nfc_effects.h"
 #include "pw_log/log.h"
 
 namespace maco::terminal_led_effects {
@@ -193,18 +194,17 @@ void TerminalLedEffects::Start(pw::async2::Dispatcher& dispatcher) {
 // --- SessionObserver ---
 
 void TerminalLedEffects::OnSessionStarted(const app_state::SessionInfo&) {
-  // Update the flag immediately so ApplySessionEffect() always sees the
-  // current session state, even if the LED command is clobbered by a
-  // subsequent event before the coroutine picks it up.
   session_active_.store(true, std::memory_order_relaxed);
-  pending_command_.store(Command::kSessionStarted, std::memory_order_relaxed);
+  pending_session_cmd_.store(
+      SessionCommand::kSessionStarted, std::memory_order_relaxed);
 }
 
 void TerminalLedEffects::OnSessionEnded(
     const app_state::SessionInfo&, const app_state::MachineUsage&
 ) {
   session_active_.store(false, std::memory_order_relaxed);
-  pending_command_.store(Command::kSessionEnded, std::memory_order_relaxed);
+  pending_session_cmd_.store(
+      SessionCommand::kSessionEnded, std::memory_order_relaxed);
 }
 
 void TerminalLedEffects::OnSessionUiStateChanged(
@@ -215,12 +215,16 @@ void TerminalLedEffects::OnSessionUiStateChanged(
 
 // --- TagVerifierObserver ---
 
+void TerminalLedEffects::OnTagDetected(pw::ConstByteSpan) {
+  pending_tag_cmd_.store(TagCommand::kTagDetected, std::memory_order_relaxed);
+}
+
 void TerminalLedEffects::OnTagVerified(pw::ConstByteSpan) {
-  pending_command_.store(Command::kTagVerified, std::memory_order_relaxed);
+  pending_tag_cmd_.store(TagCommand::kTagVerified, std::memory_order_relaxed);
 }
 
 void TerminalLedEffects::OnUnknownTag() {
-  // Unknown tags do not trigger any LED feedback.
+  pending_tag_cmd_.store(TagCommand::kUnknownTag, std::memory_order_relaxed);
 }
 
 void TerminalLedEffects::OnAuthorized(
@@ -229,15 +233,15 @@ void TerminalLedEffects::OnAuthorized(
     const pw::InlineString<64>&,
     const maco::FirebaseId&
 ) {
-  pending_command_.store(Command::kAuthorized, std::memory_order_relaxed);
+  pending_tag_cmd_.store(TagCommand::kAuthorized, std::memory_order_relaxed);
 }
 
 void TerminalLedEffects::OnUnauthorized() {
-  pending_command_.store(Command::kUnauthorized, std::memory_order_relaxed);
+  pending_tag_cmd_.store(TagCommand::kUnauthorized, std::memory_order_relaxed);
 }
 
 void TerminalLedEffects::OnTagRemoved() {
-  pending_command_.store(Command::kTagRemoved, std::memory_order_relaxed);
+  pending_tag_cmd_.store(TagCommand::kTagRemoved, std::memory_order_relaxed);
 }
 
 // --- Internal ---
@@ -266,18 +270,59 @@ pw::async2::Coro<pw::Status> TerminalLedEffects::Run(
   }
 
   // Discard any events that arrived while booting (e.g. early NFC reads).
-  pending_command_.store(Command::kNone, std::memory_order_relaxed);
+  pending_tag_cmd_.store(TagCommand::kNone, std::memory_order_relaxed);
+  pending_session_cmd_.store(SessionCommand::kNone, std::memory_order_relaxed);
   ApplySessionEffect();
+
+  // NFC area ready: solid white.
+  auto nfc_white = maco::led::RgbwColor{0, 0, 0, 80};
+  auto nfc_denied = maco::led::RgbwColor{120, 0, 0, 80};
+  led_.SetNfcEffect(SolidNfc(nfc_white));
 
   bool pending_effect_active = false;
   app_state::SessionStateUi pending_effect_state =
       app_state::SessionStateUi::kNoSession;
 
   while (true) {
-    auto cmd =
-        pending_command_.exchange(Command::kNone, std::memory_order_relaxed);
+    auto tag_cmd =
+        pending_tag_cmd_.exchange(TagCommand::kNone, std::memory_order_relaxed);
+    auto session_cmd = pending_session_cmd_.exchange(
+        SessionCommand::kNone, std::memory_order_relaxed);
 
-    // Check if we should show a pending-state LED effect.
+    // --- NFC LEDs: always process tag commands (independent of pending state)
+    switch (tag_cmd) {
+      case TagCommand::kTagDetected:
+        led_.SetNfcEffect(
+            BreathingNfc(maco::led::RgbwColor{0, 0, 0, 160}, 0.8f, 0.6f));
+        break;
+
+      case TagCommand::kUnknownTag:
+        led_.SetNfcEffect(BreathingNfc(nfc_denied, 0.8f, 0.6f));
+        break;
+
+      case TagCommand::kTagVerified:
+        led_.SetNfcEffect(
+            BreathingNfc(maco::led::RgbwColor{200, 160, 0, 0}, 0.8f, 0.6f));
+        break;
+
+      case TagCommand::kAuthorized:
+        led_.SetNfcEffect(
+            BreathingNfc(maco::led::RgbwColor{0, 200, 0, 0}, 0.8f, 0.6f));
+        break;
+
+      case TagCommand::kUnauthorized:
+        led_.SetNfcEffect(BreathingNfc(nfc_denied, 0.8f, 0.6f));
+        break;
+
+      case TagCommand::kTagRemoved:
+        led_.SetNfcEffect(SolidNfc(nfc_white));
+        break;
+
+      case TagCommand::kNone:
+        break;
+    }
+
+    // --- Ambient ring: check pending UI state first
     auto ui_state = session_ui_state_.load(std::memory_order_relaxed);
     bool is_pending =
         (ui_state == app_state::SessionStateUi::kStopPending ||
@@ -285,7 +330,6 @@ pw::async2::Coro<pw::Status> TerminalLedEffects::Run(
          ui_state == app_state::SessionStateUi::kTakeoverPending);
 
     if (is_pending) {
-      // Enter or switch pending effect
       if (!pending_effect_active || pending_effect_state != ui_state) {
         pending_effect_active = true;
         pending_effect_state = ui_state;
@@ -295,41 +339,51 @@ pw::async2::Coro<pw::Status> TerminalLedEffects::Run(
           led_.SetAmbientEffect(StopPendingAmbientEffect());
         }
       }
-      // Skip ambient-changing commands while in a pending state
     } else {
       if (pending_effect_active) {
-        // Left pending state — revert to session effect
         pending_effect_active = false;
         ApplySessionEffect();
       }
 
-      // Process commands normally
-      switch (cmd) {
-        case Command::kSessionStarted:
-        case Command::kSessionEnded:
-          ApplySessionEffect();
-          break;
-
-        case Command::kTagVerified:
+      // Process ambient effects from tag events.
+      bool tag_handled_ambient = false;
+      switch (tag_cmd) {
+        case TagCommand::kTagVerified:
           led_.SetAmbientEffect(AuthorizingTagAmbientEffect());
+          tag_handled_ambient = true;
           break;
 
-        case Command::kUnauthorized:
+        case TagCommand::kAuthorized:
+        case TagCommand::kTagRemoved:
+          ApplySessionEffect();
+          tag_handled_ambient = true;
+          break;
+
+        case TagCommand::kUnauthorized:
           led_.SetAmbientEffect(AccessDeniedAmbientEffect());
+          tag_handled_ambient = true;
           co_await time_provider_.WaitFor(1500ms);
-          if (pending_command_.load(std::memory_order_relaxed) ==
-              Command::kNone) {
+          if (pending_tag_cmd_.load(std::memory_order_relaxed) ==
+              TagCommand::kNone) {
             ApplySessionEffect();
+            led_.SetNfcEffect(SolidNfc(nfc_white));
           }
           break;
 
-        case Command::kAuthorized:
-        case Command::kTagRemoved:
-          ApplySessionEffect();
+        default:
           break;
+      }
 
-        case Command::kNone:
-          break;
+      // Process session events when no tag event already touched ambient.
+      if (!tag_handled_ambient) {
+        switch (session_cmd) {
+          case SessionCommand::kSessionStarted:
+          case SessionCommand::kSessionEnded:
+            ApplySessionEffect();
+            break;
+          case SessionCommand::kNone:
+            break;
+        }
       }
     }
 

@@ -33,9 +33,13 @@ namespace maco::terminal_led_effects {
 ///   - Unauthorized: ~2.5 red blinks over 1.5 s, then reverts to session effect
 ///   - Authorized / tag removed: reverts to session effect
 ///
-/// Unknown tags and early verification stages (OnTagDetected, OnVerifying,
-/// OnAuthorizing) produce no LED change — effects only start once NTAG424
-/// auth succeeds.
+/// NFC area LEDs indicate tag verification progress:
+///   - Ready (idle): solid white
+///   - Tag detected: bright white pulse
+///   - Unknown tag: red pulse
+///   - Verified (genuine NTAG424): yellow pulse
+///   - Authorized: green pulse
+///   - Tag removed: back to solid white
 class TerminalLedEffects : public app_state::SessionObserver,
                            public app_state::TagVerifierObserver {
  public:
@@ -59,9 +63,9 @@ class TerminalLedEffects : public app_state::SessionObserver,
   void OnSessionUiStateChanged(app_state::SessionStateUi state) override;
 
   // TagVerifierObserver
-  // OnTagDetected / OnVerifying: deliberately not overridden — no effect yet.
+  void OnTagDetected(pw::ConstByteSpan uid) override;
   void OnTagVerified(pw::ConstByteSpan ntag_uid) override;
-  void OnUnknownTag() override;  // No effect.
+  void OnUnknownTag() override;
   void OnAuthorized(
       const maco::TagUid& tag_uid,
       const maco::FirebaseId& user_id,
@@ -72,14 +76,22 @@ class TerminalLedEffects : public app_state::SessionObserver,
   void OnTagRemoved() override;
 
  private:
-  enum class Command : uint8_t {
+  // Tag events drive NFC LEDs + some ambient effects.
+  enum class TagCommand : uint8_t {
+    kNone,
+    kTagDetected,
+    kTagVerified,
+    kUnknownTag,
+    kAuthorized,
+    kUnauthorized,
+    kTagRemoved,
+  };
+
+  // Session events drive ambient ring effects only.
+  enum class SessionCommand : uint8_t {
     kNone,
     kSessionStarted,
     kSessionEnded,
-    kTagVerified,
-    kAuthorized,    // Reverts to session effect
-    kUnauthorized,  // Blinks red twice, then reverts to session effect
-    kTagRemoved,    // Reverts to session effect
   };
 
   pw::async2::Coro<pw::Status> Run(pw::async2::CoroContext& cx);
@@ -98,7 +110,10 @@ class TerminalLedEffects : public app_state::SessionObserver,
   std::atomic<app_state::SessionStateUi> session_ui_state_{
       app_state::SessionStateUi::kNoSession};
 
-  std::atomic<Command> pending_command_{Command::kNone};
+  // Two independent command channels so tag and session events don't clobber
+  // each other (they fire concurrently from the same dispatcher tick).
+  std::atomic<TagCommand> pending_tag_cmd_{TagCommand::kNone};
+  std::atomic<SessionCommand> pending_session_cmd_{SessionCommand::kNone};
 
   pw::async2::CoroContext coro_cx_;
   std::optional<pw::async2::CoroOrElseTask> task_;

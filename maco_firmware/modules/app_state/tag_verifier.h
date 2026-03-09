@@ -7,6 +7,7 @@
 #include <optional>
 
 #include "maco_firmware/modules/app_state/auth_cache.h"
+#include "maco_firmware/modules/app_state/system_state.h"
 #include "maco_firmware/modules/app_state/tag_verifier_observer.h"
 #include "maco_firmware/modules/app_state/ui/snapshot.h"
 #include "maco_firmware/modules/nfc_reader/nfc_reader.h"
@@ -49,6 +50,7 @@ class TagVerifier {
               secrets::DeviceSecrets& device_secrets,
               firebase::FirebaseClient& firebase_client,
               pw::random::RandomGenerator& rng,
+              SystemState& system_state,
               pw::allocator::Allocator& allocator);
 
   /// Register an observer. Max 4, PW_CHECK on overflow.
@@ -86,6 +88,7 @@ class TagVerifier {
   secrets::DeviceSecrets& device_secrets_;
   firebase::FirebaseClient& firebase_client_;
   pw::random::RandomGenerator& rng_;
+  SystemState& system_state_;
 
   std::array<TagVerifierObserver*, kMaxObservers> observers_{};
   size_t observer_count_ = 0;

@@ -16,6 +16,7 @@ cc_library(
         "//maco_firmware/modules/app_state/ui:snapshot",
         "//maco_firmware/modules/led_animator:ambient_effects",
         "//maco_firmware/modules/led_animator:led_animator",
+        "//maco_firmware/modules/led_animator:nfc_effects",
         "@pigweed//pw_allocator:allocator",
         "@pigweed//pw_async2:coro",
         "@pigweed//pw_async2:coro_or_else_task",
