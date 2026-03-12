@@ -193,10 +193,13 @@ class ParticleCli:
             )
 
             if check and not cli_result.success:
+                msg = f"Command failed: {' '.join(args)}"
+                if capture_output:
+                    msg += f"\n{cli_result.output}"
                 raise ParticleCliError(
-                    f"Command failed: {' '.join(args)}\n{cli_result.output}",
+                    msg,
                     returncode=cli_result.returncode,
-                    output=cli_result.output,
+                    output=cli_result.output if capture_output else "",
                 )
 
             return cli_result
@@ -270,6 +273,7 @@ class ParticleCli:
         return self.run(
             ["flash", "--local", firmware_path],
             timeout=timeout,
+            capture_output=False,
             check=True,
         )
 
