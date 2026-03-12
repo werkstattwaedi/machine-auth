@@ -44,6 +44,7 @@ const ID = {
   tokenMike1:   "04c439aa1e1890",
   tokenMike2:   "042d1f322b1690",
   tokenSimon:   "049a3aaa1e1890",
+  tokenSimon2:  "044a1f322b1690",
   tokenMarco:   "04231f322b1690",
 
   // maco terminals
@@ -189,6 +190,11 @@ async function seed() {
       userId: db.doc(`users/${ID.userSimon}`),
       registered: Timestamp.now(),
       label: "Simon Tag",
+    },
+    [ID.tokenSimon2]: {
+      userId: db.doc(`users/${ID.userSimon}`),
+      registered: Timestamp.now(),
+      label: "Simon Tag Plexi",
     },
     [ID.tokenMarco]: {
       userId: db.doc(`users/${ID.userMarco}`),
