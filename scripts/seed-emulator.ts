@@ -10,6 +10,9 @@
  * Document IDs are hardcoded 20-char Firebase-style IDs for reproducibility.
  */
 
+import { readFileSync } from "fs";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
 import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
@@ -90,31 +93,23 @@ async function seed() {
   console.log(`  Created ${Object.keys(permissions).length} permissions`);
 
   // --- Auth users (UID = Firestore doc ID) ---
-  await auth.createUser({
-    uid: ID.userAdmin,
-    email: "admin@example.com",
-    password: "admin123",
-    displayName: "Test Admin",
-  });
-  await auth.createUser({
-    uid: ID.userMike,
-    email: "mike@werkstattwaedi.ch",
-    password: "mike1234",
-    displayName: "Mike Schneider",
-  });
-  await auth.createUser({
-    uid: ID.userMarco,
-    email: "marco@werkstattwaedi.ch",
-    password: "marco1234",
-    displayName: "Marco",
-  });
-  await auth.createUser({
-    uid: ID.userSimon,
-    email: "simon@werkstattwaedi.ch",
-    password: "simon1234",
-    displayName: "Simon",
-  });
-  console.log("  Created 4 Auth users");
+  // Uses upsert pattern so seed can be re-run on existing emulator data.
+  async function upsertAuthUser(props: { uid: string; email: string; password: string; displayName: string }) {
+    try {
+      await auth.createUser(props);
+    } catch (e: any) {
+      if (e?.errorInfo?.code === "auth/uid-already-exists") {
+        await auth.updateUser(props.uid, { email: props.email, displayName: props.displayName });
+      } else {
+        throw e;
+      }
+    }
+  }
+  await upsertAuthUser({ uid: ID.userAdmin, email: "admin@example.com", password: "admin123", displayName: "Test Admin" });
+  await upsertAuthUser({ uid: ID.userMike, email: "mike@werkstattwaedi.ch", password: "mike1234", displayName: "Mike Schneider" });
+  await upsertAuthUser({ uid: ID.userMarco, email: "marco@werkstattwaedi.ch", password: "marco1234", displayName: "Marco" });
+  await upsertAuthUser({ uid: ID.userSimon, email: "simon@werkstattwaedi.ch", password: "simon1234", displayName: "Simon" });
+  console.log("  Created/updated 4 Auth users");
 
   // --- Users ---
   await db.collection("users").doc(ID.userAdmin).set({
@@ -214,115 +209,16 @@ async function seed() {
   await db.collection("maco").doc(ID.macoLasercutter).set({ name: "Laser Cutter" });
   console.log("  Created 3 MaCo devices");
 
-  // --- Catalog (unified billable items) ---
-  const catalog: Record<string, any> = {
-    [ID.catStationaer]: {
-      code: "1001",
-      name: "Stationäre Maschinen",
-      workshops: ["holz"],
-      pricingModel: "time",
-      unitPrice: { none: 10, member: 5, intern: 0 },
-      active: true,
-      userCanAdd: false,
-      description: "Holzbearbeitungsmaschinen (Kreissäge, Bandsäge, etc.)",
-    },
-    [ID.catLaser]: {
-      code: "1012",
-      name: "Laser Cutter",
-      workshops: ["makerspace"],
-      pricingModel: "time",
-      unitPrice: { none: 10, member: 5, intern: 0 },
-      active: true,
-      userCanAdd: false,
-      description: "CO2 Laser Cutter",
-    },
-    [ID.catDrechselbank]: {
-      code: "1002",
-      name: "Drechselbank",
-      workshops: ["holz"],
-      pricingModel: "time",
-      unitPrice: { none: 10, member: 5, intern: 0 },
-      active: true,
-      userCanAdd: false,
-    },
-    [ID.catSchweissen]: {
-      code: "2001",
-      name: "Maschinen / Schweissanlage",
-      workshops: ["metall"],
-      pricingModel: "time",
-      unitPrice: { none: 15, member: 7, intern: 0 },
-      active: true,
-      userCanAdd: false,
-    },
-    [ID.catPlasma]: {
-      code: "2002",
-      name: "Plasmaschneider / Brenner",
-      workshops: ["metall"],
-      pricingModel: "time",
-      unitPrice: { none: 20, member: 10, intern: 0 },
-      active: true,
-      userCanAdd: true,
-    },
-    [ID.catSandblastK]: {
-      code: "2003",
-      name: "Sandstrahlen Klein",
-      workshops: ["metall", "glas"],
-      pricingModel: "count",
-      unitPrice: { none: 5, member: 5, intern: 0 },
-      active: true,
-      userCanAdd: true,
-    },
-    [ID.catSandblastG]: {
-      code: "2004",
-      name: "Sandstrahlen Gross",
-      workshops: ["metall", "glas"],
-      pricingModel: "count",
-      unitPrice: { none: 20, member: 20, intern: 0 },
-      active: true,
-      userCanAdd: true,
-    },
-    [ID.cat3dPLA]: {
-      code: "9001",
-      name: "PLA (3D Druck)",
-      workshops: ["makerspace"],
-      pricingModel: "weight",
-      unitPrice: { none: 50, member: 50, intern: 0 },
-      active: true,
-      userCanAdd: true,
-    },
-    [ID.cat3dPETG]: {
-      code: "9002",
-      name: "PETG (3D Druck)",
-      workshops: ["makerspace"],
-      pricingModel: "weight",
-      unitPrice: { none: 70, member: 70, intern: 0 },
-      active: true,
-      userCanAdd: true,
-    },
-    [ID.catSperrholz]: {
-      code: "3001",
-      name: "Sperrholz Birke 4mm",
-      workshops: ["holz"],
-      pricingModel: "area",
-      unitPrice: { none: 45, member: 45, intern: 0 },
-      active: true,
-      userCanAdd: true,
-    },
-    [ID.catKantholz]: {
-      code: "3002",
-      name: "Kantholz Fichte",
-      workshops: ["holz"],
-      pricingModel: "length",
-      unitPrice: { none: 12, member: 12, intern: 0 },
-      active: true,
-      userCanAdd: true,
-    },
-  };
+  // --- Catalog (loaded from JSON) ---
+  const catalogJson = JSON.parse(
+    readFileSync(join(dirname(fileURLToPath(import.meta.url)), "seed-data", "catalog.json"), "utf-8")
+  ) as Array<{ id: string; [key: string]: any }>;
 
-  for (const [id, data] of Object.entries(catalog)) {
+  for (const item of catalogJson) {
+    const { id, ...data } = item;
     await db.collection("catalog").doc(id).set(data);
   }
-  console.log(`  Created ${Object.keys(catalog).length} catalog entries`);
+  console.log(`  Created ${catalogJson.length} catalog entries`);
 
   // --- Machines (with checkoutTemplateId + workshop) ---
   await db.collection("machine").doc(ID.machineLaserVirtual).set({
