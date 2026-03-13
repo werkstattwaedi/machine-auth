@@ -16,6 +16,9 @@ import { where, addDoc, collection, doc, serverTimestamp, getDocs, query } from 
 import { db } from "@/lib/firebase"
 import { CheckCircle, Loader2, Package } from "lucide-react"
 import { useState } from "react"
+import type { CatalogItem } from "@/lib/workshop-config"
+import { getShortUnit } from "@/lib/workshop-config"
+import { computePricing } from "@/lib/pricing-calc"
 
 const materialSearchSchema = z.object({
   id: z.string().optional(),
@@ -26,21 +29,11 @@ export const Route = createFileRoute("/_material/material/add")({
   component: MaterialAddPage,
 })
 
-interface CatalogDoc {
-  name: string
-  description?: string | null
-  workshops: string[]
-  pricingModel: string
-  unitPrice: { none: number; member: number; intern: number }
-  active: boolean
-  userCanAdd: boolean
-}
-
 function MaterialAddPage() {
   const { id } = Route.useSearch()
   const { userDoc } = useAuth()
 
-  const { data: catalogItem, loading } = useDocument<CatalogDoc>(
+  const { data: catalogItem, loading } = useDocument<CatalogItem>(
     id ? `catalog/${id}` : null,
   )
 
@@ -113,42 +106,13 @@ function MaterialAddPage() {
 
   // Compute quantity and price based on pricing model
   const pm = catalogItem.pricingModel
-  let computedQty = 0
-  let totalPrice = 0
-  let formInputs: { quantity: number; unit: string }[] = []
-
-  if (pm === "area") {
-    const l = parseFloat(lengthCm) || 0
-    const w = parseFloat(widthCm) || 0
-    computedQty = (l / 100) * (w / 100) // m²
-    totalPrice = computedQty * unitPrice
-    formInputs = [
-      { quantity: l, unit: "cm" },
-      { quantity: w, unit: "cm" },
-    ]
-  } else if (pm === "length") {
-    const l = parseFloat(lengthCm) || 0
-    computedQty = l / 100 // m
-    totalPrice = computedQty * unitPrice
-    formInputs = [{ quantity: l, unit: "cm" }]
-  } else if (pm === "weight") {
-    const g = parseFloat(weightG) || 0
-    computedQty = g / 1000 // kg
-    totalPrice = computedQty * unitPrice
-    formInputs = [{ quantity: g, unit: "g" }]
-  } else if (pm === "direct") {
-    const chf = parseFloat(quantity) || 0
-    computedQty = 1
-    totalPrice = chf
-  } else {
-    // count, time
-    const qty = parseFloat(quantity) || 0
-    computedQty = qty
-    totalPrice = qty * unitPrice
-    formInputs = [{ quantity: qty, unit: pm === "time" ? "h" : "Stk." }]
-  }
-
-  totalPrice = Math.round(totalPrice * 100) / 100
+  const pricing = computePricing(pm, unitPrice, {
+    quantity: parseFloat(quantity) || 0,
+    lengthCm: parseFloat(lengthCm) || 0,
+    widthCm: parseFloat(widthCm) || 0,
+    weightG: parseFloat(weightG) || 0,
+  })
+  const { quantity: computedQty, totalPrice, formInputs } = pricing
 
   const handleSubmit = async () => {
     if (totalPrice <= 0) return
@@ -190,7 +154,7 @@ function MaterialAddPage() {
         quantity: computedQty,
         unitPrice,
         totalPrice,
-        formInputs: formInputs.length > 0 ? formInputs : null,
+        formInputs,
       })
       setSuccess(true)
     } finally {
@@ -198,18 +162,7 @@ function MaterialAddPage() {
     }
   }
 
-  const unitLabel =
-    pm === "area"
-      ? "m²"
-      : pm === "length"
-        ? "m"
-        : pm === "weight"
-          ? "kg"
-          : pm === "time"
-            ? "Std."
-            : pm === "count"
-              ? "Stk."
-              : "CHF"
+  const unitLabel = getShortUnit(pm)
 
   return (
     <Card>

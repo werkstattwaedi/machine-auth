@@ -14,31 +14,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { type ColumnDef } from "@tanstack/react-table"
 import { Plus, Loader2 } from "lucide-react"
 import { useState } from "react"
 import { useFirestoreMutation } from "@/hooks/use-firestore-mutation"
 import { useForm } from "react-hook-form"
 import { formatCHF } from "@/lib/format"
+import type { CatalogItem } from "@/lib/workshop-config"
+import { CatalogFormFields, type CatalogFormValues } from "@/components/admin/catalog-form-fields"
 
 export const Route = createFileRoute("/_authenticated/_admin/materials/")({
   component: CatalogPage,
 })
 
-interface CatalogDoc {
-  code: string
-  name: string
-  workshops: string[]
-  pricingModel: string
-  unitPrice: { none: number; member: number; intern: number }
-  active: boolean
-  userCanAdd: boolean
-  description?: string | null
-}
-
-const columns: ColumnDef<CatalogDoc & { id: string }>[] = [
+const columns: ColumnDef<CatalogItem>[] = [
   {
     accessorKey: "code",
     header: ({ column }) => <ColumnHeader column={column} title="Code" />,
@@ -96,7 +85,7 @@ const columns: ColumnDef<CatalogDoc & { id: string }>[] = [
 ]
 
 function CatalogPage() {
-  const { data, loading } = useCollection<CatalogDoc>("catalog")
+  const { data, loading } = useCollection<CatalogItem>("catalog")
   const [createOpen, setCreateOpen] = useState(false)
 
   if (loading) return <PageLoading />
@@ -123,20 +112,9 @@ function CatalogPage() {
   )
 }
 
-interface CreateCatalogFormValues {
-  code: string
-  name: string
-  workshops: string
-  pricingModel: string
-  priceNone: string
-  priceMember: string
-  priceIntern: string
-  userCanAdd: boolean
-}
-
 function CreateCatalogDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const { add, loading } = useFirestoreMutation()
-  const { register, handleSubmit, reset } = useForm<CreateCatalogFormValues>({
+  const { register, handleSubmit, reset } = useForm<CatalogFormValues>({
     defaultValues: {
       pricingModel: "count",
       workshops: "holz",
@@ -144,10 +122,11 @@ function CreateCatalogDialog({ open, onOpenChange }: { open: boolean; onOpenChan
     },
   })
 
-  const onSubmit = async (values: CreateCatalogFormValues) => {
+  const onSubmit = async (values: CatalogFormValues) => {
     await add("catalog", {
       code: values.code,
       name: values.name,
+      description: values.description || null,
       workshops: values.workshops.split(",").map((w) => w.trim()).filter(Boolean),
       pricingModel: values.pricingModel,
       unitPrice: {
@@ -157,7 +136,6 @@ function CreateCatalogDialog({ open, onOpenChange }: { open: boolean; onOpenChan
       },
       active: true,
       userCanAdd: values.userCanAdd,
-      description: null,
     }, {
       successMessage: "Katalogeintrag erstellt",
     })
@@ -172,51 +150,7 @@ function CreateCatalogDialog({ open, onOpenChange }: { open: boolean; onOpenChan
           <DialogTitle>Katalogeintrag erstellen</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Code</Label>
-              <Input placeholder="z.B. 1042" {...register("code", { required: true })} />
-            </div>
-            <div className="space-y-2">
-              <Label>Name</Label>
-              <Input placeholder="z.B. Sperrholz Birke 4mm" {...register("name", { required: true })} />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Werkstätten (kommagetrennt)</Label>
-              <Input placeholder="holz, metall" {...register("workshops")} />
-            </div>
-            <div className="space-y-2">
-              <Label>Preismodell</Label>
-              <select className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm" {...register("pricingModel")}>
-                <option value="time">Zeit (Std.)</option>
-                <option value="area">Fläche (m²)</option>
-                <option value="length">Länge (m)</option>
-                <option value="count">Stück</option>
-                <option value="weight">Gewicht (kg)</option>
-                <option value="direct">Betrag (CHF)</option>
-              </select>
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label>Preis (Voll)</Label>
-              <Input type="number" step="0.01" {...register("priceNone", { required: true })} />
-            </div>
-            <div className="space-y-2">
-              <Label>Preis (Mitglied)</Label>
-              <Input type="number" step="0.01" {...register("priceMember")} />
-            </div>
-            <div className="space-y-2">
-              <Label>Preis (Intern)</Label>
-              <Input type="number" step="0.01" {...register("priceIntern")} />
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <input type="checkbox" id="userCanAdd" {...register("userCanAdd")} />
-            <Label htmlFor="userCanAdd">Benutzer kann hinzufügen</Label>
-          </div>
+          <CatalogFormFields register={register} />
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Abbrechen</Button>
             <Button type="submit" disabled={loading}>

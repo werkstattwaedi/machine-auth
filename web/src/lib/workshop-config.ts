@@ -92,3 +92,16 @@ export function getUnitLabel(config: PricingConfig, pricingModel: PricingModel):
   }
   return map[pricingModel] ?? pricingModel
 }
+
+/** Short unit label (no config needed) */
+export function getShortUnit(pm: PricingModel): string {
+  switch (pm) {
+    case "time": return "h"
+    case "area": return "m²"
+    case "length": return "m"
+    case "count": return "Stk."
+    case "weight": return "kg"
+    case "direct": return "CHF"
+    default: return ""
+  }
+}

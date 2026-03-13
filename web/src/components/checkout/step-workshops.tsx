@@ -4,17 +4,11 @@
 import { useState, useMemo } from "react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ArrowLeft, ArrowRight } from "lucide-react"
-import {
-  getSortedWorkshops,
-  useCatalogForWorkshop,
-} from "@/lib/workshop-config"
+import { getSortedWorkshops } from "@/lib/workshop-config"
 import type { PricingConfig, WorkshopId, DiscountLevel } from "@/lib/workshop-config"
 import type { CheckoutState, CheckoutAction } from "./use-checkout-state"
-import {
-  WorkshopInlineSection,
-  type CheckoutItemLocal,
-  type ItemCallbacks,
-} from "@/components/usage/inline-rows"
+import { type CheckoutItemLocal, type ItemCallbacks } from "@/components/usage/inline-rows"
+import { WorkshopSectionWithCatalog } from "@/components/usage/workshop-section-with-catalog"
 import {
   addDoc,
   updateDoc,
@@ -25,7 +19,6 @@ import {
   type DocumentReference,
 } from "firebase/firestore"
 import { db } from "@/lib/firebase"
-import { PageLoading } from "@/components/page-loading"
 
 interface StepWorkshopsProps {
   state: CheckoutState
@@ -203,48 +196,3 @@ export function StepWorkshops({
   )
 }
 
-function WorkshopSectionWithCatalog({
-  workshopId,
-  workshop,
-  config,
-  items,
-  callbacks,
-  discountLevel,
-}: {
-  workshopId: WorkshopId
-  workshop: { label: string; order: number }
-  config: PricingConfig
-  items: CheckoutItemLocal[]
-  callbacks: ItemCallbacks
-  discountLevel: DiscountLevel
-}) {
-  const { data: rawCatalog, loading } = useCatalogForWorkshop(workshopId)
-
-  if (loading) return <PageLoading />
-
-  const wrappedCallbacks: ItemCallbacks = {
-    ...callbacks,
-    addItem: (item: CheckoutItemLocal) => {
-      let resolved = item
-      if (item.catalogId) {
-        const cat = rawCatalog.find((c) => c.id === item.catalogId)
-        if (cat) {
-          resolved = { ...item, unitPrice: cat.unitPrice[discountLevel] ?? cat.unitPrice.none ?? 0 }
-        }
-      }
-      callbacks.addItem(resolved)
-    },
-  }
-
-  return (
-    <WorkshopInlineSection
-      workshopId={workshopId}
-      workshop={workshop}
-      config={config}
-      items={items}
-      catalogItems={rawCatalog}
-      callbacks={wrappedCallbacks}
-      discountLevel={discountLevel}
-    />
-  )
-}

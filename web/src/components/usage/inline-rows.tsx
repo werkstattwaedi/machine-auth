@@ -13,7 +13,7 @@ import type {
   DiscountLevel,
   PricingModel,
 } from "@/lib/workshop-config"
-import { getUnitLabel } from "@/lib/workshop-config"
+import { getUnitLabel, getShortUnit } from "@/lib/workshop-config"
 
 /** Shape of a checkout item for inline editing */
 export interface CheckoutItemLocal {
@@ -699,18 +699,6 @@ function AddArticleSearch({
       </div>
     </div>
   )
-}
-
-function getShortUnit(pm: PricingModel): string {
-  switch (pm) {
-    case "time": return "h"
-    case "area": return "m²"
-    case "length": return "m"
-    case "count": return "Stk"
-    case "weight": return "kg"
-    case "direct": return "CHF"
-    default: return ""
-  }
 }
 
 // ---------------------------------------------------------------------------
