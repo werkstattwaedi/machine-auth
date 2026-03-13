@@ -9,6 +9,7 @@
 #include "maco_firmware/modules/app_state/session_fsm.h"
 #include "maco_firmware/modules/app_state/system_state.h"
 #include "maco_firmware/modules/app_state/tag_verifier_observer.h"
+#include "maco_firmware/modules/buzzer/buzzer.h"
 #include "maco_firmware/modules/led_animator/led_animator.h"
 #include "pw_allocator/allocator.h"
 #include "pw_async2/coro.h"
@@ -17,9 +18,10 @@
 #include "pw_async2/time_provider.h"
 #include "pw_chrono/system_clock.h"
 
-namespace maco::terminal_led_effects {
+namespace maco::terminal_effects {
 
-/// Drives ambient LED ring effects based on session and tag verification state.
+/// Drives ambient LED ring effects and buzzer feedback based on session and
+/// tag verification state.
 ///
 /// Lifecycle:
 ///   - Start() begins the boot animation immediately.
@@ -40,11 +42,17 @@ namespace maco::terminal_led_effects {
 ///   - Verified (genuine NTAG424): yellow pulse
 ///   - Authorized: green pulse
 ///   - Tag removed: back to solid white
-class TerminalLedEffects : public app_state::SessionObserver,
-                           public app_state::TagVerifierObserver {
+///
+/// Buzzer tones provide audible feedback:
+///   - Tag detected: 1500 Hz, 100ms (medium acknowledgment)
+///   - Unknown/unauthorized: 800 Hz, 200ms (low negative feedback)
+///   - Authorized: 2500 Hz, 150ms (high success tone)
+class TerminalEffects : public app_state::SessionObserver,
+                        public app_state::TagVerifierObserver {
  public:
-  TerminalLedEffects(
+  TerminalEffects(
       led_animator::LedAnimatorBase& led,
+      buzzer::Buzzer& buzzer,
       app_state::SystemState& system_state,
       pw::async2::TimeProvider<pw::chrono::SystemClock>& time_provider,
       pw::allocator::Allocator& allocator
@@ -98,6 +106,7 @@ class TerminalLedEffects : public app_state::SessionObserver,
   void ApplySessionEffect();
 
   led_animator::LedAnimatorBase& led_;
+  buzzer::Buzzer& buzzer_;
   app_state::SystemState& system_state_;
   pw::async2::TimeProvider<pw::chrono::SystemClock>& time_provider_;
 
@@ -105,6 +114,12 @@ class TerminalLedEffects : public app_state::SessionObserver,
   // accurate even when the corresponding LED command is overwritten by a
   // rapid subsequent event (e.g. kSessionStarted clobbered by kTagVerified).
   std::atomic<bool> session_active_{false};
+
+  // Snapshot of session_active_ at tag-detect time, so OnAuthorized can tell
+  // whether this tag tap is starting or ending a session.  Safe regardless of
+  // observer registration order: OnTagDetected always fires before
+  // OnAuthorized in the tag verifier pipeline.
+  std::atomic<bool> session_was_active_at_detect_{false};
 
   // Current session UI state for pending-effect tracking.
   std::atomic<app_state::SessionStateUi> session_ui_state_{
@@ -119,4 +134,4 @@ class TerminalLedEffects : public app_state::SessionObserver,
   std::optional<pw::async2::CoroOrElseTask> task_;
 };
 
-}  // namespace maco::terminal_led_effects
+}  // namespace maco::terminal_effects

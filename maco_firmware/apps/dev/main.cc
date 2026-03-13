@@ -19,7 +19,7 @@
 #include "maco_firmware/modules/machine_control/machine_controller.h"
 #include "maco_firmware/modules/nfc_reader/nfc_reader.h"
 #include "maco_firmware/modules/stack_monitor/stack_monitor.h"
-#include "maco_firmware/modules/terminal_led_effects/terminal_led_effects.h"
+#include "maco_firmware/modules/terminal_effects/terminal_effects.h"
 #include "maco_firmware/modules/terminal_ui/terminal_ui.h"
 #include "maco_firmware/services/maco_service.h"
 #include "maco_firmware/system/system.h"
@@ -126,16 +126,23 @@ void AppInit() {
   // Start system monitor (subscribes to platform events)
   system_state.Start(pw::System().dispatcher());
 
-  // LED ring effects driven by session and tag-verification state.
+  // Initialize buzzer for audible feedback on tag events.
+  auto& buzzer = maco::system::GetBuzzer();
+  if (auto s = buzzer.Init(); !s.ok()) {
+    PW_LOG_WARN("Buzzer init failed: %d", static_cast<int>(s.code()));
+  }
+
+  // LED ring + buzzer effects driven by session and tag-verification state.
   // Start() begins the boot animation immediately; the coroutine transitions
   // to idle once system_state reports kReady.
-  static maco::terminal_led_effects::TerminalLedEffects terminal_led_effects(
+  static maco::terminal_effects::TerminalEffects terminal_effects(
       led,
+      buzzer,
       system_state,
       pw::async2::GetSystemTimeProvider(),
       pw::System().allocator()
   );
-  terminal_led_effects.Start(pw::System().dispatcher());
+  terminal_effects.Start(pw::System().dispatcher());
 
   // Wait for USB serial after splash screen is visible so the user sees
   // something while the device waits for a console connection.
@@ -171,7 +178,7 @@ void AppInit() {
   machine_controller.Start(pw::System().dispatcher());
   default_sensor.Start(pw::System().dispatcher());
   terminal_ui.SetMachineController(&machine_controller);
-  session_fsm.AddObserver(&terminal_led_effects);
+  session_fsm.AddObserver(&terminal_effects);
 
   // Get and start NFC reader (init happens asynchronously)
   PW_LOG_INFO("Starting NFC reader...");
@@ -208,7 +215,7 @@ void AppInit() {
         pw::System().allocator()
     );
     tag_verifier.AddObserver(&session_fsm);
-    tag_verifier.AddObserver(&terminal_led_effects);
+    tag_verifier.AddObserver(&terminal_effects);
     tag_verifier.Start(pw::System().dispatcher());
 
     // Session controller - drives timeouts, hold detection, UI action bridge

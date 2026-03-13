@@ -6,14 +6,15 @@ load("@rules_cc//cc:cc_library.bzl", "cc_library")
 package(default_visibility = ["//maco_firmware:__subpackages__"])
 
 cc_library(
-    name = "terminal_led_effects",
-    srcs = ["terminal_led_effects.cc"],
-    hdrs = ["terminal_led_effects.h"],
+    name = "terminal_effects",
+    srcs = ["terminal_effects.cc"],
+    hdrs = ["terminal_effects.h"],
     deps = [
         "//maco_firmware/modules/app_state:session_fsm",
         "//maco_firmware/modules/app_state:system_state",
         "//maco_firmware/modules/app_state:tag_verifier_observer",
         "//maco_firmware/modules/app_state/ui:snapshot",
+        "//maco_firmware/modules/buzzer",
         "//maco_firmware/modules/led_animator:ambient_effects",
         "//maco_firmware/modules/led_animator:led_animator",
         "//maco_firmware/modules/led_animator:nfc_effects",
