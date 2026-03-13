@@ -1,8 +1,12 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { useState, useEffect } from "react"
-import { functions } from "./firebase"
+import { useState, useEffect, useCallback, useRef } from "react"
+import {
+  signInWithCustomToken,
+  signOut as firebaseSignOut,
+} from "firebase/auth"
+import { auth, functions } from "./firebase"
 
 interface TokenUser {
   tokenId: string
@@ -14,8 +18,13 @@ interface TokenUser {
 
 interface UseTokenAuthResult {
   tokenUser: TokenUser | null
+  /** True while verifying the tag and signing in */
   loading: boolean
   error: string | null
+  /** True when the current Firebase Auth session was created by a tag tap */
+  isTagAuth: boolean
+  /** Sign out of the tag-created Firebase Auth session */
+  tagSignOut: () => Promise<void>
 }
 
 const FUNCTIONS_REGION = "us-central1"
@@ -31,8 +40,10 @@ function functionsBaseUrl(): string {
 
 /**
  * Resolve user identity from NFC tag URL parameters (picc + cmac).
- * Uses a direct POST because verifyTagCheckout is a plain Express route,
- * not a Firebase callable function.
+ *
+ * Verifies the tag via the backend, then signs into Firebase Auth with a
+ * short-lived custom token so the client can read/write Firestore directly
+ * (security rules require `request.auth`).
  */
 export function useTokenAuth(
   picc: string | null,
@@ -41,6 +52,15 @@ export function useTokenAuth(
   const [tokenUser, setTokenUser] = useState<TokenUser | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isTagAuth, setIsTagAuth] = useState(false)
+  const tagAuthRef = useRef(false)
+
+  const tagSignOut = useCallback(async () => {
+    if (!tagAuthRef.current) return
+    tagAuthRef.current = false
+    setIsTagAuth(false)
+    await firebaseSignOut(auth)
+  }, [])
 
   useEffect(() => {
     if (!picc || !cmac) return
@@ -58,7 +78,19 @@ export function useTokenAuth(
       .then(async (res) => {
         const data = await res.json()
         if (!res.ok) throw new Error(data.error ?? "Tag-Verifizierung fehlgeschlagen")
-        setTokenUser(data)
+
+        // Sign into Firebase Auth so Firestore rules allow reads/writes
+        await signInWithCustomToken(auth, data.customToken)
+        tagAuthRef.current = true
+        setIsTagAuth(true)
+
+        setTokenUser({
+          tokenId: data.tokenId,
+          userId: data.userId,
+          name: data.name,
+          email: data.email,
+          userType: data.userType,
+        })
       })
       .catch((err) => {
         setError(err.message ?? "Tag-Verifizierung fehlgeschlagen")
@@ -66,5 +98,5 @@ export function useTokenAuth(
       .finally(() => setLoading(false))
   }, [picc, cmac])
 
-  return { tokenUser, loading, error }
+  return { tokenUser, loading, error, isTagAuth, tagSignOut }
 }

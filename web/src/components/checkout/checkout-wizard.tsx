@@ -61,7 +61,7 @@ interface CheckoutItemDoc {
 
 export function CheckoutWizard({ picc, cmac, kiosk, onActiveChange }: CheckoutWizardProps) {
   const { user, userDoc } = useAuth()
-  const { tokenUser, loading: tokenLoading } = useTokenAuth(
+  const { tokenUser, loading: tokenLoading, isTagAuth, tagSignOut } = useTokenAuth(
     picc ?? null,
     cmac ?? null,
   )
@@ -70,9 +70,11 @@ export function CheckoutWizard({ picc, cmac, kiosk, onActiveChange }: CheckoutWi
   const [landingDismissed, setLandingDismissed] = useState(false)
   const { data: pricingConfig, loading: loadingConfig } = usePricingConfig()
 
-  // Determine auth mode
-  const isAccountLoggedIn = !!user && !!userDoc
-  const isTagIdentified = !isAccountLoggedIn && !!tokenUser
+  // Determine auth mode (tag-auth signs into Firebase Auth too, but is not
+  // an "account login" — it should still behave like a kiosk session with
+  // timeouts and sign-out on close)
+  const isAccountLoggedIn = !!user && !!userDoc && !isTagAuth
+  const isTagIdentified = isTagAuth && !!tokenUser
   const isAnonymous = !isAccountLoggedIn && !isTagIdentified
   const identifiedUserDoc = isAccountLoggedIn ? userDoc : null
   const identifiedUserRef = identifiedUserDoc
@@ -158,6 +160,7 @@ export function CheckoutWizard({ picc, cmac, kiosk, onActiveChange }: CheckoutWi
   onResetRef.current = () => {
     dispatch({ type: "RESET" })
     setLandingDismissed(false)
+    tagSignOut()
     window.history.replaceState(null, "", kiosk ? "/checkout?kiosk" : "/checkout")
   }
 
@@ -192,10 +195,16 @@ export function CheckoutWizard({ picc, cmac, kiosk, onActiveChange }: CheckoutWi
     const timer = setTimeout(() => {
       dispatch({ type: "RESET" })
       setLandingDismissed(false)
+      tagSignOut()
       window.history.replaceState(null, "", kiosk ? "/checkout?kiosk" : "/checkout")
     }, 30_000)
     return () => clearTimeout(timer)
-  }, [state.submitted, isAccountLoggedIn, dispatch, kiosk])
+  }, [state.submitted, isAccountLoggedIn, dispatch, kiosk, tagSignOut])
+
+  // Sign out tag auth when wizard unmounts (new tag replaces this instance)
+  useEffect(() => {
+    return () => { tagSignOut() }
+  }, [tagSignOut])
 
   // Report checkout active state to parent
   const isActive = state.step > 0 || state.persons[0]?.isPreFilled
@@ -218,7 +227,10 @@ export function CheckoutWizard({ picc, cmac, kiosk, onActiveChange }: CheckoutWi
     return (
       <PaymentResult
         totalPrice={state.totalPrice}
-        onReset={() => dispatch({ type: "RESET" })}
+        onReset={() => {
+          dispatch({ type: "RESET" })
+          tagSignOut()
+        }}
       />
     )
   }
