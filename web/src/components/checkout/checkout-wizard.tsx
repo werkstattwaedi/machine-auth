@@ -1,7 +1,7 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import { useAuth } from "@/lib/auth"
 import { useTokenAuth } from "@/lib/token-auth"
 import { useCollection } from "@/lib/firestore"
@@ -35,6 +35,7 @@ import type { PricingModel } from "@/lib/workshop-config"
 interface CheckoutWizardProps {
   picc?: string
   cmac?: string
+  onActiveChange?: (active: boolean) => void
 }
 
 interface CheckoutDoc {
@@ -56,7 +57,7 @@ interface CheckoutItemDoc {
   formInputs?: { quantity: number; unit: string }[]
 }
 
-export function CheckoutWizard({ picc, cmac }: CheckoutWizardProps) {
+export function CheckoutWizard({ picc, cmac, onActiveChange }: CheckoutWizardProps) {
   const { user, userDoc } = useAuth()
   const { tokenUser, loading: tokenLoading } = useTokenAuth(
     picc ?? null,
@@ -67,13 +68,15 @@ export function CheckoutWizard({ picc, cmac }: CheckoutWizardProps) {
   const { data: pricingConfig, loading: loadingConfig } = usePricingConfig()
 
   // Determine auth mode
-  const isA3 = !!user && !!userDoc
-  const isA2 = !isA3 && !!tokenUser
-  const isAnonymous = !isA3 && !isA2
-  const identifiedUserDoc = isA3 ? userDoc : null
+  const isAccountLoggedIn = !!user && !!userDoc
+  const isTagIdentified = !isAccountLoggedIn && !!tokenUser
+  const isAnonymous = !isAccountLoggedIn && !isTagIdentified
+  const identifiedUserDoc = isAccountLoggedIn ? userDoc : null
   const identifiedUserRef = identifiedUserDoc
     ? userRef(identifiedUserDoc.id)
-    : undefined
+    : isTagIdentified
+      ? userRef(tokenUser!.userId)
+      : undefined
 
   // Find open checkout for identified user
   const { data: openCheckouts, loading: loadingCheckout } =
@@ -117,8 +120,85 @@ export function CheckoutWizard({ picc, cmac }: CheckoutWizardProps) {
   // Merge Firestore items with local items (for anonymous users)
   const effectiveItems = isAnonymous ? state.localItems : items
 
-  // Pre-fill primary person for A3 (logged-in) users
+  // Pre-fill primary person for logged-in users
   usePreFillPerson(identifiedUserDoc, dispatch, state.persons)
+
+  // Pre-fill primary person for tag-identified users and auto-advance
+  useEffect(() => {
+    if (!tokenUser || isAccountLoggedIn) return
+    const primary = state.persons[0]
+    if (!primary || primary.isPreFilled) return
+
+    const [firstName = "", ...rest] = (tokenUser.name ?? "").split(" ")
+    dispatch({
+      type: "UPDATE_PERSON",
+      id: primary.id,
+      updates: {
+        firstName,
+        lastName: rest.join(" "),
+        email: tokenUser.email ?? "",
+        userType: (tokenUser.userType as UserType) ?? "erwachsen",
+        isPreFilled: true,
+        termsAccepted: true,
+      },
+    })
+    // Auto-advance to workshops step
+    dispatch({ type: "SET_STEP", step: 1 })
+    // Intentionally keyed only on userId — re-run only when a different user's
+    // tag is tapped, not on every tokenUser field update.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tokenUser?.userId])
+
+  // Inactivity timeout for non-logged-in users (5 minutes)
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Always-current reset callback; stored in a ref so the timeout closure
+  // never captures a stale dispatch reference.
+  const onResetRef = useRef<(() => void) | null>(null)
+  onResetRef.current = () => {
+    dispatch({ type: "RESET" })
+    window.history.replaceState(null, "", "/checkout")
+  }
+
+  useEffect(() => {
+    // Only apply timeout to non-logged-in users with an active checkout
+    if (isAccountLoggedIn) return
+    const hasActivity = state.step > 0 || !!(picc && cmac)
+    if (!hasActivity) return
+
+    const resetTimeout = () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current)
+      timeoutRef.current = setTimeout(() => {
+        onResetRef.current?.()
+      }, 5 * 60 * 1000)
+    }
+
+    resetTimeout()
+
+    const events = ["pointerdown", "keydown", "scroll"]
+    const handler = () => resetTimeout()
+    events.forEach((e) => window.addEventListener(e, handler))
+
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current)
+      events.forEach((e) => window.removeEventListener(e, handler))
+    }
+  }, [isAccountLoggedIn, state.step, picc, cmac])
+
+  // Auto-reset after submission for non-logged-in users (30s to view payment info)
+  useEffect(() => {
+    if (!state.submitted || isAccountLoggedIn) return
+    const timer = setTimeout(() => {
+      dispatch({ type: "RESET" })
+      window.history.replaceState(null, "", "/checkout")
+    }, 30_000)
+    return () => clearTimeout(timer)
+  }, [state.submitted, isAccountLoggedIn, dispatch])
+
+  // Report checkout active state to parent
+  const isActive = state.step > 0 || state.persons[0]?.isPreFilled
+  useEffect(() => {
+    onActiveChange?.(!!isActive)
+  }, [isActive, onActiveChange])
 
   // Sync usageType from open checkout
   useEffect(() => {

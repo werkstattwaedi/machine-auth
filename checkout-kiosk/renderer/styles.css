@@ -1,0 +1,49 @@
+/* Copyright Offene Werkstatt Wädenswil – SPDX-License-Identifier: MIT */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  font-family: system-ui, -apple-system, sans-serif;
+  background: #1a1a1a;
+}
+
+#top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 48px;
+  padding: 0 16px;
+  background: #222;
+  color: #fff;
+  -webkit-app-region: drag;
+}
+
+#title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+#btn-reset {
+  -webkit-app-region: no-drag;
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: #2a9d8f;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+#btn-reset:hover {
+  background: #21867a;
+}
+
+#checkout-view {
+  flex: 1;
+  border: none;
+}

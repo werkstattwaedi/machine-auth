@@ -199,9 +199,10 @@ describe("SDM Crypto (Unit)", () => {
       counterBuffer.writeUIntBE(counter, 0, 3);
 
       const piccPlaintext = Buffer.concat([
+        Buffer.from([0xC7]),
         uidBuffer,
         counterBuffer,
-        Buffer.alloc(6, 0),
+        Buffer.alloc(5, 0),
       ]);
 
       const cipher = crypto.createCipheriv(
@@ -219,18 +220,13 @@ describe("SDM Crypto (Unit)", () => {
       const piccData = decryptPICCData(encryptedPICC, ZERO_KEY);
 
       // Verify CMAC can be computed and verified
-      // We can't compare against AN12196 CMAC directly due to format differences,
-      // but we can verify that our CMAC computation is internally consistent
-      const isValid = verifyCMAC("0000000000000000", piccData, ZERO_KEY);
+      const isValid = verifyCMAC("0000000000000000", piccData, encryptedPICC, ZERO_KEY);
 
       // This should be false because the CMAC is wrong
       expect(isValid).to.be.false;
 
-      // Now compute the correct CMAC by importing the function
-      const { verifyCMAC: verify } = require("../../src/ntag/sdm_crypto");
-
       // The function should at least not throw errors with valid input
-      expect(() => verify("0000000000000000", piccData, ZERO_KEY)).to.not.throw();
+      expect(() => verifyCMAC("0000000000000000", piccData, encryptedPICC, ZERO_KEY)).to.not.throw();
     });
 
     it("should validate CMAC computation is deterministic", () => {
@@ -271,8 +267,8 @@ describe("SDM Crypto (Unit)", () => {
 
       // Verify same CMAC behavior for both
       const testCMAC = "1234567890ABCDEF";
-      const result1 = verifyCMAC(testCMAC, piccData1, ZERO_KEY);
-      const result2 = verifyCMAC(testCMAC, piccData2, ZERO_KEY);
+      const result1 = verifyCMAC(testCMAC, piccData1, encryptedPICC, ZERO_KEY);
+      const result2 = verifyCMAC(testCMAC, piccData2, encryptedPICC, ZERO_KEY);
 
       expect(result1).to.equal(result2);
     });

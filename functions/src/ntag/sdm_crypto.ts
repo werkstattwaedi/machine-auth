@@ -17,13 +17,6 @@ export interface PICCData {
   counter: Buffer;  // 3 bytes (24-bit counter)
 }
 
-/**
- * Session keys derived from SV2
- */
-interface SessionKeys {
-  encKey: Buffer;   // SesAuthEncKey - for encryption
-  macKey: Buffer;   // SesAuthMACKey - for CMAC
-}
 
 /**
  * Derives SV2 value for session key generation
@@ -49,28 +42,6 @@ function deriveSV2(key: Buffer, uid: Buffer, counter: Buffer): Buffer {
   return computeCMAC(key, input);
 }
 
-/**
- * Derives session keys from SV2
- * SesAuthEncKey = CMAC(key, 0x01 || SV2[0..15])
- * SesAuthMACKey = CMAC(key, 0x02 || SV2[0..15])
- *
- * @param key - SDMFileReadKey (Key 3, diversified per-tag)
- * @param sv2 - 16-byte SV2 value
- * @returns Session encryption and MAC keys
- */
-function deriveSessionKeys(key: Buffer, sv2: Buffer): SessionKeys {
-  if (sv2.length !== 16) throw new Error("SV2 must be 16 bytes");
-
-  // SesAuthEncKey = CMAC(key, 0x01 || SV2)
-  const encInput = Buffer.concat([Buffer.from([0x01]), sv2]);
-  const encKey = computeCMAC(key, encInput);
-
-  // SesAuthMACKey = CMAC(key, 0x02 || SV2)
-  const macInput = Buffer.concat([Buffer.from([0x02]), sv2]);
-  const macKey = computeCMAC(key, macInput);
-
-  return { encKey, macKey };
-}
 
 /**
  * Computes AES-128 CMAC per NIST SP 800-38B
@@ -204,9 +175,12 @@ export function decryptPICCData(
     decipher.final(),
   ]);
 
-  // Extract UID (first 7 bytes) and counter (next 3 bytes)
-  const uid = decrypted.subarray(0, 7);
-  const counter = decrypted.subarray(7, 10);
+  // PICC data format: [0xC7 tag byte] [7-byte UID] [3-byte counter] [5 padding]
+  if (decrypted[0] !== 0xC7) {
+    throw new Error(`Unexpected PICC tag byte: 0x${decrypted[0].toString(16)}`);
+  }
+  const uid = decrypted.subarray(1, 8);
+  const counter = decrypted.subarray(8, 11);
 
   return { uid, counter };
 }
@@ -214,18 +188,19 @@ export function decryptPICCData(
 /**
  * Verifies CMAC signature of SDM message
  *
- * The tag generates the CMAC using SDMFileReadKey (Key 3, diversified per-tag).
- * The caller must derive Key 3 from the UID (obtained by decrypting PICC data
- * with the static terminal key) before calling this function.
+ * The MAC input is the ASCII hex of the encrypted PICC data (the portion of
+ * the URL between SDMMACInputOffset and SDMMACOffset), per AN12196 §3.
  *
  * @param cmac - Hex-encoded CMAC from URL (8 bytes = truncated CMAC)
- * @param piccData - Decrypted PICC data
+ * @param piccData - Decrypted PICC data (for SV2 derivation)
+ * @param encryptedPICC - Hex-encoded encrypted PICC data from URL (MAC input)
  * @param sdmFileReadKey - Hex-encoded SDMFileReadKey (diversified Key 3, 32 hex chars)
  * @returns true if CMAC is valid
  */
 export function verifyCMAC(
   cmac: string,
   piccData: PICCData,
+  encryptedPICC: string,
   sdmFileReadKey: string
 ): boolean {
   const cmacBytes = Buffer.from(cmac, "hex");
@@ -238,15 +213,20 @@ export function verifyCMAC(
     throw new Error("SDMFileReadKey must be 16 bytes (32 hex characters)");
   }
 
-  // Derive SV2 and session keys from SDMFileReadKey (diversified Key 3)
-  const sv2 = deriveSV2(sdmKeyBytes, piccData.uid, piccData.counter);
-  const sessionKeys = deriveSessionKeys(sdmKeyBytes, sv2);
+  // SDM session MAC key = CMAC(SDMFileReadKey, SV2_input) directly
+  // (no extra deriveSessionKeys step — that's for regular auth only)
+  const sesSDMFileReadMACKey = deriveSV2(sdmKeyBytes, piccData.uid, piccData.counter);
 
-  // Compute CMAC over UID || Counter using session MAC key
-  const dataToMAC = Buffer.concat([piccData.uid, piccData.counter]);
-  const computedCMAC = computeCMAC(sessionKeys.macKey, dataToMAC);
+  // MAC input = NDEF data from SDMMACInputOffset (0x22) to SDMMACOffset (0x48).
+  // Assumes URL template: ...picc=<32 hex>&cmac=<16 hex>  (see sdm_constants.h)
+  const dataToMAC = Buffer.from(encryptedPICC.toUpperCase() + "&cmac=", "ascii");
+  const computedCMAC = computeCMAC(sesSDMFileReadMACKey, dataToMAC);
 
-  // Compare first 8 bytes (truncated CMAC)
-  const truncatedCMAC = computedCMAC.subarray(0, 8);
+  // Truncate CMAC: take bytes at odd indices (1, 3, 5, ..., 15) per AN12196
+  const truncatedCMAC = Buffer.alloc(8);
+  for (let i = 0; i < 8; i++) {
+    truncatedCMAC[i] = computedCMAC[i * 2 + 1];
+  }
+
   return truncatedCMAC.equals(cmacBytes);
 }

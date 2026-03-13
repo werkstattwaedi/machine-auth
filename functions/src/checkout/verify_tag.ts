@@ -34,6 +34,9 @@ export interface VerifyTagResponse {
   tokenId: string;
   userId: string;
   uid: string;  // Hex-encoded UID for debugging
+  name?: string;
+  email?: string;
+  userType?: string;
 }
 
 /**
@@ -108,7 +111,7 @@ export async function handleVerifyTagCheckout(
   let isValid;
   try {
     const sdmMacKey = diversifyKey(masterKey, systemName, piccData.uid, "sdm_mac");
-    isValid = verifyCMAC(cmac, piccData, sdmMacKey);
+    isValid = verifyCMAC(cmac, piccData, picc, sdmMacKey);
   } catch (error: any) {
     logger.error("CMAC verification failed", { error: error.message });
     throw new Error(`CMAC verification failed: ${error.message}`);
@@ -119,10 +122,17 @@ export async function handleVerifyTagCheckout(
     throw new Error("Invalid CMAC signature");
   }
 
-  // Step 4: Return token and user information
+  // Step 4: Fetch user details for pre-fill
+  const userDoc = await userRef.get();
+  const userData = userDoc.exists ? userDoc.data() : undefined;
+
+  // Step 5: Return token and user information
   return {
     tokenId,
     userId,
     uid: uidHex,
+    name: userData?.name ?? userData?.displayName,
+    email: userData?.email,
+    userType: userData?.userType,
   };
 }

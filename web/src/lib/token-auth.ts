@@ -2,12 +2,14 @@
 // SPDX-License-Identifier: MIT
 
 import { useState, useEffect } from "react"
-import { httpsCallable } from "firebase/functions"
 import { functions } from "./firebase"
 
 interface TokenUser {
   tokenId: string
   userId: string
+  name?: string
+  email?: string
+  userType?: string
 }
 
 interface UseTokenAuthResult {
@@ -16,9 +18,21 @@ interface UseTokenAuthResult {
   error: string | null
 }
 
+const FUNCTIONS_REGION = "us-central1"
+
+/** Build the base URL for the Functions endpoint. */
+function functionsBaseUrl(): string {
+  if (import.meta.env.DEV) {
+    return `http://127.0.0.1:5001/oww-maschinenfreigabe/${FUNCTIONS_REGION}`
+  }
+  const projectId = functions.app.options.projectId
+  return `https://${FUNCTIONS_REGION}-${projectId}.cloudfunctions.net`
+}
+
 /**
  * Resolve user identity from NFC tag URL parameters (picc + cmac).
- * Used for public checkout and token-activated views.
+ * Uses a direct POST because verifyTagCheckout is a plain Express route,
+ * not a Firebase callable function.
  */
 export function useTokenAuth(
   picc: string | null,
@@ -34,14 +48,17 @@ export function useTokenAuth(
     setLoading(true)
     setError(null)
 
-    const verify = httpsCallable<
-      { picc: string; cmac: string },
-      { tokenId: string; userId: string }
-    >(functions, "api/verifyTagCheckout")
+    const url = `${functionsBaseUrl()}/api/verifyTagCheckout`
 
-    verify({ picc, cmac })
-      .then((result) => {
-        setTokenUser(result.data)
+    fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ picc, cmac }),
+    })
+      .then(async (res) => {
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error ?? "Tag-Verifizierung fehlgeschlagen")
+        setTokenUser(data)
       })
       .catch((err) => {
         setError(err.message ?? "Tag-Verifizierung fehlgeschlagen")
