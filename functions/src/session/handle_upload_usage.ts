@@ -48,20 +48,25 @@ export async function handleUploadUsage(
       continue;
     }
 
+    if (!record.checkOut) {
+      logger.warn("Skipping record with no end time (open session)", {
+        userId: record.userId.value,
+      });
+      continue;
+    }
+
     const usageRef = db.collection("usage_machine").doc();
     usageRefs.push(usageRef);
     batch.set(usageRef, {
       userId: db.doc(`users/${record.userId.value}`),
       authenticationId: db.doc(`authentications/${record.authenticationId.value}`),
       machine: machineRef,
-      checkIn: Timestamp.fromMillis(Number(record.checkIn) * 1000),
-      checkOut: record.checkOut
-        ? Timestamp.fromMillis(Number(record.checkOut) * 1000)
-        : null,
-      checkOutReason: record.reason?.reason
+      startTime: Timestamp.fromMillis(Number(record.checkIn) * 1000),
+      endTime: Timestamp.fromMillis(Number(record.checkOut) * 1000),
+      endReason: record.reason?.reason
         ? JSON.stringify({ reason: record.reason.reason.$case })
         : null,
-      checkout: null, // Will be set by accumulation logic
+      checkoutItemRef: null, // Will be set by accumulation logic
     });
   }
 
@@ -84,9 +89,9 @@ export async function handleUploadUsage(
  * 1. Look up machine → get workshop + checkoutTemplateId (catalog ref)
  * 2. Find user's open checkout (or create one)
  * 3. Query items subcollection where catalogId == checkoutTemplateId
- * 4. Sum all usage_machine hours for this checkout + catalog entry
+ * 4. Sum all unlinked usage_machine hours for this catalog entry
  * 5. Update/create checkout item with new totals
- * 6. Link usage_machine records to checkout
+ * 6. Set usage_machine.checkoutItemRef to the checkout item
  */
 async function accumulateUsageIntoCheckout(
   db: admin.firestore.Firestore,
@@ -219,21 +224,22 @@ async function accumulateForUser(
 
   const machineRefs = machinesWithTemplate.docs.map(d => d.ref);
 
+  // Query all unlinked usage for this user across machines sharing this catalog template
+  const unlinkedDocs: admin.firestore.QueryDocumentSnapshot[] = [];
   let totalHours = 0;
   for (const mRef of machineRefs) {
     const usageQuery = await db.collection("usage_machine")
       .where("userId", "==", userRef)
       .where("machine", "==", mRef)
-      .where("checkout", "==", null)
+      .where("checkoutItemRef", "==", null)
       .get();
 
     for (const usageDoc of usageQuery.docs) {
+      unlinkedDocs.push(usageDoc);
       const data = usageDoc.data();
-      if (data.checkIn && data.checkOut) {
-        const checkIn = (data.checkIn as Timestamp).toMillis();
-        const checkOut = (data.checkOut as Timestamp).toMillis();
-        totalHours += (checkOut - checkIn) / (1000 * 60 * 60);
-      }
+      const startTime = (data.startTime as Timestamp).toMillis();
+      const endTime = (data.endTime as Timestamp).toMillis();
+      totalHours += (endTime - startTime) / (1000 * 60 * 60);
     }
   }
 
@@ -241,9 +247,9 @@ async function accumulateForUser(
   totalHours = Math.round(totalHours * 100) / 100;
   const totalPrice = Math.round(totalHours * unitPrice * 100) / 100;
 
+  let itemRef: admin.firestore.DocumentReference;
   if (itemsQuery.empty) {
-    // Create new checkout item
-    await checkoutRef.collection("items").add({
+    itemRef = await checkoutRef.collection("items").add({
       workshop,
       description: catalogData.name,
       origin: "nfc",
@@ -254,31 +260,24 @@ async function accumulateForUser(
       totalPrice,
     });
   } else {
-    // Update existing item
-    await itemsQuery.docs[0].ref.update({
+    itemRef = itemsQuery.docs[0].ref;
+    await itemRef.update({
       quantity: totalHours,
       totalPrice,
     });
   }
 
-  // Link all unlinked usage_machine records for this user to the checkout
-  for (const mRef of machineRefs) {
-    const unlinkedUsage = await db.collection("usage_machine")
-      .where("userId", "==", userRef)
-      .where("machine", "==", mRef)
-      .where("checkout", "==", null)
-      .get();
-
-    const linkBatch = db.batch();
-    for (const usageDoc of unlinkedUsage.docs) {
-      linkBatch.update(usageDoc.ref, { checkout: checkoutRef });
-    }
-    await linkBatch.commit();
+  // Link all unlinked usage_machine records to the checkout item
+  const linkBatch = db.batch();
+  for (const usageDoc of unlinkedDocs) {
+    linkBatch.update(usageDoc.ref, { checkoutItemRef: itemRef });
   }
+  await linkBatch.commit();
 
   logger.info("Accumulated usage into checkout", {
     userId,
     checkoutId: checkoutRef.id,
+    itemId: itemRef.id,
     totalHours,
     totalPrice,
   });

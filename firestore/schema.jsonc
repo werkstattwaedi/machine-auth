@@ -51,10 +51,10 @@
       "userId": "DocumentReference", // DocumentReference to /users/{userId}
       "authenticationId": "DocumentReference | null", // DocumentReference to /authentications/{authId}
       "machine": "DocumentReference", // DocumentReference to /machine/{machineId}
-      "checkIn": "timestamp",
-      "checkOut": "timestamp | null", // null if still active
-      "checkOutReason": "string | null", // JSON representation of CheckOutReason proto
-      "checkout": "DocumentReference | null" // DocumentReference to /checkouts/{checkoutId}
+      "startTime": "timestamp",
+      "endTime": "timestamp",
+      "endReason": "string | null", // JSON representation of CheckOutReason proto
+      "checkoutItemRef": "DocumentReference | null" // DocumentReference to /checkouts/{checkoutId}/items/{itemId}
     }
   },
   "checkouts": {

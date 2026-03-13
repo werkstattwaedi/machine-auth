@@ -19,10 +19,10 @@ export const Route = createFileRoute("/_authenticated/_admin/sessions")({
 interface UsageMachineDoc {
   userId?: { id: string }
   machine?: { id: string }
-  checkIn?: { toDate(): Date }
-  checkOut?: { toDate(): Date } | null
-  checkOutReason?: string
-  checkout?: { id: string } | null
+  startTime?: { toDate(): Date }
+  endTime?: { toDate(): Date }
+  endReason?: string
+  checkoutItemRef?: { id: string; parent: { parent: { id: string } } } | null
   workshop?: string
 }
 
@@ -72,27 +72,26 @@ function SessionsPage() {
         cell: ({ row }) => row.original.workshop ?? "–",
       },
       {
-        accessorKey: "checkIn",
-        header: ({ column }) => <ColumnHeader column={column} title="Check-in" />,
-        cell: ({ row }) => formatDateTime(row.original.checkIn),
+        accessorKey: "startTime",
+        header: ({ column }) => <ColumnHeader column={column} title="Start" />,
+        cell: ({ row }) => formatDateTime(row.original.startTime),
       },
       {
-        accessorKey: "checkOut",
-        header: "Check-out",
-        cell: ({ row }) =>
-          row.original.checkOut ? formatDateTime(row.original.checkOut) : (
-            <Badge variant="secondary">Aktiv</Badge>
-          ),
+        accessorKey: "endTime",
+        header: "Ende",
+        cell: ({ row }) => formatDateTime(row.original.endTime),
       },
       {
-        accessorKey: "checkout",
+        accessorKey: "checkoutItemRef",
         header: "Checkout",
-        cell: ({ row }) =>
-          row.original.checkout ? (
-            <Badge variant="outline">{row.original.checkout.id}</Badge>
+        cell: ({ row }) => {
+          const ref = row.original.checkoutItemRef
+          return ref ? (
+            <Badge variant="outline">{ref.parent.parent.id}</Badge>
           ) : (
             <span className="text-muted-foreground">–</span>
-          ),
+          )
+        },
       },
     ],
     [machines, users]

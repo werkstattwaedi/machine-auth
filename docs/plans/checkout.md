@@ -65,7 +65,7 @@ The checkout carries an explicit list of workshops visited. This is separate fro
 | Unified catalog | `catalog/{itemId}` replaces both `materials/{materialId}` and machine configs from `config/pricing`. All billable things in one collection. |
 | Config simplification | `config/pricing` stays as one document (avoids extra reads on 100K ops/month budget). Machine prices removed — now in `catalog`. Keeps entry fees, workshop metadata, labels. |
 | Machine → catalog mapping | Each physical machine doc gets `workshop` + `checkoutTemplateId` (DocumentReference to `catalog/{itemId}`) |
-| `usage_machine` | Pure audit log. Never edited. Points to checkout for linkage. |
+| `usage_machine` | Pure audit log. Never edited. `checkoutItemRef` links to the checkout item it was billed under. |
 | Checkout lifetime | Open until explicitly closed (user hasn't paid until they close it) |
 | Machine hours | Exclusively from NFC. No manual entry. Read-only at checkout — users cannot adjust. |
 | Accumulation logic | Cloud Function on usage upload updates checkout item quantity + totalPrice |
@@ -252,7 +252,7 @@ checkouts/{checkoutId}/items/{itemId}        ← auto-generated
 - Cloud Function is the sole writer — updates `quantity` (total hours) and `totalPrice`
 - `unitPrice` set at item creation (Cloud Function looks up `catalog` entry + user's discount level)
 - **Users cannot edit these items** — the NFC-measured time is authoritative (`catalog.userCanAdd == false`)
-- Individual sessions visible by querying `usage_machine` where `checkout == thisCheckout`
+- Individual sessions visible by querying `usage_machine` where `checkoutItemRef == itemRef`
 - Corrections require escalation (out of scope — future admin flow)
 
 **Manual entries (materials only):**
@@ -306,10 +306,10 @@ Stays as one document (avoids extra reads). Machine configs and their prices rem
    b. Find user's open checkout (or create one)
    c. Query items subcollection where catalogId == checkoutTemplateId
       → if not found: create item with unitPrice from catalog.unitPrice[discount]
-   d. Query all usage_machine for this checkout where machine maps to same catalog entry
-      → sum hours
+   d. Query all usage_machine where checkoutItemRef == null and machine maps to same catalog entry
+      → sum hours (endTime - startTime)
    e. Update item: quantity + totalPrice (= quantity × unitPrice)
-   f. Set usage_machine.checkout = checkoutRef
+   f. Set usage_machine.checkoutItemRef = itemRef
 ```
 
 ### Manual entry → checkout item (Web app, materials only)

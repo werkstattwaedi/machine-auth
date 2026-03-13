@@ -35,6 +35,24 @@
           "order": "DESCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "usage_machine",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "machine",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "checkoutItemRef",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []

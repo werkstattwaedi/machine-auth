@@ -80,14 +80,11 @@ export interface UsageMachineEntity {
   userId: DocumentReference; // Reference to /users/{userId}
   authenticationId: DocumentReference | null; // Reference to /authentications/{authId}
   machine: DocumentReference; // Reference to /machine/{machineId}
-  checkIn: Timestamp;
-  checkOut?: Timestamp;
-  checkOutReason?: string; // JSON of CheckOutReason
-  checkout?: DocumentReference; // Reference to /checkouts/{checkoutId} when billed
+  startTime: Timestamp;
+  endTime: Timestamp;
+  endReason?: string; // JSON of CheckOutReason
+  checkoutItemRef?: DocumentReference; // Reference to /checkouts/{checkoutId}/items/{itemId} when billed
 }
-
-/** @deprecated Use UsageMachineEntity instead */
-export type UsageEntity = UsageMachineEntity;
 
 // --- Catalog ---
 
