@@ -19,6 +19,7 @@ import { userRef } from "@/lib/firestore-helpers"
 import { usePricingConfig } from "@/lib/workshop-config"
 import { calculateFee } from "@/lib/pricing"
 import { PageLoading } from "@/components/page-loading"
+import { CheckoutLanding } from "./checkout-landing"
 import { CheckoutProgress } from "./checkout-progress"
 import { StepCheckin } from "./step-checkin"
 import { StepWorkshops } from "./step-workshops"
@@ -35,6 +36,7 @@ import type { PricingModel } from "@/lib/workshop-config"
 interface CheckoutWizardProps {
   picc?: string
   cmac?: string
+  kiosk?: boolean
   onActiveChange?: (active: boolean) => void
 }
 
@@ -57,7 +59,7 @@ interface CheckoutItemDoc {
   formInputs?: { quantity: number; unit: string }[]
 }
 
-export function CheckoutWizard({ picc, cmac, onActiveChange }: CheckoutWizardProps) {
+export function CheckoutWizard({ picc, cmac, kiosk, onActiveChange }: CheckoutWizardProps) {
   const { user, userDoc } = useAuth()
   const { tokenUser, loading: tokenLoading } = useTokenAuth(
     picc ?? null,
@@ -65,6 +67,7 @@ export function CheckoutWizard({ picc, cmac, onActiveChange }: CheckoutWizardPro
   )
   const { state, dispatch } = useCheckoutState()
   const [submitting, setSubmitting] = useState(false)
+  const [landingDismissed, setLandingDismissed] = useState(false)
   const { data: pricingConfig, loading: loadingConfig } = usePricingConfig()
 
   // Determine auth mode
@@ -142,8 +145,6 @@ export function CheckoutWizard({ picc, cmac, onActiveChange }: CheckoutWizardPro
         termsAccepted: true,
       },
     })
-    // Auto-advance to workshops step
-    dispatch({ type: "SET_STEP", step: 1 })
     // Intentionally keyed only on userId — re-run only when a different user's
     // tag is tapped, not on every tokenUser field update.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -156,7 +157,8 @@ export function CheckoutWizard({ picc, cmac, onActiveChange }: CheckoutWizardPro
   const onResetRef = useRef<(() => void) | null>(null)
   onResetRef.current = () => {
     dispatch({ type: "RESET" })
-    window.history.replaceState(null, "", "/checkout")
+    setLandingDismissed(false)
+    window.history.replaceState(null, "", kiosk ? "/checkout?kiosk" : "/checkout")
   }
 
   useEffect(() => {
@@ -189,10 +191,11 @@ export function CheckoutWizard({ picc, cmac, onActiveChange }: CheckoutWizardPro
     if (!state.submitted || isAccountLoggedIn) return
     const timer = setTimeout(() => {
       dispatch({ type: "RESET" })
-      window.history.replaceState(null, "", "/checkout")
+      setLandingDismissed(false)
+      window.history.replaceState(null, "", kiosk ? "/checkout?kiosk" : "/checkout")
     }, 30_000)
     return () => clearTimeout(timer)
-  }, [state.submitted, isAccountLoggedIn, dispatch])
+  }, [state.submitted, isAccountLoggedIn, dispatch, kiosk])
 
   // Report checkout active state to parent
   const isActive = state.step > 0 || state.persons[0]?.isPreFilled
@@ -322,6 +325,18 @@ export function CheckoutWizard({ picc, cmac, onActiveChange }: CheckoutWizardPro
     } finally {
       setSubmitting(false)
     }
+  }
+
+  // Show landing when no user is identified and they haven't dismissed it
+  const showLanding = isAnonymous && !landingDismissed && state.step === 0
+
+  if (showLanding) {
+    return (
+      <CheckoutLanding
+        kiosk={!!kiosk}
+        onAnonymous={() => setLandingDismissed(true)}
+      />
+    )
   }
 
   return (

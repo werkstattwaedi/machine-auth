@@ -31,17 +31,17 @@ npm start            # starts the kiosk app
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CHECKOUT_URL` | `https://checkout.werkstattwaedi.ch/checkout` | Base URL for the checkout web app |
+| `CHECKOUT_URL` | `https://localhost:5173/checkout?kiosk` | Base URL for the checkout web app |
 
 For local development with emulators:
 ```bash
-CHECKOUT_URL=http://localhost:5173/checkout npm start
+CHECKOUT_URL=https://localhost:5173/checkout?kiosk npm start
 ```
 
 ## How It Works
 
-1. Frameless Electron window loads the checkout web app in a `<webview>`
-2. Top bar has a "Neuer Checkout" button to reset the iframe
+1. Electron window loads the checkout web app in a `<webview>` with `?kiosk` param
+2. Top bar has a "Neuer Checkout" button to reset the webview
 3. Main process listens for NFC cards via `nfc-pcsc` (PC/SC)
 4. On card detect: reads NDEF URL via ISO 7816-4 APDUs, extracts `picc`/`cmac` params
 5. Navigates webview to checkout URL with those params

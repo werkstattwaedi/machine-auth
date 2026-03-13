@@ -6,7 +6,7 @@ const path = require("path")
 const { NFC } = require("nfc-pcsc")
 
 const CHECKOUT_URL =
-  process.env.CHECKOUT_URL || "https://localhost:5173/checkout"
+  process.env.CHECKOUT_URL || "https://localhost:5173/checkout?kiosk"
 
 // Accept self-signed certs in dev (Vite basicSsl plugin)
 if (CHECKOUT_URL.includes("localhost")) {
@@ -17,9 +17,11 @@ let mainWindow
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1024,
-    height: 768,
-    frame: false,
+    title: "Offene Werkstatt – Checkout",
+    width: 1280,
+    height: 900,
+    frame: true,
+    autoHideMenuBar: true,
     kiosk: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),

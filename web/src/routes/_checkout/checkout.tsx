@@ -10,6 +10,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog"
 const checkoutSearchSchema = z.object({
   picc: z.string().optional(),
   cmac: z.string().optional(),
+  kiosk: z.string().optional(),
 })
 
 export const Route = createFileRoute("/_checkout/checkout")({
@@ -18,7 +19,8 @@ export const Route = createFileRoute("/_checkout/checkout")({
 })
 
 function CheckoutPage() {
-  const { picc, cmac } = Route.useSearch()
+  const { picc, cmac, kiosk } = Route.useSearch()
+  const isKiosk = kiosk !== undefined
   const navigate = useNavigate()
 
   // Track the "accepted" params that the wizard is actually using
@@ -82,6 +84,7 @@ function CheckoutPage() {
         key={`${activeParams.picc ?? ""}-${activeParams.cmac ?? ""}`}
         picc={activeParams.picc}
         cmac={activeParams.cmac}
+        kiosk={isKiosk}
         onActiveChange={(active) => {
           checkoutActiveRef.current = active
         }}

@@ -14,22 +14,14 @@ body {
 #top-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  height: 48px;
-  padding: 0 16px;
+  justify-content: flex-end;
+  height: 40px;
+  padding: 0 12px;
   background: #222;
-  color: #fff;
-  -webkit-app-region: drag;
-}
-
-#title {
-  font-size: 14px;
-  font-weight: 600;
 }
 
 #btn-reset {
-  -webkit-app-region: no-drag;
-  padding: 6px 16px;
+  padding: 5px 14px;
   font-size: 13px;
   font-weight: 600;
   color: #fff;
