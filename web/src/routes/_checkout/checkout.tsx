@@ -29,7 +29,7 @@ function CheckoutPage() {
   // "neuer checkout" navigates here without picc/cmac — the previous
   // tag session persists in IndexedDB and must be wiped)
   useEffect(() => {
-    if (!picc && !cmac) {
+    if (isKiosk && !picc && !cmac) {
       signOut(auth)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
