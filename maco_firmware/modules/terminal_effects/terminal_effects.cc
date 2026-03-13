@@ -3,7 +3,7 @@
 
 #define PW_LOG_MODULE_NAME "LEDS"
 
-#include "maco_firmware/modules/terminal_led_effects/terminal_led_effects.h"
+#include "maco_firmware/modules/terminal_effects/terminal_effects.h"
 
 #include "maco_firmware/modules/app_state/system_state.h"
 #include "maco_firmware/modules/app_state/ui/snapshot.h"
@@ -11,7 +11,7 @@
 #include "maco_firmware/modules/led_animator/nfc_effects.h"
 #include "pw_log/log.h"
 
-namespace maco::terminal_led_effects {
+namespace maco::terminal_effects {
 
 using namespace std::chrono_literals;
 using namespace maco::led_animator;
@@ -170,36 +170,38 @@ inline AmbientEffect TakeoverPendingAmbientEffect() {
   return effect;
 }
 
-TerminalLedEffects::TerminalLedEffects(
+TerminalEffects::TerminalEffects(
     led_animator::LedAnimatorBase& led,
+    buzzer::Buzzer& buzzer,
     app_state::SystemState& system_state,
     pw::async2::TimeProvider<pw::chrono::SystemClock>& time_provider,
     pw::allocator::Allocator& allocator
 )
     : led_(led),
+      buzzer_(buzzer),
       system_state_(system_state),
       time_provider_(time_provider),
       coro_cx_(allocator) {}
 
-void TerminalLedEffects::Start(pw::async2::Dispatcher& dispatcher) {
+void TerminalEffects::Start(pw::async2::Dispatcher& dispatcher) {
   led_.SetAmbientEffect(BootAmbientEffect());
 
   auto coro = Run(coro_cx_);
   task_.emplace(std::move(coro), [](pw::Status s) {
-    PW_LOG_ERROR("TerminalLedEffects failed: %d", static_cast<int>(s.code()));
+    PW_LOG_ERROR("TerminalEffects failed: %d", static_cast<int>(s.code()));
   });
   dispatcher.Post(*task_);
 }
 
 // --- SessionObserver ---
 
-void TerminalLedEffects::OnSessionStarted(const app_state::SessionInfo&) {
+void TerminalEffects::OnSessionStarted(const app_state::SessionInfo&) {
   session_active_.store(true, std::memory_order_relaxed);
   pending_session_cmd_.store(
       SessionCommand::kSessionStarted, std::memory_order_relaxed);
 }
 
-void TerminalLedEffects::OnSessionEnded(
+void TerminalEffects::OnSessionEnded(
     const app_state::SessionInfo&, const app_state::MachineUsage&
 ) {
   session_active_.store(false, std::memory_order_relaxed);
@@ -207,7 +209,7 @@ void TerminalLedEffects::OnSessionEnded(
       SessionCommand::kSessionEnded, std::memory_order_relaxed);
 }
 
-void TerminalLedEffects::OnSessionUiStateChanged(
+void TerminalEffects::OnSessionUiStateChanged(
     app_state::SessionStateUi state
 ) {
   session_ui_state_.store(state, std::memory_order_relaxed);
@@ -215,38 +217,50 @@ void TerminalLedEffects::OnSessionUiStateChanged(
 
 // --- TagVerifierObserver ---
 
-void TerminalLedEffects::OnTagDetected(pw::ConstByteSpan) {
+void TerminalEffects::OnTagDetected(pw::ConstByteSpan) {
+  // Snapshot session state before SessionFsm processes this tag.
+  session_was_active_at_detect_.store(
+      session_active_.load(std::memory_order_relaxed),
+      std::memory_order_relaxed);
+  buzzer_.Beep(1500, 100ms);
   pending_tag_cmd_.store(TagCommand::kTagDetected, std::memory_order_relaxed);
 }
 
-void TerminalLedEffects::OnTagVerified(pw::ConstByteSpan) {
+void TerminalEffects::OnTagVerified(pw::ConstByteSpan) {
   pending_tag_cmd_.store(TagCommand::kTagVerified, std::memory_order_relaxed);
 }
 
-void TerminalLedEffects::OnUnknownTag() {
+void TerminalEffects::OnUnknownTag() {
+  buzzer_.Beep(800, 200ms);
   pending_tag_cmd_.store(TagCommand::kUnknownTag, std::memory_order_relaxed);
 }
 
-void TerminalLedEffects::OnAuthorized(
+void TerminalEffects::OnAuthorized(
     const maco::TagUid&,
     const maco::FirebaseId&,
     const pw::InlineString<64>&,
     const maco::FirebaseId&
 ) {
+  // Only play success tone when starting a new session.  Ending a session
+  // (tag tap while active) already got the OnTagDetected acknowledgment beep.
+  if (!session_was_active_at_detect_.load(std::memory_order_relaxed)) {
+    buzzer_.Beep(2500, 150ms);
+  }
   pending_tag_cmd_.store(TagCommand::kAuthorized, std::memory_order_relaxed);
 }
 
-void TerminalLedEffects::OnUnauthorized() {
+void TerminalEffects::OnUnauthorized() {
+  buzzer_.Beep(800, 200ms);
   pending_tag_cmd_.store(TagCommand::kUnauthorized, std::memory_order_relaxed);
 }
 
-void TerminalLedEffects::OnTagRemoved() {
+void TerminalEffects::OnTagRemoved() {
   pending_tag_cmd_.store(TagCommand::kTagRemoved, std::memory_order_relaxed);
 }
 
 // --- Internal ---
 
-void TerminalLedEffects::ApplySessionEffect() {
+void TerminalEffects::ApplySessionEffect() {
   if (session_active_.load(std::memory_order_relaxed)) {
     // Breathing green ring with two sweep arcs offset by half a period.
     led_.SetAmbientEffect(SessionActiveAmbientEffect());
@@ -256,7 +270,7 @@ void TerminalLedEffects::ApplySessionEffect() {
   }
 }
 
-pw::async2::Coro<pw::Status> TerminalLedEffects::Run(
+pw::async2::Coro<pw::Status> TerminalEffects::Run(
     [[maybe_unused]] pw::async2::CoroContext& cx
 ) {
   // Boot phase: keep the boot animation until SystemState reports kReady.
@@ -393,4 +407,4 @@ pw::async2::Coro<pw::Status> TerminalLedEffects::Run(
   co_return pw::OkStatus();
 }
 
-}  // namespace maco::terminal_led_effects
+}  // namespace maco::terminal_effects
