@@ -66,6 +66,14 @@ export function getSortedWorkshops(
   ).sort((a, b) => a[1].order - b[1].order)
 }
 
+export interface PriceList {
+  id: string
+  name: string
+  items: string[] // catalog document IDs (not DocumentReferences — needed for documentId() queries)
+  footer: string
+  active: boolean
+}
+
 /** Get user-addable catalog items for a workshop */
 export function useCatalogForWorkshop(workshopId: string | null) {
   return useCollection<CatalogItem>(

@@ -85,6 +85,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Price lists (public read for QR lookup, admin write)
+    match /price_lists/{priceListId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // Catalog (unified billable items — public read for QR/material lookup)
     match /catalog/{itemId} {
       allow read: if true;

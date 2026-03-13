@@ -25,16 +25,19 @@ import { Route as MaterialMaterialAddRouteImport } from "./routes/_material/mate
 import { Route as AuthenticatedAdminUsersRouteImport } from "./routes/_authenticated/_admin/users"
 import { Route as AuthenticatedAdminTerminalsRouteImport } from "./routes/_authenticated/_admin/terminals"
 import { Route as AuthenticatedAdminSessionsRouteImport } from "./routes/_authenticated/_admin/sessions"
+import { Route as AuthenticatedAdminPriceListsRouteImport } from "./routes/_authenticated/_admin/price-lists"
 import { Route as AuthenticatedAdminPermissionsRouteImport } from "./routes/_authenticated/_admin/permissions"
 import { Route as AuthenticatedAdminMaterialsRouteImport } from "./routes/_authenticated/_admin/materials"
 import { Route as AuthenticatedAdminMachinesRouteImport } from "./routes/_authenticated/_admin/machines"
 import { Route as AuthenticatedAdminCheckoutsRouteImport } from "./routes/_authenticated/_admin/checkouts"
 import { Route as AuthenticatedAdminAuditRouteImport } from "./routes/_authenticated/_admin/audit"
 import { Route as AuthenticatedAdminUsersIndexRouteImport } from "./routes/_authenticated/_admin/users/index"
+import { Route as AuthenticatedAdminPriceListsIndexRouteImport } from "./routes/_authenticated/_admin/price-lists/index"
 import { Route as AuthenticatedAdminPermissionsIndexRouteImport } from "./routes/_authenticated/_admin/permissions/index"
 import { Route as AuthenticatedAdminMaterialsIndexRouteImport } from "./routes/_authenticated/_admin/materials/index"
 import { Route as AuthenticatedAdminMachinesIndexRouteImport } from "./routes/_authenticated/_admin/machines/index"
 import { Route as AuthenticatedAdminUsersUserIdRouteImport } from "./routes/_authenticated/_admin/users/$userId"
+import { Route as AuthenticatedAdminPriceListsPriceListIdRouteImport } from "./routes/_authenticated/_admin/price-lists/$priceListId"
 import { Route as AuthenticatedAdminPermissionsPermissionIdRouteImport } from "./routes/_authenticated/_admin/permissions/$permissionId"
 import { Route as AuthenticatedAdminMaterialsMaterialIdRouteImport } from "./routes/_authenticated/_admin/materials/$materialId"
 import { Route as AuthenticatedAdminMachinesMachineIdRouteImport } from "./routes/_authenticated/_admin/machines/$machineId"
@@ -116,6 +119,12 @@ const AuthenticatedAdminSessionsRoute =
     path: "/sessions",
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
+const AuthenticatedAdminPriceListsRoute =
+  AuthenticatedAdminPriceListsRouteImport.update({
+    id: "/price-lists",
+    path: "/price-lists",
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
 const AuthenticatedAdminPermissionsRoute =
   AuthenticatedAdminPermissionsRouteImport.update({
     id: "/permissions",
@@ -151,6 +160,12 @@ const AuthenticatedAdminUsersIndexRoute =
     path: "/",
     getParentRoute: () => AuthenticatedAdminUsersRoute,
   } as any)
+const AuthenticatedAdminPriceListsIndexRoute =
+  AuthenticatedAdminPriceListsIndexRouteImport.update({
+    id: "/",
+    path: "/",
+    getParentRoute: () => AuthenticatedAdminPriceListsRoute,
+  } as any)
 const AuthenticatedAdminPermissionsIndexRoute =
   AuthenticatedAdminPermissionsIndexRouteImport.update({
     id: "/",
@@ -174,6 +189,12 @@ const AuthenticatedAdminUsersUserIdRoute =
     id: "/$userId",
     path: "/$userId",
     getParentRoute: () => AuthenticatedAdminUsersRoute,
+  } as any)
+const AuthenticatedAdminPriceListsPriceListIdRoute =
+  AuthenticatedAdminPriceListsPriceListIdRouteImport.update({
+    id: "/$priceListId",
+    path: "/$priceListId",
+    getParentRoute: () => AuthenticatedAdminPriceListsRoute,
   } as any)
 const AuthenticatedAdminPermissionsPermissionIdRoute =
   AuthenticatedAdminPermissionsPermissionIdRouteImport.update({
@@ -207,6 +228,7 @@ export interface FileRoutesByFullPath {
   "/machines": typeof AuthenticatedAdminMachinesRouteWithChildren
   "/materials": typeof AuthenticatedAdminMaterialsRouteWithChildren
   "/permissions": typeof AuthenticatedAdminPermissionsRouteWithChildren
+  "/price-lists": typeof AuthenticatedAdminPriceListsRouteWithChildren
   "/sessions": typeof AuthenticatedAdminSessionsRoute
   "/terminals": typeof AuthenticatedAdminTerminalsRoute
   "/users": typeof AuthenticatedAdminUsersRouteWithChildren
@@ -214,10 +236,12 @@ export interface FileRoutesByFullPath {
   "/machines/$machineId": typeof AuthenticatedAdminMachinesMachineIdRoute
   "/materials/$materialId": typeof AuthenticatedAdminMaterialsMaterialIdRoute
   "/permissions/$permissionId": typeof AuthenticatedAdminPermissionsPermissionIdRoute
+  "/price-lists/$priceListId": typeof AuthenticatedAdminPriceListsPriceListIdRoute
   "/users/$userId": typeof AuthenticatedAdminUsersUserIdRoute
   "/machines/": typeof AuthenticatedAdminMachinesIndexRoute
   "/materials/": typeof AuthenticatedAdminMaterialsIndexRoute
   "/permissions/": typeof AuthenticatedAdminPermissionsIndexRoute
+  "/price-lists/": typeof AuthenticatedAdminPriceListsIndexRoute
   "/users/": typeof AuthenticatedAdminUsersIndexRoute
 }
 export interface FileRoutesByTo {
@@ -236,10 +260,12 @@ export interface FileRoutesByTo {
   "/machines/$machineId": typeof AuthenticatedAdminMachinesMachineIdRoute
   "/materials/$materialId": typeof AuthenticatedAdminMaterialsMaterialIdRoute
   "/permissions/$permissionId": typeof AuthenticatedAdminPermissionsPermissionIdRoute
+  "/price-lists/$priceListId": typeof AuthenticatedAdminPriceListsPriceListIdRoute
   "/users/$userId": typeof AuthenticatedAdminUsersUserIdRoute
   "/machines": typeof AuthenticatedAdminMachinesIndexRoute
   "/materials": typeof AuthenticatedAdminMaterialsIndexRoute
   "/permissions": typeof AuthenticatedAdminPermissionsIndexRoute
+  "/price-lists": typeof AuthenticatedAdminPriceListsIndexRoute
   "/users": typeof AuthenticatedAdminUsersIndexRoute
 }
 export interface FileRoutesById {
@@ -261,6 +287,7 @@ export interface FileRoutesById {
   "/_authenticated/_admin/machines": typeof AuthenticatedAdminMachinesRouteWithChildren
   "/_authenticated/_admin/materials": typeof AuthenticatedAdminMaterialsRouteWithChildren
   "/_authenticated/_admin/permissions": typeof AuthenticatedAdminPermissionsRouteWithChildren
+  "/_authenticated/_admin/price-lists": typeof AuthenticatedAdminPriceListsRouteWithChildren
   "/_authenticated/_admin/sessions": typeof AuthenticatedAdminSessionsRoute
   "/_authenticated/_admin/terminals": typeof AuthenticatedAdminTerminalsRoute
   "/_authenticated/_admin/users": typeof AuthenticatedAdminUsersRouteWithChildren
@@ -268,10 +295,12 @@ export interface FileRoutesById {
   "/_authenticated/_admin/machines/$machineId": typeof AuthenticatedAdminMachinesMachineIdRoute
   "/_authenticated/_admin/materials/$materialId": typeof AuthenticatedAdminMaterialsMaterialIdRoute
   "/_authenticated/_admin/permissions/$permissionId": typeof AuthenticatedAdminPermissionsPermissionIdRoute
+  "/_authenticated/_admin/price-lists/$priceListId": typeof AuthenticatedAdminPriceListsPriceListIdRoute
   "/_authenticated/_admin/users/$userId": typeof AuthenticatedAdminUsersUserIdRoute
   "/_authenticated/_admin/machines/": typeof AuthenticatedAdminMachinesIndexRoute
   "/_authenticated/_admin/materials/": typeof AuthenticatedAdminMaterialsIndexRoute
   "/_authenticated/_admin/permissions/": typeof AuthenticatedAdminPermissionsIndexRoute
+  "/_authenticated/_admin/price-lists/": typeof AuthenticatedAdminPriceListsIndexRoute
   "/_authenticated/_admin/users/": typeof AuthenticatedAdminUsersIndexRoute
 }
 export interface FileRouteTypes {
@@ -289,6 +318,7 @@ export interface FileRouteTypes {
     | "/machines"
     | "/materials"
     | "/permissions"
+    | "/price-lists"
     | "/sessions"
     | "/terminals"
     | "/users"
@@ -296,10 +326,12 @@ export interface FileRouteTypes {
     | "/machines/$machineId"
     | "/materials/$materialId"
     | "/permissions/$permissionId"
+    | "/price-lists/$priceListId"
     | "/users/$userId"
     | "/machines/"
     | "/materials/"
     | "/permissions/"
+    | "/price-lists/"
     | "/users/"
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -318,10 +350,12 @@ export interface FileRouteTypes {
     | "/machines/$machineId"
     | "/materials/$materialId"
     | "/permissions/$permissionId"
+    | "/price-lists/$priceListId"
     | "/users/$userId"
     | "/machines"
     | "/materials"
     | "/permissions"
+    | "/price-lists"
     | "/users"
   id:
     | "__root__"
@@ -342,6 +376,7 @@ export interface FileRouteTypes {
     | "/_authenticated/_admin/machines"
     | "/_authenticated/_admin/materials"
     | "/_authenticated/_admin/permissions"
+    | "/_authenticated/_admin/price-lists"
     | "/_authenticated/_admin/sessions"
     | "/_authenticated/_admin/terminals"
     | "/_authenticated/_admin/users"
@@ -349,10 +384,12 @@ export interface FileRouteTypes {
     | "/_authenticated/_admin/machines/$machineId"
     | "/_authenticated/_admin/materials/$materialId"
     | "/_authenticated/_admin/permissions/$permissionId"
+    | "/_authenticated/_admin/price-lists/$priceListId"
     | "/_authenticated/_admin/users/$userId"
     | "/_authenticated/_admin/machines/"
     | "/_authenticated/_admin/materials/"
     | "/_authenticated/_admin/permissions/"
+    | "/_authenticated/_admin/price-lists/"
     | "/_authenticated/_admin/users/"
   fileRoutesById: FileRoutesById
 }
@@ -478,6 +515,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthenticatedAdminSessionsRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
+    "/_authenticated/_admin/price-lists": {
+      id: "/_authenticated/_admin/price-lists"
+      path: "/price-lists"
+      fullPath: "/price-lists"
+      preLoaderRoute: typeof AuthenticatedAdminPriceListsRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
     "/_authenticated/_admin/permissions": {
       id: "/_authenticated/_admin/permissions"
       path: "/permissions"
@@ -520,6 +564,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthenticatedAdminUsersIndexRouteImport
       parentRoute: typeof AuthenticatedAdminUsersRoute
     }
+    "/_authenticated/_admin/price-lists/": {
+      id: "/_authenticated/_admin/price-lists/"
+      path: "/"
+      fullPath: "/price-lists/"
+      preLoaderRoute: typeof AuthenticatedAdminPriceListsIndexRouteImport
+      parentRoute: typeof AuthenticatedAdminPriceListsRoute
+    }
     "/_authenticated/_admin/permissions/": {
       id: "/_authenticated/_admin/permissions/"
       path: "/"
@@ -547,6 +598,13 @@ declare module "@tanstack/react-router" {
       fullPath: "/users/$userId"
       preLoaderRoute: typeof AuthenticatedAdminUsersUserIdRouteImport
       parentRoute: typeof AuthenticatedAdminUsersRoute
+    }
+    "/_authenticated/_admin/price-lists/$priceListId": {
+      id: "/_authenticated/_admin/price-lists/$priceListId"
+      path: "/$priceListId"
+      fullPath: "/price-lists/$priceListId"
+      preLoaderRoute: typeof AuthenticatedAdminPriceListsPriceListIdRouteImport
+      parentRoute: typeof AuthenticatedAdminPriceListsRoute
     }
     "/_authenticated/_admin/permissions/$permissionId": {
       id: "/_authenticated/_admin/permissions/$permissionId"
@@ -625,6 +683,24 @@ const AuthenticatedAdminPermissionsRouteWithChildren =
     AuthenticatedAdminPermissionsRouteChildren,
   )
 
+interface AuthenticatedAdminPriceListsRouteChildren {
+  AuthenticatedAdminPriceListsPriceListIdRoute: typeof AuthenticatedAdminPriceListsPriceListIdRoute
+  AuthenticatedAdminPriceListsIndexRoute: typeof AuthenticatedAdminPriceListsIndexRoute
+}
+
+const AuthenticatedAdminPriceListsRouteChildren: AuthenticatedAdminPriceListsRouteChildren =
+  {
+    AuthenticatedAdminPriceListsPriceListIdRoute:
+      AuthenticatedAdminPriceListsPriceListIdRoute,
+    AuthenticatedAdminPriceListsIndexRoute:
+      AuthenticatedAdminPriceListsIndexRoute,
+  }
+
+const AuthenticatedAdminPriceListsRouteWithChildren =
+  AuthenticatedAdminPriceListsRoute._addFileChildren(
+    AuthenticatedAdminPriceListsRouteChildren,
+  )
+
 interface AuthenticatedAdminUsersRouteChildren {
   AuthenticatedAdminUsersUserIdRoute: typeof AuthenticatedAdminUsersUserIdRoute
   AuthenticatedAdminUsersIndexRoute: typeof AuthenticatedAdminUsersIndexRoute
@@ -647,6 +723,7 @@ interface AuthenticatedAdminRouteChildren {
   AuthenticatedAdminMachinesRoute: typeof AuthenticatedAdminMachinesRouteWithChildren
   AuthenticatedAdminMaterialsRoute: typeof AuthenticatedAdminMaterialsRouteWithChildren
   AuthenticatedAdminPermissionsRoute: typeof AuthenticatedAdminPermissionsRouteWithChildren
+  AuthenticatedAdminPriceListsRoute: typeof AuthenticatedAdminPriceListsRouteWithChildren
   AuthenticatedAdminSessionsRoute: typeof AuthenticatedAdminSessionsRoute
   AuthenticatedAdminTerminalsRoute: typeof AuthenticatedAdminTerminalsRoute
   AuthenticatedAdminUsersRoute: typeof AuthenticatedAdminUsersRouteWithChildren
@@ -660,6 +737,8 @@ const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
     AuthenticatedAdminMaterialsRouteWithChildren,
   AuthenticatedAdminPermissionsRoute:
     AuthenticatedAdminPermissionsRouteWithChildren,
+  AuthenticatedAdminPriceListsRoute:
+    AuthenticatedAdminPriceListsRouteWithChildren,
   AuthenticatedAdminSessionsRoute: AuthenticatedAdminSessionsRoute,
   AuthenticatedAdminTerminalsRoute: AuthenticatedAdminTerminalsRoute,
   AuthenticatedAdminUsersRoute: AuthenticatedAdminUsersRouteWithChildren,

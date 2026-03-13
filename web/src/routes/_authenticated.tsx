@@ -4,7 +4,7 @@
 import { createFileRoute, Outlet, Link, useNavigate, useMatches } from "@tanstack/react-router"
 import { useAuth } from "@/lib/auth"
 import { Button } from "@/components/ui/button"
-import { Loader2, LogOut, Home, User, Shield, ClipboardList, History, Cpu, Key, Monitor, Receipt, Package, FileText } from "lucide-react"
+import { Loader2, LogOut, Home, User, Shield, ClipboardList, History, Cpu, Key, Monitor, Receipt, Package, FileText, List } from "lucide-react"
 import { useEffect } from "react"
 
 export const Route = createFileRoute("/_authenticated")({
@@ -106,6 +106,10 @@ function AuthenticatedLayout() {
               <Link to="/materials" className={`${navLink} ${navLinkActive} ${navLinkHover}`}>
                 <Package className="h-4 w-4" />
                 Materialien
+              </Link>
+              <Link to="/price-lists" className={`${navLink} ${navLinkActive} ${navLinkHover}`}>
+                <List className="h-4 w-4" />
+                Preislisten
               </Link>
               <Link to="/audit" className={`${navLink} ${navLinkActive} ${navLinkHover}`}>
                 <FileText className="h-4 w-4" />

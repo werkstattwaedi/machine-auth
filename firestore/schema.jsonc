@@ -1,4 +1,14 @@
 {
+  "price_lists": {
+    "{priceListId}": {
+      "name": "string",           // List title (e.g., "Holzwerkstatt Materialien")
+      "items": ["string"],        // Catalog document IDs (plain strings, not DocumentReferences — needed for documentId() queries)
+      "footer": "string",         // Footer text (e.g., "Offene Werkstatt Wädenswil – Holzwerkstatt")
+      "active": "boolean",
+      "modifiedBy": "string | null",
+      "modifiedAt": "timestamp"
+    }
+  },
   "catalog": {
     "{itemId}": { // Auto-generated Firebase ID — unified billable items
       "code": "string", // Unique human-manageable lookup code (e.g., "1042")

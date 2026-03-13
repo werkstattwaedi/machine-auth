@@ -1,9 +1,9 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { createFileRoute } from "@tanstack/react-router"
+import { createFileRoute, Link } from "@tanstack/react-router"
 import { z } from "zod"
-import { useDocument } from "@/lib/firestore"
+import { useDocument, useCollection } from "@/lib/firestore"
 import { useAuth } from "@/lib/auth"
 import { userRef } from "@/lib/firestore-helpers"
 import { formatCHF } from "@/lib/format"
@@ -12,16 +12,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { where, addDoc, collection, doc, serverTimestamp, getDocs, query } from "firebase/firestore"
+import { where, addDoc, collection, doc, serverTimestamp, getDocs, query, documentId } from "firebase/firestore"
 import { db } from "@/lib/firebase"
-import { CheckCircle, Loader2, Package } from "lucide-react"
+import { CheckCircle, Loader2, Package, ArrowLeft } from "lucide-react"
 import { useState } from "react"
-import type { CatalogItem } from "@/lib/workshop-config"
+import type { CatalogItem, PriceList } from "@/lib/workshop-config"
 import { getShortUnit } from "@/lib/workshop-config"
 import { computePricing } from "@/lib/pricing-calc"
 
 const materialSearchSchema = z.object({
   id: z.string().optional(),
+  priceList: z.string().optional(),
 })
 
 export const Route = createFileRoute("/_material/material/add")({
@@ -30,8 +31,23 @@ export const Route = createFileRoute("/_material/material/add")({
 })
 
 function MaterialAddPage() {
-  const { id } = Route.useSearch()
+  const { id, priceList: priceListId } = Route.useSearch()
   const { userDoc } = useAuth()
+
+  const { data: priceListDoc, loading: priceListLoading } = useDocument<PriceList>(
+    priceListId ? `price_lists/${priceListId}` : null,
+  )
+
+  // Load catalog items for the price list picker
+  const priceListItems = priceListDoc?.items ?? []
+  const { data: priceListCatalog, loading: priceListCatalogLoading } =
+    useCollection<CatalogItem>(
+      // Firestore 'in' queries support max 30 items
+      priceListId && !id && priceListItems.length > 0 ? "catalog" : null,
+      ...(priceListItems.length > 0
+        ? [where(documentId(), "in", priceListItems.slice(0, 30))]
+        : []),
+    )
 
   const { data: catalogItem, loading } = useDocument<CatalogItem>(
     id ? `catalog/${id}` : null,
@@ -43,6 +59,53 @@ function MaterialAddPage() {
   const [weightG, setWeightG] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [success, setSuccess] = useState(false)
+
+  // Price list item picker: show when priceList is set but id is not
+  if (priceListId && !id) {
+    if (priceListLoading || priceListCatalogLoading) return <PageLoading />
+    if (!priceListDoc) {
+      return (
+        <Card>
+          <CardContent className="pt-6 text-center">
+            <Package className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">
+              Preisliste nicht gefunden.
+            </p>
+          </CardContent>
+        </Card>
+      )
+    }
+
+    const sorted = [...priceListCatalog].sort((a, b) =>
+      a.code.localeCompare(b.code, undefined, { numeric: true }),
+    )
+
+    return (
+      <div className="space-y-4">
+        <h1 className="text-lg font-semibold">{priceListDoc.name}</h1>
+        {sorted.map((item) => (
+          <Link
+            key={item.id}
+            to="/material/add"
+            search={{ priceList: priceListId, id: item.id }}
+            className="block"
+          >
+            <Card className="hover:bg-muted transition-colors cursor-pointer">
+              <CardContent className="py-3 flex items-center justify-between">
+                <div>
+                  <span className="font-mono text-xs mr-3">{item.code}</span>
+                  <span className="text-sm font-medium">{item.name}</span>
+                </div>
+                <span className="text-sm text-muted-foreground">
+                  {formatCHF(item.unitPrice?.none ?? 0)}/{getShortUnit(item.pricingModel)}
+                </span>
+              </CardContent>
+            </Card>
+          </Link>
+        ))}
+      </div>
+    )
+  }
 
   if (loading) return <PageLoading />
 
@@ -64,6 +127,14 @@ function MaterialAddPage() {
             >
               Weiteres Material erfassen
             </Button>
+            {priceListId && (
+              <Link to="/material/add" search={{ priceList: priceListId }}>
+                <Button variant="outline" className="w-full">
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Zurück zur Liste
+                </Button>
+              </Link>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -260,6 +331,15 @@ function MaterialAddPage() {
           ) : null}
           Hinzufügen
         </Button>
+
+        {priceListId && (
+          <Link to="/material/add" search={{ priceList: priceListId }}>
+            <Button variant="outline" className="w-full">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Zurück zur Liste
+            </Button>
+          </Link>
+        )}
       </CardContent>
     </Card>
   )
