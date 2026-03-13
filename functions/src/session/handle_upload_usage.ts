@@ -261,9 +261,14 @@ async function accumulateForUser(
     });
   } else {
     itemRef = itemsQuery.docs[0].ref;
+    // Add previously linked hours to the new unlinked hours
+    const existingData = itemsQuery.docs[0].data();
+    const existingHours = existingData.quantity ?? 0;
+    const combinedHours = Math.round((existingHours + totalHours) * 100) / 100;
+    const combinedPrice = Math.round(combinedHours * unitPrice * 100) / 100;
     await itemRef.update({
-      quantity: totalHours,
-      totalPrice,
+      quantity: combinedHours,
+      totalPrice: combinedPrice,
     });
   }
 

@@ -170,6 +170,7 @@ export function StepWorkshops({
               items={items.filter((i) => i.workshop === wsId)}
               callbacks={callbacks}
               discountLevel={discountLevel}
+              checkoutId={checkoutId}
             />
           ))}
 

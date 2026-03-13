@@ -304,6 +304,7 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
             items={items.filter((i) => i.workshop === wsId)}
             callbacks={callbacks}
             discountLevel={discountLevel}
+            checkoutId={checkoutId}
           />
         ))}
 

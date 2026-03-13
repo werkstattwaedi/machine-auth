@@ -1,10 +1,19 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, Fragment } from "react"
 import { Label } from "@/components/ui/label"
 import { formatCHF } from "@/lib/format"
-import { Plus, XCircle, Search } from "lucide-react"
+import { Plus, XCircle, Search, ChevronDown, ChevronRight } from "lucide-react"
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+} from "@/components/ui/tooltip"
+import { useCollection } from "@/lib/firestore"
+import { where } from "firebase/firestore"
+import { checkoutItemRef } from "@/lib/firestore-helpers"
 import type {
   PricingConfig,
   WorkshopId,
@@ -522,17 +531,175 @@ function DirectItemRow({
 }
 
 // ---------------------------------------------------------------------------
-// NFC machine usage row (read-only display)
+// NFC machine usage row (read-only, styled like other item rows)
 // ---------------------------------------------------------------------------
 
-export function NfcMachineItemRow({ item }: { item: CheckoutItemLocal }) {
+interface UsageMachineDoc {
+  machine?: { id: string }
+  startTime?: { toDate(): Date }
+  endTime?: { toDate(): Date }
+  checkoutItemRef?: unknown
+}
+
+function NfcUsageDetails({
+  checkoutId,
+  itemId,
+}: {
+  checkoutId: string
+  itemId: string
+}) {
+  const ref = checkoutItemRef(checkoutId, itemId)
+  const { data, loading } = useCollection<UsageMachineDoc>(
+    "usage_machine",
+    where("checkoutItemRef", "==", ref),
+  )
+  // Query machine collection directly (no LookupProvider dependency)
+  const { data: machinesDocs } = useCollection<{ name: string }>("machine")
+  const machines = new Map(machinesDocs.map((d) => [d.id, d.name]))
+
+  if (loading) return <div className="text-xs text-muted-foreground py-1">Laden...</div>
+  if (data.length === 0) return <div className="text-xs text-muted-foreground py-1">Keine Maschinennutzungen</div>
+
+  // Group by date: today vs older dates
+  const now = new Date()
+  const todayKey = `${now.getFullYear()}-${String(now.getMonth()).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`
+
+  const grouped = new Map<string, { label: string | null; entries: typeof data }>()
+  for (const rec of data) {
+    const start = rec.startTime?.toDate()
+    if (!start) continue
+    const key = `${start.getFullYear()}-${String(start.getMonth()).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}`
+    const isToday = key === todayKey
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        label: isToday ? null : start.toLocaleDateString("de-CH", { weekday: "short", day: "2-digit", month: "2-digit" }),
+        entries: [],
+      })
+    }
+    grouped.get(key)!.entries.push(rec)
+  }
+
+  // Sort groups by date descending (today first), entries by start time
+  const sortedGroups = [...grouped.entries()].sort(([a], [b]) => b.localeCompare(a))
+  for (const [, group] of sortedGroups) {
+    group.entries.sort((a, b) => {
+      const ta = a.startTime?.toDate().getTime() ?? 0
+      const tb = b.startTime?.toDate().getTime() ?? 0
+      return ta - tb
+    })
+  }
+
   return (
-    <div className="flex justify-between text-sm py-1 border-b border-dashed last:border-0">
-      <span>{item.description}</span>
-      <span className="text-muted-foreground">
-        {item.quantity > 0 ? `${Math.round(item.quantity * 60)} min` : "Aktiv"}{" "}
-        <span className="font-medium ml-2">{formatCHF(item.totalPrice)}</span>
-      </span>
+    <table className="w-full text-xs">
+      <thead>
+        <tr className="text-muted-foreground/70">
+          <th className="text-left font-medium pb-1 pr-4">Maschine</th>
+          <th className="text-right font-medium pb-1 pr-2">Dauer</th>
+          <th className="text-right font-medium pb-1">Start</th>
+        </tr>
+      </thead>
+      <tbody>
+        {sortedGroups.map(([key, group]) => (
+          <Fragment key={key}>
+            {group.label && (
+              <tr>
+                <td colSpan={3} className="pt-2 pb-0.5 font-bold text-muted-foreground">
+                  {group.label}
+                </td>
+              </tr>
+            )}
+            {group.entries.map((rec) => {
+              const start = rec.startTime?.toDate()
+              const end = rec.endTime?.toDate()
+              const machineName = rec.machine ? (machines.get(rec.machine.id) ?? rec.machine.id) : "–"
+              const durationMin = start && end
+                ? Math.round((end.getTime() - start.getTime()) / 60000)
+                : null
+              const timeStr = start
+                ? start.toLocaleTimeString("de-CH", { hour: "2-digit", minute: "2-digit" })
+                : ""
+              return (
+                <tr key={rec.id} className="text-muted-foreground">
+                  <td className="py-0.5 pr-4">{machineName}</td>
+                  <td className="py-0.5 pr-2 text-right tabular-nums">
+                    {durationMin != null ? `${durationMin} min` : "aktiv"}
+                  </td>
+                  <td className="py-0.5 text-right tabular-nums">{timeStr}</td>
+                </tr>
+              )
+            })}
+          </Fragment>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+export function NfcMachineItemRow({
+  item,
+  index,
+  checkoutId,
+}: {
+  item: CheckoutItemLocal
+  index: number
+  checkoutId: string | null
+}) {
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const minutes = Math.round(item.quantity * 60)
+
+  return (
+    <div className={`pl-8 pr-4 py-3 ${rowBg(index)}`}>
+      {/* Header with grayed-out remove icon + tooltip */}
+      <div className="flex items-center gap-2">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="-ml-6 shrink-0 text-muted-foreground/40 cursor-default">
+                <XCircle className="h-4 w-4" />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>
+              Per NFC erfasst — nicht entfernbar
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+        <h4 className="text-sm font-bold">{item.description}</h4>
+      </div>
+
+      {/* Quantity + price row */}
+      <div className="flex items-end gap-3 mt-2">
+        <div className="w-28">
+          <Label className="text-xs font-bold">Dauer</Label>
+          <div className="h-9 flex items-center text-sm">
+            {`${minutes} min`}
+          </div>
+        </div>
+        <div className="flex-1" />
+        <PriceColumns
+          unitLabel="Preis/h"
+          unitPrice={item.unitPrice}
+          total={item.totalPrice}
+        />
+      </div>
+
+      {/* Expandable details */}
+      {checkoutId && (
+        <div className="mt-3 border-t border-dashed pt-2">
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            onClick={() => setDetailsOpen(!detailsOpen)}
+          >
+            {detailsOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+            Einzelne Nutzungen
+          </button>
+          {detailsOpen && (
+            <div className="mt-1.5 pl-4 pr-2">
+              <NfcUsageDetails checkoutId={checkoutId} itemId={item.id} />
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -714,6 +881,7 @@ export function WorkshopInlineSection({
   callbacks,
   discountLevel,
   onBlurSave,
+  checkoutId,
 }: {
   workshopId: WorkshopId
   workshop: WorkshopConfig
@@ -723,9 +891,11 @@ export function WorkshopInlineSection({
   callbacks: ItemCallbacks
   discountLevel: DiscountLevel
   onBlurSave?: boolean
+  checkoutId?: string | null
 }) {
   const [searchOpen, setSearchOpen] = useState(false)
 
+  // NFC items first, then manual — continuous indexing
   const nfcItems = items.filter((i) => i.origin === "nfc")
   const manualItems = items.filter((i) => i.origin !== "nfc")
 
@@ -737,24 +907,24 @@ export function WorkshopInlineSection({
         {workshop.label}
       </h2>
 
-      {/* NFC machine items (read-only) */}
-      {nfcItems.length > 0 && (
-        <div>
-          <h3 className="text-sm font-bold mb-2">Maschinennutzung (NFC)</h3>
-          {nfcItems.map((item) => (
-            <NfcMachineItemRow key={item.id} item={item} />
-          ))}
-        </div>
-      )}
+      {/* NFC machine items (read-only, same style as manual items) */}
+      {nfcItems.map((item, i) => (
+        <NfcMachineItemRow
+          key={item.id}
+          item={item}
+          index={i}
+          checkoutId={checkoutId ?? null}
+        />
+      ))}
 
-      {/* Manual items (editable) */}
+      {/* Manual items (editable, index continues after NFC items) */}
       {manualItems.map((item, i) => (
         <CatalogItemRow
           key={item.id}
           item={item}
           catalogEntry={catalogItems.find((c) => c.id === item.catalogId)}
           config={config}
-          index={i}
+          index={nfcItems.length + i}
           callbacks={callbacks}
           onBlurSave={onBlurSave}
         />

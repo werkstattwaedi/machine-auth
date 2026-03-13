@@ -19,6 +19,7 @@ export function WorkshopSectionWithCatalog({
   callbacks,
   discountLevel,
   onBlurSave,
+  checkoutId,
 }: {
   workshopId: WorkshopId
   workshop: WorkshopConfig
@@ -27,6 +28,7 @@ export function WorkshopSectionWithCatalog({
   callbacks: ItemCallbacks
   discountLevel: DiscountLevel
   onBlurSave?: boolean
+  checkoutId?: string | null
 }) {
   const { data: rawCatalog, loading } = useCatalogForWorkshop(workshopId)
 
@@ -57,6 +59,7 @@ export function WorkshopSectionWithCatalog({
       callbacks={wrappedCallbacks}
       discountLevel={discountLevel}
       onBlurSave={onBlurSave}
+      checkoutId={checkoutId}
     />
   )
 }
