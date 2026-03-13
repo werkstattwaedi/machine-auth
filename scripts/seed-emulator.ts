@@ -258,9 +258,9 @@ async function seed() {
   // --- Config: Pricing (simplified — no machine configs) ---
   await db.collection("config").doc("pricing").set({
     entryFees: {
-      erwachsen: { regular: 15, materialbezug: 0, intern: 0, hangenmoos: 15 },
-      kind: { regular: 7.5, materialbezug: 0, intern: 0, hangenmoos: 7.5 },
-      firma: { regular: 30, materialbezug: 0, intern: 0, hangenmoos: 30 },
+      erwachsen: { regular: 5, materialbezug: 0, intern: 0, hangenmoos: 0 },
+      kind: { regular: 2.5, materialbezug: 0, intern: 0, hangenmoos: 0 },
+      firma: { regular: 5, materialbezug: 0, intern: 0, hangenmoos: 0 },
     },
     workshops: {
       holz:      { label: "Holzwerkstatt",     order: 1 },
