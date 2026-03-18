@@ -134,6 +134,8 @@ function checkoutReducer(
   }
 }
 
+export { checkoutReducer, initialState }
+
 export function useCheckoutState() {
   const [state, dispatch] = useReducer(checkoutReducer, initialState)
   return { state, dispatch }

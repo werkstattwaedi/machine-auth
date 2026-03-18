@@ -14,6 +14,7 @@ import {
 import { useCollection } from "@/lib/firestore"
 import { where } from "firebase/firestore"
 import { checkoutItemRef } from "@/lib/firestore-helpers"
+import { useDb } from "@/lib/firebase-context"
 import type {
   PricingConfig,
   WorkshopId,
@@ -548,7 +549,8 @@ function NfcUsageDetails({
   checkoutId: string
   itemId: string
 }) {
-  const ref = checkoutItemRef(checkoutId, itemId)
+  const db = useDb()
+  const ref = checkoutItemRef(db, checkoutId, itemId)
   const { data, loading } = useCollection<UsageMachineDoc>(
     "usage_machine",
     where("checkoutItemRef", "==", ref),

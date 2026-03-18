@@ -22,8 +22,9 @@ import {
   doc,
   getDoc,
   serverTimestamp,
+  type Firestore,
 } from "firebase/firestore"
-import { auth, db } from "./firebase"
+import { useDb, useFirebaseAuth } from "./firebase-context"
 
 export interface UserDoc {
   id: string
@@ -52,6 +53,8 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const auth = useFirebaseAuth()
+  const db = useDb()
   const [user, setUser] = useState<User | null>(null)
   const [userDoc, setUserDoc] = useState<UserDoc | null>(null)
   const [loading, setLoading] = useState(true)
@@ -68,7 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false)
       setUserDocLoading(!!firebaseUser)
     })
-  }, [])
+  }, [auth])
 
   // Listen to Firestore user doc when authenticated (doc ID = Auth UID)
   useEffect(() => {
@@ -106,7 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setUserDocLoading(false)
     })
-  }, [user])
+  }, [user, db])
 
   const signInWithEmail = async (email: string) => {
     await sendSignInLinkToEmail(auth, email, {
@@ -134,7 +137,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     )
     window.localStorage.removeItem("emailForSignIn")
 
-    await handleSignIn(credential.user)
+    await handleSignIn(db, credential.user)
     return true
   }
 
@@ -170,7 +173,7 @@ export function useAuth(): AuthContextValue {
  * Self-registration: if no user doc exists for this Auth UID, create one.
  * Admin-created users already have a doc, so this is a no-op for them.
  */
-async function handleSignIn(user: User): Promise<void> {
+async function handleSignIn(db: Firestore, user: User): Promise<void> {
   if (!user.email) throw new Error("E-Mail-Adresse benötigt")
 
   const userDocRef = doc(db, "users", user.uid)

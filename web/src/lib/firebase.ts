@@ -32,9 +32,12 @@ export const db = initializeFirestore(app, {
 export const functions = getFunctions(app)
 
 if (import.meta.env.DEV) {
-  connectAuthEmulator(auth, "http://127.0.0.1:9099", {
+  const authPort = import.meta.env.VITE_EMULATOR_AUTH_PORT || "9099"
+  const firestorePort = import.meta.env.VITE_EMULATOR_FIRESTORE_PORT || "8080"
+  const functionsPort = import.meta.env.VITE_EMULATOR_FUNCTIONS_PORT || "5001"
+  connectAuthEmulator(auth, `http://127.0.0.1:${authPort}`, {
     disableWarnings: true,
   })
-  connectFirestoreEmulator(db, "127.0.0.1", 8080)
-  connectFunctionsEmulator(functions, "127.0.0.1", 5001)
+  connectFirestoreEmulator(db, "127.0.0.1", parseInt(firestorePort))
+  connectFunctionsEmulator(functions, "127.0.0.1", parseInt(functionsPort))
 }

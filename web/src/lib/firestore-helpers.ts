@@ -1,50 +1,49 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { doc, collection, type DocumentReference } from "firebase/firestore"
-import { db } from "./firebase"
+import { doc, collection, type DocumentReference, type Firestore } from "firebase/firestore"
 
-export function userRef(id: string): DocumentReference {
+export function userRef(db: Firestore, id: string): DocumentReference {
   return doc(db, "users", id)
 }
 
-export function machineRef(id: string): DocumentReference {
+export function machineRef(db: Firestore, id: string): DocumentReference {
   return doc(db, "machine", id)
 }
 
-export function permissionRef(id: string): DocumentReference {
+export function permissionRef(db: Firestore, id: string): DocumentReference {
   return doc(db, "permission", id)
 }
 
-export function tokenRef(id: string): DocumentReference {
+export function tokenRef(db: Firestore, id: string): DocumentReference {
   return doc(db, "tokens", id)
 }
 
-export function macoRef(id: string): DocumentReference {
+export function macoRef(db: Firestore, id: string): DocumentReference {
   return doc(db, "maco", id)
 }
 
-export function catalogRef(id: string): DocumentReference {
+export function catalogRef(db: Firestore, id: string): DocumentReference {
   return doc(db, "catalog", id)
 }
 
-export function usageMachineRef(id: string): DocumentReference {
+export function usageMachineRef(db: Firestore, id: string): DocumentReference {
   return doc(db, "usage_machine", id)
 }
 
-export function checkoutRef(id: string): DocumentReference {
+export function checkoutRef(db: Firestore, id: string): DocumentReference {
   return doc(db, "checkouts", id)
 }
 
-export function checkoutItemRef(checkoutId: string, itemId: string): DocumentReference {
+export function checkoutItemRef(db: Firestore, checkoutId: string, itemId: string): DocumentReference {
   return doc(db, "checkouts", checkoutId, "items", itemId)
 }
 
-export function checkoutItemsCollection(checkoutId: string) {
+export function checkoutItemsCollection(db: Firestore, checkoutId: string) {
   return collection(db, "checkouts", checkoutId, "items")
 }
 
-export function configRef(id: string): DocumentReference {
+export function configRef(db: Firestore, id: string): DocumentReference {
   return doc(db, "config", id)
 }
 

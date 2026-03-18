@@ -3,18 +3,13 @@
  *
  * Uses the actual SDM crypto implementation to generate valid PICC and CMAC
  * pairs for integration testing.
+ *
+ * COPY NOTE: A self-contained copy lives in web/e2e/sdm-test-helper.ts for
+ * Playwright E2E tests. If the crypto changes, update both.
  */
 
 import * as crypto from "crypto";
 import { diversifyKey } from "../src/ntag/key_diversification";
-
-/**
- * Session keys derived from SV2
- */
-interface SessionKeys {
-  encKey: Buffer;
-  macKey: Buffer;
-}
 
 /**
  * Computes AES-128 CMAC per NIST SP 800-38B
@@ -24,7 +19,6 @@ function computeCMAC(key: Buffer, data: Buffer): Buffer {
   const { k1, k2 } = generateCMACSubkeys(key);
 
   const blockSize = 16;
-  const numBlocks = Math.ceil(data.length / blockSize);
   const lastBlockSize = data.length % blockSize;
   const needsPadding = lastBlockSize !== 0 || data.length === 0;
 
@@ -113,21 +107,6 @@ function deriveSV2(key: Buffer, uid: Buffer, counter: Buffer): Buffer {
 }
 
 /**
- * Derives session keys from SV2
- */
-function deriveSessionKeys(key: Buffer, sv2: Buffer): SessionKeys {
-  if (sv2.length !== 16) throw new Error("SV2 must be 16 bytes");
-
-  const encInput = Buffer.concat([Buffer.from([0x01]), sv2]);
-  const encKey = computeCMAC(key, encInput);
-
-  const macInput = Buffer.concat([Buffer.from([0x02]), sv2]);
-  const macKey = computeCMAC(key, macInput);
-
-  return { encKey, macKey };
-}
-
-/**
  * Generates valid PICC and CMAC for testing
  *
  * @param uid - 7-byte UID as hex string (e.g., "04c339aa1e1890")
@@ -161,11 +140,12 @@ export function generateValidPICCAndCMAC(
     throw new Error("Terminal key must be 16 bytes (32 hex characters)");
   }
 
-  // 1. Encrypt PICC data (UID + Counter + padding) with terminal key
+  // 1. Encrypt PICC data [0xC7 tag | UID(7) | Counter(3) | padding(5)] with terminal key
   const piccPlaintext = Buffer.concat([
+    Buffer.from([0xC7]),  // NTAG424 PICC tag byte
     uidBuffer,
     counterBuffer,
-    Buffer.alloc(6, 0), // Padding to 16 bytes
+    Buffer.alloc(5, 0), // Padding to 16 bytes
   ]);
 
   const cipher = crypto.createCipheriv(
@@ -183,17 +163,24 @@ export function generateValidPICCAndCMAC(
   const sdmMacKey = diversifyKey(masterKey, systemName, uidBuffer, "sdm_mac");
   const sdmMacKeyBuffer = Buffer.from(sdmMacKey, "hex");
 
-  // 3. Derive SV2 and session keys from SDM MAC key (not terminal key)
-  const sv2 = deriveSV2(sdmMacKeyBuffer, uidBuffer, counterBuffer);
-  const sessionKeys = deriveSessionKeys(sdmMacKeyBuffer, sv2);
+  // 3. Derive session MAC key = CMAC(SDMFileReadKey, SV2_input) directly
+  //    (matches production sdm_crypto.ts verifyCMAC)
+  const sesSDMFileReadMACKey = deriveSV2(sdmMacKeyBuffer, uidBuffer, counterBuffer);
 
-  // 4. Compute CMAC over UID + Counter using session MAC key
-  const dataToMAC = Buffer.concat([uidBuffer, counterBuffer]);
-  const cmacFull = computeCMAC(sessionKeys.macKey, dataToMAC);
+  // 4. MAC input = ASCII hex of encrypted PICC + "&cmac=" (per AN12196 §3)
+  const piccHex = encryptedPICC.toString("hex");
+  const dataToMAC = Buffer.from(piccHex.toUpperCase() + "&cmac=", "ascii");
+  const cmacFull = computeCMAC(sesSDMFileReadMACKey, dataToMAC);
 
-  // 5. Return encrypted PICC and truncated CMAC (8 bytes)
+  // 5. Truncate CMAC: take bytes at odd indices (1, 3, 5, ..., 15) per AN12196
+  const truncatedCMAC = Buffer.alloc(8);
+  for (let i = 0; i < 8; i++) {
+    truncatedCMAC[i] = cmacFull[i * 2 + 1];
+  }
+
+  // 6. Return encrypted PICC and truncated CMAC
   return {
-    picc: encryptedPICC.toString("hex"),
-    cmac: cmacFull.subarray(0, 8).toString("hex"),
+    picc: piccHex,
+    cmac: truncatedCMAC.toString("hex"),
   };
 }

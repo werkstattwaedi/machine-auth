@@ -17,8 +17,8 @@ import {
   collection,
   serverTimestamp,
 } from "firebase/firestore"
-import { db } from "@/lib/firebase"
 import { userRef } from "@/lib/firestore-helpers"
+import { useDb } from "@/lib/firebase-context"
 import { formatCHF } from "@/lib/format"
 import { PageLoading } from "@/components/page-loading"
 import { EmptyState } from "@/components/empty-state"
@@ -86,7 +86,8 @@ function DashboardPage() {
 }
 
 function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
-  const ref = userRef(userDoc.id)
+  const db = useDb()
+  const ref = userRef(db, userDoc.id)
   const { data: pricingConfig, loading: loadingConfig } = usePricingConfig()
 
   // Workshop selection state

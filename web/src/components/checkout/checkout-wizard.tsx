@@ -14,8 +14,8 @@ import {
   serverTimestamp,
   doc,
 } from "firebase/firestore"
-import { db } from "@/lib/firebase"
 import { userRef } from "@/lib/firestore-helpers"
+import { useDb } from "@/lib/firebase-context"
 import { usePricingConfig } from "@/lib/workshop-config"
 import { calculateFee } from "@/lib/pricing"
 import { PageLoading } from "@/components/page-loading"
@@ -60,6 +60,7 @@ interface CheckoutItemDoc {
 }
 
 export function CheckoutWizard({ picc, cmac, kiosk, onActiveChange }: CheckoutWizardProps) {
+  const db = useDb()
   const { user, userDoc } = useAuth()
   const { tokenUser, loading: tokenLoading } = useTokenAuth(
     picc ?? null,
@@ -76,9 +77,9 @@ export function CheckoutWizard({ picc, cmac, kiosk, onActiveChange }: CheckoutWi
   const isAnonymous = !isAccountLoggedIn && !isTagIdentified
   const identifiedUserDoc = isAccountLoggedIn ? userDoc : null
   const identifiedUserRef = identifiedUserDoc
-    ? userRef(identifiedUserDoc.id)
+    ? userRef(db, identifiedUserDoc.id)
     : isTagIdentified
-      ? userRef(tokenUser!.userId)
+      ? userRef(db, tokenUser!.userId)
       : undefined
 
   // Find open checkout for identified user

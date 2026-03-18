@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label"
 import { useForm } from "react-hook-form"
 import { Loader2 } from "lucide-react"
 import { httpsCallable } from "firebase/functions"
-import { functions } from "@/lib/firebase"
+import { useFunctions } from "@/lib/firebase-context"
 import { useState } from "react"
 import { toast } from "sonner"
 
@@ -29,6 +29,7 @@ interface CreateUserFormValues {
 }
 
 export function CreateUserDialog({ open, onOpenChange }: CreateUserDialogProps) {
+  const functions = useFunctions()
   const [loading, setLoading] = useState(false)
   const { register, handleSubmit, reset } = useForm<CreateUserFormValues>({
     defaultValues: { displayName: "", name: "", email: "" },

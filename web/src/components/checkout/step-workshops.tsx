@@ -18,7 +18,7 @@ import {
   doc,
   type DocumentReference,
 } from "firebase/firestore"
-import { db } from "@/lib/firebase"
+import { useDb } from "@/lib/firebase-context"
 
 interface StepWorkshopsProps {
   state: CheckoutState
@@ -41,6 +41,7 @@ export function StepWorkshops({
   userRef,
   discountLevel,
 }: StepWorkshopsProps) {
+  const db = useDb()
   const sortedWorkshops = config ? getSortedWorkshops(config) : []
 
   // Workshops that already have items (cannot be unchecked)

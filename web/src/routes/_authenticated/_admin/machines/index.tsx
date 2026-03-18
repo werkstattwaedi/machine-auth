@@ -23,6 +23,7 @@ import { useMemo, useState } from "react"
 import { useFirestoreMutation } from "@/hooks/use-firestore-mutation"
 import { useForm } from "react-hook-form"
 import { macoRef } from "@/lib/firestore-helpers"
+import { useDb } from "@/lib/firebase-context"
 
 export const Route = createFileRoute("/_authenticated/_admin/machines/")({
   component: MachinesPage,
@@ -100,6 +101,7 @@ function MachinesPage() {
 }
 
 function CreateMachineDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const db = useDb()
   const { set, loading } = useFirestoreMutation()
   const { register, handleSubmit, reset } = useForm<{ id: string; name: string; macoId: string }>()
 
@@ -107,7 +109,7 @@ function CreateMachineDialog({ open, onOpenChange }: { open: boolean; onOpenChan
     await set("machine", values.id, {
       name: values.name,
       requiredPermission: [],
-      maco: values.macoId ? macoRef(values.macoId) : null,
+      maco: values.macoId ? macoRef(db, values.macoId) : null,
     }, {
       successMessage: "Maschine erstellt",
     })

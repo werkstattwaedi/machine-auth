@@ -5,6 +5,7 @@ import { createFileRoute, Link } from "@tanstack/react-router"
 import { useDocument, useCollection } from "@/lib/firestore"
 import { useFirestoreMutation } from "@/hooks/use-firestore-mutation"
 import { permissionRef } from "@/lib/firestore-helpers"
+import { useDb } from "@/lib/firebase-context"
 import { PageLoading } from "@/components/page-loading"
 import { PageHeader } from "@/components/admin/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -54,6 +55,7 @@ interface PermissionFormValues {
 }
 
 function PermissionDetailPage() {
+  const db = useDb()
   const { permissionId } = Route.useParams()
   const { data: permission, loading } = useDocument<PermissionDoc>(
     `permission/${permissionId}`,
@@ -117,7 +119,7 @@ function PermissionDetailPage() {
       if (!user) return
       const filtered = (user.permissions ?? [])
         .filter((p) => p.id !== permissionId)
-        .map((p) => permissionRef(p.id))
+        .map((p) => permissionRef(db, p.id))
       await update("users", revokeTarget.id, { permissions: filtered }, {
         successMessage: "Berechtigung entfernt",
       })
@@ -126,7 +128,7 @@ function PermissionDetailPage() {
       if (!machine) return
       const filtered = (machine.requiredPermission ?? [])
         .filter((p) => p.id !== permissionId)
-        .map((p) => permissionRef(p.id))
+        .map((p) => permissionRef(db, p.id))
       await update("machine", revokeTarget.id, { requiredPermission: filtered }, {
         successMessage: "Berechtigung entfernt",
       })

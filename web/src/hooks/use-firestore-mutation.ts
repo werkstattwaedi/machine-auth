@@ -13,7 +13,7 @@ import {
   type DocumentData,
   type DocumentReference,
 } from "firebase/firestore"
-import { db } from "@/lib/firebase"
+import { useDb } from "@/lib/firebase-context"
 import { useAuth } from "@/lib/auth"
 import { toast } from "sonner"
 
@@ -28,6 +28,7 @@ interface MutationState {
 }
 
 export function useFirestoreMutation() {
+  const db = useDb()
   const { user } = useAuth()
   const [state, setState] = useState<MutationState>({
     loading: false,
@@ -75,7 +76,7 @@ export function useFirestoreMutation() {
         () => setDoc(doc(db, path, id), withAuditFields(data)),
         options
       ),
-    [mutate, withAuditFields]
+    [mutate, withAuditFields, db]
   )
 
   const add = useCallback(
@@ -84,7 +85,7 @@ export function useFirestoreMutation() {
         () => addDoc(collection(db, collectionPath), withAuditFields(data)),
         options
       ),
-    [mutate, withAuditFields]
+    [mutate, withAuditFields, db]
   )
 
   const update = useCallback(
@@ -98,13 +99,13 @@ export function useFirestoreMutation() {
         () => updateDoc(doc(db, path, id), withAuditFields(data)),
         options
       ),
-    [mutate, withAuditFields]
+    [mutate, withAuditFields, db]
   )
 
   const remove = useCallback(
     (path: string, id: string, options?: MutationOptions) =>
       mutate(() => deleteDoc(doc(db, path, id)), options),
-    [mutate]
+    [mutate, db]
   )
 
   return {

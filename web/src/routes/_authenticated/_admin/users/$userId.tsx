@@ -5,6 +5,7 @@ import { createFileRoute } from "@tanstack/react-router"
 import { useDocument, useCollection } from "@/lib/firestore"
 import { useFirestoreMutation } from "@/hooks/use-firestore-mutation"
 import { permissionRef, userRef } from "@/lib/firestore-helpers"
+import { useDb } from "@/lib/firebase-context"
 import { where } from "firebase/firestore"
 import { PageLoading } from "@/components/page-loading"
 import { PageHeader } from "@/components/admin/page-header"
@@ -63,12 +64,13 @@ interface UserFormValues {
 }
 
 function UserDetailPage() {
+  const db = useDb()
   const { userId } = Route.useParams()
   const { data: user, loading } = useDocument<UserDoc>(`users/${userId}`)
   const { data: allPermissions } = useCollection<PermissionDoc>("permission")
   const { data: tokens, loading: tokensLoading } = useCollection<TokenDoc>(
     "tokens",
-    where("userId", "==", userRef(userId))
+    where("userId", "==", userRef(db, userId))
   )
   const { update, loading: saving } = useFirestoreMutation()
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([])
@@ -105,7 +107,7 @@ function UserDetailPage() {
       email: values.email,
       roles,
       userType: values.userType,
-      permissions: selectedPermissions.map((id) => permissionRef(id)),
+      permissions: selectedPermissions.map((id) => permissionRef(db, id)),
     }, {
       successMessage: "Benutzer gespeichert",
     })
@@ -122,11 +124,9 @@ function UserDetailPage() {
     const { set } = await import("firebase/firestore").then((m) => ({
       set: m.setDoc,
     }))
-    const { doc: docFn } = await import("firebase/firestore")
-    const { db } = await import("@/lib/firebase")
-    const { serverTimestamp } = await import("firebase/firestore")
+    const { doc: docFn, serverTimestamp } = await import("firebase/firestore")
     await set(docFn(db, "tokens", newTagId.trim()), {
-      userId: userRef(userId),
+      userId: userRef(db, userId),
       label: "",
       registered: serverTimestamp(),
       modifiedBy: null,
@@ -137,7 +137,6 @@ function UserDetailPage() {
 
   const handleToggleTag = async (tokenId: string, isDeactivated: boolean) => {
     const { updateDoc, doc: docFn, serverTimestamp } = await import("firebase/firestore")
-    const { db } = await import("@/lib/firebase")
     await updateDoc(docFn(db, "tokens", tokenId), {
       deactivated: isDeactivated ? null : serverTimestamp(),
       modifiedAt: serverTimestamp(),

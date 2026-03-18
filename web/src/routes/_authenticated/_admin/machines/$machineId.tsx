@@ -5,6 +5,7 @@ import { createFileRoute } from "@tanstack/react-router"
 import { useDocument, useCollection } from "@/lib/firestore"
 import { useFirestoreMutation } from "@/hooks/use-firestore-mutation"
 import { permissionRef, macoRef } from "@/lib/firestore-helpers"
+import { useDb } from "@/lib/firebase-context"
 import { PageLoading } from "@/components/page-loading"
 import { PageHeader } from "@/components/admin/page-header"
 import { Card, CardContent } from "@/components/ui/card"
@@ -38,6 +39,7 @@ interface MacoDoc {
 }
 
 function MachineDetailPage() {
+  const db = useDb()
   const { machineId } = Route.useParams()
   const { data: machine, loading } = useDocument<MachineDoc>(
     `machine/${machineId}`,
@@ -79,9 +81,9 @@ function MachineDetailPage() {
       {
         name: values.name,
         requiredPermission: selectedPermissions.map((id) =>
-          permissionRef(id),
+          permissionRef(db, id),
         ),
-        maco: values.macoId ? macoRef(values.macoId) : null,
+        maco: values.macoId ? macoRef(db, values.macoId) : null,
       },
       {
         successMessage: "Maschine gespeichert",

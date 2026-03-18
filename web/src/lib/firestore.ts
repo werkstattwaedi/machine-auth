@@ -11,7 +11,7 @@ import {
   type Unsubscribe,
   query,
 } from "firebase/firestore"
-import { db } from "./firebase"
+import { useDb } from "./firebase-context"
 
 interface UseCollectionResult<T> {
   data: (T & { id: string })[]
@@ -34,6 +34,7 @@ export function useCollection<T = DocumentData>(
   path: string | null,
   ...constraints: QueryConstraint[]
 ): UseCollectionResult<T> {
+  const db = useDb()
   const [data, setData] = useState<(T & { id: string })[]>([])
   const [loading, setLoading] = useState(!!path)
   const [error, setError] = useState<Error | null>(null)
@@ -74,10 +75,10 @@ export function useCollection<T = DocumentData>(
       clearTimeout(timer)
       unsub?.()
     }
-    // Re-subscribe when path changes. Constraints are stable per call site
+    // Re-subscribe when path or db changes. Constraints are stable per call site
     // (each component always passes the same set of where/orderBy clauses).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path])
+  }, [path, db])
 
   return { data, loading, error }
 }
@@ -85,6 +86,7 @@ export function useCollection<T = DocumentData>(
 export function useDocument<T = DocumentData>(
   path: string | null
 ): UseDocumentResult<T> {
+  const db = useDb()
   const [data, setData] = useState<(T & { id: string }) | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
@@ -123,7 +125,7 @@ export function useDocument<T = DocumentData>(
       clearTimeout(timer)
       unsub?.()
     }
-  }, [path])
+  }, [path, db])
 
   return { data, loading, error }
 }

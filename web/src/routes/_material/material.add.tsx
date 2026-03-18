@@ -6,6 +6,7 @@ import { z } from "zod"
 import { useDocument, useCollection } from "@/lib/firestore"
 import { useAuth } from "@/lib/auth"
 import { userRef } from "@/lib/firestore-helpers"
+import { useDb } from "@/lib/firebase-context"
 import { formatCHF } from "@/lib/format"
 import { PageLoading } from "@/components/page-loading"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -13,7 +14,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { where, addDoc, collection, doc, serverTimestamp, getDocs, query, documentId } from "firebase/firestore"
-import { db } from "@/lib/firebase"
 import { CheckCircle, Loader2, Package, ArrowLeft } from "lucide-react"
 import { useState } from "react"
 import type { CatalogItem, PriceList } from "@/lib/workshop-config"
@@ -31,6 +31,7 @@ export const Route = createFileRoute("/_material/material/add")({
 })
 
 function MaterialAddPage() {
+  const db = useDb()
   const { id, priceList: priceListId } = Route.useSearch()
   const { userDoc } = useAuth()
 
@@ -189,7 +190,7 @@ function MaterialAddPage() {
     if (totalPrice <= 0) return
     setSubmitting(true)
     try {
-      const uRef = userRef(userDoc.id)
+      const uRef = userRef(db, userDoc.id)
 
       // Find or create open checkout
       const coQuery = query(

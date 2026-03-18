@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { useState, useEffect } from "react"
-import { functions } from "./firebase"
+import { useFunctions } from "./firebase-context"
 
 interface TokenUser {
   tokenId: string
@@ -21,11 +21,11 @@ interface UseTokenAuthResult {
 const FUNCTIONS_REGION = "us-central1"
 
 /** Build the base URL for the Functions endpoint. */
-function functionsBaseUrl(): string {
+function functionsBaseUrl(projectId: string | undefined): string {
   if (import.meta.env.DEV) {
-    return `http://127.0.0.1:5001/oww-maschinenfreigabe/${FUNCTIONS_REGION}`
+    const port = import.meta.env.VITE_EMULATOR_FUNCTIONS_PORT || "5001"
+    return `http://127.0.0.1:${port}/oww-maschinenfreigabe/${FUNCTIONS_REGION}`
   }
-  const projectId = functions.app.options.projectId
   return `https://${FUNCTIONS_REGION}-${projectId}.cloudfunctions.net`
 }
 
@@ -38,6 +38,7 @@ export function useTokenAuth(
   picc: string | null,
   cmac: string | null
 ): UseTokenAuthResult {
+  const functions = useFunctions()
   const [tokenUser, setTokenUser] = useState<TokenUser | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -48,7 +49,7 @@ export function useTokenAuth(
     setLoading(true)
     setError(null)
 
-    const url = `${functionsBaseUrl()}/api/verifyTagCheckout`
+    const url = `${functionsBaseUrl(functions.app.options.projectId)}/api/verifyTagCheckout`
 
     fetch(url, {
       method: "POST",
@@ -64,7 +65,7 @@ export function useTokenAuth(
         setError(err.message ?? "Tag-Verifizierung fehlgeschlagen")
       })
       .finally(() => setLoading(false))
-  }, [picc, cmac])
+  }, [picc, cmac, functions])
 
   return { tokenUser, loading, error }
 }
