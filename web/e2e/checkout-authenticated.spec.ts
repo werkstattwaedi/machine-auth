@@ -44,8 +44,13 @@ test.describe("Authenticated checkout", () => {
     // Navigate to the sign-in link (redirects to /login as configured)
     await page.goto(signInCode!.oobLink)
 
-    // Wait for sign-in to complete, then navigate to checkout
-    await page.waitForLoadState("load")
+    // Wait for sign-in to complete — the app redirects authenticated users
+    // away from /login, so wait for navigation away from the OOB URL
+    await page.waitForURL((url) => !url.href.includes("oobCode"), {
+      timeout: 10_000,
+    })
+
+    // Navigate to checkout
     await page.goto("/checkout")
 
     // The person card should show pre-filled data (name split into first/last)

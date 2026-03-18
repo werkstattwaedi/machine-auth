@@ -281,6 +281,27 @@ async function seed() {
   });
   console.log("  Created config/pricing");
 
+  // --- Price Lists ---
+  await db.collection("price_lists").doc("00pricelist0holz0001").set({
+    name: "Holzwerkstatt MDF Platten",
+    items: [
+      "00catmat000000003110", // MDF 3mm
+      "00catmat000000003111", // MDF 4mm
+      "00catmat000000003112", // MDF 6mm
+      "00catmat000000003113", // MDF 8mm
+      "00catmat000000003114", // MDF 10mm
+      "00catmat000000003115", // MDF 12mm
+      "00catmat000000003116", // MDF 16mm
+      "00catmat000000003117", // MDF 19mm
+      "00catmat000000003118", // MDF 22mm
+    ],
+    footer: "Offene Werkstatt Wädenswil – Holzwerkstatt",
+    active: true,
+    modifiedBy: null,
+    modifiedAt: Timestamp.now(),
+  });
+  console.log("  Created 1 price list");
+
   // --- Sample open checkout with items for Mike ---
   const mikeRef = db.doc(`users/${ID.userMike}`);
   const checkoutRef = db.collection("checkouts").doc("00checkout0mike00001");

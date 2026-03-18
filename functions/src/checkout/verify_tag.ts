@@ -6,6 +6,7 @@
  */
 
 import { getFirestore } from "firebase-admin/firestore";
+import { getAuth } from "firebase-admin/auth";
 import * as logger from "firebase-functions/logger";
 import { decryptPICCData, verifyCMAC } from "../ntag/sdm_crypto";
 import { diversifyKey } from "../ntag/key_diversification";
@@ -34,6 +35,7 @@ export interface VerifyTagResponse {
   tokenId: string;
   userId: string;
   uid: string;  // Hex-encoded UID for debugging
+  customToken: string;  // Firebase custom token for client-side auth
   name?: string;
   email?: string;
   userType?: string;
@@ -126,11 +128,18 @@ export async function handleVerifyTagCheckout(
   const userDoc = await userRef.get();
   const userData = userDoc.exists ? userDoc.data() : undefined;
 
-  // Step 5: Return token and user information
+  // Step 5: Create Firebase custom token for client-side Firestore access.
+  // UID = user doc ID so security rules' isOwner() check works.
+  const customToken = await getAuth().createCustomToken(userId, {
+    tagCheckout: true,
+  });
+
+  // Step 6: Return token and user information
   return {
     tokenId,
     userId,
     uid: uidHex,
+    customToken,
     name: userData?.name ?? userData?.displayName,
     email: userData?.email,
     userType: userData?.userType,

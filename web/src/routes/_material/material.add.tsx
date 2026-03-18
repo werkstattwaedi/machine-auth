@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { where, addDoc, collection, doc, serverTimestamp, getDocs, query, documentId } from "firebase/firestore"
-import { CheckCircle, Loader2, Package, ArrowLeft } from "lucide-react"
+import { CheckCircle, Loader2, Package, ArrowLeft, LogIn } from "lucide-react"
 import { useState } from "react"
 import type { CatalogItem, PriceList } from "@/lib/workshop-config"
 import { getShortUnit } from "@/lib/workshop-config"
@@ -33,7 +33,7 @@ export const Route = createFileRoute("/_material/material/add")({
 function MaterialAddPage() {
   const db = useDb()
   const { id, priceList: priceListId } = Route.useSearch()
-  const { userDoc } = useAuth()
+  const { user, userDoc, loading: authLoading } = useAuth()
 
   const { data: priceListDoc, loading: priceListLoading } = useDocument<PriceList>(
     priceListId ? `price_lists/${priceListId}` : null,
@@ -60,6 +60,24 @@ function MaterialAddPage() {
   const [weightG, setWeightG] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [success, setSuccess] = useState(false)
+
+  // Require authentication for all material operations
+  if (authLoading) return <PageLoading />
+  if (!user || !userDoc) {
+    return (
+      <Card>
+        <CardContent className="pt-6 text-center space-y-4">
+          <LogIn className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
+          <p className="text-sm text-muted-foreground">
+            Bitte melde dich an, um Material zu erfassen.
+          </p>
+          <Link to="/login">
+            <Button className="w-full">Anmelden</Button>
+          </Link>
+        </CardContent>
+      </Card>
+    )
+  }
 
   // Price list item picker: show when priceList is set but id is not
   if (priceListId && !id) {
@@ -149,19 +167,6 @@ function MaterialAddPage() {
           <Package className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
           <p className="text-sm text-muted-foreground">
             Material nicht gefunden. Bitte QR-Code erneut scannen.
-          </p>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  if (!userDoc) {
-    return (
-      <Card>
-        <CardContent className="pt-6 text-center space-y-4">
-          <Package className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
-          <p className="text-sm text-muted-foreground">
-            Bitte melde dich an, um Material zu erfassen.
           </p>
         </CardContent>
       </Card>

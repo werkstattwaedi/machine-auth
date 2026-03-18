@@ -4,6 +4,8 @@
 import { useState, useRef, useEffect } from "react"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { z } from "zod"
+import { signOut } from "firebase/auth"
+import { useFirebaseAuth } from "@/lib/firebase-context"
 import { CheckoutWizard } from "@/components/checkout/checkout-wizard"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 
@@ -19,9 +21,19 @@ export const Route = createFileRoute("/_checkout/checkout")({
 })
 
 function CheckoutPage() {
+  const auth = useFirebaseAuth()
   const { picc, cmac, kiosk } = Route.useSearch()
   const isKiosk = kiosk !== undefined
   const navigate = useNavigate()
+
+  // Clear any stale Firebase Auth session on mount (e.g. kiosk chrome
+  // "neuer checkout" navigates here without picc/cmac — the previous
+  // tag session persists in IndexedDB and must be wiped)
+  useEffect(() => {
+    if (isKiosk && !picc && !cmac) {
+      signOut(auth)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Track the "accepted" params that the wizard is actually using
   const [activeParams, setActiveParams] = useState<{
