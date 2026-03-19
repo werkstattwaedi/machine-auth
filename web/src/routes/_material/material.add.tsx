@@ -13,7 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { where, addDoc, collection, doc, serverTimestamp, getDocs, query, documentId } from "firebase/firestore"
+import { where, addDoc, collection, doc, serverTimestamp, getDocs, query, documentId, writeBatch } from "firebase/firestore"
 import { CheckCircle, Loader2, Package, ArrowLeft, LogIn } from "lucide-react"
 import { useState } from "react"
 import type { CatalogItem, PriceList } from "@/lib/workshop-config"
@@ -206,7 +206,10 @@ function MaterialAddPage() {
       const coSnap = await getDocs(coQuery)
       let checkoutId: string
       if (coSnap.empty) {
-        const coRef = await addDoc(collection(db, "checkouts"), {
+        // Create checkout + item atomically
+        const batch = writeBatch(db)
+        const coRef = doc(collection(db, "checkouts"))
+        batch.set(coRef, {
           userId: uRef,
           status: "open",
           usageType: "regular",
@@ -216,23 +219,37 @@ function MaterialAddPage() {
           modifiedBy: null,
           modifiedAt: serverTimestamp(),
         })
+        const itemRef = doc(collection(db, "checkouts", coRef.id, "items"))
+        batch.set(itemRef, {
+          workshop: catalogItem.workshops[0] ?? "",
+          description: catalogItem.name,
+          origin: "qr",
+          catalogId: doc(db, "catalog", id),
+          pricingModel: catalogItem.pricingModel ?? null,
+          created: serverTimestamp(),
+          quantity: computedQty,
+          unitPrice,
+          totalPrice,
+          formInputs,
+        })
+        await batch.commit()
         checkoutId = coRef.id
       } else {
         checkoutId = coSnap.docs[0].id
+        // Add item to existing checkout
+        await addDoc(collection(db, "checkouts", checkoutId, "items"), {
+          workshop: catalogItem.workshops[0] ?? "",
+          description: catalogItem.name,
+          origin: "qr",
+          catalogId: doc(db, "catalog", id),
+          pricingModel: catalogItem.pricingModel ?? null,
+          created: serverTimestamp(),
+          quantity: computedQty,
+          unitPrice,
+          totalPrice,
+          formInputs,
+        })
       }
-
-      // Add item to checkout
-      await addDoc(collection(db, "checkouts", checkoutId, "items"), {
-        workshop: catalogItem.workshops[0] ?? "",
-        description: catalogItem.name,
-        origin: "qr",
-        catalogId: doc(db, "catalog", id),
-        created: serverTimestamp(),
-        quantity: computedQty,
-        unitPrice,
-        totalPrice,
-        formInputs,
-      })
       setSuccess(true)
     } finally {
       setSubmitting(false)

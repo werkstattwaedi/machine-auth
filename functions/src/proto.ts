@@ -23,9 +23,3 @@ export {
   UploadUsageRequest,
   UploadUsageResponse,
 } from "./proto/firebase_rpc/usage.js";
-
-// Re-export personalization types
-export {
-  KeyDiversificationRequest,
-  KeyDiversificationResponse,
-} from "./proto/firebase_rpc/personalization.js";

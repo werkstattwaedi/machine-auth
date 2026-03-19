@@ -29,7 +29,7 @@ service cloud.firestore {
 
     // Users collection (doc ID = Firebase Auth UID)
     match /users/{userId} {
-      allow read: if isSignedIn();
+      allow read: if isAdmin() || (isSignedIn() && userId == request.auth.uid);
 
       // Allow creating own user doc during self-registration
       allow create: if isSignedIn() && userId == request.auth.uid &&
@@ -54,7 +54,7 @@ service cloud.firestore {
 
     // Tokens collection
     match /tokens/{tokenId} {
-      allow read: if isSignedIn();
+      allow read: if isAdmin();
       allow write: if isAdmin();
     }
 
@@ -70,18 +70,11 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Sessions collection
-    match /sessions/{sessionId} {
-      allow read: if isSignedIn();
-      allow create, update: if isAdmin() &&
-                               isDocumentReference(request.resource.data.userId, 'users') &&
-                               isDocumentReference(request.resource.data.tokenId, 'tokens');
-      allow delete: if isAdmin();
-    }
-
     // Machine usage (from MaCo terminals)
     match /usage_machine/{usageId} {
-      allow read: if isSignedIn();
+      allow read: if isAdmin() ||
+                     (isSignedIn() && resource.data.userId ==
+                       /databases/$(database)/documents/users/$(request.auth.uid));
       allow write: if isAdmin();
     }
 
@@ -99,8 +92,13 @@ service cloud.firestore {
 
     // Checkouts (shopping cart)
     match /checkouts/{checkoutId} {
-      // Anonymous can create (walk-in checkout)
-      allow create: if true;
+      // Anonymous can create (walk-in checkout) with validated fields
+      allow create: if true
+        && request.resource.data.status == 'open'
+        && request.resource.data.keys().hasOnly([
+             'userId', 'status', 'usageType', 'created',
+             'workshopsVisited', 'persons', 'modifiedBy', 'modifiedAt'
+           ]);
       allow read: if isSignedIn();
       // Owner can update their own open checkout, admin can update any
       allow update: if isAdmin() ||

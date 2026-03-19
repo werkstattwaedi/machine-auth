@@ -3,6 +3,7 @@
 
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { useCollection } from "@/lib/firestore"
+import { orderBy, limit } from "firebase/firestore"
 import { useLookup, resolveRef } from "@/lib/lookup"
 import { PageLoading } from "@/components/page-loading"
 import { DataTable, ColumnHeader } from "@/components/data-table"
@@ -34,7 +35,11 @@ interface CheckoutDoc {
 }
 
 function CheckoutsPage() {
-  const { data, loading } = useCollection<CheckoutDoc>("checkouts")
+  const { data, loading } = useCollection<CheckoutDoc>(
+    "checkouts",
+    orderBy("created", "desc"),
+    limit(100),
+  )
   const { users } = useLookup()
 
   const columns = useMemo<ColumnDef<CheckoutDoc & { id: string }>[]>(

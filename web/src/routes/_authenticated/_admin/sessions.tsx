@@ -3,6 +3,7 @@
 
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { useCollection } from "@/lib/firestore"
+import { orderBy, limit } from "firebase/firestore"
 import { useLookup, resolveRef } from "@/lib/lookup"
 import { PageLoading } from "@/components/page-loading"
 import { DataTable, ColumnHeader } from "@/components/data-table"
@@ -27,7 +28,11 @@ interface UsageMachineDoc {
 }
 
 function SessionsPage() {
-  const { data, loading } = useCollection<UsageMachineDoc>("usage_machine")
+  const { data, loading } = useCollection<UsageMachineDoc>(
+    "usage_machine",
+    orderBy("startTime", "desc"),
+    limit(200),
+  )
   const { machines, users } = useLookup()
 
   const columns = useMemo<ColumnDef<UsageMachineDoc & { id: string }>[]>(
