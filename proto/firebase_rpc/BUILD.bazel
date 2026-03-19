@@ -47,16 +47,3 @@ nanopb_proto_library(
     name = "usage_nanopb",
     deps = [":usage_proto"],
 )
-
-# Tag personalization / key diversification
-proto_library(
-    name = "personalization_proto",
-    srcs = ["personalization.proto"],
-    strip_import_prefix = "/proto",
-    deps = ["//proto:common_proto"],
-)
-
-nanopb_proto_library(
-    name = "personalization_nanopb",
-    deps = [":personalization_proto"],
-)

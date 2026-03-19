@@ -38,6 +38,11 @@ export async function handleUploadUsage(
   const db = admin.firestore();
   const machineRef = db.collection("machine").doc(machineId);
 
+  // Load machine doc to get workshop for denormalization
+  const machineDoc = await machineRef.get();
+  const machineData = machineDoc.exists ? machineDoc.data() as MachineEntity : null;
+  const workshop = machineData?.workshop ?? null;
+
   // Create usage_machine records from device-uploaded history
   const batch = db.batch();
   const usageRefs: admin.firestore.DocumentReference[] = [];
@@ -67,13 +72,14 @@ export async function handleUploadUsage(
         ? JSON.stringify({ reason: record.reason.reason.$case })
         : null,
       checkoutItemRef: null, // Will be set by accumulation logic
+      workshop,
     });
   }
 
   await batch.commit();
 
   // Accumulate usage into checkout items
-  await accumulateUsageIntoCheckout(db, machineRef, request);
+  await accumulateUsageIntoCheckout(db, machineRef, machineData, request);
 
   logger.info("Successfully processed usage history", {
     totalRecords: request.history.records?.length || 0,
@@ -96,16 +102,13 @@ export async function handleUploadUsage(
 async function accumulateUsageIntoCheckout(
   db: admin.firestore.Firestore,
   machineRef: admin.firestore.DocumentReference,
+  machineData: MachineEntity | null,
   request: UploadUsageRequest,
 ): Promise<void> {
-  // Load machine doc to get catalog template and workshop
-  const machineDoc = await machineRef.get();
-  if (!machineDoc.exists) {
+  if (!machineData) {
     logger.warn("Machine not found for accumulation", { machineId: machineRef.id });
     return;
   }
-
-  const machineData = machineDoc.data() as MachineEntity;
   if (!machineData.checkoutTemplateId) {
     logger.info("Machine has no checkoutTemplateId, skipping accumulation", {
       machineId: machineRef.id,
@@ -225,12 +228,14 @@ async function accumulateForUser(
   const machineRefs = machinesWithTemplate.docs.map(d => d.ref);
 
   // Query all unlinked usage for this user across machines sharing this catalog template
+  // Firestore 'in' operator supports max 30 values per query
   const unlinkedDocs: admin.firestore.QueryDocumentSnapshot[] = [];
   let totalHours = 0;
-  for (const mRef of machineRefs) {
+  for (let i = 0; i < machineRefs.length; i += 30) {
+    const chunk = machineRefs.slice(i, i + 30);
     const usageQuery = await db.collection("usage_machine")
       .where("userId", "==", userRef)
-      .where("machine", "==", mRef)
+      .where("machine", "in", chunk)
       .where("checkoutItemRef", "==", null)
       .get();
 

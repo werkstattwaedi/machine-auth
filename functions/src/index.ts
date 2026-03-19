@@ -15,15 +15,10 @@ import {
   UploadUsageRequest,
   UploadUsageResponse,
 } from "./proto/firebase_rpc/usage.js";
-import {
-  KeyDiversificationRequest,
-  KeyDiversificationResponse,
-} from "./proto/firebase_rpc/personalization.js";
 import { handleTerminalCheckin } from "./auth/handle_terminal_checkin";
 import { handleAuthenticateTag } from "./auth/handle_authenticate_tag";
 import { handleCompleteTagAuth } from "./auth/handle_complete_tag_auth";
 import { handleUploadUsage } from "./session/handle_upload_usage";
-import { handleKeyDiversification } from "./personalization/handle_key_diversification";
 import { handleVerifyTagCheckout } from "./checkout/verify_tag";
 import { BinaryWriter } from "@bufbuild/protobuf/wire";
 
@@ -156,27 +151,11 @@ export const uploadUsageHandler = async (
   }
 };
 
-// === Personalization Handler ===
-
-export const keyDiversificationHandler = async (
-  req: express.Request,
-  res: express.Response
-) => {
-  try {
-    const request = decodeProtoRequest(req, KeyDiversificationRequest.decode);
-    const response = handleKeyDiversification(request, (req as any).config);
-    sendProtoResponse(req, res, response, KeyDiversificationResponse.encode);
-  } catch (error: any) {
-    sendHttpError(req, res, error);
-  }
-};
-
 // Register routes
 app.post("/terminalCheckin", terminalCheckinHandler);
 app.post("/authenticateTag", authenticateTagHandler);
 app.post("/completeTagAuth", completeTagAuthHandler);
 app.post("/uploadUsage", uploadUsageHandler);
-app.post("/personalize", keyDiversificationHandler);
 
 function decodeProtoRequest<T>(
   req: express.Request,

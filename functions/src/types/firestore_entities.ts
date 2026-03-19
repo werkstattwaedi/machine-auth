@@ -21,25 +21,6 @@ export interface TokenEntity {
   label: string;
 }
 
-export interface SessionEntity {
-  userId: DocumentReference; // Reference to /users/{userId}
-  tokenId: DocumentReference; // Reference to /tokens/{tokenId}
-  startTime: Timestamp;
-  rndA?: Uint8Array; // Cloud-generated random bytes for authentication
-  usage: UsageRecordEntity[];
-  closed?: {
-    time: Timestamp;
-    metadata: string; // JSON string
-  };
-}
-
-export interface UsageRecordEntity {
-  machine: DocumentReference; // Reference to /machine/{machineId}
-  checkIn: Timestamp;
-  checkOut: Timestamp;
-  metadata: string; // JSON string
-}
-
 export interface PermissionEntity {
   name: string;
 }
@@ -84,6 +65,7 @@ export interface UsageMachineEntity {
   endTime: Timestamp;
   endReason?: string; // JSON of CheckOutReason
   checkoutItemRef?: DocumentReference; // Reference to /checkouts/{checkoutId}/items/{itemId} when billed
+  workshop?: string | null; // Denormalized from machine
 }
 
 // --- Catalog ---
