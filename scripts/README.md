@@ -35,7 +35,7 @@ Download from Firebase Console > Project Settings > Service Accounts. Set path i
 **Option B: Application Default Credentials (local dev)**
 ```bash
 gcloud auth application-default login
-gcloud config set project oww-maschinenfreigabe
+gcloud config set project oww-maco
 ```
 
 ## Usage

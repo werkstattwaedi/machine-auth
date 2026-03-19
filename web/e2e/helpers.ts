@@ -4,7 +4,7 @@
 import { initializeApp, getApps, type App } from "firebase-admin/app"
 import { getFirestore, type Firestore } from "firebase-admin/firestore"
 
-const PROJECT_ID = "oww-maschinenfreigabe"
+const PROJECT_ID = "oww-maco"
 
 // E2E emulator ports — must match playwright.config.ts and firebase.e2e.json
 export const E2E_PORTS = {

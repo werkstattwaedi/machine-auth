@@ -24,7 +24,7 @@ const MASTER_KEY = "c025f541727ecd8b6eb92055c88a2a70"
 const SYSTEM_NAME = "OwwMachineAuth"
 const NFC_TAG_UID = "04c339aa1e1890"
 
-const PROJECT_ID = "oww-maschinenfreigabe"
+const PROJECT_ID = "oww-maco"
 const AUTH_EMULATOR = `http://127.0.0.1:${E2E_PORTS.auth}`
 
 // Test user constants

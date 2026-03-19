@@ -33,7 +33,7 @@ const FUNCTIONS_REGION = "us-central1"
 function functionsBaseUrl(projectId: string | undefined): string {
   if (import.meta.env.DEV) {
     const port = import.meta.env.VITE_EMULATOR_FUNCTIONS_PORT || "5001"
-    return `http://127.0.0.1:${port}/oww-maschinenfreigabe/${FUNCTIONS_REGION}`
+    return `http://127.0.0.1:${port}/oww-maco/${FUNCTIONS_REGION}`
   }
   return `https://${FUNCTIONS_REGION}-${projectId}.cloudfunctions.net`
 }

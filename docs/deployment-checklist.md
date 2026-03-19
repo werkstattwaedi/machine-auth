@@ -5,7 +5,7 @@ Steps to deploy the full system to production.
 ## Prerequisites
 
 - Firebase CLI authenticated: `firebase login`
-- Correct project selected: `firebase use oww-maschinenfreigabe`
+- Correct project selected: `firebase use oww-maco`
 
 ## 1. Secrets
 
@@ -63,7 +63,7 @@ npm run build
 firebase deploy --only hosting
 ```
 
-Verify: Visit `https://oww-maschinenfreigabe.web.app/`
+Verify: Visit `https://oww-maco.web.app/`
 
 ## 7. Full Deploy (all at once)
 
@@ -85,5 +85,5 @@ The gateway runs separately (not on Firebase). See `maco_gateway/` for deploymen
 
 Required args:
 - `--master-key`: ASCON master key (same as `DIVERSIFICATION_MASTER_KEY`)
-- `--firebase-url`: Production URL (`https://us-central1-oww-maschinenfreigabe.cloudfunctions.net/api`)
+- `--firebase-url`: Production URL (`https://us-central1-oww-maco.cloudfunctions.net/api`)
 - `--gateway-api-key`: Must match `GATEWAY_API_KEY` secret in Firebase

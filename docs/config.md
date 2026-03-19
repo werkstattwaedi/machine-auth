@@ -71,7 +71,7 @@ The `./pw console` command automatically detects `/dev/particle_*` devices.
 
 1. Go to [Firebase Console](https://console.firebase.google.com/)
 2. Click **"Add project"**
-3. Enter project name: `oww-maschinenfreigabe` (or your preferred name)
+3. Enter project name: `oww-maco` (or your preferred name)
 4. Enable Google Analytics (optional)
 5. Create project
 
@@ -128,7 +128,7 @@ Set using Firebase CLI or Console:
 firebase login
 
 # Set project
-firebase use oww-maschinenfreigabe
+firebase use oww-maco
 
 # Set secrets (will prompt for values)
 firebase functions:secrets:set DIVERSIFICATION_MASTER_KEY
@@ -157,7 +157,7 @@ Set using `.env` files in `functions/` directory:
 DIVERSIFICATION_SYSTEM_NAME=OwwMachineAuth
 ```
 
-**Production** (`functions/.env.oww-maschinenfreigabe`):
+**Production** (`functions/.env.oww-maco`):
 ```bash
 DIVERSIFICATION_SYSTEM_NAME=OwwMachineAuth
 ```
@@ -211,9 +211,9 @@ Emulator connections are automatic — `web/src/lib/firebase.ts` detects `import
 
 ```bash
 VITE_FIREBASE_API_KEY=YOUR_FIREBASE_API_KEY
-VITE_FIREBASE_AUTH_DOMAIN=oww-maschinenfreigabe.firebaseapp.com
-VITE_FIREBASE_PROJECT_ID=oww-maschinenfreigabe
-VITE_FIREBASE_STORAGE_BUCKET=oww-maschinenfreigabe.firebasestorage.app
+VITE_FIREBASE_AUTH_DOMAIN=oww-maco.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=oww-maco
+VITE_FIREBASE_STORAGE_BUCKET=oww-maco.firebasestorage.app
 VITE_FIREBASE_MESSAGING_SENDER_ID=YOUR_MESSAGING_SENDER_ID
 VITE_FIREBASE_APP_ID=YOUR_APP_ID
 ```
@@ -257,7 +257,7 @@ PARTICLE_PRODUCT_ID="your-product-id-or-slug"
 PARTICLE_TOKEN="your-particle-token-here"
 
 # Firebase project ID
-FIREBASE_PROJECT_ID="oww-maschinenfreigabe"
+FIREBASE_PROJECT_ID="oww-maco"
 
 # Path to Firebase service account key (OPTIONAL)
 # If not set, uses Application Default Credentials
@@ -277,7 +277,7 @@ Choose **one** method:
 
 ```bash
 gcloud auth application-default login
-gcloud config set project oww-maschinenfreigabe
+gcloud config set project oww-maco
 ```
 
 Then **omit** `GOOGLE_APPLICATION_CREDENTIALS` from `.env`.
@@ -319,7 +319,7 @@ This is distinct from the Firebase Functions secrets:
 
 ```bash
 # Ensure correct project
-gcloud config set project oww-maschinenfreigabe
+gcloud config set project oww-maco
 
 # Create the secret
 echo -n "YOUR_HEX_KEY" | gcloud secrets create GATEWAY_ASCON_MASTER_KEY --data-file=-
@@ -401,7 +401,7 @@ The firmware sends requests to Firebase Functions via Particle webhooks.
 ```json
 {
   "event": "terminalRequest",
-  "url": "https://us-central1-oww-maschinenfreigabe.cloudfunctions.net/api",
+  "url": "https://us-central1-oww-maco.cloudfunctions.net/api",
   "requestType": "POST",
   "noDefaults": true,
   "rejectUnauthorized": true,

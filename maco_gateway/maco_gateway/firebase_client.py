@@ -53,7 +53,7 @@ class FirebaseClient:
 
         Args:
             base_url: Base URL for Firebase functions
-                (e.g., https://us-central1-oww-maschinenfreigabe.cloudfunctions.net/api)
+                (e.g., https://us-central1-oww-maco.cloudfunctions.net/api)
             api_key: Gateway API key for authorization
             timeout: Request timeout in seconds
         """

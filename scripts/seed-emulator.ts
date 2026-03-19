@@ -21,7 +21,7 @@ import { getFirestore, Timestamp } from "firebase-admin/firestore";
 process.env.FIRESTORE_EMULATOR_HOST ??= "127.0.0.1:8080";
 process.env.FIREBASE_AUTH_EMULATOR_HOST ??= "127.0.0.1:9099";
 
-initializeApp({ projectId: "oww-maschinenfreigabe" });
+initializeApp({ projectId: "oww-maco" });
 const db = getFirestore();
 const auth = getAuth();
 

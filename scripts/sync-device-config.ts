@@ -214,7 +214,7 @@ Prerequisites:
 
   if (!prod) {
     process.env.FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080";
-    process.env.FIREBASE_PROJECT_ID = "oww-maschinenfreigabe";
+    process.env.FIREBASE_PROJECT_ID = "oww-maco";
     console.log("Using local emulator (pass --prod for production)\n");
   } else {
     // Clear emulator host in case .env.local set it

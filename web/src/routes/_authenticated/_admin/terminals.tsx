@@ -46,7 +46,7 @@ function TerminalsPage() {
 
       // Fetch devices from Particle Cloud via admin API
       const resp = await fetch(
-        `${import.meta.env.DEV ? "http://127.0.0.1:5001/oww-maschinenfreigabe/us-central1" : ""}/admin/particle/devices`,
+        `${import.meta.env.DEV ? "http://127.0.0.1:5001/oww-maco/us-central1" : ""}/admin/particle/devices`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -65,7 +65,7 @@ function TerminalsPage() {
       // Import each new device
       for (const device of newDevices) {
         await fetch(
-          `${import.meta.env.DEV ? "http://127.0.0.1:5001/oww-maschinenfreigabe/us-central1" : ""}/admin/particle/import-device`,
+          `${import.meta.env.DEV ? "http://127.0.0.1:5001/oww-maco/us-central1" : ""}/admin/particle/import-device`,
           {
             method: "POST",
             headers: {

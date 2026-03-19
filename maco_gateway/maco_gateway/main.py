@@ -365,7 +365,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--firebase-url",
-        default="https://us-central1-oww-maschinenfreigabe.cloudfunctions.net/api",
+        default="https://us-central1-oww-maco.cloudfunctions.net/api",
         help="Firebase Cloud Functions URL",
     )
     parser.add_argument(

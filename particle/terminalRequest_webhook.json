@@ -1,7 +1,7 @@
 {
   "name": "terminalRequest",
   "event": "terminalRequest",
-  "url": "https://us-central1-oww-maschinenfreigabe.cloudfunctions.net/api/{{{method}}}",
+  "url": "https://us-central1-oww-maco.cloudfunctions.net/api/{{{method}}}",
   "requestType": "POST",
   "json": {
     "id": "{{{id}}}",
