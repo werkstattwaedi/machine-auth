@@ -31,9 +31,12 @@ cc_library(
 # SDM constants - NDEF template and SDM configuration bytes
 cc_library(
     name = "sdm_constants",
+    srcs = ["sdm_constants.cc"],
     hdrs = ["sdm_constants.h"],
     deps = [
+        "@pigweed//pw_assert:check",
         "@pigweed//pw_bytes",
+        "@pigweed//pw_result",
     ],
 )
 
@@ -60,6 +63,9 @@ cc_library(
 cc_library(
     name = "personalization_keys",
     hdrs = ["personalization_keys.h"],
+    deps = [
+        "@pigweed//pw_string",
+    ],
 )
 
 # Key provisioning - idempotent key changes on NTAG424 tags

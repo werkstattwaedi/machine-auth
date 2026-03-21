@@ -5,8 +5,8 @@
 
 #include <array>
 #include <cstddef>
-#include <cstring>
-#include <string_view>
+
+#include "pw_string/string.h"
 
 namespace maco::personalize {
 
@@ -24,12 +24,7 @@ struct PersonalizationKeys {
 
   /// SDM base URL (without "https://", e.g. "id.werkstattwaedi.ch/").
   /// The NDEF template will be: https://<sdm_base_url>?picc=...&cmac=...
-  char sdm_base_url[kMaxSdmBaseUrlLength + 1] = {};
-  size_t sdm_base_url_length = 0;
-
-  std::string_view sdm_base_url_view() const {
-    return {sdm_base_url, sdm_base_url_length};
-  }
+  pw::InlineString<kMaxSdmBaseUrlLength> sdm_base_url;
 };
 
 }  // namespace maco::personalize
