@@ -180,12 +180,19 @@
     "{userId}": { // Doc ID = Firebase Auth UID
       "created": "timestamp",
       "email": "string", // User email
-      "displayName": "string", // Display name (e.g., "MikeS")
-      "name": "string", // Full name (e.g., "Michael Schneider")
+      "displayName": "string | null", // Optional display name / nickname (e.g., "MikeS"); derived from firstName+lastName if absent
+      "firstName": "string", // First name (e.g., "Michael")
+      "lastName": "string", // Last name (e.g., "Schneider")
       "permissions": ["DocumentReference"], // Array of DocumentReferences to /permission/{permissionId}
       "roles": ["vereinsmitglied|admin"],
       "termsAcceptedAt": "timestamp | null", // When user accepted terms of service
-      "userType": "erwachsen | kind | firma" // User type for pricing
+      "userType": "erwachsen | kind | firma", // User type for pricing
+      "billingAddress": { // Required when userType == "firma" (Rechnungsadresse)
+        "company": "string", // Company name (required)
+        "street": "string",
+        "zip": "string",
+        "city": "string"
+      } // | null
     }
   }
 }

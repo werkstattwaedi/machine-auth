@@ -18,8 +18,8 @@ import { Route as AuthenticatedIndexRouteImport } from "./routes/_authenticated/
 import { Route as ReportReportRouteImport } from "./routes/_report/report"
 import { Route as CheckoutCheckoutRouteImport } from "./routes/_checkout/checkout"
 import { Route as AuthenticatedUsageRouteImport } from "./routes/_authenticated/usage"
-import { Route as AuthenticatedTermsRouteImport } from "./routes/_authenticated/terms"
 import { Route as AuthenticatedProfileRouteImport } from "./routes/_authenticated/profile"
+import { Route as AuthenticatedCompleteProfileRouteImport } from "./routes/_authenticated/complete-profile"
 import { Route as AuthenticatedAdminRouteImport } from "./routes/_authenticated/_admin"
 import { Route as MaterialMaterialAddRouteImport } from "./routes/_material/material.add"
 import { Route as AuthenticatedAdminUsersRouteImport } from "./routes/_authenticated/_admin/users"
@@ -83,16 +83,17 @@ const AuthenticatedUsageRoute = AuthenticatedUsageRouteImport.update({
   path: "/usage",
   getParentRoute: () => AuthenticatedRoute,
 } as any)
-const AuthenticatedTermsRoute = AuthenticatedTermsRouteImport.update({
-  id: "/terms",
-  path: "/terms",
-  getParentRoute: () => AuthenticatedRoute,
-} as any)
 const AuthenticatedProfileRoute = AuthenticatedProfileRouteImport.update({
   id: "/profile",
   path: "/profile",
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedCompleteProfileRoute =
+  AuthenticatedCompleteProfileRouteImport.update({
+    id: "/complete-profile",
+    path: "/complete-profile",
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
   id: "/_admin",
   getParentRoute: () => AuthenticatedRoute,
@@ -218,8 +219,8 @@ const AuthenticatedAdminMachinesMachineIdRoute =
 export interface FileRoutesByFullPath {
   "/": typeof AuthenticatedIndexRoute
   "/login": typeof LoginRoute
+  "/complete-profile": typeof AuthenticatedCompleteProfileRoute
   "/profile": typeof AuthenticatedProfileRoute
-  "/terms": typeof AuthenticatedTermsRoute
   "/usage": typeof AuthenticatedUsageRoute
   "/checkout": typeof CheckoutCheckoutRoute
   "/report": typeof ReportReportRoute
@@ -247,8 +248,8 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   "/": typeof AuthenticatedIndexRoute
   "/login": typeof LoginRoute
+  "/complete-profile": typeof AuthenticatedCompleteProfileRoute
   "/profile": typeof AuthenticatedProfileRoute
-  "/terms": typeof AuthenticatedTermsRoute
   "/usage": typeof AuthenticatedUsageRoute
   "/checkout": typeof CheckoutCheckoutRoute
   "/report": typeof ReportReportRoute
@@ -276,8 +277,8 @@ export interface FileRoutesById {
   "/_report": typeof ReportRouteWithChildren
   "/login": typeof LoginRoute
   "/_authenticated/_admin": typeof AuthenticatedAdminRouteWithChildren
+  "/_authenticated/complete-profile": typeof AuthenticatedCompleteProfileRoute
   "/_authenticated/profile": typeof AuthenticatedProfileRoute
-  "/_authenticated/terms": typeof AuthenticatedTermsRoute
   "/_authenticated/usage": typeof AuthenticatedUsageRoute
   "/_checkout/checkout": typeof CheckoutCheckoutRoute
   "/_report/report": typeof ReportReportRoute
@@ -308,8 +309,8 @@ export interface FileRouteTypes {
   fullPaths:
     | "/"
     | "/login"
+    | "/complete-profile"
     | "/profile"
-    | "/terms"
     | "/usage"
     | "/checkout"
     | "/report"
@@ -337,8 +338,8 @@ export interface FileRouteTypes {
   to:
     | "/"
     | "/login"
+    | "/complete-profile"
     | "/profile"
-    | "/terms"
     | "/usage"
     | "/checkout"
     | "/report"
@@ -365,8 +366,8 @@ export interface FileRouteTypes {
     | "/_report"
     | "/login"
     | "/_authenticated/_admin"
+    | "/_authenticated/complete-profile"
     | "/_authenticated/profile"
-    | "/_authenticated/terms"
     | "/_authenticated/usage"
     | "/_checkout/checkout"
     | "/_report/report"
@@ -466,18 +467,18 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthenticatedUsageRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    "/_authenticated/terms": {
-      id: "/_authenticated/terms"
-      path: "/terms"
-      fullPath: "/terms"
-      preLoaderRoute: typeof AuthenticatedTermsRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
     "/_authenticated/profile": {
       id: "/_authenticated/profile"
       path: "/profile"
       fullPath: "/profile"
       preLoaderRoute: typeof AuthenticatedProfileRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    "/_authenticated/complete-profile": {
+      id: "/_authenticated/complete-profile"
+      path: "/complete-profile"
+      fullPath: "/complete-profile"
+      preLoaderRoute: typeof AuthenticatedCompleteProfileRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     "/_authenticated/_admin": {
@@ -749,16 +750,16 @@ const AuthenticatedAdminRouteWithChildren =
 
 interface AuthenticatedRouteChildren {
   AuthenticatedAdminRoute: typeof AuthenticatedAdminRouteWithChildren
+  AuthenticatedCompleteProfileRoute: typeof AuthenticatedCompleteProfileRoute
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
-  AuthenticatedTermsRoute: typeof AuthenticatedTermsRoute
   AuthenticatedUsageRoute: typeof AuthenticatedUsageRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedAdminRoute: AuthenticatedAdminRouteWithChildren,
+  AuthenticatedCompleteProfileRoute: AuthenticatedCompleteProfileRoute,
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
-  AuthenticatedTermsRoute: AuthenticatedTermsRoute,
   AuthenticatedUsageRoute: AuthenticatedUsageRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
 }

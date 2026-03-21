@@ -24,7 +24,8 @@ interface CreateUserDialogProps {
 
 interface CreateUserFormValues {
   displayName: string
-  name: string
+  firstName: string
+  lastName: string
   email: string
 }
 
@@ -32,7 +33,7 @@ export function CreateUserDialog({ open, onOpenChange }: CreateUserDialogProps) 
   const functions = useFunctions()
   const [loading, setLoading] = useState(false)
   const { register, handleSubmit, reset } = useForm<CreateUserFormValues>({
-    defaultValues: { displayName: "", name: "", email: "" },
+    defaultValues: { displayName: "", firstName: "", lastName: "", email: "" },
   })
 
   const onSubmit = async (values: CreateUserFormValues) => {
@@ -57,13 +58,19 @@ export function CreateUserDialog({ open, onOpenChange }: CreateUserDialogProps) 
           <DialogTitle>Benutzer erstellen</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="create-displayName">Anzeigename</Label>
-            <Input id="create-displayName" {...register("displayName", { required: true })} />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="create-firstName">Vorname</Label>
+              <Input id="create-firstName" {...register("firstName", { required: true })} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="create-lastName">Nachname</Label>
+              <Input id="create-lastName" {...register("lastName", { required: true })} />
+            </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="create-name">Vollständiger Name</Label>
-            <Input id="create-name" {...register("name")} />
+            <Label htmlFor="create-displayName">Anzeigename (optional)</Label>
+            <Input id="create-displayName" placeholder="z.B. MikeS" {...register("displayName")} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="create-email">E-Mail</Label>

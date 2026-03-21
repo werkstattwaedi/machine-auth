@@ -26,15 +26,25 @@ import {
 } from "firebase/firestore"
 import { useDb, useFirebaseAuth } from "./firebase-context"
 
+export interface BillingAddress {
+  company: string
+  street: string
+  zip: string
+  city: string
+}
+
 export interface UserDoc {
   id: string
-  displayName: string
-  name: string
+  displayName: string // Derived from firstName+lastName if not set in Firestore
+  rawDisplayName: string | null // The actual Firestore value (null if not explicitly set)
+  firstName: string
+  lastName: string
   email?: string
   roles: string[]
   permissions: string[] // permission doc IDs (resolved from refs)
   termsAcceptedAt?: { toDate(): Date } | null
   userType?: string // "erwachsen" | "kind" | "firma"
+  billingAddress?: BillingAddress | null
 }
 
 interface AuthContextValue {
@@ -85,10 +95,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         const data = docSnap.data()
         const roles: string[] = data.roles ?? []
+        const firstName = data.firstName ?? ""
+        const lastName = data.lastName ?? ""
+        const rawDisplayName: string | null = data.displayName || null
         setUserDoc({
           id: docSnap.id,
-          displayName: data.displayName ?? "",
-          name: data.name ?? "",
+          displayName: rawDisplayName || `${firstName} ${lastName}`.trim() || "",
+          rawDisplayName,
+          firstName,
+          lastName,
           email: data.email,
           roles,
           permissions: (data.permissions ?? []).map(
@@ -96,6 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           ),
           termsAcceptedAt: data.termsAcceptedAt ?? null,
           userType: data.userType ?? "erwachsen",
+          billingAddress: data.billingAddress ?? null,
         })
 
         // If user doc says admin but token doesn't have the claim,
@@ -183,12 +199,14 @@ async function handleSignIn(db: Firestore, user: User): Promise<void> {
   // Create new user document with Auth UID as doc ID
   await setDoc(userDocRef, {
     email: user.email,
-    displayName: user.displayName || "New User",
-    name: "",
+    displayName: null,
+    firstName: "",
+    lastName: "",
     created: serverTimestamp(),
     roles: ["vereinsmitglied"],
     permissions: [],
     termsAcceptedAt: null,
     userType: "erwachsen",
+    billingAddress: null,
   })
 }

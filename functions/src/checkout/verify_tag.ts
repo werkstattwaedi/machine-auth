@@ -36,7 +36,8 @@ export interface VerifyTagResponse {
   userId: string;
   uid: string;  // Hex-encoded UID for debugging
   customToken: string;  // Firebase custom token for client-side auth
-  name?: string;
+  firstName?: string;
+  lastName?: string;
   email?: string;
   userType?: string;
 }
@@ -140,7 +141,8 @@ export async function handleVerifyTagCheckout(
     userId,
     uid: uidHex,
     customToken,
-    name: userData?.name ?? userData?.displayName,
+    firstName: userData?.firstName,
+    lastName: userData?.lastName,
     email: userData?.email,
     userType: userData?.userType,
   };

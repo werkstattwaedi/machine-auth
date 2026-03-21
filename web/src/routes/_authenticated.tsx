@@ -23,14 +23,14 @@ function AuthenticatedLayout() {
     }
   }, [user, loading, navigate])
 
-  // Terms acceptance gate - redirect to /terms if terms not accepted
-  // (skip if already on the terms page, wait for userDoc to load)
-  const isOnTermsPage = matches.some((m) => m.fullPath === "/terms")
+  // Profile completion gate - redirect to /complete-profile if profile not completed
+  // (skip if already on the page, wait for userDoc to load)
+  const isOnCompleteProfilePage = matches.some((m) => m.fullPath === "/complete-profile")
   useEffect(() => {
-    if (!loading && !userDocLoading && userDoc && !userDoc.termsAcceptedAt && !isOnTermsPage) {
-      navigate({ to: "/terms" })
+    if (!loading && !userDocLoading && userDoc && !userDoc.termsAcceptedAt && !isOnCompleteProfilePage) {
+      navigate({ to: "/complete-profile" })
     }
-  }, [loading, userDocLoading, userDoc, isOnTermsPage, navigate])
+  }, [loading, userDocLoading, userDoc, isOnCompleteProfilePage, navigate])
 
   if (loading) {
     return (

@@ -5,13 +5,24 @@ import { DocumentReference, Timestamp } from "firebase-admin/firestore";
  * These represent the actual shape of documents in Firestore
  */
 
+export interface BillingAddress {
+  company: string;
+  street: string;
+  zip: string;
+  city: string;
+}
+
 export interface UserEntity {
   created: Timestamp;
-  displayName: string;
-  name: string;
+  displayName?: string | null; // Optional nickname; derived from firstName+lastName if absent
+  firstName: string;
+  lastName: string;
   email?: string;
   permissions: DocumentReference[]; // References to /permission/{permissionId}
   roles: string[];
+  termsAcceptedAt?: Timestamp | null;
+  userType?: "erwachsen" | "kind" | "firma";
+  billingAddress?: BillingAddress | null; // Required when userType == "firma"
 }
 
 export interface TokenEntity {

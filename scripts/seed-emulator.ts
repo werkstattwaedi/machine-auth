@@ -115,7 +115,8 @@ async function seed() {
   await db.collection("users").doc(ID.userAdmin).set({
     created: Timestamp.now(),
     displayName: "Admin",
-    name: "Test Admin",
+    firstName: "Test",
+    lastName: "Admin",
     email: "admin@example.com",
     permissions: [
       db.doc(`permission/${ID.permLaser}`),
@@ -125,11 +126,15 @@ async function seed() {
       db.doc(`permission/${ID.permHolz}`),
     ],
     roles: ["admin", "vereinsmitglied"],
+    termsAcceptedAt: Timestamp.now(),
+    userType: "erwachsen",
+    billingAddress: null,
   });
   await db.collection("users").doc(ID.userMike).set({
     created: Timestamp.now(),
     displayName: "MikeS",
-    name: "Mike Schneider",
+    firstName: "Mike",
+    lastName: "Schneider",
     email: "mike@werkstattwaedi.ch",
     permissions: [
       db.doc(`permission/${ID.permLaser}`),
@@ -137,22 +142,33 @@ async function seed() {
       db.doc(`permission/${ID.permHolz}`),
     ],
     roles: ["admin", "vereinsmitglied"],
+    termsAcceptedAt: Timestamp.now(),
+    userType: "erwachsen",
+    billingAddress: null,
   });
   await db.collection("users").doc(ID.userMarco).set({
     created: Timestamp.now(),
-    displayName: "Marco",
-    name: "Marco",
+    displayName: null,
+    firstName: "Marco",
+    lastName: "Menzi",
     email: "marco@werkstattwaedi.ch",
     permissions: [db.doc(`permission/${ID.permHolz}`)],
     roles: ["admin", "vereinsmitglied"],
+    termsAcceptedAt: Timestamp.now(),
+    userType: "erwachsen",
+    billingAddress: null,
   });
   await db.collection("users").doc(ID.userSimon).set({
     created: Timestamp.now(),
-    displayName: "Simon",
-    name: "Simon",
+    displayName: null,
+    firstName: "Simon",
+    lastName: "Flepp",
     email: "simon@werkstattwaedi.ch",
     permissions: [db.doc(`permission/${ID.permLaser}`)],
     roles: ["vereinsmitglied"],
+    termsAcceptedAt: Timestamp.now(),
+    userType: "erwachsen",
+    billingAddress: null,
   });
   await auth.setCustomUserClaims(ID.userAdmin, { admin: true });
   await auth.setCustomUserClaims(ID.userMike, { admin: true });

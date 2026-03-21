@@ -20,7 +20,13 @@ export const Route = createFileRoute("/_authenticated/profile")({
 
 interface ProfileFormValues {
   displayName: string
-  name: string
+  firstName: string
+  lastName: string
+  userType: string
+  company: string
+  street: string
+  zip: string
+  city: string
 }
 
 function ProfilePage() {
@@ -29,26 +35,59 @@ function ProfilePage() {
   const permNames = new Map(permDocs.map((d) => [d.id, d.name]))
   const { update, loading: saving } = useFirestoreMutation()
 
-  const { register, handleSubmit, reset, formState: { isDirty } } = useForm<ProfileFormValues>({
+  const { register, handleSubmit, reset, watch, formState: { isDirty } } = useForm<ProfileFormValues>({
     defaultValues: {
-      displayName: userDoc?.displayName ?? "",
-      name: userDoc?.name ?? "",
+      displayName: "",
+      firstName: "",
+      lastName: "",
+      userType: "erwachsen",
+      company: "",
+      street: "",
+      zip: "",
+      city: "",
     },
   })
 
-  // Reset form when userDoc changes (initial load)
+  const userType = watch("userType")
+  const isFirma = userType === "firma"
+
   useEffect(() => {
     if (userDoc) {
       reset({
-        displayName: userDoc.displayName,
-        name: userDoc.name,
+        displayName: userDoc.rawDisplayName ?? "",
+        firstName: userDoc.firstName,
+        lastName: userDoc.lastName,
+        userType: userDoc.userType ?? "erwachsen",
+        company: userDoc.billingAddress?.company ?? "",
+        street: userDoc.billingAddress?.street ?? "",
+        zip: userDoc.billingAddress?.zip ?? "",
+        city: userDoc.billingAddress?.city ?? "",
       })
     }
   }, [userDoc, reset])
 
   const onSubmit = async (values: ProfileFormValues) => {
     if (!userDoc) return
-    await update("users", userDoc.id, values, {
+
+    const data: Record<string, unknown> = {
+      displayName: values.displayName.trim() || null,
+      firstName: values.firstName,
+      lastName: values.lastName,
+      userType: values.userType,
+    }
+
+    if (values.userType === "firma") {
+      data.billingAddress = {
+        company: values.company,
+        street: values.street,
+        zip: values.zip,
+        city: values.city,
+      }
+    } else {
+      data.billingAddress = null
+    }
+
+    await update("users", userDoc.id, data, {
       successMessage: "Profil gespeichert",
     })
   }
@@ -64,13 +103,22 @@ function ProfilePage() {
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="displayName">Anzeigename</Label>
-              <Input id="displayName" {...register("displayName")} />
+              <Label htmlFor="displayName">Anzeigename (optional)</Label>
+              <Input id="displayName" placeholder="z.B. MikeS" {...register("displayName")} />
+              <p className="text-xs text-muted-foreground">
+                Falls leer, wird Vor- und Nachname angezeigt.
+              </p>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="name">Vollständiger Name</Label>
-              <Input id="name" {...register("name")} />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="firstName">Vorname</Label>
+                <Input id="firstName" {...register("firstName")} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="lastName">Nachname</Label>
+                <Input id="lastName" {...register("lastName")} />
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -80,6 +128,43 @@ function ProfilePage() {
                 E-Mail kann nicht geändert werden.
               </p>
             </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="userType">Benutzertyp</Label>
+              <select
+                id="userType"
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+                {...register("userType")}
+              >
+                <option value="erwachsen">Erwachsen</option>
+                <option value="kind">Kind (u. 18)</option>
+                <option value="firma">Firma</option>
+              </select>
+            </div>
+
+            {isFirma && (
+              <div className="space-y-4 rounded border p-4">
+                <h4 className="text-sm font-semibold">Rechnungsadresse</h4>
+                <div className="space-y-2">
+                  <Label htmlFor="company">Firma</Label>
+                  <Input id="company" {...register("company")} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="street">Strasse</Label>
+                  <Input id="street" {...register("street")} />
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="zip">PLZ</Label>
+                    <Input id="zip" {...register("zip")} />
+                  </div>
+                  <div className="col-span-2 space-y-2">
+                    <Label htmlFor="city">Ort</Label>
+                    <Input id="city" {...register("city")} />
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label>Rollen</Label>

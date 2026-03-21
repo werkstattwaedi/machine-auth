@@ -27,6 +27,20 @@ service cloud.firestore {
       return resource.data.userId == /databases/$(database)/documents/users/$(userId);
     }
 
+    // Validate billing address has all required fields
+    function hasValidBillingAddress(data) {
+      return data.billingAddress is map &&
+             data.billingAddress.company is string && data.billingAddress.company.size() > 0 &&
+             data.billingAddress.street is string && data.billingAddress.street.size() > 0 &&
+             data.billingAddress.zip is string && data.billingAddress.zip.size() > 0 &&
+             data.billingAddress.city is string && data.billingAddress.city.size() > 0;
+    }
+
+    // Validate user profile: firma users must have billing address
+    function isValidUserProfile(data) {
+      return data.userType != 'firma' || hasValidBillingAddress(data);
+    }
+
     // Users collection (doc ID = Firebase Auth UID)
     match /users/{userId} {
       allow read: if isAdmin() || (isSignedIn() && userId == request.auth.uid);
@@ -37,11 +51,13 @@ service cloud.firestore {
                        isDocumentReferenceArray(request.resource.data.permissions, 'permission');
 
       // Users can update their own doc but cannot change roles/permissions
+      // Firma users must provide a valid billing address
       allow update: if isAdmin() ||
                        (isSignedIn() &&
                         userId == request.auth.uid &&
                         request.resource.data.roles == resource.data.roles &&
-                        request.resource.data.permissions == resource.data.permissions);
+                        request.resource.data.permissions == resource.data.permissions &&
+                        isValidUserProfile(request.resource.data));
 
       allow delete: if isAdmin();
     }

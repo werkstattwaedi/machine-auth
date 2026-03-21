@@ -21,8 +21,9 @@ import { FakeAuth, createFakeUser, type FakeUser } from "./fake-auth"
 
 interface UserInput {
   id: string
-  displayName?: string
-  name?: string
+  displayName?: string | null
+  firstName?: string
+  lastName?: string
   email?: string
   roles?: string[]
   permissions?: string[] // permission IDs
@@ -161,14 +162,18 @@ export class TestFixture {
       const permissionRefs = (u.permissions ?? []).map((pid) =>
         db.doc("permission", pid),
       )
+      const firstName = u.firstName ?? ""
+      const lastName = u.lastName ?? ""
       db.setDoc(db.doc("users", u.id), {
-        displayName: u.displayName ?? u.id,
-        name: u.name ?? "",
+        displayName: u.displayName ?? null,
+        firstName,
+        lastName,
         email: u.email ?? `${u.id}@test.com`,
         roles: u.roles ?? ["vereinsmitglied"],
         permissions: permissionRefs,
         userType: u.userType ?? "erwachsen",
         termsAcceptedAt: u.termsAcceptedAt ?? null,
+        billingAddress: null,
         created: new Date(),
       })
     }

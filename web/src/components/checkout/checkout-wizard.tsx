@@ -135,13 +135,12 @@ export function CheckoutWizard({ picc, cmac, kiosk, onActiveChange }: CheckoutWi
     const primary = state.persons[0]
     if (!primary || primary.isPreFilled) return
 
-    const [firstName = "", ...rest] = (tokenUser.name ?? "").split(" ")
     dispatch({
       type: "UPDATE_PERSON",
       id: primary.id,
       updates: {
-        firstName,
-        lastName: rest.join(" "),
+        firstName: tokenUser.firstName ?? "",
+        lastName: tokenUser.lastName ?? "",
         email: tokenUser.email ?? "",
         userType: (tokenUser.userType as UserType) ?? "erwachsen",
         isPreFilled: true,
@@ -398,8 +397,8 @@ export function CheckoutWizard({ picc, cmac, kiosk, onActiveChange }: CheckoutWi
 function usePreFillPerson(
   userDoc: {
     id: string
-    name: string
-    displayName: string
+    firstName: string
+    lastName: string
     email?: string
     userType?: string
     termsAcceptedAt?: unknown
@@ -412,15 +411,12 @@ function usePreFillPerson(
     const primary = persons[0]
     if (!primary || primary.isPreFilled) return
 
-    const [firstName = "", ...rest] = (
-      userDoc.name || userDoc.displayName
-    ).split(" ")
     dispatch({
       type: "UPDATE_PERSON",
       id: primary.id,
       updates: {
-        firstName,
-        lastName: rest.join(" "),
+        firstName: userDoc.firstName,
+        lastName: userDoc.lastName,
         email: userDoc.email ?? "",
         userType: (userDoc.userType as UserType) ?? "erwachsen",
         isPreFilled: true,

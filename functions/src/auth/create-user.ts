@@ -16,8 +16,9 @@ import { getFirestore, Timestamp } from "firebase-admin/firestore";
 
 interface CreateUserData {
   email: string;
-  displayName: string;
-  name?: string;
+  displayName?: string;
+  firstName?: string;
+  lastName?: string;
 }
 
 export const createUser = onCall(async (request) => {
@@ -26,12 +27,12 @@ export const createUser = onCall(async (request) => {
     throw new HttpsError("permission-denied", "Admin access required");
   }
 
-  const { email, displayName, name } = request.data as CreateUserData;
+  const { email, displayName, firstName, lastName } = request.data as CreateUserData;
 
-  if (!email || !displayName) {
+  if (!email) {
     throw new HttpsError(
       "invalid-argument",
-      "email and displayName are required"
+      "email is required"
     );
   }
 
@@ -41,9 +42,10 @@ export const createUser = onCall(async (request) => {
 
   try {
     // Create Firebase Auth user (no password — email-link auth)
+    const derivedDisplayName = displayName || `${firstName ?? ""} ${lastName ?? ""}`.trim() || email;
     authUser = await auth.createUser({
       email,
-      displayName,
+      displayName: derivedDisplayName,
     });
   } catch (error: any) {
     logger.error("Failed to create Auth user", error);
@@ -58,12 +60,14 @@ export const createUser = onCall(async (request) => {
     await db.collection("users").doc(authUser.uid).set({
       created: Timestamp.now(),
       email,
-      displayName,
-      name: name ?? "",
+      displayName: displayName || null,
+      firstName: firstName ?? "",
+      lastName: lastName ?? "",
       permissions: [],
       roles: ["vereinsmitglied"],
       termsAcceptedAt: null,
       userType: "erwachsen",
+      billingAddress: null,
     });
   } catch (error: any) {
     // Rollback: delete Auth user if Firestore write fails

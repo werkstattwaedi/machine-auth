@@ -19,8 +19,9 @@ export const Route = createFileRoute("/_authenticated/_admin/users/")({
 })
 
 interface UserListDoc {
-  displayName: string
-  name: string
+  displayName?: string | null
+  firstName: string
+  lastName: string
   email?: string
   roles: string[]
   permissions: { id: string }[]
@@ -34,21 +35,18 @@ function UsersPage() {
   const columns = useMemo<ColumnDef<UserListDoc & { id: string }>[]>(
     () => [
       {
-        accessorKey: "displayName",
-        header: ({ column }) => <ColumnHeader column={column} title="Anzeigename" />,
+        id: "name",
+        header: ({ column }) => <ColumnHeader column={column} title="Name" />,
+        accessorFn: (row) => `${row.firstName ?? ""} ${row.lastName ?? ""}`.trim(),
         cell: ({ row }) => (
           <Link
             to="/users/$userId"
             params={{ userId: row.original.id }}
             className="font-medium hover:underline"
           >
-            {row.getValue("displayName") || "–"}
+            {`${row.original.firstName ?? ""} ${row.original.lastName ?? ""}`.trim() || "–"}
           </Link>
         ),
-      },
-      {
-        accessorKey: "name",
-        header: ({ column }) => <ColumnHeader column={column} title="Name" />,
       },
       {
         accessorKey: "email",

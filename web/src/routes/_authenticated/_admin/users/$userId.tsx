@@ -35,13 +35,20 @@ export const Route = createFileRoute("/_authenticated/_admin/users/$userId")({
 })
 
 interface UserDoc {
-  displayName: string
-  name: string
+  displayName?: string | null
+  firstName: string
+  lastName: string
   email?: string
   roles: string[]
   permissions: (DocumentReference | { id: string })[]
   termsAcceptedAt?: { toDate(): Date } | null
   userType?: string
+  billingAddress?: {
+    company: string
+    street: string
+    zip: string
+    city: string
+  } | null
 }
 
 interface PermissionDoc {
@@ -57,10 +64,15 @@ interface TokenDoc {
 
 interface UserFormValues {
   displayName: string
-  name: string
+  firstName: string
+  lastName: string
   email: string
   isAdmin: boolean
   userType: string
+  company: string
+  street: string
+  zip: string
+  city: string
 }
 
 function UserDetailPage() {
@@ -76,7 +88,9 @@ function UserDetailPage() {
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([])
   const [newTagId, setNewTagId] = useState("")
 
-  const { register, handleSubmit, reset } = useForm<UserFormValues>()
+  const { register, handleSubmit, reset, watch } = useForm<UserFormValues>()
+  const userType = watch("userType")
+  const isFirma = userType === "firma"
 
   useEffect(() => {
     if (user) {
@@ -85,11 +99,16 @@ function UserDetailPage() {
       )
       setSelectedPermissions(perms)
       reset({
-        displayName: user.displayName,
-        name: user.name,
+        displayName: user.displayName ?? "",
+        firstName: user.firstName ?? "",
+        lastName: user.lastName ?? "",
         email: user.email ?? "",
         isAdmin: user.roles?.includes("admin") ?? false,
         userType: user.userType ?? "erwachsen",
+        company: user.billingAddress?.company ?? "",
+        street: user.billingAddress?.street ?? "",
+        zip: user.billingAddress?.zip ?? "",
+        city: user.billingAddress?.city ?? "",
       })
     }
   }, [user, reset])
@@ -101,14 +120,28 @@ function UserDetailPage() {
     const roles: string[] = ["vereinsmitglied"]
     if (values.isAdmin) roles.push("admin")
 
-    await update("users", userId, {
-      displayName: values.displayName,
-      name: values.name,
+    const data: Record<string, unknown> = {
+      displayName: values.displayName.trim() || null,
+      firstName: values.firstName,
+      lastName: values.lastName,
       email: values.email,
       roles,
       userType: values.userType,
       permissions: selectedPermissions.map((id) => permissionRef(db, id)),
-    }, {
+    }
+
+    if (values.userType === "firma") {
+      data.billingAddress = {
+        company: values.company,
+        street: values.street,
+        zip: values.zip,
+        city: values.city,
+      }
+    } else {
+      data.billingAddress = null
+    }
+
+    await update("users", userId, data, {
       successMessage: "Benutzer gespeichert",
     })
   }
@@ -145,7 +178,7 @@ function UserDetailPage() {
 
   return (
     <div>
-      <PageHeader title={user.displayName || "Benutzer"} backTo="/users" backLabel="Zurück zu Benutzer" />
+      <PageHeader title={user.displayName || `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || "Benutzer"} backTo="/users" backLabel="Zurück zu Benutzer" />
 
       <Tabs defaultValue="details">
         <TabsList>
@@ -160,12 +193,18 @@ function UserDetailPage() {
             <CardContent className="pt-6">
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 max-w-lg">
                 <div className="space-y-2">
-                  <Label htmlFor="displayName">Anzeigename</Label>
-                  <Input id="displayName" {...register("displayName")} />
+                  <Label htmlFor="displayName">Anzeigename (optional)</Label>
+                  <Input id="displayName" placeholder="z.B. MikeS" {...register("displayName")} />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="name">Vollständiger Name</Label>
-                  <Input id="name" {...register("name")} />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="firstName">Vorname</Label>
+                    <Input id="firstName" {...register("firstName")} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="lastName">Nachname</Label>
+                    <Input id="lastName" {...register("lastName")} />
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="email">E-Mail</Label>
@@ -183,6 +222,31 @@ function UserDetailPage() {
                     <option value="firma">Firma</option>
                   </select>
                 </div>
+
+                {isFirma && (
+                  <div className="space-y-4 rounded border p-4">
+                    <h4 className="text-sm font-semibold">Rechnungsadresse</h4>
+                    <div className="space-y-2">
+                      <Label htmlFor="company">Firma</Label>
+                      <Input id="company" {...register("company")} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="street">Strasse</Label>
+                      <Input id="street" {...register("street")} />
+                    </div>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="zip">PLZ</Label>
+                        <Input id="zip" {...register("zip")} />
+                      </div>
+                      <div className="col-span-2 space-y-2">
+                        <Label htmlFor="city">Ort</Label>
+                        <Input id="city" {...register("city")} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex items-center gap-2">
                   <Checkbox
                     id="isAdmin"

@@ -11,7 +11,8 @@ import { useFunctions, useFirebaseAuth } from "./firebase-context"
 interface TokenUser {
   tokenId: string
   userId: string
-  name?: string
+  firstName?: string
+  lastName?: string
   email?: string
   userType?: string
 }
@@ -89,7 +90,8 @@ export function useTokenAuth(
         setTokenUser({
           tokenId: data.tokenId,
           userId: data.userId,
-          name: data.name,
+          firstName: data.firstName,
+          lastName: data.lastName,
           email: data.email,
           userType: data.userType,
         })
