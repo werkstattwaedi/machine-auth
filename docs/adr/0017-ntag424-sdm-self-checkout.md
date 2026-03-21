@@ -17,10 +17,10 @@ This eliminates the need for a custom app or authenticated session: the phone's 
 ### URL Format
 
 ```
-https://werkstattwaedi.ch/tag?picc=<32 hex chars>&cmac=<16 hex chars>
+https://id.werkstattwaedi.ch/?picc=<32 hex chars>&cmac=<16 hex chars>
 ```
 
-The `/tag` endpoint receives the encrypted PICC data and CMAC. The backend decrypts the UID, verifies the CMAC, and determines the appropriate action (checkout, session view, etc.).
+The base URL is deployment-specific (passed via `PersonalizeTagRequest.sdm_base_url`). The backend decrypts the UID, verifies the CMAC, and determines the appropriate action (checkout, session view, etc.).
 
 ### Key Architecture
 
@@ -46,7 +46,7 @@ File 0x02 (NDEF) contains an 88-byte NDEF URI record:
 |--------|---------|
 | 0x00-0x01 | NLEN = 86 |
 | 0x02-0x06 | NDEF record header + URI type + "https://" prefix code |
-| 0x07-0x21 | `werkstattwaedi.ch/tag?picc=` |
+| 0x07-0x21 | `<base_url>?picc=` (e.g. `id.werkstattwaedi.ch/?picc=`) |
 | 0x22-0x41 | PICC placeholder (32 hex zeros → 16 encrypted bytes) |
 | 0x42-0x47 | `&cmac=` |
 | 0x48-0x57 | CMAC placeholder (16 hex zeros → 8 CMAC bytes) |

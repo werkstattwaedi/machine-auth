@@ -9,5 +9,7 @@ typings/
 node_modules/
 *.local
 
-# Env Variables
+# Env Variables (symlinks to operations repo are tracked)
 .env.*
+!.env.local
+!.env.oww-maco

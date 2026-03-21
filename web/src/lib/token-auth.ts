@@ -27,13 +27,13 @@ interface UseTokenAuthResult {
   tagSignOut: () => Promise<void>
 }
 
-const FUNCTIONS_REGION = "us-central1"
+const FUNCTIONS_REGION = import.meta.env.VITE_FUNCTIONS_REGION ?? "us-central1"
 
 /** Build the base URL for the Functions endpoint. */
 function functionsBaseUrl(projectId: string | undefined): string {
   if (import.meta.env.DEV) {
     const port = import.meta.env.VITE_EMULATOR_FUNCTIONS_PORT || "5001"
-    return `http://127.0.0.1:${port}/oww-maco/${FUNCTIONS_REGION}`
+    return `http://127.0.0.1:${port}/${import.meta.env.VITE_FIREBASE_PROJECT_ID}/${FUNCTIONS_REGION}`
   }
   return `https://${FUNCTIONS_REGION}-${projectId}.cloudfunctions.net`
 }

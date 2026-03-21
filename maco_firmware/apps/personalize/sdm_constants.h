@@ -6,7 +6,7 @@
 /// @file sdm_constants.h
 /// @brief NTAG424 DNA NDEF template and SDM configuration for tag checkout.
 ///
-/// URL: https://werkstattwaedi.ch/tag?picc=<encrypted>&cmac=<signature>
+/// URL: https://id.werkstattwaedi.ch/?picc=<encrypted>&cmac=<signature>
 ///
 /// The NDEF file (file 0x02) contains a URI record with placeholder bytes
 /// that the tag replaces with encrypted UID+counter and CMAC when tapped
@@ -41,7 +41,7 @@ constexpr size_t kWriteChunkSize = 44;
 //   [0x04]      0x52 (Payload Length = 82)
 //   [0x05]      0x55 (Type = 'U' URI)
 //   [0x06]      0x04 (URI prefix = "https://")
-//   [0x07-0x21] "werkstattwaedi.ch/tag?picc=" (27 bytes)
+//   [0x07-0x21] "<base_url>?picc=" (currently "werkstattwaedi.ch/tag?picc=", 27 bytes)
 //   [0x22-0x41] PICC placeholder (32 hex zeros = 16 encrypted bytes)
 //   [0x42-0x47] "&cmac=" (6 bytes)
 //   [0x48-0x57] CMAC placeholder (16 hex zeros = 8 CMAC bytes)
@@ -56,7 +56,7 @@ constexpr std::array<std::byte, kNdefTotalSize> kNdefTemplate = {{
     std::byte{0x52},  // Payload Length (82)
     std::byte{0x55},  // Type 'U' (URI)
     std::byte{0x04},  // URI prefix "https://"
-    // "werkstattwaedi.ch/tag?picc="
+    // Base URL + "?picc=" (deployment-specific, will be made dynamic)
     std::byte{'w'}, std::byte{'e'}, std::byte{'r'}, std::byte{'k'},
     std::byte{'s'}, std::byte{'t'}, std::byte{'a'}, std::byte{'t'},
     std::byte{'t'}, std::byte{'w'}, std::byte{'a'}, std::byte{'e'},

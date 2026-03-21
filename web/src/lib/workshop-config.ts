@@ -96,7 +96,7 @@ export function getUnitLabel(config: PricingConfig, pricingModel: PricingModel):
     length: config.labels?.units?.m ?? "m",
     count: config.labels?.units?.stk ?? "Stk.",
     weight: config.labels?.units?.kg ?? "kg",
-    direct: config.labels?.units?.chf ?? "CHF",
+    direct: config.labels?.units?.chf ?? (import.meta.env.VITE_CURRENCY || "CHF"),
   }
   return map[pricingModel] ?? pricingModel
 }
@@ -109,7 +109,7 @@ export function getShortUnit(pm: PricingModel): string {
     case "length": return "m"
     case "count": return "Stk."
     case "weight": return "kg"
-    case "direct": return "CHF"
+    case "direct": return import.meta.env.VITE_CURRENCY || "CHF"
     default: return ""
   }
 }

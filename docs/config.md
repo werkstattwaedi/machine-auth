@@ -2,13 +2,44 @@
 
 Complete guide to configuring all components of the machine authentication system for a new environment.
 
+## Operations Repo Pattern
+
+All deployment-specific configuration lives in a separate **operations repo**, not in this repository. This repo contains committed symlinks to `../machine-auth-operations/`.
+
+**Setup:**
+
+1. Create your operations repo from the [template](https://github.com/werkstattwaedi/machine-auth-operations-template)
+2. Clone it as a sibling named `machine-auth-operations`:
+   ```
+   workspace/
+   ├── machine-auth/                    # this repo
+   │   └── operations -> ../machine-auth-operations/
+   └── machine-auth-operations/         # your operations repo
+   ```
+3. Rename template files (drop `.template` suffix), fill in your values
+
+The symlinks resolve automatically. Without the operations repo, builds fail with clear broken-symlink errors.
+
+**What goes where:**
+
+| Location | Contains |
+|----------|----------|
+| Operations repo `.env.local` | All dev/emulator variables (including test secrets) |
+| Operations repo `.env.production` | Production parameters only (NO secrets) |
+| Operations repo `.firebaserc` | Firebase project ID |
+| Firebase Functions Secrets | Production secrets (`firebase functions:secrets:set`) |
+| GCP Secret Manager | Gateway ASCON key |
+
+See the [template repo README](https://github.com/werkstattwaedi/machine-auth-operations-template) for the complete list of variables.
+
+---
+
 ## Table of Contents
 
 - [Linux Serial Device Setup](#linux-serial-device-setup)
 - [Firebase Project Setup](#firebase-project-setup)
 - [Firebase Functions Configuration](#firebase-functions-configuration)
 - [Web App Configuration](#web-app-configuration)
-- [Scripts Configuration](#scripts-configuration)
 - [MaCo Gateway Configuration](#maco-gateway-configuration)
 - [Factory Provisioning](#factory-provisioning)
 - [Particle Cloud Setup](#particle-cloud-setup)
@@ -71,7 +102,7 @@ The `./pw console` command automatically detects `/dev/particle_*` devices.
 
 1. Go to [Firebase Console](https://console.firebase.google.com/)
 2. Click **"Add project"**
-3. Enter project name: `oww-maco` (or your preferred name)
+3. Enter project name
 4. Enable Google Analytics (optional)
 5. Create project
 
@@ -103,7 +134,7 @@ In Firebase Console:
 2. Scroll to "Your apps" section
 3. Click "Add app" > Web (</>) icon
 4. Register app with nickname: `admin`
-5. Copy the Firebase configuration object (needed for admin UI)
+5. Copy the Firebase configuration values into your operations repo `.env.production`
 
 ### 4. Service Account (for scripts and CI/CD)
 
@@ -111,24 +142,20 @@ In Firebase Console:
 2. Click **"Generate new private key"**
 3. Download JSON file
 4. Store securely - **NEVER commit to git**
-5. Note the file path for later configuration
 
 ---
 
 ## Firebase Functions Configuration
 
-Firebase Functions use **secrets** (sensitive values) and **parameters** (non-sensitive config).
+Firebase Functions use **secrets** (sensitive values stored in Secret Manager) and **parameters** (non-sensitive config in env files).
 
 ### Required Secrets
 
-Set using Firebase CLI or Console:
+Set using Firebase CLI:
 
 ```bash
-# Login to Firebase
 firebase login
-
-# Set project
-firebase use oww-maco
+firebase use <your-project-id>
 
 # Set secrets (will prompt for values)
 firebase functions:secrets:set DIVERSIFICATION_MASTER_KEY
@@ -150,80 +177,40 @@ firebase functions:secrets:set PARTICLE_TOKEN
 
 ### Required Parameters
 
-Set using `.env` files in `functions/` directory:
+Parameters are set in your operations repo env files. They are symlinked into the `functions/` directory automatically.
 
-**Development** (`functions/.env.local`):
-```bash
-DIVERSIFICATION_SYSTEM_NAME=OwwMachineAuth
-```
-
-**Production** (`functions/.env.oww-maco`):
-```bash
-DIVERSIFICATION_SYSTEM_NAME=OwwMachineAuth
-```
-
-Or set via Firebase CLI:
-```bash
-firebase functions:config:set diversification.system_name="OwwMachineAuth"
-```
-
-### New: Admin API Parameters
-
-For the admin API (device import feature), also set:
-
-```bash
-# Set as parameter (non-sensitive)
-firebase functions:config:set particle.product_id="YOUR_PRODUCT_ID_OR_SLUG"
-```
-
-Or add to your `.env` files:
-```bash
-PARTICLE_PRODUCT_ID=your-product-id-or-slug
-```
-
-**Note:** `PARTICLE_TOKEN` is already set as a secret (see above).
+| Parameter | Description |
+|-----------|-------------|
+| `DIVERSIFICATION_SYSTEM_NAME` | System name for key diversification (e.g. `OwwMachineAuth`) |
+| `PARTICLE_PRODUCT_ID` | Particle product ID or slug |
 
 ### Verify Configuration
 
 ```bash
 # List all secrets
 firebase functions:secrets:access
-
-# List all config
-firebase functions:config:get
 ```
 
 ---
 
 ## Web App Configuration
 
-The web app (`web/`) uses Vite environment files for Firebase configuration. Emulator connections are automatic in dev mode.
+The web app uses `VITE_*` environment variables from the operations repo. These are symlinked into `web/` as `.env.development` (dev) and `.env.production` (prod).
 
-### Development Environment
+### Deployment Variables
 
-**File:** `web/.env.development` (checked in, safe values)
+Beyond Firebase config, the following deployment-specific variables are used:
 
-Emulator connections are automatic — `web/src/lib/firebase.ts` detects `import.meta.env.DEV` and connects to local emulators.
-
-### Production Environment
-
-**File:** `web/.env.production`
-
-```bash
-VITE_FIREBASE_API_KEY=YOUR_FIREBASE_API_KEY
-VITE_FIREBASE_AUTH_DOMAIN=oww-maco.firebaseapp.com
-VITE_FIREBASE_PROJECT_ID=oww-maco
-VITE_FIREBASE_STORAGE_BUCKET=oww-maco.firebasestorage.app
-VITE_FIREBASE_MESSAGING_SENDER_ID=YOUR_MESSAGING_SENDER_ID
-VITE_FIREBASE_APP_ID=YOUR_APP_ID
-```
-
-**How to get these values:**
-
-1. Firebase Console > Project Settings > General
-2. Scroll to "Your apps" > Select your web app
-3. Click "Config" to see the configuration object
-4. Copy values to `web/.env.production`
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `VITE_CHECKOUT_DOMAIN` | Checkout subdomain | `checkout.example.com` |
+| `VITE_FUNCTIONS_REGION` | Cloud Functions region | `us-central1` |
+| `VITE_LOCALE` | Locale for formatting | `de-CH` |
+| `VITE_CURRENCY` | Currency code | `CHF` |
+| `VITE_ORGANIZATION_NAME` | Organization name | `My Workshop` |
+| `VITE_IBAN` | Payment IBAN | `CH00 0000 0000 0000 0000 0` |
+| `VITE_TWINT_URL` | TWINT payment URL (optional) | |
+| `VITE_PAYMENT_RECIPIENT_*` | QR-bill recipient details | |
 
 **Important:** The production API key should be **restricted** in Google Cloud Console:
 - Application restrictions: HTTP referrers (set to your domain)
@@ -233,76 +220,9 @@ See [`docs/deployment-checklist.md`](deployment-checklist.md) for full deploymen
 
 ---
 
-## Scripts Configuration
-
-Scripts for device config synchronization use their own configuration.
-
-### Setup
-
-**File:** `scripts/.env`
-
-```bash
-# Copy template
-cd scripts
-cp .env.template .env
-```
-
-**Edit `scripts/.env`:**
-
-```bash
-# Your Particle product ID or slug (from Particle Console)
-PARTICLE_PRODUCT_ID="your-product-id-or-slug"
-
-# Particle access token (create with: particle token create)
-PARTICLE_TOKEN="your-particle-token-here"
-
-# Firebase project ID
-FIREBASE_PROJECT_ID="oww-maco"
-
-# Path to Firebase service account key (OPTIONAL)
-# If not set, uses Application Default Credentials
-GOOGLE_APPLICATION_CREDENTIALS="/path/to/serviceAccountKey.json"
-```
-
-### Firebase Authentication for Scripts
-
-Choose **one** method:
-
-**Option A: Service Account Key (Recommended)**
-
-1. Download service account key from Firebase Console (see [Firebase Setup](#4-service-account-for-scripts-and-cicd))
-2. Set path in `.env`: `GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json`
-
-**Option B: Application Default Credentials (Local Dev)**
-
-```bash
-gcloud auth application-default login
-gcloud config set project oww-maco
-```
-
-Then **omit** `GOOGLE_APPLICATION_CREDENTIALS` from `.env`.
-
-### Install Dependencies
-
-```bash
-cd scripts
-npm install
-```
-
-### Verify Configuration
-
-```bash
-cd scripts
-npm run sync-config -- --help
-```
-
-See [`scripts/README.md`](../scripts/README.md) for detailed usage.
-
----
-
 ## MaCo Gateway Configuration
 
-The MaCo gateway uses a separate secret stored in **Google Cloud Secret Manager** (not Firebase Functions secrets).
+The MaCo gateway uses a secret stored in **Google Cloud Secret Manager** (separate from Firebase Functions secrets).
 
 ### Secrets
 
@@ -318,8 +238,7 @@ This is distinct from the Firebase Functions secrets:
 ### Set the Secret
 
 ```bash
-# Ensure correct project
-gcloud config set project oww-maco
+gcloud config set project <your-project-id>
 
 # Create the secret
 echo -n "YOUR_HEX_KEY" | gcloud secrets create GATEWAY_ASCON_MASTER_KEY --data-file=-
@@ -330,11 +249,7 @@ echo -n "YOUR_HEX_KEY" | gcloud secrets versions add GATEWAY_ASCON_MASTER_KEY --
 
 ### Local Development
 
-For local development, the gateway reads `MASTER_KEY` from `maco_gateway/.env.local`:
-
-```bash
-MASTER_KEY=000102030405060708090a0b0c0d0e0f
-```
+For local development, the gateway reads `MASTER_KEY` from the operations repo `.env.local` (symlinked to `maco_gateway/.env.local`).
 
 ---
 
@@ -346,8 +261,8 @@ The factory console (`./pw factory-console`) provisions devices with two secrets
 
 | Factory env var | Local source | GCP Secret Manager |
 |----------------|-------------|-------------------|
-| `FACTORY_GATEWAY_SECRET` | `maco_gateway/.env.local` → `MASTER_KEY` | `GATEWAY_ASCON_MASTER_KEY` |
-| `FACTORY_NTAG_KEY` | `functions/.env.local` → `TERMINAL_KEY` | `TERMINAL_KEY` |
+| `FACTORY_GATEWAY_SECRET` | `.env.local` → `MASTER_KEY` | `GATEWAY_ASCON_MASTER_KEY` |
+| `FACTORY_NTAG_KEY` | `.env.local` → `TERMINAL_KEY` | `TERMINAL_KEY` |
 
 ### Local Dev (default)
 
@@ -355,7 +270,7 @@ The factory console (`./pw factory-console`) provisions devices with two secrets
 ./pw factory-console
 ```
 
-Reads secrets from local `.env.local` files. Requires `maco_gateway/.env.local` and `functions/.env.local` to exist with the respective keys.
+Reads secrets from operations repo `.env.local` (via symlinks).
 
 ### Production
 
@@ -394,19 +309,17 @@ particle token create
 
 ### 3. Configure Webhook
 
-The firmware sends requests to Firebase Functions via Particle webhooks.
-
-**Create webhook** (`particle/terminalRequest_webhook.json`):
+The gateway sends requests to Firebase Functions. Configure the Particle webhook:
 
 ```json
 {
   "event": "terminalRequest",
-  "url": "https://us-central1-oww-maco.cloudfunctions.net/api",
+  "url": "https://<region>-<project-id>.cloudfunctions.net/api",
   "requestType": "POST",
   "noDefaults": true,
   "rejectUnauthorized": true,
   "headers": {
-    "Authorization": "Bearer YOUR_PARTICLE_WEBHOOK_API_KEY"
+    "Authorization": "Bearer <YOUR_PARTICLE_WEBHOOK_API_KEY>"
   },
   "responseTemplate": "{{PARTICLE_PUBLISHED_AT}}"
 }
@@ -415,10 +328,8 @@ The firmware sends requests to Firebase Functions via Particle webhooks.
 **Deploy webhook:**
 
 ```bash
-particle webhook create particle/terminalRequest_webhook.json
+particle webhook create <path-to-webhook.json>
 ```
-
-**Note:** Replace `YOUR_PARTICLE_WEBHOOK_API_KEY` with the value you set in [Functions Secrets](#required-secrets).
 
 ### 4. Add Devices to Product
 
@@ -434,12 +345,6 @@ particle webhook create particle/terminalRequest_webhook.json
 
 Security rules use Firebase Auth **custom claims** for role-based access. The `syncCustomClaims` Cloud Function trigger syncs the `roles[]` field from user documents to Auth custom claims, so rules can check `request.auth.token.admin == true`.
 
-**Key behaviors:**
-- All authenticated users can read most collections
-- Only admins can write to `permission`, `tokens`, `machine`, `maco`, `sessions`
-- Users can update their own user doc (doc ID = Auth UID) but cannot change `roles` or `permissions`
-- User document creation requires authentication and the doc ID must match the Auth UID
-
 **Deploy rules:**
 
 ```bash
@@ -454,6 +359,14 @@ firebase deploy --only firestore:rules
 
 Use this checklist when setting up a new environment:
 
+### Operations Repo
+
+- [ ] Operations repo created from [template](https://github.com/werkstattwaedi/machine-auth-operations-template)
+- [ ] Cloned as sibling: `machine-auth-operations/`
+- [ ] `.env.local` configured (rename from template)
+- [ ] `.env.production` configured (rename from template)
+- [ ] `.firebaserc` configured (rename from template)
+
 ### Firebase
 
 - [ ] Firebase project created
@@ -461,39 +374,22 @@ Use this checklist when setting up a new environment:
 - [ ] Firestore database created
 - [ ] Hosting enabled
 - [ ] Service account key downloaded (for scripts/CI)
-- [ ] Firebase configuration copied to `web/.env.production`
 
 ### Firebase Functions
 
-- [ ] `DIVERSIFICATION_MASTER_KEY` secret set
-- [ ] `PARTICLE_WEBHOOK_API_KEY` secret set
-- [ ] `GATEWAY_API_KEY` secret set
-- [ ] `TERMINAL_KEY` secret set
-- [ ] `PARTICLE_TOKEN` secret set
-- [ ] `DIVERSIFICATION_SYSTEM_NAME` parameter set
-- [ ] `PARTICLE_PRODUCT_ID` parameter set
+- [ ] All secrets set via `firebase functions:secrets:set`
 - [ ] Functions deployed: `firebase deploy --only functions`
 
 ### Web App
 
-- [ ] `web/.env.production` configured with Firebase credentials
 - [ ] Production API key restricted in Google Cloud Console
 - [ ] Web app built and deployed: `firebase deploy --only hosting`
 - [ ] First admin user created with `roles: ['admin']`
 - [ ] Custom claims set for admin user (via `syncCustomClaims` trigger)
 
-### Scripts
-
-- [ ] `scripts/.env` file created from template
-- [ ] All variables in `.env` filled in
-- [ ] Firebase authentication configured (service account or ADC)
-- [ ] Dependencies installed: `npm install`
-- [ ] Test sync: `npm run sync-config -- <device-id>`
-
 ### MaCo Gateway
 
 - [ ] `GATEWAY_ASCON_MASTER_KEY` set in Google Cloud Secret Manager
-- [ ] `maco_gateway/.env.local` configured for local dev
 
 ### Particle Cloud
 
@@ -509,82 +405,6 @@ Use this checklist when setting up a new environment:
 - [ ] Firebase secrets set (not in `.env` files)
 - [ ] Production API key restricted
 
-### Optional
-
-- [ ] Error tracking configured (Sentry, etc.)
-- [ ] Analytics enabled
-- [ ] Monitoring/alerting set up
-- [ ] Backup strategy documented
-
----
-
-## Quick Start: New Environment Setup
-
-**1. Firebase Project**
-```bash
-# Create project in Firebase Console
-# Enable: Auth, Firestore, Hosting
-
-# Get Firebase config for admin UI
-# (Project Settings > General > Your apps)
-```
-
-**2. Set Secrets**
-```bash
-firebase login
-firebase use <your-project-id>
-
-# Generate and set secrets
-firebase functions:secrets:set DIVERSIFICATION_MASTER_KEY  # openssl rand -hex 16
-firebase functions:secrets:set PARTICLE_WEBHOOK_API_KEY    # openssl rand -hex 32
-firebase functions:secrets:set PARTICLE_TOKEN              # particle token create
-```
-
-**3. Configure Functions**
-```bash
-# Set parameters
-firebase functions:config:set \
-  diversification.system_name="OwwMachineAuth" \
-  particle.product_id="<your-product-id>"
-
-# Or use .env files in functions/ directory
-```
-
-**4. Configure Web App**
-```bash
-# Edit web/.env.production with Firebase config
-cd web
-npm install
-npm run build
-```
-
-**5. Configure Scripts**
-```bash
-cd scripts
-cp .env.template .env
-# Edit .env with your values
-npm install
-```
-
-**6. Deploy**
-```bash
-# From project root
-firebase deploy
-```
-
-**7. Create First Admin**
-```bash
-# Manually create first admin user in Firestore
-# Collection: users
-# Document: auto-generated ID
-# Fields:
-#   email: "admin@example.com"
-#   displayName: "Admin User"
-#   roles: ["admin"]
-#   permissions: []
-#   created: serverTimestamp()
-```
-
 ---
 
 ## Troubleshooting
@@ -598,7 +418,11 @@ firebase functions:secrets:access
 
 ### "Missing Firebase configuration"
 
-Check `.env` files in `functions/` directory and verify parameter values.
+Check that the operations repo is cloned as a sibling and symlinks resolve:
+```bash
+ls -la operations/  # Should not be a broken symlink
+cat .firebaserc     # Should show your project config
+```
 
 ### "Permission denied" in Firestore
 
@@ -625,12 +449,7 @@ For emulators, ensure you're using the correct URL (127.0.0.1, not localhost).
 
 ## Related Documentation
 
-- [Admin UI Deployment Checklist](requirements/admin-ui-deployment.md)
-- [Scripts README](../scripts/README.md)
+- [Operations Template](https://github.com/werkstattwaedi/machine-auth-operations-template) - Setup guide for new deployments
+- [Deployment Checklist](deployment-checklist.md)
 - [Compilation Guide](compile.md)
 - [CLAUDE.md](../CLAUDE.md) - Development patterns and architecture
-
----
-
-**Last Updated:** 2025-10-12
-**Maintainer:** Project team
