@@ -15,17 +15,30 @@ namespace maco::personalize {
 pw::async2::Coro<pw::Status> ConfigureSdm(
     pw::async2::CoroContext& cx,
     nfc::Ntag424Tag& ntag,
-    const nfc::Ntag424Session& session) {
-  PW_LOG_INFO("Checking SDM configuration...");
+    const nfc::Ntag424Session& session,
+    std::string_view base_url) {
+  PW_LOG_INFO("Building NDEF template (%u char base URL)",
+              static_cast<unsigned>(base_url.size()));
 
-  // Step 1: Read current file settings to check if SDM is already enabled.
-  // Use Full mode: during authenticated session, PICC expects CMAC on commands.
+  auto template_result = sdm::BuildNdefTemplate(base_url);
+  if (!template_result.ok()) {
+    PW_LOG_ERROR("Failed to build NDEF template (URL too long?)");
+    co_return template_result.status();
+  }
+
+  const auto& ndef = *template_result;
+  const auto file_settings = sdm::BuildSdmFileSettings(
+      ndef.picc_data_offset, ndef.sdm_mac_offset);
+
+  // Step 1: Check if SDM is already configured with correct offsets.
+  PW_LOG_INFO("Checking SDM configuration...");
   std::array<std::byte, 32> settings_buf{};
   auto settings_result = co_await ntag.GetFileSettings(
       cx, session, sdm::kNdefFileNumber, settings_buf);
   if (settings_result.ok()) {
     if (sdm::IsSdmConfigured(
-            pw::ConstByteSpan(settings_buf.data(), *settings_result))) {
+            pw::ConstByteSpan(settings_buf.data(), *settings_result),
+            ndef.picc_data_offset, ndef.sdm_mac_offset)) {
       PW_LOG_INFO("SDM already configured — skipping");
       co_return pw::OkStatus();
     }
@@ -36,35 +49,31 @@ pw::async2::Coro<pw::Status> ConfigureSdm(
                 static_cast<int>(settings_result.status().code()));
   }
 
-  // Step 2: Write NDEF URL template in 2 chunks (plain mode)
-  PW_LOG_INFO("Writing NDEF URL template...");
+  // Step 2: Write NDEF URL template in chunks
+  PW_LOG_INFO("Writing NDEF URL template (%u bytes)...",
+              static_cast<unsigned>(ndef.size));
 
-  pw::ConstByteSpan part1(sdm::kNdefTemplate.data(), sdm::kWriteChunkSize);
-  auto write1_status = co_await ntag.WriteData(
-      cx, session, sdm::kNdefFileNumber, 0, part1, nfc::CommMode::kPlain);
-  if (!write1_status.ok()) {
-    PW_LOG_ERROR("NDEF write part 1 failed: %d",
-                 static_cast<int>(write1_status.code()));
-    co_return write1_status;
-  }
-
-  pw::ConstByteSpan part2(sdm::kNdefTemplate.data() + sdm::kWriteChunkSize,
-                          sdm::kNdefTotalSize - sdm::kWriteChunkSize);
-  auto write2_status = co_await ntag.WriteData(
-      cx, session, sdm::kNdefFileNumber, sdm::kWriteChunkSize, part2,
-      nfc::CommMode::kPlain);
-  if (!write2_status.ok()) {
-    PW_LOG_ERROR("NDEF write part 2 failed: %d",
-                 static_cast<int>(write2_status.code()));
-    co_return write2_status;
+  size_t offset = 0;
+  while (offset < ndef.size) {
+    size_t chunk = std::min(sdm::kWriteChunkSize, ndef.size - offset);
+    pw::ConstByteSpan data(ndef.data.data() + offset, chunk);
+    auto write_status = co_await ntag.WriteData(
+        cx, session, sdm::kNdefFileNumber, offset, data,
+        nfc::CommMode::kPlain);
+    if (!write_status.ok()) {
+      PW_LOG_ERROR("NDEF write at offset %u failed: %d",
+                   static_cast<unsigned>(offset),
+                   static_cast<int>(write_status.code()));
+      co_return write_status;
+    }
+    offset += chunk;
   }
 
   // Step 3: Enable SDM via ChangeFileSettings.
-  // Command is always Full mode (encrypted). Response follows file's current
-  // CommMode (Plain), since the file hasn't changed CommMode yet.
-  PW_LOG_INFO("Enabling SDM...");
+  PW_LOG_INFO("Enabling SDM (picc_offset=0x%02x, mac_offset=0x%02x)...",
+              ndef.picc_data_offset, ndef.sdm_mac_offset);
   auto change_status = co_await ntag.ChangeFileSettings(
-      cx, session, sdm::kNdefFileNumber, sdm::kSdmFileSettings,
+      cx, session, sdm::kNdefFileNumber, file_settings,
       nfc::CommMode::kPlain);
   if (!change_status.ok()) {
     PW_LOG_ERROR("ChangeFileSettings failed: %d",
@@ -79,12 +88,12 @@ pw::async2::Coro<pw::Status> ConfigureSdm(
   if (!verify_result.ok()) {
     PW_LOG_WARN("Verification GetFileSettings failed: %d",
                 static_cast<int>(verify_result.status().code()));
-    // SDM was written successfully, verification is best-effort
     co_return pw::OkStatus();
   }
 
   if (!sdm::IsSdmConfigured(
-          pw::ConstByteSpan(verify_buf.data(), *verify_result))) {
+          pw::ConstByteSpan(verify_buf.data(), *verify_result),
+          ndef.picc_data_offset, ndef.sdm_mac_offset)) {
     PW_LOG_ERROR("SDM verification failed — settings don't match expected");
     co_return pw::Status::Internal();
   }

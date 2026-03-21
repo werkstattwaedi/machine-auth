@@ -110,6 +110,7 @@ class PersonalizePane(WindowPane, PluginMixin):
         master_key: bytes = b"",
         terminal_key: bytes = b"",
         system_name: str = "OwwMachineAuth",
+        sdm_base_url: str = "",
         *args,
         **kwargs,
     ):
@@ -118,6 +119,7 @@ class PersonalizePane(WindowPane, PluginMixin):
         self._master_key = master_key
         self._terminal_key = terminal_key
         self._system_name = system_name
+        self._sdm_base_url = sdm_base_url
 
         self._auto_mode = False
         self._current_uid: bytes | None = None
@@ -315,6 +317,7 @@ class PersonalizePane(WindowPane, PluginMixin):
                 authorization_key=keys["authorization"],
                 sdm_mac_key=keys["sdm_mac"],
                 reserved2_key=keys["reserved2"],
+                sdm_base_url=self._sdm_base_url,
             )
 
             if not status.ok():

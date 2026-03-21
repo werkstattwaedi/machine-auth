@@ -13,3 +13,4 @@ maco.PersonalizeTagRequest.terminal_key    max_size:16
 maco.PersonalizeTagRequest.authorization_key max_size:16
 maco.PersonalizeTagRequest.sdm_mac_key     max_size:16
 maco.PersonalizeTagRequest.reserved2_key   max_size:16
+maco.PersonalizeTagRequest.sdm_base_url   max_size:64

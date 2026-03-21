@@ -98,6 +98,19 @@ pw::Status PersonalizationRpcService::PersonalizeTag(
               request.reserved2_key.bytes,
               sizeof(keys.reserved2_key));
 
+  // Copy SDM base URL
+  size_t url_len = std::strlen(request.sdm_base_url);
+  if (url_len > kMaxSdmBaseUrlLength) {
+    PW_LOG_ERROR("SDM base URL too long: %u > %u",
+                 static_cast<unsigned>(url_len),
+                 static_cast<unsigned>(kMaxSdmBaseUrlLength));
+    response.success = false;
+    return pw::OkStatus();
+  }
+  std::memcpy(keys.sdm_base_url, request.sdm_base_url, url_len);
+  keys.sdm_base_url[url_len] = '\0';
+  keys.sdm_base_url_length = url_len;
+
   coordinator_.DeliverKeys(keys);
   response.success = true;
   return pw::OkStatus();

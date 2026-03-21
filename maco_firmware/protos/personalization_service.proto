@@ -44,6 +44,7 @@ message PersonalizeTagRequest {
   bytes authorization_key = 4; // 16-byte (key 2)
   bytes sdm_mac_key = 5;       // 16-byte (key 3)
   bytes reserved2_key = 6;     // 16-byte (key 4)
+  string sdm_base_url = 7;    // e.g. "id.werkstattwaedi.ch/"
 }
 
 message GetPersonalizeStateRequest {}
