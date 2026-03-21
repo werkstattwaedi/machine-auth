@@ -24,6 +24,7 @@ import type {
   PricingModel,
 } from "@/lib/workshop-config"
 import { getUnitLabel, getShortUnit } from "@/lib/workshop-config"
+import type { ItemErrors } from "@/components/checkout/validation"
 
 /** Shape of a checkout item for inline editing */
 export interface CheckoutItemLocal {
@@ -57,6 +58,19 @@ function rowBg(index: number): string {
   return index % 2 === 0 ? "bg-[#f5f5f5]" : "bg-white"
 }
 
+// --- Error badge for item validation (absolutely positioned to avoid layout shift) ---
+function ItemError({ message }: { message?: string }) {
+  if (!message) return null
+  return (
+    <span className="absolute left-0 top-full mt-0.5 whitespace-nowrap px-2 py-0.5 text-xs text-white bg-[#cc2a24] rounded-sm">
+      {message}
+    </span>
+  )
+}
+
+const INPUT_ERR_CLS =
+  "flex h-9 w-full rounded-none border border-[#cc2a24] bg-background px-3 py-1 text-sm outline-none focus:border-[#cc2a24]"
+
 // --- Shared row header: ⊗ icon left + label ---
 function ItemHeader({
   label,
@@ -87,6 +101,8 @@ function PriceColumns({
   editablePrice,
   onPriceChange,
   onPriceBlur,
+  priceError,
+  priceErrorMessage,
 }: {
   unitLabel: string
   unitPrice: number
@@ -94,26 +110,29 @@ function PriceColumns({
   editablePrice?: boolean
   onPriceChange?: (v: number) => void
   onPriceBlur?: () => void
+  priceError?: boolean
+  priceErrorMessage?: string
 }) {
   return (
     <>
-      <div className="w-24 shrink-0 text-right">
+      <div className="w-24 shrink-0 text-right relative">
         <Label className="text-xs font-bold">{unitLabel}</Label>
         {editablePrice ? (
           <input
             type="number"
             min="0"
-            step="0.05"
+            step="any"
             value={unitPrice || ""}
-            onChange={(e) => onPriceChange?.(parseFloat(e.target.value) || 0)}
+            onChange={(e) => onPriceChange?.(Math.max(0, parseFloat(e.target.value) || 0))}
             onBlur={onPriceBlur}
-            className={INPUT_CLS + " text-right"}
+            className={(priceError ? INPUT_ERR_CLS : INPUT_CLS) + " text-right"}
           />
         ) : (
           <div className="h-9 flex items-center justify-end text-sm">
             {formatCHF(unitPrice)}
           </div>
         )}
+        <ItemError message={priceErrorMessage} />
       </div>
       <div className="w-24 shrink-0 text-right">
         <Label className="text-xs font-bold">Betrag</Label>
@@ -136,6 +155,7 @@ export function CatalogItemRow({
   index,
   callbacks,
   onBlurSave,
+  error,
 }: {
   item: CheckoutItemLocal
   catalogEntry?: CatalogItem
@@ -143,6 +163,7 @@ export function CatalogItemRow({
   index: number
   callbacks: ItemCallbacks
   onBlurSave?: boolean
+  error?: ItemErrors
 }) {
   const pricingModel = catalogEntry?.pricingModel ?? item.pricingModel ?? "count"
 
@@ -155,6 +176,7 @@ export function CatalogItemRow({
           index={index}
           callbacks={callbacks}
           onBlurSave={onBlurSave}
+          error={error}
         />
       )
     case "length":
@@ -165,6 +187,7 @@ export function CatalogItemRow({
           index={index}
           callbacks={callbacks}
           onBlurSave={onBlurSave}
+          error={error}
         />
       )
     case "direct":
@@ -174,6 +197,7 @@ export function CatalogItemRow({
           index={index}
           callbacks={callbacks}
           onBlurSave={onBlurSave}
+          error={error}
         />
       )
     default:
@@ -185,6 +209,7 @@ export function CatalogItemRow({
           index={index}
           callbacks={callbacks}
           onBlurSave={onBlurSave}
+          error={error}
         />
       )
   }
@@ -201,6 +226,7 @@ function SimpleItemRow({
   index,
   callbacks,
   onBlurSave,
+  error,
 }: {
   item: CheckoutItemLocal
   config: PricingConfig
@@ -208,6 +234,7 @@ function SimpleItemRow({
   index: number
   callbacks: ItemCallbacks
   onBlurSave?: boolean
+  error?: ItemErrors
 }) {
   const isWeight = pricingModel === "weight"
   const isTime = pricingModel === "time"
@@ -241,28 +268,31 @@ function SimpleItemRow({
     })
   }
 
+  const hasError = error && (error.quantity || error.price)
+
   return (
-    <div className={`pl-8 pr-4 py-3 ${rowBg(index)}`}>
+    <div className={`pl-8 pr-4 py-3 ${rowBg(index)}${hasError ? " bg-[#fce4e4]" : ""}`}>
       <ItemHeader
         label={`Artikel ${index + 1}: ${item.description}`}
         onRemove={() => callbacks.removeItem(item.id)}
       />
-      <div className="flex items-end gap-3 mt-2">
-        <div className="w-28">
+      <div className={`flex items-end gap-3 mt-2${hasError ? " pb-5" : ""}`}>
+        <div className="w-28 relative">
           <Label className="text-xs font-bold">Anzahl ({displayUnit})</Label>
           <input
             type="number"
             min="0"
-            step={pricingModel === "count" ? "1" : "0.1"}
+            step="any"
             value={rawQty || ""}
             onChange={(e) => {
-              const v = parseFloat(e.target.value) || 0
+              const v = Math.max(0, parseFloat(e.target.value) || 0)
               setRawQty(v)
               if (!onBlurSave) doUpdate(v, needsUserPrice ? localUnitPrice : undefined)
             }}
             onBlur={onBlurSave ? () => doUpdate(rawQty, needsUserPrice ? localUnitPrice : undefined) : undefined}
-            className={INPUT_CLS}
+            className={error?.quantity ? INPUT_ERR_CLS : INPUT_CLS}
           />
+          <ItemError message={error?.quantity} />
         </div>
         <div className="flex-1" />
         <PriceColumns
@@ -275,6 +305,8 @@ function SimpleItemRow({
             if (!onBlurSave) doUpdate(rawQty, v)
           }}
           onPriceBlur={onBlurSave ? () => doUpdate(rawQty, localUnitPrice) : undefined}
+          priceError={!!error?.price}
+          priceErrorMessage={error?.price}
         />
       </div>
     </div>
@@ -291,12 +323,14 @@ function AreaItemRow({
   index,
   callbacks,
   onBlurSave,
+  error,
 }: {
   item: CheckoutItemLocal
   config: PricingConfig
   index: number
   callbacks: ItemCallbacks
   onBlurSave?: boolean
+  error?: ItemErrors
 }) {
   const formL = item.formInputs?.[0]?.quantity ?? 0
   const formW = item.formInputs?.[1]?.quantity ?? 0
@@ -325,43 +359,46 @@ function AreaItemRow({
     })
   }
 
+  const hasError = error && (error.quantity || error.price)
+
   return (
-    <div className={`pl-8 pr-4 py-3 ${rowBg(index)}`}>
+    <div className={`pl-8 pr-4 py-3 ${rowBg(index)}${hasError ? " bg-[#fce4e4]" : ""}`}>
       <ItemHeader
         label={`Artikel ${index + 1}: ${item.description}`}
         onRemove={() => callbacks.removeItem(item.id)}
       />
-      <div className="flex items-end gap-3 mt-2">
-        <div className="w-24">
+      <div className={`flex items-end gap-3 mt-2${hasError ? " pb-5" : ""}`}>
+        <div className="w-24 relative">
           <Label className="text-xs font-bold">Länge (cm)</Label>
           <input
             type="number"
             min="0"
-            step="1"
+            step="any"
             value={lengthCm || ""}
             onChange={(e) => {
-              const v = parseFloat(e.target.value) || 0
+              const v = Math.max(0, parseFloat(e.target.value) || 0)
               setLengthCm(v)
               if (!onBlurSave) doUpdate(v, widthCm)
             }}
             onBlur={onBlurSave ? () => doUpdate(lengthCm, widthCm) : undefined}
-            className={INPUT_CLS}
+            className={error?.quantity ? INPUT_ERR_CLS : INPUT_CLS}
           />
+          <ItemError message={error?.quantity} />
         </div>
         <div className="w-24">
           <Label className="text-xs font-bold">Breite (cm)</Label>
           <input
             type="number"
             min="0"
-            step="1"
+            step="any"
             value={widthCm || ""}
             onChange={(e) => {
-              const v = parseFloat(e.target.value) || 0
+              const v = Math.max(0, parseFloat(e.target.value) || 0)
               setWidthCm(v)
               if (!onBlurSave) doUpdate(lengthCm, v)
             }}
             onBlur={onBlurSave ? () => doUpdate(lengthCm, widthCm) : undefined}
-            className={INPUT_CLS}
+            className={error?.quantity ? INPUT_ERR_CLS : INPUT_CLS}
           />
         </div>
         <div className="w-16">
@@ -379,6 +416,8 @@ function AreaItemRow({
             if (!onBlurSave) doUpdate(lengthCm, widthCm, v)
           }}
           onPriceBlur={onBlurSave ? () => doUpdate(lengthCm, widthCm, localUnitPrice) : undefined}
+          priceError={!!error?.price}
+          priceErrorMessage={error?.price}
         />
       </div>
     </div>
@@ -395,12 +434,14 @@ function LengthItemRow({
   index,
   callbacks,
   onBlurSave,
+  error,
 }: {
   item: CheckoutItemLocal
   config: PricingConfig
   index: number
   callbacks: ItemCallbacks
   onBlurSave?: boolean
+  error?: ItemErrors
 }) {
   const formL = item.formInputs?.[0]?.quantity ?? 0
   const [lengthCm, setLengthCm] = useState(formL)
@@ -422,28 +463,31 @@ function LengthItemRow({
     })
   }
 
+  const hasError = error && (error.quantity || error.price)
+
   return (
-    <div className={`pl-8 pr-4 py-3 ${rowBg(index)}`}>
+    <div className={`pl-8 pr-4 py-3 ${rowBg(index)}${hasError ? " bg-[#fce4e4]" : ""}`}>
       <ItemHeader
         label={`Artikel ${index + 1}: ${item.description}`}
         onRemove={() => callbacks.removeItem(item.id)}
       />
-      <div className="flex items-end gap-3 mt-2">
-        <div className="w-28">
+      <div className={`flex items-end gap-3 mt-2${hasError ? " pb-5" : ""}`}>
+        <div className="w-28 relative">
           <Label className="text-xs font-bold">Länge (cm)</Label>
           <input
             type="number"
             min="0"
-            step="1"
+            step="any"
             value={lengthCm || ""}
             onChange={(e) => {
-              const v = parseFloat(e.target.value) || 0
+              const v = Math.max(0, parseFloat(e.target.value) || 0)
               setLengthCm(v)
               if (!onBlurSave) doUpdate(v)
             }}
             onBlur={onBlurSave ? () => doUpdate(lengthCm) : undefined}
-            className={INPUT_CLS}
+            className={error?.quantity ? INPUT_ERR_CLS : INPUT_CLS}
           />
+          <ItemError message={error?.quantity} />
         </div>
         <div className="flex-1" />
         <PriceColumns
@@ -456,6 +500,8 @@ function LengthItemRow({
             if (!onBlurSave) doUpdate(lengthCm, v)
           }}
           onPriceBlur={onBlurSave ? () => doUpdate(lengthCm, localUnitPrice) : undefined}
+          priceError={!!error?.price}
+          priceErrorMessage={error?.price}
         />
       </div>
     </div>
@@ -471,11 +517,13 @@ function DirectItemRow({
   index,
   callbacks,
   onBlurSave,
+  error,
 }: {
   item: CheckoutItemLocal
   index: number
   callbacks: ItemCallbacks
   onBlurSave?: boolean
+  error?: ItemErrors
 }) {
   const [description, setDescription] = useState(item.description)
   const [cost, setCost] = useState(item.totalPrice)
@@ -490,14 +538,16 @@ function DirectItemRow({
     })
   }
 
+  const hasError = error && (error.description || error.price)
+
   return (
-    <div className={`pl-8 pr-4 py-3 ${rowBg(index)}`}>
+    <div className={`pl-8 pr-4 py-3 ${rowBg(index)}${hasError ? " bg-[#fce4e4]" : ""}`}>
       <ItemHeader
         label={`Artikel ${index + 1}: ${item.description || "Pauschal"}`}
         onRemove={() => callbacks.removeItem(item.id)}
       />
-      <div className="flex items-end gap-3 mt-2">
-        <div className="flex-1">
+      <div className={`flex items-end gap-3 mt-2${hasError ? " pb-5" : ""}`}>
+        <div className="flex-1 relative">
           <Label className="text-xs font-bold">Bezogene Leistungen</Label>
           <input
             value={description}
@@ -507,24 +557,26 @@ function DirectItemRow({
             }}
             onBlur={onBlurSave ? () => doUpdate(description, cost) : undefined}
             placeholder="Was hast du gebraucht?"
-            className={INPUT_CLS}
+            className={error?.description ? INPUT_ERR_CLS : INPUT_CLS}
           />
+          <ItemError message={error?.description} />
         </div>
-        <div className="w-24 shrink-0">
+        <div className="w-24 shrink-0 relative">
           <Label className="text-xs font-bold">Kosten (CHF)</Label>
           <input
             type="number"
             min="0"
-            step="0.05"
+            step="any"
             value={cost || ""}
             onChange={(e) => {
-              const v = parseFloat(e.target.value) || 0
+              const v = Math.max(0, parseFloat(e.target.value) || 0)
               setCost(v)
               if (!onBlurSave) doUpdate(description, v)
             }}
             onBlur={onBlurSave ? () => doUpdate(description, cost) : undefined}
-            className={INPUT_CLS}
+            className={error?.price ? INPUT_ERR_CLS : INPUT_CLS}
           />
+          <ItemError message={error?.price} />
         </div>
       </div>
     </div>
@@ -884,6 +936,7 @@ export function WorkshopInlineSection({
   discountLevel,
   onBlurSave,
   checkoutId,
+  itemErrors,
 }: {
   workshopId: WorkshopId
   workshop: WorkshopConfig
@@ -894,6 +947,7 @@ export function WorkshopInlineSection({
   discountLevel: DiscountLevel
   onBlurSave?: boolean
   checkoutId?: string | null
+  itemErrors?: Record<string, ItemErrors>
 }) {
   const [searchOpen, setSearchOpen] = useState(false)
 
@@ -929,6 +983,7 @@ export function WorkshopInlineSection({
           index={nfcItems.length + i}
           callbacks={callbacks}
           onBlurSave={onBlurSave}
+          error={itemErrors?.[item.id]}
         />
       ))}
 

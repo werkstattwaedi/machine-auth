@@ -128,7 +128,7 @@ test.describe("Anonymous checkout", () => {
     await expect(page.getByText("Eintrittsgebühren")).toBeVisible()
   })
 
-  test("form validation prevents advancing", async ({ page }) => {
+  test("form validation prevents advancing and shows errors", async ({ page }) => {
     await page.goto("/checkout")
     // Dismiss landing page
     await page
@@ -137,29 +137,42 @@ test.describe("Anonymous checkout", () => {
 
     await expect(page.getByText("Deine Angaben")).toBeVisible()
 
-    // "Weiter" should be disabled initially
-    await expect(
-      page.getByRole("button", { name: "Weiter" }),
-    ).toBeDisabled()
-
-    // Fill only first name — still disabled
-    await personField(page, "Vorname").fill("Max")
-    await expect(
-      page.getByRole("button", { name: "Weiter" }),
-    ).toBeDisabled()
-
-    // Fill all fields but don't accept terms — still disabled
-    await personField(page, "Nachname").fill("Muster")
-    await personField(page, "E-Mail").fill("max@test.com")
-    await expect(
-      page.getByRole("button", { name: "Weiter" }),
-    ).toBeDisabled()
-
-    // Accept terms — now enabled
-    await page.locator("#terms-accept").click()
+    // "Weiter" is always enabled (clickable)
     await expect(
       page.getByRole("button", { name: "Weiter" }),
     ).toBeEnabled()
+
+    // Click Weiter with empty fields — shows validation errors
+    await page.getByRole("button", { name: "Weiter" }).click()
+    await expect(page.getByText("Vorname ist erforderlich.")).toBeVisible()
+    await expect(page.getByText("Nachname ist erforderlich.")).toBeVisible()
+    await expect(page.getByText("E-Mail ist erforderlich.")).toBeVisible()
+    await expect(page.getByText("Nutzungsbestimmungen ist erforderlich.")).toBeVisible()
+
+    // Still on step 0
+    await expect(page.getByText("Deine Angaben")).toBeVisible()
+
+    // Fill invalid email, blur → format error shown
+    await personField(page, "Vorname").fill("Max")
+    await personField(page, "Nachname").fill("Muster")
+    await personField(page, "E-Mail").fill("not-valid")
+
+    // Errors for filled fields should be gone, email format error present
+    await expect(page.getByText("Vorname ist erforderlich.")).not.toBeVisible()
+    await expect(
+      page.getByText("E-Mail muss im Format name@address.xyz eingegeben werden."),
+    ).toBeVisible()
+
+    // Fix email
+    await personField(page, "E-Mail").fill("max@test.com")
+    await expect(
+      page.getByText("E-Mail muss im Format name@address.xyz eingegeben werden."),
+    ).not.toBeVisible()
+
+    // Accept terms — now Weiter advances
+    await page.locator("#terms-accept").click()
+    await page.getByRole("button", { name: "Weiter" }).click()
+    await expect(page.getByText("Werkstätten wählen")).toBeVisible()
   })
 
   test("step navigation forward and back", async ({ page }) => {

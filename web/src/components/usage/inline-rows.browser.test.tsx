@@ -256,6 +256,39 @@ describe("SimpleItemRow", () => {
     expect(callbacks.updateItem).toHaveBeenCalledTimes(1)
     expect(callbacks.updateItem.mock.calls[0][1]).toMatchObject({ quantity: 7, totalPrice: 7 })
   })
+
+  it("clamps negative quantity to zero", async () => {
+    const user = userEvent.setup()
+    const callbacks = makeCallbacks()
+    const item = makeItem({ pricingModel: "count", unitPrice: 1 })
+
+    render(
+      <CatalogItemRow item={item} config={makeConfig()} index={0} callbacks={callbacks} />,
+    )
+
+    const input = screen.getByRole("spinbutton")
+    await user.clear(input)
+    await user.type(input, "-5")
+    const lastCall = callbacks.updateItem.mock.calls.at(-1)!
+    expect(lastCall[1].quantity).toBeGreaterThanOrEqual(0)
+  })
+
+  it("clamps negative manual price to zero", async () => {
+    const user = userEvent.setup()
+    const callbacks = makeCallbacks()
+    const item = makeItem({ catalogId: null, unitPrice: 0, pricingModel: "count" })
+
+    render(
+      <CatalogItemRow item={item} config={makeConfig()} index={0} callbacks={callbacks} />,
+    )
+
+    const inputs = screen.getAllByRole("spinbutton")
+    // Second spinbutton is the editable price
+    await user.clear(inputs[1])
+    await user.type(inputs[1], "-3")
+    const lastCall = callbacks.updateItem.mock.calls.at(-1)!
+    expect(lastCall[1].unitPrice).toBeGreaterThanOrEqual(0)
+  })
 })
 
 // ============================================================================
@@ -401,6 +434,27 @@ describe("DirectItemRow", () => {
     )
 
     expect(screen.getByPlaceholderText("Was hast du gebraucht?")).toBeTruthy()
+  })
+
+  it("clamps negative cost to zero", async () => {
+    const user = userEvent.setup()
+    const callbacks = makeCallbacks()
+    const item = makeItem({
+      pricingModel: "direct",
+      catalogId: null,
+      description: "Test",
+      totalPrice: 0,
+    })
+
+    render(
+      <CatalogItemRow item={item} config={makeConfig()} index={0} callbacks={callbacks} />,
+    )
+
+    const costInput = screen.getByRole("spinbutton")
+    await user.clear(costInput)
+    await user.type(costInput, "-10")
+    const lastCall = callbacks.updateItem.mock.calls.at(-1)!
+    expect(lastCall[1].totalPrice).toBeGreaterThanOrEqual(0)
   })
 })
 

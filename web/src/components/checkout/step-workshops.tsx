@@ -1,7 +1,7 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useCallback, useRef, useEffect } from "react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ArrowLeft, ArrowRight } from "lucide-react"
 import { getSortedWorkshops } from "@/lib/workshop-config"
@@ -9,6 +9,7 @@ import type { PricingConfig, WorkshopId, DiscountLevel } from "@/lib/workshop-co
 import type { CheckoutState, CheckoutAction } from "./use-checkout-state"
 import { type CheckoutItemLocal, type ItemCallbacks } from "@/components/usage/inline-rows"
 import { WorkshopSectionWithCatalog } from "@/components/usage/workshop-section-with-catalog"
+import { validateCheckoutItem, hasItemErrors, type ItemErrors } from "./validation"
 import {
   addDoc,
   updateDoc,
@@ -43,6 +44,28 @@ export function StepWorkshops({
 }: StepWorkshopsProps) {
   const db = useDb()
   const sortedWorkshops = config ? getSortedWorkshops(config) : []
+
+  const [itemsSubmitted, setItemsSubmitted] = useState(false)
+
+  // Recompute errors reactively so fixing an item clears its error
+  const itemErrors = useMemo(() => {
+    if (!itemsSubmitted) return {} as Record<string, ItemErrors>
+    const errors: Record<string, ItemErrors> = {}
+    for (const item of items) {
+      const err = validateCheckoutItem(item)
+      if (hasItemErrors(err)) errors[item.id] = err
+    }
+    return errors
+  }, [items, itemsSubmitted])
+
+  // Reset submitted state when items are added so new items start clean
+  const prevItemCount = useRef(items.length)
+  useEffect(() => {
+    if (items.length > prevItemCount.current) {
+      setItemsSubmitted(false)
+    }
+    prevItemCount.current = items.length
+  }, [items.length])
 
   // Workshops that already have items (cannot be unchecked)
   const workshopsWithItems = useMemo(() => {
@@ -131,6 +154,13 @@ export function StepWorkshops({
     [isAnonymous, checkoutId, userRef, state.usageType, dispatch],
   )
 
+  const handleCheckout = useCallback(() => {
+    setItemsSubmitted(true)
+    const invalid = items.some((item) => hasItemErrors(validateCheckoutItem(item)))
+    if (invalid) return
+    dispatch({ type: "SET_STEP", step: 2 })
+  }, [items, dispatch])
+
   return (
     <div className="space-y-8">
       {/* Workshop checkbox selector */}
@@ -172,6 +202,7 @@ export function StepWorkshops({
               callbacks={callbacks}
               discountLevel={discountLevel}
               checkoutId={checkoutId}
+              itemErrors={itemErrors}
             />
           ))}
 
@@ -188,7 +219,7 @@ export function StepWorkshops({
         <button
           type="button"
           className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-white bg-cog-teal rounded-[3px] hover:bg-cog-teal-dark transition-colors"
-          onClick={() => dispatch({ type: "SET_STEP", step: 2 })}
+          onClick={handleCheckout}
         >
           Check-Out
           <ArrowRight className="h-4 w-4" />
@@ -197,4 +228,3 @@ export function StepWorkshops({
     </div>
   )
 }
-

@@ -9,6 +9,7 @@ import {
   type ItemCallbacks,
 } from "@/components/usage/inline-rows"
 import { PageLoading } from "@/components/page-loading"
+import type { ItemErrors } from "@/components/checkout/validation"
 
 /** Workshop section that loads catalog items for the workshop */
 export function WorkshopSectionWithCatalog({
@@ -20,6 +21,7 @@ export function WorkshopSectionWithCatalog({
   discountLevel,
   onBlurSave,
   checkoutId,
+  itemErrors,
 }: {
   workshopId: WorkshopId
   workshop: WorkshopConfig
@@ -29,6 +31,7 @@ export function WorkshopSectionWithCatalog({
   discountLevel: DiscountLevel
   onBlurSave?: boolean
   checkoutId?: string | null
+  itemErrors?: Record<string, ItemErrors>
 }) {
   const { data: rawCatalog, loading } = useCatalogForWorkshop(workshopId)
 
@@ -60,6 +63,7 @@ export function WorkshopSectionWithCatalog({
       discountLevel={discountLevel}
       onBlurSave={onBlurSave}
       checkoutId={checkoutId}
+      itemErrors={itemErrors}
     />
   )
 }
