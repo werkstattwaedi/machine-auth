@@ -419,6 +419,10 @@ def main() -> int:
     master_key = bytes.fromhex(secrets["DIVERSIFICATION_MASTER_KEY"])
     terminal_key = bytes.fromhex(secrets["TERMINAL_KEY"])
     system_name = secrets.get("DIVERSIFICATION_SYSTEM_NAME", _SYSTEM_NAME)
+    sdm_base_url = secrets.get("SDM_BASE_URL", "")
+    if not sdm_base_url:
+        print("Warning: SDM_BASE_URL not set, tag personalization will fail")
+        print("  Set SDM_BASE_URL in your operations .env file")
 
     if len(master_key) != 16:
         print("Error: DIVERSIFICATION_MASTER_KEY must be 16 bytes (32 hex)")
@@ -429,7 +433,8 @@ def main() -> int:
 
     mode_label = "PROD" if use_prod else "DEV"
     print(f"Secrets loaded ({mode_label}): master_key=...{master_key[-2:].hex()}, "
-          f"terminal_key=...{terminal_key[-2:].hex()}")
+          f"terminal_key=...{terminal_key[-2:].hex()}, "
+          f"sdm_url=https://{sdm_base_url}")
 
     is_serial = args.device is not None
 
@@ -477,6 +482,7 @@ def main() -> int:
                 master_key=master_key,
                 terminal_key=terminal_key,
                 system_name=system_name,
+                sdm_base_url=sdm_base_url,
             )
 
             console = pw_embed.PwConsoleEmbed(

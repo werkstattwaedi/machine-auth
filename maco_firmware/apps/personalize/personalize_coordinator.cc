@@ -265,7 +265,8 @@ pw::async2::Coro<pw::Status> PersonalizeCoordinator::TryPersonalize(
   }
 
   // Configure SDM (idempotent)
-  auto sdm_status = co_await ConfigureSdm(cx, ntag, *session_result);
+  auto sdm_status = co_await ConfigureSdm(
+      cx, ntag, *session_result, keys.sdm_base_url);
   if (!sdm_status.ok()) {
     SetError("SDM configuration failed");
     StreamTagEvent(maco_TagEvent_EventType_PERSONALIZATION_FAILED,

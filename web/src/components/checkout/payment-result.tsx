@@ -5,9 +5,9 @@ import { formatCHF } from "@/lib/format"
 import { CheckCircle } from "lucide-react"
 import { QRCodeSVG } from "qrcode.react"
 
-// Swiss QR-bill payment details
-const IBAN = "CH56 0681 4580 1260 0509 7"
-const TWINT_QR_DATA = "https://pay.twint.ch/1/merchant/oww"
+// Payment details from deployment config
+const IBAN = import.meta.env.VITE_IBAN
+const TWINT_QR_DATA = import.meta.env.VITE_TWINT_URL
 
 interface PaymentResultProps {
   totalPrice: number
@@ -38,7 +38,7 @@ export function PaymentResult({ totalPrice, onReset }: PaymentResultProps) {
             <h4 className="font-semibold">E-Banking</h4>
             <div className="bg-white p-3 rounded inline-block mx-auto">
               <QRCodeSVG
-                value={`SPC\n0200\n1\nCH5606814580126005097\nS\nVerein Offene Werkstatt Wädenswil\n\n\n\n8820\nWädenswil\nCH\n\n\n\n\n\n\n\n${totalPrice.toFixed(2)}\nCHF\n\n\n\n\n\n\n\nNON\n\n\nEPD`}
+                value={`SPC\n0200\n1\n${IBAN.replace(/\s/g, "")}\nS\n${import.meta.env.VITE_PAYMENT_RECIPIENT_NAME}\n\n\n\n${import.meta.env.VITE_PAYMENT_RECIPIENT_POSTAL_CODE}\n${import.meta.env.VITE_PAYMENT_RECIPIENT_CITY}\n${import.meta.env.VITE_PAYMENT_RECIPIENT_COUNTRY}\n\n\n\n\n\n\n\n${totalPrice.toFixed(2)}\n${import.meta.env.VITE_CURRENCY}\n\n\n\n\n\n\n\nNON\n\n\nEPD`}
                 size={160}
               />
             </div>

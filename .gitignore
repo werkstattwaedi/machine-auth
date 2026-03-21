@@ -62,8 +62,9 @@ node_modules/
 # Yarn Integrity file
 .yarn-integrity
 
-# dotenv environment variables file
+# dotenv environment variables file (but allow committed symlinks)
 .env
+!scripts/.env
 *.env.local
 !functions/.env.local
 !maco_gateway/.env.local

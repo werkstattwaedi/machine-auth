@@ -3,18 +3,21 @@
 
 import { type Timestamp } from "firebase/firestore"
 
-const chfFormatter = new Intl.NumberFormat("de-CH", {
+const locale = import.meta.env.VITE_LOCALE ?? "de-CH"
+const currency = import.meta.env.VITE_CURRENCY ?? "CHF"
+
+const currencyFormatter = new Intl.NumberFormat(locale, {
   style: "currency",
-  currency: "CHF",
+  currency,
 })
 
-const dateFormatter = new Intl.DateTimeFormat("de-CH", {
+const dateFormatter = new Intl.DateTimeFormat(locale, {
   day: "2-digit",
   month: "2-digit",
   year: "numeric",
 })
 
-const dateTimeFormatter = new Intl.DateTimeFormat("de-CH", {
+const dateTimeFormatter = new Intl.DateTimeFormat(locale, {
   day: "2-digit",
   month: "2-digit",
   year: "numeric",
@@ -23,7 +26,7 @@ const dateTimeFormatter = new Intl.DateTimeFormat("de-CH", {
 })
 
 export function formatCHF(amount: number): string {
-  return chfFormatter.format(amount)
+  return currencyFormatter.format(amount)
 }
 
 export function formatDate(

@@ -33,9 +33,10 @@ function hostRewrite(): PluginOption {
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
         const host = req.headers.host || req.headers[":authority"]
+        const checkoutDomain = process.env.VITE_CHECKOUT_DOMAIN || "checkout.werkstattwaedi.ch"
         if (
           typeof host === "string" &&
-          host.startsWith("checkout.werkstattwaedi.ch") &&
+          host.startsWith(checkoutDomain) &&
           req.url === "/"
         ) {
           res.writeHead(302, { Location: "/checkout" })
@@ -59,7 +60,7 @@ export default defineConfig({
   ],
   server: {
     host: true,
-    allowedHosts: ["checkout.werkstattwaedi.ch"],
+    allowedHosts: [process.env.VITE_CHECKOUT_DOMAIN || "checkout.werkstattwaedi.ch"],
   },
   resolve: {
     alias: {
