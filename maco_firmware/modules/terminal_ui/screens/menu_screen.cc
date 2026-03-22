@@ -77,7 +77,7 @@ pw::Status MenuScreen::OnActivate() {
             self->action_callback_(self->items_[idx].action);
           }
         },
-        LV_EVENT_CLICKED,
+        LV_EVENT_PRESSED,
         this);
 
     AddToGroup(btn);

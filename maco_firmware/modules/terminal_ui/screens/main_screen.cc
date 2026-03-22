@@ -92,7 +92,7 @@ pw::Status MainScreen::OnActivate() {
           (*cb)(UiAction::kOpenMenu);
         }
       },
-      LV_EVENT_CLICKED,
+      LV_EVENT_PRESSED,
       &action_callback_);
   AddToGroup(menu_btn_);
 

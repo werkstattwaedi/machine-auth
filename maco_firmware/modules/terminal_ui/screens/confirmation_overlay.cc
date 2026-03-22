@@ -84,7 +84,7 @@ void ConfirmationOverlay::Create(lv_obj_t* parent, lv_group_t* group) {
           (*cb)(UiAction::kConfirm);
         }
       },
-      LV_EVENT_CLICKED,
+      LV_EVENT_PRESSED,
       &action_callback_);
   if (group_) {
     lv_group_add_obj(group_, confirm_btn_);
