@@ -649,7 +649,7 @@
         "bzlTransitiveDigest": "ZVTMsEkfirao/Z6Wr5ihB9pW+8YVDs/t7F6CtoJ+2PY=",
         "usagesDigest": "GQZ+4FK05jr+dpNg0cYzGgyhDyrGBxhGaKe5kCyXyTQ=",
         "recordedFileInputs": {
-          "@@//tools/requirements_lock.txt": "b8d843fc3b83618e90dc67552454ad2db7e4b5f4d535ff363efb083a8d41db56",
+          "@@//tools/requirements_lock.txt": "aa83693938a7844a8da239eaf81f3c087e2670f1a8f31105620c9ff6fcd98a2d",
           "@@nanopb+//extra/requirements_lock.txt": "2bcdca24f1a4429b4ab0f0bb80cca292a92e12f7bf3d0f46de7c2b14fd97ac25",
           "@@particle_bazel+//tools/requirements_lock.txt": "523b96e9a22a45d2878eefec325e5cf19ea1388dba19b55994070224f1e4cdd9",
           "@@pigweed+//pw_env_setup/py/pw_env_setup/virtualenv_setup/upstream_requirements_darwin_lock.txt": "affe8afad4cccc4b1fc1e424417dac43202b2dbdf60696dca8c70ffbd52cd450",
@@ -759,6 +759,15 @@
               "python_interpreter_target": "@@rules_python++python+python_3_11_host//:python",
               "repo": "maco_pip_311",
               "requirement": "pypng==0.20220715.0"
+            }
+          },
+          "maco_pip_311_python_dotenv": {
+            "repoRuleId": "@@rules_python+//python/private/pypi:whl_library.bzl%whl_library",
+            "attributes": {
+              "dep_template": "@maco_pip//{name}:{target}",
+              "python_interpreter_target": "@@rules_python++python+python_3_11_host//:python",
+              "repo": "maco_pip_311",
+              "requirement": "python-dotenv==1.1.0"
             }
           },
           "maco_pip_311_sniffio": {
@@ -39535,6 +39544,7 @@
                 "lz4": "{\"maco_pip_311_lz4\":[{\"version\":\"3.11\"}]}",
                 "pycryptodome": "{\"maco_pip_311_pycryptodome\":[{\"version\":\"3.11\"}]}",
                 "pypng": "{\"maco_pip_311_pypng\":[{\"version\":\"3.11\"}]}",
+                "python_dotenv": "{\"maco_pip_311_python_dotenv\":[{\"version\":\"3.11\"}]}",
                 "sniffio": "{\"maco_pip_311_sniffio\":[{\"version\":\"3.11\"}]}",
                 "typing_extensions": "{\"maco_pip_311_typing_extensions\":[{\"version\":\"3.11\"}]}"
               },
@@ -39549,6 +39559,7 @@
                 "lz4",
                 "pycryptodome",
                 "pypng",
+                "python_dotenv",
                 "sniffio",
                 "typing_extensions"
               ],

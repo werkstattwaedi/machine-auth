@@ -56,6 +56,10 @@ if [ -d "web" ] && [ ! -d "web/node_modules" ]; then
   (cd web && npm install)
 fi
 
+# Generate env files from operations config
+info "Generating environment files..."
+npm run generate-env
+
 if [ "$FRESH" = true ]; then
   warn "Fresh start requested — clearing persisted emulator data..."
   rm -rf firebase-data

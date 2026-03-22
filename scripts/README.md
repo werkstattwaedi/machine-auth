@@ -12,19 +12,28 @@ CLI tools for device provisioning and configuration. User/token management has m
 
 ## Setup
 
+Most environment variables are generated automatically from the operations repo config:
+
+```bash
+npm run generate-env   # from project root — generates scripts/.env
+```
+
+For scripts that need credentials (`sync-device-config.ts`, `setup-device.ts`), create `scripts/.env.local` with your personal tokens:
+
 ```bash
 cd scripts
-cp .env.template .env   # Fill in credentials
-npm install
+cp .env.template .env.local   # Fill in credentials
 ```
 
 ### Environment Variables
 
+`scripts/.env` (auto-generated from operations config):
+- `FIREBASE_PROJECT_ID`, `PARTICLE_PRODUCT_ID`, and all `VITE_*` vars
+
+`scripts/.env.local` (manually maintained, gitignored):
 - `PARTICLE_TOKEN`: Get with `particle token create`
-- `PARTICLE_PRODUCT_ID`: Particle product ID or slug
 - `PARTICLE_PRODUCT_NAME`: Product name (for device setup)
 - `WIFI_SSID` / `WIFI_PASS`: Wi-Fi credentials (for device setup)
-- `FIREBASE_PROJECT_ID`: Firebase project ID
 - `GOOGLE_APPLICATION_CREDENTIALS` (optional): Service account key path
 
 ### Firebase Authentication
