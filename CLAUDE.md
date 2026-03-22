@@ -138,6 +138,34 @@ npm run seed             # Seed emulator with test data
 - Hosting: http://localhost:5050
 - Gateway: localhost:5000
 
+## Testing
+
+**Important:** Stop the dev emulators (`npm run dev`) before running tests — concurrent emulator instances cause data isolation issues.
+
+```bash
+# Web unit tests (Vitest, no emulator needed)
+cd web && npm test
+
+# Web integration tests (Firestore security rules, emulator auto-started)
+npm run test:web:integration
+
+# Web E2E tests (Playwright, emulators auto-started for Firestore+Auth+Functions)
+npm run test:web:e2e
+
+# Functions tests (unit + integration, emulator auto-started)
+cd functions && npm test
+
+# All unit tests (web + functions, no emulators)
+npm run test:all
+```
+
+**Test locations:**
+- `web/src/**/*.test.{ts,tsx}` — Web unit tests (Vitest)
+- `web/src/**/*.integration.test.ts` — Firestore security rules tests (Vitest + emulator)
+- `web/e2e/*.spec.ts` — E2E browser tests (Playwright + emulators)
+- `functions/src/**/*.test.ts` — Functions unit tests (Mocha)
+- `functions/test/integration/` — Functions integration tests (Mocha + emulator)
+
 ## Web Application
 
 React SPA in `web/` (Vite + TanStack Router + shadcn/ui + Tailwind)

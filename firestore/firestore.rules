@@ -108,12 +108,13 @@ service cloud.firestore {
 
     // Checkouts (shopping cart)
     match /checkouts/{checkoutId} {
-      // Anonymous can create (walk-in checkout) with validated fields
+      // Open checkout (incremental flow) or closed checkout (one-shot submit)
       allow create: if true
-        && request.resource.data.status == 'open'
+        && (request.resource.data.status == 'open' || request.resource.data.status == 'closed')
         && request.resource.data.keys().hasOnly([
              'userId', 'status', 'usageType', 'created',
-             'workshopsVisited', 'persons', 'modifiedBy', 'modifiedAt'
+             'workshopsVisited', 'persons', 'modifiedBy', 'modifiedAt',
+             'closedAt', 'notes', 'summary'
            ]);
       allow read: if isSignedIn();
       // Owner can update their own open checkout, admin can update any

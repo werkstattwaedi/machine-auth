@@ -90,7 +90,8 @@ export default async function globalSetup() {
   // Create matching Firestore user doc
   await db.collection("users").doc(authUid).set({
     displayName: "E2E Testuser",
-    name: "E2E Testuser",
+    firstName: "E2E",
+    lastName: "Testuser",
     email: AUTH_USER_EMAIL,
     roles: ["vereinsmitglied"],
     permissions: [db.doc("permission/laser")],
@@ -105,7 +106,8 @@ export default async function globalSetup() {
   // ── Seed NFC tag test data ──
   await db.collection("users").doc(NFC_USER_ID).set({
     displayName: "NFC Tester",
-    name: "NFC Tester",
+    firstName: "NFC",
+    lastName: "Tester",
     email: "nfc@test.com",
     roles: ["vereinsmitglied"],
     permissions: [db.doc("permission/laser")],

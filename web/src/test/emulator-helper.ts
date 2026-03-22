@@ -55,6 +55,10 @@ export function getAdminFirestore(): Firestore {
   return adminDb
 }
 
+export function getTestEnvironment(): RulesTestEnvironment {
+  return testEnv
+}
+
 /**
  * Seed a document into the emulator via the admin SDK.
  * Automatically converts string paths starting with "/" to DocumentReferences.

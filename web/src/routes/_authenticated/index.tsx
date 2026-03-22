@@ -16,7 +16,6 @@ import {
   doc,
   collection,
   serverTimestamp,
-  writeBatch,
 } from "firebase/firestore"
 import { userRef } from "@/lib/firestore-helpers"
 import { useDb } from "@/lib/firebase-context"
@@ -138,11 +137,10 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
     () => ({
       addItem: async (item: CheckoutItemLocal) => {
         let coId = checkoutId
-        // Create checkout + first item atomically if needed
+        // Create checkout first, then add item (sequential so security
+        // rules can read the parent checkout when validating the item)
         if (!coId) {
-          const batch = writeBatch(db)
-          const coRef = doc(collection(db, "checkouts"))
-          batch.set(coRef, {
+          const coRef = await addDoc(collection(db, "checkouts"), {
             userId: ref,
             status: "open",
             usageType: "regular",
@@ -152,21 +150,7 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
             modifiedBy: null,
             modifiedAt: serverTimestamp(),
           })
-          const itemRef = doc(collection(db, "checkouts", coRef.id, "items"))
-          batch.set(itemRef, {
-            workshop: item.workshop,
-            description: item.description,
-            origin: item.origin,
-            catalogId: item.catalogId ? doc(db, "catalog", item.catalogId) : null,
-            pricingModel: item.pricingModel ?? null,
-            created: serverTimestamp(),
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            totalPrice: item.totalPrice,
-            formInputs: item.formInputs ?? null,
-          })
-          await batch.commit()
-          return
+          coId = coRef.id
         }
         await addDoc(collection(db, "checkouts", coId, "items"), {
           workshop: item.workshop,
