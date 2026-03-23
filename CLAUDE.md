@@ -159,10 +159,22 @@ cd functions && npm test
 npm run test:all
 ```
 
+**Screenshot tests (Playwright visual regression):**
+
+Some E2E tests use `toHaveScreenshot()` for pixel-level layout regression detection. Reference snapshots are stored in `web/e2e/*.spec.ts-snapshots/` and checked into git.
+
+```bash
+# Update snapshots after intentional UI changes (run from repo root):
+firebase emulators:exec --config firebase.e2e.json \
+  --only firestore,auth,functions \
+  'cd web && npx playwright test checkin-screenshots --update-snapshots'
+```
+
 **Test locations:**
 - `web/src/**/*.test.{ts,tsx}` — Web unit tests (Vitest)
 - `web/src/**/*.integration.test.ts` — Firestore security rules tests (Vitest + emulator)
 - `web/e2e/*.spec.ts` — E2E browser tests (Playwright + emulators)
+- `web/e2e/*.spec.ts-snapshots/` — Screenshot baselines for visual regression tests
 - `functions/src/**/*.test.ts` — Functions unit tests (Mocha)
 - `functions/test/integration/` — Functions integration tests (Mocha + emulator)
 

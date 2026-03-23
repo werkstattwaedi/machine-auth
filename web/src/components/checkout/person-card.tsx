@@ -2,12 +2,11 @@
 // SPDX-License-Identifier: MIT
 
 import { Label } from "@/components/ui/label"
-import { Button } from "@/components/ui/button"
 import {
   USER_TYPE_LABELS,
   type UserType,
 } from "@/lib/pricing"
-import { X } from "lucide-react"
+import { XCircle } from "lucide-react"
 import type { CheckoutPerson, CheckoutAction } from "./use-checkout-state"
 
 interface PersonCardProps {
@@ -41,7 +40,7 @@ const INPUT_ERR = `${BASE_INPUT} border-[#cc2a24] focus:border-[#cc2a24]`
 
 function ErrorBadge({ message }: { message: string }) {
   return (
-    <span className="inline-block mt-1 px-2 py-0.5 text-xs text-white bg-[#cc2a24] rounded-sm">
+    <span className="block w-full mt-1 px-2 py-0.5 text-xs text-white bg-[#cc2a24] rounded-sm">
       {message}
     </span>
   )
@@ -62,29 +61,31 @@ export function PersonCard({
 
   const showBillingAddress = person.userType === "firma"
 
+  const canRemove = !isOnly && !person.isPreFilled
+
   const err = (field: string) => showError(field, errors, touched, submitted)
   const fieldCls = (field: string) => (err(field) ? INPUT_ERR : INPUT_OK)
   const wrapCls = (field: string) =>
-    `space-y-1${err(field) ? " bg-[#fce4e4] p-2 -m-2 rounded-sm" : ""}`
+    `space-y-1${err(field) ? " bg-[#fce4e4] p-2 rounded-sm" : ""}`
 
   return (
-    <div className="bg-[rgba(204,204,204,0.2)] rounded-none p-[25px] space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-base font-bold font-body">
-          Person {index + 1}
-        </h3>
-        {!isOnly && !person.isPreFilled && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+    <div data-testid="person-card" className="bg-[rgba(204,204,204,0.2)] rounded-none p-[25px] space-y-4">
+      <div className="flex items-center gap-1.5">
+        {canRemove && (
+          <button
+            type="button"
+            aria-label={`Person ${index + 1} entfernen`}
+            className="-ml-[18px] shrink-0 text-muted-foreground hover:text-destructive"
             onClick={() =>
               dispatch({ type: "REMOVE_PERSON", id: person.id })
             }
           >
-            <X className="h-4 w-4" />
-          </Button>
+            <XCircle className="h-4 w-4" />
+          </button>
         )}
+        <h3 className="text-base font-bold font-body">
+          Person {index + 1}
+        </h3>
       </div>
 
       {person.isPreFilled ? (
@@ -149,12 +150,23 @@ export function PersonCard({
           {(Object.entries(USER_TYPE_LABELS) as [UserType, string][]).map(
             ([value, label]) => (
               <label key={value} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                <span
+                  className={`inline-flex items-center justify-center h-4 w-4 rounded-full border ${
+                    person.userType === value
+                      ? "border-cog-teal bg-cog-teal"
+                      : "border-[#ccc] bg-white"
+                  }`}
+                >
+                  {person.userType === value && (
+                    <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                  )}
+                </span>
                 <input
                   type="radio"
                   name={`userType-${person.id}`}
                   checked={person.userType === value}
                   onChange={() => update({ userType: value })}
-                  className="accent-cog-teal"
+                  className="sr-only"
                   disabled={person.isPreFilled}
                 />
                 {label}

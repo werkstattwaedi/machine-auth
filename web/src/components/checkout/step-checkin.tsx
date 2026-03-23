@@ -78,6 +78,15 @@ export function StepCheckin({ state, dispatch, isAnonymous }: StepCheckinProps) 
         />
       ))}
 
+      <button
+        type="button"
+        className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-cog-teal border border-cog-teal rounded-[3px] bg-white hover:bg-cog-teal-light transition-colors"
+        onClick={handleAddPerson}
+      >
+        <Plus className="h-4 w-4" />
+        Person hinzufügen
+      </button>
+
       {isAnonymous && (
         <div className="space-y-3 pt-2">
           <div className="flex items-start justify-between">
@@ -103,6 +112,7 @@ export function StepCheckin({ state, dispatch, isAnonymous }: StepCheckinProps) 
             <div className="flex items-start gap-3">
               <Checkbox
                 id="terms-accept"
+                className="bg-white"
                 checked={state.persons.every((p) => p.termsAccepted || p.isPreFilled)}
                 onCheckedChange={(checked) => {
                   state.persons.forEach((p) => {
@@ -121,7 +131,7 @@ export function StepCheckin({ state, dispatch, isAnonymous }: StepCheckinProps) 
               </label>
             </div>
             {submitted && termsError && (
-              <span className="inline-block px-2 py-0.5 text-xs text-white bg-[#cc2a24] rounded-sm">
+              <span className="block w-full px-2 py-0.5 text-xs text-white bg-[#cc2a24] rounded-sm">
                 {termsError}
               </span>
             )}
@@ -129,24 +139,14 @@ export function StepCheckin({ state, dispatch, isAnonymous }: StepCheckinProps) 
         </div>
       )}
 
-      <div className="flex items-center gap-4">
-        <button
-          type="button"
-          className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-cog-teal border border-cog-teal rounded-[3px] bg-white hover:bg-cog-teal-light transition-colors"
-          onClick={handleAddPerson}
-        >
-          <Plus className="h-4 w-4" />
-          Person hinzufügen
-        </button>
-        <button
-          type="button"
-          className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-white bg-cog-teal rounded-[3px] hover:bg-cog-teal-dark transition-colors"
-          onClick={handleWeiter}
-        >
-          Weiter
-          <ArrowRight className="h-4 w-4" />
-        </button>
-      </div>
+      <button
+        type="button"
+        className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-white bg-cog-teal rounded-[3px] hover:bg-cog-teal-dark transition-colors"
+        onClick={handleWeiter}
+      >
+        Weiter
+        <ArrowRight className="h-4 w-4" />
+      </button>
     </div>
   )
 }
