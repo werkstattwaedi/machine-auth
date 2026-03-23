@@ -203,7 +203,7 @@ async function handleSignIn(db: Firestore, user: User): Promise<void> {
     firstName: "",
     lastName: "",
     created: serverTimestamp(),
-    roles: ["vereinsmitglied"],
+    roles: [],
     permissions: [],
     termsAcceptedAt: null,
     userType: "erwachsen",

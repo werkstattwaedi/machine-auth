@@ -64,7 +64,7 @@ export const createUser = onCall(async (request) => {
       firstName: firstName ?? "",
       lastName: lastName ?? "",
       permissions: [],
-      roles: ["vereinsmitglied"],
+      roles: [],
       termsAcceptedAt: null,
       userType: "erwachsen",
       billingAddress: null,

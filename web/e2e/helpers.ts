@@ -56,6 +56,13 @@ export async function getCheckoutItems(checkoutId: string) {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
 }
 
+/** Get a user document by Auth UID */
+export async function getUserDoc(uid: string) {
+  const db = getAdminFirestore()
+  const snap = await db.collection("users").doc(uid).get()
+  return snap.exists ? snap.data() : null
+}
+
 /** Fetch OOB codes from Auth emulator (email sign-in links) */
 export async function getAuthOobCodes(): Promise<
   { email: string; oobCode: string; oobLink: string; requestType: string }[]
