@@ -21,6 +21,34 @@ async function goToWorkshops(page: Page) {
   await expect(page.getByText("Werkstätten wählen")).toBeVisible()
 }
 
+/** Navigate to checkout summary (step 3) with no items */
+async function goToSummary(page: Page) {
+  await goToWorkshops(page)
+  await page.getByRole("button", { name: "Check-Out" }).click()
+  await expect(page.getByText("Zusammenfassung")).toBeVisible()
+}
+
+/** Navigate to checkout summary with a holz item added */
+async function goToSummaryWithItems(page: Page) {
+  await goToWorkshops(page)
+
+  await page.getByLabel("Holz").click()
+  const holzSection = page.locator("div.space-y-2").filter({ hasText: /^Holz/ })
+
+  // Add count-based item (Schleifpapier, CHF 2/Stk.)
+  await holzSection.getByRole("button", { name: "Artikel hinzufügen" }).click()
+  await expect(page.getByText("Schleifpapier")).toBeVisible()
+  await page.getByText("Schleifpapier").click()
+
+  // Set quantity to 3 (CHF 2 × 3 = CHF 6)
+  const qtyInput = page.locator('label:has-text("Anzahl")').locator("..").locator("input")
+  await qtyInput.fill("3")
+  await qtyInput.blur()
+
+  await page.getByRole("button", { name: "Check-Out" }).click()
+  await expect(page.getByText("Zusammenfassung")).toBeVisible()
+}
+
 test.describe("Checkout step screenshots", () => {
   test("empty workshop form", async ({ page }) => {
     await goToWorkshops(page)
@@ -107,6 +135,44 @@ test.describe("Checkout step screenshots", () => {
     await page.getByText("Maschinenzeit").click()
 
     await expect(page).toHaveScreenshot("checkout-materials-added.png", {
+      fullPage: true,
+    })
+  })
+
+  test("summary — entry fees only", async ({ page }) => {
+    await goToSummary(page)
+
+    await expect(page).toHaveScreenshot("checkout-summary-empty.png", {
+      fullPage: true,
+    })
+  })
+
+  test("summary — with workshop items", async ({ page }) => {
+    await goToSummaryWithItems(page)
+
+    await expect(page).toHaveScreenshot("checkout-summary-items.png", {
+      fullPage: true,
+    })
+  })
+
+  test("summary — tip with round-up", async ({ page }) => {
+    await goToSummaryWithItems(page)
+
+    // Enter a manual tip
+    const tipInput = page.locator('input[type="number"][step="0.50"]')
+    await tipInput.fill("1")
+
+    // Wait for round-up options to appear
+    await expect(page.getByText("Aufrunden auf")).toBeVisible()
+
+    // Select the first round-up option
+    const firstRadio = page.getByText("Aufrunden auf").locator("..").locator("label").first()
+    await firstRadio.click()
+
+    // Blur the tip input to avoid cursor blink
+    await page.locator("h2").first().click()
+
+    await expect(page).toHaveScreenshot("checkout-summary-tip.png", {
       fullPage: true,
     })
   })

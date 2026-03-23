@@ -59,7 +59,7 @@ test.describe("Anonymous checkout", () => {
 
     // ── Step 2: Checkout ──
     await expect(page.getByText("Zusammenfassung")).toBeVisible()
-    await expect(page.getByText("Eintrittsgebühren")).toBeVisible()
+    await expect(page.getByText("Nutzungsgebühren")).toBeVisible()
     await expect(page.getByText("Max Muster")).toBeVisible()
 
     // Submit
@@ -125,7 +125,7 @@ test.describe("Anonymous checkout", () => {
     // Verify both persons shown
     await expect(page.getByText("Max Muster")).toBeVisible()
     await expect(page.getByText("Anna Kind")).toBeVisible()
-    await expect(page.getByText("Eintrittsgebühren")).toBeVisible()
+    await expect(page.getByText("Nutzungsgebühren")).toBeVisible()
   })
 
   test("form validation prevents advancing and shows errors", async ({ page }) => {

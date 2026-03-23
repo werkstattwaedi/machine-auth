@@ -86,6 +86,16 @@ export default async function globalSetup() {
     userCanAdd: true,
   })
 
+  await db.collection("catalog").doc("e2e-item-count").set({
+    code: "9010",
+    name: "Schleifpapier",
+    workshops: ["holz"],
+    pricingModel: "count",
+    unitPrice: { none: 2, member: 1.5, intern: 0 },
+    active: true,
+    userCanAdd: true,
+  })
+
   await db.collection("catalog").doc("e2e-item-3").set({
     code: "9003",
     name: "Filament",
