@@ -49,6 +49,14 @@ export default async function globalSetup() {
     workshops: {
       holz: { label: "Holz", order: 1 },
       metall: { label: "Metall", order: 2 },
+      textil: { label: "Textil", order: 3 },
+      keramik: { label: "Keramik", order: 4 },
+      schmuck: { label: "Schmuck", order: 5 },
+      glas: { label: "Glas", order: 6 },
+      stein: { label: "Stein", order: 7 },
+      malen: { label: "Malen und Basteln", order: 8 },
+      makerspace: { label: "Maker Space", order: 9 },
+      diverses: { label: "Diverses", order: 10 },
     },
     labels: {
       units: { h: "Std.", m2: "m²", m: "m", stk: "Stk.", kg: "kg", chf: "CHF" },
@@ -61,7 +69,7 @@ export default async function globalSetup() {
     code: "9001",
     name: "E2E Testmaterial",
     workshops: ["holz"],
-    pricingModel: "count",
+    pricingModel: "area",
     unitPrice: { none: 10, member: 8, intern: 0 },
     active: true,
     userCanAdd: true,
@@ -74,6 +82,26 @@ export default async function globalSetup() {
     workshops: ["holz"],
     pricingModel: "area",
     unitPrice: { none: 5, member: 4, intern: 0 },
+    active: true,
+    userCanAdd: true,
+  })
+
+  await db.collection("catalog").doc("e2e-item-3").set({
+    code: "9003",
+    name: "Filament",
+    workshops: ["makerspace"],
+    pricingModel: "weight",
+    unitPrice: { none: 65, member: 65, intern: 0 },
+    active: true,
+    userCanAdd: true,
+  })
+
+  await db.collection("catalog").doc("e2e-item-4").set({
+    code: "9004",
+    name: "Filament (Spezial)",
+    workshops: ["makerspace"],
+    pricingModel: "weight",
+    unitPrice: { none: 105, member: 105, intern: 0 },
     active: true,
     userCanAdd: true,
   })

@@ -172,10 +172,25 @@ export function StepWorkshops({
           Für welche Werkstätten möchtest du Kosten erfassen?
         </p>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {sortedWorkshops.map(([wsId, ws]) => {
+          {sortedWorkshops.map(([wsId, ws], i) => {
             const hasItems = workshopsWithItems.has(wsId)
+            // Column-first order: balanced columns (e.g. 4-3-3 for 10 items in 3 cols)
+            const cols = 3
+            const n = sortedWorkshops.length
+            const rows = Math.ceil(n / cols)
+            const fullCols = n - (rows - 1) * cols // columns with `rows` items
+            let col: number, row: number
+            if (i < fullCols * rows) {
+              col = Math.floor(i / rows)
+              row = i % rows
+            } else {
+              const j = i - fullCols * rows
+              col = fullCols + Math.floor(j / (rows - 1))
+              row = j % (rows - 1)
+            }
+            const order = row * cols + col
             return (
-              <label key={wsId} className={`flex items-center gap-2 ${hasItems ? "cursor-default" : "cursor-pointer"}`}>
+              <label key={wsId} className={`flex items-center gap-2 ${hasItems ? "cursor-default" : "cursor-pointer"}`} style={{ order }}>
                 <Checkbox
                   checked={selectedWorkshops.has(wsId)}
                   disabled={hasItems}

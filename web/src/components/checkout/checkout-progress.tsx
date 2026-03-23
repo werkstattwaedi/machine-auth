@@ -22,7 +22,7 @@ export function CheckoutProgress({ currentStep }: CheckoutProgressProps) {
             <div
               className={cn(
                 "h-[3px] mb-2 transition-colors",
-                i <= currentStep ? "bg-cog-teal" : "bg-[#ccc]"
+                i === currentStep ? "bg-cog-teal" : "bg-[#ccc]"
               )}
             />
             <span
@@ -30,9 +30,7 @@ export function CheckoutProgress({ currentStep }: CheckoutProgressProps) {
                 "text-sm",
                 i === currentStep
                   ? "text-foreground font-semibold"
-                  : i < currentStep
-                    ? "text-cog-teal font-medium"
-                    : "text-muted-foreground"
+                  : "text-muted-foreground"
               )}
             >
               {step.label}
