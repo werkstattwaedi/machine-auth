@@ -40,7 +40,8 @@ interface PermissionDoc {
 
 interface UserDoc {
   displayName?: string
-  name?: string
+  firstName?: string
+  lastName?: string
   permissions?: (DocumentReference | { id: string })[]
 }
 

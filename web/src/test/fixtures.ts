@@ -255,7 +255,7 @@ export class TestFixture {
         currentFakeUser = createFakeUser({
           uid: userData.id,
           email: userData.email,
-          displayName: userData.displayName,
+          displayName: userData.displayName ?? undefined,
           claims: userData.roles?.includes("admin") ? { admin: true } : {},
         })
         auth.setCurrentUser(currentFakeUser)
@@ -273,8 +273,8 @@ export class TestFixture {
       .withPermission({ id: "laser", name: "Laser Cutter" })
       .withUser({
         id: "member1",
-        displayName: "Max Muster",
-        name: "Max Muster",
+        firstName: "Max",
+        lastName: "Muster",
         email: "max@test.com",
         roles: ["vereinsmitglied"],
         permissions: ["laser"],
