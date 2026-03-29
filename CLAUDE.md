@@ -145,10 +145,18 @@ npm run seed             # Seed emulator with test data
 
 ## Testing
 
-**Important:** Stop the dev emulators (`npm run dev`) before running tests — concurrent emulator instances cause data isolation issues.
+**Before committing / during code review — always run:**
 
 ```bash
-# Web unit tests (Vitest, no emulator needed)
+npm run test:precommit   # Builds + tests both web apps and functions
+```
+
+This runs: web build (TypeScript + Vite for checkout & admin) → web unit tests → web integration tests (emulator auto-started) → functions build + unit + integration tests (emulator auto-started).
+
+**Important:** Stop the dev emulators (`npm run dev`) before running integration/E2E tests — concurrent emulator instances cause data isolation issues.
+
+```bash
+# Web unit tests only (Vitest, no emulator needed)
 cd web && npm test
 
 # Web integration tests (Firestore security rules, emulator auto-started)

@@ -15,7 +15,8 @@
     "test:web": "cd web && npm test",
     "test:web:integration": "firebase emulators:exec --config firebase.e2e.json --only firestore 'cd web && npm run test:integration'",
     "test:web:e2e": "firebase emulators:exec --config firebase.e2e.json --only firestore,auth,functions 'cd web && npm run test:e2e'",
-    "test:all": "npm run test:web && cd functions && npm test"
+    "test:all": "npm run test:web && cd functions && npm test",
+    "test:precommit": "cd web && npm run build && npm test && cd .. && npm run test:web:integration && cd functions && npm test"
   },
   "devDependencies": {
     "@bufbuild/protobuf": "^2.10.2",
