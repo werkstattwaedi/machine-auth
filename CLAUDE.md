@@ -12,7 +12,9 @@ This is a comprehensive IoT machine authentication system featuring secure NFC-b
 |-----------|----------|-------------|
 | **MACO Firmware** | `maco_firmware/` | Pigweed-based firmware (Bazel build) |
 | **Functions** | `functions/` | Firebase Cloud Functions (TypeScript) |
-| **Web** | `web/` | React + Vite + shadcn/ui web application |
+| **Web (Checkout)** | `web/apps/checkout/` | Public checkout app (React + Vite + shadcn/ui) |
+| **Web (Admin)** | `web/apps/admin/` | Admin dashboard (React + Vite + shadcn/ui) |
+| **Web (Shared)** | `web/modules/` | Shared Firebase, hooks, UI components |
 | **Gateway** | `maco_gateway/` | Python pw_rpc proxy (ASCON + Firebase) |
 
 **Component-specific documentation:**
@@ -120,13 +122,15 @@ await sessionRef.set({ userId: `/users/${userId}` });
 One-command startup:
 
 ```bash
-./dev.sh    # Installs deps, builds, starts emulators + web dev server
+./dev.sh    # Installs deps, builds, starts emulators + both web apps
 ```
 
 Or manually:
 
 ```bash
-npm run dev              # Emulators + web dev server
+npm run dev              # Emulators + checkout + admin dev servers
+npm run dev:checkout     # Checkout dev server only
+npm run dev:admin        # Admin dev server only
 npm run dev:gateway      # Gateway (separate terminal)
 npm run seed             # Seed emulator with test data
 ```
@@ -134,7 +138,8 @@ npm run seed             # Seed emulator with test data
 **Services:**
 - Emulator UI: http://localhost:4000
 - Functions: http://localhost:5001
-- Web app: http://localhost:5173
+- Checkout app: https://localhost:5173
+- Admin app: https://localhost:5174
 - Hosting: http://localhost:5050
 - Gateway: localhost:5000
 
@@ -161,32 +166,39 @@ npm run test:all
 
 **Screenshot tests (Playwright visual regression):**
 
-Some E2E tests use `toHaveScreenshot()` for pixel-level layout regression detection. Reference snapshots are stored in `web/e2e/*.spec.ts-snapshots/` and checked into git.
+Some E2E tests use `toHaveScreenshot()` for pixel-level layout regression detection. Reference snapshots are stored in `web/apps/checkout/e2e/*.spec.ts-snapshots/` and checked into git.
 
 ```bash
 # Update snapshots after intentional UI changes (run from repo root):
 firebase emulators:exec --config firebase.e2e.json \
   --only firestore,auth,functions \
-  'cd web && npx playwright test checkin-screenshots --update-snapshots'
+  'cd web/apps/checkout && npx playwright test checkin-screenshots --update-snapshots'
 ```
 
 **Test locations:**
-- `web/src/**/*.test.{ts,tsx}` — Web unit tests (Vitest)
-- `web/src/**/*.integration.test.ts` — Firestore security rules tests (Vitest + emulator)
-- `web/e2e/*.spec.ts` — E2E browser tests (Playwright + emulators)
-- `web/e2e/*.spec.ts-snapshots/` — Screenshot baselines for visual regression tests
+- `web/apps/checkout/src/**/*.test.{ts,tsx}` — Checkout unit tests (Vitest)
+- `web/apps/admin/src/**/*.test.{ts,tsx}` — Admin unit tests (Vitest)
+- `web/modules/**/*.test.{ts,tsx}` — Shared module unit tests (Vitest)
+- `web/modules/**/*.integration.test.ts` — Firestore security rules tests (Vitest + emulator)
+- `web/apps/checkout/e2e/*.spec.ts` — E2E browser tests (Playwright + emulators)
+- `web/apps/checkout/e2e/*.spec.ts-snapshots/` — Screenshot baselines for visual regression tests
 - `functions/src/**/*.test.ts` — Functions unit tests (Mocha)
 - `functions/test/integration/` — Functions integration tests (Mocha + emulator)
 
 ## Web Application
 
-React SPA in `web/` (Vite + TanStack Router + shadcn/ui + Tailwind)
+npm workspace with two React SPAs and shared modules (Vite + TanStack Router + shadcn/ui + Tailwind):
+
+- `web/apps/checkout/` — Public checkout, user self-service (`@oww/checkout`)
+- `web/apps/admin/` — Admin dashboard (`@oww/admin`)
+- `web/modules/` — Shared Firebase, hooks, UI components (`@oww/modules`)
 
 ```bash
 cd web
-npm install
-npm run dev    # http://localhost:5173 with emulators
-npm run build  # Production build to web/dist/
+npm install               # Installs all workspace deps
+npm run build             # Builds all workspaces
+npm run dev:checkout      # https://localhost:5173
+npm run dev:admin         # https://localhost:5174
 ```
 
 **Key Patterns:**
@@ -199,7 +211,9 @@ npm run build  # Production build to web/dist/
 
 **Deploy:**
 ```bash
-firebase deploy --only hosting
+firebase deploy --only hosting           # Both sites
+firebase deploy --only hosting:checkout  # Checkout only
+firebase deploy --only hosting:admin     # Admin only
 ```
 
 See [`docs/deployment-checklist.md`](docs/deployment-checklist.md) for production deployment steps.

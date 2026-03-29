@@ -50,7 +50,7 @@ if [ ! -d "functions/lib" ]; then
   (cd functions && npm run build)
 fi
 
-# Install web deps if needed
+# Install web workspace deps if needed
 if [ -d "web" ] && [ ! -d "web/node_modules" ]; then
   info "Installing web dependencies..."
   (cd web && npm install)
@@ -75,7 +75,8 @@ fi
 info "Starting dev environment..."
 info "  Emulator UI:  http://localhost:4000"
 info "  Functions:    http://localhost:5001"
-info "  Web app:      http://localhost:5173"
+info "  Checkout:     https://localhost:5173"
+info "  Admin:        https://localhost:5174"
 info "  Hosting:      http://localhost:5050"
 info ""
 info "Press Ctrl+C to stop all services."

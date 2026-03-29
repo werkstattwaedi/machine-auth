@@ -212,8 +212,9 @@ function main() {
         { comment: "# Firebase Functions — parameters (secrets via Secret Manager)", vars: FUNCTIONS_PARAMS },
       ],
     },
+    // Checkout app
     {
-      path: "web/.env.development",
+      path: "web/apps/checkout/.env.development",
       source: "local",
       header,
       sections: [
@@ -222,7 +223,26 @@ function main() {
       ],
     },
     {
-      path: "web/.env.production",
+      path: "web/apps/checkout/.env.production",
+      source: "production",
+      header,
+      sections: [
+        { comment: "# Firebase", vars: VITE_FIREBASE },
+        { comment: "# Deployment", vars: VITE_DEPLOYMENT },
+      ],
+    },
+    // Admin app
+    {
+      path: "web/apps/admin/.env.development",
+      source: "local",
+      header,
+      sections: [
+        { comment: "# Firebase (emulator)", vars: VITE_FIREBASE },
+        { comment: "# Deployment", vars: VITE_DEPLOYMENT },
+      ],
+    },
+    {
+      path: "web/apps/admin/.env.production",
       source: "production",
       header,
       sections: [
@@ -267,7 +287,17 @@ function main() {
 
   // Generate .firebaserc
   const firebaserc = JSON.stringify(
-    { projects: { default: projectId } },
+    {
+      projects: { default: projectId },
+      targets: {
+        [projectId]: {
+          hosting: {
+            checkout: [projectId],
+            admin: [`${projectId}-admin`],
+          },
+        },
+      },
+    },
     null,
     2
   ) + "\n";

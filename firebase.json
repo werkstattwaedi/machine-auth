@@ -21,23 +21,44 @@
       ]
     }
   ],
-  "hosting": {
-    "predeploy": [
-      "cd web && npm install && npm run build"
-    ],
-    "rewrites": [
-      {
-        "source": "**",
-        "destination": "/index.html"
-      }
-    ],
-    "public": "web/dist",
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**"
-    ]
-  },
+  "hosting": [
+    {
+      "target": "checkout",
+      "public": "web/apps/checkout/dist",
+      "predeploy": [
+        "cd web && npm install && npm run build -w @oww/checkout"
+      ],
+      "rewrites": [
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ],
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ]
+    },
+    {
+      "target": "admin",
+      "public": "web/apps/admin/dist",
+      "predeploy": [
+        "cd web && npm install && npm run build -w @oww/admin"
+      ],
+      "rewrites": [
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ],
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ]
+    }
+  ],
   "emulators": {
     "auth": {
       "port": 9099

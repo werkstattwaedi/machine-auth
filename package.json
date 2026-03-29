@@ -4,10 +4,11 @@
   "description": "IoT machine authentication system - dev orchestration",
   "scripts": {
     "generate-env": "npx tsx scripts/generate-env.ts",
-    "dev": "concurrently -n emu,web -c blue,green \"npm run dev:emulators\" \"npm run dev:web\"",
+    "dev": "concurrently -n emu,checkout,admin -c blue,green,yellow \"npm run dev:emulators\" \"npm run dev:checkout\" \"npm run dev:admin\"",
     "dev:fresh": "rm -rf firebase-data && npm run dev",
     "dev:emulators": "firebase emulators:start --import=./firebase-data --export-on-exit=./firebase-data",
-    "dev:web": "cd web && npm run dev",
+    "dev:checkout": "cd web/apps/checkout && npm run dev",
+    "dev:admin": "cd web/apps/admin && npm run dev",
     "dev:gateway": "bazel run //maco_gateway:gateway -- --verbose",
     "seed": "npx tsx scripts/seed-emulator.ts",
     "sync-config": "npx tsx scripts/sync-device-config.ts",
