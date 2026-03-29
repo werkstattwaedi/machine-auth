@@ -21,7 +21,7 @@ test.beforeEach(async () => {
 
 test.describe("Anonymous checkout", () => {
   test("full checkout flow — happy path", async ({ page }) => {
-    await page.goto("/checkout")
+    await page.goto("/")
 
     // ── Landing page ──
     // Dismiss landing page
@@ -88,7 +88,7 @@ test.describe("Anonymous checkout", () => {
   })
 
   test("multiple persons with different user types", async ({ page }) => {
-    await page.goto("/checkout")
+    await page.goto("/")
     // Dismiss landing page
     await page
       .getByRole("button", { name: "Ohne Anmeldung fortfahren" })
@@ -129,7 +129,7 @@ test.describe("Anonymous checkout", () => {
   })
 
   test("form validation prevents advancing and shows errors", async ({ page }) => {
-    await page.goto("/checkout")
+    await page.goto("/")
     // Dismiss landing page
     await page
       .getByRole("button", { name: "Ohne Anmeldung fortfahren" })
@@ -176,7 +176,7 @@ test.describe("Anonymous checkout", () => {
   })
 
   test("step navigation forward and back", async ({ page }) => {
-    await page.goto("/checkout")
+    await page.goto("/")
     // Dismiss landing page
     await page
       .getByRole("button", { name: "Ohne Anmeldung fortfahren" })

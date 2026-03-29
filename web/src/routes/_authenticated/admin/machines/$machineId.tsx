@@ -19,7 +19,7 @@ import { useEffect, useState } from "react"
 import { type DocumentReference } from "firebase/firestore"
 
 export const Route = createFileRoute(
-  "/_authenticated/_admin/machines/$machineId",
+  "/_authenticated/admin/machines/$machineId",
 )({
   component: MachineDetailPage,
 })
@@ -103,7 +103,7 @@ function MachineDetailPage() {
     <div>
       <PageHeader
         title={machine.name || "Maschine"}
-        backTo="/machines"
+        backTo="/admin/machines"
         backLabel="Zurück zu Maschinen"
       />
       <Card>

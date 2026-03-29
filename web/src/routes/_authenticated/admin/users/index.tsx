@@ -14,7 +14,7 @@ import { Plus } from "lucide-react"
 import { useMemo, useState } from "react"
 import { CreateUserDialog } from "@/components/admin/create-user-dialog"
 
-export const Route = createFileRoute("/_authenticated/_admin/users/")({
+export const Route = createFileRoute("/_authenticated/admin/users/")({
   component: UsersPage,
 })
 
@@ -40,7 +40,7 @@ function UsersPage() {
         accessorFn: (row) => `${row.firstName ?? ""} ${row.lastName ?? ""}`.trim(),
         cell: ({ row }) => (
           <Link
-            to="/users/$userId"
+            to="/admin/users/$userId"
             params={{ userId: row.original.id }}
             className="font-medium hover:underline"
           >

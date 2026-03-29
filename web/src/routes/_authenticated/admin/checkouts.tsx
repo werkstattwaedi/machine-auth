@@ -13,7 +13,7 @@ import { formatDateTime, formatCHF } from "@/lib/format"
 import { type ColumnDef } from "@tanstack/react-table"
 import { useMemo } from "react"
 
-export const Route = createFileRoute("/_authenticated/_admin/checkouts")({
+export const Route = createFileRoute("/_authenticated/admin/checkouts")({
   component: CheckoutsPage,
 })
 
@@ -76,7 +76,7 @@ function CheckoutsPage() {
           if (!ref) return "–"
           return (
             <Link
-              to="/users/$userId"
+              to="/admin/users/$userId"
               params={{ userId: ref.id }}
               className="hover:underline"
             >

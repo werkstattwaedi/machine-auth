@@ -21,7 +21,7 @@ import { formatCHF } from "@/lib/format"
 import { generatePriceListPdf } from "@/lib/price-list-pdf"
 
 export const Route = createFileRoute(
-  "/_authenticated/_admin/price-lists/$priceListId",
+  "/_authenticated/admin/price-lists/$priceListId",
 )({
   component: PriceListDetailPage,
 })
@@ -109,7 +109,7 @@ function PriceListDetailPage() {
     <div className="space-y-4">
       <PageHeader
         title={priceList.name || "Preisliste"}
-        backTo="/price-lists"
+        backTo="/admin/price-lists"
         backLabel="Zurück zu Preislisten"
       />
 

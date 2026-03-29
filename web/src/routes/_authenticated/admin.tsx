@@ -6,7 +6,7 @@ import { useAuth } from "@/lib/auth"
 import { LookupProvider } from "@/lib/lookup"
 import { useEffect } from "react"
 
-export const Route = createFileRoute("/_authenticated/_admin")({
+export const Route = createFileRoute("/_authenticated/admin")({
   component: AdminLayout,
 })
 
@@ -16,7 +16,7 @@ function AdminLayout() {
 
   useEffect(() => {
     if (!loading && !isAdmin) {
-      navigate({ to: "/" })
+      navigate({ to: "/visit" })
     }
   }, [isAdmin, loading, navigate])
 

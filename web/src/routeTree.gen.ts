@@ -12,35 +12,34 @@ import { Route as rootRouteImport } from "./routes/__root"
 import { Route as LoginRouteImport } from "./routes/login"
 import { Route as ReportRouteImport } from "./routes/_report"
 import { Route as MaterialRouteImport } from "./routes/_material"
-import { Route as CheckoutRouteImport } from "./routes/_checkout"
 import { Route as AuthenticatedRouteImport } from "./routes/_authenticated"
-import { Route as AuthenticatedIndexRouteImport } from "./routes/_authenticated/index"
+import { Route as IndexRouteImport } from "./routes/index"
 import { Route as ReportReportRouteImport } from "./routes/_report/report"
-import { Route as CheckoutCheckoutRouteImport } from "./routes/_checkout/checkout"
+import { Route as AuthenticatedVisitRouteImport } from "./routes/_authenticated/visit"
 import { Route as AuthenticatedUsageRouteImport } from "./routes/_authenticated/usage"
 import { Route as AuthenticatedProfileRouteImport } from "./routes/_authenticated/profile"
 import { Route as AuthenticatedCompleteProfileRouteImport } from "./routes/_authenticated/complete-profile"
-import { Route as AuthenticatedAdminRouteImport } from "./routes/_authenticated/_admin"
+import { Route as AuthenticatedAdminRouteImport } from "./routes/_authenticated/admin"
 import { Route as MaterialMaterialAddRouteImport } from "./routes/_material/material.add"
-import { Route as AuthenticatedAdminUsersRouteImport } from "./routes/_authenticated/_admin/users"
-import { Route as AuthenticatedAdminTerminalsRouteImport } from "./routes/_authenticated/_admin/terminals"
-import { Route as AuthenticatedAdminSessionsRouteImport } from "./routes/_authenticated/_admin/sessions"
-import { Route as AuthenticatedAdminPriceListsRouteImport } from "./routes/_authenticated/_admin/price-lists"
-import { Route as AuthenticatedAdminPermissionsRouteImport } from "./routes/_authenticated/_admin/permissions"
-import { Route as AuthenticatedAdminMaterialsRouteImport } from "./routes/_authenticated/_admin/materials"
-import { Route as AuthenticatedAdminMachinesRouteImport } from "./routes/_authenticated/_admin/machines"
-import { Route as AuthenticatedAdminCheckoutsRouteImport } from "./routes/_authenticated/_admin/checkouts"
-import { Route as AuthenticatedAdminAuditRouteImport } from "./routes/_authenticated/_admin/audit"
-import { Route as AuthenticatedAdminUsersIndexRouteImport } from "./routes/_authenticated/_admin/users/index"
-import { Route as AuthenticatedAdminPriceListsIndexRouteImport } from "./routes/_authenticated/_admin/price-lists/index"
-import { Route as AuthenticatedAdminPermissionsIndexRouteImport } from "./routes/_authenticated/_admin/permissions/index"
-import { Route as AuthenticatedAdminMaterialsIndexRouteImport } from "./routes/_authenticated/_admin/materials/index"
-import { Route as AuthenticatedAdminMachinesIndexRouteImport } from "./routes/_authenticated/_admin/machines/index"
-import { Route as AuthenticatedAdminUsersUserIdRouteImport } from "./routes/_authenticated/_admin/users/$userId"
-import { Route as AuthenticatedAdminPriceListsPriceListIdRouteImport } from "./routes/_authenticated/_admin/price-lists/$priceListId"
-import { Route as AuthenticatedAdminPermissionsPermissionIdRouteImport } from "./routes/_authenticated/_admin/permissions/$permissionId"
-import { Route as AuthenticatedAdminMaterialsMaterialIdRouteImport } from "./routes/_authenticated/_admin/materials/$materialId"
-import { Route as AuthenticatedAdminMachinesMachineIdRouteImport } from "./routes/_authenticated/_admin/machines/$machineId"
+import { Route as AuthenticatedAdminUsersRouteImport } from "./routes/_authenticated/admin/users"
+import { Route as AuthenticatedAdminTerminalsRouteImport } from "./routes/_authenticated/admin/terminals"
+import { Route as AuthenticatedAdminSessionsRouteImport } from "./routes/_authenticated/admin/sessions"
+import { Route as AuthenticatedAdminPriceListsRouteImport } from "./routes/_authenticated/admin/price-lists"
+import { Route as AuthenticatedAdminPermissionsRouteImport } from "./routes/_authenticated/admin/permissions"
+import { Route as AuthenticatedAdminMaterialsRouteImport } from "./routes/_authenticated/admin/materials"
+import { Route as AuthenticatedAdminMachinesRouteImport } from "./routes/_authenticated/admin/machines"
+import { Route as AuthenticatedAdminCheckoutsRouteImport } from "./routes/_authenticated/admin/checkouts"
+import { Route as AuthenticatedAdminAuditRouteImport } from "./routes/_authenticated/admin/audit"
+import { Route as AuthenticatedAdminUsersIndexRouteImport } from "./routes/_authenticated/admin/users/index"
+import { Route as AuthenticatedAdminPriceListsIndexRouteImport } from "./routes/_authenticated/admin/price-lists/index"
+import { Route as AuthenticatedAdminPermissionsIndexRouteImport } from "./routes/_authenticated/admin/permissions/index"
+import { Route as AuthenticatedAdminMaterialsIndexRouteImport } from "./routes/_authenticated/admin/materials/index"
+import { Route as AuthenticatedAdminMachinesIndexRouteImport } from "./routes/_authenticated/admin/machines/index"
+import { Route as AuthenticatedAdminUsersUserIdRouteImport } from "./routes/_authenticated/admin/users/$userId"
+import { Route as AuthenticatedAdminPriceListsPriceListIdRouteImport } from "./routes/_authenticated/admin/price-lists/$priceListId"
+import { Route as AuthenticatedAdminPermissionsPermissionIdRouteImport } from "./routes/_authenticated/admin/permissions/$permissionId"
+import { Route as AuthenticatedAdminMaterialsMaterialIdRouteImport } from "./routes/_authenticated/admin/materials/$materialId"
+import { Route as AuthenticatedAdminMachinesMachineIdRouteImport } from "./routes/_authenticated/admin/machines/$machineId"
 
 const LoginRoute = LoginRouteImport.update({
   id: "/login",
@@ -55,28 +54,24 @@ const MaterialRoute = MaterialRouteImport.update({
   id: "/_material",
   getParentRoute: () => rootRouteImport,
 } as any)
-const CheckoutRoute = CheckoutRouteImport.update({
-  id: "/_checkout",
-  getParentRoute: () => rootRouteImport,
-} as any)
 const AuthenticatedRoute = AuthenticatedRouteImport.update({
   id: "/_authenticated",
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
+const IndexRoute = IndexRouteImport.update({
   id: "/",
   path: "/",
-  getParentRoute: () => AuthenticatedRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ReportReportRoute = ReportReportRouteImport.update({
   id: "/report",
   path: "/report",
   getParentRoute: () => ReportRoute,
 } as any)
-const CheckoutCheckoutRoute = CheckoutCheckoutRouteImport.update({
-  id: "/checkout",
-  path: "/checkout",
-  getParentRoute: () => CheckoutRoute,
+const AuthenticatedVisitRoute = AuthenticatedVisitRouteImport.update({
+  id: "/visit",
+  path: "/visit",
+  getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedUsageRoute = AuthenticatedUsageRouteImport.update({
   id: "/usage",
@@ -95,7 +90,8 @@ const AuthenticatedCompleteProfileRoute =
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
-  id: "/_admin",
+  id: "/admin",
+  path: "/admin",
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const MaterialMaterialAddRoute = MaterialMaterialAddRouteImport.update({
@@ -217,186 +213,188 @@ const AuthenticatedAdminMachinesMachineIdRoute =
   } as any)
 
 export interface FileRoutesByFullPath {
-  "/": typeof AuthenticatedIndexRoute
+  "/": typeof IndexRoute
   "/login": typeof LoginRoute
+  "/admin": typeof AuthenticatedAdminRouteWithChildren
   "/complete-profile": typeof AuthenticatedCompleteProfileRoute
   "/profile": typeof AuthenticatedProfileRoute
   "/usage": typeof AuthenticatedUsageRoute
-  "/checkout": typeof CheckoutCheckoutRoute
+  "/visit": typeof AuthenticatedVisitRoute
   "/report": typeof ReportReportRoute
-  "/audit": typeof AuthenticatedAdminAuditRoute
-  "/checkouts": typeof AuthenticatedAdminCheckoutsRoute
-  "/machines": typeof AuthenticatedAdminMachinesRouteWithChildren
-  "/materials": typeof AuthenticatedAdminMaterialsRouteWithChildren
-  "/permissions": typeof AuthenticatedAdminPermissionsRouteWithChildren
-  "/price-lists": typeof AuthenticatedAdminPriceListsRouteWithChildren
-  "/sessions": typeof AuthenticatedAdminSessionsRoute
-  "/terminals": typeof AuthenticatedAdminTerminalsRoute
-  "/users": typeof AuthenticatedAdminUsersRouteWithChildren
+  "/admin/audit": typeof AuthenticatedAdminAuditRoute
+  "/admin/checkouts": typeof AuthenticatedAdminCheckoutsRoute
+  "/admin/machines": typeof AuthenticatedAdminMachinesRouteWithChildren
+  "/admin/materials": typeof AuthenticatedAdminMaterialsRouteWithChildren
+  "/admin/permissions": typeof AuthenticatedAdminPermissionsRouteWithChildren
+  "/admin/price-lists": typeof AuthenticatedAdminPriceListsRouteWithChildren
+  "/admin/sessions": typeof AuthenticatedAdminSessionsRoute
+  "/admin/terminals": typeof AuthenticatedAdminTerminalsRoute
+  "/admin/users": typeof AuthenticatedAdminUsersRouteWithChildren
   "/material/add": typeof MaterialMaterialAddRoute
-  "/machines/$machineId": typeof AuthenticatedAdminMachinesMachineIdRoute
-  "/materials/$materialId": typeof AuthenticatedAdminMaterialsMaterialIdRoute
-  "/permissions/$permissionId": typeof AuthenticatedAdminPermissionsPermissionIdRoute
-  "/price-lists/$priceListId": typeof AuthenticatedAdminPriceListsPriceListIdRoute
-  "/users/$userId": typeof AuthenticatedAdminUsersUserIdRoute
-  "/machines/": typeof AuthenticatedAdminMachinesIndexRoute
-  "/materials/": typeof AuthenticatedAdminMaterialsIndexRoute
-  "/permissions/": typeof AuthenticatedAdminPermissionsIndexRoute
-  "/price-lists/": typeof AuthenticatedAdminPriceListsIndexRoute
-  "/users/": typeof AuthenticatedAdminUsersIndexRoute
+  "/admin/machines/$machineId": typeof AuthenticatedAdminMachinesMachineIdRoute
+  "/admin/materials/$materialId": typeof AuthenticatedAdminMaterialsMaterialIdRoute
+  "/admin/permissions/$permissionId": typeof AuthenticatedAdminPermissionsPermissionIdRoute
+  "/admin/price-lists/$priceListId": typeof AuthenticatedAdminPriceListsPriceListIdRoute
+  "/admin/users/$userId": typeof AuthenticatedAdminUsersUserIdRoute
+  "/admin/machines/": typeof AuthenticatedAdminMachinesIndexRoute
+  "/admin/materials/": typeof AuthenticatedAdminMaterialsIndexRoute
+  "/admin/permissions/": typeof AuthenticatedAdminPermissionsIndexRoute
+  "/admin/price-lists/": typeof AuthenticatedAdminPriceListsIndexRoute
+  "/admin/users/": typeof AuthenticatedAdminUsersIndexRoute
 }
 export interface FileRoutesByTo {
-  "/": typeof AuthenticatedIndexRoute
+  "/": typeof IndexRoute
   "/login": typeof LoginRoute
+  "/admin": typeof AuthenticatedAdminRouteWithChildren
   "/complete-profile": typeof AuthenticatedCompleteProfileRoute
   "/profile": typeof AuthenticatedProfileRoute
   "/usage": typeof AuthenticatedUsageRoute
-  "/checkout": typeof CheckoutCheckoutRoute
+  "/visit": typeof AuthenticatedVisitRoute
   "/report": typeof ReportReportRoute
-  "/audit": typeof AuthenticatedAdminAuditRoute
-  "/checkouts": typeof AuthenticatedAdminCheckoutsRoute
-  "/sessions": typeof AuthenticatedAdminSessionsRoute
-  "/terminals": typeof AuthenticatedAdminTerminalsRoute
+  "/admin/audit": typeof AuthenticatedAdminAuditRoute
+  "/admin/checkouts": typeof AuthenticatedAdminCheckoutsRoute
+  "/admin/sessions": typeof AuthenticatedAdminSessionsRoute
+  "/admin/terminals": typeof AuthenticatedAdminTerminalsRoute
   "/material/add": typeof MaterialMaterialAddRoute
-  "/machines/$machineId": typeof AuthenticatedAdminMachinesMachineIdRoute
-  "/materials/$materialId": typeof AuthenticatedAdminMaterialsMaterialIdRoute
-  "/permissions/$permissionId": typeof AuthenticatedAdminPermissionsPermissionIdRoute
-  "/price-lists/$priceListId": typeof AuthenticatedAdminPriceListsPriceListIdRoute
-  "/users/$userId": typeof AuthenticatedAdminUsersUserIdRoute
-  "/machines": typeof AuthenticatedAdminMachinesIndexRoute
-  "/materials": typeof AuthenticatedAdminMaterialsIndexRoute
-  "/permissions": typeof AuthenticatedAdminPermissionsIndexRoute
-  "/price-lists": typeof AuthenticatedAdminPriceListsIndexRoute
-  "/users": typeof AuthenticatedAdminUsersIndexRoute
+  "/admin/machines/$machineId": typeof AuthenticatedAdminMachinesMachineIdRoute
+  "/admin/materials/$materialId": typeof AuthenticatedAdminMaterialsMaterialIdRoute
+  "/admin/permissions/$permissionId": typeof AuthenticatedAdminPermissionsPermissionIdRoute
+  "/admin/price-lists/$priceListId": typeof AuthenticatedAdminPriceListsPriceListIdRoute
+  "/admin/users/$userId": typeof AuthenticatedAdminUsersUserIdRoute
+  "/admin/machines": typeof AuthenticatedAdminMachinesIndexRoute
+  "/admin/materials": typeof AuthenticatedAdminMaterialsIndexRoute
+  "/admin/permissions": typeof AuthenticatedAdminPermissionsIndexRoute
+  "/admin/price-lists": typeof AuthenticatedAdminPriceListsIndexRoute
+  "/admin/users": typeof AuthenticatedAdminUsersIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
+  "/": typeof IndexRoute
   "/_authenticated": typeof AuthenticatedRouteWithChildren
-  "/_checkout": typeof CheckoutRouteWithChildren
   "/_material": typeof MaterialRouteWithChildren
   "/_report": typeof ReportRouteWithChildren
   "/login": typeof LoginRoute
-  "/_authenticated/_admin": typeof AuthenticatedAdminRouteWithChildren
+  "/_authenticated/admin": typeof AuthenticatedAdminRouteWithChildren
   "/_authenticated/complete-profile": typeof AuthenticatedCompleteProfileRoute
   "/_authenticated/profile": typeof AuthenticatedProfileRoute
   "/_authenticated/usage": typeof AuthenticatedUsageRoute
-  "/_checkout/checkout": typeof CheckoutCheckoutRoute
+  "/_authenticated/visit": typeof AuthenticatedVisitRoute
   "/_report/report": typeof ReportReportRoute
-  "/_authenticated/": typeof AuthenticatedIndexRoute
-  "/_authenticated/_admin/audit": typeof AuthenticatedAdminAuditRoute
-  "/_authenticated/_admin/checkouts": typeof AuthenticatedAdminCheckoutsRoute
-  "/_authenticated/_admin/machines": typeof AuthenticatedAdminMachinesRouteWithChildren
-  "/_authenticated/_admin/materials": typeof AuthenticatedAdminMaterialsRouteWithChildren
-  "/_authenticated/_admin/permissions": typeof AuthenticatedAdminPermissionsRouteWithChildren
-  "/_authenticated/_admin/price-lists": typeof AuthenticatedAdminPriceListsRouteWithChildren
-  "/_authenticated/_admin/sessions": typeof AuthenticatedAdminSessionsRoute
-  "/_authenticated/_admin/terminals": typeof AuthenticatedAdminTerminalsRoute
-  "/_authenticated/_admin/users": typeof AuthenticatedAdminUsersRouteWithChildren
+  "/_authenticated/admin/audit": typeof AuthenticatedAdminAuditRoute
+  "/_authenticated/admin/checkouts": typeof AuthenticatedAdminCheckoutsRoute
+  "/_authenticated/admin/machines": typeof AuthenticatedAdminMachinesRouteWithChildren
+  "/_authenticated/admin/materials": typeof AuthenticatedAdminMaterialsRouteWithChildren
+  "/_authenticated/admin/permissions": typeof AuthenticatedAdminPermissionsRouteWithChildren
+  "/_authenticated/admin/price-lists": typeof AuthenticatedAdminPriceListsRouteWithChildren
+  "/_authenticated/admin/sessions": typeof AuthenticatedAdminSessionsRoute
+  "/_authenticated/admin/terminals": typeof AuthenticatedAdminTerminalsRoute
+  "/_authenticated/admin/users": typeof AuthenticatedAdminUsersRouteWithChildren
   "/_material/material/add": typeof MaterialMaterialAddRoute
-  "/_authenticated/_admin/machines/$machineId": typeof AuthenticatedAdminMachinesMachineIdRoute
-  "/_authenticated/_admin/materials/$materialId": typeof AuthenticatedAdminMaterialsMaterialIdRoute
-  "/_authenticated/_admin/permissions/$permissionId": typeof AuthenticatedAdminPermissionsPermissionIdRoute
-  "/_authenticated/_admin/price-lists/$priceListId": typeof AuthenticatedAdminPriceListsPriceListIdRoute
-  "/_authenticated/_admin/users/$userId": typeof AuthenticatedAdminUsersUserIdRoute
-  "/_authenticated/_admin/machines/": typeof AuthenticatedAdminMachinesIndexRoute
-  "/_authenticated/_admin/materials/": typeof AuthenticatedAdminMaterialsIndexRoute
-  "/_authenticated/_admin/permissions/": typeof AuthenticatedAdminPermissionsIndexRoute
-  "/_authenticated/_admin/price-lists/": typeof AuthenticatedAdminPriceListsIndexRoute
-  "/_authenticated/_admin/users/": typeof AuthenticatedAdminUsersIndexRoute
+  "/_authenticated/admin/machines/$machineId": typeof AuthenticatedAdminMachinesMachineIdRoute
+  "/_authenticated/admin/materials/$materialId": typeof AuthenticatedAdminMaterialsMaterialIdRoute
+  "/_authenticated/admin/permissions/$permissionId": typeof AuthenticatedAdminPermissionsPermissionIdRoute
+  "/_authenticated/admin/price-lists/$priceListId": typeof AuthenticatedAdminPriceListsPriceListIdRoute
+  "/_authenticated/admin/users/$userId": typeof AuthenticatedAdminUsersUserIdRoute
+  "/_authenticated/admin/machines/": typeof AuthenticatedAdminMachinesIndexRoute
+  "/_authenticated/admin/materials/": typeof AuthenticatedAdminMaterialsIndexRoute
+  "/_authenticated/admin/permissions/": typeof AuthenticatedAdminPermissionsIndexRoute
+  "/_authenticated/admin/price-lists/": typeof AuthenticatedAdminPriceListsIndexRoute
+  "/_authenticated/admin/users/": typeof AuthenticatedAdminUsersIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | "/"
     | "/login"
+    | "/admin"
     | "/complete-profile"
     | "/profile"
     | "/usage"
-    | "/checkout"
+    | "/visit"
     | "/report"
-    | "/audit"
-    | "/checkouts"
-    | "/machines"
-    | "/materials"
-    | "/permissions"
-    | "/price-lists"
-    | "/sessions"
-    | "/terminals"
-    | "/users"
+    | "/admin/audit"
+    | "/admin/checkouts"
+    | "/admin/machines"
+    | "/admin/materials"
+    | "/admin/permissions"
+    | "/admin/price-lists"
+    | "/admin/sessions"
+    | "/admin/terminals"
+    | "/admin/users"
     | "/material/add"
-    | "/machines/$machineId"
-    | "/materials/$materialId"
-    | "/permissions/$permissionId"
-    | "/price-lists/$priceListId"
-    | "/users/$userId"
-    | "/machines/"
-    | "/materials/"
-    | "/permissions/"
-    | "/price-lists/"
-    | "/users/"
+    | "/admin/machines/$machineId"
+    | "/admin/materials/$materialId"
+    | "/admin/permissions/$permissionId"
+    | "/admin/price-lists/$priceListId"
+    | "/admin/users/$userId"
+    | "/admin/machines/"
+    | "/admin/materials/"
+    | "/admin/permissions/"
+    | "/admin/price-lists/"
+    | "/admin/users/"
   fileRoutesByTo: FileRoutesByTo
   to:
     | "/"
     | "/login"
+    | "/admin"
     | "/complete-profile"
     | "/profile"
     | "/usage"
-    | "/checkout"
+    | "/visit"
     | "/report"
-    | "/audit"
-    | "/checkouts"
-    | "/sessions"
-    | "/terminals"
+    | "/admin/audit"
+    | "/admin/checkouts"
+    | "/admin/sessions"
+    | "/admin/terminals"
     | "/material/add"
-    | "/machines/$machineId"
-    | "/materials/$materialId"
-    | "/permissions/$permissionId"
-    | "/price-lists/$priceListId"
-    | "/users/$userId"
-    | "/machines"
-    | "/materials"
-    | "/permissions"
-    | "/price-lists"
-    | "/users"
+    | "/admin/machines/$machineId"
+    | "/admin/materials/$materialId"
+    | "/admin/permissions/$permissionId"
+    | "/admin/price-lists/$priceListId"
+    | "/admin/users/$userId"
+    | "/admin/machines"
+    | "/admin/materials"
+    | "/admin/permissions"
+    | "/admin/price-lists"
+    | "/admin/users"
   id:
     | "__root__"
+    | "/"
     | "/_authenticated"
-    | "/_checkout"
     | "/_material"
     | "/_report"
     | "/login"
-    | "/_authenticated/_admin"
+    | "/_authenticated/admin"
     | "/_authenticated/complete-profile"
     | "/_authenticated/profile"
     | "/_authenticated/usage"
-    | "/_checkout/checkout"
+    | "/_authenticated/visit"
     | "/_report/report"
-    | "/_authenticated/"
-    | "/_authenticated/_admin/audit"
-    | "/_authenticated/_admin/checkouts"
-    | "/_authenticated/_admin/machines"
-    | "/_authenticated/_admin/materials"
-    | "/_authenticated/_admin/permissions"
-    | "/_authenticated/_admin/price-lists"
-    | "/_authenticated/_admin/sessions"
-    | "/_authenticated/_admin/terminals"
-    | "/_authenticated/_admin/users"
+    | "/_authenticated/admin/audit"
+    | "/_authenticated/admin/checkouts"
+    | "/_authenticated/admin/machines"
+    | "/_authenticated/admin/materials"
+    | "/_authenticated/admin/permissions"
+    | "/_authenticated/admin/price-lists"
+    | "/_authenticated/admin/sessions"
+    | "/_authenticated/admin/terminals"
+    | "/_authenticated/admin/users"
     | "/_material/material/add"
-    | "/_authenticated/_admin/machines/$machineId"
-    | "/_authenticated/_admin/materials/$materialId"
-    | "/_authenticated/_admin/permissions/$permissionId"
-    | "/_authenticated/_admin/price-lists/$priceListId"
-    | "/_authenticated/_admin/users/$userId"
-    | "/_authenticated/_admin/machines/"
-    | "/_authenticated/_admin/materials/"
-    | "/_authenticated/_admin/permissions/"
-    | "/_authenticated/_admin/price-lists/"
-    | "/_authenticated/_admin/users/"
+    | "/_authenticated/admin/machines/$machineId"
+    | "/_authenticated/admin/materials/$materialId"
+    | "/_authenticated/admin/permissions/$permissionId"
+    | "/_authenticated/admin/price-lists/$priceListId"
+    | "/_authenticated/admin/users/$userId"
+    | "/_authenticated/admin/machines/"
+    | "/_authenticated/admin/materials/"
+    | "/_authenticated/admin/permissions/"
+    | "/_authenticated/admin/price-lists/"
+    | "/_authenticated/admin/users/"
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
+  IndexRoute: typeof IndexRoute
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
-  CheckoutRoute: typeof CheckoutRouteWithChildren
   MaterialRoute: typeof MaterialRouteWithChildren
   ReportRoute: typeof ReportRouteWithChildren
   LoginRoute: typeof LoginRoute
@@ -425,13 +423,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof MaterialRouteImport
       parentRoute: typeof rootRouteImport
     }
-    "/_checkout": {
-      id: "/_checkout"
-      path: ""
-      fullPath: "/"
-      preLoaderRoute: typeof CheckoutRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     "/_authenticated": {
       id: "/_authenticated"
       path: ""
@@ -439,12 +430,12 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthenticatedRouteImport
       parentRoute: typeof rootRouteImport
     }
-    "/_authenticated/": {
-      id: "/_authenticated/"
+    "/": {
+      id: "/"
       path: "/"
       fullPath: "/"
-      preLoaderRoute: typeof AuthenticatedIndexRouteImport
-      parentRoute: typeof AuthenticatedRoute
+      preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
     }
     "/_report/report": {
       id: "/_report/report"
@@ -453,12 +444,12 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof ReportReportRouteImport
       parentRoute: typeof ReportRoute
     }
-    "/_checkout/checkout": {
-      id: "/_checkout/checkout"
-      path: "/checkout"
-      fullPath: "/checkout"
-      preLoaderRoute: typeof CheckoutCheckoutRouteImport
-      parentRoute: typeof CheckoutRoute
+    "/_authenticated/visit": {
+      id: "/_authenticated/visit"
+      path: "/visit"
+      fullPath: "/visit"
+      preLoaderRoute: typeof AuthenticatedVisitRouteImport
+      parentRoute: typeof AuthenticatedRoute
     }
     "/_authenticated/usage": {
       id: "/_authenticated/usage"
@@ -481,10 +472,10 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthenticatedCompleteProfileRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    "/_authenticated/_admin": {
-      id: "/_authenticated/_admin"
-      path: ""
-      fullPath: "/"
+    "/_authenticated/admin": {
+      id: "/_authenticated/admin"
+      path: "/admin"
+      fullPath: "/admin"
       preLoaderRoute: typeof AuthenticatedAdminRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
@@ -495,136 +486,136 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof MaterialMaterialAddRouteImport
       parentRoute: typeof MaterialRoute
     }
-    "/_authenticated/_admin/users": {
-      id: "/_authenticated/_admin/users"
+    "/_authenticated/admin/users": {
+      id: "/_authenticated/admin/users"
       path: "/users"
-      fullPath: "/users"
+      fullPath: "/admin/users"
       preLoaderRoute: typeof AuthenticatedAdminUsersRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
-    "/_authenticated/_admin/terminals": {
-      id: "/_authenticated/_admin/terminals"
+    "/_authenticated/admin/terminals": {
+      id: "/_authenticated/admin/terminals"
       path: "/terminals"
-      fullPath: "/terminals"
+      fullPath: "/admin/terminals"
       preLoaderRoute: typeof AuthenticatedAdminTerminalsRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
-    "/_authenticated/_admin/sessions": {
-      id: "/_authenticated/_admin/sessions"
+    "/_authenticated/admin/sessions": {
+      id: "/_authenticated/admin/sessions"
       path: "/sessions"
-      fullPath: "/sessions"
+      fullPath: "/admin/sessions"
       preLoaderRoute: typeof AuthenticatedAdminSessionsRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
-    "/_authenticated/_admin/price-lists": {
-      id: "/_authenticated/_admin/price-lists"
+    "/_authenticated/admin/price-lists": {
+      id: "/_authenticated/admin/price-lists"
       path: "/price-lists"
-      fullPath: "/price-lists"
+      fullPath: "/admin/price-lists"
       preLoaderRoute: typeof AuthenticatedAdminPriceListsRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
-    "/_authenticated/_admin/permissions": {
-      id: "/_authenticated/_admin/permissions"
+    "/_authenticated/admin/permissions": {
+      id: "/_authenticated/admin/permissions"
       path: "/permissions"
-      fullPath: "/permissions"
+      fullPath: "/admin/permissions"
       preLoaderRoute: typeof AuthenticatedAdminPermissionsRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
-    "/_authenticated/_admin/materials": {
-      id: "/_authenticated/_admin/materials"
+    "/_authenticated/admin/materials": {
+      id: "/_authenticated/admin/materials"
       path: "/materials"
-      fullPath: "/materials"
+      fullPath: "/admin/materials"
       preLoaderRoute: typeof AuthenticatedAdminMaterialsRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
-    "/_authenticated/_admin/machines": {
-      id: "/_authenticated/_admin/machines"
+    "/_authenticated/admin/machines": {
+      id: "/_authenticated/admin/machines"
       path: "/machines"
-      fullPath: "/machines"
+      fullPath: "/admin/machines"
       preLoaderRoute: typeof AuthenticatedAdminMachinesRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
-    "/_authenticated/_admin/checkouts": {
-      id: "/_authenticated/_admin/checkouts"
+    "/_authenticated/admin/checkouts": {
+      id: "/_authenticated/admin/checkouts"
       path: "/checkouts"
-      fullPath: "/checkouts"
+      fullPath: "/admin/checkouts"
       preLoaderRoute: typeof AuthenticatedAdminCheckoutsRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
-    "/_authenticated/_admin/audit": {
-      id: "/_authenticated/_admin/audit"
+    "/_authenticated/admin/audit": {
+      id: "/_authenticated/admin/audit"
       path: "/audit"
-      fullPath: "/audit"
+      fullPath: "/admin/audit"
       preLoaderRoute: typeof AuthenticatedAdminAuditRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
-    "/_authenticated/_admin/users/": {
-      id: "/_authenticated/_admin/users/"
+    "/_authenticated/admin/users/": {
+      id: "/_authenticated/admin/users/"
       path: "/"
-      fullPath: "/users/"
+      fullPath: "/admin/users/"
       preLoaderRoute: typeof AuthenticatedAdminUsersIndexRouteImport
       parentRoute: typeof AuthenticatedAdminUsersRoute
     }
-    "/_authenticated/_admin/price-lists/": {
-      id: "/_authenticated/_admin/price-lists/"
+    "/_authenticated/admin/price-lists/": {
+      id: "/_authenticated/admin/price-lists/"
       path: "/"
-      fullPath: "/price-lists/"
+      fullPath: "/admin/price-lists/"
       preLoaderRoute: typeof AuthenticatedAdminPriceListsIndexRouteImport
       parentRoute: typeof AuthenticatedAdminPriceListsRoute
     }
-    "/_authenticated/_admin/permissions/": {
-      id: "/_authenticated/_admin/permissions/"
+    "/_authenticated/admin/permissions/": {
+      id: "/_authenticated/admin/permissions/"
       path: "/"
-      fullPath: "/permissions/"
+      fullPath: "/admin/permissions/"
       preLoaderRoute: typeof AuthenticatedAdminPermissionsIndexRouteImport
       parentRoute: typeof AuthenticatedAdminPermissionsRoute
     }
-    "/_authenticated/_admin/materials/": {
-      id: "/_authenticated/_admin/materials/"
+    "/_authenticated/admin/materials/": {
+      id: "/_authenticated/admin/materials/"
       path: "/"
-      fullPath: "/materials/"
+      fullPath: "/admin/materials/"
       preLoaderRoute: typeof AuthenticatedAdminMaterialsIndexRouteImport
       parentRoute: typeof AuthenticatedAdminMaterialsRoute
     }
-    "/_authenticated/_admin/machines/": {
-      id: "/_authenticated/_admin/machines/"
+    "/_authenticated/admin/machines/": {
+      id: "/_authenticated/admin/machines/"
       path: "/"
-      fullPath: "/machines/"
+      fullPath: "/admin/machines/"
       preLoaderRoute: typeof AuthenticatedAdminMachinesIndexRouteImport
       parentRoute: typeof AuthenticatedAdminMachinesRoute
     }
-    "/_authenticated/_admin/users/$userId": {
-      id: "/_authenticated/_admin/users/$userId"
+    "/_authenticated/admin/users/$userId": {
+      id: "/_authenticated/admin/users/$userId"
       path: "/$userId"
-      fullPath: "/users/$userId"
+      fullPath: "/admin/users/$userId"
       preLoaderRoute: typeof AuthenticatedAdminUsersUserIdRouteImport
       parentRoute: typeof AuthenticatedAdminUsersRoute
     }
-    "/_authenticated/_admin/price-lists/$priceListId": {
-      id: "/_authenticated/_admin/price-lists/$priceListId"
+    "/_authenticated/admin/price-lists/$priceListId": {
+      id: "/_authenticated/admin/price-lists/$priceListId"
       path: "/$priceListId"
-      fullPath: "/price-lists/$priceListId"
+      fullPath: "/admin/price-lists/$priceListId"
       preLoaderRoute: typeof AuthenticatedAdminPriceListsPriceListIdRouteImport
       parentRoute: typeof AuthenticatedAdminPriceListsRoute
     }
-    "/_authenticated/_admin/permissions/$permissionId": {
-      id: "/_authenticated/_admin/permissions/$permissionId"
+    "/_authenticated/admin/permissions/$permissionId": {
+      id: "/_authenticated/admin/permissions/$permissionId"
       path: "/$permissionId"
-      fullPath: "/permissions/$permissionId"
+      fullPath: "/admin/permissions/$permissionId"
       preLoaderRoute: typeof AuthenticatedAdminPermissionsPermissionIdRouteImport
       parentRoute: typeof AuthenticatedAdminPermissionsRoute
     }
-    "/_authenticated/_admin/materials/$materialId": {
-      id: "/_authenticated/_admin/materials/$materialId"
+    "/_authenticated/admin/materials/$materialId": {
+      id: "/_authenticated/admin/materials/$materialId"
       path: "/$materialId"
-      fullPath: "/materials/$materialId"
+      fullPath: "/admin/materials/$materialId"
       preLoaderRoute: typeof AuthenticatedAdminMaterialsMaterialIdRouteImport
       parentRoute: typeof AuthenticatedAdminMaterialsRoute
     }
-    "/_authenticated/_admin/machines/$machineId": {
-      id: "/_authenticated/_admin/machines/$machineId"
+    "/_authenticated/admin/machines/$machineId": {
+      id: "/_authenticated/admin/machines/$machineId"
       path: "/$machineId"
-      fullPath: "/machines/$machineId"
+      fullPath: "/admin/machines/$machineId"
       preLoaderRoute: typeof AuthenticatedAdminMachinesMachineIdRouteImport
       parentRoute: typeof AuthenticatedAdminMachinesRoute
     }
@@ -753,7 +744,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedCompleteProfileRoute: typeof AuthenticatedCompleteProfileRoute
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedUsageRoute: typeof AuthenticatedUsageRoute
-  AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
+  AuthenticatedVisitRoute: typeof AuthenticatedVisitRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
@@ -761,23 +752,11 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedCompleteProfileRoute: AuthenticatedCompleteProfileRoute,
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedUsageRoute: AuthenticatedUsageRoute,
-  AuthenticatedIndexRoute: AuthenticatedIndexRoute,
+  AuthenticatedVisitRoute: AuthenticatedVisitRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
   AuthenticatedRouteChildren,
-)
-
-interface CheckoutRouteChildren {
-  CheckoutCheckoutRoute: typeof CheckoutCheckoutRoute
-}
-
-const CheckoutRouteChildren: CheckoutRouteChildren = {
-  CheckoutCheckoutRoute: CheckoutCheckoutRoute,
-}
-
-const CheckoutRouteWithChildren = CheckoutRoute._addFileChildren(
-  CheckoutRouteChildren,
 )
 
 interface MaterialRouteChildren {
@@ -804,8 +783,8 @@ const ReportRouteWithChildren =
   ReportRoute._addFileChildren(ReportRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
+  IndexRoute: IndexRoute,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
-  CheckoutRoute: CheckoutRouteWithChildren,
   MaterialRoute: MaterialRouteWithChildren,
   ReportRoute: ReportRouteWithChildren,
   LoginRoute: LoginRoute,

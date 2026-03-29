@@ -23,7 +23,7 @@ import { formatCHF } from "@/lib/format"
 import type { CatalogItem } from "@/lib/workshop-config"
 import { CatalogFormFields, type CatalogFormValues } from "@/components/admin/catalog-form-fields"
 
-export const Route = createFileRoute("/_authenticated/_admin/materials/")({
+export const Route = createFileRoute("/_authenticated/admin/materials/")({
   component: CatalogPage,
 })
 
@@ -40,7 +40,7 @@ const columns: ColumnDef<CatalogItem>[] = [
     header: ({ column }) => <ColumnHeader column={column} title="Name" />,
     cell: ({ row }) => (
       <Link
-        to="/materials/$materialId"
+        to="/admin/materials/$materialId"
         params={{ materialId: row.original.id }}
         className="font-medium hover:underline"
       >

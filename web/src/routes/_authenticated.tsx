@@ -59,7 +59,7 @@ function AuthenticatedLayout() {
         </div>
 
         <div className="px-3 py-2 flex flex-col gap-0.5 flex-1">
-          <Link to="/" className={`${navLink} ${navLinkActive} ${navLinkHover}`}>
+          <Link to="/visit" className={`${navLink} ${navLinkActive} ${navLinkHover}`}>
             <Home className="h-4 w-4" />
             Aktueller Besuch
           </Link>
@@ -79,39 +79,39 @@ function AuthenticatedLayout() {
               <div className="mt-5 mb-1 px-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
                 Administration
               </div>
-              <Link to="/users" className={`${navLink} ${navLinkActive} ${navLinkHover}`}>
+              <Link to="/admin/users" className={`${navLink} ${navLinkActive} ${navLinkHover}`}>
                 <Shield className="h-4 w-4" />
                 Benutzer
               </Link>
-              <Link to="/machines" className={`${navLink} ${navLinkActive} ${navLinkHover}`}>
+              <Link to="/admin/machines" className={`${navLink} ${navLinkActive} ${navLinkHover}`}>
                 <Cpu className="h-4 w-4" />
                 Maschinen
               </Link>
-              <Link to="/permissions" className={`${navLink} ${navLinkActive} ${navLinkHover}`}>
+              <Link to="/admin/permissions" className={`${navLink} ${navLinkActive} ${navLinkHover}`}>
                 <Key className="h-4 w-4" />
                 Berechtigungen
               </Link>
-              <Link to="/terminals" className={`${navLink} ${navLinkActive} ${navLinkHover}`}>
+              <Link to="/admin/terminals" className={`${navLink} ${navLinkActive} ${navLinkHover}`}>
                 <Monitor className="h-4 w-4" />
                 Terminals
               </Link>
-              <Link to="/sessions" className={`${navLink} ${navLinkActive} ${navLinkHover}`}>
+              <Link to="/admin/sessions" className={`${navLink} ${navLinkActive} ${navLinkHover}`}>
                 <ClipboardList className="h-4 w-4" />
                 Sitzungen
               </Link>
-              <Link to="/checkouts" className={`${navLink} ${navLinkActive} ${navLinkHover}`}>
+              <Link to="/admin/checkouts" className={`${navLink} ${navLinkActive} ${navLinkHover}`}>
                 <Receipt className="h-4 w-4" />
                 Checkouts
               </Link>
-              <Link to="/materials" className={`${navLink} ${navLinkActive} ${navLinkHover}`}>
+              <Link to="/admin/materials" className={`${navLink} ${navLinkActive} ${navLinkHover}`}>
                 <Package className="h-4 w-4" />
                 Materialien
               </Link>
-              <Link to="/price-lists" className={`${navLink} ${navLinkActive} ${navLinkHover}`}>
+              <Link to="/admin/price-lists" className={`${navLink} ${navLinkActive} ${navLinkHover}`}>
                 <List className="h-4 w-4" />
                 Preislisten
               </Link>
-              <Link to="/audit" className={`${navLink} ${navLinkActive} ${navLinkHover}`}>
+              <Link to="/admin/audit" className={`${navLink} ${navLinkActive} ${navLinkHover}`}>
                 <FileText className="h-4 w-4" />
                 Audit Log
               </Link>

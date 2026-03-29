@@ -23,7 +23,7 @@ import { useFirestoreMutation } from "@/hooks/use-firestore-mutation"
 import { useForm } from "react-hook-form"
 import type { PriceList } from "@/lib/workshop-config"
 
-export const Route = createFileRoute("/_authenticated/_admin/price-lists/")({
+export const Route = createFileRoute("/_authenticated/admin/price-lists/")({
   component: PriceListsPage,
 })
 
@@ -33,7 +33,7 @@ const columns: ColumnDef<PriceList>[] = [
     header: ({ column }) => <ColumnHeader column={column} title="Name" />,
     cell: ({ row }) => (
       <Link
-        to="/price-lists/$priceListId"
+        to="/admin/price-lists/$priceListId"
         params={{ priceListId: row.original.id }}
         className="font-medium hover:underline"
       >

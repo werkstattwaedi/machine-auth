@@ -44,7 +44,7 @@ import type { WorkshopId, DiscountLevel, PricingModel } from "@/lib/workshop-con
 import { type CheckoutItemLocal, type ItemCallbacks } from "@/components/usage/inline-rows"
 import { WorkshopSectionWithCatalog } from "@/components/usage/workshop-section-with-catalog"
 
-export const Route = createFileRoute("/_authenticated/")({
+export const Route = createFileRoute("/_authenticated/visit")({
   component: DashboardPage,
 })
 
@@ -330,7 +330,7 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
                 </div>
                 <div className="text-xl font-bold">{formatCHF(itemsTotal)}</div>
               </div>
-              <Link to="/checkout">
+              <Link to="/">
                 <Button className="bg-cog-teal hover:bg-cog-teal-dark">
                   <ShoppingCart className="h-4 w-4 mr-2" />
                   Zum Checkout

@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/admin/page-header"
 import { AuditLogPanel } from "@/components/admin/audit-log-panel"
 import { Card, CardContent } from "@/components/ui/card"
 
-export const Route = createFileRoute("/_authenticated/_admin/audit")({
+export const Route = createFileRoute("/_authenticated/admin/audit")({
   component: AuditPage,
 })
 

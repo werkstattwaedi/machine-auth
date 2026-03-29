@@ -6,7 +6,7 @@ const path = require("path")
 const { NFC } = require("nfc-pcsc")
 
 const CHECKOUT_URL =
-  process.env.CHECKOUT_URL || "https://localhost:5173/checkout?kiosk"
+  process.env.CHECKOUT_URL || "https://localhost:5173/?kiosk"
 
 // Accept self-signed certs in dev (Vite basicSsl plugin)
 if (CHECKOUT_URL.includes("localhost")) {

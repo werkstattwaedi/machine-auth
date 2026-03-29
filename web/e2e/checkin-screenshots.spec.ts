@@ -5,7 +5,7 @@ import { test, expect, type Page } from "@playwright/test"
 
 /** Navigate to checkout and dismiss the landing page to reach check-in step */
 async function goToCheckin(page: Page) {
-  await page.goto("/checkout")
+  await page.goto("/")
   await page
     .getByRole("button", { name: "Ohne Anmeldung fortfahren" })
     .click({ timeout: 10_000 })

@@ -30,7 +30,7 @@ import { Loader2, Save, Plus, Ban, RotateCcw } from "lucide-react"
 import { useEffect, useState } from "react"
 import { type DocumentReference } from "firebase/firestore"
 
-export const Route = createFileRoute("/_authenticated/_admin/users/$userId")({
+export const Route = createFileRoute("/_authenticated/admin/users/$userId")({
   component: UserDetailPage,
 })
 
@@ -178,7 +178,7 @@ function UserDetailPage() {
 
   return (
     <div>
-      <PageHeader title={user.displayName || `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || "Benutzer"} backTo="/users" backLabel="Zurück zu Benutzer" />
+      <PageHeader title={user.displayName || `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || "Benutzer"} backTo="/admin/users" backLabel="Zurück zu Benutzer" />
 
       <Tabs defaultValue="details">
         <TabsList>

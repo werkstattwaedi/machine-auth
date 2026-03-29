@@ -15,7 +15,7 @@ const checkoutSearchSchema = z.object({
   kiosk: z.string().optional(),
 })
 
-export const Route = createFileRoute("/_checkout/checkout")({
+export const Route = createFileRoute("/")({
   validateSearch: checkoutSearchSchema,
   component: CheckoutPage,
 })
@@ -82,7 +82,7 @@ function CheckoutPage() {
     setPendingParams(null)
     // Revert URL to previous params
     navigate({
-      to: "/checkout",
+      to: "/",
       search: activeParams.picc
         ? { picc: activeParams.picc, cmac: activeParams.cmac }
         : {},
@@ -91,27 +91,41 @@ function CheckoutPage() {
   }
 
   return (
-    <>
-      <CheckoutWizard
-        key={`${activeParams.picc ?? ""}-${activeParams.cmac ?? ""}`}
-        picc={activeParams.picc}
-        cmac={activeParams.cmac}
-        kiosk={isKiosk}
-        onActiveChange={(active) => {
-          checkoutActiveRef.current = active
-        }}
-      />
-      <ConfirmDialog
-        open={!!pendingParams}
-        onOpenChange={(open) => {
-          if (!open) handleCancelNewTag()
-        }}
-        title="Neuer Badge erkannt"
-        description="Ein Checkout ist bereits in Bearbeitung. Neuen Checkout starten?"
-        confirmLabel="Neuer Checkout"
-        onConfirm={handleConfirmNewTag}
-        destructive
-      />
-    </>
+    <div className="min-h-screen flex flex-col items-center bg-background">
+      <header className="w-full bg-background px-6 pt-6 pb-2">
+        <div className="w-full max-w-[1000px] mx-auto">
+          <img
+            src="/logo_oww.png"
+            alt="Offene Werkstatt Wädenswil"
+            className="h-[93px]"
+          />
+        </div>
+      </header>
+      <div className="w-full max-w-[1000px] px-6 py-4">
+        <h1 className="text-[37px] font-bold mb-6">
+          Self-Checkout
+        </h1>
+        <CheckoutWizard
+          key={`${activeParams.picc ?? ""}-${activeParams.cmac ?? ""}`}
+          picc={activeParams.picc}
+          cmac={activeParams.cmac}
+          kiosk={isKiosk}
+          onActiveChange={(active) => {
+            checkoutActiveRef.current = active
+          }}
+        />
+        <ConfirmDialog
+          open={!!pendingParams}
+          onOpenChange={(open) => {
+            if (!open) handleCancelNewTag()
+          }}
+          title="Neuer Badge erkannt"
+          description="Ein Checkout ist bereits in Bearbeitung. Neuen Checkout starten?"
+          confirmLabel="Neuer Checkout"
+          onConfirm={handleConfirmNewTag}
+          destructive
+        />
+      </div>
+    </div>
   )
 }

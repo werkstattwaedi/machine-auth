@@ -3,6 +3,6 @@
 
 import { createFileRoute, Outlet } from "@tanstack/react-router"
 
-export const Route = createFileRoute("/_authenticated/_admin/materials")({
+export const Route = createFileRoute("/_authenticated/admin/permissions")({
   component: () => <Outlet />,
 })

@@ -89,7 +89,7 @@ function CompleteProfilePage() {
     await update("users", userDoc.id, data, {
       successMessage: "Profil gespeichert",
     })
-    navigate({ to: "/" })
+    navigate({ to: "/visit" })
   }
 
   return (

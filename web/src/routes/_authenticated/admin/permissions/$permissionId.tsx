@@ -28,7 +28,7 @@ import { useEffect, useMemo, useState } from "react"
 import { type DocumentReference } from "firebase/firestore"
 
 export const Route = createFileRoute(
-  "/_authenticated/_admin/permissions/$permissionId",
+  "/_authenticated/admin/permissions/$permissionId",
 )({
   component: PermissionDetailPage,
 })
@@ -42,6 +42,7 @@ interface UserDoc {
   displayName?: string
   firstName?: string
   lastName?: string
+  name?: string
   permissions?: (DocumentReference | { id: string })[]
 }
 
@@ -142,7 +143,7 @@ function PermissionDetailPage() {
     <div>
       <PageHeader
         title={permission.name || "Berechtigung"}
-        backTo="/permissions"
+        backTo="/admin/permissions"
         backLabel="Zurück zu Berechtigungen"
       />
 
@@ -200,7 +201,7 @@ function PermissionDetailPage() {
                     <TableRow key={user.id}>
                       <TableCell>
                         <Link
-                          to="/users/$userId"
+                          to="/admin/users/$userId"
                           params={{ userId: user.id }}
                           className="hover:underline"
                         >
@@ -245,7 +246,7 @@ function PermissionDetailPage() {
                     <TableRow key={machine.id}>
                       <TableCell>
                         <Link
-                          to="/machines/$machineId"
+                          to="/admin/machines/$machineId"
                           params={{ machineId: machine.id }}
                           className="hover:underline"
                         >

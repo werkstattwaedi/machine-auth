@@ -23,7 +23,7 @@ import { useMemo, useState } from "react"
 import { serverTimestamp } from "firebase/firestore"
 import { type ColumnDef } from "@tanstack/react-table"
 
-export const Route = createFileRoute("/_authenticated/_admin/permissions/")({
+export const Route = createFileRoute("/_authenticated/admin/permissions/")({
   component: PermissionsPage,
 })
 
@@ -67,7 +67,7 @@ function PermissionsPage() {
         header: ({ column }) => <ColumnHeader column={column} title="Name" />,
         cell: ({ row }) => (
           <Link
-            to="/permissions/$permissionId"
+            to="/admin/permissions/$permissionId"
             params={{ permissionId: row.original.id }}
             className="font-medium hover:underline"
           >

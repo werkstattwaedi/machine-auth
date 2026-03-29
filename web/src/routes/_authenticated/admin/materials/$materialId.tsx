@@ -15,7 +15,7 @@ import type { CatalogItem } from "@/lib/workshop-config"
 import { CatalogFormFields, type CatalogFormValues } from "@/components/admin/catalog-form-fields"
 
 export const Route = createFileRoute(
-  "/_authenticated/_admin/materials/$materialId",
+  "/_authenticated/admin/materials/$materialId",
 )({
   component: CatalogDetailPage,
 })
@@ -77,7 +77,7 @@ function CatalogDetailPage() {
     <div className="space-y-4">
       <PageHeader
         title={catalog.name || "Katalogeintrag"}
-        backTo="/materials"
+        backTo="/admin/materials"
         backLabel="Zurück zum Katalog"
       />
 

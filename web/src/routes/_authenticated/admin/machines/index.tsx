@@ -25,7 +25,7 @@ import { useForm } from "react-hook-form"
 import { macoRef } from "@/lib/firestore-helpers"
 import { useDb } from "@/lib/firebase-context"
 
-export const Route = createFileRoute("/_authenticated/_admin/machines/")({
+export const Route = createFileRoute("/_authenticated/admin/machines/")({
   component: MachinesPage,
 })
 
@@ -47,7 +47,7 @@ function MachinesPage() {
         header: ({ column }) => <ColumnHeader column={column} title="Name" />,
         cell: ({ row }) => (
           <Link
-            to="/machines/$machineId"
+            to="/admin/machines/$machineId"
             params={{ machineId: row.original.id }}
             className="font-medium hover:underline"
           >

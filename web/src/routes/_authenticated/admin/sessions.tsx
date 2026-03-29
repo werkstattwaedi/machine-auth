@@ -13,7 +13,7 @@ import { formatDateTime } from "@/lib/format"
 import { type ColumnDef } from "@tanstack/react-table"
 import { useMemo } from "react"
 
-export const Route = createFileRoute("/_authenticated/_admin/sessions")({
+export const Route = createFileRoute("/_authenticated/admin/sessions")({
   component: SessionsPage,
 })
 
@@ -45,7 +45,7 @@ function SessionsPage() {
           if (!ref) return "–"
           return (
             <Link
-              to="/machines/$machineId"
+              to="/admin/machines/$machineId"
               params={{ machineId: ref.id }}
               className="hover:underline"
             >
@@ -62,7 +62,7 @@ function SessionsPage() {
           if (!ref) return "–"
           return (
             <Link
-              to="/users/$userId"
+              to="/admin/users/$userId"
               params={{ userId: ref.id }}
               className="hover:underline"
             >

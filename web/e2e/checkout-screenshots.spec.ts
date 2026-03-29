@@ -5,7 +5,7 @@ import { test, expect, type Page } from "@playwright/test"
 
 /** Navigate to checkout → dismiss landing → fill check-in → advance to workshops */
 async function goToWorkshops(page: Page) {
-  await page.goto("/checkout")
+  await page.goto("/")
   await page
     .getByRole("button", { name: "Ohne Anmeldung fortfahren" })
     .click({ timeout: 10_000 })

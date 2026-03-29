@@ -27,32 +27,9 @@ function httpRedirect(): PluginOption {
   }
 }
 
-function hostRewrite(): PluginOption {
-  return {
-    name: "host-rewrite",
-    configureServer(server) {
-      server.middlewares.use((req, res, next) => {
-        const host = req.headers.host || req.headers[":authority"]
-        const checkoutDomain = process.env.VITE_CHECKOUT_DOMAIN || "checkout.werkstattwaedi.ch"
-        if (
-          typeof host === "string" &&
-          host.startsWith(checkoutDomain) &&
-          req.url === "/"
-        ) {
-          res.writeHead(302, { Location: "/checkout" })
-          res.end()
-          return
-        }
-        next()
-      })
-    },
-  }
-}
-
 export default defineConfig({
   plugins: [
     httpRedirect(),
-    hostRewrite(),
     basicSsl(),
     TanStackRouterVite({ quoteStyle: "double" }),
     react(),

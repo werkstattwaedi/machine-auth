@@ -161,7 +161,7 @@ export function CheckoutWizard({ picc, cmac, kiosk, onActiveChange }: CheckoutWi
     dispatch({ type: "RESET" })
     setLandingDismissed(false)
     tagSignOut()
-    window.history.replaceState(null, "", kiosk ? "/checkout?kiosk" : "/checkout")
+    window.history.replaceState(null, "", kiosk ? "/?kiosk" : "/")
   }
 
   useEffect(() => {
@@ -196,7 +196,7 @@ export function CheckoutWizard({ picc, cmac, kiosk, onActiveChange }: CheckoutWi
       dispatch({ type: "RESET" })
       setLandingDismissed(false)
       tagSignOut()
-      window.history.replaceState(null, "", kiosk ? "/checkout?kiosk" : "/checkout")
+      window.history.replaceState(null, "", kiosk ? "/?kiosk" : "/")
     }, 30_000)
     return () => clearTimeout(timer)
   }, [state.submitted, isAccountLoggedIn, dispatch, kiosk, tagSignOut])

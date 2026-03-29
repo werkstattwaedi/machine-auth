@@ -13,7 +13,7 @@ test.describe("Authenticated checkout", () => {
   test("email link sign-in and checkout with pre-filled person", async ({
     page,
   }) => {
-    await page.goto("/checkout")
+    await page.goto("/")
 
     // ── Landing: email sign-in form ──
     await expect(page.getByText("Anmelden")).toBeVisible()
@@ -51,7 +51,7 @@ test.describe("Authenticated checkout", () => {
     })
 
     // Navigate to checkout
-    await page.goto("/checkout")
+    await page.goto("/")
 
     // The person card should show pre-filled data (name split into first/last)
     await expect(page.getByText("Testuser")).toBeVisible({

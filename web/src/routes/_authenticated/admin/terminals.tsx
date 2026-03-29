@@ -13,7 +13,7 @@ import { useState } from "react"
 import { getAuth } from "firebase/auth"
 import { toast } from "sonner"
 
-export const Route = createFileRoute("/_authenticated/_admin/terminals")({
+export const Route = createFileRoute("/_authenticated/admin/terminals")({
   component: TerminalsPage,
 })
 

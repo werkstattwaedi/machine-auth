@@ -26,7 +26,7 @@ function LoginPage() {
       .then((completed) => {
         if (completed) {
           toast.success("Erfolgreich angemeldet")
-          navigate({ to: "/" })
+          navigate({ to: "/visit" })
         }
       })
       .catch((err) => {
@@ -39,7 +39,7 @@ function LoginPage() {
   // Redirect if already signed in
   useEffect(() => {
     if (!loading && user) {
-      navigate({ to: "/" })
+      navigate({ to: "/visit" })
     }
   }, [user, loading, navigate])
 

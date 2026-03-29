@@ -27,7 +27,7 @@ test.describe("NFC tag checkout", () => {
     const { picc, cmac } = readE2eData()
 
     // Navigate with picc+cmac params — hits real Functions emulator
-    await page.goto(`/checkout?picc=${picc}&cmac=${cmac}`)
+    await page.goto(`/?picc=${picc}&cmac=${cmac}`)
 
     // ── No landing page — tag identifies the user directly ──
     // Wait for tag verification to complete and person to be pre-filled
@@ -72,7 +72,7 @@ test.describe("NFC tag checkout", () => {
   })
 
   test("kiosk mode — shows NFC landing", async ({ page }) => {
-    await page.goto("/checkout?kiosk")
+    await page.goto("/?kiosk")
 
     // Kiosk landing with NFC prompt
     await expect(
