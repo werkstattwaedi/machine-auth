@@ -40,6 +40,23 @@ export default defineConfig({
     port: 5174,
     allowedHosts: [process.env.VITE_ADMIN_DOMAIN || "admin.werkstattwaedi.ch"],
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("node_modules/react-dom/") || id.includes("node_modules/react/")) {
+            return "vendor-react"
+          }
+          if (id.includes("node_modules/firebase/") || id.includes("node_modules/@firebase/")) {
+            return "vendor-firebase"
+          }
+          if (id.includes("node_modules/@tanstack/")) {
+            return "vendor-router"
+          }
+        },
+      },
+    },
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

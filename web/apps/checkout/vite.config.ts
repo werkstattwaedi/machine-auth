@@ -39,6 +39,23 @@ export default defineConfig({
     host: true,
     allowedHosts: [process.env.VITE_CHECKOUT_DOMAIN || "checkout.werkstattwaedi.ch"],
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("node_modules/react-dom/") || id.includes("node_modules/react/")) {
+            return "vendor-react"
+          }
+          if (id.includes("node_modules/firebase/") || id.includes("node_modules/@firebase/")) {
+            return "vendor-firebase"
+          }
+          if (id.includes("node_modules/@tanstack/")) {
+            return "vendor-router"
+          }
+        },
+      },
+    },
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

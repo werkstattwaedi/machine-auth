@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { createFileRoute, Link } from "@tanstack/react-router"
-import { z } from "zod"
+import { z } from "zod/v4/mini"
 import { useDocument, useCollection } from "@modules/lib/firestore"
 import { useAuth } from "@modules/lib/auth"
 import { userRef } from "@modules/lib/firestore-helpers"
@@ -21,8 +21,8 @@ import { getShortUnit } from "@modules/lib/workshop-config"
 import { computePricing } from "@modules/lib/pricing-calc"
 
 const materialSearchSchema = z.object({
-  id: z.string().optional(),
-  priceList: z.string().optional(),
+  id: z.optional(z.string()),
+  priceList: z.optional(z.string()),
 })
 
 export const Route = createFileRoute("/_material/material/add")({

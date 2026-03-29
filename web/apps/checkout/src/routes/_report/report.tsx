@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: MIT
 
 import { createFileRoute } from "@tanstack/react-router"
-import { z } from "zod"
+import { z } from "zod/v4/mini"
 import { Card, CardContent } from "@modules/components/ui/card"
 import { AlertTriangle } from "lucide-react"
 
 const reportSearchSchema = z.object({
-  machine: z.string().optional(),
-  session: z.string().optional(),
+  machine: z.optional(z.string()),
+  session: z.optional(z.string()),
 })
 
 export const Route = createFileRoute("/_report/report")({

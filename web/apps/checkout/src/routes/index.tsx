@@ -3,16 +3,16 @@
 
 import { useState, useRef, useEffect } from "react"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
-import { z } from "zod"
+import { z } from "zod/v4/mini"
 import { signOut } from "firebase/auth"
 import { useFirebaseAuth } from "@modules/lib/firebase-context"
 import { CheckoutWizard } from "@/components/checkout/checkout-wizard"
 import { ConfirmDialog } from "@modules/components/confirm-dialog"
 
 const checkoutSearchSchema = z.object({
-  picc: z.string().optional(),
-  cmac: z.string().optional(),
-  kiosk: z.string().optional(),
+  picc: z.optional(z.string()),
+  cmac: z.optional(z.string()),
+  kiosk: z.optional(z.string()),
 })
 
 export const Route = createFileRoute("/")({
