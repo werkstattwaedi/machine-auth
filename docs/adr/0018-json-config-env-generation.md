@@ -4,7 +4,7 @@
 
 **Date:** 2026-03-22
 
-**Applies to:** `scripts/generate-env.ts`, `functions/.env*`, `web/.env*`, `maco_gateway/.env.local`, `scripts/.env`
+**Applies to:** `scripts/generate-env.ts`, `functions/.env*`, `web/apps/checkout/.env*`, `web/apps/admin/.env*`, `maco_gateway/.env.local`, `scripts/.env`
 
 ## Context
 
@@ -31,8 +31,10 @@ Generated files:
 |------|--------|---------|
 | `functions/.env.local` | local (merged) | Emulator: params + test secrets |
 | `functions/.env.<projectId>` | production | Deploy: params only (secrets via Secret Manager) |
-| `web/.env.development` | local (merged) | Vite dev server with emulators |
-| `web/.env.production` | production | Vite production build |
+| `web/apps/checkout/.env.development` | local (merged) | Checkout Vite dev server |
+| `web/apps/checkout/.env.production` | production | Checkout Vite production build |
+| `web/apps/admin/.env.development` | local (merged) | Admin Vite dev server |
+| `web/apps/admin/.env.production` | production | Admin Vite production build |
 | `maco_gateway/.env.local` | local (merged) | Local gateway development |
 | `scripts/.env` | production | Utility scripts |
 | `.firebaserc` | production | Firebase project ID |

@@ -31,11 +31,11 @@ npm start            # starts the kiosk app
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CHECKOUT_URL` | `https://localhost:5173/checkout?kiosk` | Base URL for the checkout web app |
+| `CHECKOUT_URL` | `https://localhost:5173/?kiosk` | Base URL for the checkout web app |
 
 For local development with emulators:
 ```bash
-CHECKOUT_URL=https://localhost:5173/checkout?kiosk npm start
+CHECKOUT_URL=https://localhost:5173/?kiosk npm start
 ```
 
 ## How It Works

@@ -54,7 +54,7 @@ The `syncCustomClaims` trigger fires on user doc writes. For existing admin user
 
 Verify: In Firebase Console > Authentication > Users, click a user and check Custom Claims shows `{"admin": true}`.
 
-## 6. Deploy Web App
+## 6. Deploy Web Apps
 
 ```bash
 cd web
@@ -63,7 +63,14 @@ npm run build
 firebase deploy --only hosting
 ```
 
-Verify: Visit `https://oww-maco.web.app/`
+This deploys both the checkout and admin sites. To deploy individually:
+
+```bash
+firebase deploy --only hosting:checkout
+firebase deploy --only hosting:admin
+```
+
+Verify: Visit both checkout and admin hosting URLs.
 
 ## 7. Full Deploy (all at once)
 
@@ -73,10 +80,10 @@ firebase deploy
 
 ## 8. Smoke Tests
 
-1. **Public checkout**: Visit `/checkout?picc=...&cmac=...` with a valid tag URL
-2. **Login**: Send email link, complete sign-in
+1. **Public checkout**: Visit checkout site with `?picc=...&cmac=...` tag URL
+2. **Login**: Send email link, complete sign-in on checkout site
 3. **Dashboard**: Verify user doc loads from Firestore
-4. **Admin access**: Verify admin-only pages are restricted to users with admin custom claim
+4. **Admin site**: Visit admin site, verify it requires admin custom claim
 5. **Functions**: Check a terminal checkin works end-to-end
 
 ## Gateway Deployment

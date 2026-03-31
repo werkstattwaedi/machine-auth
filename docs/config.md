@@ -35,8 +35,10 @@ All deployment-specific configuration lives in a separate **operations repo**, n
 |------|--------|---------|
 | `functions/.env.local` | local (merged) | Emulator: params + test secrets |
 | `functions/.env.<projectId>` | production | Deploy: params only (secrets via Secret Manager) |
-| `web/.env.development` | local (merged) | Vite dev server |
-| `web/.env.production` | production | Vite production build |
+| `web/apps/checkout/.env.development` | local (merged) | Checkout Vite dev server |
+| `web/apps/checkout/.env.production` | production | Checkout Vite production build |
+| `web/apps/admin/.env.development` | local (merged) | Admin Vite dev server |
+| `web/apps/admin/.env.production` | production | Admin Vite production build |
 | `maco_gateway/.env.local` | local (merged) | Local gateway config |
 | `scripts/.env` | production | Utility scripts |
 | `.firebaserc` | production | Firebase project ID |
@@ -206,7 +208,7 @@ firebase functions:secrets:access
 
 ## Web App Configuration
 
-The web app uses `VITE_*` environment variables generated from the operations repo `config.jsonc` into `web/.env.development` (dev) and `web/.env.production` (prod) by `npm run generate-env`.
+Both web apps (checkout and admin) use `VITE_*` environment variables generated from the operations repo `config.jsonc` into per-app `.env.development` (dev) and `.env.production` (prod) files by `npm run generate-env`.
 
 ### Deployment Variables
 
@@ -394,7 +396,7 @@ Use this checklist when setting up a new environment:
 ### Web App
 
 - [ ] Production API key restricted in Google Cloud Console
-- [ ] Web app built and deployed: `firebase deploy --only hosting`
+- [ ] Both web apps built and deployed: `firebase deploy --only hosting`
 - [ ] First admin user created with `roles: ['admin']`
 - [ ] Custom claims set for admin user (via `syncCustomClaims` trigger)
 
