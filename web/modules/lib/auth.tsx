@@ -14,6 +14,9 @@ import {
   isSignInWithEmailLink,
   signInWithEmailLink,
   signOut as firebaseSignOut,
+  GoogleAuthProvider,
+  signInWithPopup,
+  linkWithPopup,
   type User,
 } from "firebase/auth"
 import {
@@ -56,8 +59,13 @@ interface AuthContextValue {
   /** True while the Firestore user doc is being fetched (may be slow). */
   userDocLoading: boolean
   signInWithEmail: (email: string) => Promise<void>
+  signInWithGoogle: () => Promise<void>
   completeSignIn: () => Promise<boolean>
+  linkGoogle: () => Promise<void>
   signOut: () => Promise<void>
+  /** Set when Google sign-in failed because an email-link account exists. */
+  pendingGoogleLink: boolean
+  clearPendingGoogleLink: () => void
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -127,6 +135,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
   }, [user, db])
 
+  const [pendingGoogleLink, setPendingGoogleLink] = useState(
+    () => window.localStorage.getItem("pendingGoogleLink") === "true"
+  )
+
+  const signInWithGoogle = async () => {
+    try {
+      const result = await signInWithPopup(auth, new GoogleAuthProvider())
+      await handleSignIn(db, result.user)
+    } catch (error: unknown) {
+      if (
+        error instanceof Error &&
+        "code" in error &&
+        (error as { code: string }).code === "auth/account-exists-with-different-credential"
+      ) {
+        // Existing email-link account — user must sign in via email first, then link
+        window.localStorage.setItem("pendingGoogleLink", "true")
+        setPendingGoogleLink(true)
+      }
+      throw error
+    }
+  }
+
+  const linkGoogle = async () => {
+    if (!user) throw new Error("Nicht angemeldet")
+    await linkWithPopup(user, new GoogleAuthProvider())
+    clearPendingGoogleLink()
+  }
+
+  const clearPendingGoogleLink = () => {
+    window.localStorage.removeItem("pendingGoogleLink")
+    setPendingGoogleLink(false)
+  }
+
   const signInWithEmail = async (email: string) => {
     await sendSignInLinkToEmail(auth, email, {
       url: `${window.location.origin}/login`,
@@ -171,8 +212,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       userDocLoading,
       signInWithEmail,
+      signInWithGoogle,
       completeSignIn,
+      linkGoogle,
       signOut,
+      pendingGoogleLink,
+      clearPendingGoogleLink,
     }}>
       {children}
     </AuthContext>

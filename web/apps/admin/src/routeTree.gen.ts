@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from "./routes/__root"
 import { Route as LoginRouteImport } from "./routes/login"
+import { Route as LinkAccountRouteImport } from "./routes/link-account"
 import { Route as AuthenticatedRouteImport } from "./routes/_authenticated"
 import { Route as IndexRouteImport } from "./routes/index"
 import { Route as AuthenticatedUsersRouteImport } from "./routes/_authenticated/users"
@@ -35,6 +36,11 @@ import { Route as AuthenticatedMachinesMachineIdRouteImport } from "./routes/_au
 const LoginRoute = LoginRouteImport.update({
   id: "/login",
   path: "/login",
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LinkAccountRoute = LinkAccountRouteImport.update({
+  id: "/link-account",
+  path: "/link-account",
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedRoute = AuthenticatedRouteImport.update({
@@ -154,6 +160,7 @@ const AuthenticatedMachinesMachineIdRoute =
 
 export interface FileRoutesByFullPath {
   "/": typeof IndexRoute
+  "/link-account": typeof LinkAccountRoute
   "/login": typeof LoginRoute
   "/audit": typeof AuthenticatedAuditRoute
   "/checkouts": typeof AuthenticatedCheckoutsRoute
@@ -177,6 +184,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   "/": typeof IndexRoute
+  "/link-account": typeof LinkAccountRoute
   "/login": typeof LoginRoute
   "/audit": typeof AuthenticatedAuditRoute
   "/checkouts": typeof AuthenticatedCheckoutsRoute
@@ -197,6 +205,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   "/": typeof IndexRoute
   "/_authenticated": typeof AuthenticatedRouteWithChildren
+  "/link-account": typeof LinkAccountRoute
   "/login": typeof LoginRoute
   "/_authenticated/audit": typeof AuthenticatedAuditRoute
   "/_authenticated/checkouts": typeof AuthenticatedCheckoutsRoute
@@ -222,6 +231,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | "/"
+    | "/link-account"
     | "/login"
     | "/audit"
     | "/checkouts"
@@ -245,6 +255,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | "/"
+    | "/link-account"
     | "/login"
     | "/audit"
     | "/checkouts"
@@ -264,6 +275,7 @@ export interface FileRouteTypes {
     | "__root__"
     | "/"
     | "/_authenticated"
+    | "/link-account"
     | "/login"
     | "/_authenticated/audit"
     | "/_authenticated/checkouts"
@@ -289,6 +301,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
+  LinkAccountRoute: typeof LinkAccountRoute
   LoginRoute: typeof LoginRoute
 }
 
@@ -299,6 +312,13 @@ declare module "@tanstack/react-router" {
       path: "/login"
       fullPath: "/login"
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    "/link-account": {
+      id: "/link-account"
+      path: "/link-account"
+      fullPath: "/link-account"
+      preLoaderRoute: typeof LinkAccountRouteImport
       parentRoute: typeof rootRouteImport
     }
     "/_authenticated": {
@@ -561,6 +581,7 @@ const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
+  LinkAccountRoute: LinkAccountRoute,
   LoginRoute: LoginRoute,
 }
 export const routeTree = rootRouteImport

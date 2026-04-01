@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from "./routes/__root"
 import { Route as LoginRouteImport } from "./routes/login"
+import { Route as LinkAccountRouteImport } from "./routes/link-account"
 import { Route as ReportRouteImport } from "./routes/_report"
 import { Route as MaterialRouteImport } from "./routes/_material"
 import { Route as AuthenticatedRouteImport } from "./routes/_authenticated"
@@ -24,6 +25,11 @@ import { Route as MaterialMaterialAddRouteImport } from "./routes/_material/mate
 const LoginRoute = LoginRouteImport.update({
   id: "/login",
   path: "/login",
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LinkAccountRoute = LinkAccountRouteImport.update({
+  id: "/link-account",
+  path: "/link-account",
   getParentRoute: () => rootRouteImport,
 } as any)
 const ReportRoute = ReportRouteImport.update({
@@ -77,6 +83,7 @@ const MaterialMaterialAddRoute = MaterialMaterialAddRouteImport.update({
 
 export interface FileRoutesByFullPath {
   "/": typeof IndexRoute
+  "/link-account": typeof LinkAccountRoute
   "/login": typeof LoginRoute
   "/complete-profile": typeof AuthenticatedCompleteProfileRoute
   "/profile": typeof AuthenticatedProfileRoute
@@ -87,6 +94,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   "/": typeof IndexRoute
+  "/link-account": typeof LinkAccountRoute
   "/login": typeof LoginRoute
   "/complete-profile": typeof AuthenticatedCompleteProfileRoute
   "/profile": typeof AuthenticatedProfileRoute
@@ -101,6 +109,7 @@ export interface FileRoutesById {
   "/_authenticated": typeof AuthenticatedRouteWithChildren
   "/_material": typeof MaterialRouteWithChildren
   "/_report": typeof ReportRouteWithChildren
+  "/link-account": typeof LinkAccountRoute
   "/login": typeof LoginRoute
   "/_authenticated/complete-profile": typeof AuthenticatedCompleteProfileRoute
   "/_authenticated/profile": typeof AuthenticatedProfileRoute
@@ -113,6 +122,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | "/"
+    | "/link-account"
     | "/login"
     | "/complete-profile"
     | "/profile"
@@ -123,6 +133,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | "/"
+    | "/link-account"
     | "/login"
     | "/complete-profile"
     | "/profile"
@@ -136,6 +147,7 @@ export interface FileRouteTypes {
     | "/_authenticated"
     | "/_material"
     | "/_report"
+    | "/link-account"
     | "/login"
     | "/_authenticated/complete-profile"
     | "/_authenticated/profile"
@@ -150,6 +162,7 @@ export interface RootRouteChildren {
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   MaterialRoute: typeof MaterialRouteWithChildren
   ReportRoute: typeof ReportRouteWithChildren
+  LinkAccountRoute: typeof LinkAccountRoute
   LoginRoute: typeof LoginRoute
 }
 
@@ -160,6 +173,13 @@ declare module "@tanstack/react-router" {
       path: "/login"
       fullPath: "/login"
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    "/link-account": {
+      id: "/link-account"
+      path: "/link-account"
+      fullPath: "/link-account"
+      preLoaderRoute: typeof LinkAccountRouteImport
       parentRoute: typeof rootRouteImport
     }
     "/_report": {
@@ -281,6 +301,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   MaterialRoute: MaterialRouteWithChildren,
   ReportRoute: ReportRouteWithChildren,
+  LinkAccountRoute: LinkAccountRoute,
   LoginRoute: LoginRoute,
 }
 export const routeTree = rootRouteImport

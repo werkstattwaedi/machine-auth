@@ -13,7 +13,7 @@ export const Route = createFileRoute("/_authenticated")({
 })
 
 function AdminAuthenticatedLayout() {
-  const { user, userDoc, isAdmin, loading, signOut } = useAuth()
+  const { user, userDoc, isAdmin, loading, userDocLoading, signOut } = useAuth()
   const navigate = useNavigate()
 
   // Redirect to login if not authenticated
@@ -23,12 +23,12 @@ function AdminAuthenticatedLayout() {
     }
   }, [user, loading, navigate])
 
-  // Redirect non-admins to login
+  // Redirect non-admins to login (wait for user doc to load first)
   useEffect(() => {
-    if (!loading && user && !isAdmin) {
+    if (!loading && !userDocLoading && user && !isAdmin) {
       navigate({ to: "/login" })
     }
-  }, [user, isAdmin, loading, navigate])
+  }, [user, isAdmin, loading, userDocLoading, navigate])
 
   if (loading) {
     return (

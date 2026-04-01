@@ -8,17 +8,20 @@ import { Button } from "@modules/components/ui/button"
 import { Input } from "@modules/components/ui/input"
 import { toast } from "sonner"
 import { Loader2, Mail } from "lucide-react"
+import { GoogleIcon } from "@modules/components/icons/google"
 
 export const Route = createFileRoute("/login")({
   component: LoginPage,
 })
 
 function LoginPage() {
-  const { user, loading, signInWithEmail, completeSignIn } = useAuth()
+  const { user, loading, signInWithEmail, signInWithGoogle, completeSignIn, pendingGoogleLink } = useAuth()
   const navigate = useNavigate()
   const [email, setEmail] = useState("")
   const [sending, setSending] = useState(false)
+  const [signingInWithGoogle, setSigningInWithGoogle] = useState(false)
   const [linkSent, setLinkSent] = useState(false)
+  const [showLinkHint, setShowLinkHint] = useState(false)
 
   // Complete email link sign-in if arriving from email link
   useEffect(() => {
@@ -26,7 +29,7 @@ function LoginPage() {
       .then((completed) => {
         if (completed) {
           toast.success("Erfolgreich angemeldet")
-          navigate({ to: "/users" })
+          navigate({ to: pendingGoogleLink ? "/link-account" : "/users" })
         }
       })
       .catch((err) => {
@@ -39,9 +42,37 @@ function LoginPage() {
   // Redirect if already signed in
   useEffect(() => {
     if (!loading && user) {
-      navigate({ to: "/users" })
+      navigate({ to: pendingGoogleLink ? "/link-account" : "/users" })
     }
-  }, [user, loading, navigate])
+  }, [user, loading, pendingGoogleLink, navigate])
+
+  const handleGoogleSignIn = async () => {
+    setSigningInWithGoogle(true)
+    try {
+      await signInWithGoogle()
+      navigate({ to: "/users" })
+    } catch (err: unknown) {
+      if (
+        err instanceof Error &&
+        "code" in err &&
+        (err as { code: string }).code === "auth/account-exists-with-different-credential"
+      ) {
+        setShowLinkHint(true)
+        toast.info("Bitte zuerst per E-Mail-Link anmelden")
+      } else if (
+        err instanceof Error &&
+        "code" in err &&
+        (err as { code: string }).code === "auth/popup-closed-by-user"
+      ) {
+        // User closed the popup — no error needed
+      } else {
+        const message = err instanceof Error ? err.message : "Fehler"
+        toast.error(`Anmeldung fehlgeschlagen: ${message}`)
+      }
+    } finally {
+      setSigningInWithGoogle(false)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -91,25 +122,56 @@ function LoginPage() {
               </p>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <Input
-                type="email"
-                placeholder="deine@email.ch"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
+            <>
+              {showLinkHint && (
+                <div className="rounded border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-800">
+                  Ein Konto mit dieser E-Mail existiert bereits. Melde dich per E-Mail-Link an,
+                  um dein Google-Konto zu verknüpfen.
+                </div>
+              )}
+
               <Button
-                type="submit"
-                className="w-full bg-cog-teal hover:bg-cog-teal-dark text-white font-semibold"
-                disabled={sending}
+                onClick={handleGoogleSignIn}
+                className="w-full bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 font-semibold"
+                disabled={signingInWithGoogle}
               >
-                {sending ? (
+                {signingInWithGoogle ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : null}
-                Anmelde-Link senden
+                ) : (
+                  <GoogleIcon className="h-4 w-4 mr-2" />
+                )}
+                Mit Google anmelden
               </Button>
-            </form>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">oder</span>
+                </div>
+              </div>
+
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <Input
+                  type="email"
+                  placeholder="deine@email.ch"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
+                <Button
+                  type="submit"
+                  className="w-full bg-cog-teal hover:bg-cog-teal-dark text-white font-semibold"
+                  disabled={sending}
+                >
+                  {sending ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : null}
+                  Anmelde-Link senden
+                </Button>
+              </form>
+            </>
           )}
         </div>
       </div>
