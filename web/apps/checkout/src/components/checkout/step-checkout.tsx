@@ -151,13 +151,13 @@ export function StepCheckout({
           {state.persons.map((p) => {
             const fee = calculateFee(p.userType, state.usageType, config)
             return (
-              <div key={p.id} className="flex items-center gap-6 text-sm">
-                <span className="w-40">
+              <div key={p.id} className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-6 text-sm">
+                <span className="font-medium sm:font-normal sm:w-40">
                   {p.firstName} {p.lastName}
                 </span>
-                <span className="w-40">{p.email}</span>
-                <span className="w-28">{USER_TYPE_LABELS[p.userType]}</span>
-                <span>{formatCHF(fee)}</span>
+                <span className="text-muted-foreground sm:text-foreground sm:w-40">{p.email}</span>
+                <span className="sm:w-28">{USER_TYPE_LABELS[p.userType]}</span>
+                <span className="font-semibold sm:font-normal">{formatCHF(fee)}</span>
               </div>
             )
           })}
@@ -235,8 +235,8 @@ export function StepCheckout({
 
         {/* Round-up radio options */}
         {roundOpts.length > 0 && (
-          <div className="flex items-center justify-between text-sm mt-3">
-            <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-sm mt-3">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-4">
               <span className="text-muted-foreground">Aufrunden auf</span>
               {roundOpts.map((target) => {
                 const isActive = roundUpTarget === target

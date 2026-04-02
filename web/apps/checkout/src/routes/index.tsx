@@ -92,7 +92,7 @@ function CheckoutPage() {
 
   return (
     <div className="min-h-screen flex flex-col items-center bg-background">
-      <header className="w-full bg-background px-6 pt-6 pb-2">
+      <header className="w-full bg-background px-4 sm:px-6 pt-6 pb-2">
         <div className="w-full max-w-[1000px] mx-auto">
           <img
             src="/logo_oww.png"
@@ -101,8 +101,8 @@ function CheckoutPage() {
           />
         </div>
       </header>
-      <div className="w-full max-w-[1000px] px-6 py-4">
-        <h1 className="text-[37px] font-bold mb-6">
+      <div className="w-full max-w-[1000px] px-4 sm:px-6 py-4">
+        <h1 className="text-2xl sm:text-[37px] font-bold mb-6">
           Self-Checkout
         </h1>
         <CheckoutWizard

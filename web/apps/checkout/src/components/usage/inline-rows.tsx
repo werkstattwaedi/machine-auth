@@ -115,7 +115,7 @@ function PriceColumns({
 }) {
   return (
     <>
-      <div className="w-24 shrink-0 text-right relative">
+      <div className="w-20 sm:w-24 shrink-0 text-right relative">
         <Label className="text-xs font-bold">{unitLabel}</Label>
         {editablePrice ? (
           <input
@@ -134,7 +134,7 @@ function PriceColumns({
         )}
         <ItemError message={priceErrorMessage} />
       </div>
-      <div className="w-24 shrink-0 text-right">
+      <div className="w-20 sm:w-24 shrink-0 text-right">
         <Label className="text-xs font-bold">Betrag</Label>
         <div className="h-9 flex items-center justify-end text-sm font-bold">
           {formatCHF(total)}
@@ -276,8 +276,8 @@ function SimpleItemRow({
         label={`Artikel ${index + 1}: ${item.description}`}
         onRemove={() => callbacks.removeItem(item.id)}
       />
-      <div className={`flex items-end gap-3 mt-2${hasError ? " pb-5" : ""}`}>
-        <div className="w-28 relative">
+      <div className={`flex flex-wrap items-end gap-x-3 mt-2${hasError ? " gap-y-8 pb-5" : " gap-y-3"}`}>
+        <div className="w-24 sm:w-28 relative">
           <Label className="text-xs font-bold">Anzahl ({displayUnit})</Label>
           <input
             type="number"
@@ -294,7 +294,7 @@ function SimpleItemRow({
           />
           <ItemError message={error?.quantity} />
         </div>
-        <div className="flex-1" />
+        <div className="ml-auto flex items-end gap-3">
         <PriceColumns
           unitLabel={`Preis/${getUnitLabel(config, pricingModel)}`}
           unitPrice={effectivePrice}
@@ -308,6 +308,7 @@ function SimpleItemRow({
           priceError={!!error?.price}
           priceErrorMessage={error?.price}
         />
+        </div>
       </div>
     </div>
   )
@@ -367,8 +368,8 @@ function AreaItemRow({
         label={`Artikel ${index + 1}: ${item.description}`}
         onRemove={() => callbacks.removeItem(item.id)}
       />
-      <div className={`flex items-end gap-3 mt-2${hasError ? " pb-5" : ""}`}>
-        <div className="w-24 relative">
+      <div className={`flex flex-wrap items-end gap-x-3 mt-2${hasError ? " gap-y-8 pb-5" : " gap-y-3"}`}>
+        <div className="w-20 sm:w-24 relative">
           <Label className="text-xs font-bold">Länge (cm)</Label>
           <input
             type="number"
@@ -385,7 +386,7 @@ function AreaItemRow({
           />
           <ItemError message={error?.quantity} />
         </div>
-        <div className="w-24">
+        <div className="w-20 sm:w-24">
           <Label className="text-xs font-bold">Breite (cm)</Label>
           <input
             type="number"
@@ -401,11 +402,11 @@ function AreaItemRow({
             className={error?.quantity ? INPUT_ERR_CLS : INPUT_CLS}
           />
         </div>
-        <div className="w-16">
+        <div className="w-14 sm:w-16">
           <Label className="text-xs font-bold">{getUnitLabel(config, "area")}</Label>
           <div className="h-9 flex items-center text-sm">{computedM2.toFixed(2)}</div>
         </div>
-        <div className="flex-1" />
+        <div className="ml-auto flex items-end gap-3">
         <PriceColumns
           unitLabel={`Preis/${getUnitLabel(config, "area")}`}
           unitPrice={effectivePrice}
@@ -419,6 +420,7 @@ function AreaItemRow({
           priceError={!!error?.price}
           priceErrorMessage={error?.price}
         />
+        </div>
       </div>
     </div>
   )
@@ -471,8 +473,8 @@ function LengthItemRow({
         label={`Artikel ${index + 1}: ${item.description}`}
         onRemove={() => callbacks.removeItem(item.id)}
       />
-      <div className={`flex items-end gap-3 mt-2${hasError ? " pb-5" : ""}`}>
-        <div className="w-28 relative">
+      <div className={`flex flex-wrap items-end gap-x-3 mt-2${hasError ? " gap-y-8 pb-5" : " gap-y-3"}`}>
+        <div className="w-24 sm:w-28 relative">
           <Label className="text-xs font-bold">Länge (cm)</Label>
           <input
             type="number"
@@ -489,7 +491,7 @@ function LengthItemRow({
           />
           <ItemError message={error?.quantity} />
         </div>
-        <div className="flex-1" />
+        <div className="ml-auto flex items-end gap-3">
         <PriceColumns
           unitLabel={`Preis/${getUnitLabel(config, "length")}`}
           unitPrice={effectivePrice}
@@ -503,6 +505,7 @@ function LengthItemRow({
           priceError={!!error?.price}
           priceErrorMessage={error?.price}
         />
+        </div>
       </div>
     </div>
   )
@@ -546,8 +549,8 @@ function DirectItemRow({
         label={`Artikel ${index + 1}: ${item.description || "Pauschal"}`}
         onRemove={() => callbacks.removeItem(item.id)}
       />
-      <div className={`flex items-end gap-3 mt-2${hasError ? " pb-5" : ""}`}>
-        <div className="flex-1 relative">
+      <div className={`flex flex-wrap items-end gap-x-3 mt-2${hasError ? " gap-y-8 pb-5" : " gap-y-3"}`}>
+        <div className="flex-1 min-w-0 relative">
           <Label className="text-xs font-bold">Bezogene Leistungen</Label>
           <input
             value={description}
@@ -721,19 +724,20 @@ export function NfcMachineItemRow({
       </div>
 
       {/* Quantity + price row */}
-      <div className="flex items-end gap-3 mt-2">
-        <div className="w-28">
+      <div className="flex flex-wrap items-end gap-3 mt-2">
+        <div className="w-24 sm:w-28">
           <Label className="text-xs font-bold">Dauer</Label>
           <div className="h-9 flex items-center text-sm">
             {`${minutes} min`}
           </div>
         </div>
-        <div className="flex-1" />
+        <div className="ml-auto flex items-end gap-3">
         <PriceColumns
           unitLabel="Preis/h"
           unitPrice={item.unitPrice}
           total={item.totalPrice}
         />
+        </div>
       </div>
 
       {/* Expandable details */}

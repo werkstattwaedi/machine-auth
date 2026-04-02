@@ -27,7 +27,7 @@ export function CheckoutProgress({ currentStep }: CheckoutProgressProps) {
             />
             <span
               className={cn(
-                "text-sm",
+                "text-xs sm:text-sm",
                 i === currentStep
                   ? "text-foreground font-semibold"
                   : "text-muted-foreground"

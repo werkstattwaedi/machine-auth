@@ -89,7 +89,7 @@ export function StepCheckin({ state, dispatch, isAnonymous }: StepCheckinProps) 
 
       {isAnonymous && (
         <div className="space-y-3 pt-2">
-          <div className="flex items-start justify-between">
+          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
             <span className="text-sm font-bold">
               Nutzungsbestimmungen<span className="text-[#cc2a24]">*</span>
             </span>

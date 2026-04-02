@@ -24,7 +24,9 @@ async function goToWorkshops(page: Page) {
 /** Navigate to checkout summary (step 3) with no items */
 async function goToSummary(page: Page) {
   await goToWorkshops(page)
-  await page.getByRole("button", { name: "Check-Out" }).click()
+  const checkoutBtn = page.getByRole("button", { name: "Check-Out" })
+  await checkoutBtn.scrollIntoViewIfNeeded()
+  await checkoutBtn.click()
   await expect(page.getByText("Zusammenfassung")).toBeVisible()
 }
 
@@ -45,7 +47,9 @@ async function goToSummaryWithItems(page: Page) {
   await qtyInput.fill("3")
   await qtyInput.blur()
 
-  await page.getByRole("button", { name: "Check-Out" }).click()
+  const checkoutBtn = page.getByRole("button", { name: "Check-Out" })
+  await checkoutBtn.scrollIntoViewIfNeeded()
+  await checkoutBtn.click()
   await expect(page.getByText("Zusammenfassung")).toBeVisible()
 }
 
@@ -210,8 +214,11 @@ test.describe("Checkout step screenshots", () => {
       .fill("Maschinennutzung")
     await page.getByText("Maschinenzeit").click()
 
-    // Trigger validation
-    await page.getByRole("button", { name: "Check-Out" }).click()
+    // Trigger validation (scrollIntoViewIfNeeded: on mobile the tall page
+    // can cause the parent div to intercept Playwright's actionability check)
+    const checkoutBtn = page.getByRole("button", { name: "Check-Out" })
+    await checkoutBtn.scrollIntoViewIfNeeded()
+    await checkoutBtn.click()
 
     // Wait for error annotations to appear
     await expect(page.getByText("Masse müssen grösser als 0 sein.")).toBeVisible()

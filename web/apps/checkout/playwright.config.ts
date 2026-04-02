@@ -28,6 +28,15 @@ export default defineConfig({
 
   projects: [
     { name: "chromium", use: { browserName: "chromium" } },
+    {
+      name: "mobile-chrome",
+      use: {
+        browserName: "chromium",
+        viewport: { width: 375, height: 812 },
+        isMobile: true,
+        hasTouch: true,
+      },
+    },
   ],
 
   globalSetup: "./e2e/global-setup.ts",

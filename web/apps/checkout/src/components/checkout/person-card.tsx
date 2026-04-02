@@ -89,7 +89,7 @@ export function PersonCard({
       </div>
 
       {person.isPreFilled ? (
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="space-y-1">
             <Label className="text-sm font-bold">Vorname</Label>
             <p className="text-sm">{person.firstName}</p>
@@ -104,7 +104,7 @@ export function PersonCard({
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className={wrapCls("firstName")}>
             <Label className="text-sm font-bold">
               Vorname<span className="text-[#cc2a24]">*</span>
@@ -180,7 +180,7 @@ export function PersonCard({
       {showBillingAddress && (
         <div className="space-y-3 border-t pt-4">
           <Label className="text-sm font-bold">Rechnungsadresse</Label>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className={wrapCls("billingCompany")}>
               <Label className="text-sm">Firma<span className="text-[#cc2a24]">*</span></Label>
               <input
