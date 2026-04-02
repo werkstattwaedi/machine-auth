@@ -3,13 +3,10 @@
 
 import { test, expect, type Page } from "@playwright/test"
 
-/** Navigate to checkout → dismiss landing → fill check-in → advance to workshops */
+/** Navigate to checkout → fill check-in → advance to workshops */
 async function goToWorkshops(page: Page) {
   await page.goto("/")
-  await page
-    .getByRole("button", { name: "Ohne Anmeldung fortfahren" })
-    .click({ timeout: 10_000 })
-  await expect(page.getByText("Deine Angaben")).toBeVisible()
+  await expect(page.getByText("Deine Angaben")).toBeVisible({ timeout: 10_000 })
 
   // Fill required person fields
   await page.locator('label:has-text("Vorname")').first().locator("..").locator("input").fill("Max")

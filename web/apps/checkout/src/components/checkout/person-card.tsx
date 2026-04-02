@@ -19,6 +19,10 @@ interface PersonCardProps {
   touched?: Record<string, boolean>
   submitted?: boolean
   onBlur?: (field: string) => void
+  /** Override the card title (e.g. "Eingeloggt" for account users) */
+  title?: string
+  /** Sign-out affordance shown below the pre-filled fields */
+  onSignOut?: () => void
 }
 
 function showError(
@@ -55,6 +59,8 @@ export function PersonCard({
   touched,
   submitted,
   onBlur,
+  title,
+  onSignOut,
 }: PersonCardProps) {
   const update = (updates: Partial<CheckoutPerson>) =>
     dispatch({ type: "UPDATE_PERSON", id: person.id, updates })
@@ -70,38 +76,54 @@ export function PersonCard({
 
   return (
     <div data-testid="person-card" className="bg-[rgba(204,204,204,0.2)] rounded-none p-[25px] space-y-4">
-      <div className="flex items-center gap-1.5">
-        {canRemove && (
-          <button
-            type="button"
-            aria-label={`Person ${index + 1} entfernen`}
-            className="-ml-[18px] shrink-0 text-muted-foreground hover:text-destructive"
-            onClick={() =>
-              dispatch({ type: "REMOVE_PERSON", id: person.id })
-            }
-          >
-            <XCircle className="h-4 w-4" />
-          </button>
-        )}
-        <h3 className="text-base font-bold font-body">
-          Person {index + 1}
-        </h3>
-      </div>
+      {(title === undefined || title) && (
+        <div className="flex items-center gap-1.5">
+          {canRemove && (
+            <button
+              type="button"
+              aria-label={`Person ${index + 1} entfernen`}
+              className="-ml-[18px] shrink-0 text-muted-foreground hover:text-destructive"
+              onClick={() =>
+                dispatch({ type: "REMOVE_PERSON", id: person.id })
+              }
+            >
+              <XCircle className="h-4 w-4" />
+            </button>
+          )}
+          <h3 className="text-base font-bold font-body">
+            {title || `Person ${index + 1}`}
+          </h3>
+        </div>
+      )}
 
       {person.isPreFilled ? (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="space-y-1">
-            <Label className="text-sm font-bold">Vorname</Label>
-            <p className="text-sm">{person.firstName}</p>
+        <div className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="space-y-1">
+              <Label className="text-sm font-bold">Vorname</Label>
+              <p className="text-sm">{person.firstName}</p>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-sm font-bold">Nachname</Label>
+              <p className="text-sm">{person.lastName}</p>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-sm font-bold">E-Mail</Label>
+              <p className="text-sm">{person.email}</p>
+            </div>
           </div>
-          <div className="space-y-1">
-            <Label className="text-sm font-bold">Nachname</Label>
-            <p className="text-sm">{person.lastName}</p>
-          </div>
-          <div className="space-y-1">
-            <Label className="text-sm font-bold">E-Mail</Label>
-            <p className="text-sm">{person.email}</p>
-          </div>
+          {onSignOut && (
+            <div className="border-t border-border/50 pt-2">
+              <button
+                type="button"
+                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                onClick={onSignOut}
+              >
+                Nicht {person.firstName} {person.lastName}?{" "}
+                <span className="underline">Abmelden</span>
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

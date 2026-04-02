@@ -15,13 +15,16 @@ test.describe("Authenticated checkout", () => {
   }) => {
     await page.goto("/")
 
-    // ── Landing: email sign-in form ──
-    await expect(page.getByText("Anmelden")).toBeVisible()
-    await expect(
-      page.getByPlaceholder("deine@email.ch"),
-    ).toBeVisible()
+    // ── Checkout page shows login hint ──
+    await expect(page.getByText("Bereits registriert?")).toBeVisible({
+      timeout: 10_000,
+    })
 
-    // Enter email and request sign-in link
+    // Click "Anmelden" to go to /login
+    await page.locator('a[href*="/login"]').click()
+    await page.waitForURL("**/login**")
+
+    // ── Login page: email sign-in form ──
     await page.getByPlaceholder("deine@email.ch").fill(AUTH_USER_EMAIL)
     await page
       .getByRole("button", { name: "Anmelde-Link senden" })
@@ -44,14 +47,10 @@ test.describe("Authenticated checkout", () => {
     // Navigate to the sign-in link (redirects to /login as configured)
     await page.goto(signInCode!.oobLink)
 
-    // Wait for sign-in to complete — the app redirects authenticated users
-    // away from /login, so wait for navigation away from the OOB URL
+    // Wait for sign-in to complete — redirects back to / via stored redirect
     await page.waitForURL((url) => !url.href.includes("oobCode"), {
       timeout: 10_000,
     })
-
-    // Navigate to checkout
-    await page.goto("/")
 
     // The person card should show pre-filled data (name split into first/last)
     await expect(page.getByText("Testuser")).toBeVisible({

@@ -23,14 +23,8 @@ test.describe("Anonymous checkout", () => {
   test("full checkout flow — happy path", async ({ page }) => {
     await page.goto("/")
 
-    // ── Landing page ──
-    // Dismiss landing page
-    await page
-      .getByRole("button", { name: "Ohne Anmeldung fortfahren" })
-      .click({ timeout: 10_000 })
-
-    // ── Step 0: Check-in ──
-    await expect(page.getByText("Deine Angaben")).toBeVisible()
+    // ── Step 0: Check-in (no landing gate) ──
+    await expect(page.getByText("Deine Angaben")).toBeVisible({ timeout: 10_000 })
 
     // Fill person card
     await personField(page, "Vorname").fill("Max")
@@ -89,10 +83,7 @@ test.describe("Anonymous checkout", () => {
 
   test("multiple persons with different user types", async ({ page }) => {
     await page.goto("/")
-    // Dismiss landing page
-    await page
-      .getByRole("button", { name: "Ohne Anmeldung fortfahren" })
-      .click({ timeout: 10_000 })
+    await expect(page.getByText("Deine Angaben")).toBeVisible({ timeout: 10_000 })
 
     // Fill person 1
     await personField(page, "Vorname", 0).fill("Max")
@@ -130,10 +121,7 @@ test.describe("Anonymous checkout", () => {
 
   test("form validation prevents advancing and shows errors", async ({ page }) => {
     await page.goto("/")
-    // Dismiss landing page
-    await page
-      .getByRole("button", { name: "Ohne Anmeldung fortfahren" })
-      .click({ timeout: 10_000 })
+    await expect(page.getByText("Deine Angaben")).toBeVisible({ timeout: 10_000 })
 
     await expect(page.getByText("Deine Angaben")).toBeVisible()
 
@@ -177,10 +165,7 @@ test.describe("Anonymous checkout", () => {
 
   test("step navigation forward and back", async ({ page }) => {
     await page.goto("/")
-    // Dismiss landing page
-    await page
-      .getByRole("button", { name: "Ohne Anmeldung fortfahren" })
-      .click({ timeout: 10_000 })
+    await expect(page.getByText("Deine Angaben")).toBeVisible({ timeout: 10_000 })
 
     // Step 0 visible
     await expect(page.getByText("Deine Angaben")).toBeVisible()

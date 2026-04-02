@@ -19,7 +19,6 @@ import { useDb } from "@modules/lib/firebase-context"
 import { usePricingConfig } from "@modules/lib/workshop-config"
 import { calculateFee } from "@modules/lib/pricing"
 import { PageLoading } from "@modules/components/page-loading"
-import { CheckoutLanding } from "./checkout-landing"
 import { CheckoutProgress } from "./checkout-progress"
 import { StepCheckin } from "./step-checkin"
 import { StepWorkshops } from "./step-workshops"
@@ -61,14 +60,13 @@ interface CheckoutItemDoc {
 
 export function CheckoutWizard({ picc, cmac, kiosk, onActiveChange }: CheckoutWizardProps) {
   const db = useDb()
-  const { user, userDoc } = useAuth()
+  const { user, userDoc, signOut } = useAuth()
   const { tokenUser, loading: tokenLoading, isTagAuth, tagSignOut } = useTokenAuth(
     picc ?? null,
     cmac ?? null,
   )
   const { state, dispatch } = useCheckoutState()
   const [submitting, setSubmitting] = useState(false)
-  const [landingDismissed, setLandingDismissed] = useState(false)
   const { data: pricingConfig, loading: loadingConfig } = usePricingConfig()
 
   // Determine auth mode (tag-auth signs into Firebase Auth too, but is not
@@ -159,7 +157,6 @@ export function CheckoutWizard({ picc, cmac, kiosk, onActiveChange }: CheckoutWi
   const onResetRef = useRef<(() => void) | null>(null)
   onResetRef.current = () => {
     dispatch({ type: "RESET" })
-    setLandingDismissed(false)
     tagSignOut()
     window.history.replaceState(null, "", kiosk ? "/?kiosk" : "/")
   }
@@ -194,7 +191,6 @@ export function CheckoutWizard({ picc, cmac, kiosk, onActiveChange }: CheckoutWi
     if (!state.submitted || isAccountLoggedIn) return
     const timer = setTimeout(() => {
       dispatch({ type: "RESET" })
-      setLandingDismissed(false)
       tagSignOut()
       window.history.replaceState(null, "", kiosk ? "/?kiosk" : "/")
     }, 30_000)
@@ -339,18 +335,6 @@ export function CheckoutWizard({ picc, cmac, kiosk, onActiveChange }: CheckoutWi
     }
   }
 
-  // Show landing when no user is identified and they haven't dismissed it
-  const showLanding = isAnonymous && !landingDismissed && state.step === 0
-
-  if (showLanding) {
-    return (
-      <CheckoutLanding
-        kiosk={!!kiosk}
-        onAnonymous={() => setLandingDismissed(true)}
-      />
-    )
-  }
-
   return (
     <div>
       <CheckoutProgress currentStep={state.step} />
@@ -359,6 +343,12 @@ export function CheckoutWizard({ picc, cmac, kiosk, onActiveChange }: CheckoutWi
           state={state}
           dispatch={dispatch}
           isAnonymous={isAnonymous}
+          kiosk={!!kiosk}
+          isAccountLoggedIn={isAccountLoggedIn}
+          onSignOut={async () => {
+            await signOut()
+            window.location.replace(kiosk ? "/?kiosk" : "/")
+          }}
         />
       )}
       {state.step === 1 && (

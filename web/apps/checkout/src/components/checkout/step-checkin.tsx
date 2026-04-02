@@ -3,8 +3,9 @@
 
 import { useState, useMemo, useCallback } from "react"
 import { Checkbox } from "@modules/components/ui/checkbox"
+import { Button } from "@modules/components/ui/button"
 import { PersonCard } from "./person-card"
-import { Plus, ArrowRight } from "lucide-react"
+import { Plus, ArrowRight, LogIn } from "lucide-react"
 import type { CheckoutState, CheckoutAction } from "./use-checkout-state"
 import { validatePerson } from "./validation"
 
@@ -12,9 +13,12 @@ interface StepCheckinProps {
   state: CheckoutState
   dispatch: React.Dispatch<CheckoutAction>
   isAnonymous: boolean
+  kiosk: boolean
+  isAccountLoggedIn: boolean
+  onSignOut: () => void
 }
 
-export function StepCheckin({ state, dispatch, isAnonymous }: StepCheckinProps) {
+export function StepCheckin({ state, dispatch, isAnonymous, kiosk, isAccountLoggedIn, onSignOut }: StepCheckinProps) {
   // touched: personId → field → true
   const [touched, setTouched] = useState<Record<string, Record<string, boolean>>>({})
   const [submitted, setSubmitted] = useState(false)
@@ -63,6 +67,12 @@ export function StepCheckin({ state, dispatch, isAnonymous }: StepCheckinProps) 
         Deine Angaben
       </h2>
 
+      <IdentityHint
+        kiosk={kiosk}
+        isAccountLoggedIn={isAccountLoggedIn}
+        isTagIdentified={!isAnonymous && !isAccountLoggedIn}
+      />
+
       {state.persons.map((person, i) => (
         <PersonCard
           key={person.id}
@@ -75,6 +85,8 @@ export function StepCheckin({ state, dispatch, isAnonymous }: StepCheckinProps) 
           touched={touched[person.id]}
           submitted={submitted}
           onBlur={(field) => handleBlur(person.id, field)}
+          title={i === 0 && isAccountLoggedIn ? "" : undefined}
+          onSignOut={i === 0 && isAccountLoggedIn ? onSignOut : undefined}
         />
       ))}
 
@@ -147,6 +159,60 @@ export function StepCheckin({ state, dispatch, isAnonymous }: StepCheckinProps) 
         Weiter
         <ArrowRight className="h-4 w-4" />
       </button>
+    </div>
+  )
+}
+
+function IdentityHint({
+  kiosk,
+  isAccountLoggedIn,
+  isTagIdentified,
+}: {
+  kiosk: boolean
+  isAccountLoggedIn: boolean
+  isTagIdentified: boolean
+}) {
+  // Already identified — no hint needed
+  if (isTagIdentified || isAccountLoggedIn) return null
+
+  // Kiosk — NFC hint
+  if (kiosk) {
+    return (
+      <div className="flex items-center gap-3 rounded-[3px] border border-cog-teal/30 bg-cog-teal/5 px-4 py-2.5">
+        <svg
+          viewBox="0 0 64 64"
+          className="h-8 w-8 shrink-0 text-cog-teal animate-pulse"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <rect x="10" y="14" width="44" height="36" rx="4" />
+          <path d="M30 38a4 4 0 0 1 0-8" />
+          <path d="M26 42a10 10 0 0 1 0-20" />
+          <path d="M22 46a16 16 0 0 1 0-28" />
+        </svg>
+        <span className="text-sm text-muted-foreground">
+          Badge an den Leser halten, um deine Daten zu laden
+        </span>
+      </div>
+    )
+  }
+
+  // Browser — login hint
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-[3px] border border-border bg-muted/50 px-4 py-2.5">
+      <span className="text-sm text-muted-foreground">
+        Bereits registriert?
+      </span>
+      {/* Plain <a> instead of router <Link> — intentional full reload clears checkout state */}
+      <a href="/login?redirect=/">
+        <Button variant="ghost" size="sm" className="text-cog-teal hover:text-cog-teal-dark">
+          <LogIn className="h-4 w-4 mr-1.5" />
+          Anmelden
+        </Button>
+      </a>
     </div>
   )
 }

@@ -3,7 +3,7 @@
 
 import { render, screen, cleanup } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { describe, it, expect, afterEach } from "vitest"
+import { describe, it, expect, afterEach, vi } from "vitest"
 import { useReducer } from "react"
 import { StepCheckin } from "./step-checkin"
 import {
@@ -21,12 +21,17 @@ afterEach(cleanup)
  */
 function renderCheckin({
   isAnonymous = true,
+  kiosk = false,
+  isAccountLoggedIn = false,
   stateOverrides,
 }: {
   isAnonymous?: boolean
+  kiosk?: boolean
+  isAccountLoggedIn?: boolean
   stateOverrides?: Partial<CheckoutState>
 } = {}) {
   const dispatched: CheckoutAction[] = []
+  const onSignOut = vi.fn()
 
   function Wrapper() {
     const init = { ...initialState, ...stateOverrides }
@@ -40,12 +45,15 @@ function renderCheckin({
         state={state}
         dispatch={wrappedDispatch}
         isAnonymous={isAnonymous}
+        kiosk={kiosk}
+        isAccountLoggedIn={isAccountLoggedIn}
+        onSignOut={onSignOut}
       />
     )
   }
 
   render(<Wrapper />)
-  return { dispatched }
+  return { dispatched, onSignOut }
 }
 
 describe("StepCheckin validation", () => {
@@ -168,5 +176,75 @@ describe("StepCheckin validation", () => {
 
     // No submit-triggered errors visible (submitted was reset)
     expect(screen.queryByText("Vorname ist erforderlich.")).toBeNull()
+  })
+})
+
+describe("Identity hint", () => {
+  it("shows login hint for anonymous browser users", () => {
+    renderCheckin({ isAnonymous: true, kiosk: false })
+
+    expect(screen.getByText("Bereits registriert?")).toBeTruthy()
+    expect(screen.getByText("Anmelden")).toBeTruthy()
+  })
+
+  it("shows NFC hint for kiosk mode", () => {
+    renderCheckin({ isAnonymous: true, kiosk: true })
+
+    expect(
+      screen.getByText("Badge an den Leser halten, um deine Daten zu laden"),
+    ).toBeTruthy()
+    expect(screen.queryByText("Bereits registriert?")).toBeNull()
+  })
+
+  it("shows sign-out in person card for logged-in users", () => {
+    renderCheckin({
+      isAnonymous: false,
+      isAccountLoggedIn: true,
+
+      stateOverrides: {
+        persons: [{
+          id: "p1",
+          firstName: "Max",
+          lastName: "Muster",
+          email: "max@test.com",
+          userType: "erwachsen",
+          termsAccepted: true,
+          isPreFilled: true,
+        }],
+      },
+    })
+
+    expect(screen.queryByText("Bereits registriert?")).toBeNull()
+    expect(screen.getByText(/Abmelden/)).toBeTruthy()
+  })
+
+  it("calls onSignOut when Abmelden is clicked", async () => {
+    const user = userEvent.setup()
+    const { onSignOut } = renderCheckin({
+      isAnonymous: false,
+      isAccountLoggedIn: true,
+
+      stateOverrides: {
+        persons: [{
+          id: "p1",
+          firstName: "Max",
+          lastName: "Muster",
+          email: "max@test.com",
+          userType: "erwachsen",
+          termsAccepted: true,
+          isPreFilled: true,
+        }],
+      },
+    })
+
+    await user.click(screen.getByText(/Abmelden/))
+    expect(onSignOut).toHaveBeenCalledOnce()
+  })
+
+  it("hides identity hint when tag-identified (not anonymous, not account)", () => {
+    renderCheckin({ isAnonymous: false, isAccountLoggedIn: false })
+
+    expect(screen.queryByText("Bereits registriert?")).toBeNull()
+    expect(screen.queryByText("Badge an den Leser halten")).toBeNull()
   })
 })

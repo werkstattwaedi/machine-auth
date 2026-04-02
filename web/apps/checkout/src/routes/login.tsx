@@ -3,6 +3,7 @@
 
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
+import { z } from "zod/v4/mini"
 import { useAuth } from "@modules/lib/auth"
 import { Button } from "@modules/components/ui/button"
 import { Input } from "@modules/components/ui/input"
@@ -10,13 +11,20 @@ import { toast } from "sonner"
 import { Loader2, Mail } from "lucide-react"
 import { GoogleIcon } from "@modules/components/icons/google"
 
+const loginSearchSchema = z.object({
+  redirect: z.optional(z.string()),
+})
+
 export const Route = createFileRoute("/login")({
+  validateSearch: loginSearchSchema,
   component: LoginPage,
 })
 
 function LoginPage() {
   const { user, loading, signInWithEmail, signInWithGoogle, completeSignIn, pendingGoogleLink } = useAuth()
   const navigate = useNavigate()
+  const { redirect: redirectTo } = Route.useSearch()
+  const targetPath = redirectTo || "/visit"
   const [email, setEmail] = useState("")
   const [sending, setSending] = useState(false)
   const [signingInWithGoogle, setSigningInWithGoogle] = useState(false)
@@ -29,7 +37,10 @@ function LoginPage() {
       .then((completed) => {
         if (completed) {
           toast.success("Erfolgreich angemeldet")
-          navigate({ to: pendingGoogleLink ? "/link-account" : "/visit" })
+          const storedRedirect = window.localStorage.getItem("loginRedirect")
+          window.localStorage.removeItem("loginRedirect")
+          const target = storedRedirect || targetPath
+          navigate({ to: pendingGoogleLink ? "/link-account" : target })
         }
       })
       .catch((err) => {
@@ -42,15 +53,15 @@ function LoginPage() {
   // Redirect if already signed in
   useEffect(() => {
     if (!loading && user) {
-      navigate({ to: pendingGoogleLink ? "/link-account" : "/visit" })
+      navigate({ to: pendingGoogleLink ? "/link-account" : targetPath })
     }
-  }, [user, loading, pendingGoogleLink, navigate])
+  }, [user, loading, pendingGoogleLink, navigate, targetPath])
 
   const handleGoogleSignIn = async () => {
     setSigningInWithGoogle(true)
     try {
       await signInWithGoogle()
-      navigate({ to: "/visit" })
+      navigate({ to: targetPath })
     } catch (err: unknown) {
       if (
         err instanceof Error &&
@@ -80,6 +91,9 @@ function LoginPage() {
 
     setSending(true)
     try {
+      if (redirectTo) {
+        window.localStorage.setItem("loginRedirect", redirectTo)
+      }
       await signInWithEmail(email)
       setLinkSent(true)
       toast.success("Anmelde-Link gesendet!")

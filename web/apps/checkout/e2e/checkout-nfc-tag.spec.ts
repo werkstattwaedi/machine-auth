@@ -71,21 +71,16 @@ test.describe("NFC tag checkout", () => {
     expect(userIdRef.path).toBe(`users/${NFC_USER_ID}`)
   })
 
-  test("kiosk mode — shows NFC landing", async ({ page }) => {
+  test("kiosk mode — shows NFC hint inline with checkout form", async ({ page }) => {
     await page.goto("/?kiosk")
 
-    // Kiosk landing with NFC prompt
+    // Check-in form visible immediately with inline NFC hint
+    await expect(page.getByText("Deine Angaben")).toBeVisible()
     await expect(
-      page.getByText("Badge an den Leser halten"),
-    ).toBeVisible()
-    await expect(
-      page.getByRole("button", { name: "Ohne Badge fortfahren" }),
+      page.getByText("Badge an den Leser halten, um deine Daten zu laden"),
     ).toBeVisible()
 
-    // Dismiss landing → shows check-in form
-    await page
-      .getByRole("button", { name: "Ohne Badge fortfahren" })
-      .click()
-    await expect(page.getByText("Deine Angaben")).toBeVisible()
+    // No login hint in kiosk mode
+    await expect(page.getByText("Bereits registriert?")).not.toBeVisible()
   })
 })
