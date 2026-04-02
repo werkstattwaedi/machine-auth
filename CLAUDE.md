@@ -174,14 +174,16 @@ npm run test:all
 
 **Screenshot tests (Playwright visual regression):**
 
-Some E2E tests use `toHaveScreenshot()` for pixel-level layout regression detection. Reference snapshots are stored in `web/apps/checkout/e2e/*.spec.ts-snapshots/` and checked into git.
+E2E tests use `toHaveScreenshot()` for pixel-level layout regression detection. Tests run at **two viewports** automatically: desktop (`chromium`, 1280×720) and mobile (`mobile-chrome`, 375×812 with touch). Reference snapshots are stored in `web/apps/checkout/e2e/*.spec.ts-snapshots/` and checked into git — both `*-chromium-linux.png` and `*-mobile-chrome-linux.png` baselines.
 
 ```bash
 # Update snapshots after intentional UI changes (run from repo root):
 firebase emulators:exec --config firebase.e2e.json \
   --only firestore,auth,functions \
-  'cd web/apps/checkout && npx playwright test checkin-screenshots --update-snapshots'
+  'cd web/apps/checkout && npx playwright test checkin-screenshots checkout-screenshots --update-snapshots'
 ```
+
+New screenshot tests automatically run at both viewports — no extra configuration needed.
 
 **Test locations:**
 - `web/apps/checkout/src/**/*.test.{ts,tsx}` — Checkout unit tests (Vitest)

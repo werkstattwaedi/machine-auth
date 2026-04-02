@@ -3,6 +3,7 @@
 
 import { useState, useMemo, useCallback, useRef, useEffect } from "react"
 import { Checkbox } from "@modules/components/ui/checkbox"
+import { useIsMobile } from "@modules/hooks/use-mobile"
 import { ArrowLeft, ArrowRight } from "lucide-react"
 import { getSortedWorkshops } from "@modules/lib/workshop-config"
 import type { PricingConfig, WorkshopId, DiscountLevel } from "@modules/lib/workshop-config"
@@ -43,6 +44,7 @@ export function StepWorkshops({
   discountLevel,
 }: StepWorkshopsProps) {
   const db = useDb()
+  const isMobile = useIsMobile()
   const sortedWorkshops = config ? getSortedWorkshops(config) : []
 
   const [itemsSubmitted, setItemsSubmitted] = useState(false)
@@ -175,7 +177,7 @@ export function StepWorkshops({
           {sortedWorkshops.map(([wsId, ws], i) => {
             const hasItems = workshopsWithItems.has(wsId)
             // Column-first order: balanced columns (e.g. 4-3-3 for 10 items in 3 cols)
-            const cols = 3
+            const cols = isMobile ? 2 : 3
             const n = sortedWorkshops.length
             const rows = Math.ceil(n / cols)
             const fullCols = n - (rows - 1) * cols // columns with `rows` items
