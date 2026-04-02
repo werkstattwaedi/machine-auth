@@ -9,7 +9,9 @@ Steps to deploy the full system to production.
 
 ## 1. Secrets
 
-Set all required secrets in Firebase:
+Set all required secrets:
+
+**Firebase Functions secrets:**
 
 ```bash
 firebase functions:secrets:set DIVERSIFICATION_MASTER_KEY
@@ -20,6 +22,15 @@ firebase functions:secrets:set PARTICLE_TOKEN
 ```
 
 Verify: `firebase functions:secrets:access GATEWAY_API_KEY`
+
+**Google Cloud Secret Manager (gateway):**
+
+```bash
+gcloud config set project <your-project-id>
+echo -n "$(openssl rand -hex 16)" | gcloud secrets create GATEWAY_ASCON_MASTER_KEY --data-file=-
+```
+
+See [`config.md`](config.md#maco-gateway-configuration) for details.
 
 ## 2. Environment Config
 
@@ -88,9 +99,12 @@ firebase deploy
 
 ## Gateway Deployment
 
-The gateway runs separately (not on Firebase). See `maco_gateway/` for deployment.
+The gateway runs separately on a Raspberry Pi (not on Firebase). Use the deploy script:
 
-Required args:
-- `--master-key`: ASCON master key (same as `DIVERSIFICATION_MASTER_KEY`)
-- `--firebase-url`: Production URL (`https://us-central1-oww-maco.cloudfunctions.net/api`)
-- `--gateway-api-key`: Must match `GATEWAY_API_KEY` secret in Firebase
+```bash
+npx tsx scripts/deploy-gateway.ts --host pi@rpi.local
+```
+
+This builds the gateway tarball, generates the `.env` from `config.jsonc` and Google Cloud Secret Manager (including `GATEWAY_ASCON_MASTER_KEY`), and deploys to the target host.
+
+See `scripts/deploy-gateway.ts --help` for additional options (e.g., `--remote-dir`, `--build-only`).

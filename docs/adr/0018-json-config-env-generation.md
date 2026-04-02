@@ -1,6 +1,6 @@
 # ADR-0018: JSON Config with Generated Env Files
 
-**Status:** Proposed
+**Status:** Accepted
 
 **Date:** 2026-03-22
 

@@ -1,6 +1,6 @@
 # MACO Firmware - AI Context
 
-This is the new Pigweed-based firmware. For the legacy Particle firmware, see `firmware/CLAUDE.md`.
+This is the Pigweed-based firmware for the MaCo terminal.
 
 ## Planning and Review
 

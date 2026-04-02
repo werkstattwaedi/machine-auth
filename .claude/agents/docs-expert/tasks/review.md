@@ -9,7 +9,7 @@ Review code for consistency with documented architecture decisions and requireme
 First, gather context:
 - Read all ADRs in `docs/adr/`
 - Read relevant requirements in `docs/requirements/`
-- Note any design documents in `docs/design/`
+- Note any design documents in `docs/ui-design/`
 
 ### 2. Review the Code
 
