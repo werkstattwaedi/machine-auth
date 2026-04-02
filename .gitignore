@@ -99,5 +99,9 @@ compile_commands.json
 
 .playwright-mcp
 
+# Playwright test artifacts
+**/test-results/
+**/e2e/.e2e-data.json
+
 # proprietary docs
 docs/proprietary/
