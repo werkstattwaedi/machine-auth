@@ -90,75 +90,77 @@ export function StepCheckin({ state, dispatch, isAnonymous, kiosk, isAccountLogg
         />
       ))}
 
-      <button
-        type="button"
-        className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-cog-teal border border-cog-teal rounded-[3px] bg-white hover:bg-cog-teal-light transition-colors"
-        onClick={handleAddPerson}
-      >
-        <Plus className="h-4 w-4" />
-        Person hinzufügen
-      </button>
+      <div className="flex flex-col items-start gap-3">
+        <button
+          type="button"
+          className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-cog-teal border border-cog-teal rounded-[3px] bg-white hover:bg-cog-teal-light transition-colors"
+          onClick={handleAddPerson}
+        >
+          <Plus className="h-4 w-4" />
+          Person hinzufügen
+        </button>
 
-      {isAnonymous && (
-        <div className="space-y-3 pt-2">
-          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
-            <span className="text-sm font-bold">
-              Nutzungsbestimmungen<span className="text-[#cc2a24]">*</span>
-            </span>
-            <a
-              href="https://werkstattwaedi.ch/nutzungsbestimmungen"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm underline font-bold text-cog-teal"
-            >
-              Nutzungsbestimmungen lesen
-            </a>
-          </div>
-          <div
-            className={
-              submitted && termsError
-                ? "bg-[#fce4e4] p-3 rounded-sm space-y-2"
-                : "space-y-2"
-            }
-          >
-            <div className="flex items-start gap-3">
-              <Checkbox
-                id="terms-accept"
-                className="bg-white"
-                checked={state.persons.every((p) => p.termsAccepted || p.isPreFilled)}
-                onCheckedChange={(checked) => {
-                  state.persons.forEach((p) => {
-                    if (!p.isPreFilled) {
-                      dispatch({
-                        type: "UPDATE_PERSON",
-                        id: p.id,
-                        updates: { termsAccepted: checked === true },
-                      })
-                    }
-                  })
-                }}
-              />
-              <label htmlFor="terms-accept" className="text-sm leading-snug">
-                Ich akzeptiere die Nutzungsbestimmungen
-              </label>
-            </div>
-            {submitted && termsError && (
-              <span className="block w-full px-2 py-0.5 text-xs text-white bg-[#cc2a24] rounded-sm">
-                {termsError}
+        {isAnonymous && (
+          <div className="space-y-3 pt-2">
+            <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
+              <span className="text-sm font-bold">
+                Nutzungsbestimmungen<span className="text-[#cc2a24]">*</span>
               </span>
-            )}
+              <a
+                href="https://werkstattwaedi.ch/nutzungsbestimmungen"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm underline font-bold text-cog-teal"
+              >
+                Nutzungsbestimmungen lesen
+              </a>
+            </div>
+            <div
+              className={
+                submitted && termsError
+                  ? "bg-[#fce4e4] p-3 rounded-sm space-y-2"
+                  : "space-y-2"
+              }
+            >
+              <div className="flex items-start gap-3">
+                <Checkbox
+                  id="terms-accept"
+                  className="bg-white"
+                  checked={state.persons.every((p) => p.termsAccepted || p.isPreFilled)}
+                  onCheckedChange={(checked) => {
+                    state.persons.forEach((p) => {
+                      if (!p.isPreFilled) {
+                        dispatch({
+                          type: "UPDATE_PERSON",
+                          id: p.id,
+                          updates: { termsAccepted: checked === true },
+                        })
+                      }
+                    })
+                  }}
+                />
+                <label htmlFor="terms-accept" className="text-sm leading-snug">
+                  Ich akzeptiere die Nutzungsbestimmungen
+                </label>
+              </div>
+              {submitted && termsError && (
+                <span className="block w-full px-2 py-0.5 text-xs text-white bg-[#cc2a24] rounded-sm">
+                  {termsError}
+                </span>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      <button
-        type="button"
-        className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-white bg-cog-teal rounded-[3px] hover:bg-cog-teal-dark transition-colors"
-        onClick={handleWeiter}
-      >
-        Weiter
-        <ArrowRight className="h-4 w-4" />
-      </button>
+        <button
+          type="button"
+          className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-white bg-cog-teal rounded-[3px] hover:bg-cog-teal-dark transition-colors"
+          onClick={handleWeiter}
+        >
+          Weiter
+          <ArrowRight className="h-4 w-4" />
+        </button>
+      </div>
     </div>
   )
 }

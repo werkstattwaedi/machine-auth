@@ -166,37 +166,38 @@ export function PersonCard({
         </div>
       )}
 
-      <div className="space-y-1">
-        <Label className="text-sm font-bold">Nutzer:in</Label>
-        <div className="flex gap-3 pt-1">
-          {(Object.entries(USER_TYPE_LABELS) as [UserType, string][]).map(
-            ([value, label]) => (
-              <label key={value} className="flex items-center gap-1.5 text-sm cursor-pointer">
-                <span
-                  className={`inline-flex items-center justify-center h-4 w-4 rounded-full border ${
-                    person.userType === value
-                      ? "border-cog-teal bg-cog-teal"
-                      : "border-[#ccc] bg-white"
-                  }`}
-                >
-                  {person.userType === value && (
-                    <span className="h-1.5 w-1.5 rounded-full bg-white" />
-                  )}
-                </span>
-                <input
-                  type="radio"
-                  name={`userType-${person.id}`}
-                  checked={person.userType === value}
-                  onChange={() => update({ userType: value })}
-                  className="sr-only"
-                  disabled={person.isPreFilled}
-                />
-                {label}
-              </label>
-            )
-          )}
+      {!person.isPreFilled && (
+        <div className="space-y-1">
+          <Label className="text-sm font-bold">Nutzer:in</Label>
+          <div className="flex gap-3 pt-1">
+            {(Object.entries(USER_TYPE_LABELS) as [UserType, string][]).map(
+              ([value, label]) => (
+                <label key={value} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                  <span
+                    className={`inline-flex items-center justify-center h-4 w-4 rounded-full border ${
+                      person.userType === value
+                        ? "border-cog-teal bg-cog-teal"
+                        : "border-[#ccc] bg-white"
+                    }`}
+                  >
+                    {person.userType === value && (
+                      <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                    )}
+                  </span>
+                  <input
+                    type="radio"
+                    name={`userType-${person.id}`}
+                    checked={person.userType === value}
+                    onChange={() => update({ userType: value })}
+                    className="sr-only"
+                  />
+                  {label}
+                </label>
+              )
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Billing address for Firma */}
       {showBillingAddress && (
