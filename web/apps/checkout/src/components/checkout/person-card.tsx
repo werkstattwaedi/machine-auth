@@ -72,7 +72,7 @@ export function PersonCard({
   const err = (field: string) => showError(field, errors, touched, submitted)
   const fieldCls = (field: string) => (err(field) ? INPUT_ERR : INPUT_OK)
   const wrapCls = (field: string) =>
-    `space-y-1${err(field) ? " bg-[#fce4e4] p-2 rounded-sm" : ""}`
+    `space-y-1${err(field) ? " bg-[#fce4e4] p-2 -m-2 rounded-sm" : ""}`
 
   return (
     <div data-testid="person-card" className="bg-[rgba(204,204,204,0.2)] rounded-none p-[25px] space-y-4">
