@@ -13,6 +13,7 @@ const checkoutSearchSchema = z.object({
   picc: z.optional(z.string()),
   cmac: z.optional(z.string()),
   kiosk: z.optional(z.string()),
+  step: z.optional(z.number()),
 })
 
 export const Route = createFileRoute("/")({
@@ -22,7 +23,7 @@ export const Route = createFileRoute("/")({
 
 function CheckoutPage() {
   const auth = useFirebaseAuth()
-  const { picc, cmac, kiosk } = Route.useSearch()
+  const { picc, cmac, kiosk, step } = Route.useSearch()
   const isKiosk = kiosk !== undefined
   const navigate = useNavigate()
 
@@ -110,6 +111,7 @@ function CheckoutPage() {
           picc={activeParams.picc}
           cmac={activeParams.cmac}
           kiosk={isKiosk}
+          initialStep={step}
           onActiveChange={(active) => {
             checkoutActiveRef.current = active
           }}

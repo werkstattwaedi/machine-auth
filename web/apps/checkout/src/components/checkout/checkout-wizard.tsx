@@ -36,6 +36,7 @@ interface CheckoutWizardProps {
   picc?: string
   cmac?: string
   kiosk?: boolean
+  initialStep?: number
   onActiveChange?: (active: boolean) => void
 }
 
@@ -58,14 +59,14 @@ interface CheckoutItemDoc {
   formInputs?: { quantity: number; unit: string }[]
 }
 
-export function CheckoutWizard({ picc, cmac, kiosk, onActiveChange }: CheckoutWizardProps) {
+export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange }: CheckoutWizardProps) {
   const db = useDb()
   const { user, userDoc, signOut } = useAuth()
   const { tokenUser, loading: tokenLoading, isTagAuth, tagSignOut } = useTokenAuth(
     picc ?? null,
     cmac ?? null,
   )
-  const { state, dispatch } = useCheckoutState()
+  const { state, dispatch } = useCheckoutState(initialStep)
   const [submitting, setSubmitting] = useState(false)
   const { data: pricingConfig, loading: loadingConfig } = usePricingConfig()
 

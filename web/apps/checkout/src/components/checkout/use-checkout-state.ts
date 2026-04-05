@@ -136,8 +136,13 @@ function checkoutReducer(
 
 export { checkoutReducer, initialState }
 
-export function useCheckoutState() {
-  const [state, dispatch] = useReducer(checkoutReducer, initialState)
+export function useCheckoutState(initialStep?: number) {
+  const [state, dispatch] = useReducer(
+    checkoutReducer,
+    initialStep != null && initialStep > 0
+      ? { ...initialState, step: initialStep }
+      : initialState,
+  )
   return { state, dispatch }
 }
 
