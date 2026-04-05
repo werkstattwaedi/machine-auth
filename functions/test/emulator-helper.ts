@@ -26,9 +26,12 @@ export async function setupEmulator(): Promise<RulesTestEnvironment> {
     });
   }
 
-  // Connect admin SDK to emulator
+  // Connect admin SDK to emulators
   if (process.env.FIRESTORE_EMULATOR_HOST !== "127.0.0.1:8080") {
     process.env.FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080";
+  }
+  if (!process.env.FIREBASE_AUTH_EMULATOR_HOST) {
+    process.env.FIREBASE_AUTH_EMULATOR_HOST = "127.0.0.1:9099";
   }
 
   return testEnv;
