@@ -136,7 +136,7 @@ export function StepCheckout({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col flex-1 gap-6">
       <h4 className="text-sm font-semibold text-muted-foreground">
         Zusammenfassung
       </h4>
@@ -331,6 +331,8 @@ export function StepCheckout({
           <strong>Platz sauber</strong> hinterlässt.
         </p>
       </div>
+
+      <div className="flex-1" />
 
       {/* Sticky bottom navigation */}
       <div className="sticky bottom-0 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 bg-background border-t border-border flex gap-3">
