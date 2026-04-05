@@ -1,12 +1,12 @@
 ---
-description: Process GitHub issues labeled "claude-workqueue". Fetches issues, spawns isolated sub-agents to implement fixes or ask clarifying questions, then summarizes results.
+description: Process GitHub issues labeled "claude-workqueue" and address review comments on open workqueue PRs. Fetches issues, spawns sub-agents to implement fixes or ask clarifying questions, then summarizes results.
 ---
 
 # /workqueue
 
-Process the `claude-workqueue` issue queue. Re-runnable — skips issues already handled or awaiting answers.
+Process the `claude-workqueue` issue queue and open workqueue PRs with review feedback. Re-runnable — skips issues already handled or awaiting answers.
 
-**Arguments:** $ARGUMENTS (optional issue number to process only that issue)
+**Arguments:** $ARGUMENTS (optional issue number or PR number to process only that item)
 
 ## Phase 1 — Fetch & Filter Issues
 
@@ -38,6 +38,43 @@ gh issue list --repo werkstattwaedi/machine-auth --label "claude-workqueue" --st
 4. If no actionable issues remain, report "No issues to process in the workqueue." and stop.
 
 5. Print the list of issues to be processed.
+
+## Phase 1b — Fetch & Filter PRs with Review Feedback
+
+1. Fetch all open PRs with `workqueue/issue-` branch prefix:
+
+```bash
+gh pr list --repo werkstattwaedi/machine-auth --search "head:workqueue/issue-" --state open --json number,title,headRefName,url --limit 50
+```
+
+2. For each PR, check for unaddressed review comments:
+
+```bash
+# Get review comments (inline code comments)
+gh api repos/werkstattwaedi/machine-auth/pulls/<PR>/comments --jq '[.[] | select(.body | contains("<!-- claude-workqueue-ack -->") | not)] | length'
+# Get general PR comments (not from bot)
+gh pr view <PR> --repo werkstattwaedi/machine-auth --json comments --jq '[.comments[] | select(.body | contains("<!-- claude-workqueue") | not)] | length'
+```
+
+   A PR needs attention if there are review comments without a `<!-- claude-workqueue-ack -->` reply, OR general comments that aren't from the bot.
+
+3. Extract the issue number from the branch name (`workqueue/issue-<N>` → `N`).
+
+4. Build a list of PRs needing review fixes. Print them.
+
+**IMPORTANT — Pre-analyze before spawning agents:**
+
+For each PR needing fixes, **read the review comments yourself first** using:
+```bash
+gh api repos/werkstattwaedi/machine-auth/pulls/<PR>/comments --jq '.[] | "File: \(.path):\(.line // .original_line)\n\(.body)\n---"'
+```
+
+Then read the relevant source files to understand the current state. Use this understanding to write a **focused, specific agent prompt** that includes:
+- The exact files and line numbers to modify
+- What the reviewer asked for
+- The specific fix approach
+
+Do NOT send the generic worker template for PR fixes. Short, focused prompts work much better.
 
 ## Phase 2 — Process Each Issue (Sequential)
 
@@ -250,13 +287,41 @@ gh label create "claude-workqueue-wip" --color "FFA500" --description "Workqueue
 gh label create "claude-workqueue-question" --color "D93F0B" --description "Workqueue: needs human answer" --repo werkstattwaedi/machine-auth 2>/dev/null || true
 ```
 
+## Phase 2b — Process PRs with Review Feedback (Sequential)
+
+For each PR with unaddressed review comments, one at a time:
+
+### 2b.1. Pre-analyze
+
+Read the review comments, the current code on the PR branch, and the linked issue to understand what's being asked. Formulate a focused fix plan.
+
+### 2b.2. Spawn fixup agent
+
+Spawn an Agent (no worktree — work directly on the PR branch) with a **focused prompt** containing:
+- The PR number and branch name
+- Instruction to `git checkout <branch>` and `git pull`
+- The exact review comments and what needs to change
+- Specific files and line numbers
+- The fix approach
+- Instruction to run tests (`npm run test:precommit` with timeout 600000, and `npm run test:web:e2e` with timeout 600000 if UI files changed)
+- If screenshot tests fail due to intentional changes, update snapshots
+- Commit, push to the same branch (no force push)
+- Reply to each addressed review comment with `<!-- claude-workqueue-ack -->` + a brief explanation of the fix
+- Output: `WORKQUEUE_RESULT: pr-fixed | <summary>` or `WORKQUEUE_RESULT: error | <what went wrong>`
+
+### 2b.3. Handle the result
+
+- **`pr-fixed`**: Record as fixed in summary.
+- **`error`**: Record the error in summary.
+
 ## Phase 3 — Summary
 
-After all issues are processed, print a summary:
+After all issues and PRs are processed, print a summary:
 
 ```
 ## Workqueue Summary
 
+### New Issues
 | Issue | Title | Status | Details |
 |-------|-------|--------|---------|
 | #12   | Fix login bug | ✅ Implemented | PR #34 |
@@ -264,18 +329,37 @@ After all issues are processed, print a summary:
 | #18   | Refactor Y | ❌ Error | Build failed |
 | #20   | Update Z | ⏭️ Skipped | PR already exists |
 
-### Pending Questions
+### PR Review Fixes
+| PR | Title | Status | Details |
+|----|-------|--------|---------|
+| #73 | Fix nav buttons | ✅ Fixed | Addressed 1 review comment |
+| #74 | Add feature | ❌ Error | Test failure |
 
+### Pending Questions
 Issues waiting for human answers (re-run `/workqueue` after answering):
 - #15: [question summary]
 ```
 
-If there are no pending questions, omit that section.
+Omit any section that has no entries.
 
 ## Important Constraints
 
 - Process issues **sequentially** (tests use emulators on fixed ports)
-- Each issue runs in an **isolated worktree** via the Agent tool's `isolation: "worktree"` parameter
 - **Never** force-push or modify the main branch
 - Ensure labels are always cleaned up, even on errors
 - Create the `claude-workqueue-wip` and `claude-workqueue-question` labels if they don't exist (idempotent)
+
+## Agent Prompt Guidelines
+
+**Pre-analyze issues before spawning agents** to reduce agent work time.
+
+Before spawning an agent for any task (new issue or PR fix):
+1. **Read the issue/comments yourself first** — understand what needs to happen
+2. **Read the relevant source files** — identify exact files and line numbers
+3. **Write a focused prompt** with:
+   - Specific files to modify and what to change
+   - The branch to use (`workqueue/issue-<N>`)
+   - Concrete test/commit/push/PR instructions
+   - Expected output format (`WORKQUEUE_RESULT: ...`)
+
+This reduces agent runtime significantly by front-loading the analysis. Agents may take 10-15 minutes per issue even with focused prompts — this is normal, not a stall.
