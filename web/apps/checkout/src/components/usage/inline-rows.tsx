@@ -794,6 +794,8 @@ function AddArticleSearch({
 
   useEffect(() => {
     inputRef.current?.focus()
+    // Scroll the container into view so the dropdown is visible
+    containerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
   }, [])
 
   // Close on outside click
