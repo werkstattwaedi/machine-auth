@@ -15,9 +15,7 @@ test.describe("Check-in step screenshots", () => {
   test("empty form", async ({ page }) => {
     await goToCheckin(page)
 
-    await expect(page).toHaveScreenshot("checkin-empty.png", {
-      fullPage: true,
-    })
+    await expect(page).toHaveScreenshot("checkin-empty.png")
   })
 
   test("two persons with company type", async ({ page }) => {
@@ -34,9 +32,7 @@ test.describe("Check-in step screenshots", () => {
     // Wait for billing address fields to appear
     await expect(person2.getByText("Rechnungsadresse")).toBeVisible()
 
-    await expect(page).toHaveScreenshot("checkin-two-persons-company.png", {
-      fullPage: true,
-    })
+    await expect(page).toHaveScreenshot("checkin-two-persons-company.png")
   })
 
   test("validation errors after submit", async ({ page }) => {
@@ -48,9 +44,7 @@ test.describe("Check-in step screenshots", () => {
     // Wait for error messages to appear
     await expect(page.getByText("Vorname ist erforderlich.")).toBeVisible()
 
-    await expect(page).toHaveScreenshot("checkin-validation-errors.png", {
-      fullPage: true,
-    })
+    await expect(page).toHaveScreenshot("checkin-validation-errors.png")
   })
 
   test("anonymous browser — login hint visible", async ({ page }) => {
@@ -58,9 +52,7 @@ test.describe("Check-in step screenshots", () => {
 
     await expect(page.getByText("Bereits registriert?")).toBeVisible()
 
-    await expect(page).toHaveScreenshot("checkin-login-hint.png", {
-      fullPage: true,
-    })
+    await expect(page).toHaveScreenshot("checkin-login-hint.png")
   })
 
   test("kiosk mode — NFC hint visible", async ({ page }) => {
@@ -71,9 +63,7 @@ test.describe("Check-in step screenshots", () => {
       page.getByText("Badge an den Leser halten, um deine Daten zu laden"),
     ).toBeVisible()
 
-    await expect(page).toHaveScreenshot("checkin-kiosk-nfc-hint.png", {
-      fullPage: true,
-    })
+    await expect(page).toHaveScreenshot("checkin-kiosk-nfc-hint.png")
   })
 
   test("logged-in user — sign-out in person card", async ({ page }) => {
@@ -95,8 +85,20 @@ test.describe("Check-in step screenshots", () => {
     await page.goto("/")
     await expect(page.getByText("Abmelden")).toBeVisible({ timeout: 10_000 })
 
-    await expect(page).toHaveScreenshot("checkin-logged-in.png", {
-      fullPage: true,
-    })
+    await expect(page).toHaveScreenshot("checkin-logged-in.png")
+  })
+
+  test("two persons scrolled — sticky nav bar at bottom", async ({ page }) => {
+    await goToCheckin(page)
+
+    // Add second person so the page content is taller than the viewport
+    await page.getByRole("button", { name: "Person hinzufügen" }).click()
+    await expect(page.getByText("Person 2")).toBeVisible()
+
+    // Scroll down so content above the fold is visible and sticky nav is at bottom
+    await page.evaluate(() => window.scrollBy(0, 300))
+
+    // Capture viewport only — shows sticky buttons anchored to viewport bottom
+    await expect(page).toHaveScreenshot("checkin-scrolled-sticky-nav.png")
   })
 })

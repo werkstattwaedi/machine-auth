@@ -54,9 +54,7 @@ test.describe("Checkout step screenshots", () => {
   test("empty workshop form", async ({ page }) => {
     await goToWorkshops(page)
 
-    await expect(page).toHaveScreenshot("checkout-workshops-empty.png", {
-      fullPage: true,
-    })
+    await expect(page).toHaveScreenshot("checkout-workshops-empty.png")
   })
 
   test("holz and makerspace selected", async ({ page }) => {
@@ -71,9 +69,7 @@ test.describe("Checkout step screenshots", () => {
       page.getByRole("button", { name: "Artikel hinzufügen" }).first(),
     ).toBeVisible()
 
-    await expect(page).toHaveScreenshot("checkout-workshops-selected.png", {
-      fullPage: true,
-    })
+    await expect(page).toHaveScreenshot("checkout-workshops-selected.png")
   })
 
   test("add article dropdown open", async ({ page }) => {
@@ -93,9 +89,7 @@ test.describe("Checkout step screenshots", () => {
     // Press Tab to highlight the first item instead of blinking cursor
     await page.keyboard.press("Tab")
 
-    await expect(page).toHaveScreenshot("checkout-add-article-dropdown.png", {
-      fullPage: true,
-    })
+    await expect(page).toHaveScreenshot("checkout-add-article-dropdown.png")
   })
 
   test("materials added with ad-hoc item", async ({ page }) => {
@@ -135,25 +129,30 @@ test.describe("Checkout step screenshots", () => {
     // Select the "h" (time/Maschinenzeit) fallback
     await page.getByText("Maschinenzeit").click()
 
-    await expect(page).toHaveScreenshot("checkout-materials-added.png", {
-      fullPage: true,
-    })
+    await expect(page).toHaveScreenshot("checkout-materials-added.png")
   })
 
   test("summary — entry fees only", async ({ page }) => {
     await goToSummary(page)
 
-    await expect(page).toHaveScreenshot("checkout-summary-empty.png", {
-      fullPage: true,
-    })
+    await expect(page).toHaveScreenshot("checkout-summary-empty.png")
   })
 
   test("summary — with workshop items", async ({ page }) => {
     await goToSummaryWithItems(page)
 
-    await expect(page).toHaveScreenshot("checkout-summary-items.png", {
-      fullPage: true,
-    })
+    await expect(page).toHaveScreenshot("checkout-summary-items.png")
+  })
+
+  test("summary — with workshop items scrolled — sticky nav bar at bottom", async ({ page }) => {
+    await goToSummaryWithItems(page)
+
+    // Scroll down so the item list is visible above the fold and the sticky
+    // payment bar is anchored to the viewport bottom (as users see it)
+    await page.evaluate(() => window.scrollBy(0, 200))
+
+    // Capture viewport only — sticky bar should appear at viewport bottom
+    await expect(page).toHaveScreenshot("checkout-summary-scrolled-sticky-nav.png")
   })
 
   test("summary — tip with round-up", async ({ page }) => {
@@ -173,9 +172,7 @@ test.describe("Checkout step screenshots", () => {
     // Blur the tip input to avoid cursor blink
     await page.locator("h2").first().click()
 
-    await expect(page).toHaveScreenshot("checkout-summary-tip.png", {
-      fullPage: true,
-    })
+    await expect(page).toHaveScreenshot("checkout-summary-tip.png")
   })
 
   test("checkout validation errors", async ({ page }) => {
@@ -220,8 +217,6 @@ test.describe("Checkout step screenshots", () => {
     // Wait for error annotations to appear
     await expect(page.getByText("Masse müssen grösser als 0 sein.")).toBeVisible()
 
-    await expect(page).toHaveScreenshot("checkout-validation-errors.png", {
-      fullPage: true,
-    })
+    await expect(page).toHaveScreenshot("checkout-validation-errors.png")
   })
 })
