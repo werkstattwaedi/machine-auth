@@ -17,6 +17,9 @@ function AuthenticatedLayout() {
   const { user, userDoc, loading, userDocLoading, signOut } = useAuth()
   const navigate = useNavigate()
   const matches = useMatches()
+  // Hooks must be called unconditionally before any early returns
+  const isMobile = useIsMobile()
+  const [sheetOpen, setSheetOpen] = useState(false)
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -43,9 +46,6 @@ function AuthenticatedLayout() {
   }
 
   if (!user) return null
-
-  const isMobile = useIsMobile()
-  const [sheetOpen, setSheetOpen] = useState(false)
 
   const navLink = "flex items-center gap-2.5 px-3 py-2 rounded-[3px] text-sm transition-colors"
   const navLinkActive = "[&.active]:bg-cog-teal [&.active]:text-white [&.active]:font-semibold"
