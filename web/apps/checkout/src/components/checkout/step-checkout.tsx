@@ -88,20 +88,15 @@ export function StepCheckout({
   const itemsCost = items.reduce((sum, i) => sum + i.totalPrice, 0)
   const subtotal = personFees + itemsCost
 
-  // Track which workshop sections are expanded (collapsed by default)
-  const [expandedWorkshops, setExpandedWorkshops] = useState<Set<string>>(new Set())
-
-  const toggleWorkshop = (wsId: string) => {
-    setExpandedWorkshops((prev) => {
+  // Collapsible sections: tracks which sections are expanded
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
+  const toggleSection = (id: string) =>
+    setExpandedSections((prev) => {
       const next = new Set(prev)
-      if (next.has(wsId)) {
-        next.delete(wsId)
-      } else {
-        next.add(wsId)
-      }
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
       return next
     })
-  }
 
   // Tip is split: manual entry + optional round-up
   const [manualTip, setManualTip] = useState(0)
@@ -137,70 +132,89 @@ export function StepCheckout({
 
   return (
     <div className="flex flex-col flex-1 gap-6">
+      {/* Usage type selector — above the summary heading */}
+      <select
+        value={state.usageType}
+        onChange={(e) =>
+          dispatch({
+            type: "SET_USAGE_TYPE",
+            usageType: e.target.value as UsageType,
+          })
+        }
+        className={SELECT_CLS + " max-w-xs"}
+      >
+        {Object.entries(USAGE_TYPE_LABELS).map(([key, label]) => (
+          <option key={key} value={key}>
+            {label}
+          </option>
+        ))}
+      </select>
+
       <h4 className="text-sm font-semibold text-muted-foreground">
         Zusammenfassung
       </h4>
 
-      {/* Usage fees (type selector + person list) */}
+      {/* Usage fees (collapsible person list) */}
       <div>
-        <h2 className="text-xl font-bold font-body underline decoration-cog-teal decoration-2 underline-offset-4 mb-4">
-          Nutzungsgebühren
-        </h2>
-        <select
-          value={state.usageType}
-          onChange={(e) =>
-            dispatch({
-              type: "SET_USAGE_TYPE",
-              usageType: e.target.value as UsageType,
-            })
-          }
-          className={SELECT_CLS + " max-w-xs mb-4"}
-        >
-          {Object.entries(USAGE_TYPE_LABELS).map(([key, label]) => (
-            <option key={key} value={key}>
-              {label}
-            </option>
-          ))}
-        </select>
-        <div className="space-y-3">
-          {state.persons.map((p) => {
-            const fee = calculateFee(p.userType, state.usageType, config)
-            return (
-              <div key={p.id} className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-6 text-sm">
-                <span className="font-medium sm:font-normal sm:w-40">
-                  {p.firstName} {p.lastName}
-                </span>
-                <span className="text-muted-foreground sm:text-foreground sm:w-40">{p.email}</span>
-                <span className="sm:w-28">{USER_TYPE_LABELS[p.userType]}</span>
-                <span className="font-semibold sm:font-normal">{formatCHF(fee)}</span>
-              </div>
-            )
-          })}
-        </div>
-        <div className="text-right font-bold text-lg mt-2">
-          {formatCHF(personFees)}
+        <Separator />
+        <div className="pt-6">
+          <button
+            type="button"
+            className="flex items-center justify-between w-full text-left mb-4"
+            onClick={() => toggleSection("nutzungsgebuehren")}
+            aria-expanded={expandedSections.has("nutzungsgebuehren")}
+          >
+            <span className="flex items-center gap-2">
+              {expandedSections.has("nutzungsgebuehren") ? (
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              ) : (
+                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+              )}
+              <h2 className="text-xl font-bold font-body underline decoration-cog-teal decoration-2 underline-offset-4">
+                Nutzungsgebühren
+              </h2>
+            </span>
+            <span className="font-bold text-lg">{formatCHF(personFees)}</span>
+          </button>
+          {expandedSections.has("nutzungsgebuehren") && (
+            <div className="space-y-3 pl-6">
+              {state.persons.map((p) => {
+                const fee = calculateFee(p.userType, state.usageType, config)
+                return (
+                  <div key={p.id} className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-6 text-sm">
+                    <span className="font-medium sm:font-normal sm:w-40">
+                      {p.firstName} {p.lastName}
+                    </span>
+                    <span className="text-muted-foreground sm:text-foreground sm:w-40">{p.email}</span>
+                    <span className="sm:w-28">{USER_TYPE_LABELS[p.userType]}</span>
+                    <span className="font-semibold sm:font-normal">{formatCHF(fee)}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       </div>
 
       {/* Workshop cost sections */}
       {Array.from(workshopGroups.entries()).map(([wsId, { label, items: wsItems }]) => {
         const wsTotal = wsItems.reduce((s, i) => s + i.totalPrice, 0)
-        const isExpanded = expandedWorkshops.has(wsId)
+        const isExpanded = expandedSections.has(wsId)
         return (
           <div key={wsId}>
             <Separator />
             <div className="pt-6">
               <button
                 type="button"
-                className="flex items-center justify-between w-full mb-4 text-left"
-                onClick={() => toggleWorkshop(wsId)}
+                className="flex items-center justify-between w-full text-left mb-4"
+                onClick={() => toggleSection(wsId)}
                 aria-expanded={isExpanded}
               >
                 <span className="flex items-center gap-2">
                   {isExpanded ? (
-                    <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
                   ) : (
-                    <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
                   )}
                   <h2 className="text-xl font-bold font-body underline decoration-cog-teal decoration-2 underline-offset-4">
                     {label}
@@ -208,19 +222,23 @@ export function StepCheckout({
                 </span>
                 <span className="font-bold text-lg">{formatCHF(wsTotal)}</span>
               </button>
-              {isExpanded && wsItems.map((item) => (
-                <div key={item.id} className="flex justify-between text-sm mb-1">
-                  <span>
-                    {item.description}
-                    {item.origin === "nfc" && (
-                      <span className="text-muted-foreground ml-2">
-                        {Math.round(item.quantity * 60)} min
+              {isExpanded && (
+                <div className="pl-6">
+                  {wsItems.map((item) => (
+                    <div key={item.id} className="flex justify-between text-sm mb-1">
+                      <span>
+                        {item.description}
+                        {item.origin === "nfc" && (
+                          <span className="text-muted-foreground ml-2">
+                            {Math.round(item.quantity * 60)} min
+                          </span>
+                        )}
                       </span>
-                    )}
-                  </span>
-                  <span className="font-semibold">{formatCHF(item.totalPrice)}</span>
+                      <span className="font-semibold">{formatCHF(item.totalPrice)}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
           </div>
         )
