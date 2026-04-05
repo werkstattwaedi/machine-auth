@@ -88,20 +88,15 @@ export function StepCheckout({
   const itemsCost = items.reduce((sum, i) => sum + i.totalPrice, 0)
   const subtotal = personFees + itemsCost
 
-  // Track which workshop sections are expanded (collapsed by default)
-  const [expandedWorkshops, setExpandedWorkshops] = useState<Set<string>>(new Set())
-
-  const toggleWorkshop = (wsId: string) => {
-    setExpandedWorkshops((prev) => {
+  // Collapsible sections: tracks which sections are expanded
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
+  const toggleSection = (id: string) =>
+    setExpandedSections((prev) => {
       const next = new Set(prev)
-      if (next.has(wsId)) {
-        next.delete(wsId)
-      } else {
-        next.add(wsId)
-      }
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
       return next
     })
-  }
 
   // Tip is split: manual entry + optional round-up
   const [manualTip, setManualTip] = useState(0)
@@ -141,11 +136,8 @@ export function StepCheckout({
         Zusammenfassung
       </h4>
 
-      {/* Usage fees (type selector + person list) */}
+      {/* Usage fees (type selector + collapsible person list) */}
       <div>
-        <h2 className="text-xl font-bold font-body underline decoration-cog-teal decoration-2 underline-offset-4 mb-4">
-          Nutzungsgebühren
-        </h2>
         <select
           value={state.usageType}
           onChange={(e) =>
@@ -162,30 +154,47 @@ export function StepCheckout({
             </option>
           ))}
         </select>
-        <div className="space-y-3">
-          {state.persons.map((p) => {
-            const fee = calculateFee(p.userType, state.usageType, config)
-            return (
-              <div key={p.id} className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-6 text-sm">
-                <span className="font-medium sm:font-normal sm:w-40">
-                  {p.firstName} {p.lastName}
-                </span>
-                <span className="text-muted-foreground sm:text-foreground sm:w-40">{p.email}</span>
-                <span className="sm:w-28">{USER_TYPE_LABELS[p.userType]}</span>
-                <span className="font-semibold sm:font-normal">{formatCHF(fee)}</span>
-              </div>
-            )
-          })}
-        </div>
-        <div className="text-right font-bold text-lg mt-2">
-          {formatCHF(personFees)}
-        </div>
+        <button
+          type="button"
+          className="flex items-center justify-between w-full text-left mb-2"
+          onClick={() => toggleSection("nutzungsgebuehren")}
+          aria-expanded={expandedSections.has("nutzungsgebuehren")}
+        >
+          <span className="flex items-center gap-2">
+            {expandedSections.has("nutzungsgebuehren") ? (
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            )}
+            <h2 className="text-xl font-bold font-body underline decoration-cog-teal decoration-2 underline-offset-4">
+              Nutzungsgebühren
+            </h2>
+          </span>
+          <span className="font-bold text-lg">{formatCHF(personFees)}</span>
+        </button>
+        {expandedSections.has("nutzungsgebuehren") && (
+          <div className="space-y-3 pl-6">
+            {state.persons.map((p) => {
+              const fee = calculateFee(p.userType, state.usageType, config)
+              return (
+                <div key={p.id} className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-6 text-sm">
+                  <span className="font-medium sm:font-normal sm:w-40">
+                    {p.firstName} {p.lastName}
+                  </span>
+                  <span className="text-muted-foreground sm:text-foreground sm:w-40">{p.email}</span>
+                  <span className="sm:w-28">{USER_TYPE_LABELS[p.userType]}</span>
+                  <span className="font-semibold sm:font-normal">{formatCHF(fee)}</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {/* Workshop cost sections */}
       {Array.from(workshopGroups.entries()).map(([wsId, { label, items: wsItems }]) => {
         const wsTotal = wsItems.reduce((s, i) => s + i.totalPrice, 0)
-        const isExpanded = expandedWorkshops.has(wsId)
+        const isExpanded = expandedSections.has(wsId)
         return (
           <div key={wsId}>
             <Separator />
@@ -193,7 +202,7 @@ export function StepCheckout({
               <button
                 type="button"
                 className="flex items-center justify-between w-full mb-4 text-left"
-                onClick={() => toggleWorkshop(wsId)}
+                onClick={() => toggleSection(wsId)}
                 aria-expanded={isExpanded}
               >
                 <span className="flex items-center gap-2">

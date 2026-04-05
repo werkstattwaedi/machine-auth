@@ -54,6 +54,8 @@ test.describe("Anonymous checkout", () => {
     // ── Step 2: Checkout ──
     await expect(page.getByText("Zusammenfassung")).toBeVisible()
     await expect(page.getByText("Nutzungsgebühren")).toBeVisible()
+    // Expand the collapsible user details section to verify person is listed
+    await page.getByRole("button", { name: /Nutzungsgebühren/ }).click()
     await expect(page.getByText("Max Muster")).toBeVisible()
 
     // Submit
@@ -113,10 +115,11 @@ test.describe("Anonymous checkout", () => {
     // Skip workshop selection, go to checkout
     await page.getByRole("button", { name: "Check-Out" }).click()
 
-    // Verify both persons shown
+    // Verify both persons shown (expand the collapsible section first)
+    await expect(page.getByText("Nutzungsgebühren")).toBeVisible()
+    await page.getByRole("button", { name: /Nutzungsgebühren/ }).click()
     await expect(page.getByText("Max Muster")).toBeVisible()
     await expect(page.getByText("Anna Kind")).toBeVisible()
-    await expect(page.getByText("Nutzungsgebühren")).toBeVisible()
   })
 
   test("form validation prevents advancing and shows errors", async ({ page }) => {
