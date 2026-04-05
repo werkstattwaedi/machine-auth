@@ -143,28 +143,6 @@ function LoginPage() {
                 </div>
               )}
 
-              <Button
-                onClick={handleGoogleSignIn}
-                className="w-full bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 font-semibold"
-                disabled={signingInWithGoogle}
-              >
-                {signingInWithGoogle ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <GoogleIcon className="h-4 w-4 mr-2" />
-                )}
-                Mit Google anmelden
-              </Button>
-
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-background px-2 text-muted-foreground">oder</span>
-                </div>
-              </div>
-
               <form onSubmit={handleSubmit} className="space-y-4">
                 <Input
                   type="email"
@@ -184,6 +162,28 @@ function LoginPage() {
                   Anmelde-Link senden
                 </Button>
               </form>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">oder</span>
+                </div>
+              </div>
+
+              <Button
+                onClick={handleGoogleSignIn}
+                className="w-full bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 font-semibold"
+                disabled={signingInWithGoogle}
+              >
+                {signingInWithGoogle ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <GoogleIcon className="h-4 w-4 mr-2" />
+                )}
+                Mit Google anmelden
+              </Button>
             </>
           )}
         </div>
