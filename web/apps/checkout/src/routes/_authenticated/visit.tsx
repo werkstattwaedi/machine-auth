@@ -22,7 +22,6 @@ import { useDb } from "@modules/lib/firebase-context"
 import { formatCHF } from "@modules/lib/format"
 import { PageLoading } from "@modules/components/page-loading"
 import { EmptyState } from "@modules/components/empty-state"
-import { Card, CardContent } from "@modules/components/ui/card"
 import { Button } from "@modules/components/ui/button"
 import { Checkbox } from "@modules/components/ui/checkbox"
 import {
@@ -319,26 +318,24 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
         />
       )}
 
-      {/* Summary card */}
+      {/* Summary card — sticky at viewport bottom so the checkout button is always reachable */}
       {hasUsage && (
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-sm text-muted-foreground">
-                  Kosten (laufend)
-                </div>
-                <div className="text-xl font-bold">{formatCHF(itemsTotal)}</div>
+        <div className="sticky bottom-0 bg-background border-t pt-4 pb-4 -mx-4 px-4 sm:-mx-6 sm:px-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm text-muted-foreground">
+                Kosten (laufend)
               </div>
-              <Link to="/">
-                <Button className="bg-cog-teal hover:bg-cog-teal-dark">
-                  <ShoppingCart className="h-4 w-4 mr-2" />
-                  Zum Checkout
-                </Button>
-              </Link>
+              <div className="text-xl font-bold">{formatCHF(itemsTotal)}</div>
             </div>
-          </CardContent>
-        </Card>
+            <Link to="/" search={{ step: "summary" }}>
+              <Button className="bg-cog-teal hover:bg-cog-teal-dark">
+                <ShoppingCart className="h-4 w-4 mr-2" />
+                Zum Checkout
+              </Button>
+            </Link>
+          </div>
+        </div>
       )}
 
       {/* Uncheck workshop confirmation dialog */}
