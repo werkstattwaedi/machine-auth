@@ -346,6 +346,23 @@ Omit any section that has no entries.
 
 **The workqueue must run autonomously without manual intervention.**
 
+### Running agents with monitoring
+
+**Run each worker agent in background** (`run_in_background: true`). While waiting for the notification:
+
+1. **Record the start time** (note the current time before spawning).
+2. **Every 5 minutes**, check that the agent is still making progress:
+   ```bash
+   # Check CPU activity of child processes (node, java, playwright, etc.)
+   ps aux --sort=-pcpu | grep -E '(node|java|playwright|vitest|tsc|firebase)' | grep -v grep | head -10
+   ```
+   - If processes are active (CPU > 0%), the agent is working — continue waiting.
+   - If no relevant processes are running and 5+ minutes have passed since the last check, the agent may be stuck.
+3. **After 30 minutes**, if no result has been returned, treat it as a timeout:
+   - Clean up: remove `claude-workqueue-wip` label, clean worktrees
+   - Record as error: "Agent timed out after 30 minutes"
+   - Move to the next issue
+
 ### Agent failure handling
 
 If an agent call returns an error (crash, rejection, timeout):
@@ -358,7 +375,6 @@ If an agent call returns an error (crash, rejection, timeout):
 
 - **No sub-agents inside worker agents** — don't spawn code-reviewer or other agents from within the worker. This adds fragility.
 - **Minimal steps**: implement → test → commit → push → create PR. That's it.
-- Agents may take 10-20 minutes per issue — this is normal, not a stall.
 
 ## Agent Prompt Guidelines
 
