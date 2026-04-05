@@ -337,7 +337,7 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
   }
 
   return (
-    <div>
+    <div className="flex flex-col flex-1">
       <CheckoutProgress currentStep={state.step} />
       {state.step === 0 && (
         <StepCheckin

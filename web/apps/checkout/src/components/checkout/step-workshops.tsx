@@ -164,7 +164,7 @@ export function StepWorkshops({
   }, [items, dispatch])
 
   return (
-    <div className="space-y-8">
+    <div className="flex flex-col flex-1 gap-8">
       {/* Workshop checkbox selector */}
       <div>
         <h2 className="text-xl font-bold font-body mb-2">
@@ -223,8 +223,10 @@ export function StepWorkshops({
             />
           ))}
 
-      {/* Navigation */}
-      <div className="flex gap-3">
+      <div className="flex-1" />
+
+      {/* Sticky bottom navigation */}
+      <div className="sticky bottom-0 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 bg-background border-t border-border flex gap-3">
         <button
           type="button"
           className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-cog-teal border border-cog-teal rounded-[3px] bg-white hover:bg-cog-teal-light transition-colors"

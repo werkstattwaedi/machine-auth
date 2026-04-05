@@ -102,7 +102,7 @@ function CheckoutPage() {
           />
         </div>
       </header>
-      <div className="w-full max-w-[1000px] px-4 sm:px-6 py-4">
+      <div className="w-full max-w-[1000px] px-4 sm:px-6 py-4 flex-1 flex flex-col">
         <h1 className="text-2xl sm:text-[37px] font-bold mb-6">
           Self-Checkout
         </h1>

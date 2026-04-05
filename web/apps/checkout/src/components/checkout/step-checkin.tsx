@@ -62,7 +62,7 @@ export function StepCheckin({ state, dispatch, isAnonymous, kiosk, isAccountLogg
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col flex-1 gap-6">
       <h2 className="text-xl font-bold font-body">
         Deine Angaben
       </h2>
@@ -152,6 +152,12 @@ export function StepCheckin({ state, dispatch, isAnonymous, kiosk, isAccountLogg
           </div>
         )}
 
+      </div>
+
+      <div className="flex-1" />
+
+      {/* Sticky bottom navigation */}
+      <div className="sticky bottom-0 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 bg-background border-t border-border flex gap-3">
         <button
           type="button"
           className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-white bg-cog-teal rounded-[3px] hover:bg-cog-teal-dark transition-colors"
