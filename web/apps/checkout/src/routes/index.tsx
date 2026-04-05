@@ -13,7 +13,7 @@ const checkoutSearchSchema = z.object({
   picc: z.optional(z.string()),
   cmac: z.optional(z.string()),
   kiosk: z.optional(z.string()),
-  step: z.optional(z.number()),
+  step: z.optional(z.string()),
 })
 
 export const Route = createFileRoute("/")({
@@ -111,7 +111,7 @@ function CheckoutPage() {
           picc={activeParams.picc}
           cmac={activeParams.cmac}
           kiosk={isKiosk}
-          initialStep={step}
+          initialStep={step === "summary" ? 2 : undefined}
           onActiveChange={(active) => {
             checkoutActiveRef.current = active
           }}

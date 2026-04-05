@@ -328,7 +328,7 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
               </div>
               <div className="text-xl font-bold">{formatCHF(itemsTotal)}</div>
             </div>
-            <Link to="/" search={{ step: 2 }}>
+            <Link to="/" search={{ step: "summary" }}>
               <Button className="bg-cog-teal hover:bg-cog-teal-dark">
                 <ShoppingCart className="h-4 w-4 mr-2" />
                 Zum Checkout
