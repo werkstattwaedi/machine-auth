@@ -172,7 +172,10 @@ Then output: WORKQUEUE_RESULT: question | Issue only affects firmware, out of wo
 
 1. Create a branch: git checkout -b workqueue/issue-<N>
 2. Make focused, minimal changes following project conventions
-3. Add tests if the change warrants them
+3. **Every change must be covered by tests:**
+   - **Logic changes** (bug fixes, new behavior, state management): add or update **unit tests** (Vitest, in `*.test.{ts,tsx}` next to the source file)
+   - **Layout/UI changes** (styling, visibility, positioning, new components): add or update **e2e screenshot tests** (Playwright, in `web/apps/checkout/e2e/*.spec.ts`) to capture the visual state
+   - If a change affects both logic and layout, add both
 4. Keep changes scoped to what the issue asks for — no drive-by refactoring
 
 ## Step 5: Run Tests
