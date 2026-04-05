@@ -208,14 +208,7 @@ Then re-run `npm run test:web:e2e` to confirm they pass. Include the updated sna
 
 If any test command times out, do NOT retry — report the timeout and continue to commit what you have.
 
-## Step 6: Code Review
-
-Invoke the code-reviewer agent to review your changes:
-Use the Agent tool with subagent_type="code-reviewer" and prompt="Review the current uncommitted changes for quality and consistency."
-
-Address any serious issues flagged. Minor suggestions can be noted but don't need to block.
-
-## Step 7: Commit
+## Step 6: Commit
 
 Stage only the files you changed (never git add -A). Include updated screenshot snapshots if any:
 git add <specific files>
@@ -349,6 +342,24 @@ Omit any section that has no entries.
 - Ensure labels are always cleaned up, even on errors
 - Create the `claude-workqueue-wip` and `claude-workqueue-question` labels if they don't exist (idempotent)
 
+## Reliability & Error Recovery
+
+**The workqueue must run autonomously without manual intervention.**
+
+### Agent failure handling
+
+If an agent call returns an error (crash, rejection, timeout):
+1. **Always clean up**: remove `claude-workqueue-wip` label
+2. **Record the failure** with the error message in the summary
+3. **Move to the next issue** — never stop the entire queue for one failure
+4. **Clean up worktrees**: `git worktree list` and remove any stale worktrees from failed agents
+
+### Keep agents simple
+
+- **No sub-agents inside worker agents** — don't spawn code-reviewer or other agents from within the worker. This adds fragility.
+- **Minimal steps**: implement → test → commit → push → create PR. That's it.
+- Agents may take 10-20 minutes per issue — this is normal, not a stall.
+
 ## Agent Prompt Guidelines
 
 **Pre-analyze issues before spawning agents** to reduce agent work time.
@@ -361,5 +372,3 @@ Before spawning an agent for any task (new issue or PR fix):
    - The branch to use (`workqueue/issue-<N>`)
    - Concrete test/commit/push/PR instructions
    - Expected output format (`WORKQUEUE_RESULT: ...`)
-
-This reduces agent runtime significantly by front-loading the analysis. Agents may take 10-15 minutes per issue even with focused prompts — this is normal, not a stall.
