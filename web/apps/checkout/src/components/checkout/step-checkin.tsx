@@ -152,6 +152,10 @@ export function StepCheckin({ state, dispatch, isAnonymous, kiosk, isAccountLogg
           </div>
         )}
 
+      </div>
+
+      {/* Sticky bottom navigation */}
+      <div className="sticky bottom-0 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 bg-background border-t border-border flex gap-3">
         <button
           type="button"
           className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-white bg-cog-teal rounded-[3px] hover:bg-cog-teal-dark transition-colors"
