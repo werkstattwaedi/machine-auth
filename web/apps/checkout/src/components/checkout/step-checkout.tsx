@@ -7,7 +7,7 @@ import { Label } from "@modules/components/ui/label"
 import { formatCHF } from "@modules/lib/format"
 import { USER_TYPE_LABELS, USAGE_TYPE_LABELS, calculateFee } from "@modules/lib/pricing"
 import type { PricingConfig, WorkshopId } from "@modules/lib/workshop-config"
-import { ArrowLeft, Loader2, X } from "lucide-react"
+import { ArrowLeft, ChevronDown, ChevronRight, Loader2, X } from "lucide-react"
 import type { CheckoutState, CheckoutAction } from "./use-checkout-state"
 import type { CheckoutItemLocal } from "@/components/usage/inline-rows"
 import { SELECT_CLS } from "@/components/usage/inline-rows"
@@ -87,6 +87,21 @@ export function StepCheckout({
 
   const itemsCost = items.reduce((sum, i) => sum + i.totalPrice, 0)
   const subtotal = personFees + itemsCost
+
+  // Track which workshop sections are expanded (collapsed by default)
+  const [expandedWorkshops, setExpandedWorkshops] = useState<Set<string>>(new Set())
+
+  const toggleWorkshop = (wsId: string) => {
+    setExpandedWorkshops((prev) => {
+      const next = new Set(prev)
+      if (next.has(wsId)) {
+        next.delete(wsId)
+      } else {
+        next.add(wsId)
+      }
+      return next
+    })
+  }
 
   // Tip is split: manual entry + optional round-up
   const [manualTip, setManualTip] = useState(0)
@@ -170,17 +185,30 @@ export function StepCheckout({
       {/* Workshop cost sections */}
       {Array.from(workshopGroups.entries()).map(([wsId, { label, items: wsItems }]) => {
         const wsTotal = wsItems.reduce((s, i) => s + i.totalPrice, 0)
+        const isExpanded = expandedWorkshops.has(wsId)
         return (
           <div key={wsId}>
             <Separator />
             <div className="pt-6">
-              <div className="flex items-baseline justify-between mb-4">
-                <h2 className="text-xl font-bold font-body underline decoration-cog-teal decoration-2 underline-offset-4">
-                  {label}
-                </h2>
+              <button
+                type="button"
+                className="flex items-center justify-between w-full mb-4 text-left"
+                onClick={() => toggleWorkshop(wsId)}
+                aria-expanded={isExpanded}
+              >
+                <span className="flex items-center gap-2">
+                  {isExpanded ? (
+                    <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                  )}
+                  <h2 className="text-xl font-bold font-body underline decoration-cog-teal decoration-2 underline-offset-4">
+                    {label}
+                  </h2>
+                </span>
                 <span className="font-bold text-lg">{formatCHF(wsTotal)}</span>
-              </div>
-              {wsItems.map((item) => (
+              </button>
+              {isExpanded && wsItems.map((item) => (
                 <div key={item.id} className="flex justify-between text-sm mb-1">
                   <span>
                     {item.description}
