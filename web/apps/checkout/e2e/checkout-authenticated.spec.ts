@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { test, expect } from "@playwright/test"
-import { clearCollections, getAuthOobCodes, getCheckoutDocs } from "./helpers"
+import { clearCollections, waitForOobCode, getCheckoutDocs } from "./helpers"
 import { AUTH_USER_EMAIL } from "./global-setup"
 
 test.beforeEach(async () => {
@@ -36,11 +36,8 @@ test.describe("Authenticated checkout", () => {
     ).toBeVisible({ timeout: 5000 })
 
     // ── Fetch OOB code from Auth emulator ──
-    const oobCodes = await getAuthOobCodes()
-    const signInCode = oobCodes.find(
-      (c) =>
-        c.email === AUTH_USER_EMAIL &&
-        c.requestType === "EMAIL_SIGNIN",
+    const signInCode = await waitForOobCode(
+      (c) => c.email === AUTH_USER_EMAIL && c.requestType === "EMAIL_SIGNIN",
     )
     expect(signInCode).toBeTruthy()
 
@@ -52,8 +49,8 @@ test.describe("Authenticated checkout", () => {
       timeout: 10_000,
     })
 
-    // The person card should show pre-filled data (name split into first/last)
-    await expect(page.getByText("Testuser")).toBeVisible({
+    // The person card should show pre-filled data (read-only paragraph with last name)
+    await expect(page.getByText("Testuser", { exact: true })).toBeVisible({
       timeout: 10_000,
     })
 
@@ -72,7 +69,8 @@ test.describe("Authenticated checkout", () => {
     await page.getByRole("button", { name: "Check-Out" }).click()
     await expect(page.getByText("Zusammenfassung")).toBeVisible()
 
-    // Verify person name in summary
+    // Expand the collapsible Nutzungsgebühren section to verify person is listed
+    await page.getByRole("button", { name: /Nutzungsgebühren/ }).click()
     await expect(page.getByText("E2E Testuser", { exact: true })).toBeVisible()
 
     // Submit

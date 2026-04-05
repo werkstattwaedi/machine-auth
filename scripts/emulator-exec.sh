@@ -24,4 +24,4 @@ done
 # Brief pause to let ports release
 sleep 1
 
-exec firebase emulators:exec "$@"
+exec firebase emulators:exec --project oww-maco "$@"

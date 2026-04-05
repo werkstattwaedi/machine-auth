@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { test, expect, type Page } from "@playwright/test"
-import { getAuthOobCodes } from "./helpers"
+import { waitForOobCode } from "./helpers"
 import { AUTH_USER_EMAIL } from "./global-setup"
 
 /** Navigate to checkout — check-in step is shown directly */
@@ -73,8 +73,7 @@ test.describe("Check-in step screenshots", () => {
     await page.getByRole("button", { name: "Anmelde-Link senden" }).click()
     await expect(page.getByText("Anmelde-Link wurde an")).toBeVisible({ timeout: 5000 })
 
-    const oobCodes = await getAuthOobCodes()
-    const signInCode = oobCodes.find(
+    const signInCode = await waitForOobCode(
       (c) => c.email === AUTH_USER_EMAIL && c.requestType === "EMAIL_SIGNIN",
     )
     expect(signInCode).toBeTruthy()
