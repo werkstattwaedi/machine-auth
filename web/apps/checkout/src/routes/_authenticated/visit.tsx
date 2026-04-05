@@ -197,37 +197,47 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
 
   const sortedWorkshops = getSortedWorkshops(pricingConfig)
 
-  // Workshops that have existing items (always shown)
+  // Workshops that have actual line items (these cannot be unchecked without confirmation)
   const workshopsWithItems = new Set<WorkshopId>()
   for (const item of items) {
     if (item.workshop) workshopsWithItems.add(item.workshop as WorkshopId)
   }
-  // Also include workshopsVisited from checkout
+  // Workshops that were visited (recorded in checkout) but may have no items
+  const visitedWorkshops = new Set<WorkshopId>()
   if (openCheckout?.workshopsVisited) {
     for (const ws of openCheckout.workshopsVisited) {
-      workshopsWithItems.add(ws as WorkshopId)
+      visitedWorkshops.add(ws as WorkshopId)
     }
   }
 
-  const effectiveWorkshops = new Set([...workshopsWithItems, ...selectedWorkshops])
+  const effectiveWorkshops = new Set([...workshopsWithItems, ...visitedWorkshops, ...selectedWorkshops])
   const hasUsage = effectiveWorkshops.size > 0
 
   const itemsTotal = items.reduce((sum, i) => sum + i.totalPrice, 0)
 
   const toggleWorkshop = (wsId: WorkshopId) => {
     const hasExistingItems = workshopsWithItems.has(wsId)
-    const isSelected = selectedWorkshops.has(wsId) || hasExistingItems
+    const isSelected = selectedWorkshops.has(wsId) || visitedWorkshops.has(wsId) || hasExistingItems
 
     if (isSelected) {
       if (hasExistingItems) {
+        // Has actual line items — require confirmation before deleting them
         setUncheckConfirm(wsId)
         return
       }
+      // No line items — uncheck immediately
       setSelectedWorkshops((prev) => {
         const next = new Set(prev)
         next.delete(wsId)
         return next
       })
+      // Remove from workshopsVisited if it was recorded there
+      if (checkoutId && visitedWorkshops.has(wsId)) {
+        updateDoc(doc(db, "checkouts", checkoutId), {
+          workshopsVisited: arrayRemove(wsId),
+          modifiedAt: serverTimestamp(),
+        })
+      }
     } else {
       setSelectedWorkshops((prev) => new Set(prev).add(wsId))
       // Update workshopsVisited on checkout if it exists
@@ -278,12 +288,11 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
         </p>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {sortedWorkshops.map(([wsId, ws]) => {
-            const hasItems = workshopsWithItems.has(wsId)
             return (
-              <label key={wsId} className={`flex items-center gap-2 ${hasItems ? "cursor-default" : "cursor-pointer"}`}>
+              <label key={wsId} className="flex items-center gap-2 cursor-pointer">
                 <Checkbox
                   checked={effectiveWorkshops.has(wsId)}
-                  disabled={hasItems}
+                  disabled={false}
                   onCheckedChange={() => toggleWorkshop(wsId)}
                 />
                 <span className="text-sm">{ws.label}</span>
