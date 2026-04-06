@@ -1,6 +1,7 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
+import { useEffect } from "react"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { useAuth } from "@modules/lib/auth"
 import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
@@ -9,7 +10,7 @@ import { Button } from "@modules/components/ui/button"
 import { Input } from "@modules/components/ui/input"
 import { Label } from "@modules/components/ui/label"
 import { Checkbox } from "@modules/components/ui/checkbox"
-import { Loader2, CheckCircle } from "lucide-react"
+import { Loader2 } from "lucide-react"
 import { serverTimestamp } from "firebase/firestore"
 import { useForm, Controller } from "react-hook-form"
 
@@ -48,19 +49,18 @@ function CompleteProfilePage() {
 
   const userType = watch("userType")
   const isFirma = userType === "firma"
+  const profileComplete = !!userDoc?.termsAcceptedAt
 
-  if (userDoc?.termsAcceptedAt) {
+  useEffect(() => {
+    if (profileComplete) {
+      navigate({ to: "/visit" })
+    }
+  }, [profileComplete, navigate])
+
+  if (profileComplete) {
     return (
-      <div className="max-w-lg space-y-4">
-        <h1 className="text-2xl font-bold">Profil vervollständigen</h1>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2 text-green-600">
-              <CheckCircle className="h-5 w-5" />
-              <span>Dein Profil ist bereits vollständig.</span>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-6 w-6 animate-spin" />
       </div>
     )
   }
