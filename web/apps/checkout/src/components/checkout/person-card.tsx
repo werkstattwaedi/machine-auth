@@ -153,7 +153,7 @@ export function PersonCard({
           </div>
           <div className={wrapCls("email")}>
             <Label className="text-sm font-bold">
-              E-Mail<span className="text-[#cc2a24]">*</span>
+              E-Mail{index === 0 && <span className="text-[#cc2a24]">*</span>}
             </Label>
             <input
               value={person.email}

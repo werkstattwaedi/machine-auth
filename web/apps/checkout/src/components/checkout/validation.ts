@@ -19,6 +19,7 @@ export function isValidEmail(email: string): boolean {
 export function validatePerson(
   person: CheckoutPerson,
   isAnonymous: boolean,
+  isPrimary: boolean = true,
 ): Record<string, string> {
   if (person.isPreFilled) return {}
 
@@ -30,9 +31,14 @@ export function validatePerson(
   if (!person.lastName.trim()) {
     errors.lastName = "Nachname ist erforderlich."
   }
-  if (!person.email.trim()) {
-    errors.email = "E-Mail ist erforderlich."
-  } else if (!isValidEmail(person.email.trim())) {
+  if (isPrimary) {
+    if (!person.email.trim()) {
+      errors.email = "E-Mail ist erforderlich."
+    } else if (!isValidEmail(person.email.trim())) {
+      errors.email = "E-Mail muss im Format name@address.xyz eingegeben werden."
+    }
+  } else if (person.email.trim() && !isValidEmail(person.email.trim())) {
+    // For additional persons, only validate format if email is provided
     errors.email = "E-Mail muss im Format name@address.xyz eingegeben werden."
   }
 
