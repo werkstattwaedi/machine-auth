@@ -43,7 +43,7 @@ The PDF builder (`build_invoice_pdf.ts`) is a pure function: `(InvoiceData, Paym
 bills/{billId}
 ├── userId: DocumentReference       → /users/{userId}
 ├── checkouts: DocumentReference[]  → /checkouts/{id}
-├── referenceNumber: string         → "RF32000000042"
+├── referenceNumber: number         → 42 (SCOR reference RF32000000042 computed at render time)
 ├── amount, currency, storagePath, created, paidAt, paidVia
 ```
 
