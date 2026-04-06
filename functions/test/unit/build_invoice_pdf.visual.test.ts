@@ -12,6 +12,8 @@ import {
   firmaCheckoutInvoice,
   multiCheckoutInvoice,
   checkoutWithTipInvoice,
+  longInvoice,
+  paidInvoice,
 } from "./invoice_test_fixtures";
 import type { InvoiceData } from "../../src/invoice/types";
 
@@ -42,17 +44,17 @@ before(async () => {
   }
 });
 
-async function renderFirstPage(data: InvoiceData): Promise<Buffer> {
+async function renderPages(data: InvoiceData): Promise<Buffer[]> {
   const pdfBuffer = await buildInvoicePdf(data, TEST_PAYMENT_CONFIG);
+  const result: Buffer[] = [];
   const pages = await pdfToImg(pdfBuffer, { scale: 2 });
   for await (const page of pages) {
-    return page; // return first page only
+    result.push(page);
   }
-  throw new Error("PDF has no pages");
+  return result;
 }
 
-async function compareSnapshot(name: string, data: InvoiceData) {
-  const actual = await renderFirstPage(data);
+function comparePage(name: string, actual: Buffer) {
   const snapshotPath = resolve(SNAPSHOT_DIR, `${name}.png`);
 
   if (UPDATE_SNAPSHOTS || !existsSync(snapshotPath)) {
@@ -91,7 +93,6 @@ async function compareSnapshot(name: string, data: InvoiceData) {
   const diffRatio = diffPixels / totalPixels;
 
   if (diffRatio > MAX_DIFF_PIXELS_RATIO) {
-    // Write actual for inspection
     writeFileSync(resolve(SNAPSHOT_DIR, `${name}-actual.png`), actual);
     throw new Error(
       `Visual regression for ${name}: ${diffPixels} pixels differ ` +
@@ -101,22 +102,47 @@ async function compareSnapshot(name: string, data: InvoiceData) {
   }
 }
 
+/**
+ * Compare all pages of a PDF against snapshots.
+ * Single-page PDFs use "{name}.png", multi-page use "{name}-p1.png", "{name}-p2.png", etc.
+ */
+async function compareAllPages(name: string, data: InvoiceData) {
+  const pages = await renderPages(data);
+  expect(pages.length).to.be.greaterThan(0, "PDF should have at least one page");
+
+  if (pages.length === 1) {
+    comparePage(name, pages[0]);
+  } else {
+    for (let i = 0; i < pages.length; i++) {
+      comparePage(`${name}-p${i + 1}`, pages[i]);
+    }
+  }
+}
+
 describe("buildInvoicePdf — visual regression", function () {
   this.timeout(30000);
 
   it("single checkout (erwachsen)", async () => {
-    await compareSnapshot("single-checkout-erwachsen", singleCheckoutInvoice());
+    await compareAllPages("single-checkout-erwachsen", singleCheckoutInvoice());
   });
 
   it("single checkout (firma with billing address)", async () => {
-    await compareSnapshot("single-checkout-firma", firmaCheckoutInvoice());
+    await compareAllPages("single-checkout-firma", firmaCheckoutInvoice());
   });
 
   it("multi-checkout", async () => {
-    await compareSnapshot("multi-checkout", multiCheckoutInvoice());
+    await compareAllPages("multi-checkout", multiCheckoutInvoice());
   });
 
   it("checkout with tip", async () => {
-    await compareSnapshot("checkout-with-tip", checkoutWithTipInvoice());
+    await compareAllPages("checkout-with-tip", checkoutWithTipInvoice());
+  });
+
+  it("long invoice (all pricing models)", async () => {
+    await compareAllPages("long-invoice", longInvoice());
+  });
+
+  it("paid invoice (TWINT)", async () => {
+    await compareAllPages("paid-twint", paidInvoice());
   });
 });

@@ -151,4 +151,5 @@ export interface CheckoutItemEntity {
   unitPrice: number;
   totalPrice: number;
   formInputs?: { quantity: number; unit: string }[];
+  pricingModel?: PricingModel | null;
 }

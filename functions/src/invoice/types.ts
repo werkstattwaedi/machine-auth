@@ -7,7 +7,7 @@ import { CheckoutPersonEntity, CheckoutItemEntity, UsageType } from "../types/fi
 export interface BillEntity {
   userId: DocumentReference;
   checkouts: DocumentReference[];
-  referenceNumber: string;
+  referenceNumber: number;
   amount: number;
   currency: string;
   storagePath: string | null;
@@ -16,11 +16,19 @@ export interface BillEntity {
   paidVia: "twint" | "ebanking" | "cash" | null;
 }
 
+/** Per-person entry fee for display on the invoice */
+export interface PersonEntryFee {
+  name: string;
+  userType: string;
+  fee: number;
+}
+
 /** Assembled data for a single checkout within an invoice */
 export interface InvoiceCheckout {
   date: Date;
   usageType: UsageType;
   persons: CheckoutPersonEntity[];
+  personEntryFees: PersonEntryFee[];
   items: CheckoutItemEntity[];
   workshopsVisited: string[];
   entryFees: number;
@@ -38,7 +46,7 @@ export interface WorkshopInfo {
 
 /** Full data needed to render an invoice PDF */
 export interface InvoiceData {
-  referenceNumber: string;
+  referenceNumber: number;
   invoiceDate: Date;
   billingAddress: {
     company: string;
@@ -49,9 +57,10 @@ export interface InvoiceData {
   recipientName: string;
   checkouts: InvoiceCheckout[];
   workshops: Record<string, WorkshopInfo>;
-  entryFeeLabels: Record<string, string>;
   grandTotal: number;
   currency: string;
+  paidAt?: Date | null;
+  paidVia?: "twint" | "ebanking" | "cash" | null;
 }
 
 /** Payment recipient configuration (from environment params) */

@@ -6,7 +6,6 @@ import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { defineString } from "firebase-functions/params";
 import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
-import { generateScorReference } from "./scor_reference";
 import { buildInvoicePdf } from "./build_invoice_pdf";
 import type {
   CheckoutEntity,
@@ -18,6 +17,7 @@ import type {
   PaymentConfig,
   WorkshopInfo,
   BillEntity,
+  PersonEntryFee,
 } from "./types";
 
 // Payment config from environment params
@@ -63,16 +63,21 @@ export const generateInvoice = onCall(async (request) => {
     throw new HttpsError("invalid-argument", "checkoutIds must be a non-empty array");
   }
 
+  // Fix #5: reject duplicate checkout IDs
+  const uniqueIds = [...new Set(checkoutIds)];
+  if (uniqueIds.length !== checkoutIds.length) {
+    throw new HttpsError("invalid-argument", "Duplicate checkout IDs are not allowed");
+  }
+
   const db = getFirestore();
   const callerUid = request.auth.uid;
   const isAdmin = request.auth.token?.admin === true;
 
-  // Load all checkout docs
+  // Load all checkout docs (pre-check outside transaction for fast-fail)
   const checkoutDocs = await Promise.all(
     checkoutIds.map((id) => db.collection("checkouts").doc(id).get())
   );
 
-  // Validate all checkouts
   for (const doc of checkoutDocs) {
     if (!doc.exists) {
       throw new HttpsError("not-found", `Checkout ${doc.id} not found`);
@@ -81,9 +86,6 @@ export const generateInvoice = onCall(async (request) => {
 
     if (data.status !== "closed") {
       throw new HttpsError("failed-precondition", `Checkout ${doc.id} is not closed`);
-    }
-    if (data.billRef) {
-      throw new HttpsError("already-exists", `Checkout ${doc.id} already has a bill`);
     }
 
     // Authorization: caller owns the checkout or is admin
@@ -115,11 +117,13 @@ export const generateInvoice = onCall(async (request) => {
     const data = doc.data() as CheckoutEntity;
     const items = checkoutItems[i];
 
-    // Calculate entry fees per person
-    let entryFees = 0;
-    for (const person of data.persons) {
-      entryFees += calculateEntryFee(person.userType, data.usageType, configFees);
-    }
+    // Fix #3: calculate per-person entry fees with correct per-type amounts
+    const personEntryFees: PersonEntryFee[] = data.persons.map((person) => ({
+      name: person.name,
+      userType: person.userType,
+      fee: calculateEntryFee(person.userType, data.usageType, configFees),
+    }));
+    const entryFees = personEntryFees.reduce((sum, pf) => sum + pf.fee, 0);
 
     const machineCost = data.summary?.machineCost ?? 0;
     const materialCost = data.summary?.materialCost ?? 0;
@@ -130,6 +134,7 @@ export const generateInvoice = onCall(async (request) => {
       date: data.created.toDate(),
       usageType: data.usageType,
       persons: data.persons,
+      personEntryFees,
       items,
       workshopsVisited: data.workshopsVisited,
       entryFees,
@@ -162,11 +167,34 @@ export const generateInvoice = onCall(async (request) => {
     recipientName = invoiceCheckouts[0].persons[0]?.name ?? "Unbekannt";
   }
 
-  // Transaction: increment bill number, create bill, set billRef on checkouts
+  // Build payment config
+  const paymentConfig: PaymentConfig = {
+    iban: paymentIban.value(),
+    recipientName: paymentRecipientName.value(),
+    recipientStreet: paymentRecipientStreet.value(),
+    recipientPostalCode: paymentRecipientPostalCode.value(),
+    recipientCity: paymentRecipientCity.value(),
+    recipientCountry: paymentRecipientCountry.value(),
+    currency: paymentCurrency.value() || "CHF",
+  };
+
+  // Fix #1 & #2: Transaction re-validates billRef, builds PDF before committing storage.
+  // If PDF or upload fails after transaction, we clean up.
   const billRef = db.collection("bills").doc();
-  let referenceNumber: string;
+  let referenceNumber = 0;
 
   await db.runTransaction(async (tx) => {
+    // Re-read checkouts inside transaction to guard against concurrent calls
+    const freshDocs = await Promise.all(
+      checkoutIds.map((id) => tx.get(db.collection("checkouts").doc(id)))
+    );
+    for (const doc of freshDocs) {
+      const data = doc.data() as CheckoutEntity;
+      if (data.billRef) {
+        throw new HttpsError("already-exists", `Checkout ${doc.id} already has a bill`);
+      }
+    }
+
     const configRef = db.doc("config/billing");
     const configDoc = await tx.get(configRef);
 
@@ -175,9 +203,7 @@ export const generateInvoice = onCall(async (request) => {
       nextBillNumber = (configDoc.data()?.nextBillNumber as number) ?? 1;
     }
 
-    // Generate SCOR reference from zero-padded bill number
-    const payload = String(nextBillNumber).padStart(9, "0");
-    referenceNumber = generateScorReference(payload);
+    referenceNumber = nextBillNumber;
 
     // Increment counter
     if (configDoc.exists) {
@@ -190,9 +216,9 @@ export const generateInvoice = onCall(async (request) => {
     const bill: BillEntity = {
       userId: checkoutDocs[0].data()!.userId,
       checkouts: checkoutDocs.map((d) => d.ref),
-      referenceNumber: referenceNumber!,
+      referenceNumber,
       amount: grandTotal,
-      currency: paymentCurrency.value() || "CHF",
+      currency: paymentConfig.currency,
       storagePath: null,
       created: Timestamp.now(),
       paidAt: null,
@@ -201,56 +227,61 @@ export const generateInvoice = onCall(async (request) => {
     tx.set(billRef, bill);
 
     // Set billRef on each checkout
-    for (const doc of checkoutDocs) {
+    for (const doc of freshDocs) {
       tx.update(doc.ref, { billRef: billRef });
     }
   });
 
-  // Build PDF
-  const paymentConfig: PaymentConfig = {
-    iban: paymentIban.value(),
-    recipientName: paymentRecipientName.value(),
-    recipientStreet: paymentRecipientStreet.value(),
-    recipientPostalCode: paymentRecipientPostalCode.value(),
-    recipientCity: paymentRecipientCity.value(),
-    recipientCountry: paymentRecipientCountry.value(),
-    currency: paymentCurrency.value() || "CHF",
-  };
+  // Build PDF and upload — clean up bill on failure
+  try {
+    const invoiceData: InvoiceData = {
+      referenceNumber,
+      invoiceDate: new Date(),
+      billingAddress,
+      recipientName,
+      checkouts: invoiceCheckouts,
+      workshops,
+      grandTotal,
+      currency: paymentConfig.currency,
+    };
 
-  const invoiceData: InvoiceData = {
-    referenceNumber: referenceNumber!,
-    invoiceDate: new Date(),
-    billingAddress,
-    recipientName,
-    checkouts: invoiceCheckouts,
-    workshops,
-    entryFeeLabels: { erwachsen: "Erwachsen", kind: "Kind (u. 18)", firma: "Firma" },
-    grandTotal,
-    currency: paymentConfig.currency,
-  };
+    const pdfBuffer = await buildInvoicePdf(invoiceData, paymentConfig);
 
-  const pdfBuffer = await buildInvoicePdf(invoiceData, paymentConfig);
+    // Upload to Cloud Storage
+    const storagePath = `invoices/${billRef.id}.pdf`;
+    const bucket = getStorage().bucket();
+    const file = bucket.file(storagePath);
+    await file.save(pdfBuffer, { contentType: "application/pdf" });
 
-  // Upload to Cloud Storage
-  const storagePath = `invoices/${billRef.id}.pdf`;
-  const bucket = getStorage().bucket();
-  const file = bucket.file(storagePath);
-  await file.save(pdfBuffer, { contentType: "application/pdf" });
+    // Update bill with storage path
+    await billRef.update({ storagePath });
 
-  // Update bill with storage path
-  await billRef.update({ storagePath });
+    // Generate signed URL (1 hour)
+    const [url] = await file.getSignedUrl({
+      action: "read",
+      expires: Date.now() + 3600 * 1000,
+    });
 
-  // Generate signed URL (1 hour)
-  const [url] = await file.getSignedUrl({
-    action: "read",
-    expires: Date.now() + 3600 * 1000,
-  });
+    logger.info(`Generated invoice ${billRef.id} (${referenceNumber}) for ${checkoutIds.length} checkout(s)`);
 
-  logger.info(`Generated invoice ${billRef.id} (${referenceNumber!}) for ${checkoutIds.length} checkout(s)`);
-
-  return {
-    billId: billRef.id,
-    url,
-    referenceNumber: referenceNumber!,
-  };
+    return {
+      billId: billRef.id,
+      url,
+      referenceNumber,
+    };
+  } catch (error) {
+    // Roll back: delete bill and clear billRef on checkouts
+    logger.error(`PDF generation/upload failed for bill ${billRef.id}, rolling back`, error);
+    try {
+      const batch = db.batch();
+      batch.delete(billRef);
+      for (const id of checkoutIds) {
+        batch.update(db.collection("checkouts").doc(id), { billRef: null });
+      }
+      await batch.commit();
+    } catch (rollbackErr) {
+      logger.error("Rollback failed", rollbackErr);
+    }
+    throw new HttpsError("internal", "Invoice generation failed");
+  }
 });

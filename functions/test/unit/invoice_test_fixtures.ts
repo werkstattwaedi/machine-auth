@@ -28,7 +28,7 @@ function makeItem(overrides: Partial<CheckoutItemEntity> & { description: string
 
 export function singleCheckoutInvoice(): InvoiceData {
   return {
-    referenceNumber: "RF32000000001",
+    referenceNumber: 1,
     invoiceDate: new Date(2025, 5, 15),
     billingAddress: null,
     recipientName: "Max Mustermann",
@@ -39,9 +39,10 @@ export function singleCheckoutInvoice(): InvoiceData {
         persons: [
           { name: "Max Mustermann", email: "max@example.com", userType: "erwachsen" },
         ],
+        personEntryFees: [{ name: "Max Mustermann", userType: "erwachsen", fee: 15 }],
         items: [
-          makeItem({ description: "Stationäre Maschinen", workshop: "holz", totalPrice: 25 }),
-          makeItem({ description: "Sperrholz Birke 4mm", workshop: "holz", totalPrice: 12.50 }),
+          makeItem({ description: "Stationäre Maschinen", workshop: "holz", pricingModel: "time", quantity: 0.5, unitPrice: 50, totalPrice: 25 }),
+          makeItem({ description: "Sperrholz Birke 4mm", workshop: "holz", pricingModel: "area", quantity: 0.5, unitPrice: 25, totalPrice: 12.50 }),
         ],
         workshopsVisited: ["holz"],
         entryFees: 15,
@@ -55,7 +56,6 @@ export function singleCheckoutInvoice(): InvoiceData {
       holz: { label: "Holzwerkstatt", order: 1 },
       metall: { label: "Metallwerkstatt", order: 2 },
     },
-    entryFeeLabels: { erwachsen: "Erwachsen", kind: "Kind (u. 18)", firma: "Firma" },
     grandTotal: 52.50,
     currency: "CHF",
   };
@@ -63,7 +63,7 @@ export function singleCheckoutInvoice(): InvoiceData {
 
 export function firmaCheckoutInvoice(): InvoiceData {
   return {
-    referenceNumber: "RF18000000002",
+    referenceNumber: 2,
     invoiceDate: new Date(2025, 6, 1),
     billingAddress: {
       company: "Muster AG",
@@ -84,8 +84,9 @@ export function firmaCheckoutInvoice(): InvoiceData {
             billingAddress: { company: "Muster AG", street: "Industriestrasse 42", zip: "8001", city: "Zürich" },
           },
         ],
+        personEntryFees: [{ name: "Hans Firma", userType: "firma", fee: 30 }],
         items: [
-          makeItem({ description: "CNC Fräse", workshop: "holz", totalPrice: 80 }),
+          makeItem({ description: "CNC Fräse", workshop: "holz", pricingModel: "time", quantity: 2, unitPrice: 40, totalPrice: 80 }),
         ],
         workshopsVisited: ["holz"],
         entryFees: 30,
@@ -98,7 +99,6 @@ export function firmaCheckoutInvoice(): InvoiceData {
     workshops: {
       holz: { label: "Holzwerkstatt", order: 1 },
     },
-    entryFeeLabels: { erwachsen: "Erwachsen", kind: "Kind (u. 18)", firma: "Firma" },
     grandTotal: 110,
     currency: "CHF",
   };
@@ -106,7 +106,7 @@ export function firmaCheckoutInvoice(): InvoiceData {
 
 export function multiCheckoutInvoice(): InvoiceData {
   return {
-    referenceNumber: "RF45000000003",
+    referenceNumber: 3,
     invoiceDate: new Date(2025, 6, 10),
     billingAddress: null,
     recipientName: "Lisa Beispiel",
@@ -117,8 +117,9 @@ export function multiCheckoutInvoice(): InvoiceData {
         persons: [
           { name: "Lisa Beispiel", email: "lisa@example.com", userType: "erwachsen" },
         ],
+        personEntryFees: [{ name: "Lisa Beispiel", userType: "erwachsen", fee: 15 }],
         items: [
-          makeItem({ description: "Stationäre Maschinen", workshop: "holz", totalPrice: 15 }),
+          makeItem({ description: "Stationäre Maschinen", workshop: "holz", pricingModel: "time", quantity: 0.25, unitPrice: 60, totalPrice: 15 }),
         ],
         workshopsVisited: ["holz"],
         entryFees: 15,
@@ -133,9 +134,10 @@ export function multiCheckoutInvoice(): InvoiceData {
         persons: [
           { name: "Lisa Beispiel", email: "lisa@example.com", userType: "erwachsen" },
         ],
+        personEntryFees: [{ name: "Lisa Beispiel", userType: "erwachsen", fee: 15 }],
         items: [
-          makeItem({ description: "Schweissen", workshop: "metall", totalPrice: 40 }),
-          makeItem({ description: "Stahl 2mm", workshop: "metall", totalPrice: 8 }),
+          makeItem({ description: "Schweissen", workshop: "metall", pricingModel: "time", quantity: 1, unitPrice: 40, totalPrice: 40 }),
+          makeItem({ description: "Stahl 2mm", workshop: "metall", pricingModel: "weight", quantity: 2, unitPrice: 4, totalPrice: 8 }),
         ],
         workshopsVisited: ["metall"],
         entryFees: 15,
@@ -149,7 +151,6 @@ export function multiCheckoutInvoice(): InvoiceData {
       holz: { label: "Holzwerkstatt", order: 1 },
       metall: { label: "Metallwerkstatt", order: 2 },
     },
-    entryFeeLabels: { erwachsen: "Erwachsen", kind: "Kind (u. 18)", firma: "Firma" },
     grandTotal: 93,
     currency: "CHF",
   };
@@ -160,13 +161,134 @@ export function checkoutWithTipInvoice(): InvoiceData {
   base.checkouts[0].tip = 5;
   base.checkouts[0].totalPrice = 57.50;
   base.grandTotal = 57.50;
-  base.referenceNumber = "RF71000000004";
+  base.referenceNumber = 4;
+  return base;
+}
+
+export function longInvoice(): InvoiceData {
+  const workshops = {
+    holz: { label: "Holzwerkstatt", order: 1 },
+    metall: { label: "Metallwerkstatt", order: 2 },
+    makerspace: { label: "Makerspace", order: 3 },
+  };
+
+  return {
+    referenceNumber: 6,
+    invoiceDate: new Date(2025, 7, 15),
+    billingAddress: {
+      company: "Schreinerei Müller GmbH",
+      street: "Werkgasse 17",
+      zip: "8820",
+      city: "Wädenswil",
+    },
+    recipientName: "Schreinerei Müller GmbH",
+    checkouts: [
+      {
+        date: new Date(2025, 7, 1, 8, 30),
+        usageType: "regular",
+        persons: [
+          {
+            name: "Peter Müller",
+            email: "peter@schreinerei-mueller.ch",
+            userType: "firma",
+            billingAddress: { company: "Schreinerei Müller GmbH", street: "Werkgasse 17", zip: "8820", city: "Wädenswil" },
+          },
+          { name: "Anna Müller", email: "anna@schreinerei-mueller.ch", userType: "erwachsen" },
+        ],
+        personEntryFees: [
+          { name: "Peter Müller", userType: "firma", fee: 30 },
+          { name: "Anna Müller", userType: "erwachsen", fee: 15 },
+        ],
+        items: [
+          // time
+          makeItem({ description: "Stationäre Maschinen", workshop: "holz", pricingModel: "time", quantity: 3.5, unitPrice: 50, totalPrice: 175 }),
+          makeItem({ description: "CNC Fräse", workshop: "holz", pricingModel: "time", quantity: 1.5, unitPrice: 40, totalPrice: 60 }),
+          // area
+          makeItem({ description: "Sperrholz Birke 4mm", workshop: "holz", pricingModel: "area", quantity: 2.4, unitPrice: 25, totalPrice: 60 }),
+          makeItem({ description: "MDF 12mm", workshop: "holz", pricingModel: "area", quantity: 1.2, unitPrice: 35, totalPrice: 42 }),
+          // length
+          makeItem({ description: "Eichenleiste 20x40mm", workshop: "holz", pricingModel: "length", quantity: 6, unitPrice: 8.50, totalPrice: 51 }),
+          // count
+          makeItem({ description: "Schleifscheibe K120", workshop: "holz", pricingModel: "count", quantity: 3, unitPrice: 4.50, totalPrice: 13.50 }),
+          makeItem({ description: "Holzdübel 8mm (50er)", workshop: "holz", pricingModel: "count", quantity: 2, unitPrice: 6, totalPrice: 12 }),
+        ],
+        workshopsVisited: ["holz"],
+        entryFees: 45, // 30 firma + 15 erwachsen
+        machineCost: 235,
+        materialCost: 178.50,
+        tip: 0,
+        totalPrice: 458.50,
+      },
+      {
+        date: new Date(2025, 7, 8, 13, 0),
+        usageType: "regular",
+        persons: [
+          {
+            name: "Peter Müller",
+            email: "peter@schreinerei-mueller.ch",
+            userType: "firma",
+            billingAddress: { company: "Schreinerei Müller GmbH", street: "Werkgasse 17", zip: "8820", city: "Wädenswil" },
+          },
+        ],
+        personEntryFees: [{ name: "Peter Müller", userType: "firma", fee: 30 }],
+        items: [
+          // time
+          makeItem({ description: "Schweissplatz", workshop: "metall", pricingModel: "time", quantity: 2, unitPrice: 40, totalPrice: 80 }),
+          // weight
+          makeItem({ description: "Stahlblech 2mm", workshop: "metall", pricingModel: "weight", quantity: 4.5, unitPrice: 6, totalPrice: 27 }),
+          makeItem({ description: "Schweissdraht 0.8mm", workshop: "metall", pricingModel: "weight", quantity: 0.5, unitPrice: 30, totalPrice: 15 }),
+          // direct
+          makeItem({ description: "Schutzgas Nachfüllung", workshop: "metall", pricingModel: "direct", quantity: 1, unitPrice: 15, totalPrice: 15 }),
+        ],
+        workshopsVisited: ["metall"],
+        entryFees: 30,
+        machineCost: 80,
+        materialCost: 57,
+        tip: 0,
+        totalPrice: 167,
+      },
+      {
+        date: new Date(2025, 7, 12, 10, 0),
+        usageType: "regular",
+        persons: [
+          {
+            name: "Peter Müller",
+            email: "peter@schreinerei-mueller.ch",
+            userType: "firma",
+            billingAddress: { company: "Schreinerei Müller GmbH", street: "Werkgasse 17", zip: "8820", city: "Wädenswil" },
+          },
+        ],
+        personEntryFees: [{ name: "Peter Müller", userType: "firma", fee: 30 }],
+        items: [
+          makeItem({ description: "Lasercutter", workshop: "makerspace", pricingModel: "time", quantity: 0.75, unitPrice: 60, totalPrice: 45 }),
+          makeItem({ description: "Acrylglas 3mm transparent", workshop: "makerspace", pricingModel: "area", quantity: 0.3, unitPrice: 50, totalPrice: 15 }),
+          makeItem({ description: "3D-Druck PLA", workshop: "makerspace", pricingModel: "weight", quantity: 0.12, unitPrice: 40, totalPrice: 4.80 }),
+        ],
+        workshopsVisited: ["makerspace"],
+        entryFees: 30,
+        machineCost: 45,
+        materialCost: 19.80,
+        tip: 5,
+        totalPrice: 99.80,
+      },
+    ],
+    workshops,
+    grandTotal: 725.30,
+    currency: "CHF",
+  };
+}
+
+export function paidInvoice(): InvoiceData {
+  const base = singleCheckoutInvoice();
+  base.referenceNumber = 7;
+  base.paidAt = new Date(2025, 5, 16);
+  base.paidVia = "twint";
   return base;
 }
 
 export function zeroItemsInvoice(): InvoiceData {
   return {
-    referenceNumber: "RF09000000005",
+    referenceNumber: 5,
     invoiceDate: new Date(2025, 7, 1),
     billingAddress: null,
     recipientName: "Erika Nur-Eintritt",
@@ -177,6 +299,7 @@ export function zeroItemsInvoice(): InvoiceData {
         persons: [
           { name: "Erika Nur-Eintritt", email: "erika@example.com", userType: "erwachsen" },
         ],
+        personEntryFees: [{ name: "Erika Nur-Eintritt", userType: "erwachsen", fee: 15 }],
         items: [],
         workshopsVisited: ["holz"],
         entryFees: 15,
@@ -189,7 +312,6 @@ export function zeroItemsInvoice(): InvoiceData {
     workshops: {
       holz: { label: "Holzwerkstatt", order: 1 },
     },
-    entryFeeLabels: { erwachsen: "Erwachsen", kind: "Kind (u. 18)", firma: "Firma" },
     grandTotal: 15,
     currency: "CHF",
   };
