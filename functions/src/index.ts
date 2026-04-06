@@ -220,6 +220,7 @@ export { admin } from "./admin-api";
 // Export callable functions
 export { createUser } from "./auth/create-user";
 export { generateInvoice } from "./invoice/generate_invoice";
+export { sendInvoiceEmail } from "./invoice/send_invoice_email";
 
 // Export Firestore triggers
 export { syncCustomClaims } from "./auth/set-custom-claims";

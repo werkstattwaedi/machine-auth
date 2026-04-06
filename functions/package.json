@@ -32,6 +32,7 @@
     "firebase-functions": "^6.0.1",
     "particle-api-js": "^9.1.2",
     "pdfkit": "^0.18.0",
+    "resend": "^6.10.0",
     "swissqrbill": "^4.3.0"
   },
   "devDependencies": {
