@@ -810,13 +810,14 @@ function AddArticleSearch({
   }, [onClose])
 
   const q = query.toLowerCase().trim()
-  const matches = q
+  const matches = (q
     ? catalogItems.filter(
         (c) =>
           c.name.toLowerCase().includes(q) ||
           c.code?.toLowerCase().includes(q),
       )
     : catalogItems
+  ).sort((a, b) => a.name.localeCompare(b.name, "de"))
 
   const selectCatalog = (cat: CatalogItem) => {
     const unitPrice = cat.unitPrice[discountLevel] ?? cat.unitPrice.none ?? 0
