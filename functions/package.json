@@ -43,6 +43,7 @@
     "@types/mocha": "^10.0.6",
     "@types/pdfkit": "^0.17.5",
     "@types/pngjs": "^6.0.5",
+    "@types/react": "^19.2.14",
     "@types/sinon": "^17.0.4",
     "@types/supertest": "^6.0.2",
     "chai": "^4.3.10",
