@@ -90,3 +90,4 @@ export const auditMaco = createAuditTrigger("maco", "maco/{docId}");
 export const auditUsageMachine = createAuditTrigger("usage_machine", "usage_machine/{docId}");
 export const auditCheckouts = createAuditTrigger("checkouts", "checkouts/{docId}");
 export const auditCatalog = createAuditTrigger("catalog", "catalog/{docId}");
+export const auditBills = createAuditTrigger("bills", "bills/{docId}");

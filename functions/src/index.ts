@@ -219,6 +219,7 @@ export { admin } from "./admin-api";
 
 // Export callable functions
 export { createUser } from "./auth/create-user";
+export { generateInvoice } from "./invoice/generate_invoice";
 
 // Export Firestore triggers
 export { syncCustomClaims } from "./auth/set-custom-claims";
@@ -233,4 +234,5 @@ export {
   auditUsageMachine,
   auditCheckouts,
   auditCatalog,
+  auditBills,
 } from "./audit/audit-trigger";

@@ -130,6 +130,9 @@ export interface CheckoutEntity {
   modifiedBy: string | null;
   modifiedAt: Timestamp;
 
+  // Set when a bill is created for this checkout
+  billRef?: DocumentReference | null;
+
   // Only present when status == "closed"
   closedAt?: Timestamp;
   notes?: string | null;

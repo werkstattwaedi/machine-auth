@@ -64,6 +64,16 @@ const VITE_DEPLOYMENT: VarMapping[] = [
   { envVar: "VITE_PAYMENT_RECIPIENT_COUNTRY", jsonPath: "web.paymentRecipientCountry" },
 ];
 
+const FUNCTIONS_PAYMENT: VarMapping[] = [
+  { envVar: "PAYMENT_IBAN", jsonPath: "web.iban" },
+  { envVar: "PAYMENT_RECIPIENT_NAME", jsonPath: "web.paymentRecipientName" },
+  { envVar: "PAYMENT_RECIPIENT_STREET", jsonPath: "web.paymentRecipientStreet" },
+  { envVar: "PAYMENT_RECIPIENT_POSTAL_CODE", jsonPath: "web.paymentRecipientPostalCode" },
+  { envVar: "PAYMENT_RECIPIENT_CITY", jsonPath: "web.paymentRecipientCity" },
+  { envVar: "PAYMENT_RECIPIENT_COUNTRY", jsonPath: "web.paymentRecipientCountry" },
+  { envVar: "PAYMENT_CURRENCY", jsonPath: "web.currency" },
+];
+
 const GATEWAY: VarMapping[] = [
   { envVar: "GATEWAY_HOST", jsonPath: "gateway.host" },
   { envVar: "GATEWAY_PORT", jsonPath: "gateway.port" },
@@ -202,6 +212,7 @@ function main() {
       sections: [
         { comment: "# Firebase Functions — parameters", vars: FUNCTIONS_PARAMS },
         { comment: "# Firebase Functions — test secrets (emulator only)", vars: FUNCTIONS_SECRETS },
+        { comment: "# Firebase Functions — payment config", vars: FUNCTIONS_PAYMENT },
       ],
     },
     {
@@ -210,6 +221,7 @@ function main() {
       header: header + "\n# No FIREBASE_* prefix keys (reserved by Firebase CLI)",
       sections: [
         { comment: "# Firebase Functions — parameters (secrets via Secret Manager)", vars: FUNCTIONS_PARAMS },
+        { comment: "# Firebase Functions — payment config", vars: FUNCTIONS_PAYMENT },
       ],
     },
     // Checkout app

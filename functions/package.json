@@ -15,7 +15,7 @@
     "shell": "npm run build && firebase functions:shell",
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
-    "test:unit": "npm run build && mocha 'lib/src/**/*.test.js'",
+    "test:unit": "npm run build && mocha 'lib/src/**/*.test.js' 'lib/test/unit/**/*.test.js'",
     "test:integration": "npm run build && firebase emulators:exec --only firestore,auth 'mocha lib/test/integration/**/*.test.js'",
     "test": "npm run build && npm run test:unit && npm run test:integration",
     "logs": "firebase functions:log"
@@ -30,7 +30,9 @@
     "date-fns-tz": "^3.2.0",
     "firebase-admin": "^12.6.0",
     "firebase-functions": "^6.0.1",
-    "particle-api-js": "^9.1.2"
+    "particle-api-js": "^9.1.2",
+    "pdfkit": "^0.18.0",
+    "swissqrbill": "^4.3.0"
   },
   "devDependencies": {
     "@bufbuild/buf": "^1.47.2",
@@ -38,6 +40,8 @@
     "@types/chai": "^4.3.16",
     "@types/express": "^4.17.21",
     "@types/mocha": "^10.0.6",
+    "@types/pdfkit": "^0.17.5",
+    "@types/pngjs": "^6.0.5",
     "@types/sinon": "^17.0.4",
     "@types/supertest": "^6.0.2",
     "chai": "^4.3.10",
@@ -49,6 +53,10 @@
     "express": "^4.19.2",
     "firebase-functions-test": "^3.1.0",
     "mocha": "^10.4.0",
+    "pdf-parse": "^1.1.1",
+    "pdf-to-img": "^5.0.0",
+    "pixelmatch": "^7.1.0",
+    "pngjs": "^7.0.0",
     "sinon": "^18.0.1",
     "supertest": "^7.0.0",
     "ts-mocha": "^10.0.0",

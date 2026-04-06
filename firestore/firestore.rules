@@ -157,6 +157,14 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Bills (server-side only writes, owner + admin reads)
+    match /bills/{billId} {
+      allow read: if isAdmin() ||
+        (isSignedIn() && resource.data.userId ==
+          /databases/$(database)/documents/users/$(request.auth.uid));
+      allow write: if false;
+    }
+
     // Machine issue reports
     match /machine_reports/{reportId} {
       allow create: if true;

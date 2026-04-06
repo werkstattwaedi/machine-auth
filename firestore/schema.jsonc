@@ -94,6 +94,9 @@
       "modifiedBy": "string | null", // Firebase Auth UID
       "modifiedAt": "timestamp",
 
+      // --- Optional: set when a bill is created ---
+      "billRef": "DocumentReference | null", // DocumentReference to /bills/{billId}
+
       // --- Only present when status == "closed" ---
       "closedAt": "timestamp",
       "notes": "string | null",
@@ -155,6 +158,19 @@
       "before": "object | null", // Serialized document before change
       "after": "object | null", // Serialized document after change
       "timestamp": "timestamp"
+    }
+  },
+  "bills": {
+    "{billId}": {
+      "userId": "DocumentReference",       // DocumentReference to /users/{userId}
+      "checkouts": ["DocumentReference"],   // Array of DocumentReferences to /checkouts/{id}
+      "referenceNumber": "string",          // SCOR creditor reference (e.g., "RF18539007547034")
+      "amount": "number",                   // Total CHF
+      "currency": "string",                 // "CHF"
+      "storagePath": "string | null",       // "invoices/{billId}.pdf"
+      "created": "timestamp",
+      "paidAt": "timestamp | null",
+      "paidVia": "twint | ebanking | cash | null"
     }
   },
   "machine_reports": {
