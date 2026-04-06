@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { useState, useEffect, useRef, useMemo } from "react"
+import { useNavigate } from "@tanstack/react-router"
 import { useAuth } from "@modules/lib/auth"
 import { useTokenAuth } from "@modules/lib/token-auth"
 import { useCollection } from "@modules/lib/firestore"
@@ -76,6 +77,14 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
   const isAccountLoggedIn = !!user && !!userDoc && !isTagAuth
   const isTagIdentified = isTagAuth && !!tokenUser
   const isAnonymous = !isAccountLoggedIn && !isTagIdentified
+
+  // Redirect logged-in users with incomplete profile to complete-profile
+  const navigate = useNavigate()
+  useEffect(() => {
+    if (isAccountLoggedIn && userDoc && (!userDoc.firstName || !userDoc.termsAcceptedAt)) {
+      navigate({ to: "/complete-profile" })
+    }
+  }, [isAccountLoggedIn, userDoc, navigate])
   const identifiedUserDoc = isAccountLoggedIn ? userDoc : null
   const identifiedUserRef = identifiedUserDoc
     ? userRef(db, identifiedUserDoc.id)
