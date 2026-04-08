@@ -818,3 +818,38 @@ describe("WorkshopInlineSection", () => {
     expect(screen.getByText("Artikel hinzufügen")).toBeTruthy()
   })
 })
+
+describe("AddArticleSearch sorting", () => {
+  it("displays catalog items sorted alphabetically by name", async () => {
+    const user = userEvent.setup()
+    const callbacks = makeCallbacks()
+
+    render(
+      <WorkshopInlineSection
+        workshopId="holz"
+        workshop={{ label: "Holz", order: 1 }}
+        config={makeConfig()}
+        items={[]}
+        catalogItems={makeCatalogItems()}
+        callbacks={callbacks}
+        discountLevel="none"
+        checkoutId={null}
+      />,
+      { wrapper: FirebaseWrapper },
+    )
+
+    await user.click(screen.getByText("Artikel hinzufügen"))
+
+    // Catalog item buttons have justify-between and contain the item name as first child span
+    const buttons = screen
+      .getAllByRole("button")
+      .filter((btn) => btn.classList.contains("justify-between"))
+    const labels = buttons.map((btn) => btn.textContent ?? "")
+
+    expect(labels).toEqual([
+      expect.stringContaining("Dachlatte 24x48"),
+      expect.stringContaining("MDF Platte 3mm"),
+      expect.stringContaining("Schrauben M5"),
+    ])
+  })
+})
