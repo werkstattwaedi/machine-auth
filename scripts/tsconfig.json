@@ -8,6 +8,7 @@
     "sourceMap": true,
     "strict": true,
     "target": "ES2022",
+    "types": ["node"],
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "allowImportingTsExtensions": true,

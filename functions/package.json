@@ -63,7 +63,7 @@
     "supertest": "^7.0.0",
     "ts-mocha": "^11.0.0",
     "ts-proto": "^2.11.1",
-    "typescript": "^5.4.5"
+    "typescript": "^6.0.0"
   },
   "private": true
 }
