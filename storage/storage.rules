@@ -1,0 +1,15 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Invoices are managed exclusively by Cloud Functions (Admin SDK),
+    // which bypasses these rules. No client access needed.
+    match /invoices/{invoiceId} {
+      allow read, write: if false;
+    }
+
+    // Deny all other paths by default
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
