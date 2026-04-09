@@ -50,6 +50,20 @@ export interface UserDoc {
   billingAddress?: BillingAddress | null
 }
 
+/** Profile is complete when name, terms, and (for firma) billing address are filled. */
+export function isProfileComplete(userDoc: UserDoc): boolean {
+  if (!userDoc.firstName || !userDoc.lastName || !userDoc.termsAcceptedAt) {
+    return false
+  }
+  if (userDoc.userType === "firma") {
+    const addr = userDoc.billingAddress
+    if (!addr || !addr.company || !addr.street || !addr.zip || !addr.city) {
+      return false
+    }
+  }
+  return true
+}
+
 interface AuthContextValue {
   user: User | null
   userDoc: UserDoc | null

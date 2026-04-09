@@ -3,7 +3,7 @@
 
 import { useEffect } from "react"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
-import { useAuth } from "@modules/lib/auth"
+import { useAuth, isProfileComplete } from "@modules/lib/auth"
 import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
 import { Card, CardContent, CardHeader, CardTitle } from "@modules/components/ui/card"
 import { Button } from "@modules/components/ui/button"
@@ -49,7 +49,7 @@ function CompleteProfilePage() {
 
   const userType = watch("userType")
   const isFirma = userType === "firma"
-  const profileComplete = !!userDoc?.termsAcceptedAt
+  const profileComplete = userDoc ? isProfileComplete(userDoc) : false
 
   useEffect(() => {
     if (profileComplete) {
