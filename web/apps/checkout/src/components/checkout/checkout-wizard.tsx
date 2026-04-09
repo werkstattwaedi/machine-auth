@@ -224,9 +224,15 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
     return (
       <PaymentResult
         totalPrice={state.totalPrice}
+        resetLabel={isAccountLoggedIn ? "Zurück zum Besuch" : undefined}
         onReset={() => {
           dispatch({ type: "RESET" })
-          tagSignOut()
+          if (isAccountLoggedIn) {
+            window.location.href = "/visit"
+          } else {
+            tagSignOut()
+            window.history.replaceState(null, "", kiosk ? "/?kiosk" : "/")
+          }
         }}
       />
     )
