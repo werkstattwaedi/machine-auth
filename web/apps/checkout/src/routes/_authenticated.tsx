@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { createFileRoute, Outlet, Link, useNavigate, useMatches } from "@tanstack/react-router"
-import { useAuth } from "@modules/lib/auth"
+import { useAuth, isProfileComplete } from "@modules/lib/auth"
 import { useIsMobile } from "@modules/hooks/use-mobile"
 import { Button } from "@modules/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@modules/components/ui/sheet"
@@ -32,7 +32,7 @@ function AuthenticatedLayout() {
   // (skip if already on the page, wait for userDoc to load)
   const isOnCompleteProfilePage = matches.some((m) => m.fullPath === "/complete-profile")
   useEffect(() => {
-    if (!loading && !userDocLoading && userDoc && !userDoc.termsAcceptedAt && !isOnCompleteProfilePage) {
+    if (!loading && !userDocLoading && userDoc && !isProfileComplete(userDoc) && !isOnCompleteProfilePage) {
       navigate({ to: "/complete-profile" })
     }
   }, [loading, userDocLoading, userDoc, isOnCompleteProfilePage, navigate])

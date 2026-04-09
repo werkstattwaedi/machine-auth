@@ -8,7 +8,7 @@ import { where, orderBy, type DocumentReference, type Timestamp } from "firebase
 import { httpsCallable } from "firebase/functions"
 import { userRef } from "@modules/lib/firestore-helpers"
 import { useDb, useFunctions } from "@modules/lib/firebase-context"
-import { formatDate, formatCHF } from "@modules/lib/format"
+import { formatDate, formatCHF, formatInvoiceNumber } from "@modules/lib/format"
 import { PageLoading } from "@modules/components/page-loading"
 import { EmptyState } from "@modules/components/empty-state"
 import {
@@ -137,7 +137,7 @@ function BillsSection({ bills }: { bills: (BillDoc & { id: string })[] }) {
           <TableBody>
             {bills.map((bill) => (
               <TableRow key={bill.id}>
-                <TableCell className="text-sm">{bill.referenceNumber}</TableCell>
+                <TableCell className="text-sm">{formatInvoiceNumber(bill.referenceNumber)}</TableCell>
                 <TableCell className="text-sm">
                   {formatDate(bill.created)}
                 </TableCell>

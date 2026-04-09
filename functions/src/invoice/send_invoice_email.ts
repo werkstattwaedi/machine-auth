@@ -9,6 +9,7 @@ import { getStorage } from "firebase-admin/storage";
 import { Resend } from "resend";
 import { format } from "date-fns";
 import { de } from "date-fns/locale";
+import { formatInvoiceNumber } from "./types";
 import type { BillEntity } from "./types";
 import type { CheckoutEntity } from "../types/firestore_entities";
 
@@ -76,7 +77,7 @@ export const sendInvoiceEmail = onCall(
       expires: Date.now() + 24 * 3600 * 1000,
     });
 
-    const referenceNumber = String(bill.referenceNumber).padStart(6, "0");
+    const invoiceNumber = formatInvoiceNumber(bill.referenceNumber);
     const recipientName = checkout.persons[0]?.name ?? "Kunde";
     const checkoutDate = format(checkout.created.toDate(), "dd. MMMM yyyy, HH:mm", { locale: de });
 
@@ -102,7 +103,7 @@ export const sendInvoiceEmail = onCall(
       attachments: [
         {
           path: signedUrl,
-          filename: `Rechnung-${referenceNumber}.pdf`,
+          filename: `Rechnung-${invoiceNumber}.pdf`,
         },
       ],
     });

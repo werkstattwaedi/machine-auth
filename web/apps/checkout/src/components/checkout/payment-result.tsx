@@ -10,11 +10,12 @@ const IBAN = import.meta.env.VITE_IBAN
 const TWINT_QR_DATA = import.meta.env.VITE_TWINT_URL
 
 interface PaymentResultProps {
+  resetLabel?: string
   totalPrice: number
   onReset: () => void
 }
 
-export function PaymentResult({ totalPrice, onReset }: PaymentResultProps) {
+export function PaymentResult({ totalPrice, resetLabel, onReset }: PaymentResultProps) {
   return (
     <div className="space-y-6">
       <div className="text-center space-y-3">
@@ -68,7 +69,7 @@ export function PaymentResult({ totalPrice, onReset }: PaymentResultProps) {
         className="inline-flex items-center justify-center w-full gap-2 px-3 py-1.5 text-sm font-bold text-cog-teal border border-cog-teal rounded-[3px] bg-white hover:bg-cog-teal-light transition-colors"
         onClick={onReset}
       >
-        Zurück zum Start
+        {resetLabel ?? "Zurück zum Start"}
       </button>
     </div>
   )

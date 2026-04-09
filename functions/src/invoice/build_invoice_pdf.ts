@@ -6,6 +6,7 @@ import { SwissQRBill } from "swissqrbill/pdf";
 import { format } from "date-fns";
 import { de } from "date-fns/locale";
 import { resolve } from "node:path";
+import { formatInvoiceNumber } from "./types";
 import type { InvoiceData, InvoiceCheckout, PaymentConfig } from "./types";
 import type { PricingModel } from "../types/firestore_entities";
 import { generateScorReference } from "./scor_reference";
@@ -157,7 +158,7 @@ export async function buildInvoicePdf(
     doc.text("Rechnung Self Checkout", MARGIN_LEFT, y);
     y += 22;
     doc.fontSize(10).font("Helvetica");
-    doc.text(`Rechnungsnummer: ${data.referenceNumber}`, MARGIN_LEFT, y);
+    doc.text(`Rechnungsnummer: ${formatInvoiceNumber(data.referenceNumber)}`, MARGIN_LEFT, y);
     y += 14;
     doc.text(`Datum: ${formatDateOnly(data.invoiceDate)}`, MARGIN_LEFT, y);
     y += 28;
@@ -246,7 +247,7 @@ function addPageFooters(
     // Page number + reference in footer (lineBreak: false to prevent auto-pagination)
     doc.fontSize(8).font("Helvetica");
     doc.text(
-      `Nr. ${data.referenceNumber}`,
+      `${formatInvoiceNumber(data.referenceNumber)}`,
       MARGIN_LEFT, footerY,
       { width: CONTENT_WIDTH / 2, align: "left", lineBreak: false }
     );

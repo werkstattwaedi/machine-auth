@@ -39,6 +39,13 @@ const FUNCTIONS_SECRETS: VarMapping[] = [
   { envVar: "PARTICLE_WEBHOOK_API_KEY", jsonPath: "functions.particleWebhookApiKey" },
   { envVar: "PARTICLE_TOKEN", jsonPath: "functions.particleToken" },
   { envVar: "GATEWAY_API_KEY", jsonPath: "functions.gatewayApiKey" },
+  { envVar: "RESEND_API_KEY", jsonPath: "functions.resendApiKey" },
+];
+
+const FUNCTIONS_RESEND: VarMapping[] = [
+  { envVar: "RESEND_FROM_EMAIL", jsonPath: "functions.resendFromEmail" },
+  { envVar: "RESEND_TWINT_TEMPLATE_ID", jsonPath: "functions.resendTwintTemplateId" },
+  { envVar: "RESEND_QRBILL_TEMPLATE_ID", jsonPath: "functions.resendQrBillTemplateId" },
 ];
 
 const VITE_FIREBASE: VarMapping[] = [
@@ -213,6 +220,7 @@ function main() {
         { comment: "# Firebase Functions — parameters", vars: FUNCTIONS_PARAMS },
         { comment: "# Firebase Functions — test secrets (emulator only)", vars: FUNCTIONS_SECRETS },
         { comment: "# Firebase Functions — payment config", vars: FUNCTIONS_PAYMENT },
+        { comment: "# Firebase Functions — Resend email", vars: FUNCTIONS_RESEND },
       ],
     },
     {
@@ -222,6 +230,7 @@ function main() {
       sections: [
         { comment: "# Firebase Functions — parameters (secrets via Secret Manager)", vars: FUNCTIONS_PARAMS },
         { comment: "# Firebase Functions — payment config", vars: FUNCTIONS_PAYMENT },
+        { comment: "# Firebase Functions — Resend email", vars: FUNCTIONS_RESEND },
       ],
     },
     // Checkout app

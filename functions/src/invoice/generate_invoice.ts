@@ -11,6 +11,7 @@ import type {
   CheckoutEntity,
   CheckoutItemEntity,
 } from "../types/firestore_entities";
+import { formatInvoiceNumber } from "./types";
 import type {
   InvoiceData,
   InvoiceCheckout,
@@ -262,7 +263,7 @@ export const generateInvoice = onCall(async (request) => {
       expires: Date.now() + 3600 * 1000,
     });
 
-    logger.info(`Generated invoice ${billRef.id} (${referenceNumber}) for ${checkoutIds.length} checkout(s)`);
+    logger.info(`Generated invoice ${billRef.id} (${formatInvoiceNumber(referenceNumber)}) for ${checkoutIds.length} checkout(s)`);
 
     return {
       billId: billRef.id,

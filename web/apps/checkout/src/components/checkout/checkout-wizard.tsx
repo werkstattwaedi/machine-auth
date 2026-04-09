@@ -224,9 +224,15 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
     return (
       <PaymentResult
         totalPrice={state.totalPrice}
+        resetLabel={isAccountLoggedIn ? "Zurück zum Besuch" : undefined}
         onReset={() => {
           dispatch({ type: "RESET" })
-          tagSignOut()
+          if (isAccountLoggedIn) {
+            window.location.href = "/visit"
+          } else {
+            tagSignOut()
+            window.history.replaceState(null, "", kiosk ? "/?kiosk" : "/")
+          }
         }}
       />
     )
@@ -393,6 +399,7 @@ function usePreFillPerson(
     email?: string
     userType?: string
     termsAcceptedAt?: unknown
+    billingAddress?: { company: string; street: string; zip: string; city: string } | null
   } | null,
   dispatch: React.Dispatch<CheckoutAction>,
   persons: { id: string; isPreFilled: boolean }[],
@@ -412,6 +419,10 @@ function usePreFillPerson(
         userType: (userDoc.userType as UserType) ?? "erwachsen",
         isPreFilled: true,
         termsAccepted: !!userDoc.termsAcceptedAt,
+        billingCompany: userDoc.billingAddress?.company ?? "",
+        billingStreet: userDoc.billingAddress?.street ?? "",
+        billingZip: userDoc.billingAddress?.zip ?? "",
+        billingCity: userDoc.billingAddress?.city ?? "",
       },
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
