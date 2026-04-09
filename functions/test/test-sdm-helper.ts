@@ -34,6 +34,7 @@ function computeCMAC(key: Buffer, data: Buffer): Buffer {
 
   // Separate into all blocks except last, and last block
   const allButLast = paddedMessage.length > blockSize ? paddedMessage.subarray(0, -blockSize) : Buffer.alloc(0);
+  // eslint-disable-next-line prefer-const -- mutated via index assignment
   let lastBlock = Buffer.from(paddedMessage.subarray(-blockSize));
 
   // XOR last block with K1 or K2

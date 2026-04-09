@@ -1,4 +1,3 @@
-/* eslint-disable valid-jsdoc */
 /**
  * @fileoverview Authorization for OWW Tags
  */

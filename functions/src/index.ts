@@ -185,7 +185,7 @@ function sendHttpError(
   error: any
 ) {
   console.log("Request Failed!", error);
-  let message = error instanceof Error ? error.message : "Unknown Error";
+  const message = error instanceof Error ? error.message : "Unknown Error";
 
   res.status(400).contentType("application/json").send({
     id: req.body.id,

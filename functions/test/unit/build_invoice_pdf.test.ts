@@ -20,7 +20,6 @@ if (getApps().length === 0) {
   initializeApp({ projectId: "test-project" });
 }
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 const pdfParse = require("pdf-parse");
 const parsePdf = pdfParse as (buffer: Buffer) => Promise<{ text: string }>;
 
