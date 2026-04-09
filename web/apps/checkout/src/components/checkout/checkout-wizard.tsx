@@ -399,6 +399,7 @@ function usePreFillPerson(
     email?: string
     userType?: string
     termsAcceptedAt?: unknown
+    billingAddress?: { company: string; street: string; zip: string; city: string } | null
   } | null,
   dispatch: React.Dispatch<CheckoutAction>,
   persons: { id: string; isPreFilled: boolean }[],
@@ -418,6 +419,10 @@ function usePreFillPerson(
         userType: (userDoc.userType as UserType) ?? "erwachsen",
         isPreFilled: true,
         termsAccepted: !!userDoc.termsAcceptedAt,
+        billingCompany: userDoc.billingAddress?.company ?? "",
+        billingStreet: userDoc.billingAddress?.street ?? "",
+        billingZip: userDoc.billingAddress?.zip ?? "",
+        billingCity: userDoc.billingAddress?.city ?? "",
       },
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps

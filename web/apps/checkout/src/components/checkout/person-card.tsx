@@ -203,48 +203,69 @@ export function PersonCard({
       {showBillingAddress && (
         <div className="space-y-3 border-t pt-4">
           <Label className="text-sm font-bold">Rechnungsadresse</Label>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className={wrapCls("billingCompany")}>
-              <Label className="text-sm">Firma<span className="text-[#cc2a24]">*</span></Label>
-              <input
-                value={person.billingCompany ?? ""}
-                onChange={(e) => update({ billingCompany: e.target.value })}
-                onBlur={() => onBlur?.("billingCompany")}
-                className={fieldCls("billingCompany")}
-              />
-              {err("billingCompany") && <ErrorBadge message={err("billingCompany")!} />}
+          {person.isPreFilled ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <Label className="text-sm">Firma</Label>
+                <p className="text-sm">{person.billingCompany}</p>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-sm">Strasse / Nr.</Label>
+                <p className="text-sm">{person.billingStreet}</p>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-sm">PLZ</Label>
+                <p className="text-sm">{person.billingZip}</p>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-sm">Ort</Label>
+                <p className="text-sm">{person.billingCity}</p>
+              </div>
             </div>
-            <div className={wrapCls("billingStreet")}>
-              <Label className="text-sm">Strasse / Nr.<span className="text-[#cc2a24]">*</span></Label>
-              <input
-                value={person.billingStreet ?? ""}
-                onChange={(e) => update({ billingStreet: e.target.value })}
-                onBlur={() => onBlur?.("billingStreet")}
-                className={fieldCls("billingStreet")}
-              />
-              {err("billingStreet") && <ErrorBadge message={err("billingStreet")!} />}
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className={wrapCls("billingCompany")}>
+                <Label className="text-sm">Firma<span className="text-[#cc2a24]">*</span></Label>
+                <input
+                  value={person.billingCompany ?? ""}
+                  onChange={(e) => update({ billingCompany: e.target.value })}
+                  onBlur={() => onBlur?.("billingCompany")}
+                  className={fieldCls("billingCompany")}
+                />
+                {err("billingCompany") && <ErrorBadge message={err("billingCompany")!} />}
+              </div>
+              <div className={wrapCls("billingStreet")}>
+                <Label className="text-sm">Strasse / Nr.<span className="text-[#cc2a24]">*</span></Label>
+                <input
+                  value={person.billingStreet ?? ""}
+                  onChange={(e) => update({ billingStreet: e.target.value })}
+                  onBlur={() => onBlur?.("billingStreet")}
+                  className={fieldCls("billingStreet")}
+                />
+                {err("billingStreet") && <ErrorBadge message={err("billingStreet")!} />}
+              </div>
+              <div className={wrapCls("billingZip")}>
+                <Label className="text-sm">PLZ<span className="text-[#cc2a24]">*</span></Label>
+                <input
+                  value={person.billingZip ?? ""}
+                  onChange={(e) => update({ billingZip: e.target.value })}
+                  onBlur={() => onBlur?.("billingZip")}
+                  className={fieldCls("billingZip")}
+                />
+                {err("billingZip") && <ErrorBadge message={err("billingZip")!} />}
+              </div>
+              <div className={wrapCls("billingCity")}>
+                <Label className="text-sm">Ort<span className="text-[#cc2a24]">*</span></Label>
+                <input
+                  value={person.billingCity ?? ""}
+                  onChange={(e) => update({ billingCity: e.target.value })}
+                  onBlur={() => onBlur?.("billingCity")}
+                  className={fieldCls("billingCity")}
+                />
+                {err("billingCity") && <ErrorBadge message={err("billingCity")!} />}
+              </div>
             </div>
-            <div className={wrapCls("billingZip")}>
-              <Label className="text-sm">PLZ<span className="text-[#cc2a24]">*</span></Label>
-              <input
-                value={person.billingZip ?? ""}
-                onChange={(e) => update({ billingZip: e.target.value })}
-                onBlur={() => onBlur?.("billingZip")}
-                className={fieldCls("billingZip")}
-              />
-              {err("billingZip") && <ErrorBadge message={err("billingZip")!} />}
-            </div>
-            <div className={wrapCls("billingCity")}>
-              <Label className="text-sm">Ort<span className="text-[#cc2a24]">*</span></Label>
-              <input
-                value={person.billingCity ?? ""}
-                onChange={(e) => update({ billingCity: e.target.value })}
-                onBlur={() => onBlur?.("billingCity")}
-                className={fieldCls("billingCity")}
-              />
-              {err("billingCity") && <ErrorBadge message={err("billingCity")!} />}
-            </div>
-          </div>
+          )}
         </div>
       )}
     </div>

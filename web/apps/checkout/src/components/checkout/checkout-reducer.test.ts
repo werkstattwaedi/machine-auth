@@ -85,6 +85,24 @@ describe("checkoutReducer", () => {
       expect(state.persons[0].lastName).toBe("Muster")
     })
 
+    it("updates billing address fields", () => {
+      const personId = initialState.persons[0].id
+      const state = reduce({
+        type: "UPDATE_PERSON",
+        id: personId,
+        updates: {
+          billingCompany: "Werkstatt AG",
+          billingStreet: "Seestrasse 1",
+          billingZip: "8820",
+          billingCity: "Wädenswil",
+        },
+      })
+      expect(state.persons[0].billingCompany).toBe("Werkstatt AG")
+      expect(state.persons[0].billingStreet).toBe("Seestrasse 1")
+      expect(state.persons[0].billingZip).toBe("8820")
+      expect(state.persons[0].billingCity).toBe("Wädenswil")
+    })
+
     it("leaves other persons unchanged", () => {
       let state = reduce({ type: "ADD_PERSON" })
       state = checkoutReducer(state, {
