@@ -25,6 +25,10 @@ const dateTimeFormatter = new Intl.DateTimeFormat(locale, {
   minute: "2-digit",
 })
 
+export function formatInvoiceNumber(n: number): string {
+  return `RE-${String(n).padStart(6, "0")}`
+}
+
 export function formatCHF(amount: number): string {
   return currencyFormatter.format(amount)
 }

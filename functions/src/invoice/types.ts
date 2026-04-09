@@ -63,6 +63,11 @@ export interface InvoiceData {
   paidVia?: "twint" | "ebanking" | "cash" | null;
 }
 
+/** Format a numeric reference number for display, e.g. 1 → "RE-000001" */
+export function formatInvoiceNumber(n: number): string {
+  return `RE-${String(n).padStart(6, "0")}`;
+}
+
 /** Payment recipient configuration (from environment params) */
 export interface PaymentConfig {
   iban: string;
