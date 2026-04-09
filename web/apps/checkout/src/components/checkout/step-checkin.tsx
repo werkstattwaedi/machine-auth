@@ -33,7 +33,7 @@ export function StepCheckin({ state, dispatch, isAnonymous, kiosk, isAccountLogg
   const allErrors = useMemo(
     () =>
       Object.fromEntries(
-        state.persons.map((p) => [p.id, validatePerson(p, isAnonymous)]),
+        state.persons.map((p, i) => [p.id, validatePerson(p, isAnonymous, i === 0)]),
       ),
     [state.persons, isAnonymous],
   )

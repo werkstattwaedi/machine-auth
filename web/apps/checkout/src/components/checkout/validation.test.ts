@@ -140,6 +140,33 @@ describe("validatePerson", () => {
     )
     expect(Object.keys(errors)).toHaveLength(4)
   })
+
+  // --- isPrimary (email optionality for additional persons) ---
+
+  it("requires email for primary person", () => {
+    const errors = validatePerson(makePerson({ email: "" }), true, true)
+    expect(errors.email).toBe("E-Mail ist erforderlich.")
+  })
+
+  it("does not require email for additional person", () => {
+    const errors = validatePerson(makePerson({ email: "" }), true, false)
+    expect(errors.email).toBeUndefined()
+  })
+
+  it("validates email format for additional person when provided", () => {
+    const errors = validatePerson(makePerson({ email: "not-valid" }), true, false)
+    expect(errors.email).toBe("E-Mail muss im Format name@address.xyz eingegeben werden.")
+  })
+
+  it("accepts valid email for additional person", () => {
+    const errors = validatePerson(makePerson({ email: "max@test.com" }), true, false)
+    expect(errors.email).toBeUndefined()
+  })
+
+  it("accepts empty email for additional person", () => {
+    const errors = validatePerson(makePerson({ email: "" }), true, false)
+    expect(errors.email).toBeUndefined()
+  })
 })
 
 describe("validateCheckoutItem", () => {
