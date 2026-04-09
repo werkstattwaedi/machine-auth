@@ -40,7 +40,7 @@ export default defineConfig({
     allowedHosts: [process.env.VITE_CHECKOUT_DOMAIN || "checkout.werkstattwaedi.ch"],
   },
   build: {
-    rollupOptions: {
+    rolldownOptions: {
       output: {
         manualChunks(id) {
           if (id.includes("node_modules/react-dom/") || id.includes("node_modules/react/")) {
