@@ -56,7 +56,6 @@ function computeCMAC(key: Buffer, data: Buffer): Buffer {
 
   // Determine if padding is needed
   const blockSize = 16;
-  const numBlocks = Math.ceil(data.length / blockSize);
   const lastBlockSize = data.length % blockSize;
   const needsPadding = lastBlockSize !== 0 || data.length === 0;
 
@@ -73,7 +72,7 @@ function computeCMAC(key: Buffer, data: Buffer): Buffer {
 
   // Separate into all blocks except last, and last block
   const allButLast = paddedMessage.length > blockSize ? paddedMessage.subarray(0, -blockSize) : Buffer.alloc(0);
-  let lastBlock = Buffer.from(paddedMessage.subarray(-blockSize));
+  const lastBlock = Buffer.from(paddedMessage.subarray(-blockSize));
 
   // XOR last block with K1 or K2
   const xorKey = needsPadding ? k2 : k1;

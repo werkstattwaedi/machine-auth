@@ -1,4 +1,3 @@
-/* eslint-disable valid-jsdoc */
 /**
  * @fileoverview Key diversification based for OWW NTags
  *

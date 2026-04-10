@@ -22,7 +22,7 @@
   "devDependencies": {
     "@bufbuild/protobuf": "^2.10.2",
     "concurrently": "^9.1.0",
-    "dotenv": "^16.4.5",
+    "dotenv": "^17.0.0",
     "firebase-admin": "^13.6.1",
     "tsx": "^4.19.0"
   }

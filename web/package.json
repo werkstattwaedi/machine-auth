@@ -17,6 +17,6 @@
     "test:e2e": "cd apps/checkout && npm run test:e2e"
   },
   "devDependencies": {
-    "typescript": "~5.9.3"
+    "typescript": "~6.0.2"
   }
 }

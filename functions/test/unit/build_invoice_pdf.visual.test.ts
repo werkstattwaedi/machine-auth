@@ -47,7 +47,11 @@ before(async () => {
 
 async function renderPages(name: string, data: InvoiceData): Promise<Buffer[]> {
   const pdfBuffer = await buildInvoicePdf(data, TEST_PAYMENT_CONFIG);
-  writeFileSync(resolve(SNAPSHOT_DIR, `${name}.pdf`), pdfBuffer);
+  // PDFs are written only when updating snapshots; otherwise creation-date
+  // metadata would cause spurious git diffs on every test run.
+  if (UPDATE_SNAPSHOTS) {
+    writeFileSync(resolve(SNAPSHOT_DIR, `${name}.pdf`), pdfBuffer);
+  }
   const result: Buffer[] = [];
   const pages = await pdfToImg(pdfBuffer, { scale: 2 });
   for await (const page of pages) {
