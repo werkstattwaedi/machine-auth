@@ -223,6 +223,7 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
   if (state.submitted) {
     return (
       <PaymentResult
+        checkoutId={state.checkoutId!}
         totalPrice={state.totalPrice}
         resetLabel={isAccountLoggedIn ? "Zurück zum Besuch" : undefined}
         onReset={() => {

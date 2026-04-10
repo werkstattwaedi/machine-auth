@@ -40,6 +40,7 @@ const FUNCTIONS_SECRETS: VarMapping[] = [
   { envVar: "PARTICLE_TOKEN", jsonPath: "functions.particleToken" },
   { envVar: "GATEWAY_API_KEY", jsonPath: "functions.gatewayApiKey" },
   { envVar: "RESEND_API_KEY", jsonPath: "functions.resendApiKey" },
+  { envVar: "RAISENOW_WEBHOOK_SECRET", jsonPath: "functions.raisenowWebhookSecret" },
 ];
 
 const FUNCTIONS_RESEND: VarMapping[] = [
@@ -63,12 +64,6 @@ const VITE_DEPLOYMENT: VarMapping[] = [
   { envVar: "VITE_LOCALE", jsonPath: "web.locale" },
   { envVar: "VITE_CURRENCY", jsonPath: "web.currency" },
   { envVar: "VITE_ORGANIZATION_NAME", jsonPath: "web.organizationName" },
-  { envVar: "VITE_IBAN", jsonPath: "web.iban" },
-  { envVar: "VITE_TWINT_URL", jsonPath: "web.twintUrl" },
-  { envVar: "VITE_PAYMENT_RECIPIENT_NAME", jsonPath: "web.paymentRecipientName" },
-  { envVar: "VITE_PAYMENT_RECIPIENT_POSTAL_CODE", jsonPath: "web.paymentRecipientPostalCode" },
-  { envVar: "VITE_PAYMENT_RECIPIENT_CITY", jsonPath: "web.paymentRecipientCity" },
-  { envVar: "VITE_PAYMENT_RECIPIENT_COUNTRY", jsonPath: "web.paymentRecipientCountry" },
 ];
 
 const FUNCTIONS_PAYMENT: VarMapping[] = [
@@ -79,6 +74,8 @@ const FUNCTIONS_PAYMENT: VarMapping[] = [
   { envVar: "PAYMENT_RECIPIENT_CITY", jsonPath: "web.paymentRecipientCity" },
   { envVar: "PAYMENT_RECIPIENT_COUNTRY", jsonPath: "web.paymentRecipientCountry" },
   { envVar: "PAYMENT_CURRENCY", jsonPath: "web.currency" },
+  { envVar: "TWINT_AV1", jsonPath: "web.twintAv1" },
+  { envVar: "TWINT_AV2", jsonPath: "web.twintAv2" },
 ];
 
 const GATEWAY: VarMapping[] = [

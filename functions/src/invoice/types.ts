@@ -77,4 +77,8 @@ export interface PaymentConfig {
   recipientCity: string;
   recipientCountry: string;
   currency: string;
+  /** TWINT alternative scheme parameter 1 (from RaiseNow Hub) */
+  twintAv1?: string;
+  /** TWINT alternative scheme parameter 2 (from RaiseNow Hub) */
+  twintAv2?: string;
 }

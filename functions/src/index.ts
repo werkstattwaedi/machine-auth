@@ -219,9 +219,15 @@ export { admin } from "./admin-api";
 
 // Export callable functions
 export { createUser } from "./auth/create-user";
-export { generateInvoice } from "./invoice/generate_invoice";
-export { sendInvoiceEmail } from "./invoice/send_invoice_email";
 export { getInvoiceDownloadUrl } from "./invoice/get_invoice_download_url";
+export { getPaymentQrData } from "./invoice/get_payment_qr_data";
+
+// Export bill lifecycle triggers
+export { onCheckoutClosed } from "./invoice/create_bill";
+export { onBillCreate, onBillPaid, processBillTask } from "./invoice/bill_triggers";
+
+// Export RaiseNow webhook
+export { raisenowWebhook } from "./webhook/raisenow_webhook";
 
 // Export Firestore triggers
 export { syncCustomClaims } from "./auth/set-custom-claims";

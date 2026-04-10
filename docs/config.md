@@ -221,9 +221,9 @@ Beyond Firebase config, the following deployment-specific variables are used:
 | `VITE_LOCALE` | Locale for formatting | `de-CH` |
 | `VITE_CURRENCY` | Currency code | `CHF` |
 | `VITE_ORGANIZATION_NAME` | Organization name | `My Workshop` |
-| `VITE_IBAN` | Payment IBAN | `CH00 0000 0000 0000 0000 0` |
-| `VITE_TWINT_URL` | TWINT payment URL (optional) | |
-| `VITE_PAYMENT_RECIPIENT_*` | QR-bill recipient details | |
+
+
+Payment configuration (IBAN, recipient, TWINT alternative scheme params) is server-side only — see `PAYMENT_*` and `TWINT_AV*` vars in `functions/.env.*`.
 
 **Important:** The production API key should be **restricted** in Google Cloud Console:
 - Application restrictions: HTTP referrers (set to your domain)
