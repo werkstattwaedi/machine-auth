@@ -39,15 +39,16 @@ describe("SDM Crypto (Unit)", () => {
       const counter = 42;
       const terminalKey = "00112233445566778899aabbccddeeff";
 
-      // Encrypt PICC manually
+      // Encrypt PICC manually: [0xC7 tag] [7-byte UID] [3-byte counter] [5 padding]
       const uidBuffer = Buffer.from(uid, "hex");
       const counterBuffer = Buffer.alloc(3);
       counterBuffer.writeUIntBE(counter, 0, 3);
 
       const piccPlaintext = Buffer.concat([
+        Buffer.from([0xC7]),
         uidBuffer,
         counterBuffer,
-        Buffer.alloc(6, 0), // Padding
+        Buffer.alloc(5, 0),
       ]);
 
       const cipher = crypto.createCipheriv(
@@ -75,15 +76,16 @@ describe("SDM Crypto (Unit)", () => {
       const counter = 0;
       const terminalKey = "00112233445566778899aabbccddeeff";
 
-      // Encrypt
+      // Encrypt: [0xC7 tag] [7-byte UID] [3-byte counter] [5 padding]
       const uidBuffer = Buffer.from(uid, "hex");
       const counterBuffer = Buffer.alloc(3);
       counterBuffer.writeUIntBE(counter, 0, 3);
 
       const piccPlaintext = Buffer.concat([
+        Buffer.from([0xC7]),
         uidBuffer,
         counterBuffer,
-        Buffer.alloc(6, 0),
+        Buffer.alloc(5, 0),
       ]);
 
       const cipher = crypto.createCipheriv(
@@ -111,15 +113,16 @@ describe("SDM Crypto (Unit)", () => {
       const counter = 16777215; // 2^24 - 1
       const terminalKey = "00112233445566778899aabbccddeeff";
 
-      // Encrypt
+      // Encrypt: [0xC7 tag] [7-byte UID] [3-byte counter] [5 padding]
       const uidBuffer = Buffer.from(uid, "hex");
       const counterBuffer = Buffer.alloc(3);
       counterBuffer.writeUIntBE(counter, 0, 3);
 
       const piccPlaintext = Buffer.concat([
+        Buffer.from([0xC7]),
         uidBuffer,
         counterBuffer,
-        Buffer.alloc(6, 0),
+        Buffer.alloc(5, 0),
       ]);
 
       const cipher = crypto.createCipheriv(
@@ -142,12 +145,10 @@ describe("SDM Crypto (Unit)", () => {
   });
 
   describe("NTAG424 DNA Reference Verification", () => {
-    // NOTE: Direct AN12196 test vectors cannot be used because they use a different PICC format:
-    // - AN12196: Tag(1 byte) + UID(7) + Counter(3,LE) + Random(5) = 16 bytes
-    // - Our implementation: UID(7) + Counter(3,BE) + Zeros(6) = 16 bytes
-    //
-    // However, we verify our implementation is correct by testing with all-zero keys
-    // (commonly used in examples) and confirming the crypto operations work correctly.
+    // NOTE: Direct AN12196 test vectors cannot be used because our counter is
+    // big-endian while AN12196 uses little-endian, and we zero-pad rather than
+    // using random bytes.
+    // PICC format: 0xC7(1) + UID(7) + Counter(3,BE) + Zeros(5) = 16 bytes
 
     const ZERO_KEY = "00000000000000000000000000000000";
 
@@ -158,15 +159,16 @@ describe("SDM Crypto (Unit)", () => {
       const uid = "04de5f1eacc040";
       const counter = 61;
 
-      // Encrypt PICC manually using our format
+      // Encrypt PICC manually: [0xC7 tag] [7-byte UID] [3-byte counter] [5 padding]
       const uidBuffer = Buffer.from(uid, "hex");
       const counterBuffer = Buffer.alloc(3);
       counterBuffer.writeUIntBE(counter, 0, 3);
 
       const piccPlaintext = Buffer.concat([
+        Buffer.from([0xC7]),
         uidBuffer,
         counterBuffer,
-        Buffer.alloc(6, 0),
+        Buffer.alloc(5, 0),
       ]);
 
       const cipher = crypto.createCipheriv(
@@ -241,9 +243,10 @@ describe("SDM Crypto (Unit)", () => {
       counterBuffer.writeUIntBE(counter, 0, 3);
 
       const piccPlaintext = Buffer.concat([
+        Buffer.from([0xC7]),
         uidBuffer,
         counterBuffer,
-        Buffer.alloc(6, 0),
+        Buffer.alloc(5, 0),
       ]);
 
       const cipher = crypto.createCipheriv(

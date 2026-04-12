@@ -217,7 +217,7 @@ describe("Usage page", () => {
     renderUsagePage()
 
     await waitFor(() => {
-      expect(screen.getByText("42")).toBeInTheDocument()
+      expect(screen.getByText("RE-000042")).toBeInTheDocument()
     })
     expect(screen.getByText("Bezahlt (TWINT)")).toBeInTheDocument()
   })
@@ -238,7 +238,7 @@ describe("Usage page", () => {
     renderUsagePage()
 
     await waitFor(() => {
-      expect(screen.getByText("10")).toBeInTheDocument()
+      expect(screen.getByText("RE-000010")).toBeInTheDocument()
     })
     expect(screen.getByText("Offen")).toBeInTheDocument()
   })
@@ -282,7 +282,7 @@ describe("Usage page", () => {
     renderUsagePage()
 
     await waitFor(() => {
-      expect(screen.getByText("5")).toBeInTheDocument()
+      expect(screen.getByText("RE-000005")).toBeInTheDocument()
     })
 
     const downloadBtn = screen.getByRole("button", { name: "PDF herunterladen" })
@@ -315,7 +315,7 @@ describe("Usage page", () => {
     renderUsagePage()
 
     await waitFor(() => {
-      expect(screen.getByText("7")).toBeInTheDocument()
+      expect(screen.getByText("RE-000007")).toBeInTheDocument()
     })
 
     const downloadBtn = screen.getByRole("button", { name: "PDF herunterladen" })
@@ -342,7 +342,7 @@ describe("Usage page", () => {
     renderUsagePage()
 
     await waitFor(() => {
-      expect(screen.getByText("99")).toBeInTheDocument()
+      expect(screen.getByText("RE-000099")).toBeInTheDocument()
     })
 
     expect(screen.queryByRole("button", { name: "PDF herunterladen" })).not.toBeInTheDocument()
