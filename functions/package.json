@@ -16,7 +16,7 @@
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
     "test:unit": "npm run build && mocha 'lib/src/**/*.test.js' 'lib/test/unit/**/*.test.js'",
-    "test:integration": "npm run build && firebase emulators:exec --only firestore,auth 'mocha lib/test/integration/**/*.test.js'",
+    "test:integration": "npm run build && firebase emulators:exec --config ../firebase.e2e.json --only firestore,auth 'mocha lib/test/integration/**/*.test.js'",
     "test": "npm run build && npm run test:unit && npm run test:integration",
     "logs": "firebase functions:log"
   },

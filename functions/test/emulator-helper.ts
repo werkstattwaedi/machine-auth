@@ -11,11 +11,16 @@ let testEnv: RulesTestEnvironment;
  * Initialize the Firebase emulator test environment
  */
 export async function setupEmulator(): Promise<RulesTestEnvironment> {
+  // Read ports from env (set by firebase emulators:exec) or default to dev ports
+  const firestoreHost = process.env.FIRESTORE_EMULATOR_HOST ?? "127.0.0.1:8080";
+  const [fsHost, fsPortStr] = firestoreHost.split(":");
+  const fsPort = parseInt(fsPortStr ?? "8080");
+
   testEnv = await initializeTestEnvironment({
     projectId: "test-project",
     firestore: {
-      host: "127.0.0.1",
-      port: 8080,
+      host: fsHost,
+      port: fsPort,
     },
   });
 
@@ -26,10 +31,8 @@ export async function setupEmulator(): Promise<RulesTestEnvironment> {
     });
   }
 
-  // Connect admin SDK to emulators
-  if (process.env.FIRESTORE_EMULATOR_HOST !== "127.0.0.1:8080") {
-    process.env.FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080";
-  }
+  // Ensure env vars are set for admin SDK
+  process.env.FIRESTORE_EMULATOR_HOST = firestoreHost;
   if (!process.env.FIREBASE_AUTH_EMULATOR_HOST) {
     process.env.FIREBASE_AUTH_EMULATOR_HOST = "127.0.0.1:9099";
   }
