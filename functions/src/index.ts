@@ -223,11 +223,8 @@ export { getInvoiceDownloadUrl } from "./invoice/get_invoice_download_url";
 export { getPaymentQrData } from "./invoice/get_payment_qr_data";
 
 // Export bill lifecycle triggers
-export { onCheckoutClosed } from "./invoice/create_bill";
-export { onBillCreate, onBillPaid, processBillTask } from "./invoice/bill_triggers";
-
-// Export RaiseNow webhook
-export { raisenowWebhook } from "./webhook/raisenow_webhook";
+export { onCheckoutClosed, onCheckoutCreatedClosed } from "./invoice/create_bill";
+export { onBillCreate } from "./invoice/bill_triggers";
 
 // Export Firestore triggers
 export { syncCustomClaims } from "./auth/set-custom-claims";

@@ -223,7 +223,7 @@ Beyond Firebase config, the following deployment-specific variables are used:
 | `VITE_ORGANIZATION_NAME` | Organization name | `My Workshop` |
 
 
-Payment configuration (IBAN, recipient, TWINT alternative scheme params) is server-side only — see `PAYMENT_*` and `TWINT_AV*` vars in `functions/.env.*`.
+Payment configuration (IBAN, recipient, RaiseNow PayLink) is server-side only — see `PAYMENT_*` and `RAISENOW_PAYLINK_SOLUTION_ID` vars in `functions/.env.*`.
 
 **Important:** The production API key should be **restricted** in Google Cloud Console:
 - Application restrictions: HTTP referrers (set to your domain)

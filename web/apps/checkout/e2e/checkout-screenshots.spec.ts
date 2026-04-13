@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 import { test, expect, type Page } from "@playwright/test"
+import { waitForOobCode } from "./helpers"
+
+const AUTH_USER_EMAIL = "e2e-test@werkstattwaedi.ch"
 
 /** Navigate to checkout → fill check-in → advance to workshops */
 async function goToWorkshops(page: Page) {
@@ -48,6 +51,55 @@ async function goToSummaryWithItems(page: Page) {
   await checkoutBtn.scrollIntoViewIfNeeded()
   await checkoutBtn.click()
   await expect(page.getByText("Zusammenfassung")).toBeVisible()
+}
+
+/** Sign in as the seeded test user */
+async function signIn(page: Page) {
+  await page.goto("/login")
+  await page.getByPlaceholder("deine@email.ch").fill(AUTH_USER_EMAIL)
+  await page.getByRole("button", { name: "Anmelde-Link senden" }).click()
+  await expect(page.getByText("Anmelde-Link wurde an")).toBeVisible({ timeout: 5000 })
+
+  const signInCode = await waitForOobCode(
+    (c) => c.email === AUTH_USER_EMAIL && c.requestType === "EMAIL_SIGNIN",
+  )
+  expect(signInCode).toBeTruthy()
+  await page.goto(signInCode!.oobLink)
+  await page.waitForURL((url) => !url.href.includes("oobCode"), { timeout: 10_000 })
+}
+
+/**
+ * Sign in, go through checkout, submit, and wait for payment result.
+ *
+ * Uses a logged-in user so the checkout updates an existing open doc
+ * (open → closed), which fires the onCheckoutClosed trigger. Logged-in
+ * users also have no auto-reset timer.
+ */
+async function submitAndWaitForPaymentResult(page: Page) {
+  await signIn(page)
+
+  // Navigate to checkout — logged-in user sees pre-filled form
+  await page.goto("/")
+  await expect(page.getByText("Abmelden")).toBeVisible({ timeout: 10_000 })
+
+  // Advance to workshops
+  await page.getByRole("button", { name: "Weiter" }).click()
+  await expect(page.getByText("Werkstätten wählen")).toBeVisible()
+
+  // Go to summary
+  const checkoutBtn = page.getByRole("button", { name: "Check-Out" })
+  await checkoutBtn.scrollIntoViewIfNeeded()
+  await checkoutBtn.click()
+  await expect(page.getByText("Zusammenfassung")).toBeVisible()
+
+  // Submit
+  const submitBtn = page.getByRole("button", { name: "Senden & zur Kasse" })
+  await submitBtn.scrollIntoViewIfNeeded()
+  await submitBtn.click()
+
+  // Wait for payment result with QR bill details
+  await expect(page.getByText("Zu bezahlen")).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByText("Konto / Zahlbar an")).toBeVisible({ timeout: 30_000 })
 }
 
 test.describe("Checkout step screenshots", () => {
@@ -173,6 +225,24 @@ test.describe("Checkout step screenshots", () => {
     await page.locator("h2").first().click()
 
     await expect(page).toHaveScreenshot("checkout-summary-tip.png")
+  })
+
+  test("payment result — e-banking selected", async ({ page }, testInfo) => {
+    testInfo.setTimeout(60_000)
+    await submitAndWaitForPaymentResult(page)
+
+    await expect(page).toHaveScreenshot("checkout-payment-ebanking.png")
+  })
+
+  test("payment result — twint selected", async ({ page }, testInfo) => {
+    testInfo.setTimeout(60_000)
+    await submitAndWaitForPaymentResult(page)
+
+    // Switch to TWINT
+    await page.getByRole("button", { name: /TWINT/ }).click()
+    await expect(page.getByText(/Transaktionsgebühren/)).toBeVisible()
+
+    await expect(page).toHaveScreenshot("checkout-payment-twint.png")
   })
 
   test("checkout validation errors", async ({ page }) => {

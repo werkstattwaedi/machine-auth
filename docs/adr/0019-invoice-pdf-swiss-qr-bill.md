@@ -18,9 +18,16 @@
 
 ## Decision
 
-### Callable Cloud Function generates PDF with Swiss QR bill
+### Firestore triggers generate PDF with Swiss QR bill
 
-A single `generateInvoice` callable function accepts checkout IDs, allocates a bill number, builds a PDF, and uploads it to Cloud Storage. It returns a signed URL (1-hour expiry) for immediate download.
+Two Firestore triggers handle bill creation when a checkout is closed:
+
+- **`onCheckoutClosed`** (`onDocumentUpdated`): fires when an existing checkout transitions from open → closed (tag-based flow).
+- **`onCheckoutCreatedClosed`** (`onDocumentCreated`): fires when a checkout is created directly as closed (anonymous self-checkout flow).
+
+Both call a shared `createBillForCheckout()` function that allocates a bill number and creates the bill document. A downstream `onBillCreate` trigger then generates the PDF and sends the invoice email immediately (120s timeout).
+
+If PDF generation or email sending fails, the error is logged but not re-thrown — there is no automatic retry. This is a deliberate simplification at the current volume (~100 bills/month).
 
 ### Sequential bill numbers with ISO 11649 SCOR references
 
@@ -53,6 +60,10 @@ A reverse link (`billRef: DocumentReference | null`) on `CheckoutEntity` prevent
 
 Uploaded to `invoices/{billId}.pdf` in the default bucket. Payment recipient details (IBAN, name, address) are provided via `defineString()` function parameters, sourced from the operations config via `generate-env.ts` (ADR-0018).
 
+### Client-side QR bill display
+
+A `getPaymentQrData` callable returns the SPC-format QR payload, creditor details (IBAN, name, address), SCOR reference, payer name, and amount. The checkout app renders these in a QR bill-style layout with a Swiss cross overlay. See ADR-0020 for the dual payment UX decision.
+
 ## Consequences
 
 ### Positive
@@ -67,6 +78,7 @@ Uploaded to `invoices/{billId}.pdf` in the default bucket. Payment recipient det
 
 - **Counter bottleneck:** `config/billing.nextBillNumber` is a single Firestore document, limiting concurrent invoice generation. At the expected volume (~100/month) this is a non-issue; could be sharded if volume grows.
 - **Signed URL expiry:** The 1-hour signed URL means users can't bookmark the download link. A persistent download mechanism would be needed for "download past invoices".
+- **No email retry:** If `onBillCreate` fails to send the email (e.g. Resend outage), there is no automatic retry. Could add retry logic or a dead-letter mechanism if this becomes a problem.
 
 ## Alternatives Considered
 

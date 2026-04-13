@@ -218,8 +218,6 @@ export async function buildInvoicePdf(
           country: payment.recipientCountry,
         },
         reference: generateScorReference(String(data.referenceNumber).padStart(9, "0")),
-        ...(payment.twintAv1 ? { av1: payment.twintAv1 } : {}),
-        ...(payment.twintAv2 ? { av2: payment.twintAv2 } : {}),
       }, { language: "DE" });
       qrBill.attachTo(doc);
 

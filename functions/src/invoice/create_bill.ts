@@ -2,17 +2,21 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Firestore trigger: auto-create a bill when a checkout is closed.
+ * Firestore triggers: auto-create a bill when a checkout is closed.
  *
- * Fires on update of checkouts/{checkoutId}. When status transitions to
- * "closed" and no billRef exists, creates a bill document with a sequential
- * reference number. The bill starts with no PDF — PDF generation and email
- * are handled by bill_triggers.ts.
+ * Two triggers handle the two checkout flows:
+ * - onCheckoutClosed: fires on update (open → closed), for tag-based checkouts
+ * - onCheckoutCreatedClosed: fires on create, for anonymous checkouts created
+ *   directly with status "closed"
  */
 
 import * as logger from "firebase-functions/logger";
-import { onDocumentUpdated } from "firebase-functions/v2/firestore";
+import {
+  onDocumentCreated,
+  onDocumentUpdated,
+} from "firebase-functions/v2/firestore";
 import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
+import type { DocumentReference } from "firebase-admin/firestore";
 import type {
   CheckoutEntity,
   CheckoutItemEntity,
@@ -38,6 +42,96 @@ function calculateEntryFee(
   return ENTRY_FEES[userType]?.[usageType] ?? 0;
 }
 
+/**
+ * Create a bill for a closed checkout. Shared by both triggers.
+ */
+async function createBillForCheckout(
+  checkoutRef: DocumentReference,
+  checkout: CheckoutEntity,
+): Promise<void> {
+  const db = getFirestore();
+
+  // Load items subcollection
+  const itemsSnap = await checkoutRef.collection("items").get();
+  const items = itemsSnap.docs.map((d) => d.data() as CheckoutItemEntity);
+
+  // Load pricing config for entry fees
+  const pricingDoc = await db.doc("config/pricing").get();
+  const pricingData = pricingDoc.data() as {
+    entryFees?: Record<string, Record<string, number>>;
+  } | undefined;
+  const configFees = pricingData?.entryFees ?? null;
+
+  // Calculate totals — prefer checkout summary if available
+  let grandTotal: number;
+  if (checkout.summary?.totalPrice != null) {
+    grandTotal = checkout.summary.totalPrice;
+  } else {
+    const entryFees = checkout.persons.reduce(
+      (sum, p) => sum + calculateEntryFee(p.userType, checkout.usageType, configFees),
+      0,
+    );
+    const machineCost = items
+      .filter((i) => i.origin === "nfc")
+      .reduce((sum, i) => sum + i.totalPrice, 0);
+    const materialCost = items
+      .filter((i) => i.origin !== "nfc")
+      .reduce((sum, i) => sum + i.totalPrice, 0);
+    grandTotal = entryFees + machineCost + materialCost;
+  }
+
+  // Transaction: allocate reference number and create bill
+  const billRef = db.collection("bills").doc();
+
+  await db.runTransaction(async (tx) => {
+    // Re-read checkout inside transaction to guard against concurrent triggers
+    const freshDoc = await tx.get(checkoutRef);
+    const freshData = freshDoc.data() as CheckoutEntity;
+    if (freshData.billRef) {
+      logger.info(`Checkout ${checkoutRef.id} already has a bill, skipping`);
+      return;
+    }
+
+    // Allocate sequential reference number
+    const configRef = db.doc("config/billing");
+    const configDoc = await tx.get(configRef);
+    let nextBillNumber = 1;
+    if (configDoc.exists) {
+      nextBillNumber = (configDoc.data()?.nextBillNumber as number) ?? 1;
+    }
+
+    if (configDoc.exists) {
+      tx.update(configRef, { nextBillNumber: FieldValue.increment(1) });
+    } else {
+      tx.set(configRef, { nextBillNumber: nextBillNumber + 1 });
+    }
+
+    // Create bill document
+    const bill: BillEntity = {
+      userId: checkout.userId,
+      checkouts: [checkoutRef],
+      referenceNumber: nextBillNumber,
+      amount: grandTotal,
+      currency: "CHF",
+      storagePath: null,
+      created: Timestamp.now(),
+      paidAt: null,
+      paidVia: null,
+    };
+    tx.set(billRef, bill);
+
+    // Link bill to checkout
+    tx.update(checkoutRef, { billRef: billRef });
+  });
+
+  logger.info(
+    `Created bill ${billRef.id} for checkout ${checkoutRef.id}`,
+  );
+}
+
+/**
+ * Tag-based checkout: status updated from open → closed.
+ */
 export const onCheckoutClosed = onDocumentUpdated(
   "checkouts/{checkoutId}",
   async (event) => {
@@ -50,84 +144,22 @@ export const onCheckoutClosed = onDocumentUpdated(
     if (before.status === "closed" || after.status !== "closed") return;
     if (after.billRef) return;
 
-    const checkoutRef = event.data!.after.ref;
-    const db = getFirestore();
+    await createBillForCheckout(event.data!.after.ref, after);
+  },
+);
 
-    // Load items subcollection
-    const itemsSnap = await checkoutRef.collection("items").get();
-    const items = itemsSnap.docs.map((d) => d.data() as CheckoutItemEntity);
+/**
+ * Anonymous checkout: created directly with status "closed".
+ */
+export const onCheckoutCreatedClosed = onDocumentCreated(
+  "checkouts/{checkoutId}",
+  async (event) => {
+    const data = event.data?.data() as CheckoutEntity | undefined;
+    if (!data) return;
 
-    // Load pricing config for entry fees
-    const pricingDoc = await db.doc("config/pricing").get();
-    const pricingData = pricingDoc.data() as {
-      entryFees?: Record<string, Record<string, number>>;
-    } | undefined;
-    const configFees = pricingData?.entryFees ?? null;
+    if (data.status !== "closed") return;
+    if (data.billRef) return;
 
-    // Calculate totals — prefer checkout summary if available
-    let grandTotal: number;
-    if (after.summary?.totalPrice != null) {
-      grandTotal = after.summary.totalPrice;
-    } else {
-      const entryFees = after.persons.reduce(
-        (sum, p) => sum + calculateEntryFee(p.userType, after.usageType, configFees),
-        0,
-      );
-      const machineCost = items
-        .filter((i) => i.origin === "nfc")
-        .reduce((sum, i) => sum + i.totalPrice, 0);
-      const materialCost = items
-        .filter((i) => i.origin !== "nfc")
-        .reduce((sum, i) => sum + i.totalPrice, 0);
-      grandTotal = entryFees + machineCost + materialCost;
-    }
-
-    // Transaction: allocate reference number and create bill
-    const billRef = db.collection("bills").doc();
-
-    await db.runTransaction(async (tx) => {
-      // Re-read checkout inside transaction to guard against concurrent triggers
-      const freshDoc = await tx.get(checkoutRef);
-      const freshData = freshDoc.data() as CheckoutEntity;
-      if (freshData.billRef) {
-        logger.info(`Checkout ${checkoutRef.id} already has a bill, skipping`);
-        return;
-      }
-
-      // Allocate sequential reference number
-      const configRef = db.doc("config/billing");
-      const configDoc = await tx.get(configRef);
-      let nextBillNumber = 1;
-      if (configDoc.exists) {
-        nextBillNumber = (configDoc.data()?.nextBillNumber as number) ?? 1;
-      }
-
-      if (configDoc.exists) {
-        tx.update(configRef, { nextBillNumber: FieldValue.increment(1) });
-      } else {
-        tx.set(configRef, { nextBillNumber: nextBillNumber + 1 });
-      }
-
-      // Create bill document
-      const bill: BillEntity = {
-        userId: after.userId,
-        checkouts: [checkoutRef],
-        referenceNumber: nextBillNumber,
-        amount: grandTotal,
-        currency: "CHF",
-        storagePath: null,
-        created: Timestamp.now(),
-        paidAt: null,
-        paidVia: null,
-      };
-      tx.set(billRef, bill);
-
-      // Link bill to checkout
-      tx.update(checkoutRef, { billRef: billRef });
-    });
-
-    logger.info(
-      `Created bill ${billRef.id} for checkout ${checkoutRef.id}`,
-    );
+    await createBillForCheckout(event.data!.ref, data);
   },
 );

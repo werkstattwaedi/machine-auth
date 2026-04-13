@@ -3,18 +3,14 @@
 
 /**
  * Bill lifecycle triggers:
- * - onBillCreate: enqueue a Cloud Task to generate PDF + send email after ~2 min
- * - onBillPaid: immediately regenerate PDF (with "paid" stamp) + send receipt
- * - processBillTask: the delayed task handler that generates PDF + sends email
+ * - onBillCreate: immediately generate PDF + send invoice email
  */
 
 import * as logger from "firebase-functions/logger";
-import { onDocumentCreated, onDocumentUpdated } from "firebase-functions/v2/firestore";
-import { onTaskDispatched } from "firebase-functions/v2/tasks";
+import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { defineSecret, defineString } from "firebase-functions/params";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
-import { CloudTasksClient } from "@google-cloud/tasks";
 import { Resend } from "resend";
 import { format } from "date-fns";
 import { de } from "date-fns/locale";
@@ -42,16 +38,10 @@ const paymentRecipientPostalCode = defineString("PAYMENT_RECIPIENT_POSTAL_CODE")
 const paymentRecipientCity = defineString("PAYMENT_RECIPIENT_CITY");
 const paymentRecipientCountry = defineString("PAYMENT_RECIPIENT_COUNTRY");
 const paymentCurrency = defineString("PAYMENT_CURRENCY");
-const twintAv1 = defineString("TWINT_AV1", { default: "" });
-const twintAv2 = defineString("TWINT_AV2", { default: "" });
 
 const resendApiKey = defineSecret("RESEND_API_KEY");
 const resendFromEmail = defineString("RESEND_FROM_EMAIL");
-const resendTwintTemplateId = defineString("RESEND_TWINT_TEMPLATE_ID");
 const resendQrBillTemplateId = defineString("RESEND_QRBILL_TEMPLATE_ID");
-
-// Delay before generating PDF + sending email (seconds)
-const BILL_PROCESS_DELAY_SECONDS = 120;
 
 /** Hardcoded entry fee lookup (mirrors web/modules/lib/pricing.ts) */
 const ENTRY_FEES: Record<string, Record<string, number>> = {
@@ -83,8 +73,6 @@ function buildPaymentConfig(): PaymentConfig {
     recipientCity: paymentRecipientCity.value(),
     recipientCountry: paymentRecipientCountry.value(),
     currency: paymentCurrency.value() || "CHF",
-    twintAv1: twintAv1.value() || undefined,
-    twintAv2: twintAv2.value() || undefined,
   };
 }
 
@@ -208,6 +196,11 @@ async function generateAndUploadPdf(
  * Send invoice email via Resend with the PDF attached.
  */
 async function sendEmail(billId: string, bill: BillEntity): Promise<void> {
+  if (process.env.FUNCTIONS_EMULATOR === "true") {
+    logger.info(`Emulator: skipping email for bill ${billId}`);
+    return;
+  }
+
   const db = getFirestore();
 
   // Reload bill to get the latest storagePath
@@ -246,17 +239,12 @@ async function sendEmail(billId: string, bill: BillEntity): Promise<void> {
     { locale: de },
   );
 
-  // TWINT template if paid, QR Bill template if unpaid
-  const templateId = latestBill.paidAt
-    ? resendTwintTemplateId.value()
-    : resendQrBillTemplateId.value();
-
   const resend = new Resend(resendApiKey.value());
   const { error } = await resend.emails.send({
     from: resendFromEmail.value(),
     to: recipientEmail,
     template: {
-      id: templateId,
+      id: resendQrBillTemplateId.value(),
       variables: {
         RECIPIENT_NAME: recipientName,
         CHECKOUT_DATE: checkoutDate,
@@ -283,121 +271,30 @@ async function sendEmail(billId: string, bill: BillEntity): Promise<void> {
 // --- Triggers ---
 
 /**
- * When a bill is created, enqueue a Cloud Task to generate the PDF + send
- * email after a delay. This gives the user time to pay via TWINT first.
+ * When a bill is created, immediately generate the PDF and send the
+ * invoice email.
  */
 export const onBillCreate = onDocumentCreated(
-  "bills/{billId}",
-  async (event) => {
-    const billId = event.params.billId;
-
-    try {
-      const projectId = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT;
-      const location = process.env.FUNCTION_REGION || "us-central1";
-
-      const client = new CloudTasksClient();
-      const queuePath = client.queuePath(
-        projectId!,
-        location,
-        "bill-processing",
-      );
-
-      const scheduleTime = new Date(
-        Date.now() + BILL_PROCESS_DELAY_SECONDS * 1000,
-      );
-
-      // The task URL points to the processBillTask function
-      const functionUrl = `https://${location}-${projectId}.cloudfunctions.net/processBillTask`;
-
-      await client.createTask({
-        parent: queuePath,
-        task: {
-          httpRequest: {
-            httpMethod: "POST",
-            url: functionUrl,
-            headers: { "Content-Type": "application/json" },
-            body: Buffer.from(JSON.stringify({ data: { billId } })),
-            oidcToken: {
-              serviceAccountEmail: `${projectId}@appspot.gserviceaccount.com`,
-            },
-          },
-          scheduleTime: {
-            seconds: Math.floor(scheduleTime.getTime() / 1000),
-          },
-        },
-      });
-
-      logger.info(`Enqueued bill processing task for ${billId} (${BILL_PROCESS_DELAY_SECONDS}s delay)`);
-    } catch (error) {
-      logger.error(`Failed to enqueue task for bill ${billId}`, error);
-    }
-  },
-);
-
-/**
- * When a bill's paidAt changes to non-null, immediately (re-)generate
- * the PDF with "paid" stamp and send receipt email.
- */
-export const onBillPaid = onDocumentUpdated(
-  "bills/{billId}",
-  async (event) => {
-    const before = event.data?.before.data() as BillEntity | undefined;
-    const after = event.data?.after.data() as BillEntity | undefined;
-
-    if (!before || !after) return;
-
-    // Only trigger when paidAt changes from null to non-null
-    if (before.paidAt !== null || after.paidAt === null) return;
-
-    const billId = event.params.billId;
-    logger.info(`Bill ${billId} marked as paid, generating receipt`);
-
-    try {
-      await generateAndUploadPdf(billId, after);
-      await sendEmail(billId, after);
-    } catch (error) {
-      logger.error(`Failed to process paid bill ${billId}`, error);
-    }
-  },
-);
-
-/**
- * Cloud Task handler: generate PDF + send email for a bill.
- * Skipped if the bill was already paid (onBillPaid handles that case).
- */
-export const processBillTask = onTaskDispatched(
   {
-    retryConfig: {
-      maxAttempts: 3,
-      minBackoffSeconds: 30,
-    },
+    document: "bills/{billId}",
+    timeoutSeconds: 120,
     secrets: [resendApiKey],
   },
-  async (req) => {
-    const billId = req.data?.billId as string;
-    if (!billId) {
-      logger.error("processBillTask: missing billId");
+  async (event) => {
+    const billId = event.params.billId;
+    const bill = event.data?.data() as BillEntity | undefined;
+
+    if (!bill) {
+      logger.error(`onBillCreate: no data for bill ${billId}`);
       return;
     }
 
-    const db = getFirestore();
-    const billDoc = await db.collection("bills").doc(billId).get();
-    if (!billDoc.exists) {
-      logger.warn(`processBillTask: bill ${billId} not found`);
-      return;
+    try {
+      await generateAndUploadPdf(billId, bill);
+      await sendEmail(billId, bill);
+      logger.info(`Bill ${billId} processed: PDF generated + email sent`);
+    } catch (error) {
+      logger.error(`Failed to process bill ${billId}`, error);
     }
-
-    const bill = billDoc.data() as BillEntity;
-
-    // If already paid and PDF exists, onBillPaid already handled it
-    if (bill.paidAt && bill.storagePath) {
-      logger.info(`processBillTask: bill ${billId} already processed (paid), skipping`);
-      return;
-    }
-
-    logger.info(`processBillTask: processing bill ${billId}`);
-
-    await generateAndUploadPdf(billId, bill);
-    await sendEmail(billId, bill);
   },
 );

@@ -34,19 +34,29 @@ import { PaymentResult } from "./payment-result"
 
 describe("PaymentResult", () => {
   beforeEach(() => {
-    // Default: checkout has billRef, bill is unpaid, QR data loaded
+    // Default: checkout has billRef, payment data loaded
     mockUseDocument.mockImplementation((path: string | null) => {
       if (path?.startsWith("checkouts/")) {
         return { data: { id: "checkout-1", billRef: { id: "bill-1" } }, loading: false, error: null }
-      }
-      if (path?.startsWith("bills/")) {
-        return { data: { id: "bill-1", referenceNumber: 42, amount: 25, paidAt: null, paidVia: null }, loading: false, error: null }
       }
       return { data: null, loading: false, error: null }
     })
 
     mockCallableResult.mockResolvedValue({
-      data: { qrPayload: "SPC\n0200\n1\nCH0000000000000000000\ntest-payload" },
+      data: {
+        qrBillPayload: "SPC\n0200\n1\nCH0000000000000000000\ntest-payload",
+        paylinkUrl: "https://pay.raisenow.io/test",
+        creditor: {
+          iban: "CH56 0681 4580 1260 0509 7",
+          name: "Offene Werkstatt Wädenswil",
+          street: "Tobelrainstrasse 25",
+          location: "8820 Wädenswil",
+        },
+        reference: "RF48000000001",
+        payerName: "Max Muster",
+        amount: "25.00",
+        currency: "CHF",
+      },
     })
   })
 
@@ -86,19 +96,60 @@ describe("PaymentResult", () => {
     expect(screen.getByText(/42.50/)).toBeDefined()
   })
 
-  it("shows paid state when bill has paidAt", () => {
-    mockUseDocument.mockImplementation((path: string | null) => {
-      if (path?.startsWith("checkouts/")) {
-        return { data: { id: "checkout-1", billRef: { id: "bill-1" } }, loading: false, error: null }
-      }
-      if (path?.startsWith("bills/")) {
-        return { data: { id: "bill-1", referenceNumber: 42, amount: 25, paidAt: { toDate: () => new Date() }, paidVia: "twint" }, loading: false, error: null }
-      }
-      return { data: null, loading: false, error: null }
-    })
+  it("shows E-Banking selected by default with QR code", async () => {
+    render(<PaymentResult checkoutId="checkout-1" totalPrice={25} onReset={() => {}} />)
+
+    const qrCode = await screen.findByTestId("qrcode")
+    expect(qrCode.getAttribute("data-value")).toContain("SPC")
+    expect(screen.getByText("Empfohlen")).toBeDefined()
+    expect(screen.getByText(/Gebührenfrei/)).toBeDefined()
+  })
+
+  it("shows PayLink button when TWINT is selected", async () => {
+    render(<PaymentResult checkoutId="checkout-1" totalPrice={25} onReset={() => {}} />)
+
+    await screen.findByTestId("qrcode")
+
+    // Click TWINT option
+    await userEvent.click(screen.getByRole("button", { name: /TWINT/ }))
+
+    const link = screen.getByRole("link", { name: /Mit TWINT bezahlen/ })
+    expect(link.getAttribute("href")).toBe("https://pay.raisenow.io/test")
+    expect(screen.getByText(/Transaktionsgebühren/)).toBeDefined()
+  })
+
+  it("displays QR bill details: creditor, reference, and payer name", async () => {
+    render(<PaymentResult checkoutId="checkout-1" totalPrice={25} onReset={() => {}} />)
+
+    await screen.findByTestId("qrcode")
+
+    // Creditor info
+    expect(screen.getByText("Konto / Zahlbar an")).toBeDefined()
+    expect(screen.getByText("CH56 0681 4580 1260 0509 7")).toBeDefined()
+    expect(screen.getByText("Offene Werkstatt Wädenswil")).toBeDefined()
+    expect(screen.getByText("Tobelrainstrasse 25")).toBeDefined()
+    expect(screen.getByText("8820 Wädenswil")).toBeDefined()
+
+    // Reference
+    expect(screen.getByText("Referenz")).toBeDefined()
+    expect(screen.getByText("RF48000000001")).toBeDefined()
+
+    // Payer
+    expect(screen.getByText("Zahlbar durch")).toBeDefined()
+    expect(screen.getByText("Max Muster")).toBeDefined()
+
+    // Currency / amount
+    expect(screen.getByText("CHF")).toBeDefined()
+    expect(screen.getByText("25.00")).toBeDefined()
+  })
+
+  it("shows error state when callable fails", async () => {
+    mockCallableResult.mockRejectedValue(new Error("fail"))
 
     render(<PaymentResult checkoutId="checkout-1" totalPrice={25} onReset={() => {}} />)
-    expect(screen.getByText("Bezahlt – Vielen Dank!")).toBeDefined()
+
+    const error = await screen.findByText(/QR-Code konnte nicht geladen werden/)
+    expect(error).toBeDefined()
   })
 
   it("shows loading state when bill not yet created", () => {

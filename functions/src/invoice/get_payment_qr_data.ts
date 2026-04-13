@@ -2,10 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Callable function: returns a complete Swiss QR Bill payload string for a bill.
- *
- * The client renders this string directly as a QR code — no payment config
- * (IBAN, recipient, TWINT params) is needed on the frontend.
+ * Callable function: returns the Swiss QR Bill payload string and the
+ * RaiseNow PayLink URL for a bill. The client renders the QR bill as a
+ * QR code and links to the PayLink for TWINT payments.
  */
 
 import { HttpsError, onCall } from "firebase-functions/v2/https";
@@ -13,18 +12,21 @@ import { defineString } from "firebase-functions/params";
 import { getFirestore } from "firebase-admin/firestore";
 import { generateScorReference } from "./scor_reference";
 import type { BillEntity } from "./types";
+import type { CheckoutEntity } from "../types/firestore_entities";
 
 // Payment config from environment params
 const paymentIban = defineString("PAYMENT_IBAN");
 const paymentRecipientName = defineString("PAYMENT_RECIPIENT_NAME");
+const paymentRecipientStreet = defineString("PAYMENT_RECIPIENT_STREET", { default: "" });
 const paymentRecipientPostalCode = defineString("PAYMENT_RECIPIENT_POSTAL_CODE");
 const paymentRecipientCity = defineString("PAYMENT_RECIPIENT_CITY");
 const paymentRecipientCountry = defineString("PAYMENT_RECIPIENT_COUNTRY");
 const paymentCurrency = defineString("PAYMENT_CURRENCY");
 
-// TWINT alternative scheme parameters (from RaiseNow Hub)
-const twintAv1 = defineString("TWINT_AV1", { default: "" });
-const twintAv2 = defineString("TWINT_AV2", { default: "" });
+// RaiseNow PayLink solution ID (the short code in https://pay.raisenow.io/{id})
+const raisenowPaylinkSolutionId = defineString("RAISENOW_PAYLINK_SOLUTION_ID");
+
+const RAISENOW_PAYLINK_BASE_URL = "https://pay.raisenow.io";
 
 interface GetPaymentQrDataRequest {
   billId: string;
@@ -32,13 +34,12 @@ interface GetPaymentQrDataRequest {
 
 /**
  * Build the Swiss QR Bill payload string (SPC format).
- *
- * Lines 1-32 follow the Swiss Payment Standards spec, lines 33-34 are
- * optional alternative scheme parameters (used for TWINT).
+ * Lines 1-31 follow the Swiss Payment Standards spec.
  */
 function buildQrPayload(bill: BillEntity, scorReference: string): string {
   const iban = paymentIban.value().replace(/\s/g, "");
   const name = paymentRecipientName.value();
+  const street = paymentRecipientStreet.value();
   const postalCode = paymentRecipientPostalCode.value();
   const city = paymentRecipientCity.value();
   const country = paymentRecipientCountry.value();
@@ -53,7 +54,7 @@ function buildQrPayload(bill: BillEntity, scorReference: string): string {
     iban,               // 4: IBAN
     "S",                // 5: Creditor address type (structured)
     name,               // 6: Creditor name
-    "",                 // 7: Creditor street (optional)
+    street,             // 7: Creditor street
     "",                 // 8: Creditor building number (optional)
     postalCode,         // 9: Creditor postal code
     city,               // 10: Creditor city
@@ -80,15 +81,6 @@ function buildQrPayload(bill: BillEntity, scorReference: string): string {
     "EPD",              // 31: Trailer
   ];
 
-  // Lines 32-34: billing info + alternative schemes (optional)
-  const av1Val = twintAv1.value();
-  const av2Val = twintAv2.value();
-  if (av1Val || av2Val) {
-    lines.push("");     // 32: Billing information (empty)
-    if (av1Val) lines.push(av1Val);  // 33: Alternative scheme 1
-    if (av2Val) lines.push(av2Val);  // 34: Alternative scheme 2
-  }
-
   return lines.join("\n");
 }
 
@@ -113,5 +105,50 @@ export const getPaymentQrData = onCall(async (request) => {
 
   const qrPayload = buildQrPayload(bill, scorReference);
 
-  return { qrPayload };
+  // Load payer info from first checkout
+  let payerName = "";
+  const paylinkParams = new URLSearchParams();
+  paylinkParams.set("amount.values", bill.amount.toFixed(2));
+  paylinkParams.set("amount.custom", "false");
+  paylinkParams.set("reference.creditor.value", scorReference);
+
+  if (bill.checkouts.length > 0) {
+    const checkoutDoc = await bill.checkouts[0].get();
+    if (checkoutDoc.exists) {
+      const checkout = checkoutDoc.data() as CheckoutEntity;
+      const person = checkout.persons[0];
+      if (person) {
+        payerName = person.name;
+        const nameParts = person.name.trim().split(/\s+/);
+        const firstName = nameParts[0] ?? "";
+        const lastName = nameParts.slice(1).join(" ") || firstName;
+        paylinkParams.set("supporter.first_name.value", firstName);
+        paylinkParams.set("supporter.last_name.value", lastName);
+        if (person.email) {
+          paylinkParams.set("supporter.email.value", person.email);
+        }
+      }
+    }
+  }
+
+  const paylinkUrl = `${RAISENOW_PAYLINK_BASE_URL}/${raisenowPaylinkSolutionId.value()}?${paylinkParams.toString()}`;
+
+  // Format IBAN with spaces for display (groups of 4)
+  const ibanFormatted = paymentIban.value().replace(/\s/g, "").replace(/(.{4})/g, "$1 ").trim();
+
+  return {
+    qrBillPayload: qrPayload,
+    paylinkUrl,
+    // Structured fields for QR bill display
+    creditor: {
+      iban: ibanFormatted,
+      name: paymentRecipientName.value(),
+      street: paymentRecipientStreet.value(),
+      location: `${paymentRecipientPostalCode.value()} ${paymentRecipientCity.value()}`,
+    },
+    reference: scorReference,
+    payerName,
+    amount: bill.amount.toFixed(2),
+    currency: paymentCurrency.value() || "CHF",
+  };
 });

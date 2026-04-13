@@ -40,7 +40,6 @@ const FUNCTIONS_SECRETS: VarMapping[] = [
   { envVar: "PARTICLE_TOKEN", jsonPath: "functions.particleToken" },
   { envVar: "GATEWAY_API_KEY", jsonPath: "functions.gatewayApiKey" },
   { envVar: "RESEND_API_KEY", jsonPath: "functions.resendApiKey" },
-  { envVar: "RAISENOW_WEBHOOK_SECRET", jsonPath: "functions.raisenowWebhookSecret" },
 ];
 
 const FUNCTIONS_RESEND: VarMapping[] = [
@@ -74,8 +73,7 @@ const FUNCTIONS_PAYMENT: VarMapping[] = [
   { envVar: "PAYMENT_RECIPIENT_CITY", jsonPath: "web.paymentRecipientCity" },
   { envVar: "PAYMENT_RECIPIENT_COUNTRY", jsonPath: "web.paymentRecipientCountry" },
   { envVar: "PAYMENT_CURRENCY", jsonPath: "web.currency" },
-  { envVar: "TWINT_AV1", jsonPath: "web.twintAv1" },
-  { envVar: "TWINT_AV2", jsonPath: "web.twintAv2" },
+  { envVar: "RAISENOW_PAYLINK_SOLUTION_ID", jsonPath: "web.raisenowPaylinkSolutionId" },
 ];
 
 const GATEWAY: VarMapping[] = [
