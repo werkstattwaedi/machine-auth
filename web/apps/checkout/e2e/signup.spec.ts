@@ -2,9 +2,14 @@
 // SPDX-License-Identifier: MIT
 
 import { test, expect } from "@playwright/test"
-import { getAdminFirestore, waitForOobCode } from "./helpers"
+import { clearCollections, getAdminFirestore, waitForOobCode } from "./helpers"
 
 const SIGNUP_EMAIL = "new-signup@werkstattwaedi.ch"
+const CHECKOUT_SIGNUP_EMAIL = "checkout-signup@werkstattwaedi.ch"
+
+test.beforeEach(async () => {
+  await clearCollections("users")
+})
 
 test.describe("Self-registration", () => {
   test("new user signs up, completes profile, and has no roles", async ({ page }) => {
@@ -42,15 +47,15 @@ test.describe("Self-registration", () => {
         page.getByRole("button", { name: "Profil speichern" }),
       ).toBeVisible()
 
-      const firstName = page.getByLabel("Vorname *")
+      const firstName = page.locator("#firstName")
       await firstName.click()
       await firstName.fill("Test")
 
-      const lastName = page.getByLabel("Nachname *")
+      const lastName = page.locator("#lastName")
       await lastName.click()
       await lastName.fill("Neuer")
 
-      await page.getByLabel("Ich akzeptiere die Nutzungsbestimmungen *").check()
+      await page.locator("#termsAccepted").click()
       await page.getByRole("button", { name: "Profil speichern" }).click()
 
       await page.waitForURL((url) => !url.pathname.includes("complete-profile"), {
@@ -72,5 +77,69 @@ test.describe("Self-registration", () => {
 
     expect(userDoc.roles).toEqual([])
     expect(userDoc.email).toBe(SIGNUP_EMAIL)
+  })
+
+  test("new user creates account from checkout page, completes profile, lands on visit", async ({ page }) => {
+    // ── Start at checkout page ──
+    await page.goto("/")
+    await expect(page.getByText("Deine Angaben")).toBeVisible({ timeout: 10_000 })
+
+    // ── Click "Registrieren" in the identity hint ──
+    await page.getByRole("button", { name: "Registrieren" }).click()
+
+    // ── Should be on /login with mode=signup ──
+    await page.waitForURL((url) => url.pathname === "/login", { timeout: 5_000 })
+    await expect(page.getByText("Konto erstellen")).toBeVisible()
+
+    // ── Send sign-in link ──
+    await page.getByPlaceholder("deine@email.ch").fill(CHECKOUT_SIGNUP_EMAIL)
+    await page.getByRole("button", { name: "Anmelde-Link senden" }).click()
+    await expect(page.getByText("Anmelde-Link wurde an")).toBeVisible({ timeout: 5_000 })
+
+    // ── Complete email link sign-in ──
+    const signInCode = await waitForOobCode(
+      (c) => c.email === CHECKOUT_SIGNUP_EMAIL && c.requestType === "EMAIL_SIGNIN",
+    )
+    expect(signInCode).toBeTruthy()
+    await page.goto(signInCode!.oobLink)
+
+    // ── Should land on /complete-profile (signup mode forces this) ──
+    await page.waitForURL(
+      (url) => url.pathname.includes("/complete-profile"),
+      { timeout: 10_000 },
+    )
+
+    // ── Profile page should NOT have a sidebar ──
+    await expect(page.getByRole("button", { name: "Profil speichern" })).toBeVisible()
+    await expect(page.getByText("Aktueller Besuch")).not.toBeVisible()
+    await expect(page.getByText("Nutzungsverlauf")).not.toBeVisible()
+
+    // ── Screenshot: empty complete-profile form ──
+    await expect(page).toHaveScreenshot("complete-profile-empty.png")
+
+    // ── Complete the profile ──
+    await page.locator("#firstName").fill("Checkout")
+    await page.locator("#lastName").fill("Tester")
+    await page.locator("#termsAccepted").click()
+    await page.getByRole("button", { name: "Profil speichern" }).click()
+
+    // ── Should arrive at /visit (signup mode default target) ──
+    await page.waitForURL(
+      (url) => url.pathname.includes("/visit"),
+      { timeout: 10_000 },
+    )
+
+    // ── Verify Firestore ──
+    const db = getAdminFirestore()
+    let snap = await db.collection("users").where("email", "==", CHECKOUT_SIGNUP_EMAIL).get()
+    for (let i = 0; i < 10 && snap.empty; i++) {
+      await new Promise((r) => setTimeout(r, 300))
+      snap = await db.collection("users").where("email", "==", CHECKOUT_SIGNUP_EMAIL).get()
+    }
+    expect(snap.size).toBe(1)
+    const userDoc = snap.docs[0].data()
+    expect(userDoc.firstName).toBe("Checkout")
+    expect(userDoc.lastName).toBe("Tester")
+    expect(userDoc.roles).toEqual([])
   })
 })

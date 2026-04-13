@@ -5,14 +5,12 @@ import { createFileRoute } from "@tanstack/react-router"
 import { useAuth } from "@modules/lib/auth"
 import { useCollection } from "@modules/lib/firestore"
 import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
-import { Card, CardContent, CardHeader, CardTitle } from "@modules/components/ui/card"
-import { Button } from "@modules/components/ui/button"
-import { Input } from "@modules/components/ui/input"
 import { Label } from "@modules/components/ui/label"
 import { Badge } from "@modules/components/ui/badge"
 import { useForm } from "react-hook-form"
 import { Loader2, Save } from "lucide-react"
 import { useEffect } from "react"
+import { USER_TYPE_LABELS, type UserType } from "@modules/lib/pricing"
 
 export const Route = createFileRoute("/_authenticated/profile")({
   component: ProfilePage,
@@ -28,6 +26,11 @@ interface ProfileFormValues {
   zip: string
   city: string
 }
+
+const BASE_INPUT =
+  "flex h-9 w-full rounded-none border bg-background px-3 py-1 text-sm outline-none"
+const INPUT_OK = `${BASE_INPUT} border-[#ccc] focus:border-cog-teal`
+const INPUT_DISABLED = `${BASE_INPUT} border-[#ccc] bg-muted text-muted-foreground`
 
 function ProfilePage() {
   const { user, userDoc } = useAuth()
@@ -93,116 +96,140 @@ function ProfilePage() {
   }
 
   return (
-    <div className="space-y-4 max-w-lg">
-      <h1 className="text-2xl font-bold">Profil</h1>
+    <div className="flex flex-col gap-6 max-w-lg">
+      <h2 className="text-xl font-bold font-body">Profil</h2>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{userDoc?.displayName ?? "Unbekannt"}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="displayName">Anzeigename (optional)</Label>
-              <Input id="displayName" placeholder="z.B. MikeS" {...register("displayName")} />
-              <p className="text-xs text-muted-foreground">
-                Falls leer, wird Vor- und Nachname angezeigt.
-              </p>
+      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-6">
+        <div className="bg-[rgba(204,204,204,0.2)] rounded-none p-[25px] space-y-4">
+          <div className="space-y-1">
+            <Label className="text-sm font-bold">Anzeigename (optional)</Label>
+            <input
+              placeholder="z.B. MikeS"
+              {...register("displayName")}
+              className={INPUT_OK}
+            />
+            <p className="text-xs text-muted-foreground">
+              Falls leer, wird Vor- und Nachname angezeigt.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <Label className="text-sm font-bold">Vorname</Label>
+              <input {...register("firstName")} className={INPUT_OK} />
             </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="firstName">Vorname</Label>
-                <Input id="firstName" {...register("firstName")} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="lastName">Nachname</Label>
-                <Input id="lastName" {...register("lastName")} />
-              </div>
+            <div className="space-y-1">
+              <Label className="text-sm font-bold">Nachname</Label>
+              <input {...register("lastName")} className={INPUT_OK} />
             </div>
+          </div>
 
-            <div className="space-y-2">
-              <Label>E-Mail</Label>
-              <Input value={user?.email ?? ""} disabled />
-              <p className="text-xs text-muted-foreground">
-                E-Mail kann nicht geändert werden.
-              </p>
-            </div>
+          <div className="space-y-1">
+            <Label className="text-sm font-bold">E-Mail</Label>
+            <input value={user?.email ?? ""} disabled className={INPUT_DISABLED} />
+            <p className="text-xs text-muted-foreground">
+              E-Mail kann nicht geändert werden.
+            </p>
+          </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="userType">Benutzertyp</Label>
-              <select
-                id="userType"
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                {...register("userType")}
-              >
-                <option value="erwachsen">Erwachsen</option>
-                <option value="kind">Kind (u. 18)</option>
-                <option value="firma">Firma</option>
-              </select>
-            </div>
-
-            {isFirma && (
-              <div className="space-y-4 rounded border p-4">
-                <h4 className="text-sm font-semibold">Rechnungsadresse</h4>
-                <div className="space-y-2">
-                  <Label htmlFor="company">Firma</Label>
-                  <Input id="company" {...register("company")} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="street">Strasse</Label>
-                  <Input id="street" {...register("street")} />
-                </div>
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="zip">PLZ</Label>
-                    <Input id="zip" {...register("zip")} />
-                  </div>
-                  <div className="col-span-2 space-y-2">
-                    <Label htmlFor="city">Ort</Label>
-                    <Input id="city" {...register("city")} />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <Label>Rollen</Label>
-              <div className="flex gap-1">
-                {userDoc?.roles?.length ? (
-                  userDoc.roles.map((role) => (
-                    <Badge key={role} variant="secondary">{role}</Badge>
-                  ))
-                ) : (
-                  <span className="text-sm text-muted-foreground">–</span>
-                )}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Berechtigungen</Label>
-              <div className="flex gap-1">
-                {userDoc?.permissions?.length ? (
-                  userDoc.permissions.map((perm) => (
-                    <Badge key={perm} variant="outline">{permNames.get(perm) ?? perm}</Badge>
-                  ))
-                ) : (
-                  <span className="text-sm text-muted-foreground">–</span>
-                )}
-              </div>
-            </div>
-
-            <Button type="submit" disabled={saving || !isDirty}>
-              {saving ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : (
-                <Save className="h-4 w-4 mr-2" />
+          <div className="space-y-1">
+            <Label className="text-sm font-bold">Nutzer:in</Label>
+            <div className="flex gap-3 pt-1">
+              {(Object.entries(USER_TYPE_LABELS) as [UserType, string][]).map(
+                ([value, label]) => (
+                  <label key={value} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                    <span
+                      className={`inline-flex items-center justify-center h-4 w-4 rounded-full border ${
+                        userType === value
+                          ? "border-cog-teal bg-cog-teal"
+                          : "border-[#ccc] bg-white"
+                      }`}
+                    >
+                      {userType === value && (
+                        <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                      )}
+                    </span>
+                    <input
+                      type="radio"
+                      value={value}
+                      {...register("userType")}
+                      className="sr-only"
+                    />
+                    {label}
+                  </label>
+                )
               )}
-              Speichern
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+            </div>
+          </div>
+
+          {isFirma && (
+            <div className="space-y-3 border-t pt-4">
+              <Label className="text-sm font-bold">Rechnungsadresse</Label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <Label className="text-sm font-bold">Firma</Label>
+                  <input {...register("company")} className={INPUT_OK} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-sm font-bold">Strasse</Label>
+                  <input {...register("street")} className={INPUT_OK} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-sm font-bold">PLZ</Label>
+                  <input {...register("zip")} className={INPUT_OK} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-sm font-bold">Ort</Label>
+                  <input {...register("city")} className={INPUT_OK} />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-3">
+          <div className="space-y-1">
+            <Label className="text-sm font-bold">Rollen</Label>
+            <div className="flex gap-1">
+              {userDoc?.roles?.length ? (
+                userDoc.roles.map((role) => (
+                  <Badge key={role} variant="secondary">{role}</Badge>
+                ))
+              ) : (
+                <span className="text-sm text-muted-foreground">–</span>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <Label className="text-sm font-bold">Berechtigungen</Label>
+            <div className="flex gap-1">
+              {userDoc?.permissions?.length ? (
+                userDoc.permissions.map((perm) => (
+                  <Badge key={perm} variant="outline">{permNames.get(perm) ?? perm}</Badge>
+                ))
+              ) : (
+                <span className="text-sm text-muted-foreground">–</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <button
+            type="submit"
+            disabled={saving || !isDirty}
+            className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-white bg-cog-teal rounded-[3px] hover:bg-cog-teal-dark transition-colors disabled:opacity-50"
+          >
+            {saving ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4" />
+            )}
+            Speichern
+          </button>
+        </div>
+      </form>
     </div>
   )
 }

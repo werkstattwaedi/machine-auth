@@ -13,6 +13,7 @@ import { GoogleIcon } from "@modules/components/icons/google"
 
 const loginSearchSchema = z.object({
   redirect: z.optional(z.string()),
+  mode: z.optional(z.string()),
 })
 
 export const Route = createFileRoute("/login")({
@@ -23,8 +24,9 @@ export const Route = createFileRoute("/login")({
 function LoginPage() {
   const { user, loading, signInWithEmail, signInWithGoogle, completeSignIn, pendingGoogleLink } = useAuth()
   const navigate = useNavigate()
-  const { redirect: redirectTo } = Route.useSearch()
-  const targetPath = redirectTo || "/visit"
+  const { redirect: redirectTo, mode } = Route.useSearch()
+  const isSignup = mode === "signup"
+  const targetPath = isSignup ? "/complete-profile" : (redirectTo || "/visit")
   const [email, setEmail] = useState("")
   const [sending, setSending] = useState(false)
   const [signingInWithGoogle, setSigningInWithGoogle] = useState(false)
@@ -38,8 +40,11 @@ function LoginPage() {
         if (completed) {
           toast.success("Erfolgreich angemeldet")
           const storedRedirect = window.localStorage.getItem("loginRedirect")
+          const storedMode = window.localStorage.getItem("loginMode")
           window.localStorage.removeItem("loginRedirect")
-          const target = storedRedirect || targetPath
+          window.localStorage.removeItem("loginMode")
+          const wasSignup = storedMode === "signup"
+          const target = wasSignup ? "/complete-profile" : (storedRedirect || targetPath)
           navigate({ to: pendingGoogleLink ? "/link-account" : target })
         }
       })
@@ -91,7 +96,9 @@ function LoginPage() {
 
     setSending(true)
     try {
-      if (redirectTo) {
+      if (isSignup) {
+        window.localStorage.setItem("loginMode", "signup")
+      } else if (redirectTo) {
         window.localStorage.setItem("loginRedirect", redirectTo)
       }
       await signInWithEmail(email)
@@ -125,7 +132,9 @@ function LoginPage() {
         </div>
 
         <div className="border border-border rounded p-6 space-y-4">
-          <h2 className="text-lg font-bold text-center">Anmelden</h2>
+          <h2 className="text-lg font-bold text-center">
+            {isSignup ? "Konto erstellen" : "Anmelden"}
+          </h2>
           {linkSent ? (
             <div className="text-center space-y-3">
               <Mail className="h-10 w-10 mx-auto text-cog-teal" />
@@ -186,6 +195,30 @@ function LoginPage() {
               </Button>
             </>
           )}
+
+          <div className="text-center text-sm text-muted-foreground">
+            {isSignup ? (
+              <>
+                Bereits registriert?{" "}
+                <a
+                  href={`/login${redirectTo ? `?redirect=${encodeURIComponent(redirectTo)}` : ""}`}
+                  className="text-cog-teal hover:underline"
+                >
+                  Anmelden
+                </a>
+              </>
+            ) : (
+              <>
+                Noch kein Konto?{" "}
+                <a
+                  href={`/login?mode=signup${redirectTo ? `&redirect=${encodeURIComponent(redirectTo)}` : ""}`}
+                  className="text-cog-teal hover:underline"
+                >
+                  Konto erstellen
+                </a>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>

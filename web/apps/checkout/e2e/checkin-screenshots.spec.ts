@@ -50,7 +50,7 @@ test.describe("Check-in step screenshots", () => {
   test("anonymous browser — login hint visible", async ({ page }) => {
     await goToCheckin(page)
 
-    await expect(page.getByText("Bereits registriert?")).toBeVisible()
+    await expect(page.getByText("Bereits registriert oder Konto erstellen?")).toBeVisible()
 
     await expect(page).toHaveScreenshot("checkin-login-hint.png")
   })

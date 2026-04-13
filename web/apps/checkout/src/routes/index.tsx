@@ -6,8 +6,10 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { z } from "zod/v4/mini"
 import { signOut } from "firebase/auth"
 import { useFirebaseAuth } from "@modules/lib/firebase-context"
+import { useAuth, isProfileComplete } from "@modules/lib/auth"
 import { CheckoutWizard } from "@/components/checkout/checkout-wizard"
 import { ConfirmDialog } from "@modules/components/confirm-dialog"
+import { Loader2 } from "lucide-react"
 
 const checkoutSearchSchema = z.object({
   picc: z.optional(z.string()),
@@ -23,18 +25,10 @@ export const Route = createFileRoute("/")({
 
 function CheckoutPage() {
   const auth = useFirebaseAuth()
+  const { user, userDoc, loading, userDocLoading } = useAuth()
   const { picc, cmac, kiosk, step } = Route.useSearch()
   const isKiosk = kiosk !== undefined
   const navigate = useNavigate()
-
-  // Clear any stale Firebase Auth session on mount (e.g. kiosk chrome
-  // "neuer checkout" navigates here without picc/cmac — the previous
-  // tag session persists in IndexedDB and must be wiped)
-  useEffect(() => {
-    if (isKiosk && !picc && !cmac) {
-      signOut(auth)
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Track the "accepted" params that the wizard is actually using
   const [activeParams, setActiveParams] = useState<{
@@ -55,6 +49,30 @@ function CheckoutPage() {
   const prevPiccRef = useRef(picc)
   const prevCmacRef = useRef(cmac)
 
+  // Clear any stale Firebase Auth session on mount (e.g. kiosk chrome
+  // "neuer checkout" navigates here without picc/cmac — the previous
+  // tag session persists in IndexedDB and must be wiped)
+  useEffect(() => {
+    if (isKiosk && !picc && !cmac) {
+      signOut(auth)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Redirect logged-in users with incomplete profiles to complete-profile.
+  // Tag-auth sessions always have picc/cmac in the URL — skip those.
+  // Note: CheckoutWizard uses useTokenAuth() for a more precise check, but
+  // here we use the URL heuristic to avoid a duplicate verification fetch.
+  const isAccountLoggedIn = !!user && !picc
+  const profileLoading = loading || userDocLoading
+  const needsProfileCompletion =
+    isAccountLoggedIn && !profileLoading && userDoc && !isProfileComplete(userDoc)
+
+  useEffect(() => {
+    if (needsProfileCompletion) {
+      navigate({ to: "/complete-profile", search: { redirect: "/" } })
+    }
+  }, [needsProfileCompletion, navigate])
+
   useEffect(() => {
     const paramsChanged =
       picc !== prevPiccRef.current || cmac !== prevCmacRef.current
@@ -71,6 +89,17 @@ function CheckoutPage() {
       setActiveParams({ picc, cmac })
     }
   }, [picc, cmac])
+
+  // Early returns — all hooks are above this point
+  if (isAccountLoggedIn && profileLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin" />
+      </div>
+    )
+  }
+
+  if (needsProfileCompletion) return null
 
   const handleConfirmNewTag = () => {
     if (pendingParams) {

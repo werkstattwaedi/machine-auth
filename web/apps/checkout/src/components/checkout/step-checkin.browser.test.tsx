@@ -183,7 +183,7 @@ describe("Identity hint", () => {
   it("shows login hint for anonymous browser users", () => {
     renderCheckin({ isAnonymous: true, kiosk: false })
 
-    expect(screen.getByText("Bereits registriert?")).toBeTruthy()
+    expect(screen.getByText("Bereits registriert oder Konto erstellen?")).toBeTruthy()
     expect(screen.getByText("Anmelden")).toBeTruthy()
   })
 
@@ -193,7 +193,7 @@ describe("Identity hint", () => {
     expect(
       screen.getByText("Badge an den Leser halten, um deine Daten zu laden"),
     ).toBeTruthy()
-    expect(screen.queryByText("Bereits registriert?")).toBeNull()
+    expect(screen.queryByText("Bereits registriert oder Konto erstellen?")).toBeNull()
   })
 
   it("shows sign-out in person card for logged-in users", () => {
@@ -214,7 +214,7 @@ describe("Identity hint", () => {
       },
     })
 
-    expect(screen.queryByText("Bereits registriert?")).toBeNull()
+    expect(screen.queryByText("Bereits registriert oder Konto erstellen?")).toBeNull()
     expect(screen.getByText(/Abmelden/)).toBeTruthy()
   })
 
@@ -244,7 +244,7 @@ describe("Identity hint", () => {
   it("hides identity hint when tag-identified (not anonymous, not account)", () => {
     renderCheckin({ isAnonymous: false, isAccountLoggedIn: false })
 
-    expect(screen.queryByText("Bereits registriert?")).toBeNull()
+    expect(screen.queryByText("Bereits registriert oder Konto erstellen?")).toBeNull()
     expect(screen.queryByText("Badge an den Leser halten")).toBeNull()
   })
 })

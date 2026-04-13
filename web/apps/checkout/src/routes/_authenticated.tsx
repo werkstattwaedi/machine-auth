@@ -1,7 +1,7 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { createFileRoute, Outlet, Link, useNavigate, useMatches } from "@tanstack/react-router"
+import { createFileRoute, Outlet, Link, useNavigate, useLocation } from "@tanstack/react-router"
 import { useAuth, isProfileComplete } from "@modules/lib/auth"
 import { useIsMobile } from "@modules/hooks/use-mobile"
 import { Button } from "@modules/components/ui/button"
@@ -16,7 +16,7 @@ export const Route = createFileRoute("/_authenticated")({
 function AuthenticatedLayout() {
   const { user, userDoc, loading, userDocLoading, signOut } = useAuth()
   const navigate = useNavigate()
-  const matches = useMatches()
+  const location = useLocation()
   // Hooks must be called unconditionally before any early returns
   const isMobile = useIsMobile()
   const [sheetOpen, setSheetOpen] = useState(false)
@@ -29,13 +29,11 @@ function AuthenticatedLayout() {
   }, [user, loading, navigate])
 
   // Profile completion gate - redirect to /complete-profile if profile not completed
-  // (skip if already on the page, wait for userDoc to load)
-  const isOnCompleteProfilePage = matches.some((m) => m.fullPath === "/complete-profile")
   useEffect(() => {
-    if (!loading && !userDocLoading && userDoc && !isProfileComplete(userDoc) && !isOnCompleteProfilePage) {
-      navigate({ to: "/complete-profile" })
+    if (!loading && !userDocLoading && userDoc && !isProfileComplete(userDoc)) {
+      navigate({ to: "/complete-profile", search: { redirect: location.pathname } })
     }
-  }, [loading, userDocLoading, userDoc, isOnCompleteProfilePage, navigate])
+  }, [loading, userDocLoading, userDoc, navigate, location.pathname])
 
   if (loading) {
     return (
