@@ -14,6 +14,8 @@ export interface BillEntity {
   created: Timestamp;
   paidAt: Timestamp | null;
   paidVia: "twint" | "ebanking" | "cash" | null;
+  pdfGeneratedAt: Timestamp | null;
+  emailSentAt: Timestamp | null;
 }
 
 /** Per-person entry fee for display on the invoice */

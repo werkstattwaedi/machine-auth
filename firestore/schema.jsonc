@@ -170,7 +170,20 @@
       "storagePath": "string | null",       // "invoices/{billId}.pdf"
       "created": "timestamp",
       "paidAt": "timestamp | null",
-      "paidVia": "twint | ebanking | cash | null"
+      "paidVia": "twint | ebanking | cash | null",
+      "pdfGeneratedAt": "timestamp | null", // optimistic lock for PDF generation
+      "emailSentAt": "timestamp | null"     // optimistic lock for email sending
+    }
+  },
+  "operations_log": {
+    // Reusable error/warning log for async operations on any entity
+    "{logId}": {
+      "collection": "string",               // source collection, e.g. "bills"
+      "docId": "string",                    // source document ID
+      "operation": "string",                // e.g. "pdf_generate", "email_send"
+      "severity": "error | warning",
+      "message": "string",
+      "timestamp": "timestamp"
     }
   },
   "machine_reports": {

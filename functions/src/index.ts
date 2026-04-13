@@ -224,7 +224,7 @@ export { getPaymentQrData } from "./invoice/get_payment_qr_data";
 
 // Export bill lifecycle triggers
 export { onCheckoutClosed, onCheckoutCreatedClosed } from "./invoice/create_bill";
-export { onBillCreate } from "./invoice/bill_triggers";
+export { onBillCreate, retryBillProcessing } from "./invoice/bill_triggers";
 
 // Export Firestore triggers
 export { syncCustomClaims } from "./auth/set-custom-claims";

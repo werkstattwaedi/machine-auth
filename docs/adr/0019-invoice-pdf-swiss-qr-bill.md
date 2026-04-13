@@ -25,9 +25,9 @@ Two Firestore triggers handle bill creation when a checkout is closed:
 - **`onCheckoutClosed`** (`onDocumentUpdated`): fires when an existing checkout transitions from open → closed (tag-based flow).
 - **`onCheckoutCreatedClosed`** (`onDocumentCreated`): fires when a checkout is created directly as closed (anonymous self-checkout flow).
 
-Both call a shared `createBillForCheckout()` function that allocates a bill number and creates the bill document. A downstream `onBillCreate` trigger then generates the PDF and sends the invoice email immediately (120s timeout).
+Both call a shared `createBillForCheckout()` function that allocates a bill number and creates the bill document. A downstream `onBillCreate` trigger attempts PDF generation and email sending as a fast path.
 
-If PDF generation or email sending fails, the error is logged but not re-thrown — there is no automatic retry. This is a deliberate simplification at the current volume (~100 bills/month).
+PDF generation and email sending are decoupled from bill creation using optimistic locking (`pdfGeneratedAt`, `emailSentAt` timestamp fields). If either step fails, the timestamp is cleared and the error is logged to the `operations_log` collection. A scheduled `retryBillProcessing` function (every 15 minutes) retries failed bills created within the last 24 hours.
 
 ### Sequential bill numbers with ISO 11649 SCOR references
 
@@ -78,7 +78,7 @@ A `getPaymentQrData` callable returns the SPC-format QR payload, creditor detail
 
 - **Counter bottleneck:** `config/billing.nextBillNumber` is a single Firestore document, limiting concurrent invoice generation. At the expected volume (~100/month) this is a non-issue; could be sharded if volume grows.
 - **Signed URL expiry:** The 1-hour signed URL means users can't bookmark the download link. A persistent download mechanism would be needed for "download past invoices".
-- **No email retry:** If `onBillCreate` fails to send the email (e.g. Resend outage), there is no automatic retry. Could add retry logic or a dead-letter mechanism if this becomes a problem.
+- **Retry window:** Failed PDF/email operations are only retried for 24 hours. Bills older than that require manual intervention.
 
 ## Alternatives Considered
 

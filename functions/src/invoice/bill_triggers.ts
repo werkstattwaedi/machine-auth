@@ -2,12 +2,18 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Bill lifecycle triggers:
- * - onBillCreate: immediately generate PDF + send invoice email
+ * Bill lifecycle triggers and retry:
+ * - onBillCreate: fast path — attempt PDF generation + email
+ * - retryBillProcessing: scheduled every 15 min — retry failures
+ *
+ * PDF generation and email sending use optimistic locking via timestamp
+ * fields (pdfGeneratedAt, emailSentAt) to prevent concurrent processing.
+ * Failures are logged to the operations_log collection for debugging.
  */
 
 import * as logger from "firebase-functions/logger";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
+import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret, defineString } from "firebase-functions/params";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
@@ -16,6 +22,7 @@ import { format } from "date-fns";
 import { de } from "date-fns/locale";
 import { buildInvoicePdf } from "./build_invoice_pdf";
 import { formatInvoiceNumber } from "./types";
+import { logOperationError } from "../operations_log";
 import type {
   BillEntity,
   InvoiceData,
@@ -42,6 +49,9 @@ const paymentCurrency = defineString("PAYMENT_CURRENCY");
 const resendApiKey = defineSecret("RESEND_API_KEY");
 const resendFromEmail = defineString("RESEND_FROM_EMAIL");
 const resendQrBillTemplateId = defineString("RESEND_QRBILL_TEMPLATE_ID");
+
+// Stale lock threshold: if a lock is older than this, treat it as failed
+const STALE_LOCK_MS = 5 * 60 * 1000; // 5 minutes
 
 /** Hardcoded entry fee lookup (mirrors web/modules/lib/pricing.ts) */
 const ENTRY_FEES: Record<string, Record<string, number>> = {
@@ -172,107 +182,158 @@ async function assembleInvoiceData(
   };
 }
 
+// --- Async processing with optimistic locking ---
+
 /**
- * Generate PDF, upload to storage, update bill.storagePath.
+ * Attempt to generate a PDF for a bill. Uses pdfGeneratedAt as an
+ * optimistic lock to prevent concurrent generation.
+ *
+ * Returns true if the PDF was generated (or already exists).
  */
-async function generateAndUploadPdf(
-  billId: string,
-  bill: BillEntity,
-): Promise<void> {
-  const invoiceData = await assembleInvoiceData(bill, billId);
-  const paymentConfig = buildPaymentConfig();
+async function tryGeneratePdf(billId: string): Promise<boolean> {
+  const db = getFirestore();
+  const billRef = db.collection("bills").doc(billId);
 
-  const pdfBuffer = await buildInvoicePdf(invoiceData, paymentConfig);
+  const billDoc = await billRef.get();
+  if (!billDoc.exists) return false;
+  const bill = billDoc.data() as BillEntity;
 
-  const storagePath = `invoices/${billId}.pdf`;
-  const bucket = getStorage().bucket();
-  const file = bucket.file(storagePath);
-  await file.save(pdfBuffer, { contentType: "application/pdf" });
+  // Already generated
+  if (bill.storagePath) return true;
 
-  await getFirestore().collection("bills").doc(billId).update({ storagePath });
+  // Another process is working on it (and the lock isn't stale)
+  if (bill.pdfGeneratedAt) {
+    const lockAge = Date.now() - bill.pdfGeneratedAt.toMillis();
+    if (lockAge < STALE_LOCK_MS) return false;
+    // Stale lock — clear it and proceed
+    logger.warn(`Clearing stale PDF lock for bill ${billId} (${lockAge}ms old)`);
+  }
+
+  // Acquire lock
+  await billRef.update({ pdfGeneratedAt: Timestamp.now() });
+
+  try {
+    const invoiceData = await assembleInvoiceData(bill, billId);
+    const paymentConfig = buildPaymentConfig();
+    const pdfBuffer = await buildInvoicePdf(invoiceData, paymentConfig);
+
+    const storagePath = `invoices/${billId}.pdf`;
+    const bucket = getStorage().bucket();
+    const file = bucket.file(storagePath);
+    await file.save(pdfBuffer, { contentType: "application/pdf" });
+
+    await billRef.update({ storagePath });
+    logger.info(`PDF generated for bill ${billId}`);
+    return true;
+  } catch (error) {
+    // Release lock on failure
+    await billRef.update({ pdfGeneratedAt: null });
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error(`PDF generation failed for bill ${billId}`, { error: message });
+    await logOperationError("bills", billId, "pdf_generate", message);
+    return false;
+  }
 }
 
 /**
- * Send invoice email via Resend with the PDF attached.
+ * Attempt to send the invoice email for a bill. Uses emailSentAt as an
+ * optimistic lock to prevent duplicate sends.
+ *
+ * Returns true if the email was sent (or already sent, or skipped in emulator).
  */
-async function sendEmail(billId: string, bill: BillEntity): Promise<void> {
+async function trySendEmail(billId: string): Promise<boolean> {
   if (process.env.FUNCTIONS_EMULATOR === "true") {
     logger.info(`Emulator: skipping email for bill ${billId}`);
-    return;
+    return true;
   }
 
   const db = getFirestore();
+  const billRef = db.collection("bills").doc(billId);
 
-  // Reload bill to get the latest storagePath
-  const billDoc = await db.collection("bills").doc(billId).get();
-  const latestBill = billDoc.data() as BillEntity;
+  const billDoc = await billRef.get();
+  if (!billDoc.exists) return false;
+  const bill = billDoc.data() as BillEntity;
 
-  if (!latestBill.storagePath) {
-    logger.warn(`Bill ${billId} has no PDF, skipping email`);
-    return;
-  }
+  // No PDF yet — can't send email without attachment
+  if (!bill.storagePath) return false;
+
+  // Already sent or in-progress. On failure the catch block clears
+  // emailSentAt to null so the retry picks it up. A process crash
+  // mid-send would leave emailSentAt stuck — rare enough to handle manually.
+  if (bill.emailSentAt) return false;
 
   // Get recipient email from first checkout
-  if (latestBill.checkouts.length === 0) return;
-  const checkoutDoc = await latestBill.checkouts[0].get();
-  if (!checkoutDoc.exists) return;
+  if (bill.checkouts.length === 0) return false;
+  const checkoutDoc = await bill.checkouts[0].get();
+  if (!checkoutDoc.exists) return false;
   const checkout = checkoutDoc.data() as CheckoutEntity;
   const recipientEmail = checkout.persons[0]?.email;
   if (!recipientEmail) {
     logger.warn(`Bill ${billId}: no recipient email, skipping`);
-    return;
+    return true; // Nothing to retry
   }
 
-  // Signed URL for attachment
-  const bucket = getStorage().bucket();
-  const file = bucket.file(latestBill.storagePath);
-  const [signedUrl] = await file.getSignedUrl({
-    action: "read",
-    expires: Date.now() + 24 * 3600 * 1000,
-  });
+  // Acquire lock
+  await billRef.update({ emailSentAt: Timestamp.now() });
 
-  const invoiceNumber = formatInvoiceNumber(latestBill.referenceNumber);
-  const recipientName = checkout.persons[0]?.name ?? "Kunde";
-  const checkoutDate = format(
-    checkout.created.toDate(),
-    "dd. MMMM yyyy, HH:mm",
-    { locale: de },
-  );
+  try {
+    const bucket = getStorage().bucket();
+    const file = bucket.file(bill.storagePath);
+    const [signedUrl] = await file.getSignedUrl({
+      action: "read",
+      expires: Date.now() + 24 * 3600 * 1000,
+    });
 
-  const resend = new Resend(resendApiKey.value());
-  const { error } = await resend.emails.send({
-    from: resendFromEmail.value(),
-    to: recipientEmail,
-    template: {
-      id: resendQrBillTemplateId.value(),
-      variables: {
-        RECIPIENT_NAME: recipientName,
-        CHECKOUT_DATE: checkoutDate,
-        AMOUNT: latestBill.amount.toFixed(2),
-        CURRENCY: latestBill.currency,
+    const invoiceNumber = formatInvoiceNumber(bill.referenceNumber);
+    const recipientName = checkout.persons[0]?.name ?? "Kunde";
+    const checkoutDate = format(
+      checkout.created.toDate(),
+      "dd. MMMM yyyy, HH:mm",
+      { locale: de },
+    );
+
+    const resend = new Resend(resendApiKey.value());
+    const { error } = await resend.emails.send({
+      from: resendFromEmail.value(),
+      to: recipientEmail,
+      template: {
+        id: resendQrBillTemplateId.value(),
+        variables: {
+          RECIPIENT_NAME: recipientName,
+          CHECKOUT_DATE: checkoutDate,
+          AMOUNT: bill.amount.toFixed(2),
+          CURRENCY: bill.currency,
+        },
       },
-    },
-    attachments: [
-      {
-        path: signedUrl,
-        filename: `Rechnung-${invoiceNumber}.pdf`,
-      },
-    ],
-  });
+      attachments: [
+        {
+          path: signedUrl,
+          filename: `Rechnung-${invoiceNumber}.pdf`,
+        },
+      ],
+    });
 
-  if (error) {
-    logger.error("Failed to send invoice email", { billId, error });
-    throw new Error(`Email send failed: ${JSON.stringify(error)}`);
+    if (error) {
+      throw new Error(JSON.stringify(error));
+    }
+
+    logger.info(`Invoice email sent for bill ${billId} to ${recipientEmail}`);
+    return true;
+  } catch (error) {
+    // Release lock on failure
+    await billRef.update({ emailSentAt: null });
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error(`Email send failed for bill ${billId}`, { error: message });
+    await logOperationError("bills", billId, "email_send", message);
+    return false;
   }
-
-  logger.info(`Sent invoice email for bill ${billId} to ${recipientEmail}`);
 }
 
 // --- Triggers ---
 
 /**
- * When a bill is created, immediately generate the PDF and send the
- * invoice email.
+ * Fast path: when a bill is created, attempt PDF generation and email.
+ * Failures are silently caught — the retry function will pick them up.
  */
 export const onBillCreate = onDocumentCreated(
   {
@@ -282,19 +343,68 @@ export const onBillCreate = onDocumentCreated(
   },
   async (event) => {
     const billId = event.params.billId;
-    const bill = event.data?.data() as BillEntity | undefined;
-
-    if (!bill) {
+    if (!event.data?.data()) {
       logger.error(`onBillCreate: no data for bill ${billId}`);
       return;
     }
 
-    try {
-      await generateAndUploadPdf(billId, bill);
-      await sendEmail(billId, bill);
-      logger.info(`Bill ${billId} processed: PDF generated + email sent`);
-    } catch (error) {
-      logger.error(`Failed to process bill ${billId}`, error);
+    const pdfOk = await tryGeneratePdf(billId);
+    if (pdfOk) {
+      await trySendEmail(billId);
+    }
+  },
+);
+
+/**
+ * Scheduled retry: pick up bills where PDF generation or email sending
+ * failed. Runs every 15 minutes, processes bills created in the last 24h.
+ */
+export const retryBillProcessing = onSchedule(
+  {
+    schedule: "every 15 minutes",
+    secrets: [resendApiKey],
+    timeoutSeconds: 120,
+  },
+  async () => {
+    const db = getFirestore();
+    const cutoff = Timestamp.fromMillis(Date.now() - 24 * 3600 * 1000);
+
+    const recentBills = await db
+      .collection("bills")
+      .where("created", ">", cutoff)
+      .get();
+
+    let pdfRetries = 0;
+    let emailRetries = 0;
+
+    for (const doc of recentBills.docs) {
+      const bill = doc.data() as BillEntity;
+      const billId = doc.id;
+
+      // Needs PDF: no storagePath, no active lock (or stale lock)
+      if (!bill.storagePath) {
+        const isLocked = bill.pdfGeneratedAt &&
+          Date.now() - bill.pdfGeneratedAt.toMillis() < STALE_LOCK_MS;
+        if (!isLocked) {
+          pdfRetries++;
+          const pdfOk = await tryGeneratePdf(billId);
+          if (pdfOk) {
+            emailRetries++;
+            await trySendEmail(billId);
+          }
+        }
+        continue;
+      }
+
+      // PDF exists but email not sent
+      if (!bill.emailSentAt) {
+        emailRetries++;
+        await trySendEmail(billId);
+      }
+    }
+
+    if (pdfRetries > 0 || emailRetries > 0) {
+      logger.info(`Bill retry: ${pdfRetries} PDF, ${emailRetries} email attempts`);
     }
   },
 );

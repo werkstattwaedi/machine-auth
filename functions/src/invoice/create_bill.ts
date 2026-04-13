@@ -117,6 +117,8 @@ async function createBillForCheckout(
       created: Timestamp.now(),
       paidAt: null,
       paidVia: null,
+      pdfGeneratedAt: null,
+      emailSentAt: null,
     };
     tx.set(billRef, bill);
 
