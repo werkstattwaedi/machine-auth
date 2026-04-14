@@ -17,6 +17,8 @@ export const Route = createFileRoute("/_authenticated")({
 function AdminAuthenticatedLayout() {
   const { user, userDoc, isAdmin, loading, userDocLoading, signOut } = useAuth()
   const navigate = useNavigate()
+  const isMobile = useIsMobile()
+  const [sheetOpen, setSheetOpen] = useState(false)
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -41,9 +43,6 @@ function AdminAuthenticatedLayout() {
   }
 
   if (!user || !isAdmin) return null
-
-  const isMobile = useIsMobile()
-  const [sheetOpen, setSheetOpen] = useState(false)
 
   const navLink = "flex items-center gap-2.5 px-3 py-2 rounded-[3px] text-sm transition-colors"
   const navLinkActive = "[&.active]:bg-cog-teal [&.active]:text-white [&.active]:font-semibold"
