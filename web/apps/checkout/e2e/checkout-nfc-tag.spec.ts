@@ -48,7 +48,7 @@ test.describe("NFC tag checkout", () => {
     await page.getByRole("button", { name: "Weiter" }).click()
     await expect(page.getByText("Werkstätten wählen")).toBeVisible()
 
-    await page.getByRole("button", { name: "Check-Out" }).click()
+    await page.getByRole("button", { name: "Checkout", exact: true }).click()
     await expect(page.getByText("Zusammenfassung")).toBeVisible()
 
     // Submit

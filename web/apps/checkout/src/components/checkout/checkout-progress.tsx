@@ -6,7 +6,7 @@ import { cn } from "@modules/lib/utils"
 const STEPS = [
   { label: "1. Check In" },
   { label: "2. Kosten Werkstätten" },
-  { label: "3. Check Out" },
+  { label: "3. Checkout" },
 ]
 
 interface CheckoutProgressProps {

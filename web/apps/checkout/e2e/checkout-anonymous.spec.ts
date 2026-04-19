@@ -49,7 +49,7 @@ test.describe("Anonymous checkout", () => {
     ).toBeVisible()
 
     // Proceed to checkout (with entry fee only — no items added)
-    await page.getByRole("button", { name: "Check-Out" }).click()
+    await page.getByRole("button", { name: "Checkout", exact: true }).click()
 
     // ── Step 2: Checkout ──
     await expect(page.getByText("Zusammenfassung")).toBeVisible()
@@ -113,7 +113,7 @@ test.describe("Anonymous checkout", () => {
     await expect(page.getByText("Werkstätten wählen")).toBeVisible()
 
     // Skip workshop selection, go to checkout
-    await page.getByRole("button", { name: "Check-Out" }).click()
+    await page.getByRole("button", { name: "Checkout", exact: true }).click()
 
     // Verify both persons shown (expand the collapsible section first)
     await expect(page.getByText("Nutzungsgebühren")).toBeVisible()
@@ -184,7 +184,7 @@ test.describe("Anonymous checkout", () => {
     await expect(page.getByText("Werkstätten wählen")).toBeVisible()
 
     // Advance to step 2
-    await page.getByRole("button", { name: "Check-Out" }).click()
+    await page.getByRole("button", { name: "Checkout", exact: true }).click()
     await expect(page.getByText("Zusammenfassung")).toBeVisible()
 
     // Go back to step 1
