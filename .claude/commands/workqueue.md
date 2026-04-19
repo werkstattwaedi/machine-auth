@@ -1,5 +1,5 @@
 ---
-description: Process GitHub issues labeled "claude-workqueue" and address review comments on open workqueue PRs. Fetches issues, spawns sub-agents to implement fixes or ask clarifying questions, then summarizes results.
+description: Process GitHub issues labeled "claude-workqueue" and address review comments on open workqueue PRs. Posts plans for non-trivial issues first, then implements after human approval. Writes regression tests for every fix.
 ---
 
 # /workqueue
@@ -7,6 +7,29 @@ description: Process GitHub issues labeled "claude-workqueue" and address review
 Process the `claude-workqueue` issue queue and open workqueue PRs with review feedback. Re-runnable — skips issues already handled or awaiting answers.
 
 **Arguments:** $ARGUMENTS (optional issue number or PR number to process only that item)
+
+## Core rules
+
+1. **Never use git worktrees.** The operations repo setup requires working in the main checkout, and the Firebase emulators bind to fixed ports — parallel worktrees cause test hangs and port conflicts. Do NOT pass `isolation: "worktree"` to the Agent tool. Process issues sequentially on the primary working directory.
+2. **Plan-first for non-trivial issues.** For anything beyond a clearly trivial fix, post a short plan as an issue comment and wait for human approval before implementing. The human approves by removing the `claude-workqueue-plan-review` label.
+3. **Regression tests are mandatory.** Every fix must include a test that would have caught the bug or that locks in the new behavior. If a regression test is genuinely impractical, the plan must explicitly request an exception and explain why — the human decides during plan review.
+
+## State machine (labels)
+
+| Label | Meaning |
+|-------|---------|
+| `claude-workqueue` | In the queue, ready for processing |
+| `claude-workqueue-wip` | Currently being worked by a `/workqueue` run |
+| `claude-workqueue-question` | Waiting for a human to answer a clarifying question |
+| `claude-workqueue-plan-review` | A plan has been posted; waiting for human to review and approve |
+
+Ensure all four labels exist (idempotent):
+
+```bash
+gh label create "claude-workqueue-wip" --color "FFA500" --description "Workqueue: in progress" --repo werkstattwaedi/machine-auth 2>/dev/null || true
+gh label create "claude-workqueue-question" --color "D93F0B" --description "Workqueue: needs human answer" --repo werkstattwaedi/machine-auth 2>/dev/null || true
+gh label create "claude-workqueue-plan-review" --color "1D76DB" --description "Workqueue: plan posted, needs human approval" --repo werkstattwaedi/machine-auth 2>/dev/null || true
+```
 
 ## Phase 1 — Fetch & Filter Issues
 
@@ -18,26 +41,34 @@ gh issue list --repo werkstattwaedi/machine-auth --label "claude-workqueue" --st
 
 2. If `$ARGUMENTS` is a number, filter the list to only that issue. If the issue doesn't have the `claude-workqueue` label, warn and stop.
 
-3. For each issue, determine if it should be processed or skipped:
+3. For each issue, classify its state:
 
-   **Skip if** the issue has label `claude-workqueue-wip` (currently being worked on by another run).
+   **Skip** if the issue has label `claude-workqueue-wip` (currently being worked on by another run).
 
-   **Skip if** a PR already exists for this issue:
+   **Skip** if the issue has label `claude-workqueue-plan-review` (plan posted, waiting for human). Include it in the summary under "Plans awaiting review."
+
+   **Skip** if a PR already exists for this issue:
    ```bash
    gh pr list --repo werkstattwaedi/machine-auth --search "head:workqueue/issue-<N>" --json number --jq 'length'
    ```
-   If result > 0, skip.
 
-   **Re-check if** the issue has label `claude-workqueue-question` (waiting for human answer):
+   **Re-check** if the issue has label `claude-workqueue-question` (waiting for human answer):
    - Fetch comments: `gh issue view <N> --repo werkstattwaedi/machine-auth --json comments`
    - Find the last comment containing `<!-- claude-workqueue -->` — that's the bot's question
-   - Check if any human comment was posted AFTER the bot's question (by comparing timestamps)
-   - If a human replied: remove the `claude-workqueue-question` label and process the issue
-   - If no human reply: skip
+   - If any human comment was posted AFTER that timestamp, remove the label and process
+   - Otherwise skip
 
-4. If no actionable issues remain, report "No issues to process in the workqueue." and stop.
+   **Process as IMPLEMENT** if an approved plan exists:
+   - Comments contain one with marker `<!-- claude-workqueue-plan -->`
+   - Label `claude-workqueue-plan-review` is absent (human removed it → approval)
+   - The agent will read and follow that plan
 
-5. Print the list of issues to be processed.
+   **Process as NEW** otherwise:
+   - No plan yet and the issue is ready to triage (the agent decides: question / plan / trivial implement)
+
+4. If no actionable issues remain, report it and continue to Phase 1b.
+
+5. Print the classified list.
 
 ## Phase 1b — Fetch & Filter PRs with Review Feedback
 
@@ -50,9 +81,7 @@ gh pr list --repo werkstattwaedi/machine-auth --search "head:workqueue/issue-" -
 2. For each PR, check for unaddressed review comments:
 
 ```bash
-# Get review comments (inline code comments)
 gh api repos/werkstattwaedi/machine-auth/pulls/<PR>/comments --jq '[.[] | select(.body | contains("<!-- claude-workqueue-ack -->") | not)] | length'
-# Get general PR comments (not from bot)
 gh pr view <PR> --repo werkstattwaedi/machine-auth --json comments --jq '[.comments[] | select(.body | contains("<!-- claude-workqueue") | not)] | length'
 ```
 
@@ -64,21 +93,25 @@ gh pr view <PR> --repo werkstattwaedi/machine-auth --json comments --jq '[.comme
 
 **IMPORTANT — Pre-analyze before spawning agents:**
 
-For each PR needing fixes, **read the review comments yourself first** using:
+For each PR needing fixes, read the review comments and current code yourself first:
+
 ```bash
 gh api repos/werkstattwaedi/machine-auth/pulls/<PR>/comments --jq '.[] | "File: \(.path):\(.line // .original_line)\n\(.body)\n---"'
 ```
 
-Then read the relevant source files to understand the current state. Use this understanding to write a **focused, specific agent prompt** that includes:
-- The exact files and line numbers to modify
-- What the reviewer asked for
-- The specific fix approach
-
-Do NOT send the generic worker template for PR fixes. Short, focused prompts work much better.
+Then read the relevant source files and craft a focused agent prompt that names the exact files, line numbers, and fix approach. Generic worker templates produce worse results than focused, specific prompts.
 
 ## Phase 2 — Process Each Issue (Sequential)
 
-For each actionable issue, one at a time:
+Process one issue at a time. Tests use emulators on fixed ports, so parallelism is unsafe.
+
+Before processing any issue, verify the working tree is clean:
+
+```bash
+git status --porcelain
+```
+
+If dirty, stop and report — do NOT stash or discard the user's work.
 
 ### 2a. Mark as in-progress
 
@@ -86,55 +119,49 @@ For each actionable issue, one at a time:
 gh issue edit <N> --add-label "claude-workqueue-wip" --repo werkstattwaedi/machine-auth
 ```
 
-### 2b. Spawn worker agent
+### 2b. Spawn the worker agent
 
-Use the **Agent tool** with `isolation: "worktree"` to process the issue in a clean copy of the repo. Use the prompt template below, replacing `<N>` with the issue number and `<TITLE>` with the issue title:
-
----
+Use the **Agent tool without `isolation`** (no worktree). The same agent handles both stages — triage/plan and implement — based on whether an approved plan already exists. Replace `<N>` and `<TITLE>`.
 
 **Agent prompt template:**
 
 ```
-You are a workqueue worker processing GitHub issue #<N>: "<TITLE>".
+You are a workqueue worker for GitHub issue #<N>: "<TITLE>".
 
-## Step 1: Read the Issue
+CRITICAL RULES:
+- You are working in the primary checkout — do NOT create or use git worktrees.
+- Do NOT start a separate emulator — test scripts start their own. Never run `npm run dev` inside this agent.
+- Every fix must include a regression test (see Step 4).
+- Do NOT force-push. Do NOT modify `main`.
 
-Fetch the full issue:
+## Step 1: Read the issue
+
 gh issue view <N> --repo werkstattwaedi/machine-auth --json title,body,comments,labels
-
-Read the title, body, and all comments carefully.
 
 ### Screenshots
 If the body or comments contain image URLs (markdown images like ![...](https://...) or raw URLs to .png/.jpg/.gif/.webp files, or github user-attachment URLs):
-1. For each image URL, download it: curl -sL -o /tmp/issue-<N>-img-<i>.png "<url>"
+1. For each image URL: curl -sL -o /tmp/issue-<N>-img-<i>.png "<url>"
 2. Use the Read tool to view each downloaded image
 3. Incorporate what you see into your understanding
 
-## Step 2: Assess Feasibility
+### Detect approved plan
+Look for a comment containing the marker `<!-- claude-workqueue-plan -->`. If one exists, that is the APPROVED plan — skip to Step 5 (Implement) and follow it. Do not re-triage.
 
-Determine if you have enough information to implement a fix.
+## Step 2: Assess feasibility (only if no approved plan)
 
-**Enough info means ALL of:**
-- The problem or desired change is clearly described
-- You can identify which files/modules are affected
-- The expected behavior is unambiguous
-- No major design decisions need human input
+Determine if you have enough information to act.
 
-**Not enough info means ANY of:**
-- The description is vague, contradictory, or incomplete
-- Multiple valid approaches exist and the issue doesn't indicate a preference
-- You need clarification on acceptance criteria
-- Referenced files/APIs don't exist or you can't find them
+**Not enough info** — if the description is vague, contradictory, incomplete, leaves major design decisions open, or references files/APIs you can't locate. Go to Step 2a.
 
-### If NOT enough info:
+**Out of scope** — if the issue only affects firmware (`maco_firmware/`). The workqueue handles web + functions only. Go to Step 2b.
 
-Post a comment asking specific questions:
+**Enough info** — continue to Step 3.
+
+### Step 2a: Ask questions
 
 gh issue comment <N> --repo werkstattwaedi/machine-auth --body "$(cat <<'COMMENT_EOF'
 <!-- claude-workqueue -->
 ## Questions before I can work on this
-
-I'd like to implement this but need clarification:
 
 1. [specific question]
 2. [specific question]
@@ -143,77 +170,127 @@ I'll pick this up automatically on the next `/workqueue` run after you answer.
 COMMENT_EOF
 )"
 
-Then output EXACTLY this (and nothing else after):
+Output EXACTLY and nothing else after:
 WORKQUEUE_RESULT: question | <one-line summary of what you asked>
 
-### If enough info:
-
-Continue to Step 3.
-
-## Step 3: Understand the Codebase
-
-1. Read CLAUDE.md for project conventions and build commands
-2. Explore the relevant code areas — understand existing patterns before changing anything
-3. This project is web + functions only for workqueue scope (skip issues that only affect maco_firmware/)
-
-If the issue only affects firmware (maco_firmware/), post a comment:
+### Step 2b: Out of scope
 
 gh issue comment <N> --repo werkstattwaedi/machine-auth --body "$(cat <<'COMMENT_EOF'
 <!-- claude-workqueue -->
 ## Scope limitation
 
-This issue appears to only affect firmware code (maco_firmware/). The workqueue currently handles web and functions code only. Please handle this issue manually or adjust the scope.
+This issue appears to only affect firmware code (`maco_firmware/`). The workqueue currently handles web and functions code only. Please handle this issue manually.
 COMMENT_EOF
 )"
 
-Then output: WORKQUEUE_RESULT: question | Issue only affects firmware, out of workqueue scope
+Output:
+WORKQUEUE_RESULT: question | Issue only affects firmware, out of workqueue scope
 
-## Step 4: Implement the Fix
+## Step 3: Understand the codebase
 
-1. Create a branch: git checkout -b workqueue/issue-<N>
-2. Make focused, minimal changes following project conventions
-3. **Every change must be covered by tests:**
-   - **Logic changes** (bug fixes, new behavior, state management): add or update **unit tests** (Vitest, in `*.test.{ts,tsx}` next to the source file)
-   - **Layout/UI changes** (styling, visibility, positioning, new components): add or update **e2e screenshot tests** (Playwright, in `web/apps/checkout/e2e/*.spec.ts`) to capture the visual state
-   - If a change affects both logic and layout, add both
-4. Keep changes scoped to what the issue asks for — no drive-by refactoring
+1. Read CLAUDE.md for project conventions and build commands.
+2. Read the relevant source files to understand the existing patterns.
+3. Identify the specific files/functions that need changes and the specific test files where regression coverage should live.
 
-## Step 5: Run Tests
+## Step 4: Classify triviality
 
-### 5a. Unit + integration tests
-Run with a 10-minute timeout (use the Bash tool's `timeout` parameter set to 600000):
-```bash
+**Trivial** means ALL of:
+- Single-file or near-single-file change
+- Obvious, mechanical fix (typo, string, constant, import, dep bump, clearly wrong conditional)
+- Testing approach is obvious (one unit test or one screenshot update)
+- No design or product decisions involved
+
+**Non-trivial** means any of:
+- Touches multiple files or modules
+- Changes behavior, logic, or data flow
+- Adds or changes UI layout / components
+- Multiple reasonable implementation approaches exist
+- Regression test story is not obvious
+- Security, auth, permissions, or Firestore schema are involved
+
+**Default to non-trivial** when unsure.
+
+### If trivial: go to Step 5 (Implement).
+
+### If non-trivial: post a plan (Step 4a), then stop.
+
+### Step 4a: Post plan and stop
+
+gh issue comment <N> --repo werkstattwaedi/machine-auth --body "$(cat <<'COMMENT_EOF'
+<!-- claude-workqueue-plan -->
+## Implementation plan
+
+### Understanding
+<1-3 sentences — what the issue asks and the root cause if it's a bug>
+
+### Approach
+<bulleted list of the concrete changes — name specific files, functions, and the nature of each change>
+
+### Regression testing
+<Describe the test(s) that will lock in the fix. Name the test file and what it will assert. Prefer unit tests (Vitest) for logic; e2e screenshot tests (Playwright) for layout.>
+
+<If a regression test is genuinely impractical, replace the above with:>
+**Testing exception requested.** <Why a regression test is impractical, what alternative verification will be done (manual steps, assertion in code, etc.), and what risk that leaves.>
+
+### Risks / open questions
+<anything the reviewer should weigh — edge cases, alternative approaches considered, config or data migrations>
+
+---
+Approve by removing the `claude-workqueue-plan-review` label. Leave a comment for revisions.
+COMMENT_EOF
+)"
+
+gh issue edit <N> --add-label "claude-workqueue-plan-review" --repo werkstattwaedi/machine-auth
+
+Output EXACTLY:
+WORKQUEUE_RESULT: plan-posted | <one-line summary of the approach>
+
+## Step 5: Implement
+
+1. Ensure you are on `main` and up to date, then create the branch:
+   git fetch origin main
+   git checkout main
+   git pull --ff-only origin main
+   git checkout -b workqueue/issue-<N>
+   (If the branch already exists locally, use it.)
+
+2. If an approved plan exists (Step 1 marker found), follow it. Deviate only if you discover the plan is wrong — in that case, STOP, post a comment describing the deviation, and output `WORKQUEUE_RESULT: question | <summary>` instead.
+
+3. Make focused, minimal changes following project conventions. No drive-by refactoring.
+
+4. **Write the regression test.** This is non-negotiable unless the approved plan granted a testing exception.
+   - **Logic changes** (bug fix, new behavior, state management): add or update **unit tests** (Vitest, `*.test.{ts,tsx}` next to the source).
+   - **Layout / UI changes** (styling, visibility, positioning, new components): add or update **e2e screenshot tests** (Playwright, `web/apps/checkout/e2e/*.spec.ts`).
+   - If the change affects both, add both.
+   - Verify the test actually exercises the fix — a test that passes on the unfixed code is not a regression test.
+
+## Step 6: Run tests
+
+### 6a. Unit + integration tests
+Run with `timeout: 600000` (10 min) on the Bash tool:
 npm run test:precommit
-```
 
 If tests fail:
-- Analyze the failure
-- If related to your changes: fix and re-run
-- If unrelated: note it but continue
-- If you cannot get tests passing after 2 attempts, report the failure
-- If the command times out, report it as an error — do NOT retry
+- If related to your changes: fix and re-run.
+- If unrelated: note it and continue.
+- If you cannot get tests passing after 2 attempts: report the failure.
+- If the command times out: report it — do NOT retry.
 
-### 5b. E2E tests (if UI changed)
-If your changes touch any files under `web/` (components, pages, styles, layouts), also run the e2e tests with a 10-minute timeout (use the Bash tool's `timeout` parameter set to 600000):
-
-```bash
+### 6b. E2E tests (if any file under `web/` changed)
+Run with `timeout: 600000`:
 npm run test:web:e2e
-```
 
-If screenshot tests fail because your UI changes are intentional, update the snapshots:
-```bash
+If screenshot tests fail because the UI change is intentional, update the snapshots:
 firebase emulators:exec --config firebase.e2e.json \
   --only firestore,auth,functions \
   'cd web/apps/checkout && npx playwright test --update-snapshots'
-```
 
-Then re-run `npm run test:web:e2e` to confirm they pass. Include the updated snapshot files in your commit.
+Re-run `npm run test:web:e2e` to confirm. Include the updated snapshot files in the commit.
 
-If any test command times out, do NOT retry — report the timeout and continue to commit what you have.
+## Step 7: Commit
 
-## Step 6: Commit
+Stage only the files you changed. Never `git add -A`.
 
-Stage only the files you changed (never git add -A). Include updated screenshot snapshots if any:
 git add <specific files>
 git add web/apps/checkout/e2e/*.spec.ts-snapshots/*.png  # only if snapshots were updated
 git commit -m "$(cat <<'EOF'
@@ -225,94 +302,89 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 EOF
 )"
 
-Use appropriate type: fix, feat, refactor, test, docs, etc.
+Use an appropriate type: fix, feat, refactor, test, docs, etc.
 
-## Step 8: Push and Create PR
+## Step 8: Push and create PR
 
 git push -u origin workqueue/issue-<N>
 
 gh pr create --repo werkstattwaedi/machine-auth --title "<concise title>" --body "$(cat <<'PR_EOF'
 ## Summary
-
 <what was changed and why, 1-3 bullets>
 
 Closes #<N>
 
-## Test Results
+## Regression coverage
+<name the test file(s) added or updated and what they assert. If an exception was approved, cite it and explain the alternative verification.>
 
-<pass/fail summary from Step 5>
+## Test results
+<pass/fail summary from Step 6>
 
 ---
 🤖 Automated by `/workqueue`
 PR_EOF
 )"
 
-## Step 9: Report Result
+## Step 9: Report
 
-Output EXACTLY (with the actual PR URL):
+Output EXACTLY (with the real PR URL):
 WORKQUEUE_RESULT: implemented | <one-line summary> | <PR URL>
 
-## Error Handling
+## Error handling
 
-If anything goes wrong that you cannot recover from, output:
+If anything goes wrong that you cannot recover from:
 WORKQUEUE_RESULT: error | <what went wrong>
 
-Never leave uncommitted changes without reporting. Always provide a WORKQUEUE_RESULT line.
+Never leave uncommitted changes without reporting. Always output a `WORKQUEUE_RESULT` line.
 ```
-
----
 
 ### 2c. Handle the result
 
-Parse the `WORKQUEUE_RESULT` line from the agent's output:
+Parse the `WORKQUEUE_RESULT` line and update labels:
 
-- **`implemented`**: Remove `claude-workqueue-wip` and `claude-workqueue` labels. Record the PR URL.
-- **`question`**: Remove `claude-workqueue-wip` label, add `claude-workqueue-question` label.
-- **`error`**: Remove `claude-workqueue-wip` label. Record the error.
+- **`implemented`** → remove `claude-workqueue-wip` and `claude-workqueue`. Record the PR URL.
+- **`plan-posted`** → remove `claude-workqueue-wip` (the agent already added `claude-workqueue-plan-review`). Record under "Plans awaiting review."
+- **`question`** → remove `claude-workqueue-wip`, add `claude-workqueue-question`.
+- **`error`** → remove `claude-workqueue-wip`. Record the error. Do NOT remove `claude-workqueue`.
+
+Also ensure the working tree is clean and the current branch is back on `main` (or the branch the user started on) before moving to the next issue:
 
 ```bash
-# Example label management:
-gh issue edit <N> --remove-label "claude-workqueue-wip" --repo werkstattwaedi/machine-auth
-gh issue edit <N> --remove-label "claude-workqueue" --repo werkstattwaedi/machine-auth  # only on success
-gh issue edit <N> --add-label "claude-workqueue-question" --repo werkstattwaedi/machine-auth  # only on question
+git status --porcelain
+git rev-parse --abbrev-ref HEAD
 ```
 
-If label doesn't exist yet, create it first:
-```bash
-gh label create "claude-workqueue-wip" --color "FFA500" --description "Workqueue: in progress" --repo werkstattwaedi/machine-auth 2>/dev/null || true
-gh label create "claude-workqueue-question" --color "D93F0B" --description "Workqueue: needs human answer" --repo werkstattwaedi/machine-auth 2>/dev/null || true
-```
+If the agent left the tree dirty or on a workqueue branch with uncommitted changes, stop and report — do NOT force-clean.
 
 ## Phase 2b — Process PRs with Review Feedback (Sequential)
 
-For each PR with unaddressed review comments, one at a time:
+For each PR with unaddressed review comments:
 
 ### 2b.1. Pre-analyze
 
-Read the review comments, the current code on the PR branch, and the linked issue to understand what's being asked. Formulate a focused fix plan.
+Read the review comments, the current code on the PR branch, and the linked issue. Formulate a focused fix plan.
 
 ### 2b.2. Spawn fixup agent
 
-Spawn an Agent (no worktree — work directly on the PR branch) with a **focused prompt** containing:
+Spawn an Agent (no worktree) with a focused prompt that includes:
 - The PR number and branch name
-- Instruction to `git checkout <branch>` and `git pull`
-- The exact review comments and what needs to change
-- Specific files and line numbers
-- The fix approach
-- Instruction to run tests (`npm run test:precommit` with timeout 600000, and `npm run test:web:e2e` with timeout 600000 if UI files changed)
-- If screenshot tests fail due to intentional changes, update snapshots
-- Commit, push to the same branch (no force push)
-- Reply to each addressed review comment with `<!-- claude-workqueue-ack -->` + a brief explanation of the fix
-- Output: `WORKQUEUE_RESULT: pr-fixed | <summary>` or `WORKQUEUE_RESULT: error | <what went wrong>`
+- Instruction to `git fetch origin && git checkout <branch> && git pull --ff-only`
+- The exact review comments verbatim, with file paths and line numbers
+- The specific fix approach per comment
+- **Regression test requirement:** if the review surfaced a behavior gap, add or update a regression test. If the review is cosmetic (wording, naming), a test may not be needed — say so explicitly.
+- Run tests: `npm run test:precommit` (timeout 600000), and `npm run test:web:e2e` (timeout 600000) if UI files changed. If screenshot tests fail due to intentional changes, update snapshots.
+- Commit and push to the same branch (no force-push).
+- Reply to each addressed review comment with `<!-- claude-workqueue-ack -->` + a brief explanation of the fix.
+- Output: `WORKQUEUE_RESULT: pr-fixed | <summary>` or `WORKQUEUE_RESULT: error | <what went wrong>`.
 
 ### 2b.3. Handle the result
 
-- **`pr-fixed`**: Record as fixed in summary.
-- **`error`**: Record the error in summary.
+- **`pr-fixed`** → record as fixed.
+- **`error`** → record the error.
 
 ## Phase 3 — Summary
 
-After all issues and PRs are processed, print a summary:
+After all issues and PRs are processed, print:
 
 ```
 ## Workqueue Summary
@@ -321,8 +393,10 @@ After all issues and PRs are processed, print a summary:
 | Issue | Title | Status | Details |
 |-------|-------|--------|---------|
 | #12   | Fix login bug | ✅ Implemented | PR #34 |
-| #15   | Add feature X | ❓ Question posted | Asked about scope |
-| #18   | Refactor Y | ❌ Error | Build failed |
+| #14   | Typo in nav | ✅ Implemented | PR #35 (trivial) |
+| #15   | Add feature X | 📋 Plan posted | Awaiting review |
+| #17   | Refactor Y | ❓ Question posted | Asked about scope |
+| #18   | Widget redesign | ❌ Error | Test failure |
 | #20   | Update Z | ⏭️ Skipped | PR already exists |
 
 ### PR Review Fixes
@@ -331,19 +405,16 @@ After all issues and PRs are processed, print a summary:
 | #73 | Fix nav buttons | ✅ Fixed | Addressed 1 review comment |
 | #74 | Add feature | ❌ Error | Test failure |
 
-### Pending Questions
-Issues waiting for human answers (re-run `/workqueue` after answering):
-- #15: [question summary]
+### Plans awaiting review
+Remove `claude-workqueue-plan-review` on each issue to approve:
+- #15: [one-line summary]
+
+### Pending questions
+Re-run `/workqueue` after answering:
+- #17: [question summary]
 ```
 
-Omit any section that has no entries.
-
-## Important Constraints
-
-- Process issues **sequentially** (tests use emulators on fixed ports)
-- **Never** force-push or modify the main branch
-- Ensure labels are always cleaned up, even on errors
-- Create the `claude-workqueue-wip` and `claude-workqueue-question` labels if they don't exist (idempotent)
+Omit sections with no entries.
 
 ## Reliability & Error Recovery
 
@@ -351,43 +422,38 @@ Omit any section that has no entries.
 
 ### Running agents with monitoring
 
-**Run each worker agent in background** (`run_in_background: true`). While waiting for the notification:
+Run each worker agent in background (`run_in_background: true`). While waiting:
 
-1. **Record the start time** (note the current time before spawning).
-2. **Every 5 minutes**, check that the agent is still making progress:
+1. Record the start time.
+2. Every ~5 minutes, spot-check progress:
    ```bash
-   # Check CPU activity of child processes (node, java, playwright, etc.)
    ps aux --sort=-pcpu | grep -E '(node|java|playwright|vitest|tsc|firebase)' | grep -v grep | head -10
    ```
-   - If processes are active (CPU > 0%), the agent is working — continue waiting.
-   - If no relevant processes are running and 5+ minutes have passed since the last check, the agent may be stuck.
-3. **After 30 minutes**, if no result has been returned, treat it as a timeout:
-   - Clean up: remove `claude-workqueue-wip` label, clean worktrees
-   - Record as error: "Agent timed out after 30 minutes"
-   - Move to the next issue
+   - Active processes (CPU > 0%): keep waiting.
+   - Idle for 5+ minutes after last activity: agent may be stuck.
+3. After 30 minutes with no result:
+   - Remove `claude-workqueue-wip`.
+   - Record as error: "Agent timed out after 30 minutes."
+   - Move to the next issue.
 
 ### Agent failure handling
 
 If an agent call returns an error (crash, rejection, timeout):
-1. **Always clean up**: remove `claude-workqueue-wip` label
-2. **Record the failure** with the error message in the summary
-3. **Move to the next issue** — never stop the entire queue for one failure
-4. **Clean up worktrees**: `git worktree list` and remove any stale worktrees from failed agents
+1. Always remove `claude-workqueue-wip`.
+2. Record the failure in the summary.
+3. Move to the next issue — never stop the queue for one failure.
+4. **Never run `git worktree` commands** — since we don't create them, there is nothing to clean up. If you see a stray worktree, report it and leave it alone.
 
 ### Keep agents simple
 
-- **No sub-agents inside worker agents** — don't spawn code-reviewer or other agents from within the worker. This adds fragility.
-- **Minimal steps**: implement → test → commit → push → create PR. That's it.
+- No sub-agents inside worker agents — don't spawn code-reviewer or other agents from within the worker.
+- Minimal steps: read → plan OR implement → test → commit → push → PR.
 
 ## Agent Prompt Guidelines
 
-**Pre-analyze issues before spawning agents** to reduce agent work time.
+**Pre-analyze before spawning agents.**
 
-Before spawning an agent for any task (new issue or PR fix):
-1. **Read the issue/comments yourself first** — understand what needs to happen
-2. **Read the relevant source files** — identify exact files and line numbers
-3. **Write a focused prompt** with:
-   - Specific files to modify and what to change
-   - The branch to use (`workqueue/issue-<N>`)
-   - Concrete test/commit/push/PR instructions
-   - Expected output format (`WORKQUEUE_RESULT: ...`)
+Before spawning an agent for any task:
+1. Read the issue/PR comments yourself.
+2. Read the relevant source files.
+3. Write a focused prompt that names specific files, line numbers, and the expected `WORKQUEUE_RESULT` line.
