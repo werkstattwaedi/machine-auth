@@ -85,12 +85,17 @@ Before fetching any issues, confirm the repo is in a clean, passing state. This 
    npm run test:precommit
    ```
 
-3. If any test fails:
+3. Run the e2e suite with a 10-minute timeout:
+   ```bash
+   npm run test:web:e2e
+   ```
+
+4. If any test fails in either step:
    - **Abort the entire `/workqueue` run.**
    - Print the failing tests.
    - Tell the user to fix the baseline first, and do not proceed to Phase 1.
 
-4. If everything passes, record "baseline: green" and continue. Worker agents will be told the baseline was green; they are not allowed to dismiss failures as pre-existing.
+5. If everything passes, record "baseline: green (precommit + e2e)" and continue. Worker agents will be told the baseline was green; they are not allowed to dismiss failures as pre-existing.
 
 ## Phase 1 — Fetch & Filter Issues
 
@@ -194,7 +199,7 @@ CRITICAL RULES:
 - Do NOT start a separate emulator — test scripts start their own. Never run `npm run dev` inside this agent.
 - Every fix must include a regression test (see Step 4).
 - Do NOT force-push. Do NOT modify `main`.
-- **The full test suite (`npm run test:precommit`) was green before you started.** Any failure in Step 6 is caused by your changes — you may NOT explain it away as pre-existing.
+- **Both `npm run test:precommit` and `npm run test:web:e2e` were green before you started.** Any failure in Step 6 is caused by your changes — you may NOT explain it away as pre-existing.
 
 ## Step 1: Read the issue
 
