@@ -135,6 +135,12 @@ test.describe("Self-registration", () => {
     // ── Screenshot: empty complete-profile form ──
     await expect(page).toHaveScreenshot("complete-profile-empty.png")
 
+    // ── Regression (#111): labels should not show required-field asterisks.
+    // All fields on the complete-profile form are required, so marking them
+    // individually with "*" is redundant and visually noisy.
+    const formText = await page.locator("form").innerText()
+    expect(formText).not.toContain("*")
+
     // ── Complete the profile ──
     await page.locator("#firstName").fill("Checkout")
     await page.locator("#lastName").fill("Tester")
