@@ -126,7 +126,7 @@ function CompleteProfilePage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className={wrapCls("firstName")}>
               <Label htmlFor="firstName" className="text-sm font-bold">
-                Vorname<span className="text-[#cc2a24]">*</span>
+                Vorname
               </Label>
               <input
                 id="firstName"
@@ -137,7 +137,7 @@ function CompleteProfilePage() {
             </div>
             <div className={wrapCls("lastName")}>
               <Label htmlFor="lastName" className="text-sm font-bold">
-                Nachname<span className="text-[#cc2a24]">*</span>
+                Nachname
               </Label>
               <input
                 id="lastName"
@@ -184,7 +184,7 @@ function CompleteProfilePage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className={wrapCls("company")}>
                   <Label className="text-sm font-bold">
-                    Firma<span className="text-[#cc2a24]">*</span>
+                    Firma
                   </Label>
                   <input
                     {...register("company", {
@@ -196,7 +196,7 @@ function CompleteProfilePage() {
                 </div>
                 <div className={wrapCls("street")}>
                   <Label className="text-sm font-bold">
-                    Strasse<span className="text-[#cc2a24]">*</span>
+                    Strasse
                   </Label>
                   <input
                     {...register("street", {
@@ -208,7 +208,7 @@ function CompleteProfilePage() {
                 </div>
                 <div className={wrapCls("zip")}>
                   <Label className="text-sm font-bold">
-                    PLZ<span className="text-[#cc2a24]">*</span>
+                    PLZ
                   </Label>
                   <input
                     {...register("zip", {
@@ -220,7 +220,7 @@ function CompleteProfilePage() {
                 </div>
                 <div className={wrapCls("city")}>
                   <Label className="text-sm font-bold">
-                    Ort<span className="text-[#cc2a24]">*</span>
+                    Ort
                   </Label>
                   <input
                     {...register("city", {
@@ -238,7 +238,7 @@ function CompleteProfilePage() {
         <div className="space-y-3">
           <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
             <span className="text-sm font-bold">
-              Nutzungsbestimmungen<span className="text-[#cc2a24]">*</span>
+              Nutzungsbestimmungen
             </span>
             <a
               href="https://werkstattwaedi.ch/nutzungsbestimmungen"
