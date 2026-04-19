@@ -13,6 +13,44 @@ Process the `claude-workqueue` issue queue and open workqueue PRs with review fe
 1. **Never use git worktrees.** The operations repo setup requires working in the main checkout, and the Firebase emulators bind to fixed ports — parallel worktrees cause test hangs and port conflicts. Do NOT pass `isolation: "worktree"` to the Agent tool. Process issues sequentially on the primary working directory.
 2. **Plan-first for non-trivial issues.** For anything beyond a clearly trivial fix, post a short plan as an issue comment and wait for human approval before implementing. The human approves by removing the `claude-workqueue-plan-review` label.
 3. **Regression tests are mandatory.** Every fix must include a test that would have caught the bug or that locks in the new behavior. If a regression test is genuinely impractical, the plan must explicitly request an exception and explain why — the human decides during plan review.
+4. **All `gh` calls go through `.claude/scripts/wq-gh.sh`**, which authenticates as the workqueue GitHub App so comments, PRs, and review acks are attributed to the bot rather than the local user. `git push` and other `git` commands keep using the user's credentials — commits remain the user's.
+
+## Setup (one-time)
+
+The workqueue authenticates as a GitHub App so issue comments don't look like you talking to yourself. Do these once per machine:
+
+1. **Create a GitHub App** under your account:
+   - https://github.com/settings/apps/new
+   - Name: e.g. `werkstattwaedi-workqueue`
+   - Homepage URL: repo URL
+   - Webhook: **disable** (uncheck Active)
+   - Repository permissions:
+     - **Contents**: Read & write (push branches)
+     - **Issues**: Read & write (comment, label)
+     - **Pull requests**: Read & write (create, comment, review)
+     - **Metadata**: Read (auto)
+   - Where can this App be installed: *Only on this account*
+   - Click **Create GitHub App**.
+2. On the App's page, scroll to **Private keys** → **Generate a private key**. Save the downloaded `.pem`.
+3. Note the numeric **App ID** (at the top of the App settings page).
+4. **Install the App** on the repo: App page → left sidebar → *Install App* → pick `werkstattwaedi/machine-auth` (only). After installing, the URL contains the installation ID: `…/settings/installations/<INSTALLATION_ID>`. Note that number.
+5. Store the credentials outside the repo:
+   ```bash
+   mkdir -p ~/.config/workqueue-app
+   mv ~/Downloads/<your-app>.<date>.private-key.pem ~/.config/workqueue-app/private-key.pem
+   chmod 600 ~/.config/workqueue-app/private-key.pem
+   cat > ~/.config/workqueue-app/env <<'EOF'
+   export WORKQUEUE_APP_ID=<APP_ID>
+   export WORKQUEUE_APP_INSTALLATION_ID=<INSTALLATION_ID>
+   export WORKQUEUE_APP_PRIVATE_KEY=$HOME/.config/workqueue-app/private-key.pem
+   EOF
+   chmod 600 ~/.config/workqueue-app/env
+   ```
+6. Verify — this should print `werkstattwaedi/machine-auth`:
+   ```bash
+   .claude/scripts/wq-gh.sh api /installation/repositories --jq '.repositories[].full_name'
+   ```
+   (Note: App installation tokens cannot call `/user` — that endpoint is user-scope. A 403 there means auth works but the wrong endpoint was used.)
 
 ## State machine (labels)
 
@@ -26,9 +64,9 @@ Process the `claude-workqueue` issue queue and open workqueue PRs with review fe
 Ensure all four labels exist (idempotent):
 
 ```bash
-gh label create "claude-workqueue-wip" --color "FFA500" --description "Workqueue: in progress" --repo werkstattwaedi/machine-auth 2>/dev/null || true
-gh label create "claude-workqueue-question" --color "D93F0B" --description "Workqueue: needs human answer" --repo werkstattwaedi/machine-auth 2>/dev/null || true
-gh label create "claude-workqueue-plan-review" --color "1D76DB" --description "Workqueue: plan posted, needs human approval" --repo werkstattwaedi/machine-auth 2>/dev/null || true
+.claude/scripts/wq-gh.sh label create "claude-workqueue-wip" --color "FFA500" --description "Workqueue: in progress" --repo werkstattwaedi/machine-auth 2>/dev/null || true
+.claude/scripts/wq-gh.sh label create "claude-workqueue-question" --color "D93F0B" --description "Workqueue: needs human answer" --repo werkstattwaedi/machine-auth 2>/dev/null || true
+.claude/scripts/wq-gh.sh label create "claude-workqueue-plan-review" --color "1D76DB" --description "Workqueue: plan posted, needs human approval" --repo werkstattwaedi/machine-auth 2>/dev/null || true
 ```
 
 ## Phase 1 — Fetch & Filter Issues
@@ -36,7 +74,7 @@ gh label create "claude-workqueue-plan-review" --color "1D76DB" --description "W
 1. Fetch all open issues with the `claude-workqueue` label:
 
 ```bash
-gh issue list --repo werkstattwaedi/machine-auth --label "claude-workqueue" --state open --json number,title,labels --limit 50
+.claude/scripts/wq-gh.sh issue list --repo werkstattwaedi/machine-auth --label "claude-workqueue" --state open --json number,title,labels --limit 50
 ```
 
 2. If `$ARGUMENTS` is a number, filter the list to only that issue. If the issue doesn't have the `claude-workqueue` label, warn and stop.
@@ -49,11 +87,11 @@ gh issue list --repo werkstattwaedi/machine-auth --label "claude-workqueue" --st
 
    **Skip** if a PR already exists for this issue:
    ```bash
-   gh pr list --repo werkstattwaedi/machine-auth --search "head:workqueue/issue-<N>" --json number --jq 'length'
+   .claude/scripts/wq-gh.sh pr list --repo werkstattwaedi/machine-auth --search "head:workqueue/issue-<N>" --json number --jq 'length'
    ```
 
    **Re-check** if the issue has label `claude-workqueue-question` (waiting for human answer):
-   - Fetch comments: `gh issue view <N> --repo werkstattwaedi/machine-auth --json comments`
+   - Fetch comments: `.claude/scripts/wq-gh.sh issue view <N> --repo werkstattwaedi/machine-auth --json comments`
    - Find the last comment containing `<!-- claude-workqueue -->` — that's the bot's question
    - If any human comment was posted AFTER that timestamp, remove the label and process
    - Otherwise skip
@@ -75,14 +113,14 @@ gh issue list --repo werkstattwaedi/machine-auth --label "claude-workqueue" --st
 1. Fetch all open PRs with `workqueue/issue-` branch prefix:
 
 ```bash
-gh pr list --repo werkstattwaedi/machine-auth --search "head:workqueue/issue-" --state open --json number,title,headRefName,url --limit 50
+.claude/scripts/wq-gh.sh pr list --repo werkstattwaedi/machine-auth --search "head:workqueue/issue-" --state open --json number,title,headRefName,url --limit 50
 ```
 
 2. For each PR, check for unaddressed review comments:
 
 ```bash
-gh api repos/werkstattwaedi/machine-auth/pulls/<PR>/comments --jq '[.[] | select(.body | contains("<!-- claude-workqueue-ack -->") | not)] | length'
-gh pr view <PR> --repo werkstattwaedi/machine-auth --json comments --jq '[.comments[] | select(.body | contains("<!-- claude-workqueue") | not)] | length'
+.claude/scripts/wq-gh.sh api repos/werkstattwaedi/machine-auth/pulls/<PR>/comments --jq '[.[] | select(.body | contains("<!-- claude-workqueue-ack -->") | not)] | length'
+.claude/scripts/wq-gh.sh pr view <PR> --repo werkstattwaedi/machine-auth --json comments --jq '[.comments[] | select(.body | contains("<!-- claude-workqueue") | not)] | length'
 ```
 
    A PR needs attention if there are review comments without a `<!-- claude-workqueue-ack -->` reply, OR general comments that aren't from the bot.
@@ -96,7 +134,7 @@ gh pr view <PR> --repo werkstattwaedi/machine-auth --json comments --jq '[.comme
 For each PR needing fixes, read the review comments and current code yourself first:
 
 ```bash
-gh api repos/werkstattwaedi/machine-auth/pulls/<PR>/comments --jq '.[] | "File: \(.path):\(.line // .original_line)\n\(.body)\n---"'
+.claude/scripts/wq-gh.sh api repos/werkstattwaedi/machine-auth/pulls/<PR>/comments --jq '.[] | "File: \(.path):\(.line // .original_line)\n\(.body)\n---"'
 ```
 
 Then read the relevant source files and craft a focused agent prompt that names the exact files, line numbers, and fix approach. Generic worker templates produce worse results than focused, specific prompts.
@@ -116,7 +154,7 @@ If dirty, stop and report — do NOT stash or discard the user's work.
 ### 2a. Mark as in-progress
 
 ```bash
-gh issue edit <N> --add-label "claude-workqueue-wip" --repo werkstattwaedi/machine-auth
+.claude/scripts/wq-gh.sh issue edit <N> --add-label "claude-workqueue-wip" --repo werkstattwaedi/machine-auth
 ```
 
 ### 2b. Spawn the worker agent
@@ -136,7 +174,7 @@ CRITICAL RULES:
 
 ## Step 1: Read the issue
 
-gh issue view <N> --repo werkstattwaedi/machine-auth --json title,body,comments,labels
+.claude/scripts/wq-gh.sh issue view <N> --repo werkstattwaedi/machine-auth --json title,body,comments,labels
 
 ### Screenshots
 If the body or comments contain image URLs (markdown images like ![...](https://...) or raw URLs to .png/.jpg/.gif/.webp files, or github user-attachment URLs):
@@ -159,7 +197,7 @@ Determine if you have enough information to act.
 
 ### Step 2a: Ask questions
 
-gh issue comment <N> --repo werkstattwaedi/machine-auth --body "$(cat <<'COMMENT_EOF'
+.claude/scripts/wq-gh.sh issue comment <N> --repo werkstattwaedi/machine-auth --body "$(cat <<'COMMENT_EOF'
 <!-- claude-workqueue -->
 ## Questions before I can work on this
 
@@ -175,7 +213,7 @@ WORKQUEUE_RESULT: question | <one-line summary of what you asked>
 
 ### Step 2b: Out of scope
 
-gh issue comment <N> --repo werkstattwaedi/machine-auth --body "$(cat <<'COMMENT_EOF'
+.claude/scripts/wq-gh.sh issue comment <N> --repo werkstattwaedi/machine-auth --body "$(cat <<'COMMENT_EOF'
 <!-- claude-workqueue -->
 ## Scope limitation
 
@@ -216,7 +254,7 @@ WORKQUEUE_RESULT: question | Issue only affects firmware, out of workqueue scope
 
 ### Step 4a: Post plan and stop
 
-gh issue comment <N> --repo werkstattwaedi/machine-auth --body "$(cat <<'COMMENT_EOF'
+.claude/scripts/wq-gh.sh issue comment <N> --repo werkstattwaedi/machine-auth --body "$(cat <<'COMMENT_EOF'
 <!-- claude-workqueue-plan -->
 ## Implementation plan
 
@@ -240,7 +278,7 @@ Approve by removing the `claude-workqueue-plan-review` label. Leave a comment fo
 COMMENT_EOF
 )"
 
-gh issue edit <N> --add-label "claude-workqueue-plan-review" --repo werkstattwaedi/machine-auth
+.claude/scripts/wq-gh.sh issue edit <N> --add-label "claude-workqueue-plan-review" --repo werkstattwaedi/machine-auth
 
 Output EXACTLY:
 WORKQUEUE_RESULT: plan-posted | <one-line summary of the approach>
@@ -308,7 +346,7 @@ Use an appropriate type: fix, feat, refactor, test, docs, etc.
 
 git push -u origin workqueue/issue-<N>
 
-gh pr create --repo werkstattwaedi/machine-auth --title "<concise title>" --body "$(cat <<'PR_EOF'
+.claude/scripts/wq-gh.sh pr create --repo werkstattwaedi/machine-auth --title "<concise title>" --body "$(cat <<'PR_EOF'
 ## Summary
 <what was changed and why, 1-3 bullets>
 
