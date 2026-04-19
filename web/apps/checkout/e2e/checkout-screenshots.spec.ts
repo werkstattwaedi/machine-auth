@@ -65,7 +65,11 @@ async function signIn(page: Page) {
   )
   expect(signInCode).toBeTruthy()
   await page.goto(signInCode!.oobLink)
-  await page.waitForURL((url) => !url.href.includes("oobCode"), { timeout: 10_000 })
+  // Wait for the post-login landing page. /visit is the default for a
+  // signed-in user with a complete profile; waiting only on !oobCode races
+  // with the /login → /visit navigation and can observe the transient
+  // logged-out /login state.
+  await page.waitForURL((url) => url.pathname === "/visit", { timeout: 10_000 })
 }
 
 /**

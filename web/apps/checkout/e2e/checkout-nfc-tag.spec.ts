@@ -55,7 +55,7 @@ test.describe("NFC tag checkout", () => {
     await page.getByRole("button", { name: "Senden & zur Kasse" }).click()
 
     // ── Payment result ──
-    await expect(page.getByText("Vielen Dank!")).toBeVisible({
+    await expect(page.getByText("Zu bezahlen")).toBeVisible({
       timeout: 10_000,
     })
 

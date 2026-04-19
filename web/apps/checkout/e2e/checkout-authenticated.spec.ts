@@ -16,12 +16,15 @@ test.describe("Authenticated checkout", () => {
     await page.goto("/")
 
     // ── Checkout page shows login hint ──
-    await expect(page.getByText("Bereits registriert?")).toBeVisible({
+    await expect(
+      page.getByText("Bereits registriert oder Konto erstellen?"),
+    ).toBeVisible({
       timeout: 10_000,
     })
 
-    // Click "Anmelden" to go to /login
-    await page.locator('a[href*="/login"]').click()
+    // Click "Anmelden" (the login hint now renders both Anmelden + Registrieren
+    // links, so pin by href).
+    await page.locator('a[href="/login?redirect=/"]').click()
     await page.waitForURL("**/login**")
 
     // ── Login page: email sign-in form ──
@@ -41,15 +44,20 @@ test.describe("Authenticated checkout", () => {
     )
     expect(signInCode).toBeTruthy()
 
-    // Navigate to the sign-in link (redirects to /login as configured)
+    // Navigate to the sign-in link (redirects to /login which completes the
+    // sign-in and then navigates to the authenticated landing page)
     await page.goto(signInCode!.oobLink)
 
-    // Wait for sign-in to complete — redirects back to / via stored redirect
-    await page.waitForURL((url) => !url.href.includes("oobCode"), {
+    // Wait for post-login landing — /visit is the default for a signed-in
+    // user with a complete profile. Waiting for just !oobCode races with the
+    // /login → /visit navigation.
+    await page.waitForURL((url) => url.pathname === "/visit", {
       timeout: 10_000,
     })
 
-    // The person card should show pre-filled data (read-only paragraph with last name)
+    // Navigate to the checkout page — the logged-in user sees a pre-filled
+    // person card (read-only paragraph with last name).
+    await page.goto("/")
     await expect(page.getByText("Testuser", { exact: true })).toBeVisible({
       timeout: 10_000,
     })
@@ -77,7 +85,7 @@ test.describe("Authenticated checkout", () => {
     await page.getByRole("button", { name: "Senden & zur Kasse" }).click()
 
     // ── Payment result ──
-    await expect(page.getByText("Vielen Dank!")).toBeVisible({
+    await expect(page.getByText("Zu bezahlen")).toBeVisible({
       timeout: 10_000,
     })
 

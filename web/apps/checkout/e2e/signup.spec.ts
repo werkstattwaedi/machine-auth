@@ -2,13 +2,23 @@
 // SPDX-License-Identifier: MIT
 
 import { test, expect } from "@playwright/test"
-import { clearCollections, getAdminFirestore, waitForOobCode } from "./helpers"
+import { getAdminFirestore, waitForOobCode } from "./helpers"
 
 const SIGNUP_EMAIL = "new-signup@werkstattwaedi.ch"
 const CHECKOUT_SIGNUP_EMAIL = "checkout-signup@werkstattwaedi.ch"
 
+// Only wipe the docs for the signup-specific emails — the seeded `e2e-test`
+// and `NFC` users are required by sibling spec files that run after signup.
 test.beforeEach(async () => {
-  await clearCollections("users")
+  const db = getAdminFirestore()
+  const emails = [SIGNUP_EMAIL, CHECKOUT_SIGNUP_EMAIL]
+  for (const email of emails) {
+    const snap = await db.collection("users").where("email", "==", email).get()
+    if (snap.empty) continue
+    const batch = db.batch()
+    snap.docs.forEach((d) => batch.delete(d.ref))
+    await batch.commit()
+  }
 })
 
 test.describe("Self-registration", () => {

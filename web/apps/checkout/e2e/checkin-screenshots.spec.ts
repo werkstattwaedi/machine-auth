@@ -78,7 +78,9 @@ test.describe("Check-in step screenshots", () => {
     )
     expect(signInCode).toBeTruthy()
     await page.goto(signInCode!.oobLink)
-    await page.waitForURL((url) => !url.href.includes("oobCode"), { timeout: 10_000 })
+    // Wait for the post-login landing — /visit is the default for a signed-in
+    // user. Waiting only on !oobCode races with the /login → /visit redirect.
+    await page.waitForURL((url) => url.pathname === "/visit", { timeout: 10_000 })
 
     // Navigate to checkout
     await page.goto("/")

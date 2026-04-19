@@ -18,10 +18,12 @@ import { generateValidPICCAndCMAC } from "./sdm-test-helper"
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // Must match TERMINAL_KEY, DIVERSIFICATION_MASTER_KEY, and
-// DIVERSIFICATION_SYSTEM_NAME in functions/.env.local
+// DIVERSIFICATION_SYSTEM_NAME in functions/.env.local / .env.<project>.
+// These are test fixtures, not real secrets — the emulator's copy of
+// `.env.local` holds the same values.
 const TERMINAL_KEY = "f5e4b999d5aa629f193a874529c4aa2f"
 const MASTER_KEY = "c025f541727ecd8b6eb92055c88a2a70"
-const SYSTEM_NAME = "OwwMachineAuth"
+const SYSTEM_NAME = "Oww8820Maco"
 const NFC_TAG_UID = "04c339aa1e1890"
 
 const PROJECT_ID = "oww-maco"
