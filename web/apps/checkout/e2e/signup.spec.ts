@@ -15,6 +15,11 @@ test.describe("Self-registration", () => {
   test("new user signs up, completes profile, and has no roles", async ({ page }) => {
     // ── Sign in via /login with a fresh email ──
     await page.goto("/login")
+
+    // On the signup page (or login page), the switch link is visible while the
+    // form is shown.
+    await expect(page.getByText("Noch kein Konto?")).toBeVisible()
+
     await page.getByPlaceholder("deine@email.ch").fill(SIGNUP_EMAIL)
     await page
       .getByRole("button", { name: "Anmelde-Link senden" })
@@ -23,6 +28,12 @@ test.describe("Self-registration", () => {
     await expect(
       page.getByText("Anmelde-Link wurde an"),
     ).toBeVisible({ timeout: 5000 })
+
+    // Regression (#103): the account-switch link must disappear once the
+    // sign-in link has been sent — it's confusing to offer "Bereits
+    // registriert? Anmelden" on the confirmation screen.
+    await expect(page.getByText("Bereits registriert?")).not.toBeVisible()
+    await expect(page.getByText("Noch kein Konto?")).not.toBeVisible()
 
     // Fetch sign-in link from Auth emulator
     const signInCode = await waitForOobCode(
@@ -91,10 +102,17 @@ test.describe("Self-registration", () => {
     await page.waitForURL((url) => url.pathname === "/login", { timeout: 5_000 })
     await expect(page.getByText("Konto erstellen")).toBeVisible()
 
+    // In signup mode, the "already registered" switch link is visible.
+    await expect(page.getByText("Bereits registriert?")).toBeVisible()
+
     // ── Send sign-in link ──
     await page.getByPlaceholder("deine@email.ch").fill(CHECKOUT_SIGNUP_EMAIL)
     await page.getByRole("button", { name: "Anmelde-Link senden" }).click()
     await expect(page.getByText("Anmelde-Link wurde an")).toBeVisible({ timeout: 5_000 })
+
+    // Regression (#103): once the link has been sent, the "Bereits
+    // registriert? Anmelden" switch link must no longer be shown.
+    await expect(page.getByText("Bereits registriert?")).not.toBeVisible()
 
     // ── Complete email link sign-in ──
     const signInCode = await waitForOobCode(
@@ -116,6 +134,12 @@ test.describe("Self-registration", () => {
 
     // ── Screenshot: empty complete-profile form ──
     await expect(page).toHaveScreenshot("complete-profile-empty.png")
+
+    // ── Regression (#111): labels should not show required-field asterisks.
+    // All fields on the complete-profile form are required, so marking them
+    // individually with "*" is redundant and visually noisy.
+    const formText = await page.locator("form").innerText()
+    expect(formText).not.toContain("*")
 
     // ── Complete the profile ──
     await page.locator("#firstName").fill("Checkout")

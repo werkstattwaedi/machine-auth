@@ -196,29 +196,31 @@ function LoginPage() {
             </>
           )}
 
-          <div className="text-center text-sm text-muted-foreground">
-            {isSignup ? (
-              <>
-                Bereits registriert?{" "}
-                <a
-                  href={`/login${redirectTo ? `?redirect=${encodeURIComponent(redirectTo)}` : ""}`}
-                  className="text-cog-teal hover:underline"
-                >
-                  Anmelden
-                </a>
-              </>
-            ) : (
-              <>
-                Noch kein Konto?{" "}
-                <a
-                  href={`/login?mode=signup${redirectTo ? `&redirect=${encodeURIComponent(redirectTo)}` : ""}`}
-                  className="text-cog-teal hover:underline"
-                >
-                  Konto erstellen
-                </a>
-              </>
-            )}
-          </div>
+          {!linkSent && (
+            <div className="text-center text-sm text-muted-foreground">
+              {isSignup ? (
+                <>
+                  Bereits registriert?{" "}
+                  <a
+                    href={`/login${redirectTo ? `?redirect=${encodeURIComponent(redirectTo)}` : ""}`}
+                    className="text-cog-teal hover:underline"
+                  >
+                    Anmelden
+                  </a>
+                </>
+              ) : (
+                <>
+                  Noch kein Konto?{" "}
+                  <a
+                    href={`/login?mode=signup${redirectTo ? `&redirect=${encodeURIComponent(redirectTo)}` : ""}`}
+                    className="text-cog-teal hover:underline"
+                  >
+                    Konto erstellen
+                  </a>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
