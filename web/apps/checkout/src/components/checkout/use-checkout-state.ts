@@ -40,7 +40,7 @@ type CheckoutAction =
   | { type: "UPDATE_PERSON"; id: string; updates: Partial<CheckoutPerson> }
   | { type: "SET_USAGE_TYPE"; usageType: UsageType }
   | { type: "SET_TIP"; amount: number }
-  | { type: "SET_SUBMITTED"; checkoutId: string; totalPrice: number }
+  | { type: "SET_SUBMITTED"; checkoutId: string | null; totalPrice: number }
   | { type: "RESET" }
   | { type: "ADD_LOCAL_ITEM"; item: CheckoutItemLocal }
   | { type: "UPDATE_LOCAL_ITEM"; id: string; item: CheckoutItemLocal }

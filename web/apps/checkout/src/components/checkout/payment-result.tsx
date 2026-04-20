@@ -14,7 +14,7 @@ interface CheckoutDoc {
   billRef?: DocumentReference | null
 }
 
-interface PaymentData {
+export interface PaymentData {
   qrBillPayload: string
   paylinkUrl: string
   creditor: {
@@ -41,26 +41,46 @@ const SWISS_CROSS_SVG = `data:image/svg+xml,${encodeURIComponent(
 )}`
 
 interface PaymentResultProps {
-  checkoutId: string
+  /** Null for the anonymous flow, where the client never sees the doc id. */
+  checkoutId: string | null
   totalPrice: number
   resetLabel?: string
   onReset: () => void
+  /**
+   * Pre-fetched payment data from `closeCheckoutAndGetPayment`. When provided,
+   * the QR renders immediately without waiting for the Firestore-trigger /
+   * `getPaymentQrData` round-trip used by the legacy fallback path.
+   */
+  initialPaymentData?: PaymentData | null
 }
 
-export function PaymentResult({ checkoutId, totalPrice, resetLabel, onReset }: PaymentResultProps) {
+export function PaymentResult({
+  checkoutId,
+  totalPrice,
+  resetLabel,
+  onReset,
+  initialPaymentData,
+}: PaymentResultProps) {
   const functions = useFunctions()
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>("ebanking")
 
-  // Listen for billRef on checkout doc
-  const { data: checkout } = useDocument<CheckoutDoc>(`checkouts/${checkoutId}`)
-  const billId = checkout?.billRef?.id ?? null
-
-  // Fetch payment data from server once bill exists
-  const [paymentData, setPaymentData] = useState<PaymentData | null>(null)
+  const [paymentData, setPaymentData] = useState<PaymentData | null>(
+    initialPaymentData ?? null,
+  )
   const [qrError, setQrError] = useState(false)
 
+  // Legacy fallback: subscribe to billRef on the checkout doc and fetch
+  // payment data once the Firestore trigger has created the bill. Skipped
+  // when initialPaymentData is supplied (the normal flow now), and also
+  // skipped when no checkoutId is available.
+  const skipFallback = !!initialPaymentData || !checkoutId
+  const { data: checkout } = useDocument<CheckoutDoc>(
+    skipFallback ? null : `checkouts/${checkoutId}`,
+  )
+  const billId = checkout?.billRef?.id ?? null
+
   useEffect(() => {
-    if (!billId) return
+    if (skipFallback || !billId) return
 
     const getPaymentData = httpsCallable<{ billId: string }, PaymentData>(
       functions,
@@ -70,7 +90,7 @@ export function PaymentResult({ checkoutId, totalPrice, resetLabel, onReset }: P
     getPaymentData({ billId })
       .then((result) => setPaymentData(result.data))
       .catch(() => setQrError(true))
-  }, [billId, functions])
+  }, [skipFallback, billId, functions])
 
   return (
     <div className="space-y-6">
