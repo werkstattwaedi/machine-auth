@@ -22,6 +22,7 @@ export function WorkshopSectionWithCatalog({
   onBlurSave,
   checkoutId,
   itemErrors,
+  sectionRef,
 }: {
   workshopId: WorkshopId
   workshop: WorkshopConfig
@@ -32,6 +33,7 @@ export function WorkshopSectionWithCatalog({
   onBlurSave?: boolean
   checkoutId?: string | null
   itemErrors?: Record<string, ItemErrors>
+  sectionRef?: (el: HTMLDivElement | null) => void
 }) {
   const { data: rawCatalog, loading } = useCatalogForWorkshop(workshopId)
 
@@ -64,6 +66,7 @@ export function WorkshopSectionWithCatalog({
       onBlurSave={onBlurSave}
       checkoutId={checkoutId}
       itemErrors={itemErrors}
+      sectionRef={sectionRef}
     />
   )
 }

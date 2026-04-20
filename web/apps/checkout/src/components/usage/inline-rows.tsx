@@ -944,6 +944,7 @@ export function WorkshopInlineSection({
   onBlurSave,
   checkoutId,
   itemErrors,
+  sectionRef,
 }: {
   workshopId: WorkshopId
   workshop: WorkshopConfig
@@ -955,6 +956,7 @@ export function WorkshopInlineSection({
   onBlurSave?: boolean
   checkoutId?: string | null
   itemErrors?: Record<string, ItemErrors>
+  sectionRef?: (el: HTMLDivElement | null) => void
 }) {
   const [searchOpen, setSearchOpen] = useState(false)
 
@@ -965,7 +967,7 @@ export function WorkshopInlineSection({
   const wsTotal = items.reduce((s, i) => s + i.totalPrice, 0)
 
   return (
-    <div className="space-y-2">
+    <div ref={sectionRef} className="space-y-2">
       <h2 className="text-xl font-bold font-body underline decoration-cog-teal decoration-2 underline-offset-4">
         {workshop.label}
       </h2>

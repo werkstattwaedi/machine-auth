@@ -78,14 +78,24 @@ export function StepWorkshops({
     return s
   }, [items])
 
-  // Pre-select workshops that have items
-  const [selectedWorkshops, setSelectedWorkshops] = useState<Set<WorkshopId>>(
-    () => new Set<WorkshopId>(workshopsWithItems),
-  )
+  // Track checkbox toggles explicitly made by the user. Workshops that already
+  // have items are always considered selected (derived below); keeping manual
+  // selections separate avoids snapshot drift when `items` arrives late (e.g.
+  // after a StepWorkshops re-mount triggered by `checkoutId` changing when the
+  // first item is added). See issue #99.
+  const [manuallySelectedWorkshops, setManuallySelectedWorkshops] = useState<
+    Set<WorkshopId>
+  >(() => new Set<WorkshopId>())
+
+  const selectedWorkshops = useMemo(() => {
+    const combined = new Set<WorkshopId>(manuallySelectedWorkshops)
+    for (const wsId of workshopsWithItems) combined.add(wsId)
+    return combined
+  }, [manuallySelectedWorkshops, workshopsWithItems])
 
   const toggleWorkshop = (wsId: WorkshopId) => {
     if (workshopsWithItems.has(wsId)) return
-    setSelectedWorkshops((prev) => {
+    setManuallySelectedWorkshops((prev) => {
       const next = new Set(prev)
       if (next.has(wsId)) {
         next.delete(wsId)
@@ -95,6 +105,40 @@ export function StepWorkshops({
       return next
     })
   }
+
+  // Scroll the most recently added workshop section into view so users on
+  // mobile see the new inline section instead of it silently appearing below
+  // the fold. See issue #100.
+  //
+  // We track which workshops were selected on the *previous* render and, when
+  // exactly one new workshop has been added, scroll its section after the
+  // browser has had a chance to paint (one rAF tick). The initial set of
+  // already-selected workshops (from `workshopsWithItems` on first mount) is
+  // captured in the ref so their mount doesn't trigger a scroll.
+  const sectionRefs = useRef<Map<WorkshopId, HTMLDivElement>>(new Map())
+  const registerSectionRef = useCallback(
+    (wsId: WorkshopId) => (el: HTMLDivElement | null) => {
+      if (el) sectionRefs.current.set(wsId, el)
+      else sectionRefs.current.delete(wsId)
+    },
+    [],
+  )
+  const prevSelectedRef = useRef<Set<WorkshopId>>(selectedWorkshops)
+  useEffect(() => {
+    const prev = prevSelectedRef.current
+    const added: WorkshopId[] = []
+    for (const wsId of selectedWorkshops) {
+      if (!prev.has(wsId)) added.push(wsId)
+    }
+    prevSelectedRef.current = selectedWorkshops
+    if (added.length !== 1) return
+    const wsId = added[0]
+    const raf = requestAnimationFrame(() => {
+      const el = sectionRefs.current.get(wsId)
+      el?.scrollIntoView({ behavior: "smooth", block: "start" })
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [selectedWorkshops])
 
   // Callbacks: local state for anonymous, Firestore for authenticated
   const callbacks: ItemCallbacks = useMemo(
@@ -220,6 +264,7 @@ export function StepWorkshops({
               discountLevel={discountLevel}
               checkoutId={checkoutId}
               itemErrors={itemErrors}
+              sectionRef={registerSectionRef(wsId)}
             />
           ))}
 
