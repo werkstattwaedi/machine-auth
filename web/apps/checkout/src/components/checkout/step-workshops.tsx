@@ -78,14 +78,24 @@ export function StepWorkshops({
     return s
   }, [items])
 
-  // Pre-select workshops that have items
-  const [selectedWorkshops, setSelectedWorkshops] = useState<Set<WorkshopId>>(
-    () => new Set<WorkshopId>(workshopsWithItems),
-  )
+  // Track checkbox toggles explicitly made by the user. Workshops that already
+  // have items are always considered selected (derived below); keeping manual
+  // selections separate avoids snapshot drift when `items` arrives late (e.g.
+  // after a StepWorkshops re-mount triggered by `checkoutId` changing when the
+  // first item is added). See issue #99.
+  const [manuallySelectedWorkshops, setManuallySelectedWorkshops] = useState<
+    Set<WorkshopId>
+  >(() => new Set<WorkshopId>())
+
+  const selectedWorkshops = useMemo(() => {
+    const combined = new Set<WorkshopId>(manuallySelectedWorkshops)
+    for (const wsId of workshopsWithItems) combined.add(wsId)
+    return combined
+  }, [manuallySelectedWorkshops, workshopsWithItems])
 
   const toggleWorkshop = (wsId: WorkshopId) => {
     if (workshopsWithItems.has(wsId)) return
-    setSelectedWorkshops((prev) => {
+    setManuallySelectedWorkshops((prev) => {
       const next = new Set(prev)
       if (next.has(wsId)) {
         next.delete(wsId)
