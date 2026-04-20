@@ -151,6 +151,26 @@ test.describe("Self-registration", () => {
     const formText = await page.locator("form").innerText()
     expect(formText).not.toContain("*")
 
+    // ── Regression (#110): the Nutzungsbestimmungen link is inlined in the
+    // checkbox label (not a separate header row). Clicking the link must
+    // open the terms in a new tab without toggling the checkbox.
+    const termsLink = page.getByRole("link", { name: "Nutzungsbestimmungen" })
+    await expect(termsLink).toHaveAttribute(
+      "href",
+      "https://werkstattwaedi.ch/nutzungsbestimmungen",
+    )
+    await expect(termsLink).toHaveAttribute("target", "_blank")
+    const termsCheckbox = page.locator("#termsAccepted")
+    await expect(termsCheckbox).not.toBeChecked()
+    // Intercept the link click to prevent actual navigation, verify the
+    // checkbox state is unaffected by the click (stopPropagation keeps the
+    // label-click-forwarding from toggling the checkbox).
+    await termsLink.evaluate((a) =>
+      a.addEventListener("click", (e) => e.preventDefault()),
+    )
+    await termsLink.click()
+    await expect(termsCheckbox).not.toBeChecked()
+
     // ── Complete the profile ──
     await page.locator("#firstName").fill("Checkout")
     await page.locator("#lastName").fill("Tester")
