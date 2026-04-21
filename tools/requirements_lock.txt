@@ -24,7 +24,7 @@ pypng==0.20220715.0
 lz4==4.4.5
 
 # Dotenv (gateway reads .env.local for configuration)
-python-dotenv==1.1.0
+python-dotenv==1.2.2
 
 # Common dependencies
 idna==3.10
