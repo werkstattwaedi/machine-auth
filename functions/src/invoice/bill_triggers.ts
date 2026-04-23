@@ -18,8 +18,7 @@ import { defineSecret, defineString } from "firebase-functions/params";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { Resend } from "resend";
-import { format } from "date-fns";
-import { de } from "date-fns/locale";
+import { formatWorkshopDateTime } from "../util/workshop_timezone";
 import { buildInvoicePdf } from "./build_invoice_pdf";
 import { formatInvoiceNumber } from "./types";
 import { logOperationError } from "../operations_log";
@@ -286,10 +285,9 @@ async function trySendEmail(billId: string): Promise<boolean> {
 
     const invoiceNumber = formatInvoiceNumber(bill.referenceNumber);
     const recipientName = checkout.persons[0]?.name ?? "Kunde";
-    const checkoutDate = format(
+    const checkoutDate = formatWorkshopDateTime(
       checkout.created.toDate(),
       "dd. MMMM yyyy, HH:mm",
-      { locale: de },
     );
 
     const resend = new Resend(resendApiKey.value());
