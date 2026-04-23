@@ -31,12 +31,13 @@ export interface PaymentData {
 
 type PaymentMethod = "ebanking" | "twint"
 
-// Swiss cross SVG for QR bill center overlay (SIX Swiss Payment Standards spec)
-const SWISS_CROSS_SVG = `data:image/svg+xml,${encodeURIComponent(
+// Swiss cross SVG for QR bill center overlay (SIX Swiss Payment Standards spec):
+// thin white border, black square, white cross.
+export const SWISS_CROSS_SVG = `data:image/svg+xml,${encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">' +
-  '<rect width="100" height="100" fill="black"/>' +
-  '<rect x="3" y="3" width="94" height="94" fill="white"/>' +
-  '<polygon points="20,40 20,60 40,60 40,80 60,80 60,60 80,60 80,40 60,40 60,20 40,20 40,40" fill="black"/>' +
+  '<rect width="100" height="100" fill="white"/>' +
+  '<rect x="3" y="3" width="94" height="94" fill="black"/>' +
+  '<polygon points="20,40 20,60 40,60 40,80 60,80 60,60 80,60 80,40 60,40 60,20 40,20 40,40" fill="white"/>' +
   '</svg>',
 )}`
 
