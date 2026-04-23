@@ -222,6 +222,7 @@ export { createUser } from "./auth/create-user";
 export { getInvoiceDownloadUrl } from "./invoice/get_invoice_download_url";
 export { getPaymentQrData } from "./invoice/get_payment_qr_data";
 export { closeCheckoutAndGetPayment } from "./invoice/close_checkout_and_get_payment";
+export { logClientError } from "./util/log_client_error";
 
 // Export bill lifecycle triggers
 export { onCheckoutClosed, onCheckoutCreatedClosed } from "./invoice/create_bill";
