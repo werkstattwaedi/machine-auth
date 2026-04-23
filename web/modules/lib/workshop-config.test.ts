@@ -49,6 +49,8 @@ describe("getUnitLabel", () => {
     ["count", "Stück"],
     ["weight", "Kilogramm"],
     ["direct", "Franken"],
+    // SLA ignores label config — "Druck" is the atomic billable unit.
+    ["sla", "Druck"],
   ] as [PricingModel, string][])("%s → %s", (model, expected) => {
     expect(getUnitLabel(config, model)).toBe(expected)
   })
@@ -68,6 +70,7 @@ describe("getShortUnit", () => {
     ["count", "Stk."],
     ["weight", "kg"],
     ["direct", "CHF"],
+    ["sla", "Druck"],
   ] as [PricingModel, string][])("%s → %s", (model, expected) => {
     expect(getShortUnit(model)).toBe(expected)
   })

@@ -47,7 +47,24 @@ export function WorkshopSectionWithCatalog({
       if (item.catalogId) {
         const cat = rawCatalog.find((c) => c.id === item.catalogId)
         if (cat) {
-          resolved = { ...item, unitPrice: cat.unitPrice[discountLevel] ?? cat.unitPrice.none ?? 0 }
+          resolved = {
+            ...item,
+            unitPrice: cat.unitPrice[discountLevel] ?? cat.unitPrice.none ?? 0,
+          }
+          // SLA items need the two-axis price resolved at add time so the
+          // inline row can compute totals without re-querying.
+          if (cat.pricingModel === "sla" && cat.slaPricing) {
+            resolved.slaPricing = {
+              resinPricePerLiter:
+                cat.slaPricing.resinPricePerLiter?.[discountLevel] ??
+                cat.slaPricing.resinPricePerLiter?.none ??
+                0,
+              pricePerLayer:
+                cat.slaPricing.pricePerLayer?.[discountLevel] ??
+                cat.slaPricing.pricePerLayer?.none ??
+                0,
+            }
+          }
         }
       }
       callbacks.addItem(resolved)

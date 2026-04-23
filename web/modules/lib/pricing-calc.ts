@@ -12,7 +12,17 @@ export interface PricingResult {
 export function computePricing(
   pricingModel: PricingModel,
   unitPrice: number,
-  raw: { quantity?: number; lengthCm?: number; widthCm?: number; weightG?: number },
+  raw: {
+    quantity?: number
+    lengthCm?: number
+    widthCm?: number
+    weightG?: number
+    resinMl?: number
+    layers?: number
+  },
+  // SLA has two price axes; resolve to a single DiscountLevel value in the
+  // caller and pass it here so this function stays pure.
+  slaPricing?: { resinPricePerLiter: number; pricePerLayer: number },
 ): PricingResult {
   let quantity = 0
   let totalPrice = 0
@@ -41,6 +51,18 @@ export function computePricing(
     const chf = raw.quantity ?? 0
     quantity = 1
     totalPrice = chf
+  } else if (pricingModel === "sla") {
+    const resinMl = raw.resinMl ?? 0
+    const layers = raw.layers ?? 0
+    const resinPricePerLiter = slaPricing?.resinPricePerLiter ?? 0
+    const pricePerLayer = slaPricing?.pricePerLayer ?? 0
+    quantity = 1
+    totalPrice =
+      (resinMl / 1000) * resinPricePerLiter + layers * pricePerLayer
+    formInputs = [
+      { quantity: resinMl, unit: "ml" },
+      { quantity: layers, unit: "layers" },
+    ]
   } else {
     // count, time
     const qty = raw.quantity ?? 0

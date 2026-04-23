@@ -85,6 +85,20 @@ function makeCatalogItems(): CatalogItem[] {
       active: true,
       userCanAdd: true,
     },
+    {
+      id: "cat-sla",
+      code: "9010",
+      name: "SLA Druck",
+      workshops: ["holz"],
+      pricingModel: "sla",
+      unitPrice: { none: 0, member: 0, intern: 0 },
+      slaPricing: {
+        resinPricePerLiter: { none: 250, member: 200, intern: 150 },
+        pricePerLayer: { none: 0.01, member: 0.008, intern: 0.006 },
+      },
+      active: true,
+      userCanAdd: true,
+    },
   ]
 }
 
@@ -392,6 +406,117 @@ describe("LengthItemRow", () => {
 
     const lastCall = callbacks.updateItem.mock.calls.at(-1)!
     expect(lastCall[1]).toMatchObject({ quantity: 1.5 })
+  })
+})
+
+// ============================================================================
+// SlaItemRow (via CatalogItemRow)
+// ============================================================================
+
+describe("SlaItemRow", () => {
+  function slaItem(overrides: Partial<CheckoutItemLocal> = {}): CheckoutItemLocal {
+    return makeItem({
+      pricingModel: "sla",
+      catalogId: "cat-sla",
+      quantity: 1,
+      unitPrice: 0,
+      totalPrice: 0,
+      description: "SLA Druck",
+      slaPricing: { resinPricePerLiter: 250, pricePerLayer: 0.01 },
+      ...overrides,
+    })
+  }
+
+  it("computes total from resin volume (per liter) and layer count", async () => {
+    const user = userEvent.setup()
+    const callbacks = makeCallbacks()
+
+    render(
+      <CatalogItemRow
+        item={slaItem()}
+        catalogEntry={makeCatalogItems()[3]}
+        config={makeConfig()}
+        index={0}
+        callbacks={callbacks}
+      />,
+    )
+
+    const inputs = screen.getAllByRole("spinbutton")
+    // inputs[0] = resin ml, inputs[1] = layers
+    await user.clear(inputs[0])
+    await user.type(inputs[0], "50")
+    await user.clear(inputs[1])
+    await user.type(inputs[1], "1000")
+
+    const lastCall = callbacks.updateItem.mock.calls.at(-1)!
+    // 50ml/1000 * 250 CHF/L = 12.5; 1000 * 0.01 = 10; total = 22.5
+    expect(lastCall[1]).toMatchObject({
+      quantity: 1,
+      totalPrice: 22.5,
+    })
+    expect(lastCall[1].formInputs).toEqual([
+      { quantity: 50, unit: "ml" },
+      { quantity: 1000, unit: "layers" },
+    ])
+  })
+
+  it("shows the resin price per liter in the Preis/Einheit hint", () => {
+    const callbacks = makeCallbacks()
+
+    render(
+      <CatalogItemRow
+        item={slaItem()}
+        catalogEntry={makeCatalogItems()[3]}
+        config={makeConfig()}
+        index={0}
+        callbacks={callbacks}
+      />,
+    )
+
+    // The dominating cost axis is the resin price per liter; display it
+    // verbatim so users can sanity-check the main pricing signal.
+    expect(screen.getByText("250 CHF/L")).toBeTruthy()
+  })
+
+  it("displays computed total as users type", async () => {
+    const user = userEvent.setup()
+    const callbacks = makeCallbacks()
+
+    render(
+      <CatalogItemRow
+        item={slaItem()}
+        catalogEntry={makeCatalogItems()[3]}
+        config={makeConfig()}
+        index={0}
+        callbacks={callbacks}
+      />,
+    )
+
+    const inputs = screen.getAllByRole("spinbutton")
+    await user.clear(inputs[0])
+    await user.type(inputs[0], "100")
+    await user.clear(inputs[1])
+    await user.type(inputs[1], "500")
+
+    // 100/1000 * 250 = 25; 500 * 0.01 = 5; total = 30
+    expect(screen.getByText(/CHF\s*30\.00/)).toBeTruthy()
+  })
+
+  it("shows both Resin and Layer input labels", () => {
+    const callbacks = makeCallbacks()
+
+    render(
+      <CatalogItemRow
+        item={slaItem()}
+        catalogEntry={makeCatalogItems()[3]}
+        config={makeConfig()}
+        index={0}
+        callbacks={callbacks}
+      />,
+    )
+
+    expect(screen.getByText("Resin (ml)")).toBeTruthy()
+    expect(screen.getByText("Layer")).toBeTruthy()
   })
 })
 
@@ -850,6 +975,7 @@ describe("AddArticleSearch sorting", () => {
       expect.stringContaining("Dachlatte 24x48"),
       expect.stringContaining("MDF Platte 3mm"),
       expect.stringContaining("Schrauben M5"),
+      expect.stringContaining("SLA Druck"),
     ])
   })
 })

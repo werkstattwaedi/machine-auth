@@ -3,7 +3,7 @@
 
 import { Input } from "@modules/components/ui/input"
 import { Label } from "@modules/components/ui/label"
-import type { UseFormRegister } from "react-hook-form"
+import { useWatch, type Control, type UseFormRegister } from "react-hook-form"
 
 export interface CatalogFormValues {
   code: string
@@ -14,17 +14,31 @@ export interface CatalogFormValues {
   priceNone: string
   priceMember: string
   priceIntern: string
+  // SLA-only: resin price per liter × discount level (CHF/L)
+  resinPricePerLiterNone: string
+  resinPricePerLiterMember: string
+  resinPricePerLiterIntern: string
+  // SLA-only: price per printed layer × discount level (CHF/layer)
+  pricePerLayerNone: string
+  pricePerLayerMember: string
+  pricePerLayerIntern: string
   active: boolean
   userCanAdd: boolean
 }
 
 export function CatalogFormFields({
   register,
+  control,
   showActive,
 }: {
   register: UseFormRegister<CatalogFormValues>
+  control: Control<CatalogFormValues>
   showActive?: boolean
 }) {
+  // Conditionally reveal the SLA-specific price axes.
+  const pricingModel = useWatch({ control, name: "pricingModel" })
+  const isSla = pricingModel === "sla"
+
   return (
     <>
       <div className="grid grid-cols-2 gap-4">
@@ -58,6 +72,7 @@ export function CatalogFormFields({
             <option value="count">Stück</option>
             <option value="weight">Gewicht (kg)</option>
             <option value="direct">Betrag (CHF)</option>
+            <option value="sla">SLA Druck (Resin + Layer)</option>
           </select>
         </div>
       </div>
@@ -75,6 +90,62 @@ export function CatalogFormFields({
           <Input type="number" step="0.01" {...register("priceIntern")} />
         </div>
       </div>
+      {isSla && (
+        <>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label>Resin CHF/L (Voll)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                {...register("resinPricePerLiterNone")}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Resin CHF/L (Mitglied)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                {...register("resinPricePerLiterMember")}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Resin CHF/L (Intern)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                {...register("resinPricePerLiterIntern")}
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label>CHF/Layer (Voll)</Label>
+              <Input
+                type="number"
+                step="0.0001"
+                {...register("pricePerLayerNone")}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>CHF/Layer (Mitglied)</Label>
+              <Input
+                type="number"
+                step="0.0001"
+                {...register("pricePerLayerMember")}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>CHF/Layer (Intern)</Label>
+              <Input
+                type="number"
+                step="0.0001"
+                {...register("pricePerLayerIntern")}
+              />
+            </div>
+          </div>
+        </>
+      )}
       <div className="flex items-center gap-4">
         {showActive && (
           <div className="flex items-center gap-2">

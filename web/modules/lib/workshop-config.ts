@@ -17,7 +17,14 @@ export type WorkshopId =
   | "diverses"
 
 export type DiscountLevel = "none" | "member" | "intern"
-export type PricingModel = "time" | "area" | "length" | "count" | "weight" | "direct"
+export type PricingModel =
+  | "time"
+  | "area"
+  | "length"
+  | "count"
+  | "weight"
+  | "direct"
+  | "sla"
 
 export interface WorkshopConfig {
   label: string
@@ -41,6 +48,15 @@ export interface PricingConfig {
   labels: PricingLabels
 }
 
+/**
+ * SLA resin printing pricing: two-axis costs per discount level.
+ * Only present when `CatalogItem.pricingModel === "sla"`.
+ */
+export interface SlaPricing {
+  resinPricePerLiter: Record<DiscountLevel, number>
+  pricePerLayer: Record<DiscountLevel, number>
+}
+
 export interface CatalogItem {
   id: string
   code: string
@@ -51,6 +67,7 @@ export interface CatalogItem {
   active: boolean
   userCanAdd: boolean
   description?: string | null
+  slaPricing?: SlaPricing | null
 }
 
 export function usePricingConfig() {
@@ -97,6 +114,9 @@ export function getUnitLabel(config: PricingConfig, pricingModel: PricingModel):
     count: config.labels?.units?.stk ?? "Stk.",
     weight: config.labels?.units?.kg ?? "kg",
     direct: config.labels?.units?.chf ?? (import.meta.env.VITE_CURRENCY || "CHF"),
+    // SLA prints aren't billed per a single unit; "Druck" (one print job) is
+    // the atomic item, but its cost depends on resin volume + layer count.
+    sla: "Druck",
   }
   return map[pricingModel] ?? pricingModel
 }
@@ -110,6 +130,7 @@ export function getShortUnit(pm: PricingModel): string {
     case "count": return "Stk."
     case "weight": return "kg"
     case "direct": return import.meta.env.VITE_CURRENCY || "CHF"
+    case "sla": return "Druck"
     default: return ""
   }
 }

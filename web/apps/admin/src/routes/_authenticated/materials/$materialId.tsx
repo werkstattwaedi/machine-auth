@@ -27,7 +27,7 @@ function CatalogDetailPage() {
   )
   const { update, loading: saving } = useFirestoreMutation()
 
-  const { register, handleSubmit, reset } = useForm<CatalogFormValues>()
+  const { register, handleSubmit, reset, control } = useForm<CatalogFormValues>()
 
   useEffect(() => {
     if (catalog) {
@@ -40,6 +40,12 @@ function CatalogDetailPage() {
         priceNone: String(catalog.unitPrice?.none ?? 0),
         priceMember: String(catalog.unitPrice?.member ?? 0),
         priceIntern: String(catalog.unitPrice?.intern ?? 0),
+        resinPricePerLiterNone: String(catalog.slaPricing?.resinPricePerLiter?.none ?? 0),
+        resinPricePerLiterMember: String(catalog.slaPricing?.resinPricePerLiter?.member ?? 0),
+        resinPricePerLiterIntern: String(catalog.slaPricing?.resinPricePerLiter?.intern ?? 0),
+        pricePerLayerNone: String(catalog.slaPricing?.pricePerLayer?.none ?? 0),
+        pricePerLayerMember: String(catalog.slaPricing?.pricePerLayer?.member ?? 0),
+        pricePerLayerIntern: String(catalog.slaPricing?.pricePerLayer?.intern ?? 0),
         active: catalog.active,
         userCanAdd: catalog.userCanAdd,
       })
@@ -50,6 +56,7 @@ function CatalogDetailPage() {
   if (!catalog) return <div>Katalogeintrag nicht gefunden.</div>
 
   const onSubmit = async (values: CatalogFormValues) => {
+    const isSla = values.pricingModel === "sla"
     await update(
       "catalog",
       materialId,
@@ -64,6 +71,20 @@ function CatalogDetailPage() {
           member: parseFloat(values.priceMember) || 0,
           intern: parseFloat(values.priceIntern) || 0,
         },
+        slaPricing: isSla
+          ? {
+              resinPricePerLiter: {
+                none: parseFloat(values.resinPricePerLiterNone) || 0,
+                member: parseFloat(values.resinPricePerLiterMember) || 0,
+                intern: parseFloat(values.resinPricePerLiterIntern) || 0,
+              },
+              pricePerLayer: {
+                none: parseFloat(values.pricePerLayerNone) || 0,
+                member: parseFloat(values.pricePerLayerMember) || 0,
+                intern: parseFloat(values.pricePerLayerIntern) || 0,
+              },
+            }
+          : null,
         active: values.active,
         userCanAdd: values.userCanAdd,
       },
@@ -87,7 +108,7 @@ function CatalogDetailPage() {
             onSubmit={handleSubmit(onSubmit)}
             className="space-y-4 max-w-lg"
           >
-            <CatalogFormFields register={register} showActive />
+            <CatalogFormFields register={register} control={control} showActive />
             <Button type="submit" disabled={saving}>
               {saving ? (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />

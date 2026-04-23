@@ -38,6 +38,10 @@ export interface CheckoutItemLocal {
   unitPrice: number
   totalPrice: number
   formInputs?: { quantity: number; unit: string }[]
+  // SLA items carry a resolved two-axis price (already adjusted for the
+  // current user's discount level) so the row can compute totals without
+  // re-querying the catalog document.
+  slaPricing?: { resinPricePerLiter: number; pricePerLayer: number } | null
 }
 
 /** Generic callbacks for adding/updating/removing items */
@@ -184,6 +188,16 @@ export function CatalogItemRow({
         <LengthItemRow
           item={item}
           config={config}
+          index={index}
+          callbacks={callbacks}
+          onBlurSave={onBlurSave}
+          error={error}
+        />
+      )
+    case "sla":
+      return (
+        <SlaItemRow
+          item={item}
           index={index}
           callbacks={callbacks}
           onBlurSave={onBlurSave}
@@ -505,6 +519,112 @@ function LengthItemRow({
           priceError={!!error?.price}
           priceErrorMessage={error?.price}
         />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// SLA resin print item (two-axis price: resin volume ml × CHF/L + layers × CHF/layer)
+// ---------------------------------------------------------------------------
+
+function SlaItemRow({
+  item,
+  index,
+  callbacks,
+  onBlurSave,
+  error,
+}: {
+  item: CheckoutItemLocal
+  index: number
+  callbacks: ItemCallbacks
+  onBlurSave?: boolean
+  error?: ItemErrors
+}) {
+  const formResin = item.formInputs?.[0]?.quantity ?? 0
+  const formLayers = item.formInputs?.[1]?.quantity ?? 0
+  const [resinMl, setResinMl] = useState(formResin)
+  const [layers, setLayers] = useState(formLayers)
+
+  const resinPricePerLiter = item.slaPricing?.resinPricePerLiter ?? 0
+  const pricePerLayer = item.slaPricing?.pricePerLayer ?? 0
+
+  const computeTotal = (ml: number, lyr: number) =>
+    Math.round(
+      ((ml / 1000) * resinPricePerLiter + lyr * pricePerLayer) * 100,
+    ) / 100
+
+  const doUpdate = (ml: number, lyr: number) => {
+    callbacks.updateItem(item.id, {
+      ...item,
+      quantity: 1,
+      totalPrice: computeTotal(ml, lyr),
+      formInputs: [
+        { quantity: ml, unit: "ml" },
+        { quantity: lyr, unit: "layers" },
+      ],
+    })
+  }
+
+  const hasError = error && (error.quantity || error.price)
+
+  return (
+    <div className={`pl-8 pr-4 py-3 ${rowBg(index)}${hasError ? " bg-[#fce4e4]" : ""}`}>
+      <ItemHeader
+        label={`Artikel ${index + 1}: ${item.description}`}
+        onRemove={() => callbacks.removeItem(item.id)}
+      />
+      <div className={`flex flex-wrap items-end gap-x-3 mt-2${hasError ? " gap-y-8 pb-5" : " gap-y-3"}`}>
+        <div className="w-24 sm:w-28 relative">
+          <Label className="text-xs font-bold">Resin (ml)</Label>
+          <input
+            type="number"
+            min="0"
+            step="0.1"
+            value={resinMl || ""}
+            onChange={(e) => {
+              const v = Math.max(0, parseFloat(e.target.value) || 0)
+              setResinMl(v)
+              if (!onBlurSave) doUpdate(v, layers)
+            }}
+            onBlur={onBlurSave ? () => doUpdate(resinMl, layers) : undefined}
+            className={error?.quantity ? INPUT_ERR_CLS : INPUT_CLS}
+          />
+          <ItemError message={error?.quantity} />
+        </div>
+        <div className="w-24 sm:w-28">
+          <Label className="text-xs font-bold">Layer</Label>
+          <input
+            type="number"
+            min="0"
+            step="1"
+            value={layers || ""}
+            onChange={(e) => {
+              // Layer count is an integer counter — clamp to non-negative int.
+              const v = Math.max(0, Math.floor(parseFloat(e.target.value) || 0))
+              setLayers(v)
+              if (!onBlurSave) doUpdate(resinMl, v)
+            }}
+            onBlur={onBlurSave ? () => doUpdate(resinMl, layers) : undefined}
+            className={error?.quantity ? INPUT_ERR_CLS : INPUT_CLS}
+          />
+        </div>
+        <div className="ml-auto flex items-end gap-3">
+          {/* Dominating cost axis: show resin CHF/L (not per-layer) in the
+              price-per-unit hint column so users see the main pricing signal. */}
+          <div className="w-20 sm:w-24 shrink-0 text-right">
+            <Label className="text-xs font-bold">Preis/Einheit</Label>
+            <div className="h-9 flex items-center justify-end text-sm">
+              {`${resinPricePerLiter} CHF/L`}
+            </div>
+          </div>
+          <div className="w-20 sm:w-24 shrink-0 text-right">
+            <Label className="text-xs font-bold">Betrag</Label>
+            <div className="h-9 flex items-center justify-end text-sm font-bold">
+              {formatCHF(computeTotal(resinMl, layers))}
+            </div>
+          </div>
         </div>
       </div>
     </div>

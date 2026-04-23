@@ -17,12 +17,17 @@
       "code": "string", // Unique human-manageable lookup code (e.g., "1042")
       "name": "string", // e.g., "Stationäre Maschinen", "Sperrholz Birke 4mm"
       "workshops": ["string"], // e.g., ["holz"], ["holz", "metall"]
-      "pricingModel": "time | area | length | count | weight | direct",
-      // time → hours, area → m², length → meters, count → pieces, weight → kg, direct → CHF
+      "pricingModel": "time | area | length | count | weight | direct | sla",
+      // time → hours, area → m², length → meters, count → pieces, weight → kg,
+      // direct → CHF, sla → resin (ml, priced per L) + layers (count, priced per layer)
       "unitPrice": { // Conditional price per base unit by discount level
         "none": "number",
         "member": "number",
         "intern": "number"
+      },
+      "slaPricing": { // Only present when pricingModel == "sla"
+        "resinPricePerLiter": { "none": "number", "member": "number", "intern": "number" },
+        "pricePerLayer":      { "none": "number", "member": "number", "intern": "number" }
       },
       "active": "boolean",
       "userCanAdd": "boolean", // true = users can add to checkout, false = system-only (NFC machine hours)
