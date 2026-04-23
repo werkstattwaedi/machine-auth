@@ -11,7 +11,10 @@ import {
   type Unsubscribe,
   query,
 } from "firebase/firestore"
+import { getFunctions, httpsCallable, type Functions } from "firebase/functions"
 import { useDb } from "./firebase-context"
+import { getClientSessionId } from "./client-session"
+import type { FirebaseApp } from "firebase/app"
 
 interface UseCollectionResult<T> {
   data: (T & { id: string })[]
@@ -29,6 +32,58 @@ interface UseDocumentResult<T> {
 // watch-stream assertion errors caused by rapid mount/unmount cycles
 // (React StrictMode double-mount, fast navigation between pages).
 const LISTENER_DELAY_MS = 50
+
+interface FirestoreQueryError {
+  code?: string
+  message?: string
+  name?: string
+}
+
+// Fire-and-forget: log an error to console and to Cloud Logging via the
+// logClientError callable. Never throws — a failure here must not trigger
+// another error callback.
+function reportQueryError(
+  functions: Functions,
+  path: string,
+  err: FirestoreQueryError,
+): void {
+  const sessionId = getClientSessionId()
+  const code = err.code ?? err.name ?? "unknown"
+  const message = err.message ?? String(err)
+  // eslint-disable-next-line no-console
+  console.error("[firestore] error", { path, code, message, sessionId })
+
+  try {
+    const callable = httpsCallable<
+      {
+        sessionId: string
+        context: string
+        code: string
+        message: string
+        path: string
+        userAgent: string
+      },
+      { ok: boolean }
+    >(functions, "logClientError")
+    callable({
+      sessionId,
+      context: "firestore",
+      code,
+      message,
+      path,
+      userAgent:
+        typeof navigator !== "undefined" ? navigator.userAgent ?? "" : "",
+    }).catch(() => {
+      // Swallow: never let logClientError failure recurse into reportQueryError.
+    })
+  } catch {
+    // Swallow synchronous init errors for the same reason.
+  }
+}
+
+function functionsForDb(db: { app: FirebaseApp }): Functions {
+  return getFunctions(db.app)
+}
 
 export function useCollection<T = DocumentData>(
   path: string | null,
@@ -65,6 +120,7 @@ export function useCollection<T = DocumentData>(
           setError(null)
         },
         (err) => {
+          reportQueryError(functionsForDb(db), path, err as FirestoreQueryError)
           setError(err)
           setLoading(false)
         }
@@ -115,6 +171,7 @@ export function useDocument<T = DocumentData>(
           setError(null)
         },
         (err) => {
+          reportQueryError(functionsForDb(db), path, err as FirestoreQueryError)
           setError(err)
           setLoading(false)
         }

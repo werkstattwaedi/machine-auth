@@ -47,6 +47,10 @@ vi.mock("@modules/lib/auth", () => ({
   useAuth: () => mockAuthReturn,
 }))
 
+// Per-test error injection: map collection path -> error to deliver instead
+// of a snapshot. Used to simulate permission-denied on `bills`.
+const errorPaths = new Map<string, Error>()
+
 // Mock firebase/firestore — redirect to FakeFirestore
 vi.mock("firebase/firestore", async () => {
   const actual = await vi.importActual<typeof import("firebase/firestore")>("firebase/firestore")
@@ -81,6 +85,13 @@ vi.mock("firebase/firestore", async () => {
           )
         }
         const path = refOrQuery.collectionPath ?? refOrQuery.path ?? ""
+        const injected = errorPaths.get(path)
+        if (injected) {
+          // Fire asynchronously so the hook's initial loading state is set first,
+          // matching real Firestore behaviour.
+          queueMicrotask(() => onError?.(injected))
+          return () => {}
+        }
         const constraints = (refOrQuery as { constraints?: unknown[] }).constraints ?? []
         return fakeDb.onSnapshotCollection(
           fakeDb.collection(path),
@@ -110,6 +121,7 @@ vi.mock("firebase/firestore", async () => {
 const mockCallable = vi.fn()
 vi.mock("firebase/functions", () => ({
   httpsCallable: () => mockCallable,
+  getFunctions: () => ({}),
 }))
 
 // Mock sonner
@@ -144,6 +156,8 @@ describe("Usage page", () => {
     fakeDb = new FakeFirestore()
     mockCallable.mockReset()
     mockToastError.mockReset()
+    errorPaths.clear()
+    sessionStorage.clear()
     mockAuthReturn = {
       user: { uid: "user1" },
       userDoc: mockUserDoc,
@@ -324,6 +338,26 @@ describe("Usage page", () => {
     await waitFor(() => {
       expect(mockToastError).toHaveBeenCalledWith("PDF konnte nicht geladen werden.")
     })
+  })
+
+  it("shows <QueryError> when bills collection fails and hides the empty state", async () => {
+    const err = Object.assign(new Error("Missing or insufficient permissions."), {
+      code: "permission-denied",
+    })
+    errorPaths.set("bills", err)
+
+    renderUsagePage()
+
+    // The QueryError component renders the session ID and the alert role.
+    await waitFor(() => {
+      expect(
+        screen.getByText("Beim Laden ist ein Fehler aufgetreten."),
+      ).toBeInTheDocument()
+    })
+    expect(screen.getByText(/Fehler-ID:/)).toBeInTheDocument()
+    // The silently-empty state that the bug reporter saw must no longer
+    // appear when the query itself errored.
+    expect(screen.queryByText("Keine Rechnungen")).not.toBeInTheDocument()
   })
 
   it("does not show download button when storagePath is null", async () => {
