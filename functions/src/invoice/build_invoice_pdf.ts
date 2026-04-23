@@ -3,9 +3,8 @@
 
 import PDFDocument from "pdfkit";
 import { SwissQRBill } from "swissqrbill/pdf";
-import { format } from "date-fns";
-import { de } from "date-fns/locale";
 import { resolve } from "node:path";
+import { formatWorkshopDateTime } from "../util/workshop_timezone";
 import { formatInvoiceNumber } from "./types";
 import type { InvoiceData, InvoiceCheckout, PaymentConfig } from "./types";
 import type { PricingModel } from "../types/firestore_entities";
@@ -75,11 +74,11 @@ function unitLabel(pricingModel?: PricingModel | null): string {
 }
 
 function formatDate(date: Date): string {
-  return format(date, "dd.MM.yyyy HH:mm", { locale: de });
+  return formatWorkshopDateTime(date, "dd.MM.yyyy HH:mm");
 }
 
 function formatDateOnly(date: Date): string {
-  return format(date, "dd.MM.yyyy", { locale: de });
+  return formatWorkshopDateTime(date, "dd.MM.yyyy");
 }
 
 function ensureSpace(doc: PDFKit.PDFDocument, y: number, needed: number): number {

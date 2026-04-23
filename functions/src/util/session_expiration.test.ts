@@ -25,7 +25,7 @@ describe("Session Expiration", () => {
 
   beforeEach(() => {
     // Clear environment variable before each test
-    delete process.env.SESSION_TIMEZONE;
+    delete process.env.WORKSHOP_TIMEZONE;
   });
 
   describe("calculateSessionExpiration", () => {
@@ -79,7 +79,7 @@ describe("Session Expiration", () => {
     });
 
     it("should use custom timezone from environment variable", () => {
-      process.env.SESSION_TIMEZONE = "America/New_York";
+      process.env.WORKSHOP_TIMEZONE = "America/New_York";
       
       // Test with a session starting at 10:30 AM EST (UTC-5 in winter)
       const startTime = createTimestamp("2024-01-12T15:30:00.000Z"); // 10:30 AM EST
