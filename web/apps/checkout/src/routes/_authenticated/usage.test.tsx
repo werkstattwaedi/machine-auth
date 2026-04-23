@@ -276,10 +276,19 @@ describe("Usage page", () => {
     expect(screen.getByText("Nicht verrechnete Checkouts")).toBeInTheDocument()
   })
 
-  it("download button calls getInvoiceDownloadUrl and opens URL", async () => {
+  it("download button calls getInvoiceDownloadUrl and triggers anchor click", async () => {
     const user = userEvent.setup()
     mockCallable.mockResolvedValue({ data: { url: "https://example.com/invoice.pdf" } })
+    // The fix replaces window.open(..., "_blank") — blocked by popup blockers
+    // after an await — with a synthetic anchor click. Spy on the click and
+    // explicitly assert window.open was NOT used.
     const openSpy = vi.spyOn(window, "open").mockImplementation(() => null)
+    const clickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(function mockClick(this: HTMLAnchorElement) {
+        // Capture the anchor so the test can assert on its href.
+        ;(clickSpy as unknown as { clickedAnchor?: HTMLAnchorElement }).clickedAnchor = this
+      })
 
     fakeDb.setDoc(fakeDb.doc("bills", "bill3"), {
       userId: fakeDb.doc("users", "user1"),
@@ -305,8 +314,18 @@ describe("Usage page", () => {
     await waitFor(() => {
       expect(mockCallable).toHaveBeenCalledWith({ billId: "bill3" })
     })
-    expect(openSpy).toHaveBeenCalledWith("https://example.com/invoice.pdf", "_blank")
+    await waitFor(() => {
+      expect(clickSpy).toHaveBeenCalledTimes(1)
+    })
 
+    const clickedAnchor = (clickSpy as unknown as {
+      clickedAnchor?: HTMLAnchorElement
+    }).clickedAnchor
+    expect(clickedAnchor).toBeInstanceOf(HTMLAnchorElement)
+    expect(clickedAnchor!.href).toBe("https://example.com/invoice.pdf")
+    expect(openSpy).not.toHaveBeenCalled()
+
+    clickSpy.mockRestore()
     openSpy.mockRestore()
   })
 
