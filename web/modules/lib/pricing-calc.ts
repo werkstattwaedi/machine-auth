@@ -20,9 +20,10 @@ export function computePricing(
     resinMl?: number
     layers?: number
   },
-  // SLA has two price axes; resolve to a single DiscountLevel value in the
-  // caller and pass it here so this function stays pure.
-  slaPricing?: { resinPricePerLiter: number; pricePerLayer: number },
+  // SLA has a second price axis (layer cost) that lives in global pricing
+  // config rather than on the catalog item. Callers resolve it for the
+  // current discount level and pass the number so this function stays pure.
+  layerPrice?: number,
 ): PricingResult {
   let quantity = 0
   let totalPrice = 0
@@ -54,11 +55,10 @@ export function computePricing(
   } else if (pricingModel === "sla") {
     const resinMl = raw.resinMl ?? 0
     const layers = raw.layers ?? 0
-    const resinPricePerLiter = slaPricing?.resinPricePerLiter ?? 0
-    const pricePerLayer = slaPricing?.pricePerLayer ?? 0
+    const perLayer = layerPrice ?? 0
     quantity = 1
-    totalPrice =
-      (resinMl / 1000) * resinPricePerLiter + layers * pricePerLayer
+    // unitPrice is CHF per liter of resin; layerPrice is CHF per printed layer.
+    totalPrice = (resinMl / 1000) * unitPrice + layers * perLayer
     formInputs = [
       { quantity: resinMl, unit: "ml" },
       { quantity: layers, unit: "layers" },

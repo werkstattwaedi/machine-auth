@@ -84,12 +84,13 @@ describe("computePricing", () => {
   })
 
   describe("sla pricing", () => {
-    it("combines resin volume (per liter) and layer count", () => {
+    it("combines resin volume (unitPrice CHF/L) and layer count (layerPrice CHF/layer)", () => {
+      // unitPrice = CHF/L of resin; layerPrice = CHF per printed layer.
       const result = computePricing(
         "sla",
-        0,
+        250,
         { resinMl: 50, layers: 1000 },
-        { resinPricePerLiter: 250, pricePerLayer: 0.01 },
+        0.01,
       )
       // (50/1000)*250 = 12.5; 1000 * 0.01 = 10; total = 22.5
       expect(result.quantity).toBe(1)
@@ -103,9 +104,9 @@ describe("computePricing", () => {
     it("returns only resin cost when layers is zero", () => {
       const result = computePricing(
         "sla",
-        0,
+        250,
         { resinMl: 50, layers: 0 },
-        { resinPricePerLiter: 250, pricePerLayer: 0.01 },
+        0.01,
       )
       expect(result.totalPrice).toBe(12.5)
     })
@@ -113,9 +114,9 @@ describe("computePricing", () => {
     it("returns only layer cost when resin volume is zero", () => {
       const result = computePricing(
         "sla",
-        0,
+        250,
         { resinMl: 0, layers: 1000 },
-        { resinPricePerLiter: 250, pricePerLayer: 0.01 },
+        0.01,
       )
       expect(result.totalPrice).toBe(10)
     })
@@ -123,9 +124,9 @@ describe("computePricing", () => {
     it("returns zero when both axes are zero", () => {
       const result = computePricing(
         "sla",
-        0,
+        250,
         { resinMl: 0, layers: 0 },
-        { resinPricePerLiter: 250, pricePerLayer: 0.01 },
+        0.01,
       )
       expect(result.totalPrice).toBe(0)
       expect(result.quantity).toBe(1)
@@ -134,18 +135,14 @@ describe("computePricing", () => {
     it("rounds fractional totals to 2 decimal places", () => {
       // 13.7 ml * 250 CHF/L = 3.425 → rounded to 3.43 (Banker isn't used;
       // Math.round rounds half up for positive values).
-      const result = computePricing(
-        "sla",
-        0,
-        { resinMl: 13.7, layers: 0 },
-        { resinPricePerLiter: 250, pricePerLayer: 0.01 },
-      )
+      const result = computePricing("sla", 250, { resinMl: 13.7, layers: 0 }, 0.01)
       expect(result.totalPrice).toBe(3.43)
     })
 
-    it("treats missing slaPricing as zero cost", () => {
-      const result = computePricing("sla", 0, { resinMl: 50, layers: 1000 })
-      expect(result.totalPrice).toBe(0)
+    it("treats missing layerPrice as zero cost for the layer axis", () => {
+      // No layerPrice provided → only resin cost contributes.
+      const result = computePricing("sla", 250, { resinMl: 50, layers: 1000 })
+      expect(result.totalPrice).toBe(12.5)
     })
   })
 

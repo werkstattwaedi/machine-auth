@@ -123,7 +123,6 @@ function CreateCatalogDialog({ open, onOpenChange }: { open: boolean; onOpenChan
   })
 
   const onSubmit = async (values: CatalogFormValues) => {
-    const isSla = values.pricingModel === "sla"
     await add("catalog", {
       code: values.code,
       name: values.name,
@@ -135,23 +134,6 @@ function CreateCatalogDialog({ open, onOpenChange }: { open: boolean; onOpenChan
         member: parseFloat(values.priceMember) || 0,
         intern: parseFloat(values.priceIntern) || 0,
       },
-      // SLA items carry a two-axis price (resin volume × layer count); the
-      // main unitPrice fields are left as zeros for compatibility with any
-      // legacy queries that still read them.
-      slaPricing: isSla
-        ? {
-            resinPricePerLiter: {
-              none: parseFloat(values.resinPricePerLiterNone) || 0,
-              member: parseFloat(values.resinPricePerLiterMember) || 0,
-              intern: parseFloat(values.resinPricePerLiterIntern) || 0,
-            },
-            pricePerLayer: {
-              none: parseFloat(values.pricePerLayerNone) || 0,
-              member: parseFloat(values.pricePerLayerMember) || 0,
-              intern: parseFloat(values.pricePerLayerIntern) || 0,
-            },
-          }
-        : null,
       active: true,
       userCanAdd: values.userCanAdd,
     }, {

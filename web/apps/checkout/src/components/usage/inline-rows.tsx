@@ -35,13 +35,11 @@ export interface CheckoutItemLocal {
   catalogId: string | null
   pricingModel: PricingModel | null
   quantity: number
+  // For `pricingModel === "sla"` this is CHF per liter of resin, already
+  // resolved for the current user's discount level.
   unitPrice: number
   totalPrice: number
   formInputs?: { quantity: number; unit: string }[]
-  // SLA items carry a resolved two-axis price (already adjusted for the
-  // current user's discount level) so the row can compute totals without
-  // re-querying the catalog document.
-  slaPricing?: { resinPricePerLiter: number; pricePerLayer: number } | null
 }
 
 /** Generic callbacks for adding/updating/removing items */
@@ -156,6 +154,7 @@ export function CatalogItemRow({
   item,
   catalogEntry,
   config,
+  discountLevel,
   index,
   callbacks,
   onBlurSave,
@@ -164,6 +163,10 @@ export function CatalogItemRow({
   item: CheckoutItemLocal
   catalogEntry?: CatalogItem
   config: PricingConfig
+  // Only used for SLA rows today, to look up the globally-configured
+  // per-layer price at the user's discount level. Other pricing models
+  // already have their price resolved onto `item.unitPrice` at add time.
+  discountLevel?: DiscountLevel
   index: number
   callbacks: ItemCallbacks
   onBlurSave?: boolean
@@ -198,6 +201,11 @@ export function CatalogItemRow({
       return (
         <SlaItemRow
           item={item}
+          layerPrice={
+            config.slaLayerPrice?.[discountLevel ?? "none"] ??
+            config.slaLayerPrice?.none ??
+            0
+          }
           index={index}
           callbacks={callbacks}
           onBlurSave={onBlurSave}
@@ -531,12 +539,17 @@ function LengthItemRow({
 
 function SlaItemRow({
   item,
+  layerPrice,
   index,
   callbacks,
   onBlurSave,
   error,
 }: {
   item: CheckoutItemLocal
+  // Resolved CHF-per-layer for the current discount level. SLA layer cost is
+  // hardware-driven and constant across resin types, so it lives in
+  // `PricingConfig.slaLayerPrice` rather than on each catalog entry.
+  layerPrice: number
   index: number
   callbacks: ItemCallbacks
   onBlurSave?: boolean
@@ -547,12 +560,12 @@ function SlaItemRow({
   const [resinMl, setResinMl] = useState(formResin)
   const [layers, setLayers] = useState(formLayers)
 
-  const resinPricePerLiter = item.slaPricing?.resinPricePerLiter ?? 0
-  const pricePerLayer = item.slaPricing?.pricePerLayer ?? 0
+  // For SLA, unitPrice is CHF/L of resin (resolved at add time).
+  const resinPricePerLiter = item.unitPrice
 
   const computeTotal = (ml: number, lyr: number) =>
     Math.round(
-      ((ml / 1000) * resinPricePerLiter + lyr * pricePerLayer) * 100,
+      ((ml / 1000) * resinPricePerLiter + lyr * layerPrice) * 100,
     ) / 100
 
   const doUpdate = (ml: number, lyr: number) => {
@@ -611,12 +624,12 @@ function SlaItemRow({
           />
         </div>
         <div className="ml-auto flex items-end gap-3">
-          {/* Dominating cost axis: show resin CHF/L (not per-layer) in the
-              price-per-unit hint column so users see the main pricing signal. */}
-          <div className="w-20 sm:w-24 shrink-0 text-right">
+          {/* SLA has two price axes — show both so users can see the full
+              pricing signal: resin (dominant) + layer cost. */}
+          <div className="w-32 sm:w-40 shrink-0 text-right">
             <Label className="text-xs font-bold">Preis/Einheit</Label>
             <div className="h-9 flex items-center justify-end text-sm">
-              {`${resinPricePerLiter} CHF/L`}
+              {`${resinPricePerLiter} CHF/L · ${layerPrice} CHF/Layer`}
             </div>
           </div>
           <div className="w-20 sm:w-24 shrink-0 text-right">
@@ -1109,6 +1122,7 @@ export function WorkshopInlineSection({
           item={item}
           catalogEntry={catalogItems.find((c) => c.id === item.catalogId)}
           config={config}
+          discountLevel={discountLevel}
           index={nfcItems.length + i}
           callbacks={callbacks}
           onBlurSave={onBlurSave}

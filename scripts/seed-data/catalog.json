@@ -1859,13 +1859,9 @@
     "name": "SLA Druck",
     "workshops": ["makerspace"],
     "pricingModel": "sla",
-    "unitPrice": { "none": 0, "member": 0, "intern": 0 },
-    "slaPricing": {
-      "resinPricePerLiter": { "none": 250, "member": 200, "intern": 150 },
-      "pricePerLayer": { "none": 0.01, "member": 0.008, "intern": 0.006 }
-    },
+    "unitPrice": { "none": 250, "member": 200, "intern": 150 },
     "active": true,
     "userCanAdd": true,
-    "description": "Resin-Druck: Preis nach Harzverbrauch (ml) und Layeranzahl"
+    "description": "Resin-Druck: Preis nach Harzverbrauch (CHF/L) und Layeranzahl (global)"
   }
 ]

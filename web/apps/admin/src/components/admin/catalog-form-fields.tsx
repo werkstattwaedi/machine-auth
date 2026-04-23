@@ -14,14 +14,6 @@ export interface CatalogFormValues {
   priceNone: string
   priceMember: string
   priceIntern: string
-  // SLA-only: resin price per liter × discount level (CHF/L)
-  resinPricePerLiterNone: string
-  resinPricePerLiterMember: string
-  resinPricePerLiterIntern: string
-  // SLA-only: price per printed layer × discount level (CHF/layer)
-  pricePerLayerNone: string
-  pricePerLayerMember: string
-  pricePerLayerIntern: string
   active: boolean
   userCanAdd: boolean
 }
@@ -35,9 +27,14 @@ export function CatalogFormFields({
   control: Control<CatalogFormValues>
   showActive?: boolean
 }) {
-  // Conditionally reveal the SLA-specific price axes.
+  // For SLA catalog entries, `unitPrice` represents CHF per liter of resin;
+  // the per-layer cost is configured globally on `config/pricing`.
   const pricingModel = useWatch({ control, name: "pricingModel" })
-  const isSla = pricingModel === "sla"
+  const priceLabel = pricingModel === "sla" ? "Resin CHF/L" : "Preis"
+  const priceHelp =
+    pricingModel === "sla"
+      ? "Preis pro Liter Resin. Der Layerpreis wird global konfiguriert."
+      : null
 
   return (
     <>
@@ -72,79 +69,26 @@ export function CatalogFormFields({
             <option value="count">Stück</option>
             <option value="weight">Gewicht (kg)</option>
             <option value="direct">Betrag (CHF)</option>
-            <option value="sla">SLA Druck (Resin + Layer)</option>
+            <option value="sla">SLA Druck (Resin CHF/L)</option>
           </select>
         </div>
       </div>
       <div className="grid grid-cols-3 gap-4">
         <div className="space-y-2">
-          <Label>Preis (Voll)</Label>
+          <Label>{priceLabel} (Voll)</Label>
           <Input type="number" step="0.01" {...register("priceNone", { required: true })} />
         </div>
         <div className="space-y-2">
-          <Label>Preis (Mitglied)</Label>
+          <Label>{priceLabel} (Mitglied)</Label>
           <Input type="number" step="0.01" {...register("priceMember")} />
         </div>
         <div className="space-y-2">
-          <Label>Preis (Intern)</Label>
+          <Label>{priceLabel} (Intern)</Label>
           <Input type="number" step="0.01" {...register("priceIntern")} />
         </div>
       </div>
-      {isSla && (
-        <>
-          <div className="grid grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label>Resin CHF/L (Voll)</Label>
-              <Input
-                type="number"
-                step="0.01"
-                {...register("resinPricePerLiterNone")}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Resin CHF/L (Mitglied)</Label>
-              <Input
-                type="number"
-                step="0.01"
-                {...register("resinPricePerLiterMember")}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Resin CHF/L (Intern)</Label>
-              <Input
-                type="number"
-                step="0.01"
-                {...register("resinPricePerLiterIntern")}
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label>CHF/Layer (Voll)</Label>
-              <Input
-                type="number"
-                step="0.0001"
-                {...register("pricePerLayerNone")}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>CHF/Layer (Mitglied)</Label>
-              <Input
-                type="number"
-                step="0.0001"
-                {...register("pricePerLayerMember")}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>CHF/Layer (Intern)</Label>
-              <Input
-                type="number"
-                step="0.0001"
-                {...register("pricePerLayerIntern")}
-              />
-            </div>
-          </div>
-        </>
+      {priceHelp && (
+        <p className="text-xs text-muted-foreground">{priceHelp}</p>
       )}
       <div className="flex items-center gap-4">
         {showActive && (

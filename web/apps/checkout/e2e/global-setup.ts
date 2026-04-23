@@ -48,6 +48,8 @@ export default async function globalSetup() {
       kind: { regular: 7.5, materialbezug: 0, intern: 0, hangenmoos: 7.5 },
       firma: { regular: 30, materialbezug: 0, intern: 0, hangenmoos: 30 },
     },
+    // SLA per-layer price (global; resin-per-liter lives on each catalog entry).
+    slaLayerPrice: { none: 0.01, member: 0.008, intern: 0.006 },
     workshops: {
       holz: { label: "Holz", order: 1 },
       metall: { label: "Metall", order: 2 },

@@ -23,8 +23,10 @@ function makeConfig(): PricingConfig {
   return {
     entryFees: { erwachsen: {}, kind: {}, firma: {} },
     workshops: { holz: { label: "Holz", order: 1 } } as PricingConfig["workshops"],
+    // Per-layer SLA cost is global (hardware-driven, not resin-specific).
+    slaLayerPrice: { none: 0.01, member: 0.008, intern: 0.006 },
     labels: {
-      units: { h: "Std.", m2: "m²", m: "m", stk: "Stk.", kg: "kg", chf: "CHF" },
+      units: { h: "Std.", m2: "m²", m: "m", stk: "Stk.", kg: "kg", chf: "CHF", l: "L" },
       discounts: { none: "Normal", member: "Mitglied", intern: "Intern" },
     },
   }
@@ -91,11 +93,9 @@ function makeCatalogItems(): CatalogItem[] {
       name: "SLA Druck",
       workshops: ["holz"],
       pricingModel: "sla",
-      unitPrice: { none: 0, member: 0, intern: 0 },
-      slaPricing: {
-        resinPricePerLiter: { none: 250, member: 200, intern: 150 },
-        pricePerLayer: { none: 0.01, member: 0.008, intern: 0.006 },
-      },
+      // unitPrice is CHF per liter of resin for SLA. Layer price comes from
+      // PricingConfig.slaLayerPrice (global).
+      unitPrice: { none: 250, member: 200, intern: 150 },
       active: true,
       userCanAdd: true,
     },
@@ -419,15 +419,15 @@ describe("SlaItemRow", () => {
       pricingModel: "sla",
       catalogId: "cat-sla",
       quantity: 1,
-      unitPrice: 0,
+      // For SLA, unitPrice = CHF per liter of resin (resolved for discount).
+      unitPrice: 250,
       totalPrice: 0,
       description: "SLA Druck",
-      slaPricing: { resinPricePerLiter: 250, pricePerLayer: 0.01 },
       ...overrides,
     })
   }
 
-  it("computes total from resin volume (per liter) and layer count", async () => {
+  it("computes total from unitPrice (CHF/L) and the global layerPrice (CHF/layer)", async () => {
     const user = userEvent.setup()
     const callbacks = makeCallbacks()
 
@@ -436,6 +436,7 @@ describe("SlaItemRow", () => {
         item={slaItem()}
         catalogEntry={makeCatalogItems()[3]}
         config={makeConfig()}
+        discountLevel="none"
         index={0}
         callbacks={callbacks}
       />,
@@ -460,7 +461,7 @@ describe("SlaItemRow", () => {
     ])
   })
 
-  it("shows the resin price per liter in the Preis/Einheit hint", () => {
+  it("shows both resin-per-liter (unitPrice) and per-layer (config.slaLayerPrice) in the hint", () => {
     const callbacks = makeCallbacks()
 
     render(
@@ -468,14 +469,36 @@ describe("SlaItemRow", () => {
         item={slaItem()}
         catalogEntry={makeCatalogItems()[3]}
         config={makeConfig()}
+        discountLevel="none"
         index={0}
         callbacks={callbacks}
       />,
     )
 
-    // The dominating cost axis is the resin price per liter; display it
-    // verbatim so users can sanity-check the main pricing signal.
-    expect(screen.getByText("250 CHF/L")).toBeTruthy()
+    // Show both price axes so users can sanity-check the full pricing signal.
+    expect(
+      screen.getByText("250 CHF/L · 0.01 CHF/Layer"),
+    ).toBeTruthy()
+  })
+
+  it("applies member discount layerPrice from config.slaLayerPrice", () => {
+    const callbacks = makeCallbacks()
+
+    render(
+      <CatalogItemRow
+        item={slaItem({ unitPrice: 200 })}
+        catalogEntry={makeCatalogItems()[3]}
+        config={makeConfig()}
+        discountLevel="member"
+        index={0}
+        callbacks={callbacks}
+      />,
+    )
+
+    // Member discount: resin = 200 CHF/L, layer = 0.008 CHF/layer.
+    expect(
+      screen.getByText("200 CHF/L · 0.008 CHF/Layer"),
+    ).toBeTruthy()
   })
 
   it("displays computed total as users type", async () => {
@@ -487,6 +510,7 @@ describe("SlaItemRow", () => {
         item={slaItem()}
         catalogEntry={makeCatalogItems()[3]}
         config={makeConfig()}
+        discountLevel="none"
         index={0}
         callbacks={callbacks}
       />,
@@ -510,6 +534,7 @@ describe("SlaItemRow", () => {
         item={slaItem()}
         catalogEntry={makeCatalogItems()[3]}
         config={makeConfig()}
+        discountLevel="none"
         index={0}
         callbacks={callbacks}
       />,

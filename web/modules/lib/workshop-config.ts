@@ -46,15 +46,10 @@ export interface PricingConfig {
   entryFees: EntryFees
   workshops: Record<WorkshopId, WorkshopConfig>
   labels: PricingLabels
-}
-
-/**
- * SLA resin printing pricing: two-axis costs per discount level.
- * Only present when `CatalogItem.pricingModel === "sla"`.
- */
-export interface SlaPricing {
-  resinPricePerLiter: Record<DiscountLevel, number>
-  pricePerLayer: Record<DiscountLevel, number>
+  // SLA resin prints have a per-layer cost that's constant across all resin
+  // types (driven by hardware wear, not material). Configured globally so a
+  // new resin catalog entry doesn't need its own copy of these numbers.
+  slaLayerPrice: Record<DiscountLevel, number>
 }
 
 export interface CatalogItem {
@@ -63,11 +58,12 @@ export interface CatalogItem {
   name: string
   workshops: string[]
   pricingModel: PricingModel
+  // For `pricingModel === "sla"` this is CHF per liter of resin; the per-layer
+  // portion of the cost comes from `PricingConfig.slaLayerPrice`.
   unitPrice: Record<DiscountLevel, number>
   active: boolean
   userCanAdd: boolean
   description?: string | null
-  slaPricing?: SlaPricing | null
 }
 
 export function usePricingConfig() {
@@ -114,9 +110,10 @@ export function getUnitLabel(config: PricingConfig, pricingModel: PricingModel):
     count: config.labels?.units?.stk ?? "Stk.",
     weight: config.labels?.units?.kg ?? "kg",
     direct: config.labels?.units?.chf ?? (import.meta.env.VITE_CURRENCY || "CHF"),
-    // SLA prints aren't billed per a single unit; "Druck" (one print job) is
-    // the atomic item, but its cost depends on resin volume + layer count.
-    sla: "Druck",
+    // SLA resin is priced per liter of resin consumed (plus a constant
+    // per-layer cost from pricingConfig.slaLayerPrice). `unitPrice` on an
+    // SLA catalog entry is therefore CHF/L.
+    sla: config.labels?.units?.l ?? "L",
   }
   return map[pricingModel] ?? pricingModel
 }
@@ -130,7 +127,7 @@ export function getShortUnit(pm: PricingModel): string {
     case "count": return "Stk."
     case "weight": return "kg"
     case "direct": return import.meta.env.VITE_CURRENCY || "CHF"
-    case "sla": return "Druck"
+    case "sla": return "L"
     default: return ""
   }
 }

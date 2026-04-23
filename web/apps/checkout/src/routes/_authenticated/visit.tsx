@@ -65,7 +65,6 @@ interface CheckoutItemDoc {
   unitPrice: number
   totalPrice: number
   formInputs?: { quantity: number; unit: string }[]
-  slaPricing?: { resinPricePerLiter: number; pricePerLayer: number } | null
 }
 
 function DashboardPage() {
@@ -128,7 +127,6 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
         unitPrice: item.unitPrice,
         totalPrice: item.totalPrice,
         formInputs: item.formInputs,
-        slaPricing: item.slaPricing ?? null,
       })),
     [checkoutItems],
   )
@@ -164,7 +162,6 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
           unitPrice: item.unitPrice,
           totalPrice: item.totalPrice,
           formInputs: item.formInputs ?? null,
-          slaPricing: item.slaPricing ?? null,
         })
       },
       updateItem: (_id: string, item: CheckoutItemLocal) => {

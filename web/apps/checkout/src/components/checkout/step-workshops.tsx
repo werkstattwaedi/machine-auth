@@ -178,7 +178,6 @@ export function StepWorkshops({
             unitPrice: item.unitPrice,
             totalPrice: item.totalPrice,
             formInputs: item.formInputs ?? null,
-            slaPricing: item.slaPricing ?? null,
           })
         },
         updateItem: (_id: string, item: CheckoutItemLocal) => {
