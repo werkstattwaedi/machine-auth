@@ -124,12 +124,13 @@ describe("Session Expiration", () => {
     });
 
     it("should return true for a session that has expired", () => {
-      // Create a session that started yesterday at 10 AM
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      yesterday.setHours(10, 0, 0, 0);
-      const startTime = Timestamp.fromDate(yesterday);
-      
+      // 48 hours ago — expiration is always at least a full day in the past,
+      // regardless of the current wall-clock time. A "yesterday 10 AM" anchor
+      // failed between 00:00–03:00 local because expiration (3 AM today) was
+      // still in the future.
+      const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
+      const startTime = Timestamp.fromDate(twoDaysAgo);
+
       expect(isSessionExpired(startTime)).to.equal(true);
     });
 
