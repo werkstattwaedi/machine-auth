@@ -164,6 +164,22 @@ test.describe("Anonymous checkout", () => {
       page.getByText("E-Mail muss im Format name@address.xyz eingegeben werden."),
     ).not.toBeVisible()
 
+    // ── Regression (#110): Nutzungsbestimmungen link is inlined in the
+    // checkbox label. Clicking the link does not toggle the checkbox.
+    const termsLink = page.getByRole("link", { name: "Nutzungsbestimmungen" })
+    await expect(termsLink).toHaveAttribute(
+      "href",
+      "https://werkstattwaedi.ch/nutzungsbestimmungen",
+    )
+    await expect(termsLink).toHaveAttribute("target", "_blank")
+    const termsCheckbox = page.locator("#terms-accept")
+    await expect(termsCheckbox).not.toBeChecked()
+    await termsLink.evaluate((a) =>
+      a.addEventListener("click", (e) => e.preventDefault()),
+    )
+    await termsLink.click()
+    await expect(termsCheckbox).not.toBeChecked()
+
     // Accept terms — now Weiter advances
     await page.locator("#terms-accept").click()
     await page.getByRole("button", { name: "Weiter" }).click()

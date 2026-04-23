@@ -236,19 +236,6 @@ function CompleteProfilePage() {
         </div>
 
         <div className="space-y-3">
-          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
-            <span className="text-sm font-bold">
-              Nutzungsbestimmungen
-            </span>
-            <a
-              href="https://werkstattwaedi.ch/nutzungsbestimmungen"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm underline font-bold text-cog-teal"
-            >
-              Nutzungsbestimmungen lesen
-            </a>
-          </div>
           <Controller
             name="termsAccepted"
             control={control}
@@ -269,7 +256,16 @@ function CompleteProfilePage() {
                     onCheckedChange={field.onChange}
                   />
                   <label htmlFor="termsAccepted" className="text-sm leading-snug">
-                    Ich akzeptiere die Nutzungsbestimmungen
+                    Ich akzeptiere die{" "}
+                    <a
+                      href="https://werkstattwaedi.ch/nutzungsbestimmungen"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="underline font-bold text-cog-teal"
+                    >
+                      Nutzungsbestimmungen
+                    </a>
                   </label>
                 </div>
                 {isSubmitted && errors.termsAccepted && (
