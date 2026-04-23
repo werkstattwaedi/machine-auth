@@ -92,7 +92,7 @@ firebase deploy
 ## 8. Smoke Tests
 
 1. **Public checkout**: Visit checkout site with `?picc=...&cmac=...` tag URL
-2. **Login**: Send email link, complete sign-in on checkout site
+2. **Login**: Request 6-digit code on `/login`, redeem it (or click the magic link in the Resend email) to complete sign-in
 3. **Dashboard**: Verify user doc loads from Firestore
 4. **Admin site**: Visit admin site, verify it requires admin custom claim
 5. **Functions**: Check a terminal checkin works end-to-end

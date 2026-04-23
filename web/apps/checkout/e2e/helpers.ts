@@ -5,9 +5,6 @@ import { initializeApp, getApps, type App } from "firebase-admin/app"
 import { getFirestore, type Firestore } from "firebase-admin/firestore"
 
 const PROJECT_ID = "oww-maco"
-// OOB codes REST endpoint uses the emulator's project ID.
-// The emulator-exec.sh script passes --project oww-maco to match.
-const AUTH_EMULATOR_PROJECT = PROJECT_ID
 
 // E2E emulator ports — must match playwright.config.ts and firebase.e2e.json
 export const E2E_PORTS = {
@@ -15,8 +12,6 @@ export const E2E_PORTS = {
   firestore: 8180,
   functions: 5101,
 }
-
-const AUTH_EMULATOR = `http://127.0.0.1:${E2E_PORTS.auth}`
 
 let app: App
 let db: Firestore
@@ -66,29 +61,35 @@ export async function getUserDoc(uid: string) {
   return snap.exists ? snap.data() : null
 }
 
-type OobCode = { email: string; oobCode: string; oobLink: string; requestType: string }
-
-/** Fetch OOB codes from Auth emulator (email sign-in links). */
-export async function getAuthOobCodes(): Promise<OobCode[]> {
-  const res = await fetch(
-    `${AUTH_EMULATOR}/emulator/v1/projects/${AUTH_EMULATOR_PROJECT}/oobCodes`,
-  )
-  const data = await res.json()
-  return data.oobCodes ?? []
+export type LoginCodeEntry = {
+  docId: string
+  code: string
 }
 
-/** Poll the Auth emulator until an OOB code matching the predicate appears.
- *  sendSignInLinkToEmail is async — the emulator may not have registered
- *  the code yet when the test queries immediately after clicking. */
-export async function waitForOobCode(
-  predicate: (c: OobCode) => boolean,
-  { timeoutMs = 5000, intervalMs = 200 } = {},
-): Promise<OobCode | undefined> {
+/** Poll Firestore for the latest unconsumed loginCodes doc for an email.
+ *  requestLoginCode runs in the Functions emulator and writes `debugCode`
+ *  (plaintext code) because FUNCTIONS_EMULATOR === "true". */
+export async function waitForLoginCode(
+  email: string,
+  { timeoutMs = 5000, intervalMs = 150 } = {},
+): Promise<LoginCodeEntry | undefined> {
+  const db = getAdminFirestore()
+  const normalized = email.trim().toLowerCase()
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
-    const codes = await getAuthOobCodes()
-    const match = codes.find(predicate)
-    if (match) return match
+    const snap = await db
+      .collection("loginCodes")
+      .where("email", "==", normalized)
+      .orderBy("created", "desc")
+      .limit(1)
+      .get()
+    if (!snap.empty) {
+      const doc = snap.docs[0]
+      const data = doc.data()
+      if (!data.consumedAt && typeof data.debugCode === "string") {
+        return { docId: doc.id, code: data.debugCode as string }
+      }
+    }
     await new Promise((r) => setTimeout(r, intervalMs))
   }
   return undefined

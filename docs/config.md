@@ -126,7 +126,9 @@ In Firebase Console:
 1. **Authentication**
    - Go to Authentication > Sign-in method
    - Enable **Google** provider
-   - Enable **Email/Password** provider
+   - Enable **Email/Password** provider (login uses our own Resend-based 6-digit
+     code + magic link flow, but Firebase stores the user in the Email/Password
+     provider when `auth.createUser({ email })` runs server-side)
    - Add authorized domain for production (e.g., `your-domain.com`)
 
 2. **Firestore Database**
@@ -383,7 +385,8 @@ Use this checklist when setting up a new environment:
 ### Firebase
 
 - [ ] Firebase project created
-- [ ] Authentication enabled (Email link sign-in)
+- [ ] Authentication enabled (Google + Email/Password providers)
+- [ ] Resend login template created in Resend dashboard with variables `{{CODE}}`, `{{MAGIC_LINK}}`, `{{EXPIRES_MINUTES}}`; template ID set as `RESEND_LOGIN_TEMPLATE_ID` in `config.jsonc`
 - [ ] Firestore database created
 - [ ] Hosting enabled
 - [ ] Service account key downloaded (for scripts/CI)

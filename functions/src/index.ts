@@ -219,6 +219,9 @@ export { admin } from "./admin-api";
 
 // Export callable functions
 export { createUser } from "./auth/create-user";
+export { requestLoginCode } from "./auth/login-code/request";
+export { verifyLoginCode } from "./auth/login-code/verify-code";
+export { verifyMagicLink } from "./auth/login-code/verify-link";
 export { getInvoiceDownloadUrl } from "./invoice/get_invoice_download_url";
 export { getPaymentQrData } from "./invoice/get_payment_qr_data";
 export { closeCheckoutAndGetPayment } from "./invoice/close_checkout_and_get_payment";

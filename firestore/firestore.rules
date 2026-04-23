@@ -170,5 +170,10 @@ service cloud.firestore {
       allow create: if true;
       allow read, update, delete: if isAdmin();
     }
+
+    // Login codes (server-only; written + read only by Cloud Functions)
+    match /loginCodes/{id} {
+      allow read, write: if false;
+    }
   }
 }

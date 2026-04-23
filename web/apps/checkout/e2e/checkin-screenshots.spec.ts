@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { test, expect, type Page } from "@playwright/test"
-import { waitForOobCode } from "./helpers"
+import { clearCollections, waitForLoginCode } from "./helpers"
 import { AUTH_USER_EMAIL } from "./global-setup"
 
 /** Navigate to checkout — check-in step is shown directly */
@@ -67,20 +67,22 @@ test.describe("Check-in step screenshots", () => {
   })
 
   test("logged-in user — sign-out in person card", async ({ page }) => {
-    // Sign in via /login
-    await page.goto("/login")
-    await page.getByPlaceholder("deine@email.ch").fill(AUTH_USER_EMAIL)
-    await page.getByRole("button", { name: "Anmelde-Link senden" }).click()
-    await expect(page.getByText("Anmelde-Link wurde an")).toBeVisible({ timeout: 5000 })
+    // Clear prior loginCodes so the per-email 60 s rate limit doesn't
+    // reject this test when it follows another that signed in.
+    await clearCollections("loginCodes")
 
-    const signInCode = await waitForOobCode(
-      (c) => c.email === AUTH_USER_EMAIL && c.requestType === "EMAIL_SIGNIN",
-    )
-    expect(signInCode).toBeTruthy()
-    await page.goto(signInCode!.oobLink)
-    // Wait for the post-login landing — /visit is the default for a signed-in
-    // user. Waiting only on !oobCode races with the /login → /visit redirect.
-    await page.waitForURL((url) => url.pathname === "/visit", { timeout: 10_000 })
+    // Sign in via /login (6-digit code flow)
+    await page.goto("/login")
+    await page.getByTestId("login-email-input").fill(AUTH_USER_EMAIL)
+    await page.getByTestId("login-email-submit").click()
+    await expect(page.getByTestId("login-code-stage")).toBeVisible({ timeout: 5000 })
+
+    const entry = await waitForLoginCode(AUTH_USER_EMAIL)
+    expect(entry).toBeTruthy()
+    await page.getByTestId("login-code-input").fill(entry!.code)
+    await page.getByTestId("login-code-submit").click()
+
+    await page.waitForURL((url) => !url.pathname.startsWith("/login"), { timeout: 10_000 })
 
     // Navigate to checkout
     await page.goto("/")

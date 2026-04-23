@@ -205,6 +205,17 @@
       "label": "string" // Token label (e.g., "Key 1")
     }
   },
+  "loginCodes": {
+    "{id}": { // id is a 32-byte random base64url string — also the magic-link token
+      "email": "string",            // normalized lowercase
+      "codeHash": "string",         // sha256(`${code}|${id}`)
+      "expiresAt": "timestamp",     // created + 5 min; also the Firestore TTL field (auto-delete)
+      "created": "timestamp",
+      "attempts": "number",         // verification attempts used; doc burned after 5
+      "consumedAt": "timestamp | null", // set on successful verify or when invalidated
+      "debugCode?": "string"        // EMULATOR ONLY — plaintext code for E2E tests; absent in production docs
+    }
+  },
   "users": {
     "{userId}": { // Doc ID = Firebase Auth UID
       "created": "timestamp",

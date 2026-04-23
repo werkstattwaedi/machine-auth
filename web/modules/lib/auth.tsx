@@ -10,13 +10,12 @@ import {
 } from "react"
 import {
   onAuthStateChanged,
-  sendSignInLinkToEmail,
-  isSignInWithEmailLink,
-  signInWithEmailLink,
+  signInWithCustomToken,
   signOut as firebaseSignOut,
   GoogleAuthProvider,
   signInWithPopup,
   linkWithPopup,
+  type Auth,
   type User,
 } from "firebase/auth"
 import {
@@ -27,7 +26,8 @@ import {
   serverTimestamp,
   type Firestore,
 } from "firebase/firestore"
-import { useDb, useFirebaseAuth } from "./firebase-context"
+import { httpsCallable, type Functions } from "firebase/functions"
+import { useDb, useFirebaseAuth, useFunctions } from "./firebase-context"
 
 export interface BillingAddress {
   company: string
@@ -72,9 +72,13 @@ interface AuthContextValue {
   loading: boolean
   /** True while the Firestore user doc is being fetched (may be slow). */
   userDocLoading: boolean
-  signInWithEmail: (email: string) => Promise<void>
+  /** Ask the server to email a 6-digit code + magic link. */
+  requestLoginEmail: (email: string) => Promise<void>
+  /** Redeem the 6-digit code and sign in. */
+  verifyLoginCode: (email: string, code: string) => Promise<void>
+  /** Redeem a magic-link token (read from ?token=…) and sign in. Returns true if redeemed. */
+  completeMagicLink: (token: string) => Promise<boolean>
   signInWithGoogle: () => Promise<void>
-  completeSignIn: () => Promise<boolean>
   linkGoogle: () => Promise<void>
   signOut: () => Promise<void>
   /** Set when Google sign-in failed because an email-link account exists. */
@@ -87,6 +91,7 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const auth = useFirebaseAuth()
   const db = useDb()
+  const functions = useFunctions()
   const [user, setUser] = useState<User | null>(null)
   const [userDoc, setUserDoc] = useState<UserDoc | null>(null)
   const [loading, setLoading] = useState(true)
@@ -163,7 +168,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         "code" in error &&
         (error as { code: string }).code === "auth/account-exists-with-different-credential"
       ) {
-        // Existing email-link account — user must sign in via email first, then link
+        // Existing email account — user must sign in via email first, then link
         window.localStorage.setItem("pendingGoogleLink", "true")
         setPendingGoogleLink(true)
       }
@@ -182,33 +187,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setPendingGoogleLink(false)
   }
 
-  const signInWithEmail = async (email: string) => {
-    await sendSignInLinkToEmail(auth, email, {
-      url: `${window.location.origin}/login`,
-      handleCodeInApp: true,
-    })
-    window.localStorage.setItem("emailForSignIn", email)
+  const requestLoginEmail = async (email: string) => {
+    const fn = httpsCallable<{ email: string }, { ok: true }>(
+      functions,
+      "requestLoginCode"
+    )
+    await fn({ email })
   }
 
-  const completeSignIn = async (): Promise<boolean> => {
-    if (!isSignInWithEmailLink(auth, window.location.href)) {
-      return false
-    }
-
-    let email = window.localStorage.getItem("emailForSignIn")
-    if (!email) {
-      email = window.prompt("Bitte E-Mail-Adresse bestätigen:")
-    }
-    if (!email) throw new Error("E-Mail-Adresse benötigt")
-
-    const credential = await signInWithEmailLink(
+  const verifyLoginCode = async (email: string, code: string) => {
+    await redeemCustomToken(
+      functions,
+      "verifyLoginCode",
+      { email, code },
       auth,
-      email,
-      window.location.href
+      db
     )
-    window.localStorage.removeItem("emailForSignIn")
+  }
 
-    await handleSignIn(db, credential.user)
+  const completeMagicLink = async (token: string): Promise<boolean> => {
+    if (!token) return false
+    await redeemCustomToken(
+      functions,
+      "verifyMagicLink",
+      { token },
+      auth,
+      db
+    )
     return true
   }
 
@@ -225,9 +230,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAdmin,
       loading,
       userDocLoading,
-      signInWithEmail,
+      requestLoginEmail,
+      verifyLoginCode,
+      completeMagicLink,
       signInWithGoogle,
-      completeSignIn,
       linkGoogle,
       signOut,
       pendingGoogleLink,
@@ -242,6 +248,22 @@ export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext)
   if (!ctx) throw new Error("useAuth must be used within AuthProvider")
   return ctx
+}
+
+async function redeemCustomToken(
+  functions: Functions,
+  name: "verifyLoginCode" | "verifyMagicLink",
+  payload: Record<string, string>,
+  auth: Auth,
+  db: Firestore
+): Promise<void> {
+  const fn = httpsCallable<Record<string, string>, { customToken: string }>(
+    functions,
+    name
+  )
+  const { data } = await fn(payload)
+  const credential = await signInWithCustomToken(auth, data.customToken)
+  await handleSignIn(db, credential.user)
 }
 
 /**

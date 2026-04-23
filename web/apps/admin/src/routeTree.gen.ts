@@ -13,6 +13,7 @@ import { Route as LoginRouteImport } from "./routes/login"
 import { Route as LinkAccountRouteImport } from "./routes/link-account"
 import { Route as AuthenticatedRouteImport } from "./routes/_authenticated"
 import { Route as IndexRouteImport } from "./routes/index"
+import { Route as LoginVerifyRouteImport } from "./routes/login_.verify"
 import { Route as AuthenticatedUsersRouteImport } from "./routes/_authenticated/users"
 import { Route as AuthenticatedTerminalsRouteImport } from "./routes/_authenticated/terminals"
 import { Route as AuthenticatedSessionsRouteImport } from "./routes/_authenticated/sessions"
@@ -50,6 +51,11 @@ const AuthenticatedRoute = AuthenticatedRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: "/",
   path: "/",
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginVerifyRoute = LoginVerifyRouteImport.update({
+  id: "/login_/verify",
+  path: "/login/verify",
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedUsersRoute = AuthenticatedUsersRouteImport.update({
@@ -171,6 +177,7 @@ export interface FileRoutesByFullPath {
   "/sessions": typeof AuthenticatedSessionsRoute
   "/terminals": typeof AuthenticatedTerminalsRoute
   "/users": typeof AuthenticatedUsersRouteWithChildren
+  "/login/verify": typeof LoginVerifyRoute
   "/machines/$machineId": typeof AuthenticatedMachinesMachineIdRoute
   "/materials/$materialId": typeof AuthenticatedMaterialsMaterialIdRoute
   "/permissions/$permissionId": typeof AuthenticatedPermissionsPermissionIdRoute
@@ -190,6 +197,7 @@ export interface FileRoutesByTo {
   "/checkouts": typeof AuthenticatedCheckoutsRoute
   "/sessions": typeof AuthenticatedSessionsRoute
   "/terminals": typeof AuthenticatedTerminalsRoute
+  "/login/verify": typeof LoginVerifyRoute
   "/machines/$machineId": typeof AuthenticatedMachinesMachineIdRoute
   "/materials/$materialId": typeof AuthenticatedMaterialsMaterialIdRoute
   "/permissions/$permissionId": typeof AuthenticatedPermissionsPermissionIdRoute
@@ -216,6 +224,7 @@ export interface FileRoutesById {
   "/_authenticated/sessions": typeof AuthenticatedSessionsRoute
   "/_authenticated/terminals": typeof AuthenticatedTerminalsRoute
   "/_authenticated/users": typeof AuthenticatedUsersRouteWithChildren
+  "/login_/verify": typeof LoginVerifyRoute
   "/_authenticated/machines/$machineId": typeof AuthenticatedMachinesMachineIdRoute
   "/_authenticated/materials/$materialId": typeof AuthenticatedMaterialsMaterialIdRoute
   "/_authenticated/permissions/$permissionId": typeof AuthenticatedPermissionsPermissionIdRoute
@@ -242,6 +251,7 @@ export interface FileRouteTypes {
     | "/sessions"
     | "/terminals"
     | "/users"
+    | "/login/verify"
     | "/machines/$machineId"
     | "/materials/$materialId"
     | "/permissions/$permissionId"
@@ -261,6 +271,7 @@ export interface FileRouteTypes {
     | "/checkouts"
     | "/sessions"
     | "/terminals"
+    | "/login/verify"
     | "/machines/$machineId"
     | "/materials/$materialId"
     | "/permissions/$permissionId"
@@ -286,6 +297,7 @@ export interface FileRouteTypes {
     | "/_authenticated/sessions"
     | "/_authenticated/terminals"
     | "/_authenticated/users"
+    | "/login_/verify"
     | "/_authenticated/machines/$machineId"
     | "/_authenticated/materials/$materialId"
     | "/_authenticated/permissions/$permissionId"
@@ -303,6 +315,7 @@ export interface RootRouteChildren {
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   LinkAccountRoute: typeof LinkAccountRoute
   LoginRoute: typeof LoginRoute
+  LoginVerifyRoute: typeof LoginVerifyRoute
 }
 
 declare module "@tanstack/react-router" {
@@ -333,6 +346,13 @@ declare module "@tanstack/react-router" {
       path: "/"
       fullPath: "/"
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    "/login_/verify": {
+      id: "/login_/verify"
+      path: "/login/verify"
+      fullPath: "/login/verify"
+      preLoaderRoute: typeof LoginVerifyRouteImport
       parentRoute: typeof rootRouteImport
     }
     "/_authenticated/users": {
@@ -583,6 +603,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   LinkAccountRoute: LinkAccountRoute,
   LoginRoute: LoginRoute,
+  LoginVerifyRoute: LoginVerifyRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

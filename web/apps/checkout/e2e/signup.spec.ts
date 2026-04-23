@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { test, expect } from "@playwright/test"
-import { getAdminFirestore, waitForOobCode } from "./helpers"
+import { getAdminFirestore, waitForLoginCode } from "./helpers"
 
 const SIGNUP_EMAIL = "new-signup@werkstattwaedi.ch"
 const CHECKOUT_SIGNUP_EMAIL = "checkout-signup@werkstattwaedi.ch"
@@ -30,29 +30,25 @@ test.describe("Self-registration", () => {
     // form is shown.
     await expect(page.getByText("Noch kein Konto?")).toBeVisible()
 
-    await page.getByPlaceholder("deine@email.ch").fill(SIGNUP_EMAIL)
-    await page
-      .getByRole("button", { name: "Anmelde-Link senden" })
-      .click()
+    await page.getByTestId("login-email-input").fill(SIGNUP_EMAIL)
+    await page.getByTestId("login-email-submit").click()
 
-    await expect(
-      page.getByText("Anmelde-Link wurde an"),
-    ).toBeVisible({ timeout: 5000 })
+    await expect(page.getByTestId("login-code-stage")).toBeVisible({
+      timeout: 5000,
+    })
 
     // Regression (#103): the account-switch link must disappear once the
-    // sign-in link has been sent — it's confusing to offer "Bereits
-    // registriert? Anmelden" on the confirmation screen.
+    // code stage is shown — it's confusing to offer "Bereits registriert?
+    // Anmelden" on the confirmation screen.
     await expect(page.getByText("Bereits registriert?")).not.toBeVisible()
     await expect(page.getByText("Noch kein Konto?")).not.toBeVisible()
 
-    // Fetch sign-in link from Auth emulator
-    const signInCode = await waitForOobCode(
-      (c) => c.email === SIGNUP_EMAIL && c.requestType === "EMAIL_SIGNIN",
-    )
-    expect(signInCode).toBeTruthy()
-
-    // Complete sign-in — handleSignIn() creates the user doc
-    await page.goto(signInCode!.oobLink)
+    // Read the 6-digit code from the emulator Firestore and submit it —
+    // handleSignIn() creates the user doc on first sign-in.
+    const entry = await waitForLoginCode(SIGNUP_EMAIL)
+    expect(entry).toBeTruthy()
+    await page.getByTestId("login-code-input").fill(entry!.code)
+    await page.getByTestId("login-code-submit").click()
 
     // ── Should be redirected to /complete-profile ──
     // On fast environments the createUser Cloud Function may set termsAcceptedAt
@@ -115,21 +111,22 @@ test.describe("Self-registration", () => {
     // In signup mode, the "already registered" switch link is visible.
     await expect(page.getByText("Bereits registriert?")).toBeVisible()
 
-    // ── Send sign-in link ──
-    await page.getByPlaceholder("deine@email.ch").fill(CHECKOUT_SIGNUP_EMAIL)
-    await page.getByRole("button", { name: "Anmelde-Link senden" }).click()
-    await expect(page.getByText("Anmelde-Link wurde an")).toBeVisible({ timeout: 5_000 })
+    // ── Request login code ──
+    await page.getByTestId("login-email-input").fill(CHECKOUT_SIGNUP_EMAIL)
+    await page.getByTestId("login-email-submit").click()
+    await expect(page.getByTestId("login-code-stage")).toBeVisible({
+      timeout: 5_000,
+    })
 
-    // Regression (#103): once the link has been sent, the "Bereits
+    // Regression (#103): once the code stage is shown, the "Bereits
     // registriert? Anmelden" switch link must no longer be shown.
     await expect(page.getByText("Bereits registriert?")).not.toBeVisible()
 
-    // ── Complete email link sign-in ──
-    const signInCode = await waitForOobCode(
-      (c) => c.email === CHECKOUT_SIGNUP_EMAIL && c.requestType === "EMAIL_SIGNIN",
-    )
-    expect(signInCode).toBeTruthy()
-    await page.goto(signInCode!.oobLink)
+    // ── Complete sign-in with 6-digit code ──
+    const entry = await waitForLoginCode(CHECKOUT_SIGNUP_EMAIL)
+    expect(entry).toBeTruthy()
+    await page.getByTestId("login-code-input").fill(entry!.code)
+    await page.getByTestId("login-code-submit").click()
 
     // ── Should land on /complete-profile (signup mode forces this) ──
     await page.waitForURL(

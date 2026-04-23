@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { test, expect, type Page } from "@playwright/test"
-import { waitForOobCode } from "./helpers"
+import { clearCollections, waitForLoginCode } from "./helpers"
 
 const AUTH_USER_EMAIL = "e2e-test@werkstattwaedi.ch"
 
@@ -53,23 +53,24 @@ async function goToSummaryWithItems(page: Page) {
   await expect(page.getByText("Zusammenfassung")).toBeVisible()
 }
 
-/** Sign in as the seeded test user */
+/** Sign in as the seeded test user via the 6-digit code flow. */
 async function signIn(page: Page) {
-  await page.goto("/login")
-  await page.getByPlaceholder("deine@email.ch").fill(AUTH_USER_EMAIL)
-  await page.getByRole("button", { name: "Anmelde-Link senden" }).click()
-  await expect(page.getByText("Anmelde-Link wurde an")).toBeVisible({ timeout: 5000 })
+  // Drop any prior loginCodes so the per-email 60 s rate limit doesn't
+  // reject back-to-back tests sharing this helper.
+  await clearCollections("loginCodes")
 
-  const signInCode = await waitForOobCode(
-    (c) => c.email === AUTH_USER_EMAIL && c.requestType === "EMAIL_SIGNIN",
-  )
-  expect(signInCode).toBeTruthy()
-  await page.goto(signInCode!.oobLink)
-  // Wait for the post-login landing page. /visit is the default for a
-  // signed-in user with a complete profile; waiting only on !oobCode races
-  // with the /login → /visit navigation and can observe the transient
-  // logged-out /login state.
-  await page.waitForURL((url) => url.pathname === "/visit", { timeout: 10_000 })
+  await page.goto("/login")
+  await page.getByTestId("login-email-input").fill(AUTH_USER_EMAIL)
+  await page.getByTestId("login-email-submit").click()
+  await expect(page.getByTestId("login-code-stage")).toBeVisible({ timeout: 5000 })
+
+  const entry = await waitForLoginCode(AUTH_USER_EMAIL)
+  expect(entry).toBeTruthy()
+  await page.getByTestId("login-code-input").fill(entry!.code)
+  await page.getByTestId("login-code-submit").click()
+
+  // Post-login: wait for any non-login URL.
+  await page.waitForURL((url) => !url.pathname.startsWith("/login"), { timeout: 10_000 })
 }
 
 /**
