@@ -206,7 +206,7 @@ function IdentityHint({
 
   // Browser — login / signup hint
   return (
-    <div className="flex items-center justify-between gap-3 rounded-[3px] border border-border bg-muted/50 px-4 py-2.5">
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 rounded-[3px] border border-border bg-muted/50 px-4 py-2.5">
       <span className="text-sm text-muted-foreground">
         Bereits registriert oder Konto erstellen?
       </span>
