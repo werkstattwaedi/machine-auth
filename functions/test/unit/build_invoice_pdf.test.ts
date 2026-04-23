@@ -131,3 +131,22 @@ describe("buildInvoicePdf — content", () => {
     expect(text).to.include("CH93 0076 2011 6238 5295 7");
   });
 });
+
+// Guards against regression where fixtures use `new Date(Y, M, D, h, m)`, which
+// depends on the runner's local timezone. CI runs in UTC and dev machines in
+// Europe/Zurich — a TZ-dependent fixture means `formatWorkshopDateTime` asserts
+// pass locally but fail in CI (the bug that broke PR #133). Fixtures must pin
+// each date to a concrete UTC instant.
+describe("invoice fixtures — timezone independence", () => {
+  it("single checkout fixture pins the visit date to a UTC instant", () => {
+    // 14.06.2025 14:30 Europe/Zurich = CEST (UTC+2) = 12:30 UTC
+    expect(singleCheckoutInvoice().checkouts[0].date.toISOString())
+      .to.equal("2025-06-14T12:30:00.000Z");
+  });
+
+  it("long invoice fixture pins the first visit date to a UTC instant", () => {
+    // 01.08.2025 08:30 Europe/Zurich = CEST (UTC+2) = 06:30 UTC
+    expect(longInvoice().checkouts[0].date.toISOString())
+      .to.equal("2025-08-01T06:30:00.000Z");
+  });
+});

@@ -4,6 +4,20 @@
 import type { InvoiceData, PaymentConfig } from "../../src/invoice/types";
 import type { CheckoutItemEntity } from "../../src/types/firestore_entities";
 import { Timestamp } from "firebase-admin/firestore";
+import { fromZonedTime } from "date-fns-tz";
+
+/**
+ * Build a Date representing the given wall-clock time in Europe/Zurich.
+ *
+ * Fixtures must not depend on the test runner's local timezone — CI runs in
+ * UTC while developer machines are often in Europe/Zurich. Using
+ * `new Date(Y, M, D, h, m)` would produce different instants in those two
+ * environments and break `formatWorkshopDateTime` assertions.
+ */
+function zurich(year: number, monthIndex: number, day: number, hour = 0, minute = 0): Date {
+  const iso = `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00`;
+  return fromZonedTime(iso, "Europe/Zurich");
+}
 
 export const TEST_PAYMENT_CONFIG: PaymentConfig = {
   iban: "CH93 0076 2011 6238 5295 7",
@@ -29,12 +43,12 @@ function makeItem(overrides: Partial<CheckoutItemEntity> & { description: string
 export function singleCheckoutInvoice(): InvoiceData {
   return {
     referenceNumber: 1,
-    invoiceDate: new Date(2025, 5, 15),
+    invoiceDate: zurich(2025, 5, 15),
     billingAddress: null,
     recipientName: "Max Mustermann",
     checkouts: [
       {
-        date: new Date(2025, 5, 14, 14, 30),
+        date: zurich(2025, 5, 14, 14, 30),
         usageType: "regular",
         persons: [
           { name: "Max Mustermann", email: "max@example.com", userType: "erwachsen" },
@@ -64,7 +78,7 @@ export function singleCheckoutInvoice(): InvoiceData {
 export function firmaCheckoutInvoice(): InvoiceData {
   return {
     referenceNumber: 2,
-    invoiceDate: new Date(2025, 6, 1),
+    invoiceDate: zurich(2025, 6, 1),
     billingAddress: {
       company: "Muster AG",
       street: "Industriestrasse 42",
@@ -74,7 +88,7 @@ export function firmaCheckoutInvoice(): InvoiceData {
     recipientName: "Muster AG",
     checkouts: [
       {
-        date: new Date(2025, 5, 28, 9, 0),
+        date: zurich(2025, 5, 28, 9, 0),
         usageType: "regular",
         persons: [
           {
@@ -107,12 +121,12 @@ export function firmaCheckoutInvoice(): InvoiceData {
 export function multiCheckoutInvoice(): InvoiceData {
   return {
     referenceNumber: 3,
-    invoiceDate: new Date(2025, 6, 10),
+    invoiceDate: zurich(2025, 6, 10),
     billingAddress: null,
     recipientName: "Lisa Beispiel",
     checkouts: [
       {
-        date: new Date(2025, 5, 20, 10, 0),
+        date: zurich(2025, 5, 20, 10, 0),
         usageType: "regular",
         persons: [
           { name: "Lisa Beispiel", email: "lisa@example.com", userType: "erwachsen" },
@@ -129,7 +143,7 @@ export function multiCheckoutInvoice(): InvoiceData {
         totalPrice: 30,
       },
       {
-        date: new Date(2025, 5, 27, 14, 0),
+        date: zurich(2025, 5, 27, 14, 0),
         usageType: "regular",
         persons: [
           { name: "Lisa Beispiel", email: "lisa@example.com", userType: "erwachsen" },
@@ -174,7 +188,7 @@ export function longInvoice(): InvoiceData {
 
   return {
     referenceNumber: 6,
-    invoiceDate: new Date(2025, 7, 15),
+    invoiceDate: zurich(2025, 7, 15),
     billingAddress: {
       company: "Schreinerei Müller GmbH",
       street: "Werkgasse 17",
@@ -184,7 +198,7 @@ export function longInvoice(): InvoiceData {
     recipientName: "Schreinerei Müller GmbH",
     checkouts: [
       {
-        date: new Date(2025, 7, 1, 8, 30),
+        date: zurich(2025, 7, 1, 8, 30),
         usageType: "regular",
         persons: [
           {
@@ -220,7 +234,7 @@ export function longInvoice(): InvoiceData {
         totalPrice: 458.50,
       },
       {
-        date: new Date(2025, 7, 8, 13, 0),
+        date: zurich(2025, 7, 8, 13, 0),
         usageType: "regular",
         persons: [
           {
@@ -248,7 +262,7 @@ export function longInvoice(): InvoiceData {
         totalPrice: 167,
       },
       {
-        date: new Date(2025, 7, 12, 10, 0),
+        date: zurich(2025, 7, 12, 10, 0),
         usageType: "regular",
         persons: [
           {
@@ -281,7 +295,7 @@ export function longInvoice(): InvoiceData {
 export function paidInvoice(): InvoiceData {
   const base = singleCheckoutInvoice();
   base.referenceNumber = 7;
-  base.paidAt = new Date(2025, 5, 16);
+  base.paidAt = zurich(2025, 5, 16);
   base.paidVia = "twint";
   return base;
 }
@@ -289,12 +303,12 @@ export function paidInvoice(): InvoiceData {
 export function zeroItemsInvoice(): InvoiceData {
   return {
     referenceNumber: 5,
-    invoiceDate: new Date(2025, 7, 1),
+    invoiceDate: zurich(2025, 7, 1),
     billingAddress: null,
     recipientName: "Erika Nur-Eintritt",
     checkouts: [
       {
-        date: new Date(2025, 6, 30, 16, 0),
+        date: zurich(2025, 6, 30, 16, 0),
         usageType: "regular",
         persons: [
           { name: "Erika Nur-Eintritt", email: "erika@example.com", userType: "erwachsen" },
