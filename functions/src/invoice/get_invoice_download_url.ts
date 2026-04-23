@@ -5,7 +5,25 @@ import * as logger from "firebase-functions/logger";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
-import type { BillEntity } from "./types";
+import { formatInvoiceNumber, type BillEntity } from "./types";
+
+/**
+ * Build the options passed to `file.getSignedUrl(...)` for a bill download.
+ * Factored out as a pure function so we can regression-test the
+ * Content-Disposition header without a callable-test harness.
+ */
+export function buildDownloadOptions(bill: BillEntity): {
+  action: "read";
+  expires: number;
+  responseDisposition: string;
+} {
+  const filename = `Rechnung_${formatInvoiceNumber(bill.referenceNumber)}.pdf`;
+  return {
+    action: "read",
+    expires: Date.now() + 3600 * 1000,
+    responseDisposition: `attachment; filename="${filename}"`,
+  };
+}
 
 export const getInvoiceDownloadUrl = onCall(async (request) => {
   if (!request.auth) {
@@ -38,10 +56,7 @@ export const getInvoiceDownloadUrl = onCall(async (request) => {
   }
 
   const file = getStorage().bucket().file(bill.storagePath);
-  const [url] = await file.getSignedUrl({
-    action: "read",
-    expires: Date.now() + 3600 * 1000,
-  });
+  const [url] = await file.getSignedUrl(buildDownloadOptions(bill));
 
   logger.info(`Generated download URL for bill ${billId}`);
 

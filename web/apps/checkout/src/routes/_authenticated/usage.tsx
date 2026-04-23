@@ -11,6 +11,7 @@ import { useDb, useFunctions } from "@modules/lib/firebase-context"
 import { formatDate, formatCHF, formatInvoiceNumber } from "@modules/lib/format"
 import { PageLoading } from "@modules/components/page-loading"
 import { EmptyState } from "@modules/components/empty-state"
+import { QueryError } from "@modules/components/query-error"
 import {
   Table,
   TableBody,
@@ -77,22 +78,30 @@ function UsageContent({ userDoc }: { userDoc: UserDoc }) {
   const db = useDb()
   const ref = userRef(db, userDoc.id)
 
-  const { data: bills, loading: billsLoading } = useCollection<BillDoc>(
+  const {
+    data: bills,
+    loading: billsLoading,
+    error: billsError,
+  } = useCollection<BillDoc>(
     "bills",
     where("userId", "==", ref),
     orderBy("created", "desc"),
   )
 
-  const { data: unbilledCheckouts, loading: checkoutsLoading } =
-    useCollection<CheckoutDoc>(
-      "checkouts",
-      where("userId", "==", ref),
-      where("status", "==", "closed"),
-      where("billRef", "==", null),
-      orderBy("closedAt", "desc"),
-    )
+  const {
+    data: unbilledCheckouts,
+    loading: checkoutsLoading,
+    error: checkoutsError,
+  } = useCollection<CheckoutDoc>(
+    "checkouts",
+    where("userId", "==", ref),
+    where("status", "==", "closed"),
+    where("billRef", "==", null),
+    orderBy("closedAt", "desc"),
+  )
 
   if (billsLoading || checkoutsLoading) return <PageLoading />
+  if (billsError || checkoutsError) return <QueryError context="usage" />
 
   return (
     <div className="space-y-8">
@@ -177,7 +186,17 @@ function DownloadButton({ billId }: { billId: string }) {
         "getInvoiceDownloadUrl",
       )
       const result = await getUrl({ billId })
-      window.open(result.data.url, "_blank")
+      // Use a synthetic anchor click instead of window.open — after the
+      // preceding await the user-gesture is gone and Chrome blocks popups.
+      // The signed URL is served with Content-Disposition: attachment, so
+      // the current tab never navigates.
+      const a = document.createElement("a")
+      a.href = result.data.url
+      a.rel = "noopener"
+      a.target = "_self"
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
     } catch {
       toast.error("PDF konnte nicht geladen werden.")
     } finally {
