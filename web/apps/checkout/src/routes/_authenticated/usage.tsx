@@ -177,7 +177,17 @@ function DownloadButton({ billId }: { billId: string }) {
         "getInvoiceDownloadUrl",
       )
       const result = await getUrl({ billId })
-      window.open(result.data.url, "_blank")
+      // Use a synthetic anchor click instead of window.open — after the
+      // preceding await the user-gesture is gone and Chrome blocks popups.
+      // The signed URL is served with Content-Disposition: attachment, so
+      // the current tab never navigates.
+      const a = document.createElement("a")
+      a.href = result.data.url
+      a.rel = "noopener"
+      a.target = "_self"
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
     } catch {
       toast.error("PDF konnte nicht geladen werden.")
     } finally {
