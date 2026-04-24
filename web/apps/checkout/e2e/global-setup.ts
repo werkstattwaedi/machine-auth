@@ -120,6 +120,16 @@ export default async function globalSetup() {
     userCanAdd: true,
   })
 
+  await db.collection("catalog").doc("e2e-item-sla").set({
+    code: "9099",
+    name: "E2E SLA Resin",
+    workshops: ["makerspace"],
+    pricingModel: "sla",
+    unitPrice: { none: 250, member: 200, intern: 0 },
+    active: true,
+    userCanAdd: true,
+  })
+
   // ── Seed permission ──
   await db.collection("permission").doc("laser").set({
     name: "Laser Cutter",
