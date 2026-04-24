@@ -112,8 +112,8 @@ export function getUnitLabel(config: PricingConfig, pricingModel: PricingModel):
     direct: config.labels?.units?.chf ?? (import.meta.env.VITE_CURRENCY || "CHF"),
     // SLA resin is priced per liter of resin consumed (plus a constant
     // per-layer cost from pricingConfig.slaLayerPrice). `unitPrice` on an
-    // SLA catalog entry is therefore CHF/L.
-    sla: config.labels?.units?.l ?? "L",
+    // SLA catalog entry is therefore CHF/l.
+    sla: config.labels?.units?.l ?? "l",
   }
   return map[pricingModel] ?? pricingModel
 }
@@ -127,7 +127,7 @@ export function getShortUnit(pm: PricingModel): string {
     case "count": return "Stk."
     case "weight": return "kg"
     case "direct": return import.meta.env.VITE_CURRENCY || "CHF"
-    case "sla": return "L"
+    case "sla": return "l"
     default: return ""
   }
 }

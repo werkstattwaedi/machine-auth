@@ -26,7 +26,7 @@ function makeConfig(): PricingConfig {
     // Per-layer SLA cost is global (hardware-driven, not resin-specific).
     slaLayerPrice: { none: 0.01, member: 0.008, intern: 0.006 },
     labels: {
-      units: { h: "Std.", m2: "m²", m: "m", stk: "Stk.", kg: "kg", chf: "CHF", l: "L" },
+      units: { h: "Std.", m2: "m²", m: "m", stk: "Stk.", kg: "kg", chf: "CHF", l: "l" },
       discounts: { none: "Normal", member: "Mitglied", intern: "Intern" },
     },
   }
@@ -427,7 +427,7 @@ describe("SlaItemRow", () => {
     })
   }
 
-  it("computes total from unitPrice (CHF/L) and the global layerPrice (CHF/layer)", async () => {
+  it("computes total from unitPrice (CHF/l) and the global layerPrice (CHF/layer)", async () => {
     const user = userEvent.setup()
     const callbacks = makeCallbacks()
 
@@ -450,7 +450,7 @@ describe("SlaItemRow", () => {
     await user.type(inputs[1], "1000")
 
     const lastCall = callbacks.updateItem.mock.calls.at(-1)!
-    // 50ml/1000 * 250 CHF/L = 12.5; 1000 * 0.01 = 10; total = 22.5
+    // 50ml/1000 * 250 CHF/l = 12.5; 1000 * 0.01 = 10; total = 22.5
     expect(lastCall[1]).toMatchObject({
       quantity: 1,
       totalPrice: 22.5,
@@ -476,9 +476,9 @@ describe("SlaItemRow", () => {
     )
 
     // Show both price axes so users can sanity-check the full pricing signal.
-    expect(
-      screen.getByText("250 CHF/L · 0.01 CHF/Layer"),
-    ).toBeTruthy()
+    // Rendered as two stacked <span>s so a narrow column can't wrap mid-number.
+    expect(screen.getByText("250 CHF/l")).toBeTruthy()
+    expect(screen.getByText("0.01 CHF/Layer")).toBeTruthy()
   })
 
   it("applies member discount layerPrice from config.slaLayerPrice", () => {
@@ -495,10 +495,9 @@ describe("SlaItemRow", () => {
       />,
     )
 
-    // Member discount: resin = 200 CHF/L, layer = 0.008 CHF/layer.
-    expect(
-      screen.getByText("200 CHF/L · 0.008 CHF/Layer"),
-    ).toBeTruthy()
+    // Member discount: resin = 200 CHF/l, layer = 0.008 CHF/layer.
+    expect(screen.getByText("200 CHF/l")).toBeTruthy()
+    expect(screen.getByText("0.008 CHF/Layer")).toBeTruthy()
   })
 
   it("displays computed total as users type", async () => {

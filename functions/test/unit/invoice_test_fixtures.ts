@@ -277,8 +277,22 @@ export function longInvoice(): InvoiceData {
           makeItem({ description: "Lasercutter", workshop: "makerspace", pricingModel: "time", quantity: 0.75, unitPrice: 60, totalPrice: 45 }),
           makeItem({ description: "Acrylglas 3mm transparent", workshop: "makerspace", pricingModel: "area", quantity: 0.3, unitPrice: 50, totalPrice: 15 }),
           makeItem({ description: "3D-Druck PLA", workshop: "makerspace", pricingModel: "weight", quantity: 0.12, unitPrice: 40, totalPrice: 4.80 }),
-          // sla: 50ml resin @ 250 CHF/L + 1000 layers @ 0.01 CHF = 12.50 + 10.00 = 22.50
-          makeItem({ description: "SLA Resin (Tough)", workshop: "makerspace", pricingModel: "sla", quantity: 1, unitPrice: 250, totalPrice: 22.50 }),
+          // sla: 50ml resin @ 250 CHF/l + 1000 layers @ 0.01 CHF = 12.50 + 10.00 = 22.50.
+          // formInputs carry the two input axes so the PDF can render the
+          // full pricing signal; SLA quantity × unitPrice would otherwise
+          // read as "1 × 250 = 22.50" which is arithmetically nonsense.
+          makeItem({
+            description: "SLA Resin (Tough)",
+            workshop: "makerspace",
+            pricingModel: "sla",
+            quantity: 1,
+            unitPrice: 250,
+            totalPrice: 22.50,
+            formInputs: [
+              { quantity: 50, unit: "ml" },
+              { quantity: 1000, unit: "layers" },
+            ],
+          }),
         ],
         workshopsVisited: ["makerspace"],
         entryFees: 30,

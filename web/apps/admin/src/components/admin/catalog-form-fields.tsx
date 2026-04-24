@@ -30,7 +30,7 @@ export function CatalogFormFields({
   // For SLA catalog entries, `unitPrice` represents CHF per liter of resin;
   // the per-layer cost is configured globally on `config/pricing`.
   const pricingModel = useWatch({ control, name: "pricingModel" })
-  const priceLabel = pricingModel === "sla" ? "Resin CHF/L" : "Preis"
+  const priceLabel = pricingModel === "sla" ? "Resin CHF/l" : "Preis"
   const priceHelp =
     pricingModel === "sla"
       ? "Preis pro Liter Resin. Der Layerpreis wird global konfiguriert."
@@ -69,7 +69,7 @@ export function CatalogFormFields({
             <option value="count">Stück</option>
             <option value="weight">Gewicht (kg)</option>
             <option value="direct">Betrag (CHF)</option>
-            <option value="sla">SLA Druck (Resin CHF/L)</option>
+            <option value="sla">SLA Druck (Resin CHF/l)</option>
           </select>
         </div>
       </div>

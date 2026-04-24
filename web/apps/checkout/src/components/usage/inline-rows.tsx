@@ -534,7 +534,7 @@ function LengthItemRow({
 }
 
 // ---------------------------------------------------------------------------
-// SLA resin print item (two-axis price: resin volume ml × CHF/L + layers × CHF/layer)
+// SLA resin print item (two-axis price: resin volume ml × CHF/l + layers × CHF/layer)
 // ---------------------------------------------------------------------------
 
 function SlaItemRow({
@@ -560,7 +560,7 @@ function SlaItemRow({
   const [resinMl, setResinMl] = useState(formResin)
   const [layers, setLayers] = useState(formLayers)
 
-  // For SLA, unitPrice is CHF/L of resin (resolved at add time).
+  // For SLA, unitPrice is CHF/l of resin (resolved at add time).
   const resinPricePerLiter = item.unitPrice
 
   const computeTotal = (ml: number, lyr: number) =>
@@ -629,7 +629,7 @@ function SlaItemRow({
           <div className="w-32 sm:w-40 shrink-0 text-right">
             <Label className="text-xs font-bold">Preis/Einheit</Label>
             <div className="min-h-9 flex flex-col items-end justify-center text-sm leading-tight">
-              <span>{`${resinPricePerLiter} CHF/L`}</span>
+              <span>{`${resinPricePerLiter} CHF/l`}</span>
               <span>{`${layerPrice} CHF/Layer`}</span>
             </div>
           </div>
