@@ -105,7 +105,9 @@ describe("buildInvoicePdf — content", () => {
     expect(text).to.include("08.08.2025 13:00");
     expect(text).to.include("12.08.2025 10:00");
     // Grand total
-    expect(text).to.include("725.30");
+    expect(text).to.include("747.80");
+    // SLA row renders with the "L" unit label and the resin description
+    expect(text).to.include("SLA Resin (Tough)");
     // Payment terms (unpaid)
     expect(text).to.include("Zahlbar innert 30 Tagen");
   });

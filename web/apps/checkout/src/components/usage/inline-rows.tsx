@@ -628,8 +628,9 @@ function SlaItemRow({
               pricing signal: resin (dominant) + layer cost. */}
           <div className="w-32 sm:w-40 shrink-0 text-right">
             <Label className="text-xs font-bold">Preis/Einheit</Label>
-            <div className="h-9 flex items-center justify-end text-sm">
-              {`${resinPricePerLiter} CHF/L · ${layerPrice} CHF/Layer`}
+            <div className="min-h-9 flex flex-col items-end justify-center text-sm leading-tight">
+              <span>{`${resinPricePerLiter} CHF/L`}</span>
+              <span>{`${layerPrice} CHF/Layer`}</span>
             </div>
           </div>
           <div className="w-20 sm:w-24 shrink-0 text-right">

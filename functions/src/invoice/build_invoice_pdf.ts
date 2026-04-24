@@ -45,6 +45,7 @@ const UNIT_LABELS: Record<string, string> = {
   count: "Stk.",
   weight: "kg",
   direct: "",
+  sla: "L",
 };
 
 const PAID_VIA_LABELS: Record<string, string> = {

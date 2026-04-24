@@ -315,6 +315,45 @@ test.describe("Checkout step screenshots", () => {
     await expect(page).toHaveScreenshot("checkout-sla-validation-errors.png")
   })
 
+  test("summary — with SLA item", async ({ page }) => {
+    await goToWorkshops(page)
+
+    await page.getByLabel("Maker Space").click()
+    const makerSection = page
+      .locator("div.space-y-2")
+      .filter({ hasText: /^Maker Space/ })
+
+    // Add the SLA catalog item
+    await makerSection
+      .getByRole("button", { name: "Artikel hinzufügen" })
+      .click()
+    await expect(page.getByText("E2E SLA Resin")).toBeVisible()
+    await page.getByText("E2E SLA Resin").click()
+
+    // Fill Resin (ml) and Layer inputs
+    const resinInput = page
+      .locator('label:has-text("Resin (ml)")')
+      .locator("..")
+      .locator("input")
+    await resinInput.fill("50")
+    await resinInput.blur()
+
+    const layerInput = page
+      .locator('label:has-text("Layer")')
+      .locator("..")
+      .locator("input")
+    await layerInput.fill("1000")
+    await layerInput.blur()
+
+    // Go to summary
+    const checkoutBtn = page.getByRole("button", { name: "Check-Out" })
+    await checkoutBtn.scrollIntoViewIfNeeded()
+    await checkoutBtn.click()
+    await expect(page.getByText("Zusammenfassung")).toBeVisible()
+
+    await expect(page).toHaveScreenshot("checkout-summary-sla.png")
+  })
+
   test("checkout validation errors", async ({ page }) => {
     await goToWorkshops(page)
 
