@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "resend-cli": {
+      "source": "resend/resend-cli",
+      "sourceType": "github",
+      "computedHash": "8253f110ec3cbaac56153fc9051eeb7d3e8dbba03c31b49981aeb4d6f036d6d7"
+    }
+  }
+}
