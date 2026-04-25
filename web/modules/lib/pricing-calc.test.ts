@@ -83,6 +83,69 @@ describe("computePricing", () => {
     })
   })
 
+  describe("sla pricing", () => {
+    it("combines resin volume (unitPrice CHF/l) and layer count (layerPrice CHF/layer)", () => {
+      // unitPrice = CHF/l of resin; layerPrice = CHF per printed layer.
+      const result = computePricing(
+        "sla",
+        250,
+        { resinMl: 50, layers: 1000 },
+        0.01,
+      )
+      // (50/1000)*250 = 12.5; 1000 * 0.01 = 10; total = 22.5
+      expect(result.quantity).toBe(1)
+      expect(result.totalPrice).toBe(22.5)
+      expect(result.formInputs).toEqual([
+        { quantity: 50, unit: "ml" },
+        { quantity: 1000, unit: "layers" },
+      ])
+    })
+
+    it("returns only resin cost when layers is zero", () => {
+      const result = computePricing(
+        "sla",
+        250,
+        { resinMl: 50, layers: 0 },
+        0.01,
+      )
+      expect(result.totalPrice).toBe(12.5)
+    })
+
+    it("returns only layer cost when resin volume is zero", () => {
+      const result = computePricing(
+        "sla",
+        250,
+        { resinMl: 0, layers: 1000 },
+        0.01,
+      )
+      expect(result.totalPrice).toBe(10)
+    })
+
+    it("returns zero when both axes are zero", () => {
+      const result = computePricing(
+        "sla",
+        250,
+        { resinMl: 0, layers: 0 },
+        0.01,
+      )
+      expect(result.totalPrice).toBe(0)
+      expect(result.quantity).toBe(1)
+    })
+
+    it("rounds fractional totals to 2 decimal places", () => {
+      // 13.7 ml * 250 CHF/l = 3.425 → rounded to 3.43 (Banker isn't used;
+      // Math.round rounds half up for positive values).
+      const result = computePricing("sla", 250, { resinMl: 13.7, layers: 0 }, 0.01)
+      expect(result.totalPrice).toBe(3.43)
+    })
+
+    it("treats missing layerPrice as zero cost for the layer axis", () => {
+      // No layerPrice provided → only resin cost contributes.
+      const result = computePricing("sla", 250, { resinMl: 50, layers: 1000 })
+      expect(result.totalPrice).toBe(12.5)
+    })
+  })
+
   describe("rounding", () => {
     it("rounds to 2 decimal places", () => {
       // 333cm × 33cm = 3.33m × 0.33m = 1.0989m², ×10 = 10.989 → 10.99

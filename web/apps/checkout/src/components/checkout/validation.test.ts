@@ -276,6 +276,62 @@ describe("validateCheckoutItem", () => {
     expect(errors.price).toBeDefined()
   })
 
+  // --- sla items ---
+
+  it("accepts SLA item with both axes > 0", () => {
+    expect(
+      validateCheckoutItem(
+        makeItem({
+          pricingModel: "sla",
+          catalogId: "cat-sla",
+          quantity: 1,
+          unitPrice: 0,
+          totalPrice: 22.5,
+          formInputs: [
+            { quantity: 50, unit: "ml" },
+            { quantity: 1000, unit: "layers" },
+          ],
+        }),
+      ),
+    ).toEqual({})
+  })
+
+  it("requires SLA layers > 0", () => {
+    const errors = validateCheckoutItem(
+      makeItem({
+        pricingModel: "sla",
+        catalogId: "cat-sla",
+        quantity: 1,
+        unitPrice: 0,
+        formInputs: [
+          { quantity: 50, unit: "ml" },
+          { quantity: 0, unit: "layers" },
+        ],
+      }),
+    )
+    expect(errors.quantity).toBe(
+      "Resin (ml) und Layer müssen grösser als 0 sein.",
+    )
+  })
+
+  it("requires SLA resinMl > 0", () => {
+    const errors = validateCheckoutItem(
+      makeItem({
+        pricingModel: "sla",
+        catalogId: "cat-sla",
+        quantity: 1,
+        unitPrice: 0,
+        formInputs: [
+          { quantity: 0, unit: "ml" },
+          { quantity: 500, unit: "layers" },
+        ],
+      }),
+    )
+    expect(errors.quantity).toBe(
+      "Resin (ml) und Layer müssen grösser als 0 sein.",
+    )
+  })
+
   // --- negative values ---
 
   it("rejects negative quantity", () => {

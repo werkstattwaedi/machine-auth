@@ -38,6 +38,7 @@ describe("calculateFee", () => {
         kind: { regular: 10, materialbezug: 0, intern: 0, hangenmoos: 10 },
         firma: { regular: 50, materialbezug: 10, intern: 0, hangenmoos: 50 },
       },
+      slaLayerPrice: { none: 0.01, member: 0.008, intern: 0.006 },
       workshops: {} as PricingConfig["workshops"],
       labels: {} as PricingConfig["labels"],
     }

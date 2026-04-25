@@ -27,7 +27,7 @@ function CatalogDetailPage() {
   )
   const { update, loading: saving } = useFirestoreMutation()
 
-  const { register, handleSubmit, reset } = useForm<CatalogFormValues>()
+  const { register, handleSubmit, reset, control } = useForm<CatalogFormValues>()
 
   useEffect(() => {
     if (catalog) {
@@ -87,7 +87,7 @@ function CatalogDetailPage() {
             onSubmit={handleSubmit(onSubmit)}
             className="space-y-4 max-w-lg"
           >
-            <CatalogFormFields register={register} showActive />
+            <CatalogFormFields register={register} control={control} showActive />
             <Button type="submit" disabled={saving}>
               {saving ? (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />

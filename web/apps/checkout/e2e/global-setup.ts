@@ -48,6 +48,8 @@ export default async function globalSetup() {
       kind: { regular: 7.5, materialbezug: 0, intern: 0, hangenmoos: 7.5 },
       firma: { regular: 30, materialbezug: 0, intern: 0, hangenmoos: 30 },
     },
+    // SLA per-layer price (global; resin-per-liter lives on each catalog entry).
+    slaLayerPrice: { none: 0.01, member: 0.008, intern: 0.006 },
     workshops: {
       holz: { label: "Holz", order: 1 },
       metall: { label: "Metall", order: 2 },
@@ -114,6 +116,16 @@ export default async function globalSetup() {
     workshops: ["makerspace"],
     pricingModel: "weight",
     unitPrice: { none: 105, member: 105, intern: 0 },
+    active: true,
+    userCanAdd: true,
+  })
+
+  await db.collection("catalog").doc("e2e-item-sla").set({
+    code: "9099",
+    name: "E2E SLA Resin",
+    workshops: ["makerspace"],
+    pricingModel: "sla",
+    unitPrice: { none: 250, member: 200, intern: 0 },
     active: true,
     userCanAdd: true,
   })

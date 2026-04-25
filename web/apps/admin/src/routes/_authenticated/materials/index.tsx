@@ -114,7 +114,7 @@ function CatalogPage() {
 
 function CreateCatalogDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const { add, loading } = useFirestoreMutation()
-  const { register, handleSubmit, reset } = useForm<CatalogFormValues>({
+  const { register, handleSubmit, reset, control } = useForm<CatalogFormValues>({
     defaultValues: {
       pricingModel: "count",
       workshops: "holz",
@@ -150,7 +150,7 @@ function CreateCatalogDialog({ open, onOpenChange }: { open: boolean; onOpenChan
           <DialogTitle>Katalogeintrag erstellen</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <CatalogFormFields register={register} />
+          <CatalogFormFields register={register} control={control} />
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Abbrechen</Button>
             <Button type="submit" disabled={loading}>

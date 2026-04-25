@@ -249,6 +249,111 @@ test.describe("Checkout step screenshots", () => {
     await expect(page).toHaveScreenshot("checkout-payment-twint.png")
   })
 
+  test("SLA row — resin + layers filled", async ({ page }) => {
+    await goToWorkshops(page)
+
+    await page.getByLabel("Maker Space").click()
+    const makerSection = page
+      .locator("div.space-y-2")
+      .filter({ hasText: /^Maker Space/ })
+
+    // Add the SLA catalog item from the makerspace section
+    await makerSection
+      .getByRole("button", { name: "Artikel hinzufügen" })
+      .click()
+    await expect(page.getByText("E2E SLA Resin")).toBeVisible()
+    await page.getByText("E2E SLA Resin").click()
+
+    // Fill Resin (ml) and Layer inputs. Labels aren't associated via htmlFor,
+    // so walk from label → parent → input (same idiom as existing tests).
+    const resinInput = page
+      .locator('label:has-text("Resin (ml)")')
+      .locator("..")
+      .locator("input")
+    await resinInput.fill("50")
+    await resinInput.blur()
+
+    const layerInput = page
+      .locator('label:has-text("Layer")')
+      .locator("..")
+      .locator("input")
+    await layerInput.fill("1000")
+    await layerInput.blur()
+
+    // Click a neutral spot to stabilize focus for the screenshot
+    await page.locator("h2").first().click()
+
+    await expect(page).toHaveScreenshot("checkout-sla-filled.png")
+  })
+
+  test("SLA row — validation errors (empty inputs)", async ({ page }) => {
+    await goToWorkshops(page)
+
+    await page.getByLabel("Maker Space").click()
+    const makerSection = page
+      .locator("div.space-y-2")
+      .filter({ hasText: /^Maker Space/ })
+
+    // Add the SLA catalog item with both inputs left at 0 to trigger validation
+    await makerSection
+      .getByRole("button", { name: "Artikel hinzufügen" })
+      .click()
+    await expect(page.getByText("E2E SLA Resin")).toBeVisible()
+    await page.getByText("E2E SLA Resin").click()
+
+    // Trigger validation by clicking Check-Out (same CTA as existing validation
+    // error test). scrollIntoViewIfNeeded handles mobile viewport.
+    const checkoutBtn = page.getByRole("button", { name: "Check-Out" })
+    await checkoutBtn.scrollIntoViewIfNeeded()
+    await checkoutBtn.click()
+
+    // Wait for the SLA validation annotation to appear
+    await expect(
+      page.getByText("Resin (ml) und Layer müssen grösser als 0 sein."),
+    ).toBeVisible()
+
+    await expect(page).toHaveScreenshot("checkout-sla-validation-errors.png")
+  })
+
+  test("summary — with SLA item", async ({ page }) => {
+    await goToWorkshops(page)
+
+    await page.getByLabel("Maker Space").click()
+    const makerSection = page
+      .locator("div.space-y-2")
+      .filter({ hasText: /^Maker Space/ })
+
+    // Add the SLA catalog item
+    await makerSection
+      .getByRole("button", { name: "Artikel hinzufügen" })
+      .click()
+    await expect(page.getByText("E2E SLA Resin")).toBeVisible()
+    await page.getByText("E2E SLA Resin").click()
+
+    // Fill Resin (ml) and Layer inputs
+    const resinInput = page
+      .locator('label:has-text("Resin (ml)")')
+      .locator("..")
+      .locator("input")
+    await resinInput.fill("50")
+    await resinInput.blur()
+
+    const layerInput = page
+      .locator('label:has-text("Layer")')
+      .locator("..")
+      .locator("input")
+    await layerInput.fill("1000")
+    await layerInput.blur()
+
+    // Go to summary
+    const checkoutBtn = page.getByRole("button", { name: "Check-Out" })
+    await checkoutBtn.scrollIntoViewIfNeeded()
+    await checkoutBtn.click()
+    await expect(page.getByText("Zusammenfassung")).toBeVisible()
+
+    await expect(page).toHaveScreenshot("checkout-summary-sla.png")
+  })
+
   test("checkout validation errors", async ({ page }) => {
     await goToWorkshops(page)
 

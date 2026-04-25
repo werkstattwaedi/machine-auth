@@ -3,7 +3,7 @@
 
 import { Input } from "@modules/components/ui/input"
 import { Label } from "@modules/components/ui/label"
-import type { UseFormRegister } from "react-hook-form"
+import { useWatch, type Control, type UseFormRegister } from "react-hook-form"
 
 export interface CatalogFormValues {
   code: string
@@ -20,11 +20,22 @@ export interface CatalogFormValues {
 
 export function CatalogFormFields({
   register,
+  control,
   showActive,
 }: {
   register: UseFormRegister<CatalogFormValues>
+  control: Control<CatalogFormValues>
   showActive?: boolean
 }) {
+  // For SLA catalog entries, `unitPrice` represents CHF per liter of resin;
+  // the per-layer cost is configured globally on `config/pricing`.
+  const pricingModel = useWatch({ control, name: "pricingModel" })
+  const priceLabel = pricingModel === "sla" ? "Resin CHF/l" : "Preis"
+  const priceHelp =
+    pricingModel === "sla"
+      ? "Preis pro Liter Resin. Der Layerpreis wird global konfiguriert."
+      : null
+
   return (
     <>
       <div className="grid grid-cols-2 gap-4">
@@ -58,23 +69,27 @@ export function CatalogFormFields({
             <option value="count">Stück</option>
             <option value="weight">Gewicht (kg)</option>
             <option value="direct">Betrag (CHF)</option>
+            <option value="sla">SLA Druck (Resin CHF/l)</option>
           </select>
         </div>
       </div>
       <div className="grid grid-cols-3 gap-4">
         <div className="space-y-2">
-          <Label>Preis (Voll)</Label>
+          <Label>{priceLabel} (Voll)</Label>
           <Input type="number" step="0.01" {...register("priceNone", { required: true })} />
         </div>
         <div className="space-y-2">
-          <Label>Preis (Mitglied)</Label>
+          <Label>{priceLabel} (Mitglied)</Label>
           <Input type="number" step="0.01" {...register("priceMember")} />
         </div>
         <div className="space-y-2">
-          <Label>Preis (Intern)</Label>
+          <Label>{priceLabel} (Intern)</Label>
           <Input type="number" step="0.01" {...register("priceIntern")} />
         </div>
       </div>
+      {priceHelp && (
+        <p className="text-xs text-muted-foreground">{priceHelp}</p>
+      )}
       <div className="flex items-center gap-4">
         {showActive && (
           <div className="flex items-center gap-2">

@@ -35,6 +35,8 @@ export interface CheckoutItemLocal {
   catalogId: string | null
   pricingModel: PricingModel | null
   quantity: number
+  // For `pricingModel === "sla"` this is CHF per liter of resin, already
+  // resolved for the current user's discount level.
   unitPrice: number
   totalPrice: number
   formInputs?: { quantity: number; unit: string }[]
@@ -152,6 +154,7 @@ export function CatalogItemRow({
   item,
   catalogEntry,
   config,
+  discountLevel,
   index,
   callbacks,
   onBlurSave,
@@ -160,6 +163,10 @@ export function CatalogItemRow({
   item: CheckoutItemLocal
   catalogEntry?: CatalogItem
   config: PricingConfig
+  // Only used for SLA rows today, to look up the globally-configured
+  // per-layer price at the user's discount level. Other pricing models
+  // already have their price resolved onto `item.unitPrice` at add time.
+  discountLevel?: DiscountLevel
   index: number
   callbacks: ItemCallbacks
   onBlurSave?: boolean
@@ -184,6 +191,21 @@ export function CatalogItemRow({
         <LengthItemRow
           item={item}
           config={config}
+          index={index}
+          callbacks={callbacks}
+          onBlurSave={onBlurSave}
+          error={error}
+        />
+      )
+    case "sla":
+      return (
+        <SlaItemRow
+          item={item}
+          layerPrice={
+            config.slaLayerPrice?.[discountLevel ?? "none"] ??
+            config.slaLayerPrice?.none ??
+            0
+          }
           index={index}
           callbacks={callbacks}
           onBlurSave={onBlurSave}
@@ -505,6 +527,118 @@ function LengthItemRow({
           priceError={!!error?.price}
           priceErrorMessage={error?.price}
         />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// SLA resin print item (two-axis price: resin volume ml × CHF/l + layers × CHF/layer)
+// ---------------------------------------------------------------------------
+
+function SlaItemRow({
+  item,
+  layerPrice,
+  index,
+  callbacks,
+  onBlurSave,
+  error,
+}: {
+  item: CheckoutItemLocal
+  // Resolved CHF-per-layer for the current discount level. SLA layer cost is
+  // hardware-driven and constant across resin types, so it lives in
+  // `PricingConfig.slaLayerPrice` rather than on each catalog entry.
+  layerPrice: number
+  index: number
+  callbacks: ItemCallbacks
+  onBlurSave?: boolean
+  error?: ItemErrors
+}) {
+  const formResin = item.formInputs?.[0]?.quantity ?? 0
+  const formLayers = item.formInputs?.[1]?.quantity ?? 0
+  const [resinMl, setResinMl] = useState(formResin)
+  const [layers, setLayers] = useState(formLayers)
+
+  // For SLA, unitPrice is CHF/l of resin (resolved at add time).
+  const resinPricePerLiter = item.unitPrice
+
+  const computeTotal = (ml: number, lyr: number) =>
+    Math.round(
+      ((ml / 1000) * resinPricePerLiter + lyr * layerPrice) * 100,
+    ) / 100
+
+  const doUpdate = (ml: number, lyr: number) => {
+    callbacks.updateItem(item.id, {
+      ...item,
+      quantity: 1,
+      totalPrice: computeTotal(ml, lyr),
+      formInputs: [
+        { quantity: ml, unit: "ml" },
+        { quantity: lyr, unit: "layers" },
+      ],
+    })
+  }
+
+  const hasError = error && (error.quantity || error.price)
+
+  return (
+    <div className={`pl-8 pr-4 py-3 ${rowBg(index)}${hasError ? " bg-[#fce4e4]" : ""}`}>
+      <ItemHeader
+        label={`Artikel ${index + 1}: ${item.description}`}
+        onRemove={() => callbacks.removeItem(item.id)}
+      />
+      <div className={`flex flex-wrap items-end gap-x-3 mt-2${hasError ? " gap-y-8 pb-5" : " gap-y-3"}`}>
+        <div className="w-24 sm:w-28 relative">
+          <Label className="text-xs font-bold">Resin (ml)</Label>
+          <input
+            type="number"
+            min="0"
+            step="0.1"
+            value={resinMl || ""}
+            onChange={(e) => {
+              const v = Math.max(0, parseFloat(e.target.value) || 0)
+              setResinMl(v)
+              if (!onBlurSave) doUpdate(v, layers)
+            }}
+            onBlur={onBlurSave ? () => doUpdate(resinMl, layers) : undefined}
+            className={error?.quantity ? INPUT_ERR_CLS : INPUT_CLS}
+          />
+          <ItemError message={error?.quantity} />
+        </div>
+        <div className="w-24 sm:w-28">
+          <Label className="text-xs font-bold">Layer</Label>
+          <input
+            type="number"
+            min="0"
+            step="1"
+            value={layers || ""}
+            onChange={(e) => {
+              // Layer count is an integer counter — clamp to non-negative int.
+              const v = Math.max(0, Math.floor(parseFloat(e.target.value) || 0))
+              setLayers(v)
+              if (!onBlurSave) doUpdate(resinMl, v)
+            }}
+            onBlur={onBlurSave ? () => doUpdate(resinMl, layers) : undefined}
+            className={error?.quantity ? INPUT_ERR_CLS : INPUT_CLS}
+          />
+        </div>
+        <div className="ml-auto flex items-end gap-3">
+          {/* SLA has two price axes — show both so users can see the full
+              pricing signal: resin (dominant) + layer cost. */}
+          <div className="w-32 sm:w-40 shrink-0 text-right">
+            <Label className="text-xs font-bold">Preis/Einheit</Label>
+            <div className="min-h-9 flex flex-col items-end justify-center text-sm leading-tight">
+              <span>{`${resinPricePerLiter} CHF/l`}</span>
+              <span>{`${layerPrice} CHF/Layer`}</span>
+            </div>
+          </div>
+          <div className="w-20 sm:w-24 shrink-0 text-right">
+            <Label className="text-xs font-bold">Betrag</Label>
+            <div className="h-9 flex items-center justify-end text-sm font-bold">
+              {formatCHF(computeTotal(resinMl, layers))}
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -989,6 +1123,7 @@ export function WorkshopInlineSection({
           item={item}
           catalogEntry={catalogItems.find((c) => c.id === item.catalogId)}
           config={config}
+          discountLevel={discountLevel}
           index={nfcItems.length + i}
           callbacks={callbacks}
           onBlurSave={onBlurSave}
