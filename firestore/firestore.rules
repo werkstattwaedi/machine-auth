@@ -167,9 +167,17 @@ service cloud.firestore {
              isCheckoutPrincipalFor(request.resource.data.userId)
            );
 
-      // Update: admin, or the principal of an open checkout.
+      // Update: admin, or the principal of an open checkout. The principal
+      // can edit metadata (workshopsVisited, persons, usageType, notes) but
+      // CANNOT change status, summary, closedAt, or billRef — those
+      // transitions go through closeCheckoutAndGetPayment so the server
+      // can recompute prices and allocate a bill atomically.
       allow update: if isAdmin() ||
-        (isCheckoutPrincipalFor(resource.data.userId) && resource.data.status == "open");
+        (isCheckoutPrincipalFor(resource.data.userId) &&
+         resource.data.status == "open" &&
+         !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+           'status', 'summary', 'closedAt', 'billRef'
+         ]));
       allow delete: if isAdmin();
 
       // Checkout items subcollection

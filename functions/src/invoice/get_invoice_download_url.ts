@@ -43,9 +43,14 @@ export const getInvoiceDownloadUrl = onCall(async (request) => {
 
   const bill = billSnap.data() as BillEntity;
   const isAdmin = request.auth.token.admin === true;
-  // users/{userId} doc IDs equal Firebase Auth UIDs (see schema.jsonc), so
-  // comparing the doc ID to request.auth.uid is equivalent to reference equality.
-  const isOwner = bill.userId.id === request.auth.uid;
+  // For real logins, request.auth.uid equals the user doc id. For kiosk
+  // tag-tap sessions, the uid is synthetic and the actsAs claim names the
+  // real user — match against either.
+  const claims = request.auth.token as { actsAs?: unknown };
+  const actsAs = typeof claims.actsAs === "string" ? claims.actsAs : null;
+  const isOwner =
+    bill.userId.id === request.auth.uid ||
+    (actsAs !== null && bill.userId.id === actsAs);
 
   if (!isAdmin && !isOwner) {
     throw new HttpsError("permission-denied", "Access denied");
