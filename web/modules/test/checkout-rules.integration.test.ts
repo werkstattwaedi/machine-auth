@@ -18,6 +18,7 @@ import {
   collection,
   addDoc,
   doc,
+  getDoc,
   serverTimestamp,
   setDoc,
 } from "firebase/firestore"
@@ -38,6 +39,17 @@ afterAll(async () => {
 /** Get a client-SDK Firestore for an authenticated user. */
 function authedDb(uid: string) {
   return getTestEnvironment().authenticatedContext(uid).firestore()
+}
+
+/**
+ * A kiosk tag-tap session: synthetic UID with an actsAs claim naming the
+ * real user. Mirrors what verifyTagCheckout mints in production.
+ */
+function tagSessionDb(realUserUid: string, sessionUid?: string) {
+  const sid = sessionUid ?? `tag:${realUserUid}:s1`
+  return getTestEnvironment()
+    .authenticatedContext(sid, { actsAs: realUserUid, tagCheckout: true })
+    .firestore()
 }
 
 /** Get a client-SDK Firestore for an unauthenticated user. */
@@ -147,6 +159,42 @@ describe("Checkout create rules", () => {
       }),
     )
   })
+
+  // R2 in Security Analysis: an unauthenticated client could previously
+  // stamp a victim's userId on a checkout. Must be rejected.
+  it("rejects unauthenticated create that targets another user's userId", async () => {
+    const anonDb = unauthDb()
+    await assertFails(
+      addDoc(collection(anonDb, "checkouts"), {
+        userId: doc(anonDb, "users/victim"),
+        status: "open",
+        usageType: "regular",
+        created: serverTimestamp(),
+        workshopsVisited: [],
+        persons: [],
+        modifiedBy: null,
+        modifiedAt: serverTimestamp(),
+      }),
+    )
+  })
+
+  // Same attack from a signed-in but unrelated user: u1 cannot create a
+  // checkout that names u2 as the owner.
+  it("rejects signed-in create that targets a different user's userId", async () => {
+    const db = authedDb("u1")
+    await assertFails(
+      addDoc(collection(db, "checkouts"), {
+        userId: doc(db, "users/u2"),
+        status: "open",
+        usageType: "regular",
+        created: serverTimestamp(),
+        workshopsVisited: [],
+        persons: [],
+        modifiedBy: null,
+        modifiedAt: serverTimestamp(),
+      }),
+    )
+  })
 })
 
 describe("Checkout items create rules", () => {
@@ -249,5 +297,136 @@ describe("Checkout items create rules", () => {
         formInputs: null,
       }),
     )
+  })
+
+  // R3 in Security Analysis: rules-level field validation rejects negative
+  // quantities/prices. Server-side recompute is the authoritative defense
+  // (Phase A5), but this is a cheap guard.
+  it("rejects items with zero or negative quantity", async () => {
+    await createOpenCheckout("co1", "u1")
+    const db = authedDb("u1")
+    await assertFails(
+      addDoc(collection(db, "checkouts", "co1", "items"), {
+        workshop: "holz",
+        description: "broken",
+        origin: "manual",
+        catalogId: null,
+        created: serverTimestamp(),
+        quantity: 0,
+        unitPrice: 1,
+        totalPrice: 0,
+        formInputs: null,
+      }),
+    )
+  })
+
+  it("rejects items with negative unitPrice", async () => {
+    await createOpenCheckout("co1", "u1")
+    const db = authedDb("u1")
+    await assertFails(
+      addDoc(collection(db, "checkouts", "co1", "items"), {
+        workshop: "holz",
+        description: "discount mint",
+        origin: "manual",
+        catalogId: null,
+        created: serverTimestamp(),
+        quantity: 1,
+        unitPrice: -100,
+        totalPrice: -100,
+        formInputs: null,
+      }),
+    )
+  })
+
+  // A kiosk tag-tap session is a synthetic UID with an `actsAs` claim.
+  // It must be able to add items to the real user's open checkout.
+  it("allows tag-tap session (actsAs claim) to add items to real user's checkout", async () => {
+    await createOpenCheckout("co1", "u1")
+    const db = tagSessionDb("u1")
+    await assertSucceeds(
+      addDoc(collection(db, "checkouts", "co1", "items"), {
+        workshop: "holz",
+        description: "Schleifpapier",
+        origin: "manual",
+        catalogId: null,
+        created: serverTimestamp(),
+        quantity: 1,
+        unitPrice: 3,
+        totalPrice: 3,
+        formInputs: null,
+      }),
+    )
+  })
+
+  // …but only for the user it actually claims to act as. A tag-tap session
+  // for u1 must NOT be able to write to u2's checkout.
+  it("rejects tag-tap session writing to a different user's checkout", async () => {
+    await createOpenCheckout("co2", "u2")
+    const db = tagSessionDb("u1")
+    await assertFails(
+      addDoc(collection(db, "checkouts", "co2", "items"), {
+        workshop: "holz",
+        description: "victim charge",
+        origin: "manual",
+        catalogId: null,
+        created: serverTimestamp(),
+        quantity: 1,
+        unitPrice: 5,
+        totalPrice: 5,
+        formInputs: null,
+      }),
+    )
+  })
+})
+
+describe("Checkout read rules (R1: cross-user leak fix)", () => {
+  it("rejects a different signed-in user from reading another user's checkout", async () => {
+    await createOpenCheckout("co1", "u1")
+
+    const u2db = authedDb("u2")
+    await assertFails(getDoc(doc(u2db, "checkouts", "co1")))
+  })
+
+  it("allows the owner to read their own checkout", async () => {
+    await createOpenCheckout("co1", "u1")
+
+    const u1db = authedDb("u1")
+    await assertSucceeds(getDoc(doc(u1db, "checkouts", "co1")))
+  })
+
+  it("allows a tag-tap session for u1 to read u1's checkout", async () => {
+    await createOpenCheckout("co1", "u1")
+
+    const tagDb = tagSessionDb("u1")
+    await assertSucceeds(getDoc(doc(tagDb, "checkouts", "co1")))
+  })
+
+  it("rejects a tag-tap session for u2 from reading u1's checkout", async () => {
+    await createOpenCheckout("co1", "u1")
+
+    const tagDb = tagSessionDb("u2")
+    await assertFails(getDoc(doc(tagDb, "checkouts", "co1")))
+  })
+})
+
+describe("Server-only collections deny rules", () => {
+  it("denies client read of authentications", async () => {
+    const db = authedDb("u1")
+    await assertFails(getDoc(doc(db, "authentications", "any")))
+  })
+
+  it("denies client write of authentications", async () => {
+    const db = authedDb("u1")
+    await assertFails(setDoc(doc(db, "authentications", "any"), { foo: 1 }))
+  })
+
+  it("denies client read of operations_log", async () => {
+    const db = authedDb("u1")
+    await assertFails(getDoc(doc(db, "operations_log", "any")))
+  })
+
+  it("denies client write of operations_log", async () => {
+    const db = authedDb("u1")
+    await assertFails(setDoc(doc(db, "operations_log", "any"), { foo: 1 }))
   })
 })
