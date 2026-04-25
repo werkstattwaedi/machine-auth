@@ -299,6 +299,7 @@ async function trySendEmail(billId: string): Promise<boolean> {
         variables: {
           RECIPIENT_NAME: recipientName,
           CHECKOUT_DATE: checkoutDate,
+          INVOICE_NUMBER: invoiceNumber,
           AMOUNT: bill.amount.toFixed(2),
           CURRENCY: bill.currency,
         },
