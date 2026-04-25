@@ -209,7 +209,8 @@
       "userId": "DocumentReference", // DocumentReference to /users/{userId}
       "registered": "timestamp", // time the token was added to the user's profile
       "deactivated": "timestamp", // optional timestamp, when set the token is not in use anymore
-      "label": "string" // Token label (e.g., "Key 1")
+      "label": "string", // Token label (e.g., "Key 1")
+      "lastSdmCounter": "number" // Last observed SDM read counter (24-bit). Updated atomically by verifyTagCheckout for replay defense; treated as 0 when absent.
     }
   },
   "loginCodes": {

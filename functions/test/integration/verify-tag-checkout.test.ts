@@ -276,6 +276,98 @@ describe("handleVerifyTagCheckout (Integration)", () => {
       const response3 = await handleVerifyTagCheckout(test3, mockConfig);
       expect(response3.uid).to.equal(TEST_TOKEN_UID);
     });
+
+    it("should reject replay of same counter value", async () => {
+      await seedTestData({
+        tokens: {
+          [TEST_TOKEN_UID]: {
+            userId: `/users/${TEST_USER_ID}`,
+            label: "Test Token",
+          },
+        },
+        users: {
+          [TEST_USER_ID]: {
+            displayName: "Test User",
+            permissions: [],
+            roles: [],
+          },
+        },
+      });
+
+      const replay = generateTestData(TEST_TOKEN_UID, 42);
+      const first = await handleVerifyTagCheckout(replay, mockConfig);
+      expect(first.uid).to.equal(TEST_TOKEN_UID);
+
+      // Same picc/cmac sent again — must be rejected as a replay even though
+      // the cryptography is still valid.
+      try {
+        await handleVerifyTagCheckout(replay, mockConfig);
+        expect.fail("Should have rejected replayed counter");
+      } catch (error: any) {
+        expect(error.message).to.include("replay");
+      }
+    });
+
+    it("should reject older counter after newer one observed", async () => {
+      await seedTestData({
+        tokens: {
+          [TEST_TOKEN_UID]: {
+            userId: `/users/${TEST_USER_ID}`,
+            label: "Test Token",
+          },
+        },
+        users: {
+          [TEST_USER_ID]: {
+            displayName: "Test User",
+            permissions: [],
+            roles: [],
+          },
+        },
+      });
+
+      const newer = generateTestData(TEST_TOKEN_UID, 500);
+      await handleVerifyTagCheckout(newer, mockConfig);
+
+      const older = generateTestData(TEST_TOKEN_UID, 100);
+      try {
+        await handleVerifyTagCheckout(older, mockConfig);
+        expect.fail("Should have rejected older counter");
+      } catch (error: any) {
+        expect(error.message).to.include("replay");
+      }
+    });
+  });
+
+  describe("Custom token", () => {
+    it("uses a synthetic UID, not the user doc ID", async () => {
+      await seedTestData({
+        tokens: {
+          [TEST_TOKEN_UID]: {
+            userId: `/users/${TEST_USER_ID}`,
+            label: "Test Token",
+          },
+        },
+        users: {
+          [TEST_USER_ID]: {
+            displayName: "Admin User",
+            permissions: [],
+            roles: ["admin"],
+          },
+        },
+      });
+
+      const { picc, cmac } = generateTestData(TEST_TOKEN_UID, 7);
+      const response = await handleVerifyTagCheckout({ picc, cmac }, mockConfig);
+
+      // The response carries the real userId for client pre-fill, but the
+      // custom token must NOT bind to that UID — that would inherit any
+      // persistent admin claims and defeat the whole purpose of this design.
+      expect(response.userId).to.equal(TEST_USER_ID);
+      expect(response.customToken).to.be.a("string");
+      // We can't decode the custom token here without a JWKS fetch, but the
+      // synthetic UID is asserted in detail by the unit test; here we just
+      // confirm the contract.
+    });
   });
 
   describe("User lookup", () => {

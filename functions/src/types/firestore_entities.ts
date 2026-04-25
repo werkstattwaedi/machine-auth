@@ -30,6 +30,10 @@ export interface TokenEntity {
   registered: Timestamp;
   deactivated?: Timestamp;
   label: string;
+  // Last observed SDM read counter (24-bit). Updated atomically in
+  // verifyTagCheckout to defend against URL replay. Absent on tokens that
+  // predate the replay-defense rollout (treated as 0).
+  lastSdmCounter?: number;
 }
 
 export interface PermissionEntity {
