@@ -37,7 +37,7 @@ describe("getSortedWorkshops", () => {
 describe("getUnitLabel", () => {
   const config: PricingConfig = {
     labels: {
-      units: { h: "Stunden", m2: "Quadratmeter", m: "Meter", stk: "Stück", kg: "Kilogramm", chf: "Franken" },
+      units: { h: "Stunden", m2: "Quadratmeter", m: "Meter", stk: "Stück", kg: "Kilogramm", chf: "Franken", l: "Liter" },
       discounts: { none: "", member: "", intern: "" },
     },
   } as unknown as PricingConfig
@@ -49,6 +49,8 @@ describe("getUnitLabel", () => {
     ["count", "Stück"],
     ["weight", "Kilogramm"],
     ["direct", "Franken"],
+    // SLA resin is priced per liter (unitPrice = CHF/l on each resin entry).
+    ["sla", "Liter"],
   ] as [PricingModel, string][])("%s → %s", (model, expected) => {
     expect(getUnitLabel(config, model)).toBe(expected)
   })
@@ -57,6 +59,7 @@ describe("getUnitLabel", () => {
     const emptyConfig = { labels: {} } as unknown as PricingConfig
     expect(getUnitLabel(emptyConfig, "time")).toBe("Std.")
     expect(getUnitLabel(emptyConfig, "area")).toBe("m²")
+    expect(getUnitLabel(emptyConfig, "sla")).toBe("l")
   })
 })
 
@@ -68,6 +71,7 @@ describe("getShortUnit", () => {
     ["count", "Stk."],
     ["weight", "kg"],
     ["direct", "CHF"],
+    ["sla", "l"],
   ] as [PricingModel, string][])("%s → %s", (model, expected) => {
     expect(getShortUnit(model)).toBe(expected)
   })

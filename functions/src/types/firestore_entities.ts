@@ -81,7 +81,7 @@ export interface UsageMachineEntity {
 
 // --- Catalog ---
 
-export type PricingModel = "time" | "area" | "length" | "count" | "weight" | "direct";
+export type PricingModel = "time" | "area" | "length" | "count" | "weight" | "direct" | "sla";
 export type DiscountLevel = "none" | "member" | "intern";
 
 export interface CatalogEntity {

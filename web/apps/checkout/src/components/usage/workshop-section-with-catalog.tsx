@@ -39,7 +39,9 @@ export function WorkshopSectionWithCatalog({
 
   if (loading) return <PageLoading />
 
-  // Override addItem to inject discount-level pricing
+  // Override addItem to inject discount-level pricing. For SLA items,
+  // `unitPrice` is CHF/l of resin (per catalog entry); the per-layer cost
+  // is looked up from `PricingConfig.slaLayerPrice` at render time.
   const wrappedCallbacks: ItemCallbacks = {
     ...callbacks,
     addItem: (item: CheckoutItemLocal) => {
@@ -47,7 +49,10 @@ export function WorkshopSectionWithCatalog({
       if (item.catalogId) {
         const cat = rawCatalog.find((c) => c.id === item.catalogId)
         if (cat) {
-          resolved = { ...item, unitPrice: cat.unitPrice[discountLevel] ?? cat.unitPrice.none ?? 0 }
+          resolved = {
+            ...item,
+            unitPrice: cat.unitPrice[discountLevel] ?? cat.unitPrice.none ?? 0,
+          }
         }
       }
       callbacks.addItem(resolved)

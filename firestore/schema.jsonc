@@ -17,9 +17,12 @@
       "code": "string", // Unique human-manageable lookup code (e.g., "1042")
       "name": "string", // e.g., "Stationäre Maschinen", "Sperrholz Birke 4mm"
       "workshops": ["string"], // e.g., ["holz"], ["holz", "metall"]
-      "pricingModel": "time | area | length | count | weight | direct",
-      // time → hours, area → m², length → meters, count → pieces, weight → kg, direct → CHF
+      "pricingModel": "time | area | length | count | weight | direct | sla",
+      // time → hours, area → m², length → meters, count → pieces, weight → kg,
+      // direct → CHF, sla → resin (ml, priced per L via unitPrice) + layers
+      // (count, priced via global config.pricing.slaLayerPrice)
       "unitPrice": { // Conditional price per base unit by discount level
+        // For pricingModel == "sla" this is CHF per liter of resin.
         "none": "number",
         "member": "number",
         "intern": "number"
@@ -137,6 +140,10 @@
         "kind": { "regular": "number", "materialbezug": "number", "intern": "number", "hangenmoos": "number" },
         "firma": { "regular": "number", "materialbezug": "number", "intern": "number", "hangenmoos": "number" }
       },
+      // SLA resin prints: per-layer CHF cost (constant across all resin types,
+      // hardware-wear-driven) by discount level. Per-liter resin price lives
+      // on each catalog entry's unitPrice.
+      "slaLayerPrice": { "none": "number", "member": "number", "intern": "number" },
       "workshops": {
         "{workshopId}": { // e.g., "holz", "metall", "makerspace"
           "label": "string", // Display name (e.g., "Holzwerkstatt")

@@ -105,7 +105,11 @@ describe("buildInvoicePdf — content", () => {
     expect(text).to.include("08.08.2025 13:00");
     expect(text).to.include("12.08.2025 10:00");
     // Grand total
-    expect(text).to.include("725.30");
+    expect(text).to.include("747.80");
+    // SLA row renders the two input axes inline in the description instead
+    // of the misleading quantity × unitPrice columns (see build_invoice_pdf
+    // SLA special-case).
+    expect(text).to.include("SLA Resin (Tough) (50 ml · 1000 layers)");
     // Payment terms (unpaid)
     expect(text).to.include("Zahlbar innert 30 Tagen");
   });

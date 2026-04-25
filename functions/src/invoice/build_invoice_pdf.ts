@@ -45,6 +45,7 @@ const UNIT_LABELS: Record<string, string> = {
   count: "Stk.",
   weight: "kg",
   direct: "",
+  sla: "l",
 };
 
 const PAID_VIA_LABELS: Record<string, string> = {
@@ -366,8 +367,20 @@ function renderCheckoutSection(
 
     let workshopTotal = 0;
     for (const item of items) {
-      const unit = unitLabel(item.pricingModel);
-      y = renderItemRow(doc, y, item.description, unit, item.quantity, item.unitPrice, item.totalPrice);
+      if (item.pricingModel === "sla") {
+        // SLA has two pricing axes (resin volume + layer count); the single
+        // quantity × unitPrice column pair can't express that without reading
+        // as an arithmetic falsehood. Render the axes in the description and
+        // skip the middle columns — only totalPrice stays.
+        const axes = (item.formInputs ?? [])
+          .map((fi) => `${formatQty(fi.quantity)} ${fi.unit}`)
+          .join(" · ");
+        const desc = axes ? `${item.description} (${axes})` : item.description;
+        y = renderItemRow(doc, y, desc, "", null, null, item.totalPrice);
+      } else {
+        const unit = unitLabel(item.pricingModel);
+        y = renderItemRow(doc, y, item.description, unit, item.quantity, item.unitPrice, item.totalPrice);
+      }
       workshopTotal += item.totalPrice;
     }
     y = renderSubtotalRow(doc, y, workshopTotal);
