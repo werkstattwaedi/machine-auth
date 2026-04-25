@@ -32,11 +32,31 @@ npm start            # starts the kiosk app
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `CHECKOUT_URL` | `https://localhost:5173/?kiosk` | Base URL for the checkout web app |
+| `KIOSK_BEARER_KEY` | `""` | Per-kiosk Bearer secret. **Required in production** (the app refuses to start without it). The web app passes it as `Authorization: Bearer …` to `/api/verifyTagCheckout`. The dev/emulator path bypasses the check, so an empty value is fine when `CHECKOUT_URL` points at localhost. |
+
+The Bearer is intentionally a soft revocation/audit knob, not real
+attestation — anyone with local admin on this Windows box can extract
+it. The actual security defense for the kiosk badge flow is the
+synthetic-UID custom token returned by `verifyTagCheckout`. See
+`docs/Security Analysis.md` for the threat model.
 
 For local development with emulators:
 ```bash
 CHECKOUT_URL=https://localhost:5173/?kiosk npm start
 ```
+
+For production:
+```bash
+CHECKOUT_URL=https://checkout.werkstattwaedi.ch/?kiosk \
+KIOSK_BEARER_KEY="$(cat /etc/oww-kiosk/bearer.key)" \
+  npm start
+```
+
+The Bearer should be installed on the kiosk machine outside the
+checked-in source tree (e.g., a file owned by root, or a systemd
+EnvironmentFile). Rotate the secret with
+`firebase functions:secrets:set KIOSK_BEARER_KEY` and update the
+kiosk environment to match.
 
 ## How It Works
 

@@ -19,8 +19,15 @@ webview.addEventListener("dom-ready", () => {
   console.log("Webview loaded:", webview.src)
 })
 
-// "Neuer Checkout" resets to base URL
-btnReset.addEventListener("click", () => {
+// "Neuer Checkout" wipes session storage and reloads the base URL.
+// Wiping storage is what guarantees the previous user's Firebase Auth
+// session is gone — navigation alone wouldn't clear IndexedDB.
+btnReset.addEventListener("click", async () => {
+  try {
+    await window.kiosk.resetSession()
+  } catch (err) {
+    console.error("Failed to reset kiosk session:", err)
+  }
   webview.src = baseUrl
 })
 

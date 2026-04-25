@@ -150,10 +150,22 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Always-current reset callback; stored in a ref so the timeout closure
   // never captures a stale dispatch reference.
-  const onResetRef = useRef<(() => void) | null>(null)
-  onResetRef.current = () => {
+  const onResetRef = useRef<(() => Promise<void>) | null>(null)
+  onResetRef.current = async () => {
     dispatch({ type: "RESET" })
-    tagSignOut()
+    await tagSignOut()
+    // In the Electron kiosk app, also wipe the webview's session storage
+    // so any leftover Firebase Auth state from this session is gone.
+    // Defined by the kiosk preload (see checkout-kiosk/preload.js); a
+    // no-op in regular browsers.
+    const kioskApi = (window as unknown as { kiosk?: { resetSession?: () => Promise<void> } }).kiosk
+    if (kioskApi?.resetSession) {
+      try {
+        await kioskApi.resetSession()
+      } catch (err) {
+        console.error("Failed to reset kiosk session:", err)
+      }
+    }
     window.history.replaceState(null, "", kiosk ? "/?kiosk" : "/")
   }
 
@@ -186,12 +198,12 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
   useEffect(() => {
     if (!state.submitted || isAccountLoggedIn) return
     const timer = setTimeout(() => {
-      dispatch({ type: "RESET" })
-      tagSignOut()
-      window.history.replaceState(null, "", kiosk ? "/?kiosk" : "/")
+      // Reuse the unified reset callback so we get the same kiosk
+      // session wipe + tagSignOut + URL replace as the inactivity path.
+      onResetRef.current?.()
     }, 30_000)
     return () => clearTimeout(timer)
-  }, [state.submitted, isAccountLoggedIn, dispatch, kiosk, tagSignOut])
+  }, [state.submitted, isAccountLoggedIn])
 
   // Sign out tag auth when wizard unmounts (new tag replaces this instance)
   useEffect(() => {
