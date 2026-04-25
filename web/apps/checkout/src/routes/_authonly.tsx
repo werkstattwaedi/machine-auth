@@ -15,7 +15,7 @@ export const Route = createFileRoute("/_authonly")({
  * Used for flows like profile completion where the full app chrome is premature.
  */
 function AuthOnlyLayout() {
-  const { user, loading } = useAuth()
+  const { user, loading, sessionKind } = useAuth()
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -23,6 +23,14 @@ function AuthOnlyLayout() {
       navigate({ to: "/login" })
     }
   }, [user, loading, navigate])
+
+  // Tag-tap (kiosk) sessions must never reach member-area screens — they
+  // are scoped to the checkout flow only. Bounce back to the kiosk root.
+  useEffect(() => {
+    if (!loading && sessionKind === "tag") {
+      navigate({ to: "/" })
+    }
+  }, [sessionKind, loading, navigate])
 
   if (loading) {
     return (
@@ -32,7 +40,7 @@ function AuthOnlyLayout() {
     )
   }
 
-  if (!user) return null
+  if (!user || sessionKind === "tag") return null
 
   return (
     <div className="min-h-screen flex flex-col items-center bg-background">

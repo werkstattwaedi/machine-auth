@@ -64,10 +64,25 @@ export function isProfileComplete(userDoc: UserDoc): boolean {
   return true
 }
 
+/**
+ * Provenance of the current Firebase Auth session.
+ *
+ * - `real`: an email-code, magic-link, or Google sign-in. Full member-area
+ *   access; user.uid equals the user doc id.
+ * - `tag`: a kiosk badge tap. Synthetic uid (`tag:…`) with `actsAs` claim;
+ *   the session is a different Firebase principal than the user and must
+ *   NOT be allowed to navigate the member area. See route guards below.
+ * - `anonymous`: Firebase signInAnonymously (Phase C). Used for the
+ *   no-account checkout path.
+ * - `null`: not signed in (or claims not yet resolved).
+ */
+export type SessionKind = "real" | "tag" | "anonymous" | null
+
 interface AuthContextValue {
   user: User | null
   userDoc: UserDoc | null
   isAdmin: boolean
+  sessionKind: SessionKind
   /** True until Firebase Auth state resolves (fast, local check). */
   loading: boolean
   /** True while the Firestore user doc is being fetched (may be slow). */
@@ -96,23 +111,60 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [userDoc, setUserDoc] = useState<UserDoc | null>(null)
   const [loading, setLoading] = useState(true)
   const [userDocLoading, setUserDocLoading] = useState(false)
+  const [sessionKind, setSessionKind] = useState<SessionKind>(null)
 
-  // Listen to Firebase Auth state
+  // Listen to Firebase Auth state. Resolve sessionKind from the ID-token
+  // claims so callers can distinguish a real login from a kiosk tag-tap.
   useEffect(() => {
     return onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser)
       if (!firebaseUser) {
         setUserDoc(null)
+        setSessionKind(null)
+        setLoading(false)
+        setUserDocLoading(false)
+        return
       }
-      // Always resolve auth loading immediately - don't wait for Firestore
-      setLoading(false)
-      setUserDocLoading(!!firebaseUser)
-    })
-  }, [auth])
 
-  // Listen to Firestore user doc when authenticated (doc ID = Auth UID)
+      // Resolve sessionKind from token claims. The tag-tap session is the
+      // one that must be locked out of the member area; everything else
+      // is "real" (email/magic-link/Google) or "anonymous" (Phase C).
+      try {
+        const tokenResult = await firebaseUser.getIdTokenResult()
+        const claims = tokenResult.claims as { tagCheckout?: unknown; actsAs?: unknown }
+        if (claims.tagCheckout === true || typeof claims.actsAs === "string") {
+          setSessionKind("tag")
+        } else if (firebaseUser.isAnonymous) {
+          setSessionKind("anonymous")
+        } else {
+          setSessionKind("real")
+        }
+      } catch {
+        // Token decoding failed; treat as real to avoid accidental lockouts.
+        setSessionKind("real")
+      }
+
+      setLoading(false)
+      // Tag sessions don't have a user doc at users/{user.uid} — the
+      // synthetic uid never spawned one. Skip the Firestore subscription
+      // and the loading flag so the UI doesn't spin forever.
+      const isTagSession = user?.uid?.startsWith("tag:") ||
+        (firebaseUser.uid?.startsWith("tag:") ?? false)
+      setUserDocLoading(!isTagSession)
+    })
+  }, [auth, user?.uid])
+
+  // Listen to Firestore user doc when authenticated (doc ID = Auth UID).
+  // Tag-tap sessions have a synthetic uid (`tag:…`) and no corresponding
+  // user doc; skip the subscription entirely (the kiosk reads pre-fill
+  // data from useTokenAuth's response).
   useEffect(() => {
     if (!user) return
+    if (user.uid.startsWith("tag:")) {
+      setUserDoc(null)
+      setUserDocLoading(false)
+      return
+    }
 
     const userDocRef = doc(db, "users", user.uid)
 
@@ -228,6 +280,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       userDoc,
       isAdmin,
+      sessionKind,
       loading,
       userDocLoading,
       requestLoginEmail,

@@ -14,7 +14,7 @@ export const Route = createFileRoute("/_authenticated")({
 })
 
 function AuthenticatedLayout() {
-  const { user, userDoc, loading, userDocLoading, signOut } = useAuth()
+  const { user, userDoc, loading, userDocLoading, signOut, sessionKind } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   // Hooks must be called unconditionally before any early returns
@@ -27,6 +27,16 @@ function AuthenticatedLayout() {
       navigate({ to: "/login" })
     }
   }, [user, loading, navigate])
+
+  // Tag-tap (kiosk) sessions are scoped to the checkout flow only — they
+  // must never reach the member-area routes that live under this layout
+  // (/visit, /profile, /usage). Bounce back to the kiosk root, which
+  // unmounts the wizard and triggers tagSignOut.
+  useEffect(() => {
+    if (!loading && sessionKind === "tag") {
+      navigate({ to: "/" })
+    }
+  }, [sessionKind, loading, navigate])
 
   // Profile completion gate - redirect to /complete-profile if profile not completed
   useEffect(() => {
@@ -43,7 +53,7 @@ function AuthenticatedLayout() {
     )
   }
 
-  if (!user) return null
+  if (!user || sessionKind === "tag") return null
 
   const navLink = "flex items-center gap-2.5 px-3 py-2 rounded-[3px] text-sm transition-colors"
   const navLinkActive = "[&.active]:bg-cog-teal [&.active]:text-white [&.active]:font-semibold"
