@@ -52,6 +52,20 @@ function tagSessionDb(realUserUid: string, sessionUid?: string) {
     .firestore()
 }
 
+/**
+ * A Firebase Anonymous Auth session — what the truly-anonymous checkout
+ * path uses. The `firebase.sign_in_provider` claim mirrors what real
+ * signInAnonymously() tokens carry; rules read this to gate writes
+ * scoped to a single anonymous principal.
+ */
+function anonAuthDb(uid: string) {
+  return getTestEnvironment()
+    .authenticatedContext(uid, {
+      firebase: { sign_in_provider: "anonymous", identities: {} },
+    })
+    .firestore()
+}
+
 /** Get a client-SDK Firestore for an unauthenticated user. */
 function unauthDb() {
   return getTestEnvironment().unauthenticatedContext().firestore()
@@ -89,8 +103,8 @@ describe("Checkout create rules", () => {
     )
   })
 
-  it("allows creating a closed checkout (one-shot anonymous submit)", async () => {
-    const db = unauthDb()
+  it("allows anonymous-auth client to create a closed checkout", async () => {
+    const db = anonAuthDb("anon-1")
     await assertSucceeds(
       addDoc(collection(db, "checkouts"), {
         userId: null,
@@ -104,6 +118,27 @@ describe("Checkout create rules", () => {
         closedAt: serverTimestamp(),
         notes: null,
         summary: { totalPrice: 15, entryFees: 15, machineCost: 0, materialCost: 0, tip: 0 },
+      }),
+    )
+  })
+
+  it("rejects fully unauthenticated create even with userId == null", async () => {
+    // After Phase C, anonymous = Firebase Anonymous Auth. The legacy
+    // unauthenticated `if true` create branch is gone.
+    const db = unauthDb()
+    await assertFails(
+      addDoc(collection(db, "checkouts"), {
+        userId: null,
+        status: "closed",
+        usageType: "regular",
+        created: serverTimestamp(),
+        workshopsVisited: [],
+        persons: [],
+        modifiedBy: null,
+        modifiedAt: serverTimestamp(),
+        closedAt: serverTimestamp(),
+        notes: null,
+        summary: { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 },
       }),
     )
   })
@@ -269,9 +304,9 @@ describe("Checkout items create rules", () => {
     )
   })
 
-  it("allows items on anonymous checkout (userId == null)", async () => {
-    // Create anonymous open checkout via unauthenticated context
-    const anonDb = unauthDb()
+  it("allows anonymous-auth client to add items to anonymous checkout (userId == null)", async () => {
+    // Create anonymous open checkout via Firebase Anonymous Auth context
+    const anonDb = anonAuthDb("anon-1")
     await setDoc(doc(anonDb, "checkouts", "co-anon"), {
       userId: null,
       status: "open",
@@ -283,11 +318,42 @@ describe("Checkout items create rules", () => {
       modifiedAt: serverTimestamp(),
     })
 
-    // Unauthenticated users can add items to anonymous checkouts
     await assertSucceeds(
       addDoc(collection(anonDb, "checkouts", "co-anon", "items"), {
         workshop: "holz",
         description: "MDF Platte",
+        origin: "qr",
+        catalogId: null,
+        created: serverTimestamp(),
+        quantity: 1,
+        unitPrice: 5,
+        totalPrice: 5,
+        formInputs: null,
+      }),
+    )
+  })
+
+  it("rejects fully unauthenticated client from adding items to anonymous checkout", async () => {
+    // Set up the checkout via the anonymous-auth principal that legitimately
+    // owns this flow.
+    const setupDb = anonAuthDb("anon-1")
+    await setDoc(doc(setupDb, "checkouts", "co-anon"), {
+      userId: null,
+      status: "open",
+      usageType: "regular",
+      created: serverTimestamp(),
+      workshopsVisited: [],
+      persons: [],
+      modifiedBy: null,
+      modifiedAt: serverTimestamp(),
+    })
+
+    // A fully unauthenticated client must not be able to write items.
+    const unauth = unauthDb()
+    await assertFails(
+      addDoc(collection(unauth, "checkouts", "co-anon", "items"), {
+        workshop: "holz",
+        description: "stolen item",
         origin: "qr",
         catalogId: null,
         created: serverTimestamp(),

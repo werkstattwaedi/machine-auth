@@ -55,7 +55,7 @@ interface CheckoutItemDoc {
 export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange }: CheckoutWizardProps) {
   const db = useDb()
   const functions = useFunctions()
-  const { user, userDoc, signOut } = useAuth()
+  const { user, userDoc, signOut, signInAnonymouslyIfNeeded } = useAuth()
   const { tokenUser, loading: tokenLoading, isTagAuth, tagSignOut } = useTokenAuth(
     picc ?? null,
     cmac ?? null,
@@ -239,7 +239,17 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
   const handleSubmit = async () => {
     setSubmitting(true)
     try {
-      // Calculate entry fees
+      // Truly-anonymous flow: sign into Firebase Anonymous Auth before
+      // calling the bill callable. Each anonymous checkout becomes a
+      // distinct Firebase principal, which lets the rules require
+      // isAnonymousAuth() rather than the old `if true` create branch.
+      // No-op if a session (real, anonymous, or tag) already exists.
+      if (isAnonymous) {
+        await signInAnonymouslyIfNeeded()
+      }
+
+      // Calculate entry fees (client-side estimate for the receipt; the
+      // server recomputes authoritatively in closeCheckoutAndGetPayment).
       const entryFees = state.persons.reduce(
         (sum, p) => sum + calculateFee(p.userType, state.usageType, pricingConfig),
         0,

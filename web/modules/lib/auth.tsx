@@ -10,6 +10,7 @@ import {
 } from "react"
 import {
   onAuthStateChanged,
+  signInAnonymously,
   signInWithCustomToken,
   signOut as firebaseSignOut,
   GoogleAuthProvider,
@@ -96,6 +97,13 @@ interface AuthContextValue {
   signInWithGoogle: () => Promise<void>
   linkGoogle: () => Promise<void>
   signOut: () => Promise<void>
+  /**
+   * Sign in as a Firebase Anonymous user if no session exists. Used by the
+   * truly-anonymous checkout path so Firestore rules can gate on a real
+   * principal rather than `if true` for unauth writes. No-op if a session
+   * (real, anonymous, or tag) already exists.
+   */
+  signInAnonymouslyIfNeeded: () => Promise<void>
   /** Set when Google sign-in failed because an email-link account exists. */
   pendingGoogleLink: boolean
   clearPendingGoogleLink: () => void
@@ -273,6 +281,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await firebaseSignOut(auth)
   }
 
+  const signInAnonymouslyIfNeeded = async () => {
+    if (auth.currentUser) return
+    await signInAnonymously(auth)
+  }
+
   const isAdmin = userDoc?.roles?.includes("admin") ?? false
 
   return (
@@ -289,6 +302,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signInWithGoogle,
       linkGoogle,
       signOut,
+      signInAnonymouslyIfNeeded,
       pendingGoogleLink,
       clearPendingGoogleLink,
     }}>
