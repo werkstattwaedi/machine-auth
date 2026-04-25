@@ -86,6 +86,40 @@ describe("Login code flow (Integration)", () => {
       );
     });
 
+    it("surfaces a config error when LOGIN_ALLOWED_ORIGINS is empty in production-like mode", async () => {
+      // Reproduces the production outage: when the param is unset/empty and
+      // we're not in emulator mode, every login attempt should fail with the
+      // distinct "not configured" error (not the generic "unknown request
+      // origin"), so ops sees the misconfiguration in logs.
+      const savedEmulator = process.env.FUNCTIONS_EMULATOR;
+      const savedOrigins = process.env.LOGIN_ALLOWED_ORIGINS;
+      delete process.env.FUNCTIONS_EMULATOR;
+      process.env.LOGIN_ALLOWED_ORIGINS = "";
+      try {
+        try {
+          await handleRequestLoginCode(
+            { email: "ops@example.com" },
+            "https://checkout.werkstattwaedi.ch"
+          );
+          throw new Error("expected HttpsError, got success");
+        } catch (err: any) {
+          expect(err?.code).to.equal("failed-precondition");
+          expect(err?.message ?? "").to.contain("not configured");
+        }
+      } finally {
+        if (savedEmulator === undefined) {
+          delete process.env.FUNCTIONS_EMULATOR;
+        } else {
+          process.env.FUNCTIONS_EMULATOR = savedEmulator;
+        }
+        if (savedOrigins === undefined) {
+          delete process.env.LOGIN_ALLOWED_ORIGINS;
+        } else {
+          process.env.LOGIN_ALLOWED_ORIGINS = savedOrigins;
+        }
+      }
+    });
+
     it("rejects malformed email", async () => {
       await expectHttpsError(
         () => handleRequestLoginCode({ email: "not-an-email" }, ORIGIN),

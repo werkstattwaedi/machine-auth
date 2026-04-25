@@ -8,7 +8,9 @@
 
 import * as crypto from "crypto";
 import { getAuth } from "firebase-admin/auth";
+import * as logger from "firebase-functions/logger";
 import { defineString } from "firebase-functions/params";
+import { HttpsError } from "firebase-functions/v2/https";
 
 /**
  * Comma-separated list of allowed production origins (exact-match).
@@ -18,10 +20,11 @@ import { defineString } from "firebase-functions/params";
  * Previously we wildcarded `*.web.app` / `*.firebaseapp.com`, which let any
  * attacker-controlled Firebase-hosted site request a magic link pointing to
  * itself — the user clicks, the attacker's site gets the custom token.
+ *
+ * No default: an unset param must fail loudly (see `assertLoginOriginsConfigured`)
+ * rather than silently rejecting every login attempt with "unknown request origin".
  */
-const loginAllowedOrigins = defineString("LOGIN_ALLOWED_ORIGINS", {
-  default: "",
-});
+const loginAllowedOrigins = defineString("LOGIN_ALLOWED_ORIGINS");
 
 /** Any localhost / 127.0.0.1 origin — allowed in emulator mode only. */
 const LOCALHOST_ORIGIN_REGEX =
@@ -62,13 +65,39 @@ export function constantTimeEqual(a: string, b: string): boolean {
   return crypto.timingSafeEqual(bufA, bufB);
 }
 
+/**
+ * Throws a distinct `failed-precondition` error when the login origin
+ * allow-list is empty/whitespace in non-emulator mode. Surfaces the
+ * misconfiguration in Cloud Functions logs without leaking details to
+ * the client (the message is generic enough that an attacker probing
+ * origins learns nothing from it; ops sees the error log line).
+ *
+ * Exported separately so unit tests can pass the value directly without
+ * stubbing `defineString`.
+ */
+export function assertLoginOriginsConfigured(value: string): void {
+  if (isEmulator()) return;
+  if (value.trim().length > 0) return;
+  logger.error(
+    "LOGIN_ALLOWED_ORIGINS is empty in production — login is broken " +
+      "for all clients. Set the param via firebase functions:config or " +
+      "regenerate functions/.env.<projectId> via `npm run generate-env`."
+  );
+  throw new HttpsError(
+    "failed-precondition",
+    "login origin allow-list not configured"
+  );
+}
+
 export function isAllowedOrigin(origin: string | undefined | null): boolean {
   if (!origin) return false;
   // Localhost is only honored in emulator mode — a browser on a user's
   // machine setting Origin: http://localhost against a production function
   // would be a misconfiguration, not a legitimate request.
   if (isEmulator() && LOCALHOST_ORIGIN_REGEX.test(origin)) return true;
-  return parseAllowedOrigins(loginAllowedOrigins.value()).has(origin);
+  const value = loginAllowedOrigins.value();
+  assertLoginOriginsConfigured(value);
+  return parseAllowedOrigins(value).has(origin);
 }
 
 /** Exposed for tests — takes the param value so tests don't need to stub defineString. */

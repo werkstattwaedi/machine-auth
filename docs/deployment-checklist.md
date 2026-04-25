@@ -41,6 +41,8 @@ firebase functions:config:set DIVERSIFICATION_SYSTEM_NAME="oww"
 firebase functions:config:set PARTICLE_PRODUCT_ID="<product-id>"
 ```
 
+After editing `machine-auth-operations/config.jsonc`, run `npm run generate-env` from the repo root to refresh `functions/.env.<projectId>` (and the web/maco_gateway env files) before deploying. Otherwise newly-added Firebase Functions params (e.g. `LOGIN_ALLOWED_ORIGINS`) will be missing from the deployed environment and login will silently break.
+
 ## 3. Deploy Functions
 
 ```bash
