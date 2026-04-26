@@ -111,6 +111,12 @@
       "fieldPath": "expiresAt",
       "ttl": true,
       "indexes": []
+    },
+    {
+      "collectionGroup": "authentications",
+      "fieldPath": "ttlAt",
+      "ttl": true,
+      "indexes": []
     }
   ]
 }

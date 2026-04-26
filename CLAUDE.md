@@ -117,6 +117,10 @@ await sessionRef.set({ userId: userDoc.ref });
 await sessionRef.set({ userId: `/users/${userId}` });
 ```
 
+**TTL retention contracts** (Firestore TTL policies in `firestore/firestore.indexes.json`):
+- `loginCodes.expiresAt`: created + 5 min — auto-deletes consumed/expired magic-link codes.
+- `authentications.ttlAt`: created + 5 min for in-progress auth; cleared (set to `null`) on successful completion so completed records are retained indefinitely.
+
 ## Local Development
 
 One-command startup:

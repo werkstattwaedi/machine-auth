@@ -67,6 +67,11 @@ export interface AuthenticationEntity {
     rndA: Uint8Array; // Cloud-generated random (RndA)
     rndB: Uint8Array; // Tag's random after decryption (RndB)
   } | null;
+
+  // Firestore TTL marker. Set to created + 5 min on creation so abandoned
+  // in-progress auth docs (firmware crash, lost power) get auto-deleted.
+  // Cleared (set to null) on successful completion to retain the record.
+  ttlAt?: Timestamp | null;
 }
 
 /**
