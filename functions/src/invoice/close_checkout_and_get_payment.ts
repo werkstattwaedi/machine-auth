@@ -122,12 +122,18 @@ export function recomputeSummary(
   };
 }
 
-/** Exported for unit tests. Defensive sanity-check on each item before summing it into a bill. */
+/**
+ * Exported for unit tests. Defensive sanity-check on each item before
+ * summing it into a bill. Number.isFinite() rejects Infinity / -Infinity
+ * / NaN — without it, `Infinity >= 0` would pass the inequality and the
+ * Firestore SDK would later reject the write with an opaque error
+ * instead of a clean 400 here.
+ */
 export function isValidItem(item: { quantity?: number; unitPrice?: number; totalPrice?: number }): boolean {
   return (
-    typeof item.quantity === "number" && item.quantity > 0 &&
-    typeof item.unitPrice === "number" && item.unitPrice >= 0 &&
-    typeof item.totalPrice === "number" && item.totalPrice >= 0
+    typeof item.quantity === "number" && Number.isFinite(item.quantity) && item.quantity > 0 &&
+    typeof item.unitPrice === "number" && Number.isFinite(item.unitPrice) && item.unitPrice >= 0 &&
+    typeof item.totalPrice === "number" && Number.isFinite(item.totalPrice) && item.totalPrice >= 0
   );
 }
 
@@ -145,6 +151,55 @@ function logSummaryDivergence(
       serverTotal: server.totalPrice,
     });
   }
+}
+
+const ALLOWED_USER_TYPES = ["erwachsen", "kind", "firma"] as const;
+type CanonicalUserType = (typeof ALLOWED_USER_TYPES)[number];
+
+/**
+ * For a registered user (real login or tag-tap session), the primary
+ * person's userType must match the user's stored profile — otherwise an
+ * adult member could post `userType: "kind"` and pay the child entry
+ * fee. We override silently rather than reject so legitimate stale
+ * client-side state (e.g., a userType change since the form was
+ * rendered) doesn't fail the checkout.
+ *
+ * Additional persons[1..] are guests and have no canonical record to
+ * cross-check against; they remain trusted as the primary user vouches
+ * for them.
+ *
+ * Returns a (possibly mutated) copy of the persons array. Logs a warning
+ * if any override happened.
+ */
+async function enforcePrimaryUserType(
+  db: FirebaseFirestore.Firestore,
+  persons: CheckoutPersonEntity[],
+  userIdRef: DocumentReference | null,
+  context: string,
+): Promise<CheckoutPersonEntity[]> {
+  // Truly anonymous: no user record to compare against; cannot validate.
+  // The wider system trusts whoever is in front of the screen here.
+  if (!userIdRef || persons.length === 0) return persons;
+
+  const userSnap = await userIdRef.get();
+  if (!userSnap.exists) return persons;
+  const stored = userSnap.data()?.userType as CanonicalUserType | undefined;
+  if (!stored || !ALLOWED_USER_TYPES.includes(stored)) return persons;
+
+  const primary = persons[0];
+  if (primary.userType === stored) return persons;
+
+  logger.warn("Overriding client-supplied primary userType", {
+    context,
+    userId: userIdRef.id,
+    clientUserType: primary.userType,
+    storedUserType: stored,
+  });
+
+  // Replace just the primary person; preserve the rest.
+  const corrected = [...persons];
+  corrected[0] = { ...primary, userType: stored };
+  return corrected;
 }
 
 interface NewCheckoutItemInput {
@@ -246,6 +301,18 @@ async function closeExistingCheckout(
     (pricingDoc.data() as { entryFees?: Record<string, Record<string, number>> } | undefined)
       ?.entryFees ?? null;
 
+  // Cross-check the primary person's userType against the user's stored
+  // profile. We know the userIdRef from callerUid; fetched outside the
+  // transaction to keep the txn small. A registered user can't claim
+  // child pricing they're not entitled to.
+  const userRef = db.collection("users").doc(callerUid);
+  const enforcedPersons = await enforcePrimaryUserType(
+    db,
+    args.persons,
+    userRef,
+    `closeExistingCheckout ${args.checkoutId}`,
+  );
+
   const result = await db.runTransaction(async (tx) => {
     const checkoutDoc = await tx.get(checkoutRef);
     if (!checkoutDoc.exists) {
@@ -268,7 +335,7 @@ async function closeExistingCheckout(
         const existingBill = existingBillDoc.data() as BillEntity;
         return {
           bill: existingBill,
-          payer: payerFromPersons(checkout.persons ?? args.persons),
+          payer: payerFromPersons(checkout.persons ?? enforcedPersons),
         };
       }
     }
@@ -290,7 +357,7 @@ async function closeExistingCheckout(
       .filter(isValidItem);
 
     const summary = recomputeSummary(
-      args.persons,
+      enforcedPersons,
       args.usageType,
       items,
       configFees,
@@ -308,7 +375,7 @@ async function closeExistingCheckout(
     tx.update(checkoutRef, {
       status: "closed",
       usageType: args.usageType,
-      persons: args.persons,
+      persons: enforcedPersons,
       closedAt: FieldValue.serverTimestamp(),
       notes: null,
       summary,
@@ -317,7 +384,7 @@ async function closeExistingCheckout(
       billRef,
     });
 
-    return { bill, payer: payerFromPersons(args.persons) };
+    return { bill, payer: payerFromPersons(enforcedPersons) };
   });
 
   return buildPaymentData(result.bill, result.payer);
@@ -364,20 +431,32 @@ async function createAnonymousCheckout(
     (pricingDoc.data() as { entryFees?: Record<string, Record<string, number>> } | undefined)
       ?.entryFees ?? null;
 
-  const summary = recomputeSummary(
+  const checkoutRef = db.collection("checkouts").doc();
+  const billRef = db.collection("bills").doc();
+  const userIdRef = effectiveUserId
+    ? db.collection("users").doc(effectiveUserId)
+    : null;
+
+  // For registered users (tag-tap path falls through here when no open
+  // checkout exists), cross-check the primary person's userType against
+  // the stored profile so they can't claim child pricing they aren't
+  // entitled to. The truly-anonymous path (userIdRef === null) has no
+  // record to compare against.
+  const enforcedPersons = await enforcePrimaryUserType(
+    db,
     args.persons,
+    userIdRef,
+    "createAnonymousCheckout",
+  );
+
+  const summary = recomputeSummary(
+    enforcedPersons,
     args.usageType,
     validItems,
     configFees,
     args.clientSummary?.tip ?? 0,
   );
   logSummaryDivergence("createAnonymousCheckout", args.clientSummary, summary);
-
-  const checkoutRef = db.collection("checkouts").doc();
-  const billRef = db.collection("bills").doc();
-  const userIdRef = effectiveUserId
-    ? db.collection("users").doc(effectiveUserId)
-    : null;
 
   // Pre-allocate item refs so they can be written inside the transaction.
   const itemRefs = validItems.map(() => checkoutRef.collection("items").doc());
@@ -397,7 +476,7 @@ async function createAnonymousCheckout(
       usageType: args.usageType,
       created: now,
       workshopsVisited: args.newCheckout.workshopsVisited,
-      persons: args.persons,
+      persons: enforcedPersons,
       modifiedBy: callerUid,
       modifiedAt: FieldValue.serverTimestamp(),
       closedAt: FieldValue.serverTimestamp(),
@@ -426,7 +505,7 @@ async function createAnonymousCheckout(
       tx.set(itemRefs[idx], itemDoc);
     });
 
-    return { bill, payer: payerFromPersons(args.persons) };
+    return { bill, payer: payerFromPersons(enforcedPersons) };
   });
 
   return buildPaymentData(result.bill, result.payer);

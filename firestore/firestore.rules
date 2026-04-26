@@ -49,10 +49,6 @@ service cloud.firestore {
       return arr is list && arr.size() >= 0;
     }
 
-    function isOwner(userId) {
-      return resource.data.userId == /databases/$(database)/documents/users/$(userId);
-    }
-
     // Validate billing address has all required fields
     function hasValidBillingAddress(data) {
       return data.billingAddress is map &&
@@ -69,11 +65,14 @@ service cloud.firestore {
 
     // Item-pricing field validation. Server-side recompute in
     // closeCheckoutAndGetPayment is the authoritative defense; this is a
-    // cheap rule-level guard that rejects negative quantities/prices.
+    // cheap rule-level guard that rejects negative quantities/prices and
+    // non-finite values (Infinity / NaN). The `is number` check passes
+    // for non-finite values, so the explicit < bound is what catches
+    // them: `Infinity < 1e308` is false, `NaN < anything` is false.
     function hasValidItemPricing(data) {
-      return data.quantity is number && data.quantity > 0 &&
-             data.unitPrice is number && data.unitPrice >= 0 &&
-             data.totalPrice is number && data.totalPrice >= 0;
+      return data.quantity is number && data.quantity > 0 && data.quantity < 1000000 &&
+             data.unitPrice is number && data.unitPrice >= 0 && data.unitPrice < 1000000 &&
+             data.totalPrice is number && data.totalPrice >= 0 && data.totalPrice < 1000000;
     }
 
     // Users collection (doc ID = Firebase Auth UID)

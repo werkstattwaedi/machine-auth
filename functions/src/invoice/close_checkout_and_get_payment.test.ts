@@ -85,6 +85,19 @@ describe("isValidItem", () => {
     expect(isValidItem({})).to.be.false;
     expect(isValidItem({ quantity: "5" as unknown as number, unitPrice: 1, totalPrice: 5 })).to.be.false;
   });
+
+  it("rejects Infinity in any field (would otherwise pass `>= 0`)", () => {
+    expect(isValidItem({ quantity: Infinity, unitPrice: 5, totalPrice: 100 })).to.be.false;
+    expect(isValidItem({ quantity: 1, unitPrice: Infinity, totalPrice: 100 })).to.be.false;
+    expect(isValidItem({ quantity: 1, unitPrice: 5, totalPrice: Infinity })).to.be.false;
+    expect(isValidItem({ quantity: 1, unitPrice: 5, totalPrice: -Infinity })).to.be.false;
+  });
+
+  it("rejects NaN in any field (NaN comparisons are always false)", () => {
+    expect(isValidItem({ quantity: NaN, unitPrice: 5, totalPrice: 100 })).to.be.false;
+    expect(isValidItem({ quantity: 1, unitPrice: NaN, totalPrice: 100 })).to.be.false;
+    expect(isValidItem({ quantity: 1, unitPrice: 5, totalPrice: NaN })).to.be.false;
+  });
 });
 
 describe("recomputeSummary", () => {

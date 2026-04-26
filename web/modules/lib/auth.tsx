@@ -134,13 +134,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return
       }
 
+      // Tag sessions are minted with a synthetic uid like `tag:{userId}:{nonce}`.
+      // We use the prefix as a fail-safe identifier that doesn't depend on
+      // a successful network round-trip to decode claims — see the catch
+      // block below.
+      const uidIsTag = firebaseUser.uid.startsWith("tag:")
+
       // Resolve sessionKind from token claims. The tag-tap session is the
       // one that must be locked out of the member area; everything else
       // is "real" (email/magic-link/Google) or "anonymous" (Phase C).
       try {
         const tokenResult = await firebaseUser.getIdTokenResult()
         const claims = tokenResult.claims as { tagCheckout?: unknown; actsAs?: unknown }
-        if (claims.tagCheckout === true || typeof claims.actsAs === "string") {
+        if (claims.tagCheckout === true || typeof claims.actsAs === "string" || uidIsTag) {
           setSessionKind("tag")
         } else if (firebaseUser.isAnonymous) {
           setSessionKind("anonymous")
@@ -148,19 +154,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setSessionKind("real")
         }
       } catch {
-        // Token decoding failed; treat as real to avoid accidental lockouts.
-        setSessionKind("real")
+        // Token decoding failed (network partition, expired refresh, …).
+        // Fail safe: a tag-shaped uid stays a tag session, so the route
+        // guards still bounce it out of the member area. Anything else
+        // we treat as real to avoid accidental lockouts of legitimate
+        // members.
+        setSessionKind(uidIsTag ? "tag" : "real")
       }
 
       setLoading(false)
       // Tag sessions don't have a user doc at users/{user.uid} — the
       // synthetic uid never spawned one. Skip the Firestore subscription
       // and the loading flag so the UI doesn't spin forever.
-      const isTagSession = user?.uid?.startsWith("tag:") ||
-        (firebaseUser.uid?.startsWith("tag:") ?? false)
-      setUserDocLoading(!isTagSession)
+      setUserDocLoading(!uidIsTag)
     })
-  }, [auth, user?.uid])
+  }, [auth])
 
   // Listen to Firestore user doc when authenticated (doc ID = Auth UID).
   // Tag-tap sessions have a synthetic uid (`tag:…`) and no corresponding
