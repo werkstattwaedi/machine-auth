@@ -4,7 +4,7 @@
 import { useState, useRef, useEffect, Fragment } from "react"
 import { Label } from "@modules/components/ui/label"
 import { formatCHF } from "@modules/lib/format"
-import { formatUnitPrice } from "@modules/lib/units"
+import { formatUnitPrice, formatPricePerCount } from "@modules/lib/units"
 import { Plus, XCircle, Search, ChevronDown, ChevronRight } from "lucide-react"
 import {
   Tooltip,
@@ -100,6 +100,62 @@ function ItemHeader({
   )
 }
 
+// --- Single price-axis column (label on top, fixed-width value below) ---
+// Used by both PriceColumns (single axis) and SlaItemRow (two axes side-by-
+// side) so per-axis styling stays consistent and SLA's two-column layout in
+// #140 doesn't drift from the rest of the table. Width defaults to the
+// `w-20 sm:w-24` used by the other unit-price columns; SLA passes a wider
+// width because formatUnitPrice / formatPricePerCount produce strings like
+// `CHF 0.25/ml` that wrap at the narrower size.
+function PriceAxisColumn({
+  label,
+  displayValue,
+  editableNumeric,
+  numericValue,
+  onNumericChange,
+  onNumericBlur,
+  hasError,
+  errorMessage,
+  widthClass = "w-20 sm:w-24",
+}: {
+  label: string
+  /** Pre-formatted string shown when the column is read-only. */
+  displayValue?: string
+  /** When true, render an editable numeric input (used for non-catalog rows). */
+  editableNumeric?: boolean
+  numericValue?: number
+  onNumericChange?: (v: number) => void
+  onNumericBlur?: () => void
+  hasError?: boolean
+  errorMessage?: string
+  /** Tailwind width class (defaults to the standard unit-price column width). */
+  widthClass?: string
+}) {
+  return (
+    <div className={`${widthClass} shrink-0 text-right relative`}>
+      <Label className="text-xs font-bold">{label}</Label>
+      {editableNumeric ? (
+        <input
+          type="number"
+          min="0"
+          step="any"
+          value={numericValue || ""}
+          onChange={(e) =>
+            onNumericChange?.(Math.max(0, parseFloat(e.target.value) || 0))
+          }
+          onBlur={onNumericBlur}
+          className={(hasError ? INPUT_ERR_CLS : INPUT_CLS) + " text-right"}
+        />
+      ) : (
+        <div className="h-9 flex items-center justify-end text-sm whitespace-nowrap">
+          {displayValue}
+        </div>
+      )}
+      <ItemError message={errorMessage} />
+    </div>
+  )
+}
+
 // --- Price columns (fixed-width, right-aligned, optionally editable) ---
 function PriceColumns({
   unitLabel,
@@ -122,25 +178,16 @@ function PriceColumns({
 }) {
   return (
     <>
-      <div className="w-20 sm:w-24 shrink-0 text-right relative">
-        <Label className="text-xs font-bold">{unitLabel}</Label>
-        {editablePrice ? (
-          <input
-            type="number"
-            min="0"
-            step="any"
-            value={unitPrice || ""}
-            onChange={(e) => onPriceChange?.(Math.max(0, parseFloat(e.target.value) || 0))}
-            onBlur={onPriceBlur}
-            className={(priceError ? INPUT_ERR_CLS : INPUT_CLS) + " text-right"}
-          />
-        ) : (
-          <div className="h-9 flex items-center justify-end text-sm">
-            {formatCHF(unitPrice)}
-          </div>
-        )}
-        <ItemError message={priceErrorMessage} />
-      </div>
+      <PriceAxisColumn
+        label={unitLabel}
+        displayValue={formatCHF(unitPrice)}
+        editableNumeric={editablePrice}
+        numericValue={unitPrice}
+        onNumericChange={onPriceChange}
+        onNumericBlur={onPriceBlur}
+        hasError={priceError}
+        errorMessage={priceErrorMessage}
+      />
       <div className="w-20 sm:w-24 shrink-0 text-right">
         <Label className="text-xs font-bold">Betrag</Label>
         <div className="h-9 flex items-center justify-end text-sm font-bold">
@@ -629,17 +676,26 @@ function SlaItemRow({
           />
         </div>
         <div className="ml-auto flex items-end gap-3">
-          {/* SLA has two price axes — show both so users can see the full
-              pricing signal: resin (dominant) + layer cost. Uses
-              formatUnitPrice so the displayed CHF value is locale-formatted
-              (vs. raw JS number coercion). */}
-          <div className="w-32 sm:w-40 shrink-0 text-right">
-            <Label className="text-xs font-bold">Preis/Einheit</Label>
-            <div className="min-h-9 flex flex-col items-end justify-center text-sm leading-tight">
-              <span>{formatUnitPrice(resinPricePerLiter, "l")}</span>
-              <span>{`${formatCHF(layerPrice)}/Layer`}</span>
-            </div>
-          </div>
+          {/* SLA has two independent price axes (resin volume + per-layer
+              cost). Per #140 we render them as two side-by-side columns
+              instead of stacking inside one column — the previous layout
+              made it hard to compare magnitudes at a glance, and the
+              per-layer figure rendered as raw `0.00109 CHF/Layer` was
+              effectively unreadable. formatUnitPrice + formatPricePerCount
+              rescale the denominators so the numbers stay in a friendly
+              range (e.g. CHF 0.20/ml resin, CHF 1.09/1000 Layer). */}
+          <PriceAxisColumn
+            label="Preis Resin"
+            displayValue={formatUnitPrice(resinPricePerLiter, "l", {
+              referenceQuantity: 0.05,
+            })}
+            widthClass="w-24 sm:w-28"
+          />
+          <PriceAxisColumn
+            label="Preis Layer"
+            displayValue={formatPricePerCount(layerPrice, "Layer")}
+            widthClass="w-24 sm:w-32"
+          />
           <div className="w-20 sm:w-24 shrink-0 text-right">
             <Label className="text-xs font-bold">Betrag</Label>
             <div className="h-9 flex items-center justify-end text-sm font-bold">
