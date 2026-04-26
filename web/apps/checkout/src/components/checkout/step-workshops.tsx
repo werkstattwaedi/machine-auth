@@ -285,7 +285,7 @@ export function StepWorkshops({
           className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-white bg-cog-teal rounded-[3px] hover:bg-cog-teal-dark transition-colors"
           onClick={handleCheckout}
         >
-          Check-Out
+          Checkout
           <ArrowRight className="h-4 w-4" />
         </button>
       </div>

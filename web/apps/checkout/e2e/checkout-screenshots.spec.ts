@@ -24,7 +24,7 @@ async function goToWorkshops(page: Page) {
 /** Navigate to checkout summary (step 3) with no items */
 async function goToSummary(page: Page) {
   await goToWorkshops(page)
-  const checkoutBtn = page.getByRole("button", { name: "Check-Out" })
+  const checkoutBtn = page.getByRole("button", { name: "Checkout", exact: true })
   await checkoutBtn.scrollIntoViewIfNeeded()
   await checkoutBtn.click()
   await expect(page.getByText("Zusammenfassung")).toBeVisible()
@@ -47,7 +47,7 @@ async function goToSummaryWithItems(page: Page) {
   await qtyInput.fill("3")
   await qtyInput.blur()
 
-  const checkoutBtn = page.getByRole("button", { name: "Check-Out" })
+  const checkoutBtn = page.getByRole("button", { name: "Checkout", exact: true })
   await checkoutBtn.scrollIntoViewIfNeeded()
   await checkoutBtn.click()
   await expect(page.getByText("Zusammenfassung")).toBeVisible()
@@ -92,7 +92,7 @@ async function submitAndWaitForPaymentResult(page: Page) {
   await expect(page.getByText("Werkstätten wählen")).toBeVisible()
 
   // Go to summary
-  const checkoutBtn = page.getByRole("button", { name: "Check-Out" })
+  const checkoutBtn = page.getByRole("button", { name: "Checkout", exact: true })
   await checkoutBtn.scrollIntoViewIfNeeded()
   await checkoutBtn.click()
   await expect(page.getByText("Zusammenfassung")).toBeVisible()
@@ -302,9 +302,9 @@ test.describe("Checkout step screenshots", () => {
     await expect(page.getByText("E2E SLA Resin")).toBeVisible()
     await page.getByText("E2E SLA Resin").click()
 
-    // Trigger validation by clicking Check-Out (same CTA as existing validation
+    // Trigger validation by clicking Checkout (same CTA as existing validation
     // error test). scrollIntoViewIfNeeded handles mobile viewport.
-    const checkoutBtn = page.getByRole("button", { name: "Check-Out" })
+    const checkoutBtn = page.getByRole("button", { name: "Checkout", exact: true })
     await checkoutBtn.scrollIntoViewIfNeeded()
     await checkoutBtn.click()
 
@@ -347,7 +347,7 @@ test.describe("Checkout step screenshots", () => {
     await layerInput.blur()
 
     // Go to summary
-    const checkoutBtn = page.getByRole("button", { name: "Check-Out" })
+    const checkoutBtn = page.getByRole("button", { name: "Checkout", exact: true })
     await checkoutBtn.scrollIntoViewIfNeeded()
     await checkoutBtn.click()
     await expect(page.getByText("Zusammenfassung")).toBeVisible()
@@ -390,7 +390,7 @@ test.describe("Checkout step screenshots", () => {
 
     // Trigger validation (scrollIntoViewIfNeeded: on mobile the tall page
     // can cause the parent div to intercept Playwright's actionability check)
-    const checkoutBtn = page.getByRole("button", { name: "Check-Out" })
+    const checkoutBtn = page.getByRole("button", { name: "Checkout", exact: true })
     await checkoutBtn.scrollIntoViewIfNeeded()
     await checkoutBtn.click()
 
