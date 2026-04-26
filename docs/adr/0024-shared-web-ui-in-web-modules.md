@@ -1,4 +1,4 @@
-# ADR-0023: Shared web UI lives in web/modules
+# ADR-0024: Shared web UI lives in web/modules
 
 **Status:** Accepted
 

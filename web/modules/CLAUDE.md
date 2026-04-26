@@ -5,7 +5,7 @@ This workspace holds code shared between `web/apps/admin` and
 
 **Use this directory for any new cross-app UI** instead of copying files
 between `apps/admin/src/components/` and `apps/checkout/src/components/`.
-See [ADR-0023](../../docs/adr/0023-shared-web-ui-in-web-modules.md).
+See [ADR-0024](../../docs/adr/0024-shared-web-ui-in-web-modules.md).
 
 ## Structure
 
