@@ -4,9 +4,16 @@
 import { createFileRoute } from "@tanstack/react-router"
 import { useDocument, useCollection } from "@modules/lib/firestore"
 import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
-import { permissionRef, userRef } from "@modules/lib/firestore-helpers"
+import {
+  permissionRef,
+  permissionsCollection,
+  tokenRef,
+  tokensCollection,
+  userRef,
+} from "@modules/lib/firestore-helpers"
 import { useDb } from "@modules/lib/firebase-context"
-import { where } from "firebase/firestore"
+import type { TokenDoc } from "@modules/lib/firestore-entities"
+import { where, serverTimestamp } from "firebase/firestore"
 import { PageLoading } from "@modules/components/page-loading"
 import { PageHeader } from "@/components/admin/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@modules/components/ui/card"
@@ -28,39 +35,10 @@ import { formatDateTime } from "@modules/lib/format"
 import { useForm } from "react-hook-form"
 import { Loader2, Save, Plus, Ban, RotateCcw } from "lucide-react"
 import { useEffect, useState } from "react"
-import { type DocumentReference } from "firebase/firestore"
 
 export const Route = createFileRoute("/_authenticated/users/$userId")({
   component: UserDetailPage,
 })
-
-interface UserDoc {
-  displayName?: string | null
-  firstName: string
-  lastName: string
-  email?: string
-  roles: string[]
-  permissions: (DocumentReference | { id: string })[]
-  termsAcceptedAt?: { toDate(): Date } | null
-  userType?: string
-  billingAddress?: {
-    company: string
-    street: string
-    zip: string
-    city: string
-  } | null
-}
-
-interface PermissionDoc {
-  name: string
-}
-
-interface TokenDoc {
-  userId: DocumentReference | { id: string }
-  label?: string
-  registered?: { toDate(): Date }
-  deactivated?: { toDate(): Date } | null
-}
 
 interface UserFormValues {
   displayName: string
@@ -78,13 +56,14 @@ interface UserFormValues {
 function UserDetailPage() {
   const db = useDb()
   const { userId } = Route.useParams()
-  const { data: user, loading } = useDocument<UserDoc>(`users/${userId}`)
-  const { data: allPermissions } = useCollection<PermissionDoc>("permission")
-  const { data: tokens, loading: tokensLoading } = useCollection<TokenDoc>(
-    "tokens",
-    where("userId", "==", userRef(db, userId))
+  const { data: user, loading } = useDocument(userRef(db, userId))
+  const { data: allPermissions } = useCollection(permissionsCollection(db))
+  const { data: tokens, loading: tokensLoading } = useCollection(
+    tokensCollection(db),
+    where("userId", "==", userRef(db, userId)),
   )
-  const { update, loading: saving } = useFirestoreMutation()
+  const { update, set } = useFirestoreMutation()
+  const { update: updateRaw, loading: saving } = useFirestoreMutation()
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([])
   const [newTagId, setNewTagId] = useState("")
 
@@ -141,7 +120,7 @@ function UserDetailPage() {
       data.billingAddress = null
     }
 
-    await update("users", userId, data, {
+    await update(userRef(db, userId), data, {
       successMessage: "Benutzer gespeichert",
     })
   }
@@ -154,25 +133,17 @@ function UserDetailPage() {
 
   const handleAddTag = async () => {
     if (!newTagId.trim()) return
-    const { set } = await import("firebase/firestore").then((m) => ({
-      set: m.setDoc,
-    }))
-    const { doc: docFn, serverTimestamp } = await import("firebase/firestore")
-    await set(docFn(db, "tokens", newTagId.trim()), {
+    await set(tokenRef(db, newTagId.trim()), {
       userId: userRef(db, userId),
       label: "",
       registered: serverTimestamp(),
-      modifiedBy: null,
-      modifiedAt: serverTimestamp(),
-    })
+    } as unknown as TokenDoc)
     setNewTagId("")
   }
 
   const handleToggleTag = async (tokenId: string, isDeactivated: boolean) => {
-    const { updateDoc, doc: docFn, serverTimestamp } = await import("firebase/firestore")
-    await updateDoc(docFn(db, "tokens", tokenId), {
-      deactivated: isDeactivated ? null : serverTimestamp(),
-      modifiedAt: serverTimestamp(),
+    await updateRaw(tokenRef(db, tokenId), {
+      deactivated: isDeactivated ? null : (serverTimestamp() as unknown as null),
     })
   }
 

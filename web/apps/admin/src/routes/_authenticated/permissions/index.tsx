@@ -4,9 +4,21 @@
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { useCollection } from "@modules/lib/firestore"
 import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
+import {
+  permissionRef,
+  permissionsCollection,
+  usersCollection,
+  machinesCollection,
+} from "@modules/lib/firestore-helpers"
+import { useDb } from "@modules/lib/firebase-context"
+import type {
+  PermissionDoc,
+  UserDoc,
+  MachineDoc,
+} from "@modules/lib/firestore-entities"
 import { PageLoading } from "@modules/components/page-loading"
 import { PageHeader } from "@/components/admin/page-header"
-import { DataTable, ColumnHeader } from "@/components/data-table"
+import { DataTable, ColumnHeader } from "@modules/components/data-table"
 import { Button } from "@modules/components/ui/button"
 import { Input } from "@modules/components/ui/input"
 import { Label } from "@modules/components/ui/label"
@@ -27,19 +39,11 @@ export const Route = createFileRoute("/_authenticated/permissions/")({
   component: PermissionsPage,
 })
 
-interface PermissionDoc {
-  name: string
-}
-
-interface RefHolder {
-  permissions?: { id: string }[]
-  requiredPermission?: { id: string }[]
-}
-
 function PermissionsPage() {
-  const { data, loading } = useCollection<PermissionDoc>("permission")
-  const { data: users } = useCollection<RefHolder & { displayName?: string }>("users")
-  const { data: machines } = useCollection<RefHolder & { name?: string }>("machine")
+  const db = useDb()
+  const { data, loading } = useCollection(permissionsCollection(db))
+  const { data: users } = useCollection(usersCollection(db))
+  const { data: machines } = useCollection(machinesCollection(db))
   const { add, remove, loading: saving } = useFirestoreMutation()
   const [createOpen, setCreateOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
@@ -47,10 +51,10 @@ function PermissionsPage() {
   const referenceInfo = useMemo(() => {
     if (!deleteTarget) return null
     const id = deleteTarget.id
-    const referencingUsers = users.filter((u) =>
+    const referencingUsers = users.filter((u: UserDoc & { id: string }) =>
       (u.permissions ?? []).some((p) => p.id === id)
     )
-    const referencingMachines = machines.filter((m) =>
+    const referencingMachines = machines.filter((m: MachineDoc & { id: string }) =>
       (m.requiredPermission ?? []).some((p) => p.id === id)
     )
     return { users: referencingUsers, machines: referencingMachines }
@@ -98,7 +102,7 @@ function PermissionsPage() {
 
   const handleDelete = async () => {
     if (!deleteTarget || hasReferences) return
-    await remove("permission", deleteTarget.id, {
+    await remove(permissionRef(db, deleteTarget.id), {
       successMessage: "Berechtigung gelöscht",
     })
     setDeleteTarget(null)
@@ -149,13 +153,15 @@ function PermissionsPage() {
         open={createOpen}
         onOpenChange={setCreateOpen}
         onSubmit={async (name, description) => {
-          await add("permission", {
-            name,
-            description: description || null,
-            created: serverTimestamp(),
-          }, {
-            successMessage: "Berechtigung erstellt",
-          })
+          await add(
+            permissionsCollection(db),
+            {
+              name,
+              description: description || null,
+              created: serverTimestamp(),
+            } as unknown as PermissionDoc,
+            { successMessage: "Berechtigung erstellt" },
+          )
         }}
         saving={saving}
       />

@@ -1,6 +1,12 @@
 {
   // Cross-cutting fields: modifiedBy (string|null) and modifiedAt (timestamp)
   // are automatically added by the web mutation hook on all writable collections.
+  //
+  // Cross-collection links: every link between documents is stored as a
+  // Firestore DocumentReference, never a plain string ID. The single
+  // exception is `price_lists.items` (plain strings) — that field is read
+  // back via Firestore's documentId() `in` query, which only accepts raw
+  // document IDs. See docs/adr/0023-canonical-firestore-access.md.
 
   "price_lists": {
     "{priceListId}": {

@@ -11,6 +11,7 @@ import {
   getUnitLabel,
   getShortUnit,
   validatePricingConfig,
+  getStorageBaseUnit,
   type PricingConfig,
   type PricingModel,
 } from "./workshop-config"
@@ -154,5 +155,28 @@ describe("validatePricingConfig (issue #149)", () => {
   it("rejects slaLayerPrice with a missing discount level", () => {
     const broken = { ...(valid as object), slaLayerPrice: { none: 0.001, member: 0.001 } }
     expect(validatePricingConfig(broken)).toMatch(/intern/)
+  })
+})
+
+describe("getStorageBaseUnit", () => {
+  // Storage convention: one SI base unit per dimension. Pinned here so a
+  // future change to the conversion layer can't silently shift what we
+  // persist in Firestore.
+  it.each([
+    ["time", "h"],
+    ["area", "m2"],
+    ["length", "m"],
+    ["weight", "kg"],
+    ["sla", "l"],
+  ] as [PricingModel, "m" | "m2" | "l" | "kg" | "h"][])(
+    "%s → %s",
+    (model, expected) => {
+      expect(getStorageBaseUnit(model)).toBe(expected)
+    },
+  )
+
+  it("returns null for non-SI pricing models", () => {
+    expect(getStorageBaseUnit("count")).toBeNull()
+    expect(getStorageBaseUnit("direct")).toBeNull()
   })
 })

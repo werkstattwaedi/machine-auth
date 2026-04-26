@@ -13,11 +13,16 @@ import {
   addDoc,
   updateDoc,
   deleteDoc,
-  doc,
-  collection,
   serverTimestamp,
 } from "firebase/firestore"
-import { userRef } from "@modules/lib/firestore-helpers"
+import {
+  userRef,
+  catalogRef,
+  checkoutRef,
+  checkoutItemRef,
+  checkoutsCollection,
+  checkoutItemsCollection,
+} from "@modules/lib/firestore-helpers"
 import { useDb } from "@modules/lib/firebase-context"
 import { formatCHF } from "@modules/lib/format"
 import { PageLoading } from "@modules/components/page-loading"
@@ -47,26 +52,6 @@ export const Route = createFileRoute("/_authenticated/visit")({
   component: DashboardPage,
 })
 
-interface CheckoutDoc {
-  userId: { id: string }
-  status: "open" | "closed"
-  usageType: string
-  workshopsVisited: string[]
-  created: { toDate(): Date }
-}
-
-interface CheckoutItemDoc {
-  workshop: string
-  description: string
-  origin: "nfc" | "manual" | "qr"
-  catalogId: { id: string; path: string } | null
-  pricingModel?: string | null
-  quantity: number
-  unitPrice: number
-  totalPrice: number
-  formInputs?: { quantity: number; unit: string }[]
-}
-
 function DashboardPage() {
   const { userDoc, userDocLoading } = useAuth()
 
@@ -94,8 +79,8 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
   const [uncheckConfirm, setUncheckConfirm] = useState<WorkshopId | null>(null)
 
   // Find user's open checkout
-  const { data: openCheckouts, loading: loadingCheckout } = useCollection<CheckoutDoc>(
-    "checkouts",
+  const { data: openCheckouts, loading: loadingCheckout } = useCollection(
+    checkoutsCollection(db),
     where("userId", "==", ref),
     where("status", "==", "open"),
   )
@@ -103,8 +88,8 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
   const checkoutId = openCheckout?.id ?? null
 
   // Load checkout items
-  const { data: checkoutItems, loading: loadingItems } = useCollection<CheckoutItemDoc>(
-    checkoutId ? `checkouts/${checkoutId}/items` : null,
+  const { data: checkoutItems, loading: loadingItems } = useCollection(
+    checkoutId ? checkoutItemsCollection(db, checkoutId) : null,
     orderBy("created"),
   )
 
@@ -126,7 +111,7 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         totalPrice: item.totalPrice,
-        formInputs: item.formInputs,
+        formInputs: item.formInputs ?? undefined,
       })),
     [checkoutItems],
   )
@@ -139,7 +124,7 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
         // Create checkout first, then add item (sequential so security
         // rules can read the parent checkout when validating the item)
         if (!coId) {
-          const coRef = await addDoc(collection(db, "checkouts"), {
+          const coRef = await addDoc(checkoutsCollection(db), {
             userId: ref,
             status: "open",
             usageType: "regular",
@@ -151,11 +136,11 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
           })
           coId = coRef.id
         }
-        await addDoc(collection(db, "checkouts", coId, "items"), {
+        await addDoc(checkoutItemsCollection(db, coId), {
           workshop: item.workshop,
           description: item.description,
           origin: item.origin,
-          catalogId: item.catalogId ? doc(db, "catalog", item.catalogId) : null,
+          catalogId: item.catalogId ? catalogRef(db, item.catalogId) : null,
           pricingModel: item.pricingModel ?? null,
           created: serverTimestamp(),
           quantity: item.quantity,
@@ -166,7 +151,7 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
       },
       updateItem: (_id: string, item: CheckoutItemLocal) => {
         if (!checkoutId) return
-        updateDoc(doc(db, "checkouts", checkoutId, "items", item.id), {
+        updateDoc(checkoutItemRef(db, checkoutId, item.id), {
           description: item.description,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
@@ -176,7 +161,7 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
       },
       removeItem: (id: string) => {
         if (!checkoutId) return
-        deleteDoc(doc(db, "checkouts", checkoutId, "items", id))
+        deleteDoc(checkoutItemRef(db, checkoutId, id))
       },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -240,7 +225,7 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
       })
       // Remove from workshopsVisited if it was recorded there
       if (checkoutId && visitedWorkshops.has(wsId)) {
-        updateDoc(doc(db, "checkouts", checkoutId), {
+        updateDoc(checkoutRef(db, checkoutId), {
           workshopsVisited: arrayRemove(wsId),
           modifiedAt: serverTimestamp(),
         })
@@ -249,7 +234,7 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
       setSelectedWorkshops((prev) => new Set(prev).add(wsId))
       // Update workshopsVisited on checkout if it exists
       if (checkoutId) {
-        updateDoc(doc(db, "checkouts", checkoutId), {
+        updateDoc(checkoutRef(db, checkoutId), {
           workshopsVisited: arrayUnion(wsId),
           modifiedAt: serverTimestamp(),
         })
@@ -265,11 +250,11 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
     )
     await Promise.all(
       itemsToDelete.map((i) =>
-        deleteDoc(doc(db, "checkouts", checkoutId, "items", i.id)),
+        deleteDoc(checkoutItemRef(db, checkoutId, i.id)),
       ),
     )
     // Update workshopsVisited
-    await updateDoc(doc(db, "checkouts", checkoutId), {
+    await updateDoc(checkoutRef(db, checkoutId), {
       workshopsVisited: arrayRemove(wsId),
       modifiedAt: serverTimestamp(),
     })

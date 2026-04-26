@@ -2,5 +2,8 @@
   "name": "@oww/modules",
   "private": true,
   "version": "0.0.0",
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "convert": "^7.0.0"
+  }
 }

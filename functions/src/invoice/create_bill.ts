@@ -50,8 +50,12 @@ function calculateEntryFee(
 
 /**
  * Create a bill for a closed checkout. Shared by both triggers.
+ *
+ * Exported for integration testing — invoke directly to bypass the
+ * Firestore trigger wrapper (the Functions emulator is not started in
+ * the test harness).
  */
-async function createBillForCheckout(
+export async function createBillForCheckout(
   checkoutRef: DocumentReference,
   checkout: CheckoutEntity,
 ): Promise<void> {

@@ -7,7 +7,11 @@ import { useTokenAuth } from "@modules/lib/token-auth"
 import { useCollection } from "@modules/lib/firestore"
 import { where, orderBy } from "firebase/firestore"
 import { httpsCallable } from "firebase/functions"
-import { userRef } from "@modules/lib/firestore-helpers"
+import {
+  userRef,
+  checkoutsCollection,
+  checkoutItemsCollection,
+} from "@modules/lib/firestore-helpers"
 import { useDb, useFunctions } from "@modules/lib/firebase-context"
 import { usePricingConfig } from "@modules/lib/workshop-config"
 import { calculateFee } from "@modules/lib/pricing"
@@ -33,25 +37,6 @@ interface CheckoutWizardProps {
   kiosk?: boolean
   initialStep?: number
   onActiveChange?: (active: boolean) => void
-}
-
-interface CheckoutDoc {
-  userId: { id: string }
-  status: "open" | "closed"
-  usageType: string
-  workshopsVisited: string[]
-}
-
-interface CheckoutItemDoc {
-  workshop: string
-  description: string
-  origin: "nfc" | "manual" | "qr"
-  catalogId: { id: string } | null
-  pricingModel?: string | null
-  quantity: number
-  unitPrice: number
-  totalPrice: number
-  formInputs?: { quantity: number; unit: string }[]
 }
 
 export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange }: CheckoutWizardProps) {
@@ -81,25 +66,23 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
       : undefined
 
   // Find open checkout for identified user
-  const { data: openCheckouts, loading: loadingCheckout } =
-    useCollection<CheckoutDoc>(
-      identifiedUserRef ? "checkouts" : null,
-      ...(identifiedUserRef
-        ? [
-            where("userId", "==", identifiedUserRef),
-            where("status", "==", "open"),
-          ]
-        : []),
-    )
+  const { data: openCheckouts, loading: loadingCheckout } = useCollection(
+    identifiedUserRef ? checkoutsCollection(db) : null,
+    ...(identifiedUserRef
+      ? [
+          where("userId", "==", identifiedUserRef),
+          where("status", "==", "open"),
+        ]
+      : []),
+  )
   const openCheckout = openCheckouts[0] ?? null
   const checkoutId = openCheckout?.id ?? null
 
   // Load checkout items
-  const { data: checkoutItems, loading: loadingItems } =
-    useCollection<CheckoutItemDoc>(
-      checkoutId ? `checkouts/${checkoutId}/items` : null,
-      orderBy("created"),
-    )
+  const { data: checkoutItems, loading: loadingItems } = useCollection(
+    checkoutId ? checkoutItemsCollection(db, checkoutId) : null,
+    orderBy("created"),
+  )
 
   // Map to local shape
   const items: CheckoutItemLocal[] = useMemo(
@@ -114,7 +97,7 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         totalPrice: item.totalPrice,
-        formInputs: item.formInputs,
+        formInputs: item.formInputs ?? undefined,
       })),
     [checkoutItems],
   )

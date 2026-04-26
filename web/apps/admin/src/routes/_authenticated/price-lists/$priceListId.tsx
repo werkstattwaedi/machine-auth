@@ -4,6 +4,11 @@
 import { createFileRoute } from "@tanstack/react-router"
 import { useDocument, useCollection } from "@modules/lib/firestore"
 import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
+import { useDb } from "@modules/lib/firebase-context"
+import {
+  catalogCollection,
+  priceListRef,
+} from "@modules/lib/firestore-helpers"
 import { PageLoading } from "@modules/components/page-loading"
 import { PageHeader } from "@/components/admin/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@modules/components/ui/card"
@@ -16,7 +21,7 @@ import { useForm } from "react-hook-form"
 import { Loader2, Save, Download } from "lucide-react"
 import { useEffect, useState, useRef, useCallback } from "react"
 import { QRCodeCanvas } from "qrcode.react"
-import type { PriceList, CatalogItem } from "@modules/lib/workshop-config"
+import type { CatalogItem } from "@modules/lib/workshop-config"
 import { formatCHF } from "@modules/lib/format"
 import { generatePriceListPdf } from "@modules/lib/price-list-pdf"
 
@@ -33,12 +38,13 @@ interface FormValues {
 }
 
 function PriceListDetailPage() {
+  const db = useDb()
   const { priceListId } = Route.useParams()
-  const { data: priceList, loading } = useDocument<PriceList>(
-    `price_lists/${priceListId}`,
+  const { data: priceList, loading } = useDocument(
+    priceListRef(db, priceListId),
   )
   const { data: allCatalog, loading: catalogLoading } =
-    useCollection<CatalogItem>("catalog")
+    useCollection(catalogCollection(db))
   const { update, loading: saving } = useFirestoreMutation()
 
   const { register, handleSubmit, reset, setValue, watch } =
@@ -61,8 +67,7 @@ function PriceListDetailPage() {
 
   const onSubmit = async (values: FormValues) => {
     await update(
-      "price_lists",
-      priceListId,
+      priceListRef(db, priceListId),
       {
         name: values.name,
         footer: values.footer,

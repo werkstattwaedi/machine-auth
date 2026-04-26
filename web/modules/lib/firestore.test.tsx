@@ -23,12 +23,12 @@ vi.mock("firebase/functions", () => ({
 }))
 
 /**
- * The real useCollection/useDocument hooks call Firebase SDK functions
- * (collection, doc, onSnapshot, query) that expect a real Firestore instance.
+ * The real useCollection/useDocument hooks call `onSnapshot` and (for
+ * collections with constraints) `query`. After issue #145 the hooks accept
+ * typed refs directly, so we no longer mock collection()/doc() here — the
+ * tests pass FakeFirestore refs in directly.
  *
- * To test them with FakeFirestore, we mock the firebase/firestore module
- * to redirect these SDK calls to our fake. This is a bridge layer —
- * the hooks themselves are under test, not the Firebase SDK.
+ * We still need to bridge `onSnapshot` and `query` to FakeFirestore.
  */
 
 let fakeDb: FakeFirestore
@@ -37,22 +37,12 @@ vi.mock("firebase/firestore", async () => {
   const actual = await vi.importActual<typeof import("firebase/firestore")>("firebase/firestore")
   return {
     ...actual,
-    collection: (...args: unknown[]) => {
-      // collection(db, path) — db is from context, path is a string
-      const path = args[1] as string
-      return fakeDb.collection(path)
-    },
-    doc: (...args: unknown[]) => {
-      // doc(db, path) or doc(db, path, id, ...)
-      const segments = (args as unknown[]).slice(1) as string[]
-      return fakeDb.doc(...segments)
-    },
     query: (_ref: unknown, ...constraints: unknown[]) => {
-      // query(collectionRef, ...constraints)
       const ref = _ref as { path: string }
       return {
         type: "query",
         collectionPath: ref.path,
+        path: ref.path,
         constraints: constraints as { kind: string }[],
       }
     },
@@ -121,6 +111,16 @@ function createWrapper() {
   )
 }
 
+// Convenience: hand the FakeFirestore ref through a cast because the hooks
+// expect the real SDK's CollectionReference<T> / DocumentReference<T> types.
+function colRef<T = unknown>(path: string) {
+  return fakeDb.collection(path) as unknown as import("firebase/firestore").CollectionReference<T>
+}
+
+function docRef<T = unknown>(...segments: string[]) {
+  return fakeDb.doc(...segments) as unknown as import("firebase/firestore").DocumentReference<T>
+}
+
 describe("useCollection", () => {
   beforeEach(() => {
     fakeDb = new FakeFirestore()
@@ -131,7 +131,7 @@ describe("useCollection", () => {
   })
 
   it("returns empty array initially for empty collection", async () => {
-    const { result } = renderHook(() => useCollection("users"), {
+    const { result } = renderHook(() => useCollection(colRef("users")), {
       wrapper: createWrapper(),
     })
 
@@ -144,7 +144,7 @@ describe("useCollection", () => {
     fakeDb.setDoc(fakeDb.doc("users", "u1"), { name: "Max" })
     fakeDb.setDoc(fakeDb.doc("users", "u2"), { name: "Anna" })
 
-    const { result } = renderHook(() => useCollection("users"), {
+    const { result } = renderHook(() => useCollection(colRef("users")), {
       wrapper: createWrapper(),
     })
 
@@ -154,18 +154,18 @@ describe("useCollection", () => {
     expect(result.current.data[1]).toMatchObject({ id: "u2", name: "Anna" })
   })
 
-  it("returns empty for null path", async () => {
+  it("returns empty for null ref", async () => {
     const { result } = renderHook(() => useCollection(null), {
       wrapper: createWrapper(),
     })
 
-    // Should resolve immediately (no delay) for null path
+    // Should resolve immediately (no delay) for null ref
     expect(result.current.loading).toBe(false)
     expect(result.current.data).toEqual([])
   })
 
   it("reacts to data changes", async () => {
-    const { result } = renderHook(() => useCollection("users"), {
+    const { result } = renderHook(() => useCollection(colRef("users")), {
       wrapper: createWrapper(),
     })
 
@@ -187,7 +187,7 @@ describe("useCollection", () => {
     // We need to import where from the mocked module
     const { where } = await import("firebase/firestore")
     const { result } = renderHook(
-      () => useCollection("users", where("role", "==", "admin")),
+      () => useCollection(colRef("users"), where("role", "==", "admin")),
       { wrapper: createWrapper() },
     )
 
@@ -203,7 +203,7 @@ describe("useCollection", () => {
     })
     errorPaths.set("bills", err)
 
-    const { result } = renderHook(() => useCollection("bills"), {
+    const { result } = renderHook(() => useCollection(colRef("bills")), {
       wrapper: createWrapper(),
     })
 
@@ -258,7 +258,7 @@ describe("useDocument", () => {
   it("returns document data with id", async () => {
     fakeDb.setDoc(fakeDb.doc("users", "u1"), { name: "Max" })
 
-    const { result } = renderHook(() => useDocument("users/u1"), {
+    const { result } = renderHook(() => useDocument(docRef("users", "u1")), {
       wrapper: createWrapper(),
     })
 
@@ -267,15 +267,16 @@ describe("useDocument", () => {
   })
 
   it("returns null for non-existent document", async () => {
-    const { result } = renderHook(() => useDocument("users/missing"), {
-      wrapper: createWrapper(),
-    })
+    const { result } = renderHook(
+      () => useDocument(docRef("users", "missing")),
+      { wrapper: createWrapper() },
+    )
 
     await waitFor(() => expect(result.current.loading).toBe(false))
     expect(result.current.data).toBeNull()
   })
 
-  it("returns null for null path", async () => {
+  it("returns null for null ref", async () => {
     const { result } = renderHook(() => useDocument(null), {
       wrapper: createWrapper(),
     })
@@ -287,9 +288,10 @@ describe("useDocument", () => {
   it("reacts to document updates", async () => {
     fakeDb.setDoc(fakeDb.doc("users", "u1"), { name: "Max" })
 
-    const { result } = renderHook(() => useDocument("users/u1"), {
-      wrapper: createWrapper(),
-    })
+    const { result } = renderHook(
+      () => useDocument(docRef<{ name: string }>("users", "u1")),
+      { wrapper: createWrapper() },
+    )
 
     await waitFor(() => expect(result.current.loading).toBe(false))
     expect(result.current.data?.name).toBe("Max")

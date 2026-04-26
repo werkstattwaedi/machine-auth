@@ -4,7 +4,13 @@
 import { createFileRoute } from "@tanstack/react-router"
 import { useDocument, useCollection } from "@modules/lib/firestore"
 import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
-import { permissionRef, macoRef } from "@modules/lib/firestore-helpers"
+import {
+  machineRef,
+  permissionRef,
+  permissionsCollection,
+  macoRef,
+  macosCollection,
+} from "@modules/lib/firestore-helpers"
 import { useDb } from "@modules/lib/firebase-context"
 import { PageLoading } from "@modules/components/page-loading"
 import { PageHeader } from "@/components/admin/page-header"
@@ -16,7 +22,6 @@ import { Badge } from "@modules/components/ui/badge"
 import { useForm } from "react-hook-form"
 import { Loader2, Save } from "lucide-react"
 import { useEffect, useState } from "react"
-import { type DocumentReference } from "firebase/firestore"
 
 export const Route = createFileRoute(
   "/_authenticated/machines/$machineId",
@@ -24,28 +29,12 @@ export const Route = createFileRoute(
   component: MachineDetailPage,
 })
 
-interface MachineDoc {
-  name: string
-  requiredPermission: (DocumentReference | { id: string })[]
-  maco?: DocumentReference | { id: string } | null
-}
-
-interface PermissionDoc {
-  name: string
-}
-
-interface MacoDoc {
-  name: string
-}
-
 function MachineDetailPage() {
   const db = useDb()
   const { machineId } = Route.useParams()
-  const { data: machine, loading } = useDocument<MachineDoc>(
-    `machine/${machineId}`,
-  )
-  const { data: allPermissions } = useCollection<PermissionDoc>("permission")
-  const { data: allMacos } = useCollection<MacoDoc>("maco")
+  const { data: machine, loading } = useDocument(machineRef(db, machineId))
+  const { data: allPermissions } = useCollection(permissionsCollection(db))
+  const { data: allMacos } = useCollection(macosCollection(db))
   const { update, loading: saving } = useFirestoreMutation()
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([])
 
@@ -76,8 +65,7 @@ function MachineDetailPage() {
 
   const onSubmit = async (values: { name: string; macoId: string }) => {
     await update(
-      "machine",
-      machineId,
+      machineRef(db, machineId),
       {
         name: values.name,
         requiredPermission: selectedPermissions.map((id) =>
