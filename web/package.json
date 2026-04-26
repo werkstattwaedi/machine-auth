@@ -14,7 +14,9 @@
     "test": "npm run test -w @oww/checkout -w @oww/admin",
     "test:integration": "cd apps/checkout && npm run test:integration",
     "test:browser": "cd apps/checkout && npm run test:browser",
-    "test:e2e": "cd apps/checkout && npm run test:e2e"
+    "test:e2e": "cd apps/checkout && npm run test:e2e && cd ../admin && npm run test:e2e",
+    "test:e2e:checkout": "cd apps/checkout && npm run test:e2e",
+    "test:e2e:admin": "cd apps/admin && npm run test:e2e"
   },
   "devDependencies": {
     "typescript": "~6.0.2"
