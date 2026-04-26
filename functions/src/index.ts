@@ -276,6 +276,9 @@ export { logClientError } from "./util/log_client_error";
 export { onCheckoutClosed, onCheckoutCreatedClosed } from "./invoice/create_bill";
 export { onBillCreate, retryBillProcessing } from "./invoice/bill_triggers";
 
+// Export scheduled cleanup
+export { cleanupAbandonedCheckouts } from "./checkout/cleanup_abandoned_checkouts";
+
 // Export Firestore triggers
 export { syncCustomClaims } from "./auth/set-custom-claims";
 
