@@ -16,8 +16,13 @@ export async function setupEmulator(): Promise<RulesTestEnvironment> {
   const [fsHost, fsPortStr] = firestoreHost.split(":");
   const fsPort = parseInt(fsPortStr ?? "8080");
 
+  // Match the projectId configured in firebase.e2e.json's
+  // singleProjectMode so that Auth-emulator-issued ID tokens have the
+  // expected `aud` claim (`oww-maco`) and `verifyIdToken` accepts them.
+  const projectId = "oww-maco";
+
   testEnv = await initializeTestEnvironment({
-    projectId: "test-project",
+    projectId,
     firestore: {
       host: fsHost,
       port: fsPort,
@@ -26,9 +31,7 @@ export async function setupEmulator(): Promise<RulesTestEnvironment> {
 
   // Initialize Firebase Admin SDK to connect to emulator
   if (!admin.apps.length) {
-    admin.initializeApp({
-      projectId: "test-project",
-    });
+    admin.initializeApp({ projectId });
   }
 
   // Ensure env vars are set for admin SDK
