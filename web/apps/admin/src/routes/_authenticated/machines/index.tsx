@@ -22,21 +22,21 @@ import { Plus, Loader2 } from "lucide-react"
 import { useMemo, useState } from "react"
 import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
 import { useForm } from "react-hook-form"
-import { macoRef } from "@modules/lib/firestore-helpers"
+import {
+  macoRef,
+  machineRef,
+  machinesCollection,
+} from "@modules/lib/firestore-helpers"
+import type { MachineDoc } from "@modules/lib/firestore-entities"
 import { useDb } from "@modules/lib/firebase-context"
 
 export const Route = createFileRoute("/_authenticated/machines/")({
   component: MachinesPage,
 })
 
-interface MachineDoc {
-  name: string
-  requiredPermission: { id: string }[]
-  maco?: { id: string }
-}
-
 function MachinesPage() {
-  const { data, loading } = useCollection<MachineDoc>("machine")
+  const db = useDb()
+  const { data, loading } = useCollection(machinesCollection(db))
   const { permissions, terminals } = useLookup()
   const [createOpen, setCreateOpen] = useState(false)
 
@@ -106,13 +106,17 @@ function CreateMachineDialog({ open, onOpenChange }: { open: boolean; onOpenChan
   const { register, handleSubmit, reset } = useForm<{ id: string; name: string; macoId: string }>()
 
   const onSubmit = async (values: { id: string; name: string; macoId: string }) => {
-    await set("machine", values.id, {
-      name: values.name,
-      requiredPermission: [],
-      maco: values.macoId ? macoRef(db, values.macoId) : null,
-    }, {
-      successMessage: "Maschine erstellt",
-    })
+    await set(
+      machineRef(db, values.id),
+      {
+        name: values.name,
+        requiredPermission: [],
+        maco: values.macoId ? macoRef(db, values.macoId) : null,
+      },
+      {
+        successMessage: "Maschine erstellt",
+      },
+    )
     reset()
     onOpenChange(false)
   }

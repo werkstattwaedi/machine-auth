@@ -3,6 +3,13 @@
 
 import { createContext, useContext, type ReactNode } from "react"
 import { useCollection } from "./firestore"
+import { useDb } from "./firebase-context"
+import {
+  permissionsCollection,
+  machinesCollection,
+  usersCollection,
+  macosCollection,
+} from "./firestore-helpers"
 
 interface LookupMaps {
   permissions: Map<string, string>
@@ -14,10 +21,11 @@ interface LookupMaps {
 const LookupContext = createContext<LookupMaps | null>(null)
 
 export function LookupProvider({ children }: { children: ReactNode }) {
-  const { data: perms } = useCollection<{ name: string }>("permission")
-  const { data: machines } = useCollection<{ name: string }>("machine")
-  const { data: users } = useCollection<{ displayName: string }>("users")
-  const { data: terminals } = useCollection<{ name: string }>("maco")
+  const db = useDb()
+  const { data: perms } = useCollection(permissionsCollection(db))
+  const { data: machines } = useCollection(machinesCollection(db))
+  const { data: users } = useCollection(usersCollection(db))
+  const { data: terminals } = useCollection(macosCollection(db))
 
   const maps: LookupMaps = {
     permissions: new Map(perms.map((d) => [d.id, d.name])),

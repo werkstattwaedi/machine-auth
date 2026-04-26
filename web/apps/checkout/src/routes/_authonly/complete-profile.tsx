@@ -6,6 +6,8 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { z } from "zod/v4/mini"
 import { useAuth, isProfileComplete } from "@modules/lib/auth"
 import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
+import { useDb } from "@modules/lib/firebase-context"
+import { userRef } from "@modules/lib/firestore-helpers"
 import { Label } from "@modules/components/ui/label"
 import { Checkbox } from "@modules/components/ui/checkbox"
 import { Loader2, ArrowRight } from "lucide-react"
@@ -47,6 +49,7 @@ function ErrorBadge({ message }: { message: string }) {
 }
 
 function CompleteProfilePage() {
+  const db = useDb()
   const { userDoc } = useAuth()
   const { update, loading: saving } = useFirestoreMutation()
   const navigate = useNavigate()
@@ -109,7 +112,7 @@ function CompleteProfilePage() {
       data.billingAddress = null
     }
 
-    await update("users", userDoc.id, data, {
+    await update(userRef(db, userDoc.id), data, {
       successMessage: "Profil gespeichert",
     })
     navigate({ to: redirectTo || "/visit" })

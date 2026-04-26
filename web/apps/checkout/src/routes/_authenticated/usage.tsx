@@ -4,9 +4,14 @@
 import { createFileRoute } from "@tanstack/react-router"
 import { useAuth, type UserDoc } from "@modules/lib/auth"
 import { useCollection } from "@modules/lib/firestore"
-import { where, orderBy, type DocumentReference, type Timestamp } from "firebase/firestore"
+import { where, orderBy } from "firebase/firestore"
 import { httpsCallable } from "firebase/functions"
-import { userRef } from "@modules/lib/firestore-helpers"
+import {
+  userRef,
+  billsCollection,
+  checkoutsCollection,
+} from "@modules/lib/firestore-helpers"
+import type { BillDoc, CheckoutDoc } from "@modules/lib/firestore-entities"
 import { useDb, useFunctions } from "@modules/lib/firebase-context"
 import { formatDate, formatCHF, formatInvoiceNumber } from "@modules/lib/format"
 import { PageLoading } from "@modules/components/page-loading"
@@ -29,27 +34,6 @@ import { toast } from "sonner"
 export const Route = createFileRoute("/_authenticated/usage")({
   component: UsagePage,
 })
-
-interface BillDoc {
-  userId: DocumentReference
-  checkouts: DocumentReference[]
-  referenceNumber: number
-  amount: number
-  currency: string
-  storagePath: string | null
-  created: Timestamp
-  paidAt: Timestamp | null
-  paidVia: "twint" | "ebanking" | "cash" | null
-}
-
-interface CheckoutDoc {
-  userId: DocumentReference
-  status: string
-  created: Timestamp
-  closedAt?: Timestamp
-  summary?: { totalPrice: number }
-  billRef?: DocumentReference | null
-}
 
 const paidViaLabel: Record<string, string> = {
   twint: "TWINT",
@@ -82,8 +66,8 @@ function UsageContent({ userDoc }: { userDoc: UserDoc }) {
     data: bills,
     loading: billsLoading,
     error: billsError,
-  } = useCollection<BillDoc>(
-    "bills",
+  } = useCollection(
+    billsCollection(db),
     where("userId", "==", ref),
     orderBy("created", "desc"),
   )
@@ -92,8 +76,8 @@ function UsageContent({ userDoc }: { userDoc: UserDoc }) {
     data: unbilledCheckouts,
     loading: checkoutsLoading,
     error: checkoutsError,
-  } = useCollection<CheckoutDoc>(
-    "checkouts",
+  } = useCollection(
+    checkoutsCollection(db),
     where("userId", "==", ref),
     where("status", "==", "closed"),
     where("billRef", "==", null),

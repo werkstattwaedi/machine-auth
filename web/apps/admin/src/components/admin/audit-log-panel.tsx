@@ -2,22 +2,14 @@
 // SPDX-License-Identifier: MIT
 
 import { useCollection } from "@modules/lib/firestore"
+import { useDb } from "@modules/lib/firebase-context"
+import { auditLogCollection } from "@modules/lib/firestore-helpers"
 import { where, orderBy, limit } from "firebase/firestore"
 import { formatDateTime } from "@modules/lib/format"
 import { Badge } from "@modules/components/ui/badge"
 import { PageLoading } from "@modules/components/page-loading"
 import { EmptyState } from "@modules/components/empty-state"
 import { FileText } from "lucide-react"
-
-interface AuditLogEntry {
-  collection: string
-  docId: string
-  operation: "create" | "update" | "delete"
-  actorUid: string | null
-  before: Record<string, unknown> | null
-  after: Record<string, unknown> | null
-  timestamp: { toDate(): Date }
-}
 
 interface AuditLogPanelProps {
   /** Filter by collection name */
@@ -41,13 +33,14 @@ const OPERATION_VARIANT: Record<string, "default" | "secondary" | "destructive" 
 }
 
 export function AuditLogPanel({ collection: filterCollection, docId: filterDocId, maxEntries = 50 }: AuditLogPanelProps) {
+  const db = useDb()
   const constraints = []
   if (filterCollection) constraints.push(where("collection", "==", filterCollection))
   if (filterDocId) constraints.push(where("docId", "==", filterDocId))
   constraints.push(orderBy("timestamp", "desc"))
   constraints.push(limit(maxEntries))
 
-  const { data: entries, loading } = useCollection<AuditLogEntry>("audit_log", ...constraints)
+  const { data: entries, loading } = useCollection(auditLogCollection(db), ...constraints)
 
   if (loading) return <PageLoading />
 

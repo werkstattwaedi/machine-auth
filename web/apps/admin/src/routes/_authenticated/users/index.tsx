@@ -3,6 +3,9 @@
 
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { useCollection } from "@modules/lib/firestore"
+import { usersCollection } from "@modules/lib/firestore-helpers"
+import { useDb } from "@modules/lib/firebase-context"
+import type { UserDoc } from "@modules/lib/firestore-entities"
 import { useLookup, resolveRef } from "@modules/lib/lookup"
 import { PageLoading } from "@modules/components/page-loading"
 import { DataTable, ColumnHeader } from "@/components/data-table"
@@ -18,17 +21,11 @@ export const Route = createFileRoute("/_authenticated/users/")({
   component: UsersPage,
 })
 
-interface UserListDoc {
-  displayName?: string | null
-  firstName: string
-  lastName: string
-  email?: string
-  roles: string[]
-  permissions: { id: string }[]
-}
+type UserListDoc = UserDoc
 
 function UsersPage() {
-  const { data, loading } = useCollection<UserListDoc>("users")
+  const db = useDb()
+  const { data, loading } = useCollection(usersCollection(db))
   const { permissions } = useLookup()
   const [createOpen, setCreateOpen] = useState(false)
 

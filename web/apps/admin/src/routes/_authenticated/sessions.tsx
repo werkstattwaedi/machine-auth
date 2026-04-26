@@ -3,8 +3,11 @@
 
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { useCollection } from "@modules/lib/firestore"
-import { orderBy, limit } from "firebase/firestore"
+import { orderBy, limit, type DocumentReference } from "firebase/firestore"
 import { useLookup, resolveRef } from "@modules/lib/lookup"
+import { useDb } from "@modules/lib/firebase-context"
+import { usageMachineCollection } from "@modules/lib/firestore-helpers"
+import type { UsageMachineDoc } from "@modules/lib/firestore-entities"
 import { PageLoading } from "@modules/components/page-loading"
 import { DataTable, ColumnHeader } from "@/components/data-table"
 import { PageHeader } from "@/components/admin/page-header"
@@ -17,19 +20,10 @@ export const Route = createFileRoute("/_authenticated/sessions")({
   component: SessionsPage,
 })
 
-interface UsageMachineDoc {
-  userId?: { id: string }
-  machine?: { id: string }
-  startTime?: { toDate(): Date }
-  endTime?: { toDate(): Date }
-  endReason?: string
-  checkoutItemRef?: { id: string; parent: { parent: { id: string } } } | null
-  workshop?: string
-}
-
 function SessionsPage() {
-  const { data, loading } = useCollection<UsageMachineDoc>(
-    "usage_machine",
+  const db = useDb()
+  const { data, loading } = useCollection(
+    usageMachineCollection(db),
     orderBy("startTime", "desc"),
     limit(200),
   )
@@ -90,7 +84,12 @@ function SessionsPage() {
         accessorKey: "checkoutItemRef",
         header: "Checkout",
         cell: ({ row }) => {
-          const ref = row.original.checkoutItemRef
+          // checkoutItemRef points at /checkouts/{id}/items/{itemId}; the
+          // grandparent doc id is the parent checkout id.
+          const ref = row.original.checkoutItemRef as
+            | (DocumentReference & { parent: { parent: { id: string } } })
+            | null
+            | undefined
           return ref ? (
             <Badge variant="outline">{ref.parent.parent.id}</Badge>
           ) : (
