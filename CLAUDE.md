@@ -195,6 +195,8 @@ New screenshot tests automatically run at both viewports — no extra configurat
 - `functions/src/**/*.test.ts` — Functions unit tests (Mocha)
 - `functions/test/integration/` — Functions integration tests (Mocha + emulator)
 
+**When adding a new owner-scoped Firestore collection,** add cross-user negative tests to `web/modules/test/cross-user-rules.integration.test.ts` (matrix: other-user read/write/delete, anon, tag-tap, admin carve-out). This file is the regression net for the B2 launch-readiness incident (cross-user `checkouts` read leak) — it must fail loudly if any owner-scoped rule is ever loosened.
+
 ## Web Application
 
 npm workspace with two React SPAs and shared modules (Vite + TanStack Router + shadcn/ui + Tailwind):
