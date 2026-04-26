@@ -62,11 +62,16 @@
       "created": "timestamp", // When the authentication was initiated
 
       // Crypto state for 3-pass mutual auth - set to null once auth completes successfully
-      // If non-null after ~1 min, auth timed out (cleanup via scheduled function)
       "inProgressAuth": {
         "rndA": "bytes", // Cloud-generated random (RndA)
         "rndB": "bytes"  // Tag's random after decryption (RndB)
-      } // | null
+      }, // | null
+
+      // Firestore TTL field (auto-delete). Set to created + 5 min on
+      // AuthenticateTag; cleared (set to null) on successful CompleteTagAuth
+      // so completed records are retained. TTL policy declared in
+      // firestore.indexes.json. Best-effort: GC may lag up to ~24 h.
+      "ttlAt": "timestamp | null"
     }
   },
   "usage_machine": {
