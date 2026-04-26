@@ -273,20 +273,20 @@ export function formatCount(value: number, label: string): string {
 
 /** cm → m */
 export function cmToMeters(cm: number): number {
-  return cm / 100
+  return convert(cm, "cm").to("m")
 }
 
 /** g → kg */
 export function gramsToKg(g: number): number {
-  return g / 1000
+  return convert(g, "g").to("kg")
 }
 
 /** ml → l */
 export function mlToLiters(ml: number): number {
-  return ml / 1000
+  return convert(ml, "ml").to("l")
 }
 
 /** Two cm dimensions → m² */
 export function cmDimensionsToSquareMeters(lengthCm: number, widthCm: number): number {
-  return cmToMeters(lengthCm) * cmToMeters(widthCm)
+  return convert(lengthCm * widthCm, "cm2").to("m2")
 }
