@@ -6,7 +6,7 @@
   // Firestore DocumentReference, never a plain string ID. The single
   // exception is `price_lists.items` (plain strings) — that field is read
   // back via Firestore's documentId() `in` query, which only accepts raw
-  // document IDs. See docs/adr/0011-canonical-firestore-access.md.
+  // document IDs. See docs/adr/0023-canonical-firestore-access.md.
 
   "price_lists": {
     "{priceListId}": {
