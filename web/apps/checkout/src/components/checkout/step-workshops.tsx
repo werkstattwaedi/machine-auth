@@ -11,16 +11,16 @@ import type { CheckoutState, CheckoutAction } from "./use-checkout-state"
 import { type CheckoutItemLocal, type ItemCallbacks } from "@/components/usage/inline-rows"
 import { WorkshopSectionWithCatalog } from "@/components/usage/workshop-section-with-catalog"
 import { validateCheckoutItem, hasItemErrors, type ItemErrors } from "./validation"
-import {
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  collection,
-  serverTimestamp,
-  doc,
-  type DocumentReference,
-} from "firebase/firestore"
+import { serverTimestamp, type DocumentReference } from "firebase/firestore"
 import { useDb } from "@modules/lib/firebase-context"
+import {
+  catalogRef,
+  checkoutsCollection,
+  checkoutItemsCollection,
+  checkoutItemRef,
+} from "@modules/lib/firestore-helpers"
+import type { UserDoc } from "@modules/lib/firestore-entities"
+import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
 
 interface StepWorkshopsProps {
   state: CheckoutState
@@ -29,7 +29,7 @@ interface StepWorkshopsProps {
   config: PricingConfig | null
   items: CheckoutItemLocal[]
   checkoutId: string | null
-  userRef: DocumentReference | null
+  userRef: DocumentReference<UserDoc> | null
   discountLevel: DiscountLevel
 }
 
@@ -44,6 +44,7 @@ export function StepWorkshops({
   discountLevel,
 }: StepWorkshopsProps) {
   const db = useDb()
+  const { add, update, remove } = useFirestoreMutation()
   const isMobile = useIsMobile()
   const sortedWorkshops = config ? getSortedWorkshops(config) : []
 
@@ -154,24 +155,22 @@ export function StepWorkshops({
         addItem: async (item: CheckoutItemLocal) => {
           let coId = checkoutId
           if (!coId && userRef) {
-            const coRef = await addDoc(collection(db, "checkouts"), {
+            const coRef = await add(checkoutsCollection(db), {
               userId: userRef,
               status: "open",
               usageType: state.usageType,
               created: serverTimestamp(),
               workshopsVisited: [item.workshop],
               persons: [],
-              modifiedBy: null,
-              modifiedAt: serverTimestamp(),
             })
             coId = coRef.id
           }
           if (!coId) return
-          await addDoc(collection(db, "checkouts", coId, "items"), {
+          await add(checkoutItemsCollection(db, coId), {
             workshop: item.workshop,
             description: item.description,
             origin: item.origin,
-            catalogId: item.catalogId ? doc(db, "catalog", item.catalogId) : null,
+            catalogId: item.catalogId ? catalogRef(db, item.catalogId) : null,
             pricingModel: item.pricingModel ?? null,
             created: serverTimestamp(),
             quantity: item.quantity,
@@ -182,7 +181,7 @@ export function StepWorkshops({
         },
         updateItem: (_id: string, item: CheckoutItemLocal) => {
           if (!checkoutId) return
-          updateDoc(doc(db, "checkouts", checkoutId, "items", item.id), {
+          update(checkoutItemRef(db, checkoutId, item.id), {
             description: item.description,
             quantity: item.quantity,
             unitPrice: item.unitPrice,
@@ -192,7 +191,7 @@ export function StepWorkshops({
         },
         removeItem: (id: string) => {
           if (!checkoutId) return
-          deleteDoc(doc(db, "checkouts", checkoutId, "items", id))
+          remove(checkoutItemRef(db, checkoutId, id))
         },
       }
     },

@@ -18,6 +18,8 @@ import {
   type CollectionReference,
   type DocumentData,
   type DocumentReference,
+  type PartialWithFieldValue,
+  type WithFieldValue,
 } from "firebase/firestore"
 import { useAuth } from "../lib/auth"
 import { toast } from "sonner"
@@ -72,11 +74,12 @@ export function useFirestoreMutation() {
   const set = useCallback(
     <T extends DocumentData>(
       ref: DocumentReference<T>,
-      data: T,
+      data: WithFieldValue<T>,
       options?: MutationOptions,
     ) =>
       mutate(
-        () => setDoc(ref, withAuditFields(data) as T),
+        () =>
+          setDoc(ref, withAuditFields(data as DocumentData) as WithFieldValue<T>),
         options,
       ),
     [mutate, withAuditFields],
@@ -85,11 +88,12 @@ export function useFirestoreMutation() {
   const add = useCallback(
     <T extends DocumentData>(
       ref: CollectionReference<T>,
-      data: T,
+      data: WithFieldValue<T>,
       options?: MutationOptions,
     ) =>
       mutate(
-        () => addDoc(ref, withAuditFields(data) as T),
+        () =>
+          addDoc(ref, withAuditFields(data as DocumentData) as WithFieldValue<T>),
         options,
       ),
     [mutate, withAuditFields],
@@ -98,7 +102,7 @@ export function useFirestoreMutation() {
   const update = useCallback(
     <T extends DocumentData>(
       ref: DocumentReference<T>,
-      data: Partial<T>,
+      data: PartialWithFieldValue<T>,
       options?: MutationOptions,
     ) =>
       mutate(
