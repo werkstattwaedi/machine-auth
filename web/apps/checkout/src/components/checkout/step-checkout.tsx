@@ -65,9 +65,13 @@ export function StepCheckout({
   items,
   config,
 }: StepCheckoutProps) {
-  // Entry fees from persons + usage type
+  // Entry fees from persons + usage type. The wizard gates on a valid
+  // pricingConfig (see CheckoutWizard.configError handling), so by the
+  // time we render here `config` is non-null and only an unknown
+  // userType+usageType combo can return null — coerce to 0 for the
+  // running estimate; the server recompute is the authoritative number.
   const personFees = state.persons.reduce(
-    (sum, p) => sum + calculateFee(p.userType, state.usageType, config),
+    (sum, p) => sum + (calculateFee(p.userType, state.usageType, config) ?? 0),
     0,
   )
 
@@ -179,7 +183,7 @@ export function StepCheckout({
           {expandedSections.has("nutzungsgebuehren") && (
             <div className="space-y-3 pl-6">
               {state.persons.map((p) => {
-                const fee = calculateFee(p.userType, state.usageType, config)
+                const fee = calculateFee(p.userType, state.usageType, config) ?? 0
                 return (
                   <div key={p.id} className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-6 text-sm">
                     <span className="font-medium sm:font-normal sm:w-40">

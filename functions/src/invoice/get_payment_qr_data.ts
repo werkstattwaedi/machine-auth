@@ -17,6 +17,10 @@ import type { CheckoutEntity } from "../types/firestore_entities";
 // Payment config from environment params
 const paymentIban = defineString("PAYMENT_IBAN");
 const paymentRecipientName = defineString("PAYMENT_RECIPIENT_NAME");
+// Empty default is deliberate: per Swiss Payment Standards (QR-bill spec
+// field 7), the creditor street/building is optional. Keeping the default
+// avoids prompting in setups where the org doesn't publish a street
+// address. (Issue #149: documented carve-out.)
 const paymentRecipientStreet = defineString("PAYMENT_RECIPIENT_STREET", { default: "" });
 const paymentRecipientPostalCode = defineString("PAYMENT_RECIPIENT_POSTAL_CODE");
 const paymentRecipientCity = defineString("PAYMENT_RECIPIENT_CITY");

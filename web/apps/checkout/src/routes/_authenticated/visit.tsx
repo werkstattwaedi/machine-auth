@@ -39,7 +39,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@modules/components/ui/alert-dialog"
-import { ShoppingCart, Coffee } from "lucide-react"
+import { ShoppingCart, Coffee, AlertTriangle } from "lucide-react"
 import {
   usePricingConfig,
   getSortedWorkshops,
@@ -72,7 +72,7 @@ function DashboardPage() {
 function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
   const db = useDb()
   const ref = userRef(db, userDoc.id)
-  const { data: pricingConfig, loading: loadingConfig } = usePricingConfig()
+  const { data: pricingConfig, loading: loadingConfig, configError } = usePricingConfig()
 
   // Workshop selection state
   const [selectedWorkshops, setSelectedWorkshops] = useState<Set<WorkshopId>>(new Set())
@@ -170,12 +170,19 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
 
   if (loadingCheckout || loadingItems || loadingConfig) return <PageLoading />
 
-  if (!pricingConfig) {
+  // Issue #149: refuse to render the visit page if `config/pricing` is
+  // missing or malformed. Surface the failure to staff loudly rather than
+  // silently rendering with hardcoded fallbacks.
+  if (configError || !pricingConfig) {
     return (
       <EmptyState
-        icon={Coffee}
-        title="Konfiguration wird geladen..."
-        description="Bitte warte einen Moment."
+        icon={AlertTriangle}
+        title="Konfigurationsfehler"
+        description={
+          configError
+            ? `Preiskonfiguration ungültig: ${configError}. Bitte Admin kontaktieren.`
+            : "Preiskonfiguration konnte nicht geladen werden. Bitte Admin kontaktieren."
+        }
       />
     )
   }

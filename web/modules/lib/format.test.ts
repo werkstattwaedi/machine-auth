@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect } from "vitest"
-import { formatCHF, formatDate, formatDateTime } from "./format"
+import { currency, formatCHF, formatDate, formatDateTime, locale } from "./format"
 
 describe("formatCHF", () => {
   it("formats whole numbers", () => {
@@ -56,5 +56,22 @@ describe("formatDateTime", () => {
 
   it("returns dash for null", () => {
     expect(formatDateTime(null)).toBe("–")
+  })
+})
+
+describe("env-driven constants (issue #149)", () => {
+  // The module reads VITE_LOCALE and VITE_CURRENCY at load time and exports
+  // them as `locale` / `currency`. The fail-loud check happens during
+  // import — if either env var were missing, this test file would not even
+  // load. We verify the exported values match what `.env.development`
+  // declares so callers (e.g. `getShortUnit`) see consistent values.
+  it("exports locale from VITE_LOCALE", () => {
+    expect(locale).toBe(import.meta.env.VITE_LOCALE)
+    expect(locale.length).toBeGreaterThan(0)
+  })
+
+  it("exports currency from VITE_CURRENCY", () => {
+    expect(currency).toBe(import.meta.env.VITE_CURRENCY)
+    expect(currency.length).toBeGreaterThan(0)
   })
 })

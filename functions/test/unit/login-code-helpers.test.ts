@@ -12,6 +12,7 @@ import {
   isPlausibleEmail,
   normalizeEmail,
 } from "../../src/auth/login-code/helpers";
+import { assertResendLoginTemplateConfigured } from "../../src/auth/login-code/request";
 
 describe("login-code helpers", () => {
   describe("normalizeEmail", () => {
@@ -171,6 +172,55 @@ describe("login-code helpers", () => {
     it("does not throw in emulator mode even when empty", () => {
       process.env.FUNCTIONS_EMULATOR = "true";
       expect(() => assertLoginOriginsConfigured("")).to.not.throw();
+    });
+  });
+
+  describe("assertResendLoginTemplateConfigured (issue #149)", () => {
+    let savedEmulator: string | undefined;
+
+    beforeEach(() => {
+      savedEmulator = process.env.FUNCTIONS_EMULATOR;
+    });
+
+    afterEach(() => {
+      if (savedEmulator === undefined) {
+        delete process.env.FUNCTIONS_EMULATOR;
+      } else {
+        process.env.FUNCTIONS_EMULATOR = savedEmulator;
+      }
+    });
+
+    it("throws in non-emulator mode when value is empty", () => {
+      delete process.env.FUNCTIONS_EMULATOR;
+      try {
+        assertResendLoginTemplateConfigured("");
+        throw new Error("expected throw, got success");
+      } catch (err: any) {
+        expect(err.code).to.equal("failed-precondition");
+        expect(err.message).to.contain("not configured");
+      }
+    });
+
+    it("throws on whitespace-only value in non-emulator mode", () => {
+      delete process.env.FUNCTIONS_EMULATOR;
+      try {
+        assertResendLoginTemplateConfigured("   ");
+        throw new Error("expected throw, got success");
+      } catch (err: any) {
+        expect(err.code).to.equal("failed-precondition");
+      }
+    });
+
+    it("does not throw when value is set", () => {
+      delete process.env.FUNCTIONS_EMULATOR;
+      expect(() =>
+        assertResendLoginTemplateConfigured("template_abc123")
+      ).to.not.throw();
+    });
+
+    it("does not throw in emulator mode even when empty", () => {
+      process.env.FUNCTIONS_EMULATOR = "true";
+      expect(() => assertResendLoginTemplateConfigured("")).to.not.throw();
     });
   });
 });

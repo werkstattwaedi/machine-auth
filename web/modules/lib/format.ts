@@ -3,8 +3,28 @@
 
 import { type Timestamp } from "firebase/firestore"
 
-const locale = import.meta.env.VITE_LOCALE ?? "de-CH"
-const currency = import.meta.env.VITE_CURRENCY ?? "CHF"
+/**
+ * Single source of truth for the app's locale + currency. Both come from
+ * Vite env vars and must be set at build time — `scripts/generate-env.ts`
+ * writes them into `.env.development` / `.env.production`. We deliberately
+ * fail loud (rather than silently defaulting to "de-CH" / "CHF") so a
+ * misconfigured build environment surfaces immediately during boot rather
+ * than being discovered later via mismatched currency display or an
+ * incorrect Intl format. See issue #149.
+ */
+function requireEnv(name: "VITE_LOCALE" | "VITE_CURRENCY"): string {
+  const value = import.meta.env[name]
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(
+      `${name} must be set — run \`npm run generate-env\` to regenerate ` +
+        `web/apps/*/.env.* from scripts/env-config.ts.`,
+    )
+  }
+  return value
+}
+
+export const locale = requireEnv("VITE_LOCALE")
+export const currency = requireEnv("VITE_CURRENCY")
 
 const currencyFormatter = new Intl.NumberFormat(locale, {
   style: "currency",
