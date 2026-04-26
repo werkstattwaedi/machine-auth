@@ -5,6 +5,11 @@ import { createFileRoute } from "@tanstack/react-router"
 import { useAuth } from "@modules/lib/auth"
 import { useCollection } from "@modules/lib/firestore"
 import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
+import { useDb } from "@modules/lib/firebase-context"
+import {
+  permissionsCollection,
+  userRef,
+} from "@modules/lib/firestore-helpers"
 import { Label } from "@modules/components/ui/label"
 import { Badge } from "@modules/components/ui/badge"
 import { useForm } from "react-hook-form"
@@ -33,8 +38,9 @@ const INPUT_OK = `${BASE_INPUT} border-[#ccc] focus:border-cog-teal`
 const INPUT_DISABLED = `${BASE_INPUT} border-[#ccc] bg-muted text-muted-foreground`
 
 function ProfilePage() {
+  const db = useDb()
   const { user, userDoc } = useAuth()
-  const { data: permDocs } = useCollection<{ name: string }>("permission")
+  const { data: permDocs } = useCollection(permissionsCollection(db))
   const permNames = new Map(permDocs.map((d) => [d.id, d.name]))
   const { update, loading: saving } = useFirestoreMutation()
 
@@ -90,7 +96,7 @@ function ProfilePage() {
       data.billingAddress = null
     }
 
-    await update("users", userDoc.id, data, {
+    await update(userRef(db, userDoc.id), data, {
       successMessage: "Profil gespeichert",
     })
   }

@@ -5,7 +5,14 @@ import { createFileRoute, Link } from "@tanstack/react-router"
 import { z } from "zod/v4/mini"
 import { useDocument, useCollection } from "@modules/lib/firestore"
 import { useAuth } from "@modules/lib/auth"
-import { userRef } from "@modules/lib/firestore-helpers"
+import {
+  userRef,
+  catalogRef,
+  catalogCollection,
+  priceListRef,
+  checkoutsCollection,
+  checkoutItemsCollection,
+} from "@modules/lib/firestore-helpers"
 import { useDb } from "@modules/lib/firebase-context"
 import { formatCHF } from "@modules/lib/format"
 import { PageLoading } from "@modules/components/page-loading"
@@ -13,10 +20,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@modules/components/ui
 import { Button } from "@modules/components/ui/button"
 import { Input } from "@modules/components/ui/input"
 import { Label } from "@modules/components/ui/label"
-import { where, addDoc, collection, doc, serverTimestamp, getDocs, query, documentId, writeBatch } from "firebase/firestore"
+import {
+  where,
+  addDoc,
+  doc,
+  serverTimestamp,
+  getDocs,
+  query,
+  documentId,
+  writeBatch,
+} from "firebase/firestore"
 import { CheckCircle, Loader2, Package, ArrowLeft, LogIn } from "lucide-react"
 import { useState } from "react"
-import type { CatalogItem, PriceList } from "@modules/lib/workshop-config"
 import { getShortUnit } from "@modules/lib/workshop-config"
 import { computePricing } from "@modules/lib/pricing-calc"
 
@@ -35,23 +50,25 @@ function MaterialAddPage() {
   const { id, priceList: priceListId } = Route.useSearch()
   const { user, userDoc, loading: authLoading } = useAuth()
 
-  const { data: priceListDoc, loading: priceListLoading } = useDocument<PriceList>(
-    priceListId ? `price_lists/${priceListId}` : null,
+  const { data: priceListDoc, loading: priceListLoading } = useDocument(
+    priceListId ? priceListRef(db, priceListId) : null,
   )
 
   // Load catalog items for the price list picker
   const priceListItems = priceListDoc?.items ?? []
   const { data: priceListCatalog, loading: priceListCatalogLoading } =
-    useCollection<CatalogItem>(
+    useCollection(
       // Firestore 'in' queries support max 30 items
-      priceListId && !id && priceListItems.length > 0 ? "catalog" : null,
+      priceListId && !id && priceListItems.length > 0
+        ? catalogCollection(db)
+        : null,
       ...(priceListItems.length > 0
         ? [where(documentId(), "in", priceListItems.slice(0, 30))]
         : []),
     )
 
-  const { data: catalogItem, loading } = useDocument<CatalogItem>(
-    id ? `catalog/${id}` : null,
+  const { data: catalogItem, loading } = useDocument(
+    id ? catalogRef(db, id) : null,
   )
 
   const [quantity, setQuantity] = useState("1")
@@ -199,16 +216,18 @@ function MaterialAddPage() {
 
       // Find or create open checkout
       const coQuery = query(
-        collection(db, "checkouts"),
+        checkoutsCollection(db),
         where("userId", "==", uRef),
         where("status", "==", "open"),
       )
       const coSnap = await getDocs(coQuery)
       let checkoutId: string
       if (coSnap.empty) {
-        // Create checkout + item atomically
+        // Create checkout + item atomically. writeBatch needs raw refs from
+        // doc(collection(...)) so it can mint a fresh id; we go through the
+        // typed collection helpers but still let the SDK pick the id.
         const batch = writeBatch(db)
-        const coRef = doc(collection(db, "checkouts"))
+        const coRef = doc(checkoutsCollection(db))
         batch.set(coRef, {
           userId: uRef,
           status: "open",
@@ -219,12 +238,12 @@ function MaterialAddPage() {
           modifiedBy: null,
           modifiedAt: serverTimestamp(),
         })
-        const itemRef = doc(collection(db, "checkouts", coRef.id, "items"))
+        const itemRef = doc(checkoutItemsCollection(db, coRef.id))
         batch.set(itemRef, {
           workshop: catalogItem.workshops[0] ?? "",
           description: catalogItem.name,
           origin: "qr",
-          catalogId: doc(db, "catalog", id),
+          catalogId: catalogRef(db, id),
           pricingModel: catalogItem.pricingModel ?? null,
           created: serverTimestamp(),
           quantity: computedQty,
@@ -237,11 +256,11 @@ function MaterialAddPage() {
       } else {
         checkoutId = coSnap.docs[0].id
         // Add item to existing checkout
-        await addDoc(collection(db, "checkouts", checkoutId, "items"), {
+        await addDoc(checkoutItemsCollection(db, checkoutId), {
           workshop: catalogItem.workshops[0] ?? "",
           description: catalogItem.name,
           origin: "qr",
-          catalogId: doc(db, "catalog", id),
+          catalogId: catalogRef(db, id),
           pricingModel: catalogItem.pricingModel ?? null,
           created: serverTimestamp(),
           quantity: computedQty,

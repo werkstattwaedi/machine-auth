@@ -4,8 +4,12 @@
 import { createFileRoute } from "@tanstack/react-router"
 import { useDocument, useCollection } from "@modules/lib/firestore"
 import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
-import { useFunctions } from "@modules/lib/firebase-context"
+import { useDb, useFunctions } from "@modules/lib/firebase-context"
 import { httpsCallable } from "firebase/functions"
+import {
+  catalogCollection,
+  priceListRef,
+} from "@modules/lib/firestore-helpers"
 import { PageLoading } from "@modules/components/page-loading"
 import { PageHeader } from "@/components/admin/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@modules/components/ui/card"
@@ -18,7 +22,6 @@ import { useForm } from "react-hook-form"
 import { Loader2, Save, Download } from "lucide-react"
 import { useEffect, useState, useCallback } from "react"
 import { toast } from "sonner"
-import type { PriceList, CatalogItem } from "@modules/lib/workshop-config"
 import { formatCHF } from "@modules/lib/format"
 
 export const Route = createFileRoute(
@@ -34,12 +37,13 @@ interface FormValues {
 }
 
 function PriceListDetailPage() {
+  const db = useDb()
   const { priceListId } = Route.useParams()
-  const { data: priceList, loading } = useDocument<PriceList>(
-    `price_lists/${priceListId}`,
+  const { data: priceList, loading } = useDocument(
+    priceListRef(db, priceListId),
   )
   const { data: allCatalog, loading: catalogLoading } =
-    useCollection<CatalogItem>("catalog")
+    useCollection(catalogCollection(db))
   const { update, loading: saving } = useFirestoreMutation()
   const functions = useFunctions()
   const [downloading, setDownloading] = useState(false)
@@ -63,8 +67,7 @@ function PriceListDetailPage() {
 
   const onSubmit = async (values: FormValues) => {
     await update(
-      "price_lists",
-      priceListId,
+      priceListRef(db, priceListId),
       {
         name: values.name,
         footer: values.footer,

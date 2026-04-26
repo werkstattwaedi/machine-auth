@@ -4,15 +4,11 @@
 import { useEffect, useState } from "react"
 import { formatCHF } from "@modules/lib/format"
 import { useDocument } from "@modules/lib/firestore"
-import { useFunctions } from "@modules/lib/firebase-context"
+import { useDb, useFunctions } from "@modules/lib/firebase-context"
+import { checkoutRef } from "@modules/lib/firestore-helpers"
 import { httpsCallable } from "firebase/functions"
 import { Loader2 } from "lucide-react"
 import { QRCodeSVG } from "qrcode.react"
-import type { DocumentReference } from "firebase/firestore"
-
-interface CheckoutDoc {
-  billRef?: DocumentReference | null
-}
 
 export interface PaymentData {
   qrBillPayload: string
@@ -62,6 +58,7 @@ export function PaymentResult({
   onReset,
   initialPaymentData,
 }: PaymentResultProps) {
+  const db = useDb()
   const functions = useFunctions()
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>("ebanking")
 
@@ -75,8 +72,8 @@ export function PaymentResult({
   // when initialPaymentData is supplied (the normal flow now), and also
   // skipped when no checkoutId is available.
   const skipFallback = !!initialPaymentData || !checkoutId
-  const { data: checkout } = useDocument<CheckoutDoc>(
-    skipFallback ? null : `checkouts/${checkoutId}`,
+  const { data: checkout } = useDocument(
+    skipFallback || !checkoutId ? null : checkoutRef(db, checkoutId),
   )
   const billId = checkout?.billRef?.id ?? null
 
