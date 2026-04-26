@@ -32,6 +32,7 @@
     "firebase-functions": "^7.0.0",
     "particle-api-js": "^9.1.2",
     "pdfkit": "^0.18.0",
+    "qrcode": "^1.5.4",
     "resend": "^6.10.0",
     "swissqrbill": "^4.3.0"
   },
@@ -43,6 +44,7 @@
     "@types/mocha": "^10.0.6",
     "@types/pdfkit": "^0.17.5",
     "@types/pngjs": "^6.0.5",
+    "@types/qrcode": "^1.5.5",
     "@types/react": "^19.2.14",
     "@types/sinon": "^21.0.0",
     "@types/supertest": "^6.0.2",
