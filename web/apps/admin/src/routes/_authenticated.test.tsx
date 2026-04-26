@@ -19,6 +19,7 @@ vi.mock("@tanstack/react-router", () => ({
     <a {...(props as Record<string, string>)}>{children}</a>
   ),
   useNavigate: () => vi.fn(),
+  useLocation: () => ({ pathname: "/" }),
 }))
 
 // Avoid pulling in Firestore via LookupProvider

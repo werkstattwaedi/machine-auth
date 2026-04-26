@@ -16,6 +16,7 @@ import { Route as MaterialRouteImport } from "./routes/_material"
 import { Route as AuthonlyRouteImport } from "./routes/_authonly"
 import { Route as AuthenticatedRouteImport } from "./routes/_authenticated"
 import { Route as IndexRouteImport } from "./routes/index"
+import { Route as LoginVerifyRouteImport } from "./routes/login_.verify"
 import { Route as ReportReportRouteImport } from "./routes/_report/report"
 import { Route as AuthonlyCompleteProfileRouteImport } from "./routes/_authonly/complete-profile"
 import { Route as AuthenticatedVisitRouteImport } from "./routes/_authenticated/visit"
@@ -52,6 +53,11 @@ const AuthenticatedRoute = AuthenticatedRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: "/",
   path: "/",
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginVerifyRoute = LoginVerifyRouteImport.update({
+  id: "/login_/verify",
+  path: "/login/verify",
   getParentRoute: () => rootRouteImport,
 } as any)
 const ReportReportRoute = ReportReportRouteImport.update({
@@ -94,6 +100,7 @@ export interface FileRoutesByFullPath {
   "/visit": typeof AuthenticatedVisitRoute
   "/complete-profile": typeof AuthonlyCompleteProfileRoute
   "/report": typeof ReportReportRoute
+  "/login/verify": typeof LoginVerifyRoute
   "/material/add": typeof MaterialMaterialAddRoute
 }
 export interface FileRoutesByTo {
@@ -105,6 +112,7 @@ export interface FileRoutesByTo {
   "/visit": typeof AuthenticatedVisitRoute
   "/complete-profile": typeof AuthonlyCompleteProfileRoute
   "/report": typeof ReportReportRoute
+  "/login/verify": typeof LoginVerifyRoute
   "/material/add": typeof MaterialMaterialAddRoute
 }
 export interface FileRoutesById {
@@ -121,6 +129,7 @@ export interface FileRoutesById {
   "/_authenticated/visit": typeof AuthenticatedVisitRoute
   "/_authonly/complete-profile": typeof AuthonlyCompleteProfileRoute
   "/_report/report": typeof ReportReportRoute
+  "/login_/verify": typeof LoginVerifyRoute
   "/_material/material/add": typeof MaterialMaterialAddRoute
 }
 export interface FileRouteTypes {
@@ -134,6 +143,7 @@ export interface FileRouteTypes {
     | "/visit"
     | "/complete-profile"
     | "/report"
+    | "/login/verify"
     | "/material/add"
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -145,6 +155,7 @@ export interface FileRouteTypes {
     | "/visit"
     | "/complete-profile"
     | "/report"
+    | "/login/verify"
     | "/material/add"
   id:
     | "__root__"
@@ -160,6 +171,7 @@ export interface FileRouteTypes {
     | "/_authenticated/visit"
     | "/_authonly/complete-profile"
     | "/_report/report"
+    | "/login_/verify"
     | "/_material/material/add"
   fileRoutesById: FileRoutesById
 }
@@ -171,6 +183,7 @@ export interface RootRouteChildren {
   ReportRoute: typeof ReportRouteWithChildren
   LinkAccountRoute: typeof LinkAccountRoute
   LoginRoute: typeof LoginRoute
+  LoginVerifyRoute: typeof LoginVerifyRoute
 }
 
 declare module "@tanstack/react-router" {
@@ -222,6 +235,13 @@ declare module "@tanstack/react-router" {
       path: "/"
       fullPath: "/"
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    "/login_/verify": {
+      id: "/login_/verify"
+      path: "/login/verify"
+      fullPath: "/login/verify"
+      preLoaderRoute: typeof LoginVerifyRouteImport
       parentRoute: typeof rootRouteImport
     }
     "/_report/report": {
@@ -328,6 +348,7 @@ const rootRouteChildren: RootRouteChildren = {
   ReportRoute: ReportRouteWithChildren,
   LinkAccountRoute: LinkAccountRoute,
   LoginRoute: LoginRoute,
+  LoginVerifyRoute: LoginVerifyRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -278,6 +278,8 @@ async function seed() {
       kind: { regular: 2.5, materialbezug: 0, intern: 0, hangenmoos: 0 },
       firma: { regular: 5, materialbezug: 0, intern: 0, hangenmoos: 0 },
     },
+    // SLA per-layer cost (hardware-wear-driven, constant across resin types).
+    slaLayerPrice: { none: 0.00109, member: 0.00109, intern: 0 },
     workshops: {
       holz:      { label: "Holzwerkstatt",     order: 1 },
       metall:    { label: "Metallwerkstatt",    order: 2 },

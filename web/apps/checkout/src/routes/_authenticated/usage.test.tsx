@@ -47,6 +47,10 @@ vi.mock("@modules/lib/auth", () => ({
   useAuth: () => mockAuthReturn,
 }))
 
+// Per-test error injection: map collection path -> error to deliver instead
+// of a snapshot. Used to simulate permission-denied on `bills`.
+const errorPaths = new Map<string, Error>()
+
 // Mock firebase/firestore — redirect to FakeFirestore
 vi.mock("firebase/firestore", async () => {
   const actual = await vi.importActual<typeof import("firebase/firestore")>("firebase/firestore")
@@ -81,6 +85,13 @@ vi.mock("firebase/firestore", async () => {
           )
         }
         const path = refOrQuery.collectionPath ?? refOrQuery.path ?? ""
+        const injected = errorPaths.get(path)
+        if (injected) {
+          // Fire asynchronously so the hook's initial loading state is set first,
+          // matching real Firestore behaviour.
+          queueMicrotask(() => onError?.(injected))
+          return () => {}
+        }
         const constraints = (refOrQuery as { constraints?: unknown[] }).constraints ?? []
         return fakeDb.onSnapshotCollection(
           fakeDb.collection(path),
@@ -110,6 +121,7 @@ vi.mock("firebase/firestore", async () => {
 const mockCallable = vi.fn()
 vi.mock("firebase/functions", () => ({
   httpsCallable: () => mockCallable,
+  getFunctions: () => ({}),
 }))
 
 // Mock sonner
@@ -144,6 +156,8 @@ describe("Usage page", () => {
     fakeDb = new FakeFirestore()
     mockCallable.mockReset()
     mockToastError.mockReset()
+    errorPaths.clear()
+    sessionStorage.clear()
     mockAuthReturn = {
       user: { uid: "user1" },
       userDoc: mockUserDoc,
@@ -262,10 +276,19 @@ describe("Usage page", () => {
     expect(screen.getByText("Nicht verrechnete Checkouts")).toBeInTheDocument()
   })
 
-  it("download button calls getInvoiceDownloadUrl and opens URL", async () => {
+  it("download button calls getInvoiceDownloadUrl and triggers anchor click", async () => {
     const user = userEvent.setup()
     mockCallable.mockResolvedValue({ data: { url: "https://example.com/invoice.pdf" } })
+    // The fix replaces window.open(..., "_blank") — blocked by popup blockers
+    // after an await — with a synthetic anchor click. Spy on the click and
+    // explicitly assert window.open was NOT used.
     const openSpy = vi.spyOn(window, "open").mockImplementation(() => null)
+    const clickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(function mockClick(this: HTMLAnchorElement) {
+        // Capture the anchor so the test can assert on its href.
+        ;(clickSpy as unknown as { clickedAnchor?: HTMLAnchorElement }).clickedAnchor = this
+      })
 
     fakeDb.setDoc(fakeDb.doc("bills", "bill3"), {
       userId: fakeDb.doc("users", "user1"),
@@ -291,8 +314,18 @@ describe("Usage page", () => {
     await waitFor(() => {
       expect(mockCallable).toHaveBeenCalledWith({ billId: "bill3" })
     })
-    expect(openSpy).toHaveBeenCalledWith("https://example.com/invoice.pdf", "_blank")
+    await waitFor(() => {
+      expect(clickSpy).toHaveBeenCalledTimes(1)
+    })
 
+    const clickedAnchor = (clickSpy as unknown as {
+      clickedAnchor?: HTMLAnchorElement
+    }).clickedAnchor
+    expect(clickedAnchor).toBeInstanceOf(HTMLAnchorElement)
+    expect(clickedAnchor!.href).toBe("https://example.com/invoice.pdf")
+    expect(openSpy).not.toHaveBeenCalled()
+
+    clickSpy.mockRestore()
     openSpy.mockRestore()
   })
 
@@ -324,6 +357,26 @@ describe("Usage page", () => {
     await waitFor(() => {
       expect(mockToastError).toHaveBeenCalledWith("PDF konnte nicht geladen werden.")
     })
+  })
+
+  it("shows <QueryError> when bills collection fails and hides the empty state", async () => {
+    const err = Object.assign(new Error("Missing or insufficient permissions."), {
+      code: "permission-denied",
+    })
+    errorPaths.set("bills", err)
+
+    renderUsagePage()
+
+    // The QueryError component renders the session ID and the alert role.
+    await waitFor(() => {
+      expect(
+        screen.getByText("Beim Laden ist ein Fehler aufgetreten."),
+      ).toBeInTheDocument()
+    })
+    expect(screen.getByText(/Fehler-ID:/)).toBeInTheDocument()
+    // The silently-empty state that the bug reporter saw must no longer
+    // appear when the query itself errored.
+    expect(screen.queryByText("Keine Rechnungen")).not.toBeInTheDocument()
   })
 
   it("does not show download button when storagePath is null", async () => {

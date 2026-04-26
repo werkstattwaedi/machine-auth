@@ -4,17 +4,13 @@
 import { useEffect, useState } from "react"
 import { formatCHF } from "@modules/lib/format"
 import { useDocument } from "@modules/lib/firestore"
-import { useFunctions } from "@modules/lib/firebase-context"
+import { useDb, useFunctions } from "@modules/lib/firebase-context"
+import { checkoutRef } from "@modules/lib/firestore-helpers"
 import { httpsCallable } from "firebase/functions"
 import { Loader2 } from "lucide-react"
 import { QRCodeSVG } from "qrcode.react"
-import type { DocumentReference } from "firebase/firestore"
 
-interface CheckoutDoc {
-  billRef?: DocumentReference | null
-}
-
-interface PaymentData {
+export interface PaymentData {
   qrBillPayload: string
   paylinkUrl: string
   creditor: {
@@ -31,36 +27,58 @@ interface PaymentData {
 
 type PaymentMethod = "ebanking" | "twint"
 
-// Swiss cross SVG for QR bill center overlay (SIX Swiss Payment Standards spec)
-const SWISS_CROSS_SVG = `data:image/svg+xml,${encodeURIComponent(
+// Swiss cross SVG for QR bill center overlay (SIX Swiss Payment Standards spec):
+// thin white border, black square, white cross.
+export const SWISS_CROSS_SVG = `data:image/svg+xml,${encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">' +
-  '<rect width="100" height="100" fill="black"/>' +
-  '<rect x="3" y="3" width="94" height="94" fill="white"/>' +
-  '<polygon points="20,40 20,60 40,60 40,80 60,80 60,60 80,60 80,40 60,40 60,20 40,20 40,40" fill="black"/>' +
+  '<rect width="100" height="100" fill="white"/>' +
+  '<rect x="3" y="3" width="94" height="94" fill="black"/>' +
+  '<polygon points="20,40 20,60 40,60 40,80 60,80 60,60 80,60 80,40 60,40 60,20 40,20 40,40" fill="white"/>' +
   '</svg>',
 )}`
 
 interface PaymentResultProps {
-  checkoutId: string
+  /** Null for the anonymous flow, where the client never sees the doc id. */
+  checkoutId: string | null
   totalPrice: number
   resetLabel?: string
   onReset: () => void
+  /**
+   * Pre-fetched payment data from `closeCheckoutAndGetPayment`. When provided,
+   * the QR renders immediately without waiting for the Firestore-trigger /
+   * `getPaymentQrData` round-trip used by the legacy fallback path.
+   */
+  initialPaymentData?: PaymentData | null
 }
 
-export function PaymentResult({ checkoutId, totalPrice, resetLabel, onReset }: PaymentResultProps) {
+export function PaymentResult({
+  checkoutId,
+  totalPrice,
+  resetLabel,
+  onReset,
+  initialPaymentData,
+}: PaymentResultProps) {
+  const db = useDb()
   const functions = useFunctions()
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>("ebanking")
 
-  // Listen for billRef on checkout doc
-  const { data: checkout } = useDocument<CheckoutDoc>(`checkouts/${checkoutId}`)
-  const billId = checkout?.billRef?.id ?? null
-
-  // Fetch payment data from server once bill exists
-  const [paymentData, setPaymentData] = useState<PaymentData | null>(null)
+  const [paymentData, setPaymentData] = useState<PaymentData | null>(
+    initialPaymentData ?? null,
+  )
   const [qrError, setQrError] = useState(false)
 
+  // Legacy fallback: subscribe to billRef on the checkout doc and fetch
+  // payment data once the Firestore trigger has created the bill. Skipped
+  // when initialPaymentData is supplied (the normal flow now), and also
+  // skipped when no checkoutId is available.
+  const skipFallback = !!initialPaymentData || !checkoutId
+  const { data: checkout } = useDocument(
+    skipFallback || !checkoutId ? null : checkoutRef(db, checkoutId),
+  )
+  const billId = checkout?.billRef?.id ?? null
+
   useEffect(() => {
-    if (!billId) return
+    if (skipFallback || !billId) return
 
     const getPaymentData = httpsCallable<{ billId: string }, PaymentData>(
       functions,
@@ -70,7 +88,7 @@ export function PaymentResult({ checkoutId, totalPrice, resetLabel, onReset }: P
     getPaymentData({ billId })
       .then((result) => setPaymentData(result.data))
       .catch(() => setQrError(true))
-  }, [billId, functions])
+  }, [skipFallback, billId, functions])
 
   return (
     <div className="space-y-6">

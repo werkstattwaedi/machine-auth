@@ -6,6 +6,8 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { z } from "zod/v4/mini"
 import { useAuth, isProfileComplete } from "@modules/lib/auth"
 import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
+import { useDb } from "@modules/lib/firebase-context"
+import { userRef } from "@modules/lib/firestore-helpers"
 import { Label } from "@modules/components/ui/label"
 import { Checkbox } from "@modules/components/ui/checkbox"
 import { Loader2, ArrowRight } from "lucide-react"
@@ -47,6 +49,7 @@ function ErrorBadge({ message }: { message: string }) {
 }
 
 function CompleteProfilePage() {
+  const db = useDb()
   const { userDoc } = useAuth()
   const { update, loading: saving } = useFirestoreMutation()
   const navigate = useNavigate()
@@ -109,7 +112,7 @@ function CompleteProfilePage() {
       data.billingAddress = null
     }
 
-    await update("users", userDoc.id, data, {
+    await update(userRef(db, userDoc.id), data, {
       successMessage: "Profil gespeichert",
     })
     navigate({ to: redirectTo || "/visit" })
@@ -126,7 +129,7 @@ function CompleteProfilePage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className={wrapCls("firstName")}>
               <Label htmlFor="firstName" className="text-sm font-bold">
-                Vorname<span className="text-[#cc2a24]">*</span>
+                Vorname
               </Label>
               <input
                 id="firstName"
@@ -137,7 +140,7 @@ function CompleteProfilePage() {
             </div>
             <div className={wrapCls("lastName")}>
               <Label htmlFor="lastName" className="text-sm font-bold">
-                Nachname<span className="text-[#cc2a24]">*</span>
+                Nachname
               </Label>
               <input
                 id="lastName"
@@ -184,7 +187,7 @@ function CompleteProfilePage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className={wrapCls("company")}>
                   <Label className="text-sm font-bold">
-                    Firma<span className="text-[#cc2a24]">*</span>
+                    Firma
                   </Label>
                   <input
                     {...register("company", {
@@ -196,7 +199,7 @@ function CompleteProfilePage() {
                 </div>
                 <div className={wrapCls("street")}>
                   <Label className="text-sm font-bold">
-                    Strasse<span className="text-[#cc2a24]">*</span>
+                    Strasse
                   </Label>
                   <input
                     {...register("street", {
@@ -208,7 +211,7 @@ function CompleteProfilePage() {
                 </div>
                 <div className={wrapCls("zip")}>
                   <Label className="text-sm font-bold">
-                    PLZ<span className="text-[#cc2a24]">*</span>
+                    PLZ
                   </Label>
                   <input
                     {...register("zip", {
@@ -220,7 +223,7 @@ function CompleteProfilePage() {
                 </div>
                 <div className={wrapCls("city")}>
                   <Label className="text-sm font-bold">
-                    Ort<span className="text-[#cc2a24]">*</span>
+                    Ort
                   </Label>
                   <input
                     {...register("city", {
@@ -236,19 +239,6 @@ function CompleteProfilePage() {
         </div>
 
         <div className="space-y-3">
-          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
-            <span className="text-sm font-bold">
-              Nutzungsbestimmungen<span className="text-[#cc2a24]">*</span>
-            </span>
-            <a
-              href="https://werkstattwaedi.ch/nutzungsbestimmungen"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm underline font-bold text-cog-teal"
-            >
-              Nutzungsbestimmungen lesen
-            </a>
-          </div>
           <Controller
             name="termsAccepted"
             control={control}
@@ -269,7 +259,16 @@ function CompleteProfilePage() {
                     onCheckedChange={field.onChange}
                   />
                   <label htmlFor="termsAccepted" className="text-sm leading-snug">
-                    Ich akzeptiere die Nutzungsbestimmungen
+                    Ich akzeptiere die{" "}
+                    <a
+                      href="https://werkstattwaedi.ch/nutzungsbestimmungen"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="underline font-bold text-cog-teal"
+                    >
+                      Nutzungsbestimmungen
+                    </a>
                   </label>
                 </div>
                 {isSubmitted && errors.termsAccepted && (

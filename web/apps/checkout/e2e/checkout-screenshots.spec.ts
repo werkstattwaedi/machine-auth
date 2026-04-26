@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { test, expect, type Page } from "@playwright/test"
-import { waitForOobCode } from "./helpers"
+import { clearCollections, waitForLoginCode } from "./helpers"
 
 const AUTH_USER_EMAIL = "e2e-test@werkstattwaedi.ch"
 
@@ -53,19 +53,24 @@ async function goToSummaryWithItems(page: Page) {
   await expect(page.getByText("Zusammenfassung")).toBeVisible()
 }
 
-/** Sign in as the seeded test user */
+/** Sign in as the seeded test user via the 6-digit code flow. */
 async function signIn(page: Page) {
-  await page.goto("/login")
-  await page.getByPlaceholder("deine@email.ch").fill(AUTH_USER_EMAIL)
-  await page.getByRole("button", { name: "Anmelde-Link senden" }).click()
-  await expect(page.getByText("Anmelde-Link wurde an")).toBeVisible({ timeout: 5000 })
+  // Drop any prior loginCodes so the per-email 60 s rate limit doesn't
+  // reject back-to-back tests sharing this helper.
+  await clearCollections("loginCodes")
 
-  const signInCode = await waitForOobCode(
-    (c) => c.email === AUTH_USER_EMAIL && c.requestType === "EMAIL_SIGNIN",
-  )
-  expect(signInCode).toBeTruthy()
-  await page.goto(signInCode!.oobLink)
-  await page.waitForURL((url) => !url.href.includes("oobCode"), { timeout: 10_000 })
+  await page.goto("/login")
+  await page.getByTestId("login-email-input").fill(AUTH_USER_EMAIL)
+  await page.getByTestId("login-email-submit").click()
+  await expect(page.getByTestId("login-code-stage")).toBeVisible({ timeout: 5000 })
+
+  const entry = await waitForLoginCode(AUTH_USER_EMAIL)
+  expect(entry).toBeTruthy()
+  await page.getByTestId("login-code-input").fill(entry!.code)
+  await page.getByTestId("login-code-submit").click()
+
+  // Post-login: wait for any non-login URL.
+  await page.waitForURL((url) => !url.pathname.startsWith("/login"), { timeout: 10_000 })
 }
 
 /**
@@ -243,6 +248,111 @@ test.describe("Checkout step screenshots", () => {
     await expect(page.getByText(/Transaktionsgebühren/)).toBeVisible()
 
     await expect(page).toHaveScreenshot("checkout-payment-twint.png")
+  })
+
+  test("SLA row — resin + layers filled", async ({ page }) => {
+    await goToWorkshops(page)
+
+    await page.getByLabel("Maker Space").click()
+    const makerSection = page
+      .locator("div.space-y-2")
+      .filter({ hasText: /^Maker Space/ })
+
+    // Add the SLA catalog item from the makerspace section
+    await makerSection
+      .getByRole("button", { name: "Artikel hinzufügen" })
+      .click()
+    await expect(page.getByText("E2E SLA Resin")).toBeVisible()
+    await page.getByText("E2E SLA Resin").click()
+
+    // Fill Resin (ml) and Layer inputs. Labels aren't associated via htmlFor,
+    // so walk from label → parent → input (same idiom as existing tests).
+    const resinInput = page
+      .locator('label:has-text("Resin (ml)")')
+      .locator("..")
+      .locator("input")
+    await resinInput.fill("50")
+    await resinInput.blur()
+
+    const layerInput = page
+      .locator('label:has-text("Layer")')
+      .locator("..")
+      .locator("input")
+    await layerInput.fill("1000")
+    await layerInput.blur()
+
+    // Click a neutral spot to stabilize focus for the screenshot
+    await page.locator("h2").first().click()
+
+    await expect(page).toHaveScreenshot("checkout-sla-filled.png")
+  })
+
+  test("SLA row — validation errors (empty inputs)", async ({ page }) => {
+    await goToWorkshops(page)
+
+    await page.getByLabel("Maker Space").click()
+    const makerSection = page
+      .locator("div.space-y-2")
+      .filter({ hasText: /^Maker Space/ })
+
+    // Add the SLA catalog item with both inputs left at 0 to trigger validation
+    await makerSection
+      .getByRole("button", { name: "Artikel hinzufügen" })
+      .click()
+    await expect(page.getByText("E2E SLA Resin")).toBeVisible()
+    await page.getByText("E2E SLA Resin").click()
+
+    // Trigger validation by clicking Checkout (same CTA as existing validation
+    // error test). scrollIntoViewIfNeeded handles mobile viewport.
+    const checkoutBtn = page.getByRole("button", { name: "Checkout", exact: true })
+    await checkoutBtn.scrollIntoViewIfNeeded()
+    await checkoutBtn.click()
+
+    // Wait for the SLA validation annotation to appear
+    await expect(
+      page.getByText("Resin (ml) und Layer müssen grösser als 0 sein."),
+    ).toBeVisible()
+
+    await expect(page).toHaveScreenshot("checkout-sla-validation-errors.png")
+  })
+
+  test("summary — with SLA item", async ({ page }) => {
+    await goToWorkshops(page)
+
+    await page.getByLabel("Maker Space").click()
+    const makerSection = page
+      .locator("div.space-y-2")
+      .filter({ hasText: /^Maker Space/ })
+
+    // Add the SLA catalog item
+    await makerSection
+      .getByRole("button", { name: "Artikel hinzufügen" })
+      .click()
+    await expect(page.getByText("E2E SLA Resin")).toBeVisible()
+    await page.getByText("E2E SLA Resin").click()
+
+    // Fill Resin (ml) and Layer inputs
+    const resinInput = page
+      .locator('label:has-text("Resin (ml)")')
+      .locator("..")
+      .locator("input")
+    await resinInput.fill("50")
+    await resinInput.blur()
+
+    const layerInput = page
+      .locator('label:has-text("Layer")')
+      .locator("..")
+      .locator("input")
+    await layerInput.fill("1000")
+    await layerInput.blur()
+
+    // Go to summary
+    const checkoutBtn = page.getByRole("button", { name: "Checkout", exact: true })
+    await checkoutBtn.scrollIntoViewIfNeeded()
+    await checkoutBtn.click()
+    await expect(page.getByText("Zusammenfassung")).toBeVisible()
+
+    await expect(page).toHaveScreenshot("checkout-summary-sla.png")
   })
 
   test("checkout validation errors", async ({ page }) => {

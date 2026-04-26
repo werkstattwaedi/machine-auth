@@ -18,11 +18,13 @@ import { generateValidPICCAndCMAC } from "./sdm-test-helper"
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // Must match TERMINAL_KEY, DIVERSIFICATION_MASTER_KEY, and
-// DIVERSIFICATION_SYSTEM_NAME in functions/.env.local
+// DIVERSIFICATION_SYSTEM_NAME in functions/.env.local / .env.<project>.
+// These are test fixtures, not real secrets — the emulator's copy of
+// `.env.local` holds the same values.
 const TERMINAL_KEY = "f5e4b999d5aa629f193a874529c4aa2f"
 const MASTER_KEY = "c025f541727ecd8b6eb92055c88a2a70"
-const SYSTEM_NAME = "OwwMachineAuth"
-const NFC_TAG_UID = "04c339aa1e1890"
+const SYSTEM_NAME = "Oww8820Maco"
+export const NFC_TAG_UID = "04c339aa1e1890"
 
 const PROJECT_ID = "oww-maco"
 const AUTH_EMULATOR = `http://127.0.0.1:${E2E_PORTS.auth}`
@@ -46,6 +48,8 @@ export default async function globalSetup() {
       kind: { regular: 7.5, materialbezug: 0, intern: 0, hangenmoos: 7.5 },
       firma: { regular: 30, materialbezug: 0, intern: 0, hangenmoos: 30 },
     },
+    // SLA per-layer price (global; resin-per-liter lives on each catalog entry).
+    slaLayerPrice: { none: 0.01, member: 0.008, intern: 0.006 },
     workshops: {
       holz: { label: "Holz", order: 1 },
       metall: { label: "Metall", order: 2 },
@@ -112,6 +116,16 @@ export default async function globalSetup() {
     workshops: ["makerspace"],
     pricingModel: "weight",
     unitPrice: { none: 105, member: 105, intern: 0 },
+    active: true,
+    userCanAdd: true,
+  })
+
+  await db.collection("catalog").doc("e2e-item-sla").set({
+    code: "9099",
+    name: "E2E SLA Resin",
+    workshops: ["makerspace"],
+    pricingModel: "sla",
+    unitPrice: { none: 250, member: 200, intern: 0 },
     active: true,
     userCanAdd: true,
   })

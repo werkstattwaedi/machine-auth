@@ -18,8 +18,7 @@ import { defineSecret, defineString } from "firebase-functions/params";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { Resend } from "resend";
-import { format } from "date-fns";
-import { de } from "date-fns/locale";
+import { formatWorkshopDateTime } from "../util/workshop_timezone";
 import { buildInvoicePdf } from "./build_invoice_pdf";
 import { formatInvoiceNumber } from "./types";
 import { logOperationError } from "../operations_log";
@@ -189,8 +188,11 @@ async function assembleInvoiceData(
  * optimistic lock to prevent concurrent generation.
  *
  * Returns true if the PDF was generated (or already exists).
+ *
+ * Exported for integration testing — invoked directly to bypass the
+ * Firestore trigger wrapper.
  */
-async function tryGeneratePdf(billId: string): Promise<boolean> {
+export async function tryGeneratePdf(billId: string): Promise<boolean> {
   const db = getFirestore();
   const billRef = db.collection("bills").doc(billId);
 
@@ -240,8 +242,11 @@ async function tryGeneratePdf(billId: string): Promise<boolean> {
  * optimistic lock to prevent duplicate sends.
  *
  * Returns true if the email was sent (or already sent, or skipped in emulator).
+ *
+ * Exported for integration testing — invoked directly to bypass the
+ * Firestore trigger wrapper.
  */
-async function trySendEmail(billId: string): Promise<boolean> {
+export async function trySendEmail(billId: string): Promise<boolean> {
   if (process.env.FUNCTIONS_EMULATOR === "true") {
     logger.info(`Emulator: skipping email for bill ${billId}`);
     return true;
@@ -286,10 +291,9 @@ async function trySendEmail(billId: string): Promise<boolean> {
 
     const invoiceNumber = formatInvoiceNumber(bill.referenceNumber);
     const recipientName = checkout.persons[0]?.name ?? "Kunde";
-    const checkoutDate = format(
+    const checkoutDate = formatWorkshopDateTime(
       checkout.created.toDate(),
       "dd. MMMM yyyy, HH:mm",
-      { locale: de },
     );
 
     const resend = new Resend(resendApiKey.value());
@@ -301,6 +305,7 @@ async function trySendEmail(billId: string): Promise<boolean> {
         variables: {
           RECIPIENT_NAME: recipientName,
           CHECKOUT_DATE: checkoutDate,
+          INVOICE_NUMBER: invoiceNumber,
           AMOUNT: bill.amount.toFixed(2),
           CURRENCY: bill.currency,
         },

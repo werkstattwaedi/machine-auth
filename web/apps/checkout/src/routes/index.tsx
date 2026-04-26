@@ -25,7 +25,7 @@ export const Route = createFileRoute("/")({
 
 function CheckoutPage() {
   const auth = useFirebaseAuth()
-  const { user, userDoc, loading, userDocLoading } = useAuth()
+  const { userDoc, loading, userDocLoading, sessionKind } = useAuth()
   const { picc, cmac, kiosk, step } = Route.useSearch()
   const isKiosk = kiosk !== undefined
   const navigate = useNavigate()
@@ -60,9 +60,10 @@ function CheckoutPage() {
 
   // Redirect logged-in users with incomplete profiles to complete-profile.
   // Tag-auth sessions always have picc/cmac in the URL — skip those.
-  // Note: CheckoutWizard uses useTokenAuth() for a more precise check, but
-  // here we use the URL heuristic to avoid a duplicate verification fetch.
-  const isAccountLoggedIn = !!user && !picc
+  // Anonymous Firebase Auth sessions (sessionKind === "anonymous") look like
+  // a logged-in user but have no userDoc; treating them as account-logged-in
+  // would flip `profileLoading` true→false on submit and unmount the wizard.
+  const isAccountLoggedIn = sessionKind === "real" && !picc
   const profileLoading = loading || userDocLoading
   const needsProfileCompletion =
     isAccountLoggedIn && !profileLoading && userDoc && !isProfileComplete(userDoc)

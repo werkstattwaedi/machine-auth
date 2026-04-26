@@ -3,8 +3,11 @@
 
 import { createFileRoute } from "@tanstack/react-router"
 import { useCollection } from "@modules/lib/firestore"
+import { useDb } from "@modules/lib/firebase-context"
+import { macosCollection } from "@modules/lib/firestore-helpers"
+import type { MacoDoc } from "@modules/lib/firestore-entities"
 import { PageLoading } from "@modules/components/page-loading"
-import { DataTable, ColumnHeader } from "@/components/data-table"
+import { DataTable, ColumnHeader } from "@modules/components/data-table"
 import { PageHeader } from "@/components/admin/page-header"
 import { Button } from "@modules/components/ui/button"
 import { type ColumnDef } from "@tanstack/react-table"
@@ -16,10 +19,6 @@ import { toast } from "sonner"
 export const Route = createFileRoute("/_authenticated/terminals")({
   component: TerminalsPage,
 })
-
-interface MacoDoc {
-  name: string
-}
 
 const columns: ColumnDef<MacoDoc & { id: string }>[] = [
   {
@@ -34,7 +33,8 @@ const columns: ColumnDef<MacoDoc & { id: string }>[] = [
 ]
 
 function TerminalsPage() {
-  const { data, loading } = useCollection<MacoDoc>("maco")
+  const db = useDb()
+  const { data, loading } = useCollection(macosCollection(db))
   const [importing, setImporting] = useState(false)
 
   const handleImport = async () => {

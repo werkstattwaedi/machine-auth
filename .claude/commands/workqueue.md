@@ -69,6 +69,34 @@ Ensure all four labels exist (idempotent):
 .claude/scripts/wq-gh.sh label create "claude-workqueue-plan-review" --color "1D76DB" --description "Workqueue: plan posted, needs human approval" --repo werkstattwaedi/machine-auth 2>/dev/null || true
 ```
 
+## Phase 0 — Baseline test run
+
+Before fetching any issues, confirm the repo is in a clean, passing state. This makes it impossible for a worker agent to later blame "pre-existing test failures" for regressions it introduced.
+
+1. Verify the working tree is clean and we're on a known branch:
+   ```bash
+   git status --porcelain
+   git rev-parse --abbrev-ref HEAD
+   ```
+   If the tree is dirty, stop and report — do NOT stash or discard.
+
+2. Run the full precommit suite with a 10-minute timeout (Bash `timeout: 600000`):
+   ```bash
+   npm run test:precommit
+   ```
+
+3. Run the e2e suite with a 10-minute timeout:
+   ```bash
+   npm run test:web:e2e
+   ```
+
+4. If any test fails in either step:
+   - **Abort the entire `/workqueue` run.**
+   - Print the failing tests.
+   - Tell the user to fix the baseline first, and do not proceed to Phase 1.
+
+5. If everything passes, record "baseline: green (precommit + e2e)" and continue. Worker agents will be told the baseline was green; they are not allowed to dismiss failures as pre-existing.
+
 ## Phase 1 — Fetch & Filter Issues
 
 1. Fetch all open issues with the `claude-workqueue` label:
@@ -171,6 +199,7 @@ CRITICAL RULES:
 - Do NOT start a separate emulator — test scripts start their own. Never run `npm run dev` inside this agent.
 - Every fix must include a regression test (see Step 4).
 - Do NOT force-push. Do NOT modify `main`.
+- **Both `npm run test:precommit` and `npm run test:web:e2e` were green before you started.** Any failure in Step 6 is caused by your changes — you may NOT explain it away as pre-existing.
 
 ## Step 1: Read the issue
 
@@ -308,10 +337,11 @@ WORKQUEUE_RESULT: plan-posted | <one-line summary of the approach>
 Run with `timeout: 600000` (10 min) on the Bash tool:
 npm run test:precommit
 
+**The baseline was green before you started.** Any failure here is caused by your changes — you may NOT dismiss failures as "pre-existing" or "unrelated." If a test appears unrelated on the surface (different file, different area), dig until you understand the causal chain; flaky tests are almost always regressions in disguise.
+
 If tests fail:
-- If related to your changes: fix and re-run.
-- If unrelated: note it and continue.
-- If you cannot get tests passing after 2 attempts: report the failure.
+- Diagnose and fix — the baseline was green, so the cause is in your diff.
+- If you cannot get tests passing after 2 attempts: report the failure with the specific test name and error.
 - If the command times out: report it — do NOT retry.
 
 ### 6b. E2E tests (if any file under `web/` changed)

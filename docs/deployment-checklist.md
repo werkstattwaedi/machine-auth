@@ -41,6 +41,8 @@ firebase functions:config:set DIVERSIFICATION_SYSTEM_NAME="oww"
 firebase functions:config:set PARTICLE_PRODUCT_ID="<product-id>"
 ```
 
+After editing `machine-auth-operations/config.jsonc`, run `npm run generate-env` from the repo root to refresh `functions/.env.<projectId>` (and the web/maco_gateway env files) before deploying. Otherwise newly-added Firebase Functions params (e.g. `LOGIN_ALLOWED_ORIGINS`) will be missing from the deployed environment and login will silently break.
+
 ## 3. Deploy Functions
 
 ```bash
@@ -92,7 +94,7 @@ firebase deploy
 ## 8. Smoke Tests
 
 1. **Public checkout**: Visit checkout site with `?picc=...&cmac=...` tag URL
-2. **Login**: Send email link, complete sign-in on checkout site
+2. **Login**: Request 6-digit code on `/login`, redeem it (or click the magic link in the Resend email) to complete sign-in
 3. **Dashboard**: Verify user doc loads from Firestore
 4. **Admin site**: Visit admin site, verify it requires admin custom claim
 5. **Functions**: Check a terminal checkin works end-to-end

@@ -93,17 +93,27 @@ export async function handleAuthenticateTag(
     toKeyBytes(authKey)
   );
 
-  // Create authentication record with crypto state
+  // Create authentication record with crypto state.
+  // ttlAt arms a Firestore TTL policy (configured in firestore.indexes.json)
+  // that auto-deletes abandoned in-progress auth docs holding secret RND
+  // material. The handshake completes in seconds; 5 min is generous slack.
+  // ttlAt is cleared on successful completion in handleCompleteTagAuth.
   const authId = admin.firestore().collection("authentications").doc().id;
-  await admin.firestore().collection("authentications").doc(authId).set({
-    tokenId: tokenDoc.ref,
-    keySlot: request.keySlot,
-    created: Timestamp.now(),
-    inProgressAuth: {
-      rndA: challengeResponse.cloudChallenge,
-      rndB: challengeResponse.rndB,
-    },
-  });
+  const now = Timestamp.now();
+  await admin
+    .firestore()
+    .collection("authentications")
+    .doc(authId)
+    .set({
+      tokenId: tokenDoc.ref,
+      keySlot: request.keySlot,
+      created: now,
+      ttlAt: Timestamp.fromMillis(now.toMillis() + 5 * 60 * 1000),
+      inProgressAuth: {
+        rndA: challengeResponse.cloudChallenge,
+        rndB: challengeResponse.rndB,
+      },
+    });
 
   logger.info("Authentication initiated", { authId, tokenIdHex });
 

@@ -14,6 +14,32 @@ service cloud.firestore {
       return isSignedIn() && request.auth.token.get('admin', false) == true;
     }
 
+    // The `actsAs` claim is set by verifyTagCheckout on the synthetic-UID
+    // custom token used for kiosk badge sessions. It names the real user
+    // doc the session is authorized to operate on. Empty string for
+    // non-tag sessions.
+    function actsAs() {
+      return isSignedIn() ? request.auth.token.get('actsAs', '') : '';
+    }
+
+    // True for sessions created by Firebase Anonymous Auth
+    // (signInAnonymously). The truly-anonymous checkout path uses these
+    // — each session has a fresh UID, so rules can scope writes per
+    // session even when there's no underlying user record.
+    function isAnonymousAuth() {
+      return isSignedIn() && request.auth.token.firebase.sign_in_provider == 'anonymous';
+    }
+
+    // Whether the caller is authorized to act on a checkout owned by the
+    // user pointed to by `userRef`. Either a real login (uid == doc.id)
+    // or a tag-tap session (actsAs claim == doc.id).
+    function isCheckoutPrincipalFor(userRef) {
+      return isSignedIn() && (
+        userRef == /databases/$(database)/documents/users/$(request.auth.uid) ||
+        (actsAs() != '' && userRef == /databases/$(database)/documents/users/$(actsAs()))
+      );
+    }
+
     // Validation helpers
     function isDocumentReference(field, collection) {
       return field is path;
@@ -21,10 +47,6 @@ service cloud.firestore {
 
     function isDocumentReferenceArray(arr, collection) {
       return arr is list && arr.size() >= 0;
-    }
-
-    function isOwner(userId) {
-      return resource.data.userId == /databases/$(database)/documents/users/$(userId);
     }
 
     // Validate billing address has all required fields
@@ -41,17 +63,35 @@ service cloud.firestore {
       return data.userType != 'firma' || hasValidBillingAddress(data);
     }
 
+    // Item-pricing field validation. Server-side recompute in
+    // closeCheckoutAndGetPayment is the authoritative defense; this is a
+    // cheap rule-level guard that rejects negative quantities/prices and
+    // non-finite values (Infinity / NaN). The `is number` check passes
+    // for non-finite values, so the explicit < bound is what catches
+    // them: `Infinity < 1e308` is false, `NaN < anything` is false.
+    function hasValidItemPricing(data) {
+      return data.quantity is number && data.quantity > 0 && data.quantity < 1000000 &&
+             data.unitPrice is number && data.unitPrice >= 0 && data.unitPrice < 1000000 &&
+             data.totalPrice is number && data.totalPrice >= 0 && data.totalPrice < 1000000;
+    }
+
     // Users collection (doc ID = Firebase Auth UID)
     match /users/{userId} {
-      allow read: if isAdmin() || (isSignedIn() && userId == request.auth.uid);
+      // Read: admin, the user themselves, or a kiosk session acting on
+      // their behalf (so the kiosk can pre-fill the form).
+      allow read: if isAdmin() ||
+                     (isSignedIn() && userId == request.auth.uid) ||
+                     (actsAs() != '' && actsAs() == userId);
 
       // Allow creating own user doc during self-registration
       allow create: if isSignedIn() && userId == request.auth.uid &&
                        request.resource.data.permissions is list &&
                        isDocumentReferenceArray(request.resource.data.permissions, 'permission');
 
-      // Users can update their own doc but cannot change roles/permissions
-      // Firma users must provide a valid billing address
+      // Users can update their own doc but cannot change roles/permissions.
+      // Tag-tap sessions cannot update users at all (their request.auth.uid
+      // is synthetic, won't match userId, so the predicate fails).
+      // Firma users must provide a valid billing address.
       allow update: if isAdmin() ||
                        (isSignedIn() &&
                         userId == request.auth.uid &&
@@ -90,7 +130,9 @@ service cloud.firestore {
     match /usage_machine/{usageId} {
       allow read: if isAdmin() ||
                      (isSignedIn() && resource.data.userId ==
-                       /databases/$(database)/documents/users/$(request.auth.uid));
+                       /databases/$(database)/documents/users/$(request.auth.uid)) ||
+                     (actsAs() != '' && resource.data.userId ==
+                       /databases/$(database)/documents/users/$(actsAs()));
       allow write: if isAdmin();
     }
 
@@ -108,40 +150,72 @@ service cloud.firestore {
 
     // Checkouts (shopping cart)
     match /checkouts/{checkoutId} {
-      // Open checkout (incremental flow) or closed checkout (one-shot submit)
-      allow create: if true
-        && (request.resource.data.status == 'open' || request.resource.data.status == 'closed')
+      // Read: admin, the owner (real or tag-tap), or — for anonymous
+      // checkouts — the Firebase Anonymous Auth session that created it.
+      // (Anonymous reads are intentionally permissive across all anon
+      // sessions; doc IDs are random Firebase IDs so brute-force is
+      // impractical, and there is no name/billing in pure-anon checkouts.)
+      allow read: if isAdmin() ||
+                     isCheckoutPrincipalFor(resource.data.userId) ||
+                     (resource.data.userId == null && isAnonymousAuth());
+
+      // Create:
+      //  - Anonymous (signed-in via Firebase Anonymous Auth) with userId == null
+      //  - Signed-in real/tag with userId matching the authenticated principal
+      //
+      // Closes Security Analysis §R2 (no more attacker-supplied userId
+      // from an unauth client) and the legacy `if true` branch.
+      allow create: if (request.resource.data.status == 'open' || request.resource.data.status == 'closed')
         && request.resource.data.keys().hasOnly([
              'userId', 'status', 'usageType', 'created',
              'workshopsVisited', 'persons', 'modifiedBy', 'modifiedAt',
              'closedAt', 'notes', 'summary'
-           ]);
-      allow read: if isSignedIn();
-      // Owner can update their own open checkout, admin can update any
+           ])
+        && (
+             (request.resource.data.userId == null && isAnonymousAuth()) ||
+             isCheckoutPrincipalFor(request.resource.data.userId)
+           );
+
+      // Update: admin, or the principal of an open checkout. The principal
+      // can edit metadata (workshopsVisited, persons, usageType, notes) but
+      // CANNOT change status, summary, closedAt, or billRef — those
+      // transitions go through closeCheckoutAndGetPayment so the server
+      // can recompute prices and allocate a bill atomically.
       allow update: if isAdmin() ||
-        (isSignedIn() && isOwner(request.auth.uid) && resource.data.status == "open");
+        (isCheckoutPrincipalFor(resource.data.userId) &&
+         resource.data.status == "open" &&
+         !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+           'status', 'summary', 'closedAt', 'billRef'
+         ]));
       allow delete: if isAdmin();
 
       // Checkout items subcollection
       match /items/{itemId} {
-        allow read: if isSignedIn();
-        // Owner can create items on their open checkout; anonymous checkouts (userId == null) also allowed
-        allow create: if isAdmin() ||
-          (isSignedIn() &&
-           get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId ==
-             /databases/$(database)/documents/users/$(request.auth.uid) &&
-           get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.status == "open") ||
-          get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId == null;
-        allow update: if isAdmin() ||
-          (isSignedIn() &&
-           get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId ==
-             /databases/$(database)/documents/users/$(request.auth.uid) &&
-           get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.status == "open");
+        allow read: if isAdmin() ||
+                       isCheckoutPrincipalFor(get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId) ||
+                       (get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId == null && isAnonymousAuth());
+
+        // Create / update / delete: principal of an open checkout, or an
+        // anonymous-auth session writing to a null-userId checkout. Field
+        // validation rejects negative/zero quantities and negative prices
+        // (defense-in-depth behind server-side recompute in
+        // closeCheckoutAndGetPayment).
+        allow create: if (
+            isAdmin() ||
+            (isCheckoutPrincipalFor(get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId) &&
+             get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.status == "open") ||
+            (get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId == null && isAnonymousAuth())
+          ) && hasValidItemPricing(request.resource.data);
+        allow update: if (
+            isAdmin() ||
+            (isCheckoutPrincipalFor(get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId) &&
+             get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.status == "open") ||
+            (get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId == null && isAnonymousAuth())
+          ) && hasValidItemPricing(request.resource.data);
         allow delete: if isAdmin() ||
-          (isSignedIn() &&
-           get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId ==
-             /databases/$(database)/documents/users/$(request.auth.uid) &&
-           get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.status == "open");
+            (isCheckoutPrincipalFor(get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId) &&
+             get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.status == "open") ||
+            (get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId == null && isAnonymousAuth());
       }
     }
 
@@ -161,7 +235,9 @@ service cloud.firestore {
     match /bills/{billId} {
       allow read: if isAdmin() ||
         (isSignedIn() && resource.data.userId ==
-          /databases/$(database)/documents/users/$(request.auth.uid));
+          /databases/$(database)/documents/users/$(request.auth.uid)) ||
+        (actsAs() != '' && resource.data.userId ==
+          /databases/$(database)/documents/users/$(actsAs()));
       allow write: if false;
     }
 
@@ -169,6 +245,20 @@ service cloud.firestore {
     match /machine_reports/{reportId} {
       allow create: if true;
       allow read, update, delete: if isAdmin();
+    }
+
+    // Login codes (server-only; written + read only by Cloud Functions)
+    match /loginCodes/{id} {
+      allow read, write: if false;
+    }
+
+    // Server-only collections (Cloud Functions writes via Admin SDK bypass
+    // these rules; explicit deny for any client attempt).
+    match /authentications/{authId} {
+      allow read, write: if false;
+    }
+    match /operations_log/{logId} {
+      allow read, write: if false;
     }
   }
 }

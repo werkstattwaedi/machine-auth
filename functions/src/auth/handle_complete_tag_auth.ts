@@ -133,13 +133,16 @@ export async function handleCompleteTagAuth(
       Buffer.from(rndB)
     );
 
-    // Clear the crypto state (auth is now complete)
+    // Clear the crypto state (auth is now complete). Also clear ttlAt so
+    // Firestore TTL does not GC the completed record (the abandoned-record
+    // hygiene policy only targets in-progress docs).
     await admin
       .firestore()
       .collection("authentications")
       .doc(authId)
       .update({
         inProgressAuth: null,
+        ttlAt: null,
       });
 
     logger.info("Tag authentication completed successfully", {

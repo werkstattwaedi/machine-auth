@@ -4,6 +4,9 @@
 import { createFileRoute } from "@tanstack/react-router"
 import { useDocument } from "@modules/lib/firestore"
 import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
+import { useDb } from "@modules/lib/firebase-context"
+import { catalogRef } from "@modules/lib/firestore-helpers"
+import type { PricingModel } from "@modules/lib/firestore-entities"
 import { PageLoading } from "@modules/components/page-loading"
 import { PageHeader } from "@/components/admin/page-header"
 import { Card, CardContent } from "@modules/components/ui/card"
@@ -11,7 +14,6 @@ import { Button } from "@modules/components/ui/button"
 import { useForm } from "react-hook-form"
 import { Loader2, Save } from "lucide-react"
 import { useEffect } from "react"
-import type { CatalogItem } from "@modules/lib/workshop-config"
 import { CatalogFormFields, type CatalogFormValues } from "@/components/admin/catalog-form-fields"
 
 export const Route = createFileRoute(
@@ -21,13 +23,12 @@ export const Route = createFileRoute(
 })
 
 function CatalogDetailPage() {
+  const db = useDb()
   const { materialId } = Route.useParams()
-  const { data: catalog, loading } = useDocument<CatalogItem>(
-    `catalog/${materialId}`,
-  )
+  const { data: catalog, loading } = useDocument(catalogRef(db, materialId))
   const { update, loading: saving } = useFirestoreMutation()
 
-  const { register, handleSubmit, reset } = useForm<CatalogFormValues>()
+  const { register, handleSubmit, reset, control } = useForm<CatalogFormValues>()
 
   useEffect(() => {
     if (catalog) {
@@ -51,14 +52,15 @@ function CatalogDetailPage() {
 
   const onSubmit = async (values: CatalogFormValues) => {
     await update(
-      "catalog",
-      materialId,
+      catalogRef(db, materialId),
       {
         code: values.code,
         name: values.name,
         description: values.description || null,
         workshops: values.workshops.split(",").map((w) => w.trim()).filter(Boolean),
-        pricingModel: values.pricingModel,
+        // The form keeps `pricingModel` as a free string; the catalog
+        // schema narrows it to a union. Trust the form widget's options.
+        pricingModel: values.pricingModel as PricingModel,
         unitPrice: {
           none: parseFloat(values.priceNone) || 0,
           member: parseFloat(values.priceMember) || 0,
@@ -87,7 +89,7 @@ function CatalogDetailPage() {
             onSubmit={handleSubmit(onSubmit)}
             className="space-y-4 max-w-lg"
           >
-            <CatalogFormFields register={register} showActive />
+            <CatalogFormFields register={register} control={control} showActive />
             <Button type="submit" disabled={saving}>
               {saving ? (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />

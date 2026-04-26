@@ -10,7 +10,11 @@
   <div id="top-bar">
     <button id="btn-reset">Neuer Checkout</button>
   </div>
-  <webview id="checkout-view" allowpopups></webview>
+  <!-- partition: dedicated, wipeable storage for the kiosk webview.
+       The main process clears this on app start, on Neuer Checkout, and
+       on inactivity timeouts from the web app — so a closed kiosk
+       window equals a closed session. -->
+  <webview id="checkout-view" partition="persist:kiosk:volatile"></webview>
   <script src="renderer.js"></script>
 </body>
 </html>

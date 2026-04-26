@@ -27,7 +27,7 @@ Make it **easy to do the right thing**. Users should see their accumulated costs
 - **Shopping cart** (requires account): Open checkout persists across the visit. NFC sessions auto-accumulate into line items. Manual entries save on the fly. User closes checkout when done paying.
 - **Anonymous checkout** (no account): Fill in everything in one wizard session. No persistence, no shopping cart.
 
-**Account creation**: Self-registration exists — enter email → receive magic link → account auto-created. The `vereinsmitglied` role is granted by admins to financial supporters of the Verein; it affects pricing (discounted rates) but is not auto-assigned.
+**Account creation**: Self-registration exists — enter email → receive a 6-digit code (or magic link) → account auto-created. The `vereinsmitglied` role is granted by admins to financial supporters of the Verein; it affects pricing (discounted rates) but is not auto-assigned.
 
 ### Machine gating
 

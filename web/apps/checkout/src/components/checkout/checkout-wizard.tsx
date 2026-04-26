@@ -5,17 +5,14 @@ import { useState, useEffect, useRef, useMemo } from "react"
 import { useAuth } from "@modules/lib/auth"
 import { useTokenAuth } from "@modules/lib/token-auth"
 import { useCollection } from "@modules/lib/firestore"
+import { where, orderBy } from "firebase/firestore"
+import { httpsCallable } from "firebase/functions"
 import {
-  where,
-  orderBy,
-  addDoc,
-  updateDoc,
-  collection,
-  serverTimestamp,
-  doc,
-} from "firebase/firestore"
-import { userRef } from "@modules/lib/firestore-helpers"
-import { useDb } from "@modules/lib/firebase-context"
+  userRef,
+  checkoutsCollection,
+  checkoutItemsCollection,
+} from "@modules/lib/firestore-helpers"
+import { useDb, useFunctions } from "@modules/lib/firebase-context"
 import { usePricingConfig } from "@modules/lib/workshop-config"
 import { calculateFee } from "@modules/lib/pricing"
 import { PageLoading } from "@modules/components/page-loading"
@@ -23,7 +20,7 @@ import { CheckoutProgress } from "./checkout-progress"
 import { StepCheckin } from "./step-checkin"
 import { StepWorkshops } from "./step-workshops"
 import { StepCheckout } from "./step-checkout"
-import { PaymentResult } from "./payment-result"
+import { PaymentResult, type PaymentData } from "./payment-result"
 import {
   useCheckoutState,
   type CheckoutAction,
@@ -40,34 +37,17 @@ interface CheckoutWizardProps {
   onActiveChange?: (active: boolean) => void
 }
 
-interface CheckoutDoc {
-  userId: { id: string }
-  status: "open" | "closed"
-  usageType: string
-  workshopsVisited: string[]
-}
-
-interface CheckoutItemDoc {
-  workshop: string
-  description: string
-  origin: "nfc" | "manual" | "qr"
-  catalogId: { id: string } | null
-  pricingModel?: string | null
-  quantity: number
-  unitPrice: number
-  totalPrice: number
-  formInputs?: { quantity: number; unit: string }[]
-}
-
 export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange }: CheckoutWizardProps) {
   const db = useDb()
-  const { user, userDoc, signOut } = useAuth()
+  const functions = useFunctions()
+  const { user, userDoc, signOut, signInAnonymouslyIfNeeded } = useAuth()
   const { tokenUser, loading: tokenLoading, isTagAuth, tagSignOut } = useTokenAuth(
     picc ?? null,
     cmac ?? null,
   )
   const { state, dispatch } = useCheckoutState(initialStep)
   const [submitting, setSubmitting] = useState(false)
+  const [paymentData, setPaymentData] = useState<PaymentData | null>(null)
   const { data: pricingConfig, loading: loadingConfig } = usePricingConfig()
 
   // Determine auth mode (tag-auth signs into Firebase Auth too, but is not
@@ -84,25 +64,23 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
       : undefined
 
   // Find open checkout for identified user
-  const { data: openCheckouts, loading: loadingCheckout } =
-    useCollection<CheckoutDoc>(
-      identifiedUserRef ? "checkouts" : null,
-      ...(identifiedUserRef
-        ? [
-            where("userId", "==", identifiedUserRef),
-            where("status", "==", "open"),
-          ]
-        : []),
-    )
+  const { data: openCheckouts, loading: loadingCheckout } = useCollection(
+    identifiedUserRef ? checkoutsCollection(db) : null,
+    ...(identifiedUserRef
+      ? [
+          where("userId", "==", identifiedUserRef),
+          where("status", "==", "open"),
+        ]
+      : []),
+  )
   const openCheckout = openCheckouts[0] ?? null
   const checkoutId = openCheckout?.id ?? null
 
   // Load checkout items
-  const { data: checkoutItems, loading: loadingItems } =
-    useCollection<CheckoutItemDoc>(
-      checkoutId ? `checkouts/${checkoutId}/items` : null,
-      orderBy("created"),
-    )
+  const { data: checkoutItems, loading: loadingItems } = useCollection(
+    checkoutId ? checkoutItemsCollection(db, checkoutId) : null,
+    orderBy("created"),
+  )
 
   // Map to local shape
   const items: CheckoutItemLocal[] = useMemo(
@@ -117,7 +95,7 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         totalPrice: item.totalPrice,
-        formInputs: item.formInputs,
+        formInputs: item.formInputs ?? undefined,
       })),
     [checkoutItems],
   )
@@ -155,10 +133,22 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Always-current reset callback; stored in a ref so the timeout closure
   // never captures a stale dispatch reference.
-  const onResetRef = useRef<(() => void) | null>(null)
-  onResetRef.current = () => {
+  const onResetRef = useRef<(() => Promise<void>) | null>(null)
+  onResetRef.current = async () => {
     dispatch({ type: "RESET" })
-    tagSignOut()
+    await tagSignOut()
+    // In the Electron kiosk app, also wipe the webview's session storage
+    // so any leftover Firebase Auth state from this session is gone.
+    // Defined by the kiosk preload (see checkout-kiosk/preload.js); a
+    // no-op in regular browsers.
+    const kioskApi = (window as unknown as { kiosk?: { resetSession?: () => Promise<void> } }).kiosk
+    if (kioskApi?.resetSession) {
+      try {
+        await kioskApi.resetSession()
+      } catch (err) {
+        console.error("Failed to reset kiosk session:", err)
+      }
+    }
     window.history.replaceState(null, "", kiosk ? "/?kiosk" : "/")
   }
 
@@ -191,12 +181,12 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
   useEffect(() => {
     if (!state.submitted || isAccountLoggedIn) return
     const timer = setTimeout(() => {
-      dispatch({ type: "RESET" })
-      tagSignOut()
-      window.history.replaceState(null, "", kiosk ? "/?kiosk" : "/")
+      // Reuse the unified reset callback so we get the same kiosk
+      // session wipe + tagSignOut + URL replace as the inactivity path.
+      onResetRef.current?.()
     }, 30_000)
     return () => clearTimeout(timer)
-  }, [state.submitted, isAccountLoggedIn, dispatch, kiosk, tagSignOut])
+  }, [state.submitted, isAccountLoggedIn])
 
   // Sign out tag auth when wizard unmounts (new tag replaces this instance)
   useEffect(() => {
@@ -223,11 +213,13 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
   if (state.submitted) {
     return (
       <PaymentResult
-        checkoutId={state.checkoutId!}
+        checkoutId={state.checkoutId}
         totalPrice={state.totalPrice}
+        initialPaymentData={paymentData}
         resetLabel={isAccountLoggedIn ? "Zurück zum Besuch" : undefined}
         onReset={() => {
           dispatch({ type: "RESET" })
+          setPaymentData(null)
           if (isAccountLoggedIn) {
             window.location.href = "/visit"
           } else {
@@ -242,7 +234,17 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
   const handleSubmit = async () => {
     setSubmitting(true)
     try {
-      // Calculate entry fees
+      // Truly-anonymous flow: sign into Firebase Anonymous Auth before
+      // calling the bill callable. Each anonymous checkout becomes a
+      // distinct Firebase principal, which lets the rules require
+      // isAnonymousAuth() rather than the old `if true` create branch.
+      // No-op if a session (real, anonymous, or tag) already exists.
+      if (isAnonymous) {
+        await signInAnonymouslyIfNeeded()
+      }
+
+      // Calculate entry fees (client-side estimate for the receipt; the
+      // server recomputes authoritatively in closeCheckoutAndGetPayment).
       const entryFees = state.persons.reduce(
         (sum, p) => sum + calculateFee(p.userType, state.usageType, pricingConfig),
         0,
@@ -278,66 +280,84 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
         tip: state.tip,
       }
 
+      // One callable round-trip closes (or creates+closes) the checkout,
+      // creates the bill, and returns the QR data. Replaces the old async
+      // chain (Firestore write → trigger → second callable for QR), which
+      // also stalled the anonymous flow because the checkouts read rule
+      // requires isSignedIn().
+      const closeCheckoutAndGetPayment = httpsCallable<
+        {
+          checkoutId?: string
+          newCheckout?: {
+            userId: string | null
+            workshopsVisited: string[]
+            items: {
+              workshop: string
+              description: string
+              origin: string
+              catalogId: string | null
+              quantity: number
+              unitPrice: number
+              totalPrice: number
+              formInputs?: { quantity: number; unit: string }[]
+              pricingModel?: string | null
+            }[]
+          }
+          usageType: string
+          persons: typeof persons
+          summary: typeof summary
+        },
+        PaymentData
+      >(functions, "closeCheckoutAndGetPayment")
+
+      let resultCheckoutId: string | null
+
       if (checkoutId) {
-        // Close existing open checkout
-        await updateDoc(doc(db, "checkouts", checkoutId), {
-          status: "closed",
-          usageType: state.usageType,
-          persons,
-          closedAt: serverTimestamp(),
-          notes: null,
-          summary,
-          modifiedBy: user?.uid ?? null,
-          modifiedAt: serverTimestamp(),
-        })
-
-        dispatch({
-          type: "SET_SUBMITTED",
+        const { data } = await closeCheckoutAndGetPayment({
           checkoutId,
-          totalPrice: total,
-        })
-      } else {
-        // Anonymous checkout — create closed checkout in one shot
-        const checkoutDocRef = await addDoc(collection(db, "checkouts"), {
-          userId: identifiedUserRef ?? null,
-          status: "closed",
           usageType: state.usageType,
-          created: serverTimestamp(),
-          workshopsVisited: [...new Set(effectiveItems.map((i) => i.workshop))],
           persons,
-          closedAt: serverTimestamp(),
-          notes: null,
           summary,
-          modifiedBy: user?.uid ?? null,
-          modifiedAt: serverTimestamp(),
         })
-
-        // Create items in subcollection for anonymous
-        for (const item of effectiveItems) {
-          await addDoc(
-            collection(db, "checkouts", checkoutDocRef.id, "items"),
-            {
-              workshop: item.workshop,
-              description: item.description,
-              origin: item.origin,
-              catalogId: item.catalogId
-                ? doc(db, "catalog", item.catalogId)
-                : null,
-              created: serverTimestamp(),
-              quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              totalPrice: item.totalPrice,
-              formInputs: item.formInputs ?? null,
-            },
-          )
+        setPaymentData(data)
+        resultCheckoutId = checkoutId
+      } else {
+        const newCheckout = {
+          // Preserve the original semantic: an account/tag user with no
+          // pre-existing open checkout still gets their userId stamped on
+          // the new doc. Only truly anonymous visitors send null.
+          userId: identifiedUserRef?.id ?? null,
+          workshopsVisited: [...new Set(effectiveItems.map((i) => i.workshop))],
+          items: effectiveItems.map((item) => ({
+            workshop: item.workshop,
+            description: item.description,
+            origin: item.origin,
+            catalogId: item.catalogId,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            totalPrice: item.totalPrice,
+            ...(item.formInputs ? { formInputs: item.formInputs } : {}),
+            ...(item.pricingModel ? { pricingModel: item.pricingModel } : {}),
+          })),
         }
 
-        dispatch({
-          type: "SET_SUBMITTED",
-          checkoutId: checkoutDocRef.id,
-          totalPrice: total,
+        const { data } = await closeCheckoutAndGetPayment({
+          newCheckout,
+          usageType: state.usageType,
+          persons,
+          summary,
         })
+        setPaymentData(data)
+        // The callable creates the doc server-side; the client never needs
+        // the new id (PaymentResult uses initialPaymentData directly).
+        resultCheckoutId = null
       }
+
+      dispatch({
+        type: "SET_SUBMITTED",
+        checkoutId: resultCheckoutId,
+        totalPrice: total,
+      })
     } finally {
       setSubmitting(false)
     }

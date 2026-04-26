@@ -3,9 +3,8 @@
 
 import PDFDocument from "pdfkit";
 import { SwissQRBill } from "swissqrbill/pdf";
-import { format } from "date-fns";
-import { de } from "date-fns/locale";
 import { resolve } from "node:path";
+import { formatWorkshopDateTime } from "../util/workshop_timezone";
 import { formatInvoiceNumber } from "./types";
 import type { InvoiceData, InvoiceCheckout, PaymentConfig } from "./types";
 import type { PricingModel } from "../types/firestore_entities";
@@ -46,6 +45,7 @@ const UNIT_LABELS: Record<string, string> = {
   count: "Stk.",
   weight: "kg",
   direct: "",
+  sla: "l",
 };
 
 const PAID_VIA_LABELS: Record<string, string> = {
@@ -75,11 +75,11 @@ function unitLabel(pricingModel?: PricingModel | null): string {
 }
 
 function formatDate(date: Date): string {
-  return format(date, "dd.MM.yyyy HH:mm", { locale: de });
+  return formatWorkshopDateTime(date, "dd.MM.yyyy HH:mm");
 }
 
 function formatDateOnly(date: Date): string {
-  return format(date, "dd.MM.yyyy", { locale: de });
+  return formatWorkshopDateTime(date, "dd.MM.yyyy");
 }
 
 function ensureSpace(doc: PDFKit.PDFDocument, y: number, needed: number): number {
@@ -367,8 +367,20 @@ function renderCheckoutSection(
 
     let workshopTotal = 0;
     for (const item of items) {
-      const unit = unitLabel(item.pricingModel);
-      y = renderItemRow(doc, y, item.description, unit, item.quantity, item.unitPrice, item.totalPrice);
+      if (item.pricingModel === "sla") {
+        // SLA has two pricing axes (resin volume + layer count); the single
+        // quantity × unitPrice column pair can't express that without reading
+        // as an arithmetic falsehood. Render the axes in the description and
+        // skip the middle columns — only totalPrice stays.
+        const axes = (item.formInputs ?? [])
+          .map((fi) => `${formatQty(fi.quantity)} ${fi.unit}`)
+          .join(" · ");
+        const desc = axes ? `${item.description} (${axes})` : item.description;
+        y = renderItemRow(doc, y, desc, "", null, null, item.totalPrice);
+      } else {
+        const unit = unitLabel(item.pricingModel);
+        y = renderItemRow(doc, y, item.description, unit, item.quantity, item.unitPrice, item.totalPrice);
+      }
       workshopTotal += item.totalPrice;
     }
     y = renderSubtotalRow(doc, y, workshopTotal);

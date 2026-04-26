@@ -1,6 +1,12 @@
 {
   // Cross-cutting fields: modifiedBy (string|null) and modifiedAt (timestamp)
   // are automatically added by the web mutation hook on all writable collections.
+  //
+  // Cross-collection links: every link between documents is stored as a
+  // Firestore DocumentReference, never a plain string ID. The single
+  // exception is `price_lists.items` (plain strings) — that field is read
+  // back via Firestore's documentId() `in` query, which only accepts raw
+  // document IDs. See docs/adr/0023-canonical-firestore-access.md.
 
   "price_lists": {
     "{priceListId}": {
@@ -17,9 +23,12 @@
       "code": "string", // Unique human-manageable lookup code (e.g., "1042")
       "name": "string", // e.g., "Stationäre Maschinen", "Sperrholz Birke 4mm"
       "workshops": ["string"], // e.g., ["holz"], ["holz", "metall"]
-      "pricingModel": "time | area | length | count | weight | direct",
-      // time → hours, area → m², length → meters, count → pieces, weight → kg, direct → CHF
+      "pricingModel": "time | area | length | count | weight | direct | sla",
+      // time → hours, area → m², length → meters, count → pieces, weight → kg,
+      // direct → CHF, sla → resin (ml, priced per L via unitPrice) + layers
+      // (count, priced via global config.pricing.slaLayerPrice)
       "unitPrice": { // Conditional price per base unit by discount level
+        // For pricingModel == "sla" this is CHF per liter of resin.
         "none": "number",
         "member": "number",
         "intern": "number"
@@ -53,11 +62,16 @@
       "created": "timestamp", // When the authentication was initiated
 
       // Crypto state for 3-pass mutual auth - set to null once auth completes successfully
-      // If non-null after ~1 min, auth timed out (cleanup via scheduled function)
       "inProgressAuth": {
         "rndA": "bytes", // Cloud-generated random (RndA)
         "rndB": "bytes"  // Tag's random after decryption (RndB)
-      } // | null
+      }, // | null
+
+      // Firestore TTL field (auto-delete). Set to created + 5 min on
+      // AuthenticateTag; cleared (set to null) on successful CompleteTagAuth
+      // so completed records are retained. TTL policy declared in
+      // firestore.indexes.json. Best-effort: GC may lag up to ~24 h.
+      "ttlAt": "timestamp | null"
     }
   },
   "usage_machine": {
@@ -137,6 +151,10 @@
         "kind": { "regular": "number", "materialbezug": "number", "intern": "number", "hangenmoos": "number" },
         "firma": { "regular": "number", "materialbezug": "number", "intern": "number", "hangenmoos": "number" }
       },
+      // SLA resin prints: per-layer CHF cost (constant across all resin types,
+      // hardware-wear-driven) by discount level. Per-liter resin price lives
+      // on each catalog entry's unitPrice.
+      "slaLayerPrice": { "none": "number", "member": "number", "intern": "number" },
       "workshops": {
         "{workshopId}": { // e.g., "holz", "metall", "makerspace"
           "label": "string", // Display name (e.g., "Holzwerkstatt")
@@ -202,7 +220,19 @@
       "userId": "DocumentReference", // DocumentReference to /users/{userId}
       "registered": "timestamp", // time the token was added to the user's profile
       "deactivated": "timestamp", // optional timestamp, when set the token is not in use anymore
-      "label": "string" // Token label (e.g., "Key 1")
+      "label": "string", // Token label (e.g., "Key 1")
+      "lastSdmCounter": "number" // Last observed SDM read counter (24-bit). Updated atomically by verifyTagCheckout for replay defense; treated as 0 when absent.
+    }
+  },
+  "loginCodes": {
+    "{id}": { // id is a 32-byte random base64url string — also the magic-link token
+      "email": "string",            // normalized lowercase
+      "codeHash": "string",         // sha256(`${code}|${id}`)
+      "expiresAt": "timestamp",     // created + 5 min; also the Firestore TTL field (auto-delete)
+      "created": "timestamp",
+      "attempts": "number",         // verification attempts used; doc burned after 5
+      "consumedAt": "timestamp | null", // set on successful verify or when invalidated
+      "debugCode?": "string"        // EMULATOR ONLY — plaintext code for E2E tests; absent in production docs
     }
   },
   "users": {

@@ -62,12 +62,16 @@ test.describe("Anonymous checkout", () => {
     await page.getByRole("button", { name: "Senden & zur Kasse" }).click()
 
     // ── Payment result ──
-    await expect(page.getByText("Vielen Dank!")).toBeVisible({
+    await expect(page.getByText("Zu bezahlen")).toBeVisible({
       timeout: 10_000,
     })
-    await expect(page.getByText("Zu bezahlen:")).toBeVisible()
-    await expect(page.getByRole("heading", { name: "E-Banking" })).toBeVisible()
-    await expect(page.getByRole("heading", { name: "Twint" })).toBeVisible()
+    // The E-Banking / TWINT buttons only render once the bill is created
+    // server-side (onCheckoutCreatedClosed trigger) and getPaymentQrData
+    // resolves — emulator cold starts can take a few seconds.
+    await expect(page.getByRole("button", { name: /E-Banking/ })).toBeVisible({
+      timeout: 30_000,
+    })
+    await expect(page.getByRole("button", { name: /TWINT/ })).toBeVisible()
 
     // ── Verify Firestore ──
     const checkouts = await getCheckoutDocs()
@@ -159,6 +163,22 @@ test.describe("Anonymous checkout", () => {
     await expect(
       page.getByText("E-Mail muss im Format name@address.xyz eingegeben werden."),
     ).not.toBeVisible()
+
+    // ── Regression (#110): Nutzungsbestimmungen link is inlined in the
+    // checkbox label. Clicking the link does not toggle the checkbox.
+    const termsLink = page.getByRole("link", { name: "Nutzungsbestimmungen" })
+    await expect(termsLink).toHaveAttribute(
+      "href",
+      "https://werkstattwaedi.ch/nutzungsbestimmungen",
+    )
+    await expect(termsLink).toHaveAttribute("target", "_blank")
+    const termsCheckbox = page.locator("#terms-accept")
+    await expect(termsCheckbox).not.toBeChecked()
+    await termsLink.evaluate((a) =>
+      a.addEventListener("click", (e) => e.preventDefault()),
+    )
+    await termsLink.click()
+    await expect(termsCheckbox).not.toBeChecked()
 
     // Accept terms — now Weiter advances
     await page.locator("#terms-accept").click()

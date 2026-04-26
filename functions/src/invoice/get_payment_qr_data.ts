@@ -32,6 +32,26 @@ interface GetPaymentQrDataRequest {
   billId: string;
 }
 
+export interface PaymentData {
+  qrBillPayload: string;
+  paylinkUrl: string;
+  creditor: {
+    iban: string;
+    name: string;
+    street: string;
+    location: string;
+  };
+  reference: string;
+  payerName: string;
+  amount: string;
+  currency: string;
+}
+
+export interface PaymentPayer {
+  name: string;
+  email?: string;
+}
+
 /**
  * Build the Swiss QR Bill payload string (SPC format).
  * Lines 1-31 follow the Swiss Payment Standards spec.
@@ -84,6 +104,60 @@ function buildQrPayload(bill: BillEntity, scorReference: string): string {
   return lines.join("\n");
 }
 
+/**
+ * Assemble the payment data (QR payload + PayLink + display fields) for a bill.
+ * Pure with respect to Firestore — caller provides the already-loaded bill and
+ * payer info, so this can run inside or outside a transaction.
+ */
+export function buildPaymentData(
+  bill: BillEntity,
+  payer: PaymentPayer | null,
+): PaymentData {
+  const scorReference = generateScorReference(
+    String(bill.referenceNumber).padStart(9, "0"),
+  );
+
+  const qrPayload = buildQrPayload(bill, scorReference);
+
+  const paylinkParams = new URLSearchParams();
+  paylinkParams.set("amount.values", bill.amount.toFixed(2));
+  paylinkParams.set("amount.custom", "false");
+  paylinkParams.set("reference.creditor.value", scorReference);
+
+  let payerName = "";
+  if (payer) {
+    payerName = payer.name;
+    const nameParts = payer.name.trim().split(/\s+/);
+    const firstName = nameParts[0] ?? "";
+    const lastName = nameParts.slice(1).join(" ") || firstName;
+    paylinkParams.set("supporter.first_name.value", firstName);
+    paylinkParams.set("supporter.last_name.value", lastName);
+    if (payer.email) {
+      paylinkParams.set("supporter.email.value", payer.email);
+    }
+  }
+
+  const paylinkUrl = `${RAISENOW_PAYLINK_BASE_URL}/${raisenowPaylinkSolutionId.value()}?${paylinkParams.toString()}`;
+
+  // Format IBAN with spaces for display (groups of 4)
+  const ibanFormatted = paymentIban.value().replace(/\s/g, "").replace(/(.{4})/g, "$1 ").trim();
+
+  return {
+    qrBillPayload: qrPayload,
+    paylinkUrl,
+    creditor: {
+      iban: ibanFormatted,
+      name: paymentRecipientName.value(),
+      street: paymentRecipientStreet.value(),
+      location: `${paymentRecipientPostalCode.value()} ${paymentRecipientCity.value()}`,
+    },
+    reference: scorReference,
+    payerName,
+    amount: bill.amount.toFixed(2),
+    currency: paymentCurrency.value() || "CHF",
+  };
+}
+
 export const getPaymentQrData = onCall(async (request) => {
   const { billId } = request.data as GetPaymentQrDataRequest;
   if (!billId || typeof billId !== "string") {
@@ -98,57 +172,18 @@ export const getPaymentQrData = onCall(async (request) => {
 
   const bill = billDoc.data() as BillEntity;
 
-  // Generate SCOR reference from bill's reference number
-  const scorReference = generateScorReference(
-    String(bill.referenceNumber).padStart(9, "0"),
-  );
-
-  const qrPayload = buildQrPayload(bill, scorReference);
-
-  // Load payer info from first checkout
-  let payerName = "";
-  const paylinkParams = new URLSearchParams();
-  paylinkParams.set("amount.values", bill.amount.toFixed(2));
-  paylinkParams.set("amount.custom", "false");
-  paylinkParams.set("reference.creditor.value", scorReference);
-
+  // Load payer info from the first checkout's primary person
+  let payer: PaymentPayer | null = null;
   if (bill.checkouts.length > 0) {
     const checkoutDoc = await bill.checkouts[0].get();
     if (checkoutDoc.exists) {
       const checkout = checkoutDoc.data() as CheckoutEntity;
       const person = checkout.persons[0];
       if (person) {
-        payerName = person.name;
-        const nameParts = person.name.trim().split(/\s+/);
-        const firstName = nameParts[0] ?? "";
-        const lastName = nameParts.slice(1).join(" ") || firstName;
-        paylinkParams.set("supporter.first_name.value", firstName);
-        paylinkParams.set("supporter.last_name.value", lastName);
-        if (person.email) {
-          paylinkParams.set("supporter.email.value", person.email);
-        }
+        payer = { name: person.name, email: person.email };
       }
     }
   }
 
-  const paylinkUrl = `${RAISENOW_PAYLINK_BASE_URL}/${raisenowPaylinkSolutionId.value()}?${paylinkParams.toString()}`;
-
-  // Format IBAN with spaces for display (groups of 4)
-  const ibanFormatted = paymentIban.value().replace(/\s/g, "").replace(/(.{4})/g, "$1 ").trim();
-
-  return {
-    qrBillPayload: qrPayload,
-    paylinkUrl,
-    // Structured fields for QR bill display
-    creditor: {
-      iban: ibanFormatted,
-      name: paymentRecipientName.value(),
-      street: paymentRecipientStreet.value(),
-      location: `${paymentRecipientPostalCode.value()} ${paymentRecipientCity.value()}`,
-    },
-    reference: scorReference,
-    payerName,
-    amount: bill.amount.toFixed(2),
-    currency: paymentCurrency.value() || "CHF",
-  };
+  return buildPaymentData(bill, payer);
 });

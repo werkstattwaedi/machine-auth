@@ -33,14 +33,6 @@ vi.mock("firebase/firestore", async () => {
   const actual = await vi.importActual<typeof import("firebase/firestore")>("firebase/firestore")
   return {
     ...actual,
-    doc: (...args: unknown[]) => {
-      const segments = (args as unknown[]).slice(1) as string[]
-      return fakeDb.doc(...segments)
-    },
-    collection: (...args: unknown[]) => {
-      const path = args[1] as string
-      return fakeDb.collection(path)
-    },
     setDoc: (ref: ReturnType<FakeFirestore["doc"]>, data: Record<string, unknown>) => {
       fakeDb.setDoc(ref, data)
       return Promise.resolve()
@@ -72,6 +64,16 @@ function createWrapper() {
   )
 }
 
+// Hand FakeFirestore refs through; the mutation hook only forwards them
+// to the (mocked) SDK functions, so the cast is safe at runtime.
+function colRef<T = Record<string, unknown>>(path: string) {
+  return fakeDb.collection(path) as unknown as import("firebase/firestore").CollectionReference<T>
+}
+
+function docRef<T = Record<string, unknown>>(...segments: string[]) {
+  return fakeDb.doc(...segments) as unknown as import("firebase/firestore").DocumentReference<T>
+}
+
 describe("useFirestoreMutation", () => {
   beforeEach(() => {
     fakeDb = new FakeFirestore()
@@ -83,7 +85,7 @@ describe("useFirestoreMutation", () => {
     })
 
     await act(async () => {
-      await result.current.set("users", "u1", { name: "Max" })
+      await result.current.set(docRef("users", "u1"), { name: "Max" })
     })
 
     const data = fakeDb.getData("users", "u1")
@@ -96,7 +98,7 @@ describe("useFirestoreMutation", () => {
     })
 
     await act(async () => {
-      await result.current.set("users", "u1", { name: "Max" })
+      await result.current.set(docRef("users", "u1"), { name: "Max" })
     })
 
     const data = fakeDb.getData("users", "u1")
@@ -110,7 +112,7 @@ describe("useFirestoreMutation", () => {
     })
 
     await act(async () => {
-      await result.current.add("users", { name: "Anna" })
+      await result.current.add(colRef("users"), { name: "Anna" })
     })
 
     const allDocs = fakeDb.getAllDocs("users")
@@ -128,7 +130,7 @@ describe("useFirestoreMutation", () => {
     })
 
     await act(async () => {
-      await result.current.update("users", "u1", { age: 31 })
+      await result.current.update(docRef("users", "u1"), { age: 31 })
     })
 
     const data = fakeDb.getData("users", "u1")
@@ -145,7 +147,7 @@ describe("useFirestoreMutation", () => {
     })
 
     await act(async () => {
-      await result.current.remove("users", "u1")
+      await result.current.remove(docRef("users", "u1"))
     })
 
     expect(fakeDb.getData("users", "u1")).toBeUndefined()

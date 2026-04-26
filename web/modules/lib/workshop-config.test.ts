@@ -10,6 +10,7 @@ import {
   getSortedWorkshops,
   getUnitLabel,
   getShortUnit,
+  getStorageBaseUnit,
   type PricingConfig,
   type PricingModel,
 } from "./workshop-config"
@@ -37,7 +38,7 @@ describe("getSortedWorkshops", () => {
 describe("getUnitLabel", () => {
   const config: PricingConfig = {
     labels: {
-      units: { h: "Stunden", m2: "Quadratmeter", m: "Meter", stk: "Stück", kg: "Kilogramm", chf: "Franken" },
+      units: { h: "Stunden", m2: "Quadratmeter", m: "Meter", stk: "Stück", kg: "Kilogramm", chf: "Franken", l: "Liter" },
       discounts: { none: "", member: "", intern: "" },
     },
   } as unknown as PricingConfig
@@ -49,6 +50,8 @@ describe("getUnitLabel", () => {
     ["count", "Stück"],
     ["weight", "Kilogramm"],
     ["direct", "Franken"],
+    // SLA resin is priced per liter (unitPrice = CHF/l on each resin entry).
+    ["sla", "Liter"],
   ] as [PricingModel, string][])("%s → %s", (model, expected) => {
     expect(getUnitLabel(config, model)).toBe(expected)
   })
@@ -57,6 +60,7 @@ describe("getUnitLabel", () => {
     const emptyConfig = { labels: {} } as unknown as PricingConfig
     expect(getUnitLabel(emptyConfig, "time")).toBe("Std.")
     expect(getUnitLabel(emptyConfig, "area")).toBe("m²")
+    expect(getUnitLabel(emptyConfig, "sla")).toBe("l")
   })
 })
 
@@ -68,7 +72,31 @@ describe("getShortUnit", () => {
     ["count", "Stk."],
     ["weight", "kg"],
     ["direct", "CHF"],
+    ["sla", "l"],
   ] as [PricingModel, string][])("%s → %s", (model, expected) => {
     expect(getShortUnit(model)).toBe(expected)
+  })
+})
+
+describe("getStorageBaseUnit", () => {
+  // Storage convention: one SI base unit per dimension. Pinned here so a
+  // future change to the conversion layer can't silently shift what we
+  // persist in Firestore.
+  it.each([
+    ["time", "h"],
+    ["area", "m2"],
+    ["length", "m"],
+    ["weight", "kg"],
+    ["sla", "l"],
+  ] as [PricingModel, "m" | "m2" | "l" | "kg" | "h"][])(
+    "%s → %s",
+    (model, expected) => {
+      expect(getStorageBaseUnit(model)).toBe(expected)
+    },
+  )
+
+  it("returns null for non-SI pricing models", () => {
+    expect(getStorageBaseUnit("count")).toBeNull()
+    expect(getStorageBaseUnit("direct")).toBeNull()
   })
 })

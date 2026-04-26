@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: MIT
 
 import { test, expect } from "@playwright/test"
-import { clearCollections, waitForOobCode, getCheckoutDocs } from "./helpers"
+import { clearCollections, waitForLoginCode, getCheckoutDocs } from "./helpers"
 import { AUTH_USER_EMAIL } from "./global-setup"
 
 test.beforeEach(async () => {
-  await clearCollections("checkouts")
+  // loginCodes clearing resets the per-email 60 s rate limit between runs.
+  await clearCollections("checkouts", "loginCodes")
 })
 
 test.describe("Authenticated checkout", () => {
@@ -16,40 +17,40 @@ test.describe("Authenticated checkout", () => {
     await page.goto("/")
 
     // ── Checkout page shows login hint ──
-    await expect(page.getByText("Bereits registriert?")).toBeVisible({
+    await expect(
+      page.getByText("Bereits registriert oder Konto erstellen?"),
+    ).toBeVisible({
       timeout: 10_000,
     })
 
-    // Click "Anmelden" to go to /login
-    await page.locator('a[href*="/login"]').click()
+    // Click "Anmelden" (the login hint now renders both Anmelden + Registrieren
+    // links, so pin by href).
+    await page.locator('a[href="/login?redirect=/"]').click()
     await page.waitForURL("**/login**")
 
-    // ── Login page: email sign-in form ──
-    await page.getByPlaceholder("deine@email.ch").fill(AUTH_USER_EMAIL)
-    await page
-      .getByRole("button", { name: "Anmelde-Link senden" })
-      .click()
+    // ── Login page: email + code flow ──
+    await page.getByTestId("login-email-input").fill(AUTH_USER_EMAIL)
+    await page.getByTestId("login-email-submit").click()
+    await expect(page.getByTestId("login-code-stage")).toBeVisible({
+      timeout: 5000,
+    })
 
-    // Verify "link sent" message
-    await expect(
-      page.getByText("Anmelde-Link wurde an"),
-    ).toBeVisible({ timeout: 5000 })
+    // ── Read the code from Firestore (emulator writes debugCode) ──
+    const entry = await waitForLoginCode(AUTH_USER_EMAIL)
+    expect(entry).toBeTruthy()
 
-    // ── Fetch OOB code from Auth emulator ──
-    const signInCode = await waitForOobCode(
-      (c) => c.email === AUTH_USER_EMAIL && c.requestType === "EMAIL_SIGNIN",
-    )
-    expect(signInCode).toBeTruthy()
+    await page.getByTestId("login-code-input").fill(entry!.code)
+    await page.getByTestId("login-code-submit").click()
 
-    // Navigate to the sign-in link (redirects to /login as configured)
-    await page.goto(signInCode!.oobLink)
-
-    // Wait for sign-in to complete — redirects back to / via stored redirect
-    await page.waitForURL((url) => !url.href.includes("oobCode"), {
+    // Post-login the redirect target is either the stored `redirect=/` (home)
+    // or `/visit` (default landing). Accept any non-login URL.
+    await page.waitForURL((url) => !url.pathname.startsWith("/login"), {
       timeout: 10_000,
     })
 
-    // The person card should show pre-filled data (read-only paragraph with last name)
+    // Navigate to the checkout page — the logged-in user sees a pre-filled
+    // person card (read-only paragraph with last name).
+    await page.goto("/")
     await expect(page.getByText("Testuser", { exact: true })).toBeVisible({
       timeout: 10_000,
     })
@@ -77,7 +78,7 @@ test.describe("Authenticated checkout", () => {
     await page.getByRole("button", { name: "Senden & zur Kasse" }).click()
 
     // ── Payment result ──
-    await expect(page.getByText("Vielen Dank!")).toBeVisible({
+    await expect(page.getByText("Zu bezahlen")).toBeVisible({
       timeout: 10_000,
     })
 

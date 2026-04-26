@@ -102,19 +102,6 @@ export function StepCheckin({ state, dispatch, isAnonymous, kiosk, isAccountLogg
 
         {isAnonymous && (
           <div className="space-y-3 pt-2">
-            <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
-              <span className="text-sm font-bold">
-                Nutzungsbestimmungen<span className="text-[#cc2a24]">*</span>
-              </span>
-              <a
-                href="https://werkstattwaedi.ch/nutzungsbestimmungen"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm underline font-bold text-cog-teal"
-              >
-                Nutzungsbestimmungen lesen
-              </a>
-            </div>
             <div
               className={
                 submitted && termsError
@@ -140,7 +127,16 @@ export function StepCheckin({ state, dispatch, isAnonymous, kiosk, isAccountLogg
                   }}
                 />
                 <label htmlFor="terms-accept" className="text-sm leading-snug">
-                  Ich akzeptiere die Nutzungsbestimmungen
+                  Ich akzeptiere die{" "}
+                  <a
+                    href="https://werkstattwaedi.ch/nutzungsbestimmungen"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="underline font-bold text-cog-teal"
+                  >
+                    Nutzungsbestimmungen
+                  </a>
                 </label>
               </div>
               {submitted && termsError && (
@@ -210,7 +206,7 @@ function IdentityHint({
 
   // Browser — login / signup hint
   return (
-    <div className="flex items-center justify-between gap-3 rounded-[3px] border border-border bg-muted/50 px-4 py-2.5">
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 rounded-[3px] border border-border bg-muted/50 px-4 py-2.5">
       <span className="text-sm text-muted-foreground">
         Bereits registriert oder Konto erstellen?
       </span>

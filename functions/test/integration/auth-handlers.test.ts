@@ -269,6 +269,15 @@ describe("Auth Handlers (Integration)", () => {
       expect(authData?.inProgressAuth).to.not.be.null;
       expect(authData?.inProgressAuth?.rndA).to.have.length(16);
       expect(authData?.inProgressAuth?.rndB).to.have.length(16);
+
+      // Regression (issue #155): ttlAt arms the Firestore TTL policy that
+      // auto-deletes abandoned in-progress auth docs. Must be ~5 min in the
+      // future (handshake completes in seconds; 5 min is generous slack).
+      expect(authData?.ttlAt).to.exist;
+      const ttlMs = (authData?.ttlAt as Timestamp).toMillis();
+      const createdMs = (authData?.created as Timestamp).toMillis();
+      const ttlSlackMs = ttlMs - createdMs;
+      expect(ttlSlackMs).to.equal(5 * 60 * 1000);
     });
   });
 
@@ -373,12 +382,16 @@ describe("Auth Handlers (Integration)", () => {
       const rndB = crypto.randomBytes(16);
       const authId = "in-progress-auth-123";
 
-      await db.collection("authentications").doc(authId).set({
-        tokenId: db.collection("tokens").doc(TEST_TOKEN_UID),
-        keySlot: Key.KEY_APPLICATION,
-        created: Timestamp.now(),
-        inProgressAuth: { rndA, rndB },
-      });
+      await db
+        .collection("authentications")
+        .doc(authId)
+        .set({
+          tokenId: db.collection("tokens").doc(TEST_TOKEN_UID),
+          keySlot: Key.KEY_APPLICATION,
+          created: Timestamp.now(),
+          ttlAt: Timestamp.fromMillis(Date.now() + 5 * 60 * 1000),
+          inProgressAuth: { rndA, rndB },
+        });
 
       // Create valid encrypted response
       const uid = Buffer.from(TEST_TOKEN_UID, "hex");
@@ -419,6 +432,10 @@ describe("Auth Handlers (Integration)", () => {
       // Verify inProgressAuth was cleared
       const authDoc = await db.collection("authentications").doc(authId).get();
       expect(authDoc.data()?.inProgressAuth).to.be.null;
+
+      // Regression (issue #155): ttlAt is cleared on success so the Firestore
+      // TTL policy does not GC the completed auth record.
+      expect(authDoc.data()?.ttlAt).to.be.null;
     });
   });
 

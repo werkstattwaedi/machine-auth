@@ -10,13 +10,13 @@ import {
 } from "react"
 import {
   onAuthStateChanged,
-  sendSignInLinkToEmail,
-  isSignInWithEmailLink,
-  signInWithEmailLink,
+  signInAnonymously,
+  signInWithCustomToken,
   signOut as firebaseSignOut,
   GoogleAuthProvider,
   signInWithPopup,
   linkWithPopup,
+  type Auth,
   type User,
 } from "firebase/auth"
 import {
@@ -27,7 +27,8 @@ import {
   serverTimestamp,
   type Firestore,
 } from "firebase/firestore"
-import { useDb, useFirebaseAuth } from "./firebase-context"
+import { httpsCallable, type Functions } from "firebase/functions"
+import { useDb, useFirebaseAuth, useFunctions } from "./firebase-context"
 
 export interface BillingAddress {
   company: string
@@ -64,19 +65,45 @@ export function isProfileComplete(userDoc: UserDoc): boolean {
   return true
 }
 
+/**
+ * Provenance of the current Firebase Auth session.
+ *
+ * - `real`: an email-code, magic-link, or Google sign-in. Full member-area
+ *   access; user.uid equals the user doc id.
+ * - `tag`: a kiosk badge tap. Synthetic uid (`tag:…`) with `actsAs` claim;
+ *   the session is a different Firebase principal than the user and must
+ *   NOT be allowed to navigate the member area. See route guards below.
+ * - `anonymous`: Firebase signInAnonymously (Phase C). Used for the
+ *   no-account checkout path.
+ * - `null`: not signed in (or claims not yet resolved).
+ */
+export type SessionKind = "real" | "tag" | "anonymous" | null
+
 interface AuthContextValue {
   user: User | null
   userDoc: UserDoc | null
   isAdmin: boolean
+  sessionKind: SessionKind
   /** True until Firebase Auth state resolves (fast, local check). */
   loading: boolean
   /** True while the Firestore user doc is being fetched (may be slow). */
   userDocLoading: boolean
-  signInWithEmail: (email: string) => Promise<void>
+  /** Ask the server to email a 6-digit code + magic link. */
+  requestLoginEmail: (email: string) => Promise<void>
+  /** Redeem the 6-digit code and sign in. */
+  verifyLoginCode: (email: string, code: string) => Promise<void>
+  /** Redeem a magic-link token (read from ?token=…) and sign in. Returns true if redeemed. */
+  completeMagicLink: (token: string) => Promise<boolean>
   signInWithGoogle: () => Promise<void>
-  completeSignIn: () => Promise<boolean>
   linkGoogle: () => Promise<void>
   signOut: () => Promise<void>
+  /**
+   * Sign in as a Firebase Anonymous user if no session exists. Used by the
+   * truly-anonymous checkout path so Firestore rules can gate on a real
+   * principal rather than `if true` for unauth writes. No-op if a session
+   * (real, anonymous, or tag) already exists.
+   */
+  signInAnonymouslyIfNeeded: () => Promise<void>
   /** Set when Google sign-in failed because an email-link account exists. */
   pendingGoogleLink: boolean
   clearPendingGoogleLink: () => void
@@ -87,27 +114,73 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const auth = useFirebaseAuth()
   const db = useDb()
+  const functions = useFunctions()
   const [user, setUser] = useState<User | null>(null)
   const [userDoc, setUserDoc] = useState<UserDoc | null>(null)
   const [loading, setLoading] = useState(true)
   const [userDocLoading, setUserDocLoading] = useState(false)
+  const [sessionKind, setSessionKind] = useState<SessionKind>(null)
 
-  // Listen to Firebase Auth state
+  // Listen to Firebase Auth state. Resolve sessionKind from the ID-token
+  // claims so callers can distinguish a real login from a kiosk tag-tap.
   useEffect(() => {
     return onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser)
       if (!firebaseUser) {
         setUserDoc(null)
+        setSessionKind(null)
+        setLoading(false)
+        setUserDocLoading(false)
+        return
       }
-      // Always resolve auth loading immediately - don't wait for Firestore
+
+      // Tag sessions are minted with a synthetic uid like `tag:{userId}:{nonce}`.
+      // We use the prefix as a fail-safe identifier that doesn't depend on
+      // a successful network round-trip to decode claims — see the catch
+      // block below.
+      const uidIsTag = firebaseUser.uid.startsWith("tag:")
+
+      // Resolve sessionKind from token claims. The tag-tap session is the
+      // one that must be locked out of the member area; everything else
+      // is "real" (email/magic-link/Google) or "anonymous" (Phase C).
+      try {
+        const tokenResult = await firebaseUser.getIdTokenResult()
+        const claims = tokenResult.claims as { tagCheckout?: unknown; actsAs?: unknown }
+        if (claims.tagCheckout === true || typeof claims.actsAs === "string" || uidIsTag) {
+          setSessionKind("tag")
+        } else if (firebaseUser.isAnonymous) {
+          setSessionKind("anonymous")
+        } else {
+          setSessionKind("real")
+        }
+      } catch {
+        // Token decoding failed (network partition, expired refresh, …).
+        // Fail safe: a tag-shaped uid stays a tag session, so the route
+        // guards still bounce it out of the member area. Anything else
+        // we treat as real to avoid accidental lockouts of legitimate
+        // members.
+        setSessionKind(uidIsTag ? "tag" : "real")
+      }
+
       setLoading(false)
-      setUserDocLoading(!!firebaseUser)
+      // Tag sessions don't have a user doc at users/{user.uid} — the
+      // synthetic uid never spawned one. Skip the Firestore subscription
+      // and the loading flag so the UI doesn't spin forever.
+      setUserDocLoading(!uidIsTag)
     })
   }, [auth])
 
-  // Listen to Firestore user doc when authenticated (doc ID = Auth UID)
+  // Listen to Firestore user doc when authenticated (doc ID = Auth UID).
+  // Tag-tap sessions have a synthetic uid (`tag:…`) and no corresponding
+  // user doc; skip the subscription entirely (the kiosk reads pre-fill
+  // data from useTokenAuth's response).
   useEffect(() => {
     if (!user) return
+    if (user.uid.startsWith("tag:")) {
+      setUserDoc(null)
+      setUserDocLoading(false)
+      return
+    }
 
     const userDocRef = doc(db, "users", user.uid)
 
@@ -163,7 +236,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         "code" in error &&
         (error as { code: string }).code === "auth/account-exists-with-different-credential"
       ) {
-        // Existing email-link account — user must sign in via email first, then link
+        // Existing email account — user must sign in via email first, then link
         window.localStorage.setItem("pendingGoogleLink", "true")
         setPendingGoogleLink(true)
       }
@@ -182,38 +255,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setPendingGoogleLink(false)
   }
 
-  const signInWithEmail = async (email: string) => {
-    await sendSignInLinkToEmail(auth, email, {
-      url: `${window.location.origin}/login`,
-      handleCodeInApp: true,
-    })
-    window.localStorage.setItem("emailForSignIn", email)
+  const requestLoginEmail = async (email: string) => {
+    const fn = httpsCallable<{ email: string }, { ok: true }>(
+      functions,
+      "requestLoginCode"
+    )
+    await fn({ email })
   }
 
-  const completeSignIn = async (): Promise<boolean> => {
-    if (!isSignInWithEmailLink(auth, window.location.href)) {
-      return false
-    }
-
-    let email = window.localStorage.getItem("emailForSignIn")
-    if (!email) {
-      email = window.prompt("Bitte E-Mail-Adresse bestätigen:")
-    }
-    if (!email) throw new Error("E-Mail-Adresse benötigt")
-
-    const credential = await signInWithEmailLink(
+  const verifyLoginCode = async (email: string, code: string) => {
+    await redeemCustomToken(
+      functions,
+      "verifyLoginCode",
+      { email, code },
       auth,
-      email,
-      window.location.href
+      db
     )
-    window.localStorage.removeItem("emailForSignIn")
+  }
 
-    await handleSignIn(db, credential.user)
+  const completeMagicLink = async (token: string): Promise<boolean> => {
+    if (!token) return false
+    await redeemCustomToken(
+      functions,
+      "verifyMagicLink",
+      { token },
+      auth,
+      db
+    )
     return true
   }
 
   const signOut = async () => {
     await firebaseSignOut(auth)
+  }
+
+  const signInAnonymouslyIfNeeded = async () => {
+    if (auth.currentUser) return
+    await signInAnonymously(auth)
   }
 
   const isAdmin = userDoc?.roles?.includes("admin") ?? false
@@ -223,13 +301,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       userDoc,
       isAdmin,
+      sessionKind,
       loading,
       userDocLoading,
-      signInWithEmail,
+      requestLoginEmail,
+      verifyLoginCode,
+      completeMagicLink,
       signInWithGoogle,
-      completeSignIn,
       linkGoogle,
       signOut,
+      signInAnonymouslyIfNeeded,
       pendingGoogleLink,
       clearPendingGoogleLink,
     }}>
@@ -242,6 +323,22 @@ export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext)
   if (!ctx) throw new Error("useAuth must be used within AuthProvider")
   return ctx
+}
+
+async function redeemCustomToken(
+  functions: Functions,
+  name: "verifyLoginCode" | "verifyMagicLink",
+  payload: Record<string, string>,
+  auth: Auth,
+  db: Firestore
+): Promise<void> {
+  const fn = httpsCallable<Record<string, string>, { customToken: string }>(
+    functions,
+    name
+  )
+  const { data } = await fn(payload)
+  const credential = await signInWithCustomToken(auth, data.customToken)
+  await handleSignIn(db, credential.user)
 }
 
 /**

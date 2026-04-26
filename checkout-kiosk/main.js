@@ -1,16 +1,48 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-const { app, BrowserWindow, ipcMain } = require("electron")
+const { app, BrowserWindow, ipcMain, session } = require("electron")
 const path = require("path")
 const { NFC } = require("nfc-pcsc")
 
 const CHECKOUT_URL =
   process.env.CHECKOUT_URL || "https://localhost:5173/?kiosk"
 
+// Per-kiosk Bearer secret used to authenticate the verifyTagCheckout call.
+// This is a soft revocation/audit knob, NOT real attestation — anyone with
+// local admin on this Windows box can extract it. The structural defense
+// is the synthetic-UID custom token that verifyTagCheckout returns. See
+// docs/Security Analysis.md and the plan in /home/michschn/.claude/plans/.
+const KIOSK_BEARER_KEY = process.env.KIOSK_BEARER_KEY || ""
+const IS_DEV = CHECKOUT_URL.includes("localhost")
+
+if (!KIOSK_BEARER_KEY && !IS_DEV) {
+  console.error(
+    "FATAL: KIOSK_BEARER_KEY env var is required in production. Refusing to start."
+  )
+  process.exit(1)
+}
+
 // Accept self-signed certs in dev (Vite basicSsl plugin)
-if (CHECKOUT_URL.includes("localhost")) {
+if (IS_DEV) {
   app.commandLine.appendSwitch("ignore-certificate-errors")
+}
+
+// Dedicated, partition-scoped session for the checkout webview. Phase D2
+// wipes this on app start, on Neuer Checkout, and on inactivity-timeout
+// from the renderer — so a closed/reopened kiosk window never resurrects
+// a previous user's Firebase Auth session from IndexedDB.
+const KIOSK_PARTITION = "persist:kiosk:volatile"
+
+async function clearKioskSession() {
+  try {
+    const sess = session.fromPartition(KIOSK_PARTITION)
+    await sess.clearStorageData()
+    await sess.clearCache()
+    console.log("Kiosk session storage cleared")
+  } catch (err) {
+    console.error("Failed to clear kiosk session:", err.message)
+  }
 }
 
 let mainWindow
@@ -26,10 +58,48 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       webviewTag: true,
+      // Explicit security defaults. These are the modern Electron defaults
+      // but stating them keeps future Electron upgrades from regressing
+      // silently.
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
     },
   })
 
   mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"))
+
+  // Refuse to open new windows or navigate the chrome away from the
+  // bundled renderer page. The webview can still navigate within itself
+  // (handled separately on its own webContents below).
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }))
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    if (!url.startsWith("file://")) {
+      event.preventDefault()
+    }
+  })
+
+  // The webview's webContents is created lazily; lock it down on attach.
+  mainWindow.webContents.on(
+    "did-attach-webview",
+    (_event, webviewWebContents) => {
+      webviewWebContents.setWindowOpenHandler(() => ({ action: "deny" }))
+      webviewWebContents.on("will-navigate", (event, navUrl) => {
+        try {
+          const allowed = new URL(CHECKOUT_URL).origin
+          const target = new URL(navUrl).origin
+          if (target !== allowed) {
+            console.warn(
+              `Blocked webview navigation to off-origin URL: ${navUrl}`
+            )
+            event.preventDefault()
+          }
+        } catch {
+          event.preventDefault()
+        }
+      })
+    }
+  )
 
   // Pass checkout URL to renderer
   mainWindow.webContents.on("did-finish-load", () => {
@@ -157,7 +227,11 @@ function parseNdefUri(ndef) {
 
 // --- App lifecycle ---
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  // Always start from a clean session — any leftover IndexedDB / cookies
+  // from a previous run (e.g., a Firebase Auth session of the last user)
+  // is wiped before the renderer attaches its webview.
+  await clearKioskSession()
   createWindow()
   initNfc()
 })
@@ -167,3 +241,17 @@ app.on("window-all-closed", () => {
 })
 
 ipcMain.handle("get-checkout-url", () => CHECKOUT_URL)
+
+// Handed to the renderer's window.kiosk.bearer() — used by the web app's
+// useTokenAuth to set Authorization: Bearer on the verifyTagCheckout call.
+// Empty string in dev means "no header"; the Functions emulator middleware
+// bypasses the Bearer check.
+ipcMain.handle("get-kiosk-bearer", () => KIOSK_BEARER_KEY)
+
+// Handed to the renderer's window.kiosk.resetSession() — fired from the
+// Neuer Checkout button and from the web app's inactivity / post-payment
+// reset paths. Wipes IndexedDB + localStorage + cookies + cache for the
+// kiosk partition, so even a half-finished tag-tap session is gone.
+ipcMain.handle("reset-kiosk-session", async () => {
+  await clearKioskSession()
+})

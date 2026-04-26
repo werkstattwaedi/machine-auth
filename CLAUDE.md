@@ -117,6 +117,40 @@ await sessionRef.set({ userId: userDoc.ref });
 await sessionRef.set({ userId: `/users/${userId}` });
 ```
 
+**TTL retention contracts** (Firestore TTL policies in `firestore/firestore.indexes.json`):
+- `loginCodes.expiresAt`: created + 5 min — auto-deletes consumed/expired magic-link codes.
+- `authentications.ttlAt`: created + 5 min for in-progress auth; cleared (set to `null`) on successful completion so completed records are retained indefinitely.
+
+### Canonical Firestore access (web apps)
+
+All web reads and writes go through the typed builders in
+`web/modules/lib/firestore-helpers.ts`. The hooks (`useDocument`,
+`useCollection`) and the mutation API (`useFirestoreMutation`) accept
+typed `DocumentReference<T>` / `CollectionReference<T>` only — string
+paths are not accepted. Doc shapes live in
+`web/modules/lib/firestore-entities.ts`. See
+[`docs/adr/0023-canonical-firestore-access.md`](docs/adr/0023-canonical-firestore-access.md).
+
+```tsx
+import { useDb } from "@modules/lib/firebase-context"
+import { userRef, machinesCollection } from "@modules/lib/firestore-helpers"
+import { useDocument, useCollection } from "@modules/lib/firestore"
+import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
+
+function MyPage({ userId }: { userId: string }) {
+  const db = useDb()
+  const { data: user } = useDocument(userRef(db, userId))
+  const { data: machines } = useCollection(machinesCollection(db))
+  const { update } = useFirestoreMutation()
+
+  // Writes that point at another doc use the typed helpers too:
+  return <Button onClick={() => update(userRef(db, userId), { foo: "bar" })} />
+}
+```
+
+Do not redefine `*Doc` types inline — import them from
+`@modules/lib/firestore-entities`.
+
 ## Local Development
 
 One-command startup:
@@ -194,6 +228,8 @@ New screenshot tests automatically run at both viewports — no extra configurat
 - `web/apps/checkout/e2e/*.spec.ts-snapshots/` — Screenshot baselines for visual regression tests
 - `functions/src/**/*.test.ts` — Functions unit tests (Mocha)
 - `functions/test/integration/` — Functions integration tests (Mocha + emulator)
+
+**When adding a new owner-scoped Firestore collection,** add cross-user negative tests to `web/modules/test/cross-user-rules.integration.test.ts` (matrix: other-user read/write/delete, anon, tag-tap, admin carve-out). This file is the regression net for the B2 launch-readiness incident (cross-user `checkouts` read leak) — it must fail loudly if any owner-scoped rule is ever loosened.
 
 ## Web Application
 

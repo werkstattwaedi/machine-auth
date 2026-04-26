@@ -7,6 +7,7 @@ import {
   setSeconds,
   setMilliseconds,
 } from "date-fns";
+import { getWorkshopTimezone } from "./workshop_timezone";
 
 /**
  * Calculates the expiration time for a session (3am the next day in configured timezone)
@@ -18,7 +19,7 @@ export function calculateSessionExpiration(
   startTime: Timestamp,
   timezone?: string
 ): Timestamp {
-  const tz = timezone || process.env.SESSION_TIMEZONE || "Europe/Zurich";
+  const tz = timezone || getWorkshopTimezone();
 
   const startDate = startTime.toDate();
 

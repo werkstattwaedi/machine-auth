@@ -1,19 +1,24 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
+/**
+ * Canonical write API for the web apps. All mutations go through typed
+ * `DocumentReference<T>` / `CollectionReference<T>` from
+ * `firestore-helpers.ts` — never raw string paths. Audit fields
+ * (`modifiedBy`, `modifiedAt`) are stamped automatically on every write.
+ */
+
 import { useState, useCallback } from "react"
 import {
-  doc,
   setDoc,
   updateDoc,
   deleteDoc,
   addDoc,
-  collection,
   serverTimestamp,
+  type CollectionReference,
   type DocumentData,
   type DocumentReference,
 } from "firebase/firestore"
-import { useDb } from "../lib/firebase-context"
 import { useAuth } from "../lib/auth"
 import { toast } from "sonner"
 
@@ -28,7 +33,6 @@ interface MutationState {
 }
 
 export function useFirestoreMutation() {
-  const db = useDb()
   const { user } = useAuth()
   const [state, setState] = useState<MutationState>({
     loading: false,
@@ -36,19 +40,19 @@ export function useFirestoreMutation() {
   })
 
   const withAuditFields = useCallback(
-    (data: DocumentData): DocumentData => ({
+    <T extends DocumentData>(data: T): T & DocumentData => ({
       ...data,
       modifiedBy: user?.uid ?? null,
       modifiedAt: serverTimestamp(),
     }),
-    [user]
+    [user],
   )
 
   const mutate = useCallback(
-    async (
-      fn: () => Promise<void | DocumentReference>,
-      options?: MutationOptions
-    ) => {
+    async <R = void>(
+      fn: () => Promise<R>,
+      options?: MutationOptions,
+    ): Promise<R> => {
       setState({ loading: true, error: null })
       try {
         const result = await fn()
@@ -62,50 +66,52 @@ export function useFirestoreMutation() {
         throw error
       }
     },
-    []
+    [],
   )
 
   const set = useCallback(
-    (
-      path: string,
-      id: string,
-      data: DocumentData,
-      options?: MutationOptions
+    <T extends DocumentData>(
+      ref: DocumentReference<T>,
+      data: T,
+      options?: MutationOptions,
     ) =>
       mutate(
-        () => setDoc(doc(db, path, id), withAuditFields(data)),
-        options
+        () => setDoc(ref, withAuditFields(data) as T),
+        options,
       ),
-    [mutate, withAuditFields, db]
+    [mutate, withAuditFields],
   )
 
   const add = useCallback(
-    (collectionPath: string, data: DocumentData, options?: MutationOptions) =>
+    <T extends DocumentData>(
+      ref: CollectionReference<T>,
+      data: T,
+      options?: MutationOptions,
+    ) =>
       mutate(
-        () => addDoc(collection(db, collectionPath), withAuditFields(data)),
-        options
+        () => addDoc(ref, withAuditFields(data) as T),
+        options,
       ),
-    [mutate, withAuditFields, db]
+    [mutate, withAuditFields],
   )
 
   const update = useCallback(
-    (
-      path: string,
-      id: string,
-      data: DocumentData,
-      options?: MutationOptions
+    <T extends DocumentData>(
+      ref: DocumentReference<T>,
+      data: Partial<T>,
+      options?: MutationOptions,
     ) =>
       mutate(
-        () => updateDoc(doc(db, path, id), withAuditFields(data)),
-        options
+        () => updateDoc(ref, withAuditFields(data as DocumentData)),
+        options,
       ),
-    [mutate, withAuditFields, db]
+    [mutate, withAuditFields],
   )
 
   const remove = useCallback(
-    (path: string, id: string, options?: MutationOptions) =>
-      mutate(() => deleteDoc(doc(db, path, id)), options),
-    [mutate, db]
+    (ref: DocumentReference, options?: MutationOptions) =>
+      mutate(() => deleteDoc(ref), options),
+    [mutate],
   )
 
   return {

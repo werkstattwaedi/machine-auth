@@ -30,6 +30,10 @@ export interface TokenEntity {
   registered: Timestamp;
   deactivated?: Timestamp;
   label: string;
+  // Last observed SDM read counter (24-bit). Updated atomically in
+  // verifyTagCheckout to defend against URL replay. Absent on tokens that
+  // predate the replay-defense rollout (treated as 0).
+  lastSdmCounter?: number;
 }
 
 export interface PermissionEntity {
@@ -63,6 +67,11 @@ export interface AuthenticationEntity {
     rndA: Uint8Array; // Cloud-generated random (RndA)
     rndB: Uint8Array; // Tag's random after decryption (RndB)
   } | null;
+
+  // Firestore TTL marker. Set to created + 5 min on creation so abandoned
+  // in-progress auth docs (firmware crash, lost power) get auto-deleted.
+  // Cleared (set to null) on successful completion to retain the record.
+  ttlAt?: Timestamp | null;
 }
 
 /**
@@ -81,7 +90,7 @@ export interface UsageMachineEntity {
 
 // --- Catalog ---
 
-export type PricingModel = "time" | "area" | "length" | "count" | "weight" | "direct";
+export type PricingModel = "time" | "area" | "length" | "count" | "weight" | "direct" | "sla";
 export type DiscountLevel = "none" | "member" | "intern";
 
 export interface CatalogEntity {

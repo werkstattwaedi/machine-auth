@@ -5,6 +5,7 @@
  * for unauthenticated checkout via NFC tag tap.
  */
 
+import * as crypto from "crypto";
 import { getFirestore } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
 import * as logger from "firebase-functions/logger";
@@ -108,7 +109,7 @@ export async function handleVerifyTagCheckout(
     throw new Error("Token has no associated user");
   }
 
-  const userId = userRef.id;
+  const realUserId = userRef.id;
 
   // Step 3: Derive SDM MAC key (diversified Key 3) and verify CMAC
   let isValid;
@@ -121,24 +122,67 @@ export async function handleVerifyTagCheckout(
   }
 
   if (!isValid) {
-    logger.warn("CMAC signature mismatch", { tokenId, userId });
+    logger.warn("CMAC signature mismatch", { tokenId, userId: realUserId });
     throw new Error("Invalid CMAC signature");
   }
 
-  // Step 4: Fetch user details for pre-fill
+  // Step 4: Verify SDM read counter is monotonically increasing (replay defense).
+  // The 3-byte counter is little-endian on the wire (per NTAG SDM spec).
+  // We read+write atomically so two concurrent requests with the same counter
+  // can't both succeed.
+  const incomingCounter =
+    piccData.counter[0] |
+    (piccData.counter[1] << 8) |
+    (piccData.counter[2] << 16);
+
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(tokenRef);
+    // Sentinel -1: a token that has never been tapped accepts any counter
+    // (including 0). After the first tap, subsequent counters must strictly
+    // increase. Real NTAG counters start at 0 and only go up.
+    const lastCounter =
+      (snap.data()?.lastSdmCounter as number | undefined) ?? -1;
+    if (incomingCounter <= lastCounter) {
+      logger.warn("SDM counter replay rejected", {
+        tokenId,
+        userId: realUserId,
+        incomingCounter,
+        lastCounter,
+      });
+      throw new Error("SDM replay detected: counter not advancing");
+    }
+    tx.update(tokenRef, { lastSdmCounter: incomingCounter });
+  });
+
+  // Step 5: Fetch user details for pre-fill
   const userDoc = await userRef.get();
   const userData = userDoc.exists ? userDoc.data() : undefined;
 
-  // Step 5: Create Firebase custom token for client-side Firestore access.
-  // UID = user doc ID so security rules' isOwner() check works.
-  const customToken = await getAuth().createCustomToken(userId, {
+  // Step 6: Create Firebase custom token with a SYNTHETIC UID so the kiosk
+  // session is a different Firebase principal than the real user. This is
+  // the actual security defense:
+  //  - createCustomToken merges developer claims with the auth user's
+  //    persistent custom claims. If we used realUserId, an admin tapping
+  //    their badge would get an `admin: true` session.
+  //  - With a synthetic UID, no persistent claims exist, so the kiosk
+  //    session has only the claims we explicitly set here.
+  // The `actsAs` claim names the real user; rules and callables use it for
+  // owner checks instead of `request.auth.uid`.
+  const sessionUid = `tag:${realUserId}:${crypto
+    .randomBytes(12)
+    .toString("base64url")}`;
+  const customToken = await getAuth().createCustomToken(sessionUid, {
     tagCheckout: true,
+    actsAs: realUserId,
+    kioskId: "kiosk-1",
   });
 
-  // Step 6: Return token and user information
+  // Step 7: Return token and user information.
+  // `userId` in the response is the REAL user, so the client can pre-fill
+  // the form. The synthetic session UID is opaque to the client.
   return {
     tokenId,
-    userId,
+    userId: realUserId,
     uid: uidHex,
     customToken,
     firstName: userData?.firstName,

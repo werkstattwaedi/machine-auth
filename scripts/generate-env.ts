@@ -31,6 +31,7 @@ interface OutputFile {
 const FUNCTIONS_PARAMS: VarMapping[] = [
   { envVar: "DIVERSIFICATION_SYSTEM_NAME", jsonPath: "functions.diversificationSystemName" },
   { envVar: "PARTICLE_PRODUCT_ID", jsonPath: "functions.particleProductId" },
+  { envVar: "LOGIN_ALLOWED_ORIGINS", jsonPath: "functions.loginAllowedOrigins" },
 ];
 
 const FUNCTIONS_SECRETS: VarMapping[] = [
@@ -46,6 +47,7 @@ const FUNCTIONS_RESEND: VarMapping[] = [
   { envVar: "RESEND_FROM_EMAIL", jsonPath: "functions.resendFromEmail" },
   { envVar: "RESEND_TWINT_TEMPLATE_ID", jsonPath: "functions.resendTwintTemplateId" },
   { envVar: "RESEND_QRBILL_TEMPLATE_ID", jsonPath: "functions.resendQrBillTemplateId" },
+  { envVar: "RESEND_LOGIN_TEMPLATE_ID", jsonPath: "functions.resendLoginTemplateId" },
 ];
 
 const VITE_FIREBASE: VarMapping[] = [

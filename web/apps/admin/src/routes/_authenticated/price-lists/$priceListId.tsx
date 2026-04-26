@@ -4,6 +4,12 @@
 import { createFileRoute } from "@tanstack/react-router"
 import { useDocument, useCollection } from "@modules/lib/firestore"
 import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
+import { useDb, useFunctions } from "@modules/lib/firebase-context"
+import { httpsCallable } from "firebase/functions"
+import {
+  catalogCollection,
+  priceListRef,
+} from "@modules/lib/firestore-helpers"
 import { PageLoading } from "@modules/components/page-loading"
 import { PageHeader } from "@/components/admin/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@modules/components/ui/card"
@@ -14,11 +20,9 @@ import { Checkbox } from "@modules/components/ui/checkbox"
 import { Switch } from "@modules/components/ui/switch"
 import { useForm } from "react-hook-form"
 import { Loader2, Save, Download } from "lucide-react"
-import { useEffect, useState, useRef, useCallback } from "react"
-import { QRCodeCanvas } from "qrcode.react"
-import type { PriceList, CatalogItem } from "@modules/lib/workshop-config"
+import { useEffect, useState, useCallback } from "react"
+import { toast } from "sonner"
 import { formatCHF } from "@modules/lib/format"
-import { generatePriceListPdf } from "@modules/lib/price-list-pdf"
 
 export const Route = createFileRoute(
   "/_authenticated/price-lists/$priceListId",
@@ -33,18 +37,20 @@ interface FormValues {
 }
 
 function PriceListDetailPage() {
+  const db = useDb()
   const { priceListId } = Route.useParams()
-  const { data: priceList, loading } = useDocument<PriceList>(
-    `price_lists/${priceListId}`,
+  const { data: priceList, loading } = useDocument(
+    priceListRef(db, priceListId),
   )
   const { data: allCatalog, loading: catalogLoading } =
-    useCollection<CatalogItem>("catalog")
+    useCollection(catalogCollection(db))
   const { update, loading: saving } = useFirestoreMutation()
+  const functions = useFunctions()
+  const [downloading, setDownloading] = useState(false)
 
   const { register, handleSubmit, reset, setValue, watch } =
     useForm<FormValues>()
   const [selectedItems, setSelectedItems] = useState<string[]>([])
-  const qrRef = useRef<HTMLCanvasElement>(null)
 
   const active = watch("active")
 
@@ -61,8 +67,7 @@ function PriceListDetailPage() {
 
   const onSubmit = async (values: FormValues) => {
     await update(
-      "price_lists",
-      priceListId,
+      priceListRef(db, priceListId),
       {
         name: values.name,
         footer: values.footer,
@@ -83,16 +88,32 @@ function PriceListDetailPage() {
     )
   }, [])
 
-  const handleDownloadPdf = () => {
+  const handleDownloadPdf = async () => {
     if (!priceList) return
-    const canvas = qrRef.current
-    if (!canvas) return
-    const qrDataUrl = canvas.toDataURL("image/png")
-    const selected = selectedItems
-      .map((id) => allCatalog.find((c) => c.id === id))
-      .filter((c): c is CatalogItem => c != null)
-      .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
-    generatePriceListPdf(priceList, selected, qrDataUrl)
+    setDownloading(true)
+    try {
+      const fn = httpsCallable<{ priceListId: string }, { url: string }>(
+        functions,
+        "getPriceListPdfUrl",
+      )
+      const result = await fn({ priceListId })
+      // Mirror the bill-download pattern (web/apps/checkout/src/routes/
+      // _authenticated/usage.tsx): synthesise an anchor click rather than
+      // window.open, so the post-await popup blocker doesn't trip.
+      const a = document.createElement("a")
+      a.href = result.data.url
+      a.rel = "noopener"
+      a.target = "_self"
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "PDF konnte nicht erstellt werden."
+      toast.error(message)
+    } finally {
+      setDownloading(false)
+    }
   }
 
   if (loading || catalogLoading) return <PageLoading />
@@ -179,14 +200,18 @@ function PriceListDetailPage() {
           <CardTitle className="text-base">PDF herunterladen</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="hidden">
-            <QRCodeCanvas ref={qrRef} value={qrUrl} size={256} />
-          </div>
           <p className="text-sm text-muted-foreground">
             QR-Code verweist auf: {qrUrl}
           </p>
-          <Button onClick={handleDownloadPdf} disabled={selectedItems.length === 0}>
-            <Download className="h-4 w-4 mr-2" />
+          <Button
+            onClick={handleDownloadPdf}
+            disabled={selectedItems.length === 0 || downloading}
+          >
+            {downloading ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : (
+              <Download className="h-4 w-4 mr-2" />
+            )}
             PDF herunterladen
           </Button>
         </CardContent>

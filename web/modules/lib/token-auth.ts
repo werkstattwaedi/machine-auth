@@ -3,6 +3,8 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import {
+  inMemoryPersistence,
+  setPersistence,
   signInWithCustomToken,
   signOut as firebaseSignOut,
 } from "firebase/auth"
@@ -40,6 +42,52 @@ function functionsBaseUrl(projectId: string | undefined): string {
 }
 
 /**
+ * Kiosk runtime contract: the Electron preload exposes `window.kiosk` with
+ * an IPC handle for the per-kiosk Bearer secret used to authenticate the
+ * verifyTagCheckout call. The Bearer is intentionally a soft revocation/
+ * audit knob, not real attestation — the structural defense is the
+ * synthetic-UID custom token returned by verifyTagCheckout.
+ */
+interface KioskWindow {
+  bearer?: () => Promise<string | null | undefined>
+}
+
+function getKiosk(): KioskWindow | undefined {
+  return (window as unknown as { kiosk?: KioskWindow }).kiosk
+}
+
+/**
+ * Resolve the kiosk Bearer if running inside the Electron kiosk shell.
+ * Returns null if not in the kiosk (regular browser, phone tap, dev). The
+ * dev/emulator Functions middleware bypasses the Bearer check, so a
+ * missing header is fine in development.
+ */
+async function resolveKioskBearer(): Promise<string | null> {
+  const kiosk = getKiosk()
+  if (!kiosk?.bearer) return null
+  const value = await kiosk.bearer()
+  return typeof value === "string" && value.length > 0 ? value : null
+}
+
+interface VerifyTagResponse {
+  customToken: string
+  tokenId: string
+  userId: string
+  firstName?: string
+  lastName?: string
+  email?: string
+  userType?: string
+}
+
+// Module-level dedup of in-flight verify_tag calls. The verifyTagCheckout
+// endpoint enforces a strict SDM counter increase; a duplicate request with
+// the same picc (e.g. React StrictMode double-mount, browser reload, or a
+// bare network retry) would be rejected as a replay even though it's the
+// same physical tap. Returning the same promise to all callers keeps the
+// server-side defense intact while making the hook idempotent per tap.
+const inflightVerifyByKey = new Map<string, Promise<VerifyTagResponse>>()
+
+/**
  * Resolve user identity from NFC tag URL parameters (picc + cmac).
  *
  * Verifies the tag via the backend, then signs into Firebase Auth with a
@@ -72,18 +120,58 @@ export function useTokenAuth(
     setError(null)
 
     const url = `${functionsBaseUrl(functions.app.options.projectId)}/api/verifyTagCheckout`
+    let cancelled = false
 
-    fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ picc, cmac }),
-    })
-      .then(async (res) => {
-        const data = await res.json()
-        if (!res.ok) throw new Error(data.error ?? "Tag-Verifizierung fehlgeschlagen")
+    ;(async () => {
+      try {
+        const cacheKey = `${picc}|${cmac}`
+        let pending = inflightVerifyByKey.get(cacheKey)
+        if (!pending) {
+          pending = (async () => {
+            const headers: Record<string, string> = {
+              "Content-Type": "application/json",
+            }
+            const bearer = await resolveKioskBearer()
+            if (bearer) headers["Authorization"] = `Bearer ${bearer}`
 
-        // Sign into Firebase Auth so Firestore rules allow reads/writes
+            const res = await fetch(url, {
+              method: "POST",
+              headers,
+              body: JSON.stringify({ picc, cmac }),
+            })
+            const responseBody = await res.json()
+            if (!res.ok) {
+              throw new Error(
+                responseBody.error ?? "Tag-Verifizierung fehlgeschlagen"
+              )
+            }
+            return responseBody as VerifyTagResponse
+          })()
+          inflightVerifyByKey.set(cacheKey, pending)
+          // Drop the cache entry once settled so a fresh tap (after tagSignOut)
+          // can re-issue. Failures also clear so a retry with the same picc
+          // re-attempts the verify rather than being stuck on the prior error.
+          pending.finally(() => {
+            if (inflightVerifyByKey.get(cacheKey) === pending) {
+              inflightVerifyByKey.delete(cacheKey)
+            }
+          })
+        }
+        const data = await pending
+        if (cancelled) return
+
+        // The kiosk session is short-lived and must not persist across
+        // tab/process restarts. inMemoryPersistence applies to subsequent
+        // sign-ins on this Auth instance; combined with Phase D's Electron
+        // session wipe, a closed kiosk window equals a closed session.
+        await setPersistence(auth, inMemoryPersistence)
+
+        // Sign into Firebase Auth so Firestore rules allow reads/writes.
+        // The custom token uses a synthetic UID with `actsAs` claim — see
+        // functions/src/checkout/verify_tag.ts.
         await signInWithCustomToken(auth, data.customToken)
+        if (cancelled) return
+
         tagAuthRef.current = true
         setIsTagAuth(true)
 
@@ -95,11 +183,18 @@ export function useTokenAuth(
           email: data.email,
           userType: data.userType,
         })
-      })
-      .catch((err) => {
-        setError(err.message ?? "Tag-Verifizierung fehlgeschlagen")
-      })
-      .finally(() => setLoading(false))
+      } catch (err) {
+        if (cancelled) return
+        const msg = err instanceof Error ? err.message : "Tag-Verifizierung fehlgeschlagen"
+        setError(msg)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
   }, [picc, cmac, functions, auth])
 
   return { tokenUser, loading, error, isTagAuth, tagSignOut }

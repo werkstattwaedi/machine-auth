@@ -10,15 +10,24 @@ vi.mock("qrcode.react", () => ({
   ),
 }))
 
-// Mock firestore hook
+// Mock firestore hook. After the canonical refactor (issue #145), `useDocument`
+// receives a typed DocumentReference (or null). Our fake returns a ref-shaped
+// object whose `.path` we can use to discriminate which doc was requested.
 const mockUseDocument = vi.fn()
 vi.mock("@modules/lib/firestore", () => ({
-  useDocument: (...args: any[]) => mockUseDocument(...args),
+  useDocument: (ref: { path?: string } | null) => mockUseDocument(ref),
+}))
+
+// Mock the helper so tests don't need a live Firestore instance.
+vi.mock("@modules/lib/firestore-helpers", () => ({
+  checkoutRef: (_db: unknown, id: string) => ({ id, path: `checkouts/${id}` }),
 }))
 
 // Mock firebase context
 const mockFunctions = {}
+const mockDb = {}
 vi.mock("@modules/lib/firebase-context", () => ({
+  useDb: () => mockDb,
   useFunctions: () => mockFunctions,
 }))
 
@@ -30,13 +39,13 @@ vi.mock("firebase/functions", () => ({
 
 import { render, screen, cleanup } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { PaymentResult } from "./payment-result"
+import { PaymentResult, SWISS_CROSS_SVG } from "./payment-result"
 
 describe("PaymentResult", () => {
   beforeEach(() => {
     // Default: checkout has billRef, payment data loaded
-    mockUseDocument.mockImplementation((path: string | null) => {
-      if (path?.startsWith("checkouts/")) {
+    mockUseDocument.mockImplementation((ref: { path?: string } | null) => {
+      if (ref?.path?.startsWith("checkouts/")) {
         return { data: { id: "checkout-1", billRef: { id: "bill-1" } }, loading: false, error: null }
       }
       return { data: null, loading: false, error: null }
@@ -153,8 +162,8 @@ describe("PaymentResult", () => {
   })
 
   it("shows loading state when bill not yet created", () => {
-    mockUseDocument.mockImplementation((path: string | null) => {
-      if (path?.startsWith("checkouts/")) {
+    mockUseDocument.mockImplementation((ref: { path?: string } | null) => {
+      if (ref?.path?.startsWith("checkouts/")) {
         return { data: { id: "checkout-1", billRef: null }, loading: false, error: null }
       }
       return { data: null, loading: false, error: null }
@@ -162,5 +171,26 @@ describe("PaymentResult", () => {
 
     render(<PaymentResult checkoutId="checkout-1" totalPrice={25} onReset={() => {}} />)
     expect(screen.getByText(/QR-Code wird geladen/)).toBeDefined()
+  })
+
+  // Regression test for issue #109: the Swiss cross overlay must match the
+  // SIX QR-bill spec (white border, black square, white cross), not the
+  // inverted arrangement that shipped previously.
+  it("uses the spec-compliant Swiss cross color arrangement (white cross on black)", () => {
+    const prefix = "data:image/svg+xml,"
+    expect(SWISS_CROSS_SVG.startsWith(prefix)).toBe(true)
+
+    const svg = decodeURIComponent(SWISS_CROSS_SVG.slice(prefix.length))
+
+    // Outer 100x100 rect: white border
+    expect(svg).toMatch(/<rect width="100" height="100" fill="white"\/>/)
+    // Inner 94x94 rect (3px inset): black square
+    expect(svg).toMatch(/<rect x="3" y="3" width="94" height="94" fill="black"\/>/)
+    // Cross polygon: white
+    expect(svg).toMatch(/<polygon points="[^"]+" fill="white"\/>/)
+
+    // Defensive: no inverted colors leak back in.
+    expect(svg).not.toMatch(/<rect width="100" height="100" fill="black"\/>/)
+    expect(svg).not.toMatch(/<polygon points="[^"]+" fill="black"\/>/)
   })
 })

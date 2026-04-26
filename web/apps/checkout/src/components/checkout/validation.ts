@@ -89,7 +89,7 @@ export function validateCheckoutItem(item: CheckoutItemLocal): ItemErrors {
     return errors
   }
 
-  // For area/length models, check formInputs instead of quantity
+  // For area/length/sla models, check formInputs instead of quantity
   if (item.pricingModel === "area") {
     const l = item.formInputs?.[0]?.quantity ?? 0
     const w = item.formInputs?.[1]?.quantity ?? 0
@@ -100,6 +100,12 @@ export function validateCheckoutItem(item: CheckoutItemLocal): ItemErrors {
     const l = item.formInputs?.[0]?.quantity ?? 0
     if (l <= 0) {
       errors.quantity = "Länge muss grösser als 0 sein."
+    }
+  } else if (item.pricingModel === "sla") {
+    const resinMl = item.formInputs?.[0]?.quantity ?? 0
+    const layers = item.formInputs?.[1]?.quantity ?? 0
+    if (resinMl <= 0 || layers <= 0) {
+      errors.quantity = "Resin (ml) und Layer müssen grösser als 0 sein."
     }
   } else if (item.quantity <= 0) {
     errors.quantity = "Anzahl muss grösser als 0 sein."

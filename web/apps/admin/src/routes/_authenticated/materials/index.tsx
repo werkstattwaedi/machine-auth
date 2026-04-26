@@ -3,8 +3,11 @@
 
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { useCollection } from "@modules/lib/firestore"
+import { useDb } from "@modules/lib/firebase-context"
+import { catalogCollection } from "@modules/lib/firestore-helpers"
+import type { PricingModel } from "@modules/lib/firestore-entities"
 import { PageLoading } from "@modules/components/page-loading"
-import { DataTable, ColumnHeader } from "@/components/data-table"
+import { DataTable, ColumnHeader } from "@modules/components/data-table"
 import { PageHeader } from "@/components/admin/page-header"
 import { Badge } from "@modules/components/ui/badge"
 import { Button } from "@modules/components/ui/button"
@@ -85,7 +88,8 @@ const columns: ColumnDef<CatalogItem>[] = [
 ]
 
 function CatalogPage() {
-  const { data, loading } = useCollection<CatalogItem>("catalog")
+  const db = useDb()
+  const { data, loading } = useCollection(catalogCollection(db))
   const [createOpen, setCreateOpen] = useState(false)
 
   if (loading) return <PageLoading />
@@ -113,8 +117,9 @@ function CatalogPage() {
 }
 
 function CreateCatalogDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const db = useDb()
   const { add, loading } = useFirestoreMutation()
-  const { register, handleSubmit, reset } = useForm<CatalogFormValues>({
+  const { register, handleSubmit, reset, control } = useForm<CatalogFormValues>({
     defaultValues: {
       pricingModel: "count",
       workshops: "holz",
@@ -123,12 +128,13 @@ function CreateCatalogDialog({ open, onOpenChange }: { open: boolean; onOpenChan
   })
 
   const onSubmit = async (values: CatalogFormValues) => {
-    await add("catalog", {
+    await add(catalogCollection(db), {
       code: values.code,
       name: values.name,
       description: values.description || null,
       workshops: values.workshops.split(",").map((w) => w.trim()).filter(Boolean),
-      pricingModel: values.pricingModel,
+      // Form widget keeps `pricingModel` as a free string; trust its options.
+      pricingModel: values.pricingModel as PricingModel,
       unitPrice: {
         none: parseFloat(values.priceNone) || 0,
         member: parseFloat(values.priceMember) || 0,
@@ -150,7 +156,7 @@ function CreateCatalogDialog({ open, onOpenChange }: { open: boolean; onOpenChan
           <DialogTitle>Katalogeintrag erstellen</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <CatalogFormFields register={register} />
+          <CatalogFormFields register={register} control={control} />
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Abbrechen</Button>
             <Button type="submit" disabled={loading}>
