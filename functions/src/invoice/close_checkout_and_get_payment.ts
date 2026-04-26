@@ -55,17 +55,17 @@ function effectiveUid(request: CallableRequest<unknown>): string | null {
   return request.auth?.uid ?? null;
 }
 
-/** Hardcoded entry fees (mirrors web/modules/lib/pricing.ts and create_bill.ts). */
-const ENTRY_FEES_FALLBACK: Record<string, Record<string, number>> = {
-  erwachsen: { regular: 15, materialbezug: 0, intern: 0, hangenmoos: 15 },
-  kind: { regular: 7.5, materialbezug: 0, intern: 0, hangenmoos: 7.5 },
-  firma: { regular: 30, materialbezug: 0, intern: 0, hangenmoos: 30 },
-};
-
 /**
  * Exported for unit tests. Returns the per-person entry fee for a given
- * userType + usageType combo, preferring config/pricing.entryFees and
- * falling back to ENTRY_FEES_FALLBACK with a loud warning.
+ * userType + usageType combo from `config/pricing.entryFees`.
+ *
+ * Throws `failed-precondition` when the config doc is missing or doesn't
+ * contain a row for the requested combo (issue #149). The previous
+ * silent-fallback path shipped hardcoded fees that diverged from the
+ * seeded production prices, so a misconfigured Firestore document would
+ * have silently misbilled every checkout — exactly the bug A8 was filed
+ * for. We bail loudly here so staff sees the failure immediately rather
+ * than discovering it at month-end reconciliation.
  */
 export function entryFeeFor(
   userType: string,
@@ -74,16 +74,19 @@ export function entryFeeFor(
 ): number {
   if (configFees) {
     const row = configFees[userType];
-    if (row && usageType in row) return row[usageType] ?? 0;
+    if (row && usageType in row) {
+      const value = row[usageType];
+      if (typeof value === "number") return value;
+    }
   }
-  // Loud signal that config/pricing is missing — staff need to know
-  // immediately rather than discover it at month-end reconciliation
-  // (Launch Analysis §A8).
-  logger.warn("Pricing config missing; using hardcoded fallback fees", {
+  logger.error("Pricing config missing entry fee row", {
     userType,
     usageType,
   });
-  return ENTRY_FEES_FALLBACK[userType]?.[usageType] ?? 0;
+  throw new HttpsError(
+    "failed-precondition",
+    `Pricing config missing entry fee for ${userType}/${usageType}`,
+  );
 }
 
 /**
@@ -295,7 +298,11 @@ async function closeExistingCheckout(
   const billRef = db.collection("bills").doc();
 
   // Pricing config read outside the transaction — it's not strongly tied
-  // to the checkout's atomicity and changes infrequently.
+  // to the checkout's atomicity and changes infrequently. Issue #149:
+  // entryFeeFor throws failed-precondition for any unknown row, so a
+  // missing config/pricing surfaces as a clean Cloud Functions error
+  // (visible to the client + ops logs) rather than silently substituting
+  // hardcoded prices.
   const pricingDoc = await db.doc("config/pricing").get();
   const configFees =
     (pricingDoc.data() as { entryFees?: Record<string, Record<string, number>> } | undefined)

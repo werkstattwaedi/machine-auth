@@ -23,13 +23,14 @@ import type {
 } from "../types/firestore_entities";
 import type { BillEntity } from "./types";
 
-/** Hardcoded entry fee lookup (mirrors web/modules/lib/pricing.ts) */
-const ENTRY_FEES: Record<string, Record<string, number>> = {
-  erwachsen: { regular: 15, materialbezug: 0, intern: 0, hangenmoos: 15 },
-  kind: { regular: 7.5, materialbezug: 0, intern: 0, hangenmoos: 7.5 },
-  firma: { regular: 30, materialbezug: 0, intern: 0, hangenmoos: 30 },
-};
-
+/**
+ * Look up the per-person entry fee from `config/pricing.entryFees`.
+ *
+ * Throws when the config row is missing (issue #149). The previous
+ * silent-fallback path shipped hardcoded prices that diverged from the
+ * seeded production values; throwing here puts the bill into the
+ * documented "needs ops attention" state instead of emitting a wrong PDF.
+ */
 function calculateEntryFee(
   userType: string,
   usageType: string,
@@ -37,9 +38,14 @@ function calculateEntryFee(
 ): number {
   if (configFees) {
     const row = configFees[userType];
-    if (row && usageType in row) return row[usageType] ?? 0;
+    if (row && usageType in row) {
+      const value = row[usageType];
+      if (typeof value === "number") return value;
+    }
   }
-  return ENTRY_FEES[userType]?.[usageType] ?? 0;
+  throw new Error(
+    `Pricing config missing entry fee for ${userType}/${usageType}`,
+  );
 }
 
 /**

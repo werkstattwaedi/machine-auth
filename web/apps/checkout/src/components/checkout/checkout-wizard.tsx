@@ -12,6 +12,8 @@ import { useDb, useFunctions } from "@modules/lib/firebase-context"
 import { usePricingConfig } from "@modules/lib/workshop-config"
 import { calculateFee } from "@modules/lib/pricing"
 import { PageLoading } from "@modules/components/page-loading"
+import { EmptyState } from "@modules/components/empty-state"
+import { AlertTriangle } from "lucide-react"
 import { CheckoutProgress } from "./checkout-progress"
 import { StepCheckin } from "./step-checkin"
 import { StepWorkshops } from "./step-workshops"
@@ -63,7 +65,7 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
   const { state, dispatch } = useCheckoutState(initialStep)
   const [submitting, setSubmitting] = useState(false)
   const [paymentData, setPaymentData] = useState<PaymentData | null>(null)
-  const { data: pricingConfig, loading: loadingConfig } = usePricingConfig()
+  const { data: pricingConfig, loading: loadingConfig, configError } = usePricingConfig()
 
   // Determine auth mode (tag-auth signs into Firebase Auth too, but is not
   // an "account login" — it should still behave like a kiosk session with
@@ -227,6 +229,24 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
     return <PageLoading />
   }
 
+  // Issue #149: refuse to render the checkout if `config/pricing` is
+  // missing or malformed. The previous behaviour silently substituted
+  // hardcoded fees that diverged from production prices, hiding a
+  // misconfigured Firestore document until month-end reconciliation.
+  if (configError || !pricingConfig) {
+    return (
+      <EmptyState
+        icon={AlertTriangle}
+        title="Konfigurationsfehler"
+        description={
+          configError
+            ? `Preiskonfiguration ungültig: ${configError}. Bitte Admin kontaktieren.`
+            : "Preiskonfiguration konnte nicht geladen werden. Bitte Admin kontaktieren."
+        }
+      />
+    )
+  }
+
   if (state.submitted) {
     return (
       <PaymentResult
@@ -262,8 +282,12 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
 
       // Calculate entry fees (client-side estimate for the receipt; the
       // server recomputes authoritatively in closeCheckoutAndGetPayment).
+      // pricingConfig is non-null here — render is gated by the configError
+      // check above. calculateFee returns null for unknown userType+usageType
+      // combinations; treat those as zero to avoid blocking the submit on a
+      // misconfigured row (the server will throw and surface the error).
       const entryFees = state.persons.reduce(
-        (sum, p) => sum + calculateFee(p.userType, state.usageType, pricingConfig),
+        (sum, p) => sum + (calculateFee(p.userType, state.usageType, pricingConfig) ?? 0),
         0,
       )
 

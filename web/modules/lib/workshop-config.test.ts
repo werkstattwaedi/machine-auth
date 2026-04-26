@@ -10,6 +10,7 @@ import {
   getSortedWorkshops,
   getUnitLabel,
   getShortUnit,
+  validatePricingConfig,
   type PricingConfig,
   type PricingModel,
 } from "./workshop-config"
@@ -74,5 +75,84 @@ describe("getShortUnit", () => {
     ["sla", "l"],
   ] as [PricingModel, string][])("%s → %s", (model, expected) => {
     expect(getShortUnit(model)).toBe(expected)
+  })
+})
+
+describe("validatePricingConfig (issue #149)", () => {
+  // The fail-loud check that gates the checkout UI from rendering with a
+  // malformed `config/pricing` document. Each invalid case must return a
+  // non-null error string identifying the offending field.
+  const valid: unknown = {
+    entryFees: {
+      erwachsen: { regular: 5, materialbezug: 0, intern: 0, hangenmoos: 0 },
+      kind: { regular: 2.5, materialbezug: 0, intern: 0, hangenmoos: 0 },
+      firma: { regular: 5, materialbezug: 0, intern: 0, hangenmoos: 0 },
+    },
+    workshops: { holz: { label: "Holz", order: 1 } },
+    labels: { units: { h: "Std." }, discounts: { none: "" } },
+    slaLayerPrice: { none: 0.001, member: 0.001, intern: 0 },
+  }
+
+  it("returns null for a valid config", () => {
+    expect(validatePricingConfig(valid)).toBeNull()
+  })
+
+  it("rejects a missing document (null)", () => {
+    expect(validatePricingConfig(null)).toMatch(/missing/)
+  })
+
+  it("rejects a non-object value", () => {
+    expect(validatePricingConfig("not-a-doc")).toMatch(/missing|not an object/)
+  })
+
+  it("rejects a config with no entryFees", () => {
+    const broken = { ...(valid as object), entryFees: undefined }
+    expect(validatePricingConfig(broken)).toMatch(/entryFees/)
+  })
+
+  it("rejects a config with a missing user type row", () => {
+    const broken = {
+      ...(valid as object),
+      entryFees: {
+        erwachsen: { regular: 5, materialbezug: 0, intern: 0, hangenmoos: 0 },
+        kind: { regular: 2.5, materialbezug: 0, intern: 0, hangenmoos: 0 },
+        // firma missing
+      },
+    }
+    expect(validatePricingConfig(broken)).toMatch(/firma/)
+  })
+
+  it("rejects a config with a missing usage type column", () => {
+    const broken = {
+      ...(valid as object),
+      entryFees: {
+        erwachsen: { regular: 5, materialbezug: 0, intern: 0 /* hangenmoos missing */ },
+        kind: { regular: 2.5, materialbezug: 0, intern: 0, hangenmoos: 0 },
+        firma: { regular: 5, materialbezug: 0, intern: 0, hangenmoos: 0 },
+      },
+    }
+    expect(validatePricingConfig(broken)).toMatch(/hangenmoos/)
+  })
+
+  it("rejects a config with non-numeric fee", () => {
+    const broken = {
+      ...(valid as object),
+      entryFees: {
+        erwachsen: { regular: "free", materialbezug: 0, intern: 0, hangenmoos: 0 },
+        kind: { regular: 2.5, materialbezug: 0, intern: 0, hangenmoos: 0 },
+        firma: { regular: 5, materialbezug: 0, intern: 0, hangenmoos: 0 },
+      },
+    }
+    expect(validatePricingConfig(broken)).toMatch(/erwachsen.*regular.*number/)
+  })
+
+  it("rejects a config with no slaLayerPrice", () => {
+    const broken = { ...(valid as object), slaLayerPrice: undefined }
+    expect(validatePricingConfig(broken)).toMatch(/slaLayerPrice/)
+  })
+
+  it("rejects slaLayerPrice with a missing discount level", () => {
+    const broken = { ...(valid as object), slaLayerPrice: { none: 0.001, member: 0.001 } }
+    expect(validatePricingConfig(broken)).toMatch(/intern/)
   })
 })

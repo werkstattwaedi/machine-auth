@@ -30,12 +30,34 @@ import {
 
 const resendApiKey = defineSecret("RESEND_API_KEY");
 const resendFromEmail = defineString("RESEND_FROM_EMAIL");
-// Defaulted so the emulator doesn't prompt for input when the param isn't
-// set locally. In the emulator we skip Resend entirely; in production this
-// must be set via Firebase Functions params.
-const resendLoginTemplateId = defineString("RESEND_LOGIN_TEMPLATE_ID", {
-  default: "",
-});
+// No default: an unset param must fail loudly (see
+// `assertResendLoginTemplateConfigured`) rather than silently calling
+// Resend with an empty template id and producing an opaque provider
+// error. In emulator mode we skip Resend entirely so the assertion is
+// a no-op (issue #149, mirrors PR #142's LOGIN_ALLOWED_ORIGINS pattern).
+const resendLoginTemplateId = defineString("RESEND_LOGIN_TEMPLATE_ID");
+
+/**
+ * Throws a `failed-precondition` error when the Resend login template id
+ * is empty/whitespace in non-emulator mode. Surfaces the misconfiguration
+ * in Cloud Functions logs without leaking provider details to the client.
+ *
+ * Exported separately so unit tests can pass the value directly without
+ * stubbing `defineString` (mirrors `assertLoginOriginsConfigured`).
+ */
+export function assertResendLoginTemplateConfigured(value: string): void {
+  if (process.env.FUNCTIONS_EMULATOR === "true") return;
+  if (value.trim().length > 0) return;
+  logger.error(
+    "RESEND_LOGIN_TEMPLATE_ID is empty in production — login emails " +
+      "cannot be sent. Set the param via firebase functions:config or " +
+      "regenerate functions/.env.<projectId> via `npm run generate-env`."
+  );
+  throw new HttpsError(
+    "failed-precondition",
+    "Resend login template not configured"
+  );
+}
 
 const CODE_EXPIRY_MS = 5 * 60 * 1000;
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
@@ -134,12 +156,16 @@ async function sendLoginEmail(
   code: string,
   magicLink: string
 ): Promise<void> {
+  const templateId = resendLoginTemplateId.value();
+  // Fail loud before calling Resend with an empty template id (would
+  // otherwise produce an opaque provider error).
+  assertResendLoginTemplateConfigured(templateId);
   const resend = new Resend(resendApiKey.value());
   const { error } = await resend.emails.send({
     from: resendFromEmail.value(),
     to: email,
     template: {
-      id: resendLoginTemplateId.value(),
+      id: templateId,
       variables: {
         CODE: code,
         MAGIC_LINK: magicLink,

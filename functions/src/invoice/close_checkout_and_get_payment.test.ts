@@ -42,17 +42,44 @@ describe("entryFeeFor", () => {
     expect(entryFeeFor("erwachsen", "regular", config)).to.equal(17.5);
   });
 
-  it("falls back to hardcoded fee when config missing", () => {
-    expect(entryFeeFor("erwachsen", "regular", null)).to.equal(15);
+  it("preserves explicit zero (not coerced)", () => {
+    const config = { erwachsen: { regular: 0, materialbezug: 0, intern: 0, hangenmoos: 0 } };
+    expect(entryFeeFor("erwachsen", "regular", config)).to.equal(0);
   });
 
-  it("falls back to hardcoded fee when userType absent in config", () => {
-    const config = { kind: { regular: 8, materialbezug: 0, intern: 0, hangenmoos: 8 } };
-    expect(entryFeeFor("erwachsen", "regular", config)).to.equal(15);
-  });
+  // Issue #149: previously the function silently substituted hardcoded
+  // fallback prices (15/7.5/30 CHF) when the config row was missing. Those
+  // numbers diverged from the seeded production prices (5/2.5/5 CHF), so
+  // a misconfigured `config/pricing` would have silently misbilled every
+  // checkout. The new contract throws failed-precondition so the failure
+  // surfaces in Cloud Functions logs and to the client immediately.
+  describe("issue #149: fail loud on missing config row", () => {
+    function expectThrows(fn: () => unknown, codeContains = "failed-precondition") {
+      try {
+        fn();
+        throw new Error("expected throw, got success");
+      } catch (err: any) {
+        expect(err.code ?? "").to.contain(codeContains);
+      }
+    }
 
-  it("returns 0 for unknown userType (not in fallback either)", () => {
-    expect(entryFeeFor("alien", "regular", null)).to.equal(0);
+    it("throws when configFees is null", () => {
+      expectThrows(() => entryFeeFor("erwachsen", "regular", null));
+    });
+
+    it("throws when userType absent in config", () => {
+      const config = { kind: { regular: 8, materialbezug: 0, intern: 0, hangenmoos: 8 } };
+      expectThrows(() => entryFeeFor("erwachsen", "regular", config));
+    });
+
+    it("throws when usageType absent in user-type row", () => {
+      const config = { erwachsen: { regular: 5 } } as Record<string, Record<string, number>>;
+      expectThrows(() => entryFeeFor("erwachsen", "materialbezug", config));
+    });
+
+    it("throws for unknown userType (no silent zero fallback)", () => {
+      expectThrows(() => entryFeeFor("alien", "regular", null));
+    });
   });
 });
 
@@ -119,15 +146,23 @@ describe("recomputeSummary", () => {
     expect(summary.totalPrice).to.equal(34);
   });
 
-  it("uses hardcoded fallback when pricing config missing", () => {
-    const summary = recomputeSummary([adultPerson, childPerson], "regular", [], null, 0);
-    // erwachsen: 15 + kind: 7.5 = 22.5
-    expect(summary.entryFees).to.equal(22.5);
-    expect(summary.totalPrice).to.equal(22.5);
+  it("throws when pricing config missing (issue #149)", () => {
+    // Previously this returned a hardcoded-fallback summary; the new
+    // contract is to fail loud so a misconfigured `config/pricing` doc
+    // surfaces immediately rather than silently misbilling.
+    try {
+      recomputeSummary([adultPerson, childPerson], "regular", [], null, 0);
+      throw new Error("expected throw, got success");
+    } catch (err: any) {
+      expect(err.code ?? "").to.contain("failed-precondition");
+    }
   });
 
   it("clamps negative tip to zero", () => {
-    const summary = recomputeSummary([adultPerson], "regular", [], null, -50);
+    const config = {
+      erwachsen: { regular: 15, materialbezug: 0, intern: 0, hangenmoos: 15 },
+    };
+    const summary = recomputeSummary([adultPerson], "regular", [], config, -50);
     expect(summary.tip).to.equal(0);
     expect(summary.totalPrice).to.equal(15);
   });
@@ -136,17 +171,22 @@ describe("recomputeSummary", () => {
     // Even if the client posted summary.totalPrice = 0.01 elsewhere, this
     // function only sees items + persons. The bill amount is whatever this
     // returns. There is no way for the client's number to influence it.
+    const config = {
+      erwachsen: { regular: 15, materialbezug: 0, intern: 0, hangenmoos: 15 },
+    };
     const summary = recomputeSummary(
       [adultPerson],
       "regular",
       [item("manual", 100)],
-      null,
+      config,
       0,
     );
     expect(summary.totalPrice).to.equal(115);
   });
 
   it("returns zero summary for an empty checkout (no persons, no items)", () => {
+    // No persons → no entryFeeFor lookup, so config can stay null without
+    // tripping the new fail-loud check.
     const summary = recomputeSummary([], "regular", [], null, 0);
     expect(summary.totalPrice).to.equal(0);
     expect(summary.entryFees).to.equal(0);

@@ -22,39 +22,25 @@ export const USAGE_TYPE_LABELS: Record<UsageType, string> = {
   hangenmoos: "Hangenmoos AG",
 }
 
-/** Hardcoded fallback fees per user type + usage type combination (CHF) */
-const FEES: Record<UserType, Record<UsageType, number>> = {
-  erwachsen: {
-    regular: 15,
-    materialbezug: 0,
-    intern: 0,
-    hangenmoos: 15,
-  },
-  kind: {
-    regular: 7.5,
-    materialbezug: 0,
-    intern: 0,
-    hangenmoos: 7.5,
-  },
-  firma: {
-    regular: 30,
-    materialbezug: 0,
-    intern: 0,
-    hangenmoos: 30,
-  },
-}
-
-/** Calculate fee from Firestore config, falling back to hardcoded values */
+/**
+ * Calculate per-person entry fee from `config/pricing.entryFees`.
+ *
+ * Returns `null` when the config doc isn't loaded or doesn't contain a row
+ * for the requested userType + usageType combination — callers must surface
+ * that as a visible error to staff (issue #149) rather than silently
+ * substituting a hardcoded fallback. The previous fallback shipped fees
+ * that diverged from the seeded production prices, so a misconfigured
+ * `config/pricing` would have silently misbilled every customer.
+ */
 export function calculateFee(
   userType: UserType,
   usageType: UsageType,
-  config?: PricingConfig | null,
-): number {
-  if (config?.entryFees) {
-    const feeRow = config.entryFees[userType]
-    if (feeRow && usageType in feeRow) {
-      return feeRow[usageType] ?? 0
-    }
-  }
-  return FEES[userType]?.[usageType] ?? 0
+  config: PricingConfig | null | undefined,
+): number | null {
+  if (!config?.entryFees) return null
+  const feeRow = config.entryFees[userType]
+  if (!feeRow) return null
+  // Use `in` to distinguish "missing key" (null) from "explicit zero" (0).
+  if (!(usageType in feeRow)) return null
+  return feeRow[usageType] ?? null
 }
