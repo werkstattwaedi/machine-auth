@@ -3,6 +3,9 @@
 
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { useCollection } from "@modules/lib/firestore"
+import { useDb } from "@modules/lib/firebase-context"
+import { priceListsCollection } from "@modules/lib/firestore-helpers"
+import type { PriceListDoc } from "@modules/lib/firestore-entities"
 import { PageLoading } from "@modules/components/page-loading"
 import { DataTable, ColumnHeader } from "@/components/data-table"
 import { PageHeader } from "@/components/admin/page-header"
@@ -21,7 +24,8 @@ import { Plus, Loader2 } from "lucide-react"
 import { useState } from "react"
 import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
 import { useForm } from "react-hook-form"
-import type { PriceList } from "@modules/lib/workshop-config"
+
+type PriceList = PriceListDoc & { id: string }
 
 export const Route = createFileRoute("/_authenticated/price-lists/")({
   component: PriceListsPage,
@@ -66,7 +70,8 @@ const columns: ColumnDef<PriceList>[] = [
 ]
 
 function PriceListsPage() {
-  const { data, loading } = useCollection<PriceList>("price_lists")
+  const db = useDb()
+  const { data, loading } = useCollection(priceListsCollection(db))
   const [createOpen, setCreateOpen] = useState(false)
 
   if (loading) return <PageLoading />
@@ -99,6 +104,7 @@ interface CreateFormValues {
 }
 
 function CreatePriceListDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const db = useDb()
   const { add, loading } = useFirestoreMutation()
   const { register, handleSubmit, reset } = useForm<CreateFormValues>({
     defaultValues: { name: "", footer: "" },
@@ -106,7 +112,7 @@ function CreatePriceListDialog({ open, onOpenChange }: { open: boolean; onOpenCh
 
   const onSubmit = async (values: CreateFormValues) => {
     try {
-      await add("price_lists", {
+      await add(priceListsCollection(db), {
         name: values.name,
         footer: values.footer,
         items: [],

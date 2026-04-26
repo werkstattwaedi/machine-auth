@@ -2,7 +2,19 @@
 // SPDX-License-Identifier: MIT
 
 import { useDocument, useCollection } from "./firestore"
+import { catalogCollection, configRef } from "./firestore-helpers"
+import { useDb } from "./firebase-context"
 import { where } from "firebase/firestore"
+import type {
+  CatalogItemDoc,
+  PriceListDoc,
+  PricingConfigDoc,
+  PricingLabels,
+  PricingModel,
+  DiscountLevel,
+  WorkshopConfigEntry,
+  PricingEntryFees,
+} from "./firestore-entities"
 
 export type WorkshopId =
   | "holz"
@@ -16,81 +28,45 @@ export type WorkshopId =
   | "makerspace"
   | "diverses"
 
-export type DiscountLevel = "none" | "member" | "intern"
-export type PricingModel =
-  | "time"
-  | "area"
-  | "length"
-  | "count"
-  | "weight"
-  | "direct"
-  | "sla"
+export type { DiscountLevel, PricingModel, PricingLabels }
 
-export interface WorkshopConfig {
-  label: string
-  order: number
-}
+/** Display config for a single workshop. */
+export type WorkshopConfig = WorkshopConfigEntry
 
-export interface EntryFees {
-  erwachsen: Record<string, number>
-  kind: Record<string, number>
-  firma: Record<string, number>
-}
+export type EntryFees = PricingEntryFees
 
-export interface PricingLabels {
-  units: Record<string, string>
-  discounts: Record<DiscountLevel, string>
-}
+/** Backward-compat alias. New code should import `PricingConfigDoc`. */
+export type PricingConfig = PricingConfigDoc
 
-export interface PricingConfig {
-  entryFees: EntryFees
-  workshops: Record<WorkshopId, WorkshopConfig>
-  labels: PricingLabels
-  // SLA resin prints have a per-layer cost that's constant across all resin
-  // types (driven by hardware wear, not material). Configured globally so a
-  // new resin catalog entry doesn't need its own copy of these numbers.
-  slaLayerPrice: Record<DiscountLevel, number>
-}
+/** Backward-compat alias of the catalog wire format with the synthetic id. */
+export type CatalogItem = CatalogItemDoc & { id: string }
 
-export interface CatalogItem {
-  id: string
-  code: string
-  name: string
-  workshops: string[]
-  pricingModel: PricingModel
-  // For `pricingModel === "sla"` this is CHF per liter of resin; the per-layer
-  // portion of the cost comes from `PricingConfig.slaLayerPrice`.
-  unitPrice: Record<DiscountLevel, number>
-  active: boolean
-  userCanAdd: boolean
-  description?: string | null
-}
+/** Backward-compat alias of the price-list wire format with the synthetic id. */
+export type PriceList = PriceListDoc & { id: string }
 
 export function usePricingConfig() {
-  return useDocument<PricingConfig>("config/pricing")
+  const db = useDb()
+  // The "config" collection is open-ended (one doc per concern); for the
+  // pricing doc we narrow the generic explicitly.
+  return useDocument<PricingConfigDoc>(
+    configRef(db, "pricing") as unknown as import("firebase/firestore").DocumentReference<PricingConfigDoc>,
+  )
 }
 
 /** Get workshops sorted by order field */
 export function getSortedWorkshops(
-  config: PricingConfig,
-): [WorkshopId, WorkshopConfig][] {
+  config: PricingConfigDoc,
+): [WorkshopId, WorkshopConfigEntry][] {
   return (
-    Object.entries(config.workshops) as [WorkshopId, WorkshopConfig][]
+    Object.entries(config.workshops) as [WorkshopId, WorkshopConfigEntry][]
   ).sort((a, b) => a[1].order - b[1].order)
-}
-
-export interface PriceList {
-  id: string
-  name: string
-  items: string[] // catalog document IDs (not DocumentReferences — needed for documentId() queries)
-  footer: string
-  active: boolean
 }
 
 /** Get user-addable catalog items for a workshop */
 export function useCatalogForWorkshop(workshopId: string | null) {
-  return useCollection<CatalogItem>(
-    workshopId ? "catalog" : null,
+  const db = useDb()
+  return useCollection(
+    workshopId ? catalogCollection(db) : null,
     ...(workshopId
       ? [
           where("active", "==", true),
@@ -102,7 +78,7 @@ export function useCatalogForWorkshop(workshopId: string | null) {
 }
 
 /** Get unit display label */
-export function getUnitLabel(config: PricingConfig, pricingModel: PricingModel): string {
+export function getUnitLabel(config: PricingConfigDoc, pricingModel: PricingModel): string {
   const map: Record<PricingModel, string> = {
     time: config.labels?.units?.h ?? "Std.",
     area: config.labels?.units?.m2 ?? "m²",

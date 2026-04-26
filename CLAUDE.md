@@ -117,6 +117,36 @@ await sessionRef.set({ userId: userDoc.ref });
 await sessionRef.set({ userId: `/users/${userId}` });
 ```
 
+### Canonical Firestore access (web apps)
+
+All web reads and writes go through the typed builders in
+`web/modules/lib/firestore-helpers.ts`. The hooks (`useDocument`,
+`useCollection`) and the mutation API (`useFirestoreMutation`) accept
+typed `DocumentReference<T>` / `CollectionReference<T>` only — string
+paths are not accepted. Doc shapes live in
+`web/modules/lib/firestore-entities.ts`. See
+[`docs/adr/0023-canonical-firestore-access.md`](docs/adr/0023-canonical-firestore-access.md).
+
+```tsx
+import { useDb } from "@modules/lib/firebase-context"
+import { userRef, machinesCollection } from "@modules/lib/firestore-helpers"
+import { useDocument, useCollection } from "@modules/lib/firestore"
+import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
+
+function MyPage({ userId }: { userId: string }) {
+  const db = useDb()
+  const { data: user } = useDocument(userRef(db, userId))
+  const { data: machines } = useCollection(machinesCollection(db))
+  const { update } = useFirestoreMutation()
+
+  // Writes that point at another doc use the typed helpers too:
+  return <Button onClick={() => update(userRef(db, userId), { foo: "bar" })} />
+}
+```
+
+Do not redefine `*Doc` types inline — import them from
+`@modules/lib/firestore-entities`.
+
 ## Local Development
 
 One-command startup:

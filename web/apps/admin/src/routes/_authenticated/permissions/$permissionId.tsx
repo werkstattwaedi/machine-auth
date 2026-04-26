@@ -4,7 +4,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { useDocument, useCollection } from "@modules/lib/firestore"
 import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
-import { permissionRef } from "@modules/lib/firestore-helpers"
+import {
+  permissionRef,
+  machineRef,
+  machinesCollection,
+  userRef,
+  usersCollection,
+} from "@modules/lib/firestore-helpers"
 import { useDb } from "@modules/lib/firebase-context"
 import { PageLoading } from "@modules/components/page-loading"
 import { PageHeader } from "@/components/admin/page-header"
@@ -25,31 +31,12 @@ import {
 import { useForm } from "react-hook-form"
 import { Loader2, Save, X } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
-import { type DocumentReference } from "firebase/firestore"
 
 export const Route = createFileRoute(
   "/_authenticated/permissions/$permissionId",
 )({
   component: PermissionDetailPage,
 })
-
-interface PermissionDoc {
-  name: string
-  description?: string
-}
-
-interface UserDoc {
-  displayName?: string
-  firstName?: string
-  lastName?: string
-  name?: string
-  permissions?: (DocumentReference | { id: string })[]
-}
-
-interface MachineDoc {
-  name?: string
-  requiredPermission?: (DocumentReference | { id: string })[]
-}
 
 interface PermissionFormValues {
   name: string
@@ -59,11 +46,11 @@ interface PermissionFormValues {
 function PermissionDetailPage() {
   const db = useDb()
   const { permissionId } = Route.useParams()
-  const { data: permission, loading } = useDocument<PermissionDoc>(
-    `permission/${permissionId}`,
+  const { data: permission, loading } = useDocument(
+    permissionRef(db, permissionId),
   )
-  const { data: allUsers } = useCollection<UserDoc>("users")
-  const { data: allMachines } = useCollection<MachineDoc>("machine")
+  const { data: allUsers } = useCollection(usersCollection(db))
+  const { data: allMachines } = useCollection(machinesCollection(db))
   const { update, loading: saving } = useFirestoreMutation()
   const [revokeTarget, setRevokeTarget] = useState<{
     type: "user" | "machine"
@@ -103,8 +90,7 @@ function PermissionDetailPage() {
 
   const onSubmit = async (values: PermissionFormValues) => {
     await update(
-      "permission",
-      permissionId,
+      permissionRef(db, permissionId),
       {
         name: values.name,
         description: values.description || null,
@@ -122,18 +108,22 @@ function PermissionDetailPage() {
       const filtered = (user.permissions ?? [])
         .filter((p) => p.id !== permissionId)
         .map((p) => permissionRef(db, p.id))
-      await update("users", revokeTarget.id, { permissions: filtered }, {
-        successMessage: "Berechtigung entfernt",
-      })
+      await update(
+        userRef(db, revokeTarget.id),
+        { permissions: filtered },
+        { successMessage: "Berechtigung entfernt" },
+      )
     } else {
       const machine = allMachines.find((m) => m.id === revokeTarget.id)
       if (!machine) return
       const filtered = (machine.requiredPermission ?? [])
         .filter((p) => p.id !== permissionId)
         .map((p) => permissionRef(db, p.id))
-      await update("machine", revokeTarget.id, { requiredPermission: filtered }, {
-        successMessage: "Berechtigung entfernt",
-      })
+      await update(
+        machineRef(db, revokeTarget.id),
+        { requiredPermission: filtered },
+        { successMessage: "Berechtigung entfernt" },
+      )
     }
 
     setRevokeTarget(null)
