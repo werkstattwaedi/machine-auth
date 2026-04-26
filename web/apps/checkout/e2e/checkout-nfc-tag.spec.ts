@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: MIT
 
 import { test, expect } from "@playwright/test"
+import { FieldValue } from "firebase-admin/firestore"
 import { readFileSync } from "fs"
 import path from "path"
 import { fileURLToPath } from "url"
-import { clearCollections, getCheckoutDocs } from "./helpers"
-import { NFC_USER_ID } from "./global-setup"
+import { clearCollections, getAdminFirestore, getCheckoutDocs } from "./helpers"
+import { NFC_TAG_UID, NFC_USER_ID } from "./global-setup"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -18,6 +19,13 @@ function readE2eData(): { picc: string; cmac: string; authUid: string } {
 
 test.beforeEach(async () => {
   await clearCollections("checkouts")
+  // The seeded picc encodes counter=0; the SDM replay defense rejects a
+  // second tap with the same counter. Each browser project re-runs the
+  // suite, so without this reset the second project trips the defense.
+  await getAdminFirestore()
+    .collection("tokens")
+    .doc(NFC_TAG_UID)
+    .update({ lastSdmCounter: FieldValue.delete() })
 })
 
 test.describe("NFC tag checkout", () => {
