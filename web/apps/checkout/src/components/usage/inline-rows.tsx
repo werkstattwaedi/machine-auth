@@ -4,6 +4,7 @@
 import { useState, useRef, useEffect, Fragment } from "react"
 import { Label } from "@modules/components/ui/label"
 import { formatCHF } from "@modules/lib/format"
+import { formatUnitPrice } from "@modules/lib/units"
 import { Plus, XCircle, Search, ChevronDown, ChevronRight } from "lucide-react"
 import {
   Tooltip,
@@ -625,12 +626,14 @@ function SlaItemRow({
         </div>
         <div className="ml-auto flex items-end gap-3">
           {/* SLA has two price axes — show both so users can see the full
-              pricing signal: resin (dominant) + layer cost. */}
+              pricing signal: resin (dominant) + layer cost. Uses
+              formatUnitPrice so the displayed CHF value is locale-formatted
+              (vs. raw JS number coercion). */}
           <div className="w-32 sm:w-40 shrink-0 text-right">
             <Label className="text-xs font-bold">Preis/Einheit</Label>
             <div className="min-h-9 flex flex-col items-end justify-center text-sm leading-tight">
-              <span>{`${resinPricePerLiter} CHF/l`}</span>
-              <span>{`${layerPrice} CHF/Layer`}</span>
+              <span>{formatUnitPrice(resinPricePerLiter, "l")}</span>
+              <span>{`${formatCHF(layerPrice)}/Layer`}</span>
             </div>
           </div>
           <div className="w-20 sm:w-24 shrink-0 text-right">

@@ -131,3 +131,25 @@ export function getShortUnit(pm: PricingModel): string {
     default: return ""
   }
 }
+
+/**
+ * SI base unit used to *store* quantities in Firestore for each pricing
+ * model. Returns `null` for non-SI dimensions (count, direct CHF) where a
+ * smart-rescaling formatter doesn't apply. The mapping is the single source
+ * of truth for the storage convention — see `units.ts` for the full
+ * documentation.
+ */
+export function getStorageBaseUnit(
+  pm: PricingModel,
+): "m" | "m2" | "l" | "kg" | "h" | null {
+  switch (pm) {
+    case "time": return "h"
+    case "area": return "m2"
+    case "length": return "m"
+    case "weight": return "kg"
+    case "sla": return "l"
+    case "count":
+    case "direct":
+    default: return null
+  }
+}

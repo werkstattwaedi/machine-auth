@@ -10,6 +10,7 @@ import {
   getSortedWorkshops,
   getUnitLabel,
   getShortUnit,
+  getStorageBaseUnit,
   type PricingConfig,
   type PricingModel,
 } from "./workshop-config"
@@ -74,5 +75,28 @@ describe("getShortUnit", () => {
     ["sla", "l"],
   ] as [PricingModel, string][])("%s → %s", (model, expected) => {
     expect(getShortUnit(model)).toBe(expected)
+  })
+})
+
+describe("getStorageBaseUnit", () => {
+  // Storage convention: one SI base unit per dimension. Pinned here so a
+  // future change to the conversion layer can't silently shift what we
+  // persist in Firestore.
+  it.each([
+    ["time", "h"],
+    ["area", "m2"],
+    ["length", "m"],
+    ["weight", "kg"],
+    ["sla", "l"],
+  ] as [PricingModel, "m" | "m2" | "l" | "kg" | "h"][])(
+    "%s → %s",
+    (model, expected) => {
+      expect(getStorageBaseUnit(model)).toBe(expected)
+    },
+  )
+
+  it("returns null for non-SI pricing models", () => {
+    expect(getStorageBaseUnit("count")).toBeNull()
+    expect(getStorageBaseUnit("direct")).toBeNull()
   })
 })
