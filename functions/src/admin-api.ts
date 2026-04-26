@@ -1,7 +1,7 @@
 /**
  * Admin API endpoints for the web admin interface
  *
- * Uses Firebase Auth for authentication (admin role required)
+ * Uses Firebase Auth for authentication (admin custom claim required).
  */
 
 import express from "express";
@@ -19,9 +19,14 @@ export const adminApp = express();
 adminApp.use(express.json());
 
 /**
- * Authentication middleware - verify Firebase Auth token and admin role
+ * Authentication middleware - verify Firebase Auth token and admin custom claim.
+ *
+ * Admin role lives on the auth token as a custom claim (`admin: true`), kept in
+ * sync from `users/{uid}.roles` by the `syncCustomClaims` Firestore trigger.
+ * Checking the claim here keeps the middleware consistent with `firestore.rules`
+ * (`request.auth.token.admin`) and avoids an extra Firestore read per request.
  */
-const adminAuthMiddleware = async (
+export const adminAuthMiddleware = async (
   req: express.Request,
   res: express.Response,
   next: express.NextFunction
@@ -41,20 +46,7 @@ const adminAuthMiddleware = async (
     const decodedToken = await getAuth().verifyIdToken(token);
     const uid = decodedToken.uid;
 
-    // Get user document (doc ID = Auth UID)
-    const db = getFirestore();
-    const userDoc = await db.doc(`users/${uid}`).get();
-
-    if (!userDoc.exists) {
-      logger.warn(`Admin API: User not found for uid: ${uid}`);
-      res.status(403).send({ error: "User not found" });
-      return;
-    }
-
-    const userData = userDoc.data()!;
-
-    // Check if user has admin role
-    if (!userData.roles || !userData.roles.includes("admin")) {
+    if (decodedToken.admin !== true) {
       logger.warn(`Admin API: User ${uid} is not an admin`);
       res.status(403).send({ error: "Admin access required" });
       return;
@@ -64,7 +56,6 @@ const adminAuthMiddleware = async (
     (req as any).user = {
       uid,
       userId: uid,
-      ...userData,
     };
 
     next();
