@@ -6,7 +6,6 @@ import {
   type UserType,
   type UsageType,
 } from "@modules/lib/pricing"
-import type { CheckoutItemLocal } from "@/components/usage/inline-rows"
 
 export interface CheckoutPerson {
   id: string
@@ -30,7 +29,6 @@ export interface CheckoutState {
   submitted: boolean
   checkoutId: string | null
   totalPrice: number
-  localItems: CheckoutItemLocal[] // For anonymous users (no Firestore persistence)
 }
 
 type CheckoutAction =
@@ -42,9 +40,6 @@ type CheckoutAction =
   | { type: "SET_TIP"; amount: number }
   | { type: "SET_SUBMITTED"; checkoutId: string | null; totalPrice: number }
   | { type: "RESET" }
-  | { type: "ADD_LOCAL_ITEM"; item: CheckoutItemLocal }
-  | { type: "UPDATE_LOCAL_ITEM"; id: string; item: CheckoutItemLocal }
-  | { type: "REMOVE_LOCAL_ITEM"; id: string }
 
 function createEmptyPerson(): CheckoutPerson {
   return {
@@ -66,7 +61,6 @@ const initialState: CheckoutState = {
   submitted: false,
   checkoutId: null,
   totalPrice: 0,
-  localItems: [],
 }
 
 function checkoutReducer(
@@ -111,23 +105,6 @@ function checkoutReducer(
 
     case "RESET":
       return initialState
-
-    case "ADD_LOCAL_ITEM":
-      return { ...state, localItems: [...state.localItems, action.item] }
-
-    case "UPDATE_LOCAL_ITEM":
-      return {
-        ...state,
-        localItems: state.localItems.map((i) =>
-          i.id === action.id ? action.item : i,
-        ),
-      }
-
-    case "REMOVE_LOCAL_ITEM":
-      return {
-        ...state,
-        localItems: state.localItems.filter((i) => i.id !== action.id),
-      }
 
     default:
       return state

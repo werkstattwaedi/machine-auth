@@ -96,7 +96,6 @@ function renderStepWorkshops(initialItems: CheckoutItemLocal[] = []) {
         <StepWorkshops
           state={state}
           dispatch={dispatch}
-          isAnonymous={false}
           config={makeConfig()}
           items={currentItems}
           checkoutId="co-123"
