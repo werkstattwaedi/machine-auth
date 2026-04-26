@@ -69,6 +69,24 @@ async function resolveKioskBearer(): Promise<string | null> {
   return typeof value === "string" && value.length > 0 ? value : null
 }
 
+interface VerifyTagResponse {
+  customToken: string
+  tokenId: string
+  userId: string
+  firstName?: string
+  lastName?: string
+  email?: string
+  userType?: string
+}
+
+// Module-level dedup of in-flight verify_tag calls. The verifyTagCheckout
+// endpoint enforces a strict SDM counter increase; a duplicate request with
+// the same picc (e.g. React StrictMode double-mount, browser reload, or a
+// bare network retry) would be rejected as a replay even though it's the
+// same physical tap. Returning the same promise to all callers keeps the
+// server-side defense intact while making the hook idempotent per tap.
+const inflightVerifyByKey = new Map<string, Promise<VerifyTagResponse>>()
+
 /**
  * Resolve user identity from NFC tag URL parameters (picc + cmac).
  *
@@ -106,21 +124,40 @@ export function useTokenAuth(
 
     ;(async () => {
       try {
-        const headers: Record<string, string> = {
-          "Content-Type": "application/json",
-        }
-        const bearer = await resolveKioskBearer()
-        if (bearer) headers["Authorization"] = `Bearer ${bearer}`
+        const cacheKey = `${picc}|${cmac}`
+        let pending = inflightVerifyByKey.get(cacheKey)
+        if (!pending) {
+          pending = (async () => {
+            const headers: Record<string, string> = {
+              "Content-Type": "application/json",
+            }
+            const bearer = await resolveKioskBearer()
+            if (bearer) headers["Authorization"] = `Bearer ${bearer}`
 
-        const res = await fetch(url, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({ picc, cmac }),
-        })
-        const data = await res.json()
-        if (!res.ok) {
-          throw new Error(data.error ?? "Tag-Verifizierung fehlgeschlagen")
+            const res = await fetch(url, {
+              method: "POST",
+              headers,
+              body: JSON.stringify({ picc, cmac }),
+            })
+            const responseBody = await res.json()
+            if (!res.ok) {
+              throw new Error(
+                responseBody.error ?? "Tag-Verifizierung fehlgeschlagen"
+              )
+            }
+            return responseBody as VerifyTagResponse
+          })()
+          inflightVerifyByKey.set(cacheKey, pending)
+          // Drop the cache entry once settled so a fresh tap (after tagSignOut)
+          // can re-issue. Failures also clear so a retry with the same picc
+          // re-attempts the verify rather than being stuck on the prior error.
+          pending.finally(() => {
+            if (inflightVerifyByKey.get(cacheKey) === pending) {
+              inflightVerifyByKey.delete(cacheKey)
+            }
+          })
         }
+        const data = await pending
         if (cancelled) return
 
         // The kiosk session is short-lived and must not persist across

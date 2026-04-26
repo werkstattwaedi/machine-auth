@@ -24,7 +24,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const TERMINAL_KEY = "f5e4b999d5aa629f193a874529c4aa2f"
 const MASTER_KEY = "c025f541727ecd8b6eb92055c88a2a70"
 const SYSTEM_NAME = "Oww8820Maco"
-const NFC_TAG_UID = "04c339aa1e1890"
+export const NFC_TAG_UID = "04c339aa1e1890"
 
 const PROJECT_ID = "oww-maco"
 const AUTH_EMULATOR = `http://127.0.0.1:${E2E_PORTS.auth}`
