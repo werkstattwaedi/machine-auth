@@ -10,7 +10,7 @@ import {
   clearFirestore,
   teardownEmulator,
 } from "../emulator-helper";
-import { adminAuthMiddleware } from "../../src/admin-api";
+import { adminApp, adminAuthMiddleware } from "../../src/admin-api";
 
 /**
  * Integration tests for the admin API authentication middleware.
@@ -154,6 +154,44 @@ describe("Admin API auth middleware (Integration)", () => {
 
       expect(res.status).to.equal(200);
       expect(res.body).to.deep.equal({ ok: true, uid });
+    });
+  });
+
+  describe("Rate limiting", () => {
+    // The limiter on `adminApp` reads its budget from `ADMIN_RATE_LIMIT` per
+    // request, so we shrink the window to a handful of requests for the test
+    // and restore the production default afterwards.
+    const ADMIN_RATE_LIMIT_FOR_TEST = 5;
+    let originalLimit: string | undefined;
+
+    before(() => {
+      originalLimit = process.env.ADMIN_RATE_LIMIT;
+      process.env.ADMIN_RATE_LIMIT = String(ADMIN_RATE_LIMIT_FOR_TEST);
+    });
+
+    after(() => {
+      if (originalLimit === undefined) {
+        delete process.env.ADMIN_RATE_LIMIT;
+      } else {
+        process.env.ADMIN_RATE_LIMIT = originalLimit;
+      }
+    });
+
+    it("returns 429 once the per-IP request budget is exhausted", async () => {
+      // Fire `limit` requests that each fail auth (401) — the limiter still
+      // counts them because it sits before the auth middleware. The next
+      // request must be rejected with 429 by the limiter itself.
+      const within = await Promise.all(
+        Array.from({ length: ADMIN_RATE_LIMIT_FOR_TEST }, () =>
+          request(adminApp).get("/particle/devices")
+        )
+      );
+      for (const res of within) {
+        expect(res.status).to.equal(401);
+      }
+
+      const overflow = await request(adminApp).get("/particle/devices");
+      expect(overflow.status).to.equal(429);
     });
   });
 });

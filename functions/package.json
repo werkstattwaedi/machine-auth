@@ -28,6 +28,7 @@
     "@bufbuild/protobuf": "^2.10.2",
     "date-fns": "^4.1.0",
     "date-fns-tz": "^3.2.0",
+    "express-rate-limit": "^7.5.0",
     "firebase-admin": "^13.0.0",
     "firebase-functions": "^7.0.0",
     "particle-api-js": "^9.1.2",

@@ -5,6 +5,7 @@
  */
 
 import express from "express";
+import { rateLimit } from "express-rate-limit";
 import { onRequest } from "firebase-functions/v2/https";
 import { defineSecret, defineString } from "firebase-functions/params";
 import * as logger from "firebase-functions/logger";
@@ -15,8 +16,34 @@ import Particle from "particle-api-js";
 const particleToken = defineSecret("PARTICLE_TOKEN");
 const particleProductId = defineString("PARTICLE_PRODUCT_ID");
 
+// Per-IP request budget. Read per request so tests can override via the
+// `ADMIN_RATE_LIMIT` env var without re-importing the module. Production
+// defaults to 60 req/min.
+const adminRequestBudget = (
+  _req: express.Request,
+  _res: express.Response
+): number => Number(process.env.ADMIN_RATE_LIMIT ?? 60);
+
 export const adminApp = express();
 adminApp.use(express.json());
+// Firebase Functions sit behind exactly one Google Front End proxy, so trust
+// the leftmost X-Forwarded-For hop for `req.ip`. Setting to `1` (rather than
+// `true`) avoids the express-rate-limit ERR_ERL_PERMISSIVE_TRUST_PROXY
+// warning about clients spoofing X-Forwarded-For.
+adminApp.set("trust proxy", 1);
+
+// Per-IP rate limit applied before auth so unauthenticated brute-force attempts
+// are throttled too. The limiter is in-memory and therefore per-instance in
+// serverless — best-effort rather than global, but it satisfies CodeQL's
+// "missing rate limiting" check and is sufficient for an admin-only endpoint
+// with a tiny user pool.
+const adminRateLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: adminRequestBudget,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+});
+adminApp.use(adminRateLimiter);
 
 /**
  * Authentication middleware - verify Firebase Auth token and admin custom claim.
