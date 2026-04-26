@@ -3,6 +3,7 @@
 
 import { expect } from "chai";
 import {
+  assertLoginOriginsConfigured,
   constantTimeEqual,
   generateCode,
   generateDocId,
@@ -120,6 +121,56 @@ describe("login-code helpers", () => {
           " https://checkout.werkstattwaedi.ch , , https://other.example "
         )
       ).to.equal(true);
+    });
+  });
+
+  describe("assertLoginOriginsConfigured", () => {
+    let savedEmulator: string | undefined;
+
+    beforeEach(() => {
+      savedEmulator = process.env.FUNCTIONS_EMULATOR;
+    });
+
+    afterEach(() => {
+      if (savedEmulator === undefined) {
+        delete process.env.FUNCTIONS_EMULATOR;
+      } else {
+        process.env.FUNCTIONS_EMULATOR = savedEmulator;
+      }
+    });
+
+    it("throws in non-emulator mode when value is empty", () => {
+      delete process.env.FUNCTIONS_EMULATOR;
+      try {
+        assertLoginOriginsConfigured("");
+        throw new Error("expected throw, got success");
+      } catch (err: any) {
+        expect(err.code).to.equal("failed-precondition");
+        expect(err.message).to.contain("not configured");
+      }
+    });
+
+    it("throws on whitespace-only value", () => {
+      delete process.env.FUNCTIONS_EMULATOR;
+      try {
+        assertLoginOriginsConfigured("   ");
+        throw new Error("expected throw, got success");
+      } catch (err: any) {
+        expect(err.code).to.equal("failed-precondition");
+        expect(err.message).to.contain("not configured");
+      }
+    });
+
+    it("does not throw when value has at least one origin", () => {
+      delete process.env.FUNCTIONS_EMULATOR;
+      expect(() =>
+        assertLoginOriginsConfigured("https://example.com")
+      ).to.not.throw();
+    });
+
+    it("does not throw in emulator mode even when empty", () => {
+      process.env.FUNCTIONS_EMULATOR = "true";
+      expect(() => assertLoginOriginsConfigured("")).to.not.throw();
     });
   });
 });
