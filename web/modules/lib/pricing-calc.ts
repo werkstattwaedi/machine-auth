@@ -2,6 +2,12 @@
 // SPDX-License-Identifier: MIT
 
 import type { PricingModel } from "./workshop-config"
+import {
+  cmDimensionsToSquareMeters,
+  cmToMeters,
+  gramsToKg,
+  mlToLiters,
+} from "./units"
 
 export interface PricingResult {
   quantity: number
@@ -32,7 +38,7 @@ export function computePricing(
   if (pricingModel === "area") {
     const l = raw.lengthCm ?? 0
     const w = raw.widthCm ?? 0
-    quantity = (l / 100) * (w / 100)
+    quantity = cmDimensionsToSquareMeters(l, w)
     totalPrice = quantity * unitPrice
     formInputs = [
       { quantity: l, unit: "cm" },
@@ -40,12 +46,12 @@ export function computePricing(
     ]
   } else if (pricingModel === "length") {
     const l = raw.lengthCm ?? 0
-    quantity = l / 100
+    quantity = cmToMeters(l)
     totalPrice = quantity * unitPrice
     formInputs = [{ quantity: l, unit: "cm" }]
   } else if (pricingModel === "weight") {
     const g = raw.weightG ?? 0
-    quantity = g / 1000
+    quantity = gramsToKg(g)
     totalPrice = quantity * unitPrice
     formInputs = [{ quantity: g, unit: "g" }]
   } else if (pricingModel === "direct") {
@@ -58,7 +64,7 @@ export function computePricing(
     const perLayer = layerPrice ?? 0
     quantity = 1
     // unitPrice is CHF per liter of resin; layerPrice is CHF per printed layer.
-    totalPrice = (resinMl / 1000) * unitPrice + layers * perLayer
+    totalPrice = mlToLiters(resinMl) * unitPrice + layers * perLayer
     formInputs = [
       { quantity: resinMl, unit: "ml" },
       { quantity: layers, unit: "layers" },
