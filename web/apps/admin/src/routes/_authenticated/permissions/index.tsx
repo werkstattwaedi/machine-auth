@@ -18,7 +18,7 @@ import type {
 } from "@modules/lib/firestore-entities"
 import { PageLoading } from "@modules/components/page-loading"
 import { PageHeader } from "@/components/admin/page-header"
-import { DataTable, ColumnHeader } from "@/components/data-table"
+import { DataTable, ColumnHeader } from "@modules/components/data-table"
 import { Button } from "@modules/components/ui/button"
 import { Input } from "@modules/components/ui/input"
 import { Label } from "@modules/components/ui/label"
