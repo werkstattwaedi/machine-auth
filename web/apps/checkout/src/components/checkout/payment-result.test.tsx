@@ -10,15 +10,24 @@ vi.mock("qrcode.react", () => ({
   ),
 }))
 
-// Mock firestore hook
+// Mock firestore hook. After the canonical refactor (issue #145), `useDocument`
+// receives a typed DocumentReference (or null). Our fake returns a ref-shaped
+// object whose `.path` we can use to discriminate which doc was requested.
 const mockUseDocument = vi.fn()
 vi.mock("@modules/lib/firestore", () => ({
-  useDocument: (...args: any[]) => mockUseDocument(...args),
+  useDocument: (ref: { path?: string } | null) => mockUseDocument(ref),
+}))
+
+// Mock the helper so tests don't need a live Firestore instance.
+vi.mock("@modules/lib/firestore-helpers", () => ({
+  checkoutRef: (_db: unknown, id: string) => ({ id, path: `checkouts/${id}` }),
 }))
 
 // Mock firebase context
 const mockFunctions = {}
+const mockDb = {}
 vi.mock("@modules/lib/firebase-context", () => ({
+  useDb: () => mockDb,
   useFunctions: () => mockFunctions,
 }))
 
@@ -35,8 +44,8 @@ import { PaymentResult, SWISS_CROSS_SVG } from "./payment-result"
 describe("PaymentResult", () => {
   beforeEach(() => {
     // Default: checkout has billRef, payment data loaded
-    mockUseDocument.mockImplementation((path: string | null) => {
-      if (path?.startsWith("checkouts/")) {
+    mockUseDocument.mockImplementation((ref: { path?: string } | null) => {
+      if (ref?.path?.startsWith("checkouts/")) {
         return { data: { id: "checkout-1", billRef: { id: "bill-1" } }, loading: false, error: null }
       }
       return { data: null, loading: false, error: null }
@@ -153,8 +162,8 @@ describe("PaymentResult", () => {
   })
 
   it("shows loading state when bill not yet created", () => {
-    mockUseDocument.mockImplementation((path: string | null) => {
-      if (path?.startsWith("checkouts/")) {
+    mockUseDocument.mockImplementation((ref: { path?: string } | null) => {
+      if (ref?.path?.startsWith("checkouts/")) {
         return { data: { id: "checkout-1", billRef: null }, loading: false, error: null }
       }
       return { data: null, loading: false, error: null }

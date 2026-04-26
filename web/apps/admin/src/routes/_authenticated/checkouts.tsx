@@ -5,8 +5,11 @@ import { createFileRoute, Link } from "@tanstack/react-router"
 import { useCollection } from "@modules/lib/firestore"
 import { orderBy, limit } from "firebase/firestore"
 import { useLookup, resolveRef } from "@modules/lib/lookup"
+import { useDb } from "@modules/lib/firebase-context"
+import { checkoutsCollection } from "@modules/lib/firestore-helpers"
+import type { CheckoutDoc } from "@modules/lib/firestore-entities"
 import { PageLoading } from "@modules/components/page-loading"
-import { DataTable, ColumnHeader } from "@/components/data-table"
+import { DataTable, ColumnHeader } from "@modules/components/data-table"
 import { PageHeader } from "@/components/admin/page-header"
 import { Badge } from "@modules/components/ui/badge"
 import { formatDateTime, formatCHF } from "@modules/lib/format"
@@ -17,26 +20,10 @@ export const Route = createFileRoute("/_authenticated/checkouts")({
   component: CheckoutsPage,
 })
 
-interface CheckoutDoc {
-  userId?: { id: string } | null
-  status: "open" | "closed"
-  usageType?: string
-  created?: { toDate(): Date }
-  closedAt?: { toDate(): Date }
-  workshopsVisited?: string[]
-  persons?: { name: string; email: string }[]
-  summary?: {
-    totalPrice: number
-    entryFees: number
-    machineCost: number
-    materialCost: number
-    tip: number
-  }
-}
-
 function CheckoutsPage() {
-  const { data, loading } = useCollection<CheckoutDoc>(
-    "checkouts",
+  const db = useDb()
+  const { data, loading } = useCollection(
+    checkoutsCollection(db),
     orderBy("created", "desc"),
     limit(100),
   )
