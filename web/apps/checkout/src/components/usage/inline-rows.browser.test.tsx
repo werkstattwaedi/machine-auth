@@ -461,7 +461,7 @@ describe("SlaItemRow", () => {
     ])
   })
 
-  it("shows both resin-per-liter (unitPrice) and per-layer (config.slaLayerPrice) in the hint", () => {
+  it("shows both resin-per-liter (unitPrice) and per-layer (config.slaLayerPrice) in two side-by-side columns", () => {
     const callbacks = makeCallbacks()
 
     render(
@@ -475,10 +475,16 @@ describe("SlaItemRow", () => {
       />,
     )
 
-    // Show both price axes so users can sanity-check the full pricing signal.
-    // Rendered as two stacked <span>s so a narrow column can't wrap mid-number.
-    expect(screen.getByText("250 CHF/l")).toBeTruthy()
-    expect(screen.getByText("0.01 CHF/Layer")).toBeTruthy()
+    // Per #140 the two SLA price axes are rendered as separate columns. The
+    // resin axis rescales 250 CHF/l via the formatUnitPrice reference-quantity
+    // (0.05 l = a typical print) into CHF/ml, and the layer axis rescales the
+    // 0.01 CHF/Layer config value via formatPricePerCount.
+    expect(screen.getByText("Preis Resin")).toBeTruthy()
+    expect(screen.getByText("Preis Layer")).toBeTruthy()
+    // 250 CHF/l × 0.05 l ÷ 50 mL = 0.25 CHF/ml.
+    expect(screen.getByText(/CHF\s*0\.25\/ml$/)).toBeTruthy()
+    // 0.01 CHF/Layer fits at the 1× denominator.
+    expect(screen.getByText(/CHF\s*0\.01\/Layer$/)).toBeTruthy()
   })
 
   it("applies member discount layerPrice from config.slaLayerPrice", () => {
@@ -495,9 +501,10 @@ describe("SlaItemRow", () => {
       />,
     )
 
-    // Member discount: resin = 200 CHF/l, layer = 0.008 CHF/layer.
-    expect(screen.getByText("200 CHF/l")).toBeTruthy()
-    expect(screen.getByText("0.008 CHF/Layer")).toBeTruthy()
+    // Member discount: resin = 200 CHF/l → 0.20 CHF/ml; layer = 0.008
+    // CHF/Layer → /1000 rescale to CHF 8.00/1000 Layer (sub-cent baseline).
+    expect(screen.getByText(/CHF\s*0\.20\/ml$/)).toBeTruthy()
+    expect(screen.getByText(/CHF\s*8\.00\/1000 Layer$/)).toBeTruthy()
   })
 
   it("displays computed total as users type", async () => {
