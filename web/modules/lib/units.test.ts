@@ -6,6 +6,7 @@ import {
   formatQuantity,
   formatUnitPrice,
   formatCount,
+  formatPricePerCount,
   parseQuantity,
   cmToMeters,
   gramsToKg,
@@ -136,6 +137,42 @@ describe("formatCount", () => {
 
   it("rounds away fractional values (counts are integers)", () => {
     expect(norm(formatCount(1.7, "Stk."))).toBe("2 Stk.")
+  })
+})
+
+describe("formatPricePerCount", () => {
+  it("keeps the denominator at 1 for normal-magnitude prices", () => {
+    expect(norm(formatPricePerCount(0.5, "Layer"))).toBe("CHF 0.50/Layer")
+    expect(norm(formatPricePerCount(1, "Stk."))).toBe("CHF 1.00/Stk.")
+    // Boundary: 0.01 still reads at 1× since 0.01 == threshold.
+    expect(norm(formatPricePerCount(0.01, "Layer"))).toBe("CHF 0.01/Layer")
+  })
+
+  it("rescales to /100 for sub-cent prices", () => {
+    // 0.001 CHF/Layer — at 1× would print "0.00", which reads as zero. /100
+    // gives "0.10", which is readable.
+    expect(norm(formatPricePerCount(0.001, "Layer"))).toBe("CHF 0.10/100 Layer")
+  })
+
+  it("rescales to /1000 for very small prices that don't reach 0.01 at /100", () => {
+    // 0.00009 × 100 = 0.009 < 0.01 → bump to /1000 → 0.09.
+    expect(norm(formatPricePerCount(0.00009, "Layer"))).toBe(
+      "CHF 0.09/1000 Layer",
+    )
+  })
+
+  it("uses /100 when /100 gets above the 0.01 threshold", () => {
+    // SLA per-layer seed config (0.00109 CHF/Layer): 0.00109 × 100 = 0.109,
+    // which is >= 0.01 so we stop at /100 rather than /1000. The price
+    // formatter keeps up to 4 fractional digits to preserve precision when
+    // the rescaled value isn't a clean two-decimal number.
+    expect(norm(formatPricePerCount(0.00109, "Layer"))).toBe(
+      "CHF 0.109/100 Layer",
+    )
+  })
+
+  it("returns empty string for non-finite values", () => {
+    expect(formatPricePerCount(Number.NaN, "Layer")).toBe("")
   })
 })
 
