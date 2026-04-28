@@ -51,6 +51,12 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
   const [submitting, setSubmitting] = useState(false)
   const [paymentData, setPaymentData] = useState<PaymentData | null>(null)
   const { data: pricingConfig, loading: loadingConfig, configError } = usePricingConfig()
+  // Set true after the first render that gets past the initial loading
+  // gate. Used so subsequent intermediate loading states (e.g. the items
+  // subscription detaching/re-attaching when `checkoutId` flips) don't
+  // bounce the user back to <PageLoading /> — that would unmount
+  // StepWorkshops and erase its in-component state. Issue #151.
+  const hasRenderedRef = useRef(false)
 
   // Determine auth mode (tag-auth signs into Firebase Auth too, but is not
   // an "account login" — it should still behave like a kiosk session with
@@ -65,15 +71,37 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
       ? userRef(db, tokenUser!.userId)
       : undefined
 
-  // Find open checkout for identified user
+  // Find open checkout for the current principal.
+  //
+  // Identified users (real login + tag-tap): query by `userId` reference.
+  //
+  // Truly anonymous users (issue #151): once they sign in anonymously at
+  // the end of step 1, their session has a stable Firebase Auth UID for
+  // the rest of the visit. We subscribe to open checkouts they created
+  // (`modifiedBy == auth.uid`) so a refresh on step 2 reattaches to the
+  // same checkout doc and the items they added persist. The Firestore
+  // rule still permits all anon sessions to read any null-userId
+  // checkout (doc IDs are unguessable), but the query filter scopes us
+  // to our own.
+  const anonUid = isAnonymous && user?.isAnonymous ? user.uid : null
   const { data: openCheckouts, loading: loadingCheckout } = useCollection(
-    identifiedUserRef ? checkoutsCollection(db) : null,
+    identifiedUserRef
+      ? checkoutsCollection(db)
+      : anonUid
+        ? checkoutsCollection(db)
+        : null,
     ...(identifiedUserRef
       ? [
           where("userId", "==", identifiedUserRef),
           where("status", "==", "open"),
         ]
-      : []),
+      : anonUid
+        ? [
+            where("userId", "==", null),
+            where("modifiedBy", "==", anonUid),
+            where("status", "==", "open"),
+          ]
+        : []),
   )
   const openCheckout = openCheckouts[0] ?? null
   const checkoutId = openCheckout?.id ?? null
@@ -102,8 +130,10 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
     [checkoutItems],
   )
 
-  // Merge Firestore items with local items (for anonymous users)
-  const effectiveItems = isAnonymous ? state.localItems : items
+  // Issue #151: anonymous users now sign in eagerly after step 1, so they
+  // write items to the Firestore subcollection just like authenticated
+  // users. The legacy `state.localItems` branch (and the
+  // `effectiveItems = isAnonymous ? localItems : items` split) is gone.
 
   // Pre-fill primary person for logged-in users
   usePreFillPerson(identifiedUserDoc, dispatch, state.persons)
@@ -208,8 +238,17 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
     }
   }, [openCheckout?.usageType, dispatch])
 
-  if (tokenLoading || loadingCheckout || loadingItems || loadingConfig) {
-    return <PageLoading />
+  // Only block on the *first* load. Once we've rendered the wizard once,
+  // intermediate loading states (e.g. items subscription re-attaching when
+  // `checkoutId` flips from null → "abc" after the first item write in the
+  // anonymous flow — issue #151) must NOT unmount StepWorkshops; losing
+  // its local state (`manuallySelectedWorkshops`) would drop the workshop
+  // sections the user just selected.
+  if (!hasRenderedRef.current) {
+    if (tokenLoading || loadingCheckout || loadingItems || loadingConfig) {
+      return <PageLoading />
+    }
+    hasRenderedRef.current = true
   }
 
   // Issue #149: refuse to render the checkout if `config/pricing` is
@@ -254,14 +293,9 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
   const handleSubmit = async () => {
     setSubmitting(true)
     try {
-      // Truly-anonymous flow: sign into Firebase Anonymous Auth before
-      // calling the bill callable. Each anonymous checkout becomes a
-      // distinct Firebase principal, which lets the rules require
-      // isAnonymousAuth() rather than the old `if true` create branch.
-      // No-op if a session (real, anonymous, or tag) already exists.
-      if (isAnonymous) {
-        await signInAnonymouslyIfNeeded()
-      }
+      // Anonymous sign-in moved to step 1 (issue #151) — by the time the
+      // user reaches the checkout step they're already a Firebase
+      // principal (anonymous, real, or tag), so no extra round-trip here.
 
       // Calculate entry fees (client-side estimate for the receipt; the
       // server recomputes authoritatively in closeCheckoutAndGetPayment).
@@ -274,8 +308,8 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
         0,
       )
 
-      const nfcItems = effectiveItems.filter((i) => i.origin === "nfc")
-      const materialItems = effectiveItems.filter((i) => i.origin !== "nfc")
+      const nfcItems = items.filter((i) => i.origin === "nfc")
+      const materialItems = items.filter((i) => i.origin !== "nfc")
       const machineCost = nfcItems.reduce((sum, i) => sum + i.totalPrice, 0)
       const materialCost = materialItems.reduce((sum, i) => sum + i.totalPrice, 0)
       const total = entryFees + machineCost + materialCost + state.tip
@@ -346,13 +380,17 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
         setPaymentData(data)
         resultCheckoutId = checkoutId
       } else {
+        // Degenerate path: user reached step 2 without ever adding an item
+        // (so step-workshops never lazy-created a Firestore checkout doc).
+        // Common case is "tip only" / "entry fee only". The callable
+        // handles this by creating the doc server-side.
         const newCheckout = {
           // Preserve the original semantic: an account/tag user with no
           // pre-existing open checkout still gets their userId stamped on
           // the new doc. Only truly anonymous visitors send null.
           userId: identifiedUserRef?.id ?? null,
-          workshopsVisited: [...new Set(effectiveItems.map((i) => i.workshop))],
-          items: effectiveItems.map((item) => ({
+          workshopsVisited: [...new Set(items.map((i) => i.workshop))],
+          items: items.map((item) => ({
             workshop: item.workshop,
             description: item.description,
             origin: item.origin,
@@ -401,15 +439,19 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
             await signOut()
             window.location.replace(kiosk ? "/?kiosk" : "/")
           }}
+          onAdvance={async () => {
+            // Issue #151: eager anonymous sign-in. No-op for already
+            // identified users (real, anonymous-already, or tag).
+            if (isAnonymous) await signInAnonymouslyIfNeeded()
+          }}
         />
       )}
       {state.step === 1 && (
         <StepWorkshops
           state={state}
           dispatch={dispatch}
-          isAnonymous={isAnonymous}
           config={pricingConfig}
-          items={effectiveItems}
+          items={items}
           checkoutId={checkoutId}
           userRef={identifiedUserRef ?? null}
           discountLevel={
@@ -425,7 +467,7 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
           dispatch={dispatch}
           onSubmit={handleSubmit}
           submitting={submitting}
-          items={effectiveItems}
+          items={items}
           config={pricingConfig}
         />
       )}

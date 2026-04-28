@@ -368,7 +368,30 @@ describe("Checkout items create rules", () => {
   // R3 in Security Analysis: rules-level field validation rejects negative
   // quantities/prices. Server-side recompute is the authoritative defense
   // (Phase A5), but this is a cheap guard.
-  it("rejects items with zero or negative quantity", async () => {
+  //
+  // Issue #151: `quantity: 0` is allowed at the rules layer because newly
+  // added catalog items start at 0 until the user fills in the form.
+  // The server-side recompute (`isValidItem` in
+  // closeCheckoutAndGetPayment) drops zero-quantity items from the bill.
+  it("allows items with zero quantity (in-progress catalog selection)", async () => {
+    await createOpenCheckout("co1", "u1")
+    const db = authedDb("u1")
+    await assertSucceeds(
+      addDoc(collection(db, "checkouts", "co1", "items"), {
+        workshop: "holz",
+        description: "in-progress",
+        origin: "manual",
+        catalogId: null,
+        created: serverTimestamp(),
+        quantity: 0,
+        unitPrice: 1,
+        totalPrice: 0,
+        formInputs: null,
+      }),
+    )
+  })
+
+  it("rejects items with negative quantity", async () => {
     await createOpenCheckout("co1", "u1")
     const db = authedDb("u1")
     await assertFails(
@@ -378,9 +401,9 @@ describe("Checkout items create rules", () => {
         origin: "manual",
         catalogId: null,
         created: serverTimestamp(),
-        quantity: 0,
+        quantity: -1,
         unitPrice: 1,
-        totalPrice: 0,
+        totalPrice: -1,
         formInputs: null,
       }),
     )

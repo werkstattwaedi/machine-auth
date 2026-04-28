@@ -20,15 +20,21 @@ import {
   doc,
   type DocumentReference,
 } from "firebase/firestore"
-import { useDb } from "@modules/lib/firebase-context"
+import { useDb, useFirebaseAuth } from "@modules/lib/firebase-context"
 
 interface StepWorkshopsProps {
   state: CheckoutState
   dispatch: React.Dispatch<CheckoutAction>
-  isAnonymous: boolean
   config: PricingConfig | null
   items: CheckoutItemLocal[]
   checkoutId: string | null
+  /**
+   * Owning user ref, or null for the truly-anonymous flow (issue #151).
+   * The anonymous flow signs the visitor into Firebase Anonymous Auth at
+   * the end of step 1, so writes here also go straight to Firestore — the
+   * created checkout doc has `userId: null` and the security rules allow
+   * the anon principal to write items into it.
+   */
   userRef: DocumentReference | null
   discountLevel: DiscountLevel
 }
@@ -36,7 +42,6 @@ interface StepWorkshopsProps {
 export function StepWorkshops({
   state,
   dispatch,
-  isAnonymous,
   config,
   items,
   checkoutId,
@@ -44,6 +49,7 @@ export function StepWorkshops({
   discountLevel,
 }: StepWorkshopsProps) {
   const db = useDb()
+  const auth = useFirebaseAuth()
   const isMobile = useIsMobile()
   const sortedWorkshops = config ? getSortedWorkshops(config) : []
 
@@ -140,64 +146,65 @@ export function StepWorkshops({
     return () => cancelAnimationFrame(raf)
   }, [selectedWorkshops])
 
-  // Callbacks: local state for anonymous, Firestore for authenticated
+  // Single Firestore write path (issue #151). Anonymous users are signed
+  // in by the time they reach this step, so they hit the same lazy-create
+  // flow as authenticated users — only difference is the new checkout
+  // doc's `userId` is null (the security rules allow the anon principal
+  // to create + write items into a null-userId doc).
+  //
+  // `auth.currentUser?.uid` is stamped into `modifiedBy` on the create so
+  // the wizard's checkouts subscription can scope by principal — without
+  // that filter, every anon session would see every other anon's open
+  // cart on refresh.
   const callbacks: ItemCallbacks = useMemo(
-    () => {
-      if (isAnonymous) {
-        return {
-          addItem: (item: CheckoutItemLocal) => dispatch({ type: "ADD_LOCAL_ITEM", item }),
-          updateItem: (_id: string, item: CheckoutItemLocal) => dispatch({ type: "UPDATE_LOCAL_ITEM", id: item.id, item }),
-          removeItem: (id: string) => dispatch({ type: "REMOVE_LOCAL_ITEM", id }),
-        }
-      }
-      return {
-        addItem: async (item: CheckoutItemLocal) => {
-          let coId = checkoutId
-          if (!coId && userRef) {
-            const coRef = await addDoc(collection(db, "checkouts"), {
-              userId: userRef,
-              status: "open",
-              usageType: state.usageType,
-              created: serverTimestamp(),
-              workshopsVisited: [item.workshop],
-              persons: [],
-              modifiedBy: null,
-              modifiedAt: serverTimestamp(),
-            })
-            coId = coRef.id
-          }
-          if (!coId) return
-          await addDoc(collection(db, "checkouts", coId, "items"), {
-            workshop: item.workshop,
-            description: item.description,
-            origin: item.origin,
-            catalogId: item.catalogId ? doc(db, "catalog", item.catalogId) : null,
-            pricingModel: item.pricingModel ?? null,
+    () => ({
+      addItem: async (item: CheckoutItemLocal) => {
+        let coId = checkoutId
+        if (!coId) {
+          const callerUid = auth?.currentUser?.uid ?? null
+          const coRef = await addDoc(collection(db, "checkouts"), {
+            userId: userRef ?? null,
+            status: "open",
+            usageType: state.usageType,
             created: serverTimestamp(),
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            totalPrice: item.totalPrice,
-            formInputs: item.formInputs ?? null,
+            workshopsVisited: [item.workshop],
+            persons: [],
+            modifiedBy: callerUid,
+            modifiedAt: serverTimestamp(),
           })
-        },
-        updateItem: (_id: string, item: CheckoutItemLocal) => {
-          if (!checkoutId) return
-          updateDoc(doc(db, "checkouts", checkoutId, "items", item.id), {
-            description: item.description,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            totalPrice: item.totalPrice,
-            formInputs: item.formInputs ?? null,
-          })
-        },
-        removeItem: (id: string) => {
-          if (!checkoutId) return
-          deleteDoc(doc(db, "checkouts", checkoutId, "items", id))
-        },
-      }
-    },
+          coId = coRef.id
+        }
+        if (!coId) return
+        await addDoc(collection(db, "checkouts", coId, "items"), {
+          workshop: item.workshop,
+          description: item.description,
+          origin: item.origin,
+          catalogId: item.catalogId ? doc(db, "catalog", item.catalogId) : null,
+          pricingModel: item.pricingModel ?? null,
+          created: serverTimestamp(),
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          totalPrice: item.totalPrice,
+          formInputs: item.formInputs ?? null,
+        })
+      },
+      updateItem: (_id: string, item: CheckoutItemLocal) => {
+        if (!checkoutId) return
+        updateDoc(doc(db, "checkouts", checkoutId, "items", item.id), {
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          totalPrice: item.totalPrice,
+          formInputs: item.formInputs ?? null,
+        })
+      },
+      removeItem: (id: string) => {
+        if (!checkoutId) return
+        deleteDoc(doc(db, "checkouts", checkoutId, "items", id))
+      },
+    }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isAnonymous, checkoutId, userRef, state.usageType, dispatch],
+    [checkoutId, userRef, state.usageType, auth],
   )
 
   const handleCheckout = useCallback(() => {

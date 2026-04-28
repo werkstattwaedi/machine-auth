@@ -69,8 +69,15 @@ service cloud.firestore {
     // non-finite values (Infinity / NaN). The `is number` check passes
     // for non-finite values, so the explicit < bound is what catches
     // them: `Infinity < 1e308` is false, `NaN < anything` is false.
+    //
+    // `quantity >= 0` (not > 0) so newly-added catalog items — which start
+    // with `quantity: 0` until the user fills in the form — pass the
+    // create check. Issue #151: anonymous users now write items to
+    // Firestore eagerly, so this code path is exercised by both flows.
+    // Final non-zero validation is still done server-side in
+    // closeCheckoutAndGetPayment#isValidItem.
     function hasValidItemPricing(data) {
-      return data.quantity is number && data.quantity > 0 && data.quantity < 1000000 &&
+      return data.quantity is number && data.quantity >= 0 && data.quantity < 1000000 &&
              data.unitPrice is number && data.unitPrice >= 0 && data.unitPrice < 1000000 &&
              data.totalPrice is number && data.totalPrice >= 0 && data.totalPrice < 1000000;
     }

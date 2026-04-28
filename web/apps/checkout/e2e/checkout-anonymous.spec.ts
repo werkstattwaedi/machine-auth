@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { test, expect, type Page, type Locator } from "@playwright/test"
-import { clearCollections, getCheckoutDocs } from "./helpers"
+import { clearCollections, getCheckoutDocs, getCheckoutItems } from "./helpers"
 
 /** Locate an input field by its preceding label text within a person card */
 function personField(page: Page, label: string, nth = 0): Locator {
@@ -214,5 +214,62 @@ test.describe("Anonymous checkout", () => {
     // Go back to step 0
     await page.getByRole("button", { name: "Zurück" }).click()
     await expect(page.getByText("Deine Angaben")).toBeVisible()
+  })
+
+  // Regression for issue #151: anonymous users now sign in eagerly after
+  // step 1, write items straight to Firestore (no more `state.localItems`
+  // in-memory branch). This locks in the new storage contract — anything
+  // an anonymous user adds to their cart shows up in `checkouts/{id}`
+  // and `checkouts/{id}/items/{itemId}` immediately, before submit.
+  test("anonymous flow writes items to Firestore (no in-memory cart)", async ({
+    page,
+  }) => {
+    await page.goto("/")
+    await expect(page.getByText("Deine Angaben")).toBeVisible({
+      timeout: 10_000,
+    })
+
+    // Step 0 — fill the form and advance. This now signs the visitor
+    // into Firebase Anonymous Auth.
+    await personField(page, "Vorname").fill("Refresh")
+    await personField(page, "Nachname").fill("Tester")
+    await personField(page, "E-Mail").fill("refresh@test.com")
+    await page.locator("#terms-accept").click()
+    await page.getByRole("button", { name: "Weiter" }).click()
+
+    await expect(page.getByText("Werkstätten wählen")).toBeVisible()
+
+    // Add a Holz catalog item.
+    await page.getByLabel("Holz").click()
+    const holzSection = page
+      .locator("div.space-y-2")
+      .filter({ hasText: /^Holz/ })
+    await holzSection
+      .getByRole("button", { name: "Artikel hinzufügen" })
+      .click()
+    await expect(page.getByText("Schleifpapier")).toBeVisible()
+    await page.getByText("Schleifpapier").click()
+
+    // Wait for the Firestore write to land. With the legacy
+    // `state.localItems` branch this poll would never see a doc — items
+    // were kept in React state only and never persisted before submit.
+    await expect
+      .poll(
+        async () => {
+          const checkouts = await getCheckoutDocs()
+          // Anonymous flow: userId is null on the doc.
+          const co = checkouts.find((c) => c.userId == null)
+          if (!co) return 0
+          const items = await getCheckoutItems(co.id)
+          return items.length
+        },
+        { timeout: 10_000 },
+      )
+      .toBe(1)
+
+    // The checkout is open (not closed) — submit hasn't happened yet.
+    const checkouts = await getCheckoutDocs()
+    const co = checkouts.find((c) => c.userId == null)!
+    expect(co.status).toBe("open")
   })
 })
