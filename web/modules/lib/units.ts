@@ -265,6 +265,39 @@ export function formatCount(value: number, label: string): string {
   return `${countFormatter.format(value)} ${label}`
 }
 
+/**
+ * Render a CHF-per-non-SI-count price (e.g. CHF/Layer, CHF/Stk.) with a
+ * smart denominator. For very small per-count prices the displayed number
+ * goes below the locale's two-decimal precision, which reads as noise; this
+ * helper picks a denominator from {1, 100, 1000} so the rendered value is
+ * in a friendly range (>= 0.01 typically).
+ *
+ * Examples (locale = `de-CH`, currency = CHF):
+ * - `formatPricePerCount(0.5, "Layer")`     → "CHF 0.50/Layer"
+ * - `formatPricePerCount(0.01, "Layer")`    → "CHF 0.01/Layer"
+ * - `formatPricePerCount(0.001, "Layer")`   → "CHF 0.10/100 Layer"
+ * - `formatPricePerCount(0.00109, "Layer")` → "CHF 0.109/100 Layer"
+ * - `formatPricePerCount(0.00009, "Layer")` → "CHF 0.09/1000 Layer"
+ *
+ * The denominator choice is rule-based, not locale-aware: pick the smallest
+ * denominator for which `price * denominator >= 0.01`, capped at 1000.
+ */
+export function formatPricePerCount(
+  pricePerCount: number,
+  label: string,
+): string {
+  if (!Number.isFinite(pricePerCount)) return ""
+  const denominators = [1, 100, 1000] as const
+  let denominator: number = denominators[0]
+  for (const d of denominators) {
+    denominator = d
+    if (Math.abs(pricePerCount) * d >= 0.01) break
+  }
+  const displayedPrice = pricePerCount * denominator
+  const denominatorLabel = denominator === 1 ? label : `${denominator} ${label}`
+  return `${currency} ${priceNumberFormatter.format(displayedPrice)}/${denominatorLabel}`
+}
+
 // ---------------------------------------------------------------------------
 // Internal helpers used by pricing-calc.ts to convert raw form inputs (cm,
 // g, ml) into the stored base unit. Kept here so the storage convention

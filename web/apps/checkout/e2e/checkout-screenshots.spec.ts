@@ -302,6 +302,10 @@ test.describe("Checkout step screenshots", () => {
     await expect(page.getByText("E2E SLA Resin")).toBeVisible()
     await page.getByText("E2E SLA Resin").click()
 
+    // Wait until the SLA item row has actually rendered (Firestore writes
+    // are async since issue #151 — items go through addDoc not React state).
+    await expect(makerSection.getByText("Artikel 1: E2E SLA Resin")).toBeVisible()
+
     // Trigger validation by clicking Check-Out (same CTA as existing validation
     // error test). scrollIntoViewIfNeeded handles mobile viewport.
     const checkoutBtn = page.getByRole("button", { name: "Check-Out" })

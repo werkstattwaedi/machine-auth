@@ -16,12 +16,22 @@ interface StepCheckinProps {
   kiosk: boolean
   isAccountLoggedIn: boolean
   onSignOut: () => void
+  /**
+   * Called when the user advances past step 1 with a valid form. For the
+   * truly-anonymous flow this signs the visitor into Firebase Anonymous
+   * Auth so step 2 can write items to a Firestore subcollection (issue
+   * #151). A no-op for already-identified users (real login or tag-tap).
+   */
+  onAdvance?: () => Promise<void>
 }
 
-export function StepCheckin({ state, dispatch, isAnonymous, kiosk, isAccountLoggedIn, onSignOut }: StepCheckinProps) {
+export function StepCheckin({ state, dispatch, isAnonymous, kiosk, isAccountLoggedIn, onSignOut, onAdvance }: StepCheckinProps) {
   // touched: personId → field → true
   const [touched, setTouched] = useState<Record<string, Record<string, boolean>>>({})
   const [submitted, setSubmitted] = useState(false)
+  // Disables the Weiter button while signing in anonymously so a double-tap
+  // can't enqueue two anon sessions.
+  const [advancing, setAdvancing] = useState(false)
 
   const handleBlur = useCallback((personId: string, field: string) => {
     setTouched((prev) => ({
@@ -49,10 +59,20 @@ export function StepCheckin({ state, dispatch, isAnonymous, kiosk, isAccountLogg
     return person ? allErrors[person.id].termsAccepted : null
   }, [state.persons, allErrors, isAnonymous])
 
-  const handleWeiter = () => {
+  const handleWeiter = async () => {
     setSubmitted(true)
-    if (allValid) {
+    if (!allValid) return
+    if (advancing) return
+    setAdvancing(true)
+    try {
+      // Eagerly sign in anonymously here (issue #151) so step 2 can write
+      // checkout items straight to Firestore — same code path as the
+      // authenticated flow. If sign-in fails we keep the user on step 0
+      // rather than advancing into a broken step 2.
+      if (onAdvance) await onAdvance()
       dispatch({ type: "SET_STEP", step: 1 })
+    } finally {
+      setAdvancing(false)
     }
   }
 
@@ -156,8 +176,9 @@ export function StepCheckin({ state, dispatch, isAnonymous, kiosk, isAccountLogg
       <div className="sticky bottom-0 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 bg-background border-t border-border flex gap-3">
         <button
           type="button"
-          className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-white bg-cog-teal rounded-[3px] hover:bg-cog-teal-dark transition-colors"
+          className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-white bg-cog-teal rounded-[3px] hover:bg-cog-teal-dark transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           onClick={handleWeiter}
+          disabled={advancing}
         >
           Weiter
           <ArrowRight className="h-4 w-4" />

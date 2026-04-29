@@ -26,7 +26,12 @@ describe("checkoutReducer", () => {
       expect(initialState.submitted).toBe(false)
       expect(initialState.checkoutId).toBeNull()
       expect(initialState.totalPrice).toBe(0)
-      expect(initialState.localItems).toEqual([])
+    })
+
+    it("does not carry the legacy localItems field (issue #151)", () => {
+      // Anonymous users now sign in eagerly after step 1 and write items
+      // straight to Firestore — there is no in-memory cart any more.
+      expect("localItems" in initialState).toBe(false)
     })
   })
 
@@ -161,47 +166,6 @@ describe("checkoutReducer", () => {
       expect(state.tip).toBe(0)
       expect(state.persons).toHaveLength(1)
       expect(state.submitted).toBe(false)
-    })
-  })
-
-  describe("local items", () => {
-    const item = {
-      id: "item1",
-      workshop: "holz",
-      description: "Test",
-      origin: "manual" as const,
-      catalogId: null,
-      pricingModel: null,
-      quantity: 1,
-      unitPrice: 10,
-      totalPrice: 10,
-    }
-
-    it("ADD_LOCAL_ITEM appends an item", () => {
-      const state = reduce({ type: "ADD_LOCAL_ITEM", item })
-      expect(state.localItems).toHaveLength(1)
-      expect(state.localItems[0]).toEqual(item)
-    })
-
-    it("UPDATE_LOCAL_ITEM replaces the matching item", () => {
-      let state = reduce({ type: "ADD_LOCAL_ITEM", item })
-      const updated = { ...item, quantity: 3, totalPrice: 30 }
-      state = checkoutReducer(state, {
-        type: "UPDATE_LOCAL_ITEM",
-        id: "item1",
-        item: updated,
-      })
-      expect(state.localItems[0].quantity).toBe(3)
-      expect(state.localItems[0].totalPrice).toBe(30)
-    })
-
-    it("REMOVE_LOCAL_ITEM removes the matching item", () => {
-      let state = reduce({ type: "ADD_LOCAL_ITEM", item })
-      state = checkoutReducer(state, {
-        type: "REMOVE_LOCAL_ITEM",
-        id: "item1",
-      })
-      expect(state.localItems).toHaveLength(0)
     })
   })
 

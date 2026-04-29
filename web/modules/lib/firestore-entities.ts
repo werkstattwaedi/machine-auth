@@ -169,7 +169,7 @@ export type CheckoutUsageType =
   | "hangenmoos"
 
 export interface CheckoutDoc extends AuditFields {
-  userId: DocumentReference<UserDoc>
+  userId: DocumentReference<UserDoc> | null
   status: "open" | "closed"
   usageType: CheckoutUsageType | string
   created: Timestamp

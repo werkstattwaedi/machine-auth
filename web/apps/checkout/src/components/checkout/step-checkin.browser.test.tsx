@@ -24,11 +24,13 @@ function renderCheckin({
   kiosk = false,
   isAccountLoggedIn = false,
   stateOverrides,
+  onAdvance,
 }: {
   isAnonymous?: boolean
   kiosk?: boolean
   isAccountLoggedIn?: boolean
   stateOverrides?: Partial<CheckoutState>
+  onAdvance?: () => Promise<void>
 } = {}) {
   const dispatched: CheckoutAction[] = []
   const onSignOut = vi.fn()
@@ -48,6 +50,7 @@ function renderCheckin({
         kiosk={kiosk}
         isAccountLoggedIn={isAccountLoggedIn}
         onSignOut={onSignOut}
+        onAdvance={onAdvance}
       />
     )
   }
@@ -176,6 +179,80 @@ describe("StepCheckin validation", () => {
 
     // No submit-triggered errors visible (submitted was reset)
     expect(screen.queryByText("Vorname ist erforderlich.")).toBeNull()
+  })
+
+  // Issue #151 regression: anonymous sign-in must run BEFORE the
+  // step transition so step 2 can write to Firestore as a real principal.
+  // If we dispatched SET_STEP first, step-workshops.tsx would mount and
+  // try to addDoc against `checkouts` while still unauthenticated — the
+  // rule for anon-userId checkouts requires `isAnonymousAuth()`.
+  describe("eager anonymous sign-in (#151)", () => {
+    it("calls onAdvance before dispatching SET_STEP", async () => {
+      const user = userEvent.setup()
+      const order: string[] = []
+      const onAdvance = vi.fn(async () => {
+        order.push("onAdvance")
+      })
+
+      const { dispatched } = renderCheckin({ isAnonymous: true, onAdvance })
+
+      // Capture dispatch order via a side-effect on the array reference.
+      const originalPush = dispatched.push.bind(dispatched)
+      dispatched.push = (...items: CheckoutAction[]) => {
+        for (const item of items) {
+          if (item.type === "SET_STEP") order.push("SET_STEP")
+        }
+        return originalPush(...items)
+      }
+
+      // Fill valid form
+      const inputs = screen.getAllByRole("textbox")
+      await user.type(inputs[0], "Max")
+      await user.type(inputs[1], "Muster")
+      await user.type(inputs[2], "max@test.com")
+      await user.click(screen.getByRole("checkbox"))
+
+      await user.click(screen.getByRole("button", { name: /Weiter/ }))
+
+      expect(onAdvance).toHaveBeenCalledOnce()
+      expect(order).toEqual(["onAdvance", "SET_STEP"])
+    })
+
+    it("does NOT call onAdvance or advance when validation fails", async () => {
+      const user = userEvent.setup()
+      const onAdvance = vi.fn(async () => {})
+      const { dispatched } = renderCheckin({ isAnonymous: true, onAdvance })
+
+      // Click Weiter with empty form → errors shown, onAdvance not called
+      await user.click(screen.getByRole("button", { name: /Weiter/ }))
+
+      expect(onAdvance).not.toHaveBeenCalled()
+      expect(dispatched.find((a) => a.type === "SET_STEP")).toBeUndefined()
+    })
+
+    it("does not advance if onAdvance throws (sign-in failure)", async () => {
+      const user = userEvent.setup()
+      const onAdvance = vi.fn(async () => {
+        throw new Error("network down")
+      })
+      const { dispatched } = renderCheckin({ isAnonymous: true, onAdvance })
+
+      const inputs = screen.getAllByRole("textbox")
+      await user.type(inputs[0], "Max")
+      await user.type(inputs[1], "Muster")
+      await user.type(inputs[2], "max@test.com")
+      await user.click(screen.getByRole("checkbox"))
+
+      // The button click rejects; user-event surfaces the rejection but the
+      // assertion afterwards is what matters.
+      await user
+        .click(screen.getByRole("button", { name: /Weiter/ }))
+        .catch(() => {})
+
+      expect(onAdvance).toHaveBeenCalledOnce()
+      // Crucially: SET_STEP was NOT dispatched.
+      expect(dispatched.find((a) => a.type === "SET_STEP")).toBeUndefined()
+    })
   })
 })
 
