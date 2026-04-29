@@ -22,7 +22,6 @@ import { Input } from "@modules/components/ui/input"
 import { Label } from "@modules/components/ui/label"
 import {
   where,
-  addDoc,
   doc,
   serverTimestamp,
   getDocs,
@@ -30,6 +29,7 @@ import {
   documentId,
   writeBatch,
 } from "firebase/firestore"
+import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
 import { CheckCircle, Loader2, Package, ArrowLeft, LogIn } from "lucide-react"
 import { useState } from "react"
 import { getShortUnit } from "@modules/lib/workshop-config"
@@ -47,6 +47,7 @@ export const Route = createFileRoute("/_material/material/add")({
 
 function MaterialAddPage() {
   const db = useDb()
+  const { add } = useFirestoreMutation()
   const { id, priceList: priceListId } = Route.useSearch()
   const { user, userDoc, loading: authLoading } = useAuth()
 
@@ -256,7 +257,7 @@ function MaterialAddPage() {
       } else {
         checkoutId = coSnap.docs[0].id
         // Add item to existing checkout
-        await addDoc(checkoutItemsCollection(db, checkoutId), {
+        await add(checkoutItemsCollection(db, checkoutId), {
           workshop: catalogItem.workshops[0] ?? "",
           description: catalogItem.name,
           origin: "qr",

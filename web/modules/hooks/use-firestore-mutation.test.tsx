@@ -194,4 +194,42 @@ describe("useFirestoreMutation", () => {
 
     expect(result.current.error?.message).toBe("fail")
   })
+
+  // Regression for ADR-0023 / issue #166: real call sites pass
+  // `serverTimestamp()` (a FieldValue) where the typed `*Doc` declares a
+  // `Timestamp`. The hook's `add` / `set` / `update` must accept
+  // `WithFieldValue<T>` / `PartialWithFieldValue<T>` so those callers
+  // compile — if they ever get narrowed back to plain `T` / `Partial<T>`,
+  // every migrated caller fails at build time. This test pins the runtime
+  // pass-through; the type contract is enforced by `tsc -b` in
+  // `test:precommit`.
+  it("add forwards FieldValue (serverTimestamp) into the typed doc", async () => {
+    const { serverTimestamp } = await import("firebase/firestore")
+
+    type TypedCheckout = {
+      status: string
+      created: import("firebase/firestore").Timestamp
+    }
+    const colTyped = colRef<TypedCheckout>("checkouts")
+
+    const { result } = renderHook(() => useFirestoreMutation(), {
+      wrapper: createWrapper(),
+    })
+
+    await act(async () => {
+      await result.current.add(colTyped, {
+        status: "open",
+        created: serverTimestamp(),
+      })
+    })
+
+    const all = fakeDb.getAllDocs("checkouts")
+    expect(all.size).toBe(1)
+    const [, data] = [...all.entries()][0]
+    expect(data.status).toBe("open")
+    // FakeFirestore's mocked serverTimestamp resolves to a sentinel — the
+    // important check is that the field arrived at all (i.e. the hook's
+    // signature didn't filter it out).
+    expect(data.created).toBeDefined()
+  })
 })

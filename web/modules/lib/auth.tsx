@@ -22,13 +22,13 @@ import {
 import {
   onSnapshot,
   setDoc,
-  doc,
   getDoc,
   serverTimestamp,
   type Firestore,
 } from "firebase/firestore"
 import { httpsCallable, type Functions } from "firebase/functions"
 import { useDb, useFirebaseAuth, useFunctions } from "./firebase-context"
+import { userRef } from "./firestore-helpers"
 
 export interface BillingAddress {
   company: string
@@ -182,7 +182,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    const userDocRef = doc(db, "users", user.uid)
+    const userDocRef = userRef(db, user.uid)
 
     return onSnapshot(userDocRef, async (docSnap) => {
       if (!docSnap.exists()) {
@@ -348,7 +348,7 @@ async function redeemCustomToken(
 async function handleSignIn(db: Firestore, user: User): Promise<void> {
   if (!user.email) throw new Error("E-Mail-Adresse benötigt")
 
-  const userDocRef = doc(db, "users", user.uid)
+  const userDocRef = userRef(db, user.uid)
   const snapshot = await getDoc(userDocRef)
   if (snapshot.exists()) return
 

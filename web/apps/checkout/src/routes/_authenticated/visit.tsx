@@ -10,9 +10,6 @@ import {
   orderBy,
   arrayUnion,
   arrayRemove,
-  addDoc,
-  updateDoc,
-  deleteDoc,
   serverTimestamp,
 } from "firebase/firestore"
 import {
@@ -24,6 +21,7 @@ import {
   checkoutItemsCollection,
 } from "@modules/lib/firestore-helpers"
 import { useDb } from "@modules/lib/firebase-context"
+import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
 import { formatCHF } from "@modules/lib/format"
 import { PageLoading } from "@modules/components/page-loading"
 import { EmptyState } from "@modules/components/empty-state"
@@ -71,6 +69,7 @@ function DashboardPage() {
 
 function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
   const db = useDb()
+  const { add, update, remove } = useFirestoreMutation()
   const ref = userRef(db, userDoc.id)
   const { data: pricingConfig, loading: loadingConfig, configError } = usePricingConfig()
 
@@ -124,19 +123,17 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
         // Create checkout first, then add item (sequential so security
         // rules can read the parent checkout when validating the item)
         if (!coId) {
-          const coRef = await addDoc(checkoutsCollection(db), {
+          const coRef = await add(checkoutsCollection(db), {
             userId: ref,
             status: "open",
             usageType: "regular",
             created: serverTimestamp(),
             workshopsVisited: [item.workshop],
             persons: [],
-            modifiedBy: null,
-            modifiedAt: serverTimestamp(),
           })
           coId = coRef.id
         }
-        await addDoc(checkoutItemsCollection(db, coId), {
+        await add(checkoutItemsCollection(db, coId), {
           workshop: item.workshop,
           description: item.description,
           origin: item.origin,
@@ -151,7 +148,7 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
       },
       updateItem: (_id: string, item: CheckoutItemLocal) => {
         if (!checkoutId) return
-        updateDoc(checkoutItemRef(db, checkoutId, item.id), {
+        update(checkoutItemRef(db, checkoutId, item.id), {
           description: item.description,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
@@ -161,7 +158,7 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
       },
       removeItem: (id: string) => {
         if (!checkoutId) return
-        deleteDoc(checkoutItemRef(db, checkoutId, id))
+        remove(checkoutItemRef(db, checkoutId, id))
       },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -225,18 +222,16 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
       })
       // Remove from workshopsVisited if it was recorded there
       if (checkoutId && visitedWorkshops.has(wsId)) {
-        updateDoc(checkoutRef(db, checkoutId), {
+        update(checkoutRef(db, checkoutId), {
           workshopsVisited: arrayRemove(wsId),
-          modifiedAt: serverTimestamp(),
         })
       }
     } else {
       setSelectedWorkshops((prev) => new Set(prev).add(wsId))
       // Update workshopsVisited on checkout if it exists
       if (checkoutId) {
-        updateDoc(checkoutRef(db, checkoutId), {
+        update(checkoutRef(db, checkoutId), {
           workshopsVisited: arrayUnion(wsId),
-          modifiedAt: serverTimestamp(),
         })
       }
     }
@@ -250,13 +245,12 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
     )
     await Promise.all(
       itemsToDelete.map((i) =>
-        deleteDoc(checkoutItemRef(db, checkoutId, i.id)),
+        remove(checkoutItemRef(db, checkoutId, i.id)),
       ),
     )
     // Update workshopsVisited
-    await updateDoc(checkoutRef(db, checkoutId), {
+    await update(checkoutRef(db, checkoutId), {
       workshopsVisited: arrayRemove(wsId),
-      modifiedAt: serverTimestamp(),
     })
     setSelectedWorkshops((prev) => {
       const next = new Set(prev)
