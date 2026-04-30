@@ -22,6 +22,7 @@ import {
 } from "@modules/lib/firestore-helpers"
 import { useDb } from "@modules/lib/firebase-context"
 import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
+import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { formatCHF } from "@modules/lib/format"
 import { PageLoading } from "@modules/components/page-loading"
 import { EmptyState } from "@modules/components/empty-state"
@@ -70,6 +71,14 @@ function DashboardPage() {
 function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
   const db = useDb()
   const { add, update, remove } = useFirestoreMutation()
+  // ADR-0025: multi-write composite (item deletes + workshopsVisited
+  // update) — wrapped here so a failed leg surfaces a German toast +
+  // telemetry instead of silently leaving the visit page in a
+  // half-updated state.
+  const uncheckWorkshop = useAsyncMutation({
+    context: "visit.confirmUncheckWorkshop",
+    errorMessage: "Workshop konnte nicht entfernt werden",
+  })
   const ref = userRef(db, userDoc.id)
   const { data: pricingConfig, loading: loadingConfig, configError } = usePricingConfig()
 
@@ -243,15 +252,23 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
     const itemsToDelete = items.filter(
       (i) => i.workshop === wsId && i.origin !== "nfc",
     )
-    await Promise.all(
-      itemsToDelete.map((i) =>
-        remove(checkoutItemRef(db, checkoutId, i.id)),
-      ),
-    )
-    // Update workshopsVisited
-    await update(checkoutRef(db, checkoutId), {
-      workshopsVisited: arrayRemove(wsId),
-    })
+    try {
+      await uncheckWorkshop.mutate(async () => {
+        await Promise.all(
+          itemsToDelete.map((i) =>
+            remove(checkoutItemRef(db, checkoutId, i.id)),
+          ),
+        )
+        // Update workshopsVisited
+        await update(checkoutRef(db, checkoutId), {
+          workshopsVisited: arrayRemove(wsId),
+        })
+      })
+    } catch {
+      // Hook already toasted + telemetered. Keep the dialog state as-is
+      // so the user can dismiss + retry.
+      return
+    }
     setSelectedWorkshops((prev) => {
       const next = new Set(prev)
       next.delete(wsId)

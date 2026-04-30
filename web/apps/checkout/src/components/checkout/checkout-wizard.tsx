@@ -13,6 +13,7 @@ import {
   checkoutItemsCollection,
 } from "@modules/lib/firestore-helpers"
 import { useDb, useFunctions } from "@modules/lib/firebase-context"
+import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { usePricingConfig } from "@modules/lib/workshop-config"
 import { calculateFee } from "@modules/lib/pricing"
 import { PageLoading } from "@modules/components/page-loading"
@@ -48,7 +49,15 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
     cmac ?? null,
   )
   const { state, dispatch } = useCheckoutState(initialStep)
-  const [submitting, setSubmitting] = useState(false)
+  // ADR-0025: route the checkout submit through useAsyncMutation so a
+  // failed callable surfaces a German error toast + inline alert (B5
+  // launch fix), and the wizard stays at step 2 with the submit button
+  // re-enabled instead of silently resetting.
+  const submit = useAsyncMutation<PaymentData>({
+    context: "checkout.closeAndPay",
+    errorMessage:
+      "Bezahlung konnte nicht erstellt werden. Bitte erneut versuchen.",
+  })
   const [paymentData, setPaymentData] = useState<PaymentData | null>(null)
   const { data: pricingConfig, loading: loadingConfig, configError } = usePricingConfig()
   // Set true after the first render that gets past the initial loading
@@ -291,93 +300,99 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
   }
 
   const handleSubmit = async () => {
-    setSubmitting(true)
-    try {
-      // Anonymous sign-in moved to step 1 (issue #151) — by the time the
-      // user reaches the checkout step they're already a Firebase
-      // principal (anonymous, real, or tag), so no extra round-trip here.
+    // Anonymous sign-in moved to step 1 (issue #151) — by the time the
+    // user reaches the checkout step they're already a Firebase
+    // principal (anonymous, real, or tag), so no extra round-trip here.
 
-      // Calculate entry fees (client-side estimate for the receipt; the
-      // server recomputes authoritatively in closeCheckoutAndGetPayment).
-      // pricingConfig is non-null here — render is gated by the configError
-      // check above. calculateFee returns null for unknown userType+usageType
-      // combinations; treat those as zero to avoid blocking the submit on a
-      // misconfigured row (the server will throw and surface the error).
-      const entryFees = state.persons.reduce(
-        (sum, p) => sum + (calculateFee(p.userType, state.usageType, pricingConfig) ?? 0),
-        0,
-      )
+    // Calculate entry fees (client-side estimate for the receipt; the
+    // server recomputes authoritatively in closeCheckoutAndGetPayment).
+    // pricingConfig is non-null here — render is gated by the configError
+    // check above. calculateFee returns null for unknown userType+usageType
+    // combinations; treat those as zero to avoid blocking the submit on a
+    // misconfigured row (the server will throw and surface the error).
+    const entryFees = state.persons.reduce(
+      (sum, p) => sum + (calculateFee(p.userType, state.usageType, pricingConfig) ?? 0),
+      0,
+    )
 
-      const nfcItems = items.filter((i) => i.origin === "nfc")
-      const materialItems = items.filter((i) => i.origin !== "nfc")
-      const machineCost = nfcItems.reduce((sum, i) => sum + i.totalPrice, 0)
-      const materialCost = materialItems.reduce((sum, i) => sum + i.totalPrice, 0)
-      const total = entryFees + machineCost + materialCost + state.tip
+    const nfcItems = items.filter((i) => i.origin === "nfc")
+    const materialItems = items.filter((i) => i.origin !== "nfc")
+    const machineCost = nfcItems.reduce((sum, i) => sum + i.totalPrice, 0)
+    const materialCost = materialItems.reduce((sum, i) => sum + i.totalPrice, 0)
+    const total = entryFees + machineCost + materialCost + state.tip
 
-      const persons = state.persons.map((p) => ({
-        name: `${p.firstName} ${p.lastName}`,
-        email: p.email,
-        userType: p.userType,
-        ...(p.billingCompany
-          ? {
-              billingAddress: {
-                company: p.billingCompany,
-                street: p.billingStreet ?? "",
-                zip: p.billingZip ?? "",
-                city: p.billingCity ?? "",
-              },
-            }
-          : {}),
-      }))
-
-      const summary = {
-        totalPrice: total,
-        entryFees,
-        machineCost,
-        materialCost,
-        tip: state.tip,
-      }
-
-      // One callable round-trip closes (or creates+closes) the checkout,
-      // creates the bill, and returns the QR data. Replaces the old async
-      // chain (Firestore write → trigger → second callable for QR), which
-      // also stalled the anonymous flow because the checkouts read rule
-      // requires isSignedIn().
-      const closeCheckoutAndGetPayment = httpsCallable<
-        {
-          checkoutId?: string
-          newCheckout?: {
-            userId: string | null
-            workshopsVisited: string[]
-            items: {
-              workshop: string
-              description: string
-              origin: string
-              catalogId: string | null
-              quantity: number
-              unitPrice: number
-              totalPrice: number
-              formInputs?: { quantity: number; unit: string }[]
-              pricingModel?: string | null
-            }[]
+    const persons = state.persons.map((p) => ({
+      name: `${p.firstName} ${p.lastName}`,
+      email: p.email,
+      userType: p.userType,
+      ...(p.billingCompany
+        ? {
+            billingAddress: {
+              company: p.billingCompany,
+              street: p.billingStreet ?? "",
+              zip: p.billingZip ?? "",
+              city: p.billingCity ?? "",
+            },
           }
-          usageType: string
-          persons: typeof persons
-          summary: typeof summary
-        },
-        PaymentData
-      >(functions, "closeCheckoutAndGetPayment")
+        : {}),
+    }))
 
-      let resultCheckoutId: string | null
+    const summary = {
+      totalPrice: total,
+      entryFees,
+      machineCost,
+      materialCost,
+      tip: state.tip,
+    }
 
+    // One callable round-trip closes (or creates+closes) the checkout,
+    // creates the bill, and returns the QR data. Replaces the old async
+    // chain (Firestore write → trigger → second callable for QR), which
+    // also stalled the anonymous flow because the checkouts read rule
+    // requires isSignedIn().
+    const closeCheckoutAndGetPayment = httpsCallable<
+      {
+        checkoutId?: string
+        newCheckout?: {
+          userId: string | null
+          workshopsVisited: string[]
+          items: {
+            workshop: string
+            description: string
+            origin: string
+            catalogId: string | null
+            quantity: number
+            unitPrice: number
+            totalPrice: number
+            formInputs?: { quantity: number; unit: string }[]
+            pricingModel?: string | null
+          }[]
+        }
+        usageType: string
+        persons: typeof persons
+        summary: typeof summary
+      },
+      PaymentData
+    >(functions, "closeCheckoutAndGetPayment")
+
+    // Both branches go through `submit.mutate` so a thrown callable
+    // (network blip, permission denial, etc.) surfaces a German toast +
+    // inline alert and re-throws — the dispatch below is short-circuited
+    // and the wizard stays at step 2 with the submit button re-enabled.
+    let data: PaymentData
+    let resultCheckoutId: string | null
+
+    try {
       if (checkoutId) {
-        const { data } = await closeCheckoutAndGetPayment({
-          checkoutId,
-          usageType: state.usageType,
-          persons,
-          summary,
+        data = await submit.mutate(async () => {
+          const res = await closeCheckoutAndGetPayment({
+            checkoutId,
+            usageType: state.usageType,
+            persons,
+            summary,
+          })
+          return res.data
         })
-        setPaymentData(data)
         resultCheckoutId = checkoutId
       } else {
         // Degenerate path: user reached step 2 without ever adding an item
@@ -403,26 +418,31 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
           })),
         }
 
-        const { data } = await closeCheckoutAndGetPayment({
-          newCheckout,
-          usageType: state.usageType,
-          persons,
-          summary,
+        data = await submit.mutate(async () => {
+          const res = await closeCheckoutAndGetPayment({
+            newCheckout,
+            usageType: state.usageType,
+            persons,
+            summary,
+          })
+          return res.data
         })
-        setPaymentData(data)
         // The callable creates the doc server-side; the client never needs
         // the new id (PaymentResult uses initialPaymentData directly).
         resultCheckoutId = null
       }
-
-      dispatch({
-        type: "SET_SUBMITTED",
-        checkoutId: resultCheckoutId,
-        totalPrice: total,
-      })
-    } finally {
-      setSubmitting(false)
+    } catch {
+      // Hook already toasted + telemetered; do NOT advance to the
+      // "submitted" state. Stay at step 2 so the user can retry.
+      return
     }
+
+    setPaymentData(data)
+    dispatch({
+      type: "SET_SUBMITTED",
+      checkoutId: resultCheckoutId,
+      totalPrice: total,
+    })
   }
 
   return (
@@ -466,7 +486,8 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
           state={state}
           dispatch={dispatch}
           onSubmit={handleSubmit}
-          submitting={submitting}
+          submitting={submit.loading}
+          submitError={submit.error?.message ?? null}
           items={items}
           config={pricingConfig}
         />
