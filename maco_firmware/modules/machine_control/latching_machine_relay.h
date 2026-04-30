@@ -33,12 +33,12 @@ class LatchingMachineRelay : public MachineToggle {
 
   pw::Status Init() override;
   bool IsEnabled() const override;
-  pw::async2::Coro<pw::Status> Enable(pw::async2::CoroContext& cx) override;
-  pw::async2::Coro<pw::Status> Disable(pw::async2::CoroContext& cx) override;
+  pw::async2::Coro<pw::Status> Enable(pw::async2::CoroContext cx) override;
+  pw::async2::Coro<pw::Status> Disable(pw::async2::CoroContext cx) override;
 
  private:
   /// Coroutine that performs the toggle sequence.
-  pw::async2::Coro<pw::Status> DoSetState(pw::async2::CoroContext& cx,
+  pw::async2::Coro<pw::Status> DoSetState(pw::async2::CoroContext cx,
                                           bool enable);
 
   hal_pin_t pin_;

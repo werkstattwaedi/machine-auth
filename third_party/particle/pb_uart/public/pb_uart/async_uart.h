@@ -50,6 +50,12 @@ class ReadFuture {
   /// Returns true if the future has completed (data was read or error).
   [[nodiscard]] bool is_complete() const { return completed_; }
 
+  /// Returns true if `Pend` can be called (future is bound to a UART and
+  /// hasn't completed yet).
+  [[nodiscard]] bool is_pendable() const {
+    return uart_ != nullptr && !completed_;
+  }
+
  private:
   friend class AsyncUart;
 

@@ -122,7 +122,7 @@ EventFuture Pn532NfcReader::SubscribeOnce() { return event_provider_.Get(); }
 //=============================================================================
 
 pw::async2::Coro<pw::Status> Pn532NfcReader::RunLoop(
-    pw::async2::CoroContext& cx) {
+    pw::async2::CoroContext cx) {
   PW_LOG_INFO("PN532 reader coroutine started");
 
   auto& time = pw::async2::GetSystemTimeProvider();
@@ -257,7 +257,7 @@ void LogHex(const char* prefix, pw::ConstByteSpan data) {
 //=============================================================================
 
 pw::async2::Coro<pw::Result<pw::ConstByteSpan>> Pn532NfcReader::SendCommand(
-    [[maybe_unused]] pw::async2::CoroContext& cx,
+    [[maybe_unused]] pw::async2::CoroContext cx,
     const Pn532Command& cmd,
     uint32_t timeout_ms) {
   // Build frame
@@ -373,7 +373,7 @@ pw::async2::Coro<pw::Result<pw::ConstByteSpan>> Pn532NfcReader::SendCommand(
 //=============================================================================
 
 pw::async2::Coro<pw::Result<TagInfo>> Pn532NfcReader::DetectTag(
-    pw::async2::CoroContext& cx,
+    pw::async2::CoroContext cx,
     pw::chrono::SystemClock::duration timeout) {
   uint32_t timeout_ms = ToTimeoutMs(timeout);
 
@@ -439,7 +439,7 @@ pw::Result<TagInfo> Pn532NfcReader::ParseDetectResponse(
 //=============================================================================
 
 pw::async2::Coro<pw::Result<size_t>> Pn532NfcReader::Transceive(
-    pw::async2::CoroContext& cx,
+    pw::async2::CoroContext cx,
     pw::ConstByteSpan command,
     pw::ByteSpan response_buffer,
     pw::chrono::SystemClock::duration timeout) {
@@ -500,7 +500,7 @@ pw::Result<size_t> Pn532NfcReader::ParseTransceiveResponse(
 //=============================================================================
 
 pw::async2::Coro<pw::Result<bool>> Pn532NfcReader::CheckTagPresent(
-    pw::async2::CoroContext& cx,
+    pw::async2::CoroContext cx,
     pw::chrono::SystemClock::duration timeout) {
   uint32_t timeout_ms = ToTimeoutMs(timeout);
 
@@ -541,7 +541,7 @@ pw::Result<bool> Pn532NfcReader::ParseCheckPresentResponse(
 //=============================================================================
 
 pw::async2::Coro<pw::Status> Pn532NfcReader::DoAsyncInit(
-    pw::async2::CoroContext& cx) {
+    pw::async2::CoroContext cx) {
   auto& time = pw::async2::GetSystemTimeProvider();
 
   PW_LOG_DEBUG("Init: starting hardware reset");
@@ -630,7 +630,7 @@ pw::async2::Coro<pw::Status> Pn532NfcReader::DoAsyncInit(
 }
 
 pw::async2::Coro<pw::Status> Pn532NfcReader::DoReleaseTag(
-    pw::async2::CoroContext& cx, uint8_t target_number) {
+    pw::async2::CoroContext cx, uint8_t target_number) {
   // InRelease command - properly wait for response to avoid pending data
   std::array<std::byte, 1> params = {std::byte{target_number}};
   Pn532Command cmd{kCmdInRelease, params};
@@ -648,7 +648,7 @@ pw::async2::Coro<pw::Status> Pn532NfcReader::DoReleaseTag(
 }
 
 pw::async2::Coro<pw::Status> Pn532NfcReader::RecoverFromDesync(
-    [[maybe_unused]] pw::async2::CoroContext& cx) {
+    [[maybe_unused]] pw::async2::CoroContext cx) {
   auto& time = pw::async2::GetSystemTimeProvider();
 
   // Send ACK to abort any pending command

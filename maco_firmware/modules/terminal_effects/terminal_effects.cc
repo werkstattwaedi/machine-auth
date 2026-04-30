@@ -271,7 +271,7 @@ void TerminalEffects::ApplySessionEffect() {
 }
 
 pw::async2::Coro<pw::Status> TerminalEffects::Run(
-    [[maybe_unused]] pw::async2::CoroContext& cx
+    [[maybe_unused]] pw::async2::CoroContext cx
 ) {
   // Boot phase: keep the boot animation until SystemState reports kReady.
   {

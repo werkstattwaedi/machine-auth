@@ -50,7 +50,7 @@ class SessionController {
   void GetSnapshot(AppStateSnapshot& out) const;
 
  private:
-  pw::async2::Coro<pw::Status> Run(pw::async2::CoroContext&);
+  pw::async2::Coro<pw::Status> Run(pw::async2::CoroContext );
 
   TagVerifier& tag_verifier_;
   SessionFsm& fsm_;

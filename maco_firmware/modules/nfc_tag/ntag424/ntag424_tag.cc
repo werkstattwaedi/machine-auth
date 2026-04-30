@@ -78,7 +78,7 @@ pw::Status Ntag424Tag::InterpretStatusWord(uint8_t sw1, uint8_t sw2) {
 // ============================================================================
 
 pw::async2::Coro<pw::Result<size_t>> Ntag424Tag::DoTransceive(
-    [[maybe_unused]] pw::async2::CoroContext& cx,
+    [[maybe_unused]] pw::async2::CoroContext cx,
     pw::ConstByteSpan command,
     pw::ByteSpan response) {
   // Create the future from Iso14443Tag::Transceive
@@ -92,7 +92,7 @@ pw::async2::Coro<pw::Result<size_t>> Ntag424Tag::DoTransceive(
 // ============================================================================
 
 pw::async2::Coro<pw::Status> Ntag424Tag::SelectApplication(
-    pw::async2::CoroContext& cx) {
+    pw::async2::CoroContext cx) {
   // Build ISOSelectFile command:
   // CLA=0x00, INS=0xA4, P1=0x04, P2=0x0C
   // Data: DF name = D2 76 00 00 85 01 01
@@ -127,7 +127,7 @@ pw::async2::Coro<pw::Status> Ntag424Tag::SelectApplication(
 // ============================================================================
 
 pw::async2::Coro<pw::Result<Ntag424Session>> Ntag424Tag::Authenticate(
-    pw::async2::CoroContext& cx,
+    pw::async2::CoroContext cx,
     Ntag424KeyProvider& key_provider) {
   // Clear any existing session
   ClearSession();
@@ -231,7 +231,7 @@ pw::async2::Coro<pw::Result<Ntag424Session>> Ntag424Tag::Authenticate(
 // ============================================================================
 
 pw::async2::Coro<pw::Result<size_t>> Ntag424Tag::GetCardUid(
-    pw::async2::CoroContext& cx,
+    pw::async2::CoroContext cx,
     const Ntag424Session& session,
     pw::ByteSpan uid_buffer) {
   PW_CO_TRY(ValidateSession(session));
@@ -305,7 +305,7 @@ pw::async2::Coro<pw::Result<size_t>> Ntag424Tag::GetCardUid(
 // ============================================================================
 
 pw::async2::Coro<pw::Result<size_t>> Ntag424Tag::ReadData(
-    pw::async2::CoroContext& cx,
+    pw::async2::CoroContext cx,
     const Ntag424Session& session,
     uint8_t file_number,
     uint32_t offset,
@@ -464,7 +464,7 @@ pw::async2::Coro<pw::Result<size_t>> Ntag424Tag::ReadData(
 // ============================================================================
 
 pw::async2::Coro<pw::Status> Ntag424Tag::WriteData(
-    pw::async2::CoroContext& cx,
+    pw::async2::CoroContext cx,
     const Ntag424Session& session,
     uint8_t file_number,
     uint32_t offset,
@@ -610,7 +610,7 @@ pw::async2::Coro<pw::Status> Ntag424Tag::WriteData(
 // ============================================================================
 
 pw::async2::Coro<pw::Result<size_t>> Ntag424Tag::GetFileSettings(
-    pw::async2::CoroContext& cx,
+    pw::async2::CoroContext cx,
     const Ntag424Session& session,
     uint8_t file_number,
     pw::ByteSpan settings_buffer,
@@ -719,7 +719,7 @@ pw::async2::Coro<pw::Result<size_t>> Ntag424Tag::GetFileSettings(
 // ============================================================================
 
 pw::async2::Coro<pw::Status> Ntag424Tag::ChangeFileSettings(
-    pw::async2::CoroContext& cx,
+    pw::async2::CoroContext cx,
     const Ntag424Session& session,
     uint8_t file_number,
     pw::ConstByteSpan settings,
@@ -811,7 +811,7 @@ pw::async2::Coro<pw::Status> Ntag424Tag::ChangeFileSettings(
 // ============================================================================
 
 pw::async2::Coro<pw::Status> Ntag424Tag::EnableRandomUid(
-    pw::async2::CoroContext& cx,
+    pw::async2::CoroContext cx,
     const Ntag424Session& session) {
   PW_CO_TRY(ValidateSession(session));
   auto* sm = secure_messaging();
@@ -891,7 +891,7 @@ pw::async2::Coro<pw::Status> Ntag424Tag::EnableRandomUid(
 // ============================================================================
 
 pw::async2::Coro<pw::Status> Ntag424Tag::ChangeKey(
-    pw::async2::CoroContext& cx,
+    pw::async2::CoroContext cx,
     const Ntag424Session& session,
     uint8_t key_number,
     pw::ConstByteSpan new_key,
@@ -1066,7 +1066,7 @@ pw::async2::Coro<pw::Status> Ntag424Tag::ChangeKey(
 // ============================================================================
 
 pw::async2::Coro<pw::Status> Ntag424Tag::GetVersion(
-    pw::async2::CoroContext& cx) {
+    pw::async2::CoroContext cx) {
   // GetVersion is a 3-part command that retrieves hardware, software, and
   // production info. Each part requires sending an additional frame command.
   // Reference: NTAG 424 DNA datasheet Section 10.4.1

@@ -27,14 +27,14 @@ class MockMachineToggle : public MachineToggle {
 
   bool IsEnabled() const override { return enabled_; }
 
-  pw::async2::Coro<pw::Status> Enable(pw::async2::CoroContext& cx) override {
+  pw::async2::Coro<pw::Status> Enable(pw::async2::CoroContext cx) override {
     if (!initialized_) {
       co_return pw::Status::FailedPrecondition();
     }
     co_return co_await DoSetState(cx, true);
   }
 
-  pw::async2::Coro<pw::Status> Disable(pw::async2::CoroContext& cx) override {
+  pw::async2::Coro<pw::Status> Disable(pw::async2::CoroContext cx) override {
     if (!initialized_) {
       co_return pw::Status::FailedPrecondition();
     }
@@ -65,7 +65,7 @@ class MockMachineToggle : public MachineToggle {
 
  private:
   pw::async2::Coro<pw::Status> DoSetState(
-      [[maybe_unused]] pw::async2::CoroContext& cx, bool on) {
+      [[maybe_unused]] pw::async2::CoroContext cx, bool on) {
     if (next_error_.has_value()) {
       auto err = *next_error_;
       next_error_.reset();

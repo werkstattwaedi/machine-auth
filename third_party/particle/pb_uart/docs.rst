@@ -33,7 +33,7 @@ Usage
    uart.Write(pw::bytes::Array<0x00, 0x01, 0x02>());
 
    // In a coroutine - async read with waker support
-   pw::async2::Coro<pw::Status> ReadData(pw::async2::CoroContext& cx) {
+   pw::async2::Coro<pw::Status> ReadData(pw::async2::CoroContext cx) {
      std::array<std::byte, 64> buffer;
      auto result = co_await uart.Read(buffer, 4);  // Wait for 4 bytes
      PW_TRY(result.status());

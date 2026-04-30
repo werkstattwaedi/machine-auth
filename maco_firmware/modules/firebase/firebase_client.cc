@@ -245,7 +245,7 @@ FirebaseClient::FirebaseClient(pw::rpc::Client& rpc_client, uint32_t channel_id)
     : rpc_client_(rpc_client), channel_id_(channel_id) {}
 
 pw::async2::Coro<pw::Result<CheckinResult>> FirebaseClient::TerminalCheckin(
-    pw::async2::CoroContext& cx,
+    pw::async2::CoroContext cx,
     const TagUid& tag_uid) {
   (void)cx;  // Context available for child coroutines if needed
   if (terminal_checkin_call_.active()) {
@@ -312,7 +312,7 @@ pw::async2::Coro<pw::Result<CheckinResult>> FirebaseClient::TerminalCheckin(
 }
 
 pw::async2::Coro<pw::Result<AuthenticateTagResponse>>
-FirebaseClient::AuthenticateTag(pw::async2::CoroContext& cx,
+FirebaseClient::AuthenticateTag(pw::async2::CoroContext cx,
                                 const TagUid& tag_uid,
                                 Key key_slot,
                                 pw::ConstByteSpan ntag_challenge) {
@@ -378,7 +378,7 @@ FirebaseClient::AuthenticateTag(pw::async2::CoroContext& cx,
 }
 
 pw::async2::Coro<pw::Result<CompleteAuthResult>> FirebaseClient::CompleteTagAuth(
-    pw::async2::CoroContext& cx,
+    pw::async2::CoroContext cx,
     const FirebaseId& auth_id,
     pw::ConstByteSpan encrypted_tag_response) {
   (void)cx;  // Context available for child coroutines if needed
@@ -443,7 +443,7 @@ pw::async2::Coro<pw::Result<CompleteAuthResult>> FirebaseClient::CompleteTagAuth
 }
 
 pw::async2::Coro<pw::Status> FirebaseClient::UploadUsage(
-    pw::async2::CoroContext& cx,
+    pw::async2::CoroContext cx,
     pw::ConstByteSpan payload) {
   (void)cx;
   if (upload_usage_call_.active()) {

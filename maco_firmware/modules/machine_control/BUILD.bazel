@@ -37,7 +37,7 @@ cc_library(
     deps = [
         ":machine_sensor",
         ":machine_toggle",
-        "@pigweed//pw_allocator:allocator",
+        "@pigweed//pw_allocator:pw_allocator",
         "@pigweed//pw_async2:coro",
         "@pigweed//pw_async2:coro_or_else_task",
         "@pigweed//pw_async2:time_provider",
@@ -54,7 +54,7 @@ cc_library(
     deps = [
         ":machine_toggle",
         "//maco_firmware/modules/app_state:session_fsm",
-        "@pigweed//pw_allocator:allocator",
+        "@pigweed//pw_allocator:pw_allocator",
         "@pigweed//pw_async2:coro",
         "@pigweed//pw_async2:coro_or_else_task",
         "@pigweed//pw_async2:dispatcher",

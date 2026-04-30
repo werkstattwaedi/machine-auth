@@ -44,12 +44,12 @@ class LocalKeyProvider : public Ntag424KeyProvider {
 
   /// Create Part 2 response (synchronous, returns immediately).
   pw::async2::Coro<pw::Result<std::array<std::byte, 32>>> CreateNtagChallenge(
-      pw::async2::CoroContext& cx,
+      pw::async2::CoroContext cx,
       pw::ConstByteSpan encrypted_rnd_b) override;
 
   /// Verify Part 3 and compute session keys (synchronous, returns immediately).
   pw::async2::Coro<pw::Result<SessionKeys>> VerifyAndComputeSessionKeys(
-      pw::async2::CoroContext& cx,
+      pw::async2::CoroContext cx,
       pw::ConstByteSpan encrypted_part3) override;
 
   /// Clear stored RndA/RndB state.

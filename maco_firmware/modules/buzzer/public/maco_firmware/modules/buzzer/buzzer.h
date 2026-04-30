@@ -59,7 +59,7 @@ class Buzzer {
   /// @param melody Span of notes to play in order
   /// @return OkStatus on success, error otherwise
   virtual pw::async2::Coro<pw::Status> PlayMelody(
-      pw::async2::CoroContext& cx, pw::span<const Note> melody) = 0;
+      pw::async2::CoroContext cx, pw::span<const Note> melody) = 0;
 };
 
 }  // namespace maco::buzzer

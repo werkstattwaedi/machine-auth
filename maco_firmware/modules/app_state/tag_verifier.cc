@@ -173,7 +173,7 @@ void TagVerifier::NotifyTagRemoved() {
 
 // --- Main loop ---
 
-pw::async2::Coro<pw::Status> TagVerifier::Run(pw::async2::CoroContext& cx) {
+pw::async2::Coro<pw::Status> TagVerifier::Run(pw::async2::CoroContext cx) {
   while (true) {
     auto event_future = reader_.SubscribeOnce();
     nfc::NfcEvent event = co_await event_future;
@@ -216,7 +216,7 @@ pw::async2::Coro<pw::Status> TagVerifier::Run(pw::async2::CoroContext& cx) {
 }
 
 pw::async2::Coro<pw::Status> TagVerifier::VerifyTag(
-    pw::async2::CoroContext& cx,
+    pw::async2::CoroContext cx,
     nfc::NfcTag& tag) {
   // Step 1: Check ISO 14443-4 support
   if (!tag.supports_iso14443_4()) {
@@ -300,7 +300,7 @@ pw::async2::Coro<pw::Status> TagVerifier::VerifyTag(
 }
 
 pw::async2::Coro<pw::Status> TagVerifier::AuthorizeTag(
-    pw::async2::CoroContext& cx,
+    pw::async2::CoroContext cx,
     nfc::Ntag424Tag& ntag,
     const maco::TagUid& tag_uid) {
   // Check cache first

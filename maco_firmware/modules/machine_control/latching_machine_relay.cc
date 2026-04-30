@@ -30,7 +30,7 @@ pw::Status LatchingMachineRelay::Init() {
 bool LatchingMachineRelay::IsEnabled() const { return enabled_; }
 
 pw::async2::Coro<pw::Status> LatchingMachineRelay::Enable(
-    pw::async2::CoroContext& cx) {
+    pw::async2::CoroContext cx) {
   if (!initialized_) {
     PW_LOG_ERROR("Machine relay not initialized");
     co_return pw::Status::FailedPrecondition();
@@ -44,7 +44,7 @@ pw::async2::Coro<pw::Status> LatchingMachineRelay::Enable(
 }
 
 pw::async2::Coro<pw::Status> LatchingMachineRelay::Disable(
-    pw::async2::CoroContext& cx) {
+    pw::async2::CoroContext cx) {
   if (!initialized_) {
     PW_LOG_ERROR("Machine relay not initialized");
     co_return pw::Status::FailedPrecondition();
@@ -58,7 +58,7 @@ pw::async2::Coro<pw::Status> LatchingMachineRelay::Disable(
 }
 
 pw::async2::Coro<pw::Status> LatchingMachineRelay::DoSetState(
-    [[maybe_unused]] pw::async2::CoroContext& cx, bool enable) {
+    [[maybe_unused]] pw::async2::CoroContext cx, bool enable) {
   PW_LOG_DEBUG("Machine relay toggling to %s", enable ? "enable" : "disable");
 
   // Write output state (switches GPIO to OUTPUT mode)

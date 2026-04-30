@@ -41,12 +41,12 @@ class MachineToggle {
   /// Enable machine power asynchronously.
   /// @param cx Coroutine context for suspension
   /// @return OkStatus on success, error otherwise
-  virtual pw::async2::Coro<pw::Status> Enable(pw::async2::CoroContext& cx) = 0;
+  virtual pw::async2::Coro<pw::Status> Enable(pw::async2::CoroContext cx) = 0;
 
   /// Disable machine power asynchronously.
   /// @param cx Coroutine context for suspension
   /// @return OkStatus on success, error otherwise
-  virtual pw::async2::Coro<pw::Status> Disable(pw::async2::CoroContext& cx) = 0;
+  virtual pw::async2::Coro<pw::Status> Disable(pw::async2::CoroContext cx) = 0;
 };
 
 }  // namespace maco::machine_control

@@ -39,8 +39,8 @@ class GatewayConnectionCheck {
   void Start(pw::async2::Dispatcher& dispatcher);
 
  private:
-  pw::async2::Coro<pw::Status> Run(pw::async2::CoroContext& cx);
-  pw::async2::Coro<pw::Status> Ping(pw::async2::CoroContext& cx);
+  pw::async2::Coro<pw::Status> Run(pw::async2::CoroContext cx);
+  pw::async2::Coro<pw::Status> Ping(pw::async2::CoroContext cx);
 
   GatewayClient& gateway_;
   app_state::SystemState& system_state_;

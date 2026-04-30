@@ -84,7 +84,7 @@ class FirebaseClient {
   /// @param tag_uid The 7-byte NTAG UID
   /// @return CheckinResult (CheckinAuthorized or CheckinRejected) or error
   [[nodiscard]] pw::async2::Coro<pw::Result<CheckinResult>> TerminalCheckin(
-      pw::async2::CoroContext& cx,
+      pw::async2::CoroContext cx,
       const TagUid& tag_uid);
 
   /// Initiate NTAG424 3-pass mutual authentication (coroutine).
@@ -97,7 +97,7 @@ class FirebaseClient {
   /// @param ntag_challenge Encrypted RndB from tag (Part 1 response)
   /// @return AuthenticateTagResponse or error status
   [[nodiscard]] pw::async2::Coro<pw::Result<AuthenticateTagResponse>>
-  AuthenticateTag(pw::async2::CoroContext& cx,
+  AuthenticateTag(pw::async2::CoroContext cx,
                   const TagUid& tag_uid,
                   Key key_slot,
                   pw::ConstByteSpan ntag_challenge);
@@ -111,7 +111,7 @@ class FirebaseClient {
   /// @param encrypted_tag_response Encrypted Part 3 response from tag
   /// @return CompleteAuthResult (CompleteAuthSuccess or CompleteAuthRejected)
   [[nodiscard]] pw::async2::Coro<pw::Result<CompleteAuthResult>> CompleteTagAuth(
-      pw::async2::CoroContext& cx,
+      pw::async2::CoroContext cx,
       const FirebaseId& auth_id,
       pw::ConstByteSpan encrypted_tag_response);
 
@@ -124,7 +124,7 @@ class FirebaseClient {
   /// @param payload Pre-encoded UploadUsageRequest bytes
   /// @return OkStatus on success, or error status
   [[nodiscard]] pw::async2::Coro<pw::Status> UploadUsage(
-      pw::async2::CoroContext& cx,
+      pw::async2::CoroContext cx,
       pw::ConstByteSpan payload);
 
   /// Get the channel ID.

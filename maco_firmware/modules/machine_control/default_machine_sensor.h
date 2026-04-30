@@ -30,7 +30,7 @@ class DefaultMachineSensor : public MachineSensor {
   void Start(pw::async2::Dispatcher& dispatcher) override;
 
  private:
-  pw::async2::Coro<pw::Status> Run(pw::async2::CoroContext& cx);
+  pw::async2::Coro<pw::Status> Run(pw::async2::CoroContext cx);
 
   const MachineToggle& toggle_;
   pw::async2::TimeProvider<pw::chrono::SystemClock>& time_provider_;
