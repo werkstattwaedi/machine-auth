@@ -113,7 +113,17 @@ async function seedUser(
 }
 
 interface SeedOpenCheckoutOpts {
+  /**
+   * UID stamped into `modifiedBy`. Also used as the user-doc reference
+   * for `userId` unless `userIdNull` is set.
+   */
   ownerUid: string;
+  /**
+   * When true, persists `userId: null` on the checkout (the eager-anon
+   * shape from issue #151). `modifiedBy` still uses `ownerUid`, which is
+   * the anon sign-in UID for that flow.
+   */
+  userIdNull?: boolean;
   items?: NewItem[];
   workshopsVisited?: string[];
   persons?: CheckoutPersonEntity[];
@@ -129,10 +139,15 @@ async function seedCheckout(
 ): Promise<void> {
   const db = getFirestore();
   const now = Timestamp.now();
-  const userRef = db.collection("users").doc(opts.ownerUid);
+  const userRef = opts.userIdNull
+    ? null
+    : db.collection("users").doc(opts.ownerUid);
 
+  // Cast: CheckoutEntity types userId as DocumentReference (non-null) but
+  // the eager-anon flow writes null. The source code handles
+  // `!checkout.userId` defensively, so we exercise the same shape here.
   const checkout: CheckoutEntity = {
-    userId: userRef,
+    userId: userRef as unknown as FirebaseFirestore.DocumentReference,
     status: opts.status ?? "open",
     usageType: "regular",
     created: now,
@@ -219,6 +234,12 @@ async function listBills(): Promise<{ id: string; data: BillEntity }[]> {
 interface CallOptions {
   uid?: string | null;
   actsAs?: string;
+  /**
+   * When true, attach a `firebase.sign_in_provider: "anonymous"` claim to
+   * the auth token so the callable's `isAnonymousCaller` check resolves
+   * true. Mirrors the token shape Firebase Auth issues for anon sessions.
+   */
+  anonymous?: boolean;
   data: Record<string, unknown>;
 }
 
@@ -229,6 +250,9 @@ function buildRequest(opts: CallOptions): CallableRequest<unknown> {
           uid: opts.uid,
           token: {
             ...(opts.actsAs ? { actsAs: opts.actsAs } : {}),
+            ...(opts.anonymous
+              ? { firebase: { sign_in_provider: "anonymous" } }
+              : {}),
           },
         }
       : undefined;
@@ -1078,6 +1102,170 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
       expect(result.currency).to.equal("CHF");
       const bills = await listBills();
       expect(bills[0].data.currency).to.equal("CHF");
+    });
+  });
+
+  /**
+   * Issue #180 regression: the eager-anon flow (issue #151) creates a
+   * checkout doc with `userId: null` and `modifiedBy: <anonUid>` when
+   * the visitor adds the first item. The previous ownership check
+   * required `checkout.userId.id === callerUid`, which failed the
+   * "Senden & zur Kasse" submit for every anon user with items. The
+   * branch below covers all four cases the approved plan called out.
+   */
+  describe("anonymous existing-checkout submit", () => {
+    const ANON_UID = "anon-uid-1";
+    const OTHER_ANON_UID = "anon-uid-2";
+
+    function seedAnonOpenCheckout(checkoutId: string): Promise<void> {
+      return seedCheckout(checkoutId, {
+        ownerUid: ANON_UID,
+        userIdNull: true,
+        items: [
+          {
+            workshop: "holz",
+            description: "Bandsäge",
+            origin: "nfc",
+            quantity: 1,
+            unitPrice: 20,
+            totalPrice: 20,
+          },
+        ],
+      });
+    }
+
+    it("happy path: anon caller closes their own null-userId checkout", async () => {
+      const checkoutId = "co-anon-happy";
+      await seedAnonOpenCheckout(checkoutId);
+
+      const result = await call({
+        uid: ANON_UID,
+        anonymous: true,
+        data: {
+          checkoutId,
+          usageType: "regular" as UsageType,
+          persons: [ADULT],
+          summary: {
+            totalPrice: 0,
+            entryFees: 0,
+            machineCost: 0,
+            materialCost: 0,
+            tip: 0,
+          },
+        },
+      });
+
+      // 15 (entry) + 20 (nfc) = 35 CHF
+      expect(result.amount).to.equal("35.00");
+      expect(result.currency).to.equal("CHF");
+      expect(result.payerName).to.equal(ADULT.name);
+
+      const checkout = await getCheckout(checkoutId);
+      expect(checkout.status).to.equal("closed");
+      expect(checkout.billRef).to.exist;
+      // userId stays null — the close path doesn't backfill it.
+      expect(checkout.userId).to.equal(null);
+      expect(checkout.summary?.totalPrice).to.equal(35);
+
+      const bills = await listBills();
+      expect(bills, "exactly one bill should be created").to.have.length(1);
+      expect(bills[0].data.amount).to.equal(35);
+      // Bill's userId is null on the anon flow.
+      expect(bills[0].data.userId).to.equal(null);
+    });
+
+    it("rejects a different anon session closing the cart (cross-session)", async () => {
+      const checkoutId = "co-anon-cross-session";
+      await seedAnonOpenCheckout(checkoutId);
+
+      await expectHttpsError(
+        () =>
+          call({
+            uid: OTHER_ANON_UID,
+            anonymous: true,
+            data: {
+              checkoutId,
+              usageType: "regular" as UsageType,
+              persons: [ADULT],
+              summary: {
+                totalPrice: 0,
+                entryFees: 0,
+                machineCost: 0,
+                materialCost: 0,
+                tip: 0,
+              },
+            },
+          }),
+        "permission-denied",
+      );
+
+      // Cart stays open, no bill.
+      expect(await listBills()).to.have.length(0);
+      const checkout = await getCheckout(checkoutId);
+      expect(checkout.status).to.equal("open");
+    });
+
+    it("rejects truly-unauthenticated caller (no auth context)", async () => {
+      const checkoutId = "co-anon-unauth";
+      await seedAnonOpenCheckout(checkoutId);
+
+      await expectHttpsError(
+        () =>
+          call({
+            uid: null,
+            data: {
+              checkoutId,
+              usageType: "regular" as UsageType,
+              persons: [ADULT],
+              summary: {
+                totalPrice: 0,
+                entryFees: 0,
+                machineCost: 0,
+                materialCost: 0,
+                tip: 0,
+              },
+            },
+          }),
+        "unauthenticated",
+      );
+
+      expect(await listBills()).to.have.length(0);
+      const checkout = await getCheckout(checkoutId);
+      expect(checkout.status).to.equal("open");
+    });
+
+    it("rejects non-anonymous caller spoofing the anon session's UID", async () => {
+      // Simulates a real (registered/email-signed-in) user calling with
+      // the same UID as `modifiedBy` but without the anonymous sign-in
+      // claim. The provider gate must keep them out — only an anon-auth
+      // session may close a null-userId checkout.
+      const checkoutId = "co-anon-spoof";
+      await seedAnonOpenCheckout(checkoutId);
+
+      await expectHttpsError(
+        () =>
+          call({
+            uid: ANON_UID,
+            // No `anonymous: true` — token has no firebase.sign_in_provider.
+            data: {
+              checkoutId,
+              usageType: "regular" as UsageType,
+              persons: [ADULT],
+              summary: {
+                totalPrice: 0,
+                entryFees: 0,
+                machineCost: 0,
+                materialCost: 0,
+                tip: 0,
+              },
+            },
+          }),
+        "permission-denied",
+      );
+
+      expect(await listBills()).to.have.length(0);
+      const checkout = await getCheckout(checkoutId);
+      expect(checkout.status).to.equal("open");
     });
   });
 });
