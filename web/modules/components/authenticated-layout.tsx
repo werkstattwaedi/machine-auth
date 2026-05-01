@@ -7,7 +7,7 @@
 // loading early-return — see regression test for React error #310.
 
 import type { ReactNode } from "react"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Link, Outlet, useLocation, useNavigate } from "@tanstack/react-router"
 import { useAuth, isProfileComplete } from "@modules/lib/auth"
 import { useIsMobile } from "@modules/hooks/use-mobile"
@@ -60,6 +60,8 @@ export function AuthenticatedLayout({
   }, [user, loading, navigate])
 
   // Admin gate: kick non-admins back to login once user doc has loaded.
+  // Note: anonymous principals are filtered out implicitly here because
+  // `isAdmin` is false for them, so no separate branch is needed.
   useEffect(() => {
     if (gate.kind !== "admin") return
     if (!loading && !userDocLoading && user && !isAdmin) {
@@ -75,6 +77,28 @@ export function AuthenticatedLayout({
       navigate({ to: "/" })
     }
   }, [gate, sessionKind, loading, navigate])
+
+  // Member gate: anonymous Firebase principals (eager-anon checkout flow)
+  // must not reach member-area routes either. Bounce to /login with a
+  // redirect back to the current path so a successful upgrade lands them
+  // where they tried to go. The "have we already redirected" ref avoids a
+  // re-fire after `location.pathname` updates to "/login" (TanStack Router
+  // commits the path change before unmounting this layout).
+  const anonRedirectedRef = useRef(false)
+  useEffect(() => {
+    if (gate.kind !== "member") return
+    if (!loading && sessionKind === "anonymous" && !anonRedirectedRef.current) {
+      anonRedirectedRef.current = true
+      // The typed `navigate` from the registered router may not statically
+      // accept a `search.redirect` field on /login (each app has its own
+      // search schema). Cast away the typed route check; the calling app
+      // wires `?redirect=` parsing in its login route file.
+      ;(navigate as (opts: { to: string; search?: Record<string, unknown> }) => void)({
+        to: "/login",
+        search: { redirect: location.pathname },
+      })
+    }
+  }, [gate, sessionKind, loading, navigate, location.pathname])
 
   // Member gate: redirect to profile-completion when the profile is incomplete.
   useEffect(() => {
@@ -101,7 +125,7 @@ export function AuthenticatedLayout({
 
   if (!user) return null
   if (gate.kind === "admin" && !isAdmin) return null
-  if (gate.kind === "member" && sessionKind === "tag") return null
+  if (gate.kind === "member" && (sessionKind === "tag" || sessionKind === "anonymous")) return null
 
   const navLink =
     "flex items-center gap-2.5 px-3 py-2 rounded-[3px] text-sm transition-colors"

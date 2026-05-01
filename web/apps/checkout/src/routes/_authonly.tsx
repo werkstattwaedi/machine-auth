@@ -1,10 +1,10 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router"
+import { createFileRoute, Outlet, useLocation, useNavigate } from "@tanstack/react-router"
 import { useAuth } from "@modules/lib/auth"
 import { Loader2 } from "lucide-react"
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 
 export const Route = createFileRoute("/_authonly")({
   component: AuthOnlyLayout,
@@ -17,6 +17,7 @@ export const Route = createFileRoute("/_authonly")({
 function AuthOnlyLayout() {
   const { user, loading, sessionKind } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
 
   useEffect(() => {
     if (!loading && !user) {
@@ -32,6 +33,22 @@ function AuthOnlyLayout() {
     }
   }, [sessionKind, loading, navigate])
 
+  // Anonymous Firebase principals (eager-anon checkout flow) must upgrade
+  // to a real account before reaching member-area screens. Send them to
+  // /login with a redirect back to the current path. The ref prevents a
+  // second redirect once `location.pathname` flips to "/login" before this
+  // layout unmounts.
+  const anonRedirectedRef = useRef(false)
+  useEffect(() => {
+    if (!loading && sessionKind === "anonymous" && !anonRedirectedRef.current) {
+      anonRedirectedRef.current = true
+      navigate({
+        to: "/login",
+        search: { redirect: location.pathname },
+      })
+    }
+  }, [sessionKind, loading, navigate, location.pathname])
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -40,7 +57,7 @@ function AuthOnlyLayout() {
     )
   }
 
-  if (!user || sessionKind === "tag") return null
+  if (!user || sessionKind === "tag" || sessionKind === "anonymous") return null
 
   return (
     <div className="min-h-screen flex flex-col items-center bg-background">

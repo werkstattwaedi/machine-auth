@@ -63,6 +63,11 @@ export function LoginPage({
   // honour any pending localStorage round-trip from the magic-link path.
   useEffect(() => {
     if (loading || !user) return
+    // Anonymous principals (eager-anon checkout) land on /login to upgrade
+    // their session — don't bounce them away. Once verifyLoginCode replaces
+    // the anon principal with a real one, this effect re-runs and routes
+    // them to the redirect target.
+    if (user.isAnonymous) return
 
     let target = targetPath
     if (signupEnabled) {
