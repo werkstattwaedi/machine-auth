@@ -360,45 +360,99 @@ class FactoryTestPane(WindowPane, PluginMixin):
             step.message = "Verify color bars on display"
 
         elif idx == 13:  # Check Secrets
-            resp = secrets.GetStatus()
-            provisioned = resp.response.is_provisioned
-            step.status = StepStatus.PASSED
-            step.message = (
-                "PROVISIONED" if provisioned else "NOT PROVISIONED"
-            )
+            self._check_secrets(secrets, step)
 
         elif idx == 14:  # Provision Secrets
-            gw_hex = os.environ.get("FACTORY_GATEWAY_SECRET", "")
-            ntag_hex = os.environ.get("FACTORY_NTAG_KEY", "")
-            if not gw_hex or not ntag_hex:
-                step.status = StepStatus.SKIPPED
-                step.message = "Env vars not set"
-                return
-            gw_bytes = bytes.fromhex(gw_hex)
-            ntag_bytes = bytes.fromhex(ntag_hex)
-            if len(gw_bytes) != 16 or len(ntag_bytes) != 16:
-                step.status = StepStatus.FAILED
-                step.message = "Secrets must be 16 bytes"
-                return
-            resp = secrets.Provision(
-                gateway_master_secret=gw_bytes,
-                ntag_terminal_key=ntag_bytes,
-            )
-            if resp.response.success:
-                step.status = StepStatus.PASSED
-                step.message = "Provisioned"
-            else:
-                step.status = StepStatus.FAILED
-                step.message = resp.response.error or "Provision failed"
+            self._provision_secrets(secrets, step)
 
         elif idx == 15:  # Verify Provisioned
+            self._verify_secrets(
+                secrets, step, missing_msg="NOT provisioned"
+            )
+
+    # ── Secrets steps ─────────────────────────────────────────────────
+
+    @staticmethod
+    def _expected_keys() -> tuple[bytes, bytes] | str:
+        """Return (gateway, ntag) from env, or an error message."""
+        gw_hex = os.environ.get("FACTORY_GATEWAY_SECRET", "")
+        ntag_hex = os.environ.get("FACTORY_NTAG_KEY", "")
+        if not gw_hex or not ntag_hex:
+            return "Env vars not set"
+        gw_bytes = bytes.fromhex(gw_hex)
+        ntag_bytes = bytes.fromhex(ntag_hex)
+        if len(gw_bytes) != 16 or len(ntag_bytes) != 16:
+            return "Secrets must be 16 bytes"
+        return gw_bytes, ntag_bytes
+
+    def _check_secrets(self, secrets, step: TestStep) -> None:
+        """Report whether stored secrets are missing, match, or mismatch."""
+        keys = self._expected_keys()
+        if isinstance(keys, str):
+            # Env not set — fall back to provisioned-bit only.
             resp = secrets.GetStatus()
-            if resp.response.is_provisioned:
-                step.status = StepStatus.PASSED
-                step.message = "Verified provisioned"
-            else:
-                step.status = StepStatus.FAILED
-                step.message = "NOT provisioned"
+            step.status = StepStatus.PASSED
+            step.message = (
+                f"PROVISIONED ({keys})"
+                if resp.response.is_provisioned
+                else f"NOT PROVISIONED ({keys})"
+            )
+            return
+        self._verify_secrets(secrets, step, missing_msg="NOT PROVISIONED")
+
+    def _provision_secrets(self, secrets, step: TestStep) -> None:
+        keys = self._expected_keys()
+        if isinstance(keys, str):
+            step.status = StepStatus.SKIPPED
+            step.message = keys
+            return
+        gw_bytes, ntag_bytes = keys
+        # force=true so the device clears existing secrets first — this is
+        # how an operator re-keys a misprovisioned device without an extra
+        # Clear step.
+        resp = secrets.Provision(
+            gateway_master_secret=gw_bytes,
+            ntag_terminal_key=ntag_bytes,
+            force=True,
+        )
+        if resp.response.success:
+            step.status = StepStatus.PASSED
+            step.message = "Provisioned (force=true)"
+        else:
+            step.status = StepStatus.FAILED
+            step.message = resp.response.error or "Provision failed"
+
+    def _verify_secrets(
+        self, secrets, step: TestStep, *, missing_msg: str
+    ) -> None:
+        """Compare stored keys to env candidates via the Verify RPC."""
+        keys = self._expected_keys()
+        if isinstance(keys, str):
+            step.status = StepStatus.FAILED
+            step.message = keys
+            return
+        gw_bytes, ntag_bytes = keys
+        resp = secrets.Verify(
+            gateway_master_secret=gw_bytes,
+            ntag_terminal_key=ntag_bytes,
+        )
+        r = resp.response
+        if not r.is_provisioned:
+            step.status = StepStatus.FAILED
+            step.message = missing_msg
+            return
+        if r.gateway_match and r.ntag_match:
+            step.status = StepStatus.PASSED
+            step.message = "MATCH"
+            return
+        # Provisioned, but with different keys than env.
+        mismatched = []
+        if not r.gateway_match:
+            mismatched.append("gateway")
+        if not r.ntag_match:
+            mismatched.append("ntag")
+        step.status = StepStatus.FAILED
+        step.message = f"MISMATCH ({', '.join(mismatched)}) — re-Provision"
 
     def _poll_button(self, factory, step: TestStep, field: str,
                      label: str, timeout_ms: int = 10000) -> None:

@@ -24,16 +24,24 @@ pw::Status DeviceSecretsService::GetStatus(
 pw::Status DeviceSecretsService::Provision(
     const ::maco_secrets_ProvisionRequest& request,
     ::maco_secrets_ProvisionResponse& response) {
-  PW_LOG_INFO("DeviceSecretsService.Provision called");
+  PW_LOG_INFO("DeviceSecretsService.Provision called (force=%d)",
+              request.force);
 
-  // Check if already provisioned
+  // Already-provisioned guard: bail out unless caller explicitly asked
+  // to overwrite. With force=true we clear first so Provision is a
+  // single-step re-key.
   if (storage_.IsProvisioned()) {
-    std::strncpy(response.error, "Already provisioned. Call Clear() first.",
-                 sizeof(response.error) - 1);
-    response.error[sizeof(response.error) - 1] = '\0';
-    response.success = false;
-    PW_LOG_WARN("Provision failed: already provisioned");
-    return pw::OkStatus();  // RPC succeeds, but response indicates failure
+    if (!request.force) {
+      std::strncpy(response.error,
+                   "Already provisioned. Re-run with force=true.",
+                   sizeof(response.error) - 1);
+      response.error[sizeof(response.error) - 1] = '\0';
+      response.success = false;
+      PW_LOG_WARN("Provision failed: already provisioned (force=false)");
+      return pw::OkStatus();
+    }
+    PW_LOG_WARN("Provision force=true: clearing existing secrets");
+    storage_.Clear();
   }
 
   // Validate key sizes (should be enforced by proto options, but double-check)
@@ -89,6 +97,60 @@ pw::Status DeviceSecretsService::Clear(
   storage_.Clear();
   response.success = true;
   response.error[0] = '\0';
+  return pw::OkStatus();
+}
+
+namespace {
+
+// Constant-time equality over two byte spans of equal length.
+bool ConstantTimeEqual(pw::ConstByteSpan a, pw::ConstByteSpan b) {
+  if (a.size() != b.size()) {
+    return false;
+  }
+  unsigned char diff = 0;
+  for (size_t i = 0; i < a.size(); ++i) {
+    diff |= static_cast<unsigned char>(a[i]) ^
+            static_cast<unsigned char>(b[i]);
+  }
+  return diff == 0;
+}
+
+}  // namespace
+
+pw::Status DeviceSecretsService::Verify(
+    const ::maco_secrets_ProvisionRequest& request,
+    ::maco_secrets_VerifyResponse& response) {
+  response.is_provisioned = storage_.IsProvisioned();
+  response.gateway_match = false;
+  response.ntag_match = false;
+
+  if (!response.is_provisioned) {
+    PW_LOG_INFO("DeviceSecretsService.Verify: not provisioned");
+    return pw::OkStatus();
+  }
+
+  auto stored_gateway = storage_.GetGatewayMasterSecret();
+  auto stored_ntag = storage_.GetNtagTerminalKey();
+  if (!stored_gateway.ok() || !stored_ntag.ok()) {
+    // Provisioned-bit set but read back failed — treat as mismatch.
+    PW_LOG_ERROR("DeviceSecretsService.Verify: failed to read stored keys");
+    return pw::OkStatus();
+  }
+
+  const auto candidate_gateway = pw::ConstByteSpan(
+      reinterpret_cast<const std::byte*>(request.gateway_master_secret.bytes),
+      request.gateway_master_secret.size);
+  const auto candidate_ntag = pw::ConstByteSpan(
+      reinterpret_cast<const std::byte*>(request.ntag_terminal_key.bytes),
+      request.ntag_terminal_key.size);
+
+  response.gateway_match =
+      ConstantTimeEqual(candidate_gateway, stored_gateway->bytes());
+  response.ntag_match =
+      ConstantTimeEqual(candidate_ntag, stored_ntag->bytes());
+
+  PW_LOG_INFO("DeviceSecretsService.Verify: gateway=%d ntag=%d",
+              response.gateway_match, response.ntag_match);
   return pw::OkStatus();
 }
 
