@@ -76,6 +76,8 @@ Design decisions to minimize operations:
 3. Batch usage uploads
 4. Future: Session broadcasting between devices
 
+**Login-code rate limits** (issue #152, `functions/src/auth/login-code/`): per-email caps of 20 code requests/24h and 30 cumulative verify attempts/24h, layered on top of the 60s per-email throttle and the per-doc 5-attempt cap. Don't loosen without re-evaluating the brute-force keyspace math (10^6 codes).
+
 ### Firebase Functions
 
 All code in `functions/`

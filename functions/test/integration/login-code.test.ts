@@ -135,6 +135,58 @@ describe("Login code flow (Integration)", () => {
       );
     });
 
+    it("rejects the 21st code request within a 24h window", async () => {
+      // Seed 20 docs directly so we sidestep the 60s throttle and don't
+      // bake 20 minutes of waiting into the test. Each `created` is far
+      // enough back to clear the 60s window but well within 24h.
+      const db = getFirestore();
+      const col = db.collection("loginCodes");
+      const now = Date.now();
+      const farPastTtl = new Date(now + 5 * 60 * 1000);
+      for (let i = 0; i < 20; i++) {
+        // Spread from -10h to -2min ago, all pre-consumed so the 60s
+        // throttle's "latest unconsumed" path doesn't matter.
+        const created = new Date(now - (i + 1) * 30 * 60 * 1000);
+        await col.doc(`seed-21st-${i}`).set({
+          email: "burnt@example.com",
+          codeHash: "x",
+          expiresAt: farPastTtl,
+          created,
+          attempts: 0,
+          consumedAt: created,
+        });
+      }
+
+      await expectHttpsError(
+        () => handleRequestLoginCode({ email: "burnt@example.com" }, ORIGIN),
+        "resource-exhausted"
+      );
+    });
+
+    it("allows a fresh code once the 24h window has expired", async () => {
+      // Seed 20 docs but backdate them >24h so they should not count.
+      const db = getFirestore();
+      const col = db.collection("loginCodes");
+      const longAgo = new Date(Date.now() - 25 * 60 * 60 * 1000);
+      const farPastTtl = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      for (let i = 0; i < 20; i++) {
+        await col.doc(`seed-window-reset-${i}`).set({
+          email: "reset@example.com",
+          codeHash: "x",
+          expiresAt: farPastTtl,
+          created: longAgo,
+          attempts: 0,
+          consumedAt: longAgo,
+        });
+      }
+
+      // Should succeed since all 20 are outside the rolling 24h window.
+      await handleRequestLoginCode({ email: "reset@example.com" }, ORIGIN);
+      const doc = await findLatestCodeDoc("reset@example.com");
+      expect(doc).to.not.be.null;
+      expect(doc!.data().debugCode).to.match(/^\d{6}$/);
+    });
+
     it("invalidates the previous unconsumed code when a new one is issued", async () => {
       // First request, bypass rate limit by backdating.
       await handleRequestLoginCode({ email: "alice@example.com" }, ORIGIN);
@@ -235,6 +287,78 @@ describe("Login code flow (Integration)", () => {
       await handleVerifyLoginCode({ email: "grace@example.com", code });
       await expectHttpsError(
         () => handleVerifyLoginCode({ email: "grace@example.com", code }),
+        "failed-precondition"
+      );
+    });
+
+    it("rejects the 31st cumulative attempt across multiple codes in 24h", async () => {
+      // Seed 6 prior consumed/exhausted docs totalling 30 attempts in the
+      // window. Backdate `created` so they don't trip the 60s throttle on
+      // the next requestLoginCode call.
+      const db = getFirestore();
+      const col = db.collection("loginCodes");
+      const now = Date.now();
+      const farPastTtl = new Date(now - 60 * 1000);
+      for (let i = 0; i < 6; i++) {
+        const created = new Date(now - (i + 1) * 30 * 60 * 1000);
+        await col.doc(`seed-cum-${i}`).set({
+          email: "spent@example.com",
+          codeHash: "x",
+          expiresAt: farPastTtl,
+          created,
+          attempts: 5,
+          consumedAt: created,
+        });
+      }
+
+      // A fresh request for a usable code is still allowed (it's the
+      // attempt counter, not the request counter, that's blown).
+      await handleRequestLoginCode({ email: "spent@example.com" }, ORIGIN);
+
+      // The 31st attempt must fail with resource-exhausted, distinct
+      // from the per-doc 6th-attempt failed-precondition path.
+      try {
+        await handleVerifyLoginCode({
+          email: "spent@example.com",
+          code: "000000",
+        });
+        throw new Error("expected HttpsError");
+      } catch (err: any) {
+        expect(err?.code).to.equal("resource-exhausted");
+        expect(err?.message ?? "").to.contain("Zu viele falsche Code-Eingaben");
+      }
+    });
+
+    it("allows verification once the 24h cumulative-attempts window resets", async () => {
+      // Seed 6 docs with 5 attempts each (30 total) but backdate their
+      // `created` to >24h ago so they fall outside the rolling window.
+      const db = getFirestore();
+      const col = db.collection("loginCodes");
+      const longAgo = new Date(Date.now() - 25 * 60 * 60 * 1000);
+      const longAgoTtl = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      for (let i = 0; i < 6; i++) {
+        await col.doc(`seed-cum-reset-${i}`).set({
+          email: "reborn@example.com",
+          codeHash: "x",
+          expiresAt: longAgoTtl,
+          created: longAgo,
+          attempts: 5,
+          consumedAt: longAgo,
+        });
+      }
+
+      // A fresh code request inside the window — succeeds because the
+      // request-count cap has 14 spare slots (20 − 6 stale).
+      await handleRequestLoginCode({ email: "reborn@example.com" }, ORIGIN);
+
+      // A wrong code should still produce the per-doc failed-precondition
+      // path ("Code falsch."), NOT the rolling resource-exhausted cap.
+      await expectHttpsError(
+        () =>
+          handleVerifyLoginCode({
+            email: "reborn@example.com",
+            code: "000000",
+          }),
         "failed-precondition"
       );
     });

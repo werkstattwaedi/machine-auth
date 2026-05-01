@@ -62,6 +62,12 @@ export function assertResendLoginTemplateConfigured(value: string): void {
 const CODE_EXPIRY_MS = 5 * 60 * 1000;
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 
+const PER_EMAIL_WINDOW_MS = 24 * 60 * 60 * 1000;
+// Cap on code requests per email per 24h. Calibrated for legitimate
+// retry behaviour (a few requests per real login + headroom) while
+// still bounding Resend send volume per address. See issue #152.
+const MAX_CODES_PER_EMAIL_24H = 20;
+
 export interface RequestLoginCodeInput {
   email: string;
 }
@@ -116,6 +122,23 @@ export async function handleRequestLoginCode(
     if (consumedAt == null) {
       await latest.ref.update({ consumedAt: Timestamp.now() });
     }
+  }
+
+  // Per-email 24h cap on code requests (issue #152). Brute-force defence:
+  // an attacker rotating fresh codes past the 60s throttle would otherwise
+  // get unbounded attempts at one address. The existing
+  // (email asc, created desc) index supports this query — no new index.
+  const windowStart = Timestamp.fromMillis(Date.now() - PER_EMAIL_WINDOW_MS);
+  const recentCount = await col
+    .where("email", "==", email)
+    .where("created", ">=", windowStart)
+    .count()
+    .get();
+  if (recentCount.data().count >= MAX_CODES_PER_EMAIL_24H) {
+    throw new HttpsError(
+      "resource-exhausted",
+      "Zu viele Code-Anforderungen. Bitte versuche es später erneut."
+    );
   }
 
   const docId = generateDocId();

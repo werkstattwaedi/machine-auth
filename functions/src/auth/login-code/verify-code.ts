@@ -21,6 +21,14 @@ import {
 
 const MAX_ATTEMPTS = 5;
 
+const PER_EMAIL_WINDOW_MS = 24 * 60 * 60 * 1000;
+// Cumulative cap on verify attempts per email per 24h, summed across all
+// loginCodes docs in the window (issue #152). 5 attempts/code × ~6 codes/day
+// gives a comfortable retry budget for legitimate users while bounding
+// brute-force across rotating fresh codes. The per-doc 5-attempt cap remains
+// the hard defence; this is the rolling soft cap that survives across codes.
+const MAX_ATTEMPTS_PER_EMAIL_24H = 30;
+
 export interface VerifyLoginCodeInput {
   email: string;
   code: string;
@@ -42,8 +50,8 @@ export async function handleVerifyLoginCode(
   }
 
   const db = getFirestore();
-  const snap = await db
-    .collection("loginCodes")
+  const col = db.collection("loginCodes");
+  const snap = await col
     .where("email", "==", email)
     .orderBy("created", "desc")
     .limit(1)
@@ -54,6 +62,31 @@ export async function handleVerifyLoginCode(
   }
 
   const docRef = snap.docs[0].ref;
+
+  // Per-email cumulative-attempts cap (issue #152). Sum `attempts` across
+  // all loginCodes docs for the email in the 24h window before allowing
+  // an increment. Done as a pre-check OUTSIDE the transaction: the
+  // alternative (querying inside `runTransaction`) complicates the
+  // single-doc transaction shape, and the trade-off is minor — an
+  // attacker could squeeze a few extra attempts during the read-write
+  // gap, but the per-doc 5-attempt cap remains the hard defence; this
+  // rolling cap is a soft ceiling that survives across rotating codes.
+  const windowStart = Timestamp.fromMillis(Date.now() - PER_EMAIL_WINDOW_MS);
+  const attemptsSnap = await col
+    .where("email", "==", email)
+    .where("created", ">=", windowStart)
+    .select("attempts")
+    .get();
+  let cumulativeAttempts = 0;
+  for (const d of attemptsSnap.docs) {
+    cumulativeAttempts += (d.get("attempts") as number | undefined) ?? 0;
+  }
+  if (cumulativeAttempts >= MAX_ATTEMPTS_PER_EMAIL_24H) {
+    throw new HttpsError(
+      "resource-exhausted",
+      "Zu viele falsche Code-Eingaben. Bitte versuche es später erneut."
+    );
+  }
 
   type Outcome =
     | { kind: "ok"; email: string }
