@@ -23,7 +23,7 @@ namespace maco::personalize {
 /// @param base_url URL part after "https://", e.g. "id.werkstattwaedi.ch/"
 /// @param session Proof token from Authenticate() with key 0
 pw::async2::Coro<pw::Status> ConfigureSdm(
-    pw::async2::CoroContext& cx,
+    pw::async2::CoroContext cx,
     nfc::Ntag424Tag& ntag,
     const nfc::Ntag424Session& session,
     std::string_view base_url);

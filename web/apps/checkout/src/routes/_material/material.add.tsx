@@ -30,6 +30,7 @@ import {
   writeBatch,
 } from "firebase/firestore"
 import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
+import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { CheckCircle, Loader2, Package, ArrowLeft, LogIn } from "lucide-react"
 import { useState } from "react"
 import { getShortUnit } from "@modules/lib/workshop-config"
@@ -48,6 +49,13 @@ export const Route = createFileRoute("/_material/material/add")({
 function MaterialAddPage() {
   const db = useDb()
   const { add } = useFirestoreMutation()
+  // ADR-0025: wrap the multi-step submit so partial failures (writeBatch
+  // commit, add-to-existing-checkout) surface a German toast + telemetry
+  // instead of leaving the form in an ambiguous re-enabled state.
+  const addMaterialMutation = useAsyncMutation({
+    context: "material.add",
+    errorMessage: "Material konnte nicht hinzugefügt werden",
+  })
   const { id, priceList: priceListId } = Route.useSearch()
   const { user, userDoc, loading: authLoading } = useAuth()
 
@@ -76,8 +84,8 @@ function MaterialAddPage() {
   const [lengthCm, setLengthCm] = useState("")
   const [widthCm, setWidthCm] = useState("")
   const [weightG, setWeightG] = useState("")
-  const [submitting, setSubmitting] = useState(false)
   const [success, setSuccess] = useState(false)
+  const submitting = addMaterialMutation.loading
 
   // Require authentication for all material operations
   if (authLoading) return <PageLoading />
@@ -211,68 +219,72 @@ function MaterialAddPage() {
 
   const handleSubmit = async () => {
     if (totalPrice <= 0) return
-    setSubmitting(true)
     try {
-      const uRef = userRef(db, userDoc.id)
+      await addMaterialMutation.mutate(async () => {
+        const uRef = userRef(db, userDoc.id)
 
-      // Find or create open checkout
-      const coQuery = query(
-        checkoutsCollection(db),
-        where("userId", "==", uRef),
-        where("status", "==", "open"),
-      )
-      const coSnap = await getDocs(coQuery)
-      let checkoutId: string
-      if (coSnap.empty) {
-        // Create checkout + item atomically. writeBatch needs raw refs from
-        // doc(collection(...)) so it can mint a fresh id; we go through the
-        // typed collection helpers but still let the SDK pick the id.
-        const batch = writeBatch(db)
-        const coRef = doc(checkoutsCollection(db))
-        batch.set(coRef, {
-          userId: uRef,
-          status: "open",
-          usageType: "regular",
-          created: serverTimestamp(),
-          workshopsVisited: catalogItem.workshops.length > 0 ? [catalogItem.workshops[0]] : [],
-          persons: [],
-          modifiedBy: null,
-          modifiedAt: serverTimestamp(),
-        })
-        const itemRef = doc(checkoutItemsCollection(db, coRef.id))
-        batch.set(itemRef, {
-          workshop: catalogItem.workshops[0] ?? "",
-          description: catalogItem.name,
-          origin: "qr",
-          catalogId: catalogRef(db, id),
-          pricingModel: catalogItem.pricingModel ?? null,
-          created: serverTimestamp(),
-          quantity: computedQty,
-          unitPrice,
-          totalPrice,
-          formInputs,
-        })
-        await batch.commit()
-        checkoutId = coRef.id
-      } else {
-        checkoutId = coSnap.docs[0].id
-        // Add item to existing checkout
-        await add(checkoutItemsCollection(db, checkoutId), {
-          workshop: catalogItem.workshops[0] ?? "",
-          description: catalogItem.name,
-          origin: "qr",
-          catalogId: catalogRef(db, id),
-          pricingModel: catalogItem.pricingModel ?? null,
-          created: serverTimestamp(),
-          quantity: computedQty,
-          unitPrice,
-          totalPrice,
-          formInputs,
-        })
-      }
+        // Find or create open checkout
+        const coQuery = query(
+          checkoutsCollection(db),
+          where("userId", "==", uRef),
+          where("status", "==", "open"),
+        )
+        const coSnap = await getDocs(coQuery)
+        if (coSnap.empty) {
+          // Create checkout + item atomically. writeBatch needs raw refs
+          // from doc(collection(...)) so it can mint a fresh id; we go
+          // through the typed collection helpers but still let the SDK
+          // pick the id.
+          const batch = writeBatch(db)
+          const coRef = doc(checkoutsCollection(db))
+          batch.set(coRef, {
+            userId: uRef,
+            status: "open",
+            usageType: "regular",
+            created: serverTimestamp(),
+            workshopsVisited:
+              catalogItem.workshops.length > 0
+                ? [catalogItem.workshops[0]]
+                : [],
+            persons: [],
+            modifiedBy: null,
+            modifiedAt: serverTimestamp(),
+          })
+          const itemRef = doc(checkoutItemsCollection(db, coRef.id))
+          batch.set(itemRef, {
+            workshop: catalogItem.workshops[0] ?? "",
+            description: catalogItem.name,
+            origin: "qr",
+            catalogId: catalogRef(db, id),
+            pricingModel: catalogItem.pricingModel ?? null,
+            created: serverTimestamp(),
+            quantity: computedQty,
+            unitPrice,
+            totalPrice,
+            formInputs,
+          })
+          await batch.commit()
+        } else {
+          const checkoutId = coSnap.docs[0].id
+          // Add item to existing checkout
+          await add(checkoutItemsCollection(db, checkoutId), {
+            workshop: catalogItem.workshops[0] ?? "",
+            description: catalogItem.name,
+            origin: "qr",
+            catalogId: catalogRef(db, id),
+            pricingModel: catalogItem.pricingModel ?? null,
+            created: serverTimestamp(),
+            quantity: computedQty,
+            unitPrice,
+            totalPrice,
+            formInputs,
+          })
+        }
+      })
       setSuccess(true)
-    } finally {
-      setSubmitting(false)
+    } catch {
+      // Hook already toasted + reported telemetry. Skip flipping
+      // `success` so the form stays interactive for the user to retry.
     }
   }
 

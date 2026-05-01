@@ -53,6 +53,12 @@ interface StepCheckoutProps {
   dispatch: React.Dispatch<CheckoutAction>
   onSubmit: () => Promise<void>
   submitting: boolean
+  /**
+   * German error message from the most recent failed submit. Rendered
+   * as an inline alert at the top of step 2 so the user knows the
+   * submit was rejected (B5 launch-readiness fix; see ADR-0025).
+   */
+  submitError?: string | null
   items: CheckoutItemLocal[]
   config: PricingConfig | null
 }
@@ -62,6 +68,7 @@ export function StepCheckout({
   dispatch,
   onSubmit,
   submitting,
+  submitError,
   items,
   config,
 }: StepCheckoutProps) {
@@ -136,6 +143,18 @@ export function StepCheckout({
 
   return (
     <div className="flex flex-col flex-1 gap-6">
+      {/* Inline error from the most recent failed submit (ADR-0025).
+          Hidden on the happy path so screenshots match the green flow. */}
+      {submitError && (
+        <div
+          role="alert"
+          data-testid="checkout-submit-error"
+          className="rounded-md border border-destructive/50 bg-destructive/5 text-destructive p-4 text-sm"
+        >
+          {submitError}
+        </div>
+      )}
+
       {/* Usage type selector — above the summary heading */}
       <select
         value={state.usageType}

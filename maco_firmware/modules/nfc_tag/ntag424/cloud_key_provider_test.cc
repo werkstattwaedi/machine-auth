@@ -183,7 +183,7 @@ TEST_F(CloudKeyProviderTest, CreateNtagChallenge_Success) {
 
   pw::async2::CoroContext coro_cx(test_allocator_);
   auto test_coro =
-      [&](pw::async2::CoroContext& cx) -> pw::async2::Coro<pw::Status> {
+      [&](pw::async2::CoroContext cx) -> pw::async2::Coro<pw::Status> {
     result = co_await provider.CreateNtagChallenge(cx, kEncryptedRndB);
     co_return pw::OkStatus();
   };
@@ -224,7 +224,7 @@ TEST_F(CloudKeyProviderTest, CreateNtagChallenge_InvalidInputSize) {
 
   pw::async2::CoroContext coro_cx(test_allocator_);
   auto test_coro =
-      [&](pw::async2::CoroContext& cx) -> pw::async2::Coro<pw::Status> {
+      [&](pw::async2::CoroContext cx) -> pw::async2::Coro<pw::Status> {
     // Wrong size - only 8 bytes instead of 16
     auto wrong_size = pw::bytes::Array<0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
                                        0x08>();
@@ -253,7 +253,7 @@ TEST_F(CloudKeyProviderTest, CreateNtagChallenge_RpcFailure) {
 
   pw::async2::CoroContext coro_cx(test_allocator_);
   auto test_coro =
-      [&](pw::async2::CoroContext& cx) -> pw::async2::Coro<pw::Status> {
+      [&](pw::async2::CoroContext cx) -> pw::async2::Coro<pw::Status> {
     result = co_await provider.CreateNtagChallenge(cx, kEncryptedRndB);
     co_return pw::OkStatus();
   };
@@ -289,7 +289,7 @@ TEST_F(CloudKeyProviderTest, VerifyAndComputeSessionKeys_Success) {
 
   pw::async2::CoroContext coro_cx(test_allocator_);
   auto test_coro =
-      [&](pw::async2::CoroContext& cx) -> pw::async2::Coro<pw::Status> {
+      [&](pw::async2::CoroContext cx) -> pw::async2::Coro<pw::Status> {
     // First call CreateNtagChallenge
     challenge_result = co_await provider.CreateNtagChallenge(cx, kEncryptedRndB);
     if (!challenge_result->ok()) {
@@ -357,7 +357,7 @@ TEST_F(CloudKeyProviderTest, VerifyAndComputeSessionKeys_Rejected) {
 
   pw::async2::CoroContext coro_cx(test_allocator_);
   auto test_coro =
-      [&](pw::async2::CoroContext& cx) -> pw::async2::Coro<pw::Status> {
+      [&](pw::async2::CoroContext cx) -> pw::async2::Coro<pw::Status> {
     challenge_result = co_await provider.CreateNtagChallenge(cx, kEncryptedRndB);
     if (!challenge_result->ok()) {
       co_return challenge_result->status();
@@ -410,7 +410,7 @@ TEST_F(CloudKeyProviderTest, VerifyAndComputeSessionKeys_NoAuthId) {
 
   pw::async2::CoroContext coro_cx(test_allocator_);
   auto test_coro =
-      [&](pw::async2::CoroContext& cx) -> pw::async2::Coro<pw::Status> {
+      [&](pw::async2::CoroContext cx) -> pw::async2::Coro<pw::Status> {
     // Call VerifyAndComputeSessionKeys without calling CreateNtagChallenge first
     result =
         co_await provider.VerifyAndComputeSessionKeys(cx, kEncryptedPart3);
@@ -439,7 +439,7 @@ TEST_F(CloudKeyProviderTest, VerifyAndComputeSessionKeys_InvalidInputSize) {
 
   pw::async2::CoroContext coro_cx(test_allocator_);
   auto test_coro =
-      [&](pw::async2::CoroContext& cx) -> pw::async2::Coro<pw::Status> {
+      [&](pw::async2::CoroContext cx) -> pw::async2::Coro<pw::Status> {
     challenge_result = co_await provider.CreateNtagChallenge(cx, kEncryptedRndB);
     if (!challenge_result->ok()) {
       co_return challenge_result->status();
@@ -488,7 +488,7 @@ TEST_F(CloudKeyProviderTest, CancelAuthentication_ClearsState) {
 
   pw::async2::CoroContext coro_cx(test_allocator_);
   auto test_coro =
-      [&](pw::async2::CoroContext& cx) -> pw::async2::Coro<pw::Status> {
+      [&](pw::async2::CoroContext cx) -> pw::async2::Coro<pw::Status> {
     result = co_await provider.CreateNtagChallenge(cx, kEncryptedRndB);
     co_return pw::OkStatus();
   };
@@ -534,7 +534,7 @@ TEST_F(CloudKeyProviderTest, AuthId_AvailableAfterSuccess) {
 
   pw::async2::CoroContext coro_cx(test_allocator_);
   auto test_coro =
-      [&](pw::async2::CoroContext& cx) -> pw::async2::Coro<pw::Status> {
+      [&](pw::async2::CoroContext cx) -> pw::async2::Coro<pw::Status> {
     challenge_result = co_await provider.CreateNtagChallenge(cx, kEncryptedRndB);
     if (!challenge_result->ok()) {
       co_return challenge_result->status();
@@ -585,7 +585,7 @@ TEST_F(CloudKeyProviderTest, AuthId_ClearedOnRejection) {
 
   pw::async2::CoroContext coro_cx(test_allocator_);
   auto test_coro =
-      [&](pw::async2::CoroContext& cx) -> pw::async2::Coro<pw::Status> {
+      [&](pw::async2::CoroContext cx) -> pw::async2::Coro<pw::Status> {
     challenge_result = co_await provider.CreateNtagChallenge(cx, kEncryptedRndB);
     if (!challenge_result->ok()) {
       co_return challenge_result->status();

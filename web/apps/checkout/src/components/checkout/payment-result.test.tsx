@@ -31,6 +31,18 @@ vi.mock("@modules/lib/firebase-context", () => ({
   useFunctions: () => mockFunctions,
 }))
 
+// Mock sonner — `useAsyncMutation` (used by the migrated QR fallback,
+// issue #182) toasts on rejection. Spy on `toast.error` to assert the
+// telemetry envelope fires alongside the inline `qrError` UI.
+const mockToastError = vi.fn()
+const mockToastSuccess = vi.fn()
+vi.mock("sonner", () => ({
+  toast: {
+    error: (...args: unknown[]) => mockToastError(...args),
+    success: (...args: unknown[]) => mockToastSuccess(...args),
+  },
+}))
+
 // Mock httpsCallable
 const mockCallableResult = vi.fn()
 vi.mock("firebase/functions", () => ({
@@ -159,6 +171,38 @@ describe("PaymentResult", () => {
 
     const error = await screen.findByText(/QR-Code konnte nicht geladen werden/)
     expect(error).toBeDefined()
+  })
+
+  // Regression test for issue #182: the legacy `getPaymentQrData`
+  // fallback now routes through `useAsyncMutation`. On failure the
+  // hook MUST fire a German error toast (in addition to the existing
+  // inline `qrError` UI) so the failure shows up in client telemetry.
+  // Before the migration the `.catch(() => setQrError(true))` was
+  // silent on the telemetry side.
+  it("toasts the German error message via useAsyncMutation when the callable fails (#182)", async () => {
+    mockToastError.mockReset()
+    // The hook ALSO uses httpsCallable for telemetry; the shared
+    // `mockCallableResult` would reject for both. Replace it with a
+    // selective implementation: telemetry returns ok, payment QR
+    // rejects.
+    let isFirstCall = true
+    mockCallableResult.mockImplementation(() => {
+      if (isFirstCall) {
+        isFirstCall = false
+        return Promise.reject(new Error("qr fetch failed"))
+      }
+      return Promise.resolve({ data: { ok: true } })
+    })
+
+    render(<PaymentResult checkoutId="checkout-1" totalPrice={25} onReset={() => {}} />)
+
+    // Wait for the inline error so we know the hook resolved.
+    await screen.findByText(/QR-Code konnte nicht geladen werden/)
+
+    // The migrated path also surfaces a toast.
+    expect(mockToastError).toHaveBeenCalledWith(
+      "QR-Code konnte nicht geladen werden",
+    )
   })
 
   it("shows loading state when bill not yet created", () => {

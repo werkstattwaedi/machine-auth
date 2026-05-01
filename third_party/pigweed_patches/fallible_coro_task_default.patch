@@ -1,0 +1,40 @@
+Add `default: PW_UNREACHABLE` to the FallibleCoroTask::DoPend switches so
+GCC's -Werror=return-type accepts the otherwise-exhaustive switch over
+internal::CoroPollState. Pigweed's coro_task.h already does this (see
+upstream commit 5de921b "pw_async2: Add default case to handling Context
+for CoroTask"); fallible_coro_task.h was missed.
+
+Without this, arm-none-eabi-g++ fails with:
+  error: control reaches end of non-void function [-Werror=return-type]
+
+Remove this patch once upstream lands the equivalent fix.
+
+diff --git a/pw_async2/public/pw_async2/fallible_coro_task.h b/pw_async2/public/pw_async2/fallible_coro_task.h
+--- a/pw_async2/public/pw_async2/fallible_coro_task.h
++++ b/pw_async2/public/pw_async2/fallible_coro_task.h
+@@ -18,6 +18,7 @@
+ #include "pw_async2/coro.h"
+ #include "pw_async2/func_task.h"
+ #include "pw_function/function.h"
++#include "pw_preprocessor/compiler.h"
+
+ namespace pw::async2 {
+
+@@ -93,6 +94,8 @@ class FallibleCoroTask final : public Task {
+       case internal::CoroPollState::kReady:
+         return_value_ = std::move(*result);
+         return Ready();
++      default:
++        PW_UNREACHABLE;
+     }
+   }
+
+@@ -139,6 +142,8 @@ class FallibleCoroTask<T, AllocationErrorHandler, ReturnValuePolicy::kDiscard>
+         return Ready();
+       case internal::CoroPollState::kReady:
+         return Ready();
++      default:
++        PW_UNREACHABLE;
+     }
+   }
+

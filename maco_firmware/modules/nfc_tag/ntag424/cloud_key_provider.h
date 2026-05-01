@@ -63,7 +63,7 @@ class CloudKeyProvider : public Ntag424KeyProvider {
   /// @param encrypted_rnd_b Tag's encrypted challenge from Part 1 (16 bytes)
   /// @return 32-byte Part 2 response, or error
   pw::async2::Coro<pw::Result<std::array<std::byte, 32>>> CreateNtagChallenge(
-      pw::async2::CoroContext& cx,
+      pw::async2::CoroContext cx,
       pw::ConstByteSpan encrypted_rnd_b) override;
 
   /// Verify Part 3 and get session keys from cloud.
@@ -77,7 +77,7 @@ class CloudKeyProvider : public Ntag424KeyProvider {
   /// @param encrypted_part3 Tag's encrypted Part 3 response (32 bytes)
   /// @return SessionKeys on success, or error
   pw::async2::Coro<pw::Result<SessionKeys>> VerifyAndComputeSessionKeys(
-      pw::async2::CoroContext& cx,
+      pw::async2::CoroContext cx,
       pw::ConstByteSpan encrypted_part3) override;
 
   /// Clear stored auth_id (cloud handles its own timeout).

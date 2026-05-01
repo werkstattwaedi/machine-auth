@@ -50,7 +50,7 @@ class MachineController : public app_state::SessionObserver {
  private:
   enum class Command : uint8_t { kNone, kEnable, kDisable };
 
-  pw::async2::Coro<pw::Status> Run(pw::async2::CoroContext&);
+  pw::async2::Coro<pw::Status> Run(pw::async2::CoroContext );
 
   MachineToggle& toggle_;
   pw::async2::TimeProvider<pw::chrono::SystemClock>& time_provider_;

@@ -6,9 +6,13 @@
  * `DocumentReference<T>` / `CollectionReference<T>` from
  * `firestore-helpers.ts` — never raw string paths. Audit fields
  * (`modifiedBy`, `modifiedAt`) are stamped automatically on every write.
+ *
+ * Internally delegates to `useAsyncMutation` (ADR-0025) for the unified
+ * toast + telemetry + retry contract. The public surface (`set`, `add`,
+ * `update`, `remove`, `mutate`, plus `loading` / `error`) is unchanged.
  */
 
-import { useState, useCallback } from "react"
+import { useCallback } from "react"
 import {
   setDoc,
   updateDoc,
@@ -21,25 +25,25 @@ import {
   type PartialWithFieldValue,
   type WithFieldValue,
 } from "firebase/firestore"
-import { useAuth } from "../lib/auth"
 import { toast } from "sonner"
+import { useAuth } from "../lib/auth"
+import { useAsyncMutation, type MutationError } from "./use-async-mutation"
 
 interface MutationOptions {
   successMessage?: string
   errorMessage?: string
 }
 
-interface MutationState {
-  loading: boolean
-  error: Error | null
+/** Best-effort `path` extractor for typed Firestore refs — used as the
+ * `path` field in telemetry. Both `DocumentReference` and
+ * `CollectionReference` expose `.path`. */
+function pathOf(ref: { path?: string } | undefined | null): string {
+  return ref && typeof ref.path === "string" ? ref.path : ""
 }
 
 export function useFirestoreMutation() {
   const { user } = useAuth()
-  const [state, setState] = useState<MutationState>({
-    loading: false,
-    error: null,
-  })
+  const inner = useAsyncMutation<unknown>({ context: "firestore.write" })
 
   const withAuditFields = useCallback(
     <T extends DocumentData>(data: T): T & DocumentData => ({
@@ -50,25 +54,31 @@ export function useFirestoreMutation() {
     [user],
   )
 
-  const mutate = useCallback(
-    async <R = void>(
+  // Wrap the inner mutate to forward the Firestore ref's `path` into
+  // telemetry and honour per-call `successMessage`. The inner hook owns
+  // the error toast (and re-throws), so we never need to add a
+  // try/catch here.
+  const runForRef = useCallback(
+    async <R>(
+      ref: { path?: string } | null | undefined,
       fn: () => Promise<R>,
       options?: MutationOptions,
     ): Promise<R> => {
-      setState({ loading: true, error: null })
-      try {
-        const result = await fn()
-        setState({ loading: false, error: null })
+      const path = pathOf(ref)
+      const result = await inner.mutate(async () => {
+        const value = await fn()
         if (options?.successMessage) toast.success(options.successMessage)
-        return result
-      } catch (err) {
-        const error = err instanceof Error ? err : new Error(String(err))
-        setState({ loading: false, error })
-        toast.error(options?.errorMessage ?? `Fehler: ${error.message}`)
-        throw error
-      }
+        return value as unknown
+      }, path)
+      return result as R
     },
-    [],
+    [inner],
+  )
+
+  const mutate = useCallback(
+    <R = void>(fn: () => Promise<R>, options?: MutationOptions): Promise<R> =>
+      runForRef(null, fn, options),
+    [runForRef],
   )
 
   const set = useCallback(
@@ -77,12 +87,13 @@ export function useFirestoreMutation() {
       data: WithFieldValue<T>,
       options?: MutationOptions,
     ) =>
-      mutate(
+      runForRef(
+        ref,
         () =>
           setDoc(ref, withAuditFields(data as DocumentData) as WithFieldValue<T>),
         options,
       ),
-    [mutate, withAuditFields],
+    [runForRef, withAuditFields],
   )
 
   const add = useCallback(
@@ -91,12 +102,13 @@ export function useFirestoreMutation() {
       data: WithFieldValue<T>,
       options?: MutationOptions,
     ) =>
-      mutate(
+      runForRef(
+        ref,
         () =>
           addDoc(ref, withAuditFields(data as DocumentData) as WithFieldValue<T>),
         options,
       ),
-    [mutate, withAuditFields],
+    [runForRef, withAuditFields],
   )
 
   const update = useCallback(
@@ -105,25 +117,36 @@ export function useFirestoreMutation() {
       data: PartialWithFieldValue<T>,
       options?: MutationOptions,
     ) =>
-      mutate(
+      runForRef(
+        ref,
         () => updateDoc(ref, withAuditFields(data as DocumentData)),
         options,
       ),
-    [mutate, withAuditFields],
+    [runForRef, withAuditFields],
   )
 
   const remove = useCallback(
     (ref: DocumentReference, options?: MutationOptions) =>
-      mutate(() => deleteDoc(ref), options),
-    [mutate],
+      runForRef(ref, () => deleteDoc(ref), options),
+    [runForRef],
   )
 
+  // Map the inner hook's structured `MutationError` back to a plain
+  // `Error` for the legacy public surface (`error: Error | null`).
+  const error: Error | null = inner.error ? errorOf(inner.error) : null
+
   return {
-    ...state,
+    loading: inner.loading,
+    error,
     set,
     add,
     update,
     remove,
     mutate,
   }
+}
+
+function errorOf(err: MutationError): Error {
+  if (err.originalError instanceof Error) return err.originalError
+  return new Error(err.message)
 }

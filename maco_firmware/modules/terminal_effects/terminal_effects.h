@@ -102,7 +102,7 @@ class TerminalEffects : public app_state::SessionObserver,
     kSessionEnded,
   };
 
-  pw::async2::Coro<pw::Status> Run(pw::async2::CoroContext& cx);
+  pw::async2::Coro<pw::Status> Run(pw::async2::CoroContext cx);
   void ApplySessionEffect();
 
   led_animator::LedAnimatorBase& led_;

@@ -32,7 +32,10 @@ let pdfToImg: any;
 let pixelmatch: any;
 let PNG: any;
 
-before(async () => {
+before(async function () {
+  // Cold-start ESM imports of pdf-to-img/pixelmatch/pngjs can exceed mocha's
+  // 2s default on CI runners; bump the hook timeout so it doesn't flake.
+  this.timeout(5_000);
   const pdfModule = await import("pdf-to-img");
   pdfToImg = pdfModule.pdf;
   const pmModule = await import("pixelmatch");

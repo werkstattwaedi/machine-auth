@@ -83,11 +83,11 @@ class Ntag424Tag : public Iso14443Tag {
 
   /// Select the NTAG424 DNA application.
   /// Must be called before authentication.
-  pw::async2::Coro<pw::Status> SelectApplication(pw::async2::CoroContext& cx);
+  pw::async2::Coro<pw::Status> SelectApplication(pw::async2::CoroContext cx);
 
   /// Get tag version information (diagnostic command, no auth required).
   /// Logs hardware version, software version, and production info.
-  pw::async2::Coro<pw::Status> GetVersion(pw::async2::CoroContext& cx);
+  pw::async2::Coro<pw::Status> GetVersion(pw::async2::CoroContext cx);
 
   // --- Authentication ---
 
@@ -97,7 +97,7 @@ class Ntag424Tag : public Iso14443Tag {
   /// @param key_provider Provides key number and crypto operations
   /// @return Coroutine resolving to Session proof token on success
   pw::async2::Coro<pw::Result<Ntag424Session>> Authenticate(
-      pw::async2::CoroContext& cx,
+      pw::async2::CoroContext cx,
       Ntag424KeyProvider& key_provider);
 
   // --- Authenticated Operations ---
@@ -110,7 +110,7 @@ class Ntag424Tag : public Iso14443Tag {
   /// @param uid_buffer Buffer for UID (minimum 7 bytes)
   /// @return Coroutine resolving to UID length
   pw::async2::Coro<pw::Result<size_t>> GetCardUid(
-      pw::async2::CoroContext& cx,
+      pw::async2::CoroContext cx,
       const Ntag424Session& session,
       pw::ByteSpan uid_buffer);
 
@@ -131,7 +131,7 @@ class Ntag424Tag : public Iso14443Tag {
   /// @param comm_mode Communication mode (must match file settings)
   /// @return Coroutine resolving to bytes read, or Unimplemented if chaining needed
   pw::async2::Coro<pw::Result<size_t>> ReadData(
-      pw::async2::CoroContext& cx,
+      pw::async2::CoroContext cx,
       const Ntag424Session& session,
       uint8_t file_number,
       uint32_t offset,
@@ -147,7 +147,7 @@ class Ntag424Tag : public Iso14443Tag {
   /// @param data Data to write
   /// @param comm_mode Communication mode (must match file settings)
   /// @return Coroutine resolving to success status
-  pw::async2::Coro<pw::Status> WriteData(pw::async2::CoroContext& cx,
+  pw::async2::Coro<pw::Status> WriteData(pw::async2::CoroContext cx,
                                           const Ntag424Session& session,
                                           uint8_t file_number,
                                           uint32_t offset,
@@ -167,7 +167,7 @@ class Ntag424Tag : public Iso14443Tag {
   /// @param comm_mode Communication mode (must match file's CommMode)
   /// @return Coroutine resolving to number of settings bytes
   pw::async2::Coro<pw::Result<size_t>> GetFileSettings(
-      pw::async2::CoroContext& cx,
+      pw::async2::CoroContext cx,
       const Ntag424Session& session,
       uint8_t file_number,
       pw::ByteSpan settings_buffer,
@@ -189,7 +189,7 @@ class Ntag424Tag : public Iso14443Tag {
   /// @param response_comm_mode Expected response mode (file's current CommMode)
   /// @return Coroutine resolving to success status
   pw::async2::Coro<pw::Status> ChangeFileSettings(
-      pw::async2::CoroContext& cx,
+      pw::async2::CoroContext cx,
       const Ntag424Session& session,
       uint8_t file_number,
       pw::ConstByteSpan settings,
@@ -207,7 +207,7 @@ class Ntag424Tag : public Iso14443Tag {
   /// @param session Proof token from Authenticate() with Key 0
   /// @return Coroutine resolving to success status
   pw::async2::Coro<pw::Status> EnableRandomUid(
-      pw::async2::CoroContext& cx,
+      pw::async2::CoroContext cx,
       const Ntag424Session& session);
 
   /// Change a key on the tag (requires authentication with key 0).
@@ -224,7 +224,7 @@ class Ntag424Tag : public Iso14443Tag {
   /// @param new_key_version Key version byte (optional)
   /// @param old_key Old 16-byte key (required for non-key-0 changes)
   /// @return Coroutine resolving to success status
-  pw::async2::Coro<pw::Status> ChangeKey(pw::async2::CoroContext& cx,
+  pw::async2::Coro<pw::Status> ChangeKey(pw::async2::CoroContext cx,
                                           const Ntag424Session& session,
                                           uint8_t key_number,
                                           pw::ConstByteSpan new_key,
@@ -237,7 +237,7 @@ class Ntag424Tag : public Iso14443Tag {
 
   /// Transceive helper that wraps the Iso14443Tag::Transceive future.
   pw::async2::Coro<pw::Result<size_t>> DoTransceive(
-      pw::async2::CoroContext& cx,
+      pw::async2::CoroContext cx,
       pw::ConstByteSpan command,
       pw::ByteSpan response);
 

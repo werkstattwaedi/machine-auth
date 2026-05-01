@@ -35,7 +35,7 @@ void ToneBuzzer::Stop() {
 }
 
 pw::async2::Coro<pw::Status> ToneBuzzer::PlayMelody(
-    [[maybe_unused]] pw::async2::CoroContext& cx,
+    [[maybe_unused]] pw::async2::CoroContext cx,
     pw::span<const Note> melody) {
   if (!initialized_) {
     PW_LOG_ERROR("Buzzer not initialized");

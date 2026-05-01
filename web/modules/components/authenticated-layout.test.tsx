@@ -182,6 +182,39 @@ describe("AuthenticatedLayout", () => {
     })
   })
 
+  // Regression for issue #179: an eager-anon principal (Firebase
+  // signInAnonymously, used by the no-account checkout flow) must NOT be
+  // allowed to reach member-area routes like /visit. The layout should
+  // redirect to /login with a ?redirect=<pathname> search param so a
+  // successful upgrade lands them back where they started, and the
+  // navigation chrome must not render even for one frame.
+  it("redirects anonymous member-area users to /login with redirect search param", () => {
+    mockAuthReturn = {
+      user: { uid: "anon1", email: null, isAnonymous: true },
+      userDoc: null,
+      userDocLoading: false,
+      loading: false,
+      isAdmin: false,
+      sessionKind: "anonymous",
+      signOut: vi.fn(),
+    }
+
+    render(
+      <AuthenticatedLayout
+        navItems={navItems}
+        gate={{ kind: "member", completeProfilePath: "/complete-profile" }}
+      />,
+    )
+
+    expect(navigateMock).toHaveBeenCalledWith({
+      to: "/login",
+      search: { redirect: "/protected" },
+    })
+    // Chrome must not render — no nav item label, no sign-out button.
+    expect(screen.queryByText("Benutzer")).toBeNull()
+    expect(screen.queryByText("Abmelden")).toBeNull()
+  })
+
   it("admin gate calls the wrapper around the rendered shell", () => {
     mockAuthReturn = {
       user: { uid: "admin1", email: "admin@test.com" },

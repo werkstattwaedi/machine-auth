@@ -20,7 +20,7 @@ constexpr uint8_t kReserved2KeyNumber = 4;
 }  // namespace
 
 pw::async2::Coro<pw::Result<nfc::Ntag424Session>> UpdateKeys(
-    pw::async2::CoroContext& cx,
+    pw::async2::CoroContext cx,
     nfc::Ntag424Tag& ntag,
     const PersonalizationKeys& keys,
     pw::random::RandomGenerator& rng) {

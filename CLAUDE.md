@@ -255,6 +255,13 @@ npm run dev:admin         # https://localhost:5174
 - German UI throughout
 - Firebase Auth custom claims for Firestore security rules
 
+**Async mutations:** All async writes go through `useAsyncMutation` (or
+`useFirestoreMutation` for typed Firestore writes — it delegates).
+The hook owns the toast; callers MUST NOT add their own `toast.error`
+after `await mutate(...)`. On failure the hook re-throws, so callers
+short-circuit and MUST NOT advance UI state. Failures fire telemetry
+to `logClientError`. See [ADR-0025](docs/adr/0025-async-mutation-error-handling.md).
+
 **Deploy:**
 ```bash
 firebase deploy --only hosting           # Both sites

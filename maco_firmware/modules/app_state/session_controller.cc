@@ -39,7 +39,7 @@ void SessionController::GetSnapshot(AppStateSnapshot& out) const {
 }
 
 pw::async2::Coro<pw::Status> SessionController::Run(
-    pw::async2::CoroContext&) {
+    pw::async2::CoroContext ) {
   while (true) {
     // Poll UI action atomic and convert to FSM event
     auto action =

@@ -134,7 +134,7 @@ class TestControlServiceImpl
     }
 
     PW_LOG_INFO("Connected to gateway at %s:%u", gateway_host_.c_str(),
-                gateway_port_);
+                static_cast<unsigned>(gateway_port_));
 
     response.success = true;
     return pw::OkStatus();
@@ -183,7 +183,7 @@ class TestControlServiceImpl
  private:
   // Coroutine that handles the async Firebase call and finishes the RPC
   pw::async2::Coro<pw::Status> HandleSessionAsync(
-      pw::async2::CoroContext& cx,
+      pw::async2::CoroContext cx,
       maco::TagUid tag_uid,
       StartSessionResponder responder) {
     PW_LOG_INFO("Starting TerminalCheckin coroutine");

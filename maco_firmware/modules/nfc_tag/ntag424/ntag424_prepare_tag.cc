@@ -25,6 +25,7 @@
 #include "pb_uart/async_uart.h"
 #include "pw_allocator/testing.h"
 #include "pw_async2/coro.h"
+#include "pw_async2/coro_task.h"
 #include "pw_async2/dispatcher_for_test.h"
 #include "pw_log/log.h"
 #include "pw_unit_test/framework.h"
@@ -144,6 +145,29 @@ class PrepareTagTest : public ::testing::Test {
       HAL_Delay_Milliseconds(10);
     }
     return dispatcher.RunInTaskUntilStalled(future);
+  }
+
+  template <typename T>
+  pw::async2::Poll<T> PollUntilReady(pw::async2::DispatcherForTest& dispatcher,
+                                     pw::async2::Coro<T>& coro,
+                                     int max_iterations = 200) {
+    pw::async2::CoroTask<T> task(std::move(coro));
+    dispatcher.Post(task);
+    for (int i = 0; i < max_iterations; ++i) {
+      dispatcher.RunUntilStalled();
+      if (task.has_value()) {
+        task.Deregister();
+        return pw::async2::Ready(std::move(task.value()));
+      }
+      HAL_Delay_Milliseconds(10);
+    }
+    dispatcher.RunUntilStalled();
+    if (task.has_value()) {
+      task.Deregister();
+      return pw::async2::Ready(std::move(task.value()));
+    }
+    task.Deregister();
+    return pw::async2::Pending();
   }
 
   /// Start reader and wait for initialization.

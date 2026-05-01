@@ -31,7 +31,7 @@ firebase::Key CloudKeyProvider::KeyNumberToEnum(uint8_t key_number) {
 }
 
 pw::async2::Coro<pw::Result<std::array<std::byte, 32>>>
-CloudKeyProvider::CreateNtagChallenge(pw::async2::CoroContext& cx,
+CloudKeyProvider::CreateNtagChallenge(pw::async2::CoroContext cx,
                                       pw::ConstByteSpan encrypted_rnd_b) {
   // Validate input size
   if (encrypted_rnd_b.size() != kEncryptedRndBSize) {
@@ -76,7 +76,7 @@ CloudKeyProvider::CreateNtagChallenge(pw::async2::CoroContext& cx,
 
 pw::async2::Coro<pw::Result<SessionKeys>>
 CloudKeyProvider::VerifyAndComputeSessionKeys(
-    pw::async2::CoroContext& cx,
+    pw::async2::CoroContext cx,
     pw::ConstByteSpan encrypted_part3) {
   // Validate input size
   if (encrypted_part3.size() != kEncryptedPart3Size) {

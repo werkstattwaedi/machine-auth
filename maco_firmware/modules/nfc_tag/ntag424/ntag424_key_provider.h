@@ -70,7 +70,7 @@ class Ntag424KeyProvider {
   /// @param encrypted_rnd_b Tag's encrypted challenge from Part 1 (16 bytes)
   /// @return Coroutine resolving to 32-byte Part 2 response, or error
   virtual pw::async2::Coro<pw::Result<std::array<std::byte, 32>>>
-  CreateNtagChallenge(pw::async2::CoroContext& cx,
+  CreateNtagChallenge(pw::async2::CoroContext cx,
                       pw::ConstByteSpan encrypted_rnd_b) = 0;
 
   /// Verify tag's response and compute session keys.
@@ -88,7 +88,7 @@ class Ntag424KeyProvider {
   /// @param encrypted_part3 Tag's encrypted Part 3 response (32 bytes)
   /// @return Coroutine resolving to SessionKeys on success, or error
   virtual pw::async2::Coro<pw::Result<SessionKeys>> VerifyAndComputeSessionKeys(
-      pw::async2::CoroContext& cx,
+      pw::async2::CoroContext cx,
       pw::ConstByteSpan encrypted_part3) = 0;
 
   /// Cancel any in-progress authentication.

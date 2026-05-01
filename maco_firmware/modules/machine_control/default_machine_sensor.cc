@@ -27,7 +27,7 @@ void DefaultMachineSensor::Start(pw::async2::Dispatcher& dispatcher) {
 }
 
 pw::async2::Coro<pw::Status> DefaultMachineSensor::Run(
-    pw::async2::CoroContext& /*cx*/) {
+    pw::async2::CoroContext /*cx*/) {
   bool last = toggle_.IsEnabled();
   NotifyRunning(last);
 

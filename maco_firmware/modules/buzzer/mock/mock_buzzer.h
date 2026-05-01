@@ -39,7 +39,7 @@ class MockBuzzer : public Buzzer {
   void Stop() override { stop_count_++; }
 
   pw::async2::Coro<pw::Status> PlayMelody(
-      [[maybe_unused]] pw::async2::CoroContext& cx,
+      [[maybe_unused]] pw::async2::CoroContext cx,
       [[maybe_unused]] pw::span<const Note> melody) override {
     if (!initialized_) {
       co_return pw::Status::FailedPrecondition();

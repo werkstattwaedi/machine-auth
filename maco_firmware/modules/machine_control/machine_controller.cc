@@ -48,7 +48,7 @@ void MachineController::OnMachineRunning(bool running) {
 }
 
 pw::async2::Coro<pw::Status> MachineController::Run(
-    pw::async2::CoroContext& cx) {
+    pw::async2::CoroContext cx) {
   while (true) {
     auto cmd =
         pending_command_.exchange(Command::kNone, std::memory_order_relaxed);

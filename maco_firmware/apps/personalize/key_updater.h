@@ -20,7 +20,7 @@ namespace maco::personalize {
 /// @param keys Pre-diversified keys from console
 /// @return Session from final authentication (for subsequent SDM config)
 pw::async2::Coro<pw::Result<nfc::Ntag424Session>> UpdateKeys(
-    pw::async2::CoroContext& cx,
+    pw::async2::CoroContext cx,
     nfc::Ntag424Tag& ntag,
     const PersonalizationKeys& keys,
     pw::random::RandomGenerator& rng);

@@ -96,7 +96,7 @@ cc_library(
         "//maco_firmware/modules/app_state:system_state",
         "//proto/gateway:gateway_service_nanopb",
         "//proto/gateway:gateway_service_nanopb_rpc",
-        "@pigweed//pw_allocator:allocator",
+        "@pigweed//pw_allocator:pw_allocator",
         "@pigweed//pw_async2:coro",
         "@pigweed//pw_async2:coro_or_else_task",
         "@pigweed//pw_async2:time_provider",

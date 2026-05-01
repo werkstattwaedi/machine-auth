@@ -12,7 +12,7 @@ namespace {
 
 using display::testing::ScreenshotTestHarness;
 
-UiAction last_action = UiAction::kNone;
+[[maybe_unused]] UiAction last_action = UiAction::kNone;
 void TestActionCallback(UiAction action) { last_action = action; }
 
 constexpr MenuItem kTestItems[] = {

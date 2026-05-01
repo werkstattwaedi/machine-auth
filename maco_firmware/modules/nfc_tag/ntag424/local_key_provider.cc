@@ -34,7 +34,7 @@ LocalKeyProvider::~LocalKeyProvider() {
 
 pw::async2::Coro<pw::Result<std::array<std::byte, 32>>>
 LocalKeyProvider::CreateNtagChallenge(
-    [[maybe_unused]] pw::async2::CoroContext& cx,
+    [[maybe_unused]] pw::async2::CoroContext cx,
     pw::ConstByteSpan encrypted_rnd_b) {
   // Validate input
   if (encrypted_rnd_b.size() != kBlockSize) {
@@ -82,7 +82,7 @@ LocalKeyProvider::CreateNtagChallenge(
 
 pw::async2::Coro<pw::Result<SessionKeys>>
 LocalKeyProvider::VerifyAndComputeSessionKeys(
-    [[maybe_unused]] pw::async2::CoroContext& cx,
+    [[maybe_unused]] pw::async2::CoroContext cx,
     pw::ConstByteSpan encrypted_part3) {
   // Validate input
   if (encrypted_part3.size() != 32) {
