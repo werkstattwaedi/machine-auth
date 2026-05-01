@@ -14,8 +14,7 @@ import { useForm } from "react-hook-form"
 import { Loader2 } from "lucide-react"
 import { httpsCallable } from "firebase/functions"
 import { useFunctions } from "@modules/lib/firebase-context"
-import { useState } from "react"
-import { toast } from "sonner"
+import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 
 interface CreateUserDialogProps {
   open: boolean
@@ -31,24 +30,29 @@ interface CreateUserFormValues {
 
 export function CreateUserDialog({ open, onOpenChange }: CreateUserDialogProps) {
   const functions = useFunctions()
-  const [loading, setLoading] = useState(false)
+  // ADR-0025: hook owns the toast, telemetry, and re-throw contract.
+  const create = useAsyncMutation({
+    context: "admin.createUser",
+    successMessage: "Benutzer erstellt",
+    errorMessage: "Benutzer konnte nicht erstellt werden",
+  })
   const { register, handleSubmit, reset } = useForm<CreateUserFormValues>({
     defaultValues: { displayName: "", firstName: "", lastName: "", email: "" },
   })
 
   const onSubmit = async (values: CreateUserFormValues) => {
-    setLoading(true)
     try {
-      const createUser = httpsCallable(functions, "createUser")
-      await createUser(values)
-      toast.success("Benutzer erstellt")
-      reset()
-      onOpenChange(false)
-    } catch (error: any) {
-      toast.error(error.message ?? "Benutzer konnte nicht erstellt werden")
-    } finally {
-      setLoading(false)
+      await create.mutate(async () => {
+        const createUser = httpsCallable(functions, "createUser")
+        await createUser(values)
+      })
+    } catch {
+      // Hook already toasted + telemetered; keep the dialog open so
+      // the user can adjust input and retry.
+      return
     }
+    reset()
+    onOpenChange(false)
   }
 
   return (
@@ -80,8 +84,8 @@ export function CreateUserDialog({ open, onOpenChange }: CreateUserDialogProps) 
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Abbrechen
             </Button>
-            <Button type="submit" disabled={loading}>
-              {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+            <Button type="submit" disabled={create.loading}>
+              {create.loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
               Erstellen
             </Button>
           </div>
