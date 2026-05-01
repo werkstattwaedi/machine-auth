@@ -141,17 +141,27 @@ function generateEnv(): string {
 function deploy(tarPath: string, envPath: string, host: string, remoteDir: string) {
   console.log(`\n=== Deploying to ${host}:${remoteDir} ===\n`);
 
-  execSync(`ssh ${host} "mkdir -p ${remoteDir}"`, { stdio: "inherit" });
+  // Multiplex all ssh/scp calls over a single connection so the user types
+  // the password (or unlocks their key) at most once. The first command
+  // opens the master; the rest reuse the control socket.
+  const ctlSocket = `/tmp/ssh-deploy-gateway-${process.pid}.sock`;
+  const sshOpts = `-o ControlMaster=auto -o ControlPath=${ctlSocket} -o ControlPersist=60s`;
 
-  // Upload and extract tarball (the tar contains a gateway/ directory)
-  execSync(`scp ${tarPath} ${host}:/tmp/gateway_tar.tar`, { stdio: "inherit" });
-  execSync(
-    `ssh ${host} "tar xf /tmp/gateway_tar.tar -C ${remoteDir} --strip-components=1 && rm /tmp/gateway_tar.tar"`,
-    { stdio: "inherit" },
-  );
-
-  // Upload .env alongside the gateway binary
-  execSync(`scp ${envPath} ${host}:${remoteDir}/.env`, { stdio: "inherit" });
+  try {
+    execSync(`ssh ${sshOpts} ${host} "mkdir -p ${remoteDir}"`, { stdio: "inherit" });
+    execSync(`scp ${sshOpts} ${tarPath} ${host}:/tmp/gateway_tar.tar`, { stdio: "inherit" });
+    execSync(
+      `ssh ${sshOpts} ${host} "tar xf /tmp/gateway_tar.tar -C ${remoteDir} --strip-components=1 && rm /tmp/gateway_tar.tar"`,
+      { stdio: "inherit" },
+    );
+    execSync(`scp ${sshOpts} ${envPath} ${host}:${remoteDir}/.env`, { stdio: "inherit" });
+  } finally {
+    try {
+      execSync(`ssh ${sshOpts} -O exit ${host}`, { stdio: "ignore" });
+    } catch {
+      // Master already torn down (e.g. earlier command failed before opening it).
+    }
+  }
 
   console.log(`\nDeployed. Run on the Pi:`);
   console.log(`  cd ${remoteDir} && ./gateway`);
