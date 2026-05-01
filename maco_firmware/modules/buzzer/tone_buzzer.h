@@ -31,7 +31,7 @@ class ToneBuzzer : public Buzzer {
             std::chrono::milliseconds duration) override;
   void Stop() override;
   pw::async2::Coro<pw::Status> PlayMelody(
-      pw::async2::CoroContext& cx, pw::span<const Note> melody) override;
+      pw::async2::CoroContext cx, pw::span<const Note> melody) override;
 
  private:
   hal_pin_t pin_;

@@ -223,7 +223,7 @@ class MyReader {
   }
 
  private:
-  pw::async2::Coro<pw::Status> RunLoop(pw::async2::CoroContext& cx) {
+  pw::async2::Coro<pw::Status> RunLoop(pw::async2::CoroContext cx) {
     while (true) {
       auto result = co_await DetectTag(cx, timeout_);
       if (!result.ok()) continue;
@@ -233,7 +233,7 @@ class MyReader {
   }
 
   pw::async2::Coro<pw::Result<TagInfo>> DetectTag(
-      pw::async2::CoroContext& cx,
+      pw::async2::CoroContext cx,
       pw::chrono::SystemClock::duration timeout) {
     auto cmd_result = co_await SendCommand(cx, detect_cmd_, deadline);
     if (!cmd_result.ok()) co_return cmd_result.status();

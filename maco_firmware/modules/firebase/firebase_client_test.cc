@@ -205,7 +205,7 @@ TEST_F(FirebaseClientTest, TerminalCheckin_Authorized) {
   // Create the test coroutine
   pw::async2::CoroContext coro_cx(test_allocator_);
   auto test_coro =
-      [&](pw::async2::CoroContext& cx) -> pw::async2::Coro<pw::Status> {
+      [&](pw::async2::CoroContext cx) -> pw::async2::Coro<pw::Status> {
     result = co_await client.TerminalCheckin(cx, *tag_uid_result);
     co_return pw::OkStatus();
   };
@@ -251,7 +251,7 @@ TEST_F(FirebaseClientTest, TerminalCheckin_Rejected) {
 
   pw::async2::CoroContext coro_cx(test_allocator_);
   auto test_coro =
-      [&](pw::async2::CoroContext& cx) -> pw::async2::Coro<pw::Status> {
+      [&](pw::async2::CoroContext cx) -> pw::async2::Coro<pw::Status> {
     result = co_await client.TerminalCheckin(cx, *tag_uid_result);
     co_return pw::OkStatus();
   };
@@ -289,7 +289,7 @@ TEST_F(FirebaseClientTest, TerminalCheckin_ForwardError) {
 
   pw::async2::CoroContext coro_cx(test_allocator_);
   auto test_coro =
-      [&](pw::async2::CoroContext& cx) -> pw::async2::Coro<pw::Status> {
+      [&](pw::async2::CoroContext cx) -> pw::async2::Coro<pw::Status> {
     result = co_await client.TerminalCheckin(cx, *tag_uid_result);
     co_return pw::OkStatus();
   };
@@ -322,7 +322,7 @@ TEST_F(FirebaseClientTest, TerminalCheckin_RpcError) {
 
   pw::async2::CoroContext coro_cx(test_allocator_);
   auto test_coro =
-      [&](pw::async2::CoroContext& cx) -> pw::async2::Coro<pw::Status> {
+      [&](pw::async2::CoroContext cx) -> pw::async2::Coro<pw::Status> {
     result = co_await client.TerminalCheckin(cx, *tag_uid_result);
     co_return pw::OkStatus();
   };
@@ -359,7 +359,7 @@ TEST_F(FirebaseClientTest, AuthenticateTag_Success) {
 
   pw::async2::CoroContext coro_cx(test_allocator_);
   auto test_coro =
-      [&](pw::async2::CoroContext& cx) -> pw::async2::Coro<pw::Status> {
+      [&](pw::async2::CoroContext cx) -> pw::async2::Coro<pw::Status> {
     auto ntag_challenge =
         pw::bytes::Array<0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09,
                          0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10>();
@@ -414,7 +414,7 @@ TEST_F(FirebaseClientTest, CompleteTagAuth_Success) {
 
   pw::async2::CoroContext coro_cx(test_allocator_);
   auto test_coro =
-      [&](pw::async2::CoroContext& cx) -> pw::async2::Coro<pw::Status> {
+      [&](pw::async2::CoroContext cx) -> pw::async2::Coro<pw::Status> {
     auto encrypted_response = pw::bytes::Array<
         0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B,
         0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16,
@@ -474,7 +474,7 @@ TEST_F(FirebaseClientTest, TerminalCheckin_SendsRequest) {
 
   pw::async2::CoroContext coro_cx(test_allocator_);
   auto test_coro =
-      [&](pw::async2::CoroContext& cx) -> pw::async2::Coro<pw::Status> {
+      [&](pw::async2::CoroContext cx) -> pw::async2::Coro<pw::Status> {
     result = co_await client.TerminalCheckin(cx, *tag_uid_result);
     co_return pw::OkStatus();
   };
@@ -523,7 +523,7 @@ TEST_F(FirebaseClientTest, TerminalCheckin_ConcurrentCallReturnsUnavailable) {
   // First coroutine - starts the call
   pw::async2::CoroContext coro_cx1(test_allocator_);
   auto test_coro1 =
-      [&](pw::async2::CoroContext& cx) -> pw::async2::Coro<pw::Status> {
+      [&](pw::async2::CoroContext cx) -> pw::async2::Coro<pw::Status> {
     result1 = co_await client.TerminalCheckin(cx, *tag_uid_result1);
     co_return pw::OkStatus();
   };
@@ -531,7 +531,7 @@ TEST_F(FirebaseClientTest, TerminalCheckin_ConcurrentCallReturnsUnavailable) {
   // Second coroutine - tries to start while first is in flight
   pw::async2::CoroContext coro_cx2(test_allocator_);
   auto test_coro2 =
-      [&](pw::async2::CoroContext& cx) -> pw::async2::Coro<pw::Status> {
+      [&](pw::async2::CoroContext cx) -> pw::async2::Coro<pw::Status> {
     result2 = co_await client.TerminalCheckin(cx, *tag_uid_result2);
     co_return pw::OkStatus();
   };

@@ -37,7 +37,7 @@ void GatewayConnectionCheck::Start(pw::async2::Dispatcher& dispatcher) {
 }
 
 pw::async2::Coro<pw::Status> GatewayConnectionCheck::Ping(
-    [[maybe_unused]] pw::async2::CoroContext& cx) {
+    [[maybe_unused]] pw::async2::CoroContext cx) {
   maco_gateway_PingRequest request = maco_gateway_PingRequest_init_zero;
 
   // Register future BEFORE starting RPC (callback may fire synchronously).
@@ -55,7 +55,7 @@ pw::async2::Coro<pw::Status> GatewayConnectionCheck::Ping(
 }
 
 pw::async2::Coro<pw::Status> GatewayConnectionCheck::Run(
-    pw::async2::CoroContext& cx) {
+    pw::async2::CoroContext cx) {
   // Phase 1: Wait for wifi before attempting any pings.
   {
     app_state::SystemStateSnapshot snapshot;

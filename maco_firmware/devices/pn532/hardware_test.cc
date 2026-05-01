@@ -24,6 +24,7 @@
 #include "pw_allocator/testing.h"
 #include "pw_async2/basic_dispatcher.h"
 #include "pw_async2/coro.h"
+#include "pw_async2/coro_task.h"
 #include "pw_async2/system_time_provider.h"
 #include "pw_log/log.h"
 #include "pw_unit_test/framework.h"
@@ -98,45 +99,20 @@ TestablePn532Reader& GetDriver() {
   return driver;
 }
 
-// Wrapper task to run a coroutine with arbitrary return type
-template <typename T>
-class CoroRunnerTask : public pw::async2::Task {
- public:
-  explicit CoroRunnerTask(pw::async2::Coro<T>&& coro)
-      : coro_(std::move(coro)) {}
-
-  bool is_complete() const { return result_.has_value(); }
-  T& result() { return *result_; }
-
- private:
-  pw::async2::Poll<> DoPend(pw::async2::Context& cx) override {
-    auto poll = coro_.Pend(cx);
-    if (poll.IsPending()) {
-      return pw::async2::Pending();
-    }
-    result_.emplace(std::move(*poll));
-    return pw::async2::Ready();
-  }
-
-  pw::async2::Coro<T> coro_;
-  std::optional<T> result_;
-};
-
 // Helper to run a coroutine synchronously using a dispatcher
 template <typename T>
 T RunCoro(pw::async2::Coro<T> coro) {
   pw::async2::BasicDispatcher dispatcher;
-  CoroRunnerTask<T> task(std::move(coro));
+  pw::async2::CoroTask<T> task(std::move(coro));
 
   dispatcher.Post(task);
 
-  // Run until the coroutine completes
-  while (!task.is_complete()) {
+  while (!task.has_value()) {
     dispatcher.RunUntilStalled();
     HAL_Delay_Milliseconds(1);
   }
 
-  return std::move(task.result());
+  return std::move(task.value());
 }
 
 class Pn532HardwareTest : public ::testing::Test {

@@ -20,7 +20,7 @@ constexpr uint8_t kTerminalKeyNumber = 1;
 }  // namespace
 
 pw::async2::Coro<pw::Result<TagIdentification>> IdentifyTag(
-    pw::async2::CoroContext& cx,
+    pw::async2::CoroContext cx,
     nfc::NfcTag& tag,
     nfc::NfcReader& reader,
     secrets::DeviceSecrets& device_secrets,

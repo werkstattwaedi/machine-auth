@@ -98,44 +98,44 @@ class Pn532NfcReader : public NfcReader {
 
   /// Main reader loop coroutine.
   /// Runs continuously: detect → probe → monitor → (tag gone) → repeat
-  pw::async2::Coro<pw::Status> RunLoop(pw::async2::CoroContext& cx);
+  pw::async2::Coro<pw::Status> RunLoop(pw::async2::CoroContext cx);
 
   /// Send a PN532 command and receive response.
   /// Handles frame building, ACK, and response parsing.
   /// @param timeout_ms Timeout in milliseconds (rounded up for sub-ms precision)
   pw::async2::Coro<pw::Result<pw::ConstByteSpan>> SendCommand(
-      pw::async2::CoroContext& cx,
+      pw::async2::CoroContext cx,
       const Pn532Command& cmd,
       uint32_t timeout_ms);
 
   /// Detect a tag using InListPassiveTarget.
   pw::async2::Coro<pw::Result<TagInfo>> DetectTag(
-      pw::async2::CoroContext& cx,
+      pw::async2::CoroContext cx,
       pw::chrono::SystemClock::duration timeout);
 
   /// Execute an InDataExchange command.
   pw::async2::Coro<pw::Result<size_t>> Transceive(
-      pw::async2::CoroContext& cx,
+      pw::async2::CoroContext cx,
       pw::ConstByteSpan command,
       pw::ByteSpan response_buffer,
       pw::chrono::SystemClock::duration timeout);
 
   /// Check if tag is still present using Diagnose.
   pw::async2::Coro<pw::Result<bool>> CheckTagPresent(
-      pw::async2::CoroContext& cx,
+      pw::async2::CoroContext cx,
       pw::chrono::SystemClock::duration timeout);
 
   // -- Async Init --
 
   /// Async initialization coroutine (hardware reset, SAMConfiguration, etc.)
-  pw::async2::Coro<pw::Status> DoAsyncInit(pw::async2::CoroContext& cx);
+  pw::async2::Coro<pw::Status> DoAsyncInit(pw::async2::CoroContext cx);
 
   /// Release target asynchronously
-  pw::async2::Coro<pw::Status> DoReleaseTag(pw::async2::CoroContext& cx,
+  pw::async2::Coro<pw::Status> DoReleaseTag(pw::async2::CoroContext cx,
                                              uint8_t target_number);
 
   /// Recover from protocol desync (sends ACK abort, waits for in-flight data)
-  pw::async2::Coro<pw::Status> RecoverFromDesync(pw::async2::CoroContext& cx);
+  pw::async2::Coro<pw::Status> RecoverFromDesync(pw::async2::CoroContext cx);
 
   // -- Utility --
 

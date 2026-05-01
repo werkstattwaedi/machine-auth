@@ -152,7 +152,7 @@ void UsageUploader::OnSessionEnded(const app_state::SessionInfo&,
 }
 
 pw::async2::Coro<pw::Status> UsageUploader::Run(
-    pw::async2::CoroContext& cx) {
+    pw::async2::CoroContext cx) {
   while (true) {
     co_await time_provider_.WaitFor(kPollInterval);
 
@@ -194,7 +194,7 @@ pw::async2::Coro<pw::Status> UsageUploader::Run(
 }
 
 pw::async2::Coro<pw::Status> UsageUploader::TryUpload(
-    pw::async2::CoroContext& cx) {
+    pw::async2::CoroContext cx) {
   auto queue_result = store_.LoadPendingUsage();
   if (!queue_result.ok()) {
     PW_LOG_ERROR("Failed to load pending usage");

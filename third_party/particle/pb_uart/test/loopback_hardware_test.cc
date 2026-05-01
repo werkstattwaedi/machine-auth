@@ -100,7 +100,7 @@ TEST_F(AsyncUartLoopbackTest, AsyncReadWithCoroutine) {
   bool test_passed = false;
 
   // Define the test coroutine
-  auto test_coro = [&](pw::async2::CoroContext&) -> pw::async2::Coro<pw::Status> {
+  auto test_coro = [&](pw::async2::CoroContext ) -> pw::async2::Coro<pw::Status> {
     // Write test pattern
     PW_LOG_INFO("Coro: Writing %u bytes", static_cast<unsigned>(kTestPattern.size()));
     auto write_status = uart.Write(kTestPattern);
@@ -188,7 +188,7 @@ TEST_F(AsyncUartLoopbackTest, MultipleSequentialReads) {
 
   int successful_reads = 0;
 
-  auto test_coro = [&](pw::async2::CoroContext&) -> pw::async2::Coro<pw::Status> {
+  auto test_coro = [&](pw::async2::CoroContext ) -> pw::async2::Coro<pw::Status> {
     for (int i = 0; i < 3; ++i) {
       // Write a small pattern
       constexpr auto kSmallPattern = pw::bytes::Array<0xAA, 0xBB>();
@@ -286,7 +286,7 @@ TEST_F(AsyncUartLoopbackTest, InterleavedReadsAndWrites) {
   std::array<std::byte, 18> received_data{};
 
   // Reader coroutine - starts first, does 3 reads of 6 bytes
-  auto reader_coro = [&](pw::async2::CoroContext&) -> pw::async2::Coro<pw::Status> {
+  auto reader_coro = [&](pw::async2::CoroContext ) -> pw::async2::Coro<pw::Status> {
     PW_LOG_INFO("[Reader] Starting - will do 3 reads of 6 bytes each");
 
     for (int i = 0; i < 3; ++i) {
@@ -326,7 +326,7 @@ TEST_F(AsyncUartLoopbackTest, InterleavedReadsAndWrites) {
   auto& time = pw::async2::GetSystemTimeProvider();
 
   // Writer coroutine - writes in chunks with async delays that yield to dispatcher
-  auto writer_coro = [&](pw::async2::CoroContext&) -> pw::async2::Coro<pw::Status> {
+  auto writer_coro = [&](pw::async2::CoroContext ) -> pw::async2::Coro<pw::Status> {
     // Initial delay to let reader start and suspend
     PW_LOG_INFO("[Writer] Starting - will write 8, 1, 5, 4 bytes with delays");
     co_await time.WaitFor(50ms);
@@ -451,7 +451,7 @@ TEST_F(AsyncUartLoopbackTest, ReadTimeout) {
   bool got_timeout = false;
   constexpr uint32_t kTimeoutMs = 100;  // 100ms timeout
 
-  auto test_coro = [&](pw::async2::CoroContext&) -> pw::async2::Coro<pw::Status> {
+  auto test_coro = [&](pw::async2::CoroContext ) -> pw::async2::Coro<pw::Status> {
     std::array<std::byte, 8> rx_buffer{};
 
     PW_LOG_INFO("Starting read with %ums timeout, waiting for 5 bytes...",

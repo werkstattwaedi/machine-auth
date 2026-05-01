@@ -65,10 +65,10 @@ class TagVerifier {
  private:
   static constexpr size_t kMaxObservers = 4;
 
-  pw::async2::Coro<pw::Status> Run(pw::async2::CoroContext& cx);
-  pw::async2::Coro<pw::Status> VerifyTag(pw::async2::CoroContext& cx,
+  pw::async2::Coro<pw::Status> Run(pw::async2::CoroContext cx);
+  pw::async2::Coro<pw::Status> VerifyTag(pw::async2::CoroContext cx,
                                           nfc::NfcTag& tag);
-  pw::async2::Coro<pw::Status> AuthorizeTag(pw::async2::CoroContext& cx,
+  pw::async2::Coro<pw::Status> AuthorizeTag(pw::async2::CoroContext cx,
                                              nfc::Ntag424Tag& ntag,
                                              const maco::TagUid& tag_uid);
 

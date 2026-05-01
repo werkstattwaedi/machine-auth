@@ -47,14 +47,14 @@ class PersonalizeCoordinator {
   void GetSnapshot(PersonalizeSnapshot& snapshot) PW_LOCKS_EXCLUDED(lock_);
 
  private:
-  pw::async2::Coro<pw::Status> Run(pw::async2::CoroContext& cx);
+  pw::async2::Coro<pw::Status> Run(pw::async2::CoroContext cx);
 
-  pw::async2::Coro<pw::Status> HandleTag(pw::async2::CoroContext& cx,
+  pw::async2::Coro<pw::Status> HandleTag(pw::async2::CoroContext cx,
                                           nfc::NfcTag& tag);
 
   /// Attempt personalization: provision keys + configure SDM.
   pw::async2::Coro<pw::Status> TryPersonalize(
-      pw::async2::CoroContext& cx,
+      pw::async2::CoroContext cx,
       nfc::NfcTag& tag,
       const maco::TagUid& tag_uid,
       const PersonalizationKeys& keys);

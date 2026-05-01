@@ -60,10 +60,10 @@ class UsageUploader : public app_state::SessionObserver {
   static constexpr auto kRetryInterval = std::chrono::seconds(60);
 
   /// Main coroutine loop: heartbeat updates, upload triggers, retries.
-  pw::async2::Coro<pw::Status> Run(pw::async2::CoroContext& cx);
+  pw::async2::Coro<pw::Status> Run(pw::async2::CoroContext cx);
 
   /// Attempt to upload all pending usage records.
-  pw::async2::Coro<pw::Status> TryUpload(pw::async2::CoroContext& cx);
+  pw::async2::Coro<pw::Status> TryUpload(pw::async2::CoroContext cx);
 
   SessionStore& store_;
   firebase::FirebaseClient& firebase_;

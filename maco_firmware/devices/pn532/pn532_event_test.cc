@@ -83,7 +83,7 @@ TEST(NfcEventProviderTest, ResolveFromTask_FutureSeesEvent) {
 
   // Create a task that will resolve the provider
   bool resolved = false;
-  pw::async2::PendFuncTask resolver_task([&](Context&) -> Poll<> {
+  pw::async2::FuncTask resolver_task([&](Context&) -> Poll<> {
     NfcEvent event{NfcEventType::kTagArrived, nullptr};
     provider.Resolve(std::move(event));
     resolved = true;
@@ -120,7 +120,7 @@ TEST(NfcEventProviderTest, PersistentTaskPattern_ReceivesEvent) {
   std::optional<NfcEvent> received_event;
 
   // Create a persistent task that waits for the event
-  pw::async2::PendFuncTask waiter_task([&](Context& cx) -> Poll<> {
+  pw::async2::FuncTask waiter_task([&](Context& cx) -> Poll<> {
     auto poll = future->Pend(cx);
     if (poll.IsPending()) {
       return Pending();
@@ -130,7 +130,7 @@ TEST(NfcEventProviderTest, PersistentTaskPattern_ReceivesEvent) {
   });
 
   // Create a resolver task
-  pw::async2::PendFuncTask resolver_task([&](Context&) -> Poll<> {
+  pw::async2::FuncTask resolver_task([&](Context&) -> Poll<> {
     NfcEvent event{NfcEventType::kTagArrived, nullptr};
     provider.Resolve(std::move(event));
     return Ready();
@@ -254,7 +254,7 @@ TEST(ReEnqueuePatternTest, TaskWithReEnqueue_PollsMultipleTimes) {
   const int max_polls = 5;
 
   // Task that re-enqueues itself until a condition is met
-  pw::async2::PendFuncTask active_task([&](Context& cx) -> Poll<> {
+  pw::async2::FuncTask active_task([&](Context& cx) -> Poll<> {
     poll_count++;
     if (poll_count < max_polls) {
       cx.ReEnqueue();  // More work to do
@@ -279,7 +279,7 @@ TEST(ReEnqueuePatternTest, ConditionalReEnqueue_StopsWithoutWork) {
 
   // Task that conditionally re-enqueues based on work availability
   // (simulates the pattern used in Pn532NfcReader::DoPend)
-  pw::async2::PendFuncTask conditional_task([&](Context& cx) -> Poll<> {
+  pw::async2::FuncTask conditional_task([&](Context& cx) -> Poll<> {
     poll_count++;
 
     bool needs_poll = false;

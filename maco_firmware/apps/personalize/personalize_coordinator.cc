@@ -100,7 +100,7 @@ void PersonalizeCoordinator::StreamTagEvent(
 }
 
 pw::async2::Coro<pw::Status> PersonalizeCoordinator::Run(
-    pw::async2::CoroContext& cx) {
+    pw::async2::CoroContext cx) {
   while (true) {
     SetState(PersonalizeStateId::kIdle);
 
@@ -138,7 +138,7 @@ pw::async2::Coro<pw::Status> PersonalizeCoordinator::Run(
 }
 
 pw::async2::Coro<pw::Status> PersonalizeCoordinator::HandleTag(
-    pw::async2::CoroContext& cx,
+    pw::async2::CoroContext cx,
     nfc::NfcTag& tag) {
   // IdentifyTag still needs device_secrets for the terminal key probe.
   // With the new architecture, the tag identifier uses the reader's
@@ -230,7 +230,7 @@ pw::async2::Coro<pw::Status> PersonalizeCoordinator::HandleTag(
 }
 
 pw::async2::Coro<pw::Status> PersonalizeCoordinator::TryPersonalize(
-    pw::async2::CoroContext& cx,
+    pw::async2::CoroContext cx,
     nfc::NfcTag& tag,
     const maco::TagUid& tag_uid,
     const PersonalizationKeys& keys) {
