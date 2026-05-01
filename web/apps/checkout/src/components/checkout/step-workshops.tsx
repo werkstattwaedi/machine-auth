@@ -21,6 +21,7 @@ import {
 } from "@modules/lib/firestore-helpers"
 import type { UserDoc } from "@modules/lib/firestore-entities"
 import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
+import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 
 interface StepWorkshopsProps {
   state: CheckoutState
@@ -50,6 +51,21 @@ export function StepWorkshops({
 }: StepWorkshopsProps) {
   const db = useDb()
   const { add, update, remove } = useFirestoreMutation()
+  // ADR-0025: each item-mutation site gets its own German fallback toast +
+  // telemetry context so silent failures (the legacy pattern here) become
+  // a visible, actionable error.
+  const addItemMutation = useAsyncMutation({
+    context: "checkout.workshopsAddItem",
+    errorMessage: "Eintrag konnte nicht hinzugefügt werden",
+  })
+  const updateItemMutation = useAsyncMutation({
+    context: "checkout.workshopsUpdateItem",
+    errorMessage: "Eintrag konnte nicht aktualisiert werden",
+  })
+  const removeItemMutation = useAsyncMutation({
+    context: "checkout.workshopsRemoveItem",
+    errorMessage: "Eintrag konnte nicht gelöscht werden",
+  })
   const auth = useFirebaseAuth()
   const isMobile = useIsMobile()
   const sortedWorkshops = config ? getSortedWorkshops(config) : []
@@ -160,48 +176,69 @@ export function StepWorkshops({
   const callbacks: ItemCallbacks = useMemo(
     () => ({
       addItem: async (item: CheckoutItemLocal) => {
-        let coId = checkoutId
-        if (!coId) {
-          const callerUid = auth?.currentUser?.uid ?? null
-          const coRef = await add(checkoutsCollection(db), {
-            userId: userRef ?? null,
-            status: "open",
-            usageType: state.usageType,
-            created: serverTimestamp(),
-            workshopsVisited: [item.workshop],
-            persons: [],
-            modifiedBy: callerUid,
-            modifiedAt: serverTimestamp(),
+        try {
+          await addItemMutation.mutate(async () => {
+            let coId = checkoutId
+            if (!coId) {
+              const callerUid = auth?.currentUser?.uid ?? null
+              const coRef = await add(checkoutsCollection(db), {
+                userId: userRef ?? null,
+                status: "open",
+                usageType: state.usageType,
+                created: serverTimestamp(),
+                workshopsVisited: [item.workshop],
+                persons: [],
+                modifiedBy: callerUid,
+                modifiedAt: serverTimestamp(),
+              })
+              coId = coRef.id
+            }
+            if (!coId) return
+            await add(checkoutItemsCollection(db, coId), {
+              workshop: item.workshop,
+              description: item.description,
+              origin: item.origin,
+              catalogId: item.catalogId ? catalogRef(db, item.catalogId) : null,
+              pricingModel: item.pricingModel ?? null,
+              created: serverTimestamp(),
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              totalPrice: item.totalPrice,
+              formInputs: item.formInputs ?? null,
+            })
           })
-          coId = coRef.id
+        } catch {
+          // Hook already toasted + reported telemetry. Re-thrown here so
+          // the wrapping `mutate` semantics still apply, but at the
+          // ItemCallbacks boundary we swallow so the inline-rows UI does
+          // not see an unhandled rejection.
         }
-        if (!coId) return
-        await add(checkoutItemsCollection(db, coId), {
-          workshop: item.workshop,
-          description: item.description,
-          origin: item.origin,
-          catalogId: item.catalogId ? catalogRef(db, item.catalogId) : null,
-          pricingModel: item.pricingModel ?? null,
-          created: serverTimestamp(),
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          totalPrice: item.totalPrice,
-          formInputs: item.formInputs ?? null,
-        })
       },
       updateItem: (_id: string, item: CheckoutItemLocal) => {
         if (!checkoutId) return
-        update(checkoutItemRef(db, checkoutId, item.id), {
-          description: item.description,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          totalPrice: item.totalPrice,
-          formInputs: item.formInputs ?? null,
-        })
+        // Fire-and-forget at the callback boundary; the hook handles
+        // the toast + telemetry on rejection.
+        void updateItemMutation
+          .mutate(() =>
+            update(checkoutItemRef(db, checkoutId, item.id), {
+              description: item.description,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              totalPrice: item.totalPrice,
+              formInputs: item.formInputs ?? null,
+            }),
+          )
+          .catch(() => {
+            // swallow — see above
+          })
       },
       removeItem: (id: string) => {
         if (!checkoutId) return
-        remove(checkoutItemRef(db, checkoutId, id))
+        void removeItemMutation
+          .mutate(() => remove(checkoutItemRef(db, checkoutId, id)))
+          .catch(() => {
+            // swallow — see above
+          })
       },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps

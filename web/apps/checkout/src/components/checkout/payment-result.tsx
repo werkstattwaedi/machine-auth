@@ -6,6 +6,7 @@ import { formatCHF } from "@modules/lib/format"
 import { useDocument } from "@modules/lib/firestore"
 import { useDb, useFunctions } from "@modules/lib/firebase-context"
 import { checkoutRef } from "@modules/lib/firestore-helpers"
+import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { httpsCallable } from "firebase/functions"
 import { Loader2 } from "lucide-react"
 import { QRCodeSVG } from "qrcode.react"
@@ -60,6 +61,14 @@ export function PaymentResult({
 }: PaymentResultProps) {
   const db = useDb()
   const functions = useFunctions()
+  // ADR-0025: route the legacy `getPaymentQrData` fallback through the
+  // hook so failures fire telemetry. The inline `qrError` state still
+  // drives the prominent in-page error message; the hook also surfaces
+  // a German toast (consistent with every other async write).
+  const qrFallbackMutation = useAsyncMutation<PaymentData>({
+    context: "checkout.paymentQrFallback",
+    errorMessage: "QR-Code konnte nicht geladen werden",
+  })
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>("ebanking")
 
   const [paymentData, setPaymentData] = useState<PaymentData | null>(
@@ -85,9 +94,22 @@ export function PaymentResult({
       "getPaymentQrData",
     )
 
-    getPaymentData({ billId })
-      .then((result) => setPaymentData(result.data))
-      .catch(() => setQrError(true))
+    qrFallbackMutation
+      .mutate(async () => {
+        const result = await getPaymentData({ billId })
+        return result.data
+      })
+      .then((data) => setPaymentData(data))
+      .catch(() => {
+        // Hook already toasted + reported telemetry. Keep the inline
+        // `qrError` UI as the in-page indicator.
+        setQrError(true)
+      })
+    // qrFallbackMutation.mutate is stable across renders (its deps are
+    // primitive strings + the Functions instance); don't include it in
+    // the deps array to avoid re-running when the hook's internal state
+    // updates.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [skipFallback, billId, functions])
 
   return (

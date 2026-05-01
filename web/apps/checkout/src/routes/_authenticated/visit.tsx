@@ -79,6 +79,25 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
     context: "visit.confirmUncheckWorkshop",
     errorMessage: "Workshop konnte nicht entfernt werden",
   })
+  // ADR-0025: per-callback wrappers so failures (silent today) toast +
+  // log telemetry. Toggle is its own mutation — different fallback text
+  // (it writes to the parent checkout, not an item).
+  const toggleVisitedMutation = useAsyncMutation({
+    context: "visit.toggleWorkshopVisited",
+    errorMessage: "Werkstattauswahl konnte nicht gespeichert werden",
+  })
+  const addItemMutation = useAsyncMutation({
+    context: "visit.addItem",
+    errorMessage: "Eintrag konnte nicht hinzugefügt werden",
+  })
+  const updateItemMutation = useAsyncMutation({
+    context: "visit.updateItem",
+    errorMessage: "Eintrag konnte nicht aktualisiert werden",
+  })
+  const removeItemMutation = useAsyncMutation({
+    context: "visit.removeItem",
+    errorMessage: "Eintrag konnte nicht gelöscht werden",
+  })
   const ref = userRef(db, userDoc.id)
   const { data: pricingConfig, loading: loadingConfig, configError } = usePricingConfig()
 
@@ -128,46 +147,64 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
   const callbacks: ItemCallbacks = useMemo(
     () => ({
       addItem: async (item: CheckoutItemLocal) => {
-        let coId = checkoutId
-        // Create checkout first, then add item (sequential so security
-        // rules can read the parent checkout when validating the item)
-        if (!coId) {
-          const coRef = await add(checkoutsCollection(db), {
-            userId: ref,
-            status: "open",
-            usageType: "regular",
-            created: serverTimestamp(),
-            workshopsVisited: [item.workshop],
-            persons: [],
+        try {
+          await addItemMutation.mutate(async () => {
+            let coId = checkoutId
+            // Create checkout first, then add item (sequential so security
+            // rules can read the parent checkout when validating the item)
+            if (!coId) {
+              const coRef = await add(checkoutsCollection(db), {
+                userId: ref,
+                status: "open",
+                usageType: "regular",
+                created: serverTimestamp(),
+                workshopsVisited: [item.workshop],
+                persons: [],
+              })
+              coId = coRef.id
+            }
+            await add(checkoutItemsCollection(db, coId), {
+              workshop: item.workshop,
+              description: item.description,
+              origin: item.origin,
+              catalogId: item.catalogId ? catalogRef(db, item.catalogId) : null,
+              pricingModel: item.pricingModel ?? null,
+              created: serverTimestamp(),
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              totalPrice: item.totalPrice,
+              formInputs: item.formInputs ?? null,
+            })
           })
-          coId = coRef.id
+        } catch {
+          // Hook already toasted + reported telemetry. Swallow at the
+          // ItemCallbacks boundary so callers don't see an unhandled
+          // rejection.
         }
-        await add(checkoutItemsCollection(db, coId), {
-          workshop: item.workshop,
-          description: item.description,
-          origin: item.origin,
-          catalogId: item.catalogId ? catalogRef(db, item.catalogId) : null,
-          pricingModel: item.pricingModel ?? null,
-          created: serverTimestamp(),
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          totalPrice: item.totalPrice,
-          formInputs: item.formInputs ?? null,
-        })
       },
       updateItem: (_id: string, item: CheckoutItemLocal) => {
         if (!checkoutId) return
-        update(checkoutItemRef(db, checkoutId, item.id), {
-          description: item.description,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          totalPrice: item.totalPrice,
-          formInputs: item.formInputs ?? null,
-        })
+        void updateItemMutation
+          .mutate(() =>
+            update(checkoutItemRef(db, checkoutId, item.id), {
+              description: item.description,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              totalPrice: item.totalPrice,
+              formInputs: item.formInputs ?? null,
+            }),
+          )
+          .catch(() => {
+            // swallow — see addItem
+          })
       },
       removeItem: (id: string) => {
         if (!checkoutId) return
-        remove(checkoutItemRef(db, checkoutId, id))
+        void removeItemMutation
+          .mutate(() => remove(checkoutItemRef(db, checkoutId, id)))
+          .catch(() => {
+            // swallow — see addItem
+          })
       },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -231,17 +268,31 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
       })
       // Remove from workshopsVisited if it was recorded there
       if (checkoutId && visitedWorkshops.has(wsId)) {
-        update(checkoutRef(db, checkoutId), {
-          workshopsVisited: arrayRemove(wsId),
-        })
+        void toggleVisitedMutation
+          .mutate(() =>
+            update(checkoutRef(db, checkoutId), {
+              workshopsVisited: arrayRemove(wsId),
+            }),
+          )
+          .catch(() => {
+            // Hook already toasted + reported telemetry. Local state
+            // (selectedWorkshops) was already updated optimistically;
+            // toast prompts the user to retry.
+          })
       }
     } else {
       setSelectedWorkshops((prev) => new Set(prev).add(wsId))
       // Update workshopsVisited on checkout if it exists
       if (checkoutId) {
-        update(checkoutRef(db, checkoutId), {
-          workshopsVisited: arrayUnion(wsId),
-        })
+        void toggleVisitedMutation
+          .mutate(() =>
+            update(checkoutRef(db, checkoutId), {
+              workshopsVisited: arrayUnion(wsId),
+            }),
+          )
+          .catch(() => {
+            // see above
+          })
       }
     }
   }

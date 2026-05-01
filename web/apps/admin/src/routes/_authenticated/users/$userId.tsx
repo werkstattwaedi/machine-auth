@@ -4,6 +4,7 @@
 import { createFileRoute } from "@tanstack/react-router"
 import { useDocument, useCollection } from "@modules/lib/firestore"
 import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
+import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import {
   permissionRef,
   permissionsCollection,
@@ -64,6 +65,19 @@ function UserDetailPage() {
   )
   const { update, set } = useFirestoreMutation()
   const { update: updateRaw, loading: saving } = useFirestoreMutation()
+  // ADR-0025: tag operations were silent on failure today. Wrap them so
+  // an admin sees a German confirmation toast on success and an error
+  // toast + telemetry on failure.
+  const addTagMutation = useAsyncMutation({
+    context: "admin.userAddTag",
+    successMessage: "Tag hinzugefügt",
+    errorMessage: "Tag konnte nicht hinzugefügt werden",
+  })
+  const toggleTagMutation = useAsyncMutation({
+    context: "admin.userToggleTag",
+    successMessage: "Tag-Status aktualisiert",
+    errorMessage: "Tag-Status konnte nicht geändert werden",
+  })
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([])
   const [newTagId, setNewTagId] = useState("")
 
@@ -133,18 +147,33 @@ function UserDetailPage() {
 
   const handleAddTag = async () => {
     if (!newTagId.trim()) return
-    await set(tokenRef(db, newTagId.trim()), {
-      userId: userRef(db, userId),
-      label: "",
-      registered: serverTimestamp(),
-    } as unknown as TokenDoc)
-    setNewTagId("")
+    try {
+      await addTagMutation.mutate(() =>
+        set(tokenRef(db, newTagId.trim()), {
+          userId: userRef(db, userId),
+          label: "",
+          registered: serverTimestamp(),
+        } as unknown as TokenDoc),
+      )
+      setNewTagId("")
+    } catch {
+      // Hook already toasted + reported telemetry. Keep `newTagId` so
+      // the admin can edit + retry without re-typing.
+    }
   }
 
   const handleToggleTag = async (tokenId: string, isDeactivated: boolean) => {
-    await updateRaw(tokenRef(db, tokenId), {
-      deactivated: isDeactivated ? null : (serverTimestamp() as unknown as null),
-    })
+    try {
+      await toggleTagMutation.mutate(() =>
+        updateRaw(tokenRef(db, tokenId), {
+          deactivated: isDeactivated
+            ? null
+            : (serverTimestamp() as unknown as null),
+        }),
+      )
+    } catch {
+      // Hook already toasted + reported telemetry.
+    }
   }
 
   return (
