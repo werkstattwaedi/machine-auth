@@ -41,6 +41,10 @@ class DeviceSecretsService final
   pw::Status Clear(const ::maco_secrets_Empty& request,
                    ::maco_secrets_ProvisionResponse& response);
 
+  /// Verify whether the stored secrets match a candidate set.
+  pw::Status Verify(const ::maco_secrets_ProvisionRequest& request,
+                    ::maco_secrets_VerifyResponse& response);
+
  private:
   DeviceSecretsEeprom& storage_;
 };
