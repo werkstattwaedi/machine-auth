@@ -254,18 +254,35 @@ function deploy(payloadPath: string, envPath: string, host: string, remoteDir: s
   const ctlSocket = `/tmp/ssh-deploy-gateway-${process.pid}.sock`;
   const sshOpts = `-o ControlMaster=auto -o ControlPath=${ctlSocket} -o ControlPersist=60s`;
 
-  // Single remote script: extract payload, ensure venv, sync deps.
-  // `pip install -r` is idempotent and fast when nothing changed.
-  const remoteScript = [
-    `set -e`,
-    `mkdir -p ${remoteDir}`,
-    `cd ${remoteDir}`,
-    `tar xzf /tmp/gateway-deploy.tar.gz`,
-    `rm /tmp/gateway-deploy.tar.gz`,
-    `[ -d venv ] || python3 -m venv venv`,
-    `venv/bin/pip install --quiet --upgrade pip`,
-    `venv/bin/pip install --quiet -r requirements.txt`,
-  ].join(" && ");
+  // Single remote script: extract payload, ensure venv, sync deps, write a
+  // systemd unit pinned to the deploy user/dir. `pip install -r` and the
+  // unit-file rewrite are both idempotent. The heredoc terminator is
+  // unquoted so $(whoami)/$(pwd) expand on the Pi.
+  const remoteScript = `set -e
+mkdir -p ${remoteDir}
+cd ${remoteDir}
+tar xzf /tmp/gateway-deploy.tar.gz
+rm /tmp/gateway-deploy.tar.gz
+[ -d venv ] || python3 -m venv venv
+venv/bin/pip install --quiet --upgrade pip
+venv/bin/pip install --quiet -r requirements.txt
+cat > gateway.service <<UNIT_EOF
+[Unit]
+Description=MaCo Gateway (pw_rpc proxy to Firebase)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=$(whoami)
+WorkingDirectory=$(pwd)
+ExecStart=$(pwd)/venv/bin/python -m maco_gateway.main
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+UNIT_EOF`;
 
   try {
     execSync(`scp ${sshOpts} ${payloadPath} ${host}:/tmp/gateway-deploy.tar.gz`, {
@@ -283,8 +300,25 @@ function deploy(payloadPath: string, envPath: string, host: string, remoteDir: s
     }
   }
 
-  console.log(`\nDeployed. Run on the Pi:`);
-  console.log(`  cd ${remoteDir} && venv/bin/python -m maco_gateway.main`);
+  console.log(`
+Deployed.
+
+Run once (manual):
+  ssh ${host} 'cd ${remoteDir} && venv/bin/python -m maco_gateway.main'
+
+Install as a systemd service (one-time, requires sudo on the Pi):
+  ssh ${host} 'sudo install -m 644 ${remoteDir}/gateway.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now gateway'
+
+After future deploys, restart the service:
+  ssh ${host} sudo systemctl restart gateway
+
+Logs (journald):
+  ssh ${host} journalctl -u gateway -f
+  ssh ${host} journalctl -u gateway --since today
+
+Persistent logs across reboots (one-time, if /var/log/journal/ doesn't exist):
+  ssh ${host} 'sudo mkdir -p /var/log/journal && sudo systemctl restart systemd-journald'
+`);
 }
 
 // --- Main ---
