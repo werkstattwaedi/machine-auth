@@ -106,9 +106,17 @@ firebase deploy
 The gateway runs separately on a Raspberry Pi (not on Firebase). Use the deploy script:
 
 ```bash
-npx tsx scripts/deploy-gateway.ts --host pi@rpi.local
+npx tsx scripts/deploy-gateway.ts --host maker1@maco-gateway.internal
 ```
 
-This builds the gateway tarball, generates the `.env` from `config.jsonc` and Google Cloud Secret Manager (including `GATEWAY_ASCON_MASTER_KEY`), and deploys to the target host.
+This builds the gateway-service + pw_rpc protos via Bazel, stages a small payload (gateway sources + generated protos + vendored pigweed Python sources + a pinned `requirements.txt`), generates the `.env` from `config.jsonc` and Google Cloud Secret Manager (including `GATEWAY_ASCON_MASTER_KEY`), and deploys to the target host. On the host, the script ensures a Python 3.11 venv at `~/gateway/venv` and runs `pip install -r requirements.txt`.
+
+Start the gateway after deploy:
+
+```bash
+ssh maker1@maco-gateway.internal 'cd ~/gateway && venv/bin/python -m maco_gateway.main'
+```
+
+The Pi needs `python3.11` + `python3.11-venv` installed once (Raspberry Pi OS Bookworm ships them).
 
 See `scripts/deploy-gateway.ts --help` for additional options (e.g., `--remote-dir`, `--build-only`).
