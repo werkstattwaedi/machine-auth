@@ -56,6 +56,20 @@ function effectiveUid(request: CallableRequest<unknown>): string | null {
 }
 
 /**
+ * True iff the caller signed in via Firebase Anonymous Auth. Used to
+ * scope the null-userId existing-checkout close path: the eager-anon
+ * flow (issue #151) creates a `userId: null` checkout when the visitor
+ * adds the first item, so the server must accept that anon session
+ * later — but only that anon session — when it submits.
+ */
+function isAnonymousCaller(request: CallableRequest<unknown>): boolean {
+  const provider = (request.auth?.token as
+    | { firebase?: { sign_in_provider?: string } }
+    | undefined)?.firebase?.sign_in_provider;
+  return provider === "anonymous";
+}
+
+/**
  * Exported for unit tests. Returns the per-person entry fee for a given
  * userType + usageType combo from `config/pricing.entryFees`.
  *
@@ -254,9 +268,10 @@ export const closeCheckoutAndGetPayment = onCall<
   }
 
   const callerUid = effectiveUid(request);
+  const isAnonymous = isAnonymousCaller(request);
 
   if (checkoutId) {
-    return closeExistingCheckout(callerUid, {
+    return closeExistingCheckout(callerUid, isAnonymous, {
       checkoutId,
       usageType,
       persons,
@@ -279,6 +294,7 @@ export const closeCheckoutAndGetPayment = onCall<
 
 async function closeExistingCheckout(
   callerUid: string | null,
+  isAnonymous: boolean,
   args: {
     checkoutId: string;
     usageType: UsageType;
@@ -311,8 +327,12 @@ async function closeExistingCheckout(
   // Cross-check the primary person's userType against the user's stored
   // profile. We know the userIdRef from callerUid; fetched outside the
   // transaction to keep the txn small. A registered user can't claim
-  // child pricing they're not entitled to.
-  const userRef = db.collection("users").doc(callerUid);
+  // child pricing they're not entitled to. Anonymous callers have no
+  // users/{uid} doc (the synthetic anon UID isn't a registered user),
+  // so we skip the cross-check — there's no canonical record to compare
+  // against and the wider system already trusts whoever is in front of
+  // the screen for the truly-anonymous flow.
+  const userRef = isAnonymous ? null : db.collection("users").doc(callerUid);
   const enforcedPersons = await enforcePrimaryUserType(
     db,
     args.persons,
@@ -327,11 +347,30 @@ async function closeExistingCheckout(
     }
     const checkout = checkoutDoc.data() as CheckoutEntity;
 
-    // The caller must be the checkout's principal — either the real user
-    // (uid match) or a kiosk session acting on their behalf (actsAs claim
-    // resolved by effectiveUid above and equal to callerUid).
-    if (!checkout.userId || checkout.userId.id !== callerUid) {
-      throw new HttpsError("permission-denied", "Not the checkout owner");
+    // The caller must be the checkout's principal. Two valid paths:
+    //
+    // 1. Registered user / kiosk tag-tap: `checkout.userId` is set and
+    //    must match `callerUid` (real login uid, or actsAs target for a
+    //    tag-tap session).
+    // 2. Eager-anon flow (issue #151): `checkout.userId` is null. The
+    //    Firestore rules permit any anon-auth session to read/update a
+    //    null-userId open checkout, so we add a server-side scoping that
+    //    mirrors the wizard's `modifiedBy == anonUid` query: only the
+    //    anon session that opened the cart may close it. The
+    //    sign-in-provider gate keeps real-user spoofing out — a real
+    //    user cannot accidentally (or deliberately) submit a stranger's
+    //    null-userId cart even if they know its id.
+    if (checkout.userId) {
+      if (checkout.userId.id !== callerUid) {
+        throw new HttpsError("permission-denied", "Not the checkout owner");
+      }
+    } else {
+      if (!isAnonymous) {
+        throw new HttpsError("permission-denied", "Not the checkout owner");
+      }
+      if (checkout.modifiedBy !== callerUid) {
+        throw new HttpsError("permission-denied", "Not the checkout owner");
+      }
     }
 
     // Idempotency: if the safety-net trigger already produced a bill for
