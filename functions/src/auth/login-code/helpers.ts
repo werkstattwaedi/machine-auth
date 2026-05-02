@@ -89,6 +89,31 @@ export function assertLoginOriginsConfigured(value: string): void {
   );
 }
 
+/**
+ * Parse a numeric `defineString` param value, failing loud on misconfig.
+ *
+ * `firebase-functions/params` doesn't support `defineInt` in this project,
+ * so numeric tunables ship as strings. Silently coercing `NaN` or
+ * non-positive values to a default would mask ops mistakes (e.g. an empty
+ * env var disabling a rate limit). Mirrors the loud-failure pattern used
+ * by `assertLoginOriginsConfigured`.
+ */
+export function parseIntParamOrDie(name: string, value: string): number {
+  const parsed = parseInt(value, 10);
+  if (Number.isNaN(parsed) || parsed <= 0) {
+    logger.error(
+      `${name} is not a positive integer (got ${JSON.stringify(value)}). ` +
+        "Set the param via firebase functions:config or regenerate " +
+        "functions/.env.<projectId> via `npm run generate-env`."
+    );
+    throw new HttpsError(
+      "failed-precondition",
+      `${name} is not a positive integer`
+    );
+  }
+  return parsed;
+}
+
 export function isAllowedOrigin(origin: string | undefined | null): boolean {
   if (!origin) return false;
   // Localhost is only honored in emulator mode — a browser on a user's

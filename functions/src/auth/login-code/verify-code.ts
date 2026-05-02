@@ -11,15 +11,29 @@ import {
   onCall,
   type CallableRequest,
 } from "firebase-functions/v2/https";
+import { defineString } from "firebase-functions/params";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import {
   constantTimeEqual,
   hashCode,
   mintSessionToken,
   normalizeEmail,
+  parseIntParamOrDie,
 } from "./helpers";
 
 const MAX_ATTEMPTS = 5;
+
+// Per-email rate-limit tunables (issue #152). Stored as strings so they can
+// be tuned via the operations repo without a code change. Defaults match
+// the prior hard-coded values (24h window, 30 cumulative attempts / email).
+// `LOGIN_PER_EMAIL_WINDOW_MS` is shared with `request.ts` — same param name
+// resolves to the same configured value at deploy time.
+const perEmailWindowMsParam = defineString("LOGIN_PER_EMAIL_WINDOW_MS", {
+  default: "86400000",
+});
+const maxAttemptsPerEmailParam = defineString("LOGIN_MAX_ATTEMPTS_PER_EMAIL", {
+  default: "30",
+});
 
 export interface VerifyLoginCodeInput {
   email: string;
@@ -42,8 +56,8 @@ export async function handleVerifyLoginCode(
   }
 
   const db = getFirestore();
-  const snap = await db
-    .collection("loginCodes")
+  const col = db.collection("loginCodes");
+  const snap = await col
     .where("email", "==", email)
     .orderBy("created", "desc")
     .limit(1)
@@ -54,6 +68,39 @@ export async function handleVerifyLoginCode(
   }
 
   const docRef = snap.docs[0].ref;
+
+  // Per-email cumulative-attempts cap (issue #152). Sum `attempts` across
+  // all loginCodes docs for the email in the 24h window before allowing
+  // an increment. Done as a pre-check OUTSIDE the transaction: the
+  // alternative (querying inside `runTransaction`) complicates the
+  // single-doc transaction shape, and the trade-off is minor — an
+  // attacker could squeeze a few extra attempts during the read-write
+  // gap, but the per-doc 5-attempt cap remains the hard defence; this
+  // rolling cap is a soft ceiling that survives across rotating codes.
+  const perEmailWindowMs = parseIntParamOrDie(
+    "LOGIN_PER_EMAIL_WINDOW_MS",
+    perEmailWindowMsParam.value()
+  );
+  const maxAttemptsPerEmail = parseIntParamOrDie(
+    "LOGIN_MAX_ATTEMPTS_PER_EMAIL",
+    maxAttemptsPerEmailParam.value()
+  );
+  const windowStart = Timestamp.fromMillis(Date.now() - perEmailWindowMs);
+  const attemptsSnap = await col
+    .where("email", "==", email)
+    .where("created", ">=", windowStart)
+    .select("attempts")
+    .get();
+  let cumulativeAttempts = 0;
+  for (const d of attemptsSnap.docs) {
+    cumulativeAttempts += (d.get("attempts") as number | undefined) ?? 0;
+  }
+  if (cumulativeAttempts >= maxAttemptsPerEmail) {
+    throw new HttpsError(
+      "resource-exhausted",
+      "Zu viele falsche Code-Eingaben. Bitte versuche es später erneut."
+    );
+  }
 
   type Outcome =
     | { kind: "ok"; email: string }

@@ -26,6 +26,7 @@ import {
   isEmulator,
   isPlausibleEmail,
   normalizeEmail,
+  parseIntParamOrDie,
 } from "./helpers";
 
 const resendApiKey = defineSecret("RESEND_API_KEY");
@@ -36,6 +37,16 @@ const resendFromEmail = defineString("RESEND_FROM_EMAIL");
 // error. In emulator mode we skip Resend entirely so the assertion is
 // a no-op (issue #149, mirrors PR #142's LOGIN_ALLOWED_ORIGINS pattern).
 const resendLoginTemplateId = defineString("RESEND_LOGIN_TEMPLATE_ID");
+
+// Per-email rate-limit tunables (issue #152). Stored as strings so they can
+// be tuned via the operations repo without a code change. Defaults match
+// the prior hard-coded values (24h window, 20 codes / email).
+const perEmailWindowMsParam = defineString("LOGIN_PER_EMAIL_WINDOW_MS", {
+  default: "86400000",
+});
+const maxCodesPerEmailParam = defineString("LOGIN_MAX_CODES_PER_EMAIL", {
+  default: "20",
+});
 
 /**
  * Throws a `failed-precondition` error when the Resend login template id
@@ -116,6 +127,31 @@ export async function handleRequestLoginCode(
     if (consumedAt == null) {
       await latest.ref.update({ consumedAt: Timestamp.now() });
     }
+  }
+
+  // Per-email 24h cap on code requests (issue #152). Brute-force defence:
+  // an attacker rotating fresh codes past the 60s throttle would otherwise
+  // get unbounded attempts at one address. The existing
+  // (email asc, created desc) index supports this query — no new index.
+  const perEmailWindowMs = parseIntParamOrDie(
+    "LOGIN_PER_EMAIL_WINDOW_MS",
+    perEmailWindowMsParam.value()
+  );
+  const maxCodesPerEmail = parseIntParamOrDie(
+    "LOGIN_MAX_CODES_PER_EMAIL",
+    maxCodesPerEmailParam.value()
+  );
+  const windowStart = Timestamp.fromMillis(Date.now() - perEmailWindowMs);
+  const recentCount = await col
+    .where("email", "==", email)
+    .where("created", ">=", windowStart)
+    .count()
+    .get();
+  if (recentCount.data().count >= maxCodesPerEmail) {
+    throw new HttpsError(
+      "resource-exhausted",
+      "Zu viele Code-Anforderungen. Bitte versuche es später erneut."
+    );
   }
 
   const docId = generateDocId();
