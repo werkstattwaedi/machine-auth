@@ -68,15 +68,19 @@ See [`docs/adr/0009-local-build-flash-tooling.md`](docs/adr/0009-local-build-fla
 
 ### Firebase Operations Budget
 
-**CRITICAL: 100,000 operations/month maximum** (Firebase free tier)
+Firestore Spark (free) plan: **50K reads / 20K writes / 20K deletes per day** ([pricing](https://firebase.google.com/docs/firestore/pricing)). Blaze overage is ~$0.06 per 100K extra reads, so an occasional spike costs cents, not dollars.
 
-Design decisions to minimize operations:
+Posture: rely on the Firebase usage dashboard. If a single day breaches the quota, investigate the offending path and fix that one query — do not pre-emptively add caching layers.
+
+Design decisions that already help keep ops down:
 1. Terminal-side permission checking after session established
 2. Local session caching
 3. Batch usage uploads
 4. Future: Session broadcasting between devices
 
 **Login-code rate limits** (issue #152, `functions/src/auth/login-code/`): per-email caps of 20 code requests/24h and 30 cumulative verify attempts/24h, layered on top of the 60s per-email throttle and the per-doc 5-attempt cap. The 24h caps are tunable via `defineString` env params — `LOGIN_PER_EMAIL_WINDOW_MS` (default `86400000`), `LOGIN_MAX_CODES_PER_EMAIL` (default `20`), `LOGIN_MAX_ATTEMPTS_PER_EMAIL` (default `30`) — so values can be retuned from the operations repo without a code change. Don't loosen the defaults without re-evaluating the brute-force keyspace math (10^6 codes).
+
+For onSnapshot accounting see [issue #147](https://github.com/werkstattwaedi/machine-auth/issues/147) — concurrent identical listeners share a single watch stream; the dominant cost is sequential remounts paying the initial fetch.
 
 ### Firebase Functions
 
