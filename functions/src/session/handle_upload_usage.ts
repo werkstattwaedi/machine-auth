@@ -1,9 +1,11 @@
 import {
   UploadUsageRequest,
   UploadUsageResponse,
+  MachineUsage,
 } from "../proto/firebase_rpc/usage.js";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
+import * as crypto from "crypto";
 import { Timestamp, FieldValue } from "firebase-admin/firestore";
 import type {
   MachineEntity,
@@ -12,6 +14,19 @@ import type {
   DiscountLevel,
 } from "../types/firestore_entities.js";
 
+/**
+ * Handle a `UploadUsageRequest` from a terminal/gateway.
+ *
+ * Idempotency contract: each `usage_machine` doc ID is derived deterministically
+ * as `sha256(authId|machineId|checkIn)` (truncated to 80 bits). We use
+ * `.create()` so concurrent retries are atomic — the second writer gets
+ * `ALREADY_EXISTS` and is skipped. Only newly-inserted records flow into
+ * `accumulateUsageIntoCheckout`, which prevents double-billing on retry.
+ *
+ * `machineId` is part of the hash because authIds can recur across machines
+ * (a tag re-authed elsewhere reuses the auth doc), so `(authId, checkIn)`
+ * alone is not unique system-wide.
+ */
 export async function handleUploadUsage(
   request: UploadUsageRequest,
   _options: {
@@ -43,10 +58,11 @@ export async function handleUploadUsage(
   const machineData = machineDoc.exists ? machineDoc.data() as MachineEntity : null;
   const workshop = machineData?.workshop ?? null;
 
-  // Create usage_machine records from device-uploaded history
-  const batch = db.batch();
-  const usageRefs: admin.firestore.DocumentReference[] = [];
-
+  // Create usage_machine records from device-uploaded history.
+  // Use deterministic IDs + .create() so retries are idempotent: a record
+  // that already exists is skipped (caught as ALREADY_EXISTS) and does not
+  // flow into accumulation.
+  const newRecords: MachineUsage[] = [];
   for (const record of request.history.records || []) {
     if (!record.userId?.value || !record.authenticationId?.value) {
       logger.warn("Skipping record with missing user or authentication ID");
@@ -60,38 +76,81 @@ export async function handleUploadUsage(
       continue;
     }
 
-    const usageRef = db.collection("usage_machine").doc();
-    usageRefs.push(usageRef);
-    batch.set(usageRef, {
-      userId: db.doc(`users/${record.userId.value}`),
-      authenticationId: db.doc(`authentications/${record.authenticationId.value}`),
-      machine: machineRef,
-      startTime: Timestamp.fromMillis(Number(record.checkIn) * 1000),
-      endTime: Timestamp.fromMillis(Number(record.checkOut) * 1000),
-      endReason: record.reason?.reason
-        ? JSON.stringify({ reason: record.reason.reason.$case })
-        : null,
-      checkoutItemRef: null, // Will be set by accumulation logic
-      workshop,
-    });
+    const checkInUnix = Number(record.checkIn);
+    const usageId = deriveUsageId(
+      record.authenticationId.value,
+      machineId,
+      checkInUnix,
+    );
+    const usageRef = db.collection("usage_machine").doc(usageId);
+
+    try {
+      await usageRef.create({
+        userId: db.doc(`users/${record.userId.value}`),
+        authenticationId: db.doc(`authentications/${record.authenticationId.value}`),
+        machine: machineRef,
+        startTime: Timestamp.fromMillis(checkInUnix * 1000),
+        endTime: Timestamp.fromMillis(Number(record.checkOut) * 1000),
+        endReason: record.reason?.reason
+          ? JSON.stringify({ reason: record.reason.reason.$case })
+          : null,
+        checkoutItemRef: null, // Will be set by accumulation logic
+        workshop,
+      });
+      newRecords.push(record);
+    } catch (err: unknown) {
+      const code = (err as { code?: number | string } | null)?.code;
+      // Firestore uses 6 = ALREADY_EXISTS (gRPC status code).
+      if (code === 6 || code === "already-exists") {
+        logger.info("Usage record already exists, skipping (idempotent retry)", {
+          usageId,
+          authId: record.authenticationId.value,
+          machineId,
+        });
+        continue;
+      }
+      throw err;
+    }
   }
 
-  await batch.commit();
-
-  // Accumulate usage into checkout items
-  await accumulateUsageIntoCheckout(db, machineRef, machineData, request);
+  // Accumulate usage into checkout items — only run for records we just
+  // inserted, so a pure-retry batch does no work and never re-adds to the
+  // open checkout item.
+  if (newRecords.length > 0) {
+    await accumulateUsageIntoCheckout(db, machineRef, machineData, newRecords);
+  } else {
+    logger.info("No new usage records inserted, skipping accumulation");
+  }
 
   logger.info("Successfully processed usage history", {
     totalRecords: request.history.records?.length || 0,
+    newRecords: newRecords.length,
   });
 
   return { success: true };
 }
 
 /**
+ * Derive the deterministic `usage_machine` doc ID for a given record.
+ *
+ * Hashed because authIds can recur across machines, and the hash gives a
+ * uniform-length doc ID that can't accidentally collide with existing
+ * auto-IDs. 80 bits is overkill given the small (machineId, authId) tuple
+ * space — collision risk is effectively zero. The "|" separator avoids any
+ * ambiguity if a field ever contained underscores.
+ */
+function deriveUsageId(authId: string, machineId: string, checkInUnix: number): string {
+  return crypto
+    .createHash("sha256")
+    .update(`${authId}|${machineId}|${checkInUnix}`)
+    .digest("hex")
+    .slice(0, 20);
+}
+
+/**
  * NFC session → checkout item accumulation.
  *
- * For each user in the upload:
+ * For each user in the (filtered, newly-inserted) records:
  * 1. Look up machine → get workshop + checkoutTemplateId (catalog ref)
  * 2. Find user's open checkout (or create one)
  * 3. Query items subcollection where catalogId == checkoutTemplateId
@@ -103,7 +162,7 @@ async function accumulateUsageIntoCheckout(
   db: admin.firestore.Firestore,
   machineRef: admin.firestore.DocumentReference,
   machineData: MachineEntity | null,
-  request: UploadUsageRequest,
+  newRecords: MachineUsage[],
 ): Promise<void> {
   if (!machineData) {
     logger.warn("Machine not found for accumulation", { machineId: machineRef.id });
@@ -137,8 +196,8 @@ async function accumulateUsageIntoCheckout(
   const catalogData = catalogDoc.data() as CatalogEntity;
 
   // Group records by userId
-  const userRecords = new Map<string, NonNullable<typeof request.history>["records"]>();
-  for (const record of request.history?.records || []) {
+  const userRecords = new Map<string, MachineUsage[]>();
+  for (const record of newRecords) {
     if (!record.userId?.value) continue;
     const uid = record.userId.value;
     if (!userRecords.has(uid)) userRecords.set(uid, []);
