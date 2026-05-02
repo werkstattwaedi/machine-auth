@@ -11,23 +11,29 @@ import {
   onCall,
   type CallableRequest,
 } from "firebase-functions/v2/https";
+import { defineString } from "firebase-functions/params";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import {
   constantTimeEqual,
   hashCode,
   mintSessionToken,
   normalizeEmail,
+  parseIntParamOrDie,
 } from "./helpers";
 
 const MAX_ATTEMPTS = 5;
 
-const PER_EMAIL_WINDOW_MS = 24 * 60 * 60 * 1000;
-// Cumulative cap on verify attempts per email per 24h, summed across all
-// loginCodes docs in the window (issue #152). 5 attempts/code × ~6 codes/day
-// gives a comfortable retry budget for legitimate users while bounding
-// brute-force across rotating fresh codes. The per-doc 5-attempt cap remains
-// the hard defence; this is the rolling soft cap that survives across codes.
-const MAX_ATTEMPTS_PER_EMAIL_24H = 30;
+// Per-email rate-limit tunables (issue #152). Stored as strings so they can
+// be tuned via the operations repo without a code change. Defaults match
+// the prior hard-coded values (24h window, 30 cumulative attempts / email).
+// `LOGIN_PER_EMAIL_WINDOW_MS` is shared with `request.ts` — same param name
+// resolves to the same configured value at deploy time.
+const perEmailWindowMsParam = defineString("LOGIN_PER_EMAIL_WINDOW_MS", {
+  default: "86400000",
+});
+const maxAttemptsPerEmailParam = defineString("LOGIN_MAX_ATTEMPTS_PER_EMAIL", {
+  default: "30",
+});
 
 export interface VerifyLoginCodeInput {
   email: string;
@@ -71,7 +77,15 @@ export async function handleVerifyLoginCode(
   // attacker could squeeze a few extra attempts during the read-write
   // gap, but the per-doc 5-attempt cap remains the hard defence; this
   // rolling cap is a soft ceiling that survives across rotating codes.
-  const windowStart = Timestamp.fromMillis(Date.now() - PER_EMAIL_WINDOW_MS);
+  const perEmailWindowMs = parseIntParamOrDie(
+    "LOGIN_PER_EMAIL_WINDOW_MS",
+    perEmailWindowMsParam.value()
+  );
+  const maxAttemptsPerEmail = parseIntParamOrDie(
+    "LOGIN_MAX_ATTEMPTS_PER_EMAIL",
+    maxAttemptsPerEmailParam.value()
+  );
+  const windowStart = Timestamp.fromMillis(Date.now() - perEmailWindowMs);
   const attemptsSnap = await col
     .where("email", "==", email)
     .where("created", ">=", windowStart)
@@ -81,7 +95,7 @@ export async function handleVerifyLoginCode(
   for (const d of attemptsSnap.docs) {
     cumulativeAttempts += (d.get("attempts") as number | undefined) ?? 0;
   }
-  if (cumulativeAttempts >= MAX_ATTEMPTS_PER_EMAIL_24H) {
+  if (cumulativeAttempts >= maxAttemptsPerEmail) {
     throw new HttpsError(
       "resource-exhausted",
       "Zu viele falsche Code-Eingaben. Bitte versuche es später erneut."

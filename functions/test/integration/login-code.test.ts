@@ -3,6 +3,14 @@
 
 // Force emulator branch so requestLoginCode skips Resend and writes debugCode.
 process.env.FUNCTIONS_EMULATOR = "true";
+// Prime defineString defaults — `.value()` reads `process.env` directly in
+// the local/test runtime; the param-system defaults only apply at deploy.
+process.env.LOGIN_PER_EMAIL_WINDOW_MS =
+  process.env.LOGIN_PER_EMAIL_WINDOW_MS ?? "86400000";
+process.env.LOGIN_MAX_CODES_PER_EMAIL =
+  process.env.LOGIN_MAX_CODES_PER_EMAIL ?? "20";
+process.env.LOGIN_MAX_ATTEMPTS_PER_EMAIL =
+  process.env.LOGIN_MAX_ATTEMPTS_PER_EMAIL ?? "30";
 
 import { expect } from "chai";
 import { getAuth } from "firebase-admin/auth";
