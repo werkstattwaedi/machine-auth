@@ -174,7 +174,6 @@ firebase use <your-project-id>
 
 # Set secrets (will prompt for values)
 firebase functions:secrets:set DIVERSIFICATION_MASTER_KEY
-firebase functions:secrets:set PARTICLE_WEBHOOK_API_KEY
 firebase functions:secrets:set GATEWAY_API_KEY
 firebase functions:secrets:set TERMINAL_KEY
 firebase functions:secrets:set PARTICLE_TOKEN
@@ -185,7 +184,6 @@ firebase functions:secrets:set PARTICLE_TOKEN
 | Secret | Description | How to Generate |
 |--------|-------------|-----------------|
 | `DIVERSIFICATION_MASTER_KEY` | 32-character hex key for tag personalization | `openssl rand -hex 16` |
-| `PARTICLE_WEBHOOK_API_KEY` | API key for Particle webhook authentication | `openssl rand -hex 32` |
 | `GATEWAY_API_KEY` | API key for MaCo gateway authentication | `openssl rand -hex 32` |
 | `TERMINAL_KEY` | Key for SDM encryption/decryption on terminals | `openssl rand -hex 16` |
 | `PARTICLE_TOKEN` | Particle Cloud access token | `particle token create` (see [Particle Setup](#particle-cloud-setup)) |
@@ -334,7 +332,7 @@ The gateway sends requests to Firebase Functions. Configure the Particle webhook
   "noDefaults": true,
   "rejectUnauthorized": true,
   "headers": {
-    "Authorization": "Bearer <YOUR_PARTICLE_WEBHOOK_API_KEY>"
+    "Authorization": "Bearer <YOUR_GATEWAY_API_KEY>"
   },
   "responseTemplate": "{{PARTICLE_PUBLISHED_AT}}"
 }

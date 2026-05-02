@@ -37,7 +37,6 @@ const FUNCTIONS_PARAMS: VarMapping[] = [
 const FUNCTIONS_SECRETS: VarMapping[] = [
   { envVar: "DIVERSIFICATION_MASTER_KEY", jsonPath: "functions.diversificationMasterKey" },
   { envVar: "TERMINAL_KEY", jsonPath: "functions.terminalKey" },
-  { envVar: "PARTICLE_WEBHOOK_API_KEY", jsonPath: "functions.particleWebhookApiKey" },
   { envVar: "PARTICLE_TOKEN", jsonPath: "functions.particleToken" },
   { envVar: "GATEWAY_API_KEY", jsonPath: "functions.gatewayApiKey" },
   { envVar: "RESEND_API_KEY", jsonPath: "functions.resendApiKey" },
