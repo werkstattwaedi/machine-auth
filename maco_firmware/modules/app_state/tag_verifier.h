@@ -46,9 +46,14 @@ namespace maco::app_state {
 /// LEDs, etc. can react to state transitions.
 class TagVerifier {
  public:
+  /// @param machine_id Firebase ID of the machine this terminal controls.
+  ///                   Captured by reference; storage must outlive the verifier.
+  ///                   May be empty to mean "no machine configured" — all
+  ///                   cloud check-ins will fail closed.
   TagVerifier(nfc::NfcReader& reader,
               secrets::DeviceSecrets& device_secrets,
               firebase::FirebaseClient& firebase_client,
+              const maco::FirebaseId& machine_id,
               pw::random::RandomGenerator& rng,
               SystemState& system_state,
               pw::allocator::Allocator& allocator);
@@ -87,6 +92,7 @@ class TagVerifier {
   nfc::NfcReader& reader_;
   secrets::DeviceSecrets& device_secrets_;
   firebase::FirebaseClient& firebase_client_;
+  const maco::FirebaseId& machine_id_;
   pw::random::RandomGenerator& rng_;
   SystemState& system_state_;
 

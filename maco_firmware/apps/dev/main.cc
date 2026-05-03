@@ -206,10 +206,24 @@ void AppInit() {
         pw::System().allocator());
     gateway_connection_check.Start(pw::System().dispatcher());
 
+    // Cloud check-in (PR #194) requires machine_id to enforce
+    // machine.requiredPermission. Resolve it once here; if the device has
+    // no machine configured, an empty ID propagates and TerminalCheckin
+    // fails closed with InvalidArgument.
+    static const maco::FirebaseId kEmptyMachineId = maco::FirebaseId::Empty();
+    if (config.machine_count() > 1) {
+      PW_LOG_WARN("DeviceConfig has %u machines; only machine[0] is used "
+                  "for cloud check-in",
+                  static_cast<unsigned>(config.machine_count()));
+    }
+    const auto& machine_id =
+        config.machine_count() > 0 ? config.machine(0).id() : kEmptyMachineId;
+
     static maco::app_state::TagVerifier tag_verifier(
         nfc_reader,
         maco::system::GetDeviceSecrets(),
         maco::system::GetFirebaseClient(),
+        machine_id,
         maco::system::GetRandomGenerator(),
         system_state,
         pw::System().allocator()

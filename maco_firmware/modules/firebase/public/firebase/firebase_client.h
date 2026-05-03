@@ -22,7 +22,8 @@
 ///       gateway.rpc_client(), gateway.channel_id());
 ///
 ///   // Use in coroutines
-///   auto result = co_await firebase.TerminalCheckin(coro_cx, tag_uid);
+///   auto result = co_await firebase.TerminalCheckin(
+///       coro_cx, tag_uid, machine_id);
 /// @endcode
 
 #include <cstdint>
@@ -62,7 +63,8 @@ enum Key {
 ///   FirebaseClient client(rpc_client, channel_id);
 ///
 ///   // In a coroutine:
-///   auto result = co_await client.TerminalCheckin(coro_cx, tag_uid);
+///   auto result = co_await client.TerminalCheckin(
+///       coro_cx, tag_uid, machine_id);
 /// @endcode
 ///
 /// Note: Only one call per method type can be in flight at a time.
@@ -82,10 +84,13 @@ class FirebaseClient {
   ///
   /// @param cx Coroutine context for suspension
   /// @param tag_uid The 7-byte NTAG UID
+  /// @param machine_id Firebase ID of the machine the user is tapping at;
+  ///                   the cloud uses it to enforce machine.requiredPermission
   /// @return CheckinResult (CheckinAuthorized or CheckinRejected) or error
   [[nodiscard]] pw::async2::Coro<pw::Result<CheckinResult>> TerminalCheckin(
       pw::async2::CoroContext cx,
-      const TagUid& tag_uid);
+      const TagUid& tag_uid,
+      const FirebaseId& machine_id);
 
   /// Initiate NTAG424 3-pass mutual authentication (coroutine).
   ///

@@ -188,7 +188,10 @@ class TestControlServiceImpl
       StartSessionResponder responder) {
     PW_LOG_INFO("Starting TerminalCheckin coroutine");
 
-    auto result = co_await firebase_->TerminalCheckin(cx, tag_uid);
+    // The test path goes through the mock gateway, which returns UNIMPLEMENTED;
+    // any non-empty machine_id is fine for exercising the RPC path.
+    auto machine_id = *maco::FirebaseId::FromString("test_machine");
+    auto result = co_await firebase_->TerminalCheckin(cx, tag_uid, machine_id);
 
     PW_LOG_INFO("TerminalCheckin coroutine complete");
 

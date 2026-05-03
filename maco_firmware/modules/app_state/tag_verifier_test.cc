@@ -159,8 +159,9 @@ class TagVerifierTest : public ::testing::Test {
  protected:
   void SetUp() override {
     system_state_.SetReady();
+    machine_id_ = *maco::FirebaseId::FromString("test_machine_id");
     firebase_client_.emplace(rpc_ctx_.client(), rpc_ctx_.channel().id());
-    verifier_.emplace(reader_, device_secrets_, *firebase_client_,
+    verifier_.emplace(reader_, device_secrets_, *firebase_client_, machine_id_,
                       rng_, system_state_, test_allocator_);
     verifier_->Start(dispatcher_);
     // Let the coroutine start and reach SubscribeOnce
@@ -221,6 +222,7 @@ class TagVerifierTest : public ::testing::Test {
   pw::random::XorShiftStarRng64 rng_{0x12345678};
   NullSystemMonitorBackend monitor_backend_;
   SystemState system_state_{monitor_backend_};
+  maco::FirebaseId machine_id_ = maco::FirebaseId::Empty();
   std::optional<firebase::FirebaseClient> firebase_client_;
   std::optional<TagVerifier> verifier_;
 };

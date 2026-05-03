@@ -29,12 +29,14 @@ constexpr uint8_t kAuthorizationKeyNumber = 2;
 TagVerifier::TagVerifier(nfc::NfcReader& reader,
                          secrets::DeviceSecrets& device_secrets,
                          firebase::FirebaseClient& firebase_client,
+                         const maco::FirebaseId& machine_id,
                          pw::random::RandomGenerator& rng,
                          SystemState& system_state,
                          pw::allocator::Allocator& allocator)
     : reader_(reader),
       device_secrets_(device_secrets),
       firebase_client_(firebase_client),
+      machine_id_(machine_id),
       rng_(rng),
       system_state_(system_state),
       coro_cx_(allocator) {}
@@ -318,8 +320,10 @@ pw::async2::Coro<pw::Status> TagVerifier::AuthorizeTag(
   NotifyAuthorizing();
 
   auto checkin_result =
-      co_await firebase_client_.TerminalCheckin(cx, tag_uid);
+      co_await firebase_client_.TerminalCheckin(cx, tag_uid, machine_id_);
   if (!checkin_result.ok()) {
+    // FirebaseClient returns InvalidArgument when machine_id is empty (i.e.,
+    // no machine configured on this terminal); fail closed in that case.
     PW_LOG_ERROR("TerminalCheckin failed: %d",
                  static_cast<int>(checkin_result.status().code()));
     NotifyUnauthorized();

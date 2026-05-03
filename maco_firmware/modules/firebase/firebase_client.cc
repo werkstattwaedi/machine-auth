@@ -34,8 +34,10 @@ constexpr size_t kMaxPayloadSize = 512;
 // Type aliases for gateway service
 using GatewayClient = maco::gateway::pw_rpc::nanopb::GatewayService::Client;
 
-/// Encode a TerminalCheckinRequest with the given tag UID.
+/// Encode a TerminalCheckinRequest with the given tag UID and machine ID.
+/// Caller is responsible for validating machine_id is non-empty and fits.
 pw::Result<size_t> EncodeTerminalCheckinRequest(const TagUid& tag_uid,
+                                                 const FirebaseId& machine_id,
                                                  pw::ByteSpan buffer) {
   maco_proto_firebase_rpc_TerminalCheckinRequest request =
       maco_proto_firebase_rpc_TerminalCheckinRequest_init_zero;
@@ -44,6 +46,13 @@ pw::Result<size_t> EncodeTerminalCheckinRequest(const TagUid& tag_uid,
   request.has_token_id = true;
   auto tag_bytes = tag_uid.bytes();
   std::memcpy(request.token_id.value, tag_bytes.data(), TagUid::kSize);
+
+  request.has_machine_id = true;
+  auto machine_id_str = machine_id.value();
+  std::memcpy(request.machine_id.value, machine_id_str.data(),
+              machine_id_str.size());
+  // nanopb-generated buffer is sized for max FirebaseId + NUL terminator.
+  request.machine_id.value[machine_id_str.size()] = '\0';
 
   pb_ostream_t stream = pb_ostream_from_buffer(
       reinterpret_cast<pb_byte_t*>(buffer.data()), buffer.size());
@@ -246,17 +255,25 @@ FirebaseClient::FirebaseClient(pw::rpc::Client& rpc_client, uint32_t channel_id)
 
 pw::async2::Coro<pw::Result<CheckinResult>> FirebaseClient::TerminalCheckin(
     pw::async2::CoroContext cx,
-    const TagUid& tag_uid) {
+    const TagUid& tag_uid,
+    const FirebaseId& machine_id) {
   (void)cx;  // Context available for child coroutines if needed
   if (terminal_checkin_call_.active()) {
     PW_LOG_WARN("TerminalCheckin called while previous call still in flight");
     co_return pw::Status::Unavailable();
   }
 
+  // Cloud requires machine_id (PR #194) to enforce machine.requiredPermission.
+  // Reject empty IDs here so we don't waste a payload buffer + RPC round-trip.
+  if (machine_id.empty()) {
+    PW_LOG_ERROR("TerminalCheckin called with empty machine_id");
+    co_return pw::Status::InvalidArgument();
+  }
+
   // Serialize the request payload
   std::array<std::byte, kMaxPayloadSize> payload_buffer;
   auto encode_result =
-      EncodeTerminalCheckinRequest(tag_uid, payload_buffer);
+      EncodeTerminalCheckinRequest(tag_uid, machine_id, payload_buffer);
   if (!encode_result.ok()) {
     PW_LOG_ERROR("Failed to encode TerminalCheckinRequest");
     co_return encode_result.status();

@@ -31,6 +31,12 @@ using GatewayService = maco::gateway::pw_rpc::nanopb::GatewayService;
 // Test allocator with sufficient space for coroutine frames
 constexpr size_t kAllocatorSize = 4096;
 
+// Reusable test machine ID (any non-empty FirebaseId works for these tests).
+const FirebaseId& TestMachineId() {
+  static auto id = *FirebaseId::FromString("machine_xyz");
+  return id;
+}
+
 // Helper to encode an Authorized response (no existing auth)
 pw::Result<size_t> EncodeAuthorizedResponse(const char* user_id,
                                             const char* user_label,
@@ -206,7 +212,7 @@ TEST_F(FirebaseClientTest, TerminalCheckin_Authorized) {
   pw::async2::CoroContext coro_cx(test_allocator_);
   auto test_coro =
       [&](pw::async2::CoroContext cx) -> pw::async2::Coro<pw::Status> {
-    result = co_await client.TerminalCheckin(cx, *tag_uid_result);
+    result = co_await client.TerminalCheckin(cx, *tag_uid_result, TestMachineId());
     co_return pw::OkStatus();
   };
 
@@ -252,7 +258,7 @@ TEST_F(FirebaseClientTest, TerminalCheckin_Rejected) {
   pw::async2::CoroContext coro_cx(test_allocator_);
   auto test_coro =
       [&](pw::async2::CoroContext cx) -> pw::async2::Coro<pw::Status> {
-    result = co_await client.TerminalCheckin(cx, *tag_uid_result);
+    result = co_await client.TerminalCheckin(cx, *tag_uid_result, TestMachineId());
     co_return pw::OkStatus();
   };
 
@@ -290,7 +296,7 @@ TEST_F(FirebaseClientTest, TerminalCheckin_ForwardError) {
   pw::async2::CoroContext coro_cx(test_allocator_);
   auto test_coro =
       [&](pw::async2::CoroContext cx) -> pw::async2::Coro<pw::Status> {
-    result = co_await client.TerminalCheckin(cx, *tag_uid_result);
+    result = co_await client.TerminalCheckin(cx, *tag_uid_result, TestMachineId());
     co_return pw::OkStatus();
   };
 
@@ -323,7 +329,7 @@ TEST_F(FirebaseClientTest, TerminalCheckin_RpcError) {
   pw::async2::CoroContext coro_cx(test_allocator_);
   auto test_coro =
       [&](pw::async2::CoroContext cx) -> pw::async2::Coro<pw::Status> {
-    result = co_await client.TerminalCheckin(cx, *tag_uid_result);
+    result = co_await client.TerminalCheckin(cx, *tag_uid_result, TestMachineId());
     co_return pw::OkStatus();
   };
 
@@ -342,6 +348,41 @@ TEST_F(FirebaseClientTest, TerminalCheckin_RpcError) {
   ASSERT_TRUE(result.has_value());
   EXPECT_FALSE(result->ok());
   EXPECT_EQ(result->status(), pw::Status::Unavailable());
+}
+
+// Empty machine_id is rejected client-side: the cloud requires it (PR #194)
+// to enforce machine.requiredPermission, so sending an empty value would be
+// guaranteed to fail at the server.
+TEST_F(FirebaseClientTest, TerminalCheckin_EmptyMachineIdRejected) {
+  auto client = CreateClient();
+
+  std::optional<pw::Result<CheckinResult>> result;
+
+  auto tag_uid_result = TagUid::FromBytes(
+      pw::bytes::Array<0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66>());
+  ASSERT_TRUE(tag_uid_result.ok());
+
+  pw::async2::CoroContext coro_cx(test_allocator_);
+  auto test_coro =
+      [&](pw::async2::CoroContext cx) -> pw::async2::Coro<pw::Status> {
+    result =
+        co_await client.TerminalCheckin(cx, *tag_uid_result, FirebaseId::Empty());
+    co_return pw::OkStatus();
+  };
+
+  auto coro = test_coro(coro_cx);
+  pw::async2::CoroOrElseTask task(std::move(coro),
+                                  [](pw::Status) { /* Error handler */ });
+
+  dispatcher_.Post(task);
+  ASSERT_TRUE(RunUntilComplete(task));
+
+  // No RPC packet should have been sent.
+  EXPECT_EQ(rpc_ctx_.output().total_packets(), 0u);
+
+  ASSERT_TRUE(result.has_value());
+  EXPECT_FALSE(result->ok());
+  EXPECT_EQ(result->status(), pw::Status::InvalidArgument());
 }
 
 // ============================================================================
@@ -475,7 +516,7 @@ TEST_F(FirebaseClientTest, TerminalCheckin_SendsRequest) {
   pw::async2::CoroContext coro_cx(test_allocator_);
   auto test_coro =
       [&](pw::async2::CoroContext cx) -> pw::async2::Coro<pw::Status> {
-    result = co_await client.TerminalCheckin(cx, *tag_uid_result);
+    result = co_await client.TerminalCheckin(cx, *tag_uid_result, TestMachineId());
     co_return pw::OkStatus();
   };
 
@@ -524,7 +565,8 @@ TEST_F(FirebaseClientTest, TerminalCheckin_ConcurrentCallReturnsUnavailable) {
   pw::async2::CoroContext coro_cx1(test_allocator_);
   auto test_coro1 =
       [&](pw::async2::CoroContext cx) -> pw::async2::Coro<pw::Status> {
-    result1 = co_await client.TerminalCheckin(cx, *tag_uid_result1);
+    result1 = co_await client.TerminalCheckin(cx, *tag_uid_result1,
+                                              TestMachineId());
     co_return pw::OkStatus();
   };
 
@@ -532,7 +574,8 @@ TEST_F(FirebaseClientTest, TerminalCheckin_ConcurrentCallReturnsUnavailable) {
   pw::async2::CoroContext coro_cx2(test_allocator_);
   auto test_coro2 =
       [&](pw::async2::CoroContext cx) -> pw::async2::Coro<pw::Status> {
-    result2 = co_await client.TerminalCheckin(cx, *tag_uid_result2);
+    result2 = co_await client.TerminalCheckin(cx, *tag_uid_result2,
+                                              TestMachineId());
     co_return pw::OkStatus();
   };
 
