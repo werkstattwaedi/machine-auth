@@ -32,6 +32,9 @@ message Rejected {
 // TerminalCheckin RPC - checks authorization and returns existing auth if available
 message TerminalCheckinRequest {
   maco.proto.TagUid token_id = 1;
+  // Machine the user is tapping at. Used to enforce
+  // machine.requiredPermission server-side.
+  maco.proto.FirebaseId machine_id = 2;
 }
 
 message TerminalCheckinResponse {

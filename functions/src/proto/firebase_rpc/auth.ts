@@ -30,7 +30,14 @@ export interface Rejected {
 
 /** TerminalCheckin RPC - checks authorization and returns existing auth if available */
 export interface TerminalCheckinRequest {
-  tokenId: TagUid | undefined;
+  tokenId:
+    | TagUid
+    | undefined;
+  /**
+   * Machine the user is tapping at. Used to enforce
+   * machine.requiredPermission server-side.
+   */
+  machineId: FirebaseId | undefined;
 }
 
 export interface TerminalCheckinResponse {
@@ -228,13 +235,16 @@ export const Rejected: MessageFns<Rejected> = {
 };
 
 function createBaseTerminalCheckinRequest(): TerminalCheckinRequest {
-  return { tokenId: undefined };
+  return { tokenId: undefined, machineId: undefined };
 }
 
 export const TerminalCheckinRequest: MessageFns<TerminalCheckinRequest> = {
   encode(message: TerminalCheckinRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.tokenId !== undefined) {
       TagUid.encode(message.tokenId, writer.uint32(10).fork()).join();
+    }
+    if (message.machineId !== undefined) {
+      FirebaseId.encode(message.machineId, writer.uint32(18).fork()).join();
     }
     return writer;
   },
@@ -254,6 +264,14 @@ export const TerminalCheckinRequest: MessageFns<TerminalCheckinRequest> = {
           message.tokenId = TagUid.decode(reader, reader.uint32());
           continue;
         }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.machineId = FirebaseId.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -270,6 +288,9 @@ export const TerminalCheckinRequest: MessageFns<TerminalCheckinRequest> = {
     const message = createBaseTerminalCheckinRequest();
     message.tokenId = (object.tokenId !== undefined && object.tokenId !== null)
       ? TagUid.fromPartial(object.tokenId)
+      : undefined;
+    message.machineId = (object.machineId !== undefined && object.machineId !== null)
+      ? FirebaseId.fromPartial(object.machineId)
       : undefined;
     return message;
   },

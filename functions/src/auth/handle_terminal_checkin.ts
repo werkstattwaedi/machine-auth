@@ -7,11 +7,22 @@ import {
 } from "../proto/firebase_rpc/auth.js";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
-import { TokenEntity, UserEntity } from "../types/firestore_entities";
+import {
+  MachineEntity,
+  TokenEntity,
+  UserEntity,
+} from "../types/firestore_entities";
 
 // Auth reuse window in milliseconds (5 minutes)
 const AUTH_REUSE_WINDOW_MS = 5 * 60 * 1000;
 
+/**
+ * Terminal check-in. Validates token + user, then enforces
+ * `machine.requiredPermission`: the user must hold every permission listed
+ * on the target machine (AND semantics). Empty/missing requiredPermission
+ * means the machine is unrestricted. The terminal must include `machineId`
+ * in the request — there is no implicit allow-anything path.
+ */
 export async function handleTerminalCheckin(
   request: TerminalCheckinRequest,
   _options: {
@@ -19,7 +30,10 @@ export async function handleTerminalCheckin(
     systemName: string;
   }
 ): Promise<TerminalCheckinResponse> {
-  logger.info("Terminal checkin", { tokenId: request.tokenId });
+  logger.info("Terminal checkin", {
+    tokenId: request.tokenId,
+    machineId: request.machineId?.value,
+  });
 
   if (!request.tokenId?.value || request.tokenId.value.length === 0) {
     return {
@@ -27,8 +41,18 @@ export async function handleTerminalCheckin(
     };
   }
 
+  if (!request.machineId?.value) {
+    return {
+      result: {
+        $case: "rejected",
+        rejected: { message: "Missing machine ID" },
+      },
+    };
+  }
+
   const uid = Buffer.from(request.tokenId.value);
   const tokenIdHex = uid.toString("hex");
+  const machineId = request.machineId.value;
 
   try {
     // Look up token directly by document ID
@@ -69,8 +93,47 @@ export async function handleTerminalCheckin(
     }
     const userData = userDoc.data() as UserEntity;
 
-    // TODO: Check machine permissions here if machine ID is provided
-    // For now, we just return the user info
+    // Enforce machine.requiredPermission. AND semantics: user must hold every
+    // listed permission. Empty/missing requiredPermission = unrestricted.
+    const machineDoc = await admin
+      .firestore()
+      .collection("machine")
+      .doc(machineId)
+      .get();
+    if (!machineDoc.exists) {
+      logger.warn("Machine not found", { machineId });
+      return {
+        result: {
+          $case: "rejected",
+          rejected: { message: "Maschine nicht gefunden" },
+        },
+      };
+    }
+    const machineData = machineDoc.data() as MachineEntity;
+    const requiredPermission = machineData.requiredPermission ?? [];
+    if (requiredPermission.length > 0) {
+      const userPermissionPaths = new Set(
+        (userData.permissions ?? []).map((ref) => ref.path)
+      );
+      const missing = requiredPermission
+        .map((ref) => ref.path)
+        .filter((path) => !userPermissionPaths.has(path));
+      if (missing.length > 0) {
+        logger.warn("User missing required permission for machine", {
+          userId: userDoc.id,
+          machineId,
+          missing,
+        });
+        return {
+          result: {
+            $case: "rejected",
+            rejected: {
+              message: "Keine Berechtigung für diese Maschine",
+            },
+          },
+        };
+      }
+    }
 
     // Check for recent completed authentication that can be reused
     const reuseCutoff = new Date(Date.now() - AUTH_REUSE_WINDOW_MS);

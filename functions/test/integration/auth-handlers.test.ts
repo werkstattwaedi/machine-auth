@@ -21,6 +21,7 @@ import { toKeyBytes } from "../../src/ntag/bytebuffer_util";
 describe("Auth Handlers (Integration)", () => {
   const TEST_TOKEN_UID = "04c339aa1e1890"; // 7-byte UID as hex
   const TEST_USER_ID = "testUser123";
+  const TEST_MACHINE_ID = "testMachine123";
   const TEST_MASTER_KEY = "000102030405060708090a0b0c0d0e0f";
   const TEST_SYSTEM_NAME = "OwwMachineAuth";
 
@@ -43,8 +44,20 @@ describe("Auth Handlers (Integration)", () => {
   });
 
   describe("handleTerminalCheckin", () => {
+    // Helper to build a request with both token + machine ids in one go.
+    const checkinRequest = (
+      tokenIdHex: string = TEST_TOKEN_UID,
+      machineId: string = TEST_MACHINE_ID
+    ) => ({
+      tokenId: { value: new Uint8Array(Buffer.from(tokenIdHex, "hex")) },
+      machineId: { value: machineId },
+    });
+
     it("should reject missing token ID", async () => {
-      const res = await handleTerminalCheckin({ tokenId: undefined }, config);
+      const res = await handleTerminalCheckin(
+        { tokenId: undefined, machineId: { value: TEST_MACHINE_ID } },
+        config
+      );
 
       expect(res.result?.$case).to.equal("rejected");
       if (res.result?.$case === "rejected") {
@@ -52,13 +65,21 @@ describe("Auth Handlers (Integration)", () => {
       }
     });
 
-    it("should reject unregistered token", async () => {
+    it("should reject missing machine ID", async () => {
       const tokenIdBytes = new Uint8Array(Buffer.from(TEST_TOKEN_UID, "hex"));
-
       const res = await handleTerminalCheckin(
-        { tokenId: { value: tokenIdBytes } },
+        { tokenId: { value: tokenIdBytes }, machineId: undefined },
         config
       );
+
+      expect(res.result?.$case).to.equal("rejected");
+      if (res.result?.$case === "rejected") {
+        expect(res.result.rejected.message).to.equal("Missing machine ID");
+      }
+    });
+
+    it("should reject unregistered token", async () => {
+      const res = await handleTerminalCheckin(checkinRequest(), config);
 
       expect(res.result?.$case).to.equal("rejected");
       if (res.result?.$case === "rejected") {
@@ -85,15 +106,210 @@ describe("Auth Handlers (Integration)", () => {
         },
       });
 
-      const tokenIdBytes = new Uint8Array(Buffer.from(TEST_TOKEN_UID, "hex"));
-      const res = await handleTerminalCheckin(
-        { tokenId: { value: tokenIdBytes } },
-        config
-      );
+      const res = await handleTerminalCheckin(checkinRequest(), config);
 
       expect(res.result?.$case).to.equal("rejected");
       if (res.result?.$case === "rejected") {
         expect(res.result.rejected.message).to.equal("Token deactivated");
+      }
+    });
+
+    it("should reject when machine doc is missing", async () => {
+      await seedTestData({
+        users: {
+          [TEST_USER_ID]: {
+            displayName: "Test User",
+            name: "Test User",
+            permissions: [],
+            roles: [],
+          },
+        },
+        tokens: {
+          [TEST_TOKEN_UID]: {
+            userId: `/users/${TEST_USER_ID}`,
+            label: "Test Token",
+          },
+        },
+        // Intentionally do NOT seed a machine doc.
+      });
+
+      const res = await handleTerminalCheckin(checkinRequest(), config);
+
+      expect(res.result?.$case).to.equal("rejected");
+      if (res.result?.$case === "rejected") {
+        expect(res.result.rejected.message).to.equal(
+          "Maschine nicht gefunden"
+        );
+      }
+    });
+
+    it("should authorize when machine has empty requiredPermission", async () => {
+      await seedTestData({
+        users: {
+          [TEST_USER_ID]: {
+            displayName: "Test User",
+            name: "Test User",
+            permissions: [],
+            roles: [],
+          },
+        },
+        tokens: {
+          [TEST_TOKEN_UID]: {
+            userId: `/users/${TEST_USER_ID}`,
+            label: "Test Token",
+          },
+        },
+        machines: {
+          [TEST_MACHINE_ID]: {
+            name: "Unrestricted Machine",
+            requiredPermission: [],
+          },
+        },
+      });
+
+      const res = await handleTerminalCheckin(checkinRequest(), config);
+
+      expect(res.result?.$case).to.equal("authorized");
+      if (res.result?.$case === "authorized") {
+        expect(res.result.authorized.userId?.value).to.equal(TEST_USER_ID);
+      }
+    });
+
+    it("should authorize when user holds all required permissions", async () => {
+      await seedTestData({
+        permissions: { p1: {}, p2: {} },
+        users: {
+          [TEST_USER_ID]: {
+            displayName: "Test User",
+            name: "Test User",
+            permissions: ["/permission/p1", "/permission/p2"],
+            roles: [],
+          },
+        },
+        tokens: {
+          [TEST_TOKEN_UID]: {
+            userId: `/users/${TEST_USER_ID}`,
+            label: "Test Token",
+          },
+        },
+        machines: {
+          [TEST_MACHINE_ID]: {
+            name: "Restricted Machine",
+            requiredPermission: ["/permission/p1", "/permission/p2"],
+          },
+        },
+      });
+
+      const res = await handleTerminalCheckin(checkinRequest(), config);
+
+      expect(res.result?.$case).to.equal("authorized");
+    });
+
+    it("should reject when user is missing one of multiple required permissions", async () => {
+      await seedTestData({
+        permissions: { p1: {}, p2: {} },
+        users: {
+          [TEST_USER_ID]: {
+            displayName: "Test User",
+            name: "Test User",
+            permissions: ["/permission/p1"], // missing p2
+            roles: [],
+          },
+        },
+        tokens: {
+          [TEST_TOKEN_UID]: {
+            userId: `/users/${TEST_USER_ID}`,
+            label: "Test Token",
+          },
+        },
+        machines: {
+          [TEST_MACHINE_ID]: {
+            name: "Restricted Machine",
+            requiredPermission: ["/permission/p1", "/permission/p2"],
+          },
+        },
+      });
+
+      const res = await handleTerminalCheckin(checkinRequest(), config);
+
+      expect(res.result?.$case).to.equal("rejected");
+      if (res.result?.$case === "rejected") {
+        expect(res.result.rejected.message).to.equal(
+          "Keine Berechtigung für diese Maschine"
+        );
+      }
+    });
+
+    it("should reject when user is missing the only required permission", async () => {
+      await seedTestData({
+        permissions: { p1: {} },
+        users: {
+          [TEST_USER_ID]: {
+            displayName: "Test User",
+            name: "Test User",
+            permissions: [], // no permissions at all
+            roles: [],
+          },
+        },
+        tokens: {
+          [TEST_TOKEN_UID]: {
+            userId: `/users/${TEST_USER_ID}`,
+            label: "Test Token",
+          },
+        },
+        machines: {
+          [TEST_MACHINE_ID]: {
+            name: "Restricted Machine",
+            requiredPermission: ["/permission/p1"],
+          },
+        },
+      });
+
+      const res = await handleTerminalCheckin(checkinRequest(), config);
+
+      expect(res.result?.$case).to.equal("rejected");
+      if (res.result?.$case === "rejected") {
+        expect(res.result.rejected.message).to.equal(
+          "Keine Berechtigung für diese Maschine"
+        );
+      }
+    });
+
+    it("should not bypass requiredPermission for users with admin role", async () => {
+      // Documented decision: NO admin bypass. Admin users still need to hold
+      // the listed permissions. Regression guard against accidentally
+      // re-introducing a role-based bypass.
+      await seedTestData({
+        permissions: { p1: {} },
+        users: {
+          [TEST_USER_ID]: {
+            displayName: "Admin User",
+            name: "Admin User",
+            permissions: [],
+            roles: ["admin"],
+          },
+        },
+        tokens: {
+          [TEST_TOKEN_UID]: {
+            userId: `/users/${TEST_USER_ID}`,
+            label: "Test Token",
+          },
+        },
+        machines: {
+          [TEST_MACHINE_ID]: {
+            name: "Restricted Machine",
+            requiredPermission: ["/permission/p1"],
+          },
+        },
+      });
+
+      const res = await handleTerminalCheckin(checkinRequest(), config);
+
+      expect(res.result?.$case).to.equal("rejected");
+      if (res.result?.$case === "rejected") {
+        expect(res.result.rejected.message).to.equal(
+          "Keine Berechtigung für diese Maschine"
+        );
       }
     });
 
@@ -113,13 +329,15 @@ describe("Auth Handlers (Integration)", () => {
             label: "Test Token",
           },
         },
+        machines: {
+          [TEST_MACHINE_ID]: {
+            name: "Unrestricted Machine",
+            requiredPermission: [],
+          },
+        },
       });
 
-      const tokenIdBytes = new Uint8Array(Buffer.from(TEST_TOKEN_UID, "hex"));
-      const res = await handleTerminalCheckin(
-        { tokenId: { value: tokenIdBytes } },
-        config
-      );
+      const res = await handleTerminalCheckin(checkinRequest(), config);
 
       expect(res.result?.$case).to.equal("authorized");
       if (res.result?.$case === "authorized") {
@@ -147,6 +365,12 @@ describe("Auth Handlers (Integration)", () => {
             label: "Test Token",
           },
         },
+        machines: {
+          [TEST_MACHINE_ID]: {
+            name: "Unrestricted Machine",
+            requiredPermission: [],
+          },
+        },
       });
 
       // Create a completed auth record manually
@@ -158,11 +382,7 @@ describe("Auth Handlers (Integration)", () => {
         inProgressAuth: null, // Completed
       });
 
-      const tokenIdBytes = new Uint8Array(Buffer.from(TEST_TOKEN_UID, "hex"));
-      const res = await handleTerminalCheckin(
-        { tokenId: { value: tokenIdBytes } },
-        config
-      );
+      const res = await handleTerminalCheckin(checkinRequest(), config);
 
       expect(res.result?.$case).to.equal("authorized");
       if (res.result?.$case === "authorized") {
