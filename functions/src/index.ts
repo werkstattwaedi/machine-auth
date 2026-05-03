@@ -26,7 +26,6 @@ initializeApp();
 
 const diversificationMasterKey = defineSecret("DIVERSIFICATION_MASTER_KEY");
 const diversificationSystemName = defineString("DIVERSIFICATION_SYSTEM_NAME");
-const particleWebhookApiKey = defineSecret("PARTICLE_WEBHOOK_API_KEY");
 const gatewayApiKey = defineSecret("GATEWAY_API_KEY");
 const terminalKey = defineSecret("TERMINAL_KEY");
 // Soft revocation/audit knob for the kiosk's verifyTagCheckout call. NOT real
@@ -107,7 +106,7 @@ const authMiddleware = (
   }
 
   const token = authHeader.split(" ")[1];
-  const validKeys = [particleWebhookApiKey.value(), gatewayApiKey.value()];
+  const validKeys = [gatewayApiKey.value()];
   if (!validKeys.includes(token)) {
     logger.warn("Invalid API key provided.");
     return res.status(403).send({ message: "Forbidden" });
@@ -249,7 +248,6 @@ export const api = onRequest(
   {
     secrets: [
       diversificationMasterKey,
-      particleWebhookApiKey,
       gatewayApiKey,
       terminalKey,
       kioskBearerKey,

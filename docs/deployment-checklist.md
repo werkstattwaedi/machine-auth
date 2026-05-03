@@ -15,7 +15,6 @@ Set all required secrets:
 
 ```bash
 firebase functions:secrets:set DIVERSIFICATION_MASTER_KEY
-firebase functions:secrets:set PARTICLE_WEBHOOK_API_KEY
 firebase functions:secrets:set GATEWAY_API_KEY
 firebase functions:secrets:set TERMINAL_KEY
 firebase functions:secrets:set PARTICLE_TOKEN
