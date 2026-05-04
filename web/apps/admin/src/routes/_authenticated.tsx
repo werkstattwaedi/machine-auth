@@ -8,6 +8,7 @@ import {
 } from "@modules/components/authenticated-layout"
 import { LookupProvider } from "@modules/lib/lookup"
 import {
+  BadgeCheck,
   Cpu,
   ClipboardList,
   FileText,
@@ -25,6 +26,7 @@ export const Route = createFileRoute("/_authenticated")({
 
 const navItems: AuthenticatedLayoutNavItem[] = [
   { to: "/users", label: "Benutzer", icon: Shield },
+  { to: "/memberships", label: "Mitgliedschaften", icon: BadgeCheck },
   { to: "/machines", label: "Maschinen", icon: Cpu },
   { to: "/permissions", label: "Berechtigungen", icon: Key },
   { to: "/terminals", label: "Terminals", icon: Monitor },

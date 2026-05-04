@@ -82,13 +82,28 @@ service cloud.firestore {
              data.totalPrice is number && data.totalPrice >= 0 && data.totalPrice < 1000000;
     }
 
+    // True when caller and `targetUserId` share the same non-null
+    // `activeMembership` ref. Used by `users/{userId}` read to let family
+    // co-members see each other's display names for the checkout roster
+    // picker. Both docs must already have `activeMembership` populated by
+    // the onMembershipWritten trigger; a single rules `get` on the caller's
+    // user doc is the per-evaluation cost.
+    function shareActiveMembership(targetUserId) {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(targetUserId)).data.activeMembership != null &&
+        get(/databases/$(database)/documents/users/$(targetUserId)).data.activeMembership ==
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.activeMembership;
+    }
+
     // Users collection (doc ID = Firebase Auth UID)
     match /users/{userId} {
-      // Read: admin, the user themselves, or a kiosk session acting on
-      // their behalf (so the kiosk can pre-fill the form).
+      // Read: admin, the user themselves, a kiosk session acting on their
+      // behalf (so the kiosk can pre-fill the form), or a family co-member
+      // (so the checkout roster can show display names).
       allow read: if isAdmin() ||
                      (isSignedIn() && userId == request.auth.uid) ||
-                     (actsAs() != '' && actsAs() == userId);
+                     (actsAs() != '' && actsAs() == userId) ||
+                     shareActiveMembership(userId);
 
       // Allow creating own user doc during self-registration
       allow create: if isSignedIn() && userId == request.auth.uid &&
@@ -257,6 +272,43 @@ service cloud.firestore {
     // Login codes (server-only; written + read only by Cloud Functions)
     match /loginCodes/{id} {
       allow read, write: if false;
+    }
+
+    // Memberships (yearly Vereinsmitgliedschaft, single or family).
+    // All mutations go through Cloud Function callables (functions/src/membership/);
+    // direct client writes are denied. Reads are scoped to current members and
+    // the owner so the family roster UI can populate.
+    match /memberships/{membershipId} {
+      // Read: admin, or any user listed in `members[]`. Tag-tap sessions
+      // (synthetic UIDs) are intentionally excluded — kiosk badge auth has
+      // no business browsing membership rosters.
+      allow read: if isAdmin() ||
+        (isSignedIn() &&
+         /databases/$(database)/documents/users/$(request.auth.uid) in resource.data.members);
+
+      // No client writes — callables only.
+      allow write: if false;
+
+      // Invites (sub-collection, family memberships only).
+      match /invites/{inviteId} {
+        // Read covers both `get` and `list` — Firestore evaluates the rule
+        // per document during a list, so an invitee querying with
+        // `where("email", "==", "...")` only sees their own invite, while
+        // an unfiltered list by a non-owner is denied for any non-matching
+        // document and the whole query fails.
+        //   - admin: full access
+        //   - membership owner: list/get all invites for their membership
+        //   - invitee: get/list an invite whose email matches their auth token
+        allow read: if isAdmin() ||
+          (isSignedIn() &&
+           get(/databases/$(database)/documents/memberships/$(membershipId)).data.ownerUserId ==
+           /databases/$(database)/documents/users/$(request.auth.uid)) ||
+          (isSignedIn() &&
+           request.auth.token.get('email', '') != '' &&
+           resource.data.email == request.auth.token.get('email', ''));
+
+        allow write: if false;
+      }
     }
 
     // Server-only collections (Cloud Functions writes via Admin SDK bypass

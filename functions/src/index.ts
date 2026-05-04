@@ -274,6 +274,28 @@ export { logClientError } from "./util/log_client_error";
 export { onCheckoutClosed, onCheckoutCreatedClosed } from "./invoice/create_bill";
 export { onBillCreate, retryBillProcessing } from "./invoice/bill_triggers";
 
+// Export membership module — callables, triggers, scheduled job. The
+// process_membership_payment triggers run alongside the bill triggers
+// (independent concerns) and detect membership-fee items in closed checkouts.
+export { purchaseMembership } from "./membership/purchase";
+export { inviteFamilyMember } from "./membership/invite";
+export { acceptFamilyInvite } from "./membership/accept_invite";
+export { rejectFamilyInvite } from "./membership/reject_invite";
+export { revokeFamilyInvite } from "./membership/revoke_invite";
+export { removeFamilyMember } from "./membership/remove";
+export { createChildAccount } from "./membership/create_child";
+export { cancelMembership } from "./membership/cancel";
+export {
+  adminCreateMembership,
+  adminExtendMembership,
+} from "./membership/admin";
+export {
+  onCheckoutClosedForMembership,
+  onCheckoutCreatedClosedForMembership,
+} from "./membership/process_membership_payment";
+export { onMembershipWritten } from "./membership/on_membership_written";
+export { hourlyMembershipExpiryCheck } from "./membership/expiry_check";
+
 // Export scheduled cleanup
 export { cleanupAbandonedCheckouts } from "./checkout/cleanup_abandoned_checkouts";
 

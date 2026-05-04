@@ -17,11 +17,14 @@ export interface UserEntity {
   displayName?: string | null; // Optional nickname; derived from firstName+lastName if absent
   firstName: string;
   lastName: string;
-  email?: string;
+  email?: string | null; // null for child accounts (no Firebase Auth credentials)
   permissions: DocumentReference[]; // References to /permission/{permissionId}
   roles: string[];
   termsAcceptedAt?: Timestamp | null;
   userType?: "erwachsen" | "kind" | "firma";
+  // Denormalized pointer to the user's single active membership; maintained
+  // by onMembershipWritten + the daily expiry job. `null` → not a member.
+  activeMembership?: DocumentReference | null;
   billingAddress?: BillingAddress | null; // Required when userType == "firma"
 }
 
@@ -93,6 +96,11 @@ export interface UsageMachineEntity {
 export type PricingModel = "time" | "area" | "length" | "count" | "weight" | "direct" | "sla";
 export type DiscountLevel = "none" | "member" | "intern";
 
+// Discriminator for special-purpose catalog items. Absent for regular items.
+// The post-checkout membership-payment trigger uses this to identify which
+// items, when paid, create or extend a membership.
+export type CatalogItemKind = "membership-single" | "membership-family";
+
 export interface CatalogEntity {
   code: string;
   name: string;
@@ -102,12 +110,20 @@ export interface CatalogEntity {
   active: boolean;
   userCanAdd: boolean;
   description?: string | null;
+  kind?: CatalogItemKind | null;
 }
 
 // --- Checkouts ---
 
 export type CheckoutStatus = "open" | "closed";
-export type UsageType = "regular" | "materialbezug" | "intern" | "hangenmoos";
+// "membership" tags a purchaseMembership-created checkout so the entry-fee
+// row resolves to 0 (the bill is just the membership SKU itself).
+export type UsageType =
+  | "regular"
+  | "materialbezug"
+  | "intern"
+  | "hangenmoos"
+  | "membership";
 
 export interface CheckoutPersonEntity {
   name: string;
@@ -119,6 +135,9 @@ export interface CheckoutPersonEntity {
     zip: string;
     city: string;
   };
+  // Set when picked from the signed-in user's family roster — links the
+  // visit to a real account (incl. child accounts).
+  userRef?: DocumentReference | null;
 }
 
 export interface CheckoutSummaryEntity {
@@ -161,4 +180,40 @@ export interface CheckoutItemEntity {
   totalPrice: number;
   formInputs?: { quantity: number; unit: string }[];
   pricingModel?: PricingModel | null;
+}
+
+// --- Memberships ---
+
+export type MembershipType = "single" | "family";
+export type MembershipStatus = "active" | "expired" | "cancelled";
+
+export interface MembershipEntity {
+  type: MembershipType;
+  status: MembershipStatus;
+  lastPaidAt: Timestamp | null;
+  validUntil: Timestamp;
+  ownerUserId: DocumentReference; // Reference to /users/{userId}
+  members: DocumentReference[]; // References to /users/{userId}[]
+  paymentCheckouts: DocumentReference[]; // References to /checkouts/{id}[]
+  notes?: string | null;
+  created?: Timestamp;
+  createdBy?: string | null;
+  modifiedBy?: string | null;
+  modifiedAt?: Timestamp;
+}
+
+export type MembershipInviteStatus =
+  | "pending"
+  | "accepted"
+  | "rejected"
+  | "revoked";
+
+export interface MembershipInviteEntity {
+  email: string; // normalized lowercase
+  status: MembershipInviteStatus;
+  invitedAt: Timestamp;
+  invitedBy: DocumentReference; // Reference to /users/{userId}
+  resolvedAt: Timestamp | null;
+  resolvedUserId?: DocumentReference | null;
+  ttlAt: Timestamp;
 }

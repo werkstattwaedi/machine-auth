@@ -120,10 +120,12 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
     orderBy("created"),
   )
 
-  // Determine user's discount level
-  const discountLevel: DiscountLevel = userDoc.roles?.includes("vereinsmitglied")
-    ? "member"
-    : "none"
+  // Determine user's discount level. Membership is now an explicit entity;
+  // pricing keys off the denormalized `activeMembership` ref. The server-side
+  // recompute in closeCheckoutAndGetPayment + handle_upload_usage re-validates
+  // `validUntil > now` against the actual membership doc, so a stale
+  // denormalization can only ever cause a brief over-discount.
+  const discountLevel: DiscountLevel = userDoc.activeMembership ? "member" : "none"
 
   // Map Firestore items → local shape
   const items: CheckoutItemLocal[] = useMemo(

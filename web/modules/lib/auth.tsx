@@ -43,12 +43,15 @@ export interface UserDoc {
   rawDisplayName: string | null // The actual Firestore value (null if not explicitly set)
   firstName: string
   lastName: string
-  email?: string
+  email: string | null // null for child accounts (no Firebase Auth email)
   roles: string[]
   permissions: string[] // permission doc IDs (resolved from refs)
   termsAcceptedAt?: { toDate(): Date } | null
   userType?: string // "erwachsen" | "kind" | "firma"
   billingAddress?: BillingAddress | null
+  // ID of the user's single active membership, denormalized from the
+  // membership doc. `null` → not a member. Pricing keys off this.
+  activeMembership: string | null
 }
 
 /** Profile is complete when name, terms, and (for firma) billing address are filled. */
@@ -199,7 +202,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           rawDisplayName,
           firstName,
           lastName,
-          email: data.email,
+          email: data.email ?? null,
           roles,
           permissions: (data.permissions ?? []).map(
             (ref: { id: string }) => ref.id
@@ -207,6 +210,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           termsAcceptedAt: data.termsAcceptedAt ?? null,
           userType: data.userType ?? "erwachsen",
           billingAddress: data.billingAddress ?? null,
+          activeMembership: data.activeMembership?.id ?? null,
         })
 
         // If user doc says admin but token doesn't have the claim,

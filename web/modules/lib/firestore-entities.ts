@@ -43,10 +43,13 @@ export interface BillingAddressDoc {
  * Wire-format user document. Doc id == Firebase Auth UID. The rich
  * application-side `UserDoc` (with derived `displayName`, resolved
  * `permissions: string[]`) lives in `auth.tsx` and is built from this.
+ *
+ * Child accounts (`userType === "kind"`) created by a family owner have
+ * `email: null` and a Firebase Auth user with no sign-in credentials.
  */
 export interface UserDoc extends AuditFields {
   created?: Timestamp
-  email: string
+  email: string | null
   displayName: string | null
   firstName: string
   lastName: string
@@ -54,6 +57,11 @@ export interface UserDoc extends AuditFields {
   roles: string[]
   termsAcceptedAt?: Timestamp | null
   userType?: "erwachsen" | "kind" | "firma"
+  // Denormalized pointer to the user's single active membership. `null` when
+  // the user is not a member. The server re-validates `validUntil > now`
+  // before granting the member discount, so a stale denorm only ever costs
+  // a brief extra read.
+  activeMembership?: DocumentReference<MembershipDoc> | null
   billingAddress?: BillingAddressDoc | null
 }
 
@@ -119,6 +127,13 @@ export type PricingModel =
 
 export type DiscountLevel = "none" | "member" | "intern"
 
+/**
+ * Optional discriminator for special-purpose catalog items. Absent for
+ * regular billable items. The post-checkout trigger keys off this to
+ * create or extend a membership when the item is paid.
+ */
+export type CatalogItemKind = "membership-single" | "membership-family"
+
 export interface CatalogItemDoc extends AuditFields {
   code: string
   name: string
@@ -128,6 +143,7 @@ export interface CatalogItemDoc extends AuditFields {
   active: boolean
   userCanAdd: boolean
   description?: string | null
+  kind?: CatalogItemKind | null
 }
 
 // ── price_lists ──────────────────────────────────────────────────────────
@@ -152,6 +168,9 @@ export interface CheckoutPersonDoc {
   email: string
   userType: "erwachsen" | "kind" | "firma"
   billingAddress?: BillingAddressDoc
+  // Set when the person was picked from the signed-in user's family roster,
+  // so the visit is attributed to a real account (including child accounts).
+  userRef?: DocumentReference<UserDoc> | null
 }
 
 export interface CheckoutSummaryDoc {
@@ -167,6 +186,7 @@ export type CheckoutUsageType =
   | "materialbezug"
   | "intern"
   | "hangenmoos"
+  | "membership"
 
 export interface CheckoutDoc extends AuditFields {
   userId: DocumentReference<UserDoc> | null
@@ -208,6 +228,42 @@ export interface BillDoc extends AuditFields {
   paidVia?: "twint" | "ebanking" | "cash" | null
   pdfGeneratedAt?: Timestamp | null
   emailSentAt?: Timestamp | null
+}
+
+// ── memberships ──────────────────────────────────────────────────────────
+
+export type MembershipType = "single" | "family"
+export type MembershipStatus = "active" | "expired" | "cancelled"
+
+export interface MembershipDoc extends AuditFields {
+  type: MembershipType
+  status: MembershipStatus
+  lastPaidAt: Timestamp | null
+  validUntil: Timestamp
+  ownerUserId: DocumentReference<UserDoc>
+  members: DocumentReference<UserDoc>[]
+  paymentCheckouts: DocumentReference<CheckoutDoc>[]
+  notes?: string | null
+  created?: Timestamp
+  createdBy?: string | null
+}
+
+export type MembershipInviteStatus =
+  | "pending"
+  | "accepted"
+  | "rejected"
+  | "revoked"
+
+export interface MembershipInviteDoc {
+  email: string
+  status: MembershipInviteStatus
+  invitedAt: Timestamp
+  invitedBy: DocumentReference<UserDoc>
+  resolvedAt: Timestamp | null
+  resolvedUserId?: DocumentReference<UserDoc> | null
+  // Firestore TTL field — auto-delete pending/rejected/revoked invites after
+  // 30 days. Cleared/never set on accepted invites we want to retain.
+  ttlAt: Timestamp
 }
 
 // ── audit_log ────────────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { createFileRoute } from "@tanstack/react-router"
+import { createFileRoute, Link } from "@tanstack/react-router"
 import { useDocument, useCollection } from "@modules/lib/firestore"
 import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
@@ -110,7 +110,10 @@ function UserDetailPage() {
   if (!user) return <div>Benutzer nicht gefunden.</div>
 
   const onSubmit = async (values: UserFormValues) => {
-    const roles: string[] = ["vereinsmitglied"]
+    // Membership is now a separate entity (memberships/{id}); the
+    // "vereinsmitglied" role no longer drives pricing. Roles only carry
+    // authorization flags now (currently just "admin").
+    const roles: string[] = []
     if (values.isAdmin) roles.push("admin")
 
     const data: Record<string, unknown> = {
@@ -189,6 +192,29 @@ function UserDetailPage() {
         </TabsList>
 
         <TabsContent value="details">
+          <Card className="mb-4">
+            <CardContent className="pt-6">
+              <h3 className="text-sm font-semibold mb-2">Mitgliedschaft</h3>
+              {user.activeMembership ? (
+                <div className="text-sm">
+                  <Link
+                    to="/memberships/$membershipId"
+                    params={{ membershipId: user.activeMembership.id }}
+                    className="text-primary hover:underline font-mono"
+                  >
+                    {user.activeMembership.id}
+                  </Link>
+                  <span className="text-muted-foreground ml-2">
+                    (aktiv — pricing tier: member)
+                  </span>
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground">
+                  Keine aktive Mitgliedschaft.
+                </div>
+              )}
+            </CardContent>
+          </Card>
           <Card>
             <CardContent className="pt-6">
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 max-w-lg">

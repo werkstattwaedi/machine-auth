@@ -475,9 +475,7 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
           checkoutId={checkoutId}
           userRef={identifiedUserRef ?? null}
           discountLevel={
-            identifiedUserDoc?.roles?.includes("vereinsmitglied")
-              ? "member"
-              : "none"
+            identifiedUserDoc?.activeMembership ? "member" : "none"
           }
         />
       )}
@@ -504,7 +502,7 @@ function usePreFillPerson(
     id: string
     firstName: string
     lastName: string
-    email?: string
+    email?: string | null
     userType?: string
     termsAcceptedAt?: unknown
     billingAddress?: { company: string; street: string; zip: string; city: string } | null

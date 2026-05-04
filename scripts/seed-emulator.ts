@@ -40,6 +40,9 @@ const ID = {
   userMike:    "00user00mikes0000002",
   userMarco:   "00user0marco00000003",
   userSimon:   "00user0simon00000004",
+  // family-membership demo: Mike's partner + child (no email for the kid)
+  userPartner: "00user0partner000005",
+  userKid:     "00user0kid0000000006",
 
   // tokens (NFC tag UIDs — 7-byte hex, not Firebase IDs)
   tokenAdmin:   "04c339aa1e1890",
@@ -73,6 +76,13 @@ const ID = {
   catSperrholz:    "00catalog0sperrh009",
   catKantholz:     "00catalog0kanth0010",
   catLaser:        "00catalog0laser0012",
+  // Membership fee SKUs — keyed by `kind` discriminator on the catalog doc.
+  catMemberSingle: "00catalog0memb0sng01",
+  catMemberFamily: "00catalog0memb0fam02",
+
+  // memberships
+  membershipSimon: "00membership0simon01",
+  membershipMike:  "00membership0mike002",
 } as const;
 
 async function seed() {
@@ -125,7 +135,7 @@ async function seed() {
       db.doc(`permission/${ID.perm3dprint}`),
       db.doc(`permission/${ID.permHolz}`),
     ],
-    roles: ["admin", "vereinsmitglied"],
+    roles: ["admin"],
     termsAcceptedAt: Timestamp.now(),
     userType: "erwachsen",
     billingAddress: null,
@@ -141,7 +151,7 @@ async function seed() {
       db.doc(`permission/${ID.perm3dprint}`),
       db.doc(`permission/${ID.permHolz}`),
     ],
-    roles: ["admin", "vereinsmitglied"],
+    roles: ["admin"],
     termsAcceptedAt: Timestamp.now(),
     userType: "erwachsen",
     billingAddress: null,
@@ -153,7 +163,7 @@ async function seed() {
     lastName: "Menzi",
     email: "marco@werkstattwaedi.ch",
     permissions: [db.doc(`permission/${ID.permHolz}`)],
-    roles: ["admin", "vereinsmitglied"],
+    roles: ["admin"],
     termsAcceptedAt: Timestamp.now(),
     userType: "erwachsen",
     billingAddress: null,
@@ -165,15 +175,123 @@ async function seed() {
     lastName: "Flepp",
     email: "simon@werkstattwaedi.ch",
     permissions: [db.doc(`permission/${ID.permLaser}`)],
-    roles: ["vereinsmitglied"],
+    roles: [],
     termsAcceptedAt: Timestamp.now(),
     userType: "erwachsen",
+    // Will be populated by seedMembership below.
+    activeMembership: null,
     billingAddress: null,
   });
   await auth.setCustomUserClaims(ID.userAdmin, { admin: true });
   await auth.setCustomUserClaims(ID.userMike, { admin: true });
   await auth.setCustomUserClaims(ID.userMarco, { admin: true });
   console.log("  Created 4 users (3 admin + 1 regular)");
+
+  // --- Family membership demo: Mike's partner (real account) + child (no email) ---
+  await upsertAuthUser({
+    uid: ID.userPartner,
+    email: "partner@werkstattwaedi.ch",
+    password: "partner1",
+    displayName: "Anna Schneider",
+  });
+  await db.collection("users").doc(ID.userPartner).set({
+    created: Timestamp.now(),
+    displayName: null,
+    firstName: "Anna",
+    lastName: "Schneider",
+    email: "partner@werkstattwaedi.ch",
+    permissions: [],
+    roles: [],
+    termsAcceptedAt: Timestamp.now(),
+    userType: "erwachsen",
+    activeMembership: null,
+    billingAddress: null,
+  });
+  // Child account: real Auth UID, no sign-in credentials. The Firebase
+  // `createUser` call below intentionally omits `email` and `password`,
+  // and disables sign-in. Promotion later = set an email + enable.
+  try {
+    await auth.createUser({
+      uid: ID.userKid,
+      displayName: "Lina Schneider",
+      disabled: true,
+    });
+  } catch (e: any) {
+    if (e?.errorInfo?.code === "auth/uid-already-exists") {
+      await auth.updateUser(ID.userKid, {
+        displayName: "Lina Schneider",
+        disabled: true,
+      });
+    } else {
+      throw e;
+    }
+  }
+  await db.collection("users").doc(ID.userKid).set({
+    created: Timestamp.now(),
+    displayName: null,
+    firstName: "Lina",
+    lastName: "Schneider",
+    email: null,
+    permissions: [],
+    roles: [],
+    termsAcceptedAt: null,
+    userType: "kind",
+    activeMembership: null,
+    billingAddress: null,
+  });
+  console.log("  Created 2 family-demo users (partner + kid)");
+
+  // --- Memberships ---
+  // Simon: single membership.
+  await db.collection("memberships").doc(ID.membershipSimon).set({
+    type: "single",
+    status: "active",
+    lastPaidAt: Timestamp.now(),
+    validUntil: Timestamp.fromMillis(Date.now() + 365 * 24 * 60 * 60 * 1000),
+    ownerUserId: db.doc(`users/${ID.userSimon}`),
+    members: [db.doc(`users/${ID.userSimon}`)],
+    paymentCheckouts: [],
+    notes: null,
+    created: Timestamp.now(),
+    createdBy: null,
+    modifiedAt: Timestamp.now(),
+    modifiedBy: null,
+  });
+  await db
+    .collection("users")
+    .doc(ID.userSimon)
+    .update({
+      activeMembership: db.doc(`memberships/${ID.membershipSimon}`),
+    });
+
+  // Mike: family membership (Mike + Anna + Lina).
+  await db.collection("memberships").doc(ID.membershipMike).set({
+    type: "family",
+    status: "active",
+    lastPaidAt: Timestamp.now(),
+    validUntil: Timestamp.fromMillis(Date.now() + 365 * 24 * 60 * 60 * 1000),
+    ownerUserId: db.doc(`users/${ID.userMike}`),
+    members: [
+      db.doc(`users/${ID.userMike}`),
+      db.doc(`users/${ID.userPartner}`),
+      db.doc(`users/${ID.userKid}`),
+    ],
+    paymentCheckouts: [],
+    notes: null,
+    created: Timestamp.now(),
+    createdBy: null,
+    modifiedAt: Timestamp.now(),
+    modifiedBy: null,
+  });
+  for (const uid of [ID.userMike, ID.userPartner, ID.userKid]) {
+    await db
+      .collection("users")
+      .doc(uid)
+      .update({
+        activeMembership: db.doc(`memberships/${ID.membershipMike}`),
+      });
+  }
+  console.log("  Created 2 memberships (1 single + 1 family)");
 
   // --- Tokens (NFC tag UIDs as doc IDs) ---
   const tokens: Record<string, any> = {
@@ -234,7 +352,35 @@ async function seed() {
     const { id, ...data } = item;
     await db.collection("catalog").doc(id).set(data);
   }
-  console.log(`  Created ${catalogJson.length} catalog entries`);
+
+  // Membership fee SKUs — looked up by `kind` discriminator. The
+  // post-checkout trigger creates/extends the matching membership when the
+  // checkout closes. CHF amounts are placeholders; staff edit through the
+  // admin UI / Firestore.
+  await db.collection("catalog").doc(ID.catMemberSingle).set({
+    code: "MEMBER-SINGLE",
+    name: "Mitgliedschaft Einzel (Jahr)",
+    workshops: ["membership"],
+    pricingModel: "direct",
+    unitPrice: { none: 120, member: 100, intern: 0 },
+    active: true,
+    userCanAdd: false,
+    description: "Jahres-Einzelmitgliedschaft Verein Offene Werkstatt Wädenswil.",
+    kind: "membership-single",
+  });
+  await db.collection("catalog").doc(ID.catMemberFamily).set({
+    code: "MEMBER-FAMILY",
+    name: "Mitgliedschaft Familie (Jahr)",
+    workshops: ["membership"],
+    pricingModel: "direct",
+    unitPrice: { none: 180, member: 150, intern: 0 },
+    active: true,
+    userCanAdd: false,
+    description:
+      "Jahres-Familienmitgliedschaft. Inhaber:in plus weitere Familienmitglieder (inkl. Kindkonten).",
+    kind: "membership-family",
+  });
+  console.log(`  Created ${catalogJson.length + 2} catalog entries (incl. 2 membership SKUs)`);
 
   // --- Machines (with checkoutTemplateId + workshop) ---
   await db.collection("machine").doc(ID.machineLaserVirtual).set({
@@ -274,9 +420,9 @@ async function seed() {
   // --- Config: Pricing (simplified — no machine configs) ---
   await db.collection("config").doc("pricing").set({
     entryFees: {
-      erwachsen: { regular: 5, materialbezug: 0, intern: 0, hangenmoos: 0 },
-      kind: { regular: 2.5, materialbezug: 0, intern: 0, hangenmoos: 0 },
-      firma: { regular: 5, materialbezug: 0, intern: 0, hangenmoos: 0 },
+      erwachsen: { regular: 5, materialbezug: 0, intern: 0, hangenmoos: 0, membership: 0 },
+      kind: { regular: 2.5, materialbezug: 0, intern: 0, hangenmoos: 0, membership: 0 },
+      firma: { regular: 5, materialbezug: 0, intern: 0, hangenmoos: 0, membership: 0 },
     },
     // SLA per-layer cost (hardware-wear-driven, constant across resin types).
     slaLayerPrice: { none: 0.00109, member: 0.00109, intern: 0 },

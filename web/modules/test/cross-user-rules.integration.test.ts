@@ -118,10 +118,72 @@ async function seedUser(uid: string, overrides: Record<string, unknown> = {}) {
       displayName: `User ${uid}`,
       name: `User ${uid}`,
       email: `${uid}@test.com`,
-      roles: ["vereinsmitglied"],
+      roles: [],
       permissions: [],
       userType: "erwachsen",
+      activeMembership: null,
       ...overrides,
+    })
+}
+
+async function seedMembership(
+  membershipId: string,
+  ownerUid: string,
+  type: "single" | "family" = "single",
+  memberUids: string[] = [ownerUid],
+  status: "active" | "expired" | "cancelled" = "active",
+) {
+  const db = getAdminFirestore()
+  const memberRefs = memberUids.map((uid) => db.doc(`users/${uid}`))
+  await db
+    .collection("memberships")
+    .doc(membershipId)
+    .set({
+      type,
+      status,
+      lastPaidAt: FieldValue.serverTimestamp(),
+      validUntil: FieldValue.serverTimestamp(),
+      ownerUserId: db.doc(`users/${ownerUid}`),
+      members: memberRefs,
+      paymentCheckouts: [],
+      notes: null,
+      created: FieldValue.serverTimestamp(),
+      modifiedAt: FieldValue.serverTimestamp(),
+      modifiedBy: null,
+    })
+  // Set the denormalized activeMembership pointer on each member so the
+  // family-roster join rule can resolve their docs against each other.
+  for (const memberUid of memberUids) {
+    await db
+      .collection("users")
+      .doc(memberUid)
+      .set(
+        {
+          activeMembership: db.doc(`memberships/${membershipId}`),
+        },
+        { merge: true },
+      )
+  }
+}
+
+async function seedMembershipInvite(
+  membershipId: string,
+  inviteId: string,
+  email: string,
+) {
+  const db = getAdminFirestore()
+  await db
+    .collection("memberships")
+    .doc(membershipId)
+    .collection("invites")
+    .doc(inviteId)
+    .set({
+      email: email.toLowerCase(),
+      status: "pending",
+      invitedAt: FieldValue.serverTimestamp(),
+      invitedBy: db.doc(`users/owner-stub`),
+      resolvedAt: null,
+      ttlAt: FieldValue.serverTimestamp(),
     })
 }
 
@@ -679,6 +741,175 @@ describe("cross-user: tokens (currently admin-only)", () => {
       setDoc(doc(adminDb(), "tokens", "t-admin"), {
         userId: doc(adminDb(), "users/alice"),
       }),
+    )
+  })
+})
+
+describe("cross-user: memberships", () => {
+  it("denies bob reading alice's membership", async () => {
+    await seedUser("alice")
+    await seedMembership("m1", "alice")
+    await assertCrossUserDenied(
+      "memberships/{id} read leaked to non-member",
+      "firestore.rules: memberships read",
+      () => getDoc(doc(authedDb("bob"), "memberships", "m1")),
+    )
+  })
+
+  it("denies any client write on memberships (callable-only)", async () => {
+    await seedUser("alice")
+    await assertCrossUserDenied(
+      "memberships/{id} create leaked to client (must be callable-only)",
+      "firestore.rules: memberships write deny",
+      () =>
+        setDoc(doc(authedDb("alice"), "memberships", "new"), {
+          type: "single",
+          status: "active",
+          ownerUserId: doc(authedDb("alice"), "users/alice"),
+          members: [doc(authedDb("alice"), "users/alice")],
+          paymentCheckouts: [],
+          validUntil: serverTimestamp(),
+          lastPaidAt: null,
+        }),
+    )
+  })
+
+  it("denies tag-tap-as-alice reading a membership (tag sessions excluded)", async () => {
+    await seedUser("alice")
+    await seedMembership("m1", "alice")
+    await assertCrossUserDenied(
+      "memberships/{id} read leaked across tag-tap actsAs",
+      "firestore.rules: memberships read (tag exclusion)",
+      () => getDoc(doc(tagSessionDb("alice"), "memberships", "m1")),
+    )
+  })
+
+  it("denies anonymous-auth reading a membership", async () => {
+    await seedUser("alice")
+    await seedMembership("m1", "alice")
+    await assertCrossUserDenied(
+      "memberships/{id} read leaked to anonymous-auth session",
+      "firestore.rules: memberships read",
+      () => getDoc(doc(anonAuthDb("anon-x"), "memberships", "m1")),
+    )
+  })
+
+  // Positive carve-outs
+  it("allows alice reading her own single membership", async () => {
+    await seedUser("alice")
+    await seedMembership("m1", "alice")
+    await assertSucceeds(getDoc(doc(authedDb("alice"), "memberships", "m1")))
+  })
+
+  it("allows admin reading any membership", async () => {
+    await seedUser("alice")
+    await seedMembership("m1", "alice")
+    await assertSucceeds(getDoc(doc(adminDb(), "memberships", "m1")))
+  })
+
+  it("allows family co-member reading the shared membership", async () => {
+    await seedUser("alice")
+    await seedUser("bob")
+    await seedMembership("m1", "alice", "family", ["alice", "bob"])
+    await assertSucceeds(getDoc(doc(authedDb("bob"), "memberships", "m1")))
+  })
+})
+
+describe("cross-user: membership invites", () => {
+  function authedDbWithEmail(uid: string, email: string) {
+    return getTestEnvironment()
+      .authenticatedContext(uid, { email })
+      .firestore()
+  }
+
+  it("denies non-invitee, non-owner reading an invite", async () => {
+    await seedUser("alice")
+    await seedMembership("m1", "alice", "family", ["alice"])
+    await seedMembershipInvite("m1", "i1", "carol@test.com")
+    await assertCrossUserDenied(
+      "memberships/{id}/invites read leaked to unrelated user",
+      "firestore.rules: invites read",
+      () =>
+        getDoc(doc(authedDb("bob"), "memberships", "m1", "invites", "i1")),
+    )
+  })
+
+  it("allows the invitee (matching email) to read their invite", async () => {
+    await seedUser("alice")
+    await seedMembership("m1", "alice", "family", ["alice"])
+    await seedMembershipInvite("m1", "i1", "carol@test.com")
+    await assertSucceeds(
+      getDoc(
+        doc(
+          authedDbWithEmail("carol", "carol@test.com"),
+          "memberships",
+          "m1",
+          "invites",
+          "i1",
+        ),
+      ),
+    )
+  })
+
+  it("allows the family owner to read invites", async () => {
+    await seedUser("alice")
+    await seedMembership("m1", "alice", "family", ["alice"])
+    await seedMembershipInvite("m1", "i1", "carol@test.com")
+    await assertSucceeds(
+      getDoc(doc(authedDb("alice"), "memberships", "m1", "invites", "i1")),
+    )
+  })
+
+  it("denies any client write on invites (callable-only)", async () => {
+    await seedUser("alice")
+    await seedMembership("m1", "alice", "family", ["alice"])
+    await assertCrossUserDenied(
+      "invites write leaked to client (must be callable-only)",
+      "firestore.rules: invites write deny",
+      () =>
+        setDoc(
+          doc(authedDb("alice"), "memberships", "m1", "invites", "i-bad"),
+          {
+            email: "x@test.com",
+            status: "pending",
+            invitedAt: serverTimestamp(),
+            invitedBy: doc(authedDb("alice"), "users/alice"),
+            resolvedAt: null,
+            ttlAt: serverTimestamp(),
+          },
+        ),
+    )
+  })
+})
+
+describe("cross-user: family-roster join on users", () => {
+  it("allows family co-members to read each other's user docs", async () => {
+    await seedUser("alice")
+    await seedUser("bob")
+    await seedMembership("m1", "alice", "family", ["alice", "bob"])
+    // Bob can now read Alice's user doc via the family-roster join.
+    await assertSucceeds(getDoc(doc(authedDb("bob"), "users", "alice")))
+  })
+
+  it("denies non-co-member reading another user's doc", async () => {
+    await seedUser("alice")
+    await seedUser("carol")
+    // Carol shares no membership with Alice.
+    await seedMembership("m1", "alice", "single", ["alice"])
+    await assertCrossUserDenied(
+      "users/{id} read via family-roster denied for unrelated user",
+      "firestore.rules: shareActiveMembership join",
+      () => getDoc(doc(authedDb("carol"), "users", "alice")),
+    )
+  })
+
+  it("denies reading user doc when neither has a membership", async () => {
+    await seedUser("alice")
+    await seedUser("bob")
+    await assertCrossUserDenied(
+      "users/{id} read denied when no shared membership",
+      "firestore.rules: shareActiveMembership join",
+      () => getDoc(doc(authedDb("bob"), "users", "alice")),
     )
   })
 })

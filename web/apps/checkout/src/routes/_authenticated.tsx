@@ -6,7 +6,7 @@ import {
   AuthenticatedLayout,
   type AuthenticatedLayoutNavItem,
 } from "@modules/components/authenticated-layout"
-import { History, Home, User } from "lucide-react"
+import { BadgeCheck, History, Home, User } from "lucide-react"
 
 export const Route = createFileRoute("/_authenticated")({
   component: CheckoutAuthenticatedLayout,
@@ -14,6 +14,7 @@ export const Route = createFileRoute("/_authenticated")({
 
 const navItems: AuthenticatedLayoutNavItem[] = [
   { to: "/visit", label: "Aktueller Besuch", icon: Home },
+  { to: "/membership", label: "Mitgliedschaft", icon: BadgeCheck },
   { to: "/profile", label: "Profil", icon: User },
   { to: "/usage", label: "Nutzungsverlauf", icon: History },
 ]

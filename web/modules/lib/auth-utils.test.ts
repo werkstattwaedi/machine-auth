@@ -16,6 +16,7 @@ function makeUserDoc(overrides: Partial<UserDoc> = {}): UserDoc {
     permissions: [],
     termsAcceptedAt: { toDate: () => new Date("2025-01-01") },
     userType: "erwachsen",
+    activeMembership: null,
     ...overrides,
   }
 }

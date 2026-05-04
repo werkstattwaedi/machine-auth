@@ -30,6 +30,8 @@ import type {
   ConfigDoc,
   MachineDoc,
   MacoDoc,
+  MembershipDoc,
+  MembershipInviteDoc,
   OperationsLogDoc,
   PermissionDoc,
   PriceListDoc,
@@ -218,6 +220,47 @@ export function configRef(
   id: string,
 ): DocumentReference<ConfigDoc> {
   return doc(db, "config", id) as DocumentReference<ConfigDoc>
+}
+
+// ── memberships ──────────────────────────────────────────────────────────
+
+export function membershipsCollection(
+  db: Firestore,
+): CollectionReference<MembershipDoc> {
+  return collection(db, "memberships") as CollectionReference<MembershipDoc>
+}
+
+export function membershipRef(
+  db: Firestore,
+  id: string,
+): DocumentReference<MembershipDoc> {
+  return doc(db, "memberships", id) as DocumentReference<MembershipDoc>
+}
+
+export function membershipInvitesCollection(
+  db: Firestore,
+  membershipId: string,
+): CollectionReference<MembershipInviteDoc> {
+  return collection(
+    db,
+    "memberships",
+    membershipId,
+    "invites",
+  ) as CollectionReference<MembershipInviteDoc>
+}
+
+export function membershipInviteRef(
+  db: Firestore,
+  membershipId: string,
+  inviteId: string,
+): DocumentReference<MembershipInviteDoc> {
+  return doc(
+    db,
+    "memberships",
+    membershipId,
+    "invites",
+    inviteId,
+  ) as DocumentReference<MembershipInviteDoc>
 }
 
 // ── audit_log ────────────────────────────────────────────────────────────

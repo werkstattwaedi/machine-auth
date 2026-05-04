@@ -35,7 +35,13 @@
       },
       "active": "boolean",
       "userCanAdd": "boolean", // true = users can add to checkout, false = system-only (NFC machine hours)
-      "description": "string | null"
+      "description": "string | null",
+
+      // Optional discriminator for special-purpose catalog items. Absent for
+      // regular billable items. The post-checkout trigger keys off this:
+      //   "membership-single" → create/extend a single membership
+      //   "membership-family" → create/extend a family membership
+      "kind": "membership-single | membership-family | null"
     }
   },
   "machine": {
@@ -91,7 +97,9 @@
       // --- Always present ---
       "userId": "DocumentReference", // DocumentReference to /users/{userId}
       "status": "open | closed",
-      "usageType": "regular | materialbezug | intern | hangenmoos",
+      // "membership" is a special usageType used by purchaseMembership: the
+      // checkout contains only a membership-fee SKU and skips the entry fee.
+      "usageType": "regular | materialbezug | intern | hangenmoos | membership",
       "created": "timestamp",
       "workshopsVisited": ["string"], // e.g., ["holz", "metall"]
       "persons": [{ // Array of person entries
@@ -103,7 +111,11 @@
           "street": "string",
           "zip": "string",
           "city": "string"
-        }
+        },
+        // Optional link to a known user account. Set when the person was
+        // picked from the signed-in user's family roster (so the visit is
+        // attributed to a real account — including child accounts).
+        "userRef": "DocumentReference | null"
       }],
       "modifiedBy": "string | null", // Firebase Auth UID
       "modifiedAt": "timestamp",
@@ -146,10 +158,14 @@
   },
   "config": {
     "pricing": {
+      // Per-userType × usageType entry fee. The "membership" column is 0
+      // for every userType — buying a membership has no workshop entry
+      // fee. entryFeeFor() throws if a row is missing, so the membership
+      // column must be present.
       "entryFees": {
-        "erwachsen": { "regular": "number", "materialbezug": "number", "intern": "number", "hangenmoos": "number" },
-        "kind": { "regular": "number", "materialbezug": "number", "intern": "number", "hangenmoos": "number" },
-        "firma": { "regular": "number", "materialbezug": "number", "intern": "number", "hangenmoos": "number" }
+        "erwachsen": { "regular": "number", "materialbezug": "number", "intern": "number", "hangenmoos": "number", "membership": "number" },
+        "kind": { "regular": "number", "materialbezug": "number", "intern": "number", "hangenmoos": "number", "membership": "number" },
+        "firma": { "regular": "number", "materialbezug": "number", "intern": "number", "hangenmoos": "number", "membership": "number" }
       },
       // SLA resin prints: per-layer CHF cost (constant across all resin types,
       // hardware-wear-driven) by discount level. Per-liter resin price lives
@@ -236,22 +252,71 @@
     }
   },
   "users": {
-    "{userId}": { // Doc ID = Firebase Auth UID
+    "{userId}": { // Doc ID = Firebase Auth UID. For child accounts (userType == "kind"),
+                   // the auth user has no sign-in credentials and email is null.
       "created": "timestamp",
-      "email": "string", // User email
+      "email": "string | null",       // null for child accounts created by a family owner
       "displayName": "string | null", // Optional display name / nickname (e.g., "MikeS"); derived from firstName+lastName if absent
       "firstName": "string", // First name (e.g., "Michael")
       "lastName": "string", // Last name (e.g., "Schneider")
       "permissions": ["DocumentReference"], // Array of DocumentReferences to /permission/{permissionId}
-      "roles": ["vereinsmitglied|admin"],
+      "roles": ["admin"], // "vereinsmitglied" is no longer a role — membership is its own entity
       "termsAcceptedAt": "timestamp | null", // When user accepted terms of service
       "userType": "erwachsen | kind | firma", // User type for pricing
+
+      // Denormalized pointer to the user's single active membership.
+      //   null  → not a member (pricing falls back to "none")
+      //   !null → member (server still re-validates `validUntil > now`)
+      // Maintained by the onMembershipWritten trigger and the daily expiry job.
+      "activeMembership": "DocumentReference | null",
+
       "billingAddress": { // Required when userType == "firma" (Rechnungsadresse)
         "company": "string", // Company name (required)
         "street": "string",
         "zip": "string",
         "city": "string"
       } // | null
+    }
+  },
+  "memberships": {
+    "{membershipId}": { // Auto-generated Firebase ID
+      "type": "single | family",
+      "status": "active | expired | cancelled",
+
+      // Period tracking
+      "lastPaidAt": "timestamp | null", // Most recent payment timestamp
+      "validUntil": "timestamp",        // Expiration (= lastPaidAt + 1 year, or extended)
+
+      // Members
+      "ownerUserId": "DocumentReference",     // /users/{userId} — pays, manages roster, receives reminders
+      "members": ["DocumentReference"],        // /users/{userId}[] — all current members (includes owner)
+                                              // length === 1 for "single"; >= 1 for "family"
+
+      // Audit trail of payments — references into /checkouts/{id} that paid for this membership.
+      // Source of truth for "when/how much/which method" is the checkout itself.
+      "paymentCheckouts": ["DocumentReference"],
+
+      "notes": "string | null", // Admin notes only
+
+      "modifiedBy": "string | null",
+      "modifiedAt": "timestamp",
+      "created": "timestamp",
+      "createdBy": "string | null",
+
+      "invites": {
+        "{inviteId}": { // Auto-generated — only used for type == "family"
+          "email": "string",                        // normalized lowercase
+          "status": "pending | accepted | rejected | revoked",
+          "invitedAt": "timestamp",
+          "invitedBy": "DocumentReference",         // /users/{userId}
+          "resolvedAt": "timestamp | null",
+          "resolvedUserId": "DocumentReference | null", // /users/{userId} on accept
+
+          // Firestore TTL field — auto-delete pending/rejected/revoked invites after 30 days.
+          // TTL policy declared in firestore.indexes.json. Best-effort: GC may lag up to ~24h.
+          "ttlAt": "timestamp"
+        }
+      }
     }
   }
 }
