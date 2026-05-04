@@ -32,6 +32,11 @@ const FUNCTIONS_PARAMS: VarMapping[] = [
   { envVar: "DIVERSIFICATION_SYSTEM_NAME", jsonPath: "functions.diversificationSystemName" },
   { envVar: "PARTICLE_PRODUCT_ID", jsonPath: "functions.particleProductId" },
   { envVar: "LOGIN_ALLOWED_ORIGINS", jsonPath: "functions.loginAllowedOrigins" },
+  // Login-code rate-limit knobs (issue #152). Operations-tunable so values
+  // can be retuned without a code change; CLAUDE.md keeps the docs.
+  { envVar: "LOGIN_PER_EMAIL_WINDOW_MS", jsonPath: "functions.loginPerEmailWindowMs" },
+  { envVar: "LOGIN_MAX_CODES_PER_EMAIL", jsonPath: "functions.loginMaxCodesPerEmail" },
+  { envVar: "LOGIN_MAX_ATTEMPTS_PER_EMAIL", jsonPath: "functions.loginMaxAttemptsPerEmail" },
 ];
 
 const FUNCTIONS_SECRETS: VarMapping[] = [
