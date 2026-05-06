@@ -30,13 +30,17 @@ case "$1" in
     ;;
   personalize-console)
     # Connect console for personalize firmware
-    # Usage: ./pw personalize-console [--device-serial=XXXX]
+    # Usage: ./pw personalize-console [--device-serial=XXXX] [--prod]
 
     DEVICE_SERIAL=""
+    PROD_MODE=""
     for arg in "$@"; do
       case "$arg" in
         --device-serial=*)
           DEVICE_SERIAL="${arg#*=}"
+          ;;
+        --prod)
+          PROD_MODE=1
           ;;
       esac
     done
@@ -81,10 +85,16 @@ case "$1" in
     DEVICE=$(find_particle_device "$DEVICE_SERIAL") || exit 1
     SERIAL_SUFFIX="${DEVICE##*/dev/particle_}"
 
+    PROD_ARGS=()
+    if [[ -n "$PROD_MODE" ]]; then
+      PROD_ARGS=(--prod)
+    fi
+
     echo "🏷️  Personalize console -> $DEVICE (serial: ...$SERIAL_SUFFIX)..."
     MACO_PROJECT_ROOT="$_PW_SCRIPT_DIR" exec bazelisk run //maco_firmware/apps/personalize:console -- \
       --device "$DEVICE" \
-      --device-serial-suffix "$SERIAL_SUFFIX"
+      --device-serial-suffix "$SERIAL_SUFFIX" \
+      "${PROD_ARGS[@]}"
     ;;
   run)
     # Allow running arbitrary targets: ./pw run //target
