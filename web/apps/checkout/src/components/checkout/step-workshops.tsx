@@ -247,6 +247,12 @@ export function StepWorkshops({
 
   const handleCheckout = useCallback(() => {
     setItemsSubmitted(true)
+    // The v5 MaterialPicker enforces validity before `addItem`, so every
+    // item created in this UI is well-formed at insert time. The check
+    // remains as a safety net for legacy items (added before v5, when
+    // inline editing could leave a row with quantity 0). Those items now
+    // block the user silently — the v5 cart has no inline error UI to fix
+    // them. Workaround until we backfill: remove + re-add via the picker.
     const invalid = items.some((item) => hasItemErrors(validateCheckoutItem(item)))
     if (invalid) return
     dispatch({ type: "SET_STEP", step: 2 })

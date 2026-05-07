@@ -10,7 +10,6 @@ import type { PricingConfig, WorkshopId } from "@modules/lib/workshop-config"
 import { ArrowLeft, ChevronDown, ChevronRight, Loader2, X } from "lucide-react"
 import type { CheckoutState, CheckoutAction } from "./use-checkout-state"
 import type { CheckoutItemLocal } from "@/components/usage/inline-rows"
-import { SELECT_CLS } from "@/components/usage/inline-rows"
 import type { UsageType } from "@modules/lib/pricing"
 
 /** Compute up to 3 sensible round-up total targets based on current total.
@@ -164,7 +163,7 @@ export function StepCheckout({
             usageType: e.target.value as UsageType,
           })
         }
-        className={SELECT_CLS + " max-w-xs"}
+        className="flex h-9 w-full max-w-xs rounded-none border border-[#ccc] bg-background px-3 py-1 text-sm"
       >
         {Object.entries(USAGE_TYPE_LABELS).map(([key, label]) => (
           <option key={key} value={key}>

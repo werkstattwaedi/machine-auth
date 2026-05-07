@@ -27,6 +27,36 @@ vi.mock("@/components/usage/workshop-section-with-catalog", () => ({
   ),
 }))
 
+// StepWorkshops uses useFirestoreMutation + useAsyncMutation, which both
+// pull useAuth — there's no AuthProvider in this test, so stub them so the
+// hook calls don't crash. The browser tests here only assert UI behaviour
+// (selection, scroll-into-view) and never invoke the captured callbacks.
+vi.mock("@modules/hooks/use-firestore-mutation", () => ({
+  useFirestoreMutation: () => ({
+    add: vi.fn(),
+    update: vi.fn(),
+    remove: vi.fn(),
+    set: vi.fn(),
+    mutate: vi.fn(),
+    loading: false,
+    error: null,
+  }),
+}))
+vi.mock("@modules/hooks/use-async-mutation", () => ({
+  useAsyncMutation: () => ({
+    mutate: vi.fn(),
+    loading: false,
+    error: null,
+  }),
+}))
+vi.mock("@modules/lib/firebase-context", async (orig) => {
+  const actual = (await orig()) as Record<string, unknown>
+  return {
+    ...actual,
+    useFirebaseAuth: () => null,
+  }
+})
+
 import { StepWorkshops } from "./step-workshops"
 import {
   checkoutReducer,

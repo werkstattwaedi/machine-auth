@@ -2,7 +2,12 @@
 // SPDX-License-Identifier: MIT
 
 import { useCatalogForWorkshop } from "@modules/lib/workshop-config"
-import type { PricingConfig, WorkshopId, WorkshopConfig, DiscountLevel } from "@modules/lib/workshop-config"
+import type {
+  PricingConfig,
+  WorkshopId,
+  WorkshopConfig,
+  DiscountLevel,
+} from "@modules/lib/workshop-config"
 import {
   WorkshopInlineSection,
   type CheckoutItemLocal,

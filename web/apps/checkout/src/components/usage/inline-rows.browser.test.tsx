@@ -1,29 +1,56 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { render, screen, cleanup } from "@testing-library/react"
+/**
+ * Coverage for the v5 workshop block: a card per workshop with split
+ * machine + material containers, and the new MaterialPicker that replaces
+ * the legacy inline AddArticleSearch dropdown. Materials are added via the
+ * picker only — there are no inline-edit rows in the cart anymore. See the
+ * `Walkthrough v5.html` design handoff for the visual reference.
+ */
+
+import { render, screen, cleanup, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { describe, it, expect, vi, afterEach } from "vitest"
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest"
 import { type ReactNode } from "react"
-import { FirebaseProvider, type FirebaseServices } from "@modules/lib/firebase-context"
 import {
-  CatalogItemRow,
+  FirebaseProvider,
+  type FirebaseServices,
+} from "@modules/lib/firebase-context"
+import {
   NfcMachineItemRow,
   WorkshopInlineSection,
   type CheckoutItemLocal,
   type ItemCallbacks,
 } from "./inline-rows"
-import type { PricingConfig, CatalogItem, DiscountLevel } from "@modules/lib/workshop-config"
+import type {
+  PricingConfig,
+  CatalogItem,
+  DiscountLevel,
+} from "@modules/lib/workshop-config"
 
 afterEach(cleanup)
 
-// --- Test helpers ---
+beforeEach(() => {
+  // The MaterialPicker uses Sheet from shadcn which queries matchMedia.
+  if (!window.matchMedia) {
+    Object.defineProperty(window, "matchMedia", {
+      writable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        dispatchEvent: () => false,
+      })),
+    })
+  }
+})
 
 function makeConfig(): PricingConfig {
   return {
     entryFees: { erwachsen: {}, kind: {}, firma: {} },
     workshops: { holz: { label: "Holz", order: 1 } } as PricingConfig["workshops"],
-    // Per-layer SLA cost is global (hardware-driven, not resin-specific).
     slaLayerPrice: { none: 0.01, member: 0.008, intern: 0.006 },
     labels: {
       units: { h: "Std.", m2: "m²", m: "m", stk: "Stk.", kg: "kg", chf: "CHF", l: "l" },
@@ -93,8 +120,6 @@ function makeCatalogItems(): CatalogItem[] {
       name: "SLA Druck",
       workshops: ["holz"],
       pricingModel: "sla",
-      // unitPrice is CHF per liter of resin for SLA. Layer price comes from
-      // PricingConfig.slaLayerPrice (global).
       unitPrice: { none: 250, member: 200, intern: 150 },
       active: true,
       userCanAdd: true,
@@ -102,7 +127,6 @@ function makeCatalogItems(): CatalogItem[] {
   ]
 }
 
-/** Wrapper providing a stub FirebaseProvider (needed for NfcMachineItemRow's useDb()) */
 function FirebaseWrapper({ children }: { children: ReactNode }) {
   const services: FirebaseServices = {
     db: {} as FirebaseServices["db"],
@@ -112,901 +136,463 @@ function FirebaseWrapper({ children }: { children: ReactNode }) {
   return <FirebaseProvider value={services}>{children}</FirebaseProvider>
 }
 
-// ============================================================================
-// SimpleItemRow (via CatalogItemRow)
-// ============================================================================
-
-describe("SimpleItemRow", () => {
-  it("updates quantity and total for count model", async () => {
-    const user = userEvent.setup()
-    const callbacks = makeCallbacks()
-    const item = makeItem({ pricingModel: "count", unitPrice: 0.5 })
-
-    render(
-      <CatalogItemRow item={item} config={makeConfig()} index={0} callbacks={callbacks} />,
-    )
-
-    // Only one spinbutton for count model with catalog item (price not editable)
-    const input = screen.getByRole("spinbutton")
-    await user.clear(input)
-    await user.type(input, "5")
-    // onChange fires per keystroke without onBlurSave
-    const lastCall = callbacks.updateItem.mock.calls.at(-1)!
-    expect(lastCall[0]).toBe("item-1")
-    expect(lastCall[1]).toMatchObject({ quantity: 5, totalPrice: 2.5 })
-  })
-
-  it("converts grams to kg for weight model", async () => {
-    const user = userEvent.setup()
-    const callbacks = makeCallbacks()
-    const item = makeItem({ pricingModel: "weight", unitPrice: 10 })
-
-    render(
-      <CatalogItemRow item={item} config={makeConfig()} index={0} callbacks={callbacks} />,
-    )
-
-    const input = screen.getByRole("spinbutton")
-    await user.clear(input)
-    await user.type(input, "500")
-    const lastCall = callbacks.updateItem.mock.calls.at(-1)!
-    expect(lastCall[1]).toMatchObject({ quantity: 0.5 })
-  })
-
-  it("converts minutes to hours for time model", async () => {
-    const user = userEvent.setup()
-    const callbacks = makeCallbacks()
-    const item = makeItem({ pricingModel: "time", unitPrice: 12 })
-
-    render(
-      <CatalogItemRow item={item} config={makeConfig()} index={0} callbacks={callbacks} />,
-    )
-
-    const input = screen.getByRole("spinbutton")
-    await user.clear(input)
-    await user.type(input, "30")
-    const lastCall = callbacks.updateItem.mock.calls.at(-1)!
-    expect(lastCall[1]).toMatchObject({ quantity: 0.5 })
-  })
-
-  it("shows editable price input for non-catalog items", async () => {
-    const user = userEvent.setup()
-    const callbacks = makeCallbacks()
-    const item = makeItem({ catalogId: null, unitPrice: 0, pricingModel: "count" })
-
-    render(
-      <CatalogItemRow item={item} config={makeConfig()} index={0} callbacks={callbacks} />,
-    )
-
-    // Two spinbuttons: quantity + editable price
-    const inputs = screen.getAllByRole("spinbutton")
-    expect(inputs.length).toBe(2)
-
-    // Type a price in the second input
-    await user.clear(inputs[1])
-    await user.type(inputs[1], "3")
-    expect(callbacks.updateItem).toHaveBeenCalled()
-  })
-
-  it("removes item when delete button is clicked", async () => {
-    const user = userEvent.setup()
-    const callbacks = makeCallbacks()
-    const item = makeItem()
-
-    render(
-      <CatalogItemRow item={item} config={makeConfig()} index={0} callbacks={callbacks} />,
-    )
-
-    const buttons = screen.getAllByRole("button")
-    await user.click(buttons[0]) // first button is the remove button
-    expect(callbacks.removeItem).toHaveBeenCalledWith("item-1")
-  })
-
-  it("shows correct article label with index", () => {
-    const callbacks = makeCallbacks()
-    const item = makeItem({ description: "Holzschrauben" })
-
-    render(
-      <CatalogItemRow item={item} config={makeConfig()} index={2} callbacks={callbacks} />,
-    )
-
-    expect(screen.getByText("Artikel 3: Holzschrauben")).toBeTruthy()
-  })
-
-  it("displays unit label for count model", () => {
-    const callbacks = makeCallbacks()
-    const item = makeItem({ pricingModel: "count" })
-
-    render(
-      <CatalogItemRow item={item} config={makeConfig()} index={0} callbacks={callbacks} />,
-    )
-
-    expect(screen.getByText("Anzahl (Stk.)")).toBeTruthy()
-  })
-
-  it("displays unit label for weight model", () => {
-    const callbacks = makeCallbacks()
-    const item = makeItem({ pricingModel: "weight" })
-
-    render(
-      <CatalogItemRow item={item} config={makeConfig()} index={0} callbacks={callbacks} />,
-    )
-
-    expect(screen.getByText("Anzahl (g)")).toBeTruthy()
-  })
-
-  it("displays unit label for time model", () => {
-    const callbacks = makeCallbacks()
-    const item = makeItem({ pricingModel: "time" })
-
-    render(
-      <CatalogItemRow item={item} config={makeConfig()} index={0} callbacks={callbacks} />,
-    )
-
-    expect(screen.getByText("Anzahl (min)")).toBeTruthy()
-  })
-
-  it("defers updates to blur when onBlurSave is true", async () => {
-    const user = userEvent.setup()
-    const callbacks = makeCallbacks()
-    const item = makeItem({ pricingModel: "count", unitPrice: 1 })
-
-    render(
-      <CatalogItemRow
-        item={item}
-        config={makeConfig()}
-        index={0}
-        callbacks={callbacks}
-        onBlurSave
-      />,
-    )
-
-    const input = screen.getByRole("spinbutton")
-    await user.clear(input)
-    await user.type(input, "7")
-    // No update yet — onBlurSave defers
-    expect(callbacks.updateItem).not.toHaveBeenCalled()
-
-    await user.tab() // triggers blur
-    expect(callbacks.updateItem).toHaveBeenCalledTimes(1)
-    expect(callbacks.updateItem.mock.calls[0][1]).toMatchObject({ quantity: 7, totalPrice: 7 })
-  })
-
-  it("clamps negative quantity to zero", async () => {
-    const user = userEvent.setup()
-    const callbacks = makeCallbacks()
-    const item = makeItem({ pricingModel: "count", unitPrice: 1 })
-
-    render(
-      <CatalogItemRow item={item} config={makeConfig()} index={0} callbacks={callbacks} />,
-    )
-
-    const input = screen.getByRole("spinbutton")
-    await user.clear(input)
-    await user.type(input, "-5")
-    const lastCall = callbacks.updateItem.mock.calls.at(-1)!
-    expect(lastCall[1].quantity).toBeGreaterThanOrEqual(0)
-  })
-
-  it("clamps negative manual price to zero", async () => {
-    const user = userEvent.setup()
-    const callbacks = makeCallbacks()
-    const item = makeItem({ catalogId: null, unitPrice: 0, pricingModel: "count" })
-
-    render(
-      <CatalogItemRow item={item} config={makeConfig()} index={0} callbacks={callbacks} />,
-    )
-
-    const inputs = screen.getAllByRole("spinbutton")
-    // Second spinbutton is the editable price
-    await user.clear(inputs[1])
-    await user.type(inputs[1], "-3")
-    const lastCall = callbacks.updateItem.mock.calls.at(-1)!
-    expect(lastCall[1].unitPrice).toBeGreaterThanOrEqual(0)
-  })
-})
+function renderSection(props: {
+  items?: CheckoutItemLocal[]
+  catalogItems?: CatalogItem[]
+  callbacks?: ReturnType<typeof makeCallbacks>
+  discountLevel?: DiscountLevel
+  checkoutId?: string | null
+}) {
+  const callbacks = props.callbacks ?? makeCallbacks()
+  render(
+    <WorkshopInlineSection
+      workshopId="holz"
+      workshop={{ label: "Holz", order: 1 }}
+      config={makeConfig()}
+      items={props.items ?? []}
+      catalogItems={props.catalogItems ?? makeCatalogItems()}
+      callbacks={callbacks}
+      discountLevel={props.discountLevel ?? "none"}
+      checkoutId={props.checkoutId ?? null}
+    />,
+    { wrapper: FirebaseWrapper },
+  )
+  return { callbacks }
+}
 
 // ============================================================================
-// AreaItemRow (via CatalogItemRow)
+// WorkshopInlineSection — v5 layout
 // ============================================================================
 
-describe("AreaItemRow", () => {
-  it("computes m² from length and width in cm", async () => {
-    const user = userEvent.setup()
-    const callbacks = makeCallbacks()
-    const item = makeItem({ pricingModel: "area", unitPrice: 25 })
-
-    render(
-      <CatalogItemRow
-        item={item}
-        catalogEntry={makeCatalogItems()[1]}
-        config={makeConfig()}
-        index={0}
-        callbacks={callbacks}
-      />,
-    )
-
-    // Two spinbuttons: length and width (price not editable for catalog item)
-    const inputs = screen.getAllByRole("spinbutton")
-    await user.clear(inputs[0])
-    await user.type(inputs[0], "100")
-    await user.clear(inputs[1])
-    await user.type(inputs[1], "200")
-
-    const lastCall = callbacks.updateItem.mock.calls.at(-1)!
-    expect(lastCall[1]).toMatchObject({ quantity: 2 }) // 1m × 2m = 2m²
-  })
-
-  it("displays computed m² value", async () => {
-    const user = userEvent.setup()
-    const callbacks = makeCallbacks()
-    const item = makeItem({ pricingModel: "area", unitPrice: 25 })
-
-    render(
-      <CatalogItemRow
-        item={item}
-        catalogEntry={makeCatalogItems()[1]}
-        config={makeConfig()}
-        index={0}
-        callbacks={callbacks}
-      />,
-    )
-
-    const inputs = screen.getAllByRole("spinbutton")
-    await user.clear(inputs[0])
-    await user.type(inputs[0], "150")
-    await user.clear(inputs[1])
-    await user.type(inputs[1], "200")
-
-    // 1.5m × 2m = 3.00 m²
-    expect(screen.getByText("3.00")).toBeTruthy()
-  })
-
-  it("shows length and width labels", () => {
-    const callbacks = makeCallbacks()
-    const item = makeItem({ pricingModel: "area", unitPrice: 25 })
-
-    render(
-      <CatalogItemRow
-        item={item}
-        catalogEntry={makeCatalogItems()[1]}
-        config={makeConfig()}
-        index={0}
-        callbacks={callbacks}
-      />,
-    )
-
-    expect(screen.getByText("Länge (cm)")).toBeTruthy()
-    expect(screen.getByText("Breite (cm)")).toBeTruthy()
-  })
-})
-
-// ============================================================================
-// LengthItemRow (via CatalogItemRow)
-// ============================================================================
-
-describe("LengthItemRow", () => {
-  it("converts cm to meters", async () => {
-    const user = userEvent.setup()
-    const callbacks = makeCallbacks()
-    const item = makeItem({ pricingModel: "length", unitPrice: 3 })
-
-    render(
-      <CatalogItemRow
-        item={item}
-        catalogEntry={makeCatalogItems()[2]}
-        config={makeConfig()}
-        index={0}
-        callbacks={callbacks}
-      />,
-    )
-
-    const input = screen.getByRole("spinbutton")
-    await user.clear(input)
-    await user.type(input, "150")
-
-    const lastCall = callbacks.updateItem.mock.calls.at(-1)!
-    expect(lastCall[1]).toMatchObject({ quantity: 1.5 })
-  })
-})
-
-// ============================================================================
-// SlaItemRow (via CatalogItemRow)
-// ============================================================================
-
-describe("SlaItemRow", () => {
-  function slaItem(overrides: Partial<CheckoutItemLocal> = {}): CheckoutItemLocal {
-    return makeItem({
-      pricingModel: "sla",
-      catalogId: "cat-sla",
-      quantity: 1,
-      // For SLA, unitPrice = CHF per liter of resin (resolved for discount).
-      unitPrice: 250,
-      totalPrice: 0,
-      description: "SLA Druck",
-      ...overrides,
+describe("WorkshopInlineSection v5", () => {
+  it("renders a workshop heading and a per-workshop subtotal", () => {
+    renderSection({
+      items: [
+        makeItem({ id: "i-1", totalPrice: 5 }),
+        makeItem({ id: "i-2", totalPrice: 10 }),
+      ],
     })
-  }
-
-  it("computes total from unitPrice (CHF/l) and the global layerPrice (CHF/layer)", async () => {
-    const user = userEvent.setup()
-    const callbacks = makeCallbacks()
-
-    render(
-      <CatalogItemRow
-        item={slaItem()}
-        catalogEntry={makeCatalogItems()[3]}
-        config={makeConfig()}
-        discountLevel="none"
-        index={0}
-        callbacks={callbacks}
-      />,
-    )
-
-    const inputs = screen.getAllByRole("spinbutton")
-    // inputs[0] = resin ml, inputs[1] = layers
-    await user.clear(inputs[0])
-    await user.type(inputs[0], "50")
-    await user.clear(inputs[1])
-    await user.type(inputs[1], "1000")
-
-    const lastCall = callbacks.updateItem.mock.calls.at(-1)!
-    // 50ml/1000 * 250 CHF/l = 12.5; 1000 * 0.01 = 10; total = 22.5
-    expect(lastCall[1]).toMatchObject({
-      quantity: 1,
-      totalPrice: 22.5,
-    })
-    expect(lastCall[1].formInputs).toEqual([
-      { quantity: 50, unit: "ml" },
-      { quantity: 1000, unit: "layers" },
-    ])
-  })
-
-  it("shows both resin-per-liter (unitPrice) and per-layer (config.slaLayerPrice) in two side-by-side columns", () => {
-    const callbacks = makeCallbacks()
-
-    render(
-      <CatalogItemRow
-        item={slaItem()}
-        catalogEntry={makeCatalogItems()[3]}
-        config={makeConfig()}
-        discountLevel="none"
-        index={0}
-        callbacks={callbacks}
-      />,
-    )
-
-    // Per #140 the two SLA price axes are rendered as separate columns. The
-    // resin axis rescales 250 CHF/l via the formatUnitPrice reference-quantity
-    // (0.05 l = a typical print) into CHF/ml, and the layer axis rescales the
-    // 0.01 CHF/Layer config value via formatPricePerCount.
-    expect(screen.getByText("Preis Resin")).toBeTruthy()
-    expect(screen.getByText("Preis Layer")).toBeTruthy()
-    // 250 CHF/l × 0.05 l ÷ 50 mL = 0.25 CHF/ml.
-    expect(screen.getByText(/CHF\s*0\.25\/ml$/)).toBeTruthy()
-    // 0.01 CHF/Layer fits at the 1× denominator.
-    expect(screen.getByText(/CHF\s*0\.01\/Layer$/)).toBeTruthy()
-  })
-
-  it("applies member discount layerPrice from config.slaLayerPrice", () => {
-    const callbacks = makeCallbacks()
-
-    render(
-      <CatalogItemRow
-        item={slaItem({ unitPrice: 200 })}
-        catalogEntry={makeCatalogItems()[3]}
-        config={makeConfig()}
-        discountLevel="member"
-        index={0}
-        callbacks={callbacks}
-      />,
-    )
-
-    // Member discount: resin = 200 CHF/l → 0.20 CHF/ml; layer = 0.008
-    // CHF/Layer → /1000 rescale to CHF 8.00/1000 Layer (sub-cent baseline).
-    expect(screen.getByText(/CHF\s*0\.20\/ml$/)).toBeTruthy()
-    expect(screen.getByText(/CHF\s*8\.00\/1000 Layer$/)).toBeTruthy()
-  })
-
-  it("displays computed total as users type", async () => {
-    const user = userEvent.setup()
-    const callbacks = makeCallbacks()
-
-    render(
-      <CatalogItemRow
-        item={slaItem()}
-        catalogEntry={makeCatalogItems()[3]}
-        config={makeConfig()}
-        discountLevel="none"
-        index={0}
-        callbacks={callbacks}
-      />,
-    )
-
-    const inputs = screen.getAllByRole("spinbutton")
-    await user.clear(inputs[0])
-    await user.type(inputs[0], "100")
-    await user.clear(inputs[1])
-    await user.type(inputs[1], "500")
-
-    // 100/1000 * 250 = 25; 500 * 0.01 = 5; total = 30
-    expect(screen.getByText(/CHF\s*30\.00/)).toBeTruthy()
-  })
-
-  it("shows both Resin and Layer input labels", () => {
-    const callbacks = makeCallbacks()
-
-    render(
-      <CatalogItemRow
-        item={slaItem()}
-        catalogEntry={makeCatalogItems()[3]}
-        config={makeConfig()}
-        discountLevel="none"
-        index={0}
-        callbacks={callbacks}
-      />,
-    )
-
-    expect(screen.getByText("Resin (ml)")).toBeTruthy()
-    expect(screen.getByText("Layer")).toBeTruthy()
-  })
-})
-
-// ============================================================================
-// DirectItemRow (via CatalogItemRow)
-// ============================================================================
-
-describe("DirectItemRow", () => {
-  it("updates description and cost", async () => {
-    const user = userEvent.setup()
-    const callbacks = makeCallbacks()
-    const item = makeItem({
-      pricingModel: "direct",
-      catalogId: null,
-      description: "",
-      totalPrice: 0,
-    })
-
-    render(
-      <CatalogItemRow item={item} config={makeConfig()} index={0} callbacks={callbacks} />,
-    )
-
-    const descInput = screen.getByPlaceholderText("Was hast du gebraucht?")
-    await user.type(descInput, "Lasercutting")
-
-    const costInput = screen.getByRole("spinbutton")
-    await user.clear(costInput)
-    await user.type(costInput, "25")
-
-    const lastCall = callbacks.updateItem.mock.calls.at(-1)!
-    expect(lastCall[1]).toMatchObject({ totalPrice: 25 })
-  })
-
-  it("shows placeholder text", () => {
-    const callbacks = makeCallbacks()
-    const item = makeItem({ pricingModel: "direct", catalogId: null })
-
-    render(
-      <CatalogItemRow item={item} config={makeConfig()} index={0} callbacks={callbacks} />,
-    )
-
-    expect(screen.getByPlaceholderText("Was hast du gebraucht?")).toBeTruthy()
-  })
-
-  it("clamps negative cost to zero", async () => {
-    const user = userEvent.setup()
-    const callbacks = makeCallbacks()
-    const item = makeItem({
-      pricingModel: "direct",
-      catalogId: null,
-      description: "Test",
-      totalPrice: 0,
-    })
-
-    render(
-      <CatalogItemRow item={item} config={makeConfig()} index={0} callbacks={callbacks} />,
-    )
-
-    const costInput = screen.getByRole("spinbutton")
-    await user.clear(costInput)
-    await user.type(costInput, "-10")
-    const lastCall = callbacks.updateItem.mock.calls.at(-1)!
-    expect(lastCall[1].totalPrice).toBeGreaterThanOrEqual(0)
-  })
-})
-
-// ============================================================================
-// NfcMachineItemRow
-// ============================================================================
-
-describe("NfcMachineItemRow", () => {
-  it("displays duration in minutes from quantity in hours", () => {
-    const item = makeItem({
-      origin: "nfc",
-      quantity: 0.5, // 0.5h = 30min
-      unitPrice: 12,
-      totalPrice: 6,
-      description: "Maschinennutzung",
-    })
-
-    render(<NfcMachineItemRow item={item} index={0} checkoutId={null} />, {
-      wrapper: FirebaseWrapper,
-    })
-
-    expect(screen.getByText("30 min")).toBeTruthy()
-  })
-
-  it("does not show expand button when checkoutId is null", () => {
-    const item = makeItem({
-      origin: "nfc",
-      quantity: 1,
-      description: "Maschinennutzung",
-    })
-
-    render(<NfcMachineItemRow item={item} index={0} checkoutId={null} />, {
-      wrapper: FirebaseWrapper,
-    })
-
-    expect(screen.queryByText("Einzelne Nutzungen")).toBeNull()
-  })
-
-  it("shows grayed out remove icon (not a clickable button)", () => {
-    const item = makeItem({
-      origin: "nfc",
-      quantity: 0.5,
-      description: "Maschinennutzung",
-    })
-
-    const { container } = render(
-      <NfcMachineItemRow item={item} index={0} checkoutId={null} />,
-      { wrapper: FirebaseWrapper },
-    )
-
-    // The XCircle icon is wrapped in a <span>, not a <button>
-    // (unlike manual items which have a <button> for removal)
-    expect(container.querySelector("span.text-muted-foreground\\/40")).toBeTruthy()
-    expect(container.querySelector("button > svg.lucide-x-circle")).toBeNull()
-  })
-
-  it("shows expand button when checkoutId is provided", () => {
-    const item = makeItem({
-      origin: "nfc",
-      quantity: 0.5,
-      description: "Maschinennutzung",
-    })
-
-    render(<NfcMachineItemRow item={item} index={0} checkoutId="co-1" />, {
-      wrapper: FirebaseWrapper,
-    })
-
-    expect(screen.getByText("Einzelne Nutzungen")).toBeTruthy()
-  })
-})
-
-// ============================================================================
-// WorkshopInlineSection (includes AddArticleSearch)
-// ============================================================================
-
-describe("WorkshopInlineSection", () => {
-  it("renders workshop heading and subtotal", () => {
-    const callbacks = makeCallbacks()
-    const items = [makeItem({ totalPrice: 5 }), makeItem({ id: "item-2", totalPrice: 10 })]
-
-    render(
-      <WorkshopInlineSection
-        workshopId="holz"
-        workshop={{ label: "Holz", order: 1 }}
-        config={makeConfig()}
-        items={items}
-        catalogItems={makeCatalogItems()}
-        callbacks={callbacks}
-        discountLevel="none"
-        checkoutId={null}
-      />,
-      { wrapper: FirebaseWrapper },
-    )
-
-    expect(screen.getByText("Holz")).toBeTruthy()
+    expect(screen.getByRole("heading", { name: "Holz" })).toBeTruthy()
     expect(screen.getByText("Zwischentotal Holz")).toBeTruthy()
+    // 5 + 10 = 15.00
+    expect(screen.getByText(/CHF\s*15\.00/)).toBeTruthy()
   })
 
-  it("renders NFC items before manual items", () => {
-    const callbacks = makeCallbacks()
-    const nfcItem = makeItem({
-      id: "nfc-1",
-      origin: "nfc",
-      description: "Maschinennutzung",
-      quantity: 0.5,
-      totalPrice: 6,
+  it("hides the machine container when no NFC items exist", () => {
+    renderSection({
+      items: [makeItem({ id: "m-1", origin: "manual", totalPrice: 5 })],
     })
-    const manualItem = makeItem({
-      id: "manual-1",
-      origin: "manual",
-      description: "Holzschrauben",
-      totalPrice: 2.5,
-    })
-
-    render(
-      <WorkshopInlineSection
-        workshopId="holz"
-        workshop={{ label: "Holz", order: 1 }}
-        config={makeConfig()}
-        items={[manualItem, nfcItem]}
-        catalogItems={makeCatalogItems()}
-        callbacks={callbacks}
-        discountLevel="none"
-        checkoutId={null}
-      />,
-      { wrapper: FirebaseWrapper },
-    )
-
-    expect(screen.getByText("Maschinennutzung")).toBeTruthy()
-    expect(screen.getByText(/Holzschrauben/)).toBeTruthy()
+    // The machine block should not render any chevron triggers (which all
+    // render the per-machine duration text in minutes).
+    const buttons = screen
+      .getAllByRole("button")
+      .filter((b) => b.textContent?.includes("min"))
+    expect(buttons.length).toBe(0)
   })
 
-  it("opens search when 'Artikel hinzufügen' is clicked", async () => {
+  it("renders NFC items in the machine container, manual items in the material container", () => {
+    renderSection({
+      items: [
+        makeItem({
+          id: "n-1",
+          origin: "nfc",
+          description: "CO₂ Laser",
+          quantity: 0.5,
+          totalPrice: 6,
+        }),
+        makeItem({
+          id: "m-1",
+          origin: "manual",
+          description: "Schrauben M5",
+          quantity: 8,
+          unitPrice: 0.1,
+          totalPrice: 0.8,
+        }),
+      ],
+    })
+    expect(screen.getByText("CO₂ Laser")).toBeTruthy()
+    expect(screen.getByText("Schrauben M5")).toBeTruthy()
+  })
+
+  it("shows an empty hint in the material container when no manual items exist", () => {
+    renderSection({ items: [] })
+    expect(screen.getByText(/Noch kein Material aus Holz/)).toBeTruthy()
+  })
+
+  it("removes a material item when the × button is clicked", async () => {
     const user = userEvent.setup()
     const callbacks = makeCallbacks()
-
-    render(
-      <WorkshopInlineSection
-        workshopId="holz"
-        workshop={{ label: "Holz", order: 1 }}
-        config={makeConfig()}
-        items={[]}
-        catalogItems={makeCatalogItems()}
-        callbacks={callbacks}
-        discountLevel="none"
-        checkoutId={null}
-      />,
-      { wrapper: FirebaseWrapper },
-    )
-
-    await user.click(screen.getByText("Artikel hinzufügen"))
-    expect(screen.getByPlaceholderText("Material suchen (Name oder Code)...")).toBeTruthy()
+    renderSection({
+      items: [makeItem({ id: "m-1", origin: "manual", totalPrice: 0.8 })],
+      callbacks,
+    })
+    const removeBtn = screen.getByRole("button", { name: "Entfernen" })
+    await user.click(removeBtn)
+    expect(callbacks.removeItem).toHaveBeenCalledWith("m-1")
   })
 
-  it("filters catalog items by name in search", async () => {
+  it("opens the material picker when 'Material hinzufügen' is clicked", async () => {
     const user = userEvent.setup()
-    const callbacks = makeCallbacks()
+    renderSection({})
+    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    expect(screen.getByPlaceholderText("Material suchen…")).toBeTruthy()
+  })
+})
 
-    render(
-      <WorkshopInlineSection
-        workshopId="holz"
-        workshop={{ label: "Holz", order: 1 }}
-        config={makeConfig()}
-        items={[]}
-        catalogItems={makeCatalogItems()}
-        callbacks={callbacks}
-        discountLevel="none"
-        checkoutId={null}
-      />,
-      { wrapper: FirebaseWrapper },
-    )
+// ============================================================================
+// MaterialPicker (covered through WorkshopInlineSection)
+// ============================================================================
 
-    await user.click(screen.getByText("Artikel hinzufügen"))
-    await user.type(
-      screen.getByPlaceholderText("Material suchen (Name oder Code)..."),
-      "Schraub",
-    )
-
+describe("MaterialPicker", () => {
+  it("filters catalog items by name", async () => {
+    const user = userEvent.setup()
+    renderSection({})
+    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    await user.type(screen.getByPlaceholderText("Material suchen…"), "Schraub")
     expect(screen.getByText("Schrauben M5")).toBeTruthy()
     expect(screen.queryByText("MDF Platte 3mm")).toBeNull()
-    expect(screen.queryByText("Dachlatte 24x48")).toBeNull()
   })
 
-  it("filters catalog items by code in search", async () => {
+  it("filters catalog items by code", async () => {
     const user = userEvent.setup()
-    const callbacks = makeCallbacks()
-
-    render(
-      <WorkshopInlineSection
-        workshopId="holz"
-        workshop={{ label: "Holz", order: 1 }}
-        config={makeConfig()}
-        items={[]}
-        catalogItems={makeCatalogItems()}
-        callbacks={callbacks}
-        discountLevel="none"
-        checkoutId={null}
-      />,
-      { wrapper: FirebaseWrapper },
-    )
-
-    await user.click(screen.getByText("Artikel hinzufügen"))
-    await user.type(
-      screen.getByPlaceholderText("Material suchen (Name oder Code)..."),
-      "PLT001",
-    )
-
+    renderSection({})
+    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    await user.type(screen.getByPlaceholderText("Material suchen…"), "PLT001")
     expect(screen.getByText("MDF Platte 3mm")).toBeTruthy()
     expect(screen.queryByText("Schrauben M5")).toBeNull()
   })
 
-  it("calls addItem with correct data when catalog item is selected", async () => {
+  it("calls addItem after the user enters a quantity and clicks Hinzufügen", async () => {
     const user = userEvent.setup()
     const callbacks = makeCallbacks()
+    renderSection({ callbacks })
 
-    render(
-      <WorkshopInlineSection
-        workshopId="holz"
-        workshop={{ label: "Holz", order: 1 }}
-        config={makeConfig()}
-        items={[]}
-        catalogItems={makeCatalogItems()}
-        callbacks={callbacks}
-        discountLevel="none"
-        checkoutId={null}
-      />,
-      { wrapper: FirebaseWrapper },
-    )
-
-    await user.click(screen.getByText("Artikel hinzufügen"))
-    await user.type(
-      screen.getByPlaceholderText("Material suchen (Name oder Code)..."),
-      "Schraub",
-    )
+    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
     await user.click(screen.getByText("Schrauben M5"))
 
+    // Form is now expanded — fill the count input and submit.
+    const qty = screen.getByRole("spinbutton")
+    await user.type(qty, "10")
+    await user.click(screen.getByRole("button", { name: "Hinzufügen" }))
+
     expect(callbacks.addItem).toHaveBeenCalledTimes(1)
-    const addedItem = callbacks.addItem.mock.calls[0][0]
-    expect(addedItem).toMatchObject({
+    expect(callbacks.addItem.mock.calls[0][0]).toMatchObject({
       catalogId: "cat-1",
       pricingModel: "count",
-      unitPrice: 0.5,
       workshop: "holz",
       description: "Schrauben M5",
+      quantity: 10,
+      unitPrice: 0.5,
+      totalPrice: 5,
     })
   })
 
-  it("applies member discount when selecting catalog item", async () => {
+  it("keeps the picker open after Hinzufügen so the member can add another item", async () => {
     const user = userEvent.setup()
-    const callbacks = makeCallbacks()
-
-    render(
-      <WorkshopInlineSection
-        workshopId="holz"
-        workshop={{ label: "Holz", order: 1 }}
-        config={makeConfig()}
-        items={[]}
-        catalogItems={makeCatalogItems()}
-        callbacks={callbacks}
-        discountLevel={"member" as DiscountLevel}
-        checkoutId={null}
-      />,
-      { wrapper: FirebaseWrapper },
-    )
-
-    await user.click(screen.getByText("Artikel hinzufügen"))
+    renderSection({})
+    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
     await user.click(screen.getByText("Schrauben M5"))
-
-    const addedItem = callbacks.addItem.mock.calls[0][0]
-    expect(addedItem.unitPrice).toBe(0.4)
+    const qty = screen.getByRole("spinbutton")
+    await user.type(qty, "3")
+    await user.click(screen.getByRole("button", { name: "Hinzufügen" }))
+    // The search box and result list are still rendered after the add.
+    expect(screen.getByPlaceholderText("Material suchen…")).toBeTruthy()
+    expect(screen.getByText("MDF Platte 3mm")).toBeTruthy()
   })
 
-  it("shows fallback options when search query is non-empty", async () => {
+  it("disables Hinzufügen until a positive quantity is entered", async () => {
     const user = userEvent.setup()
-    const callbacks = makeCallbacks()
-
-    render(
-      <WorkshopInlineSection
-        workshopId="holz"
-        workshop={{ label: "Holz", order: 1 }}
-        config={makeConfig()}
-        items={[]}
-        catalogItems={makeCatalogItems()}
-        callbacks={callbacks}
-        discountLevel="none"
-        checkoutId={null}
-      />,
-      { wrapper: FirebaseWrapper },
-    )
-
-    await user.click(screen.getByText("Artikel hinzufügen"))
-    await user.type(
-      screen.getByPlaceholderText("Material suchen (Name oder Code)..."),
-      "custom thing",
-    )
-
-    expect(screen.getByText("Kein passender Eintrag?")).toBeTruthy()
-    expect(screen.getByText(/Pauschal CHF/)).toBeTruthy()
-    expect(screen.getByText(/m²/)).toBeTruthy()
-    expect(screen.getByText(/Stk/)).toBeTruthy()
+    renderSection({})
+    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    await user.click(screen.getByText("Schrauben M5"))
+    const addBtn = screen.getByRole("button", { name: "Hinzufügen" })
+    expect((addBtn as HTMLButtonElement).disabled).toBe(true)
+    await user.type(screen.getByRole("spinbutton"), "2")
+    expect((addBtn as HTMLButtonElement).disabled).toBe(false)
   })
 
-  it("calls addItem with null catalogId for fallback selection", async () => {
+  it("converts cm to m² when adding an area-priced item", async () => {
     const user = userEvent.setup()
     const callbacks = makeCallbacks()
-
-    render(
-      <WorkshopInlineSection
-        workshopId="holz"
-        workshop={{ label: "Holz", order: 1 }}
-        config={makeConfig()}
-        items={[]}
-        catalogItems={makeCatalogItems()}
-        callbacks={callbacks}
-        discountLevel="none"
-        checkoutId={null}
-      />,
-      { wrapper: FirebaseWrapper },
-    )
-
-    await user.click(screen.getByText("Artikel hinzufügen"))
-    await user.type(
-      screen.getByPlaceholderText("Material suchen (Name oder Code)..."),
-      "special item",
-    )
-    await user.click(screen.getByText(/Pauschal CHF/))
-
-    expect(callbacks.addItem).toHaveBeenCalledTimes(1)
-    const addedItem = callbacks.addItem.mock.calls[0][0]
-    expect(addedItem).toMatchObject({
-      catalogId: null,
-      pricingModel: "direct",
-      description: "special item",
+    renderSection({ callbacks })
+    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    await user.click(screen.getByText("MDF Platte 3mm"))
+    const inputs = screen.getAllByRole("spinbutton")
+    await user.type(inputs[0], "100")
+    await user.type(inputs[1], "200")
+    await user.click(screen.getByRole("button", { name: "Hinzufügen" }))
+    // 1m × 2m = 2 m², 25 CHF/m² → 50.00
+    expect(callbacks.addItem.mock.calls[0][0]).toMatchObject({
+      pricingModel: "area",
+      quantity: 2,
+      totalPrice: 50,
     })
   })
 
-  it("closes search on Escape key", async () => {
+  it("uses the member-discounted unit price", async () => {
     const user = userEvent.setup()
     const callbacks = makeCallbacks()
+    renderSection({ callbacks, discountLevel: "member" })
+    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    await user.click(screen.getByText("Schrauben M5"))
+    await user.type(screen.getByRole("spinbutton"), "10")
+    await user.click(screen.getByRole("button", { name: "Hinzufügen" }))
+    expect(callbacks.addItem.mock.calls[0][0]).toMatchObject({
+      unitPrice: 0.4,
+      totalPrice: 4,
+    })
+  })
 
-    render(
-      <WorkshopInlineSection
-        workshopId="holz"
-        workshop={{ label: "Holz", order: 1 }}
-        config={makeConfig()}
-        items={[]}
-        catalogItems={makeCatalogItems()}
-        callbacks={callbacks}
-        discountLevel="none"
-        checkoutId={null}
-      />,
-      { wrapper: FirebaseWrapper },
+  it("computes the SLA total from resin volume and layer count", async () => {
+    const user = userEvent.setup()
+    const callbacks = makeCallbacks()
+    renderSection({ callbacks })
+    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    await user.click(screen.getByText("SLA Druck"))
+    const inputs = screen.getAllByRole("spinbutton")
+    await user.type(inputs[0], "50") // resin ml
+    await user.type(inputs[1], "1000") // layers
+    await user.click(screen.getByRole("button", { name: "Hinzufügen" }))
+    // 50 ml ÷ 1000 × 250 CHF/l = 12.50; 1000 × 0.01 = 10.00; total = 22.50
+    expect(callbacks.addItem.mock.calls[0][0]).toMatchObject({
+      pricingModel: "sla",
+      totalPrice: 22.5,
+      formInputs: [
+        { quantity: 50, unit: "ml" },
+        { quantity: 1000, unit: "layers" },
+      ],
+    })
+  })
+
+  it("sorts catalog items alphabetically", async () => {
+    const user = userEvent.setup()
+    renderSection({})
+    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    const buttons = screen
+      .getAllByRole("button")
+      .filter((b) => b.querySelector(".tabular-nums"))
+    const labels = buttons.map((b) => b.textContent?.split("CHF")[0].trim())
+    expect(labels[0]).toContain("Dachlatte 24x48")
+    expect(labels[1]).toContain("MDF Platte 3mm")
+    expect(labels[2]).toContain("Schrauben M5")
+    expect(labels[3]).toContain("SLA Druck")
+  })
+
+  it("shows the empty-state message when the catalog has no items and the query is empty", async () => {
+    const user = userEvent.setup()
+    renderSection({ catalogItems: [] })
+    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    expect(screen.getByText(/Keine Treffer/)).toBeTruthy()
+  })
+
+  it("hides the empty-state when the user types so the ad-hoc fallbacks can appear", async () => {
+    const user = userEvent.setup()
+    renderSection({ catalogItems: [] })
+    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    await user.type(
+      screen.getByPlaceholderText("Material suchen…"),
+      "Reststück",
     )
+    expect(screen.queryByText(/Keine Treffer/)).toBeNull()
+    expect(screen.getByText("Kein passender Eintrag?")).toBeTruthy()
+  })
 
-    await user.click(screen.getByText("Artikel hinzufügen"))
-    expect(screen.getByPlaceholderText("Material suchen (Name oder Code)...")).toBeTruthy()
-
-    await user.keyboard("{Escape}")
-
-    expect(screen.queryByPlaceholderText("Material suchen (Name oder Code)...")).toBeNull()
-    expect(screen.getByText("Artikel hinzufügen")).toBeTruthy()
+  it("does not render the legacy 'Frage am Empfang' footer", async () => {
+    const user = userEvent.setup()
+    renderSection({})
+    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    expect(screen.queryByText(/Frage am Empfang/)).toBeNull()
   })
 })
 
-describe("AddArticleSearch sorting", () => {
-  it("displays catalog items sorted alphabetically by name", async () => {
+// ============================================================================
+// MaterialPicker — ad-hoc fallback creation
+// ============================================================================
+
+describe("MaterialPicker ad-hoc fallback", () => {
+  it("only shows the fallback section when the search query is non-empty", async () => {
+    const user = userEvent.setup()
+    renderSection({})
+    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    expect(screen.queryByText("Kein passender Eintrag?")).toBeNull()
+    await user.type(screen.getByPlaceholderText("Material suchen…"), "Holzkitt")
+    expect(screen.getByText("Kein passender Eintrag?")).toBeTruthy()
+  })
+
+  it("adds a Pauschal CHF item with the typed description", async () => {
     const user = userEvent.setup()
     const callbacks = makeCallbacks()
+    renderSection({ callbacks })
+    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    await user.type(screen.getByPlaceholderText("Material suchen…"), "Sondermaterial")
+    // Click the Pauschal CHF fallback row.
+    await user.click(screen.getByText("+ Pauschal CHF"))
+    // DirectForm renders a description input prefilled with the query.
+    const desc = screen.getByPlaceholderText("Was hast du gebraucht?") as HTMLInputElement
+    expect(desc.value).toBe("Sondermaterial")
+    // Cost input is the only spinbutton in DirectForm.
+    await user.type(screen.getByRole("spinbutton"), "12.50")
+    await user.click(screen.getByRole("button", { name: "Hinzufügen" }))
+    expect(callbacks.addItem).toHaveBeenCalledTimes(1)
+    expect(callbacks.addItem.mock.calls[0][0]).toMatchObject({
+      catalogId: null,
+      pricingModel: "direct",
+      description: "Sondermaterial",
+      unitPrice: 12.5,
+      totalPrice: 12.5,
+    })
+  })
 
+  it("adds a count-priced ad-hoc item with editable unit price", async () => {
+    const user = userEvent.setup()
+    const callbacks = makeCallbacks()
+    renderSection({ callbacks })
+    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    await user.type(screen.getByPlaceholderText("Material suchen…"), "Spezialschraube")
+    await user.click(screen.getByText("+ Stk"))
+    // First spinbutton = qty, second = unit price.
+    const inputs = screen.getAllByRole("spinbutton")
+    expect(inputs.length).toBe(2)
+    await user.type(inputs[0], "5")
+    await user.type(inputs[1], "0.30")
+    await user.click(screen.getByRole("button", { name: "Hinzufügen" }))
+    expect(callbacks.addItem.mock.calls[0][0]).toMatchObject({
+      catalogId: null,
+      pricingModel: "count",
+      description: "Spezialschraube",
+      quantity: 5,
+      unitPrice: 0.3,
+      totalPrice: 1.5,
+    })
+  })
+
+  it("adds an ad-hoc area item with cm→m² conversion and editable unit price", async () => {
+    const user = userEvent.setup()
+    const callbacks = makeCallbacks()
+    renderSection({ callbacks })
+    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    await user.type(screen.getByPlaceholderText("Material suchen…"), "Plattenrest")
+    await user.click(screen.getByText("+ m²"))
+    const inputs = screen.getAllByRole("spinbutton")
+    // L, B, Preis/m²
+    expect(inputs.length).toBe(3)
+    await user.type(inputs[0], "100")
+    await user.type(inputs[1], "50")
+    await user.type(inputs[2], "20")
+    await user.click(screen.getByRole("button", { name: "Hinzufügen" }))
+    // 1m × 0.5m = 0.5 m²; 0.5 × 20 = 10.00
+    expect(callbacks.addItem.mock.calls[0][0]).toMatchObject({
+      pricingModel: "area",
+      quantity: 0.5,
+      unitPrice: 20,
+      totalPrice: 10,
+    })
+  })
+
+  it("disables Hinzufügen for an ad-hoc row until description, quantity and price are filled", async () => {
+    const user = userEvent.setup()
+    renderSection({})
+    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    await user.type(screen.getByPlaceholderText("Material suchen…"), "X")
+    await user.click(screen.getByText("+ Stk"))
+    const addBtn = screen.getByRole("button", { name: "Hinzufügen" })
+    expect((addBtn as HTMLButtonElement).disabled).toBe(true)
+    const inputs = screen.getAllByRole("spinbutton")
+    await user.type(inputs[0], "1")
+    expect((addBtn as HTMLButtonElement).disabled).toBe(true)
+    await user.type(inputs[1], "1")
+    expect((addBtn as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it("converts grams to kg for ad-hoc weight items", async () => {
+    const user = userEvent.setup()
+    const callbacks = makeCallbacks()
+    renderSection({ callbacks })
+    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    await user.type(screen.getByPlaceholderText("Material suchen…"), "Filament-Rest")
+    await user.click(screen.getByText("+ kg"))
+    const inputs = screen.getAllByRole("spinbutton")
+    await user.type(inputs[0], "500") // grams
+    await user.type(inputs[1], "20") // CHF/kg
+    await user.click(screen.getByRole("button", { name: "Hinzufügen" }))
+    // 0.5 kg × 20 CHF = 10.00
+    expect(callbacks.addItem.mock.calls[0][0]).toMatchObject({
+      pricingModel: "weight",
+      quantity: 0.5,
+      unitPrice: 20,
+      totalPrice: 10,
+      formInputs: [{ quantity: 500, unit: "g" }],
+    })
+  })
+})
+
+// ============================================================================
+// NfcMachineItemRow — collapsed summary, click to expand
+// ============================================================================
+
+describe("NfcMachineItemRow", () => {
+  it("displays duration in minutes", () => {
     render(
-      <WorkshopInlineSection
-        workshopId="holz"
-        workshop={{ label: "Holz", order: 1 }}
-        config={makeConfig()}
-        items={[]}
-        catalogItems={makeCatalogItems()}
-        callbacks={callbacks}
-        discountLevel="none"
+      <NfcMachineItemRow
+        item={makeItem({
+          origin: "nfc",
+          quantity: 0.5,
+          unitPrice: 12,
+          totalPrice: 6,
+          description: "Maschinennutzung",
+        })}
         checkoutId={null}
       />,
       { wrapper: FirebaseWrapper },
     )
+    expect(screen.getByText("30 min")).toBeTruthy()
+    expect(screen.getByText(/CHF\s*6\.00/)).toBeTruthy()
+  })
 
-    await user.click(screen.getByText("Artikel hinzufügen"))
+  it("shows the machine name", () => {
+    render(
+      <NfcMachineItemRow
+        item={makeItem({
+          origin: "nfc",
+          description: "CO₂ Laser",
+          quantity: 0.5,
+        })}
+        checkoutId={null}
+      />,
+      { wrapper: FirebaseWrapper },
+    )
+    expect(screen.getByText("CO₂ Laser")).toBeTruthy()
+  })
 
-    // Catalog item buttons have justify-between and contain the item name as first child span
-    const buttons = screen
-      .getAllByRole("button")
-      .filter((btn) => btn.classList.contains("justify-between"))
-    const labels = buttons.map((btn) => btn.textContent ?? "")
+  it("does not have a remove button (NFC entries are unremovable)", () => {
+    const { container } = render(
+      <NfcMachineItemRow
+        item={makeItem({
+          origin: "nfc",
+          description: "Maschinennutzung",
+          quantity: 0.5,
+        })}
+        checkoutId={null}
+      />,
+      { wrapper: FirebaseWrapper },
+    )
+    // No close-icon button anywhere in the row.
+    expect(within(container).queryByLabelText("Entfernen")).toBeNull()
+  })
 
-    expect(labels).toEqual([
-      expect.stringContaining("Dachlatte 24x48"),
-      expect.stringContaining("MDF Platte 3mm"),
-      expect.stringContaining("Schrauben M5"),
-      expect.stringContaining("SLA Druck"),
-    ])
+  it("disables the expand toggle when checkoutId is null", () => {
+    render(
+      <NfcMachineItemRow
+        item={makeItem({
+          origin: "nfc",
+          description: "Maschinennutzung",
+          quantity: 0.5,
+        })}
+        checkoutId={null}
+      />,
+      { wrapper: FirebaseWrapper },
+    )
+    const button = screen.getByRole("button")
+    expect((button as HTMLButtonElement).disabled).toBe(true)
   })
 })
