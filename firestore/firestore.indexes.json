@@ -149,6 +149,24 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "authentications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "inProgressAuth",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "tokenId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "created",
+          "order": "DESCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": [
