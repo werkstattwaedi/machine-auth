@@ -292,7 +292,11 @@ function main() {
         },
         {
           comment: "# Scripts",
-          vars: [{ envVar: "FIREBASE_PROJECT_ID", jsonPath: "firebase.projectId" }],
+          vars: [
+            { envVar: "FIREBASE_PROJECT_ID", jsonPath: "firebase.projectId" },
+            { envVar: "GATEWAY_DEVICE_HOST", jsonPath: "gateway.deviceHost" },
+            { envVar: "GATEWAY_DEVICE_PORT", jsonPath: "gateway.devicePort" },
+          ],
         },
       ],
     },

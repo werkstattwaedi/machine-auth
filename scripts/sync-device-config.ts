@@ -14,7 +14,7 @@
  * The device reads this as a CBOR string property keyed "device_config.proto.b64".
  *
  * Usage:
- *   npm run sync-config -- <particle-device-id> [--gateway-host <host>] [--gateway-port <port>] [--prod]
+ *   npm run sync-config -- <particle-device-id> [--prod]
  *
  * Prerequisites:
  *   - Copy .env.template to .env and fill in your credentials
@@ -34,11 +34,16 @@ import {
   HwRevision,
 } from "../functions/lib/src/proto/particle/device_config.js";
 
-// Load .env from scripts/ directory (works regardless of cwd)
-// .env.local takes priority over .env (first match wins per key)
+// Load .env from scripts/ directory (works regardless of cwd).
+// dotenv uses first-match-wins, so the file we list FIRST overrides the second.
+// In --prod we want scripts/.env (operations-generated) to win; otherwise
+// scripts/.env.local (operator's local-dev edits) wins.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PROD_MODE = process.argv.slice(2).includes("--prod");
 loadEnv({
-  path: [path.join(__dirname, ".env.local"), path.join(__dirname, ".env")],
+  path: PROD_MODE
+    ? [path.join(__dirname, ".env"), path.join(__dirname, ".env.local")]
+    : [path.join(__dirname, ".env.local"), path.join(__dirname, ".env")],
 });
 
 // -- Firebase data fetching --
@@ -144,16 +149,28 @@ async function writeToParticleLedger(
   ledgerName: string,
   protoB64: string
 ): Promise<void> {
-  const particleToken = process.env.PARTICLE_TOKEN;
+  // Reuse the logged-in `particle login` session (auth file under ~/.particle).
+  const homeDir = process.env.HOME ?? process.env.USERPROFILE;
+  const particleAuthPath = homeDir
+    ? path.join(homeDir, ".particle", "particle.config.json")
+    : "";
+  let particleToken = "";
+  if (particleAuthPath && fs.existsSync(particleAuthPath)) {
+    const cfg = JSON.parse(fs.readFileSync(particleAuthPath, "utf8"));
+    particleToken = cfg.access_token ?? "";
+  }
   if (!particleToken) {
     throw new Error(
-      "PARTICLE_TOKEN not set in .env file. Get a token with: particle token create"
+      "No Particle access token found. Run `particle login` first."
     );
   }
 
   const productId = process.env.PARTICLE_PRODUCT_ID;
   if (!productId) {
-    throw new Error("PARTICLE_PRODUCT_ID not set in .env file");
+    throw new Error(
+      "PARTICLE_PRODUCT_ID not set. Configure it in operations config.jsonc " +
+        "(functions.particleProductId) and re-run `npm run generate-env`."
+    );
   }
 
   const Particle = (await import("particle-api-js")).default;
@@ -176,48 +193,60 @@ async function writeToParticleLedger(
 
 async function main() {
   const args = process.argv.slice(2);
-  const prod = args.includes("--prod");
   const positionalArgs: string[] = [];
-  let gatewayHost = "maco-gateway.internal";
-  let gatewayPort = 5000;
+  let showHelp = false;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--prod") continue;
-    if (args[i] === "--gateway-host" && i + 1 < args.length) {
-      gatewayHost = args[++i];
-    } else if (args[i] === "--gateway-port" && i + 1 < args.length) {
-      gatewayPort = parseInt(args[++i], 10);
-    } else if (args[i] === "--help" || args[i] === "-h") {
-      positionalArgs.length = 0;
+    if (args[i] === "--help" || args[i] === "-h") {
+      showHelp = true;
       break;
     } else {
       positionalArgs.push(args[i]);
     }
   }
 
-  if (positionalArgs.length === 0) {
+  // Gateway host/port the device should connect to. Operations config is the
+  // single source of truth — generate-env.ts populates these in scripts/.env.
+  const gatewayHost = process.env.GATEWAY_DEVICE_HOST;
+  const gatewayPort = process.env.GATEWAY_DEVICE_PORT
+    ? parseInt(process.env.GATEWAY_DEVICE_PORT, 10)
+    : NaN;
+  if (!gatewayHost || !Number.isFinite(gatewayPort)) {
+    console.error(
+      "GATEWAY_DEVICE_HOST/PORT not set. Run `npm run generate-env` first " +
+        "(values come from operations config.jsonc gateway.deviceHost/devicePort)."
+    );
+    process.exit(1);
+  }
+
+  if (showHelp || positionalArgs.length === 0) {
     console.log(`
-Usage: npm run sync-config -- <particle-device-id> [options]
+Usage: npm run sync-config -- <particle-device-id> [--prod]
 
 Options:
-  --prod                  Read from production Firestore (default: local emulator)
-  --gateway-host <host>   Gateway hostname/IP (default: ${gatewayHost})
-  --gateway-port <port>   Gateway port (default: ${gatewayPort})
+  --prod   Read from production Firestore (default: local emulator)
+
+Gateway target (from operations config):
+  ${gatewayHost}:${gatewayPort}
 
 Prerequisites:
-  Copy scripts/.env.template to scripts/.env and fill in credentials.
+  Run: particle login
   Run: cd scripts && npm install
   Run: cd functions && npm run build
 `);
     process.exit(0);
   }
 
-  if (!prod) {
+  if (!PROD_MODE) {
     process.env.FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080";
+    // Emulator project must match what `.firebaserc` starts the emulator as.
+    // Override any stale placeholder (e.g. "local-firebase") that might be
+    // in the operator's scripts/.env.local from the template.
     process.env.FIREBASE_PROJECT_ID = "oww-maco";
     console.log("Using local emulator (pass --prod for production)\n");
   } else {
-    // Clear emulator host in case .env.local set it
+    // Clear any stray emulator host that may have leaked from .env.local.
     delete process.env.FIRESTORE_EMULATOR_HOST;
     console.log("Using production Firestore\n");
   }
