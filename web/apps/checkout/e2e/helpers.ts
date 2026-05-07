@@ -2,7 +2,11 @@
 // SPDX-License-Identifier: MIT
 
 import { initializeApp, getApps, type App } from "firebase-admin/app"
-import { getFirestore, type Firestore } from "firebase-admin/firestore"
+import {
+  getFirestore,
+  Timestamp,
+  type Firestore,
+} from "firebase-admin/firestore"
 
 const PROJECT_ID = "oww-maco"
 
@@ -59,6 +63,209 @@ export async function getUserDoc(uid: string) {
   const db = getAdminFirestore()
   const snap = await db.collection("users").doc(uid).get()
   return snap.exists ? snap.data() : null
+}
+
+// ── Membership seeding (used by membership-screenshots.spec.ts) ─────────
+//
+// Stable IDs and dates so screenshot baselines are reproducible. The auth
+// user from global-setup is reused; only the membership shape changes.
+
+const MEMBERSHIP_ID = "e2e-membership-001"
+const FAMILY_OWNER_OTHER_ID = "e2e-membership-other-owner-001"
+const COMEMBER_ID_PREFIX = "e2e-membership-comember-"
+const STABLE_VALID_UNTIL_ACTIVE = new Date("2027-05-12T12:00:00Z")
+const STABLE_VALID_UNTIL_EXPIRED = new Date("2025-03-03T12:00:00Z")
+const STABLE_VALID_UNTIL_CANCELLED = new Date("2026-07-11T12:00:00Z")
+const STABLE_INVITE_DATE = new Date("2026-04-29T12:00:00Z")
+
+export type SeedMembershipKind =
+  | { kind: "none" }
+  | { kind: "active-single" }
+  | {
+      kind: "active-family-owner"
+      coMembers?: Array<{
+        firstName: string
+        lastName: string
+        userType?: "erwachsen" | "kind"
+      }>
+      pendingInviteEmail?: string
+    }
+  | { kind: "active-family-member" }
+  | { kind: "expired" }
+  | { kind: "cancelled" }
+
+/**
+ * Re-shape the AUTH_USER's membership state for a single test. Cleans
+ * `memberships` (and seeded co-member user docs) on every call so tests
+ * are isolated. Caller passes the AUTH user's UID; the AUTH user doc is
+ * preserved (its `activeMembership` field is updated in place).
+ */
+export async function seedMembershipState(
+  authUserUid: string,
+  kind: SeedMembershipKind,
+): Promise<void> {
+  const db = getAdminFirestore()
+
+  // Wipe per-test state.
+  await clearMembershipState(db, authUserUid)
+
+  if (kind.kind === "none") {
+    // `clearMembershipState` already deleted any prior membership doc; the
+    // /membership page queries by `members array-contains` so the user-doc
+    // `activeMembership` field is irrelevant for the rendering. We don't
+    // touch it here — the onMembershipWritten trigger keeps it honest.
+    return
+  }
+
+  const userRef = db.collection("users").doc(authUserUid)
+  const membershipRef = db.collection("memberships").doc(MEMBERSHIP_ID)
+
+  if (kind.kind === "active-single") {
+    await membershipRef.set({
+      type: "single",
+      status: "active",
+      lastPaidAt: Timestamp.fromDate(
+        new Date(STABLE_VALID_UNTIL_ACTIVE.getTime() - 365 * 24 * 60 * 60 * 1000),
+      ),
+      validUntil: Timestamp.fromDate(STABLE_VALID_UNTIL_ACTIVE),
+      ownerUserId: userRef,
+      members: [userRef],
+      paymentCheckouts: [],
+      created: Timestamp.fromDate(STABLE_INVITE_DATE),
+    })
+    return
+  }
+
+  if (kind.kind === "active-family-owner") {
+    const memberRefs = [userRef]
+    const co = kind.coMembers ?? []
+    for (let i = 0; i < co.length; i++) {
+      const m = co[i]
+      const id = `${COMEMBER_ID_PREFIX}${i + 1}`
+      const ref = db.collection("users").doc(id)
+      await ref.set({
+        displayName: `${m.firstName} ${m.lastName}`,
+        firstName: m.firstName,
+        lastName: m.lastName,
+        email: m.userType === "kind" ? null : `${m.firstName.toLowerCase()}.${m.lastName.toLowerCase()}@beispiel.ch`,
+        roles: [],
+        permissions: [],
+        userType: m.userType ?? "erwachsen",
+        activeMembership: membershipRef,
+        created: Timestamp.fromDate(STABLE_INVITE_DATE),
+      })
+      memberRefs.push(ref)
+    }
+    await membershipRef.set({
+      type: "family",
+      status: "active",
+      lastPaidAt: Timestamp.fromDate(
+        new Date(STABLE_VALID_UNTIL_ACTIVE.getTime() - 365 * 24 * 60 * 60 * 1000),
+      ),
+      validUntil: Timestamp.fromDate(STABLE_VALID_UNTIL_ACTIVE),
+      ownerUserId: userRef,
+      members: memberRefs,
+      paymentCheckouts: [],
+      created: Timestamp.fromDate(STABLE_INVITE_DATE),
+    })
+
+    if (kind.pendingInviteEmail) {
+      await membershipRef.collection("invites").doc("e2e-invite-001").set({
+        email: kind.pendingInviteEmail,
+        status: "pending",
+        invitedAt: Timestamp.fromDate(STABLE_INVITE_DATE),
+        invitedBy: userRef,
+        resolvedAt: null,
+        ttlAt: Timestamp.fromDate(
+          new Date(STABLE_INVITE_DATE.getTime() + 30 * 24 * 60 * 60 * 1000),
+        ),
+      })
+    }
+    return
+  }
+
+  if (kind.kind === "active-family-member") {
+    const ownerRef = db.collection("users").doc(FAMILY_OWNER_OTHER_ID)
+    await ownerRef.set({
+      displayName: "Anna Müller",
+      firstName: "Anna",
+      lastName: "Müller",
+      email: "anna.mueller@beispiel.ch",
+      roles: [],
+      permissions: [],
+      userType: "erwachsen",
+      activeMembership: membershipRef,
+      created: Timestamp.fromDate(STABLE_INVITE_DATE),
+    })
+    await membershipRef.set({
+      type: "family",
+      status: "active",
+      lastPaidAt: Timestamp.fromDate(
+        new Date(STABLE_VALID_UNTIL_ACTIVE.getTime() - 365 * 24 * 60 * 60 * 1000),
+      ),
+      validUntil: Timestamp.fromDate(STABLE_VALID_UNTIL_ACTIVE),
+      ownerUserId: ownerRef,
+      members: [ownerRef, userRef],
+      paymentCheckouts: [],
+      created: Timestamp.fromDate(STABLE_INVITE_DATE),
+    })
+    return
+  }
+
+  if (kind.kind === "expired") {
+    await membershipRef.set({
+      type: "single",
+      status: "expired",
+      lastPaidAt: Timestamp.fromDate(
+        new Date(STABLE_VALID_UNTIL_EXPIRED.getTime() - 365 * 24 * 60 * 60 * 1000),
+      ),
+      validUntil: Timestamp.fromDate(STABLE_VALID_UNTIL_EXPIRED),
+      ownerUserId: userRef,
+      members: [userRef],
+      paymentCheckouts: [],
+      created: Timestamp.fromDate(STABLE_INVITE_DATE),
+    })
+    return
+  }
+
+  if (kind.kind === "cancelled") {
+    await membershipRef.set({
+      type: "single",
+      status: "cancelled",
+      lastPaidAt: Timestamp.fromDate(
+        new Date(STABLE_VALID_UNTIL_CANCELLED.getTime() - 365 * 24 * 60 * 60 * 1000),
+      ),
+      validUntil: Timestamp.fromDate(STABLE_VALID_UNTIL_CANCELLED),
+      ownerUserId: userRef,
+      members: [userRef],
+      paymentCheckouts: [],
+      created: Timestamp.fromDate(STABLE_INVITE_DATE),
+    })
+    return
+  }
+}
+
+async function clearMembershipState(
+  db: Firestore,
+  authUserUid: string,
+): Promise<void> {
+  // Recursive delete on all memberships (incl. invites sub-collection).
+  const memberships = await db.collection("memberships").get()
+  for (const m of memberships.docs) {
+    const invites = await m.ref.collection("invites").get()
+    const batch = db.batch()
+    invites.docs.forEach((d) => batch.delete(d.ref))
+    batch.delete(m.ref)
+    await batch.commit()
+  }
+
+  // Wipe seeded co-member docs but keep AUTH_USER.
+  const seededIds = [FAMILY_OWNER_OTHER_ID]
+  for (let i = 1; i <= 10; i++) seededIds.push(`${COMEMBER_ID_PREFIX}${i}`)
+  for (const id of seededIds) {
+    if (id === authUserUid) continue
+    await db.collection("users").doc(id).delete().catch(() => undefined)
+  }
 }
 
 export type LoginCodeEntry = {
