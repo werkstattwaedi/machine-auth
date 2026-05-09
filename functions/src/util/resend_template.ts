@@ -16,7 +16,6 @@
 import * as logger from "firebase-functions/logger";
 import { defineSecret, defineString } from "firebase-functions/params";
 import { HttpsError } from "firebase-functions/v2/https";
-import { Resend } from "resend";
 
 export const resendApiKey = defineSecret("RESEND_API_KEY");
 export const resendFromEmail = defineString("RESEND_FROM_EMAIL");
@@ -64,6 +63,10 @@ export interface SendTemplateInput {
 export async function sendTemplate(input: SendTemplateInput): Promise<void> {
   const { to, templateId, templateIdParam, variables } = input;
   assertTemplateConfigured(templateId, templateIdParam);
+  // Lazy import: keeps the Resend SDK out of the cold-start bundle for
+  // every other function (resend_template is reachable from index.ts via
+  // requestLoginCode and inviteFamilyMember exports).
+  const { Resend } = await import("resend");
   const resend = new Resend(resendApiKey.value());
   const { error } = await resend.emails.send({
     from: resendFromEmail.value(),

@@ -256,7 +256,7 @@ interface CloseCheckoutRequest {
 export const closeCheckoutAndGetPayment = onCall<
   CloseCheckoutRequest,
   Promise<PaymentData>
->(async (request) => {
+>({ memory: "512MiB" }, async (request) => {
   const data = request.data ?? ({} as CloseCheckoutRequest);
   const { checkoutId, newCheckout, usageType, persons, summary } = data;
 

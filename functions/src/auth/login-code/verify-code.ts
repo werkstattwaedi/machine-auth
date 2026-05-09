@@ -159,6 +159,7 @@ export async function handleVerifyLoginCode(
 }
 
 export const verifyLoginCode = onCall(
+  { memory: "512MiB" },
   async (request: CallableRequest<VerifyLoginCodeInput>) =>
     handleVerifyLoginCode(request.data)
 );

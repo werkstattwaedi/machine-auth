@@ -11,7 +11,6 @@ import { defineSecret, defineString } from "firebase-functions/params";
 import * as logger from "firebase-functions/logger";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
-import Particle from "particle-api-js";
 
 const particleToken = defineSecret("PARTICLE_TOKEN");
 const particleProductId = defineString("PARTICLE_PRODUCT_ID");
@@ -100,6 +99,9 @@ adminApp.use(adminAuthMiddleware);
  */
 adminApp.get("/particle/devices", async (req: express.Request, res: express.Response): Promise<void> => {
   try {
+    // Lazy import: keeps particle-api-js out of the cold-start bundle for
+    // every other function exported from index.ts.
+    const { default: Particle } = await import("particle-api-js");
     const particle = new Particle();
     const productId = particleProductId.value();
     const token = particleToken.value();
@@ -159,6 +161,7 @@ adminApp.post("/particle/import-device", async (req: express.Request, res: expre
       return;
     }
 
+    const { default: Particle } = await import("particle-api-js");
     const particle = new Particle();
     const productId = particleProductId.value();
     const token = particleToken.value();

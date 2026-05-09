@@ -17,9 +17,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret, defineString } from "firebase-functions/params";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
-import { Resend } from "resend";
 import { formatWorkshopDateTime } from "../util/workshop_timezone";
-import { buildInvoicePdf } from "./build_invoice_pdf";
 import { formatInvoiceNumber } from "./types";
 import { logOperationError } from "../operations_log";
 import type {
@@ -225,6 +223,9 @@ export async function tryGeneratePdf(billId: string): Promise<boolean> {
   try {
     const invoiceData = await assembleInvoiceData(bill, billId);
     const paymentConfig = buildPaymentConfig();
+    // Lazy import: pdfkit + swissqrbill (~10 MB) shouldn't be in the cold-
+    // start bundle of every other function exported from index.ts.
+    const { buildInvoicePdf } = await import("./build_invoice_pdf.js");
     const pdfBuffer = await buildInvoicePdf(invoiceData, paymentConfig);
 
     const storagePath = `invoices/${billId}.pdf`;
@@ -304,6 +305,8 @@ export async function trySendEmail(billId: string): Promise<boolean> {
       "dd. MMMM yyyy, HH:mm",
     );
 
+    // Lazy import: same rationale as build_invoice_pdf above.
+    const { Resend } = await import("resend");
     const resend = new Resend(resendApiKey.value());
     const { error } = await resend.emails.send({
       from: resendFromEmail.value(),
@@ -352,6 +355,9 @@ export const onBillCreate = onDocumentCreated(
   {
     document: "bills/{billId}",
     timeoutSeconds: 120,
+    // PDF generation builds the full invoice Buffer in memory (pdfkit +
+    // swissqrbill); 256 MiB is tight for non-trivial invoices.
+    memory: "512MiB",
     secrets: [resendApiKey],
   },
   async (event) => {
@@ -377,6 +383,8 @@ export const retryBillProcessing = onSchedule(
     schedule: "every 15 minutes",
     secrets: [resendApiKey],
     timeoutSeconds: 120,
+    // Same as onBillCreate — runs tryGeneratePdf which loads pdfkit.
+    memory: "512MiB",
   },
   async () => {
     const db = getFirestore();

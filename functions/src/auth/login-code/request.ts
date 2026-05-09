@@ -194,7 +194,7 @@ async function sendLoginEmail(
 }
 
 export const requestLoginCode = onCall(
-  { secrets: [resendApiKey] },
+  { secrets: [resendApiKey], memory: "512MiB" },
   async (request: CallableRequest<RequestLoginCodeInput>) => {
     const origin =
       (request.rawRequest.headers.origin as string | undefined) ?? null;
