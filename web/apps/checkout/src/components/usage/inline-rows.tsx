@@ -7,7 +7,6 @@ import {
   ChevronDown,
   ChevronRight,
   Plus,
-  X,
 } from "lucide-react"
 import { useCollection } from "@modules/lib/firestore"
 import { where } from "firebase/firestore"
@@ -26,6 +25,7 @@ import type {
   PricingModel,
 } from "@modules/lib/workshop-config"
 import { MaterialPicker } from "./material-picker"
+import { PositionTable, rowFromItem } from "./position-table"
 
 /** Shape of a checkout item used by the workshop block. */
 export interface CheckoutItemLocal {
@@ -48,73 +48,6 @@ export interface ItemCallbacks {
   addItem: (item: CheckoutItemLocal) => void
   updateItem: (id: string, item: CheckoutItemLocal) => void
   removeItem: (id: string) => void
-}
-
-// ---------------------------------------------------------------------------
-// Material line item — static row rendered in the cart after the picker
-// adds an entry. Per v5 design, material is no longer edited inline; the
-// member removes and re-adds via the picker if a value needs changing.
-// ---------------------------------------------------------------------------
-
-function formatItemQuantity(item: CheckoutItemLocal): string {
-  const pm = item.pricingModel
-  if (pm === "direct") return ""
-  if (pm === "sla") {
-    const ml = item.formInputs?.[0]?.quantity ?? 0
-    const layers = item.formInputs?.[1]?.quantity ?? 0
-    return `${ml} ml · ${layers} Layer`
-  }
-  if (pm === "area" && item.formInputs?.length === 2) {
-    const [l, w] = item.formInputs
-    return `${l.quantity}×${w.quantity} ${l.unit} × ${formatCHF(item.unitPrice)}`
-  }
-  // weight (g) / time (min) prefer the form input so the member sees the
-  // friendly unit they entered, not the base-unit value (kg / h).
-  if (item.formInputs?.[0]) {
-    const f = item.formInputs[0]
-    return `${f.quantity} ${f.unit} × ${formatCHF(item.unitPrice)}`
-  }
-  return `${item.quantity} × ${formatCHF(item.unitPrice)}`
-}
-
-function MaterialLineItem({
-  item,
-  onRemove,
-  striped,
-}: {
-  item: CheckoutItemLocal
-  onRemove: () => void
-  striped: boolean
-}) {
-  return (
-    <div
-      className={
-        "grid grid-cols-[1fr_auto_24px_auto] items-center gap-3 border-t border-black/5 px-4 py-3 first:border-t-0 sm:grid-cols-[18px_1fr_auto_24px_auto] sm:px-6 " +
-        (striped ? "bg-black/[0.02]" : "")
-      }
-    >
-      <span className="hidden sm:block" />
-      <div className="min-w-0">
-        <div className="font-heading text-sm font-semibold truncate">
-          {item.description}
-        </div>
-      </div>
-      <div className="hidden text-xs tabular-nums text-muted-foreground whitespace-nowrap sm:block">
-        {formatItemQuantity(item)}
-      </div>
-      <button
-        type="button"
-        onClick={onRemove}
-        aria-label="Entfernen"
-        className="flex h-6 w-6 items-center justify-center rounded-[3px] text-muted-foreground hover:bg-black/5 hover:text-destructive sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100"
-      >
-        <X className="h-3.5 w-3.5" />
-      </button>
-      <div className="font-heading text-base font-bold tabular-nums whitespace-nowrap text-right min-w-[80px]">
-        {formatCHF(item.totalPrice)}
-      </div>
-    </div>
-  )
 }
 
 // ---------------------------------------------------------------------------
@@ -365,24 +298,33 @@ export function WorkshopInlineSection({
         </div>
       )}
 
-      <div className="rounded-md border border-border bg-card py-1 shadow-sm">
+      <div className="rounded-md border border-border bg-card shadow-sm">
         {materialItems.length === 0 ? (
-          <div className="px-4 py-4 text-sm text-muted-foreground sm:px-6">
+          <div className="px-3 py-3 text-sm text-muted-foreground sm:px-4">
             Noch kein Material aus {workshop.label}.
           </div>
         ) : (
-          <div className="group">
-            {materialItems.map((item, i) => (
-              <MaterialLineItem
-                key={item.id}
-                item={item}
-                striped={i % 2 === 1}
-                onRemove={() => callbacks.removeItem(item.id)}
-              />
-            ))}
+          <div className="px-3 py-3 sm:px-4">
+            <PositionTable
+              firstColLabel="Bezogenes Material"
+              rows={materialItems.map(rowFromItem)}
+              onRemove={(id) => callbacks.removeItem(id)}
+            />
           </div>
         )}
-        <div className="px-4 py-3 sm:px-6">
+        {/* Left padding aligns the button visually with the title column of
+            the table above. Math: outer px-3 (12px) + remove col (20px) +
+            gap-x-4 (16px) = 48px mobile; sm: px-4 (16px) + 20px + gap-x-6
+            (24px) = 60px. Empty state has no remove gutter, so the button
+            still sits at the smaller outer padding. */}
+        <div
+          className={
+            "py-3 border-t border-border/60 " +
+            (materialItems.length === 0
+              ? "px-3 sm:px-4"
+              : "pl-[48px] pr-3 sm:pl-[60px] sm:pr-4")
+          }
+        >
           <button
             type="button"
             onClick={() => setPickerOpen(true)}

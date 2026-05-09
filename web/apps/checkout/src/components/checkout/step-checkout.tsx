@@ -10,10 +10,7 @@ import {
   USER_TYPE_LABELS,
   calculateFee,
 } from "@modules/lib/pricing"
-import {
-  getShortUnit,
-  type PricingConfig,
-} from "@modules/lib/workshop-config"
+import { type PricingConfig } from "@modules/lib/workshop-config"
 import {
   ArrowLeft,
   ChevronRight,
@@ -28,6 +25,7 @@ import {
 import { cn } from "@modules/lib/utils"
 import type { CheckoutState, CheckoutAction, PaymentMethod } from "./use-checkout-state"
 import type { CheckoutItemLocal } from "@/components/usage/inline-rows"
+import { PositionTable, rowFromItem } from "@/components/usage/position-table"
 import type { UsageType } from "@modules/lib/pricing"
 
 /**
@@ -262,7 +260,7 @@ export function StepCheckout({
               Keine Maschinen oder Werkzeuge erfasst.
             </p>
           ) : (
-            <ItemTable
+            <PositionTable
               firstColLabel="Akkumulierte Nutzungszeit"
               rows={nfcItems.map((item) => ({
                 key: item.id,
@@ -296,16 +294,9 @@ export function StepCheckout({
               Kein Material bezogen.
             </p>
           ) : (
-            <ItemTable
+            <PositionTable
               firstColLabel="Bezogenes Material"
-              rows={materialItems.map((item) => ({
-                key: item.id,
-                title: item.description,
-                subtitle: formatRawSize(item) || null,
-                menge: formatMenge(item),
-                kosten: formatKosten(item),
-                preis: item.totalPrice.toFixed(2),
-              }))}
+              rows={materialItems.map(rowFromItem)}
             />
           )}
         </ExpandableSection>
@@ -437,101 +428,6 @@ function DetailLabel({ children }: { children: React.ReactNode }) {
     <span className="block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
       {children}
     </span>
-  )
-}
-
-interface ItemRow {
-  key: string
-  title: string
-  /** Optional sub-line under the title (e.g. raw form input "60×40 cm"). */
-  subtitle: string | null
-  menge: string
-  kosten: string
-  preis: string
-}
-
-/**
- * 4-column table used for both Maschinen-/Werkzeugnutzung and Materialbezug
- * line items. Title column on the left (with optional muted subtitle),
- * Menge / Kosten / Preis right-aligned. CHF prefix is intentionally
- * omitted — the section total above already shows the currency once.
- *
- * The whole table is a single CSS grid so columns line up across rows
- * (each row uses `display: contents` to let its cells become direct grid
- * items of the parent).
- */
-function ItemTable({
-  firstColLabel,
-  rows,
-}: {
-  firstColLabel: string
-  rows: ItemRow[]
-}) {
-  return (
-    <div
-      role="table"
-      className="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-baseline gap-x-4 sm:gap-x-6"
-    >
-      <div role="row" className="contents">
-        <span
-          role="columnheader"
-          className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground pb-1.5"
-        >
-          {firstColLabel}
-        </span>
-        <span
-          role="columnheader"
-          className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-right pb-1.5"
-        >
-          Menge
-        </span>
-        <span
-          role="columnheader"
-          className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-right pb-1.5"
-        >
-          Kosten
-        </span>
-        <span
-          role="columnheader"
-          className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-right pb-1.5"
-        >
-          Preis
-        </span>
-      </div>
-      {rows.map((row) => (
-        <div key={row.key} role="row" className="contents">
-          <span
-            role="cell"
-            className="py-2 text-sm border-t border-dotted border-border min-w-0"
-          >
-            <span className="text-foreground block truncate">{row.title}</span>
-            {row.subtitle && (
-              <span className="block text-xs text-muted-foreground/80 font-light tabular-nums">
-                {row.subtitle}
-              </span>
-            )}
-          </span>
-          <span
-            role="cell"
-            className="py-2 text-sm text-muted-foreground tabular-nums text-right whitespace-nowrap border-t border-dotted border-border"
-          >
-            {row.menge}
-          </span>
-          <span
-            role="cell"
-            className="py-2 text-sm text-muted-foreground tabular-nums text-right whitespace-nowrap border-t border-dotted border-border"
-          >
-            {row.kosten}
-          </span>
-          <span
-            role="cell"
-            className="py-2 text-sm font-semibold tabular-nums text-right min-w-[60px] border-t border-dotted border-border"
-          >
-            {row.preis}
-          </span>
-        </div>
-      ))}
-    </div>
   )
 }
 
@@ -826,61 +722,3 @@ function SpendeCard({
   )
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/** Raw form input shown left-aligned under the description (e.g. "60×40 cm",
- *  "100 g"). Returns "" when the natural quantity already equals the form
- *  input (no extra info to surface). */
-function formatRawSize(item: CheckoutItemLocal): string {
-  const pm = item.pricingModel
-  if (!pm || pm === "direct") return ""
-  if (pm === "sla") {
-    const ml = item.formInputs?.[0]?.quantity ?? 0
-    const layers = item.formInputs?.[1]?.quantity ?? 0
-    return `${ml} ml · ${layers} Layer`
-  }
-  if (pm === "area" && item.formInputs?.length === 2) {
-    const [l, w] = item.formInputs
-    return `${l.quantity}×${w.quantity} ${l.unit}`
-  }
-  if (pm === "weight" && item.formInputs?.[0]) {
-    return `${item.formInputs[0].quantity} ${item.formInputs[0].unit}`
-  }
-  if (pm === "length" && item.formInputs?.[0]) {
-    return `${item.formInputs[0].quantity} ${item.formInputs[0].unit}`
-  }
-  // count items don't need a separate raw-size line — the qty + unit-price
-  // line on the right ("3 Stk. × CHF 2.00") already conveys it.
-  return ""
-}
-
-/** "Menge" column content — natural-unit quantity (e.g. "0.25 m²", "3 Stk.",
- *  "12 Min" for time). Returns "" for direct/SLA where this column doesn't
- *  apply. */
-function formatMenge(item: CheckoutItemLocal): string {
-  const pm = item.pricingModel
-  if (!pm || pm === "direct") return ""
-  if (pm === "sla") {
-    const ml = item.formInputs?.[0]?.quantity ?? 0
-    const layers = item.formInputs?.[1]?.quantity ?? 0
-    return `${ml} ml · ${layers} L`
-  }
-  if (pm === "time") {
-    return `${Math.round(item.quantity * 60)} Min`
-  }
-  return `${formatBaseQty(item.quantity)} ${getShortUnit(pm)}`
-}
-
-/** "Kosten" column — unit price with `/unit` suffix, no CHF prefix
- *  (e.g. "51.65/m²", "2.00/Stk."). SLA: empty (two-axis price). */
-function formatKosten(item: CheckoutItemLocal): string {
-  const pm = item.pricingModel
-  if (!pm || pm === "direct" || pm === "sla") return ""
-  return `${item.unitPrice.toFixed(2)}/${getShortUnit(pm)}`
-}
-
-function formatBaseQty(qty: number): string {
-  return qty === Math.floor(qty) ? String(qty) : qty.toFixed(2)
-}

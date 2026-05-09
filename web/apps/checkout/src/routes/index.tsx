@@ -2,13 +2,14 @@
 // SPDX-License-Identifier: MIT
 
 import { useState, useRef, useEffect } from "react"
-import { createFileRoute, useNavigate } from "@tanstack/react-router"
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router"
 import { z } from "zod/v4/mini"
 import { signOut } from "firebase/auth"
 import { useFirebaseAuth } from "@modules/lib/firebase-context"
 import { useAuth, isProfileComplete } from "@modules/lib/auth"
 import { CheckoutWizard } from "@/components/checkout/checkout-wizard"
 import { ConfirmDialog } from "@modules/components/confirm-dialog"
+import { Avatar } from "@modules/components/ui/avatar"
 import { Loader2 } from "lucide-react"
 
 const checkoutSearchSchema = z.object({
@@ -121,18 +122,42 @@ function CheckoutPage() {
     })
   }
 
+  // Use firstName + lastName (not `displayName`) so the Avatar derives
+  // proper two-letter initials like "AM". A custom displayName in Firestore
+  // could be a single token and would yield only one initial.
+  // Anonymous and tag flows fill the form inside the wizard, so the
+  // header simply hides the avatar until the user has signed in (the
+  // wizard's local form state is intentionally not lifted here — see
+  // the wizard's persons[] for the in-flight name).
+  const headerName =
+    userDoc && (userDoc.firstName || userDoc.lastName)
+      ? `${userDoc.firstName} ${userDoc.lastName}`.trim()
+      : null
+
   return (
     <div className="min-h-screen flex flex-col items-center bg-background">
-      <header className="w-full bg-background px-4 sm:px-6 pt-6 pb-2">
-        <div className="w-full max-w-[1000px] mx-auto">
+      <header className="w-full bg-background border-b border-border">
+        <div className="w-full max-w-[1000px] mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
           <img
             src="/logo_oww.png"
             alt="Offene Werkstatt Wädenswil"
-            className="h-[93px]"
+            className="h-12 shrink-0"
           />
+          {headerName && (
+            <Link
+              to="/profile"
+              className="flex items-center gap-3 min-w-0 rounded-full -m-1 p-1 hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-cog-teal/40 focus-visible:outline-offset-2 transition-colors"
+              aria-label="Profil öffnen"
+            >
+              <span className="text-sm text-foreground truncate">
+                {headerName}
+              </span>
+              <Avatar name={headerName} seed={userDoc?.id} />
+            </Link>
+          )}
         </div>
       </header>
-      <div className="w-full max-w-[1000px] px-4 sm:px-6 py-4 flex-1 flex flex-col">
+      <div className="w-full max-w-[1000px] px-4 sm:px-6 py-6 flex-1 flex flex-col">
         <h1 className="text-2xl sm:text-[37px] font-bold mb-6">
           Self-Checkout
         </h1>
