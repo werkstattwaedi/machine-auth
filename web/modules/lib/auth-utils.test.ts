@@ -12,10 +12,20 @@ function makeUserDoc(overrides: Partial<UserDoc> = {}): UserDoc {
     firstName: "Max",
     lastName: "Muster",
     email: "max@example.com",
+    phone: null,
     roles: [],
     permissions: [],
     termsAcceptedAt: { toDate: () => new Date("2025-01-01") },
     userType: "erwachsen",
+    // Postal address is now required for every registered user (see
+    // ProfilePage). Tests that target the no-address branch override
+    // billingAddress explicitly.
+    billingAddress: {
+      company: "",
+      street: "Seestrasse 12",
+      zip: "8820",
+      city: "Wädenswil",
+    },
     activeMembership: null,
     ...overrides,
   }
@@ -144,15 +154,51 @@ describe("isProfileComplete", () => {
     ).toBe(false)
   })
 
-  it("returns true for non-firma user without billing address", () => {
+  it("returns false for erwachsen user without billing address", () => {
     expect(
-      isProfileComplete(makeUserDoc({ userType: "erwachsen" })),
+      isProfileComplete(
+        makeUserDoc({ userType: "erwachsen", billingAddress: null }),
+      ),
+    ).toBe(false)
+  })
+
+  it("returns false for kind user without billing address", () => {
+    expect(
+      isProfileComplete(
+        makeUserDoc({ userType: "kind", billingAddress: null }),
+      ),
+    ).toBe(false)
+  })
+
+  it("returns true for erwachsen user with billing address (no company)", () => {
+    expect(
+      isProfileComplete(
+        makeUserDoc({
+          userType: "erwachsen",
+          billingAddress: {
+            company: "",
+            street: "Seestrasse 12",
+            zip: "8820",
+            city: "Wädenswil",
+          },
+        }),
+      ),
     ).toBe(true)
   })
 
-  it("returns true for kind user without billing address", () => {
+  it("returns false for erwachsen missing street", () => {
     expect(
-      isProfileComplete(makeUserDoc({ userType: "kind" })),
-    ).toBe(true)
+      isProfileComplete(
+        makeUserDoc({
+          userType: "erwachsen",
+          billingAddress: {
+            company: "",
+            street: "",
+            zip: "8820",
+            city: "Wädenswil",
+          },
+        }),
+      ),
+    ).toBe(false)
   })
 })

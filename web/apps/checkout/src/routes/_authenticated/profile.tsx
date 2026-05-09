@@ -12,41 +12,59 @@ import {
 } from "@modules/lib/firestore-helpers"
 import { Label } from "@modules/components/ui/label"
 import { Badge } from "@modules/components/ui/badge"
+import {
+  Required,
+  SectionDivider,
+  SectionEyebrow,
+} from "@modules/components/profile-form"
 import { useForm } from "react-hook-form"
-import { Loader2, Save } from "lucide-react"
+import { Check, KeyRound, Loader2, Mail, MapPin, Save } from "lucide-react"
 import { useEffect } from "react"
 import { USER_TYPE_LABELS, type UserType } from "@modules/lib/pricing"
+import { cn } from "@modules/lib/utils"
 
 export const Route = createFileRoute("/_authenticated/profile")({
   component: ProfilePage,
 })
 
 interface ProfileFormValues {
-  displayName: string
   firstName: string
   lastName: string
-  userType: string
+  userType: UserType
   company: string
   street: string
   zip: string
   city: string
+  phone: string
 }
 
-const BASE_INPUT =
-  "flex h-9 w-full rounded-none border bg-background px-3 py-1 text-sm outline-none"
-const INPUT_OK = `${BASE_INPUT} border-[#ccc] focus:border-cog-teal`
-const INPUT_DISABLED = `${BASE_INPUT} border-[#ccc] bg-muted text-muted-foreground`
+const INPUT_BASE =
+  "block w-full h-10 rounded-md border bg-background px-3 text-sm shadow-xs outline-none transition-colors"
+const INPUT =
+  `${INPUT_BASE} border-[#ccc] focus:border-cog-teal focus:ring-2 focus:ring-cog-teal/30`
+const INPUT_ERR =
+  `${INPUT_BASE} border-destructive focus:border-destructive focus:ring-2 focus:ring-destructive/30`
+const INPUT_DISABLED =
+  "block w-full h-10 rounded-md border border-[#ccc] bg-muted/50 px-3 text-sm text-muted-foreground cursor-not-allowed shadow-xs"
+
+function ErrorText({ message }: { message?: string }) {
+  if (!message) return null
+  return <span className="text-xs text-destructive mt-0.5">{message}</span>
+}
 
 function ProfilePage() {
   const db = useDb()
   const { user, userDoc } = useAuth()
-  const { data: permDocs } = useCollection(permissionsCollection(db))
-  const permNames = new Map(permDocs.map((d) => [d.id, d.name]))
   const { update, loading: saving } = useFirestoreMutation()
 
-  const { register, handleSubmit, reset, watch, formState: { isDirty } } = useForm<ProfileFormValues>({
+  const {
+    register,
+    handleSubmit,
+    reset,
+    watch,
+    formState: { isDirty, isSubmitSuccessful, errors, isSubmitted },
+  } = useForm<ProfileFormValues>({
     defaultValues: {
-      displayName: "",
       firstName: "",
       lastName: "",
       userType: "erwachsen",
@@ -54,178 +72,235 @@ function ProfilePage() {
       street: "",
       zip: "",
       city: "",
+      phone: "",
     },
   })
 
   const userType = watch("userType")
   const isFirma = userType === "firma"
+  const fieldCls = (field: keyof ProfileFormValues) =>
+    isSubmitted && errors[field] ? INPUT_ERR : INPUT
 
   useEffect(() => {
     if (userDoc) {
       reset({
-        displayName: userDoc.rawDisplayName ?? "",
         firstName: userDoc.firstName,
         lastName: userDoc.lastName,
-        userType: userDoc.userType ?? "erwachsen",
+        userType: (userDoc.userType as UserType) ?? "erwachsen",
         company: userDoc.billingAddress?.company ?? "",
         street: userDoc.billingAddress?.street ?? "",
         zip: userDoc.billingAddress?.zip ?? "",
         city: userDoc.billingAddress?.city ?? "",
+        phone: userDoc.phone ?? "",
       })
     }
   }, [userDoc, reset])
 
   const onSubmit = async (values: ProfileFormValues) => {
     if (!userDoc) return
-
-    const data: Record<string, unknown> = {
-      displayName: values.displayName.trim() || null,
-      firstName: values.firstName,
-      lastName: values.lastName,
-      userType: values.userType,
-    }
-
-    if (values.userType === "firma") {
-      data.billingAddress = {
-        company: values.company,
-        street: values.street,
-        zip: values.zip,
-        city: values.city,
-      }
-    } else {
-      data.billingAddress = null
-    }
-
-    await update(userRef(db, userDoc.id), data, {
-      successMessage: "Profil gespeichert",
-    })
+    await update(
+      userRef(db, userDoc.id),
+      {
+        firstName: values.firstName.trim(),
+        lastName: values.lastName.trim(),
+        userType: values.userType,
+        phone: values.phone.trim() || null,
+        billingAddress: {
+          company: values.userType === "firma" ? values.company.trim() : "",
+          street: values.street.trim(),
+          zip: values.zip.trim(),
+          city: values.city.trim(),
+        },
+      },
+      { successMessage: "Profil gespeichert" },
+    )
+    // Reset dirty state to current values so the Save button disables again.
+    reset(values, { keepValues: true })
   }
 
+  const justSaved = !isDirty && isSubmitSuccessful
+
   return (
-    <div className="flex flex-col gap-6 max-w-lg">
-      <h2 className="text-xl font-bold font-body">Profil</h2>
+    <div className="max-w-2xl mx-auto flex flex-col gap-6">
+      <header className="flex flex-col gap-1">
+        <h1 className="font-heading font-bold text-3xl leading-tight">
+          Profil
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Kontaktdaten und Konto-Einstellungen.
+        </p>
+      </header>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-6">
-        <div className="bg-[rgba(204,204,204,0.2)] rounded-none p-[25px] space-y-4">
-          <div className="space-y-1">
-            <Label className="text-sm font-bold">Anzeigename (optional)</Label>
+      <form
+        onSubmit={handleSubmit(onSubmit)}
+        className="rounded-2xl border border-border bg-card shadow-xs p-6 sm:p-7 flex flex-col gap-5"
+      >
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="flex flex-col gap-1">
+            <Label className="text-sm font-bold">
+              Vorname <Required />
+            </Label>
             <input
-              placeholder="z.B. MikeS"
-              {...register("displayName")}
-              className={INPUT_OK}
+              {...register("firstName", {
+                required: "Vorname ist erforderlich",
+              })}
+              className={fieldCls("firstName")}
+              autoComplete="given-name"
             />
-            <p className="text-xs text-muted-foreground">
-              Falls leer, wird Vor- und Nachname angezeigt.
-            </p>
+            <ErrorText message={errors.firstName?.message} />
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <Label className="text-sm font-bold">Vorname</Label>
-              <input {...register("firstName")} className={INPUT_OK} />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-sm font-bold">Nachname</Label>
-              <input {...register("lastName")} className={INPUT_OK} />
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-sm font-bold">E-Mail</Label>
-            <input value={user?.email ?? ""} disabled className={INPUT_DISABLED} />
-            <p className="text-xs text-muted-foreground">
-              E-Mail kann nicht geändert werden.
-            </p>
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-sm font-bold">Nutzer:in</Label>
-            <div className="flex gap-3 pt-1">
-              {(Object.entries(USER_TYPE_LABELS) as [UserType, string][]).map(
-                ([value, label]) => (
-                  <label key={value} className="flex items-center gap-1.5 text-sm cursor-pointer">
-                    <span
-                      className={`inline-flex items-center justify-center h-4 w-4 rounded-full border ${
-                        userType === value
-                          ? "border-cog-teal bg-cog-teal"
-                          : "border-[#ccc] bg-white"
-                      }`}
-                    >
-                      {userType === value && (
-                        <span className="h-1.5 w-1.5 rounded-full bg-white" />
-                      )}
-                    </span>
-                    <input
-                      type="radio"
-                      value={value}
-                      {...register("userType")}
-                      className="sr-only"
-                    />
-                    {label}
-                  </label>
-                )
-              )}
-            </div>
-          </div>
-
-          {isFirma && (
-            <div className="space-y-3 border-t pt-4">
-              <Label className="text-sm font-bold">Rechnungsadresse</Label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <Label className="text-sm font-bold">Firma</Label>
-                  <input {...register("company")} className={INPUT_OK} />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-sm font-bold">Strasse</Label>
-                  <input {...register("street")} className={INPUT_OK} />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-sm font-bold">PLZ</Label>
-                  <input {...register("zip")} className={INPUT_OK} />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-sm font-bold">Ort</Label>
-                  <input {...register("city")} className={INPUT_OK} />
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="flex gap-3">
-          <div className="space-y-1">
-            <Label className="text-sm font-bold">Rollen</Label>
-            <div className="flex gap-1">
-              {userDoc?.roles?.length ? (
-                userDoc.roles.map((role) => (
-                  <Badge key={role} variant="secondary">{role}</Badge>
-                ))
-              ) : (
-                <span className="text-sm text-muted-foreground">–</span>
-              )}
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-sm font-bold">Berechtigungen</Label>
-            <div className="flex gap-1">
-              {userDoc?.permissions?.length ? (
-                userDoc.permissions.map((perm) => (
-                  <Badge key={perm} variant="outline">{permNames.get(perm) ?? perm}</Badge>
-                ))
-              ) : (
-                <span className="text-sm text-muted-foreground">–</span>
-              )}
-            </div>
+          <div className="flex flex-col gap-1">
+            <Label className="text-sm font-bold">
+              Nachname <Required />
+            </Label>
+            <input
+              {...register("lastName", {
+                required: "Nachname ist erforderlich",
+              })}
+              className={fieldCls("lastName")}
+              autoComplete="family-name"
+            />
+            <ErrorText message={errors.lastName?.message} />
           </div>
         </div>
 
-        <div>
+        <div className="flex flex-col gap-1">
+          <Label className="text-sm font-bold">Nutzer:in</Label>
+          <div className="flex gap-6 flex-wrap pt-1.5">
+            {(Object.entries(USER_TYPE_LABELS) as [UserType, string][]).map(
+              ([value, label]) => (
+                <label
+                  key={value}
+                  className="inline-flex items-center gap-2 text-sm cursor-pointer select-none"
+                >
+                  <span
+                    className={cn(
+                      "inline-flex items-center justify-center h-[18px] w-[18px] rounded-full border-[1.5px] transition-colors",
+                      userType === value
+                        ? "border-cog-teal bg-cog-teal"
+                        : "border-[#c1c1c1] bg-background",
+                    )}
+                  >
+                    {userType === value && (
+                      <span className="h-2 w-2 rounded-full bg-white" />
+                    )}
+                  </span>
+                  <input
+                    type="radio"
+                    value={value}
+                    {...register("userType")}
+                    className="sr-only"
+                  />
+                  {label}
+                </label>
+              ),
+            )}
+          </div>
+        </div>
+
+        {isFirma && (
+          <div className="flex flex-col gap-1">
+            <Label className="text-sm font-bold">
+              Firmenname <Required />
+            </Label>
+            <input
+              {...register("company", {
+                validate: (v) =>
+                  !isFirma ||
+                  v.trim() !== "" ||
+                  "Firmenname ist erforderlich",
+              })}
+              className={fieldCls("company")}
+              placeholder="Holzbau Müller AG"
+              autoComplete="organization"
+            />
+            <ErrorText message={errors.company?.message} />
+          </div>
+        )}
+
+        <SectionDivider />
+        <SectionEyebrow icon={<MapPin className="h-3 w-3" />}>
+          Adresse
+        </SectionEyebrow>
+
+        <div className="flex flex-col gap-1">
+          <Label className="text-sm font-bold">
+            Strasse und Hausnummer <Required />
+          </Label>
+          <input
+            {...register("street", { required: "Strasse ist erforderlich" })}
+            className={fieldCls("street")}
+            placeholder="Seestrasse 12"
+            autoComplete="street-address"
+          />
+          <ErrorText message={errors.street?.message} />
+        </div>
+
+        <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-4">
+          <div className="flex flex-col gap-1">
+            <Label className="text-sm font-bold">
+              PLZ <Required />
+            </Label>
+            <input
+              {...register("zip", { required: "PLZ ist erforderlich" })}
+              className={`${fieldCls("zip")} tabular-nums`}
+              placeholder="8820"
+              maxLength={4}
+              inputMode="numeric"
+              autoComplete="postal-code"
+            />
+            <ErrorText message={errors.zip?.message} />
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label className="text-sm font-bold">
+              Ort <Required />
+            </Label>
+            <input
+              {...register("city", { required: "Ort ist erforderlich" })}
+              className={fieldCls("city")}
+              placeholder="Wädenswil"
+              autoComplete="address-level2"
+            />
+            <ErrorText message={errors.city?.message} />
+          </div>
+        </div>
+
+        <SectionDivider />
+        <SectionEyebrow icon={<Mail className="h-3 w-3" />}>
+          Kontakt
+        </SectionEyebrow>
+
+        <div className="flex flex-col gap-1">
+          <Label className="text-sm font-bold">E-Mail</Label>
+          <input
+            value={user?.email ?? ""}
+            disabled
+            className={INPUT_DISABLED}
+          />
+          <p className="text-xs text-muted-foreground">
+            E-Mail kann nicht geändert werden.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <Label className="text-sm font-bold">
+            Telefon{" "}
+            <span className="text-muted-foreground font-normal">(optional)</span>
+          </Label>
+          <input
+            {...register("phone")}
+            type="tel"
+            className={INPUT}
+            placeholder="+41 79 123 45 67"
+            autoComplete="tel"
+          />
+        </div>
+
+        <div className="flex items-center gap-3 mt-2 pt-5 border-t border-border">
           <button
             type="submit"
             disabled={saving || !isDirty}
-            className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-white bg-cog-teal rounded-[3px] hover:bg-cog-teal-dark transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-3.5 py-2 text-sm font-bold text-white bg-cog-teal rounded-md hover:bg-cog-teal-dark transition-colors disabled:opacity-50"
           >
             {saving ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -234,8 +309,90 @@ function ProfilePage() {
             )}
             Speichern
           </button>
+          {justSaved && (
+            <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+              <Check className="h-4 w-4 text-cog-teal-dark" />
+              Gespeichert.
+            </span>
+          )}
+          {isDirty && !justSaved && (
+            <span className="text-sm text-muted-foreground">
+              Ungespeicherte Änderungen.
+            </span>
+          )}
         </div>
       </form>
+
+      <PermissionsCard
+        granted={userDoc?.permissions ?? []}
+      />
     </div>
+  )
+}
+
+function PermissionsCard({ granted }: { granted: string[] }) {
+  const db = useDb()
+  const { data: permDocs } = useCollection(permissionsCollection(db))
+  const grantedSet = new Set(granted)
+  const total = permDocs.length
+
+  return (
+    <section className="rounded-2xl border border-border bg-card shadow-xs overflow-hidden">
+      <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-border">
+        <h2 className="font-heading font-bold text-lg">Berechtigungen</h2>
+        <span className="text-sm text-muted-foreground tabular-nums">
+          {grantedSet.size} von {total}
+        </span>
+      </div>
+      {permDocs.length === 0 ? (
+        <div className="px-6 py-8 text-sm text-muted-foreground text-center">
+          Keine Berechtigungen definiert.
+        </div>
+      ) : (
+        <ul className="flex flex-col">
+          {permDocs.map((perm) => {
+            const isGranted = grantedSet.has(perm.id)
+            return (
+              <li
+                key={perm.id}
+                className={cn(
+                  "grid grid-cols-[40px_minmax(0,1fr)_auto] gap-4 items-center px-6 py-4 border-b border-border last:border-b-0",
+                  !isGranted && "opacity-90",
+                )}
+              >
+                <span
+                  className={cn(
+                    "h-9 w-9 rounded-lg inline-flex items-center justify-center text-white",
+                    isGranted ? "bg-cog-teal" : "bg-muted text-muted-foreground",
+                  )}
+                >
+                  <KeyRound className="h-[18px] w-[18px]" />
+                </span>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <span className="font-heading font-bold text-base leading-tight">
+                      {perm.name}
+                    </span>
+                    {isGranted ? (
+                      <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-transparent">
+                        Freigegeben
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline">Einführung nötig</Badge>
+                    )}
+                  </div>
+                  {perm.description && (
+                    <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
+                      {perm.description}
+                    </p>
+                  )}
+                </div>
+                <div />
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </section>
   )
 }

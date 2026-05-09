@@ -98,8 +98,10 @@ function MembershipPage() {
   const isActive = membership?.status === "active"
 
   return (
-    <div className="max-w-2xl space-y-6">
-      <h1 className="text-2xl font-semibold">Mitgliedschaft</h1>
+    <div className="max-w-2xl mx-auto space-y-6">
+      <h1 className="font-heading font-bold text-3xl leading-tight">
+        Mitgliedschaft
+      </h1>
 
       {!membership ? (
         <NoMembership onPurchase={startPurchase} loading={purchase.loading} />

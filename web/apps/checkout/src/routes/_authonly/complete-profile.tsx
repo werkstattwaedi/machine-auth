@@ -10,10 +10,16 @@ import { useDb } from "@modules/lib/firebase-context"
 import { userRef } from "@modules/lib/firestore-helpers"
 import { Label } from "@modules/components/ui/label"
 import { Checkbox } from "@modules/components/ui/checkbox"
-import { Loader2, ArrowRight } from "lucide-react"
+import {
+  Required,
+  SectionDivider,
+  SectionEyebrow,
+} from "@modules/components/profile-form"
+import { ArrowRight, Loader2, Mail, MapPin } from "lucide-react"
 import { serverTimestamp } from "firebase/firestore"
 import { useForm, Controller } from "react-hook-form"
 import { USER_TYPE_LABELS, type UserType } from "@modules/lib/pricing"
+import { cn } from "@modules/lib/utils"
 
 const completeProfileSearchSchema = z.object({
   redirect: z.optional(z.string()),
@@ -27,22 +33,23 @@ export const Route = createFileRoute("/_authonly/complete-profile")({
 interface CompleteProfileFormValues {
   firstName: string
   lastName: string
-  userType: string
+  userType: UserType
   company: string
   street: string
   zip: string
   city: string
+  phone: string
   termsAccepted: boolean
 }
 
-const BASE_INPUT =
-  "flex h-9 w-full rounded-none border bg-background px-3 py-1 text-sm outline-none"
-const INPUT_OK = `${BASE_INPUT} border-[#ccc] focus:border-cog-teal`
-const INPUT_ERR = `${BASE_INPUT} border-[#cc2a24] focus:border-[#cc2a24]`
+const INPUT_BASE =
+  "block w-full h-10 rounded-md border bg-background px-3 text-sm shadow-xs outline-none transition-colors"
+const INPUT_OK = `${INPUT_BASE} border-[#ccc] focus:border-cog-teal focus:ring-2 focus:ring-cog-teal/30`
+const INPUT_ERR = `${INPUT_BASE} border-destructive focus:border-destructive focus:ring-2 focus:ring-destructive/30`
 
 function ErrorBadge({ message }: { message: string }) {
   return (
-    <span className="block w-full mt-1 px-2 py-0.5 text-xs text-white bg-[#cc2a24] rounded-sm">
+    <span className="block w-full mt-1 text-xs text-destructive">
       {message}
     </span>
   )
@@ -55,7 +62,13 @@ function CompleteProfilePage() {
   const navigate = useNavigate()
   const { redirect: redirectTo } = Route.useSearch()
 
-  const { register, handleSubmit, watch, control, formState: { errors, isSubmitted } } = useForm<CompleteProfileFormValues>({
+  const {
+    register,
+    handleSubmit,
+    watch,
+    control,
+    formState: { errors, isSubmitted },
+  } = useForm<CompleteProfileFormValues>({
     defaultValues: {
       firstName: "",
       lastName: "",
@@ -64,6 +77,7 @@ function CompleteProfilePage() {
       street: "",
       zip: "",
       city: "",
+      phone: "",
       termsAccepted: false,
     },
   })
@@ -88,202 +102,258 @@ function CompleteProfilePage() {
 
   const fieldCls = (field: keyof CompleteProfileFormValues) =>
     isSubmitted && errors[field] ? INPUT_ERR : INPUT_OK
-  const wrapCls = (field: keyof CompleteProfileFormValues) =>
-    `space-y-1${isSubmitted && errors[field] ? " bg-[#fce4e4] p-2 -m-2 rounded-sm" : ""}`
 
   const onSubmit = async (values: CompleteProfileFormValues) => {
     if (!userDoc) return
-
-    const data: Record<string, unknown> = {
-      firstName: values.firstName,
-      lastName: values.lastName,
-      userType: values.userType,
-      termsAcceptedAt: serverTimestamp(),
-    }
-
-    if (values.userType === "firma") {
-      data.billingAddress = {
-        company: values.company,
-        street: values.street,
-        zip: values.zip,
-        city: values.city,
-      }
-    } else {
-      data.billingAddress = null
-    }
-
-    await update(userRef(db, userDoc.id), data, {
-      successMessage: "Profil gespeichert",
-    })
+    await update(
+      userRef(db, userDoc.id),
+      {
+        firstName: values.firstName.trim(),
+        lastName: values.lastName.trim(),
+        userType: values.userType,
+        phone: values.phone.trim() || null,
+        billingAddress: {
+          company: values.userType === "firma" ? values.company.trim() : "",
+          street: values.street.trim(),
+          zip: values.zip.trim(),
+          city: values.city.trim(),
+        },
+        termsAcceptedAt: serverTimestamp(),
+      },
+      { successMessage: "Profil gespeichert" },
+    )
     navigate({ to: redirectTo || "/visit" })
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <h2 className="text-xl font-bold font-body">
-        Profil vervollständigen
-      </h2>
+    <div className="max-w-2xl mx-auto flex flex-col gap-6">
+      <header className="flex flex-col gap-1">
+        <h1 className="font-heading font-bold text-3xl leading-tight">
+          Profil vervollständigen
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Damit wir Rechnungen ausstellen können, brauchen wir noch ein paar
+          Angaben.
+        </p>
+      </header>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-6">
-        <div className="bg-[rgba(204,204,204,0.2)] rounded-none p-[25px] space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className={wrapCls("firstName")}>
-              <Label htmlFor="firstName" className="text-sm font-bold">
-                Vorname
-              </Label>
-              <input
-                id="firstName"
-                {...register("firstName", { required: "Vorname ist erforderlich" })}
-                className={fieldCls("firstName")}
-              />
-              {isSubmitted && errors.firstName && <ErrorBadge message={errors.firstName.message!} />}
-            </div>
-            <div className={wrapCls("lastName")}>
-              <Label htmlFor="lastName" className="text-sm font-bold">
-                Nachname
-              </Label>
-              <input
-                id="lastName"
-                {...register("lastName", { required: "Nachname ist erforderlich" })}
-                className={fieldCls("lastName")}
-              />
-              {isSubmitted && errors.lastName && <ErrorBadge message={errors.lastName.message!} />}
-            </div>
+      <form
+        onSubmit={handleSubmit(onSubmit)}
+        className="rounded-2xl border border-border bg-card shadow-xs p-6 sm:p-7 flex flex-col gap-5"
+      >
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="firstName" className="text-sm font-bold">
+              Vorname <Required />
+            </Label>
+            <input
+              id="firstName"
+              {...register("firstName", {
+                required: "Vorname ist erforderlich",
+              })}
+              className={fieldCls("firstName")}
+              autoComplete="given-name"
+            />
+            {isSubmitted && errors.firstName && (
+              <ErrorBadge message={errors.firstName.message!} />
+            )}
           </div>
-
-          <div className="space-y-1">
-            <Label className="text-sm font-bold">Nutzer:in</Label>
-            <div className="flex gap-3 pt-1">
-              {(Object.entries(USER_TYPE_LABELS) as [UserType, string][]).map(
-                ([value, label]) => (
-                  <label key={value} className="flex items-center gap-1.5 text-sm cursor-pointer">
-                    <span
-                      className={`inline-flex items-center justify-center h-4 w-4 rounded-full border ${
-                        userType === value
-                          ? "border-cog-teal bg-cog-teal"
-                          : "border-[#ccc] bg-white"
-                      }`}
-                    >
-                      {userType === value && (
-                        <span className="h-1.5 w-1.5 rounded-full bg-white" />
-                      )}
-                    </span>
-                    <input
-                      type="radio"
-                      value={value}
-                      {...register("userType")}
-                      className="sr-only"
-                    />
-                    {label}
-                  </label>
-                )
-              )}
-            </div>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="lastName" className="text-sm font-bold">
+              Nachname <Required />
+            </Label>
+            <input
+              id="lastName"
+              {...register("lastName", {
+                required: "Nachname ist erforderlich",
+              })}
+              className={fieldCls("lastName")}
+              autoComplete="family-name"
+            />
+            {isSubmitted && errors.lastName && (
+              <ErrorBadge message={errors.lastName.message!} />
+            )}
           </div>
+        </div>
 
-          {isFirma && (
-            <div className="space-y-3 border-t pt-4">
-              <Label className="text-sm font-bold">Rechnungsadresse</Label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className={wrapCls("company")}>
-                  <Label className="text-sm font-bold">
-                    Firma
-                  </Label>
+        <div className="flex flex-col gap-1">
+          <Label className="text-sm font-bold">Nutzer:in</Label>
+          <div className="flex gap-6 flex-wrap pt-1.5">
+            {(Object.entries(USER_TYPE_LABELS) as [UserType, string][]).map(
+              ([value, label]) => (
+                <label
+                  key={value}
+                  className="inline-flex items-center gap-2 text-sm cursor-pointer select-none"
+                >
+                  <span
+                    className={cn(
+                      "inline-flex items-center justify-center h-[18px] w-[18px] rounded-full border-[1.5px] transition-colors",
+                      userType === value
+                        ? "border-cog-teal bg-cog-teal"
+                        : "border-[#c1c1c1] bg-background",
+                    )}
+                  >
+                    {userType === value && (
+                      <span className="h-2 w-2 rounded-full bg-white" />
+                    )}
+                  </span>
                   <input
-                    {...register("company", {
-                      validate: (v) => !isFirma || v.trim() !== "" || "Firmenname ist erforderlich",
-                    })}
-                    className={fieldCls("company")}
+                    type="radio"
+                    value={value}
+                    {...register("userType")}
+                    className="sr-only"
                   />
-                  {isSubmitted && errors.company && <ErrorBadge message={errors.company.message!} />}
-                </div>
-                <div className={wrapCls("street")}>
-                  <Label className="text-sm font-bold">
-                    Strasse
-                  </Label>
-                  <input
-                    {...register("street", {
-                      validate: (v) => !isFirma || v.trim() !== "" || "Strasse ist erforderlich",
-                    })}
-                    className={fieldCls("street")}
-                  />
-                  {isSubmitted && errors.street && <ErrorBadge message={errors.street.message!} />}
-                </div>
-                <div className={wrapCls("zip")}>
-                  <Label className="text-sm font-bold">
-                    PLZ
-                  </Label>
-                  <input
-                    {...register("zip", {
-                      validate: (v) => !isFirma || v.trim() !== "" || "PLZ ist erforderlich",
-                    })}
-                    className={fieldCls("zip")}
-                  />
-                  {isSubmitted && errors.zip && <ErrorBadge message={errors.zip.message!} />}
-                </div>
-                <div className={wrapCls("city")}>
-                  <Label className="text-sm font-bold">
-                    Ort
-                  </Label>
-                  <input
-                    {...register("city", {
-                      validate: (v) => !isFirma || v.trim() !== "" || "Ort ist erforderlich",
-                    })}
-                    className={fieldCls("city")}
-                  />
-                  {isSubmitted && errors.city && <ErrorBadge message={errors.city.message!} />}
-                </div>
-              </div>
-            </div>
+                  {label}
+                </label>
+              ),
+            )}
+          </div>
+        </div>
+
+        {isFirma && (
+          <div className="flex flex-col gap-1">
+            <Label className="text-sm font-bold">
+              Firmenname <Required />
+            </Label>
+            <input
+              {...register("company", {
+                validate: (v) =>
+                  !isFirma || v.trim() !== "" || "Firmenname ist erforderlich",
+              })}
+              className={fieldCls("company")}
+              placeholder="Holzbau Müller AG"
+              autoComplete="organization"
+            />
+            {isSubmitted && errors.company && (
+              <ErrorBadge message={errors.company.message!} />
+            )}
+          </div>
+        )}
+
+        <SectionDivider />
+        <SectionEyebrow icon={<MapPin className="h-3 w-3" />}>
+          Adresse
+        </SectionEyebrow>
+
+        <div className="flex flex-col gap-1">
+          <Label className="text-sm font-bold">
+            Strasse und Hausnummer <Required />
+          </Label>
+          <input
+            {...register("street", {
+              validate: (v) => v.trim() !== "" || "Strasse ist erforderlich",
+            })}
+            className={fieldCls("street")}
+            placeholder="Seestrasse 12"
+            autoComplete="street-address"
+          />
+          {isSubmitted && errors.street && (
+            <ErrorBadge message={errors.street.message!} />
           )}
         </div>
 
-        <div className="space-y-3">
-          <Controller
-            name="termsAccepted"
-            control={control}
-            rules={{ validate: (v) => v || "Du musst die Nutzungsbestimmungen akzeptieren" }}
-            render={({ field }) => (
-              <div
-                className={
-                  isSubmitted && errors.termsAccepted
-                    ? "bg-[#fce4e4] p-3 rounded-sm space-y-2"
-                    : "space-y-2"
-                }
-              >
-                <div className="flex items-start gap-3">
-                  <Checkbox
-                    id="termsAccepted"
-                    className="bg-white"
-                    checked={field.value}
-                    onCheckedChange={field.onChange}
-                  />
-                  <label htmlFor="termsAccepted" className="text-sm leading-snug">
-                    Ich akzeptiere die{" "}
-                    <a
-                      href="https://werkstattwaedi.ch/nutzungsbestimmungen"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="underline font-bold text-cog-teal"
-                    >
-                      Nutzungsbestimmungen
-                    </a>
-                  </label>
-                </div>
-                {isSubmitted && errors.termsAccepted && (
-                  <ErrorBadge message={errors.termsAccepted.message!} />
-                )}
-              </div>
+        <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-4">
+          <div className="flex flex-col gap-1">
+            <Label className="text-sm font-bold">
+              PLZ <Required />
+            </Label>
+            <input
+              {...register("zip", {
+                validate: (v) => v.trim() !== "" || "PLZ ist erforderlich",
+              })}
+              className={`${fieldCls("zip")} tabular-nums`}
+              placeholder="8820"
+              maxLength={4}
+              inputMode="numeric"
+              autoComplete="postal-code"
+            />
+            {isSubmitted && errors.zip && (
+              <ErrorBadge message={errors.zip.message!} />
             )}
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label className="text-sm font-bold">
+              Ort <Required />
+            </Label>
+            <input
+              {...register("city", {
+                validate: (v) => v.trim() !== "" || "Ort ist erforderlich",
+              })}
+              className={fieldCls("city")}
+              placeholder="Wädenswil"
+              autoComplete="address-level2"
+            />
+            {isSubmitted && errors.city && (
+              <ErrorBadge message={errors.city.message!} />
+            )}
+          </div>
+        </div>
+
+        <SectionDivider />
+        <SectionEyebrow icon={<Mail className="h-3 w-3" />}>
+          Kontakt
+        </SectionEyebrow>
+
+        <div className="flex flex-col gap-1">
+          <Label className="text-sm font-bold">
+            Telefon{" "}
+            <span className="text-muted-foreground font-normal">
+              (optional)
+            </span>
+          </Label>
+          <input
+            {...register("phone")}
+            type="tel"
+            className={INPUT_OK}
+            placeholder="+41 79 123 45 67"
+            autoComplete="tel"
           />
         </div>
 
-        <div>
+        <Controller
+          name="termsAccepted"
+          control={control}
+          rules={{
+            validate: (v) =>
+              v || "Du musst die Nutzungsbestimmungen akzeptieren",
+          }}
+          render={({ field }) => (
+            <div className="mt-1 pt-5 border-t border-border flex flex-col gap-2">
+              <div className="flex items-start gap-3">
+                <Checkbox
+                  id="termsAccepted"
+                  className="bg-white"
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                />
+                <label
+                  htmlFor="termsAccepted"
+                  className="text-sm leading-snug"
+                >
+                  Ich akzeptiere die{" "}
+                  <a
+                    href="https://werkstattwaedi.ch/nutzungsbestimmungen"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="underline font-bold text-cog-teal"
+                  >
+                    Nutzungsbestimmungen
+                  </a>
+                </label>
+              </div>
+              {isSubmitted && errors.termsAccepted && (
+                <ErrorBadge message={errors.termsAccepted.message!} />
+              )}
+            </div>
+          )}
+        />
+
+        <div className="pt-2">
           <button
             type="submit"
             disabled={saving}
-            className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-white bg-cog-teal rounded-[3px] hover:bg-cog-teal-dark transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-bold text-white bg-cog-teal rounded-md hover:bg-cog-teal-dark transition-colors disabled:opacity-50"
           >
             {saving && <Loader2 className="h-4 w-4 animate-spin" />}
             Profil speichern
@@ -294,3 +364,4 @@ function CompleteProfilePage() {
     </div>
   )
 }
+

@@ -53,6 +53,8 @@ export interface UserDoc extends AuditFields {
   displayName: string | null
   firstName: string
   lastName: string
+  /** Optional contact phone — captured for everyone, never required. */
+  phone?: string | null
   permissions: DocumentReference<PermissionDoc>[]
   roles: string[]
   termsAcceptedAt?: Timestamp | null
@@ -62,6 +64,11 @@ export interface UserDoc extends AuditFields {
   // before granting the member discount, so a stale denorm only ever costs
   // a brief extra read.
   activeMembership?: DocumentReference<MembershipDoc> | null
+  /**
+   * Postal address. Required for every registered user (street/zip/city);
+   * `company` is only set for `userType === "firma"`. Stored under the
+   * historic `billingAddress` key so existing reads keep working.
+   */
   billingAddress?: BillingAddressDoc | null
 }
 

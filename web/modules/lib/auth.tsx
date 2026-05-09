@@ -44,6 +44,9 @@ export interface UserDoc {
   firstName: string
   lastName: string
   email: string | null // null for child accounts (no Firebase Auth email)
+  /** Optional contact phone — captured for everyone, never required.
+   *  Always normalized to a non-undefined value (`null` when absent). */
+  phone: string | null
   roles: string[]
   permissions: string[] // permission doc IDs (resolved from refs)
   termsAcceptedAt?: { toDate(): Date } | null
@@ -54,16 +57,20 @@ export interface UserDoc {
   activeMembership: string | null
 }
 
-/** Profile is complete when name, terms, and (for firma) billing address are filled. */
+/**
+ * Profile is complete when name, terms, and postal address are filled.
+ * Firma additionally requires `company` on the billingAddress.
+ */
 export function isProfileComplete(userDoc: UserDoc): boolean {
   if (!userDoc.firstName || !userDoc.lastName || !userDoc.termsAcceptedAt) {
     return false
   }
-  if (userDoc.userType === "firma") {
-    const addr = userDoc.billingAddress
-    if (!addr || !addr.company || !addr.street || !addr.zip || !addr.city) {
-      return false
-    }
+  const addr = userDoc.billingAddress
+  if (!addr || !addr.street || !addr.zip || !addr.city) {
+    return false
+  }
+  if (userDoc.userType === "firma" && !addr.company) {
+    return false
   }
   return true
 }
@@ -203,6 +210,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           firstName,
           lastName,
           email: data.email ?? null,
+          phone: data.phone ?? null,
           roles,
           permissions: (data.permissions ?? []).map(
             (ref: { id: string }) => ref.id

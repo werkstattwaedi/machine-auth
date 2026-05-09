@@ -331,7 +331,7 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="max-w-[1000px] mx-auto space-y-4">
       <h1 className="text-2xl font-bold">
         Hallo, {userDoc.displayName}
       </h1>

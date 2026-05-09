@@ -175,15 +175,13 @@ describe("Usage page", () => {
     expect(CapturedComponent).toBeTypeOf("function")
   })
 
-  it("shows empty states when no bills or checkouts exist", async () => {
+  it("shows empty state when no bills exist", async () => {
     renderUsagePage()
 
     await waitFor(() => {
       expect(screen.getByText("Nutzungsverlauf")).toBeInTheDocument()
     })
     expect(screen.getByText("Keine Rechnungen")).toBeInTheDocument()
-    // Unbilled checkouts section is hidden when empty
-    expect(screen.queryByText("Nicht verrechnete Checkouts")).not.toBeInTheDocument()
   })
 
   it("shows account error when userDoc is missing", () => {
@@ -254,26 +252,36 @@ describe("Usage page", () => {
     await waitFor(() => {
       expect(screen.getByText("RE-000010")).toBeInTheDocument()
     })
-    expect(screen.getByText("Offen")).toBeInTheDocument()
+    // "Offen" appears as the stat-card label too; assert there's at least
+    // one occurrence (the badge in the row).
+    expect(screen.getAllByText("Offen").length).toBeGreaterThan(0)
   })
 
-  it("renders unbilled checkouts", async () => {
+  it("renders closed checkouts under the Werkstatt-Besuche tab", async () => {
+    const user = userEvent.setup()
     fakeDb.setDoc(fakeDb.doc("checkouts", "co1"), {
       userId: fakeDb.doc("users", "user1"),
       status: "closed",
-      created: new Date("2025-06-10"),
-      closedAt: new Date("2025-06-10"),
+      created: new Date("2025-06-10T14:00:00"),
+      closedAt: new Date("2025-06-10T15:30:00"),
       summary: { totalPrice: 45 },
       billRef: null,
+      workshopsVisited: ["holz"],
     })
 
     renderUsagePage()
 
-    // Wait for the page to finish loading (heading appears once both queries resolve)
     await waitFor(() => {
       expect(screen.getByText("Nutzungsverlauf")).toBeInTheDocument()
     })
-    expect(screen.getByText("Nicht verrechnete Checkouts")).toBeInTheDocument()
+    await user.click(
+      screen.getByRole("button", { name: /Werkstatt-Besuche/ }),
+    )
+    // Both the "Letzter Besuch" stat and the session row label the workshop —
+    // assert that at least one occurrence is present, plus the session amount.
+    expect(screen.getAllByText("Holz").length).toBeGreaterThan(0)
+    expect(screen.getByText(/CHF\s*45\.00/)).toBeInTheDocument()
+    expect(screen.getByText("1 h 30 min")).toBeInTheDocument()
   })
 
   it("download button calls getInvoiceDownloadUrl and triggers anchor click", async () => {
