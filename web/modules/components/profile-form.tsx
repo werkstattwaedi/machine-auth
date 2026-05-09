@@ -4,16 +4,12 @@
 /**
  * Shared layout primitives for profile-style forms (Profil page +
  * Komplett-Profil-Onboarding). Extracted so the visual contract — the
- * red `*` marker, the soft section divider, the small uppercase eyebrow
- * with a leading icon — stays in one place as more profile-shaped
- * surfaces are added (e.g. admin user editor).
+ * soft section divider and the small uppercase eyebrow with a leading
+ * icon — stays in one place as more profile-shaped surfaces are added
+ * (e.g. admin user editor).
  */
 
 import type { ReactNode } from "react"
-
-export function Required() {
-  return <span className="text-destructive font-bold">*</span>
-}
 
 export function SectionDivider() {
   return <hr className="border-t border-black/10" />

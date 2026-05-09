@@ -11,7 +11,6 @@ import { userRef } from "@modules/lib/firestore-helpers"
 import { Label } from "@modules/components/ui/label"
 import { Checkbox } from "@modules/components/ui/checkbox"
 import {
-  Required,
   SectionDivider,
   SectionEyebrow,
 } from "@modules/components/profile-form"
@@ -144,7 +143,7 @@ function CompleteProfilePage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="flex flex-col gap-1">
             <Label htmlFor="firstName" className="text-sm font-bold">
-              Vorname <Required />
+              Vorname
             </Label>
             <input
               id="firstName"
@@ -160,7 +159,7 @@ function CompleteProfilePage() {
           </div>
           <div className="flex flex-col gap-1">
             <Label htmlFor="lastName" className="text-sm font-bold">
-              Nachname <Required />
+              Nachname
             </Label>
             <input
               id="lastName"
@@ -212,9 +211,7 @@ function CompleteProfilePage() {
 
         {isFirma && (
           <div className="flex flex-col gap-1">
-            <Label className="text-sm font-bold">
-              Firmenname <Required />
-            </Label>
+            <Label className="text-sm font-bold">Firmenname</Label>
             <input
               {...register("company", {
                 validate: (v) =>
@@ -236,9 +233,7 @@ function CompleteProfilePage() {
         </SectionEyebrow>
 
         <div className="flex flex-col gap-1">
-          <Label className="text-sm font-bold">
-            Strasse und Hausnummer <Required />
-          </Label>
+          <Label className="text-sm font-bold">Strasse und Hausnummer</Label>
           <input
             {...register("street", {
               validate: (v) => v.trim() !== "" || "Strasse ist erforderlich",
@@ -254,9 +249,7 @@ function CompleteProfilePage() {
 
         <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-4">
           <div className="flex flex-col gap-1">
-            <Label className="text-sm font-bold">
-              PLZ <Required />
-            </Label>
+            <Label className="text-sm font-bold">PLZ</Label>
             <input
               {...register("zip", {
                 validate: (v) => v.trim() !== "" || "PLZ ist erforderlich",
@@ -272,9 +265,7 @@ function CompleteProfilePage() {
             )}
           </div>
           <div className="flex flex-col gap-1">
-            <Label className="text-sm font-bold">
-              Ort <Required />
-            </Label>
+            <Label className="text-sm font-bold">Ort</Label>
             <input
               {...register("city", {
                 validate: (v) => v.trim() !== "" || "Ort ist erforderlich",

@@ -13,7 +13,6 @@ import {
 import { Label } from "@modules/components/ui/label"
 import { Badge } from "@modules/components/ui/badge"
 import {
-  Required,
   SectionDivider,
   SectionEyebrow,
 } from "@modules/components/profile-form"
@@ -137,9 +136,7 @@ function ProfilePage() {
       >
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="flex flex-col gap-1">
-            <Label className="text-sm font-bold">
-              Vorname <Required />
-            </Label>
+            <Label className="text-sm font-bold">Vorname</Label>
             <input
               {...register("firstName", {
                 required: "Vorname ist erforderlich",
@@ -150,9 +147,7 @@ function ProfilePage() {
             <ErrorText message={errors.firstName?.message} />
           </div>
           <div className="flex flex-col gap-1">
-            <Label className="text-sm font-bold">
-              Nachname <Required />
-            </Label>
+            <Label className="text-sm font-bold">Nachname</Label>
             <input
               {...register("lastName", {
                 required: "Nachname ist erforderlich",
@@ -200,9 +195,7 @@ function ProfilePage() {
 
         {isFirma && (
           <div className="flex flex-col gap-1">
-            <Label className="text-sm font-bold">
-              Firmenname <Required />
-            </Label>
+            <Label className="text-sm font-bold">Firmenname</Label>
             <input
               {...register("company", {
                 validate: (v) =>
@@ -224,9 +217,7 @@ function ProfilePage() {
         </SectionEyebrow>
 
         <div className="flex flex-col gap-1">
-          <Label className="text-sm font-bold">
-            Strasse und Hausnummer <Required />
-          </Label>
+          <Label className="text-sm font-bold">Strasse und Hausnummer</Label>
           <input
             {...register("street", { required: "Strasse ist erforderlich" })}
             className={fieldCls("street")}
@@ -238,9 +229,7 @@ function ProfilePage() {
 
         <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-4">
           <div className="flex flex-col gap-1">
-            <Label className="text-sm font-bold">
-              PLZ <Required />
-            </Label>
+            <Label className="text-sm font-bold">PLZ</Label>
             <input
               {...register("zip", { required: "PLZ ist erforderlich" })}
               className={`${fieldCls("zip")} tabular-nums`}
@@ -252,9 +241,7 @@ function ProfilePage() {
             <ErrorText message={errors.zip?.message} />
           </div>
           <div className="flex flex-col gap-1">
-            <Label className="text-sm font-bold">
-              Ort <Required />
-            </Label>
+            <Label className="text-sm font-bold">Ort</Label>
             <input
               {...register("city", { required: "Ort ist erforderlich" })}
               className={fieldCls("city")}
