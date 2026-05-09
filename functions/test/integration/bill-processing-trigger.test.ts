@@ -33,7 +33,10 @@ import { expect } from "chai";
 import * as sinon from "sinon";
 import { Timestamp } from "firebase-admin/firestore";
 import * as storageModule from "firebase-admin/storage";
-import { Resend } from "resend";
+// Resolution-mode ensures the `resend` types match the ESM build that
+// the SUT (and our `await import` below) loads. Static `import type` from
+// CJS test code would otherwise resolve to the CJS-build types and clash.
+type ResendType = (typeof import("resend", { with: { "resolution-mode": "import" } }))["Resend"];
 import {
   setupEmulator,
   clearFirestore,
@@ -187,10 +190,17 @@ describe("bill processing triggers (Integration)", () => {
   let getStorageStub: sinon.SinonStub;
   let resendSendStub: sinon.SinonStub;
   let fakeBucket: FakeBucket;
+  let ResendCtor: ResendType;
 
   before(async function () {
     this.timeout(10000);
     await setupEmulator();
+    // Match the SUT's `await import("resend")`. Resend ships dual
+    // ESM/CJS builds via package.json `exports`; static `import` from
+    // CJS test code resolves to the CJS build, while the SUT's dynamic
+    // import resolves to the ESM build. Stubbing one prototype does
+    // not intercept calls on the other class.
+    ({ Resend: ResendCtor } = await import("resend"));
   });
 
   after(async () => {
@@ -210,7 +220,7 @@ describe("bill processing triggers (Integration)", () => {
     // Stub the underlying `post` method on Resend.prototype so any
     // instance constructed inside the SUT is intercepted.
     resendSendStub = sinon
-      .stub(Resend.prototype, "post")
+      .stub(ResendCtor.prototype, "post")
       .resolves({ data: { id: "email-123" }, error: null } as never);
   });
 
