@@ -169,8 +169,14 @@ test.describe("Self-registration", () => {
     await expect(termsCheckbox).not.toBeChecked()
 
     // ── Complete the profile ──
+    // billingAddress (Strasse / PLZ / Ort) is required since the Profile
+    // redesign — `isProfileComplete` won't flip true otherwise and the
+    // navigate-to-/visit guard short-circuits.
     await page.locator("#firstName").fill("Checkout")
     await page.locator("#lastName").fill("Tester")
+    await page.getByPlaceholder("Seestrasse 12").fill("Seestrasse 12")
+    await page.getByPlaceholder("8820").fill("8820")
+    await page.getByPlaceholder("Wädenswil").fill("Wädenswil")
     await page.locator("#termsAccepted").click()
     await page.getByRole("button", { name: "Profil speichern" }).click()
 

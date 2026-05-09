@@ -25,6 +25,11 @@ const PROJECT_ID = "oww-maco"
 export const ADMIN_EMAIL = "admin-e2e@werkstattwaedi.ch"
 export const NON_ADMIN_EMAIL = "member-e2e@werkstattwaedi.ch"
 
+// Pin the auth UIDs so the seed-derived Avatar colour is stable across
+// runs — otherwise screenshot baselines are flaky.
+export const ADMIN_UID = "e2e-admin-user-001"
+export const NON_ADMIN_UID = "e2e-member-user-001"
+
 // Seeded "directory" users — appear in the user list, not signed in.
 export const SEEDED_DIRECTORY_USERS = [
   {
@@ -71,8 +76,8 @@ export default async function globalSetup() {
   })
 
   // ── Auth users ──
-  const adminUid = await createAuthUser(ADMIN_EMAIL)
-  const memberUid = await createAuthUser(NON_ADMIN_EMAIL)
+  const adminUid = await createAuthUser(ADMIN_EMAIL, ADMIN_UID)
+  const memberUid = await createAuthUser(NON_ADMIN_EMAIL, NON_ADMIN_UID)
 
   // ── Firestore user docs ──
   // Admin user — receives the `admin` role; syncCustomClaims will set the
@@ -159,7 +164,7 @@ async function clearEmulatorAuth() {
  * possession of the email by reading the code from the emulator), so
  * we just need an Auth account that exists. We create it via the admin
  * SDK so we control the UID and can match it to the Firestore doc. */
-async function createAuthUser(email: string): Promise<string> {
+async function createAuthUser(email: string, uid: string): Promise<string> {
   const auth = getAdminAuth()
   // If a previous run left this email behind, reuse it; otherwise create.
   try {
@@ -169,6 +174,7 @@ async function createAuthUser(email: string): Promise<string> {
     // Not found — fall through to create.
   }
   const created = await auth.createUser({
+    uid,
     email,
     emailVerified: true,
   })

@@ -13,6 +13,7 @@ import path from "path"
 import { fileURLToPath } from "url"
 import { getAdminFirestore, E2E_PORTS } from "./helpers"
 import { FieldValue } from "firebase-admin/firestore"
+import { getAuth } from "firebase-admin/auth"
 import { generateValidPICCAndCMAC } from "./sdm-test-helper"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -27,7 +28,6 @@ const SYSTEM_NAME = "Oww8820Maco"
 export const NFC_TAG_UID = "04c339aa1e1890"
 
 const PROJECT_ID = "oww-maco"
-const AUTH_EMULATOR = `http://127.0.0.1:${E2E_PORTS.auth}`
 
 // Test user constants
 export const AUTH_USER_EMAIL = "e2e-test@werkstattwaedi.ch"
@@ -139,7 +139,9 @@ export default async function globalSetup() {
   // Create Auth user via emulator REST API
   const authUid = await createAuthUser(AUTH_USER_EMAIL, AUTH_USER_PASSWORD)
 
-  // Create matching Firestore user doc
+  // Create matching Firestore user doc.
+  // billingAddress is required for `isProfileComplete` — without it, member
+  // area routes redirect to /complete-profile.
   await db.collection("users").doc(authUid).set({
     displayName: "E2E Testuser",
     firstName: "E2E",
@@ -148,6 +150,12 @@ export default async function globalSetup() {
     roles: ["vereinsmitglied"],
     permissions: [db.doc("permission/laser")],
     userType: "erwachsen",
+    billingAddress: {
+      company: "",
+      street: "Seestrasse 12",
+      zip: "8820",
+      city: "Wädenswil",
+    },
     termsAcceptedAt: FieldValue.serverTimestamp(),
     created: FieldValue.serverTimestamp(),
   })
@@ -164,6 +172,12 @@ export default async function globalSetup() {
     roles: ["vereinsmitglied"],
     permissions: [db.doc("permission/laser")],
     userType: "erwachsen",
+    billingAddress: {
+      company: "",
+      street: "Seestrasse 12",
+      zip: "8820",
+      city: "Wädenswil",
+    },
     termsAcceptedAt: FieldValue.serverTimestamp(),
     created: FieldValue.serverTimestamp(),
   })
@@ -202,37 +216,28 @@ async function clearEmulatorFirestore() {
 }
 
 async function createAuthUser(email: string, password: string): Promise<string> {
-  // Try to create user
-  const createRes = await fetch(
-    `${AUTH_EMULATOR}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-api-key`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, returnSecureToken: true }),
-    },
-  )
-
-  if (createRes.ok) {
-    const data = await createRes.json()
-    return data.localId
+  // Pin the UID via the Admin SDK so the seed-derived Avatar colour stays
+  // identical across runs — the REST `accounts:signUp` endpoint generates
+  // a random localId, which made screenshot baselines flaky.
+  const auth = getAuth()
+  try {
+    const user = await auth.createUser({
+      uid: AUTH_USER_ID,
+      email,
+      password,
+      emailVerified: true,
+    })
+    return user.uid
+  } catch (err: unknown) {
+    if (
+      typeof err === "object" &&
+      err !== null &&
+      "code" in err &&
+      (err as { code?: string }).code === "auth/uid-already-exists"
+    ) {
+      return AUTH_USER_ID
+    }
+    throw err
   }
-
-  // User already exists — sign in to get the UID
-  const signInRes = await fetch(
-    `${AUTH_EMULATOR}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=fake-api-key`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, returnSecureToken: true }),
-    },
-  )
-
-  if (!signInRes.ok) {
-    const err = await signInRes.text()
-    throw new Error(`Failed to create or sign in Auth user: ${err}`)
-  }
-
-  const data = await signInRes.json()
-  return data.localId
 }
 
