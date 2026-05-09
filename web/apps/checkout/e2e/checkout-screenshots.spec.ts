@@ -27,7 +27,7 @@ async function goToSummary(page: Page) {
   const checkoutBtn = page.getByRole("button", { name: "Check-Out" })
   await checkoutBtn.scrollIntoViewIfNeeded()
   await checkoutBtn.click()
-  await expect(page.getByText("Zusammenfassung")).toBeVisible()
+  await expect(page.getByText("Dein Besuch")).toBeVisible()
 }
 
 /** Navigate to checkout summary with a holz item added */
@@ -35,22 +35,26 @@ async function goToSummaryWithItems(page: Page) {
   await goToWorkshops(page)
 
   await page.getByLabel("Holz").click()
-  const holzSection = page.locator("div.space-y-2").filter({ hasText: /^Holz/ })
+  const holzSection = page.getByTestId("workshop-block-holz")
 
-  // Add count-based item (Schleifpapier, CHF 2/Stk.)
-  await holzSection.getByRole("button", { name: "Artikel hinzufügen" }).click()
+  // Open the MaterialPicker sheet for Holz
+  await holzSection.getByRole("button", { name: "Material hinzufügen" }).click()
   await expect(page.getByText("Schleifpapier")).toBeVisible()
   await page.getByText("Schleifpapier").click()
 
   // Set quantity to 3 (CHF 2 × 3 = CHF 6)
   const qtyInput = page.locator('label:has-text("Anzahl")').locator("..").locator("input")
   await qtyInput.fill("3")
-  await qtyInput.blur()
+
+  // Commit the row, then close the picker so the rest of the page is clickable
+  await page.getByRole("button", { name: "Hinzufügen", exact: true }).click()
+  await page.getByRole("button", { name: "Schliessen" }).click()
+  await expect(page.locator(`[data-slot="sheet-overlay"]`)).toBeHidden()
 
   const checkoutBtn = page.getByRole("button", { name: "Check-Out" })
   await checkoutBtn.scrollIntoViewIfNeeded()
   await checkoutBtn.click()
-  await expect(page.getByText("Zusammenfassung")).toBeVisible()
+  await expect(page.getByText("Dein Besuch")).toBeVisible()
 }
 
 /** Sign in as the seeded test user via the 6-digit code flow. */
@@ -95,15 +99,17 @@ async function submitAndWaitForPaymentResult(page: Page) {
   const checkoutBtn = page.getByRole("button", { name: "Check-Out" })
   await checkoutBtn.scrollIntoViewIfNeeded()
   await checkoutBtn.click()
-  await expect(page.getByText("Zusammenfassung")).toBeVisible()
+  await expect(page.getByText("Dein Besuch")).toBeVisible()
 
   // Submit
-  const submitBtn = page.getByRole("button", { name: "Senden & zur Kasse" })
+  const submitBtn = page.getByRole("button", { name: "Senden & bezahlen" })
   await submitBtn.scrollIntoViewIfNeeded()
   await submitBtn.click()
 
-  // Wait for payment result with QR bill details
-  await expect(page.getByText("Zu bezahlen")).toBeVisible({ timeout: 10_000 })
+  // Wait for Step 4 (Bezahlen) — Rechnung flow renders the QR bill card
+  await expect(
+    page.getByRole("heading", { name: "QR-Rechnung scannen" }),
+  ).toBeVisible({ timeout: 10_000 })
   await expect(page.getByText("Konto / Zahlbar an")).toBeVisible({ timeout: 30_000 })
 }
 
@@ -123,7 +129,7 @@ test.describe("Checkout step screenshots", () => {
     // Wait for both workshop sections to appear
     await expect(page.getByText("Holz").first()).toBeVisible()
     await expect(
-      page.getByRole("button", { name: "Artikel hinzufügen" }).first(),
+      page.getByRole("button", { name: "Material hinzufügen" }).first(),
     ).toBeVisible()
 
     await expect(page).toHaveScreenshot("checkout-workshops-selected.png")
@@ -134,11 +140,11 @@ test.describe("Checkout step screenshots", () => {
 
     await page.getByLabel("Holz").click()
     await expect(
-      page.getByRole("button", { name: "Artikel hinzufügen" }),
+      page.getByRole("button", { name: "Material hinzufügen" }),
     ).toBeVisible()
 
     // Open the add article search
-    await page.getByRole("button", { name: "Artikel hinzufügen" }).click()
+    await page.getByRole("button", { name: "Material hinzufügen" }).click()
 
     // Wait for dropdown to be visible
     await expect(page.getByText("E2E Testmaterial")).toBeVisible()
@@ -157,34 +163,49 @@ test.describe("Checkout step screenshots", () => {
     await page.getByLabel("Maker Space").click()
 
     // Locate workshop sections by their heading
-    const holzSection = page.locator("div.space-y-2").filter({ hasText: /^Holz/ })
-    const makerSection = page.locator("div.space-y-2").filter({ hasText: /^Maker Space/ })
+    const holzSection = page.getByTestId("workshop-block-holz")
+    const makerSection = page.getByTestId("workshop-block-makerspace")
 
-    // --- Add first material in holz ---
+    // --- Add E2E Testmaterial (area pricing) in holz ---
     await holzSection
-      .getByRole("button", { name: "Artikel hinzufügen" })
+      .getByRole("button", { name: "Material hinzufügen" })
       .click()
     await expect(page.getByText("E2E Testmaterial")).toBeVisible()
     await page.getByText("E2E Testmaterial").click()
+    await page.locator('label:has-text("Länge (cm)")').locator("..").locator("input").fill("60")
+    await page.locator('label:has-text("Breite (cm)")').locator("..").locator("input").fill("40")
+    await page.getByRole("button", { name: "Hinzufügen", exact: true }).click()
+    await page.getByRole("button", { name: "Schliessen" }).click()
+    await expect(page.locator(`[data-slot="sheet-overlay"]`)).toBeHidden()
 
-    // --- Add filament in makerspace ---
-    await makerSection
-      .getByRole("button", { name: "Artikel hinzufügen" })
-      .click()
+    // --- Add Filament (weight pricing) in makerspace ---
+    // On mobile the sticky bottom-nav can cover the add button; force: true
+    // bypasses the actionability/overlap check (the button is keyboard-
+    // reachable and we just want to open the picker).
+    const makerAddBtn = makerSection.getByRole("button", { name: "Material hinzufügen" })
+    await makerAddBtn.scrollIntoViewIfNeeded()
+    await makerAddBtn.click({ force: true })
     await expect(page.getByText("Filament").first()).toBeVisible()
     // Click the first catalog button matching "Filament" (not "Filament (Spezial)")
     await page.locator("button").filter({ hasText: /^Filament/ }).first().click()
+    await page.locator('label:has-text("Anzahl")').locator("..").locator("input").fill("100")
+    await page.getByRole("button", { name: "Hinzufügen", exact: true }).click()
+    await page.getByRole("button", { name: "Schliessen" }).click()
+    await expect(page.locator(`[data-slot="sheet-overlay"]`)).toBeHidden()
 
-    // --- Add ad-hoc item for machine hour in holz ---
-    await holzSection
-      .getByRole("button", { name: "Artikel hinzufügen" })
-      .click()
-    // Type a custom description
-    await page
-      .getByPlaceholder("Material suchen (Name oder Code)...")
-      .fill("Maschinennutzung")
-    // Select the "h" (time/Maschinenzeit) fallback
+    // --- Add ad-hoc Maschinenzeit (time pricing) in holz ---
+    const holzAddBtn2 = holzSection.getByRole("button", { name: "Material hinzufügen" })
+    await holzAddBtn2.scrollIntoViewIfNeeded()
+    await holzAddBtn2.click({ force: true })
+    await page.getByPlaceholder("Material suchen…").fill("Maschinennutzung")
     await page.getByText("Maschinenzeit").click()
+    // Fill description, time and rate so the row commits
+    await page.locator('label:has-text("Beschreibung")').locator("..").locator("input").fill("Maschinennutzung")
+    await page.locator('label:has-text("Anzahl")').locator("..").locator("input").fill("60")
+    await page.locator('label:has-text("Preis")').locator("..").locator("input").first().fill("20")
+    await page.getByRole("button", { name: "Hinzufügen", exact: true }).click()
+    await page.getByRole("button", { name: "Schliessen" }).click()
+    await expect(page.locator(`[data-slot="sheet-overlay"]`)).toBeHidden()
 
     await expect(page).toHaveScreenshot("checkout-materials-added.png")
   })
@@ -215,37 +236,107 @@ test.describe("Checkout step screenshots", () => {
   test("summary — tip with round-up", async ({ page }) => {
     await goToSummaryWithItems(page)
 
-    // Enter a manual tip
-    const tipInput = page.locator('input[type="number"][step="0.50"]')
+    // Enter a manual tip in the Spende card
+    const tipInput = page.getByRole("textbox", { name: "Trinkgeld/Spende" })
     await tipInput.fill("1")
 
-    // Wait for round-up options to appear
-    await expect(page.getByText("Aufrunden auf")).toBeVisible()
+    // The round-up row appears once there's a positive base. The dropdown
+    // owns the friendly target labels ("nächsten Franken" / "X Franken").
+    const targetSelect = page.getByLabel("Aufrunden-Ziel")
+    await expect(targetSelect).toBeVisible()
 
-    // Select the first round-up option
-    const firstRadio = page.getByText("Aufrunden auf").locator("..").locator("label").first()
-    await firstRadio.click()
+    // Picking a target also auto-checks the "Aufrunden" checkbox.
+    await targetSelect.selectOption({ index: 0 })
 
     // Blur the tip input to avoid cursor blink
-    await page.locator("h2").first().click()
+    await page.locator("h1, h2").first().click()
 
     await expect(page).toHaveScreenshot("checkout-summary-tip.png")
   })
 
-  test("payment result — e-banking selected", async ({ page }, testInfo) => {
+  test("summary — Nutzungsgebühren expanded (Nutzungsart + Personen)", async ({ page }) => {
+    await goToSummary(page)
+
+    // Expand the first type-of-cost row — panel shows the Nutzungsart
+    // dropdown plus a "Personen" list with per-person fees.
+    await page.getByRole("button", { name: /Nutzungsgebühren/ }).click()
+    await expect(page.getByLabel("Nutzungsart")).toBeVisible()
+
+    // Click a neutral spot so the screenshot is stable
+    await page.locator("h1").first().click()
+
+    await expect(page).toHaveScreenshot("checkout-summary-nutzung-expanded.png")
+  })
+
+  test("summary — Materialbezug expanded with workshop items", async ({ page }) => {
+    await goToSummaryWithItems(page)
+
+    await page.getByRole("button", { name: /Materialbezug/ }).click()
+    await expect(page.getByText("Bezogenes Material")).toBeVisible()
+
+    await page.locator("h1").first().click()
+
+    await expect(page).toHaveScreenshot("checkout-summary-material-expanded.png")
+  })
+
+  test("summary — TWINT method selected on Step 3", async ({ page }) => {
+    await goToSummaryWithItems(page)
+
+    // Pick TWINT in the Zahlungsart picker
+    await page.getByRole("button", { name: /TWINT.*Sofort bezahlen/ }).click()
+    await expect(page.getByText(/Transaktionsgebühren/)).toBeVisible()
+
+    // Scroll the method picker into view so the Empfohlen pill / TWINT body
+    // is captured in the viewport screenshot.
+    await page
+      .getByRole("button", { name: /TWINT.*Sofort bezahlen/ })
+      .scrollIntoViewIfNeeded()
+
+    await expect(page).toHaveScreenshot("checkout-summary-method-twint.png")
+  })
+
+  test("Step 4 · Rechnung — QR bill, PDF + IBAN buttons, Fertig", async ({ page }, testInfo) => {
     testInfo.setTimeout(60_000)
     await submitAndWaitForPaymentResult(page)
+
+    // PDF + IBAN actions are part of the Rechnung flow chrome.
+    await expect(page.getByRole("button", { name: /PDF herunterladen/ })).toBeVisible()
+    await expect(page.getByRole("button", { name: /IBAN kopieren/ })).toBeVisible()
 
     await expect(page).toHaveScreenshot("checkout-payment-ebanking.png")
   })
 
-  test("payment result — twint selected", async ({ page }, testInfo) => {
+  test("Step 4 · TWINT — single big button, no QR bill", async ({ page }, testInfo) => {
     testInfo.setTimeout(60_000)
-    await submitAndWaitForPaymentResult(page)
+    await signIn(page)
+    await page.goto("/")
+    await expect(page.getByText("Abmelden")).toBeVisible({ timeout: 10_000 })
 
-    // Switch to TWINT
-    await page.getByRole("button", { name: /TWINT/ }).click()
+    await page.getByRole("button", { name: "Weiter" }).click()
+    await expect(page.getByText("Werkstätten wählen")).toBeVisible()
+
+    const checkoutBtn = page.getByRole("button", { name: "Check-Out" })
+    await checkoutBtn.scrollIntoViewIfNeeded()
+    await checkoutBtn.click()
+    await expect(page.getByText("Dein Besuch")).toBeVisible()
+
+    // Pick TWINT on Step 3 before submitting
+    await page.getByRole("button", { name: /TWINT.*Sofort bezahlen/ }).click()
     await expect(page.getByText(/Transaktionsgebühren/)).toBeVisible()
+
+    const submitBtn = page.getByRole("button", { name: "Senden & bezahlen" })
+    await submitBtn.scrollIntoViewIfNeeded()
+    await submitBtn.click()
+
+    // Step 4 in the TWINT flow renders the dark pay-link as the only CTA.
+    await expect(
+      page.getByRole("heading", { name: "Mit TWINT bezahlen" }),
+    ).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByRole("link", { name: /Mit TWINT bezahlen/ })).toBeVisible({
+      timeout: 30_000,
+    })
+    // QR bill must NOT render in the TWINT flow.
+    await expect(page.getByText("Konto / Zahlbar an")).toBeHidden()
 
     await expect(page).toHaveScreenshot("checkout-payment-twint.png")
   })
@@ -254,13 +345,11 @@ test.describe("Checkout step screenshots", () => {
     await goToWorkshops(page)
 
     await page.getByLabel("Maker Space").click()
-    const makerSection = page
-      .locator("div.space-y-2")
-      .filter({ hasText: /^Maker Space/ })
+    const makerSection = page.getByTestId("workshop-block-makerspace")
 
     // Add the SLA catalog item from the makerspace section
     await makerSection
-      .getByRole("button", { name: "Artikel hinzufügen" })
+      .getByRole("button", { name: "Material hinzufügen" })
       .click()
     await expect(page.getByText("E2E SLA Resin")).toBeVisible()
     await page.getByText("E2E SLA Resin").click()
@@ -279,44 +368,20 @@ test.describe("Checkout step screenshots", () => {
       .locator("..")
       .locator("input")
     await layerInput.fill("1000")
-    await layerInput.blur()
-
-    // Click a neutral spot to stabilize focus for the screenshot
-    await page.locator("h2").first().click()
+    // Blur by Tabbing out — clicking outside hits the picker overlay.
+    await page.keyboard.press("Tab")
 
     await expect(page).toHaveScreenshot("checkout-sla-filled.png")
   })
 
-  test("SLA row — validation errors (empty inputs)", async ({ page }) => {
+  // The pre-v5 inline-rows let users add items with zero quantity then
+  // surface errors at Check-Out. The v5 MaterialPicker enforces validation
+  // at add-time (Hinzufügen button disabled until inputs are valid), so
+  // this submit-time error state can no longer be reached from the UI.
+  // Revisit if/when an item-edit affordance returns post-add.
+  test.fixme("SLA row — validation errors (empty inputs)", async ({ page }) => {
     await goToWorkshops(page)
-
     await page.getByLabel("Maker Space").click()
-    const makerSection = page
-      .locator("div.space-y-2")
-      .filter({ hasText: /^Maker Space/ })
-
-    // Add the SLA catalog item with both inputs left at 0 to trigger validation
-    await makerSection
-      .getByRole("button", { name: "Artikel hinzufügen" })
-      .click()
-    await expect(page.getByText("E2E SLA Resin")).toBeVisible()
-    await page.getByText("E2E SLA Resin").click()
-
-    // Wait until the SLA item row has actually rendered (Firestore writes
-    // are async since issue #151 — items go through addDoc not React state).
-    await expect(makerSection.getByText("Artikel 1: E2E SLA Resin")).toBeVisible()
-
-    // Trigger validation by clicking Check-Out (same CTA as existing validation
-    // error test). scrollIntoViewIfNeeded handles mobile viewport.
-    const checkoutBtn = page.getByRole("button", { name: "Check-Out" })
-    await checkoutBtn.scrollIntoViewIfNeeded()
-    await checkoutBtn.click()
-
-    // Wait for the SLA validation annotation to appear
-    await expect(
-      page.getByText("Resin (ml) und Layer müssen grösser als 0 sein."),
-    ).toBeVisible()
-
     await expect(page).toHaveScreenshot("checkout-sla-validation-errors.png")
   })
 
@@ -324,13 +389,11 @@ test.describe("Checkout step screenshots", () => {
     await goToWorkshops(page)
 
     await page.getByLabel("Maker Space").click()
-    const makerSection = page
-      .locator("div.space-y-2")
-      .filter({ hasText: /^Maker Space/ })
+    const makerSection = page.getByTestId("workshop-block-makerspace")
 
     // Add the SLA catalog item
     await makerSection
-      .getByRole("button", { name: "Artikel hinzufügen" })
+      .getByRole("button", { name: "Material hinzufügen" })
       .click()
     await expect(page.getByText("E2E SLA Resin")).toBeVisible()
     await page.getByText("E2E SLA Resin").click()
@@ -341,66 +404,33 @@ test.describe("Checkout step screenshots", () => {
       .locator("..")
       .locator("input")
     await resinInput.fill("50")
-    await resinInput.blur()
 
     const layerInput = page
       .locator('label:has-text("Layer")')
       .locator("..")
       .locator("input")
     await layerInput.fill("1000")
-    await layerInput.blur()
+
+    // Commit + close picker
+    await page.getByRole("button", { name: "Hinzufügen", exact: true }).click()
+    await page.getByRole("button", { name: "Schliessen" }).click()
+    await expect(page.locator(`[data-slot="sheet-overlay"]`)).toBeHidden()
 
     // Go to summary
     const checkoutBtn = page.getByRole("button", { name: "Check-Out" })
     await checkoutBtn.scrollIntoViewIfNeeded()
     await checkoutBtn.click()
-    await expect(page.getByText("Zusammenfassung")).toBeVisible()
+    await expect(page.getByText("Dein Besuch")).toBeVisible()
 
     await expect(page).toHaveScreenshot("checkout-summary-sla.png")
   })
 
-  test("checkout validation errors", async ({ page }) => {
+  // Same reason as "SLA row — validation errors" above: with v5's
+  // MaterialPicker, items can no longer be committed with zero values,
+  // so this submit-time error state is unreachable from the UI.
+  test.fixme("checkout validation errors", async ({ page }) => {
     await goToWorkshops(page)
-
-    // Build the same state as "materials added" — all items have quantity 0
     await page.getByLabel("Holz").click()
-    await page.getByLabel("Maker Space").click()
-
-    const holzSection = page.locator("div.space-y-2").filter({ hasText: /^Holz/ })
-    const makerSection = page.locator("div.space-y-2").filter({ hasText: /^Maker Space/ })
-
-    // Add area-based material in holz (will show two dimension field errors)
-    await holzSection
-      .getByRole("button", { name: "Artikel hinzufügen" })
-      .click()
-    await expect(page.getByText("E2E Testmaterial")).toBeVisible()
-    await page.getByText("E2E Testmaterial").click()
-
-    // Add filament in makerspace (weight, quantity 0 → error)
-    await makerSection
-      .getByRole("button", { name: "Artikel hinzufügen" })
-      .click()
-    await expect(page.getByText("Filament").first()).toBeVisible()
-    await page.locator("button").filter({ hasText: /^Filament/ }).first().click()
-
-    // Add ad-hoc machine hour in holz (time, quantity 0 + price 0 → errors)
-    await holzSection
-      .getByRole("button", { name: "Artikel hinzufügen" })
-      .click()
-    await page
-      .getByPlaceholder("Material suchen (Name oder Code)...")
-      .fill("Maschinennutzung")
-    await page.getByText("Maschinenzeit").click()
-
-    // Trigger validation (scrollIntoViewIfNeeded: on mobile the tall page
-    // can cause the parent div to intercept Playwright's actionability check)
-    const checkoutBtn = page.getByRole("button", { name: "Check-Out" })
-    await checkoutBtn.scrollIntoViewIfNeeded()
-    await checkoutBtn.click()
-
-    // Wait for error annotations to appear
-    await expect(page.getByText("Masse müssen grösser als 0 sein.")).toBeVisible()
-
     await expect(page).toHaveScreenshot("checkout-validation-errors.png")
   })
 })

@@ -37,6 +37,9 @@ interface GetPaymentQrDataRequest {
 }
 
 export interface PaymentData {
+  // Doc id of the underlying bill — lets the client wire follow-up
+  // actions (PDF download, etc.) without fetching the checkout doc.
+  billId: string;
   qrBillPayload: string;
   paylinkUrl: string;
   creditor: {
@@ -47,6 +50,7 @@ export interface PaymentData {
   };
   reference: string;
   payerName: string;
+  payerEmail: string;
   amount: string;
   currency: string;
 }
@@ -116,6 +120,7 @@ function buildQrPayload(bill: BillEntity, scorReference: string): string {
 export function buildPaymentData(
   bill: BillEntity,
   payer: PaymentPayer | null,
+  billId: string,
 ): PaymentData {
   const scorReference = generateScorReference(
     String(bill.referenceNumber).padStart(9, "0"),
@@ -129,8 +134,10 @@ export function buildPaymentData(
   paylinkParams.set("reference.creditor.value", scorReference);
 
   let payerName = "";
+  let payerEmail = "";
   if (payer) {
     payerName = payer.name;
+    payerEmail = payer.email ?? "";
     const nameParts = payer.name.trim().split(/\s+/);
     const firstName = nameParts[0] ?? "";
     const lastName = nameParts.slice(1).join(" ") || firstName;
@@ -147,6 +154,7 @@ export function buildPaymentData(
   const ibanFormatted = paymentIban.value().replace(/\s/g, "").replace(/(.{4})/g, "$1 ").trim();
 
   return {
+    billId,
     qrBillPayload: qrPayload,
     paylinkUrl,
     creditor: {
@@ -157,6 +165,7 @@ export function buildPaymentData(
     },
     reference: scorReference,
     payerName,
+    payerEmail,
     amount: bill.amount.toFixed(2),
     currency: paymentCurrency.value() || "CHF",
   };
@@ -189,5 +198,5 @@ export const getPaymentQrData = onCall(async (request) => {
     }
   }
 
-  return buildPaymentData(bill, payer);
+  return buildPaymentData(bill, payer, billId);
 });

@@ -2,31 +2,54 @@
 // SPDX-License-Identifier: MIT
 
 import { useState, useMemo, useCallback } from "react"
-import { Separator } from "@modules/components/ui/separator"
 import { Label } from "@modules/components/ui/label"
+import { Separator } from "@modules/components/ui/separator"
 import { formatCHF } from "@modules/lib/format"
-import { USER_TYPE_LABELS, USAGE_TYPE_LABELS, calculateFee } from "@modules/lib/pricing"
-import type { PricingConfig, WorkshopId } from "@modules/lib/workshop-config"
-import { ArrowLeft, ChevronDown, ChevronRight, Loader2, X } from "lucide-react"
-import type { CheckoutState, CheckoutAction } from "./use-checkout-state"
+import {
+  USAGE_TYPE_LABELS,
+  USER_TYPE_LABELS,
+  calculateFee,
+} from "@modules/lib/pricing"
+import {
+  getShortUnit,
+  type PricingConfig,
+} from "@modules/lib/workshop-config"
+import {
+  ArrowLeft,
+  ChevronRight,
+  CircleAlert,
+  Coins,
+  FileText,
+  Heart,
+  Loader2,
+  Package,
+  Wrench,
+} from "lucide-react"
+import { cn } from "@modules/lib/utils"
+import type { CheckoutState, CheckoutAction, PaymentMethod } from "./use-checkout-state"
 import type { CheckoutItemLocal } from "@/components/usage/inline-rows"
 import type { UsageType } from "@modules/lib/pricing"
 
-/** Compute up to 3 sensible round-up total targets based on current total.
- *  Small amounts (<20): include 0.50 steps. Larger amounts: integers/5/10 only. */
+/**
+ * Compute up to 3 sensible round-up total targets for the current base.
+ * The smallest target is the natural "next" step (next 0.50 for tiny
+ * totals < 5; next franc otherwise); the next two are slightly larger
+ * sensible jumps (next 5/10 etc.). The picker labels the smallest entry
+ * as "nächsten Franken" so the most-common case reads naturally.
+ */
 export function roundUpOptions(base: number): number[] {
   if (base <= 0) return []
   const maxTotal = base < 10 ? base + 3 : base * 1.1
   const bump = base + 0.01
 
   const candidates = new Set<number>()
-  if (base < 10) {
-    candidates.add(Math.ceil(bump * 2) / 2) // next 0.50
+  if (base < 5) {
+    candidates.add(Math.ceil(bump * 2) / 2) // next 0.50 step for tiny totals
   }
-  candidates.add(Math.ceil(bump))            // next integer
-  candidates.add(Math.ceil(bump / 2) * 2)    // next even integer
-  candidates.add(Math.ceil(bump / 5) * 5)    // next 5
-  candidates.add(Math.ceil(bump / 10) * 10)  // next 10
+  candidates.add(Math.ceil(bump)) // next integer franc
+  candidates.add(Math.ceil(bump / 2) * 2) // next even integer
+  candidates.add(Math.ceil(bump / 5) * 5) // next 5
+  candidates.add(Math.ceil(bump / 10) * 10) // next 10
 
   return Array.from(candidates)
     .sort((a, b) => a - b)
@@ -34,17 +57,16 @@ export function roundUpOptions(base: number): number[] {
     .slice(0, 3)
 }
 
-/** Custom radio circle matching person-card styling */
-function Radio({ checked }: { checked: boolean }) {
-  return (
-    <span
-      className={`inline-flex items-center justify-center h-4 w-4 rounded-full border ${
-        checked ? "border-cog-teal bg-cog-teal" : "border-[#ccc] bg-white"
-      }`}
-    >
-      {checked && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
-    </span>
-  )
+/** Label for a round-up target. The smallest (i.e. the "natural next
+ *  step") reads "nächsten Franken" / "nächsten halben Franken" so the
+ *  sentence "Auf X aufrunden" stays human-friendly. */
+export function roundUpOptionLabel(target: number, isNextStep: boolean): string {
+  if (isNextStep) {
+    // "next 0.50 step" only happens for tiny totals — keep it explicit.
+    if (target % 1 !== 0) return "nächsten halben Franken"
+    return "nächsten Franken"
+  }
+  return `${target.toFixed(0)} Franken`
 }
 
 interface StepCheckoutProps {
@@ -52,11 +74,7 @@ interface StepCheckoutProps {
   dispatch: React.Dispatch<CheckoutAction>
   onSubmit: () => Promise<void>
   submitting: boolean
-  /**
-   * German error message from the most recent failed submit. Rendered
-   * as an inline alert at the top of step 2 so the user knows the
-   * submit was rejected (B5 launch-readiness fix; see ADR-0025).
-   */
+  /** Inline alert after a failed submit (ADR-0025). */
   submitError?: string | null
   items: CheckoutItemLocal[]
   config: PricingConfig | null
@@ -71,79 +89,85 @@ export function StepCheckout({
   items,
   config,
 }: StepCheckoutProps) {
-  // Entry fees from persons + usage type. The wizard gates on a valid
-  // pricingConfig (see CheckoutWizard.configError handling), so by the
-  // time we render here `config` is non-null and only an unknown
-  // userType+usageType combo can return null — coerce to 0 for the
-  // running estimate; the server recompute is the authoritative number.
   const personFees = state.persons.reduce(
     (sum, p) => sum + (calculateFee(p.userType, state.usageType, config) ?? 0),
     0,
   )
+  const nfcItems = useMemo(() => items.filter((i) => i.origin === "nfc"), [items])
+  const materialItems = useMemo(
+    () => items.filter((i) => i.origin !== "nfc"),
+    [items],
+  )
+  const machineCost = nfcItems.reduce((s, i) => s + i.totalPrice, 0)
+  const materialCost = materialItems.reduce((s, i) => s + i.totalPrice, 0)
+  const subtotal = personFees + machineCost + materialCost
 
-  // Group all items by workshop
-  const workshopGroups = useMemo(() => {
-    const groups = new Map<string, { label: string; items: CheckoutItemLocal[] }>()
-    for (const item of items) {
-      const wsId = item.workshop
-      if (!groups.has(wsId)) {
-        const wsLabel = config?.workshops?.[wsId as WorkshopId]?.label ?? wsId
-        groups.set(wsId, { label: wsLabel, items: [] })
-      }
-      groups.get(wsId)!.items.push(item)
-    }
-    return groups
-  }, [items, config])
+  // Tip is split: manual entry + optional round-up to a chosen target.
+  const [manualTip, setManualTip] = useState(0)
+  const [roundUpEnabled, setRoundUpEnabled] = useState(false)
+  const [roundUpTarget, setRoundUpTarget] = useState<number | null>(null)
 
-  const itemsCost = items.reduce((sum, i) => sum + i.totalPrice, 0)
-  const subtotal = personFees + itemsCost
+  const roundBase = subtotal + manualTip
+  const roundOpts = useMemo(() => roundUpOptions(roundBase), [roundBase])
 
-  // Collapsible sections: tracks which sections are expanded
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
-  const toggleSection = (id: string) =>
-    setExpandedSections((prev) => {
+  // Auto-pick the smallest target when options first appear / the chosen
+  // target is no longer offered (e.g. base just crossed a threshold).
+  const activeTarget = roundUpTarget && roundOpts.includes(roundUpTarget)
+    ? roundUpTarget
+    : (roundOpts[0] ?? null)
+
+  const effectiveRoundUp =
+    roundUpEnabled && activeTarget != null
+      ? Math.max(0, +(activeTarget - roundBase).toFixed(2))
+      : 0
+  const tipTotal = manualTip + effectiveRoundUp
+  const total = subtotal + tipTotal
+
+  const syncTip = useCallback(
+    (manual: number, enabled: boolean, target: number | null) => {
+      const base = subtotal + manual
+      const round = enabled && target != null
+        ? Math.max(0, +(target - base).toFixed(2))
+        : 0
+      dispatch({ type: "SET_TIP", amount: manual + round })
+    },
+    [subtotal, dispatch],
+  )
+
+  const handleManualTipChange = (value: number) => {
+    setManualTip(value)
+    syncTip(value, roundUpEnabled, activeTarget)
+  }
+  const handleRoundUpToggle = (enabled: boolean) => {
+    setRoundUpEnabled(enabled)
+    syncTip(manualTip, enabled, activeTarget)
+  }
+  const handleRoundUpTarget = (target: number) => {
+    setRoundUpTarget(target)
+    // Picking a target also turns the round-up on — matches the user
+    // intent of "I just chose this" without an extra checkbox click.
+    setRoundUpEnabled(true)
+    syncTip(manualTip, true, target)
+  }
+
+  const [openSections, setOpenSections] = useState<Set<string>>(new Set())
+  const toggle = (id: string) =>
+    setOpenSections((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
       else next.add(id)
       return next
     })
 
-  // Tip is split: manual entry + optional round-up
-  const [manualTip, setManualTip] = useState(0)
-  const [roundUpTarget, setRoundUpTarget] = useState<number | null>(null)
+  const totalMachineMinutes = nfcItems.reduce(
+    (m, i) => m + Math.round(i.quantity * 60),
+    0,
+  )
 
-  // Base for round-up = subtotal + manual tip
-  const roundBase = subtotal + manualTip
-  const roundOpts = useMemo(() => roundUpOptions(roundBase), [roundBase])
-
-  // If selected round-up target is no longer valid, clear it
-  const effectiveRoundUp = roundUpTarget && roundOpts.includes(roundUpTarget)
-    ? Math.round((roundUpTarget - roundBase) * 100) / 100
-    : 0
-  const tipTotal = manualTip + effectiveRoundUp
-  const total = subtotal + tipTotal
-
-  const syncTip = useCallback((manual: number, roundTarget: number | null) => {
-    const base = subtotal + manual
-    const roundAmt = roundTarget ? Math.max(0, Math.round((roundTarget - base) * 100) / 100) : 0
-    dispatch({ type: "SET_TIP", amount: manual + roundAmt })
-  }, [subtotal, dispatch])
-
-  const handleManualTipChange = (value: number) => {
-    setManualTip(value)
-    syncTip(value, roundUpTarget)
-  }
-
-  const handleRoundUpToggle = (target: number) => {
-    const next = roundUpTarget === target ? null : target
-    setRoundUpTarget(next)
-    syncTip(manualTip, next)
-  }
+  const primaryPerson = state.persons[0]
 
   return (
     <div className="flex flex-col flex-1 gap-6">
-      {/* Inline error from the most recent failed submit (ADR-0025).
-          Hidden on the happy path so screenshots match the green flow. */}
       {submitError && (
         <div
           role="alert"
@@ -154,222 +178,220 @@ export function StepCheckout({
         </div>
       )}
 
-      {/* Usage type selector — above the summary heading */}
-      <select
-        value={state.usageType}
-        onChange={(e) =>
-          dispatch({
-            type: "SET_USAGE_TYPE",
-            usageType: e.target.value as UsageType,
-          })
-        }
-        className="flex h-9 w-full max-w-xs rounded-none border border-[#ccc] bg-background px-3 py-1 text-sm"
-      >
-        {Object.entries(USAGE_TYPE_LABELS).map(([key, label]) => (
-          <option key={key} value={key}>
-            {label}
-          </option>
-        ))}
-      </select>
+      {/* Block — Dein Besuch */}
+      <SectionEyebrow>Dein Besuch</SectionEyebrow>
 
-      <h4 className="text-sm font-semibold text-muted-foreground">
-        Zusammenfassung
-      </h4>
-
-      {/* Usage fees (collapsible person list) */}
-      <div>
-        <Separator />
-        <div className="pt-6">
-          <button
-            type="button"
-            className="flex items-center justify-between w-full text-left mb-4"
-            onClick={() => toggleSection("nutzungsgebuehren")}
-            aria-expanded={expandedSections.has("nutzungsgebuehren")}
+      {/* Three type-of-cost rows in one bordered card */}
+      <div className="rounded-md border border-border bg-background overflow-hidden">
+        <ExpandableSection
+          id="nutzung"
+          icon={<Coins className="h-4 w-4 text-cog-teal-dark" />}
+          title="Nutzungsgebühren"
+          summary={`${state.persons.length} ${
+            state.persons.length === 1 ? "Person" : "Personen"
+          } · ${USAGE_TYPE_LABELS[state.usageType]}`}
+          amount={personFees}
+          open={openSections.has("nutzung")}
+          onToggle={() => toggle("nutzung")}
+        >
+          <Label
+            htmlFor="usage-type"
+            className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
           >
-            <span className="flex items-center gap-2">
-              {expandedSections.has("nutzungsgebuehren") ? (
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
-              ) : (
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
-              )}
-              <h2 className="text-xl font-bold font-body underline decoration-cog-teal decoration-2 underline-offset-4">
-                Nutzungsgebühren
-              </h2>
-            </span>
-            <span className="font-bold text-lg">{formatCHF(personFees)}</span>
-          </button>
-          {expandedSections.has("nutzungsgebuehren") && (
-            <div className="space-y-3 pl-6">
-              {state.persons.map((p) => {
-                const fee = calculateFee(p.userType, state.usageType, config) ?? 0
-                return (
-                  <div key={p.id} className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-6 text-sm">
-                    <span className="font-medium sm:font-normal sm:w-40">
-                      {p.firstName} {p.lastName}
-                    </span>
-                    <span className="text-muted-foreground sm:text-foreground sm:w-40">{p.email}</span>
-                    <span className="sm:w-28">{USER_TYPE_LABELS[p.userType]}</span>
-                    <span className="font-semibold sm:font-normal">{formatCHF(fee)}</span>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-      </div>
+            Nutzungsart
+          </Label>
+          <select
+            id="usage-type"
+            value={state.usageType}
+            onChange={(e) =>
+              dispatch({
+                type: "SET_USAGE_TYPE",
+                usageType: e.target.value as UsageType,
+              })
+            }
+            className="mt-1.5 mb-4 h-10 w-full max-w-xs rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:border-cog-teal focus:ring-2 focus:ring-cog-teal/30"
+          >
+            {Object.entries(USAGE_TYPE_LABELS).map(([key, label]) => (
+              <option key={key} value={key}>
+                {label}
+              </option>
+            ))}
+          </select>
 
-      {/* Workshop cost sections */}
-      {Array.from(workshopGroups.entries()).map(([wsId, { label, items: wsItems }]) => {
-        const wsTotal = wsItems.reduce((s, i) => s + i.totalPrice, 0)
-        const isExpanded = expandedSections.has(wsId)
-        return (
-          <div key={wsId}>
-            <Separator />
-            <div className="pt-6">
-              <button
-                type="button"
-                className="flex items-center justify-between w-full text-left mb-4"
-                onClick={() => toggleSection(wsId)}
-                aria-expanded={isExpanded}
-              >
-                <span className="flex items-center gap-2">
-                  {isExpanded ? (
-                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                  ) : (
-                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                  )}
-                  <h2 className="text-xl font-bold font-body underline decoration-cog-teal decoration-2 underline-offset-4">
-                    {label}
-                  </h2>
-                </span>
-                <span className="font-bold text-lg">{formatCHF(wsTotal)}</span>
-              </button>
-              {isExpanded && (
-                <div className="pl-6">
-                  {wsItems.map((item) => (
-                    <div key={item.id} className="flex justify-between text-sm mb-1">
-                      <span>
-                        {item.description}
-                        {item.origin === "nfc" && (
-                          <span className="text-muted-foreground ml-2">
-                            {Math.round(item.quantity * 60)} min
-                          </span>
-                        )}
-                      </span>
-                      <span className="font-semibold">{formatCHF(item.totalPrice)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )
-      })}
-
-      {/* Subtotal before tips */}
-      <Separator />
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-semibold text-muted-foreground">Zwischentotal</span>
-        <span className="font-bold text-lg">{formatCHF(subtotal)}</span>
-      </div>
-
-      <Separator />
-
-      {/* Tip */}
-      <div>
-        <h2 className="text-xl font-bold font-body underline decoration-cog-teal decoration-2 underline-offset-4 mb-2">
-          Trinkgeld/Spenden
-        </h2>
-        <p className="text-sm text-muted-foreground mb-4">
-          Hast du bei uns einen tollen Tag erlebt, dir wurde von unseren
-          erfahrenen Vereinsmitgliedern geholfen oder am Fachabend konntest du
-          von unseren Profis profitieren? Dann freuen wir uns über einen
-          Zustupf.
-        </p>
-
-        {/* Manual tip entry */}
-        <div className="space-y-2">
-          <Label className="text-sm font-bold">Betrag (CHF)</Label>
-          <input
-            type="number"
-            step="0.50"
-            min="0"
-            value={manualTip || ""}
-            onChange={(e) => handleManualTipChange(parseFloat(e.target.value) || 0)}
-            placeholder="0.00"
-            className="h-9 w-full max-w-xs rounded-none border border-[#ccc] bg-background px-3 py-1 text-sm outline-none focus:border-cog-teal"
-          />
-        </div>
-
-        {/* Round-up radio options */}
-        {roundOpts.length > 0 && (
-          <div className="flex flex-wrap items-center justify-between gap-2 text-sm mt-3">
-            <div className="flex flex-wrap items-center gap-2 sm:gap-4">
-              <span className="text-muted-foreground">Aufrunden auf</span>
-              {roundOpts.map((target) => {
-                const isActive = roundUpTarget === target
-                return (
-                  <label key={target} className="flex items-center gap-1.5 text-sm cursor-pointer">
-                    <input
-                      type="radio"
-                      name="tip-round"
-                      checked={isActive}
-                      onChange={() => handleRoundUpToggle(target)}
-                      className="sr-only"
-                    />
-                    <Radio checked={isActive} />
-                    {formatCHF(target)}
-                  </label>
-                )
-              })}
-              {roundUpTarget && (
-                <button
-                  type="button"
-                  className="text-muted-foreground hover:text-foreground transition-colors"
-                  onClick={() => handleRoundUpToggle(roundUpTarget)}
-                  aria-label="Aufrunden entfernen"
+          <DetailLabel>Personen</DetailLabel>
+          <ul className="flex flex-col mt-1">
+            {state.persons.map((p) => {
+              const fee = calculateFee(p.userType, state.usageType, config) ?? 0
+              return (
+                <li
+                  key={p.id}
+                  className="grid grid-cols-[1fr_auto_auto] items-baseline gap-3 py-1.5 text-sm border-b border-dotted border-border last:border-b-0"
                 >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-            <span className="font-semibold">
-              {effectiveRoundUp > 0 ? formatCHF(effectiveRoundUp) : ""}
+                  <span className="font-medium text-foreground truncate">
+                    {p.firstName} {p.lastName}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {USER_TYPE_LABELS[p.userType]}
+                  </span>
+                  <span className="font-medium tabular-nums text-right min-w-[70px]">
+                    {formatCHF(fee)}
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+        </ExpandableSection>
+
+        <ExpandableSection
+          id="maschinen"
+          icon={<Wrench className="h-4 w-4 text-cog-teal-dark" />}
+          title="Maschinen-/Werkzeugnutzung"
+          summary={
+            nfcItems.length === 0
+              ? "Keine Maschinennutzung"
+              : `${nfcItems.length} ${
+                  nfcItems.length === 1 ? "Maschine" : "Maschinen"
+                } · ${totalMachineMinutes} Min total`
+          }
+          amount={machineCost}
+          open={openSections.has("maschinen")}
+          onToggle={() => toggle("maschinen")}
+        >
+          {nfcItems.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Keine Maschinen oder Werkzeuge erfasst.
+            </p>
+          ) : (
+            <ItemTable
+              firstColLabel="Akkumulierte Nutzungszeit"
+              rows={nfcItems.map((item) => ({
+                key: item.id,
+                title: item.description,
+                subtitle: null,
+                menge: `${Math.round(item.quantity * 60)} Min`,
+                kosten: `${item.unitPrice.toFixed(2)}/h`,
+                preis: item.totalPrice.toFixed(2),
+              }))}
+            />
+          )}
+        </ExpandableSection>
+
+        <ExpandableSection
+          id="material"
+          icon={<Package className="h-4 w-4 text-cog-teal-dark" />}
+          title="Materialbezug"
+          summary={
+            materialItems.length === 0
+              ? "Kein Material bezogen"
+              : `${materialItems.length} ${
+                  materialItems.length === 1 ? "Position" : "Positionen"
+                }`
+          }
+          amount={materialCost}
+          open={openSections.has("material")}
+          onToggle={() => toggle("material")}
+        >
+          {materialItems.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Kein Material bezogen.
+            </p>
+          ) : (
+            <ItemTable
+              firstColLabel="Bezogenes Material"
+              rows={materialItems.map((item) => ({
+                key: item.id,
+                title: item.description,
+                subtitle: formatRawSize(item) || null,
+                menge: formatMenge(item),
+                kosten: formatKosten(item),
+                preis: item.totalPrice.toFixed(2),
+              }))}
+            />
+          )}
+        </ExpandableSection>
+      </div>
+
+      {/* Spende — gold card, sits below items */}
+      <SpendeCard
+        spende={manualTip}
+        onSpendeChange={handleManualTipChange}
+        roundUpEnabled={roundUpEnabled}
+        roundUpOptions={roundOpts}
+        roundUpTarget={activeTarget}
+        roundUpDelta={effectiveRoundUp}
+        onRoundUpToggle={handleRoundUpToggle}
+        onRoundUpTarget={handleRoundUpTarget}
+      />
+
+      {/* Total — gold-swash highlight under amount */}
+      <div className="flex items-baseline justify-between pt-5 border-t-2 border-foreground">
+        <span className="font-heading font-bold text-2xl">Total</span>
+        <div className="text-right">
+          <span className="relative inline-block font-heading font-bold text-3xl tabular-nums">
+            <span
+              aria-hidden
+              className="absolute left-[-4px] right-[-4px] bottom-[5px] h-[11px] bg-oww-gold opacity-70 -rotate-1 -z-10"
+            />
+            {formatCHF(total)}
+          </span>
+          <span className="block text-xs text-muted-foreground mt-1">
+            keine MWST.
+          </span>
+        </div>
+      </div>
+
+      <Separator className="my-2" />
+
+      {/* Block — Zahlungsart */}
+      <SectionEyebrow>Zahlungsart</SectionEyebrow>
+      <p className="text-sm text-muted-foreground -mt-3">
+        Wie möchtest du bezahlen? Im nächsten Schritt zeigen wir dir nur diese
+        Option.
+      </p>
+
+      <div className="flex flex-col gap-3">
+        <MethodCard
+          id="ebanking"
+          selected={state.paymentMethod}
+          onSelect={(m) => dispatch({ type: "SET_PAYMENT_METHOD", method: m })}
+          mark={
+            <span className="flex h-11 w-11 items-center justify-center rounded-md bg-muted text-foreground">
+              <FileText className="h-5 w-5" strokeWidth={1.6} />
             </span>
-          </div>
-        )}
+          }
+          title="Rechnung"
+          sub="QR-Rechnung per E-Mail"
+          recommended
+          fee={{ tone: "good", label: "Gebührenfrei für den Verein" }}
+        >
+          <p className="text-sm text-muted-foreground leading-relaxed max-w-xl">
+            Du erhältst eine QR-Rechnung an{" "}
+            <strong className="text-foreground">
+              {primaryPerson?.email || "deine E-Mail-Adresse"}
+            </strong>
+            . Im nächsten Schritt kannst du sie auch sofort mit deiner
+            E-Banking App scannen.
+          </p>
+        </MethodCard>
 
-        {/* Tip subtotal */}
-        {tipTotal > 0 && (
-          <div className="text-right font-bold text-lg mt-2">
-            {formatCHF(tipTotal)}
-          </div>
-        )}
-      </div>
-
-      <Separator />
-
-      {/* Total */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold font-body">
-          Total
-        </h2>
-        <h2 className="text-xl font-bold font-body underline decoration-cog-teal decoration-2 underline-offset-4">
-          {formatCHF(total)}
-        </h2>
-      </div>
-      <p className="text-sm text-muted-foreground text-right">keine MWST.</p>
-
-      <Separator />
-
-      <div className="bg-[rgba(204,204,204,0.2)] p-[25px]">
-        <h4 className="font-bold text-sm mb-1">Fair & sauber</h4>
-        <p className="text-sm">
-          Der Betrieb der Werkstatt basiert auf Vertrauen.
-          <br />
-          Vielen Dank dass du <strong>fair abrechnest</strong> und deinen{" "}
-          <strong>Platz sauber</strong> hinterlässt.
-        </p>
+        <MethodCard
+          id="twint"
+          selected={state.paymentMethod}
+          onSelect={(m) => dispatch({ type: "SET_PAYMENT_METHOD", method: m })}
+          mark={
+            <span className="flex h-11 w-11 items-center justify-center rounded-md bg-twint-red">
+              <TwintGlyph />
+            </span>
+          }
+          title="TWINT"
+          sub="Sofort bezahlen vom Handy"
+          fee={{ tone: "warn", label: "Verein zahlt Transaktionsgebühren" }}
+        >
+          <p className="text-sm text-muted-foreground leading-relaxed max-w-xl">
+            Im nächsten Schritt scannst du den TWINT-Code mit deiner App und
+            bestätigst die Zahlung.
+          </p>
+        </MethodCard>
       </div>
 
       <div className="flex-1" />
@@ -391,9 +413,474 @@ export function StepCheckout({
           disabled={submitting || total < 0}
         >
           {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-          Senden & zur Kasse
+          Senden &amp; bezahlen
         </button>
       </div>
     </div>
   )
+}
+
+// ---------------------------------------------------------------------------
+// Subcomponents
+// ---------------------------------------------------------------------------
+
+function SectionEyebrow({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="text-[13px] font-heading font-bold uppercase tracking-[0.08em] text-cog-teal-dark">
+      {children}
+    </div>
+  )
+}
+
+function DetailLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+      {children}
+    </span>
+  )
+}
+
+interface ItemRow {
+  key: string
+  title: string
+  /** Optional sub-line under the title (e.g. raw form input "60×40 cm"). */
+  subtitle: string | null
+  menge: string
+  kosten: string
+  preis: string
+}
+
+/**
+ * 4-column table used for both Maschinen-/Werkzeugnutzung and Materialbezug
+ * line items. Title column on the left (with optional muted subtitle),
+ * Menge / Kosten / Preis right-aligned. CHF prefix is intentionally
+ * omitted — the section total above already shows the currency once.
+ *
+ * The whole table is a single CSS grid so columns line up across rows
+ * (each row uses `display: contents` to let its cells become direct grid
+ * items of the parent).
+ */
+function ItemTable({
+  firstColLabel,
+  rows,
+}: {
+  firstColLabel: string
+  rows: ItemRow[]
+}) {
+  return (
+    <div
+      role="table"
+      className="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-baseline gap-x-4 sm:gap-x-6"
+    >
+      <div role="row" className="contents">
+        <span
+          role="columnheader"
+          className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground pb-1.5"
+        >
+          {firstColLabel}
+        </span>
+        <span
+          role="columnheader"
+          className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-right pb-1.5"
+        >
+          Menge
+        </span>
+        <span
+          role="columnheader"
+          className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-right pb-1.5"
+        >
+          Kosten
+        </span>
+        <span
+          role="columnheader"
+          className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-right pb-1.5"
+        >
+          Preis
+        </span>
+      </div>
+      {rows.map((row) => (
+        <div key={row.key} role="row" className="contents">
+          <span
+            role="cell"
+            className="py-2 text-sm border-t border-dotted border-border min-w-0"
+          >
+            <span className="text-foreground block truncate">{row.title}</span>
+            {row.subtitle && (
+              <span className="block text-xs text-muted-foreground/80 font-light tabular-nums">
+                {row.subtitle}
+              </span>
+            )}
+          </span>
+          <span
+            role="cell"
+            className="py-2 text-sm text-muted-foreground tabular-nums text-right whitespace-nowrap border-t border-dotted border-border"
+          >
+            {row.menge}
+          </span>
+          <span
+            role="cell"
+            className="py-2 text-sm text-muted-foreground tabular-nums text-right whitespace-nowrap border-t border-dotted border-border"
+          >
+            {row.kosten}
+          </span>
+          <span
+            role="cell"
+            className="py-2 text-sm font-semibold tabular-nums text-right min-w-[60px] border-t border-dotted border-border"
+          >
+            {row.preis}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+interface ExpandableSectionProps {
+  id: string
+  icon: React.ReactNode
+  title: string
+  summary: string
+  amount: number
+  open: boolean
+  onToggle: () => void
+  children: React.ReactNode
+}
+
+function ExpandableSection({
+  id,
+  icon,
+  title,
+  summary,
+  amount,
+  open,
+  onToggle,
+  children,
+}: ExpandableSectionProps) {
+  return (
+    <>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={`${id}-detail`}
+        onClick={onToggle}
+        className="w-full grid grid-cols-[auto_1fr_auto] items-center gap-3 sm:gap-4 px-4 sm:px-5 py-4 text-left border-b border-border/60 last:border-b-0 hover:bg-muted/30 transition-colors data-[open=true]:bg-transparent"
+        data-open={open}
+      >
+        <span
+          className={cn(
+            "flex h-6 w-6 items-center justify-center text-muted-foreground transition-transform",
+            open && "rotate-90 text-cog-teal-dark",
+          )}
+        >
+          <ChevronRight className="h-4 w-4" />
+        </span>
+        <span className="min-w-0">
+          <span className="flex items-center gap-2 font-heading font-bold text-[15px] text-foreground leading-tight">
+            {icon}
+            {title}
+          </span>
+          <span className="block mt-1 text-[13px] text-muted-foreground truncate">
+            {summary}
+          </span>
+        </span>
+        <span className="font-semibold text-[15px] tabular-nums text-right min-w-[90px]">
+          {formatCHF(amount)}
+        </span>
+      </button>
+      {/* CSS-only expand animation: grid-rows transitions between 0fr and 1fr,
+          while the inner cell uses min-h-0 + overflow-hidden so the natural
+          content height drives the animated extent. */}
+      <div
+        id={`${id}-detail`}
+        className={cn(
+          "grid transition-[grid-template-rows,opacity] duration-200 ease-out border-border/60 last:border-b-0",
+          open
+            ? "grid-rows-[1fr] opacity-100 border-b"
+            : "grid-rows-[0fr] opacity-0 border-b-0",
+        )}
+        aria-hidden={!open}
+      >
+        <div className="min-h-0 overflow-hidden">
+          <div className="px-5 sm:px-6 pl-12 sm:pl-14 pr-5 sm:pr-6 pt-4 pb-5 bg-muted/30">
+            {children}
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
+interface MethodCardProps {
+  id: PaymentMethod
+  selected: PaymentMethod
+  onSelect: (m: PaymentMethod) => void
+  mark: React.ReactNode
+  title: string
+  sub: string
+  recommended?: boolean
+  fee: { tone: "good" | "warn"; label: string }
+  children: React.ReactNode
+}
+
+function MethodCard({
+  id,
+  selected,
+  onSelect,
+  mark,
+  title,
+  sub,
+  recommended,
+  fee,
+  children,
+}: MethodCardProps) {
+  const on = selected === id
+  return (
+    <div
+      className={cn(
+        "rounded-md border bg-background overflow-hidden transition-all",
+        on
+          ? "border-cog-teal shadow-[0_0_0_1px_var(--color-cog-teal),0_4px_12px_-4px_rgba(77,189,198,0.25)]"
+          : "border-border hover:border-foreground/30",
+      )}
+    >
+      <button
+        type="button"
+        onClick={() => onSelect(id)}
+        aria-pressed={on}
+        className="w-full grid grid-cols-[auto_auto_1fr_auto] items-center gap-4 px-5 py-4 text-left focus-visible:outline-2 focus-visible:outline-cog-teal/40 focus-visible:outline-offset-2"
+      >
+        <span
+          className={cn(
+            "h-5 w-5 rounded-full border flex items-center justify-center transition-colors",
+            on ? "border-cog-teal bg-cog-teal" : "border-[#c4c4c4] bg-white",
+          )}
+        >
+          {on && <span className="h-2 w-2 rounded-full bg-white" />}
+        </span>
+        {mark}
+        <span className="min-w-0">
+          <span className="block font-heading font-bold text-[17px] text-foreground leading-tight">
+            {title}
+          </span>
+          <span className="block mt-1 text-[13px] text-muted-foreground">
+            {sub}
+          </span>
+        </span>
+        <span className="flex flex-col items-end gap-1.5">
+          {recommended && (
+            <span className="text-[10px] font-bold uppercase tracking-wider text-white bg-cog-teal-dark rounded-full px-2 py-0.5">
+              Empfohlen
+            </span>
+          )}
+        </span>
+      </button>
+      {on && (
+        <div className="border-t border-border/60 bg-white px-5 pt-5 pb-4">
+          {children}
+          <div
+            className={cn(
+              "mt-4 pt-3 border-t border-dashed border-border/80 flex items-center gap-2 text-xs font-medium",
+              fee.tone === "good" ? "text-fee-good" : "text-fee-warn",
+            )}
+          >
+            {fee.tone === "good" ? (
+              <CheckSmall />
+            ) : (
+              <CircleAlert className="h-3.5 w-3.5" />
+            )}
+            <span>{fee.label}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function CheckSmall() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  )
+}
+
+/** Two-circle TWINT motif (recognizable, not the trademark logo). */
+function TwintGlyph() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden>
+      <circle cx="9" cy="12" r="5" fill="#fff" />
+      <circle cx="15" cy="12" r="5" fill="#fff" fillOpacity="0.55" />
+    </svg>
+  )
+}
+
+interface SpendeCardProps {
+  spende: number
+  onSpendeChange: (v: number) => void
+  roundUpEnabled: boolean
+  /** Available round-up targets in ascending order. The first entry is
+   *  the "natural next step" (next franc / 0.50). */
+  roundUpOptions: number[]
+  /** Currently selected target, or null when no options are available. */
+  roundUpTarget: number | null
+  roundUpDelta: number
+  onRoundUpToggle: (enabled: boolean) => void
+  onRoundUpTarget: (target: number) => void
+}
+
+function SpendeCard({
+  spende,
+  onSpendeChange,
+  roundUpEnabled,
+  roundUpOptions: roundOpts,
+  roundUpTarget,
+  roundUpDelta,
+  onRoundUpToggle,
+  onRoundUpTarget,
+}: SpendeCardProps) {
+  return (
+    <div className="rounded-md border border-oww-gold-border bg-oww-gold-light p-5 sm:p-6 grid sm:grid-cols-[1fr_auto] gap-4 sm:gap-6 items-start">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2 font-heading font-bold text-base text-oww-gold-text">
+          <Heart className="h-4 w-4 text-oww-gold-dark" />
+          Trinkgeld/Spende
+        </div>
+        <p className="mt-1 text-[14px] leading-relaxed text-oww-gold-text">
+          Hast du bei uns einen tollen Tag erlebt, dir wurde von unseren
+          erfahrenen Vereinsmitgliedern geholfen oder am Fachabend konntest du
+          von unseren Profis profitieren? Dann freuen wir uns über einen
+          Zustupf.
+        </p>
+      </div>
+      <div className="self-center">
+        <div className="relative inline-flex items-center">
+          <span className="absolute left-3.5 text-xs font-medium text-oww-gold-text-muted pointer-events-none">
+            CHF
+          </span>
+          <input
+            type="text"
+            inputMode="decimal"
+            placeholder="0.00"
+            value={spende > 0 ? spende.toFixed(2) : ""}
+            onChange={(e) => {
+              const v = parseFloat(e.target.value.replace(",", ".")) || 0
+              onSpendeChange(v)
+            }}
+            aria-label="Trinkgeld/Spende"
+            className="w-[140px] h-11 pl-12 pr-3.5 rounded-md border border-oww-gold-border bg-background text-base font-semibold tabular-nums text-oww-gold-text text-right placeholder:text-oww-gold-border placeholder:font-normal focus:outline-none focus:border-oww-gold-dark focus:ring-2 focus:ring-oww-gold-dark/20"
+          />
+        </div>
+      </div>
+
+      {roundOpts.length > 0 && roundUpTarget != null && (
+        <div className="sm:col-span-2 pt-3.5 border-t border-dashed border-oww-gold-border/70 flex flex-wrap items-center gap-x-2 gap-y-2 text-sm text-oww-gold-text">
+          {/* Checkbox + its own label own the toggle; the select is a
+              sibling so clicking it doesn't bubble up and toggle the
+              checkbox. */}
+          <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={roundUpEnabled}
+              onChange={(e) => onRoundUpToggle(e.target.checked)}
+              className="h-4 w-4 accent-oww-gold-dark cursor-pointer"
+              aria-label="Aufrunden"
+            />
+            <span>Auf</span>
+          </label>
+          <select
+            value={String(roundUpTarget)}
+            onChange={(e) => onRoundUpTarget(parseFloat(e.target.value))}
+            aria-label="Aufrunden-Ziel"
+            className="appearance-none bg-transparent border-0 border-b border-dashed border-oww-gold-dark/70 text-oww-gold-text font-semibold pr-5 pl-1 py-0.5 cursor-pointer focus:outline-none focus:border-oww-gold-dark"
+            style={{
+              backgroundImage:
+                "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23a07c00' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>\")",
+              backgroundRepeat: "no-repeat",
+              backgroundPosition: "right 2px center",
+            }}
+          >
+            {roundOpts.map((target, i) => (
+              <option key={target} value={String(target)}>
+                {roundUpOptionLabel(target, i === 0)}
+              </option>
+            ))}
+          </select>
+          <span>aufrunden</span>
+          {roundUpEnabled && roundUpDelta > 0 && (
+            <span className="ml-auto text-xs font-medium tabular-nums text-oww-gold-text-muted">
+              + {formatCHF(roundUpDelta)}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Raw form input shown left-aligned under the description (e.g. "60×40 cm",
+ *  "100 g"). Returns "" when the natural quantity already equals the form
+ *  input (no extra info to surface). */
+function formatRawSize(item: CheckoutItemLocal): string {
+  const pm = item.pricingModel
+  if (!pm || pm === "direct") return ""
+  if (pm === "sla") {
+    const ml = item.formInputs?.[0]?.quantity ?? 0
+    const layers = item.formInputs?.[1]?.quantity ?? 0
+    return `${ml} ml · ${layers} Layer`
+  }
+  if (pm === "area" && item.formInputs?.length === 2) {
+    const [l, w] = item.formInputs
+    return `${l.quantity}×${w.quantity} ${l.unit}`
+  }
+  if (pm === "weight" && item.formInputs?.[0]) {
+    return `${item.formInputs[0].quantity} ${item.formInputs[0].unit}`
+  }
+  if (pm === "length" && item.formInputs?.[0]) {
+    return `${item.formInputs[0].quantity} ${item.formInputs[0].unit}`
+  }
+  // count items don't need a separate raw-size line — the qty + unit-price
+  // line on the right ("3 Stk. × CHF 2.00") already conveys it.
+  return ""
+}
+
+/** "Menge" column content — natural-unit quantity (e.g. "0.25 m²", "3 Stk.",
+ *  "12 Min" for time). Returns "" for direct/SLA where this column doesn't
+ *  apply. */
+function formatMenge(item: CheckoutItemLocal): string {
+  const pm = item.pricingModel
+  if (!pm || pm === "direct") return ""
+  if (pm === "sla") {
+    const ml = item.formInputs?.[0]?.quantity ?? 0
+    const layers = item.formInputs?.[1]?.quantity ?? 0
+    return `${ml} ml · ${layers} L`
+  }
+  if (pm === "time") {
+    return `${Math.round(item.quantity * 60)} Min`
+  }
+  return `${formatBaseQty(item.quantity)} ${getShortUnit(pm)}`
+}
+
+/** "Kosten" column — unit price with `/unit` suffix, no CHF prefix
+ *  (e.g. "51.65/m²", "2.00/Stk."). SLA: empty (two-axis price). */
+function formatKosten(item: CheckoutItemLocal): string {
+  const pm = item.pricingModel
+  if (!pm || pm === "direct" || pm === "sla") return ""
+  return `${item.unitPrice.toFixed(2)}/${getShortUnit(pm)}`
+}
+
+function formatBaseQty(qty: number): string {
+  return qty === Math.floor(qty) ? String(qty) : qty.toFixed(2)
 }

@@ -21,11 +21,17 @@ export interface CheckoutPerson {
   billingCity?: string
 }
 
+export type PaymentMethod = "ebanking" | "twint"
+
 export interface CheckoutState {
-  step: number // 0 = check-in, 1 = costs, 2 = checkout
+  step: number // 0 = check-in, 1 = costs, 2 = check-out, 3 = bezahlen
   persons: CheckoutPerson[]
   usageType: UsageType
   tip: number
+  // Method picked at the bottom of step 2; step 3 (Bezahlen) renders only
+  // the chosen flow. Defaults to ebanking (the recommended option) so the
+  // user can advance without clicking.
+  paymentMethod: PaymentMethod
   submitted: boolean
   checkoutId: string | null
   totalPrice: number
@@ -38,6 +44,7 @@ type CheckoutAction =
   | { type: "UPDATE_PERSON"; id: string; updates: Partial<CheckoutPerson> }
   | { type: "SET_USAGE_TYPE"; usageType: UsageType }
   | { type: "SET_TIP"; amount: number }
+  | { type: "SET_PAYMENT_METHOD"; method: PaymentMethod }
   | { type: "SET_SUBMITTED"; checkoutId: string | null; totalPrice: number }
   | { type: "RESET" }
 
@@ -58,6 +65,7 @@ const initialState: CheckoutState = {
   persons: [createEmptyPerson()],
   usageType: "regular",
   tip: 0,
+  paymentMethod: "ebanking",
   submitted: false,
   checkoutId: null,
   totalPrice: 0,
@@ -95,9 +103,14 @@ function checkoutReducer(
     case "SET_TIP":
       return { ...state, tip: Math.max(0, action.amount) }
 
+    case "SET_PAYMENT_METHOD":
+      return { ...state, paymentMethod: action.method }
+
     case "SET_SUBMITTED":
+      // Advance to step 3 (Bezahlen) so the wizard renders PaymentResult.
       return {
         ...state,
+        step: 3,
         submitted: true,
         checkoutId: action.checkoutId,
         totalPrice: action.totalPrice,

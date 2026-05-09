@@ -23,6 +23,7 @@ describe("checkoutReducer", () => {
       expect(initialState.persons).toHaveLength(1)
       expect(initialState.usageType).toBe("regular")
       expect(initialState.tip).toBe(0)
+      expect(initialState.paymentMethod).toBe("ebanking")
       expect(initialState.submitted).toBe(false)
       expect(initialState.checkoutId).toBeNull()
       expect(initialState.totalPrice).toBe(0)
@@ -142,6 +143,14 @@ describe("checkoutReducer", () => {
     })
   })
 
+  describe("SET_PAYMENT_METHOD", () => {
+    it("changes the payment method", () => {
+      expect(
+        reduce({ type: "SET_PAYMENT_METHOD", method: "twint" }).paymentMethod,
+      ).toBe("twint")
+    })
+  })
+
   describe("SET_SUBMITTED", () => {
     it("marks as submitted with checkout ID and total", () => {
       const state = reduce({
@@ -152,6 +161,20 @@ describe("checkoutReducer", () => {
       expect(state.submitted).toBe(true)
       expect(state.checkoutId).toBe("co123")
       expect(state.totalPrice).toBe(42.5)
+    })
+
+    it("advances to step 3 (Bezahlen) atomically with marking submitted", () => {
+      // The wizard renders PaymentResult only when step === 3 + submitted; the
+      // step advance must happen in the same reducer transition so there's no
+      // intermediate frame where submitted=true but the step is still 2.
+      const initial = reduce({ type: "SET_STEP", step: 2 })
+      const state = checkoutReducer(initial, {
+        type: "SET_SUBMITTED",
+        checkoutId: "co123",
+        totalPrice: 42.5,
+      })
+      expect(state.step).toBe(3)
+      expect(state.submitted).toBe(true)
     })
   })
 

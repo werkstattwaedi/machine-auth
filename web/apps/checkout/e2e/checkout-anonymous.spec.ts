@@ -43,35 +43,36 @@ test.describe("Anonymous checkout", () => {
     // Select "Holz" workshop
     await page.getByLabel("Holz").click()
 
-    // Workshop section appears with "+ Artikel hinzufügen" button
+    // Workshop section appears with "+ Material hinzufügen" button
     await expect(
-      page.getByRole("button", { name: "Artikel hinzufügen" }),
+      page.getByRole("button", { name: "Material hinzufügen" }),
     ).toBeVisible()
 
     // Proceed to checkout (with entry fee only — no items added)
     await page.getByRole("button", { name: "Check-Out" }).click()
 
     // ── Step 2: Checkout ──
-    await expect(page.getByText("Zusammenfassung")).toBeVisible()
+    await expect(page.getByText("Dein Besuch")).toBeVisible()
     await expect(page.getByText("Nutzungsgebühren")).toBeVisible()
     // Expand the collapsible user details section to verify person is listed
     await page.getByRole("button", { name: /Nutzungsgebühren/ }).click()
     await expect(page.getByText("Max Muster")).toBeVisible()
 
     // Submit
-    await page.getByRole("button", { name: "Senden & zur Kasse" }).click()
+    await page.getByRole("button", { name: "Senden & bezahlen" }).click()
 
-    // ── Payment result ──
-    await expect(page.getByText("Zu bezahlen")).toBeVisible({
+    // ── Payment result (Step 4 · Rechnung flow) ──
+    await expect(page.getByRole("heading", { name: "QR-Rechnung scannen" })).toBeVisible({
       timeout: 10_000,
     })
-    // The E-Banking / TWINT buttons only render once the bill is created
-    // server-side (onCheckoutCreatedClosed trigger) and getPaymentQrData
-    // resolves — emulator cold starts can take a few seconds.
-    await expect(page.getByRole("button", { name: /E-Banking/ })).toBeVisible({
+    // QR card + action buttons render once the bill is created server-side
+    // (onCheckoutCreatedClosed trigger) and getPaymentQrData resolves —
+    // emulator cold starts can take a few seconds.
+    await expect(page.getByText("Konto / Zahlbar an")).toBeVisible({
       timeout: 30_000,
     })
-    await expect(page.getByRole("button", { name: /TWINT/ })).toBeVisible()
+    await expect(page.getByRole("button", { name: /PDF herunterladen/ })).toBeVisible()
+    await expect(page.getByRole("button", { name: /IBAN kopieren/ })).toBeVisible()
 
     // ── Verify Firestore ──
     const checkouts = await getCheckoutDocs()
@@ -205,7 +206,7 @@ test.describe("Anonymous checkout", () => {
 
     // Advance to step 2
     await page.getByRole("button", { name: "Check-Out" }).click()
-    await expect(page.getByText("Zusammenfassung")).toBeVisible()
+    await expect(page.getByText("Dein Besuch")).toBeVisible()
 
     // Go back to step 1
     await page.getByRole("button", { name: "Zurück" }).click()
@@ -239,16 +240,18 @@ test.describe("Anonymous checkout", () => {
 
     await expect(page.getByText("Werkstätten wählen")).toBeVisible()
 
-    // Add a Holz catalog item.
+    // Add a Holz catalog item via the MaterialPicker.
     await page.getByLabel("Holz").click()
-    const holzSection = page
-      .locator("div.space-y-2")
-      .filter({ hasText: /^Holz/ })
+    const holzSection = page.getByTestId("workshop-block-holz")
     await holzSection
-      .getByRole("button", { name: "Artikel hinzufügen" })
+      .getByRole("button", { name: "Material hinzufügen" })
       .click()
     await expect(page.getByText("Schleifpapier")).toBeVisible()
     await page.getByText("Schleifpapier").click()
+    const qtyInput = page.locator('label:has-text("Anzahl")').locator("..").locator("input")
+    await qtyInput.fill("1")
+    await page.getByRole("button", { name: "Hinzufügen", exact: true }).click()
+    await page.getByRole("button", { name: "Schliessen" }).click()
 
     // Wait for the Firestore write to land. With the legacy
     // `state.localItems` branch this poll would never see a doc — items

@@ -218,16 +218,19 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
     }
   }, [isAccountLoggedIn, state.step, picc, cmac])
 
-  // Auto-reset after submission for non-logged-in users (30s to view payment info)
+  // Auto-reset after submission for non-logged-in users (30s to view payment info).
+  // Step 3 (Bezahlen) is the post-submit screen now; gate on that step plus
+  // `submitted` (set by SET_SUBMITTED) so we don't time out a user who simply
+  // navigated forward without submitting.
   useEffect(() => {
-    if (!state.submitted || isAccountLoggedIn) return
+    if (!state.submitted || state.step !== 3 || isAccountLoggedIn) return
     const timer = setTimeout(() => {
       // Reuse the unified reset callback so we get the same kiosk
       // session wipe + tagSignOut + URL replace as the inactivity path.
       onResetRef.current?.()
     }, 30_000)
     return () => clearTimeout(timer)
-  }, [state.submitted, isAccountLoggedIn])
+  }, [state.submitted, state.step, isAccountLoggedIn])
 
   // Sign out tag auth when wizard unmounts (new tag replaces this instance)
   useEffect(() => {
@@ -274,27 +277,6 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
             ? `Preiskonfiguration ungültig: ${configError}. Bitte Admin kontaktieren.`
             : "Preiskonfiguration konnte nicht geladen werden. Bitte Admin kontaktieren."
         }
-      />
-    )
-  }
-
-  if (state.submitted) {
-    return (
-      <PaymentResult
-        checkoutId={state.checkoutId}
-        totalPrice={state.totalPrice}
-        initialPaymentData={paymentData}
-        resetLabel={isAccountLoggedIn ? "Zurück zum Besuch" : undefined}
-        onReset={() => {
-          dispatch({ type: "RESET" })
-          setPaymentData(null)
-          if (isAccountLoggedIn) {
-            window.location.href = "/visit"
-          } else {
-            tagSignOut()
-            window.history.replaceState(null, "", kiosk ? "/?kiosk" : "/")
-          }
-        }}
       />
     )
   }
@@ -488,6 +470,25 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
           submitError={submit.error?.message ?? null}
           items={items}
           config={pricingConfig}
+        />
+      )}
+      {state.step === 3 && state.submitted && (
+        <PaymentResult
+          checkoutId={state.checkoutId}
+          totalPrice={state.totalPrice}
+          initialPaymentData={paymentData}
+          selectedMethod={state.paymentMethod}
+          resetLabel={isAccountLoggedIn ? "Zurück zum Besuch" : "Fertig"}
+          onReset={() => {
+            dispatch({ type: "RESET" })
+            setPaymentData(null)
+            if (isAccountLoggedIn) {
+              window.location.href = "/visit"
+            } else {
+              tagSignOut()
+              window.history.replaceState(null, "", kiosk ? "/?kiosk" : "/")
+            }
+          }}
         />
       )}
     </div>

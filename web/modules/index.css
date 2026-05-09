@@ -50,9 +50,15 @@
   --color-oww-gold: #ffde80;
   --color-oww-gold-dark: #e6b800;
   --color-oww-gold-light: #fff4d6;
+  --color-oww-gold-border: #e6cf85;
+  --color-oww-gold-text: #4a3a10;
+  --color-oww-gold-text-muted: #8c7a3d;
   --color-cog-teal: #4dbdc6;
   --color-cog-teal-dark: #3aa8b1;
   --color-cog-teal-light: #e8f7f8;
+  --color-twint-red: #ed1c24;
+  --color-fee-good: var(--color-cog-teal-dark);
+  --color-fee-warn: var(--color-oww-gold-dark);
   --font-family-heading: "Bitter", Georgia, serif;
   --font-family-body: "Roboto Slab", "Helvetica Neue", sans-serif;
 }

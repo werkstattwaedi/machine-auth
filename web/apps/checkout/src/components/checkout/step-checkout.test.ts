@@ -2,36 +2,33 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect } from "vitest"
-import { roundUpOptions } from "./step-checkout"
+import { roundUpOptions, roundUpOptionLabel } from "./step-checkout"
 
 describe("roundUpOptions", () => {
-  it("returns empty for zero or negative", () => {
+  it("returns empty for zero or negative base", () => {
     expect(roundUpOptions(0)).toEqual([])
     expect(roundUpOptions(-5)).toEqual([])
   })
 
-  // Small amounts (<10): include half-franc steps, max = base + 3
-  it("5.00 → 5.50, 6", () => {
-    expect(roundUpOptions(5.0)).toEqual([5.5, 6])
+  // Tiny totals (< 5): include 0.50 step + integer francs
+  it("3.20 → 3.50, 4, 5", () => {
+    expect(roundUpOptions(3.2)).toEqual([3.5, 4, 5])
   })
 
-  it("6.33 → 6.50, 7, 8", () => {
-    expect(roundUpOptions(6.33)).toEqual([6.5, 7, 8])
+  it("4.99 → 5, 6", () => {
+    expect(roundUpOptions(4.99)).toEqual([5, 6])
   })
 
-  it("7.50 → 8, 10", () => {
-    expect(roundUpOptions(7.5)).toEqual([8, 10])
+  // Small totals (5–10): no half-francs, max = base + 3
+  it("6.33 → 7, 8", () => {
+    expect(roundUpOptions(6.33)).toEqual([7, 8])
   })
 
   it("9.80 → 10", () => {
     expect(roundUpOptions(9.8)).toEqual([10])
   })
 
-  // Medium amounts (10–50): no half-francs, max = base * 1.1
-  it("15.00 → 16", () => {
-    expect(roundUpOptions(15.0)).toEqual([16])
-  })
-
+  // Medium totals (10–50): max = base * 1.1
   it("23.40 → 24, 25", () => {
     expect(roundUpOptions(23.4)).toEqual([24, 25])
   })
@@ -45,34 +42,34 @@ describe("roundUpOptions", () => {
     expect(roundUpOptions(56.33)).toEqual([57, 58, 60])
   })
 
-  it("50.00 → 51, 52, 55", () => {
-    expect(roundUpOptions(50.0)).toEqual([51, 52, 55])
-  })
-
-  it("98.50 → 99, 100", () => {
-    expect(roundUpOptions(98.5)).toEqual([99, 100])
-  })
-
-  // Edge cases
   it("returns at most 3 options", () => {
-    const opts = roundUpOptions(1.01)
-    expect(opts.length).toBeLessThanOrEqual(3)
+    for (const base of [1.01, 5.5, 33.33, 56.33, 100]) {
+      expect(roundUpOptions(base).length).toBeLessThanOrEqual(3)
+    }
   })
 
-  it("all options are strictly greater than base", () => {
-    for (const base of [5, 7.76, 15, 33.33, 56.33, 100]) {
+  it("all options are strictly greater than base and within max threshold", () => {
+    for (const base of [3.2, 7.76, 15, 33.33, 56.33, 100]) {
+      const max = base < 10 ? base + 3 : base * 1.1
       for (const o of roundUpOptions(base)) {
         expect(o).toBeGreaterThan(base)
+        expect(o).toBeLessThanOrEqual(max)
       }
     }
   })
+})
 
-  it("all options are within max tip threshold", () => {
-    for (const base of [5, 7.76, 15, 33.33, 56.33, 100]) {
-      const maxTotal = base < 10 ? base + 3 : base * 1.1
-      for (const o of roundUpOptions(base)) {
-        expect(o).toBeLessThanOrEqual(maxTotal)
-      }
-    }
+describe("roundUpOptionLabel", () => {
+  it("calls the smallest integer target the next franc", () => {
+    expect(roundUpOptionLabel(7, true)).toBe("nächsten Franken")
+  })
+
+  it("calls a tiny 0.50-step target the next half franc", () => {
+    expect(roundUpOptionLabel(3.5, true)).toBe("nächsten halben Franken")
+  })
+
+  it("formats non-first-step targets as 'X Franken'", () => {
+    expect(roundUpOptionLabel(40, false)).toBe("40 Franken")
+    expect(roundUpOptionLabel(50, false)).toBe("50 Franken")
   })
 })

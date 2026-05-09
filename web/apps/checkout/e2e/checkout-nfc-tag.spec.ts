@@ -57,13 +57,13 @@ test.describe("NFC tag checkout", () => {
     await expect(page.getByText("Werkstätten wählen")).toBeVisible()
 
     await page.getByRole("button", { name: "Check-Out" }).click()
-    await expect(page.getByText("Zusammenfassung")).toBeVisible()
+    await expect(page.getByText("Dein Besuch")).toBeVisible()
 
     // Submit
-    await page.getByRole("button", { name: "Senden & zur Kasse" }).click()
+    await page.getByRole("button", { name: "Senden & bezahlen" }).click()
 
     // ── Payment result ──
-    await expect(page.getByText("Zu bezahlen")).toBeVisible({
+    await expect(page.getByRole("heading", { name: "QR-Rechnung scannen" })).toBeVisible({
       timeout: 10_000,
     })
 

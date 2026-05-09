@@ -144,9 +144,9 @@ describe("CheckoutWizard submit error handling (B5)", () => {
 
     render(<CheckoutWizard initialStep={2} />)
 
-    // The "submit" button on step 2 ("Senden & zur Kasse").
+    // The "submit" button on step 2 ("Senden & bezahlen").
     const submitBtn = await screen.findByRole("button", {
-      name: /Senden & zur Kasse/,
+      name: /Senden & bezahlen/,
     })
 
     // Clicking submits — wrap in act so the async branch settles.
@@ -170,7 +170,7 @@ describe("CheckoutWizard submit error handling (B5)", () => {
     expect(
       screen.queryByRole("button", { name: /Zurück zum Besuch/ }),
     ).toBeNull()
-    expect(screen.getByRole("button", { name: /Senden & zur Kasse/ })).toBeDefined()
+    expect(screen.getByRole("button", { name: /Senden & bezahlen/ })).toBeDefined()
 
     // Inline alert renders the structured error message.
     const alert = screen.getByTestId("checkout-submit-error")
@@ -178,7 +178,7 @@ describe("CheckoutWizard submit error handling (B5)", () => {
 
     // Submit button is re-enabled for retry (not stuck in `submitting`).
     expect(
-      (screen.getByRole("button", { name: /Senden & zur Kasse/ }) as HTMLButtonElement)
+      (screen.getByRole("button", { name: /Senden & bezahlen/ }) as HTMLButtonElement)
         .disabled,
     ).toBe(false)
   })

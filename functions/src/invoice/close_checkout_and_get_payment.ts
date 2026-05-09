@@ -381,6 +381,7 @@ async function closeExistingCheckout(
         const existingBill = existingBillDoc.data() as BillEntity;
         return {
           bill: existingBill,
+          billId: checkout.billRef.id,
           payer: payerFromPersons(checkout.persons ?? enforcedPersons),
         };
       }
@@ -430,10 +431,10 @@ async function closeExistingCheckout(
       billRef,
     });
 
-    return { bill, payer: payerFromPersons(enforcedPersons) };
+    return { bill, billId: billRef.id, payer: payerFromPersons(enforcedPersons) };
   });
 
-  return buildPaymentData(result.bill, result.payer);
+  return buildPaymentData(result.bill, result.payer, result.billId);
 }
 
 async function createAnonymousCheckout(
@@ -551,10 +552,10 @@ async function createAnonymousCheckout(
       tx.set(itemRefs[idx], itemDoc);
     });
 
-    return { bill, payer: payerFromPersons(enforcedPersons) };
+    return { bill, billId: billRef.id, payer: payerFromPersons(enforcedPersons) };
   });
 
-  return buildPaymentData(result.bill, result.payer);
+  return buildPaymentData(result.bill, result.payer, result.billId);
 }
 
 /**
