@@ -61,6 +61,7 @@ export async function handleVerifyMagicLink(
 }
 
 export const verifyMagicLink = onCall(
+  { memory: "512MiB" },
   async (request: CallableRequest<VerifyMagicLinkInput>) =>
     handleVerifyMagicLink(request.data)
 );

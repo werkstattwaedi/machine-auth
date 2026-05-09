@@ -171,7 +171,7 @@ export function buildPaymentData(
   };
 }
 
-export const getPaymentQrData = onCall(async (request) => {
+export const getPaymentQrData = onCall({ memory: "512MiB" }, async (request) => {
   const { billId } = request.data as GetPaymentQrDataRequest;
   if (!billId || typeof billId !== "string") {
     throw new HttpsError("invalid-argument", "billId is required");

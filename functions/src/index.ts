@@ -252,6 +252,7 @@ export const api = onRequest(
       terminalKey,
       kioskBearerKey,
     ],
+    memory: "512MiB",
   },
   app
 );

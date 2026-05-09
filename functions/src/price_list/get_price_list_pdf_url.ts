@@ -6,10 +6,6 @@ import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { createHash } from "node:crypto";
-import {
-  buildPriceListPdf,
-  priceListFilename,
-} from "./build_price_list_pdf";
 import type {
   PriceListCatalogItem,
   PriceListRenderData,
@@ -85,7 +81,7 @@ async function loadCatalogItems(
   return result;
 }
 
-export const getPriceListPdfUrl = onCall(async (request) => {
+export const getPriceListPdfUrl = onCall({ memory: "512MiB" }, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Authentication required");
   }
@@ -136,6 +132,12 @@ export const getPriceListPdfUrl = onCall(async (request) => {
     qrUrl,
     items,
   };
+
+  // Lazy import: pdfkit + qrcode (~7 MB) shouldn't be paid by every
+  // other function's cold start. Only this admin-only path needs them.
+  const { buildPriceListPdf, priceListFilename } = await import(
+    "./build_price_list_pdf.js"
+  );
 
   const hash = buildPriceListContentHash(renderData);
   const storagePath = `price-lists/${priceListId}/${hash}.pdf`;
