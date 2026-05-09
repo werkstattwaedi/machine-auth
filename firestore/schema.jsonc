@@ -97,9 +97,7 @@
       // --- Always present ---
       "userId": "DocumentReference", // DocumentReference to /users/{userId}
       "status": "open | closed",
-      // "membership" is a special usageType used by purchaseMembership: the
-      // checkout contains only a membership-fee SKU and skips the entry fee.
-      "usageType": "regular | materialbezug | intern | hangenmoos | membership",
+      "usageType": "regular | materialbezug | intern | hangenmoos",
       "created": "timestamp",
       "workshopsVisited": ["string"], // e.g., ["holz", "metall"]
       "persons": [{ // Array of person entries
@@ -158,14 +156,12 @@
   },
   "config": {
     "pricing": {
-      // Per-userType × usageType entry fee. The "membership" column is 0
-      // for every userType — buying a membership has no workshop entry
-      // fee. entryFeeFor() throws if a row is missing, so the membership
-      // column must be present.
+      // Per-userType × usageType entry fee. entryFeeFor() throws if a row
+      // is missing, so every userType × usageType combination must be set.
       "entryFees": {
-        "erwachsen": { "regular": "number", "materialbezug": "number", "intern": "number", "hangenmoos": "number", "membership": "number" },
-        "kind": { "regular": "number", "materialbezug": "number", "intern": "number", "hangenmoos": "number", "membership": "number" },
-        "firma": { "regular": "number", "materialbezug": "number", "intern": "number", "hangenmoos": "number", "membership": "number" }
+        "erwachsen": { "regular": "number", "materialbezug": "number", "intern": "number", "hangenmoos": "number" },
+        "kind": { "regular": "number", "materialbezug": "number", "intern": "number", "hangenmoos": "number" },
+        "firma": { "regular": "number", "materialbezug": "number", "intern": "number", "hangenmoos": "number" }
       },
       // SLA resin prints: per-layer CHF cost (constant across all resin types,
       // hardware-wear-driven) by discount level. Per-liter resin price lives

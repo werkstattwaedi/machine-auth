@@ -116,14 +116,11 @@ export interface CatalogEntity {
 // --- Checkouts ---
 
 export type CheckoutStatus = "open" | "closed";
-// "membership" tags a purchaseMembership-created checkout so the entry-fee
-// row resolves to 0 (the bill is just the membership SKU itself).
 export type UsageType =
   | "regular"
   | "materialbezug"
   | "intern"
-  | "hangenmoos"
-  | "membership";
+  | "hangenmoos";
 
 export interface CheckoutPersonEntity {
   name: string;

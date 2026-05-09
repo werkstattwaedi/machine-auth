@@ -193,7 +193,6 @@ export type CheckoutUsageType =
   | "materialbezug"
   | "intern"
   | "hangenmoos"
-  | "membership"
 
 export interface CheckoutDoc extends AuditFields {
   userId: DocumentReference<UserDoc> | null

@@ -8,6 +8,7 @@
  *  - Common error codes / lookups.
  */
 
+import * as logger from "firebase-functions/logger";
 import { HttpsError } from "firebase-functions/v2/https";
 import {
   getFirestore,
@@ -17,6 +18,8 @@ import {
   type Transaction,
 } from "firebase-admin/firestore";
 import type {
+  CatalogEntity,
+  CheckoutItemEntity,
   MembershipEntity,
   MembershipType,
   UserEntity,
@@ -25,17 +28,52 @@ import type {
 export const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
 export const INVITE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
-export const MEMBERSHIP_CATALOG_KINDS = [
-  "membership-single",
-  "membership-family",
-] as const;
-
 export function membershipTypeForCatalogKind(
   kind: string | null | undefined,
 ): MembershipType | null {
   if (kind === "membership-single") return "single";
   if (kind === "membership-family") return "family";
   return null;
+}
+
+/**
+ * Inspect a checkout's items and return the membership type implied by any
+ * membership-fee SKU present, or null if none. Resolves each item's catalog
+ * doc to read its `kind` discriminator. Family wins over single (higher tier
+ * supersedes) — same disambiguation rule as `processMembershipPayment`.
+ *
+ * Used by `purchaseMembership` to reject double-adds and by the post-checkout
+ * trigger to decide whether to create/extend a membership.
+ */
+export async function detectMembershipKindForItems(
+  database: Firestore,
+  items: CheckoutItemEntity[],
+): Promise<MembershipType | null> {
+  const catalogIds = items
+    .map((i) => i.catalogId)
+    .filter((r): r is DocumentReference => r != null);
+  if (catalogIds.length === 0) return null;
+
+  const catalogDocs = await Promise.all(catalogIds.map((r) => r.get()));
+  const kinds = catalogDocs
+    .map((d) => (d.data() as CatalogEntity | undefined)?.kind ?? null)
+    .map((k) => membershipTypeForCatalogKind(k))
+    .filter((k): k is MembershipType => k !== null);
+
+  if (kinds.length === 0) return null;
+  if (kinds.includes("family")) {
+    if (kinds.includes("single")) {
+      // Both kinds in one checkout = bug somewhere upstream (the UI offers
+      // a single radio choice, the callable validates type per call, the
+      // dedup guard rejects re-adds). Surface it loudly so staff can spot
+      // it; we still proceed with `family` as the higher tier.
+      logger.warn(
+        "Checkout contains both single and family membership SKUs — using family",
+      );
+    }
+    return "family";
+  }
+  return "single";
 }
 
 /**

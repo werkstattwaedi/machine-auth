@@ -360,9 +360,9 @@ async function seed() {
   await db.collection("catalog").doc(ID.catMemberSingle).set({
     code: "MEMBER-SINGLE",
     name: "Mitgliedschaft Einzel (Jahr)",
-    workshops: ["membership"],
+    workshops: ["diverses"],
     pricingModel: "direct",
-    unitPrice: { none: 120, member: 100, intern: 0 },
+    unitPrice: { none: 50, member: 50, intern: 0 },
     active: true,
     userCanAdd: false,
     description: "Jahres-Einzelmitgliedschaft Verein Offene Werkstatt Wädenswil.",
@@ -371,9 +371,9 @@ async function seed() {
   await db.collection("catalog").doc(ID.catMemberFamily).set({
     code: "MEMBER-FAMILY",
     name: "Mitgliedschaft Familie (Jahr)",
-    workshops: ["membership"],
+    workshops: ["diverses"],
     pricingModel: "direct",
-    unitPrice: { none: 180, member: 150, intern: 0 },
+    unitPrice: { none: 70, member: 70, intern: 0 },
     active: true,
     userCanAdd: false,
     description:
@@ -420,9 +420,9 @@ async function seed() {
   // --- Config: Pricing (simplified — no machine configs) ---
   await db.collection("config").doc("pricing").set({
     entryFees: {
-      erwachsen: { regular: 5, materialbezug: 0, intern: 0, hangenmoos: 0, membership: 0 },
-      kind: { regular: 2.5, materialbezug: 0, intern: 0, hangenmoos: 0, membership: 0 },
-      firma: { regular: 5, materialbezug: 0, intern: 0, hangenmoos: 0, membership: 0 },
+      erwachsen: { regular: 5, materialbezug: 0, intern: 0, hangenmoos: 0 },
+      kind: { regular: 2.5, materialbezug: 0, intern: 0, hangenmoos: 0 },
+      firma: { regular: 5, materialbezug: 0, intern: 0, hangenmoos: 0 },
     },
     // SLA per-layer cost (hardware-wear-driven, constant across resin types).
     slaLayerPrice: { none: 0.00109, member: 0.00109, intern: 0 },

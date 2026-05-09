@@ -3,6 +3,7 @@
 
 import {
   AlertTriangle,
+  ArrowRight,
   Check,
   Crown,
   Info,
@@ -16,12 +17,15 @@ import {
 import { httpsCallable } from "firebase/functions"
 import { where } from "firebase/firestore"
 import * as React from "react"
-import { createFileRoute, useNavigate } from "@tanstack/react-router"
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router"
 
 import { useAuth } from "@modules/lib/auth"
 import { useDb, useFunctions } from "@modules/lib/firebase-context"
 import { useDocument, useCollection } from "@modules/lib/firestore"
 import {
+  catalogCollection,
+  checkoutItemsCollection,
+  checkoutsCollection,
   membershipInvitesCollection,
   membershipsCollection,
   userRef,
@@ -46,18 +50,18 @@ function MembershipPage() {
   const { userDoc } = useAuth()
   const navigate = useNavigate()
 
+  const userId = userDoc?.id
+  const ref = userId ? userRef(db, userId) : null
+
   // Page surfaces *any* membership the user is a member of, not just the
   // active one — so expired/cancelled docs render their own status hero.
   // `users/{uid}.activeMembership` is intentionally narrower (kept by the
   // onMembershipWritten trigger and used for pricing) so we can't reuse it
   // here. By invariant a user appears in `members[]` of at most one
   // membership; if more sneak in we pick the latest validUntil.
-  const userId = userDoc?.id
   const { data: memberships, loading } = useCollection(
-    userId ? membershipsCollection(db) : null,
-    ...(userId
-      ? [where("members", "array-contains", userRef(db, userId))]
-      : []),
+    ref ? membershipsCollection(db) : null,
+    ...(ref ? [where("members", "array-contains", ref)] : []),
   )
   const membership =
     memberships.length === 0
@@ -73,6 +77,44 @@ function MembershipPage() {
     errorMessage: "Mitgliedschaft konnte nicht gestartet werden",
   })
 
+  // Detect a membership SKU already sitting in the user's open checkout so
+  // we can hide the buy buttons and route the user to the summary step
+  // instead of letting them double-add. Server-side `purchaseMembership`
+  // also rejects duplicates with `already-exists`; this is the friendly UX
+  // layer (and a defense against the toast that the server-side raise
+  // would produce).
+  const { data: openCheckouts } = useCollection(
+    ref ? checkoutsCollection(db) : null,
+    ...(ref
+      ? [where("userId", "==", ref), where("status", "==", "open")]
+      : []),
+  )
+  const openCheckout = openCheckouts[0] ?? null
+  const { data: openCheckoutItems } = useCollection(
+    openCheckout ? checkoutItemsCollection(db, openCheckout.id) : null,
+  )
+  const { data: membershipSkus } = useCollection(
+    catalogCollection(db),
+    where("kind", "in", ["membership-single", "membership-family"]),
+  )
+  const skuKindById = React.useMemo(() => {
+    const m = new Map<string, "single" | "family">()
+    for (const sku of membershipSkus) {
+      if (sku.kind === "membership-single") m.set(sku.id, "single")
+      else if (sku.kind === "membership-family") m.set(sku.id, "family")
+    }
+    return m
+  }, [membershipSkus])
+  const pendingMembershipType: "single" | "family" | null = React.useMemo(() => {
+    for (const item of openCheckoutItems) {
+      const skuId = item.catalogId?.id
+      if (skuId && skuKindById.has(skuId)) {
+        return skuKindById.get(skuId)!
+      }
+    }
+    return null
+  }, [openCheckoutItems, skuKindById])
+
   const startPurchase = async (
     type: "single" | "family",
     renewExisting: boolean,
@@ -82,12 +124,13 @@ function MembershipPage() {
         { type: "single" | "family"; renewExisting?: boolean },
         { checkoutId: string }
       >(functions, "purchaseMembership")
-      const res = await fn({ type, renewExisting })
-      // TanStack Router's `useNavigate()` is typed against the calling app's
-      // route tree; `as never` lets shared paths type-check.
+      await fn({ type, renewExisting })
+      // The membership SKU is appended to the user's open checkout (or a
+      // fresh `materialbezug` checkout). Land directly on the wizard's
+      // summary step so the user can review and pay in one click.
       navigate({
-        to: "/visit",
-        search: { openCheckout: res.data.checkoutId } as never,
+        to: "/",
+        search: { step: "summary" } as never,
       } as never)
     })
   }
@@ -103,7 +146,9 @@ function MembershipPage() {
         Mitgliedschaft
       </h1>
 
-      {!membership ? (
+      {pendingMembershipType ? (
+        <PendingMembershipCheckout type={pendingMembershipType} />
+      ) : !membership ? (
         <NoMembership onPurchase={startPurchase} loading={purchase.loading} />
       ) : (
         <StatusHero
@@ -223,6 +268,44 @@ function StatusHero({
             </Button>
           )}
         </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Pending — membership SKU sits in the user's open checkout          */
+/* ------------------------------------------------------------------ */
+
+function PendingMembershipCheckout({
+  type,
+}: {
+  type: "single" | "family"
+}) {
+  return (
+    <Card>
+      <CardContent className="pt-6 space-y-4">
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary">
+            {type === "family" ? <Users /> : <User />}
+            {type === "family" ? "Familie" : "Einzel"}
+          </Badge>
+          <Badge variant="outline">Im Checkout</Badge>
+        </div>
+        <h2 className="font-heading text-xl font-bold">
+          Mitgliedschaft im Checkout
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          Du hast bereits eine{" "}
+          {type === "family" ? "Familien-" : "Einzel-"}mitgliedschaft im
+          offenen Checkout. Schliesse den Checkout ab, um sie zu aktivieren.
+        </p>
+        <Button asChild>
+          <Link to="/" search={{ step: "summary" } as never}>
+            Zur Zahlung
+            <ArrowRight />
+          </Link>
+        </Button>
       </CardContent>
     </Card>
   )

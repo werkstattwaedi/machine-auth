@@ -29,13 +29,12 @@ import {
   type Firestore,
 } from "firebase-admin/firestore";
 import type {
-  CatalogEntity,
   CheckoutEntity,
   CheckoutItemEntity,
   MembershipEntity,
   MembershipType,
 } from "../types/firestore_entities";
-import { db, membershipTypeForCatalogKind, plusOneYear } from "./shared";
+import { db, detectMembershipKindForItems, plusOneYear } from "./shared";
 
 /**
  * Inspect a closed checkout and, for any membership-fee items it contains,
@@ -59,7 +58,10 @@ export async function processMembershipPayment(
   if (items.length === 0) return;
 
   const database = db();
-  const membershipKindForCheckout = await detectMembershipKind(database, items);
+  const membershipKindForCheckout = await detectMembershipKindForItems(
+    database,
+    items,
+  );
   if (!membershipKindForCheckout) return;
 
   const userRef = checkout.userId;
@@ -74,39 +76,6 @@ export async function processMembershipPayment(
     userId: userRef.id,
     type: membershipKindForCheckout,
   });
-}
-
-/**
- * Returns the membership type implied by the items in a checkout, or null
- * if none of the items are membership SKUs. If a checkout somehow contains
- * both a single and a family membership SKU, family wins (the larger tier
- * supersedes) and we log a warning — staff can clean up if needed.
- */
-async function detectMembershipKind(
-  database: Firestore,
-  items: CheckoutItemEntity[],
-): Promise<MembershipType | null> {
-  const catalogIds = items
-    .map((i) => i.catalogId)
-    .filter((r): r is DocumentReference => r != null);
-  if (catalogIds.length === 0) return null;
-
-  const catalogDocs = await Promise.all(catalogIds.map((r) => r.get()));
-  const kinds = catalogDocs
-    .map((d) => (d.data() as CatalogEntity | undefined)?.kind ?? null)
-    .map((k) => membershipTypeForCatalogKind(k))
-    .filter((k): k is MembershipType => k !== null);
-
-  if (kinds.length === 0) return null;
-  if (kinds.includes("family")) {
-    if (kinds.includes("single")) {
-      logger.warn(
-        "Checkout contains both single and family membership SKUs — using family",
-      );
-    }
-    return "family";
-  }
-  return "single";
 }
 
 /**

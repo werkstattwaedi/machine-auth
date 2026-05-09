@@ -5,15 +5,17 @@
  * Callable: start a self-service membership purchase.
  *
  * Validates that the caller is signed in (real login, not tag-tap), has no
- * other active membership, and the requested SKU exists. Creates an open
- * checkout containing the membership-fee catalog item. The client then
- * proceeds to pay via the existing `closeCheckoutAndGetPayment` flow; the
- * post-checkout trigger (`processMembershipPayment`) creates or extends the
- * membership when payment is recorded.
+ * other active membership, and the requested SKU exists. Appends the
+ * membership-fee catalog item to the user's existing open checkout; if the
+ * user has no open checkout, a fresh one is created with
+ * `usageType: "materialbezug"` (entry fee = 0 for every userType, so the
+ * bill is just the membership SKU). The post-checkout trigger
+ * (`processMembershipPayment`) detects membership purchases by the catalog
+ * `kind` discriminator regardless of the parent checkout's usageType.
  *
  * For renewals (caller already has an active membership), pass
  * `renewExisting: true` — we re-use the existing membership doc and just
- * create a new fee checkout. The trigger handles type changes / extensions.
+ * append a new fee item. The trigger handles type changes / extensions.
  */
 
 import * as logger from "firebase-functions/logger";
@@ -30,9 +32,9 @@ import type {
   MembershipType,
   UserEntity,
 } from "../types/firestore_entities";
-import { callerUserRef, db } from "./shared";
+import { callerUserRef, db, detectMembershipKindForItems } from "./shared";
 
-interface PurchaseMembershipRequest {
+export interface PurchaseMembershipRequest {
   type: MembershipType;
   /**
    * Allow renewing an existing active membership. Without this flag, the
@@ -42,27 +44,33 @@ interface PurchaseMembershipRequest {
   renewExisting?: boolean;
 }
 
-interface PurchaseMembershipResponse {
+export interface PurchaseMembershipResponse {
   checkoutId: string;
   catalogId: string;
   unitPrice: number;
 }
 
-export const purchaseMembership = onCall<
-  PurchaseMembershipRequest,
-  Promise<PurchaseMembershipResponse>
->(async (request) => {
-  const { type, renewExisting } = request.data ?? ({} as PurchaseMembershipRequest);
+export interface PurchaseMembershipCallerContext {
+  authUid: string | undefined;
+  authToken: Record<string, unknown> | undefined;
+}
+
+/**
+ * Pure handler — exported so integration tests can drive it without going
+ * through the onCall envelope. Mirrors the `handleInviteFamilyMember` /
+ * `inviteFamilyMember` split.
+ */
+export async function handlePurchaseMembership(
+  input: PurchaseMembershipRequest,
+  caller: PurchaseMembershipCallerContext,
+): Promise<PurchaseMembershipResponse> {
+  const { type, renewExisting } = input ?? ({} as PurchaseMembershipRequest);
   if (type !== "single" && type !== "family") {
     throw new HttpsError("invalid-argument", "type must be 'single' or 'family'");
   }
 
   const database = db();
-  const callerRef = callerUserRef(
-    database,
-    request.auth?.uid,
-    request.auth?.token as Record<string, unknown> | undefined,
-  );
+  const callerRef = callerUserRef(database, caller.authUid, caller.authToken);
   const userSnap = await callerRef.get();
   if (!userSnap.exists) {
     throw new HttpsError("not-found", "Caller user doc not found");
@@ -112,38 +120,13 @@ export const purchaseMembership = onCall<
     );
   }
 
-  // Create the open checkout for the fee. The membership-trigger waits for
-  // it to close (= paid via the existing closeCheckoutAndGetPayment flow).
-  const checkoutRef = database.collection("checkouts").doc();
-  const itemRef = checkoutRef.collection("items").doc();
+  // Find-or-create the user's open checkout and append the fee item.
+  // Mirrors the pattern in session/handle_upload_usage.ts so a parallel
+  // "buy membership" purchase doesn't strand the user behind the
+  // openCheckouts[0] pick in the web wizard.
   const now = Timestamp.now();
-
-  // usageType: "membership" — entry-fee row is 0 for every userType, so
-  // the bill is just the membership SKU itself (no workshop fee piled on
-  // top). closeCheckoutAndGetPayment + create_bill both look up the row
-  // by [userType][usageType], so this routes cleanly through both paths.
-  const checkout: CheckoutEntity = {
-    userId: callerRef as DocumentReference,
-    status: "open",
-    usageType: "membership",
-    created: now,
-    workshopsVisited: [],
-    persons: [
-      {
-        name:
-          user.displayName ??
-          `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() ??
-          (user.email ?? ""),
-        email: user.email ?? "",
-        userType: user.userType ?? "erwachsen",
-        userRef: callerRef as DocumentReference,
-      },
-    ],
-    modifiedBy: callerRef.id,
-    modifiedAt: now,
-  };
   const item: CheckoutItemEntity = {
-    workshop: "membership",
+    workshop: "diverses",
     description: catalog.name,
     origin: "manual",
     catalogId: catalogDoc.ref,
@@ -153,10 +136,71 @@ export const purchaseMembership = onCall<
     totalPrice: unitPrice,
   };
 
-  await database.runTransaction(async (tx) => {
-    tx.set(checkoutRef, checkout);
-    tx.set(itemRef, item);
-  });
+  const openCheckoutsSnap = await database
+    .collection("checkouts")
+    .where("userId", "==", callerRef as DocumentReference)
+    .where("status", "==", "open")
+    .limit(1)
+    .get();
+
+  let checkoutRef: DocumentReference;
+  if (openCheckoutsSnap.empty) {
+    checkoutRef = database.collection("checkouts").doc();
+    const newCheckout: CheckoutEntity = {
+      userId: callerRef as DocumentReference,
+      status: "open",
+      usageType: "materialbezug",
+      created: now,
+      workshopsVisited: [],
+      persons: [
+        {
+          name:
+            user.displayName ??
+            `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() ??
+            (user.email ?? ""),
+          email: user.email ?? "",
+          userType: user.userType ?? "erwachsen",
+          userRef: callerRef as DocumentReference,
+        },
+      ],
+      modifiedBy: callerRef.id,
+      modifiedAt: now,
+    };
+    const itemRef = checkoutRef.collection("items").doc();
+    await database.runTransaction(async (tx) => {
+      tx.set(checkoutRef, newCheckout);
+      tx.set(itemRef, item);
+    });
+  } else {
+    checkoutRef = openCheckoutsSnap.docs[0].ref;
+    // Wrap the items read + dedup + write in a transaction so a concurrent
+    // purchase that snuck a membership SKU into the same checkout between
+    // our read and write forces a retry. Without this, two double-clicks
+    // can both pass the guard and append duplicate line items. The UI
+    // also gates the buy buttons; this is the server-side backstop.
+    await database.runTransaction(async (tx) => {
+      const existingItemsSnap = await tx.get(checkoutRef.collection("items"));
+      const existingItems = existingItemsSnap.docs.map(
+        (d) => d.data() as CheckoutItemEntity,
+      );
+      const existingMembership = await detectMembershipKindForItems(
+        database,
+        existingItems,
+      );
+      if (existingMembership !== null) {
+        throw new HttpsError(
+          "already-exists",
+          "Eine Mitgliedschaft ist bereits im offenen Checkout.",
+        );
+      }
+      const newItemRef = checkoutRef.collection("items").doc();
+      tx.set(newItemRef, item);
+      tx.update(checkoutRef, {
+        modifiedBy: callerRef.id,
+        modifiedAt: now,
+      });
+    });
+  }
 
   logger.info("Started membership purchase", {
     userId: callerRef.id,
@@ -164,6 +208,7 @@ export const purchaseMembership = onCall<
     checkoutId: checkoutRef.id,
     catalogId: catalogDoc.id,
     unitPrice,
+    reusedExistingCheckout: !openCheckoutsSnap.empty,
   });
 
   return {
@@ -171,4 +216,14 @@ export const purchaseMembership = onCall<
     catalogId: catalogDoc.id,
     unitPrice,
   };
+}
+
+export const purchaseMembership = onCall<
+  PurchaseMembershipRequest,
+  Promise<PurchaseMembershipResponse>
+>(async (request) => {
+  return handlePurchaseMembership(request.data, {
+    authUid: request.auth?.uid,
+    authToken: request.auth?.token as Record<string, unknown> | undefined,
+  });
 });
