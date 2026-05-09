@@ -3,9 +3,14 @@
 
 /**
  * Family-invite acceptance: an invitee clicks a link to this page (with
- * the membership and invite IDs) and decides to accept or reject.
+ * the membership and invite IDs in the path) and decides to accept or
+ * reject.
  *
- * Route shape: /_authenticated/invite/$inviteId?membership=$membershipId
+ * Route shape: /_authenticated/invite/$membershipId/$inviteId
+ *
+ * Both IDs live in the path so the URL survives a /login redirect when
+ * an unauthenticated invitee opens the email link — TanStack Router's
+ * pathname is preserved through the auth gate but query strings are not.
  *
  * Auth required: invitee must be signed in (their email determines whether
  * the invite is theirs to accept).
@@ -22,27 +27,21 @@ import { Button } from "@modules/components/ui/button"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { httpsCallable } from "firebase/functions"
 
-interface InviteSearch {
-  membership: string
-}
-
-export const Route = createFileRoute("/_authenticated/invite/$inviteId")({
-  validateSearch: (search: Record<string, unknown>): InviteSearch => ({
-    membership: typeof search.membership === "string" ? search.membership : "",
-  }),
+export const Route = createFileRoute(
+  "/_authenticated/invite/$membershipId/$inviteId",
+)({
   component: InviteAcceptPage,
 })
 
 function InviteAcceptPage() {
-  const { inviteId } = Route.useParams()
-  const { membership: membershipId } = Route.useSearch()
+  const { membershipId, inviteId } = Route.useParams()
   const db = useDb()
   const functions = useFunctions()
   const { userDoc } = useAuth()
   const navigate = useNavigate()
 
   const { data: invite, loading } = useDocument(
-    membershipId ? membershipInviteRef(db, membershipId, inviteId) : null,
+    membershipInviteRef(db, membershipId, inviteId),
   )
 
   const acceptMutation = useAsyncMutation({
@@ -55,14 +54,6 @@ function InviteAcceptPage() {
     successMessage: "Einladung abgelehnt",
     errorMessage: "Einladung konnte nicht abgelehnt werden",
   })
-
-  if (!membershipId) {
-    return (
-      <div className="max-w-md">
-        <p>Ungültiger Einladungs-Link.</p>
-      </div>
-    )
-  }
 
   if (loading) return <PageLoading />
   if (!invite) {

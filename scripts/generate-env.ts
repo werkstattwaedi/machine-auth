@@ -52,6 +52,7 @@ const FUNCTIONS_RESEND: VarMapping[] = [
   { envVar: "RESEND_TWINT_TEMPLATE_ID", jsonPath: "functions.resendTwintTemplateId" },
   { envVar: "RESEND_QRBILL_TEMPLATE_ID", jsonPath: "functions.resendQrBillTemplateId" },
   { envVar: "RESEND_LOGIN_TEMPLATE_ID", jsonPath: "functions.resendLoginTemplateId" },
+  { envVar: "RESEND_INVITE_TEMPLATE_ID", jsonPath: "functions.resendInviteTemplateId" },
 ];
 
 const VITE_FIREBASE: VarMapping[] = [

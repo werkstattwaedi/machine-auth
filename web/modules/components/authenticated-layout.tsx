@@ -52,12 +52,23 @@ export function AuthenticatedLayout({
   const isMobile = useIsMobile()
   const [sheetOpen, setSheetOpen] = useState(false)
 
-  // Redirect to login if not authenticated
+  // Redirect to login if not authenticated. Preserve the current pathname
+  // through `?redirect=` so an unauthenticated visitor who clicked a deep
+  // link (e.g. an emailed invite) lands back where they intended after
+  // signing in. Mirrors the anonymous-session branch below — the ref
+  // guard prevents a re-fire after `location.pathname` flips to "/login"
+  // before the layout unmounts. A genuine remount (signed-out tab returns)
+  // resets the ref and re-redirects, which is the right behavior.
+  const unauthRedirectedRef = useRef(false)
   useEffect(() => {
-    if (!loading && !user) {
-      navigate({ to: "/login" })
+    if (!loading && !user && !unauthRedirectedRef.current) {
+      unauthRedirectedRef.current = true
+      ;(navigate as (opts: { to: string; search?: Record<string, unknown> }) => void)({
+        to: "/login",
+        search: { redirect: location.pathname },
+      })
     }
-  }, [user, loading, navigate])
+  }, [user, loading, navigate, location.pathname])
 
   // Admin gate: kick non-admins back to login once user doc has loaded.
   // Note: anonymous principals are filtered out implicitly here because

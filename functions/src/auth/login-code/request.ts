@@ -14,9 +14,8 @@ import {
   onCall,
   type CallableRequest,
 } from "firebase-functions/v2/https";
-import { defineSecret, defineString } from "firebase-functions/params";
+import { defineString } from "firebase-functions/params";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
-import { Resend } from "resend";
 import {
   buildMagicLink,
   generateCode,
@@ -28,9 +27,12 @@ import {
   normalizeEmail,
   parseIntParamOrDie,
 } from "./helpers";
+import {
+  assertTemplateConfigured,
+  resendApiKey,
+  sendTemplate,
+} from "../../util/resend_template";
 
-const resendApiKey = defineSecret("RESEND_API_KEY");
-const resendFromEmail = defineString("RESEND_FROM_EMAIL");
 // No default: an unset param must fail loudly (see
 // `assertResendLoginTemplateConfigured`) rather than silently calling
 // Resend with an empty template id and producing an opaque provider
@@ -49,25 +51,12 @@ const maxCodesPerEmailParam = defineString("LOGIN_MAX_CODES_PER_EMAIL", {
 });
 
 /**
- * Throws a `failed-precondition` error when the Resend login template id
- * is empty/whitespace in non-emulator mode. Surfaces the misconfiguration
- * in Cloud Functions logs without leaking provider details to the client.
- *
- * Exported separately so unit tests can pass the value directly without
- * stubbing `defineString` (mirrors `assertLoginOriginsConfigured`).
+ * Thin wrapper around the shared `assertTemplateConfigured` helper. Kept
+ * for backwards compatibility with `test/unit/login-code-helpers.test.ts`
+ * which imports this symbol directly.
  */
 export function assertResendLoginTemplateConfigured(value: string): void {
-  if (process.env.FUNCTIONS_EMULATOR === "true") return;
-  if (value.trim().length > 0) return;
-  logger.error(
-    "RESEND_LOGIN_TEMPLATE_ID is empty in production — login emails " +
-      "cannot be sent. Set the param via firebase functions:config or " +
-      "regenerate functions/.env.<projectId> via `npm run generate-env`."
-  );
-  throw new HttpsError(
-    "failed-precondition",
-    "Resend login template not configured"
-  );
+  assertTemplateConfigured(value, "RESEND_LOGIN_TEMPLATE_ID");
 }
 
 const CODE_EXPIRY_MS = 5 * 60 * 1000;
@@ -192,27 +181,16 @@ async function sendLoginEmail(
   code: string,
   magicLink: string
 ): Promise<void> {
-  const templateId = resendLoginTemplateId.value();
-  // Fail loud before calling Resend with an empty template id (would
-  // otherwise produce an opaque provider error).
-  assertResendLoginTemplateConfigured(templateId);
-  const resend = new Resend(resendApiKey.value());
-  const { error } = await resend.emails.send({
-    from: resendFromEmail.value(),
+  await sendTemplate({
     to: email,
-    template: {
-      id: templateId,
-      variables: {
-        CODE: code,
-        MAGIC_LINK: magicLink,
-        EXPIRES_MINUTES: "5",
-      },
+    templateId: resendLoginTemplateId.value(),
+    templateIdParam: "RESEND_LOGIN_TEMPLATE_ID",
+    variables: {
+      CODE: code,
+      MAGIC_LINK: magicLink,
+      EXPIRES_MINUTES: "5",
     },
   });
-  if (error) {
-    logger.error("Resend send failed", { error });
-    throw new HttpsError("internal", "Email send failed");
-  }
 }
 
 export const requestLoginCode = onCall(
