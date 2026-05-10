@@ -1,7 +1,7 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { useState, useMemo, useCallback } from "react"
+import { useState, useMemo, useCallback, useEffect, useRef } from "react"
 import { Label } from "@modules/components/ui/label"
 import { Separator } from "@modules/components/ui/separator"
 import { formatCHF } from "@modules/lib/format"
@@ -633,7 +633,12 @@ interface SpendeCardProps {
   onRoundUpTarget: (target: number) => void
 }
 
-function SpendeCard({
+/** Permissive numeric pattern accepted while typing: digits with at most one
+ *  `.` or `,` separator. Empty string is also accepted so the field can be
+ *  fully cleared. */
+const SPENDE_TYPING_PATTERN = /^(?:|\d*(?:[.,]\d*)?)$/
+
+export function SpendeCard({
   spende,
   onSpendeChange,
   roundUpEnabled,
@@ -643,6 +648,24 @@ function SpendeCard({
   onRoundUpToggle,
   onRoundUpTarget,
 }: SpendeCardProps) {
+  // Raw text the user is typing. Decoupled from `spende` so a keystroke like
+  // "20" survives the parse-and-reformat round-trip that previously stripped
+  // trailing zeros.
+  const [text, setText] = useState(() => (spende > 0 ? spende.toFixed(2) : ""))
+  const focusedRef = useRef(false)
+
+  // Sync from external `spende` only while the field is unfocused. This keeps
+  // the displayed text canonical when the parent updates `spende` (rare today
+  // but cheap to be safe), without clobbering mid-typing input.
+  useEffect(() => {
+    if (focusedRef.current) return
+    const canonical = spende > 0 ? spende.toFixed(2) : ""
+    // Avoid spurious updates when the existing text already parses to the
+    // same value (e.g. "20" vs "20.00" while focused-then-blurred elsewhere).
+    const parsed = parseFloat(text.replace(",", ".")) || 0
+    if (parsed !== spende) setText(canonical)
+  }, [spende, text])
+
   return (
     <div className="rounded-md border border-oww-gold-border bg-oww-gold-light p-5 sm:p-6 grid sm:grid-cols-[1fr_auto] gap-4 sm:gap-6 items-start">
       <div className="min-w-0">
@@ -666,10 +689,22 @@ function SpendeCard({
             type="text"
             inputMode="decimal"
             placeholder="0.00"
-            value={spende > 0 ? spende.toFixed(2) : ""}
+            value={text}
+            onFocus={() => {
+              focusedRef.current = true
+            }}
             onChange={(e) => {
-              const v = parseFloat(e.target.value.replace(",", ".")) || 0
+              const raw = e.target.value
+              if (!SPENDE_TYPING_PATTERN.test(raw)) return
+              setText(raw)
+              const v = parseFloat(raw.replace(",", ".")) || 0
               onSpendeChange(v)
+            }}
+            onBlur={() => {
+              focusedRef.current = false
+              const v = parseFloat(text.replace(",", ".")) || 0
+              setText(v > 0 ? v.toFixed(2) : "")
+              if (v !== spende) onSpendeChange(v)
             }}
             aria-label="Trinkgeld/Spende"
             className="w-[140px] h-11 pl-12 pr-3.5 rounded-md border border-oww-gold-border bg-background text-base font-semibold tabular-nums text-oww-gold-text text-right placeholder:text-oww-gold-border placeholder:font-normal focus:outline-none focus:border-oww-gold-dark focus:ring-2 focus:ring-oww-gold-dark/20"
