@@ -116,6 +116,30 @@ async function main(): Promise<never> {
   const cmd = process.argv[sepIdx + 1];
   const cmdArgs = process.argv.slice(sepIdx + 2);
 
+  // Nesting guard: if a parent already acquired a block (e.g. test:precommit
+  // wrapping test:web:integration which itself wraps the broker), skip the
+  // acquisition and just exec the child with the parent's env intact.
+  if (process.env.PORT_BLOCK) {
+    console.error(
+      `[port-block] Re-using parent block ${process.env.PORT_BLOCK} (offset=${process.env.PORT_OFFSET})`
+    );
+    const child = spawn(cmd, cmdArgs, { stdio: "inherit", env: process.env });
+    for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
+      process.on(sig, () => {
+        if (!child.killed) child.kill(sig);
+      });
+    }
+    child.on("exit", (code, signal) => {
+      if (signal) process.kill(process.pid, signal);
+      else process.exit(code ?? 0);
+    });
+    child.on("error", (err) => {
+      console.error(`[port-block] Failed to spawn child: ${err.message}`);
+      process.exit(127);
+    });
+    await new Promise(() => {});
+  }
+
   if (!existsSync(blocksConfigPath)) {
     console.error(`[port-block] Missing config: ${blocksConfigPath}`);
     process.exit(78); // EX_CONFIG

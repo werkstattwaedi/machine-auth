@@ -16,20 +16,32 @@ lock files.
 
 ## Usage
 
-```bash
-# Wrap any test command:
-npm run block -- npm run test:web:integration
-npm run block -- npm run test:web:e2e
-npm run block -- bash -c 'cd functions && npm run test:integration'
+The broker is **mandatory and automatic** for the standard test scripts —
+they wrap themselves in `scripts/port-block.ts`. Just run them:
 
-# Or directly:
-npx tsx scripts/port-block.ts -- npm run test:web:integration
+```bash
+npm run test:web:integration   # broker fires automatically
+npm run test:web:e2e           # broker fires automatically
+cd functions && npm run test:integration   # broker fires automatically
 ```
 
-Manual dev (`./dev.sh`, `npm run dev`) is **not** affected — it still uses
-the default ports from `firebase.json`. The broker is only for the test
-paths that go through `scripts/emulator-exec.sh` or
-`firebase emulators:exec`.
+For other `firebase emulators:exec` invocations (e.g. updating
+Playwright snapshots), wrap manually:
+
+```bash
+npm run block -- bash -c 'firebase emulators:exec --config "$FIREBASE_E2E_CONFIG" --only firestore,auth,functions "..."'
+
+# Or directly:
+npx tsx scripts/port-block.ts -- <command> [args...]
+```
+
+The broker is **nesting-safe**: if `PORT_BLOCK` is already set in the
+env, it skips acquisition and just exec's the child. So
+`npm run block -- npm run test:web:integration` does not double-acquire.
+
+Manual dev (`./dev.sh`, `npm run dev`) is **not** affected — it still
+uses the default ports from `firebase.json`. The broker only fronts
+emulator-exec test paths.
 
 ## Block layout
 

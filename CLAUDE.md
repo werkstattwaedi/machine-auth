@@ -193,7 +193,21 @@ npm run test:precommit   # Builds + tests both web apps and functions
 
 This runs: web build (TypeScript + Vite for checkout & admin) → web unit tests → web integration tests (emulator auto-started) → functions build + unit + integration tests (emulator auto-started).
 
-**Important:** Stop the dev emulators (`npm run dev`) before running integration/E2E tests — concurrent emulator instances cause data isolation issues.
+**Port-block broker (automatic):** `test:web:integration`, `test:web:e2e`,
+and `functions test:integration` automatically wrap their emulator launch
+in `scripts/port-block.ts`. The broker acquires the lowest-numbered free
+CI block (5 blocks of +10000), generates an offset
+`firebase.runtime.<block>.json`, sets emulator port env vars, and execs
+the test runner. Concurrent test runs (parallel CI / multiple agent
+worktrees) get distinct port blocks and do **not** collide. If all 5
+blocks are held the broker exits with code `75` (EX_TEMPFAIL) so the
+caller can retry. Manual `npm run dev` is unaffected — the broker only
+fronts test paths. See [`docs/port-blocks.md`](docs/port-blocks.md).
+
+To wrap any other `firebase emulators:exec` invocation in the broker
+manually, prefix with `npm run block --`. The broker is nesting-safe:
+if `PORT_BLOCK` is already set in the env, it re-uses the parent's
+block instead of acquiring another.
 
 ```bash
 # Web unit tests only (Vitest, no emulator needed)
@@ -218,9 +232,9 @@ E2E tests use `toHaveScreenshot()` for pixel-level layout regression detection. 
 
 ```bash
 # Update snapshots after intentional UI changes (run from repo root):
-firebase emulators:exec --config firebase.e2e.json \
+npm run block -- bash -c 'firebase emulators:exec --config "$FIREBASE_E2E_CONFIG" \
   --only firestore,auth,functions \
-  'cd web/apps/checkout && npx playwright test checkin-screenshots checkout-screenshots --update-snapshots'
+  "cd web/apps/checkout && npx playwright test checkin-screenshots checkout-screenshots --update-snapshots"'
 ```
 
 New screenshot tests automatically run at both viewports — no extra configuration needed.
