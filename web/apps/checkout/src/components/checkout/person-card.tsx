@@ -67,7 +67,12 @@ export function PersonCard({
 
   const showBillingAddress = person.userType === "firma"
 
-  const canRemove = !isOnly && !person.isPreFilled
+  // Issue #209: any card (including the pre-filled / first card) is
+  // removable as long as another remains — so a family owner can drop
+  // themselves from the visit and keep e.g. their kid on it. The
+  // `!isOnly` guard already enforces "at least one person stays" because
+  // the X button gates `REMOVE_PERSON`.
+  const canRemove = !isOnly
 
   const err = (field: string) => showError(field, errors, touched, submitted)
   const fieldCls = (field: string) => (err(field) ? INPUT_ERR : INPUT_OK)
@@ -76,7 +81,14 @@ export function PersonCard({
 
   return (
     <div data-testid="person-card" className="bg-[rgba(204,204,204,0.2)] rounded-none p-[25px] space-y-4">
-      {(title === undefined || title) && (
+      {/*
+        Issue #209: the wizard passes `title=""` for the first card when an
+        account user is signed in (the "Eingeloggt" hint sits in `IdentityHint`
+        instead). The X button must still render in that case so a family
+        owner can drop themselves from the visit, so we render the X
+        independently of the title row.
+      */}
+      {(title === undefined || title || canRemove) && (
         <div className="flex items-center gap-1.5">
           {canRemove && (
             <button
@@ -90,9 +102,11 @@ export function PersonCard({
               <XCircle className="h-4 w-4" />
             </button>
           )}
-          <h3 className="text-base font-bold font-body">
-            {title || `Person ${index + 1}`}
-          </h3>
+          {(title === undefined || title) && (
+            <h3 className="text-base font-bold font-body">
+              {title || `Person ${index + 1}`}
+            </h3>
+          )}
         </div>
       )}
 

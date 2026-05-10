@@ -5,7 +5,7 @@ import { render, screen, cleanup } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, it, expect, afterEach, vi } from "vitest"
 import { useReducer } from "react"
-import { StepCheckin } from "./step-checkin"
+import { StepCheckin, type FamilyCandidate } from "./step-checkin"
 import {
   checkoutReducer,
   initialState,
@@ -25,12 +25,14 @@ function renderCheckin({
   isAccountLoggedIn = false,
   stateOverrides,
   onAdvance,
+  familyCandidates,
 }: {
   isAnonymous?: boolean
   kiosk?: boolean
   isAccountLoggedIn?: boolean
   stateOverrides?: Partial<CheckoutState>
   onAdvance?: () => Promise<void>
+  familyCandidates?: FamilyCandidate[]
 } = {}) {
   const dispatched: CheckoutAction[] = []
   const onSignOut = vi.fn()
@@ -51,6 +53,7 @@ function renderCheckin({
         isAccountLoggedIn={isAccountLoggedIn}
         onSignOut={onSignOut}
         onAdvance={onAdvance}
+        familyCandidates={familyCandidates}
       />
     )
   }
@@ -323,5 +326,174 @@ describe("Identity hint", () => {
 
     expect(screen.queryByText("Bereits registriert oder Konto erstellen?")).toBeNull()
     expect(screen.queryByText("Badge an den Leser halten")).toBeNull()
+  })
+})
+
+// Issue #209: family-roster quick-add buttons & first-card removal.
+describe("Family-roster quick-add (#209)", () => {
+  const ownerPrimary: CheckoutState["persons"][number] = {
+    id: "p-self",
+    firstName: "Max",
+    lastName: "Muster",
+    email: "max@example.com",
+    userType: "erwachsen",
+    termsAccepted: true,
+    isPreFilled: true,
+    userId: "u-self",
+  }
+  const candidates: FamilyCandidate[] = [
+    {
+      userId: "u-lia",
+      firstName: "Lia",
+      lastName: "Pfeffer",
+      email: "lia@example.com",
+      userType: "kind",
+    },
+    {
+      userId: "u-yvonne",
+      firstName: "Yvonne",
+      lastName: "Pfeiffer",
+      email: "yvonne@example.com",
+      userType: "erwachsen",
+    },
+  ]
+
+  it("renders one quick-add button per family candidate", () => {
+    renderCheckin({
+      isAnonymous: false,
+      isAccountLoggedIn: true,
+      stateOverrides: { persons: [ownerPrimary] },
+      familyCandidates: candidates,
+    })
+
+    expect(screen.getByRole("button", { name: /Lia Pfeffer/ })).toBeTruthy()
+    expect(screen.getByRole("button", { name: /Yvonne Pfeiffer/ })).toBeTruthy()
+  })
+
+  it("renders no quick-add buttons when familyCandidates is empty / undefined", () => {
+    renderCheckin({
+      isAnonymous: false,
+      isAccountLoggedIn: true,
+      stateOverrides: { persons: [ownerPrimary] },
+      familyCandidates: [],
+    })
+    expect(screen.queryByRole("button", { name: /Pfeffer/ })).toBeNull()
+    expect(screen.queryByRole("button", { name: /Pfeiffer/ })).toBeNull()
+  })
+
+  it("dispatches ADD_FAMILY_PERSON when a quick-add button is clicked", async () => {
+    const user = userEvent.setup()
+    const { dispatched } = renderCheckin({
+      isAnonymous: false,
+      isAccountLoggedIn: true,
+      stateOverrides: { persons: [ownerPrimary] },
+      familyCandidates: candidates,
+    })
+
+    await user.click(screen.getByRole("button", { name: /Lia Pfeffer/ }))
+
+    const action = dispatched.find((a) => a.type === "ADD_FAMILY_PERSON")
+    expect(action).toBeDefined()
+    expect(action).toMatchObject({
+      type: "ADD_FAMILY_PERSON",
+      person: {
+        userId: "u-lia",
+        firstName: "Lia",
+        lastName: "Pfeffer",
+        email: "lia@example.com",
+        userType: "kind",
+      },
+    })
+  })
+
+  it("only shows candidates not already on the visit (caller-side filter)", () => {
+    // The wizard filters out members already attached via `userId`. We
+    // emulate the filtered list and assert that the rendered set matches.
+    const remaining = candidates.filter((c) => c.userId !== "u-yvonne")
+    renderCheckin({
+      isAnonymous: false,
+      isAccountLoggedIn: true,
+      stateOverrides: {
+        persons: [
+          ownerPrimary,
+          {
+            id: "p-yvonne",
+            firstName: "Yvonne",
+            lastName: "Pfeiffer",
+            email: "yvonne@example.com",
+            userType: "erwachsen",
+            termsAccepted: true,
+            isPreFilled: true,
+            userId: "u-yvonne",
+          },
+        ],
+      },
+      familyCandidates: remaining,
+    })
+
+    expect(screen.getByRole("button", { name: /Lia Pfeffer/ })).toBeTruthy()
+    expect(screen.queryByRole("button", { name: /\+ Yvonne Pfeiffer/ })).toBeNull()
+  })
+})
+
+// Issue #209: any card (incl. the pre-filled / first card) can be removed
+// when ≥ 2 persons are on the visit. The `isOnly` guard still pins at
+// least one person.
+describe("Person removal (#209)", () => {
+  const preFilled: CheckoutState["persons"][number] = {
+    id: "p-self",
+    firstName: "Max",
+    lastName: "Muster",
+    email: "max@example.com",
+    userType: "erwachsen",
+    termsAccepted: true,
+    isPreFilled: true,
+    userId: "u-self",
+  }
+  const familyMember: CheckoutState["persons"][number] = {
+    id: "p-lia",
+    firstName: "Lia",
+    lastName: "Pfeffer",
+    email: "lia@example.com",
+    userType: "kind",
+    termsAccepted: true,
+    isPreFilled: true,
+    userId: "u-lia",
+  }
+
+  it("does NOT show the X button when only one person is on the visit", () => {
+    renderCheckin({
+      isAnonymous: false,
+      isAccountLoggedIn: true,
+      stateOverrides: { persons: [preFilled] },
+    })
+    expect(screen.queryByRole("button", { name: /Person 1 entfernen/ })).toBeNull()
+  })
+
+  it("shows the X button on the pre-filled first card when ≥ 2 persons are on the visit", () => {
+    renderCheckin({
+      isAnonymous: false,
+      isAccountLoggedIn: true,
+      stateOverrides: { persons: [preFilled, familyMember] },
+    })
+    // First card (the pre-filled / signed-in user) is now removable too.
+    expect(screen.getByRole("button", { name: /Person 1 entfernen/ })).toBeTruthy()
+  })
+
+  it("removes the pre-filled first card when the X button is clicked", async () => {
+    const user = userEvent.setup()
+    const { dispatched } = renderCheckin({
+      isAnonymous: false,
+      isAccountLoggedIn: true,
+      stateOverrides: { persons: [preFilled, familyMember] },
+    })
+
+    await user.click(screen.getByRole("button", { name: /Person 1 entfernen/ }))
+
+    const action = dispatched.find((a) => a.type === "REMOVE_PERSON")
+    expect(action).toMatchObject({ type: "REMOVE_PERSON", id: "p-self" })
+
+    // X button on the remaining (now sole) card is gone.
+    expect(screen.queryByRole("button", { name: /Person 1 entfernen/ })).toBeNull()
   })
 })

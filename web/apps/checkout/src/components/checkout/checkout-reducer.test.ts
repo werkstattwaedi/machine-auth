@@ -58,6 +58,71 @@ describe("checkoutReducer", () => {
     })
   })
 
+  describe("ADD_FAMILY_PERSON", () => {
+    // Issue #209: family-roster quick-add appends a fully-populated,
+    // pre-filled, terms-accepted person carrying the user's id so the
+    // wizard can dedupe candidates and (later) attribute the visit.
+    it("appends a pre-filled, terms-accepted person carrying userId", () => {
+      const state = reduce({
+        type: "ADD_FAMILY_PERSON",
+        person: {
+          userId: "u-lia",
+          firstName: "Lia",
+          lastName: "Pfeffer",
+          email: "lia@example.com",
+          userType: "kind",
+        },
+      })
+      expect(state.persons).toHaveLength(2)
+      const added = state.persons[1]
+      expect(added.firstName).toBe("Lia")
+      expect(added.lastName).toBe("Pfeffer")
+      expect(added.email).toBe("lia@example.com")
+      expect(added.userType).toBe("kind")
+      expect(added.isPreFilled).toBe(true)
+      expect(added.termsAccepted).toBe(true)
+      expect(added.userId).toBe("u-lia")
+      expect(added.id).toBeTruthy()
+      expect(added.id).not.toBe(state.persons[0].id)
+    })
+
+    it("supports child accounts with empty email", () => {
+      // Child accounts (userType: "kind") have email: null on the user
+      // doc; the wizard surfaces it as "" so the pre-filled card simply
+      // hides the field. Reducer accepts and stores as-is.
+      const state = reduce({
+        type: "ADD_FAMILY_PERSON",
+        person: {
+          userId: "u-kid",
+          firstName: "Mia",
+          lastName: "Müller",
+          email: "",
+          userType: "kind",
+        },
+      })
+      expect(state.persons[1].email).toBe("")
+      expect(state.persons[1].userType).toBe("kind")
+      expect(state.persons[1].isPreFilled).toBe(true)
+    })
+
+    it("does not mutate prior persons", () => {
+      let state = reduce({ type: "ADD_PERSON" })
+      const before = state.persons.map((p) => p.id)
+      state = checkoutReducer(state, {
+        type: "ADD_FAMILY_PERSON",
+        person: {
+          userId: "u-add",
+          firstName: "X",
+          lastName: "Y",
+          email: "x@y.ch",
+          userType: "erwachsen",
+        },
+      })
+      expect(state.persons.length).toBe(3)
+      expect(state.persons.slice(0, 2).map((p) => p.id)).toEqual(before)
+    })
+  })
+
   describe("REMOVE_PERSON", () => {
     it("removes the person with matching id", () => {
       const state = reduce({ type: "ADD_PERSON" })
