@@ -21,7 +21,7 @@ export interface CheckoutPerson {
   billingCity?: string
 }
 
-export type PaymentMethod = "rechnung" | "sammel" | "twint"
+export type PaymentMethod = "rechnung" | "monthly" | "twint"
 
 export interface CheckoutState {
   step: number // 0 = check-in, 1 = costs, 2 = check-out, 3 = bezahlen

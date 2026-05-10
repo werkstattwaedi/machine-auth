@@ -138,9 +138,8 @@
       // server-stamped confirmation written when the cash actually arrives.
       // The acting principal is recorded via the existing `modifiedBy`
       // audit field — no separate `paymentMethodConfirmedBy`.
-      "paymentMethodConfirmed": "rechnung | sammel | twint",
+      "paymentMethodConfirmed": "rechnung | monthly | twint",
       "paymentMethodConfirmedAt": "timestamp",
-
 
       "items": {
         "{itemId}": { // Auto-generated — subcollection of checkouts/{checkoutId}

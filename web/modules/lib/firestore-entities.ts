@@ -200,7 +200,7 @@ export type CheckoutUsageType =
  * confirmation written when the cash arrives. Recorded once on the checkout
  * doc when the user clicks the commit button on the Bezahlen step.
  */
-export type PaymentMethodConfirmed = "rechnung" | "sammel" | "twint"
+export type PaymentMethodConfirmed = "rechnung" | "monthly" | "twint"
 
 export interface CheckoutDoc extends AuditFields {
   userId: DocumentReference<UserDoc> | null

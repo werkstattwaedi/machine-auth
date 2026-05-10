@@ -521,12 +521,12 @@ describe("cross-user: checkouts paymentMethodConfirmed ack", () => {
     await seedClosedCheckout("co1", "alice", {
       paymentMethodConfirmed: "rechnung",
       paymentMethodConfirmedAt: FieldValue.serverTimestamp(),
-      })
+    })
     await assertFails(
       updateDoc(doc(authedDb("alice"), "checkouts", "co1"), {
         paymentMethodConfirmed: "twint",
         paymentMethodConfirmedAt: serverTimestamp(),
-          }),
+      }),
     )
   })
 
@@ -547,7 +547,44 @@ describe("cross-user: checkouts paymentMethodConfirmed ack", () => {
       updateDoc(doc(authedDb("alice"), "checkouts", "co1"), {
         paymentMethodConfirmed: "bitcoin",
         paymentMethodConfirmedAt: serverTimestamp(),
-          }),
+      }),
+    )
+  })
+
+  // --- monthly is gated by activeMembership ---
+
+  it("allows a Vereinsmitglied to ack monthly on their own closed checkout", async () => {
+    await seedUser("alice")
+    await seedMembership("m1", "alice")
+    await seedClosedCheckout("co1", "alice")
+    await assertSucceeds(
+      updateDoc(doc(authedDb("alice"), "checkouts", "co1"), {
+        paymentMethodConfirmed: "monthly",
+        paymentMethodConfirmedAt: serverTimestamp(),
+      }),
+    )
+  })
+
+  it("denies a non-member acking monthly on their own closed checkout", async () => {
+    await seedUser("alice") // activeMembership: null per seedUser default
+    await seedClosedCheckout("co1", "alice")
+    await assertFails(
+      updateDoc(doc(authedDb("alice"), "checkouts", "co1"), {
+        paymentMethodConfirmed: "monthly",
+        paymentMethodConfirmedAt: serverTimestamp(),
+      }),
+    )
+  })
+
+  it("denies an anonymous-auth session from acking monthly on a null-userId checkout", async () => {
+    await seedClosedCheckout("co-anon", null)
+    // No user doc to consult for membership — the anon branch intentionally
+    // restricts the value list to ['rechnung', 'twint'].
+    await assertFails(
+      updateDoc(doc(anonAuthDb("anon-x"), "checkouts", "co-anon"), {
+        paymentMethodConfirmed: "monthly",
+        paymentMethodConfirmedAt: serverTimestamp(),
+      }),
     )
   })
 

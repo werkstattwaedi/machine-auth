@@ -86,12 +86,33 @@ test.describe("Authenticated checkout", () => {
       timeout: 10_000,
     })
 
+    // ── Commit the chosen payment method (Rechnung is the default tab) ──
+    await page
+      .getByRole("button", {
+        name: /Ich zahle die QR-Rechnung & Werkstatt verlassen/,
+      })
+      .click()
+
     // ── Verify Firestore: checkout has userId as DocumentReference ──
+    // Wait for the ack write to land.
+    await expect
+      .poll(
+        async () => {
+          const docs = await getCheckoutDocs()
+          const co = docs[0] as Record<string, unknown> | undefined
+          return co?.paymentMethodConfirmed
+        },
+        { timeout: 10_000 },
+      )
+      .toBe("rechnung")
+
     const checkouts = await getCheckoutDocs()
     expect(checkouts.length).toBeGreaterThanOrEqual(1)
 
     const checkout = checkouts[0] as Record<string, unknown>
     expect(checkout.status).toBe("closed")
+    expect(checkout.paymentMethodConfirmed).toBe("rechnung")
+    expect(checkout.paymentMethodConfirmedAt).toBeDefined()
 
     // userId should be a DocumentReference (has path property)
     const userIdRef = checkout.userId as { path: string }

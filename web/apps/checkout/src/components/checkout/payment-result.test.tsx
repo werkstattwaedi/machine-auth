@@ -124,8 +124,8 @@ describe("PaymentResult", () => {
       expect(screen.getByText("CH56 0681 4580 1260 0509 7")).toBeDefined()
       expect(screen.getByText("Referenz")).toBeDefined()
       // PDF + IBAN copy buttons are part of the rechnung panel.
-      expect(screen.getByRole("button", { name: /PDF herunterladen/ })).toBeDefined()
-      expect(screen.getByRole("button", { name: /IBAN kopieren/ })).toBeDefined()
+      // PDF download lives in the hero now (visible regardless of tab).
+      expect(screen.getByRole("button", { name: /Rechnung als PDF/ })).toBeDefined()
     })
 
     it("uses the rechnung-specific commit label", () => {
@@ -186,7 +186,7 @@ describe("PaymentResult", () => {
       expect(screen.getByRole("tab", { name: /Sammelrechnung/ })).toBeDefined()
     })
 
-    it("switches to the sammel panel + commit label when the tab is clicked", async () => {
+    it("switches to the monthly panel + commit label when the tab is clicked", async () => {
       render(
         <PaymentResult
           checkoutId="checkout-1"
@@ -197,7 +197,7 @@ describe("PaymentResult", () => {
         />,
       )
       await userEvent.click(screen.getByRole("tab", { name: /Sammelrechnung/ }))
-      // SammelPanel-only copy — the tab label also contains "Sammelrechnung",
+      // MonthlyPanel-only copy — the tab label also contains "Sammelrechnung",
       // so match on the unique panel sentence instead.
       expect(screen.getByText(/1\. des nächsten Monats/)).toBeDefined()
       expect(
@@ -257,7 +257,7 @@ describe("PaymentResult", () => {
       const [ref, payload] = mockAckUpdate.mock.calls[0]
       expect(ref.path).toBe("checkouts/checkout-1")
       expect(payload).toEqual({
-        paymentMethodConfirmed: "sammel",
+        paymentMethodConfirmed: "monthly",
         paymentMethodConfirmedAt: "server-ts",
       })
       expect(handleReset).toHaveBeenCalledOnce()
@@ -287,7 +287,7 @@ describe("PaymentResult", () => {
       expect(handleReset).not.toHaveBeenCalled()
     })
 
-    it("falls back to the checkoutId from PaymentData when the prop is null (anon flow)", async () => {
+    it("uses the checkoutId from PaymentData (the prop is decorative; the callable always threads it back)", async () => {
       const handleReset = vi.fn()
       render(
         <PaymentResult

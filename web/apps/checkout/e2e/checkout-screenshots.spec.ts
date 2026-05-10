@@ -279,14 +279,13 @@ test.describe("Checkout step screenshots", () => {
     await expect(page).toHaveScreenshot("checkout-summary-material-expanded.png")
   })
 
-  test("Step 4 · Rechnung tab (default) — QR bill + PDF / IBAN actions", async ({ page }, testInfo) => {
+  test("Step 4 · Rechnung tab (default) — QR bill + PDF download in hero", async ({ page }, testInfo) => {
     testInfo.setTimeout(60_000)
     await submitAndWaitForPaymentResult(page)
 
-    // The Rechnung tab is selected by default; PDF + IBAN actions live in
-    // the rechnung panel.
-    await expect(page.getByRole("button", { name: /PDF herunterladen/ })).toBeVisible()
-    await expect(page.getByRole("button", { name: /IBAN kopieren/ })).toBeVisible()
+    // The Rechnung tab is selected by default; the lightweight PDF
+    // download button lives in the hero (visible regardless of tab).
+    await expect(page.getByRole("button", { name: /Rechnung als PDF/ })).toBeVisible()
     // Commit button uses the rechnung-specific label.
     await expect(
       page.getByRole("button", {
@@ -314,8 +313,8 @@ test.describe("Checkout step screenshots", () => {
         name: /Ich habe via TWINT bezahlt & Werkstatt verlassen/,
       }),
     ).toBeVisible()
-    // The rechnung-only actions are gone when the TWINT tab is active.
-    await expect(page.getByRole("button", { name: /PDF herunterladen/ })).toBeHidden()
+    // PDF download stays in the hero across all tabs.
+    await expect(page.getByRole("button", { name: /Rechnung als PDF/ })).toBeVisible()
     await expect(page.getByText("Konto / Zahlbar an")).toBeHidden()
 
     await expect(page).toHaveScreenshot("checkout-payment-twint.png")

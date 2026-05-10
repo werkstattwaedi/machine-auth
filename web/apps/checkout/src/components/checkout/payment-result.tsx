@@ -4,8 +4,8 @@
 /**
  * Step 4 (Bezahlen) — payment-method picker as a G4 vertical-tab layout.
  *
- * The user picks one of three methods (QR-Rechnung / Sammelrechnung [members
- * only] / TWINT) and clicks the commit button. The click writes the
+ * The user picks one of three methods (rechnung / monthly [members only] /
+ * twint — UI labels are German). The click writes the
  * customer-stated acknowledgement to the checkout doc and unmounts.
  *
  * No back button — once the checkout is closed the user cannot rewind.
@@ -20,16 +20,8 @@ import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { httpsCallable } from "firebase/functions"
 import { serverTimestamp } from "firebase/firestore"
-import {
-  ArrowRight,
-  Copy,
-  Download,
-  FileText,
-  Loader2,
-  Smartphone,
-} from "lucide-react"
+import { Download, FileText, Loader2 } from "lucide-react"
 import { QRCodeSVG } from "qrcode.react"
-import { toast } from "sonner"
 import { cn } from "@modules/lib/utils"
 import type { PaymentMethod } from "./use-checkout-state"
 
@@ -78,13 +70,14 @@ interface PaymentResultProps {
    * fallback path.
    */
   initialPaymentData?: PaymentData | null
-  /** Gates the Sammelrechnung tab — only Vereinsmitglieder see it. */
+  /** Gates the monthly-bill (Sammelrechnung) tab — only Vereinsmitglieder
+   *  see it; the Firestore rule also requires activeMembership. */
   isMember: boolean
 }
 
 const COMMIT_LABELS: Record<PaymentMethod, string> = {
   rechnung: "Ich zahle die QR-Rechnung & Werkstatt verlassen",
-  sammel: "Auf Sammelrechnung setzen & Werkstatt verlassen",
+  monthly: "Auf Sammelrechnung setzen & Werkstatt verlassen",
   twint: "Ich habe via TWINT bezahlt & Werkstatt verlassen",
 }
 
@@ -102,6 +95,10 @@ export function PaymentResult({
     errorMessage: "QR-Code konnte nicht geladen werden",
   })
   const ackMutation = useFirestoreMutation()
+  const downloadMutation = useAsyncMutation<{ url: string }>({
+    context: "checkout.downloadInvoice",
+    errorMessage: "PDF konnte nicht geladen werden",
+  })
 
   const [paymentData, setPaymentData] = useState<PaymentData | null>(
     initialPaymentData ?? null,
@@ -118,7 +115,6 @@ export function PaymentResult({
     skipFallback || !checkoutId ? null : checkoutRef(db, checkoutId),
   )
   const billIdFromCheckout = checkout?.billRef?.id ?? null
-  const effectiveCheckoutId = paymentData?.checkoutId ?? checkoutId
 
   useEffect(() => {
     if (skipFallback || !billIdFromCheckout) return
@@ -157,37 +153,72 @@ export function PaymentResult({
     )
   }
 
-  const handleCommit = async () => {
-    if (!effectiveCheckoutId) {
-      toast.error("Checkout-ID fehlt, Bestätigung kann nicht gespeichert werden.")
-      return
-    }
+  const handleDownloadPdf = async () => {
     try {
-      await ackMutation.update(checkoutRef(db, effectiveCheckoutId), {
-        paymentMethodConfirmed: tab,
-        paymentMethodConfirmedAt: serverTimestamp(),
+      const callable = httpsCallable<{ billId: string }, { url: string }>(
+        functions,
+        "getInvoiceDownloadUrl",
+      )
+      const data = await downloadMutation.mutate(async () => {
+        const res = await callable({ billId: paymentData.billId })
+        return res.data
       })
+      window.open(data.url, "_blank", "noopener,noreferrer")
     } catch {
-      // Hook already toasted + telemetered. Keep the user on the page so
-      // they can retry rather than dropping them out without a record.
-      return
+      // toast already fired by the hook
+    }
+  }
+
+  const handleCommit = async () => {
+    // paymentData is non-null here (the !paymentData early return above
+    // guards this block). checkoutId is always populated by
+    // closeCheckoutAndGetPayment; the legacy getPaymentQrData fallback
+    // pulls it from bill.checkouts[0]. If we somehow reach the commit
+    // without one, skip the ack write rather than block the user.
+    if (paymentData.checkoutId) {
+      try {
+        await ackMutation.update(checkoutRef(db, paymentData.checkoutId), {
+          paymentMethodConfirmed: tab,
+          paymentMethodConfirmedAt: serverTimestamp(),
+        })
+      } catch {
+        // Hook already toasted + telemetered. Keep the user on the page so
+        // they can retry rather than dropping them out without a record.
+        return
+      }
     }
     onReset()
   }
 
   return (
     <div className="space-y-6">
-      {/* Hero — "Zu bezahlen" + amount. Details were shown in step 3. */}
-      <div className="rounded-md border border-border bg-cog-teal-light px-6 py-7 text-center">
-        <div className="text-[11px] font-bold uppercase tracking-wider text-cog-teal-dark">
-          Zu bezahlen
+      {/* Hero — "Zu bezahlen" + amount + lightweight PDF download.
+          Details of the bill were shown in step 3. */}
+      <div className="rounded-md border border-border bg-background px-6 py-7 flex items-end justify-between gap-4">
+        <div>
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+            Zu bezahlen
+          </div>
+          <div className="mt-2 font-heading font-bold text-5xl tabular-nums leading-none text-foreground">
+            <span className="text-base font-semibold uppercase text-muted-foreground mr-3 align-baseline">
+              CHF
+            </span>
+            {totalPrice.toFixed(2)}
+          </div>
         </div>
-        <div className="mt-2 font-heading font-bold text-5xl tabular-nums leading-none text-foreground">
-          <span className="text-2xl font-semibold text-cog-teal-dark mr-2 align-middle">
-            CHF
-          </span>
-          {totalPrice.toFixed(2)}
-        </div>
+        <button
+          type="button"
+          onClick={handleDownloadPdf}
+          disabled={downloadMutation.loading}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-md transition-colors disabled:opacity-50"
+        >
+          {downloadMutation.loading ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Download className="h-3.5 w-3.5" />
+          )}
+          Rechnung als PDF
+        </button>
       </div>
 
       {/* Vertical tabs — teal left rail on the active option */}
@@ -197,17 +228,15 @@ export function PaymentResult({
           active={tab}
           onSelect={setTab}
           icon={<FileText className="h-5 w-5" strokeWidth={1.6} />}
-          activeMarkClass="bg-cog-teal-light text-cog-teal-dark"
           label="QR-Rechnung"
           sub="Per E-Mail · 30 Tage"
         />
         {isMember && (
           <MethodTab
-            id="sammel"
+            id="monthly"
             active={tab}
             onSelect={setTab}
             icon={<CalendarMark />}
-            activeMarkClass="bg-oww-gold-light text-oww-gold-text"
             label="Sammelrechnung"
             sub="Mitglieder · monatlich"
           />
@@ -216,22 +245,34 @@ export function PaymentResult({
           id="twint"
           active={tab}
           onSelect={setTab}
-          icon={<TwintGlyph />}
-          activeMarkClass="bg-[#ecedf2] text-[#16284e]"
+          icon={
+            <img
+              src="https://assets.raisenow.io/twint-logo-dark.svg"
+              alt=""
+              className="h-5 w-auto"
+            />
+          }
           label="TWINT"
           sub="Sofort vom Handy"
         />
       </div>
 
-      {/* Method-specific instruction panel */}
-      <div className="rounded-md border border-border bg-white p-5 sm:p-7">
-        {tab === "rechnung" && (
-          <RechnungPanel paymentData={paymentData} totalPrice={totalPrice} />
-        )}
-        {tab === "sammel" && <SammelPanel totalPrice={totalPrice} />}
-        {tab === "twint" && (
-          <TwintPanel paymentData={paymentData} totalPrice={totalPrice} />
-        )}
+      {/* Method-specific instruction panel.
+          The outer container animates its height between methods (relies on
+          the global `interpolate-size: allow-keywords` set in
+          modules/index.css and `overflow-hidden` so content clips smoothly
+          during the resize). The inner `key={tab}` block re-mounts on tab
+          change so tw-animate-css fades the new content in. */}
+      <div className="rounded-md border border-border bg-white p-5 sm:p-7 overflow-hidden transition-[height] duration-200 ease-out">
+        <div key={tab} className="animate-in fade-in duration-150">
+          {tab === "rechnung" && (
+            <RechnungPanel paymentData={paymentData} totalPrice={totalPrice} />
+          )}
+          {tab === "monthly" && <MonthlyPanel totalPrice={totalPrice} />}
+          {tab === "twint" && (
+            <TwintPanel paymentData={paymentData} totalPrice={totalPrice} />
+          )}
+        </div>
       </div>
 
       {/* Single commit button — no back. Acknowledgement is recorded on click. */}
@@ -244,7 +285,6 @@ export function PaymentResult({
         >
           {ackMutation.loading && <Loader2 className="h-4 w-4 animate-spin" />}
           {COMMIT_LABELS[tab]}
-          <ArrowRight className="h-4 w-4" />
         </button>
       </div>
     </div>
@@ -260,8 +300,6 @@ interface MethodTabProps {
   active: PaymentMethod
   onSelect: (m: PaymentMethod) => void
   icon: React.ReactNode
-  /** Tailwind classes applied to the icon wrapper when this tab is active. */
-  activeMarkClass: string
   label: string
   sub: string
 }
@@ -271,7 +309,6 @@ function MethodTab({
   active,
   onSelect,
   icon,
-  activeMarkClass,
   label,
   sub,
 }: MethodTabProps) {
@@ -284,17 +321,23 @@ function MethodTab({
       onClick={() => onSelect(id)}
       className={cn(
         "w-full flex items-center gap-4 text-left rounded-lg border border-border bg-white px-4 sm:px-5 py-3.5 transition-colors",
-        // 4px left rail, transparent until active
-        "border-l-4 border-l-transparent",
+        // Active rail painted as inset box-shadow so it doesn't shift content
+        // (border-l-4 swaps would push the row 3px right when activated).
         on
-          ? "bg-cog-teal-light border-cog-teal/45 border-l-cog-teal"
+          ? "bg-cog-teal-light border-cog-teal/60 shadow-[inset_4px_0_0_0_var(--color-cog-teal)]"
           : "hover:bg-muted/40",
       )}
     >
       <span
         className={cn(
-          "shrink-0 flex h-9 w-9 items-center justify-center rounded-md transition-colors",
-          on ? activeMarkClass : "bg-muted text-muted-foreground",
+          "shrink-0 flex h-9 w-9 items-center justify-center rounded-md transition-all",
+          // TWINT styleguide mandates its logo on a dark surface — keep it
+          // as a brand chip. Our own methods (rechnung, monthly) sit on a
+          // neutral gray so the row doesn't read as three ad slots.
+          id === "twint"
+            ? "bg-[#262626] text-white"
+            : "bg-muted text-foreground/80",
+          on && "ring-2 ring-cog-teal shadow-sm scale-110",
         )}
       >
         {icon}
@@ -327,38 +370,6 @@ function RechnungPanel({
   paymentData: PaymentData
   totalPrice: number
 }) {
-  const functions = useFunctions()
-  const downloadMutation = useAsyncMutation<{ url: string }>({
-    context: "checkout.downloadInvoice",
-    errorMessage: "PDF konnte nicht geladen werden",
-  })
-
-  const handleDownloadPdf = async () => {
-    try {
-      const callable = httpsCallable<{ billId: string }, { url: string }>(
-        functions,
-        "getInvoiceDownloadUrl",
-      )
-      const data = await downloadMutation.mutate(async () => {
-        const res = await callable({ billId: paymentData.billId })
-        return res.data
-      })
-      window.open(data.url, "_blank", "noopener,noreferrer")
-    } catch {
-      // toast already fired by the hook
-    }
-  }
-
-  const handleCopyIban = async () => {
-    try {
-      const compact = paymentData.creditor.iban.replace(/\s/g, "")
-      await navigator.clipboard.writeText(compact)
-      toast.success("IBAN kopiert")
-    } catch {
-      toast.error("Kopieren fehlgeschlagen")
-    }
-  }
-
   return (
     <div className="space-y-5">
       <p className="text-sm text-foreground leading-relaxed max-w-2xl">
@@ -417,41 +428,11 @@ function RechnungPanel({
           </div>
         </div>
       </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-4 pt-2 border-t border-dashed border-border">
-        <p className="flex items-center gap-2 text-sm text-muted-foreground max-w-md">
-          <Smartphone className="h-4 w-4 shrink-0" />
-          Mit deiner Banking-App scannen — oder später per E-Mail bezahlen.
-        </p>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={handleDownloadPdf}
-            disabled={downloadMutation.loading}
-            className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-cog-teal border border-cog-teal rounded-[3px] bg-white hover:bg-cog-teal-light transition-colors disabled:opacity-50"
-          >
-            {downloadMutation.loading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Download className="h-4 w-4" />
-            )}
-            PDF herunterladen
-          </button>
-          <button
-            type="button"
-            onClick={handleCopyIban}
-            className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-cog-teal border border-cog-teal rounded-[3px] bg-white hover:bg-cog-teal-light transition-colors"
-          >
-            <Copy className="h-4 w-4" />
-            IBAN kopieren
-          </button>
-        </div>
-      </div>
     </div>
   )
 }
 
-function SammelPanel({ totalPrice }: { totalPrice: number }) {
+function MonthlyPanel({ totalPrice }: { totalPrice: number }) {
   return (
     <p className="text-sm text-foreground leading-relaxed max-w-2xl">
       Wir setzen <strong>{formatCHF(totalPrice)}</strong> auf deine
@@ -476,26 +457,21 @@ function TwintPanel({
         TWINT öffnet sich automatisch, bestätige die Zahlung in der App.
       </p>
 
-      <div className="flex flex-col items-start gap-3">
-        <a
-          href={paymentData.paylinkUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center justify-center w-[270px] h-[56px] px-[35px] bg-[#262626] rounded-[6px] hover:bg-[#333333] active:bg-[#1a1a1a] transition-colors no-underline"
-        >
-          <img
-            src="https://assets.raisenow.io/twint-logo-dark.svg"
-            alt=""
-            className="h-[36px] w-[32px] mr-[20px] shrink-0"
-          />
-          <span className="text-[17px] font-medium text-white whitespace-nowrap">
-            Mit TWINT bezahlen
-          </span>
-        </a>
-        <p className="text-xs text-muted-foreground tabular-nums">
-          {formatCHF(totalPrice)} · Bestätigung in der App
-        </p>
-      </div>
+      <a
+        href={paymentData.paylinkUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center justify-center w-[270px] h-[56px] px-[35px] bg-[#262626] rounded-[6px] hover:bg-[#333333] active:bg-[#1a1a1a] transition-colors no-underline"
+      >
+        <img
+          src="https://assets.raisenow.io/twint-logo-dark.svg"
+          alt=""
+          className="h-[36px] w-[32px] mr-[20px] shrink-0"
+        />
+        <span className="text-[17px] font-medium text-white whitespace-nowrap">
+          Mit TWINT bezahlen
+        </span>
+      </a>
     </div>
   )
 }
@@ -525,12 +501,3 @@ function CalendarMark() {
   )
 }
 
-/** Two-circle TWINT motif (recognizable, not the trademark logo). */
-function TwintGlyph() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden>
-      <circle cx="9" cy="12" r="5" fill="currentColor" />
-      <circle cx="15" cy="12" r="5" fill="currentColor" fillOpacity="0.55" />
-    </svg>
-  )
-}
