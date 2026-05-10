@@ -204,7 +204,7 @@ describe("recomputeSummary", () => {
   it("treats nfc-origin items as machine cost and others as material cost", () => {
     const summary = recomputeSummary(
       [adultPerson],
-      "intern",
+      "regular",
       [
         item("nfc", 30),
         item("manual", 5),
@@ -216,5 +216,30 @@ describe("recomputeSummary", () => {
     expect(summary.machineCost).to.equal(30);
     expect(summary.materialCost).to.equal(12);
     expect(summary.totalPrice).to.equal(42);
+  });
+
+  // Regression for issue #199: usageType "intern" must zero out entry
+  // fees, machine cost, and material cost regardless of items/config. Tip
+  // is still honoured. This is the authoritative server-side defense — a
+  // matching client-side projection lives in step-checkout/checkout-wizard.
+  it("zeros entry fees, machine and material costs when usageType is intern", () => {
+    const summary = recomputeSummary(
+      [adultPerson],
+      "intern",
+      [
+        item("nfc", 25),
+        item("qr", 12),
+      ],
+      // Pricing config carries non-zero entry fees on the intern row to
+      // prove the function ignores them. Even if an admin tweaks
+      // entryFees.*.intern up, the bill stays at 0.
+      { erwachsen: { regular: 0, materialbezug: 0, intern: 99, hangenmoos: 0 } },
+      3,
+    );
+    expect(summary.entryFees).to.equal(0);
+    expect(summary.machineCost).to.equal(0);
+    expect(summary.materialCost).to.equal(0);
+    expect(summary.tip).to.equal(3);
+    expect(summary.totalPrice).to.equal(3);
   });
 });

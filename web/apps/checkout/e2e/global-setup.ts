@@ -49,7 +49,7 @@ export default async function globalSetup() {
       firma: { regular: 30, materialbezug: 0, intern: 0, hangenmoos: 30 },
     },
     // SLA per-layer price (global; resin-per-liter lives on each catalog entry).
-    slaLayerPrice: { none: 0.01, member: 0.008, intern: 0.006 },
+    slaLayerPrice: { none: 0.01, member: 0.008 },
     workshops: {
       holz: { label: "Holz", order: 1 },
       metall: { label: "Metall", order: 2 },
@@ -64,7 +64,7 @@ export default async function globalSetup() {
     },
     labels: {
       units: { h: "Std.", m2: "m²", m: "m", stk: "Stk.", kg: "kg", chf: "CHF" },
-      discounts: { none: "Normal", member: "Mitglied", intern: "Intern" },
+      discounts: { none: "Normal", member: "Mitglied" },
     },
   })
 
@@ -74,7 +74,7 @@ export default async function globalSetup() {
     name: "E2E Testmaterial",
     workshops: ["holz"],
     pricingModel: "area",
-    unitPrice: { none: 10, member: 8, intern: 0 },
+    unitPrice: { none: 10, member: 8 },
     active: true,
     userCanAdd: true,
     description: "Testmaterial für E2E Tests",
@@ -85,7 +85,7 @@ export default async function globalSetup() {
     name: "E2E Holzplatte",
     workshops: ["holz"],
     pricingModel: "area",
-    unitPrice: { none: 5, member: 4, intern: 0 },
+    unitPrice: { none: 5, member: 4 },
     active: true,
     userCanAdd: true,
   })
@@ -95,7 +95,7 @@ export default async function globalSetup() {
     name: "Schleifpapier",
     workshops: ["holz"],
     pricingModel: "count",
-    unitPrice: { none: 2, member: 1.5, intern: 0 },
+    unitPrice: { none: 2, member: 1.5 },
     active: true,
     userCanAdd: true,
   })
@@ -105,7 +105,7 @@ export default async function globalSetup() {
     name: "Filament",
     workshops: ["makerspace"],
     pricingModel: "weight",
-    unitPrice: { none: 65, member: 65, intern: 0 },
+    unitPrice: { none: 65, member: 65 },
     active: true,
     userCanAdd: true,
   })
@@ -115,7 +115,7 @@ export default async function globalSetup() {
     name: "Filament (Spezial)",
     workshops: ["makerspace"],
     pricingModel: "weight",
-    unitPrice: { none: 105, member: 105, intern: 0 },
+    unitPrice: { none: 105, member: 105 },
     active: true,
     userCanAdd: true,
   })
@@ -125,7 +125,7 @@ export default async function globalSetup() {
     name: "E2E SLA Resin",
     workshops: ["makerspace"],
     pricingModel: "sla",
-    unitPrice: { none: 250, member: 200, intern: 0 },
+    unitPrice: { none: 250, member: 200 },
     active: true,
     userCanAdd: true,
   })
