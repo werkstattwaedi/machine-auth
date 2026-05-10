@@ -78,6 +78,49 @@ interface StepCheckoutProps {
   config: PricingConfig | null
 }
 
+/**
+ * Compute the displayed cost breakdown for the receipt step. Mirrors the
+ * server-side authoritative {@link recomputeSummary} contract: when
+ * {@link usageType} is `"intern"` the visit is never billed, so entry
+ * fees, machine cost, and material cost all collapse to 0 regardless of
+ * what items / config say. Tip stays honoured. The wizard's
+ * `handleSubmit` and `StepCheckout` both flow through this helper so the
+ * displayed total always matches what the server will bill.
+ */
+export function computeCheckoutCosts({
+  persons,
+  usageType,
+  items,
+  config,
+}: {
+  persons: { userType: string }[]
+  usageType: UsageType
+  items: { origin: string; totalPrice: number }[]
+  config: PricingConfig | null
+}): { personFees: number; machineCost: number; materialCost: number } {
+  // Internal usage is never billed.
+  if (usageType === "intern") {
+    return { personFees: 0, machineCost: 0, materialCost: 0 }
+  }
+  const personFees = persons.reduce(
+    (sum, p) =>
+      sum +
+      (calculateFee(
+        p.userType as Parameters<typeof calculateFee>[0],
+        usageType,
+        config,
+      ) ?? 0),
+    0,
+  )
+  const machineCost = items
+    .filter((i) => i.origin === "nfc")
+    .reduce((s, i) => s + i.totalPrice, 0)
+  const materialCost = items
+    .filter((i) => i.origin !== "nfc")
+    .reduce((s, i) => s + i.totalPrice, 0)
+  return { personFees, machineCost, materialCost }
+}
+
 export function StepCheckout({
   state,
   dispatch,
@@ -87,17 +130,17 @@ export function StepCheckout({
   items,
   config,
 }: StepCheckoutProps) {
-  const personFees = state.persons.reduce(
-    (sum, p) => sum + (calculateFee(p.userType, state.usageType, config) ?? 0),
-    0,
-  )
+  const { personFees, machineCost, materialCost } = computeCheckoutCosts({
+    persons: state.persons,
+    usageType: state.usageType,
+    items,
+    config,
+  })
   const nfcItems = useMemo(() => items.filter((i) => i.origin === "nfc"), [items])
   const materialItems = useMemo(
     () => items.filter((i) => i.origin !== "nfc"),
     [items],
   )
-  const machineCost = nfcItems.reduce((s, i) => s + i.totalPrice, 0)
-  const materialCost = materialItems.reduce((s, i) => s + i.totalPrice, 0)
   const subtotal = personFees + machineCost + materialCost
 
   // Tip is split: manual entry + optional round-up to a chosen target.
@@ -219,7 +262,12 @@ export function StepCheckout({
           <DetailLabel>Personen</DetailLabel>
           <ul className="flex flex-col mt-1">
             {state.persons.map((p) => {
-              const fee = calculateFee(p.userType, state.usageType, config) ?? 0
+              // Internal usage is never billed — display 0 per person to
+              // match `computeCheckoutCosts` and the server.
+              const fee =
+                state.usageType === "intern"
+                  ? 0
+                  : calculateFee(p.userType, state.usageType, config) ?? 0
               return (
                 <li
                   key={p.id}

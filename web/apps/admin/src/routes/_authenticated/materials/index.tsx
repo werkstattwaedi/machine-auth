@@ -138,7 +138,6 @@ function CreateCatalogDialog({ open, onOpenChange }: { open: boolean; onOpenChan
       unitPrice: {
         none: parseFloat(values.priceNone) || 0,
         member: parseFloat(values.priceMember) || 0,
-        intern: parseFloat(values.priceIntern) || 0,
       },
       active: true,
       userCanAdd: values.userCanAdd,

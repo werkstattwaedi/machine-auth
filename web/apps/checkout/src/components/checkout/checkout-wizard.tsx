@@ -15,14 +15,13 @@ import {
 import { useDb, useFunctions } from "@modules/lib/firebase-context"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { usePricingConfig } from "@modules/lib/workshop-config"
-import { calculateFee } from "@modules/lib/pricing"
 import { PageLoading } from "@modules/components/page-loading"
 import { EmptyState } from "@modules/components/empty-state"
 import { AlertTriangle } from "lucide-react"
 import { CheckoutProgress } from "./checkout-progress"
 import { StepCheckin } from "./step-checkin"
 import { StepWorkshops } from "./step-workshops"
-import { StepCheckout } from "./step-checkout"
+import { StepCheckout, computeCheckoutCosts } from "./step-checkout"
 import { PaymentResult, type PaymentData } from "./payment-result"
 import {
   useCheckoutState,
@@ -292,15 +291,21 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
     // check above. calculateFee returns null for unknown userType+usageType
     // combinations; treat those as zero to avoid blocking the submit on a
     // misconfigured row (the server will throw and surface the error).
-    const entryFees = state.persons.reduce(
-      (sum, p) => sum + (calculateFee(p.userType, state.usageType, pricingConfig) ?? 0),
-      0,
-    )
-
-    const nfcItems = items.filter((i) => i.origin === "nfc")
-    const materialItems = items.filter((i) => i.origin !== "nfc")
-    const machineCost = nfcItems.reduce((sum, i) => sum + i.totalPrice, 0)
-    const materialCost = materialItems.reduce((sum, i) => sum + i.totalPrice, 0)
+    // Internal usage is never billed — entry fees, machine, and material
+    // costs all collapse to 0. Mirror the server-side defense in
+    // `recomputeSummary` so the displayed receipt matches what gets
+    // billed; both this wizard and StepCheckout flow through
+    // `computeCheckoutCosts`.
+    const {
+      personFees: entryFees,
+      machineCost,
+      materialCost,
+    } = computeCheckoutCosts({
+      persons: state.persons,
+      usageType: state.usageType,
+      items,
+      config: pricingConfig,
+    })
     const total = entryFees + machineCost + materialCost + state.tip
 
     const persons = state.persons.map((p) => ({

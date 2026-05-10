@@ -71,7 +71,7 @@ function buildRequest(records: UsageRecordOpts[], machineId = TEST_MACHINE_ID): 
 
 async function seedCatalog(
   catalogId: string,
-  data: { name: string; unitPrice: { none: number; member?: number; intern?: number } },
+  data: { name: string; unitPrice: { none: number; member?: number } },
 ): Promise<void> {
   const db = getFirestore();
   await db.collection("catalog").doc(catalogId).set({
@@ -82,7 +82,6 @@ async function seedCatalog(
     unitPrice: {
       none: data.unitPrice.none,
       member: data.unitPrice.member ?? data.unitPrice.none,
-      intern: data.unitPrice.intern ?? data.unitPrice.none,
     },
     active: true,
     userCanAdd: false,
