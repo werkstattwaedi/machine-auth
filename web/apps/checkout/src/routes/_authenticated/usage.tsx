@@ -293,40 +293,27 @@ function InvoicesPanel({
           Keine Rechnungen in dieser Auswahl.
         </div>
       ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left">
-              <th className="px-6 py-3 text-[11px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
-                Nr.
-              </th>
-              <th className="px-6 py-3 text-[11px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
-                Datum
-              </th>
-              <th className="px-6 py-3 text-right text-[11px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
-                Betrag
-              </th>
-              <th className="px-6 py-3 text-[11px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
-                Status
-              </th>
-              <th className="px-6 py-3 w-12" aria-label="Aktionen" />
-            </tr>
-          </thead>
-          <tbody>
+        <>
+          {/* Mobile: stacked rows so the download icon never gets clipped
+              by the card's `overflow-hidden` (issue #215). */}
+          <ul className="sm:hidden flex flex-col">
             {bills.map((bill) => (
-              <tr
+              <li
                 key={bill.id}
-                className="border-t border-border hover:bg-muted/30"
+                className="flex items-center gap-3 px-4 py-3 border-t border-border first:border-t-0 text-sm"
               >
-                <td className="px-6 py-3 font-semibold">
-                  {formatInvoiceNumber(bill.referenceNumber)}
-                </td>
-                <td className="px-6 py-3 tabular-nums">
-                  {formatDate(bill.created)}
-                </td>
-                <td className="px-6 py-3 text-right tabular-nums">
-                  {formatCHF(bill.amount)}
-                </td>
-                <td className="px-6 py-3">
+                <div className="flex flex-col min-w-0 flex-1">
+                  <span className="font-semibold">
+                    {formatInvoiceNumber(bill.referenceNumber)}
+                  </span>
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {formatDate(bill.created)}
+                  </span>
+                </div>
+                <div className="flex flex-col items-end gap-1">
+                  <span className="font-semibold tabular-nums whitespace-nowrap">
+                    {formatCHF(bill.amount)}
+                  </span>
                   {bill.paidAt ? (
                     <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-transparent">
                       Bezahlt
@@ -337,14 +324,67 @@ function InvoicesPanel({
                   ) : (
                     <Badge variant="outline">Offen</Badge>
                   )}
-                </td>
-                <td className="px-4 py-3 text-right">
+                </div>
+                <div className="flex-shrink-0">
                   {bill.storagePath && <DownloadButton billId={bill.id} />}
-                </td>
-              </tr>
+                </div>
+              </li>
             ))}
-          </tbody>
-        </table>
+          </ul>
+          {/* Desktop: table layout preserved at sm+. */}
+          <table className="hidden sm:table w-full text-sm">
+            <thead>
+              <tr className="text-left">
+                <th className="px-6 py-3 text-[11px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
+                  Nr.
+                </th>
+                <th className="px-6 py-3 text-[11px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
+                  Datum
+                </th>
+                <th className="px-6 py-3 text-right text-[11px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
+                  Betrag
+                </th>
+                <th className="px-6 py-3 text-[11px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
+                  Status
+                </th>
+                <th className="px-6 py-3 w-12" aria-label="Aktionen" />
+              </tr>
+            </thead>
+            <tbody>
+              {bills.map((bill) => (
+                <tr
+                  key={bill.id}
+                  className="border-t border-border hover:bg-muted/30"
+                >
+                  <td className="px-6 py-3 font-semibold">
+                    {formatInvoiceNumber(bill.referenceNumber)}
+                  </td>
+                  <td className="px-6 py-3 tabular-nums">
+                    {formatDate(bill.created)}
+                  </td>
+                  <td className="px-6 py-3 text-right tabular-nums">
+                    {formatCHF(bill.amount)}
+                  </td>
+                  <td className="px-6 py-3">
+                    {bill.paidAt ? (
+                      <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-transparent">
+                        Bezahlt
+                        {bill.paidVia
+                          ? ` (${paidViaLabel[bill.paidVia] ?? bill.paidVia})`
+                          : ""}
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline">Offen</Badge>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    {bill.storagePath && <DownloadButton billId={bill.id} />}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
       )}
     </div>
   )
