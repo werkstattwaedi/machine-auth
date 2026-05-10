@@ -1,7 +1,8 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { CircleX } from "lucide-react"
+import type { ReactNode } from "react"
+import { ChevronDown, ChevronRight, CircleX } from "lucide-react"
 import { getShortUnit } from "@modules/lib/workshop-config"
 import type { CheckoutItemLocal } from "./inline-rows"
 
@@ -13,6 +14,16 @@ export interface PositionRow {
   menge: string
   kosten: string
   preis: string
+  /**
+   * Optional inline-row expansion content rendered as a full-width row
+   * directly underneath this row. When supplied alongside `expanded`, the
+   * leading gutter shows a chevron toggle (collapsed/expanded) instead of
+   * the (×) remove button. Used for NFC machine rows where each summary
+   * line drills into a per-session breakdown.
+   */
+  expandedContent?: ReactNode
+  /** Whether `expandedContent` is currently visible. */
+  expanded?: boolean
 }
 
 /**
@@ -25,28 +36,38 @@ export interface PositionRow {
  *
  * The whole table is a single CSS grid so columns line up across rows
  * (each row uses `display: contents` to let its cells become direct grid
- * items of the parent). When `onRemove` is provided, an extra trailing
+ * items of the parent). When `onRemove` is provided, an extra leading
  * column shows a hover-revealed × button (always visible on touch).
+ *
+ * When any row supplies `expandedContent` and `onToggle` is provided, the
+ * leading gutter is repurposed for a chevron toggle, and the expanded
+ * slot is rendered as a full-width grid row immediately beneath the
+ * toggled row. Material call sites that don't need this stay unaffected
+ * (no chevron column unless `onToggle` is supplied).
  */
 export function PositionTable({
   firstColLabel,
   rows,
   onRemove,
+  onToggle,
 }: {
   firstColLabel: string
   rows: PositionRow[]
   onRemove?: (key: string) => void
+  onToggle?: (key: string) => void
 }) {
-  const cols = onRemove
+  const hasGutter = Boolean(onRemove) || Boolean(onToggle)
+  const cols = hasGutter
     ? "grid-cols-[20px_minmax(0,1fr)_auto_auto_auto]"
     : "grid-cols-[minmax(0,1fr)_auto_auto_auto]"
+  const totalCols = hasGutter ? 5 : 4
   return (
     <div
       role="table"
       className={`grid ${cols} items-baseline gap-x-4 sm:gap-x-6`}
     >
       <div role="row" className="contents">
-        {onRemove && <span aria-hidden className="pb-1.5" />}
+        {hasGutter && <span aria-hidden className="pb-1.5" />}
         <span
           role="columnheader"
           className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground pb-1.5"
@@ -76,54 +97,82 @@ export function PositionTable({
           Preis
         </span>
       </div>
-      {rows.map((row) => (
-        <div key={row.key} role="row" className="contents">
-          {onRemove && (
-            // Intentionally no `border-t` here: the dotted row separator
-            // shouldn't extend into the remove gutter — the (×) button reads
-            // cleaner against unbroken whitespace.
-            <span role="cell" className="py-2 flex items-start">
-              <button
-                type="button"
-                onClick={() => onRemove(row.key)}
-                aria-label="Entfernen"
-                className="flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground/70 hover:text-destructive focus-visible:text-destructive focus-visible:outline-2 focus-visible:outline-cog-teal/40 focus-visible:outline-offset-1"
-              >
-                <CircleX className="h-4 w-4" strokeWidth={1.6} />
-              </button>
-            </span>
-          )}
-          <span
-            role="cell"
-            className="py-2 text-sm border-t border-dotted border-border min-w-0"
-          >
-            <span className="text-foreground block truncate">{row.title}</span>
-            {row.subtitle && (
-              <span className="block text-xs text-muted-foreground/80 font-light tabular-nums">
-                {row.subtitle}
+      {rows.map((row) => {
+        const expandable = row.expandedContent !== undefined && Boolean(onToggle)
+        return (
+          <div key={row.key} role="row" className="contents">
+            {hasGutter && (
+              // Intentionally no `border-t` here: the dotted row separator
+              // shouldn't extend into the leading gutter — the (×) / chevron
+              // reads cleaner against unbroken whitespace.
+              <span role="cell" className="py-2 flex items-start">
+                {expandable ? (
+                  <button
+                    type="button"
+                    onClick={() => onToggle!(row.key)}
+                    aria-label={row.expanded ? "Einklappen" : "Aufklappen"}
+                    aria-expanded={row.expanded ? "true" : "false"}
+                    className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground/70 hover:text-foreground focus-visible:text-foreground focus-visible:outline-2 focus-visible:outline-cog-teal/40 focus-visible:outline-offset-1"
+                  >
+                    {row.expanded ? (
+                      <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.8} />
+                    ) : (
+                      <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.8} />
+                    )}
+                  </button>
+                ) : onRemove ? (
+                  <button
+                    type="button"
+                    onClick={() => onRemove(row.key)}
+                    aria-label="Entfernen"
+                    className="flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground/70 hover:text-destructive focus-visible:text-destructive focus-visible:outline-2 focus-visible:outline-cog-teal/40 focus-visible:outline-offset-1"
+                  >
+                    <CircleX className="h-4 w-4" strokeWidth={1.6} />
+                  </button>
+                ) : null}
               </span>
             )}
-          </span>
-          <span
-            role="cell"
-            className="py-2 text-sm text-muted-foreground tabular-nums text-right whitespace-nowrap border-t border-dotted border-border"
-          >
-            {row.menge}
-          </span>
-          <span
-            role="cell"
-            className="py-2 text-sm text-muted-foreground tabular-nums text-right whitespace-nowrap border-t border-dotted border-border"
-          >
-            {row.kosten}
-          </span>
-          <span
-            role="cell"
-            className="py-2 text-sm font-semibold tabular-nums text-right min-w-[60px] border-t border-dotted border-border"
-          >
-            {row.preis}
-          </span>
-        </div>
-      ))}
+            <span
+              role="cell"
+              className="py-2 text-sm border-t border-dotted border-border min-w-0"
+            >
+              <span className="text-foreground block truncate">{row.title}</span>
+              {row.subtitle && (
+                <span className="block text-xs text-muted-foreground/80 font-light tabular-nums">
+                  {row.subtitle}
+                </span>
+              )}
+            </span>
+            <span
+              role="cell"
+              className="py-2 text-sm text-muted-foreground tabular-nums text-right whitespace-nowrap border-t border-dotted border-border"
+            >
+              {row.menge}
+            </span>
+            <span
+              role="cell"
+              className="py-2 text-sm text-muted-foreground tabular-nums text-right whitespace-nowrap border-t border-dotted border-border"
+            >
+              {row.kosten}
+            </span>
+            <span
+              role="cell"
+              className="py-2 text-sm font-semibold tabular-nums text-right min-w-[60px] border-t border-dotted border-border"
+            >
+              {row.preis}
+            </span>
+            {expandable && row.expanded && (
+              <span
+                role="cell"
+                style={{ gridColumn: `1 / span ${totalCols}` }}
+                className="pb-3 pl-7 sm:pl-9 pr-1"
+              >
+                {row.expandedContent}
+              </span>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
