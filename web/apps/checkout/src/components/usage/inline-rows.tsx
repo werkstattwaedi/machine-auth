@@ -234,7 +234,7 @@ export function NfcMachineItemRow({
   )
   return (
     <PositionTable
-      firstColLabel="Maschinen-/Werkzeugnutzung"
+      firstColLabel="Maschinen / Werkzeuge"
       rows={[row]}
       onToggle={checkoutId ? () => setExpanded((v) => !v) : undefined}
     />
@@ -322,7 +322,7 @@ export function WorkshopInlineSection({
         <div className="rounded-md border border-border bg-card shadow-sm">
           <div className="px-3 py-3 sm:px-4">
             <PositionTable
-              firstColLabel="Maschinen-/Werkzeugnutzung"
+              firstColLabel="Maschinen / Werkzeuge"
               rows={nfcRows}
               onToggle={checkoutId ? toggleNfc : undefined}
             />
