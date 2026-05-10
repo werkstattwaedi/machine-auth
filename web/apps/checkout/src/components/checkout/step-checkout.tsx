@@ -37,6 +37,10 @@ import type { UsageType } from "@modules/lib/pricing"
  */
 export function roundUpOptions(base: number): number[] {
   if (base <= 0) return []
+  // If the base is already a whole franc, no round-up is necessary —
+  // hide the suggestion row entirely (the Spende input remains for
+  // free-form tipping).
+  if (base % 1 === 0) return []
   const maxTotal = base < 10 ? base + 3 : base * 1.1
   const bump = base + 0.01
 
