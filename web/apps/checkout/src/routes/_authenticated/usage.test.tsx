@@ -228,10 +228,13 @@ describe("Usage page", () => {
 
     renderUsagePage()
 
+    // Both the mobile <ul> and desktop <table> layouts render in the DOM
+    // (CSS visibility-only); JSDOM doesn't apply media queries, so the
+    // bill text appears twice. Issue #215 fix.
     await waitFor(() => {
-      expect(screen.getByText("RE-000042")).toBeInTheDocument()
+      expect(screen.getAllByText("RE-000042").length).toBeGreaterThan(0)
     })
-    expect(screen.getByText("Bezahlt (TWINT)")).toBeInTheDocument()
+    expect(screen.getAllByText("Bezahlt (TWINT)").length).toBeGreaterThan(0)
   })
 
   it("renders unpaid bill with 'Offen' badge", async () => {
@@ -250,10 +253,10 @@ describe("Usage page", () => {
     renderUsagePage()
 
     await waitFor(() => {
-      expect(screen.getByText("RE-000010")).toBeInTheDocument()
+      expect(screen.getAllByText("RE-000010").length).toBeGreaterThan(0)
     })
-    // "Offen" appears as the stat-card label too; assert there's at least
-    // one occurrence (the badge in the row).
+    // "Offen" appears as the stat-card label and once per layout (mobile
+    // + desktop) — assert at least one occurrence.
     expect(screen.getAllByText("Offen").length).toBeGreaterThan(0)
   })
 
@@ -313,10 +316,13 @@ describe("Usage page", () => {
     renderUsagePage()
 
     await waitFor(() => {
-      expect(screen.getByText("RE-000005")).toBeInTheDocument()
+      expect(screen.getAllByText("RE-000005").length).toBeGreaterThan(0)
     })
 
-    const downloadBtn = screen.getByRole("button", { name: "PDF herunterladen" })
+    // Mobile + desktop layouts both render — pick the first download button.
+    const downloadBtn = screen.getAllByRole("button", {
+      name: "PDF herunterladen",
+    })[0]
     await user.click(downloadBtn)
 
     await waitFor(() => {
@@ -356,10 +362,12 @@ describe("Usage page", () => {
     renderUsagePage()
 
     await waitFor(() => {
-      expect(screen.getByText("RE-000007")).toBeInTheDocument()
+      expect(screen.getAllByText("RE-000007").length).toBeGreaterThan(0)
     })
 
-    const downloadBtn = screen.getByRole("button", { name: "PDF herunterladen" })
+    const downloadBtn = screen.getAllByRole("button", {
+      name: "PDF herunterladen",
+    })[0]
     await user.click(downloadBtn)
 
     await waitFor(() => {
@@ -403,9 +411,11 @@ describe("Usage page", () => {
     renderUsagePage()
 
     await waitFor(() => {
-      expect(screen.getByText("RE-000099")).toBeInTheDocument()
+      expect(screen.getAllByText("RE-000099").length).toBeGreaterThan(0)
     })
 
-    expect(screen.queryByRole("button", { name: "PDF herunterladen" })).not.toBeInTheDocument()
+    expect(
+      screen.queryAllByRole("button", { name: "PDF herunterladen" }),
+    ).toHaveLength(0)
   })
 })
