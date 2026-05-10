@@ -471,10 +471,10 @@ function ExpandableSection({
           <ChevronRight className="h-4 w-4" />
         </span>
         <span className="min-w-0">
-          <span className="flex items-center gap-2 font-heading font-bold text-[15px] text-foreground leading-tight">
-            {icon}
-            {title}
-          </span>
+          <div className="flex items-center gap-2 min-w-0 font-heading font-bold text-[15px] text-foreground leading-tight">
+            <span className="flex-shrink-0">{icon}</span>
+            <span className="min-w-0 break-words">{title}</span>
+          </div>
           <span className="block mt-1 text-[13px] text-muted-foreground truncate">
             {summary}
           </span>
@@ -657,7 +657,7 @@ function SpendeCard({
           Zustupf.
         </p>
       </div>
-      <div className="self-center">
+      <div className="self-center justify-self-end">
         <div className="relative inline-flex items-center">
           <span className="absolute left-3.5 text-xs font-medium text-oww-gold-text-muted pointer-events-none">
             CHF
