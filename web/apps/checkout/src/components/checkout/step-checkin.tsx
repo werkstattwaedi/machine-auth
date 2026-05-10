@@ -145,24 +145,23 @@ export function StepCheckin({ state, dispatch, isAnonymous, kiosk, isAccountLogg
       ))}
 
       <div className="flex flex-col items-start gap-3">
-        <button
-          type="button"
-          className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-cog-teal border border-cog-teal rounded-[3px] bg-white hover:bg-cog-teal-light transition-colors"
-          onClick={handleAddPerson}
-        >
-          <Plus className="h-4 w-4" />
-          Person hinzufügen
-        </button>
-
         {/*
-          Issue #209: family-roster quick-adds. Renders one button per
-          member of the signed-in user's family who isn't on the visit
-          yet. Hidden for anonymous, tag-tap, single-membership, and
-          non-owner users (the wizard passes an empty array).
+          Issue #209: family-roster quick-adds render inline with the
+          primary "Person hinzufügen" CTA. `flex-wrap` lets the chips
+          flow onto a second line on narrow viewports.
         */}
-        {familyCandidates && familyCandidates.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {familyCandidates.map((candidate) => (
+        <div className="flex flex-wrap items-start gap-2">
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-cog-teal border border-cog-teal rounded-[3px] bg-white hover:bg-cog-teal-light transition-colors"
+            onClick={handleAddPerson}
+          >
+            <Plus className="h-4 w-4" />
+            Person hinzufügen
+          </button>
+
+          {familyCandidates &&
+            familyCandidates.map((candidate) => (
               <button
                 key={candidate.userId}
                 type="button"
@@ -173,8 +172,7 @@ export function StepCheckin({ state, dispatch, isAnonymous, kiosk, isAccountLogg
                 {candidate.firstName} {candidate.lastName}
               </button>
             ))}
-          </div>
-        )}
+        </div>
 
         {isAnonymous && (
           <div className="space-y-3 pt-2">

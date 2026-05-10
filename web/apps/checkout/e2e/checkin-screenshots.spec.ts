@@ -16,6 +16,16 @@ async function goToCheckin(page: Page) {
 }
 
 test.describe("Check-in step screenshots", () => {
+  // The family-owner test seeds an `active-family-owner` membership and
+  // stamps `activeMembership` on the auth user doc. Without an explicit
+  // reset, that stamp leaks into later test files (notably
+  // checkout-screenshots Step 4) and surfaces the "Sammelrechnung" tab
+  // when those tests expect a non-member view.
+  test.afterAll(async () => {
+    const uid = process.env.E2E_AUTH_USER_UID
+    if (uid) await seedMembershipState(uid, { kind: "none" })
+  })
+
   test("empty form", async ({ page }) => {
     await goToCheckin(page)
 
