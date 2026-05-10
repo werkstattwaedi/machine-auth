@@ -35,11 +35,11 @@ export function CheckoutProgress({ currentStep }: CheckoutProgressProps) {
                   active ? "bg-cog-teal" : "bg-[#dadada]",
                 )}
               />
-              <div className="flex items-center gap-2 sm:gap-2.5">
+              <div className="flex items-start gap-2 sm:gap-2.5">
                 <span
                   aria-hidden
                   className={cn(
-                    "flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-semibold leading-none text-white shrink-0",
+                    "mt-0.5 flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-semibold leading-none text-white shrink-0",
                     active ? "bg-cog-teal" : "bg-[#bdbdbd]",
                   )}
                 >
