@@ -15,11 +15,19 @@ the child exits, the kernel releases the socket. Crash-safe; no stale
 lock files.
 
 The broker also runs `npx tsx scripts/generate-env.ts` on first-level
-invocations, before acquiring a block. A stale `.env` (e.g. a new param
-added to the operations config that hasn't propagated to
-`functions/.env.local`) makes Firebase prompt interactively for the
-missing value during emulator startup and the test hangs forever — the
-auto-regen makes this a non-issue. Nested invocations skip the regen.
+invocations, before acquiring a block — *if* the operations repo
+(`../machine-auth-operations/config.jsonc`, or
+`$OPERATIONS_CONFIG_DIR/config.jsonc`) is present. A stale `.env`
+(e.g. a new param added to the operations config that hasn't
+propagated to `functions/.env.local`) makes Firebase prompt
+interactively for the missing value during emulator startup, and the
+test hangs forever — the auto-regen prevents that for local dev.
+
+On CI runners that don't clone the operations repo, the broker prints
+`[port-block] Skipping generate-env (no operations config at …)` and
+proceeds. Env files are expected to be materialized by the CI workflow
+itself (committed fixtures, secrets injection, etc.). Nested broker
+invocations also skip the regen — the parent already handled it.
 
 ## Usage
 

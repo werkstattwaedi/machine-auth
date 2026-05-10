@@ -198,10 +198,14 @@ and `functions test:integration` automatically wrap their emulator launch
 in `scripts/port-block.ts`. The broker:
 
 1. **Regenerates `.env` files** (`npx tsx scripts/generate-env.ts`) before
-   anything else. Without this, a stale `.env` (new param in the
-   operations config not yet in `functions/.env.local`) makes Firebase
-   prompt interactively during emulator startup and the test hangs
-   forever in CI. Nested broker invocations skip this step.
+   anything else, *if* the operations repo is cloned as a sibling.
+   Without this, a stale `.env` (new param in the operations config
+   not yet in `functions/.env.local`) makes Firebase prompt
+   interactively during emulator startup and the test hangs forever.
+   On CI runners that don't have the operations repo cloned, the
+   broker prints a skip notice and proceeds — env files are expected
+   to be materialized by the workflow itself. Nested broker
+   invocations also skip this step.
 2. Acquires the lowest-numbered free CI block (5 blocks of +10000),
    generates an offset `firebase.runtime.<block>.json`, sets emulator
    port env vars, and execs the test runner.

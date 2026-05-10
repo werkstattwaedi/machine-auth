@@ -116,22 +116,36 @@ async function main(): Promise<never> {
   const cmd = process.argv[sepIdx + 1];
   const cmdArgs = process.argv.slice(sepIdx + 2);
 
-  // First-level invocations regenerate env files. Without this, a stale
-  // .env (e.g. a new param added to the operations config but not yet
-  // reflected in functions/.env.local) makes Firebase prompt interactively
-  // during emulator startup and the test run hangs forever in CI. Nested
-  // invocations skip this — the parent already did it.
+  // First-level invocations regenerate env files when the operations
+  // config is available locally. Without this, a stale .env (e.g. a new
+  // param added to config.jsonc but not yet reflected in
+  // functions/.env.local) makes Firebase prompt interactively during
+  // emulator startup and the test run hangs forever. CI runners don't
+  // have the operations repo cloned — they materialize env files via
+  // other means (committed fixtures, secrets injection) — so we silently
+  // skip when the config isn't present. Nested invocations skip this
+  // entirely; the parent already handled it.
   if (!process.env.PORT_BLOCK) {
-    const gen = spawnSync(
-      "npx",
-      ["tsx", resolve(projectRoot, "scripts/generate-env.ts")],
-      { stdio: "inherit", cwd: projectRoot }
-    );
-    if (gen.status !== 0) {
-      console.error(
-        `[port-block] generate-env failed (exit ${gen.status}); aborting`
+    const configDir =
+      process.env.OPERATIONS_CONFIG_DIR ||
+      resolve(projectRoot, "..", "machine-auth-operations");
+    const configPath = resolve(configDir, "config.jsonc");
+    if (existsSync(configPath)) {
+      const gen = spawnSync(
+        "npx",
+        ["tsx", resolve(projectRoot, "scripts/generate-env.ts")],
+        { stdio: "inherit", cwd: projectRoot }
       );
-      process.exit(gen.status ?? 1);
+      if (gen.status !== 0) {
+        console.error(
+          `[port-block] generate-env failed (exit ${gen.status}); aborting`
+        );
+        process.exit(gen.status ?? 1);
+      }
+    } else {
+      console.error(
+        `[port-block] Skipping generate-env (no operations config at ${configPath})`
+      );
     }
   }
 
