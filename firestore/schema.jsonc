@@ -252,7 +252,6 @@
                    // the auth user has no sign-in credentials and email is null.
       "created": "timestamp",
       "email": "string | null",       // null for child accounts created by a family owner
-      "displayName": "string | null", // Optional display name / nickname (e.g., "MikeS"); derived from firstName+lastName if absent
       "firstName": "string", // First name (e.g., "Michael")
       "lastName": "string", // Last name (e.g., "Schneider")
       "permissions": ["DocumentReference"], // Array of DocumentReferences to /permission/{permissionId}

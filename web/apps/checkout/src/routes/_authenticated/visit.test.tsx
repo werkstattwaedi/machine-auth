@@ -138,7 +138,7 @@ describe("visit /toggleWorkshop async error envelope (issue #182)", () => {
     mockUseAuth.mockReturnValue({
       userDoc: {
         id: "u1",
-        displayName: "Test",
+        name: "Test User",
         firstName: "Test",
         lastName: "User",
         roles: [],

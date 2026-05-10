@@ -160,7 +160,7 @@ export function AuthenticatedLayout({
 
       <div className="mt-auto border-t border-sidebar-border pt-3 pb-2">
         <div className="px-3 py-1 text-xs text-muted-foreground truncate">
-          {userDoc?.displayName ?? user.email}
+          {userDoc?.name || user.email}
         </div>
         <Button
           variant="ghost"

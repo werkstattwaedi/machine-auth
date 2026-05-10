@@ -115,8 +115,8 @@ async function seedUser(uid: string, overrides: Record<string, unknown> = {}) {
     .collection("users")
     .doc(uid)
     .set({
-      displayName: `User ${uid}`,
-      name: `User ${uid}`,
+      firstName: "User",
+      lastName: uid,
       email: `${uid}@test.com`,
       roles: [],
       permissions: [],
@@ -308,7 +308,7 @@ describe("cross-user: users", () => {
       "firestore.rules:95-100",
       () =>
         updateDoc(doc(authedDb("bob"), "users", "alice"), {
-          displayName: "pwned",
+          firstName: "pwned",
         }),
     )
   })
@@ -338,7 +338,7 @@ describe("cross-user: users", () => {
       "firestore.rules:95-100",
       () =>
         updateDoc(doc(tagSessionDb("bob"), "users", "alice"), {
-          displayName: "pwned",
+          firstName: "pwned",
         }),
     )
   })

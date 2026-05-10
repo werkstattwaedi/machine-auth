@@ -195,7 +195,7 @@ function PermissionDetailPage() {
                           params={{ userId: user.id }}
                           className="hover:underline"
                         >
-                          {user.displayName || `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || user.id}
+                          {`${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || user.id}
                         </Link>
                       </TableCell>
                       <TableCell>
@@ -206,7 +206,7 @@ function PermissionDetailPage() {
                             setRevokeTarget({
                               type: "user",
                               id: user.id,
-                              name: user.displayName || `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || user.id,
+                              name: `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || user.id,
                             })
                           }
                         >

@@ -115,7 +115,9 @@ function PermissionsPage() {
     }
     const parts: string[] = []
     if (referenceInfo.users.length > 0) {
-      const names = referenceInfo.users.map((u) => u.displayName || u.id).join(", ")
+      const names = referenceInfo.users
+        .map((u) => `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || u.id)
+        .join(", ")
       parts.push(`Benutzer: ${names}`)
     }
     if (referenceInfo.machines.length > 0) {

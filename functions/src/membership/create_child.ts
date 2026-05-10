@@ -37,7 +37,6 @@ interface CreateChildAccountRequest {
   membershipId: string;
   firstName: string;
   lastName: string;
-  displayName?: string | null;
 }
 
 interface CreateChildAccountResponse {
@@ -48,7 +47,7 @@ export const createChildAccount = onCall<
   CreateChildAccountRequest,
   Promise<CreateChildAccountResponse>
 >(async (request) => {
-  const { membershipId, firstName, lastName, displayName } =
+  const { membershipId, firstName, lastName } =
     request.data ?? ({} as CreateChildAccountRequest);
   if (!membershipId) {
     throw new HttpsError("invalid-argument", "membershipId is required");
@@ -95,17 +94,17 @@ export const createChildAccount = onCall<
   }
 
   const auth = getAuth();
-  const derivedDisplayName =
-    displayName ||
-    `${firstName} ${lastName}`.trim() ||
-    `${firstName} (Kind)`;
+  // Pass `firstName lastName` as the Firebase Auth displayName so the
+  // Auth Console shows a recognizable name.
+  const fullName =
+    `${firstName} ${lastName}`.trim() || `${firstName} (Kind)`;
 
   // Auth user with no credentials. Firebase Auth allows this — the user
   // simply has no sign-in method until someone sets an email later.
   let authUser: Awaited<ReturnType<typeof auth.createUser>>;
   try {
     authUser = await auth.createUser({
-      displayName: derivedDisplayName,
+      displayName: fullName,
       // Disable until adult/email is set — defense-in-depth in case any
       // sign-in path is ever wired up before email is provided.
       disabled: true,
@@ -141,7 +140,6 @@ export const createChildAccount = onCall<
         created: now,
         firstName,
         lastName,
-        displayName: displayName ?? null,
         email: null,
         permissions: [],
         roles: [],

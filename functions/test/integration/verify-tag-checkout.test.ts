@@ -76,7 +76,7 @@ describe("handleVerifyTagCheckout (Integration)", () => {
         },
         users: {
           [TEST_USER_ID]: {
-            displayName: "Test User",
+            firstName: "Test", lastName: "User",
             name: "Test User Full Name",
             permissions: [],
             roles: [],
@@ -105,7 +105,7 @@ describe("handleVerifyTagCheckout (Integration)", () => {
         },
         users: {
           [TEST_USER_ID]: {
-            displayName: "Test User",
+            firstName: "Test", lastName: "User",
             name: "Test User Full Name",
             permissions: ["laser"],
             roles: ["member"],
@@ -135,7 +135,7 @@ describe("handleVerifyTagCheckout (Integration)", () => {
         },
         users: {
           [TEST_USER_ID]: {
-            displayName: "Test User",
+            firstName: "Test", lastName: "User",
             permissions: [],
             roles: [],
           },
@@ -190,7 +190,7 @@ describe("handleVerifyTagCheckout (Integration)", () => {
         },
         users: {
           [TEST_USER_ID]: {
-            displayName: "Test User",
+            firstName: "Test", lastName: "User",
             permissions: [],
             roles: [],
           },
@@ -221,7 +221,7 @@ describe("handleVerifyTagCheckout (Integration)", () => {
         },
         users: {
           [TEST_USER_ID]: {
-            displayName: "Test User",
+            firstName: "Test", lastName: "User",
             permissions: [],
             roles: [],
           },
@@ -254,7 +254,7 @@ describe("handleVerifyTagCheckout (Integration)", () => {
         },
         users: {
           [TEST_USER_ID]: {
-            displayName: "Test User",
+            firstName: "Test", lastName: "User",
             permissions: [],
             roles: [],
           },
@@ -287,7 +287,7 @@ describe("handleVerifyTagCheckout (Integration)", () => {
         },
         users: {
           [TEST_USER_ID]: {
-            displayName: "Test User",
+            firstName: "Test", lastName: "User",
             permissions: [],
             roles: [],
           },
@@ -318,7 +318,7 @@ describe("handleVerifyTagCheckout (Integration)", () => {
         },
         users: {
           [TEST_USER_ID]: {
-            displayName: "Test User",
+            firstName: "Test", lastName: "User",
             permissions: [],
             roles: [],
           },
@@ -349,7 +349,7 @@ describe("handleVerifyTagCheckout (Integration)", () => {
         },
         users: {
           [TEST_USER_ID]: {
-            displayName: "Admin User",
+            firstName: "Admin", lastName: "User",
             permissions: [],
             roles: ["admin"],
           },
@@ -390,12 +390,14 @@ describe("handleVerifyTagCheckout (Integration)", () => {
         },
         users: {
           [userId1]: {
-            displayName: "User 1",
+            firstName: "User",
+            lastName: "1",
             permissions: [],
             roles: [],
           },
           [userId2]: {
-            displayName: "User 2",
+            firstName: "User",
+            lastName: "2",
             permissions: [],
             roles: [],
           },

@@ -41,7 +41,7 @@ export interface BillingAddressDoc {
 
 /**
  * Wire-format user document. Doc id == Firebase Auth UID. The rich
- * application-side `UserDoc` (with derived `displayName`, resolved
+ * application-side `UserDoc` (with derived `name`, resolved
  * `permissions: string[]`) lives in `auth.tsx` and is built from this.
  *
  * Child accounts (`userType === "kind"`) created by a family owner have
@@ -50,7 +50,6 @@ export interface BillingAddressDoc {
 export interface UserDoc extends AuditFields {
   created?: Timestamp
   email: string | null
-  displayName: string | null
   firstName: string
   lastName: string
   /** Optional contact phone — captured for everyone, never required. */

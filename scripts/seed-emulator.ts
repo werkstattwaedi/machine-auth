@@ -124,7 +124,6 @@ async function seed() {
   // --- Users ---
   await db.collection("users").doc(ID.userAdmin).set({
     created: Timestamp.now(),
-    displayName: "Admin",
     firstName: "Test",
     lastName: "Admin",
     email: "admin@example.com",
@@ -142,7 +141,6 @@ async function seed() {
   });
   await db.collection("users").doc(ID.userMike).set({
     created: Timestamp.now(),
-    displayName: "MikeS",
     firstName: "Mike",
     lastName: "Schneider",
     email: "mike@werkstattwaedi.ch",
@@ -158,7 +156,6 @@ async function seed() {
   });
   await db.collection("users").doc(ID.userMarco).set({
     created: Timestamp.now(),
-    displayName: null,
     firstName: "Marco",
     lastName: "Menzi",
     email: "marco@werkstattwaedi.ch",
@@ -170,7 +167,6 @@ async function seed() {
   });
   await db.collection("users").doc(ID.userSimon).set({
     created: Timestamp.now(),
-    displayName: null,
     firstName: "Simon",
     lastName: "Flepp",
     email: "simon@werkstattwaedi.ch",
@@ -196,7 +192,6 @@ async function seed() {
   });
   await db.collection("users").doc(ID.userPartner).set({
     created: Timestamp.now(),
-    displayName: null,
     firstName: "Anna",
     lastName: "Schneider",
     email: "partner@werkstattwaedi.ch",
@@ -228,7 +223,6 @@ async function seed() {
   }
   await db.collection("users").doc(ID.userKid).set({
     created: Timestamp.now(),
-    displayName: null,
     firstName: "Lina",
     lastName: "Schneider",
     email: null,

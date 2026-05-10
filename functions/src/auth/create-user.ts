@@ -16,7 +16,6 @@ import { getFirestore, Timestamp } from "firebase-admin/firestore";
 
 interface CreateUserData {
   email: string;
-  displayName?: string;
   firstName?: string;
   lastName?: string;
 }
@@ -27,7 +26,7 @@ export const createUser = onCall(async (request) => {
     throw new HttpsError("permission-denied", "Admin access required");
   }
 
-  const { email, displayName, firstName, lastName } = request.data as CreateUserData;
+  const { email, firstName, lastName } = request.data as CreateUserData;
 
   if (!email) {
     throw new HttpsError(
@@ -41,11 +40,13 @@ export const createUser = onCall(async (request) => {
   let authUser;
 
   try {
-    // Create Firebase Auth user (no password — email-link auth)
-    const derivedDisplayName = displayName || `${firstName ?? ""} ${lastName ?? ""}`.trim() || email;
+    // Create Firebase Auth user (no password — email-link auth).
+    // We still pass `firstName lastName` as the Firebase Auth `displayName`
+    // so the Firebase Console / Auth emulator UI show recognizable names.
+    const fullName = `${firstName ?? ""} ${lastName ?? ""}`.trim() || email;
     authUser = await auth.createUser({
       email,
-      displayName: derivedDisplayName,
+      displayName: fullName,
     });
   } catch (error: any) {
     logger.error("Failed to create Auth user", error);
@@ -60,7 +61,6 @@ export const createUser = onCall(async (request) => {
     await db.collection("users").doc(authUser.uid).set({
       created: Timestamp.now(),
       email,
-      displayName: displayName || null,
       firstName: firstName ?? "",
       lastName: lastName ?? "",
       permissions: [],

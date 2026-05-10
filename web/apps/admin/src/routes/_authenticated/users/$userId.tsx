@@ -42,7 +42,6 @@ export const Route = createFileRoute("/_authenticated/users/$userId")({
 })
 
 interface UserFormValues {
-  displayName: string
   firstName: string
   lastName: string
   email: string
@@ -92,7 +91,6 @@ function UserDetailPage() {
       )
       setSelectedPermissions(perms)
       reset({
-        displayName: user.displayName ?? "",
         firstName: user.firstName ?? "",
         lastName: user.lastName ?? "",
         email: user.email ?? "",
@@ -117,7 +115,6 @@ function UserDetailPage() {
     if (values.isAdmin) roles.push("admin")
 
     const data: Record<string, unknown> = {
-      displayName: values.displayName.trim() || null,
       firstName: values.firstName,
       lastName: values.lastName,
       email: values.email,
@@ -181,7 +178,7 @@ function UserDetailPage() {
 
   return (
     <div>
-      <PageHeader title={user.displayName || `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || "Benutzer"} backTo="/users" backLabel="Zurück zu Benutzer" />
+      <PageHeader title={`${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || "Benutzer"} backTo="/users" backLabel="Zurück zu Benutzer" />
 
       <Tabs defaultValue="details">
         <TabsList>
@@ -218,10 +215,6 @@ function UserDetailPage() {
           <Card>
             <CardContent className="pt-6">
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 max-w-lg">
-                <div className="space-y-2">
-                  <Label htmlFor="displayName">Anzeigename (optional)</Label>
-                  <Input id="displayName" placeholder="z.B. MikeS" {...register("displayName")} />
-                </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="firstName">Vorname</Label>

@@ -155,8 +155,7 @@ export async function handlePurchaseMembership(
       persons: [
         {
           name:
-            user.displayName ??
-            `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() ??
+            `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() ||
             (user.email ?? ""),
           email: user.email ?? "",
           userType: user.userType ?? "erwachsen",
