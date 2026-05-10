@@ -14,6 +14,13 @@ The lock socket is held for the lifetime of the broker process — when
 the child exits, the kernel releases the socket. Crash-safe; no stale
 lock files.
 
+The broker also runs `npx tsx scripts/generate-env.ts` on first-level
+invocations, before acquiring a block. A stale `.env` (e.g. a new param
+added to the operations config that hasn't propagated to
+`functions/.env.local`) makes Firebase prompt interactively for the
+missing value during emulator startup and the test hangs forever — the
+auto-regen makes this a non-issue. Nested invocations skip the regen.
+
 ## Usage
 
 The broker is **mandatory and automatic** for the standard test scripts —

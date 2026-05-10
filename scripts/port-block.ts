@@ -17,7 +17,7 @@
 //   <child exit code> — wrapped command exited normally
 //   75 (EX_TEMPFAIL)  — every CI block is currently held; caller may retry
 
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:net";
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -115,6 +115,25 @@ async function main(): Promise<never> {
   }
   const cmd = process.argv[sepIdx + 1];
   const cmdArgs = process.argv.slice(sepIdx + 2);
+
+  // First-level invocations regenerate env files. Without this, a stale
+  // .env (e.g. a new param added to the operations config but not yet
+  // reflected in functions/.env.local) makes Firebase prompt interactively
+  // during emulator startup and the test run hangs forever in CI. Nested
+  // invocations skip this — the parent already did it.
+  if (!process.env.PORT_BLOCK) {
+    const gen = spawnSync(
+      "npx",
+      ["tsx", resolve(projectRoot, "scripts/generate-env.ts")],
+      { stdio: "inherit", cwd: projectRoot }
+    );
+    if (gen.status !== 0) {
+      console.error(
+        `[port-block] generate-env failed (exit ${gen.status}); aborting`
+      );
+      process.exit(gen.status ?? 1);
+    }
+  }
 
   // Nesting guard: if a parent already acquired a block (e.g. test:precommit
   // wrapping test:web:integration which itself wraps the broker), skip the

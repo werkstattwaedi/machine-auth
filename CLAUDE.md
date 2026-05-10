@@ -195,14 +195,22 @@ This runs: web build (TypeScript + Vite for checkout & admin) → web unit tests
 
 **Port-block broker (automatic):** `test:web:integration`, `test:web:e2e`,
 and `functions test:integration` automatically wrap their emulator launch
-in `scripts/port-block.ts`. The broker acquires the lowest-numbered free
-CI block (5 blocks of +10000), generates an offset
-`firebase.runtime.<block>.json`, sets emulator port env vars, and execs
-the test runner. Concurrent test runs (parallel CI / multiple agent
-worktrees) get distinct port blocks and do **not** collide. If all 5
-blocks are held the broker exits with code `75` (EX_TEMPFAIL) so the
-caller can retry. Manual `npm run dev` is unaffected — the broker only
-fronts test paths. See [`docs/port-blocks.md`](docs/port-blocks.md).
+in `scripts/port-block.ts`. The broker:
+
+1. **Regenerates `.env` files** (`npx tsx scripts/generate-env.ts`) before
+   anything else. Without this, a stale `.env` (new param in the
+   operations config not yet in `functions/.env.local`) makes Firebase
+   prompt interactively during emulator startup and the test hangs
+   forever in CI. Nested broker invocations skip this step.
+2. Acquires the lowest-numbered free CI block (5 blocks of +10000),
+   generates an offset `firebase.runtime.<block>.json`, sets emulator
+   port env vars, and execs the test runner.
+
+Concurrent test runs (parallel CI / multiple agent worktrees) get
+distinct port blocks and do **not** collide. If all 5 blocks are held
+the broker exits with code `75` (EX_TEMPFAIL) so the caller can retry.
+Manual `npm run dev` is unaffected — the broker only fronts test paths.
+See [`docs/port-blocks.md`](docs/port-blocks.md).
 
 To wrap any other `firebase emulators:exec` invocation in the broker
 manually, prefix with `npm run block --`. The broker is nesting-safe:
