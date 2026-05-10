@@ -13,17 +13,22 @@
  * "drift" between developers' machines and CI — which surfaces as spurious
  * merge conflicts on every `--update-snapshots` run.
  *
- * This script re-encodes every PNG under `web/apps/checkout/e2e/**` with
+ * This script re-encodes every PNG under the project's snapshot trees with
  * oxipng (`-o max --strip safe`), which is deterministic given identical
  * pixel input. Run it after every baseline regeneration to land on the
  * canonical bytes.
+ *
+ * Default roots (when invoked without args):
+ *   - web/apps/checkout/e2e/      Playwright (checkout app)
+ *   - web/apps/admin/e2e/         Playwright (admin app)
+ *   - functions/test/unit/        Mocha visual tests (PDF rendering)
  *
  * Usage:
  *   node scripts/normalize-snapshots.mjs                  # all baselines
  *   node scripts/normalize-snapshots.mjs path/to/file.png # specific file(s)
  *
- * Also wired into `web/apps/checkout/e2e/global-teardown.ts` so any
- * `--update-snapshots` run normalizes automatically.
+ * Also wired into each suite's teardown so `--update-snapshots` /
+ * `UPDATE_SNAPSHOTS=1` runs normalize automatically.
  */
 
 import { oxipngSync } from "oxipng"
@@ -33,7 +38,11 @@ import { join, resolve, dirname } from "node:path"
 import { fileURLToPath } from "node:url"
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..")
-const DEFAULT_ROOT = join(REPO_ROOT, "web/apps/checkout/e2e")
+const DEFAULT_ROOTS = [
+  join(REPO_ROOT, "web/apps/checkout/e2e"),
+  join(REPO_ROOT, "web/apps/admin/e2e"),
+  join(REPO_ROOT, "functions/test/unit"),
+]
 
 async function walkPngs(dir) {
   const entries = await readdir(dir, { withFileTypes: true })
@@ -51,7 +60,11 @@ async function walkPngs(dir) {
 
 async function collectTargets(args) {
   if (args.length === 0) {
-    return walkPngs(DEFAULT_ROOT)
+    const out = []
+    for (const root of DEFAULT_ROOTS) {
+      if (existsSync(root)) out.push(...(await walkPngs(root)))
+    }
+    return out
   }
   // Caller supplied explicit paths (e.g. lint-staged hook); accept files or dirs.
   const out = []
