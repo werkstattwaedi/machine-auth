@@ -3,7 +3,6 @@
 
 import { useState, useMemo, useCallback } from "react"
 import { Label } from "@modules/components/ui/label"
-import { Separator } from "@modules/components/ui/separator"
 import { formatCHF } from "@modules/lib/format"
 import {
   USAGE_TYPE_LABELS,
@@ -14,16 +13,14 @@ import { type PricingConfig } from "@modules/lib/workshop-config"
 import {
   ArrowLeft,
   ChevronRight,
-  CircleAlert,
   Coins,
-  FileText,
   Heart,
   Loader2,
   Package,
   Wrench,
 } from "lucide-react"
 import { cn } from "@modules/lib/utils"
-import type { CheckoutState, CheckoutAction, PaymentMethod } from "./use-checkout-state"
+import type { CheckoutState, CheckoutAction } from "./use-checkout-state"
 import type { CheckoutItemLocal } from "@/components/usage/inline-rows"
 import { PositionTable, rowFromItem } from "@/components/usage/position-table"
 import type { UsageType } from "@modules/lib/pricing"
@@ -161,8 +158,6 @@ export function StepCheckout({
     (m, i) => m + Math.round(i.quantity * 60),
     0,
   )
-
-  const primaryPerson = state.persons[0]
 
   return (
     <div className="flex flex-col flex-1 gap-6">
@@ -331,60 +326,6 @@ export function StepCheckout({
         </div>
       </div>
 
-      <Separator className="my-2" />
-
-      {/* Block — Zahlungsart */}
-      <SectionEyebrow>Zahlungsart</SectionEyebrow>
-      <p className="text-sm text-muted-foreground -mt-3">
-        Wie möchtest du bezahlen? Im nächsten Schritt zeigen wir dir nur diese
-        Option.
-      </p>
-
-      <div className="flex flex-col gap-3">
-        <MethodCard
-          id="ebanking"
-          selected={state.paymentMethod}
-          onSelect={(m) => dispatch({ type: "SET_PAYMENT_METHOD", method: m })}
-          mark={
-            <span className="flex h-11 w-11 items-center justify-center rounded-md bg-muted text-foreground">
-              <FileText className="h-5 w-5" strokeWidth={1.6} />
-            </span>
-          }
-          title="Rechnung"
-          sub="QR-Rechnung per E-Mail"
-          recommended
-          fee={{ tone: "good", label: "Gebührenfrei für den Verein" }}
-        >
-          <p className="text-sm text-muted-foreground leading-relaxed max-w-xl">
-            Du erhältst eine QR-Rechnung an{" "}
-            <strong className="text-foreground">
-              {primaryPerson?.email || "deine E-Mail-Adresse"}
-            </strong>
-            . Im nächsten Schritt kannst du sie auch sofort mit deiner
-            E-Banking App scannen.
-          </p>
-        </MethodCard>
-
-        <MethodCard
-          id="twint"
-          selected={state.paymentMethod}
-          onSelect={(m) => dispatch({ type: "SET_PAYMENT_METHOD", method: m })}
-          mark={
-            <span className="flex h-11 w-11 items-center justify-center rounded-md bg-twint-red">
-              <TwintGlyph />
-            </span>
-          }
-          title="TWINT"
-          sub="Sofort bezahlen vom Handy"
-          fee={{ tone: "warn", label: "Verein zahlt Transaktionsgebühren" }}
-        >
-          <p className="text-sm text-muted-foreground leading-relaxed max-w-xl">
-            Im nächsten Schritt scannst du den TWINT-Code mit deiner App und
-            bestätigst die Zahlung.
-          </p>
-        </MethodCard>
-      </div>
-
       <div className="flex-1" />
 
       {/* Sticky bottom navigation */}
@@ -404,7 +345,7 @@ export function StepCheckout({
           disabled={submitting || total < 0}
         >
           {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-          Senden &amp; bezahlen
+          Weiter zum Bezahlen
         </button>
       </div>
     </div>
@@ -503,119 +444,6 @@ function ExpandableSection({
         </div>
       </div>
     </>
-  )
-}
-
-interface MethodCardProps {
-  id: PaymentMethod
-  selected: PaymentMethod
-  onSelect: (m: PaymentMethod) => void
-  mark: React.ReactNode
-  title: string
-  sub: string
-  recommended?: boolean
-  fee: { tone: "good" | "warn"; label: string }
-  children: React.ReactNode
-}
-
-function MethodCard({
-  id,
-  selected,
-  onSelect,
-  mark,
-  title,
-  sub,
-  recommended,
-  fee,
-  children,
-}: MethodCardProps) {
-  const on = selected === id
-  return (
-    <div
-      className={cn(
-        "rounded-md border bg-background overflow-hidden transition-all",
-        on
-          ? "border-cog-teal shadow-[0_0_0_1px_var(--color-cog-teal),0_4px_12px_-4px_rgba(77,189,198,0.25)]"
-          : "border-border hover:border-foreground/30",
-      )}
-    >
-      <button
-        type="button"
-        onClick={() => onSelect(id)}
-        aria-pressed={on}
-        className="w-full grid grid-cols-[auto_auto_1fr_auto] items-center gap-4 px-5 py-4 text-left focus-visible:outline-2 focus-visible:outline-cog-teal/40 focus-visible:outline-offset-2"
-      >
-        <span
-          className={cn(
-            "h-5 w-5 rounded-full border flex items-center justify-center transition-colors",
-            on ? "border-cog-teal bg-cog-teal" : "border-[#c4c4c4] bg-white",
-          )}
-        >
-          {on && <span className="h-2 w-2 rounded-full bg-white" />}
-        </span>
-        {mark}
-        <span className="min-w-0">
-          <span className="block font-heading font-bold text-[17px] text-foreground leading-tight">
-            {title}
-          </span>
-          <span className="block mt-1 text-[13px] text-muted-foreground">
-            {sub}
-          </span>
-        </span>
-        <span className="flex flex-col items-end gap-1.5">
-          {recommended && (
-            <span className="text-[10px] font-bold uppercase tracking-wider text-white bg-cog-teal-dark rounded-full px-2 py-0.5">
-              Empfohlen
-            </span>
-          )}
-        </span>
-      </button>
-      {on && (
-        <div className="border-t border-border/60 bg-white px-5 pt-5 pb-4">
-          {children}
-          <div
-            className={cn(
-              "mt-4 pt-3 border-t border-dashed border-border/80 flex items-center gap-2 text-xs font-medium",
-              fee.tone === "good" ? "text-fee-good" : "text-fee-warn",
-            )}
-          >
-            {fee.tone === "good" ? (
-              <CheckSmall />
-            ) : (
-              <CircleAlert className="h-3.5 w-3.5" />
-            )}
-            <span>{fee.label}</span>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function CheckSmall() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M20 6 9 17l-5-5" />
-    </svg>
-  )
-}
-
-/** Two-circle TWINT motif (recognizable, not the trademark logo). */
-function TwintGlyph() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden>
-      <circle cx="9" cy="12" r="5" fill="#fff" />
-      <circle cx="15" cy="12" r="5" fill="#fff" fillOpacity="0.55" />
-    </svg>
   )
 }
 

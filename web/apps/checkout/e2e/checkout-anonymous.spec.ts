@@ -59,10 +59,10 @@ test.describe("Anonymous checkout", () => {
     await expect(page.getByText("Max Muster")).toBeVisible()
 
     // Submit
-    await page.getByRole("button", { name: "Senden & bezahlen" }).click()
+    await page.getByRole("button", { name: "Weiter zum Bezahlen" }).click()
 
-    // ── Payment result (Step 4 · Rechnung flow) ──
-    await expect(page.getByRole("heading", { name: "QR-Rechnung scannen" })).toBeVisible({
+    // ── Payment result (Step 4 — Rechnung tab is selected by default) ──
+    await expect(page.getByText("Zu bezahlen")).toBeVisible({
       timeout: 10_000,
     })
     // QR card + action buttons render once the bill is created server-side

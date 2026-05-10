@@ -362,7 +362,6 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
     // inline alert and re-throws — the dispatch below is short-circuited
     // and the wizard stays at step 2 with the submit button re-enabled.
     let data: PaymentData
-    let resultCheckoutId: string | null
 
     try {
       if (checkoutId) {
@@ -375,12 +374,13 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
           })
           return res.data
         })
-        resultCheckoutId = checkoutId
       } else {
         // Degenerate path: user reached step 2 without ever adding an item
         // (so step-workshops never lazy-created a Firestore checkout doc).
         // Common case is "tip only" / "entry fee only". The callable
-        // handles this by creating the doc server-side.
+        // creates the doc server-side and threads its id back through
+        // PaymentData so the Bezahlen step can record the customer's
+        // payment-method acknowledgement on it.
         const newCheckout = {
           // Preserve the original semantic: an account/tag user with no
           // pre-existing open checkout still gets their userId stamped on
@@ -409,9 +409,6 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
           })
           return res.data
         })
-        // The callable creates the doc server-side; the client never needs
-        // the new id (PaymentResult uses initialPaymentData directly).
-        resultCheckoutId = null
       }
     } catch {
       // Hook already toasted + telemetered; do NOT advance to the
@@ -422,7 +419,7 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
     setPaymentData(data)
     dispatch({
       type: "SET_SUBMITTED",
-      checkoutId: resultCheckoutId,
+      checkoutId: data.checkoutId,
       totalPrice: total,
     })
   }
@@ -477,8 +474,7 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
           checkoutId={state.checkoutId}
           totalPrice={state.totalPrice}
           initialPaymentData={paymentData}
-          selectedMethod={state.paymentMethod}
-          resetLabel={isAccountLoggedIn ? "Zurück zum Besuch" : "Fertig"}
+          isMember={!!identifiedUserDoc?.activeMembership}
           onReset={() => {
             dispatch({ type: "RESET" })
             setPaymentData(null)

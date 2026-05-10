@@ -434,7 +434,7 @@ async function closeExistingCheckout(
     return { bill, billId: billRef.id, payer: payerFromPersons(enforcedPersons) };
   });
 
-  return buildPaymentData(result.bill, result.payer, result.billId);
+  return buildPaymentData(result.bill, result.payer, result.billId, args.checkoutId);
 }
 
 async function createAnonymousCheckout(
@@ -555,7 +555,7 @@ async function createAnonymousCheckout(
     return { bill, billId: billRef.id, payer: payerFromPersons(enforcedPersons) };
   });
 
-  return buildPaymentData(result.bill, result.payer, result.billId);
+  return buildPaymentData(result.bill, result.payer, result.billId, checkoutRef.id);
 }
 
 /**

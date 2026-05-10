@@ -131,6 +131,17 @@
         "materialCost": "number",
         "tip": "number"
       },
+
+      // --- Customer-stated payment-method acknowledgement ---
+      // Written once by the principal when they click the commit button on
+      // the Bezahlen step. Distinct from /bills/{id}.paidVia, which is a
+      // server-stamped confirmation written when the cash actually arrives.
+      // The acting principal is recorded via the existing `modifiedBy`
+      // audit field — no separate `paymentMethodConfirmedBy`.
+      "paymentMethodConfirmed": "rechnung | sammel | twint",
+      "paymentMethodConfirmedAt": "timestamp",
+
+
       "items": {
         "{itemId}": { // Auto-generated — subcollection of checkouts/{checkoutId}
           "workshop": "string", // e.g., "holz"

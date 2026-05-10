@@ -203,11 +203,27 @@ service cloud.firestore {
       // CANNOT change status, summary, closedAt, or billRef — those
       // transitions go through closeCheckoutAndGetPayment so the server
       // can recompute prices and allocate a bill atomically.
+      //
+      // Closed-checkout extension: the principal (real, tag, or — for
+      // null-userId checkouts — the anonymous-auth caller) can write the
+      // customer-stated payment-method acknowledgement fields exactly once.
+      // Only the three ack fields plus auto-stamped audit fields may
+      // change; the value must be one of the known methods; and the field
+      // must not already be set (write-once).
       allow update: if isAdmin() ||
         (isCheckoutPrincipalFor(resource.data.userId) &&
          resource.data.status == "open" &&
          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
            'status', 'summary', 'closedAt', 'billRef'
+         ])) ||
+        (resource.data.status == "closed" &&
+         (isCheckoutPrincipalFor(resource.data.userId) ||
+          (resource.data.userId == null && isAnonymousAuth())) &&
+         !('paymentMethodConfirmed' in resource.data) &&
+         request.resource.data.paymentMethodConfirmed in ['rechnung', 'sammel', 'twint'] &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+           'paymentMethodConfirmed', 'paymentMethodConfirmedAt',
+           'modifiedBy', 'modifiedAt'
          ]));
       allow delete: if isAdmin();
 
