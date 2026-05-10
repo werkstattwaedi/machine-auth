@@ -87,7 +87,7 @@ function UsersPage() {
       <DataTable
         columns={columns}
         data={data}
-        searchKey="displayName"
+        searchKey="name"
         searchPlaceholder="Name suchen..."
       />
       <CreateUserDialog open={createOpen} onOpenChange={setCreateOpen} />

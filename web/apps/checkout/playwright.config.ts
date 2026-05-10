@@ -3,12 +3,14 @@
 
 import { defineConfig } from "@playwright/test"
 
-// E2E emulator ports (offset from dev ports to avoid conflicts)
+// E2E emulator ports (offset from dev ports to avoid conflicts).
+// `scripts/port-block.ts` exports EMULATOR_*_PORT when running under the
+// broker; default to the firebase.e2e.json values otherwise.
 export const E2E_PORTS = {
   vite: 5188,
-  auth: 9199,
-  firestore: 8180,
-  functions: 5101,
+  auth: Number(process.env.EMULATOR_AUTH_PORT ?? 9199),
+  firestore: Number(process.env.EMULATOR_FIRESTORE_PORT ?? 8180),
+  functions: Number(process.env.EMULATOR_FUNCTIONS_PORT ?? 5101),
 }
 
 export default defineConfig({
@@ -40,6 +42,7 @@ export default defineConfig({
   ],
 
   globalSetup: "./e2e/global-setup.ts",
+  globalTeardown: "./e2e/global-teardown.ts",
 
   webServer: {
     command: `npx vite --port ${E2E_PORTS.vite}`,

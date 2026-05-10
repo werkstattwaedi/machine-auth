@@ -211,21 +211,17 @@ export const inviteFamilyMember = onCall<
 
 /**
  * Best-effort display name for the inviter, in priority order:
- *   1. `displayName` if set
- *   2. `firstName lastName` (trimmed)
- *   3. `email` local-part
- *   4. literal "Jemand" (German for "someone") as the last resort
+ *   1. `firstName lastName` (trimmed)
+ *   2. `email` local-part
+ *   3. literal "Jemand" (German for "someone") as the last resort
  */
-async function resolveInviterName(
+export async function resolveInviterName(
   callerRef: DocumentReference,
 ): Promise<string> {
   try {
     const snap = await callerRef.get();
     if (!snap.exists) return "Jemand";
     const user = snap.data() as UserEntity;
-    if (user.displayName && user.displayName.trim().length > 0) {
-      return user.displayName.trim();
-    }
     const fullName = `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim();
     if (fullName.length > 0) return fullName;
     if (user.email && user.email.includes("@")) {

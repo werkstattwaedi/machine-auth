@@ -91,7 +91,7 @@ describe("Auth Handlers (Integration)", () => {
       await seedTestData({
         users: {
           [TEST_USER_ID]: {
-            displayName: "Test User",
+            firstName: "Test", lastName: "User",
             name: "Test User",
             permissions: [],
             roles: [],
@@ -118,7 +118,7 @@ describe("Auth Handlers (Integration)", () => {
       await seedTestData({
         users: {
           [TEST_USER_ID]: {
-            displayName: "Test User",
+            firstName: "Test", lastName: "User",
             name: "Test User",
             permissions: [],
             roles: [],
@@ -147,7 +147,7 @@ describe("Auth Handlers (Integration)", () => {
       await seedTestData({
         users: {
           [TEST_USER_ID]: {
-            displayName: "Test User",
+            firstName: "Test", lastName: "User",
             name: "Test User",
             permissions: [],
             roles: [],
@@ -180,7 +180,7 @@ describe("Auth Handlers (Integration)", () => {
         permissions: { p1: {}, p2: {} },
         users: {
           [TEST_USER_ID]: {
-            displayName: "Test User",
+            firstName: "Test", lastName: "User",
             name: "Test User",
             permissions: ["/permission/p1", "/permission/p2"],
             roles: [],
@@ -210,7 +210,7 @@ describe("Auth Handlers (Integration)", () => {
         permissions: { p1: {}, p2: {} },
         users: {
           [TEST_USER_ID]: {
-            displayName: "Test User",
+            firstName: "Test", lastName: "User",
             name: "Test User",
             permissions: ["/permission/p1"], // missing p2
             roles: [],
@@ -245,7 +245,7 @@ describe("Auth Handlers (Integration)", () => {
         permissions: { p1: {} },
         users: {
           [TEST_USER_ID]: {
-            displayName: "Test User",
+            firstName: "Test", lastName: "User",
             name: "Test User",
             permissions: [], // no permissions at all
             roles: [],
@@ -283,7 +283,7 @@ describe("Auth Handlers (Integration)", () => {
         permissions: { p1: {} },
         users: {
           [TEST_USER_ID]: {
-            displayName: "Admin User",
+            firstName: "Admin", lastName: "User",
             name: "Admin User",
             permissions: [],
             roles: ["admin"],
@@ -317,7 +317,7 @@ describe("Auth Handlers (Integration)", () => {
       await seedTestData({
         users: {
           [TEST_USER_ID]: {
-            displayName: "Test User",
+            firstName: "Test", lastName: "User",
             name: "Test User",
             permissions: [],
             roles: [],
@@ -353,7 +353,7 @@ describe("Auth Handlers (Integration)", () => {
       await seedTestData({
         users: {
           [TEST_USER_ID]: {
-            displayName: "Test User",
+            firstName: "Test", lastName: "User",
             name: "Test User",
             permissions: [],
             roles: [],
@@ -448,7 +448,7 @@ describe("Auth Handlers (Integration)", () => {
       await seedTestData({
         users: {
           [TEST_USER_ID]: {
-            displayName: "Test User",
+            firstName: "Test", lastName: "User",
             name: "Test User",
             permissions: [],
             roles: [],
@@ -538,7 +538,7 @@ describe("Auth Handlers (Integration)", () => {
       await seedTestData({
         users: {
           [TEST_USER_ID]: {
-            displayName: "Test User",
+            firstName: "Test", lastName: "User",
             name: "Test User",
             permissions: [],
             roles: [],
@@ -583,7 +583,7 @@ describe("Auth Handlers (Integration)", () => {
       await seedTestData({
         users: {
           [TEST_USER_ID]: {
-            displayName: "Test User",
+            firstName: "Test", lastName: "User",
             name: "Test User",
             permissions: [],
             roles: [],
@@ -664,7 +664,7 @@ describe("Auth Handlers (Integration)", () => {
       await seedTestData({
         users: {
           [TEST_USER_ID]: {
-            displayName: "Test User",
+            firstName: "Test", lastName: "User",
             name: "Test User",
             permissions: [],
             roles: [],

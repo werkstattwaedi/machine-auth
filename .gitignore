@@ -76,6 +76,9 @@ firebase-seed/
 firebase-data/
 firebase-export-*
 
+# Port-block broker runtime configs (scripts/port-block.ts)
+firebase.runtime.*.json
+
 # dataconnect generated files
 .dataconnect
 

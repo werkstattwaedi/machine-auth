@@ -699,17 +699,15 @@ function MemberRow({
   const db = useDb()
   // Family-roster join rule allows reading co-members' user docs.
   const { data: user } = useDocument(userRef(db, userId))
-  const displayName =
-    user?.displayName ||
-    `${user?.firstName ?? ""} ${user?.lastName ?? ""}`.trim() ||
-    userId
+  const name =
+    `${user?.firstName ?? ""} ${user?.lastName ?? ""}`.trim() || userId
   const isChild = user?.userType === "kind"
 
   return (
     <li className="grid grid-cols-[36px_1fr_auto_auto] items-center gap-3 border-b py-3 last:border-0">
-      <Avatar name={displayName} />
+      <Avatar name={name} />
       <div className="min-w-0">
-        <div className="truncate text-sm font-semibold">{displayName}</div>
+        <div className="truncate text-sm font-semibold">{name}</div>
         <div className="text-xs text-muted-foreground">
           {user?.email ?? <span>(kein Login)</span>}
         </div>

@@ -40,6 +40,11 @@ export interface PaymentData {
   // Doc id of the underlying bill — lets the client wire follow-up
   // actions (PDF download, etc.) without fetching the checkout doc.
   billId: string;
+  // Doc id of the checkout this payment was generated for. Lets the client
+  // record the user's payment-method acknowledgement (`paymentMethodConfirmed`)
+  // without an extra fetch — needed for the anonymous flow where the
+  // checkout doc was created server-side and the client never had its id.
+  checkoutId: string | null;
   qrBillPayload: string;
   paylinkUrl: string;
   creditor: {
@@ -121,6 +126,7 @@ export function buildPaymentData(
   bill: BillEntity,
   payer: PaymentPayer | null,
   billId: string,
+  checkoutId: string | null,
 ): PaymentData {
   const scorReference = generateScorReference(
     String(bill.referenceNumber).padStart(9, "0"),
@@ -155,6 +161,7 @@ export function buildPaymentData(
 
   return {
     billId,
+    checkoutId,
     qrBillPayload: qrPayload,
     paylinkUrl,
     creditor: {
@@ -198,5 +205,10 @@ export const getPaymentQrData = onCall({ memory: "512MiB" }, async (request) => 
     }
   }
 
-  return buildPaymentData(bill, payer, billId);
+  return buildPaymentData(
+    bill,
+    payer,
+    billId,
+    bill.checkouts[0]?.id ?? null,
+  );
 });

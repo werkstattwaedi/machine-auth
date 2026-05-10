@@ -48,12 +48,28 @@ vi.mock("firebase/functions", () => ({
   httpsCallable: () => mockCallableResult,
 }))
 
+// Mock the firestore mutation hook used to record the customer's
+// payment-method acknowledgement on the checkout doc.
+const mockAckUpdate = vi.fn()
+vi.mock("@modules/hooks/use-firestore-mutation", () => ({
+  useFirestoreMutation: () => ({
+    update: mockAckUpdate,
+    loading: false,
+    error: null,
+  }),
+}))
+
+vi.mock("firebase/firestore", () => ({
+  serverTimestamp: () => "server-ts",
+}))
+
 import { render, screen, cleanup } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { PaymentResult, SWISS_CROSS_SVG } from "./payment-result"
 
 const PAYMENT_FIXTURE = {
   billId: "bill-1",
+  checkoutId: "checkout-1",
   qrBillPayload: "SPC\n0200\n1\nCH0000000000000000000\ntest-payload",
   paylinkUrl: "https://pay.raisenow.io/test",
   creditor: {
@@ -80,6 +96,7 @@ describe("PaymentResult", () => {
     })
 
     mockCallableResult.mockResolvedValue({ data: PAYMENT_FIXTURE })
+    mockAckUpdate.mockResolvedValue(undefined)
   })
 
   afterEach(() => {
@@ -87,167 +104,210 @@ describe("PaymentResult", () => {
     vi.clearAllMocks()
   })
 
-  describe("Rechnung flow", () => {
-    it('shows default "Fertig" reset button when no resetLabel prop is provided', () => {
+  describe("default — Rechnung tab selected", () => {
+    it("shows the QR code and rechnung instructions on first render", () => {
       render(
         <PaymentResult
           checkoutId="checkout-1"
           totalPrice={25}
+          isMember={false}
           onReset={() => {}}
-          selectedMethod="ebanking"
           initialPaymentData={PAYMENT_FIXTURE}
         />,
       )
-      expect(screen.getByRole("button", { name: "Fertig" })).toBeDefined()
+
+      // Hero shows the amount.
+      expect(screen.getByText("Zu bezahlen")).toBeDefined()
+      // QR + creditor block render.
+      expect(screen.getByTestId("qrcode")).toBeDefined()
+      expect(screen.getByText("Konto / Zahlbar an")).toBeDefined()
+      expect(screen.getByText("CH56 0681 4580 1260 0509 7")).toBeDefined()
+      expect(screen.getByText("Referenz")).toBeDefined()
+      // PDF + IBAN copy buttons are part of the rechnung panel.
+      // PDF download lives in the hero now (visible regardless of tab).
+      expect(screen.getByRole("button", { name: /Rechnung als PDF/ })).toBeDefined()
     })
 
-    it("shows custom resetLabel when provided", () => {
+    it("uses the rechnung-specific commit label", () => {
       render(
         <PaymentResult
           checkoutId="checkout-1"
           totalPrice={25}
-          resetLabel="Zurück zum Besuch"
+          isMember={false}
           onReset={() => {}}
-          selectedMethod="ebanking"
           initialPaymentData={PAYMENT_FIXTURE}
         />,
       )
-      expect(screen.getByRole("button", { name: "Zurück zum Besuch" })).toBeDefined()
-      expect(screen.queryByText("Fertig")).toBeNull()
+      expect(
+        screen.getByRole("button", {
+          name: /Ich zahle die QR-Rechnung & Werkstatt verlassen/,
+        }),
+      ).toBeDefined()
     })
 
-    it("calls onReset when reset button is clicked", async () => {
+    it("does not render a back button (closed checkout — no rewind)", () => {
+      render(
+        <PaymentResult
+          checkoutId="checkout-1"
+          totalPrice={25}
+          isMember={false}
+          onReset={() => {}}
+          initialPaymentData={PAYMENT_FIXTURE}
+        />,
+      )
+      expect(screen.queryByRole("button", { name: /Zurück/ })).toBeNull()
+    })
+  })
+
+  describe("Sammelrechnung gating", () => {
+    it("hides the Sammelrechnung tab for non-members", () => {
+      render(
+        <PaymentResult
+          checkoutId="checkout-1"
+          totalPrice={25}
+          isMember={false}
+          onReset={() => {}}
+          initialPaymentData={PAYMENT_FIXTURE}
+        />,
+      )
+      expect(screen.queryByRole("tab", { name: /Sammelrechnung/ })).toBeNull()
+    })
+
+    it("shows the Sammelrechnung tab for members", () => {
+      render(
+        <PaymentResult
+          checkoutId="checkout-1"
+          totalPrice={25}
+          isMember
+          onReset={() => {}}
+          initialPaymentData={PAYMENT_FIXTURE}
+        />,
+      )
+      expect(screen.getByRole("tab", { name: /Sammelrechnung/ })).toBeDefined()
+    })
+
+    it("switches to the monthly panel + commit label when the tab is clicked", async () => {
+      render(
+        <PaymentResult
+          checkoutId="checkout-1"
+          totalPrice={25}
+          isMember
+          onReset={() => {}}
+          initialPaymentData={PAYMENT_FIXTURE}
+        />,
+      )
+      await userEvent.click(screen.getByRole("tab", { name: /Sammelrechnung/ }))
+      // MonthlyPanel-only copy — the tab label also contains "Sammelrechnung",
+      // so match on the unique panel sentence instead.
+      expect(screen.getByText(/1\. des nächsten Monats/)).toBeDefined()
+      expect(
+        screen.getByRole("button", {
+          name: /Auf Sammelrechnung setzen & Werkstatt verlassen/,
+        }),
+      ).toBeDefined()
+      // QR code only renders for the rechnung tab.
+      expect(screen.queryByTestId("qrcode")).toBeNull()
+    })
+  })
+
+  describe("TWINT tab", () => {
+    it("renders the TWINT pay-link and method-specific commit label", async () => {
+      render(
+        <PaymentResult
+          checkoutId="checkout-1"
+          totalPrice={25}
+          isMember={false}
+          onReset={() => {}}
+          initialPaymentData={PAYMENT_FIXTURE}
+        />,
+      )
+      await userEvent.click(screen.getByRole("tab", { name: /TWINT/ }))
+      const link = screen.getByRole("link", { name: /Mit TWINT bezahlen/ })
+      expect(link.getAttribute("href")).toBe("https://pay.raisenow.io/test")
+      expect(
+        screen.getByRole("button", {
+          name: /Ich habe via TWINT bezahlt & Werkstatt verlassen/,
+        }),
+      ).toBeDefined()
+      expect(screen.queryByTestId("qrcode")).toBeNull()
+    })
+  })
+
+  describe("commit click → ack write → onReset", () => {
+    it("writes the selected method to the checkout doc and then calls onReset", async () => {
       const handleReset = vi.fn()
       render(
         <PaymentResult
           checkoutId="checkout-1"
-          totalPrice={10}
+          totalPrice={25}
+          isMember
           onReset={handleReset}
-          selectedMethod="ebanking"
           initialPaymentData={PAYMENT_FIXTURE}
         />,
       )
 
-      await userEvent.click(screen.getByRole("button", { name: "Fertig" }))
+      await userEvent.click(screen.getByRole("tab", { name: /Sammelrechnung/ }))
+      await userEvent.click(
+        screen.getByRole("button", {
+          name: /Auf Sammelrechnung setzen & Werkstatt verlassen/,
+        }),
+      )
+
+      expect(mockAckUpdate).toHaveBeenCalledOnce()
+      const [ref, payload] = mockAckUpdate.mock.calls[0]
+      expect(ref.path).toBe("checkouts/checkout-1")
+      expect(payload).toEqual({
+        paymentMethodConfirmed: "monthly",
+        paymentMethodConfirmedAt: "server-ts",
+      })
       expect(handleReset).toHaveBeenCalledOnce()
     })
 
-    it("shows the QR code and Rechnung headline when ebanking is selected", () => {
+    it("does NOT call onReset when the ack write fails (lets the user retry)", async () => {
+      const handleReset = vi.fn()
+      mockAckUpdate.mockRejectedValueOnce(new Error("offline"))
+
       render(
         <PaymentResult
           checkoutId="checkout-1"
           totalPrice={25}
-          onReset={() => {}}
-          selectedMethod="ebanking"
+          isMember={false}
+          onReset={handleReset}
           initialPaymentData={PAYMENT_FIXTURE}
         />,
       )
 
-      expect(screen.getByText("QR-Rechnung scannen")).toBeDefined()
-      const qrCode = screen.getByTestId("qrcode")
-      expect(qrCode.getAttribute("data-value")).toContain("SPC")
+      await userEvent.click(
+        screen.getByRole("button", {
+          name: /Ich zahle die QR-Rechnung & Werkstatt verlassen/,
+        }),
+      )
+
+      expect(mockAckUpdate).toHaveBeenCalledOnce()
+      expect(handleReset).not.toHaveBeenCalled()
     })
 
-    it("shows the email and total in the lede", () => {
+    it("uses the checkoutId from PaymentData (the prop is decorative; the callable always threads it back)", async () => {
+      const handleReset = vi.fn()
       render(
         <PaymentResult
-          checkoutId="checkout-1"
+          checkoutId={null}
           totalPrice={25}
-          onReset={() => {}}
-          selectedMethod="ebanking"
-          initialPaymentData={PAYMENT_FIXTURE}
-        />,
-      )
-      // Email appears in the lede *and* in the QR bill payer block; just
-      // verify both surfaces show it.
-      expect(screen.getAllByText("max@test.com").length).toBeGreaterThanOrEqual(1)
-    })
-
-    it("renders PDF herunterladen and IBAN kopieren buttons", () => {
-      render(
-        <PaymentResult
-          checkoutId="checkout-1"
-          totalPrice={25}
-          onReset={() => {}}
-          selectedMethod="ebanking"
-          initialPaymentData={PAYMENT_FIXTURE}
-        />,
-      )
-      expect(screen.getByRole("button", { name: /PDF herunterladen/ })).toBeDefined()
-      expect(screen.getByRole("button", { name: /IBAN kopieren/ })).toBeDefined()
-    })
-
-    it("displays QR bill details: creditor, reference, and payer name", () => {
-      render(
-        <PaymentResult
-          checkoutId="checkout-1"
-          totalPrice={25}
-          onReset={() => {}}
-          selectedMethod="ebanking"
-          initialPaymentData={PAYMENT_FIXTURE}
+          isMember={false}
+          onReset={handleReset}
+          initialPaymentData={{ ...PAYMENT_FIXTURE, checkoutId: "co-anon-9" }}
         />,
       )
 
-      expect(screen.getByText("Konto / Zahlbar an")).toBeDefined()
-      expect(screen.getByText("CH56 0681 4580 1260 0509 7")).toBeDefined()
-      expect(screen.getByText("Offene Werkstatt Wädenswil")).toBeDefined()
-      expect(screen.getByText("Tobelrainstrasse 25")).toBeDefined()
-      expect(screen.getByText("8820 Wädenswil")).toBeDefined()
-      expect(screen.getByText("Referenz")).toBeDefined()
-      expect(screen.getByText("RF48000000001")).toBeDefined()
-      expect(screen.getByText("Zahlbar durch")).toBeDefined()
-      expect(screen.getByText("Max Muster")).toBeDefined()
-      expect(screen.getByText("CHF")).toBeDefined()
-      expect(screen.getByText("25.00")).toBeDefined()
-    })
-  })
-
-  describe("TWINT flow", () => {
-    it("renders the TWINT pay-link and headline when selectedMethod=twint", () => {
-      render(
-        <PaymentResult
-          checkoutId="checkout-1"
-          totalPrice={25}
-          onReset={() => {}}
-          selectedMethod="twint"
-          initialPaymentData={PAYMENT_FIXTURE}
-        />,
+      await userEvent.click(
+        screen.getByRole("button", {
+          name: /Ich zahle die QR-Rechnung & Werkstatt verlassen/,
+        }),
       )
 
-      expect(
-        screen.getByRole("heading", { name: "Mit TWINT bezahlen" }),
-      ).toBeDefined()
-      const link = screen.getByRole("link", { name: /Mit TWINT bezahlen/ })
-      expect(link.getAttribute("href")).toBe("https://pay.raisenow.io/test")
-      expect(screen.getByText(/Transaktionsgebühren/)).toBeDefined()
-    })
-
-    it("does NOT render the QR code when TWINT is selected", () => {
-      render(
-        <PaymentResult
-          checkoutId="checkout-1"
-          totalPrice={25}
-          onReset={() => {}}
-          selectedMethod="twint"
-          initialPaymentData={PAYMENT_FIXTURE}
-        />,
-      )
-      expect(screen.queryByTestId("qrcode")).toBeNull()
-      expect(screen.queryByText("QR-Rechnung scannen")).toBeNull()
-    })
-
-    it("does NOT render PDF/IBAN action buttons in the TWINT flow", () => {
-      render(
-        <PaymentResult
-          checkoutId="checkout-1"
-          totalPrice={25}
-          onReset={() => {}}
-          selectedMethod="twint"
-          initialPaymentData={PAYMENT_FIXTURE}
-        />,
-      )
-      expect(screen.queryByRole("button", { name: /PDF herunterladen/ })).toBeNull()
-      expect(screen.queryByRole("button", { name: /IBAN kopieren/ })).toBeNull()
+      const [ref] = mockAckUpdate.mock.calls[0]
+      expect(ref.path).toBe("checkouts/co-anon-9")
+      expect(handleReset).toHaveBeenCalledOnce()
     })
   })
 
@@ -264,8 +324,8 @@ describe("PaymentResult", () => {
         <PaymentResult
           checkoutId="checkout-1"
           totalPrice={25}
+          isMember={false}
           onReset={() => {}}
-          selectedMethod="ebanking"
         />,
       )
       expect(screen.getByText(/QR-Code wird geladen/)).toBeDefined()
@@ -278,8 +338,8 @@ describe("PaymentResult", () => {
         <PaymentResult
           checkoutId="checkout-1"
           totalPrice={25}
+          isMember={false}
           onReset={() => {}}
-          selectedMethod="ebanking"
         />,
       )
 
@@ -306,8 +366,8 @@ describe("PaymentResult", () => {
         <PaymentResult
           checkoutId="checkout-1"
           totalPrice={25}
+          isMember={false}
           onReset={() => {}}
-          selectedMethod="ebanking"
         />,
       )
 

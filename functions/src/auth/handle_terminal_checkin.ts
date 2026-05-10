@@ -163,7 +163,9 @@ export async function handleTerminalCheckin(
         $case: "authorized",
         authorized: {
           userId: { value: userDoc.id },
-          userLabel: userData.displayName || "Unknown User",
+          userLabel:
+            `${userData.firstName ?? ""} ${userData.lastName ?? ""}`.trim() ||
+            "Unknown User",
           authenticationId: authenticationId ? { value: authenticationId } : undefined,
         },
       },

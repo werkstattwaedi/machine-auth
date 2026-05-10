@@ -26,7 +26,7 @@ export default tseslint.config(
   },
   // Test files: allow chai expressions and require() imports
   {
-    files: ["**/*.test.ts", "test/**/*.ts"],
+    files: ["**/*.test.ts", "test/**/*.{ts,cjs,mjs,js}"],
     rules: {
       "@typescript-eslint/no-unused-expressions": "off",
       "@typescript-eslint/no-require-imports": "off",

@@ -1,0 +1,10 @@
+{
+  "lockPort": 4040,
+  "blocks": [
+    { "name": "ci-1", "offset": 10000 },
+    { "name": "ci-2", "offset": 20000 },
+    { "name": "ci-3", "offset": 30000 },
+    { "name": "ci-4", "offset": 40000 },
+    { "name": "ci-5", "offset": 50000 }
+  ]
+}

@@ -122,17 +122,11 @@ function CheckoutPage() {
     })
   }
 
-  // Use firstName + lastName (not `displayName`) so the Avatar derives
-  // proper two-letter initials like "AM". A custom displayName in Firestore
-  // could be a single token and would yield only one initial.
   // Anonymous and tag flows fill the form inside the wizard, so the
   // header simply hides the avatar until the user has signed in (the
   // wizard's local form state is intentionally not lifted here — see
   // the wizard's persons[] for the in-flight name).
-  const headerName =
-    userDoc && (userDoc.firstName || userDoc.lastName)
-      ? `${userDoc.firstName} ${userDoc.lastName}`.trim()
-      : null
+  const headerName = userDoc?.name || null
 
   return (
     <div className="min-h-screen flex flex-col items-center bg-background">

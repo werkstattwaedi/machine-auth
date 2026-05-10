@@ -10,6 +10,15 @@ describe("roundUpOptions", () => {
     expect(roundUpOptions(-5)).toEqual([])
   })
 
+  // When the base is already a whole franc there's nothing to round up,
+  // so the suggestion row is hidden (regression for #204).
+  it("returns empty for whole-franc bases", () => {
+    expect(roundUpOptions(1)).toEqual([])
+    expect(roundUpOptions(5)).toEqual([])
+    expect(roundUpOptions(35)).toEqual([])
+    expect(roundUpOptions(70)).toEqual([])
+  })
+
   // Tiny totals (< 5): include 0.50 step + integer francs
   it("3.20 → 3.50, 4, 5", () => {
     expect(roundUpOptions(3.2)).toEqual([3.5, 4, 5])

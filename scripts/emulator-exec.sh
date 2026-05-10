@@ -7,11 +7,16 @@
 #
 # Usage: scripts/emulator-exec.sh [firebase-args...]
 #   e.g. scripts/emulator-exec.sh --config firebase.e2e.json --only firestore 'cd web && npm run test:integration'
+#
+# Environment overrides (set by scripts/port-block.ts):
+#   EMULATOR_KILL_PORTS  Comma-separated ports to free before starting.
+#                        Defaults to firebase.e2e.json's port set.
 
 set -euo pipefail
 
-# Ports configured in firebase.e2e.json
-EMULATOR_PORTS=(8180 9199 5101 4400 4500)
+DEFAULT_PORTS="8180,9199,5101,4400,4500"
+PORTS_CSV="${EMULATOR_KILL_PORTS:-$DEFAULT_PORTS}"
+IFS=',' read -r -a EMULATOR_PORTS <<< "$PORTS_CSV"
 
 for port in "${EMULATOR_PORTS[@]}"; do
   pid=$(lsof -ti ":$port" 2>/dev/null || true)

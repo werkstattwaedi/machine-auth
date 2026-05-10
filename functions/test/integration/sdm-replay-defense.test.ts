@@ -73,7 +73,7 @@ describe("SDM counter replay defense (Integration)", () => {
       },
       users: {
         [TEST_USER_ID]: {
-          displayName: "Test User",
+          firstName: "Test", lastName: "User",
           permissions: [],
           roles: [],
         },

@@ -39,8 +39,8 @@ export interface BillingAddress {
 
 export interface UserDoc {
   id: string
-  displayName: string // Derived from firstName+lastName if not set in Firestore
-  rawDisplayName: string | null // The actual Firestore value (null if not explicitly set)
+  /** Full name = `firstName lastName` (trimmed). Empty until profile is filled. */
+  name: string
   firstName: string
   lastName: string
   email: string | null // null for child accounts (no Firebase Auth email)
@@ -202,11 +202,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const roles: string[] = data.roles ?? []
         const firstName = data.firstName ?? ""
         const lastName = data.lastName ?? ""
-        const rawDisplayName: string | null = data.displayName || null
         setUserDoc({
           id: docSnap.id,
-          displayName: rawDisplayName || `${firstName} ${lastName}`.trim() || "",
-          rawDisplayName,
+          name: `${firstName} ${lastName}`.trim(),
           firstName,
           lastName,
           email: data.email ?? null,
@@ -367,7 +365,6 @@ async function handleSignIn(db: Firestore, user: User): Promise<void> {
   // Create new user document with Auth UID as doc ID
   await setDoc(userDocRef, {
     email: user.email,
-    displayName: null,
     firstName: "",
     lastName: "",
     created: serverTimestamp(),
