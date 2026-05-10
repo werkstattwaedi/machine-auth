@@ -124,7 +124,6 @@ async function seed() {
   // --- Users ---
   await db.collection("users").doc(ID.userAdmin).set({
     created: Timestamp.now(),
-    displayName: "Admin",
     firstName: "Test",
     lastName: "Admin",
     email: "admin@example.com",
@@ -142,7 +141,6 @@ async function seed() {
   });
   await db.collection("users").doc(ID.userMike).set({
     created: Timestamp.now(),
-    displayName: "MikeS",
     firstName: "Mike",
     lastName: "Schneider",
     email: "mike@werkstattwaedi.ch",
@@ -158,7 +156,6 @@ async function seed() {
   });
   await db.collection("users").doc(ID.userMarco).set({
     created: Timestamp.now(),
-    displayName: null,
     firstName: "Marco",
     lastName: "Menzi",
     email: "marco@werkstattwaedi.ch",
@@ -170,7 +167,6 @@ async function seed() {
   });
   await db.collection("users").doc(ID.userSimon).set({
     created: Timestamp.now(),
-    displayName: null,
     firstName: "Simon",
     lastName: "Flepp",
     email: "simon@werkstattwaedi.ch",
@@ -196,7 +192,6 @@ async function seed() {
   });
   await db.collection("users").doc(ID.userPartner).set({
     created: Timestamp.now(),
-    displayName: null,
     firstName: "Anna",
     lastName: "Schneider",
     email: "partner@werkstattwaedi.ch",
@@ -228,7 +223,6 @@ async function seed() {
   }
   await db.collection("users").doc(ID.userKid).set({
     created: Timestamp.now(),
-    displayName: null,
     firstName: "Lina",
     lastName: "Schneider",
     email: null,
@@ -362,7 +356,7 @@ async function seed() {
     name: "Mitgliedschaft Einzel (Jahr)",
     workshops: ["diverses"],
     pricingModel: "direct",
-    unitPrice: { none: 50, member: 50, intern: 0 },
+    unitPrice: { none: 50, member: 50 },
     active: true,
     userCanAdd: false,
     description: "Jahres-Einzelmitgliedschaft Verein Offene Werkstatt Wädenswil.",
@@ -373,7 +367,7 @@ async function seed() {
     name: "Mitgliedschaft Familie (Jahr)",
     workshops: ["diverses"],
     pricingModel: "direct",
-    unitPrice: { none: 70, member: 70, intern: 0 },
+    unitPrice: { none: 70, member: 70 },
     active: true,
     userCanAdd: false,
     description:
@@ -425,7 +419,7 @@ async function seed() {
       firma: { regular: 5, materialbezug: 0, intern: 0, hangenmoos: 0 },
     },
     // SLA per-layer cost (hardware-wear-driven, constant across resin types).
-    slaLayerPrice: { none: 0.00109, member: 0.00109, intern: 0 },
+    slaLayerPrice: { none: 0.00109, member: 0.00109 },
     workshops: {
       holz:      { label: "Holzwerkstatt",     order: 1 },
       metall:    { label: "Metallwerkstatt",    order: 2 },
@@ -440,7 +434,7 @@ async function seed() {
     },
     labels: {
       units: { m2: "m²", m: "m", stk: "Stk.", chf: "CHF", h: "Std.", kg: "kg", g: "g", l: "l" },
-      discounts: { none: "Kein Rabatt", member: "Mitglied OWW", intern: "Intern" },
+      discounts: { none: "Kein Rabatt", member: "Mitglied OWW" },
     },
   });
   console.log("  Created config/pricing");

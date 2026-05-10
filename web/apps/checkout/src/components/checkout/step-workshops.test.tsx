@@ -114,7 +114,7 @@ function makeConfig(): PricingConfig {
     workshops: {
       makerspace: { label: "Maker Space", order: 2 },
     } as PricingConfig["workshops"],
-    slaLayerPrice: { none: 0.01, member: 0.008, intern: 0.006 },
+    slaLayerPrice: { none: 0.01, member: 0.008 },
     labels: {
       units: {
         h: "Std.",
@@ -124,7 +124,7 @@ function makeConfig(): PricingConfig {
         kg: "kg",
         chf: "CHF",
       },
-      discounts: { none: "Normal", member: "Mitglied", intern: "Intern" },
+      discounts: { none: "Normal", member: "Mitglied" },
     },
   }
 }

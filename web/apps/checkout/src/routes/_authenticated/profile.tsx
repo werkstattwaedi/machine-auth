@@ -134,31 +134,6 @@ function ProfilePage() {
         onSubmit={handleSubmit(onSubmit)}
         className="rounded-2xl border border-border bg-card shadow-xs p-6 sm:p-7 flex flex-col gap-5"
       >
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="flex flex-col gap-1">
-            <Label className="text-sm font-bold">Vorname</Label>
-            <input
-              {...register("firstName", {
-                required: "Vorname ist erforderlich",
-              })}
-              className={fieldCls("firstName")}
-              autoComplete="given-name"
-            />
-            <ErrorText message={errors.firstName?.message} />
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label className="text-sm font-bold">Nachname</Label>
-            <input
-              {...register("lastName", {
-                required: "Nachname ist erforderlich",
-              })}
-              className={fieldCls("lastName")}
-              autoComplete="family-name"
-            />
-            <ErrorText message={errors.lastName?.message} />
-          </div>
-        </div>
-
         <div className="flex flex-col gap-1">
           <Label className="text-sm font-bold">Nutzer:in</Label>
           <div className="flex gap-6 flex-wrap pt-1.5">
@@ -193,6 +168,31 @@ function ProfilePage() {
           </div>
         </div>
 
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="flex flex-col gap-1">
+            <Label className="text-sm font-bold">Vorname</Label>
+            <input
+              {...register("firstName", {
+                required: "Vorname ist erforderlich",
+              })}
+              className={fieldCls("firstName")}
+              autoComplete="given-name"
+            />
+            <ErrorText message={errors.firstName?.message} />
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label className="text-sm font-bold">Nachname</Label>
+            <input
+              {...register("lastName", {
+                required: "Nachname ist erforderlich",
+              })}
+              className={fieldCls("lastName")}
+              autoComplete="family-name"
+            />
+            <ErrorText message={errors.lastName?.message} />
+          </div>
+        </div>
+
         {isFirma && (
           <div className="flex flex-col gap-1">
             <Label className="text-sm font-bold">Firmenname</Label>
@@ -204,7 +204,6 @@ function ProfilePage() {
                   "Firmenname ist erforderlich",
               })}
               className={fieldCls("company")}
-              placeholder="Holzbau Müller AG"
               autoComplete="organization"
             />
             <ErrorText message={errors.company?.message} />
@@ -221,7 +220,6 @@ function ProfilePage() {
           <input
             {...register("street", { required: "Strasse ist erforderlich" })}
             className={fieldCls("street")}
-            placeholder="Seestrasse 12"
             autoComplete="street-address"
           />
           <ErrorText message={errors.street?.message} />
@@ -233,7 +231,6 @@ function ProfilePage() {
             <input
               {...register("zip", { required: "PLZ ist erforderlich" })}
               className={`${fieldCls("zip")} tabular-nums`}
-              placeholder="8820"
               maxLength={4}
               inputMode="numeric"
               autoComplete="postal-code"
@@ -245,7 +242,6 @@ function ProfilePage() {
             <input
               {...register("city", { required: "Ort ist erforderlich" })}
               className={fieldCls("city")}
-              placeholder="Wädenswil"
               autoComplete="address-level2"
             />
             <ErrorText message={errors.city?.message} />
@@ -278,7 +274,6 @@ function ProfilePage() {
             {...register("phone")}
             type="tel"
             className={INPUT}
-            placeholder="+41 79 123 45 67"
             autoComplete="tel"
           />
         </div>

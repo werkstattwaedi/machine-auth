@@ -125,7 +125,7 @@ describe("material.add submit error envelope (issue #182)", () => {
       user: { uid: "u1" },
       userDoc: {
         id: "u1",
-        displayName: "Test",
+        name: "Test User",
         firstName: "Test",
         lastName: "User",
         roles: [],

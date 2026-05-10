@@ -30,7 +30,12 @@ export function LookupProvider({ children }: { children: ReactNode }) {
   const maps: LookupMaps = {
     permissions: new Map(perms.map((d) => [d.id, d.name])),
     machines: new Map(machines.map((d) => [d.id, d.name])),
-    users: new Map(users.map((d) => [d.id, d.displayName || d.id])),
+    users: new Map(
+      users.map((d) => [
+        d.id,
+        `${d.firstName ?? ""} ${d.lastName ?? ""}`.trim() || d.id,
+      ])
+    ),
     terminals: new Map(terminals.map((d) => [d.id, d.name || d.id])),
   }
 

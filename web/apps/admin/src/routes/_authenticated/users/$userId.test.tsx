@@ -172,7 +172,6 @@ function setupDefaults() {
   const userResult = {
     data: {
       id: "u1",
-      displayName: "Test Admin",
       firstName: "Test",
       lastName: "Admin",
       email: "test@example.com",

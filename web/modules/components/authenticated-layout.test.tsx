@@ -98,7 +98,7 @@ describe("AuthenticatedLayout", () => {
 
     mockAuthReturn = {
       user: { uid: "admin1", email: "admin@test.com" },
-      userDoc: { displayName: "Admin User" },
+      userDoc: { name: "Admin User" },
       userDocLoading: false,
       loading: false,
       isAdmin: true,
@@ -123,7 +123,7 @@ describe("AuthenticatedLayout", () => {
   it("admin gate redirects authenticated non-admin users to /login", () => {
     mockAuthReturn = {
       user: { uid: "u1", email: "user@test.com" },
-      userDoc: { displayName: "Some User", roles: [] },
+      userDoc: { name: "Some User", roles: [] },
       userDocLoading: false,
       loading: false,
       isAdmin: false,
@@ -161,7 +161,7 @@ describe("AuthenticatedLayout", () => {
     mockAuthReturn = {
       user: { uid: "u1", email: "user@test.com" },
       // Profile missing firstName / lastName / termsAcceptedAt → incomplete.
-      userDoc: { displayName: "User" },
+      userDoc: { name: "User" },
       userDocLoading: false,
       loading: false,
       isAdmin: false,
@@ -218,7 +218,7 @@ describe("AuthenticatedLayout", () => {
   it("admin gate calls the wrapper around the rendered shell", () => {
     mockAuthReturn = {
       user: { uid: "admin1", email: "admin@test.com" },
-      userDoc: { displayName: "Admin" },
+      userDoc: { name: "Admin" },
       userDocLoading: false,
       loading: false,
       isAdmin: true,

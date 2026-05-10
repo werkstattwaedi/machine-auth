@@ -34,8 +34,8 @@ async function seedTestData() {
       console.log('No users found, creating test user...');
       userRef = await db.collection('users').add({
         email: 'test@example.com',
-        displayName: 'Test User',
-        name: 'Test User',
+        firstName: 'Test',
+        lastName: 'User',
         created: Timestamp.now(),
         roles: ['vereinsmitglied'],
         permissions: [],

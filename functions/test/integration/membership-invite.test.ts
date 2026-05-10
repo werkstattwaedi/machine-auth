@@ -27,7 +27,6 @@ interface OwnerSeed {
   email: string;
   firstName?: string;
   lastName?: string;
-  displayName?: string | null;
 }
 
 async function seedFamilyMembership(owner: OwnerSeed): Promise<{
@@ -42,7 +41,6 @@ async function seedFamilyMembership(owner: OwnerSeed): Promise<{
     email: owner.email,
     firstName: owner.firstName ?? "Maria",
     lastName: owner.lastName ?? "Müller",
-    displayName: owner.displayName ?? null,
     permissions: [],
     roles: [],
     termsAcceptedAt: Timestamp.now(),
@@ -246,13 +244,12 @@ describe("Family invite (Integration)", () => {
     );
   });
 
-  it("uses inviter's full name in the link/email even when displayName is unset", async () => {
+  it("uses inviter's full name in the link/email", async () => {
     const { membershipId } = await seedFamilyMembership({
       uid: "owner-6",
       email: "owner6@example.com",
       firstName: "Anna",
       lastName: "Beispiel",
-      displayName: null,
     });
 
     const { inviteId } = await handleInviteFamilyMember(

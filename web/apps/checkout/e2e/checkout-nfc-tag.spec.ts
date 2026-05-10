@@ -60,10 +60,10 @@ test.describe("NFC tag checkout", () => {
     await expect(page.getByText("Dein Besuch")).toBeVisible()
 
     // Submit
-    await page.getByRole("button", { name: "Senden & bezahlen" }).click()
+    await page.getByRole("button", { name: "Weiter zum Bezahlen" }).click()
 
-    // ── Payment result ──
-    await expect(page.getByRole("heading", { name: "QR-Rechnung scannen" })).toBeVisible({
+    // ── Payment result (Step 4) ──
+    await expect(page.getByText("Zu bezahlen")).toBeVisible({
       timeout: 10_000,
     })
 

@@ -51,10 +51,10 @@ function makeConfig(): PricingConfig {
   return {
     entryFees: { erwachsen: {}, kind: {}, firma: {} },
     workshops: { holz: { label: "Holz", order: 1 } } as PricingConfig["workshops"],
-    slaLayerPrice: { none: 0.01, member: 0.008, intern: 0.006 },
+    slaLayerPrice: { none: 0.01, member: 0.008 },
     labels: {
       units: { h: "Std.", m2: "m²", m: "m", stk: "Stk.", kg: "kg", chf: "CHF", l: "l" },
-      discounts: { none: "Normal", member: "Mitglied", intern: "Intern" },
+      discounts: { none: "Normal", member: "Mitglied" },
     },
   }
 }
@@ -90,7 +90,7 @@ function makeCatalogItems(): CatalogItem[] {
       name: "Schrauben M5",
       workshops: ["holz"],
       pricingModel: "count",
-      unitPrice: { none: 0.5, member: 0.4, intern: 0 },
+      unitPrice: { none: 0.5, member: 0.4 },
       active: true,
       userCanAdd: true,
     },
@@ -100,7 +100,7 @@ function makeCatalogItems(): CatalogItem[] {
       name: "MDF Platte 3mm",
       workshops: ["holz"],
       pricingModel: "area",
-      unitPrice: { none: 25, member: 20, intern: 0 },
+      unitPrice: { none: 25, member: 20 },
       active: true,
       userCanAdd: true,
     },
@@ -110,7 +110,7 @@ function makeCatalogItems(): CatalogItem[] {
       name: "Dachlatte 24x48",
       workshops: ["holz"],
       pricingModel: "length",
-      unitPrice: { none: 3, member: 2.5, intern: 0 },
+      unitPrice: { none: 3, member: 2.5 },
       active: true,
       userCanAdd: true,
     },
@@ -120,7 +120,7 @@ function makeCatalogItems(): CatalogItem[] {
       name: "SLA Druck",
       workshops: ["holz"],
       pricingModel: "sla",
-      unitPrice: { none: 250, member: 200, intern: 150 },
+      unitPrice: { none: 250, member: 200 },
       active: true,
       userCanAdd: true,
     },

@@ -6,11 +6,13 @@ import { defineConfig } from "@playwright/test"
 // E2E emulator ports — must match firebase.e2e.json. The Vite port is offset
 // from the checkout app (5188) so both apps can run side-by-side under the
 // same emulator session if a future runner ever parallelizes them.
+// `scripts/port-block.ts` exports EMULATOR_*_PORT when running under the
+// broker; default to the firebase.e2e.json values otherwise.
 export const E2E_PORTS = {
   vite: 5189,
-  auth: 9199,
-  firestore: 8180,
-  functions: 5101,
+  auth: Number(process.env.EMULATOR_AUTH_PORT ?? 9199),
+  firestore: Number(process.env.EMULATOR_FIRESTORE_PORT ?? 8180),
+  functions: Number(process.env.EMULATOR_FUNCTIONS_PORT ?? 5101),
 }
 
 // Admin is desktop-first — we deliberately skip the mobile Chromium project
@@ -35,6 +37,7 @@ export default defineConfig({
   projects: [{ name: "chromium", use: { browserName: "chromium" } }],
 
   globalSetup: "./e2e/global-setup.ts",
+  globalTeardown: "./e2e/global-teardown.ts",
 
   webServer: {
     command: `npx vite --port ${E2E_PORTS.vite}`,

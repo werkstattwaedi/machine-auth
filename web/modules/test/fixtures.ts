@@ -6,7 +6,7 @@
  *
  * Usage:
  *   const fixture = new TestFixture()
- *     .withUser({ id: "u1", displayName: "Max", roles: ["vereinsmitglied"] })
+ *     .withUser({ id: "u1", firstName: "Max", lastName: "Muster", roles: ["vereinsmitglied"] })
  *     .withPermission({ id: "laser", name: "Laser Cutter" })
  *     .withMachine({ id: "m1", name: "Laser", requiredPermission: ["laser"] })
  *     .withPricingConfig({ ... })
@@ -21,7 +21,6 @@ import { FakeAuth, createFakeUser, type FakeUser } from "./fake-auth"
 
 interface UserInput {
   id: string
-  displayName?: string | null
   firstName?: string
   lastName?: string
   email?: string
@@ -165,7 +164,6 @@ export class TestFixture {
       const firstName = u.firstName ?? ""
       const lastName = u.lastName ?? ""
       db.setDoc(db.doc("users", u.id), {
-        displayName: u.displayName ?? null,
         firstName,
         lastName,
         email: u.email ?? `${u.id}@test.com`,
@@ -252,10 +250,11 @@ export class TestFixture {
     if (options?.currentUser) {
       const userData = this.users.find((u) => u.id === options.currentUser)
       if (userData) {
+        const fullName = `${userData.firstName ?? ""} ${userData.lastName ?? ""}`.trim()
         currentFakeUser = createFakeUser({
           uid: userData.id,
           email: userData.email,
-          displayName: userData.displayName ?? undefined,
+          displayName: fullName || undefined,
           claims: userData.roles?.includes("admin") ? { admin: true } : {},
         })
         auth.setCurrentUser(currentFakeUser)
@@ -296,7 +295,7 @@ export class TestFixture {
         name: "Laser Stunde",
         workshops: ["holz"],
         pricingModel: "time",
-        unitPrice: { none: 20, member: 15, intern: 0 },
+        unitPrice: { none: 20, member: 15 },
       })
       .withCheckout({
         id: "co1",
@@ -323,13 +322,15 @@ export class TestFixture {
       .withPermission({ id: "cnc", name: "CNC Fräse" })
       .withUser({
         id: "admin1",
-        displayName: "Admin",
+        firstName: "Admin",
+        lastName: "User",
         roles: ["admin"],
         permissions: ["laser", "cnc"],
       })
       .withUser({
         id: "user1",
-        displayName: "Max Muster",
+        firstName: "Max",
+        lastName: "Muster",
         roles: ["vereinsmitglied"],
         permissions: ["laser"],
       })

@@ -62,6 +62,7 @@ function AuthStateDisplay() {
       <span data-testid="user">{user ? user.uid : "null"}</span>
       <span data-testid="isAdmin">{String(isAdmin)}</span>
       <span data-testid="userDoc">{userDoc ? userDoc.id : "null"}</span>
+      <span data-testid="userDocName">{userDoc ? userDoc.name : ""}</span>
       <span data-testid="pendingGoogleLink">{String(pendingGoogleLink)}</span>
     </div>
   )
@@ -126,7 +127,6 @@ describe("AuthProvider", () => {
 
     // Pre-seed the user doc with admin role
     fakeDb.setDoc(fakeDb.doc("users", "admin1"), {
-      displayName: null,
       firstName: "Admin",
       lastName: "User",
       email: "admin@test.com",
@@ -183,7 +183,6 @@ describe("AuthProvider", () => {
     // Now simulate the Firestore doc arriving
     await act(() => {
       fakeDb.setDoc(fakeDb.doc("users", "admin1"), {
-        displayName: null,
         firstName: "Admin",
         lastName: "User",
         email: "admin@test.com",
@@ -198,6 +197,36 @@ describe("AuthProvider", () => {
     // Now isAdmin should be true
     expect(screen.getByTestId("isAdmin").textContent).toBe("true")
     expect(screen.getByTestId("userDocLoading").textContent).toBe("false")
+  })
+
+  // Regression for issue #207: legacy `displayName` field on the Firestore
+  // user doc must NOT take priority over `firstName lastName`. Old data may
+  // still carry it, but the UI must always show the full real name.
+  it("ignores legacy displayName and renders firstName+lastName as name", async () => {
+    const auth = new FakeAuth()
+    fakeDb.setDoc(fakeDb.doc("users", "user1"), {
+      displayName: "MikeS", // legacy nickname value — should be ignored
+      firstName: "Michael",
+      lastName: "Schneider",
+      email: "michael@example.com",
+      roles: [],
+      permissions: [],
+      termsAcceptedAt: null,
+      userType: "erwachsen",
+      billingAddress: null,
+    })
+
+    renderWithAuth(auth)
+
+    const u = createFakeUser({ uid: "user1", email: "michael@example.com" })
+    await act(() => {
+      auth.setCurrentUser(u)
+    })
+
+    expect(screen.getByTestId("userDocName").textContent).toBe(
+      "Michael Schneider",
+    )
+    expect(screen.getByTestId("userDocName").textContent).not.toBe("MikeS")
   })
 
   it("reads pendingGoogleLink from localStorage", () => {

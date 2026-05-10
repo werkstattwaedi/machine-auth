@@ -14,7 +14,6 @@ export interface BillingAddress {
 
 export interface UserEntity {
   created: Timestamp;
-  displayName?: string | null; // Optional nickname; derived from firstName+lastName if absent
   firstName: string;
   lastName: string;
   email?: string | null; // null for child accounts (no Firebase Auth credentials)
@@ -94,7 +93,7 @@ export interface UsageMachineEntity {
 // --- Catalog ---
 
 export type PricingModel = "time" | "area" | "length" | "count" | "weight" | "direct" | "sla";
-export type DiscountLevel = "none" | "member" | "intern";
+export type DiscountLevel = "none" | "member";
 
 // Discriminator for special-purpose catalog items. Absent for regular items.
 // The post-checkout membership-payment trigger uses this to identify which
