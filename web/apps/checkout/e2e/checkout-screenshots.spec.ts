@@ -236,9 +236,11 @@ test.describe("Checkout step screenshots", () => {
   test("summary — tip with round-up", async ({ page }) => {
     await goToSummaryWithItems(page)
 
-    // Enter a manual tip in the Spende card
+    // Enter a fractional manual tip so the round-up row is still
+    // exercised even when the seeded subtotal lands on a whole franc
+    // (#204: whole-franc bases now hide round-up suggestions).
     const tipInput = page.getByRole("textbox", { name: "Trinkgeld/Spende" })
-    await tipInput.fill("1")
+    await tipInput.fill("0.50")
 
     // The round-up row appears once there's a positive base. The dropdown
     // owns the friendly target labels ("nächsten Franken" / "X Franken").
