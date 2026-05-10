@@ -17,6 +17,7 @@
     "test:web:e2e": "scripts/emulator-exec.sh --config firebase.e2e.json --only firestore,auth,functions 'cd web && npm run test:e2e'",
     "test:all": "npm run test:web && cd functions && npm test",
     "test:precommit": "cd web && npm run build && npm test && cd .. && npm run test:web:integration && cd functions && npm test",
+    "snapshots:normalize": "node scripts/normalize-snapshots.mjs",
     "deploy:gateway": "npx tsx scripts/deploy-gateway.ts",
     "prepare": "husky"
   },
@@ -26,6 +27,7 @@
     "dotenv": "^17.0.0",
     "firebase-admin": "^13.6.1",
     "husky": "^9.1.7",
+    "oxipng": "^1.0.1",
     "tsx": "^4.19.0"
   }
 }
