@@ -1,27 +1,36 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
+/**
+ * Step 4 (Bezahlen) — payment-method picker as a G4 vertical-tab layout.
+ *
+ * The user picks one of three methods (rechnung / monthly [members only] /
+ * twint — UI labels are German). The click writes the
+ * customer-stated acknowledgement to the checkout doc and unmounts.
+ *
+ * No back button — once the checkout is closed the user cannot rewind.
+ */
+
 import { useEffect, useState } from "react"
 import { formatCHF } from "@modules/lib/format"
 import { useDocument } from "@modules/lib/firestore"
 import { useDb, useFunctions } from "@modules/lib/firebase-context"
 import { checkoutRef } from "@modules/lib/firestore-helpers"
+import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { httpsCallable } from "firebase/functions"
-import {
-  Copy,
-  Download,
-  Loader2,
-  Smartphone,
-  TriangleAlert,
-} from "lucide-react"
+import { serverTimestamp } from "firebase/firestore"
+import { Download, FileText, Loader2 } from "lucide-react"
 import { QRCodeSVG } from "qrcode.react"
-import { toast } from "sonner"
+import { cn } from "@modules/lib/utils"
 import type { PaymentMethod } from "./use-checkout-state"
 
 export interface PaymentData {
   /** Doc id of the underlying bill — drives the PDF download action. */
   billId: string
+  /** Doc id of the checkout — used to record the customer's payment-method
+   *  acknowledgement once they pick a method and click the commit button. */
+  checkoutId: string | null
   qrBillPayload: string
   paylinkUrl: string
   creditor: {
@@ -47,28 +56,37 @@ export const SWISS_CROSS_SVG = `data:image/svg+xml,${encodeURIComponent(
 )}`
 
 interface PaymentResultProps {
-  /** Null for the anonymous flow, where the client never sees the doc id. */
+  /** Closed checkout doc id. Always set on the new flow (the callable
+   *  threads it back through PaymentData), but typed as nullable so the
+   *  loading-fallback path stays renderable while we wait for it. */
   checkoutId: string | null
   totalPrice: number
-  resetLabel?: string
+  /** Fired after the ack write completes. Wizard owns the navigation. */
   onReset: () => void
   /**
-   * Pre-fetched payment data from `closeCheckoutAndGetPayment`. When provided,
-   * the QR renders immediately without waiting for the Firestore-trigger /
-   * `getPaymentQrData` round-trip used by the legacy fallback path.
+   * Pre-fetched payment data from `closeCheckoutAndGetPayment`. When
+   * provided, the QR renders immediately without waiting for the
+   * Firestore-trigger / `getPaymentQrData` round-trip used by the legacy
+   * fallback path.
    */
   initialPaymentData?: PaymentData | null
-  /** Method picked on Step 3; selects which single flow Step 4 renders. */
-  selectedMethod: PaymentMethod
+  /** Gates the monthly-bill (Sammelrechnung) tab — only Vereinsmitglieder
+   *  see it; the Firestore rule also requires activeMembership. */
+  isMember: boolean
+}
+
+const COMMIT_LABELS: Record<PaymentMethod, string> = {
+  rechnung: "Ich zahle die QR-Rechnung & Werkstatt verlassen",
+  monthly: "Auf Sammelrechnung setzen & Werkstatt verlassen",
+  twint: "Ich habe via TWINT bezahlt & Werkstatt verlassen",
 }
 
 export function PaymentResult({
   checkoutId,
   totalPrice,
-  resetLabel,
   onReset,
   initialPaymentData,
-  selectedMethod,
+  isMember,
 }: PaymentResultProps) {
   const db = useDb()
   const functions = useFunctions()
@@ -76,11 +94,17 @@ export function PaymentResult({
     context: "checkout.paymentQrFallback",
     errorMessage: "QR-Code konnte nicht geladen werden",
   })
+  const ackMutation = useFirestoreMutation()
+  const downloadMutation = useAsyncMutation<{ url: string }>({
+    context: "checkout.downloadInvoice",
+    errorMessage: "PDF konnte nicht geladen werden",
+  })
 
   const [paymentData, setPaymentData] = useState<PaymentData | null>(
     initialPaymentData ?? null,
   )
   const [qrError, setQrError] = useState(false)
+  const [tab, setTab] = useState<PaymentMethod>("rechnung")
 
   // Legacy fallback: subscribe to billRef on the checkout doc and fetch
   // payment data once the Firestore trigger has created the bill. Skipped
@@ -129,55 +153,6 @@ export function PaymentResult({
     )
   }
 
-  if (selectedMethod === "twint") {
-    return (
-      <TwintFlow
-        paymentData={paymentData}
-        totalPrice={totalPrice}
-        resetLabel={resetLabel}
-        onReset={onReset}
-      />
-    )
-  }
-
-  return (
-    <RechnungFlow
-      paymentData={paymentData}
-      totalPrice={totalPrice}
-      functions={functions}
-      resetLabel={resetLabel}
-      onReset={onReset}
-    />
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Rechnung flow — QR-bill scanning + PDF download / IBAN copy
-// ---------------------------------------------------------------------------
-
-interface FlowProps {
-  paymentData: PaymentData
-  totalPrice: number
-  resetLabel?: string
-  onReset: () => void
-}
-
-interface RechnungFlowProps extends FlowProps {
-  functions: import("firebase/functions").Functions
-}
-
-function RechnungFlow({
-  paymentData,
-  totalPrice,
-  functions,
-  resetLabel,
-  onReset,
-}: RechnungFlowProps) {
-  const downloadMutation = useAsyncMutation<{ url: string }>({
-    context: "checkout.downloadInvoice",
-    errorMessage: "PDF konnte nicht geladen werden",
-  })
-
   const handleDownloadPdf = async () => {
     try {
       const callable = httpsCallable<{ billId: string }, { url: string }>(
@@ -194,92 +169,230 @@ function RechnungFlow({
     }
   }
 
-  const handleCopyIban = async () => {
-    try {
-      // Copy the unspaced form so it pastes cleanly into banking apps.
-      const compact = paymentData.creditor.iban.replace(/\s/g, "")
-      await navigator.clipboard.writeText(compact)
-      toast.success("IBAN kopiert")
-    } catch {
-      toast.error("Kopieren fehlgeschlagen")
+  const handleCommit = async () => {
+    // paymentData is non-null here (the !paymentData early return above
+    // guards this block). checkoutId is always populated by
+    // closeCheckoutAndGetPayment; the legacy getPaymentQrData fallback
+    // pulls it from bill.checkouts[0]. If we somehow reach the commit
+    // without one, skip the ack write rather than block the user.
+    if (paymentData.checkoutId) {
+      try {
+        await ackMutation.update(checkoutRef(db, paymentData.checkoutId), {
+          paymentMethodConfirmed: tab,
+          paymentMethodConfirmedAt: serverTimestamp(),
+        })
+      } catch {
+        // Hook already toasted + telemetered. Keep the user on the page so
+        // they can retry rather than dropping them out without a record.
+        return
+      }
     }
+    onReset()
   }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold font-heading mb-2">
-          QR-Rechnung scannen
-        </h2>
-        <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl">
-          Wir haben dir die Rechnung über{" "}
-          <strong className="text-foreground">{formatCHF(totalPrice)}</strong>
-          {paymentData.payerEmail && (
-            <>
-              {" "}
-              an{" "}
-              <strong className="text-foreground">
-                {paymentData.payerEmail}
-              </strong>
-            </>
-          )}{" "}
-          geschickt. Bezahle sie mit dem QR-Code auf der Rechnung — oder gleich
-          jetzt, indem du den Code unten mit deiner E-Banking App scannst.
-        </p>
+      {/* Hero — "Zu bezahlen" + amount + lightweight PDF download.
+          Details of the bill were shown in step 3. */}
+      <div className="rounded-md border border-border bg-background px-6 py-7 flex items-end justify-between gap-4">
+        <div>
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+            Zu bezahlen
+          </div>
+          <div className="mt-2 font-heading font-bold text-5xl tabular-nums leading-none text-foreground">
+            <span className="text-base font-semibold uppercase text-muted-foreground mr-3 align-baseline">
+              CHF
+            </span>
+            {totalPrice.toFixed(2)}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={handleDownloadPdf}
+          disabled={downloadMutation.loading}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-md transition-colors disabled:opacity-50"
+        >
+          {downloadMutation.loading ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Download className="h-3.5 w-3.5" />
+          )}
+          Rechnung als PDF
+        </button>
       </div>
 
-      <QrBillCard data={paymentData} />
+      {/* Vertical tabs — teal left rail on the active option */}
+      <div role="tablist" aria-label="Zahlungsmethode" className="flex flex-col gap-1.5">
+        <MethodTab
+          id="rechnung"
+          active={tab}
+          onSelect={setTab}
+          icon={<FileText className="h-5 w-5" strokeWidth={1.6} />}
+          label="QR-Rechnung"
+          sub="Per E-Mail · 30 Tage"
+        />
+        {isMember && (
+          <MethodTab
+            id="monthly"
+            active={tab}
+            onSelect={setTab}
+            icon={<CalendarMark />}
+            label="Sammelrechnung"
+            sub="Mitglieder · monatlich"
+          />
+        )}
+        <MethodTab
+          id="twint"
+          active={tab}
+          onSelect={setTab}
+          icon={
+            <img
+              src="https://assets.raisenow.io/twint-logo-dark.svg"
+              alt=""
+              className="h-5 w-auto"
+            />
+          }
+          label="TWINT"
+          sub="Sofort vom Handy"
+        />
+      </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
-        <p className="flex items-center gap-2 text-sm text-muted-foreground max-w-md">
-          <Smartphone className="h-4 w-4 shrink-0" />
-          Mit deiner Banking-App scannen — oder später per E-Mail bezahlen.
-        </p>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={handleDownloadPdf}
-            disabled={downloadMutation.loading}
-            className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-cog-teal border border-cog-teal rounded-[3px] bg-white hover:bg-cog-teal-light transition-colors disabled:opacity-50"
-          >
-            {downloadMutation.loading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Download className="h-4 w-4" />
-            )}
-            PDF herunterladen
-          </button>
-          <button
-            type="button"
-            onClick={handleCopyIban}
-            className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-cog-teal border border-cog-teal rounded-[3px] bg-white hover:bg-cog-teal-light transition-colors"
-          >
-            <Copy className="h-4 w-4" />
-            IBAN kopieren
-          </button>
+      {/* Method-specific instruction panel.
+          The outer container animates its height between methods (relies on
+          the global `interpolate-size: allow-keywords` set in
+          modules/index.css and `overflow-hidden` so content clips smoothly
+          during the resize). The inner `key={tab}` block re-mounts on tab
+          change so tw-animate-css fades the new content in. */}
+      <div className="rounded-md border border-border bg-white p-5 sm:p-7 overflow-hidden transition-[height] duration-200 ease-out">
+        <div key={tab} className="animate-in fade-in duration-150">
+          {tab === "rechnung" && (
+            <RechnungPanel paymentData={paymentData} totalPrice={totalPrice} />
+          )}
+          {tab === "monthly" && <MonthlyPanel totalPrice={totalPrice} />}
+          {tab === "twint" && (
+            <TwintPanel paymentData={paymentData} totalPrice={totalPrice} />
+          )}
         </div>
       </div>
 
+      {/* Single commit button — no back. Acknowledgement is recorded on click. */}
       <div className="flex justify-end pt-2">
         <button
           type="button"
-          onClick={onReset}
-          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-bold text-white bg-cog-teal rounded-[3px] hover:bg-cog-teal-dark transition-colors"
+          onClick={handleCommit}
+          disabled={ackMutation.loading}
+          className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-cog-teal rounded-[3px] hover:bg-cog-teal-dark transition-colors disabled:opacity-50"
         >
-          {resetLabel ?? "Fertig"}
+          {ackMutation.loading && <Loader2 className="h-4 w-4 animate-spin" />}
+          {COMMIT_LABELS[tab]}
         </button>
       </div>
     </div>
   )
 }
 
-function QrBillCard({ data }: { data: PaymentData }) {
+// ---------------------------------------------------------------------------
+// Vertical tab card
+// ---------------------------------------------------------------------------
+
+interface MethodTabProps {
+  id: PaymentMethod
+  active: PaymentMethod
+  onSelect: (m: PaymentMethod) => void
+  icon: React.ReactNode
+  label: string
+  sub: string
+}
+
+function MethodTab({
+  id,
+  active,
+  onSelect,
+  icon,
+  label,
+  sub,
+}: MethodTabProps) {
+  const on = id === active
   return (
-    <div className="rounded-md border border-border bg-white p-5 sm:p-6">
+    <button
+      type="button"
+      role="tab"
+      aria-selected={on}
+      onClick={() => onSelect(id)}
+      className={cn(
+        "w-full flex items-center gap-4 text-left rounded-lg border border-border bg-white px-4 sm:px-5 py-3.5 transition-colors",
+        // Active rail painted as inset box-shadow so it doesn't shift content
+        // (border-l-4 swaps would push the row 3px right when activated).
+        on
+          ? "bg-cog-teal-light border-cog-teal/60 shadow-[inset_4px_0_0_0_var(--color-cog-teal)]"
+          : "hover:bg-muted/40",
+      )}
+    >
+      <span
+        className={cn(
+          "shrink-0 flex h-9 w-9 items-center justify-center rounded-md transition-all",
+          // TWINT styleguide mandates its logo on a dark surface — keep it
+          // as a brand chip. Our own methods (rechnung, monthly) sit on a
+          // neutral gray so the row doesn't read as three ad slots.
+          id === "twint"
+            ? "bg-[#262626] text-white"
+            : "bg-muted text-foreground/80",
+          on && "ring-2 ring-cog-teal shadow-sm scale-110",
+        )}
+      >
+        {icon}
+      </span>
+      <span className="min-w-0 flex flex-col gap-0.5">
+        <span
+          className={cn(
+            "font-heading font-semibold text-[15px] leading-tight",
+            on ? "text-cog-teal-dark" : "text-foreground",
+          )}
+        >
+          {label}
+        </span>
+        <span className="text-[12px] text-muted-foreground leading-tight">
+          {sub}
+        </span>
+      </span>
+    </button>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Method panels
+// ---------------------------------------------------------------------------
+
+function RechnungPanel({
+  paymentData,
+  totalPrice,
+}: {
+  paymentData: PaymentData
+  totalPrice: number
+}) {
+  return (
+    <div className="space-y-5">
+      <p className="text-sm text-foreground leading-relaxed max-w-2xl">
+        Bezahle via die QR-Rechnung über{" "}
+        <strong className="text-foreground">{formatCHF(totalPrice)}</strong>,
+        welche wir dir
+        {paymentData.payerEmail && (
+          <>
+            {" "}
+            an{" "}
+            <strong className="text-foreground">
+              {paymentData.payerEmail}
+            </strong>
+          </>
+        )}{" "}
+        geschickt haben. Oder scanne den QR-Code gleich jetzt mit deiner
+        E-Banking App.
+      </p>
+
       <div className="flex flex-col sm:flex-row gap-6">
-        <div className="shrink-0">
+        <div className="shrink-0 rounded-md border border-border p-3 bg-white self-start">
           <QRCodeSVG
-            value={data.qrBillPayload}
+            value={paymentData.qrBillPayload}
             size={180}
             level="M"
             imageSettings={{
@@ -291,43 +404,27 @@ function QrBillCard({ data }: { data: PaymentData }) {
           />
         </div>
 
-        <div className="flex flex-col gap-4 text-xs sm:text-sm min-w-0">
+        <div className="flex flex-col gap-4 text-sm min-w-0">
           <div>
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
               Konto / Zahlbar an
             </p>
-            <p className="font-mono">{data.creditor.iban}</p>
-            <p>{data.creditor.name}</p>
-            {data.creditor.street && (
-              <p className="text-muted-foreground">{data.creditor.street}</p>
+            <p className="font-mono">{paymentData.creditor.iban}</p>
+            <p>{paymentData.creditor.name}</p>
+            {paymentData.creditor.street && (
+              <p className="text-muted-foreground">
+                {paymentData.creditor.street}
+              </p>
             )}
-            <p className="text-muted-foreground">{data.creditor.location}</p>
+            <p className="text-muted-foreground">
+              {paymentData.creditor.location}
+            </p>
           </div>
           <div>
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
               Referenz
             </p>
-            <p className="font-mono">{data.reference}</p>
-          </div>
-          {data.payerName && (
-            <div>
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-                Zahlbar durch
-              </p>
-              <p>{data.payerName}</p>
-              {data.payerEmail && (
-                <p className="text-muted-foreground">{data.payerEmail}</p>
-              )}
-            </div>
-          )}
-          <div>
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-              Betrag
-            </p>
-            <p className="text-muted-foreground">{data.currency}</p>
-            <p className="font-heading font-bold text-2xl tabular-nums">
-              {data.amount}
-            </p>
+            <p className="font-mono">{paymentData.reference}</p>
           </div>
         </div>
       </div>
@@ -335,65 +432,72 @@ function QrBillCard({ data }: { data: PaymentData }) {
   )
 }
 
-// ---------------------------------------------------------------------------
-// TWINT flow — single big button + transaction-fee notice
-// ---------------------------------------------------------------------------
+function MonthlyPanel({ totalPrice }: { totalPrice: number }) {
+  return (
+    <p className="text-sm text-foreground leading-relaxed max-w-2xl">
+      Wir setzen <strong>{formatCHF(totalPrice)}</strong> auf deine
+      Sammelrechnung. Du erhältst am{" "}
+      <strong>1. des nächsten Monats</strong> eine QR-Rechnung mit allen
+      offenen Posten.
+    </p>
+  )
+}
 
-function TwintFlow({
+function TwintPanel({
   paymentData,
   totalPrice,
-  resetLabel,
-  onReset,
-}: FlowProps) {
+}: {
+  paymentData: PaymentData
+  totalPrice: number
+}) {
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold font-heading mb-2">
+    <div className="space-y-5">
+      <p className="text-sm text-foreground leading-relaxed max-w-2xl">
+        Bezahle <strong>{formatCHF(totalPrice)}</strong> sofort vom Handy —
+        TWINT öffnet sich automatisch, bestätige die Zahlung in der App.
+      </p>
+
+      <a
+        href={paymentData.paylinkUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center justify-center w-[270px] h-[56px] px-[35px] bg-[#262626] rounded-[6px] hover:bg-[#333333] active:bg-[#1a1a1a] transition-colors no-underline"
+      >
+        <img
+          src="https://assets.raisenow.io/twint-logo-dark.svg"
+          alt=""
+          className="h-[36px] w-[32px] mr-[20px] shrink-0"
+        />
+        <span className="text-[17px] font-medium text-white whitespace-nowrap">
           Mit TWINT bezahlen
-        </h2>
-        <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl">
-          Total <strong className="text-foreground">{formatCHF(totalPrice)}</strong>.
-          Tippe auf den Button und bestätige die Zahlung in deiner TWINT-App.
-        </p>
-      </div>
-
-      <div className="rounded-md border border-border bg-secondary p-8 sm:p-10 flex flex-col items-center gap-3">
-        <a
-          href={paymentData.paylinkUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center justify-center w-[270px] h-[56px] px-[35px] bg-[#262626] rounded-[6px] hover:bg-[#333333] active:bg-[#1a1a1a] transition-colors no-underline"
-        >
-          <img
-            src="https://assets.raisenow.io/twint-logo-dark.svg"
-            alt=""
-            className="h-[36px] w-[32px] mr-[20px] shrink-0"
-          />
-          <span className="text-[17px] font-medium text-white whitespace-nowrap">
-            Mit TWINT bezahlen
-          </span>
-        </a>
-        <p className="text-xs text-muted-foreground tabular-nums">
-          {formatCHF(totalPrice)} · Bestätigung in der App
-        </p>
-      </div>
-
-      <div className="flex items-start gap-2 rounded-md bg-cog-teal-light text-cog-teal-dark px-4 py-3 text-sm">
-        <TriangleAlert className="h-4 w-4 shrink-0 mt-0.5" />
-        <span>
-          Bei TWINT fallen Transaktionsgebühren an, die der Verein trägt.
         </span>
-      </div>
-
-      <div className="flex justify-end pt-2">
-        <button
-          type="button"
-          onClick={onReset}
-          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-bold text-white bg-cog-teal rounded-[3px] hover:bg-cog-teal-dark transition-colors"
-        >
-          {resetLabel ?? "Fertig"}
-        </button>
-      </div>
+      </a>
     </div>
   )
 }
+
+// ---------------------------------------------------------------------------
+// Method marks (icons)
+// ---------------------------------------------------------------------------
+
+function CalendarMark() {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+      <path d="M9 16l2 2 4-4" />
+    </svg>
+  )
+}
+

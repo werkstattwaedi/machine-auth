@@ -23,10 +23,16 @@ describe("checkoutReducer", () => {
       expect(initialState.persons).toHaveLength(1)
       expect(initialState.usageType).toBe("regular")
       expect(initialState.tip).toBe(0)
-      expect(initialState.paymentMethod).toBe("ebanking")
       expect(initialState.submitted).toBe(false)
       expect(initialState.checkoutId).toBeNull()
       expect(initialState.totalPrice).toBe(0)
+    })
+
+    it("does not carry the legacy paymentMethod field", () => {
+      // The picker moved from step 3 to step 4; PaymentResult owns its
+      // selection internally and writes the chosen method directly to the
+      // checkout doc, so wizard state no longer holds it.
+      expect("paymentMethod" in initialState).toBe(false)
     })
 
     it("does not carry the legacy localItems field (issue #151)", () => {
@@ -140,14 +146,6 @@ describe("checkoutReducer", () => {
 
     it("allows zero tip", () => {
       expect(reduce({ type: "SET_TIP", amount: 0 }).tip).toBe(0)
-    })
-  })
-
-  describe("SET_PAYMENT_METHOD", () => {
-    it("changes the payment method", () => {
-      expect(
-        reduce({ type: "SET_PAYMENT_METHOD", method: "twint" }).paymentMethod,
-      ).toBe("twint")
     })
   })
 

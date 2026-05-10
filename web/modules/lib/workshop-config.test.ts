@@ -40,7 +40,7 @@ describe("getUnitLabel", () => {
   const config: PricingConfig = {
     labels: {
       units: { h: "Stunden", m2: "Quadratmeter", m: "Meter", stk: "Stück", kg: "Kilogramm", chf: "Franken", l: "Liter" },
-      discounts: { none: "", member: "", intern: "" },
+      discounts: { none: "", member: "" },
     },
   } as unknown as PricingConfig
 
@@ -91,7 +91,7 @@ describe("validatePricingConfig (issue #149)", () => {
     },
     workshops: { holz: { label: "Holz", order: 1 } },
     labels: { units: { h: "Std." }, discounts: { none: "" } },
-    slaLayerPrice: { none: 0.001, member: 0.001, intern: 0 },
+    slaLayerPrice: { none: 0.001, member: 0.001 },
   }
 
   it("returns null for a valid config", () => {
@@ -153,8 +153,8 @@ describe("validatePricingConfig (issue #149)", () => {
   })
 
   it("rejects slaLayerPrice with a missing discount level", () => {
-    const broken = { ...(valid as object), slaLayerPrice: { none: 0.001, member: 0.001 } }
-    expect(validatePricingConfig(broken)).toMatch(/intern/)
+    const broken = { ...(valid as object), slaLayerPrice: { none: 0.001 } }
+    expect(validatePricingConfig(broken)).toMatch(/member/)
   })
 })
 

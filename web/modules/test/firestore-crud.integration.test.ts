@@ -217,7 +217,7 @@ describe("Catalog and pricing config", () => {
       },
       labels: {
         units: { h: "Std.", m2: "m²" },
-        discounts: { none: "Normal", member: "Mitglied", intern: "Intern" },
+        discounts: { none: "Normal", member: "Mitglied" },
       },
     })
 

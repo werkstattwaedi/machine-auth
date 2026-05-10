@@ -16,7 +16,7 @@ export type PricingModel =
   | "direct"
   | "sla";
 
-export type DiscountLevel = "none" | "member" | "intern";
+export type DiscountLevel = "none" | "member";
 
 export interface PriceListCatalogItem {
   code: string;

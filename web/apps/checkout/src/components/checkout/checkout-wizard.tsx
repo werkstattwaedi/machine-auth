@@ -15,14 +15,13 @@ import {
 import { useDb, useFunctions } from "@modules/lib/firebase-context"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { usePricingConfig } from "@modules/lib/workshop-config"
-import { calculateFee } from "@modules/lib/pricing"
 import { PageLoading } from "@modules/components/page-loading"
 import { EmptyState } from "@modules/components/empty-state"
 import { AlertTriangle } from "lucide-react"
 import { CheckoutProgress } from "./checkout-progress"
 import { StepCheckin } from "./step-checkin"
 import { StepWorkshops } from "./step-workshops"
-import { StepCheckout } from "./step-checkout"
+import { StepCheckout, computeCheckoutCosts } from "./step-checkout"
 import { PaymentResult, type PaymentData } from "./payment-result"
 import {
   useCheckoutState,
@@ -292,15 +291,21 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
     // check above. calculateFee returns null for unknown userType+usageType
     // combinations; treat those as zero to avoid blocking the submit on a
     // misconfigured row (the server will throw and surface the error).
-    const entryFees = state.persons.reduce(
-      (sum, p) => sum + (calculateFee(p.userType, state.usageType, pricingConfig) ?? 0),
-      0,
-    )
-
-    const nfcItems = items.filter((i) => i.origin === "nfc")
-    const materialItems = items.filter((i) => i.origin !== "nfc")
-    const machineCost = nfcItems.reduce((sum, i) => sum + i.totalPrice, 0)
-    const materialCost = materialItems.reduce((sum, i) => sum + i.totalPrice, 0)
+    // Internal usage is never billed — entry fees, machine, and material
+    // costs all collapse to 0. Mirror the server-side defense in
+    // `recomputeSummary` so the displayed receipt matches what gets
+    // billed; both this wizard and StepCheckout flow through
+    // `computeCheckoutCosts`.
+    const {
+      personFees: entryFees,
+      machineCost,
+      materialCost,
+    } = computeCheckoutCosts({
+      persons: state.persons,
+      usageType: state.usageType,
+      items,
+      config: pricingConfig,
+    })
     const total = entryFees + machineCost + materialCost + state.tip
 
     const persons = state.persons.map((p) => ({
@@ -362,7 +367,6 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
     // inline alert and re-throws — the dispatch below is short-circuited
     // and the wizard stays at step 2 with the submit button re-enabled.
     let data: PaymentData
-    let resultCheckoutId: string | null
 
     try {
       if (checkoutId) {
@@ -375,12 +379,13 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
           })
           return res.data
         })
-        resultCheckoutId = checkoutId
       } else {
         // Degenerate path: user reached step 2 without ever adding an item
         // (so step-workshops never lazy-created a Firestore checkout doc).
         // Common case is "tip only" / "entry fee only". The callable
-        // handles this by creating the doc server-side.
+        // creates the doc server-side and threads its id back through
+        // PaymentData so the Bezahlen step can record the customer's
+        // payment-method acknowledgement on it.
         const newCheckout = {
           // Preserve the original semantic: an account/tag user with no
           // pre-existing open checkout still gets their userId stamped on
@@ -409,9 +414,6 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
           })
           return res.data
         })
-        // The callable creates the doc server-side; the client never needs
-        // the new id (PaymentResult uses initialPaymentData directly).
-        resultCheckoutId = null
       }
     } catch {
       // Hook already toasted + telemetered; do NOT advance to the
@@ -422,7 +424,7 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
     setPaymentData(data)
     dispatch({
       type: "SET_SUBMITTED",
-      checkoutId: resultCheckoutId,
+      checkoutId: data.checkoutId,
       totalPrice: total,
     })
   }
@@ -477,8 +479,7 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
           checkoutId={state.checkoutId}
           totalPrice={state.totalPrice}
           initialPaymentData={paymentData}
-          selectedMethod={state.paymentMethod}
-          resetLabel={isAccountLoggedIn ? "Zurück zum Besuch" : "Fertig"}
+          isMember={!!identifiedUserDoc?.activeMembership}
           onReset={() => {
             dispatch({ type: "RESET" })
             setPaymentData(null)

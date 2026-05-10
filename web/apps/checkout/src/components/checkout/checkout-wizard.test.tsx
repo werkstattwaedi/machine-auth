@@ -98,7 +98,7 @@ vi.mock("@modules/lib/workshop-config", () => ({
     data: {
       entryFees: { erwachsen: { regular: 5 } },
       workshops: { holz: { label: "Holz", order: 1 } },
-      slaLayerPrice: { none: 0.01, member: 0.008, intern: 0.006 },
+      slaLayerPrice: { none: 0.01, member: 0.008 },
       labels: {
         units: { h: "Std." },
         discounts: { none: "Normal", member: "Mitglied" },
@@ -144,9 +144,9 @@ describe("CheckoutWizard submit error handling (B5)", () => {
 
     render(<CheckoutWizard initialStep={2} />)
 
-    // The "submit" button on step 2 ("Senden & bezahlen").
+    // The "submit" button on step 2 ("Weiter zum Bezahlen").
     const submitBtn = await screen.findByRole("button", {
-      name: /Senden & bezahlen/,
+      name: /Weiter zum Bezahlen/,
     })
 
     // Clicking submits — wrap in act so the async branch settles.
@@ -170,7 +170,7 @@ describe("CheckoutWizard submit error handling (B5)", () => {
     expect(
       screen.queryByRole("button", { name: /Zurück zum Besuch/ }),
     ).toBeNull()
-    expect(screen.getByRole("button", { name: /Senden & bezahlen/ })).toBeDefined()
+    expect(screen.getByRole("button", { name: /Weiter zum Bezahlen/ })).toBeDefined()
 
     // Inline alert renders the structured error message.
     const alert = screen.getByTestId("checkout-submit-error")
@@ -178,7 +178,7 @@ describe("CheckoutWizard submit error handling (B5)", () => {
 
     // Submit button is re-enabled for retry (not stuck in `submitting`).
     expect(
-      (screen.getByRole("button", { name: /Senden & bezahlen/ }) as HTMLButtonElement)
+      (screen.getByRole("button", { name: /Weiter zum Bezahlen/ }) as HTMLButtonElement)
         .disabled,
     ).toBe(false)
   })

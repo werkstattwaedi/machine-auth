@@ -95,6 +95,15 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.activeMembership;
     }
 
+    // True when the user pointed to by `userIdRef` has a non-null
+    // `activeMembership`. Used to gate the `paymentMethodConfirmed:
+    // "monthly"` ack write — only Vereinsmitglieder may roll an open
+    // balance onto their monthly bill.
+    function hasActiveMembership(userIdRef) {
+      return userIdRef != null &&
+        get(userIdRef).data.get('activeMembership', null) != null;
+    }
+
     // Users collection (doc ID = Firebase Auth UID)
     match /users/{userId} {
       // Read: admin, the user themselves, a kiosk session acting on their
@@ -203,12 +212,44 @@ service cloud.firestore {
       // CANNOT change status, summary, closedAt, or billRef — those
       // transitions go through closeCheckoutAndGetPayment so the server
       // can recompute prices and allocate a bill atomically.
+      //
+      // Closed-checkout extension: the principal (real, tag, or — for
+      // null-userId checkouts — the anonymous-auth caller) can write the
+      // customer-stated payment-method acknowledgement fields exactly once.
+      // Only the ack fields plus auto-stamped audit fields may change; the
+      // field must not already be set (write-once); and the value must be
+      // a known method. `monthly` additionally requires `activeMembership`
+      // on the principal's user doc, so anonymous flows can never opt into
+      // it.
+      //
+      // NOTE: anonymous-auth callers may ack any null-userId closed
+      // checkout (no per-session scoping). Combined with write-once and
+      // random 20-char doc IDs, the practical attack surface is negligible.
       allow update: if isAdmin() ||
         (isCheckoutPrincipalFor(resource.data.userId) &&
          resource.data.status == "open" &&
          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
            'status', 'summary', 'closedAt', 'billRef'
-         ]));
+         ])) ||
+        (resource.data.status == "closed" &&
+         !('paymentMethodConfirmed' in resource.data) &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+           'paymentMethodConfirmed', 'paymentMethodConfirmedAt',
+           'modifiedBy', 'modifiedAt'
+         ]) &&
+         (
+           // Real / tag-tap principal: rechnung + twint always; monthly
+           // only if their user doc has an active membership.
+           (isCheckoutPrincipalFor(resource.data.userId) && (
+             request.resource.data.paymentMethodConfirmed in ['rechnung', 'twint'] ||
+             (request.resource.data.paymentMethodConfirmed == 'monthly' &&
+              hasActiveMembership(resource.data.userId))
+           )) ||
+           // Anonymous flow on a null-userId checkout: no membership doc
+           // to consult, so monthly is intentionally denied.
+           (resource.data.userId == null && isAnonymousAuth() &&
+            request.resource.data.paymentMethodConfirmed in ['rechnung', 'twint'])
+         ));
       allow delete: if isAdmin();
 
       // Checkout items subcollection

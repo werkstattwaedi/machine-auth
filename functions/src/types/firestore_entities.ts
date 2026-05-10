@@ -93,7 +93,7 @@ export interface UsageMachineEntity {
 // --- Catalog ---
 
 export type PricingModel = "time" | "area" | "length" | "count" | "weight" | "direct" | "sla";
-export type DiscountLevel = "none" | "member" | "intern";
+export type DiscountLevel = "none" | "member";
 
 // Discriminator for special-purpose catalog items. Absent for regular items.
 // The post-checkout membership-payment trigger uses this to identify which
