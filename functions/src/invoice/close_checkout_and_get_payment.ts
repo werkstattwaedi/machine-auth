@@ -117,16 +117,26 @@ export function recomputeSummary(
   configFees: Record<string, Record<string, number>> | null,
   clientTip: number,
 ): CheckoutSummaryEntity {
-  const entryFees = persons.reduce(
-    (sum, p) => sum + entryFeeFor(p.userType, usageType, configFees),
-    0,
-  );
-  const machineCost = items
-    .filter((i) => i.origin === "nfc")
-    .reduce((sum, i) => sum + (i.totalPrice ?? 0), 0);
-  const materialCost = items
-    .filter((i) => i.origin !== "nfc")
-    .reduce((sum, i) => sum + (i.totalPrice ?? 0), 0);
+  // Internal usage is never billed: zero out entry fees, machine, and
+  // material costs regardless of what items / config say. Tip stays
+  // honoured so a contributor can still leave a tip on an internal visit.
+  const isIntern = usageType === "intern";
+  const entryFees = isIntern
+    ? 0
+    : persons.reduce(
+        (sum, p) => sum + entryFeeFor(p.userType, usageType, configFees),
+        0,
+      );
+  const machineCost = isIntern
+    ? 0
+    : items
+        .filter((i) => i.origin === "nfc")
+        .reduce((sum, i) => sum + (i.totalPrice ?? 0), 0);
+  const materialCost = isIntern
+    ? 0
+    : items
+        .filter((i) => i.origin !== "nfc")
+        .reduce((sum, i) => sum + (i.totalPrice ?? 0), 0);
   const tip = Math.max(0, clientTip ?? 0);
   const totalPrice =
     Math.round((entryFees + machineCost + materialCost + tip) * 100) / 100;

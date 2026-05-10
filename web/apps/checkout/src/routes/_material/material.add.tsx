@@ -200,7 +200,7 @@ function MaterialAddPage() {
   }
 
   // Determine discount level
-  const discountLevel: "none" | "member" | "intern" = userDoc.roles?.includes(
+  const discountLevel: "none" | "member" = userDoc.roles?.includes(
     "vereinsmitglied",
   )
     ? "member"

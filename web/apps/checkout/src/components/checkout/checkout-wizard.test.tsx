@@ -98,7 +98,7 @@ vi.mock("@modules/lib/workshop-config", () => ({
     data: {
       entryFees: { erwachsen: { regular: 5 } },
       workshops: { holz: { label: "Holz", order: 1 } },
-      slaLayerPrice: { none: 0.01, member: 0.008, intern: 0.006 },
+      slaLayerPrice: { none: 0.01, member: 0.008 },
       labels: {
         units: { h: "Std." },
         discounts: { none: "Normal", member: "Mitglied" },

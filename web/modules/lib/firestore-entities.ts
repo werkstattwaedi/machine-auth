@@ -132,7 +132,7 @@ export type PricingModel =
   | "direct"
   | "sla"
 
-export type DiscountLevel = "none" | "member" | "intern"
+export type DiscountLevel = "none" | "member"
 
 /**
  * Optional discriminator for special-purpose catalog items. Absent for

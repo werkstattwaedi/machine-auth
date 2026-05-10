@@ -40,7 +40,7 @@ const singleSku = {
   name: "Mitgliedschaft Einzel (Jahr)",
   workshops: ["diverses"],
   pricingModel: "direct",
-  unitPrice: { none: 50, member: 50, intern: 0 },
+  unitPrice: { none: 50, member: 50 },
   active: true,
   userCanAdd: false,
   description: "Jahres-Einzelmitgliedschaft Verein Offene Werkstatt Wädenswil.",
@@ -52,7 +52,7 @@ const familySku = {
   name: "Mitgliedschaft Familie (Jahr)",
   workshops: ["diverses"],
   pricingModel: "direct",
-  unitPrice: { none: 70, member: 70, intern: 0 },
+  unitPrice: { none: 70, member: 70 },
   active: true,
   userCanAdd: false,
   description:
