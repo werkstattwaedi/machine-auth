@@ -390,7 +390,10 @@ function RechnungPanel({
       </p>
 
       <div className="flex flex-col sm:flex-row gap-6">
-        <div className="shrink-0 rounded-md border border-border p-3 bg-white self-start">
+        <div
+          data-testid="payment-qr"
+          className="shrink-0 rounded-md border border-border p-3 bg-white self-start"
+        >
           <QRCodeSVG
             value={paymentData.qrBillPayload}
             size={180}
