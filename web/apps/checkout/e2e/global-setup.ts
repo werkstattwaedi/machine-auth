@@ -143,7 +143,6 @@ export default async function globalSetup() {
   // billingAddress is required for `isProfileComplete` — without it, member
   // area routes redirect to /complete-profile.
   await db.collection("users").doc(authUid).set({
-    displayName: "E2E Testuser",
     firstName: "E2E",
     lastName: "Testuser",
     email: AUTH_USER_EMAIL,
@@ -165,7 +164,6 @@ export default async function globalSetup() {
 
   // ── Seed NFC tag test data ──
   await db.collection("users").doc(NFC_USER_ID).set({
-    displayName: "NFC Tester",
     firstName: "NFC",
     lastName: "Tester",
     email: "nfc@test.com",

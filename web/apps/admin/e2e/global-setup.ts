@@ -86,7 +86,6 @@ export default async function globalSetup() {
     .collection("users")
     .doc(adminUid)
     .set({
-      displayName: "Admin Tester",
       firstName: "Admin",
       lastName: "Tester",
       email: ADMIN_EMAIL,
@@ -102,7 +101,6 @@ export default async function globalSetup() {
     .collection("users")
     .doc(memberUid)
     .set({
-      displayName: "Member Tester",
       firstName: "Member",
       lastName: "Tester",
       email: NON_ADMIN_EMAIL,
@@ -119,7 +117,6 @@ export default async function globalSetup() {
       .collection("users")
       .doc(u.id)
       .set({
-        displayName: `${u.firstName} ${u.lastName}`,
         firstName: u.firstName,
         lastName: u.lastName,
         email: u.email,

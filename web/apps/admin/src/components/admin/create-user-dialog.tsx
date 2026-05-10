@@ -22,7 +22,6 @@ interface CreateUserDialogProps {
 }
 
 interface CreateUserFormValues {
-  displayName: string
   firstName: string
   lastName: string
   email: string
@@ -37,7 +36,7 @@ export function CreateUserDialog({ open, onOpenChange }: CreateUserDialogProps) 
     errorMessage: "Benutzer konnte nicht erstellt werden",
   })
   const { register, handleSubmit, reset } = useForm<CreateUserFormValues>({
-    defaultValues: { displayName: "", firstName: "", lastName: "", email: "" },
+    defaultValues: { firstName: "", lastName: "", email: "" },
   })
 
   const onSubmit = async (values: CreateUserFormValues) => {
@@ -71,10 +70,6 @@ export function CreateUserDialog({ open, onOpenChange }: CreateUserDialogProps) 
               <Label htmlFor="create-lastName">Nachname</Label>
               <Input id="create-lastName" {...register("lastName", { required: true })} />
             </div>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="create-displayName">Anzeigename (optional)</Label>
-            <Input id="create-displayName" placeholder="z.B. MikeS" {...register("displayName")} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="create-email">E-Mail</Label>

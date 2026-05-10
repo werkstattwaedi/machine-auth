@@ -39,8 +39,8 @@ describe("Firestore data model", () => {
 
     // Seed user with permission reference (string path → auto-converted)
     await seedDoc("users", "u1", {
-      displayName: "Max Muster",
-      name: "Max Muster",
+      firstName: "Max",
+      lastName: "Muster",
       email: "max@test.com",
       roles: ["vereinsmitglied"],
       permissions: ["/permission/laser"],
@@ -49,7 +49,8 @@ describe("Firestore data model", () => {
 
     const userSnap = await db.collection("users").doc("u1").get()
     const userData = userSnap.data()!
-    expect(userData.displayName).toBe("Max Muster")
+    expect(userData.firstName).toBe("Max")
+    expect(userData.lastName).toBe("Muster")
     expect(userData.roles).toEqual(["vereinsmitglied"])
 
     // Verify permissions are real DocumentReferences
@@ -87,7 +88,8 @@ describe("Checkout flow", () => {
 
     // Seed user
     await seedDoc("users", "u1", {
-      displayName: "Max",
+      firstName: "Max",
+      lastName: "Muster",
       roles: ["vereinsmitglied"],
       permissions: [],
     })

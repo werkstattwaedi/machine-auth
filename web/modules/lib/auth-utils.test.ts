@@ -7,8 +7,7 @@ import { isProfileComplete, type UserDoc } from "./auth"
 function makeUserDoc(overrides: Partial<UserDoc> = {}): UserDoc {
   return {
     id: "user-1",
-    displayName: "Max Muster",
-    rawDisplayName: "Max Muster",
+    name: "Max Muster",
     firstName: "Max",
     lastName: "Muster",
     email: "max@example.com",

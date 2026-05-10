@@ -88,7 +88,7 @@ describe("AdminAuthenticatedLayout", () => {
 
     mockAuthReturn = {
       user: { uid: "admin1", email: "admin@test.com" },
-      userDoc: { displayName: "Admin User" },
+      userDoc: { name: "Admin User" },
       userDocLoading: false,
       loading: false,
       isAdmin: true,

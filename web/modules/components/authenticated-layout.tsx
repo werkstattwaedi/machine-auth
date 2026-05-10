@@ -162,15 +162,15 @@ export function AuthenticatedLayout({
       <div className="mt-auto border-t border-sidebar-border pt-3 pb-2">
         <div className="flex items-center gap-2.5 px-3 py-1.5">
           <Avatar
-            name={userDoc?.displayName || user.email || "?"}
+            name={userDoc?.name || user.email || "?"}
             seed={user.uid}
             size="sm"
           />
           <div className="min-w-0 flex-1">
             <div className="text-sm font-medium truncate">
-              {userDoc?.displayName ?? user.email}
+              {userDoc?.name || user.email}
             </div>
-            {userDoc?.displayName && user.email ? (
+            {userDoc?.name && user.email ? (
               <div className="text-xs text-muted-foreground truncate">
                 {user.email}
               </div>

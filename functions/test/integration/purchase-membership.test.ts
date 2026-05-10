@@ -55,7 +55,6 @@ async function seedUser(uid: string): Promise<void> {
     email: `${uid}@example.com`,
     firstName: "Test",
     lastName: "User",
-    displayName: null,
     permissions: [],
     roles: [],
     termsAcceptedAt: Timestamp.now(),

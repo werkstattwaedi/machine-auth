@@ -14,7 +14,6 @@ export interface BillingAddress {
 
 export interface UserEntity {
   created: Timestamp;
-  displayName?: string | null; // Optional nickname; derived from firstName+lastName if absent
   firstName: string;
   lastName: string;
   email?: string | null; // null for child accounts (no Firebase Auth credentials)

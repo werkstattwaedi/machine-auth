@@ -144,7 +144,6 @@ export async function seedMembershipState(
       const id = `${COMEMBER_ID_PREFIX}${i + 1}`
       const ref = db.collection("users").doc(id)
       await ref.set({
-        displayName: `${m.firstName} ${m.lastName}`,
         firstName: m.firstName,
         lastName: m.lastName,
         email: m.userType === "kind" ? null : `${m.firstName.toLowerCase()}.${m.lastName.toLowerCase()}@beispiel.ch`,
@@ -187,7 +186,6 @@ export async function seedMembershipState(
   if (kind.kind === "active-family-member") {
     const ownerRef = db.collection("users").doc(FAMILY_OWNER_OTHER_ID)
     await ownerRef.set({
-      displayName: "Anna Müller",
       firstName: "Anna",
       lastName: "Müller",
       email: "anna.mueller@beispiel.ch",

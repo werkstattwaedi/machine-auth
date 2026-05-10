@@ -333,7 +333,7 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
   return (
     <div className="max-w-[1000px] mx-auto space-y-4">
       <h1 className="text-2xl font-bold">
-        Hallo, {userDoc.displayName}
+        Hallo, {userDoc.name}
       </h1>
 
       {/* Workshop checkbox selector */}

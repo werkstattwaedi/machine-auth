@@ -24,8 +24,7 @@ vi.mock("@tanstack/react-router", () => ({
 // Mock auth
 const mockUserDoc = {
   id: "user1",
-  displayName: "Max Muster",
-  rawDisplayName: null,
+  name: "Max Muster",
   firstName: "Max",
   lastName: "Muster",
   email: "max@test.com",
