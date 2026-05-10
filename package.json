@@ -13,10 +13,11 @@
     "seed": "npx tsx scripts/seed-emulator.ts",
     "sync-config": "npx tsx scripts/sync-device-config.ts",
     "test:web": "cd web && npm test",
-    "test:web:integration": "scripts/emulator-exec.sh --config firebase.e2e.json --only firestore 'cd web && npm run test:integration'",
-    "test:web:e2e": "scripts/emulator-exec.sh --config firebase.e2e.json --only firestore,auth,functions 'cd web && npm run test:e2e'",
+    "test:web:integration": "npx tsx scripts/port-block.ts -- bash -c 'scripts/emulator-exec.sh --config \"$FIREBASE_E2E_CONFIG\" --only firestore \"cd web && npm run test:integration\"'",
+    "test:web:e2e": "npx tsx scripts/port-block.ts -- bash -c 'scripts/emulator-exec.sh --config \"$FIREBASE_E2E_CONFIG\" --only firestore,auth,functions \"cd web && npm run test:e2e\"'",
     "test:all": "npm run test:web && cd functions && npm test",
     "test:precommit": "cd web && npm run build && npm test && cd .. && npm run test:web:integration && cd functions && npm test",
+    "block": "npx tsx scripts/port-block.ts --",
     "deploy:gateway": "npx tsx scripts/deploy-gateway.ts",
     "prepare": "husky"
   },

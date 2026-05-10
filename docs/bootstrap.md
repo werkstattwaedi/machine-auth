@@ -348,6 +348,11 @@ elsewhere — check Windows / other distros, or temporarily run with a
 custom config that picks free ports (`--config /tmp/fb-alt.json` with
 `emulators.{ui,firestore,hub,logging}.port` overrides).
 
+For automated test runs that need to share a machine without colliding,
+use the port-block broker — see [`docs/port-blocks.md`](port-blocks.md).
+Manual dev (`./dev.sh`) keeps the default ports; only emulator-exec test
+paths route through the broker.
+
 ---
 
 ## Troubleshooting
