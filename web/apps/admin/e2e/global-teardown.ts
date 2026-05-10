@@ -10,7 +10,8 @@
 import { spawnSync } from "node:child_process"
 import { resolve } from "node:path"
 
-const REPO_ROOT = resolve(__dirname, "../../../..")
+// Playwright loads this file as ESM, where `__dirname` is undefined.
+const REPO_ROOT = resolve(import.meta.dirname, "../../../..")
 
 export default async function globalTeardown() {
   const res = spawnSync(

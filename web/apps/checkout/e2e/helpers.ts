@@ -10,11 +10,13 @@ import {
 
 const PROJECT_ID = "oww-maco"
 
-// E2E emulator ports — must match playwright.config.ts and firebase.e2e.json
+// E2E emulator ports — must match playwright.config.ts and firebase.e2e.json.
+// `scripts/port-block.ts` exports EMULATOR_*_PORT when running under the
+// broker; default to the firebase.e2e.json values otherwise.
 export const E2E_PORTS = {
-  auth: 9199,
-  firestore: 8180,
-  functions: 5101,
+  auth: Number(process.env.EMULATOR_AUTH_PORT ?? 9199),
+  firestore: Number(process.env.EMULATOR_FIRESTORE_PORT ?? 8180),
+  functions: Number(process.env.EMULATOR_FUNCTIONS_PORT ?? 5101),
 }
 
 let app: App
