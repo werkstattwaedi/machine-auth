@@ -13,7 +13,6 @@ export interface CatalogFormValues {
   pricingModel: string
   priceNone: string
   priceMember: string
-  priceIntern: string
   active: boolean
   userCanAdd: boolean
 }
@@ -73,7 +72,7 @@ export function CatalogFormFields({
           </select>
         </div>
       </div>
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label>{priceLabel} (Voll)</Label>
           <Input type="number" step="0.01" {...register("priceNone", { required: true })} />
@@ -81,10 +80,6 @@ export function CatalogFormFields({
         <div className="space-y-2">
           <Label>{priceLabel} (Mitglied)</Label>
           <Input type="number" step="0.01" {...register("priceMember")} />
-        </div>
-        <div className="space-y-2">
-          <Label>{priceLabel} (Intern)</Label>
-          <Input type="number" step="0.01" {...register("priceIntern")} />
         </div>
       </div>
       {priceHelp && (

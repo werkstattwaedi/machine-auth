@@ -59,10 +59,10 @@ test.describe("Anonymous checkout", () => {
     await expect(page.getByText("Max Muster")).toBeVisible()
 
     // Submit
-    await page.getByRole("button", { name: "Senden & bezahlen" }).click()
+    await page.getByRole("button", { name: "Weiter zum Bezahlen" }).click()
 
-    // ── Payment result (Step 4 · Rechnung flow) ──
-    await expect(page.getByRole("heading", { name: "QR-Rechnung scannen" })).toBeVisible({
+    // ── Payment result (Step 4 — Rechnung tab is selected by default) ──
+    await expect(page.getByText("Zu bezahlen")).toBeVisible({
       timeout: 10_000,
     })
     // QR card + action buttons render once the bill is created server-side
@@ -71,15 +71,37 @@ test.describe("Anonymous checkout", () => {
     await expect(page.getByText("Konto / Zahlbar an")).toBeVisible({
       timeout: 30_000,
     })
-    await expect(page.getByRole("button", { name: /PDF herunterladen/ })).toBeVisible()
-    await expect(page.getByRole("button", { name: /IBAN kopieren/ })).toBeVisible()
+    // PDF download is the hero-level lightweight button (always visible).
+    await expect(page.getByRole("button", { name: /Rechnung als PDF/ })).toBeVisible()
+
+    // ── Commit the chosen payment method (records the customer's
+    // acknowledgement on the closed checkout doc, then the wizard resets) ──
+    await page
+      .getByRole("button", {
+        name: /Ich zahle die QR-Rechnung & Werkstatt verlassen/,
+      })
+      .click()
 
     // ── Verify Firestore ──
+    // Wait for the ack write to land before reading the doc.
+    await expect
+      .poll(
+        async () => {
+          const docs = await getCheckoutDocs()
+          const co = docs[0] as Record<string, unknown> | undefined
+          return co?.paymentMethodConfirmed
+        },
+        { timeout: 10_000 },
+      )
+      .toBe("rechnung")
+
     const checkouts = await getCheckoutDocs()
     expect(checkouts.length).toBeGreaterThanOrEqual(1)
 
     const checkout = checkouts[0] as Record<string, unknown>
     expect(checkout.status).toBe("closed")
+    expect(checkout.paymentMethodConfirmed).toBe("rechnung")
+    expect(checkout.paymentMethodConfirmedAt).toBeDefined()
 
     const persons = checkout.persons as { name: string }[]
     expect(persons[0].name).toBe("Max Muster")

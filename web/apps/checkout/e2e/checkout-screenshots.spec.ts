@@ -101,15 +101,15 @@ async function submitAndWaitForPaymentResult(page: Page) {
   await checkoutBtn.click()
   await expect(page.getByText("Dein Besuch")).toBeVisible()
 
-  // Submit
-  const submitBtn = page.getByRole("button", { name: "Senden & bezahlen" })
+  // Submit — step 3 no longer carries a payment-method picker; the user
+  // advances to step 4 where the picker lives.
+  const submitBtn = page.getByRole("button", { name: "Weiter zum Bezahlen" })
   await submitBtn.scrollIntoViewIfNeeded()
   await submitBtn.click()
 
-  // Wait for Step 4 (Bezahlen) — Rechnung flow renders the QR bill card
-  await expect(
-    page.getByRole("heading", { name: "QR-Rechnung scannen" }),
-  ).toBeVisible({ timeout: 10_000 })
+  // Wait for Step 4 (Bezahlen) — the picker defaults to QR-Rechnung, so
+  // the QR bill creditor block renders immediately.
+  await expect(page.getByText("Zu bezahlen")).toBeVisible({ timeout: 10_000 })
   await expect(page.getByText("Konto / Zahlbar an")).toBeVisible({ timeout: 30_000 })
 }
 
@@ -281,63 +281,42 @@ test.describe("Checkout step screenshots", () => {
     await expect(page).toHaveScreenshot("checkout-summary-material-expanded.png")
   })
 
-  test("summary — TWINT method selected on Step 3", async ({ page }) => {
-    await goToSummaryWithItems(page)
-
-    // Pick TWINT in the Zahlungsart picker
-    await page.getByRole("button", { name: /TWINT.*Sofort bezahlen/ }).click()
-    await expect(page.getByText(/Transaktionsgebühren/)).toBeVisible()
-
-    // Scroll the method picker into view so the Empfohlen pill / TWINT body
-    // is captured in the viewport screenshot.
-    await page
-      .getByRole("button", { name: /TWINT.*Sofort bezahlen/ })
-      .scrollIntoViewIfNeeded()
-
-    await expect(page).toHaveScreenshot("checkout-summary-method-twint.png")
-  })
-
-  test("Step 4 · Rechnung — QR bill, PDF + IBAN buttons, Fertig", async ({ page }, testInfo) => {
+  test("Step 4 · Rechnung tab (default) — QR bill + PDF download in hero", async ({ page }, testInfo) => {
     testInfo.setTimeout(60_000)
     await submitAndWaitForPaymentResult(page)
 
-    // PDF + IBAN actions are part of the Rechnung flow chrome.
-    await expect(page.getByRole("button", { name: /PDF herunterladen/ })).toBeVisible()
-    await expect(page.getByRole("button", { name: /IBAN kopieren/ })).toBeVisible()
+    // The Rechnung tab is selected by default; the lightweight PDF
+    // download button lives in the hero (visible regardless of tab).
+    await expect(page.getByRole("button", { name: /Rechnung als PDF/ })).toBeVisible()
+    // Commit button uses the rechnung-specific label.
+    await expect(
+      page.getByRole("button", {
+        name: /Ich zahle die QR-Rechnung & Werkstatt verlassen/,
+      }),
+    ).toBeVisible()
 
-    await expect(page).toHaveScreenshot("checkout-payment-ebanking.png")
+    await expect(page).toHaveScreenshot("checkout-payment-rechnung.png")
   })
 
-  test("Step 4 · TWINT — single big button, no QR bill", async ({ page }, testInfo) => {
+  test("Step 4 · TWINT tab — pay-link, no QR bill", async ({ page }, testInfo) => {
     testInfo.setTimeout(60_000)
-    await signIn(page)
-    await page.goto("/")
-    await expect(page.getByText("Abmelden")).toBeVisible({ timeout: 10_000 })
+    await submitAndWaitForPaymentResult(page)
 
-    await page.getByRole("button", { name: "Weiter" }).click()
-    await expect(page.getByText("Werkstätten wählen")).toBeVisible()
+    // Switch to the TWINT tab — the picker is on step 4 now.
+    await page.getByRole("tab", { name: /TWINT/ }).click()
 
-    const checkoutBtn = page.getByRole("button", { name: "Check-Out" })
-    await checkoutBtn.scrollIntoViewIfNeeded()
-    await checkoutBtn.click()
-    await expect(page.getByText("Dein Besuch")).toBeVisible()
-
-    // Pick TWINT on Step 3 before submitting
-    await page.getByRole("button", { name: /TWINT.*Sofort bezahlen/ }).click()
-    await expect(page.getByText(/Transaktionsgebühren/)).toBeVisible()
-
-    const submitBtn = page.getByRole("button", { name: "Senden & bezahlen" })
-    await submitBtn.scrollIntoViewIfNeeded()
-    await submitBtn.click()
-
-    // Step 4 in the TWINT flow renders the dark pay-link as the only CTA.
-    await expect(
-      page.getByRole("heading", { name: "Mit TWINT bezahlen" }),
-    ).toBeVisible({ timeout: 10_000 })
+    // TWINT panel renders the dark pay-link as the only CTA.
     await expect(page.getByRole("link", { name: /Mit TWINT bezahlen/ })).toBeVisible({
       timeout: 30_000,
     })
-    // QR bill must NOT render in the TWINT flow.
+    // Commit button label changes for TWINT.
+    await expect(
+      page.getByRole("button", {
+        name: /Ich habe via TWINT bezahlt & Werkstatt verlassen/,
+      }),
+    ).toBeVisible()
+    // PDF download stays in the hero across all tabs.
+    await expect(page.getByRole("button", { name: /Rechnung als PDF/ })).toBeVisible()
     await expect(page.getByText("Konto / Zahlbar an")).toBeHidden()
 
     await expect(page).toHaveScreenshot("checkout-payment-twint.png")

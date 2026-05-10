@@ -30,8 +30,7 @@
       "unitPrice": { // Conditional price per base unit by discount level
         // For pricingModel == "sla" this is CHF per liter of resin.
         "none": "number",
-        "member": "number",
-        "intern": "number"
+        "member": "number"
       },
       "active": "boolean",
       "userCanAdd": "boolean", // true = users can add to checkout, false = system-only (NFC machine hours)
@@ -131,6 +130,16 @@
         "materialCost": "number",
         "tip": "number"
       },
+
+      // --- Customer-stated payment-method acknowledgement ---
+      // Written once by the principal when they click the commit button on
+      // the Bezahlen step. Distinct from /bills/{id}.paidVia, which is a
+      // server-stamped confirmation written when the cash actually arrives.
+      // The acting principal is recorded via the existing `modifiedBy`
+      // audit field — no separate `paymentMethodConfirmedBy`.
+      "paymentMethodConfirmed": "rechnung | monthly | twint",
+      "paymentMethodConfirmedAt": "timestamp",
+
       "items": {
         "{itemId}": { // Auto-generated — subcollection of checkouts/{checkoutId}
           "workshop": "string", // e.g., "holz"
@@ -166,7 +175,7 @@
       // SLA resin prints: per-layer CHF cost (constant across all resin types,
       // hardware-wear-driven) by discount level. Per-liter resin price lives
       // on each catalog entry's unitPrice.
-      "slaLayerPrice": { "none": "number", "member": "number", "intern": "number" },
+      "slaLayerPrice": { "none": "number", "member": "number" },
       "workshops": {
         "{workshopId}": { // e.g., "holz", "metall", "makerspace"
           "label": "string", // Display name (e.g., "Holzwerkstatt")

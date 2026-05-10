@@ -40,7 +40,6 @@ function CatalogDetailPage() {
         pricingModel: catalog.pricingModel,
         priceNone: String(catalog.unitPrice?.none ?? 0),
         priceMember: String(catalog.unitPrice?.member ?? 0),
-        priceIntern: String(catalog.unitPrice?.intern ?? 0),
         active: catalog.active,
         userCanAdd: catalog.userCanAdd,
       })
@@ -64,7 +63,6 @@ function CatalogDetailPage() {
         unitPrice: {
           none: parseFloat(values.priceNone) || 0,
           member: parseFloat(values.priceMember) || 0,
-          intern: parseFloat(values.priceIntern) || 0,
         },
         active: values.active,
         userCanAdd: values.userCanAdd,

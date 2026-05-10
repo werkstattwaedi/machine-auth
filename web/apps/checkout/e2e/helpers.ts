@@ -268,6 +268,53 @@ async function clearMembershipState(
   }
 }
 
+// ── Usage / bills seeding (used by usage-screenshots.spec.ts) ───────────
+//
+// Stable IDs and dates so the screenshot baselines stay reproducible.
+
+const USAGE_BILL_PAID_ID = "e2e-bill-paid-001"
+const USAGE_BILL_OPEN_ID = "e2e-bill-open-001"
+const USAGE_BILL_PAID_CREATED = new Date("2026-02-14T10:30:00Z")
+const USAGE_BILL_PAID_PAID_AT = new Date("2026-02-20T08:15:00Z")
+const USAGE_BILL_OPEN_CREATED = new Date("2026-04-04T15:45:00Z")
+
+/**
+ * Seed two `bills` rows for the auth user so the /usage Rechnungen tab
+ * has stable, reproducible content for screenshot regression tests.
+ *
+ * Both bills carry a `storagePath`, so the download icon renders on
+ * each row — that's the affordance issue #215 was about.
+ */
+export async function seedUsageBills(authUserUid: string): Promise<void> {
+  const db = getAdminFirestore()
+  await clearCollections("bills")
+  const userRef = db.collection("users").doc(authUserUid)
+
+  await db.collection("bills").doc(USAGE_BILL_PAID_ID).set({
+    userId: userRef,
+    checkouts: [],
+    referenceNumber: 240001,
+    amount: 42.5,
+    currency: "CHF",
+    storagePath: "bills/e2e-bill-paid-001.pdf",
+    created: Timestamp.fromDate(USAGE_BILL_PAID_CREATED),
+    paidAt: Timestamp.fromDate(USAGE_BILL_PAID_PAID_AT),
+    paidVia: "twint",
+  })
+
+  await db.collection("bills").doc(USAGE_BILL_OPEN_ID).set({
+    userId: userRef,
+    checkouts: [],
+    referenceNumber: 240002,
+    amount: 18,
+    currency: "CHF",
+    storagePath: "bills/e2e-bill-open-001.pdf",
+    created: Timestamp.fromDate(USAGE_BILL_OPEN_CREATED),
+    paidAt: null,
+    paidVia: null,
+  })
+}
+
 export type LoginCodeEntry = {
   docId: string
   code: string

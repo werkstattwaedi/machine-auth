@@ -296,7 +296,7 @@ export class TestFixture {
         name: "Laser Stunde",
         workshops: ["holz"],
         pricingModel: "time",
-        unitPrice: { none: 20, member: 15, intern: 0 },
+        unitPrice: { none: 20, member: 15 },
       })
       .withCheckout({
         id: "co1",

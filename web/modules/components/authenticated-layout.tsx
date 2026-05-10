@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from "react"
 import { Link, Outlet, useLocation, useNavigate } from "@tanstack/react-router"
 import { useAuth, isProfileComplete } from "@modules/lib/auth"
 import { useIsMobile } from "@modules/hooks/use-mobile"
+import { Avatar } from "@modules/components/ui/avatar"
 import { Button } from "@modules/components/ui/button"
 import {
   Sheet,
@@ -159,8 +160,22 @@ export function AuthenticatedLayout({
       ))}
 
       <div className="mt-auto border-t border-sidebar-border pt-3 pb-2">
-        <div className="px-3 py-1 text-xs text-muted-foreground truncate">
-          {userDoc?.displayName ?? user.email}
+        <div className="flex items-center gap-2.5 px-3 py-1.5">
+          <Avatar
+            name={userDoc?.displayName || user.email || "?"}
+            seed={user.uid}
+            size="sm"
+          />
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-medium truncate">
+              {userDoc?.displayName ?? user.email}
+            </div>
+            {userDoc?.displayName && user.email ? (
+              <div className="text-xs text-muted-foreground truncate">
+                {user.email}
+              </div>
+            ) : null}
+          </div>
         </div>
         <Button
           variant="ghost"
@@ -176,7 +191,7 @@ export function AuthenticatedLayout({
   )
 
   const shell = (
-    <div className="min-h-screen flex flex-col md:flex-row">
+    <div className="min-h-screen flex flex-col md:h-screen md:flex-row md:overflow-hidden">
       {/* Mobile header */}
       {isMobile && (
         <header className="flex items-center gap-3 px-4 py-3 border-b border-sidebar-border bg-sidebar">
@@ -186,29 +201,30 @@ export function AuthenticatedLayout({
                 <Menu className="h-5 w-5" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-60 p-0 bg-sidebar text-sidebar-foreground">
+            <SheetContent side="left" className="w-60 p-0 bg-sidebar text-sidebar-foreground flex flex-col">
               <SheetTitle className="p-4 pb-2">
                 <img src="/logo_oww.png" alt="Offene Werkstatt Wädenswil" className="h-10" />
               </SheetTitle>
-              <div className="px-3 py-2 flex flex-col gap-0.5 flex-1">{navContent}</div>
+              <div className="px-3 py-2 flex flex-col gap-0.5 flex-1 overflow-y-auto">{navContent}</div>
             </SheetContent>
           </Sheet>
           <img src="/logo_oww.png" alt="Offene Werkstatt Wädenswil" className="h-8" />
         </header>
       )}
 
-      {/* Desktop sidebar */}
+      {/* Desktop sidebar — pinned to viewport so footer stays visible
+          regardless of main-content length. */}
       {!isMobile && (
-        <nav className="w-60 bg-sidebar text-sidebar-foreground flex flex-col border-r border-sidebar-border">
+        <nav className="w-60 bg-sidebar text-sidebar-foreground flex flex-col border-r border-sidebar-border md:sticky md:top-0 md:h-screen md:shrink-0">
           <div className="p-4 pb-2">
             <img src="/logo_oww.png" alt="Offene Werkstatt Wädenswil" className="h-10" />
           </div>
-          <div className="px-3 py-2 flex flex-col gap-0.5 flex-1">{navContent}</div>
+          <div className="px-3 py-2 flex flex-col gap-0.5 flex-1 overflow-y-auto">{navContent}</div>
         </nav>
       )}
 
-      {/* Main content */}
-      <main className="flex-1 p-4 md:p-8 bg-background overflow-auto">
+      {/* Main content owns the page-level scroll on md+ so the sidebar stays put. */}
+      <main className="flex-1 p-4 md:p-8 bg-background md:h-screen md:overflow-auto">
         <Outlet />
       </main>
     </div>

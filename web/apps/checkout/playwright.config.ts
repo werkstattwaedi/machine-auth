@@ -40,6 +40,7 @@ export default defineConfig({
   ],
 
   globalSetup: "./e2e/global-setup.ts",
+  globalTeardown: "./e2e/global-teardown.ts",
 
   webServer: {
     command: `npx vite --port ${E2E_PORTS.vite}`,

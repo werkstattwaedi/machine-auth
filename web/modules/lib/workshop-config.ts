@@ -91,7 +91,7 @@ export function validatePricingConfig(value: unknown): string | null {
   if (!slaLayerPrice || typeof slaLayerPrice !== "object") {
     return "config/pricing.slaLayerPrice is missing"
   }
-  for (const level of ["none", "member", "intern"] as const) {
+  for (const level of ["none", "member"] as const) {
     if (typeof slaLayerPrice[level] !== "number") {
       return `config/pricing.slaLayerPrice.${level} must be a number`
     }

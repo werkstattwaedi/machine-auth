@@ -132,7 +132,7 @@ export type PricingModel =
   | "direct"
   | "sla"
 
-export type DiscountLevel = "none" | "member" | "intern"
+export type DiscountLevel = "none" | "member"
 
 /**
  * Optional discriminator for special-purpose catalog items. Absent for
@@ -194,6 +194,14 @@ export type CheckoutUsageType =
   | "intern"
   | "hangenmoos"
 
+/**
+ * Customer-stated acknowledgement of how they intend to (or just did) settle
+ * the bill. Distinct from `BillDoc.paidVia`, which is a server-stamped
+ * confirmation written when the cash arrives. Recorded once on the checkout
+ * doc when the user clicks the commit button on the Bezahlen step.
+ */
+export type PaymentMethodConfirmed = "rechnung" | "monthly" | "twint"
+
 export interface CheckoutDoc extends AuditFields {
   userId: DocumentReference<UserDoc> | null
   status: "open" | "closed"
@@ -205,6 +213,8 @@ export interface CheckoutDoc extends AuditFields {
   closedAt?: Timestamp
   notes?: string | null
   summary?: CheckoutSummaryDoc
+  paymentMethodConfirmed?: PaymentMethodConfirmed
+  paymentMethodConfirmedAt?: Timestamp
 }
 
 export interface CheckoutItemDoc extends AuditFields {
