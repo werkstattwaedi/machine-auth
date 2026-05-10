@@ -295,7 +295,11 @@ test.describe("Checkout step screenshots", () => {
       }),
     ).toBeVisible()
 
-    await expect(page).toHaveScreenshot("checkout-payment-rechnung.png")
+    // Mask the QR — its pixels encode the per-run bill ID and would
+    // otherwise produce a different image on every run.
+    await expect(page).toHaveScreenshot("checkout-payment-rechnung.png", {
+      mask: [page.getByTestId("payment-qr")],
+    })
   })
 
   test("Step 4 · TWINT tab — pay-link, no QR bill", async ({ page }, testInfo) => {
