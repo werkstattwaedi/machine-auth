@@ -531,7 +531,7 @@ describe("MaterialPicker ad-hoc fallback", () => {
 // ============================================================================
 
 describe("NfcMachineItemRow", () => {
-  it("displays duration in minutes", () => {
+  it("displays duration in minutes and total price (no CHF prefix in shared PositionTable)", () => {
     render(
       <NfcMachineItemRow
         item={makeItem({
@@ -541,12 +541,18 @@ describe("NfcMachineItemRow", () => {
           totalPrice: 6,
           description: "Maschinennutzung",
         })}
-        checkoutId={null}
+        checkoutId="checkout-1"
       />,
       { wrapper: FirebaseWrapper },
     )
-    expect(screen.getByText("30 min")).toBeTruthy()
-    expect(screen.getByText(/CHF\s*6\.00/)).toBeTruthy()
+    // Shared PositionTable column: "30 Min" (capital M) — matches material
+    // rows that also use "Min" via formatMenge.
+    expect(screen.getByText("30 Min")).toBeTruthy()
+    // Preis cell holds the bare amount; the workshop subtotal owns the
+    // CHF prefix.
+    expect(screen.getByText("6.00")).toBeTruthy()
+    // Kosten cell shows the per-hour rate.
+    expect(screen.getByText("12.00/Std.")).toBeTruthy()
   })
 
   it("shows the machine name", () => {
@@ -557,7 +563,7 @@ describe("NfcMachineItemRow", () => {
           description: "CO₂ Laser",
           quantity: 0.5,
         })}
-        checkoutId={null}
+        checkoutId="checkout-1"
       />,
       { wrapper: FirebaseWrapper },
     )
@@ -572,7 +578,7 @@ describe("NfcMachineItemRow", () => {
           description: "Maschinennutzung",
           quantity: 0.5,
         })}
-        checkoutId={null}
+        checkoutId="checkout-1"
       />,
       { wrapper: FirebaseWrapper },
     )
@@ -580,8 +586,8 @@ describe("NfcMachineItemRow", () => {
     expect(within(container).queryByLabelText("Entfernen")).toBeNull()
   })
 
-  it("disables the expand toggle when checkoutId is null", () => {
-    render(
+  it("hides the expand toggle when checkoutId is null", () => {
+    const { container } = render(
       <NfcMachineItemRow
         item={makeItem({
           origin: "nfc",
@@ -592,7 +598,9 @@ describe("NfcMachineItemRow", () => {
       />,
       { wrapper: FirebaseWrapper },
     )
-    const button = screen.getByRole("button")
-    expect((button as HTMLButtonElement).disabled).toBe(true)
+    // Without a checkout id there is no per-session breakdown to expand,
+    // so the chevron column is omitted entirely.
+    expect(within(container).queryByLabelText("Aufklappen")).toBeNull()
+    expect(within(container).queryByLabelText("Einklappen")).toBeNull()
   })
 })
