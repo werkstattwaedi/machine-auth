@@ -229,7 +229,6 @@ export function PaymentResult({
           onSelect={setTab}
           icon={<FileText className="h-5 w-5" strokeWidth={1.6} />}
           label="QR-Rechnung"
-          sub="Per E-Mail · 30 Tage"
         />
         {isMember && (
           <MethodTab
@@ -238,7 +237,6 @@ export function PaymentResult({
             onSelect={setTab}
             icon={<CalendarMark />}
             label="Sammelrechnung"
-            sub="Mitglieder · monatlich"
           />
         )}
         <MethodTab
@@ -253,7 +251,6 @@ export function PaymentResult({
             />
           }
           label="TWINT"
-          sub="Sofort vom Handy"
         />
       </div>
 
@@ -301,17 +298,9 @@ interface MethodTabProps {
   onSelect: (m: PaymentMethod) => void
   icon: React.ReactNode
   label: string
-  sub: string
 }
 
-function MethodTab({
-  id,
-  active,
-  onSelect,
-  icon,
-  label,
-  sub,
-}: MethodTabProps) {
+function MethodTab({ id, active, onSelect, icon, label }: MethodTabProps) {
   const on = id === active
   return (
     <button
@@ -342,18 +331,13 @@ function MethodTab({
       >
         {icon}
       </span>
-      <span className="min-w-0 flex flex-col gap-0.5">
-        <span
-          className={cn(
-            "font-heading font-semibold text-[15px] leading-tight",
-            on ? "text-cog-teal-dark" : "text-foreground",
-          )}
-        >
-          {label}
-        </span>
-        <span className="text-[12px] text-muted-foreground leading-tight">
-          {sub}
-        </span>
+      <span
+        className={cn(
+          "min-w-0 font-heading font-semibold text-[15px] leading-tight",
+          on ? "text-cog-teal-dark" : "text-foreground",
+        )}
+      >
+        {label}
       </span>
     </button>
   )
