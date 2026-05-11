@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import { render, screen, cleanup, act } from "@testing-library/react"
+import { render, screen, cleanup, act, fireEvent } from "@testing-library/react"
 import { type ReactNode } from "react"
 import { Shield } from "lucide-react"
 
@@ -212,7 +212,35 @@ describe("AuthenticatedLayout", () => {
     })
     // Chrome must not render — no nav item label, no sign-out button.
     expect(screen.queryByText("Benutzer")).toBeNull()
+    expect(screen.queryByRole("button", { name: "Abmelden" })).toBeNull()
+  })
+
+  // Regression for issue #232: the "Abmelden" button is now icon-only,
+  // collapsed into the avatar row so the leading edges align. The visible
+  // text was removed, so screen readers and tests rely on `aria-label`.
+  // Verifies both that the accessible name is wired up and that clicking
+  // the icon-only button still calls signOut().
+  it("renders sign-out as an icon-only button with accessible name 'Abmelden'", () => {
+    const signOutMock = vi.fn()
+    mockAuthReturn = {
+      user: { uid: "u1", email: "user@test.com" },
+      userDoc: { name: "User" },
+      userDocLoading: false,
+      loading: false,
+      isAdmin: true,
+      sessionKind: null,
+      signOut: signOutMock,
+    }
+
+    render(<AuthenticatedLayout navItems={navItems} gate={{ kind: "admin" }} />)
+
+    // Visible text label is gone — the icon button exposes its name via aria-label.
     expect(screen.queryByText("Abmelden")).toBeNull()
+    const button = screen.getByRole("button", { name: "Abmelden" })
+    expect(button).toBeTruthy()
+
+    fireEvent.click(button)
+    expect(signOutMock).toHaveBeenCalledTimes(1)
   })
 
   it("admin gate calls the wrapper around the rendered shell", () => {
