@@ -192,6 +192,45 @@ export function StepCheckout({
     syncTip(manualTip, true, target)
   }
 
+  // Keep the dispatched tip honest when the offered round-up set changes
+  // out from under the user — e.g. switching usageType to "intern" zeroes
+  // the billed subtotal, so the previously-selected 0.60 CHF round-up
+  // would otherwise linger in global state (issue #236). The render path
+  // already shows the correct tip via `effectiveRoundUp`; this effect
+  // keeps the dispatched value in sync.
+  //
+  // Disable round-up entirely when no options remain (per Mike's "or
+  // uncheck it"); re-pick the auto target when the previously-chosen one
+  // dropped out of the offered set. The manual tip portion is preserved —
+  // that was entered intentionally and should not be reset.
+  const dispatchedTip = state.tip
+  useEffect(() => {
+    if (roundOpts.length === 0) {
+      if (roundUpEnabled) setRoundUpEnabled(false)
+      // Drop any lingering round-up from the dispatched tip without
+      // disturbing the manual portion.
+      if (dispatchedTip !== manualTip) {
+        dispatch({ type: "SET_TIP", amount: manualTip })
+      }
+      return
+    }
+    if (!roundUpEnabled) return
+    // Options exist + round-up enabled: ensure the dispatched amount
+    // matches the currently-displayed tip (manualTip + effectiveRoundUp
+    // recomputed against the new base/target).
+    const expected = +(manualTip + effectiveRoundUp).toFixed(2)
+    if (Math.abs(dispatchedTip - expected) > 0.001) {
+      dispatch({ type: "SET_TIP", amount: expected })
+    }
+  }, [
+    roundOpts,
+    roundUpEnabled,
+    manualTip,
+    effectiveRoundUp,
+    dispatchedTip,
+    dispatch,
+  ])
+
   const [openSections, setOpenSections] = useState<Set<string>>(new Set())
   const toggle = (id: string) =>
     setOpenSections((prev) => {
