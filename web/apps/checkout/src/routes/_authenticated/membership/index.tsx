@@ -31,6 +31,7 @@ import {
   userRef,
 } from "@modules/lib/firestore-helpers"
 import { formatDate } from "@modules/lib/format"
+import { formatFullName } from "@modules/lib/username-utils"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { Avatar } from "@modules/components/ui/avatar"
 import { Badge } from "@modules/components/ui/badge"
@@ -699,8 +700,7 @@ function MemberRow({
   const db = useDb()
   // Family-roster join rule allows reading co-members' user docs.
   const { data: user } = useDocument(userRef(db, userId))
-  const name =
-    `${user?.firstName ?? ""} ${user?.lastName ?? ""}`.trim() || userId
+  const name = formatFullName(user ?? {}, userId)
   const isChild = user?.userType === "kind"
 
   return (

@@ -7,6 +7,7 @@ import { usersCollection } from "@modules/lib/firestore-helpers"
 import { useDb } from "@modules/lib/firebase-context"
 import type { UserDoc } from "@modules/lib/firestore-entities"
 import { useLookup, resolveRef } from "@modules/lib/lookup"
+import { formatFullName } from "@modules/lib/username-utils"
 import { PageLoading } from "@modules/components/page-loading"
 import { DataTable, ColumnHeader } from "@modules/components/data-table"
 import { PageHeader } from "@/components/admin/page-header"
@@ -34,14 +35,14 @@ function UsersPage() {
       {
         id: "name",
         header: ({ column }) => <ColumnHeader column={column} title="Name" />,
-        accessorFn: (row) => `${row.firstName ?? ""} ${row.lastName ?? ""}`.trim(),
+        accessorFn: (row) => formatFullName(row),
         cell: ({ row }) => (
           <Link
             to="/users/$userId"
             params={{ userId: row.original.id }}
             className="font-medium hover:underline"
           >
-            {`${row.original.firstName ?? ""} ${row.original.lastName ?? ""}`.trim() || "–"}
+            {formatFullName(row.original, "–")}
           </Link>
         ),
       },

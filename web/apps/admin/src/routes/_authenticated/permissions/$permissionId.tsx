@@ -12,6 +12,7 @@ import {
   usersCollection,
 } from "@modules/lib/firestore-helpers"
 import { useDb } from "@modules/lib/firebase-context"
+import { formatFullName } from "@modules/lib/username-utils"
 import { PageLoading } from "@modules/components/page-loading"
 import { PageHeader } from "@/components/admin/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@modules/components/ui/card"
@@ -195,7 +196,7 @@ function PermissionDetailPage() {
                           params={{ userId: user.id }}
                           className="hover:underline"
                         >
-                          {`${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || user.id}
+                          {formatFullName(user, user.id)}
                         </Link>
                       </TableCell>
                       <TableCell>
@@ -206,7 +207,7 @@ function PermissionDetailPage() {
                             setRevokeTarget({
                               type: "user",
                               id: user.id,
-                              name: `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || user.id,
+                              name: formatFullName(user, user.id),
                             })
                           }
                         >

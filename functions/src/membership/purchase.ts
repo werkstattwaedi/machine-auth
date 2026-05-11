@@ -33,6 +33,7 @@ import type {
   UserEntity,
 } from "../types/firestore_entities";
 import { callerUserRef, db, detectMembershipKindForItems } from "./shared";
+import { formatFullName } from "../util/username-utils";
 
 export interface PurchaseMembershipRequest {
   type: MembershipType;
@@ -154,9 +155,7 @@ export async function handlePurchaseMembership(
       workshopsVisited: [],
       persons: [
         {
-          name:
-            `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() ||
-            (user.email ?? ""),
+          name: formatFullName(user, user.email ?? ""),
           email: user.email ?? "",
           userType: user.userType ?? "erwachsen",
           userRef: callerRef as DocumentReference,

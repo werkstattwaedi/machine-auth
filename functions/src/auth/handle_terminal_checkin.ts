@@ -12,6 +12,7 @@ import {
   TokenEntity,
   UserEntity,
 } from "../types/firestore_entities";
+import { formatFullName } from "../util/username-utils";
 
 // Auth reuse window in milliseconds (5 minutes)
 const AUTH_REUSE_WINDOW_MS = 5 * 60 * 1000;
@@ -163,9 +164,7 @@ export async function handleTerminalCheckin(
         $case: "authorized",
         authorized: {
           userId: { value: userDoc.id },
-          userLabel:
-            `${userData.firstName ?? ""} ${userData.lastName ?? ""}`.trim() ||
-            "Unknown User",
+          userLabel: formatFullName(userData, "Unknown User"),
           authenticationId: authenticationId ? { value: authenticationId } : undefined,
         },
       },

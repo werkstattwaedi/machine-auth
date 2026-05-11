@@ -29,6 +29,7 @@ import {
 import { httpsCallable, type Functions } from "firebase/functions"
 import { useDb, useFirebaseAuth, useFunctions } from "./firebase-context"
 import { userRef } from "./firestore-helpers"
+import { formatFullName } from "./username-utils"
 
 export interface BillingAddress {
   company: string
@@ -204,7 +205,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const lastName = data.lastName ?? ""
         setUserDoc({
           id: docSnap.id,
-          name: `${firstName} ${lastName}`.trim(),
+          name: formatFullName({ firstName, lastName }),
           firstName,
           lastName,
           email: data.email ?? null,
