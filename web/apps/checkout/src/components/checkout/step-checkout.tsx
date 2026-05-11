@@ -26,11 +26,31 @@ import { PositionTable, rowFromItem } from "@/components/usage/position-table"
 import type { UsageType } from "@modules/lib/pricing"
 
 /**
- * Compute up to 3 sensible round-up total targets for the current base.
- * The smallest target is the natural "next" step (next 0.50 for tiny
- * totals < 5; next franc otherwise); the next two are slightly larger
- * sensible jumps (next 5/10 etc.). The picker labels the smallest entry
- * as "nächsten Franken" so the most-common case reads naturally.
+ * Compute up to 4 sensible round-up total targets for the current base.
+ *
+ * Goal: every suggestion should *feel* like a round number for its
+ * magnitude — small bases think in 0.5/1 CHF steps, mid bases in
+ * 2/5/10 CHF steps, larger bases in 50/100/500 CHF steps. We avoid
+ * "greedy" suggestions by capping the bump at `max(5, base * 10%)`,
+ * and avoid arbitrary-looking suggestions (e.g. `195 → 196`) by
+ * dropping any candidate that's already swallowed by a much-rounder
+ * candidate just slightly above it.
+ *
+ * Algorithm:
+ *   1. Generate candidates by rounding `base` up to each multiple of
+ *      a "divisor ladder" `[0.5, 1, 2, 5, 10, 20, 50, 100, ...]`.
+ *   2. Keep only candidates within the bump cap.
+ *   3. For each unique candidate, remember the *largest* divisor that
+ *      produced it (that's its "natural roundness").
+ *   4. Dominance filter — drop candidate `c` if a higher candidate `c2`
+ *      with a divisor `≥ 4×` larger is within a small gap of it. This
+ *      kills the awkward `[196, 200]` style suggestions.
+ *   5. Monotonicity filter — when sorted ascending, never go *backwards*
+ *      in roundness. E.g. for base ≈ 247 we'd otherwise see `[250, 260]`
+ *      where 260 (d=20) is less round than 250 (d=50); the rule drops
+ *      260.
+ *   6. Return up to 4 entries, ascending. The smallest is the default
+ *      (auto-selected when the "Aufrunden" checkbox is on).
  */
 export function roundUpOptions(base: number): number[] {
   if (base <= 0) return []
@@ -38,33 +58,71 @@ export function roundUpOptions(base: number): number[] {
   // hide the suggestion row entirely (the Spende input remains for
   // free-form tipping).
   if (base % 1 === 0) return []
-  const maxTotal = base < 10 ? base + 3 : base * 1.1
-  const bump = base + 0.01
+  // Cap how much we're willing to suggest as a bump. At low bases the
+  // 5 CHF floor lets us suggest natural targets like `0.30 → 5`. At
+  // high bases the 10% rule keeps us from being greedy.
+  const bumpCap = Math.max(5, base * 0.1)
+  // "Much rounder, slightly higher" tolerance for the dominance filter.
+  const dominanceGap = Math.max(0.5, base * 0.05)
+  // Divisors grow geometrically (×2, ×2.5 alternating) and cover the
+  // range up to a few thousand francs — enough headroom for any realistic
+  // workshop bill.
+  const divisors = [
+    0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000,
+  ]
 
-  const candidates = new Set<number>()
-  if (base < 5) {
-    candidates.add(Math.ceil(bump * 2) / 2) // next 0.50 step for tiny totals
+  // Build (candidate → largest-divisor-that-produces-it).
+  const candidates = new Map<number, number>()
+  for (const d of divisors) {
+    // Use a small epsilon so a base already at a multiple of `d` rounds
+    // to the *next* multiple, not itself.
+    const raw = Math.ceil((base + 1e-9) / d) * d
+    // Floating-point cleanup: snap to 2 decimal places (Swiss centimes).
+    const target = Math.round(raw * 100) / 100
+    const bump = target - base
+    if (bump <= 0 || bump > bumpCap + 1e-9) continue
+    const existing = candidates.get(target)
+    if (existing === undefined || d > existing) candidates.set(target, d)
   }
-  candidates.add(Math.ceil(bump)) // next integer franc
-  candidates.add(Math.ceil(bump / 2) * 2) // next even integer
-  candidates.add(Math.ceil(bump / 5) * 5) // next 5
-  candidates.add(Math.ceil(bump / 10) * 10) // next 10
 
-  return Array.from(candidates)
-    .sort((a, b) => a - b)
-    .filter((t) => t > base && t <= maxTotal)
-    .slice(0, 3)
+  const sorted = Array.from(candidates.entries()).sort(
+    ([a], [b]) => a - b,
+  )
+
+  // Step 4 — dominance filter.
+  const afterDominance: [number, number][] = sorted.filter(([c, dc]) =>
+    !sorted.some(
+      ([c2, d2]) =>
+        c2 > c && c2 - c <= dominanceGap + 1e-9 && d2 >= dc * 4,
+    ),
+  )
+
+  // Step 5 — monotonicity filter: walk ascending, drop any entry whose
+  // divisor is smaller than the running max.
+  let maxDivisorSeen = 0
+  const kept: number[] = []
+  for (const [c, d] of afterDominance) {
+    if (d < maxDivisorSeen) continue
+    if (d > maxDivisorSeen) maxDivisorSeen = d
+    kept.push(c)
+  }
+
+  return kept.slice(0, 4)
 }
 
-/** Label for a round-up target. The smallest (i.e. the "natural next
+/** Label for a round-up target. The smallest entry (the "natural next
  *  step") reads "nächsten Franken" / "nächsten halben Franken" so the
- *  sentence "Auf X aufrunden" stays human-friendly. */
+ *  sentence "Auf X aufrunden" stays human-friendly. Non-smallest
+ *  entries name the target value explicitly; half-franc values are
+ *  formatted with one decimal place so e.g. `12.50` doesn't print as
+ *  `13 Franken`. */
 export function roundUpOptionLabel(target: number, isNextStep: boolean): string {
   if (isNextStep) {
-    // "next 0.50 step" only happens for tiny totals — keep it explicit.
+    // Half-franc step only happens for tiny totals or .50-base totals.
     if (target % 1 !== 0) return "nächsten halben Franken"
     return "nächsten Franken"
   }
+  if (target % 1 !== 0) return `${target.toFixed(2)} Franken`
   return `${target.toFixed(0)} Franken`
 }
 
