@@ -155,6 +155,20 @@
       ]
     },
     {
+      "collectionGroup": "loginCodes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "email",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "created",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "memberships",
       "queryScope": "COLLECTION",
       "fields": [
