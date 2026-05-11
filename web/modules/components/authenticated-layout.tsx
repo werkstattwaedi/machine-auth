@@ -19,6 +19,12 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@modules/components/ui/sheet"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@modules/components/ui/tooltip"
 import { Loader2, LogOut, Menu, type LucideIcon } from "lucide-react"
 
 export interface AuthenticatedLayoutNavItem {
@@ -176,16 +182,28 @@ export function AuthenticatedLayout({
               </div>
             ) : null}
           </div>
+          {/* Icon-only sign-out button — collapses the previously full-width
+              "Abmelden" CTA into the avatar row so the leading edges line up
+              (issue #232). `aria-label` keeps screen readers happy when the
+              visible text disappears; the tooltip surfaces the label on
+              hover/focus for sighted users. */}
+          <TooltipProvider delayDuration={300}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Abmelden"
+                  className="text-muted-foreground hover:text-foreground hover:bg-cog-teal-light"
+                  onClick={() => signOut()}
+                >
+                  <LogOut className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Abmelden</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="w-full justify-start text-muted-foreground hover:text-foreground hover:bg-cog-teal-light"
-          onClick={() => signOut()}
-        >
-          <LogOut className="h-4 w-4 mr-2" />
-          Abmelden
-        </Button>
       </div>
     </>
   )
