@@ -135,6 +135,7 @@ export async function seedMembershipState(
       paymentCheckouts: [],
       created: Timestamp.fromDate(STABLE_INVITE_DATE),
     })
+    await userRef.set({ activeMembership: membershipRef }, { merge: true })
     return
   }
 
@@ -169,6 +170,13 @@ export async function seedMembershipState(
       paymentCheckouts: [],
       created: Timestamp.fromDate(STABLE_INVITE_DATE),
     })
+    // Issue #209: the firestore rule `shareActiveMembership` lets co-members
+    // read each other's user docs only when *both* sides have
+    // `activeMembership` populated. The production `onMembershipWritten`
+    // trigger keeps that field in sync; in the emulator we have to stamp
+    // it explicitly. Without this the family-roster quick-add (and the
+    // membership page's family roster) silently render empty.
+    await userRef.set({ activeMembership: membershipRef }, { merge: true })
 
     if (kind.pendingInviteEmail) {
       await membershipRef.collection("invites").doc("e2e-invite-001").set({
@@ -209,6 +217,7 @@ export async function seedMembershipState(
       paymentCheckouts: [],
       created: Timestamp.fromDate(STABLE_INVITE_DATE),
     })
+    await userRef.set({ activeMembership: membershipRef }, { merge: true })
     return
   }
 
@@ -266,6 +275,16 @@ async function clearMembershipState(
     if (id === authUserUid) continue
     await db.collection("users").doc(id).delete().catch(() => undefined)
   }
+
+  // Clear the activeMembership stamp on the AUTH user (set by the
+  // `active-family-owner` branch — issue #209). Without this, a
+  // subsequent `none` / `active-single` seed leaves the auth user
+  // pointing at a deleted membership doc.
+  await db
+    .collection("users")
+    .doc(authUserUid)
+    .set({ activeMembership: null }, { merge: true })
+    .catch(() => undefined)
 }
 
 // ── Usage / bills seeding (used by usage-screenshots.spec.ts) ───────────

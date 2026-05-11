@@ -2,7 +2,11 @@
 // SPDX-License-Identifier: MIT
 
 import { test, expect, type Page } from "@playwright/test"
-import { clearCollections, waitForLoginCode } from "./helpers"
+import {
+  clearCollections,
+  seedMembershipState,
+  waitForLoginCode,
+} from "./helpers"
 import { AUTH_USER_EMAIL } from "./global-setup"
 
 /** Navigate to checkout — check-in step is shown directly */
@@ -12,6 +16,16 @@ async function goToCheckin(page: Page) {
 }
 
 test.describe("Check-in step screenshots", () => {
+  // The family-owner test seeds an `active-family-owner` membership and
+  // stamps `activeMembership` on the auth user doc. Without an explicit
+  // reset, that stamp leaks into later test files (notably
+  // checkout-screenshots Step 4) and surfaces the "Sammelrechnung" tab
+  // when those tests expect a non-member view.
+  test.afterAll(async () => {
+    const uid = process.env.E2E_AUTH_USER_UID
+    if (uid) await seedMembershipState(uid, { kind: "none" })
+  })
+
   test("empty form", async ({ page }) => {
     await goToCheckin(page)
 
@@ -89,6 +103,55 @@ test.describe("Check-in step screenshots", () => {
     await expect(page.getByText("Abmelden")).toBeVisible({ timeout: 10_000 })
 
     await expect(page).toHaveScreenshot("checkin-logged-in.png")
+  })
+
+  // Issue #209: family-owner check-in surfaces quick-add buttons for
+  // co-members not yet on the visit, plus a removable first card. The
+  // screenshot acts as both pixel-regression and the only end-to-end
+  // verification that the wizard's `useCollection` chain reads the
+  // membership + co-member docs through the (relaxed) Firestore rules.
+  test("logged-in family owner — quick-add buttons visible", async ({ page }) => {
+    await clearCollections("loginCodes")
+
+    // Sign in as the seeded auth user via the 6-digit code flow.
+    await page.goto("/login")
+    await page.getByTestId("login-email-input").fill(AUTH_USER_EMAIL)
+    await page.getByTestId("login-email-submit").click()
+    await expect(page.getByTestId("login-code-stage")).toBeVisible({ timeout: 5000 })
+
+    const entry = await waitForLoginCode(AUTH_USER_EMAIL)
+    expect(entry).toBeTruthy()
+    await page.getByTestId("login-code-input").fill(entry!.code)
+    await page.getByTestId("login-code-submit").click()
+    await page.waitForURL((url) => !url.pathname.startsWith("/login"), {
+      timeout: 10_000,
+    })
+
+    // Seed an active family membership with two co-members so the
+    // wizard surfaces two quick-add buttons.
+    const uid = process.env.E2E_AUTH_USER_UID!
+    await seedMembershipState(uid, {
+      kind: "active-family-owner",
+      coMembers: [
+        { firstName: "Lia", lastName: "Pfeffer", userType: "kind" },
+        { firstName: "Yvonne", lastName: "Pfeiffer" },
+      ],
+    })
+
+    await page.goto("/")
+    await expect(page.getByText("Deine Angaben")).toBeVisible({
+      timeout: 10_000,
+    })
+    // Both quick-add buttons render. Use exact text so we don't match the
+    // generic "Person hinzufügen" button.
+    await expect(
+      page.getByRole("button", { name: /Lia Pfeffer/ }),
+    ).toBeVisible({ timeout: 5_000 })
+    await expect(
+      page.getByRole("button", { name: /Yvonne Pfeiffer/ }),
+    ).toBeVisible()
+
+    await expect(page).toHaveScreenshot("checkin-family-owner-quick-add.png")
   })
 
   test("two persons scrolled — sticky nav bar at bottom", async ({ page }) => {

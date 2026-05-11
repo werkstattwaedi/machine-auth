@@ -15,6 +15,13 @@ export interface CheckoutPerson {
   userType: UserType
   termsAccepted: boolean
   isPreFilled: boolean
+  /**
+   * Set when the person was added from the signed-in user's family roster
+   * (issue #209). Lets the wizard dedupe quick-add candidates against the
+   * current cards and lets the submit payload attribute the visit to a
+   * real account (incl. child accounts with `email: null`).
+   */
+  userId?: string | null
   billingCompany?: string
   billingStreet?: string
   billingZip?: string
@@ -36,6 +43,16 @@ export interface CheckoutState {
 type CheckoutAction =
   | { type: "SET_STEP"; step: number }
   | { type: "ADD_PERSON" }
+  | {
+      type: "ADD_FAMILY_PERSON"
+      person: {
+        userId: string
+        firstName: string
+        lastName: string
+        email: string
+        userType: UserType
+      }
+    }
   | { type: "REMOVE_PERSON"; id: string }
   | { type: "UPDATE_PERSON"; id: string; updates: Partial<CheckoutPerson> }
   | { type: "SET_USAGE_TYPE"; usageType: UsageType }
@@ -75,6 +92,28 @@ function checkoutReducer(
 
     case "ADD_PERSON":
       return { ...state, persons: [...state.persons, createEmptyPerson()] }
+
+    case "ADD_FAMILY_PERSON":
+      // Append a fully-populated, pre-filled card pulled from the
+      // signed-in user's family roster (issue #209). Pre-filled cards
+      // skip validation, so child accounts (email: null → "") work
+      // without per-card edits.
+      return {
+        ...state,
+        persons: [
+          ...state.persons,
+          {
+            id: crypto.randomUUID(),
+            firstName: action.person.firstName,
+            lastName: action.person.lastName,
+            email: action.person.email,
+            userType: action.person.userType,
+            termsAccepted: true,
+            isPreFilled: true,
+            userId: action.person.userId,
+          },
+        ],
+      }
 
     case "REMOVE_PERSON":
       return {

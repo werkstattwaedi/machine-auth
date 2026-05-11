@@ -7,7 +7,21 @@ import { Button } from "@modules/components/ui/button"
 import { PersonCard } from "./person-card"
 import { Plus, ArrowRight, LogIn, UserPlus } from "lucide-react"
 import type { CheckoutState, CheckoutAction } from "./use-checkout-state"
+import type { UserType } from "@modules/lib/pricing"
 import { validatePerson } from "./validation"
+
+/**
+ * Issue #209: a roster member of the signed-in family owner who is not
+ * already on the visit. Rendered as a `[+ <FirstName> <LastName>]` quick-add
+ * button.
+ */
+export interface FamilyCandidate {
+  userId: string
+  firstName: string
+  lastName: string
+  email: string
+  userType: UserType
+}
 
 interface StepCheckinProps {
   state: CheckoutState
@@ -23,9 +37,15 @@ interface StepCheckinProps {
    * #151). A no-op for already-identified users (real login or tag-tap).
    */
   onAdvance?: () => Promise<void>
+  /**
+   * Family roster members of the signed-in user that aren't on the visit
+   * yet (issue #209). Empty / omitted for anonymous, tag-tap, single-
+   * membership, or non-owner users.
+   */
+  familyCandidates?: FamilyCandidate[]
 }
 
-export function StepCheckin({ state, dispatch, isAnonymous, kiosk, isAccountLoggedIn, onSignOut, onAdvance }: StepCheckinProps) {
+export function StepCheckin({ state, dispatch, isAnonymous, kiosk, isAccountLoggedIn, onSignOut, onAdvance, familyCandidates }: StepCheckinProps) {
   // touched: personId → field → true
   const [touched, setTouched] = useState<Record<string, Record<string, boolean>>>({})
   const [submitted, setSubmitted] = useState(false)
@@ -81,6 +101,20 @@ export function StepCheckin({ state, dispatch, isAnonymous, kiosk, isAccountLogg
     dispatch({ type: "ADD_PERSON" })
   }
 
+  const handleAddFamilyPerson = (candidate: FamilyCandidate) => {
+    setSubmitted(false)
+    dispatch({
+      type: "ADD_FAMILY_PERSON",
+      person: {
+        userId: candidate.userId,
+        firstName: candidate.firstName,
+        lastName: candidate.lastName,
+        email: candidate.email,
+        userType: candidate.userType,
+      },
+    })
+  }
+
   return (
     <div className="flex flex-col flex-1 gap-6">
       <h2 className="text-xl font-bold font-body">
@@ -111,14 +145,34 @@ export function StepCheckin({ state, dispatch, isAnonymous, kiosk, isAccountLogg
       ))}
 
       <div className="flex flex-col items-start gap-3">
-        <button
-          type="button"
-          className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-cog-teal border border-cog-teal rounded-[3px] bg-white hover:bg-cog-teal-light transition-colors"
-          onClick={handleAddPerson}
-        >
-          <Plus className="h-4 w-4" />
-          Person hinzufügen
-        </button>
+        {/*
+          Issue #209: family-roster quick-adds render inline with the
+          primary "Person hinzufügen" CTA. `flex-wrap` lets the chips
+          flow onto a second line on narrow viewports.
+        */}
+        <div className="flex flex-wrap items-start gap-2">
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-cog-teal border border-cog-teal rounded-[3px] bg-white hover:bg-cog-teal-light transition-colors"
+            onClick={handleAddPerson}
+          >
+            <Plus className="h-4 w-4" />
+            Person hinzufügen
+          </button>
+
+          {familyCandidates &&
+            familyCandidates.map((candidate) => (
+              <button
+                key={candidate.userId}
+                type="button"
+                className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-cog-teal border border-cog-teal rounded-[3px] bg-white hover:bg-cog-teal-light transition-colors"
+                onClick={() => handleAddFamilyPerson(candidate)}
+              >
+                <Plus className="h-4 w-4" />
+                {candidate.firstName} {candidate.lastName}
+              </button>
+            ))}
+        </div>
 
         {isAnonymous && (
           <div className="space-y-3 pt-2">

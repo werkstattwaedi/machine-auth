@@ -78,6 +78,11 @@ vi.mock("@modules/lib/firestore-helpers", () => ({
   userRef: () => ({ id: "test-user", path: "users/test-user" }),
   checkoutsCollection: () => ({ path: "checkouts" }),
   checkoutItemsCollection: () => ({ path: "checkouts/x/items" }),
+  // Issue #209: family-roster quick-add subscribes to `memberships` and
+  // `users`; the test's `useCollection` mock returns an empty list, so the
+  // refs themselves are unused — but the imports must resolve.
+  membershipsCollection: () => ({ path: "memberships" }),
+  usersCollection: () => ({ path: "users" }),
 }))
 
 // --- firebase-context ---

@@ -5,12 +5,14 @@ import { useState, useEffect, useRef, useMemo } from "react"
 import { useAuth } from "@modules/lib/auth"
 import { useTokenAuth } from "@modules/lib/token-auth"
 import { useCollection } from "@modules/lib/firestore"
-import { where, orderBy } from "firebase/firestore"
+import { where, orderBy, documentId } from "firebase/firestore"
 import { httpsCallable } from "firebase/functions"
 import {
   userRef,
   checkoutsCollection,
   checkoutItemsCollection,
+  membershipsCollection,
+  usersCollection,
 } from "@modules/lib/firestore-helpers"
 import { useDb, useFunctions } from "@modules/lib/firebase-context"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
@@ -145,6 +147,60 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
 
   // Pre-fill primary person for logged-in users
   usePreFillPerson(identifiedUserDoc, dispatch, state.persons)
+
+  // Issue #209: family-roster quick-add. Subscribe to the signed-in user's
+  // active family membership and surface co-members not yet on the visit.
+  // - Anonymous, tag-tap, and unidentified users: skipped (selfUserId null).
+  // - Single membership / non-owner: produces zero candidates after the
+  //   `excluding self` filter, so the quick-add row is hidden by StepCheckin.
+  const selfUserId = identifiedUserDoc?.id ?? null
+  const selfRef = selfUserId ? userRef(db, selfUserId) : null
+  const { data: familyMemberships } = useCollection(
+    selfRef ? membershipsCollection(db) : null,
+    ...(selfRef
+      ? [
+          where("members", "array-contains", selfRef),
+          where("type", "==", "family"),
+          where("status", "==", "active"),
+        ]
+      : []),
+  )
+  const familyMembership = familyMemberships[0] ?? null
+  // Member ids excluding self. Bound the `in` query at 30 (Firestore limit);
+  // a family is capped at five members + self in practice.
+  const otherMemberIds = useMemo(() => {
+    if (!familyMembership || !selfUserId) return [] as string[]
+    const ids = familyMembership.members
+      .map((m) => m.id)
+      .filter((id) => id !== selfUserId)
+    return ids.slice(0, 30)
+  }, [familyMembership, selfUserId])
+  const { data: familyMemberDocs } = useCollection(
+    otherMemberIds.length > 0 ? usersCollection(db) : null,
+    where(documentId(), "in", otherMemberIds.length > 0 ? otherMemberIds : [""]),
+  )
+  // Dedupe candidates against persons already on the visit (matched by
+  // userId attached when the card was added via quick-add or the primary
+  // pre-fill effect).
+  const claimedUserIds = useMemo(
+    () => new Set(state.persons.map((p) => p.userId).filter(Boolean) as string[]),
+    [state.persons],
+  )
+  const familyCandidates = useMemo(
+    () =>
+      familyMemberDocs
+        .filter((m) => !claimedUserIds.has(m.id))
+        .map((m) => ({
+          userId: m.id,
+          firstName: m.firstName,
+          lastName: m.lastName,
+          // Child accounts have email: null; surface as empty string so
+          // the pre-filled card simply hides the field.
+          email: m.email ?? "",
+          userType: (m.userType as UserType) ?? "erwachsen",
+        })),
+    [familyMemberDocs, claimedUserIds],
+  )
 
   // Pre-fill primary person for tag-identified users and auto-advance
   useEffect(() => {
@@ -439,6 +495,7 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
           isAnonymous={isAnonymous}
           kiosk={!!kiosk}
           isAccountLoggedIn={isAccountLoggedIn}
+          familyCandidates={familyCandidates}
           onSignOut={async () => {
             await signOut()
             window.location.replace(kiosk ? "/?kiosk" : "/")
@@ -498,6 +555,18 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
 
 /**
  * Pre-fill the primary person card with data from an identified user doc.
+ * Issue #209: also stamps `userId: userDoc.id` so the family-roster
+ * quick-add can dedupe (the signed-in user is always a `members[]` entry
+ * of their own family, and we don't want a quick-add button for them).
+ *
+ * The fill targets the first non-pre-filled card. If a family-quick-add
+ * has already been the only thing the user did (so `persons[0]` is a
+ * different family member), we still want this hook to inject the
+ * signed-in user — so we look for the first card without a `userId` and
+ * with `isPreFilled: false`. If the user already has a card with their
+ * own `userId` (e.g. they removed the original primary and re-added
+ * themselves via a quick-add — though we don't render a quick-add for
+ * self today, this is future-proofing), we no-op.
  */
 function usePreFillPerson(
   userDoc: {
@@ -510,16 +579,23 @@ function usePreFillPerson(
     billingAddress?: { company: string; street: string; zip: string; city: string } | null
   } | null,
   dispatch: React.Dispatch<CheckoutAction>,
-  persons: { id: string; isPreFilled: boolean }[],
+  persons: { id: string; isPreFilled: boolean; userId?: string | null }[],
 ) {
   useEffect(() => {
     if (!userDoc) return
-    const primary = persons[0]
-    if (!primary || primary.isPreFilled) return
+    // Already on the visit (e.g. via a prior pre-fill that ran before the
+    // hook keying re-fired) — nothing to do.
+    if (persons.some((p) => p.userId === userDoc.id)) return
+    // Target the first card that doesn't already represent another
+    // identified user. Skipping cards with `userId` set means the family
+    // quick-add for a co-member doesn't get clobbered into the signed-in
+    // user's profile.
+    const target = persons.find((p) => !p.isPreFilled && !p.userId)
+    if (!target) return
 
     dispatch({
       type: "UPDATE_PERSON",
-      id: primary.id,
+      id: target.id,
       updates: {
         firstName: userDoc.firstName,
         lastName: userDoc.lastName,
@@ -527,6 +603,7 @@ function usePreFillPerson(
         userType: (userDoc.userType as UserType) ?? "erwachsen",
         isPreFilled: true,
         termsAccepted: !!userDoc.termsAcceptedAt,
+        userId: userDoc.id,
         billingCompany: userDoc.billingAddress?.company ?? "",
         billingStreet: userDoc.billingAddress?.street ?? "",
         billingZip: userDoc.billingAddress?.zip ?? "",
