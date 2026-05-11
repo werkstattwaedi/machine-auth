@@ -33,6 +33,7 @@ import {
   TableRow,
 } from "@modules/components/ui/table"
 import { formatDateTime } from "@modules/lib/format"
+import { formatFullName } from "@modules/lib/username-utils"
 import { useForm } from "react-hook-form"
 import { Loader2, Save, Plus, Ban, RotateCcw } from "lucide-react"
 import { useEffect, useState } from "react"
@@ -178,7 +179,7 @@ function UserDetailPage() {
 
   return (
     <div>
-      <PageHeader title={`${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || "Benutzer"} backTo="/users" backLabel="Zurück zu Benutzer" />
+      <PageHeader title={formatFullName(user, "Benutzer")} backTo="/users" backLabel="Zurück zu Benutzer" />
 
       <Tabs defaultValue="details">
         <TabsList>

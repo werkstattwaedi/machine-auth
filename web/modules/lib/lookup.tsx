@@ -10,6 +10,7 @@ import {
   usersCollection,
   macosCollection,
 } from "./firestore-helpers"
+import { formatFullName } from "./username-utils"
 
 interface LookupMaps {
   permissions: Map<string, string>
@@ -31,10 +32,7 @@ export function LookupProvider({ children }: { children: ReactNode }) {
     permissions: new Map(perms.map((d) => [d.id, d.name])),
     machines: new Map(machines.map((d) => [d.id, d.name])),
     users: new Map(
-      users.map((d) => [
-        d.id,
-        `${d.firstName ?? ""} ${d.lastName ?? ""}`.trim() || d.id,
-      ])
+      users.map((d) => [d.id, formatFullName(d, d.id)])
     ),
     terminals: new Map(terminals.map((d) => [d.id, d.name || d.id])),
   }

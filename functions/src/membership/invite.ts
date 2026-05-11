@@ -40,6 +40,7 @@ import {
   resendApiKey,
   sendTemplate,
 } from "../util/resend_template";
+import { formatFullName } from "../util/username-utils";
 import { defineString } from "firebase-functions/params";
 
 export interface InviteFamilyMemberRequest {
@@ -222,7 +223,7 @@ export async function resolveInviterName(
     const snap = await callerRef.get();
     if (!snap.exists) return "Jemand";
     const user = snap.data() as UserEntity;
-    const fullName = `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim();
+    const fullName = formatFullName(user);
     if (fullName.length > 0) return fullName;
     if (user.email && user.email.includes("@")) {
       return user.email.split("@")[0];

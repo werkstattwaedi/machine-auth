@@ -13,6 +13,7 @@ import * as logger from "firebase-functions/logger";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
+import { formatFullName } from "../util/username-utils";
 
 interface CreateUserData {
   email: string;
@@ -43,7 +44,7 @@ export const createUser = onCall(async (request) => {
     // Create Firebase Auth user (no password — email-link auth).
     // We still pass `firstName lastName` as the Firebase Auth `displayName`
     // so the Firebase Console / Auth emulator UI show recognizable names.
-    const fullName = `${firstName ?? ""} ${lastName ?? ""}`.trim() || email;
+    const fullName = formatFullName({ firstName, lastName }, email);
     authUser = await auth.createUser({
       email,
       displayName: fullName,

@@ -11,6 +11,7 @@ import {
   machinesCollection,
 } from "@modules/lib/firestore-helpers"
 import { useDb } from "@modules/lib/firebase-context"
+import { formatFullName } from "@modules/lib/username-utils"
 import type {
   PermissionDoc,
   UserDoc,
@@ -116,7 +117,7 @@ function PermissionsPage() {
     const parts: string[] = []
     if (referenceInfo.users.length > 0) {
       const names = referenceInfo.users
-        .map((u) => `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || u.id)
+        .map((u) => formatFullName(u, u.id))
         .join(", ")
       parts.push(`Benutzer: ${names}`)
     }

@@ -32,6 +32,7 @@ import {
   getMembershipInTx,
   membershipRef,
 } from "./shared";
+import { formatFullName } from "../util/username-utils";
 
 interface CreateChildAccountRequest {
   membershipId: string;
@@ -96,8 +97,10 @@ export const createChildAccount = onCall<
   const auth = getAuth();
   // Pass `firstName lastName` as the Firebase Auth displayName so the
   // Auth Console shows a recognizable name.
-  const fullName =
-    `${firstName} ${lastName}`.trim() || `${firstName} (Kind)`;
+  const fullName = formatFullName(
+    { firstName, lastName },
+    `${firstName} (Kind)`,
+  );
 
   // Auth user with no credentials. Firebase Auth allows this — the user
   // simply has no sign-in method until someone sets an email later.
