@@ -355,6 +355,60 @@ paths route through the broker.
 
 ---
 
+## 13. `/workqueue` GitHub App (optional — Claude Code only)
+
+The `/workqueue` Claude Code skill processes the `claude-workqueue` issue
+queue and opens PRs. It authenticates as a dedicated GitHub App so the
+bot's comments and PRs aren't attributed to your personal account. Skip
+this section if you don't use `/workqueue`.
+
+> **Keep in sync with [`.claude/commands/workqueue.md`](../.claude/commands/workqueue.md) "Setup (one-time)"** — the skill's in-tool reference has the same steps. Update both when changing the setup.
+
+```bash
+sudo apt install -y jq           # required by .claude/scripts/workqueue-gh-token.sh
+```
+
+1. **Create the App** at <https://github.com/settings/apps/new>:
+   - Name: e.g. `werkstattwaedi-workqueue` (must be globally unique)
+   - Homepage URL: this repo
+   - Webhook: **disable** (uncheck Active)
+   - Repository permissions: Contents, Issues, Pull requests → **Read & write**
+   - Where can this App be installed: *Only on this account*
+   - Click **Create GitHub App**.
+2. On the App page: **Private keys → Generate a private key** (downloads a `.pem`).
+3. Note the numeric **App ID** at the top of the App settings page.
+4. **Install the App** on the repo: left sidebar → *Install App* → pick
+   `werkstattwaedi/machine-auth` only. The post-install URL contains the
+   numeric **Installation ID**: `…/settings/installations/<INSTALLATION_ID>`.
+5. Save the credentials outside the repo:
+
+   ```bash
+   mkdir -p ~/.config/workqueue-app
+   chmod 700 ~/.config/workqueue-app
+   mv ~/Downloads/<your-app>.<date>.private-key.pem \
+     ~/.config/workqueue-app/private-key.pem
+   chmod 600 ~/.config/workqueue-app/private-key.pem
+
+   cat > ~/.config/workqueue-app/env <<'EOF'
+   export WORKQUEUE_APP_ID=<APP_ID>
+   export WORKQUEUE_APP_INSTALLATION_ID=<INSTALLATION_ID>
+   export WORKQUEUE_APP_PRIVATE_KEY=$HOME/.config/workqueue-app/private-key.pem
+   EOF
+   chmod 600 ~/.config/workqueue-app/env
+   ```
+
+6. Verify — this should print `werkstattwaedi/machine-auth`:
+
+   ```bash
+   .claude/scripts/wq-gh.sh api /installation/repositories \
+     --jq '.repositories[].full_name'
+   ```
+
+   A 403 on `/user` means the wrong endpoint — App installation tokens are
+   repo-scoped, not user-scoped.
+
+---
+
 ## Troubleshooting
 
 - **`firebase emulators:start` reports `Port 4000 is not open on 127.0.0.1`** —

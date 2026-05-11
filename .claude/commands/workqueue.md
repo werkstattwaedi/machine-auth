@@ -19,6 +19,8 @@ Process the `claude-workqueue` issue queue and open workqueue PRs with review fe
 
 The workqueue authenticates as a GitHub App so issue comments don't look like you talking to yourself. Do these once per machine:
 
+> **Keep in sync with [`docs/bootstrap.md` §13](../../docs/bootstrap.md#13-workqueue-github-app-optional--claude-code-only)** — the fresh-machine guide has the same steps. Update both when changing the setup.
+
 1. **Create a GitHub App** under your account:
    - https://github.com/settings/apps/new
    - Name: e.g. `werkstattwaedi-workqueue`
