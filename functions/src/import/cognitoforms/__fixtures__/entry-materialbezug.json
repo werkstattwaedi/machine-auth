@@ -1,0 +1,42 @@
+{
+  "Id": "1004",
+  "DeineAngaben": [
+    {
+      "Vorname": "Sandra",
+      "Nachname": "Material",
+      "EMail": "sandra@example.com",
+      "Nutzerin": "Erwachsen",
+      "Nutzungsart": "Nur Materialbezug",
+      "Nutzungsgebühr": 0,
+      "Id": "p-s4"
+    }
+  ],
+  "WerkstättenWählen": {
+    "FürWelcheWerkstättenMöchtestDuKostenErfassen": ["Schmuck", "Diverses"]
+  },
+  "MaterialbezugSchmuckAtelier": [
+    {
+      "Kategorie": "g (Silber, Lot, etc.)",
+      "MaterialBemerkungen": "Silber 925",
+      "Mengeg": 8,
+      "Preisg": 2.5,
+      "Betrag": 20,
+      "Id": "m-s4"
+    }
+  ],
+  "Diverses": [
+    {
+      "BezogeneLeistungen": "Werkzeug Verleih Pauschal",
+      "KostenCHF": 3,
+      "Id": "d-1"
+    }
+  ],
+  "Trinkgeld": 0,
+  "Total": 23,
+  "Entry": {
+    "DateCreated": "2026-05-04T08:00:00Z",
+    "DateSubmitted": "2026-05-04T09:00:00Z",
+    "Number": 1004,
+    "Status": "Submitted"
+  }
+}

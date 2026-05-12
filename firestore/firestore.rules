@@ -288,6 +288,14 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Import state — server-side only (CognitoForms importer cursor, etc.)
+    // Clients have no business reading or writing these operational
+    // markers; the importer runs as Cloud Functions with admin SDK access.
+    match /import_state/{docId} {
+      allow read: if false;
+      allow write: if false;
+    }
+
     // Audit log (admin read only, no client writes)
     match /audit_log/{logId} {
       allow read: if isAdmin();

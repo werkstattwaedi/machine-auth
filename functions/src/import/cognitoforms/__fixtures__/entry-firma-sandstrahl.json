@@ -1,0 +1,49 @@
+{
+  "Id": "1005",
+  "DeineAngaben": [
+    {
+      "Vorname": "Hans",
+      "Nachname": "Geschäft",
+      "EMail": "hans@firma.example.com",
+      "Nutzerin": "Firma",
+      "Nutzungsart": "Reguläre Nutzung",
+      "Nutzungsgebühr": 5,
+      "Rechnungsadresse2": {
+        "Firma": "Geschäft AG",
+        "FirmaZusatz": "Werkstatt",
+        "StrasseNr": "Musterstrasse 1",
+        "AdresseZusatz": "c/o Müller",
+        "PLZ": "8000",
+        "Ort": "Zürich"
+      },
+      "Id": "p-h5"
+    }
+  ],
+  "WerkstättenWählen": {
+    "FürWelcheWerkstättenMöchtestDuKostenErfassen": ["Stein", "Metall"]
+  },
+  "NutzungSandstrahlen": [
+    {
+      "Anzahl": 2,
+      "Grösse": "Klein (bis 13 x 9 x 9 cm)",
+      "Betrag": 10,
+      "Id": "sb-1"
+    }
+  ],
+  "NutzungSandstrahlenMetall": [
+    {
+      "Anzahl": 1,
+      "Grösse": "Mittel (bis 21 x 14 x 14 cm)",
+      "Betrag": 15,
+      "Id": "sbm-1"
+    }
+  ],
+  "Trinkgeld": 0,
+  "Total": 35,
+  "Entry": {
+    "DateCreated": "2026-05-05T10:00:00Z",
+    "DateSubmitted": "2026-05-05T12:00:00Z",
+    "Number": 1005,
+    "Status": "Submitted"
+  }
+}

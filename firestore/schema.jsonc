@@ -92,11 +92,16 @@
     }
   },
   "checkouts": {
+    // {checkoutId} doc IDs are Firestore auto-IDs (20-char) for native
+    // checkouts. CognitoForms imports use deterministic IDs of the form
+    // `zzCognitoFormsNNNNNN`, where NNNNNN is `Entry.Number` zero-padded
+    // to 6 digits. The prefix sorts these to the end of any listing and
+    // makes the import provenance obvious without a separate field.
     "{checkoutId}": {
       // --- Always present ---
-      "userId": "DocumentReference", // DocumentReference to /users/{userId}
+      "userId": "DocumentReference", // DocumentReference to /users/{userId}; null for anonymous / CognitoForms imports
       "status": "open | closed",
-      "usageType": "regular | materialbezug | intern | hangenmoos",
+      "usageType": "regular | ermaessigt | materialbezug | intern | hangenmoos",
       "created": "timestamp",
       "workshopsVisited": ["string"], // e.g., ["holz", "metall"]
       "persons": [{ // Array of person entries
@@ -186,6 +191,18 @@
         "units": {}, // Map of unit key to display label (e.g., "m2": "m²", "h": "Std.")
         "discounts": {} // Map of discount level to display label (e.g., "none": "Kein Rabatt")
       }
+    }
+  },
+  "import_state": {
+    // Server-only cursor docs used by import jobs. Client read/write is
+    // denied by firestore.rules so this collection cannot leak operational
+    // state to public clients.
+    "cognitoforms": {
+      "lastEntryDateSubmitted": "timestamp | null", // Exclusive lower bound for next $filter
+      "lastRunAt": "timestamp | null",
+      "lastRunStatus": "ok | partial | error",
+      "lastRunError": "string | null",
+      "importedCount": "number" // Lifetime tally
     }
   },
   "audit_log": {

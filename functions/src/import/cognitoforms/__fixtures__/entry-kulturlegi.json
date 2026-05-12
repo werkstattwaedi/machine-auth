@@ -1,0 +1,48 @@
+{
+  "Id": "1003",
+  "DeineAngaben": [
+    {
+      "Vorname": "Eva",
+      "Nachname": "Sparmeier",
+      "EMail": "eva@example.com",
+      "Nutzerin": "Erwachsen",
+      "Nutzungsart": "Ermässigte Nutzung (KulturLegi)",
+      "Nutzungsgebühr": 2.5,
+      "Id": "p-e3"
+    },
+    {
+      "Vorname": "Tim",
+      "Nachname": "Sparmeier",
+      "EMail": null,
+      "Nutzerin": "Kind (u. 18)",
+      "Nutzungsart": "Ermässigte Nutzung (KulturLegi)",
+      "Nutzungsgebühr": 1.25,
+      "Id": "p-t3"
+    }
+  ],
+  "WerkstättenWählen": {
+    "FürWelcheWerkstättenMöchtestDuKostenErfassen": ["Maker Space"]
+  },
+  "NutzungFDM3DDrucker": [
+    {
+      "Gewichtg": 50,
+      "Kategorie": "Kategorie 1 (Standard)",
+      "Betrag": 5,
+      "Id": "fdm-1"
+    },
+    {
+      "Gewichtg": 30,
+      "Kategorie": "Kategorie 3 (Technisch)",
+      "Betrag": 12,
+      "Id": "fdm-2"
+    }
+  ],
+  "Trinkgeld": 0,
+  "Total": 20.75,
+  "Entry": {
+    "DateCreated": "2026-05-03T14:00:00Z",
+    "DateSubmitted": "2026-05-03T15:30:00Z",
+    "Number": 1003,
+    "Status": "Submitted"
+  }
+}

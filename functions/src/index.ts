@@ -300,6 +300,12 @@ export { hourlyMembershipExpiryCheck } from "./membership/expiry_check";
 // Export scheduled cleanup
 export { cleanupAbandonedCheckouts } from "./checkout/cleanup_abandoned_checkouts";
 
+// Export CognitoForms importer — daily schedule + admin backfill callable.
+export {
+  scheduledCognitoformsImport,
+  backfillCognitoforms,
+} from "./import/cognitoforms";
+
 // Export Firestore triggers
 export { syncCustomClaims } from "./auth/set-custom-claims";
 
