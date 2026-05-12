@@ -39,7 +39,7 @@ vi.mock("@modules/lib/pricing", async () => {
   )
   return {
     ...actual,
-    USAGE_TYPE_LABELS: { regular: "Regulär", intern: "Intern", materialbezug: "Materialbezug", hangenmoos: "Hangenmoos" },
+    USAGE_TYPE_LABELS: { regular: "Regulär", ermaessigt: "Ermässigt", intern: "Intern", materialbezug: "Materialbezug", hangenmoos: "Hangenmoos" },
     USER_TYPE_LABELS: { erwachsen: "Erwachsen", kind: "Kind", firma: "Firma" },
     // Fractional fee so `roundUpOptions(subtotal)` produces non-empty
     // options (e.g. 14.40 → 15, 16, 17 — the smallest "next franc" is
@@ -51,9 +51,9 @@ vi.mock("@modules/lib/pricing", async () => {
 
 const config: PricingConfig = {
   entryFees: {
-    erwachsen: { regular: 15, materialbezug: 0, intern: 99, hangenmoos: 15 },
-    kind: { regular: 7.5, materialbezug: 0, intern: 99, hangenmoos: 7.5 },
-    firma: { regular: 30, materialbezug: 0, intern: 99, hangenmoos: 30 },
+    erwachsen: { regular: 15, ermaessigt: 7.5, materialbezug: 0, intern: 99, hangenmoos: 15 },
+    kind: { regular: 7.5, ermaessigt: 3.75, materialbezug: 0, intern: 99, hangenmoos: 7.5 },
+    firma: { regular: 30, ermaessigt: 15, materialbezug: 0, intern: 99, hangenmoos: 30 },
   },
   workshops: {} as PricingConfig["workshops"],
   slaLayerPrice: { none: 0.01, member: 0.008 },

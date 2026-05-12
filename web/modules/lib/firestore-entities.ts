@@ -189,6 +189,7 @@ export interface CheckoutSummaryDoc {
 
 export type CheckoutUsageType =
   | "regular"
+  | "ermaessigt"
   | "materialbezug"
   | "intern"
   | "hangenmoos"

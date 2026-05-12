@@ -85,9 +85,9 @@ describe("validatePricingConfig (issue #149)", () => {
   // non-null error string identifying the offending field.
   const valid: unknown = {
     entryFees: {
-      erwachsen: { regular: 5, materialbezug: 0, intern: 0, hangenmoos: 0 },
-      kind: { regular: 2.5, materialbezug: 0, intern: 0, hangenmoos: 0 },
-      firma: { regular: 5, materialbezug: 0, intern: 0, hangenmoos: 0 },
+      erwachsen: { regular: 5, ermaessigt: 2.5, materialbezug: 0, intern: 0, hangenmoos: 0 },
+      kind: { regular: 2.5, ermaessigt: 1.25, materialbezug: 0, intern: 0, hangenmoos: 0 },
+      firma: { regular: 5, ermaessigt: 2.5, materialbezug: 0, intern: 0, hangenmoos: 0 },
     },
     workshops: { holz: { label: "Holz", order: 1 } },
     labels: { units: { h: "Std." }, discounts: { none: "" } },
@@ -115,8 +115,8 @@ describe("validatePricingConfig (issue #149)", () => {
     const broken = {
       ...(valid as object),
       entryFees: {
-        erwachsen: { regular: 5, materialbezug: 0, intern: 0, hangenmoos: 0 },
-        kind: { regular: 2.5, materialbezug: 0, intern: 0, hangenmoos: 0 },
+        erwachsen: { regular: 5, ermaessigt: 2.5, materialbezug: 0, intern: 0, hangenmoos: 0 },
+        kind: { regular: 2.5, ermaessigt: 1.25, materialbezug: 0, intern: 0, hangenmoos: 0 },
         // firma missing
       },
     }
@@ -127,9 +127,9 @@ describe("validatePricingConfig (issue #149)", () => {
     const broken = {
       ...(valid as object),
       entryFees: {
-        erwachsen: { regular: 5, materialbezug: 0, intern: 0 /* hangenmoos missing */ },
-        kind: { regular: 2.5, materialbezug: 0, intern: 0, hangenmoos: 0 },
-        firma: { regular: 5, materialbezug: 0, intern: 0, hangenmoos: 0 },
+        erwachsen: { regular: 5, ermaessigt: 2.5, materialbezug: 0, intern: 0 /* hangenmoos missing */ },
+        kind: { regular: 2.5, ermaessigt: 1.25, materialbezug: 0, intern: 0, hangenmoos: 0 },
+        firma: { regular: 5, ermaessigt: 2.5, materialbezug: 0, intern: 0, hangenmoos: 0 },
       },
     }
     expect(validatePricingConfig(broken)).toMatch(/hangenmoos/)
@@ -139,9 +139,9 @@ describe("validatePricingConfig (issue #149)", () => {
     const broken = {
       ...(valid as object),
       entryFees: {
-        erwachsen: { regular: "free", materialbezug: 0, intern: 0, hangenmoos: 0 },
-        kind: { regular: 2.5, materialbezug: 0, intern: 0, hangenmoos: 0 },
-        firma: { regular: 5, materialbezug: 0, intern: 0, hangenmoos: 0 },
+        erwachsen: { regular: "free", ermaessigt: 2.5, materialbezug: 0, intern: 0, hangenmoos: 0 },
+        kind: { regular: 2.5, ermaessigt: 1.25, materialbezug: 0, intern: 0, hangenmoos: 0 },
+        firma: { regular: 5, ermaessigt: 2.5, materialbezug: 0, intern: 0, hangenmoos: 0 },
       },
     }
     expect(validatePricingConfig(broken)).toMatch(/erwachsen.*regular.*number/)

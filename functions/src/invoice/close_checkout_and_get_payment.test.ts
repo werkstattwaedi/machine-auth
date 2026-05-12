@@ -47,6 +47,15 @@ describe("entryFeeFor", () => {
     expect(entryFeeFor("erwachsen", "regular", config)).to.equal(0);
   });
 
+  it("returns the configured ermaessigt fee (KulturLegi)", () => {
+    const config = {
+      erwachsen: { regular: 5, ermaessigt: 2.5, materialbezug: 0, intern: 0, hangenmoos: 0 },
+      kind: { regular: 2.5, ermaessigt: 1.25, materialbezug: 0, intern: 0, hangenmoos: 0 },
+    };
+    expect(entryFeeFor("erwachsen", "ermaessigt", config)).to.equal(2.5);
+    expect(entryFeeFor("kind", "ermaessigt", config)).to.equal(1.25);
+  });
+
   // Issue #149: previously the function silently substituted hardcoded
   // fallback prices (15/7.5/30 CHF) when the config row was missing. Those
   // numbers diverged from the seeded production prices (5/2.5/5 CHF), so

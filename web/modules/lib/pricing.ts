@@ -7,7 +7,12 @@ import type { PricingConfig } from "./workshop-config"
 export type UserType = "erwachsen" | "kind" | "firma"
 
 /** Usage type affects fee calculation — top-level on checkout */
-export type UsageType = "regular" | "materialbezug" | "intern" | "hangenmoos"
+export type UsageType =
+  | "regular"
+  | "ermaessigt"
+  | "materialbezug"
+  | "intern"
+  | "hangenmoos"
 
 export const USER_TYPE_LABELS: Record<UserType, string> = {
   erwachsen: "Erwachsen",
@@ -17,6 +22,7 @@ export const USER_TYPE_LABELS: Record<UserType, string> = {
 
 export const USAGE_TYPE_LABELS: Record<UsageType, string> = {
   regular: "Reguläre Nutzung",
+  ermaessigt: "Ermässigte Nutzung (KulturLegi)",
   materialbezug: "Nur Materialbezug",
   intern: "Interne Nutzung",
   hangenmoos: "Hangenmoos AG",

@@ -168,9 +168,9 @@
       // Per-userType × usageType entry fee. entryFeeFor() throws if a row
       // is missing, so every userType × usageType combination must be set.
       "entryFees": {
-        "erwachsen": { "regular": "number", "materialbezug": "number", "intern": "number", "hangenmoos": "number" },
-        "kind": { "regular": "number", "materialbezug": "number", "intern": "number", "hangenmoos": "number" },
-        "firma": { "regular": "number", "materialbezug": "number", "intern": "number", "hangenmoos": "number" }
+        "erwachsen": { "regular": "number", "ermaessigt": "number", "materialbezug": "number", "intern": "number", "hangenmoos": "number" },
+        "kind": { "regular": "number", "ermaessigt": "number", "materialbezug": "number", "intern": "number", "hangenmoos": "number" },
+        "firma": { "regular": "number", "ermaessigt": "number", "materialbezug": "number", "intern": "number", "hangenmoos": "number" }
       },
       // SLA resin prints: per-layer CHF cost (constant across all resin types,
       // hardware-wear-driven) by discount level. Per-liter resin price lives

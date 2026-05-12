@@ -89,9 +89,9 @@ async function seedPricingConfig(): Promise<void> {
       metall: { label: "Metallwerkstatt", order: 2 },
     },
     entryFees: {
-      erwachsen: { regular: 15, materialbezug: 0, intern: 0, hangenmoos: 15 },
-      kind: { regular: 7.5, materialbezug: 0, intern: 0, hangenmoos: 7.5 },
-      firma: { regular: 30, materialbezug: 0, intern: 0, hangenmoos: 30 },
+      erwachsen: { regular: 15, ermaessigt: 7.5, materialbezug: 0, intern: 0, hangenmoos: 15 },
+      kind: { regular: 7.5, ermaessigt: 3.75, materialbezug: 0, intern: 0, hangenmoos: 7.5 },
+      firma: { regular: 30, ermaessigt: 15, materialbezug: 0, intern: 0, hangenmoos: 30 },
     },
   });
 }

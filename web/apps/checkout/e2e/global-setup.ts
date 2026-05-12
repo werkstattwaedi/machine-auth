@@ -44,9 +44,9 @@ export default async function globalSetup() {
   // ── Seed pricing config ──
   await db.doc("config/pricing").set({
     entryFees: {
-      erwachsen: { regular: 15, materialbezug: 0, intern: 0, hangenmoos: 15 },
-      kind: { regular: 7.5, materialbezug: 0, intern: 0, hangenmoos: 7.5 },
-      firma: { regular: 30, materialbezug: 0, intern: 0, hangenmoos: 30 },
+      erwachsen: { regular: 15, ermaessigt: 7.5, materialbezug: 0, intern: 0, hangenmoos: 15 },
+      kind: { regular: 7.5, ermaessigt: 3.75, materialbezug: 0, intern: 0, hangenmoos: 7.5 },
+      firma: { regular: 30, ermaessigt: 15, materialbezug: 0, intern: 0, hangenmoos: 30 },
     },
     // SLA per-layer price (global; resin-per-liter lives on each catalog entry).
     slaLayerPrice: { none: 0.01, member: 0.008 },

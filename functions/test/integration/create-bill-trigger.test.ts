@@ -119,9 +119,9 @@ async function seedPricingConfig(
       metall: { label: "Metallwerkstatt", order: 2 },
     },
     entryFees: entryFees ?? {
-      erwachsen: { regular: 15, materialbezug: 0, intern: 0, hangenmoos: 15 },
-      kind: { regular: 7.5, materialbezug: 0, intern: 0, hangenmoos: 7.5 },
-      firma: { regular: 30, materialbezug: 0, intern: 0, hangenmoos: 30 },
+      erwachsen: { regular: 15, ermaessigt: 7.5, materialbezug: 0, intern: 0, hangenmoos: 15 },
+      kind: { regular: 7.5, ermaessigt: 3.75, materialbezug: 0, intern: 0, hangenmoos: 7.5 },
+      firma: { regular: 30, ermaessigt: 15, materialbezug: 0, intern: 0, hangenmoos: 30 },
     },
   });
 }
@@ -283,9 +283,9 @@ describe("create_bill trigger (Integration)", () => {
     it("uses configured entry fees from config/pricing when present", async () => {
       // Override default entry fees so we know the config path is taken
       await seedPricingConfig({
-        erwachsen: { regular: 99, materialbezug: 0, intern: 0, hangenmoos: 99 },
-        kind: { regular: 0, materialbezug: 0, intern: 0, hangenmoos: 0 },
-        firma: { regular: 0, materialbezug: 0, intern: 0, hangenmoos: 0 },
+        erwachsen: { regular: 99, ermaessigt: 0, materialbezug: 0, intern: 0, hangenmoos: 99 },
+        kind: { regular: 0, ermaessigt: 0, materialbezug: 0, intern: 0, hangenmoos: 0 },
+        firma: { regular: 0, ermaessigt: 0, materialbezug: 0, intern: 0, hangenmoos: 0 },
       });
 
       const checkoutId = "co-config-fees";

@@ -9,9 +9,9 @@ describe("calculateFee", () => {
   describe("with config", () => {
     const config: PricingConfig = {
       entryFees: {
-        erwachsen: { regular: 20, materialbezug: 5, intern: 0, hangenmoos: 25 },
-        kind: { regular: 10, materialbezug: 0, intern: 0, hangenmoos: 10 },
-        firma: { regular: 50, materialbezug: 10, intern: 0, hangenmoos: 50 },
+        erwachsen: { regular: 20, ermaessigt: 10, materialbezug: 5, intern: 0, hangenmoos: 25 },
+        kind: { regular: 10, ermaessigt: 5, materialbezug: 0, intern: 0, hangenmoos: 10 },
+        firma: { regular: 50, ermaessigt: 25, materialbezug: 10, intern: 0, hangenmoos: 50 },
       },
       slaLayerPrice: { none: 0.01, member: 0.008 },
       workshops: {} as PricingConfig["workshops"],
@@ -20,8 +20,10 @@ describe("calculateFee", () => {
 
     it.each([
       ["erwachsen", "regular", 20],
+      ["erwachsen", "ermaessigt", 10],
       ["erwachsen", "materialbezug", 5],
       ["kind", "regular", 10],
+      ["kind", "ermaessigt", 5],
       ["kind", "materialbezug", 0],
       ["firma", "hangenmoos", 50],
     ] as [UserType, UsageType, number][])(

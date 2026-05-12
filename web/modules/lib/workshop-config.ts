@@ -72,7 +72,7 @@ export function validatePricingConfig(value: unknown): string | null {
     if (!row || typeof row !== "object") {
       return `config/pricing.entryFees.${userType} is missing`
     }
-    for (const usage of ["regular", "materialbezug", "intern", "hangenmoos"] as const) {
+    for (const usage of ["regular", "ermaessigt", "materialbezug", "intern", "hangenmoos"] as const) {
       if (typeof row[usage] !== "number") {
         return `config/pricing.entryFees.${userType}.${usage} must be a number`
       }

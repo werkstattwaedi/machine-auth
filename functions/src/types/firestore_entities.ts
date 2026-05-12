@@ -117,6 +117,7 @@ export interface CatalogEntity {
 export type CheckoutStatus = "open" | "closed";
 export type UsageType =
   | "regular"
+  | "ermaessigt"
   | "materialbezug"
   | "intern"
   | "hangenmoos";
