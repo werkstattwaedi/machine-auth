@@ -19,6 +19,7 @@
     "test:precommit": "cd web && npm run build && npm test && cd .. && npm run test:web:integration && cd functions && npm test",
     "snapshots:normalize": "node scripts/normalize-snapshots.mjs",
     "block": "npx tsx scripts/port-block.ts --",
+    "predeploy": "scripts/predeploy.sh",
     "deploy:gateway": "npx tsx scripts/deploy-gateway.ts",
     "prepare": "husky"
   },
