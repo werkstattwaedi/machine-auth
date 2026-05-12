@@ -302,6 +302,56 @@ test.describe("Checkout step screenshots", () => {
     })
   })
 
+  // Issue #237: zero-amount visit ("Interne Nutzung") must show the
+  // dedicated "nichts zu bezahlen" screen instead of the QR / Sammelrechnung
+  // / TWINT method picker. We switch usageType to "intern" on the summary
+  // step (which zeroes entry/machine/material costs server- and client-side)
+  // and assert step 4 renders the simplified screen.
+  test("Step 4 · zero amount (Interne Nutzung) — 'nichts zu bezahlen' screen", async ({ page }, testInfo) => {
+    testInfo.setTimeout(60_000)
+
+    await signIn(page)
+
+    // Navigate to checkout — logged-in user sees pre-filled form
+    await page.goto("/")
+    await expect(page.getByText("Abmelden")).toBeVisible({ timeout: 10_000 })
+
+    // Advance to workshops
+    await page.getByRole("button", { name: "Weiter" }).click()
+    await expect(page.getByText("Werkstätten wählen")).toBeVisible()
+
+    // Go to summary (no items — keeps the total small if intern toggle ever fails)
+    const checkoutBtn = page.getByRole("button", { name: "Check-Out" })
+    await checkoutBtn.scrollIntoViewIfNeeded()
+    await checkoutBtn.click()
+    await expect(page.getByText("Dein Besuch")).toBeVisible()
+
+    // Expand Nutzungsgebühren and switch to "Interne Nutzung". This zeros
+    // entry + machine + material costs both client- and server-side
+    // (issue #199), giving a CHF 0.00 bill.
+    await page.getByRole("button", { name: /Nutzungsgebühren/ }).click()
+    await expect(page.getByLabel("Nutzungsart")).toBeVisible()
+    await page.getByLabel("Nutzungsart").selectOption({ value: "intern" })
+
+    // Submit — wizard advances to step 4 (Bezahlen).
+    const submitBtn = page.getByRole("button", { name: "Weiter zum Bezahlen" })
+    await submitBtn.scrollIntoViewIfNeeded()
+    await submitBtn.click()
+
+    // Wait for the zero-amount screen.
+    await expect(page.getByText(/kostenlos/i)).toBeVisible({ timeout: 30_000 })
+
+    // QR / Sammelrechnung / TWINT tabs must NOT be present.
+    await expect(page.getByRole("tab", { name: /QR-Rechnung/ })).toBeHidden()
+    await expect(page.getByRole("tab", { name: /TWINT/ })).toBeHidden()
+    await expect(page.getByRole("tab", { name: /Sammelrechnung/ })).toBeHidden()
+
+    // The "Werkstatt verlassen" CTA is present.
+    await expect(page.getByRole("button", { name: /Werkstatt verlassen/ })).toBeVisible()
+
+    await expect(page).toHaveScreenshot("checkout-payment-zero.png")
+  })
+
   test("Step 4 · TWINT tab — pay-link, no QR bill", async ({ page }, testInfo) => {
     testInfo.setTimeout(60_000)
     await submitAndWaitForPaymentResult(page)

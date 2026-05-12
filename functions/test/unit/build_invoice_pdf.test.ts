@@ -13,6 +13,7 @@ import {
   zeroItemsInvoice,
   longInvoice,
   paidInvoice,
+  freeZeroAmountInvoice,
 } from "./invoice_test_fixtures";
 
 // pdf-parse needs firebase-admin initialized for Timestamp usage in fixtures
@@ -112,6 +113,25 @@ describe("buildInvoicePdf — content", () => {
     expect(text).to.include("SLA Resin (Tough) (50 ml · 1000 layers)");
     // Payment terms (unpaid)
     expect(text).to.include("Zahlbar innert 30 Tagen");
+  });
+
+  // Issue #237: zero-amount bills ("Interne Nutzung") are recorded for the
+  // books but have no payable balance. The PDF must keep a record of the
+  // visit, replace the QR-bill section with a "Keine Zahlung erforderlich"
+  // notice, and not include the QR-bill payment slip (Empfangsschein /
+  // Zahlteil from swissqrbill).
+  it("free zero-amount invoice: no QR bill, shows 'Keine Zahlung erforderlich' (#237)", async () => {
+    const text = await pdfText(freeZeroAmountInvoice());
+    expect(text).to.include("Keine Zahlung erforderlich");
+    expect(text).to.include("CHF 0.00");
+    // QR-bill payment slip must NOT be rendered.
+    expect(text).to.not.include("Empfangsschein");
+    expect(text).to.not.include("Zahlteil");
+    // Regular "Zahlbar innert 30 Tagen" terms also gone — nothing to pay.
+    expect(text).to.not.include("Zahlbar innert 30 Tagen");
+    // Should NOT show the "Bezahlt via …" notice — that's for an
+    // explicitly-paid bill, not a free one.
+    expect(text).to.not.include("bereits beglichen");
   });
 
   it("paid invoice: no QR bill, shows payment confirmation", async () => {

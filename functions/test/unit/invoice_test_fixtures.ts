@@ -316,6 +316,47 @@ export function paidInvoice(): InvoiceData {
   return base;
 }
 
+/**
+ * Issue #237: zero-amount "free" bill (e.g. Interne Nutzung).
+ * paidVia="free" + grandTotal=0 — the PDF must show a "Keine Zahlung
+ * erforderlich" notice and NO Swiss QR-bill payment slip.
+ */
+export function freeZeroAmountInvoice(): InvoiceData {
+  const now = zurich(2025, 4, 12);
+  return {
+    referenceNumber: 8,
+    invoiceDate: now,
+    billingAddress: null,
+    recipientName: "Ines Intern",
+    checkouts: [
+      {
+        date: zurich(2025, 4, 12, 10, 0),
+        usageType: "intern",
+        persons: [
+          { name: "Ines Intern", email: "ines@example.com", userType: "erwachsen" },
+        ],
+        // Intern usageType zeros entry fees server-side, so the per-person
+        // line is rendered with fee=0.
+        personEntryFees: [{ name: "Ines Intern", userType: "erwachsen", fee: 0 }],
+        items: [],
+        workshopsVisited: ["holz"],
+        entryFees: 0,
+        machineCost: 0,
+        materialCost: 0,
+        tip: 0,
+        totalPrice: 0,
+      },
+    ],
+    workshops: {
+      holz: { label: "Holzwerkstatt", order: 1 },
+    },
+    grandTotal: 0,
+    currency: "CHF",
+    paidAt: now,
+    paidVia: "free",
+  };
+}
+
 export function zeroItemsInvoice(): InvoiceData {
   return {
     referenceNumber: 5,

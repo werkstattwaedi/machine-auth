@@ -379,6 +379,96 @@ describe("PaymentResult", () => {
     })
   })
 
+  // Issue #237: when totalPrice is 0 (e.g. "Interne Nutzung") the screen
+  // must hide the QR / Sammelrechnung / TWINT method picker and render a
+  // dedicated "nichts zu bezahlen" message instead. The QR-load callable
+  // must not fire because there's nothing to pay.
+  describe("issue #237: zero-amount → 'nichts zu bezahlen' screen", () => {
+    it("renders the kostenlos copy and hides all payment-method tabs at totalPrice=0", () => {
+      render(
+        <PaymentResult
+          checkoutId="checkout-free"
+          totalPrice={0}
+          isMember
+          onReset={() => {}}
+        />,
+      )
+
+      // Friendly message — should contain "kostenlos" and the zero amount.
+      expect(screen.getByText(/kostenlos/i)).toBeDefined()
+      expect(screen.getByText("0.00")).toBeDefined()
+
+      // No tabs: QR-Rechnung / Sammelrechnung / TWINT all hidden.
+      expect(screen.queryByRole("tab", { name: /QR-Rechnung/ })).toBeNull()
+      expect(screen.queryByRole("tab", { name: /Sammelrechnung/ })).toBeNull()
+      expect(screen.queryByRole("tab", { name: /TWINT/ })).toBeNull()
+
+      // No QR code.
+      expect(screen.queryByTestId("qrcode")).toBeNull()
+
+      // Method-specific commit labels are gone.
+      expect(
+        screen.queryByRole("button", {
+          name: /Ich zahle die QR-Rechnung/,
+        }),
+      ).toBeNull()
+
+      // The "Werkstatt verlassen" CTA is present.
+      expect(
+        screen.getByRole("button", { name: /Werkstatt verlassen/ }),
+      ).toBeDefined()
+    })
+
+    it("calls onReset when the 'Werkstatt verlassen' button is clicked", async () => {
+      const handleReset = vi.fn()
+      render(
+        <PaymentResult
+          checkoutId="checkout-free"
+          totalPrice={0}
+          isMember={false}
+          onReset={handleReset}
+        />,
+      )
+
+      await userEvent.click(
+        screen.getByRole("button", { name: /Werkstatt verlassen/ }),
+      )
+      expect(handleReset).toHaveBeenCalledOnce()
+      // No ack write — there is no method to acknowledge.
+      expect(mockAckUpdate).not.toHaveBeenCalled()
+    })
+
+    it("does not attempt to load QR payment data when totalPrice is 0", () => {
+      // The callable that fetches QR/PayLink data is `getPaymentQrData`;
+      // it must NOT be invoked for free visits. We don't pass
+      // initialPaymentData, and we DO set a checkout.billRef in the
+      // useDocument mock — without the zero-amount short-circuit the
+      // component would call into mockCallableResult.
+      mockUseDocument.mockImplementation((ref: { path?: string } | null) => {
+        if (ref?.path?.startsWith("checkouts/")) {
+          return {
+            data: { id: "checkout-free", billRef: { id: "bill-free" } },
+            loading: false,
+            error: null,
+          }
+        }
+        return { data: null, loading: false, error: null }
+      })
+
+      render(
+        <PaymentResult
+          checkoutId="checkout-free"
+          totalPrice={0}
+          isMember={false}
+          onReset={() => {}}
+        />,
+      )
+
+      expect(mockCallableResult).not.toHaveBeenCalled()
+      expect(screen.getByText(/kostenlos/i)).toBeDefined()
+    })
+  })
+
   // Regression test for issue #109: the Swiss cross overlay must match the
   // SIX QR-bill spec (white border, black square, white cross), not the
   // inverted arrangement that shipped previously.
