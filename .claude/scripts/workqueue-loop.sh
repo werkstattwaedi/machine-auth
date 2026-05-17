@@ -1,38 +1,47 @@
 #!/usr/bin/env bash
-# Cron entry point for /workqueue. Designed to be safe to run every few hours:
-#  - flock guarantees no overlap with a previous run still in progress
-#  - cheap GH pre-check exits silently when there's nothing actionable in the
-#    queue or PR list, so we don't pay the baseline cost on empty runs
-#  - all output is logged under ~/.claude/logs/workqueue/, rotated by age
-#  - claude is invoked non-interactively via `claude -p` with a budget cap
+# Long-running /workqueue loop. Designed to run foreground inside a tmux
+# pane that you leave open. Each iteration:
+#  - Cheap GH pre-check; if no work, sleep $WORKQUEUE_INTERVAL and re-check.
+#  - If work exists, hand the current tmux pane to an interactive `claude`
+#    session running `/workqueue` with Remote Control enabled. Permission
+#    prompts and worker `SendUserMessage` calls forward to your phone /
+#    browser via Remote Control, so you can answer remotely.
+#  - Phase 7 of /workqueue runs `tmux send-keys "/exit" Enter` as its final
+#    step. Because claude owns the pane during the run, the keystrokes land
+#    in claude's input buffer; once Phase 7 returns and claude is back at
+#    its prompt, it processes /exit and shuts down. This loop's `while`
+#    body unblocks and the next iteration starts.
+#  - Sleep $WORKQUEUE_INTERVAL between iterations.
 #
-# Wire it up via crontab (see .claude/commands/workqueue.md "Cron setup").
+# Wire it up: open a tmux pane you can leave running, then:
+#   ./.claude/scripts/workqueue-loop.sh
+# Ctrl-C to stop the loop. The in-flight claude session (if any) is left
+# alone — it exits on its own via Phase 7.
 set -uo pipefail
+
+# Refuse to run outside tmux — the Phase 7 self-exit relies on
+# `tmux send-keys` reaching the pane that claude inherited.
+if [[ -z "${TMUX:-}" ]]; then
+  echo "workqueue-loop must run inside a tmux session." >&2
+  echo "Start one with: tmux new -s workqueue   then re-run this script." >&2
+  exit 1
+fi
 
 repo_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 cd "$repo_dir"
 
 log_dir="$HOME/.claude/logs/workqueue"
 mkdir -p "$log_dir"
-log_file="$log_dir/$(date -u +%Y%m%dT%H%M%SZ).log"
-current_link="$log_dir/current.log"
 status_file="$log_dir/last-run.txt"
 lock_file="$log_dir/.lock"
 
-# Prune log files older than 14 days. Best effort.
-find "$log_dir" -maxdepth 1 -name '*.log' -mtime +14 -delete 2>/dev/null || true
-
-# Single-instance lock. If another run is in progress, exit quietly.
+# Single-instance: refuse a second loop on the same machine.
 exec 9>"$lock_file"
 if ! flock -n 9; then
-  printf '%s skipped: another run is already in progress\n' \
-    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$status_file"
-  exit 0
+  echo "another workqueue-loop is already running (lock: $lock_file)" >&2
+  exit 1
 fi
-
-exec >>"$log_file" 2>&1
-printf '=== workqueue-cron starting at %s ===\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-printf 'repo: %s\n' "$repo_dir"
+trap 'flock -u 9; rm -f "$lock_file" 2>/dev/null || true' EXIT
 
 # Make sure the GitHub App credentials are loadable (so `wq-gh.sh` works).
 config="${WORKQUEUE_APP_ENV:-$HOME/.config/workqueue-app/env}"
@@ -43,12 +52,19 @@ fi
 
 wq_gh() { "$repo_dir/.claude/scripts/wq-gh.sh" "$@"; }
 
+interval="${WORKQUEUE_INTERVAL:-4h}"
+claude_bin="${CLAUDE_BIN:-claude}"
+
+# Prune log files older than 14 days. Best effort.
+find "$log_dir" -maxdepth 1 -name '*.log' -mtime +14 -delete 2>/dev/null || true
+
 # ---- Cheap pre-check: any work to do? -------------------------------------
 # Returns work_reason on stdout when there's something to process; empty
-# otherwise. We deliberately keep this to ~3 `gh` calls so idle firings cost
-# nothing. The full /workqueue run does precise checks (e.g. "has the human
-# replied since the bot asked?") — the pre-check is allowed to be optimistic
-# and let the full run exit cleanly when there's truly nothing to do.
+# otherwise. ~3 `gh` calls — keeps the idle path cheap so polling every few
+# hours is essentially free. The full /workqueue run does precise checks
+# (e.g. "has the human replied since the bot asked?") — the pre-check is
+# allowed to be optimistic and let the full run exit cleanly when there's
+# truly nothing to do.
 has_actionable_work() {
   local repo="werkstattwaedi/machine-auth"
   local reason=""
@@ -125,7 +141,7 @@ has_actionable_work() {
 
   # 4. For each open workqueue PR, check unaddressed review comments. Skipped
   #    when another signal already triggered, to keep the chatty per-PR calls
-  #    off the critical path of every cron firing.
+  #    off the critical path of every poll.
   if [[ -z "$reason" ]]; then
     local pr_numbers
     pr_numbers=$(printf '%s' "$prs_json" | jq -r '.[].number' 2>/dev/null || true)
@@ -147,50 +163,51 @@ has_actionable_work() {
   printf '%s' "$reason"
 }
 
-work_reason=$(has_actionable_work || true)
-if [[ -z "$work_reason" ]]; then
-  msg="$(date -u +%Y-%m-%dT%H:%M:%SZ) idle: no work in queue, baseline skipped"
-  printf '%s\n' "$msg"
-  printf '%s\n' "$msg" >> "$status_file"
-  # Remove the empty log so the dir doesn't fill with idle entries.
-  exec >&- 2>&-
-  rm -f "$log_file"
-  exit 0
-fi
+stamp() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
-# We have real work — point current.log at this run so `tail -F current.log`
-# in another terminal picks up the live output.
-ln -sf "$log_file" "$current_link"
+echo "workqueue-loop starting at $(stamp); interval=${interval}; tmux pane=${TMUX_PANE:-?}"
+echo "ctrl-c to stop. logs: $log_dir/"
+echo "$(stamp) loop started; interval=${interval}" >> "$status_file"
 
-printf 'work detected: %s\n' "$work_reason"
+while true; do
+  reason=$(has_actionable_work || true)
+  if [[ -z "$reason" ]]; then
+    echo "$(stamp) idle: no actionable work; sleeping ${interval}"
+    echo "$(stamp) idle" >> "$status_file"
+    sleep "$interval" || break
+    continue
+  fi
 
-# ---- Invoke claude non-interactively --------------------------------------
-# acceptEdits: never prompt for permissions during the cron run.
-# no-session-persistence: each cron run is independent; we don't need resume.
-# timeout: hard wall-clock cap so a stuck/looping run can't hold the lock
-#   forever. A normal run is well under an hour; 180m is comfortable headroom.
-#   On timeout, `timeout` sends SIGTERM then SIGKILL — the next cron firing
-#   will acquire the lock and proceed.
-claude_bin="${CLAUDE_BIN:-claude}"
-wall_clock="${WORKQUEUE_TIMEOUT:-180m}"
+  echo "$(stamp) work detected: $reason — launching claude /workqueue"
+  echo "$(stamp) running: $reason" >> "$status_file"
 
-set +e
-timeout --signal=TERM --kill-after=30s "$wall_clock" \
+  # Hand the pane to claude. Phase 7 self-exits via `tmux send-keys`, so we
+  # don't need any timeout(1) or watchdog around this — the wrapper just
+  # waits for claude to exit cleanly.
+  #
+  # --permission-mode auto: forward permission requests to Remote Control
+  #   instead of auto-skipping. Combined with --remote-control + --brief,
+  #   you get push notifications for both permission prompts and
+  #   SendUserMessage worker questions, answerable from your phone/browser.
+  # --remote-control workqueue: stable session name; the receiving URL is
+  #   the same across iterations so you can bookmark it.
+  # --brief: enables the SendUserMessage tool so worker agents can reach
+  #   you via Remote Control when they need input.
+  # --no-session-persistence: each loop iteration is independent.
+  set +e
   "$claude_bin" \
-    -p "/workqueue" \
-    --permission-mode acceptEdits \
+    --permission-mode auto \
+    --remote-control workqueue \
+    --brief \
     --no-session-persistence \
-    --output-format text
-rc=$?
-set -e
+    "/workqueue"
+  rc=$?
+  set -e
 
-# Exit 124 means `timeout` killed claude — surface that in the status line.
-if [[ "$rc" -eq 124 ]]; then
-  printf 'wall-clock timeout (%s) — claude was killed\n' "$wall_clock"
-fi
+  echo "$(stamp) claude exited with rc=$rc; sleeping ${interval}"
+  echo "$(stamp) done rc=$rc" >> "$status_file"
+  sleep "$interval" || break
+done
 
-end_msg="$(date -u +%Y-%m-%dT%H:%M:%SZ) ran: ${work_reason}; claude exit=${rc}"
-printf '%s\n' "$end_msg"
-printf '%s\n' "$end_msg" >> "$status_file"
-
-exit "$rc"
+echo "$(stamp) workqueue-loop terminated"
+echo "$(stamp) loop stopped" >> "$status_file"

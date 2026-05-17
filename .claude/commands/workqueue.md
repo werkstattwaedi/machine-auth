@@ -1,11 +1,12 @@
 ---
-description: Autonomous queue processor. Stays branches up-to-main, self-heals mechanical baseline failures, processes claude-workqueue issues and PR review feedback, scores each PR, and posts a daily digest. Runs from cron without user supervision.
+description: Autonomous queue processor. Stays branches up-to-main, self-heals mechanical baseline failures, processes claude-workqueue issues and PR review feedback, scores each PR, and posts a daily digest. Runs as a long-running loop in tmux with Remote Control for push notifications when input is needed.
 ---
 
 # /workqueue
 
-Autonomous engineering loop. Designed to run from cron 4×/day on the WSL host
-(see "Cron setup" below) but is also safe to invoke interactively.
+Autonomous engineering loop. Designed to run from a long-running tmux pane
+via `.claude/scripts/workqueue-loop.sh` (see "Loop setup" below); also safe
+to invoke interactively for one-off runs.
 
 **Arguments:** `$ARGUMENTS` (optional issue number or PR number to process only
 that item; in that mode the idle-gate, baseline self-heal, and digest phases
@@ -94,50 +95,85 @@ The workqueue authenticates as a GitHub App so issue comments don't look like yo
    ```
    (Note: App installation tokens cannot call `/user` — that endpoint is user-scope. A 403 there means auth works but the wrong endpoint was used.)
 
-## Cron setup (4×/day on WSL)
+## Loop setup (long-running in tmux)
 
-`.claude/scripts/workqueue-cron.sh` is the cron entry point. It is safe to
-fire on an empty queue — it does a cheap GitHub pre-check and exits silently
-without paying the baseline cost when there's nothing to do.
+`.claude/scripts/workqueue-loop.sh` is a foreground script you run in a
+tmux pane you leave open. Each iteration: cheap GH pre-check → if work
+exists, hand the pane to an interactive `claude` session running
+`/workqueue` → claude self-exits via Phase 7's `tmux send-keys "/exit"`
+→ wrapper sleeps `WORKQUEUE_INTERVAL` (default 4h) → next iteration.
 
-1. Make sure cron is running in WSL:
-   ```bash
-   sudo service cron status   # or: systemctl status cron
-   sudo service cron start    # if not running
+Why not cron? Cron requires `claude -p` non-interactive mode, which means
+no Remote Control (no push notifications when a worker asks a question,
+no remote permission approval). Running interactively in a tmux pane
+you can detach gets you the same "fires every few hours" behavior plus
+an open channel for the workqueue to ask you things mid-run.
+
+Run it:
+
+```bash
+# In a tmux pane you can leave running (the script refuses to start
+# outside tmux because Phase 7's self-exit depends on tmux send-keys):
+cd ~/werkstattwaedi/machine-auth
+./.claude/scripts/workqueue-loop.sh
+```
+
+Detach the tmux pane (`Ctrl-b d`) and it keeps running. `tmux attach -t
+<session>` to peek. Ctrl-C in the wrapper stops the loop; an in-flight
+claude session is not killed (it exits on its own via Phase 7).
+
+Each iteration writes one line to `~/.claude/logs/workqueue/last-run.txt`
+so you can `tail -f` it to see the loop's heartbeat. Logs older than
+14d are auto-pruned.
+
+### Remote Control
+
+Permission prompts and worker `SendUserMessage` calls forward to whatever
+device you've paired with the Claude Remote Control session named
+`workqueue` (same name across iterations — bookmark the URL once). The
+script passes:
+
+- `--permission-mode auto` — forwards permission requests to Remote Control rather than auto-skipping. The harness's safety classifier stays active.
+- `--remote-control workqueue` — stable session name.
+- `--brief` — enables `SendUserMessage` so worker agents can ask you things via Remote Control.
+
+This is materially safer than the unattended `-p --dangerously-skip-permissions`
+pattern: the classifier and your phone are both in the loop.
+
+### Trust model (read before leaving the loop running unattended)
+
+Even with `--permission-mode auto` + Remote Control, a few environment
+hardening steps are still worth doing for the WSL host that runs the
+loop:
+
+1. **Disable `/mnt/c` automount** in `/etc/wsl.conf`:
+   ```ini
+   [automount]
+   enabled = false
    ```
-   (cron only runs while the WSL distro is up. If you shut Windows down at
-   night, scheduled runs that fall in that window are simply skipped — the
-   next run picks up the accumulated work.)
+   Then `wsl --shutdown` from Windows. The workqueue cannot reach
+   Windows files at all. Highest-leverage 2-minute change.
+2. **Branch protection on `main`** in GitHub: require PR review (and CI
+   green) for merges. Phase 1b honors GitHub's auto-merge, so approved
+   PRs still land — but a runaway worker can't push directly to main
+   except via Phase 2's narrow safe-path push-direct carve-out.
+3. **GitHub App scope is repo-only** (already configured in Setup §1).
+   A leaked installation token compromises this repo, not your account.
+4. **Working tree must be clean** between runs — the workqueue enforces
+   this. Anything left dirty stops the next iteration with a report.
 
-2. Install the crontab entry:
-   ```bash
-   crontab -e
-   ```
-   Append:
-   ```
-   0 6,12,18,22 * * * /home/michschn/werkstattwaedi/machine-auth/.claude/scripts/workqueue-cron.sh >/dev/null 2>&1
-   ```
+What is NOT mitigated: npm supply-chain attacks, prompt-injected issue
+bodies trashing the local checkout *during* a run (only caught
+*between* runs by the clean-tree check), or any side effect of code the
+worker legitimately runs.
 
-3. Confirm:
-   ```bash
-   crontab -l
-   tail -f ~/.claude/logs/workqueue/last-run.txt   # one line per run
-   ```
+For stronger isolation (dedicated unprivileged user, `bwrap` sandbox per
+run), the patterns are standard but not configured by this script.
 
-The script writes per-run logs to `~/.claude/logs/workqueue/*.log` (idle
-runs leave nothing behind; logs older than 14d are auto-pruned) and a
-one-line status to `~/.claude/logs/workqueue/last-run.txt` so you can see at
-a glance whether anything's happened.
+### Environment overrides
 
-The cron script invokes `claude -p "/workqueue"` non-interactively under
-your normal Claude Code auth (subscription or API key — whichever your
-local `claude` CLI is signed into). No per-run dollar cap is set; the
-guardrail is a wall-clock timeout (default 180 min) that kills a stuck or
-runaway run so the next cron firing can take over.
-
-Optional environment overrides (set in `~/.config/workqueue-app/env` or your
-shell rc):
-- `WORKQUEUE_TIMEOUT` — wall-clock cap for a single run, passed to `timeout(1)` (default `180m`). Reduce if you want runs to fail-fast.
+Set in `~/.config/workqueue-app/env` or your shell rc:
+- `WORKQUEUE_INTERVAL` — sleep between iterations, passed to `sleep(1)` (default `4h`). Accepts `30m`, `2h`, etc.
 - `CLAUDE_BIN` — path to the `claude` CLI (default `claude` on PATH).
 
 ## State machine (labels)
@@ -802,9 +838,9 @@ the morning review is one URL, not a search across PRs.
    )"
    ```
 
-## Phase 7 — Final summary (stdout)
+## Phase 7 — Final summary (stdout) and self-exit
 
-Print the same table format as before to stdout (and cron log). Keep it short:
+Print a short summary table to stdout:
 
 ```
 ## Workqueue run summary (<UTC timestamp>)
@@ -829,6 +865,27 @@ Print the same table format as before to stdout (and cron log). Keep it short:
 ```
 
 Omit sections with no entries.
+
+### Self-exit
+
+After printing the summary, terminate the claude session so the
+`workqueue-loop.sh` wrapper unblocks and proceeds to the next iteration.
+The mechanism: claude is running in a tmux pane the wrapper owns, so
+sending `/exit` into the pane via `tmux send-keys` lands in claude's
+input buffer. Once this Bash tool returns and claude is back at its
+prompt, it processes `/exit` and shuts down.
+
+```bash
+# Always run, even when invoked outside the loop wrapper — `/exit` from a
+# manual `claude` session just closes that session, which is fine.
+if [[ -n "${TMUX:-}" ]]; then
+  tmux send-keys "/exit" Enter
+fi
+```
+
+If you're running `/workqueue` interactively outside tmux (e.g., a
+single-item run from `claude` in a plain terminal), this is a no-op and
+you'll just see the prompt — type `/exit` yourself.
 
 ## Reliability & error recovery
 
