@@ -56,6 +56,28 @@ Phase 7   stdout summary        → STOP
 5. **Human approval is the merge gate; the bot handles the mechanics.** The human signal is a GitHub PR review with `APPROVED` state. Once a PR is approved, the workqueue is responsible for getting it merged: rebase onto main if behind, resolve trivial conflicts (lockfiles, snapshots), enable GitHub's native auto-merge so it lands as soon as CI is green. This applies to *any* approved PR in the repo (workqueue-produced or otherwise) — if you reviewed it and clicked Approve, the bot finishes the job. Confidence scoring (Phase 5) still runs on workqueue PRs to make the review itself fast. The one carve-out for skipping the PR entirely is **Phase 2 push-direct**: regenerated test artifacts (Playwright/Vitest snapshots, npm lockfiles) may be pushed straight to `main` without a PR, because there is no reviewable judgment in a snapshot diff.
 6. **Bounded self-heal only.** Baseline failures may be auto-fixed *only* when they are mechanical (snapshot drift, lockfile drift) or a clear test-side hermeticity issue with an obvious, small fix. Any prod-behavior change, ambiguity, or multi-file scope must be escalated as a `claude-workqueue` issue instead. Default to escalating.
 
+## Termination signal (every exit path)
+
+The `workqueue-loop.sh` wrapper runs `claude` interactively in a tmux pane
+and watches for a signal file at `$WORKQUEUE_SIGNAL_FILE`. **Every** path
+that ends the run — normal Phase 7 completion, idle gate, dirty tree,
+baseline-red, baseline-fix-pr, baseline-escalated, or any error — MUST,
+as its final tool call, touch that file:
+
+```bash
+if [[ -n "${WORKQUEUE_SIGNAL_FILE:-}" ]]; then
+  touch "$WORKQUEUE_SIGNAL_FILE"
+fi
+```
+
+When the wrapper sees the file, it sends `/exit` to the pane and claude
+shuts down, letting the loop's next iteration fire. Without this, the
+wrapper sits forever waiting at the prompt after an early-abort path.
+
+If you're running `/workqueue` outside the loop wrapper (manual run, env
+var unset), the snippet is a harmless no-op — claude returns to its
+prompt and you type `/exit` yourself.
+
 ## Setup (one-time)
 
 The workqueue authenticates as a GitHub App so issue comments don't look like you talking to yourself. Do these once per machine:
@@ -866,26 +888,11 @@ Print a short summary table to stdout:
 
 Omit sections with no entries.
 
-### Self-exit
+### Final action: termination
 
-After printing the summary, terminate the claude session so the
-`workqueue-loop.sh` wrapper unblocks and proceeds to the next iteration.
-The mechanism: claude is running in a tmux pane the wrapper owns, so
-sending `/exit` into the pane via `tmux send-keys` lands in claude's
-input buffer. Once this Bash tool returns and claude is back at its
-prompt, it processes `/exit` and shuts down.
-
-```bash
-# Always run, even when invoked outside the loop wrapper — `/exit` from a
-# manual `claude` session just closes that session, which is fine.
-if [[ -n "${TMUX:-}" ]]; then
-  tmux send-keys "/exit" Enter
-fi
-```
-
-If you're running `/workqueue` interactively outside tmux (e.g., a
-single-item run from `claude` in a plain terminal), this is a no-op and
-you'll just see the prompt — type `/exit` yourself.
+After printing the summary, perform the termination snippet from the
+top-of-file "Termination signal" rule. This is the *only* mechanism that
+unblocks the loop wrapper.
 
 ## Reliability & error recovery
 

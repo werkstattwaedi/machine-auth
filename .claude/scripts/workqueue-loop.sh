@@ -180,10 +180,28 @@ while true; do
 
   echo "$(stamp) work detected: $reason — launching claude /workqueue"
   echo "$(stamp) running: $reason" >> "$status_file"
+  run_start=$(date +%s)
 
-  # Hand the pane to claude. Phase 7 self-exits via `tmux send-keys`, so we
-  # don't need any timeout(1) or watchdog around this — the wrapper just
-  # waits for claude to exit cleanly.
+  # Background watchdog: /workqueue touches WORKQUEUE_SIGNAL_FILE at every
+  # exit path (normal Phase 7 completion or any abort — idle, dirty tree,
+  # baseline-red, baseline-escalated, etc.). The watchdog polls for the
+  # file and sends /exit to this tmux pane (where claude is now running),
+  # so claude shuts down regardless of which exit branch /workqueue took.
+  # This is more robust than asking the model to remember tmux send-keys
+  # at every abort path.
+  signal_file=$(mktemp -t "workqueue-signal.XXXXXX")
+  rm -f "$signal_file"   # ensure it doesn't exist at start of run
+  export WORKQUEUE_SIGNAL_FILE="$signal_file"
+
+  (
+    trap 'exit 0' TERM
+    while [[ ! -f "$signal_file" ]]; do sleep 3; done
+    sleep 2   # let claude flush its final output
+    tmux send-keys "/exit" Enter
+  ) &
+  watchdog_pid=$!
+
+  # Hand the pane to claude.
   #
   # --permission-mode auto: forward permission requests to Remote Control
   #   instead of auto-skipping. Combined with --remote-control + --brief,
@@ -193,16 +211,33 @@ while true; do
   #   the same across iterations so you can bookmark it.
   # --brief: enables the SendUserMessage tool so worker agents can reach
   #   you via Remote Control when they need input.
-  # --no-session-persistence: each loop iteration is independent.
+  # Note: --no-session-persistence is only valid with -p (print mode), so
+  # we omit it. Each interactive iteration leaves a persisted session on
+  # disk; Claude Code prunes those over time on its own.
   set +e
   "$claude_bin" \
     --permission-mode auto \
     --remote-control workqueue \
     --brief \
-    --no-session-persistence \
     "/workqueue"
   rc=$?
   set -e
+
+  # Tear down the watchdog and signal file regardless of how claude exited.
+  kill "$watchdog_pid" 2>/dev/null || true
+  wait "$watchdog_pid" 2>/dev/null || true
+  rm -f "$signal_file"
+  unset WORKQUEUE_SIGNAL_FILE
+
+  # Fail-fast: if claude exited with an error in <10s, this is almost
+  # certainly a flag/config problem (not a real run), and the loop will
+  # just keep failing every WORKQUEUE_INTERVAL. Stop so you can fix it.
+  run_end=$(date +%s)
+  if [[ "$rc" -ne 0 ]] && (( run_end - run_start < 10 )); then
+    echo "$(stamp) claude failed in $(( run_end - run_start ))s with rc=$rc — assuming config error, stopping loop" >&2
+    echo "$(stamp) loop stopped: claude rc=$rc within 10s" >> "$status_file"
+    exit "$rc"
+  fi
 
   echo "$(stamp) claude exited with rc=$rc; sleeping ${interval}"
   echo "$(stamp) done rc=$rc" >> "$status_file"
