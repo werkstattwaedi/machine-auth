@@ -14,6 +14,7 @@ import {
   checkoutWithTipInvoice,
   longInvoice,
   paidInvoice,
+  freeZeroAmountInvoice,
 } from "./invoice_test_fixtures";
 import type { InvoiceData } from "../../src/invoice/types";
 
@@ -153,5 +154,12 @@ describe("buildInvoicePdf — visual regression", function () {
 
   it("paid invoice (TWINT)", async () => {
     await compareAllPages("paid-twint", paidInvoice());
+  });
+
+  // Issue #237 / PR #256 review: a free zero-amount bill (e.g. Interne
+  // Nutzung) renders a "Keine Zahlung erforderlich" notice and omits the
+  // Swiss QR-bill payment slip. The visual baseline pins that layout.
+  it("free zero-amount (Interne Nutzung)", async () => {
+    await compareAllPages("free-zero-amount", freeZeroAmountInvoice());
   });
 });

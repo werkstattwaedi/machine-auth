@@ -394,9 +394,12 @@ describe("PaymentResult", () => {
         />,
       )
 
-      // Friendly message — should contain "kostenlos" and the zero amount.
+      // Combined panel: heading + sub-line communicate "no payment".
+      // The redundant CHF 0.00 hero number was dropped (PR #256 review) —
+      // the grand-total is already shown on Step 3.
+      expect(screen.getByText(/Keine Zahlung erforderlich/)).toBeDefined()
       expect(screen.getByText(/kostenlos/i)).toBeDefined()
-      expect(screen.getByText("0.00")).toBeDefined()
+      expect(screen.queryByText("0.00")).toBeNull()
 
       // No tabs: QR-Rechnung / Sammelrechnung / TWINT all hidden.
       expect(screen.queryByRole("tab", { name: /QR-Rechnung/ })).toBeNull()

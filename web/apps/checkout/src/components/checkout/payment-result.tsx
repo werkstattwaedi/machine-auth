@@ -146,29 +146,22 @@ export function PaymentResult({
   if (isFree) {
     return (
       <div className="space-y-6">
-        <div className="rounded-md border border-border bg-background px-6 py-7 flex items-end justify-between gap-4">
-          <div>
-            <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-              Zu bezahlen
-            </div>
-            <div className="mt-2 font-heading font-bold text-5xl tabular-nums leading-none text-foreground">
-              <span className="text-base font-semibold uppercase text-muted-foreground mr-3 align-baseline">
-                CHF
-              </span>
-              0.00
+        <div className="rounded-md border border-border bg-background px-6 py-7">
+          <div className="flex items-start gap-4">
+            <CheckCircle2
+              className="h-10 w-10 text-cog-teal shrink-0"
+              strokeWidth={1.8}
+              aria-hidden="true"
+            />
+            <div className="min-w-0">
+              <div className="font-heading font-bold text-2xl sm:text-3xl leading-tight text-foreground">
+                Keine Zahlung erforderlich
+              </div>
+              <p className="mt-2 text-sm text-foreground leading-relaxed max-w-2xl">
+                Diese Nutzung ist kostenlos &mdash; du musst nichts bezahlen.
+              </p>
             </div>
           </div>
-          <CheckCircle2
-            className="h-10 w-10 text-cog-teal shrink-0"
-            strokeWidth={1.8}
-            aria-hidden="true"
-          />
-        </div>
-
-        <div className="rounded-md border border-border bg-white p-5 sm:p-7">
-          <p className="text-sm text-foreground leading-relaxed max-w-2xl">
-            Diese Nutzung ist kostenlos &mdash; du musst nichts bezahlen.
-          </p>
         </div>
 
         <div className="flex justify-end pt-2">
