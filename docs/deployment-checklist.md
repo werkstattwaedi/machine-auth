@@ -6,6 +6,24 @@ Steps to deploy the full system to production.
 
 - Firebase CLI authenticated: `firebase login`
 - Correct project selected: `firebase use oww-maco`
+- `gcloud` authenticated against the same project (needed for gateway secrets)
+- Operations repo cloned as a sibling of `machine-auth/`
+
+## 0. Predeploy (automation)
+
+Build every deployable artifact in one shot:
+
+```bash
+npm run predeploy
+```
+
+Runs: `firebase use` check → `generate-env` → install+build for `functions/`,
+`web/`, the gateway payload (Bazel + .env from gcloud secrets), and
+`checkout-kiosk/` (electron-rebuild). After this completes, the deploy
+steps below are mechanical — the build outputs they need already exist.
+
+This does NOT rotate secrets, re-save admin docs to refresh custom
+claims, or run smoke tests. Those manual steps still apply.
 
 ## 1. Secrets
 

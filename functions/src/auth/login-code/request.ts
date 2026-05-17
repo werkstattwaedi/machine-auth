@@ -120,8 +120,9 @@ export async function handleRequestLoginCode(
 
   // Per-email 24h cap on code requests (issue #152). Brute-force defence:
   // an attacker rotating fresh codes past the 60s throttle would otherwise
-  // get unbounded attempts at one address. The existing
-  // (email asc, created desc) index supports this query — no new index.
+  // get unbounded attempts at one address. The inequality on `created`
+  // needs an (email asc, created asc) composite index — distinct from the
+  // (email asc, created desc) index used by the latest-doc lookup above.
   const perEmailWindowMs = parseIntParamOrDie(
     "LOGIN_PER_EMAIL_WINDOW_MS",
     perEmailWindowMsParam.value()
