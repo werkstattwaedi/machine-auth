@@ -3,8 +3,10 @@
 # 7-byte NFC tag UID - fixed length generates fixed array
 maco.proto.TagUid.value             max_size:7 fixed_length:true
 
-# Firebase document ID (up to 20 alphanumeric characters + null terminator)
-maco.proto.FirebaseId.value         max_size:21
+# Firebase document ID. Sized to cover Firebase Auth UIDs (28 chars) used as
+# `users/{userId}` doc IDs and the older 20-char Firestore auto-IDs, rounded
+# up to a power-of-2-ish 32 for headroom.
+maco.proto.FirebaseId.value         max_size:33
 
 # 16-byte AES-128 key - fixed length generates fixed array
 maco.proto.KeyBytes.value           max_size:16 fixed_length:true
