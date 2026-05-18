@@ -122,8 +122,11 @@ The workqueue authenticates as a GitHub App so issue comments don't look like yo
 `.claude/scripts/workqueue-loop.sh` is a foreground script you run in a
 tmux pane you leave open. Each iteration: cheap GH pre-check → if work
 exists, hand the pane to an interactive `claude` session running
-`/workqueue` → claude self-exits via Phase 7's `tmux send-keys "/exit"`
-→ wrapper sleeps `WORKQUEUE_INTERVAL` (default 4h) → next iteration.
+`/workqueue` → claude self-exits via the Termination signal → wrapper
+**re-checks immediately** (the pre-check is ~3 cheap `gh` calls, and the
+real minimum iteration time is the baseline ~15min inside claude, so
+this can't tight-loop). When the pre-check eventually returns "no work",
+the wrapper sleeps `WORKQUEUE_IDLE_INTERVAL` (default 1h) and re-checks.
 
 Why not cron? Cron requires `claude -p` non-interactive mode, which means
 no Remote Control (no push notifications when a worker asks a question,
@@ -195,7 +198,7 @@ run), the patterns are standard but not configured by this script.
 ### Environment overrides
 
 Set in `~/.config/workqueue-app/env` or your shell rc:
-- `WORKQUEUE_INTERVAL` — sleep between iterations, passed to `sleep(1)` (default `4h`). Accepts `30m`, `2h`, etc.
+- `WORKQUEUE_IDLE_INTERVAL` — sleep when the queue is empty, passed to `sleep(1)` (default `1h`). Accepts `30m`, `2h`, etc. There is no sleep between successive runs when work remains — the wrapper just re-checks and fires claude again.
 - `CLAUDE_BIN` — path to the `claude` CLI (default `claude` on PATH).
 
 ## State machine (labels)
@@ -394,9 +397,22 @@ Run the baseline:
    git rev-parse --abbrev-ref HEAD   # must be main
    ```
 
-2. `npm run test:precommit` (Bash `timeout: 600000`).
+2. **Pull origin main again.** Phase 1b may have merged approved PRs on
+   GitHub (auto-merge fires server-side) while we were processing them
+   locally. Without this pull the baseline would run against the
+   pre-merge tree, defeating the point of testing the integrated state
+   and risking conflicts when worker branches later rebase. This is a
+   pure fast-forward — no destructive operation:
+   ```bash
+   git pull --ff-only origin main
+   ```
+   If the pull fails for any reason (non-ff, network, etc.), STOP with
+   `WORKQUEUE_RESULT: error | could not sync main after Phase 1b: <reason>`
+   — proceeding with a stale local main would be worse than aborting.
 
-3. `npm run test:web:e2e` (Bash `timeout: 600000`).
+3. `npm run test:precommit` (Bash `timeout: 600000`).
+
+4. `npm run test:web:e2e` (Bash `timeout: 600000`).
 
 If both pass → record "baseline: green" and continue to Phase 3.
 

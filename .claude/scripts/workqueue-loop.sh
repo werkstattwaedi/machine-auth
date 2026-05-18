@@ -52,7 +52,7 @@ fi
 
 wq_gh() { "$repo_dir/.claude/scripts/wq-gh.sh" "$@"; }
 
-interval="${WORKQUEUE_INTERVAL:-4h}"
+idle_interval="${WORKQUEUE_IDLE_INTERVAL:-1h}"
 claude_bin="${CLAUDE_BIN:-claude}"
 
 # Prune log files older than 14 days. Best effort.
@@ -165,16 +165,16 @@ has_actionable_work() {
 
 stamp() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
-echo "workqueue-loop starting at $(stamp); interval=${interval}; tmux pane=${TMUX_PANE:-?}"
+echo "workqueue-loop starting at $(stamp); idle_interval=${idle_interval}; tmux pane=${TMUX_PANE:-?}"
 echo "ctrl-c to stop. logs: $log_dir/"
-echo "$(stamp) loop started; interval=${interval}" >> "$status_file"
+echo "$(stamp) loop started; idle_interval=${idle_interval}" >> "$status_file"
 
 while true; do
   reason=$(has_actionable_work || true)
   if [[ -z "$reason" ]]; then
-    echo "$(stamp) idle: no actionable work; sleeping ${interval}"
+    echo "$(stamp) idle: no actionable work; sleeping ${idle_interval}"
     echo "$(stamp) idle" >> "$status_file"
-    sleep "$interval" || break
+    sleep "$idle_interval" || break
     continue
   fi
 
@@ -230,8 +230,8 @@ while true; do
   unset WORKQUEUE_SIGNAL_FILE
 
   # Fail-fast: if claude exited with an error in <10s, this is almost
-  # certainly a flag/config problem (not a real run), and the loop will
-  # just keep failing every WORKQUEUE_INTERVAL. Stop so you can fix it.
+  # certainly a flag/config problem (not a real run). Stop so you can fix
+  # it instead of looping on a broken config.
   run_end=$(date +%s)
   if [[ "$rc" -ne 0 ]] && (( run_end - run_start < 10 )); then
     echo "$(stamp) claude failed in $(( run_end - run_start ))s with rc=$rc — assuming config error, stopping loop" >&2
@@ -239,9 +239,15 @@ while true; do
     exit "$rc"
   fi
 
-  echo "$(stamp) claude exited with rc=$rc; sleeping ${interval}"
+  # Successful run (or a real run that errored after >10s): re-check work
+  # immediately. The pre-check is ~3 cheap gh calls; the *real* minimum
+  # iteration time is the baseline (~15min inside claude itself), so this
+  # can't tight-loop. If there's more queued work (e.g., a rebase opened
+  # a new PR, or a baseline-escalated issue is now ready to triage), we
+  # fire claude again right away. Once truly idle, we fall through to
+  # the no-work branch and sleep $idle_interval.
+  echo "$(stamp) claude exited with rc=$rc; re-checking for more work"
   echo "$(stamp) done rc=$rc" >> "$status_file"
-  sleep "$interval" || break
 done
 
 echo "$(stamp) workqueue-loop terminated"
