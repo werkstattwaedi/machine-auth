@@ -7,7 +7,6 @@
       "makerspace"
     ],
     "category": [
-      "3D-Druck",
       "FDM"
     ],
     "description": "FDM-3D-Druck-Filament, Spezial-Kategorie (z.B. flexibel, transparent).",
@@ -31,7 +30,6 @@
       "makerspace"
     ],
     "category": [
-      "3D-Druck",
       "FDM"
     ],
     "description": "FDM-3D-Druck-Filament, Standardkategorie. Verrechnet pro Gramm gedruckten Materials.",
@@ -55,7 +53,6 @@
       "makerspace"
     ],
     "category": [
-      "3D-Druck",
       "FDM"
     ],
     "description": "FDM-3D-Druck-Filament, technische Kategorie (z.B. PETG, Nylon, faserverstärkt).",
@@ -79,7 +76,6 @@
       "makerspace"
     ],
     "category": [
-      "3D-Druck",
       "SLA"
     ],
     "active": true,
@@ -104,7 +100,7 @@
       "makerspace"
     ],
     "category": [
-      "Holz",
+      "Laser",
       "MDF"
     ],
     "description": "MDF-Platte roh, ungeschliffen, Laser",
@@ -116,7 +112,8 @@
         "pricingModel": "area",
         "unitPrice": {
           "default": 5.55
-        }
+        },
+        "label": "Per m²"
       },
       {
         "id": "320-620",
@@ -152,7 +149,7 @@
       "makerspace"
     ],
     "category": [
-      "Holz",
+      "Laser",
       "MDF"
     ],
     "description": "MDF-Platte roh, ungeschliffen, Laser",
@@ -164,7 +161,8 @@
         "pricingModel": "area",
         "unitPrice": {
           "default": 7.05
-        }
+        },
+        "label": "Per m²"
       },
       {
         "id": "320-620",
@@ -200,7 +198,7 @@
       "makerspace"
     ],
     "category": [
-      "Holz",
+      "Laser",
       "MDF"
     ],
     "description": "MDF-Platte roh, ungeschliffen, Laser",
@@ -212,7 +210,8 @@
         "pricingModel": "area",
         "unitPrice": {
           "default": 8.6
-        }
+        },
+        "label": "Per m²"
       },
       {
         "id": "320-620",
@@ -248,7 +247,7 @@
       "makerspace"
     ],
     "category": [
-      "Holz",
+      "Laser",
       "MDF"
     ],
     "description": "MDF-Platte roh, ungeschliffen, Laser",
@@ -260,7 +259,8 @@
         "pricingModel": "area",
         "unitPrice": {
           "default": 10.6
-        }
+        },
+        "label": "Per m²"
       },
       {
         "id": "320-620",
@@ -296,7 +296,7 @@
       "makerspace"
     ],
     "category": [
-      "Holz",
+      "Laser",
       "Sperrholz"
     ],
     "description": "3-lagig AA natur, Laser",
@@ -308,7 +308,8 @@
         "pricingModel": "area",
         "unitPrice": {
           "default": 36
-        }
+        },
+        "label": "Per m²"
       },
       {
         "id": "a3",
@@ -328,7 +329,7 @@
       "makerspace"
     ],
     "category": [
-      "Holz",
+      "Laser",
       "Sperrholz"
     ],
     "description": "3-lagig AA natur, Laser",
@@ -340,7 +341,8 @@
         "pricingModel": "area",
         "unitPrice": {
           "default": 24
-        }
+        },
+        "label": "Per m²"
       },
       {
         "id": "a3",
@@ -360,7 +362,7 @@
       "makerspace"
     ],
     "category": [
-      "Holz",
+      "Laser",
       "Sperrholz"
     ],
     "description": "3-lagig AA natur, Laser",
@@ -372,7 +374,8 @@
         "pricingModel": "area",
         "unitPrice": {
           "default": 31
-        }
+        },
+        "label": "Per m²"
       },
       {
         "id": "a3",
@@ -392,7 +395,7 @@
       "makerspace"
     ],
     "category": [
-      "Holz",
+      "Laser",
       "Sperrholz"
     ],
     "description": "IF 20 A/BB, Laser",
@@ -404,7 +407,8 @@
         "pricingModel": "area",
         "unitPrice": {
           "default": 42.34
-        }
+        },
+        "label": "Per m²"
       },
       {
         "id": "320-620",
@@ -440,7 +444,7 @@
       "makerspace"
     ],
     "category": [
-      "Holz",
+      "Laser",
       "Sperrholz"
     ],
     "description": "IF 20 A/BB, Laser",
@@ -452,7 +456,8 @@
         "pricingModel": "area",
         "unitPrice": {
           "default": 15.9
-        }
+        },
+        "label": "Per m²"
       },
       {
         "id": "320-620",
@@ -488,7 +493,7 @@
       "makerspace"
     ],
     "category": [
-      "Holz",
+      "Laser",
       "Sperrholz"
     ],
     "description": "IF 20 A/BB, Laser",
@@ -500,7 +505,8 @@
         "pricingModel": "area",
         "unitPrice": {
           "default": 18.15
-        }
+        },
+        "label": "Per m²"
       },
       {
         "id": "320-620",
@@ -536,7 +542,7 @@
       "makerspace"
     ],
     "category": [
-      "Holz",
+      "Laser",
       "Sperrholz"
     ],
     "description": "5-lagig IF 20 A/BB, Laser",
@@ -548,7 +554,8 @@
         "pricingModel": "area",
         "unitPrice": {
           "default": 25.2
-        }
+        },
+        "label": "Per m²"
       },
       {
         "id": "320-620",
@@ -584,7 +591,7 @@
       "makerspace"
     ],
     "category": [
-      "Holz",
+      "Laser",
       "Sperrholz"
     ],
     "description": "IF 20 A/BB, Laser",
@@ -596,7 +603,8 @@
         "pricingModel": "area",
         "unitPrice": {
           "default": 26.45
-        }
+        },
+        "label": "Per m²"
       },
       {
         "id": "320-620",
@@ -632,7 +640,7 @@
       "makerspace"
     ],
     "category": [
-      "Holz",
+      "Laser",
       "Sperrholz"
     ],
     "description": "IF 20 A/BB, Laser",
@@ -644,7 +652,8 @@
         "pricingModel": "area",
         "unitPrice": {
           "default": 30.25
-        }
+        },
+        "label": "Per m²"
       },
       {
         "id": "320-620",
@@ -680,7 +689,7 @@
       "makerspace"
     ],
     "category": [
-      "Holz",
+      "Laser",
       "Sperrholz"
     ],
     "description": "3-lagig beidseitig geschlossen, Laser",
@@ -692,7 +701,8 @@
         "pricingModel": "area",
         "unitPrice": {
           "default": 26.7
-        }
+        },
+        "label": "Per m²"
       },
       {
         "id": "320-620",
@@ -728,7 +738,7 @@
       "makerspace"
     ],
     "category": [
-      "Holz",
+      "Laser",
       "Sperrholz"
     ],
     "description": "3-lagig beidseitig geschlossen, Laser",
@@ -740,7 +750,8 @@
         "pricingModel": "area",
         "unitPrice": {
           "default": 18.65
-        }
+        },
+        "label": "Per m²"
       },
       {
         "id": "320-620",
@@ -776,7 +787,7 @@
       "makerspace"
     ],
     "category": [
-      "Holz",
+      "Laser",
       "Sperrholz"
     ],
     "description": "3-lagig AA natur, Laser",
@@ -788,7 +799,8 @@
         "pricingModel": "area",
         "unitPrice": {
           "default": 54
-        }
+        },
+        "label": "Per m²"
       },
       {
         "id": "a3",
