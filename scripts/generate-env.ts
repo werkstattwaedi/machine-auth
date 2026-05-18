@@ -37,6 +37,10 @@ const FUNCTIONS_PARAMS: VarMapping[] = [
   { envVar: "LOGIN_PER_EMAIL_WINDOW_MS", jsonPath: "functions.loginPerEmailWindowMs" },
   { envVar: "LOGIN_MAX_CODES_PER_EMAIL", jsonPath: "functions.loginMaxCodesPerEmail" },
   { envVar: "LOGIN_MAX_ATTEMPTS_PER_EMAIL", jsonPath: "functions.loginMaxAttemptsPerEmail" },
+  // Checkout domain (issue #248) drives the QR-code deep link printed on
+  // price-list PDFs. Reuses `web.checkoutDomain` from the operations
+  // config so admin web + functions stay in sync.
+  { envVar: "CHECKOUT_DOMAIN", jsonPath: "web.checkoutDomain" },
 ];
 
 const FUNCTIONS_SECRETS: VarMapping[] = [

@@ -80,6 +80,8 @@ Design decisions that already help keep ops down:
 
 **Login-code rate limits** (issue #152, `functions/src/auth/login-code/`): per-email caps of 20 code requests/24h and 30 cumulative verify attempts/24h, layered on top of the 60s per-email throttle and the per-doc 5-attempt cap. The 24h caps are tunable via `defineString` env params — `LOGIN_PER_EMAIL_WINDOW_MS` (default `86400000`), `LOGIN_MAX_CODES_PER_EMAIL` (default `20`), `LOGIN_MAX_ATTEMPTS_PER_EMAIL` (default `30`) — so values can be retuned from the operations repo without a code change. Don't loosen the defaults without re-evaluating the brute-force keyspace math (10^6 codes).
 
+**Price-list QR codes** (issue #248, `functions/src/price_list/get_price_list_pdf_url.ts`): the QR printed on price-list PDFs encodes `https://${CHECKOUT_DOMAIN}/material/add?priceList=…`. `CHECKOUT_DOMAIN` is a `defineString` param sourced from `web.checkoutDomain` in the operations config — there is no production fallback, so an unset value throws `failed-precondition` instead of silently shipping `localhost:5173`. In emulator mode the empty value defaults to `localhost:5173`.
+
 For onSnapshot accounting see [issue #147](https://github.com/werkstattwaedi/machine-auth/issues/147) — concurrent identical listeners share a single watch stream; the dominant cost is sequential remounts paying the initial fetch.
 
 ### Firebase Functions
