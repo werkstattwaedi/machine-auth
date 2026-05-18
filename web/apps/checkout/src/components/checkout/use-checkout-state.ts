@@ -55,6 +55,10 @@ type CheckoutAction =
     }
   | { type: "REMOVE_PERSON"; id: string }
   | { type: "UPDATE_PERSON"; id: string; updates: Partial<CheckoutPerson> }
+  // Issue #246: rehydrate persons from an open Firestore checkout doc when
+  // the wizard remounts (e.g. after the user navigated to /profile and
+  // back). Replaces the entire `persons` array.
+  | { type: "REPLACE_PERSONS"; persons: CheckoutPerson[] }
   | { type: "SET_USAGE_TYPE"; usageType: UsageType }
   | { type: "SET_TIP"; amount: number }
   | { type: "SET_SUBMITTED"; checkoutId: string | null; totalPrice: number }
@@ -129,6 +133,13 @@ function checkoutReducer(
           return { ...p, ...action.updates }
         }),
       }
+
+    case "REPLACE_PERSONS":
+      // Issue #246: rehydrate from the open Firestore checkout doc. The
+      // caller is responsible for converting CheckoutPersonDoc -> the
+      // local CheckoutPerson shape (split name, restore userId from
+      // userRef, etc.).
+      return { ...state, persons: action.persons }
 
     case "SET_USAGE_TYPE":
       return { ...state, usageType: action.usageType }

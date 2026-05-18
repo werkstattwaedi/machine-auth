@@ -165,7 +165,10 @@ export function StepCheckin({ state, dispatch, isAnonymous, kiosk, isAccountLogg
               <button
                 key={candidate.userId}
                 type="button"
-                className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-cog-teal border border-cog-teal rounded-[3px] bg-white hover:bg-cog-teal-light transition-colors"
+                // Issue #246: chips animate in when they appear (e.g. when
+                // the signed-in user is re-added to the picker after
+                // removing themselves from the visit).
+                className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-cog-teal border border-cog-teal rounded-[3px] bg-white hover:bg-cog-teal-light transition-colors animate-in fade-in slide-in-from-top-2 duration-200"
                 onClick={() => handleAddFamilyPerson(candidate)}
               >
                 <Plus className="h-4 w-4" />
