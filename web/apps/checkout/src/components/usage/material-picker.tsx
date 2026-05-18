@@ -12,10 +12,7 @@ import { VisuallyHidden } from "radix-ui"
 import { Label } from "@modules/components/ui/label"
 import { useIsMobile } from "@modules/hooks/use-mobile"
 import { formatCHF } from "@modules/lib/format"
-import {
-  formatUnitPrice,
-  formatPricePerCount,
-} from "@modules/lib/units"
+import { formatPricePerCount } from "@modules/lib/units"
 import { ChevronRight, Search, X } from "lucide-react"
 import {
   getUnitLabel,
@@ -279,11 +276,11 @@ function PickerBody({
   const showFallbacks = trimmedQuery.length > 0
 
   return (
-    <div className="flex-1 overflow-y-auto">
+    <>
       {chipRows.length > 0 && (
         <div
           aria-label="Kategorien"
-          className="flex flex-wrap items-center gap-1.5 border-b border-border bg-background px-4 py-2"
+          className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-border bg-background px-4 py-2"
         >
           {chipRows.map((row, idx) => (
             <React.Fragment key={row.level}>
@@ -306,6 +303,7 @@ function PickerBody({
           ))}
         </div>
       )}
+      <div className="flex-1 overflow-y-auto">
       {filtered.length === 0 && !showFallbacks ? (
         <div className="px-4 py-8 text-center text-sm text-muted-foreground">
           Keine Treffer. Such-Begriff anpassen oder einen anderen Filter wählen.
@@ -385,7 +383,8 @@ function PickerBody({
           })}
         </div>
       )}
-    </div>
+      </div>
+    </>
   )
 }
 
@@ -522,15 +521,22 @@ function ExpandedRow({
   }
 
   return (
-    <div className="border-b border-border bg-secondary px-4 py-4">
-      <div className="mb-3 flex items-baseline justify-between gap-2">
+    <div className="border-b border-border bg-secondary">
+      {/* Header mirrors the CollapsedRow layout (name + subtitle | price/unit)
+          so the row doesn't reorganise on expand. The × close button sits
+          to the right of the price; everything else stays put. */}
+      <div className="grid w-full grid-cols-[1fr_auto_auto] items-center gap-3 px-4 py-3">
         <div className="min-w-0">
-          <div className="font-heading text-sm font-semibold">
+          <div className="font-heading text-sm font-semibold truncate">
             {catalog.name}
           </div>
-          <div className="text-xs text-muted-foreground">
-            {formatPriceForCatalog(variant?.pricingModel ?? "direct", config, unitPrice)}
-          </div>
+          <CatalogRowSubtitle catalog={catalog} />
+        </div>
+        <div className="font-heading text-sm font-semibold tabular-nums whitespace-nowrap">
+          {formatCHF(unitPrice)}
+          <span className="ml-0.5 font-body text-[11px] font-normal text-muted-foreground">
+            /{getShortUnit(variant?.pricingModel ?? "direct")}
+          </span>
         </div>
         <button
           type="button"
@@ -541,6 +547,7 @@ function ExpandedRow({
           <X className="h-3 w-3" />
         </button>
       </div>
+      <div className="px-4 pb-4">
       {variants.length > 1 && (
         <div
           role="radiogroup"
@@ -577,21 +584,9 @@ function ExpandedRow({
         baseItem={baseItem}
         onAdd={onAdd}
       />
+      </div>
     </div>
   )
-}
-
-function formatPriceForCatalog(
-  pm: PricingModel,
-  config: PricingConfig,
-  unitPrice: number,
-): string {
-  if (pm === "sla") {
-    // SLA has two price axes; expose the resin per-ml figure as the lead
-    // line, the per-layer cost shows up below the layer input.
-    return formatUnitPrice(unitPrice, "l", { referenceQuantity: 0.05 })
-  }
-  return `${formatCHF(unitPrice)} / ${getUnitLabel(config, pm)}`
 }
 
 function PickerEntryForm({
@@ -678,10 +673,29 @@ function AddButton({
   )
 }
 
-function LiveTotal({ value }: { value: number }) {
+/**
+ * Stable footer beneath every form. Total on the left (blank until the
+ * inputs amount to something), Hinzufügen on the right. Sits *outside*
+ * the input grid so the inputs don't have to fight the button for the
+ * last column, and the layout reads the same way regardless of how
+ * many fields the form happens to expose (Anzahl-only vs Länge ×
+ * Breite × m² etc.).
+ */
+function FormFooter({
+  total,
+  addDisabled,
+  onAdd,
+}: {
+  total: number
+  addDisabled: boolean
+  onAdd: () => void
+}) {
   return (
-    <div className="font-heading text-base font-bold tabular-nums text-cog-teal-dark text-right">
-      {value > 0 ? formatCHF(value) : "—"}
+    <div className="mt-3 flex items-center justify-between gap-3">
+      <div className="font-heading text-base font-bold tabular-nums text-cog-teal-dark">
+        {total > 0 ? formatCHF(total) : ""}
+      </div>
+      <AddButton disabled={addDisabled} onClick={onAdd} />
     </div>
   )
 }
@@ -710,25 +724,26 @@ function SimpleForm({
   const baseQty = isWeight ? raw / 1000 : isTime ? raw / 60 : raw
   const total = Math.round(baseQty * unitPrice * 100) / 100
   return (
-    <FormGrid>
-      <FormField label={`Anzahl (${displayUnit})`}>
-        <input
-          autoFocus
-          type="number"
-          min="0"
-          step="any"
-          value={raw || ""}
-          onChange={(e) =>
-            setRaw(Math.max(0, parseFloat(e.target.value) || 0))
-          }
-          className={INPUT_CLS}
-        />
-      </FormField>
-      <div className="hidden sm:block" />
-      <LiveTotal value={total} />
-      <AddButton
-        disabled={baseQty <= 0}
-        onClick={() => {
+    <>
+      <FormGrid>
+        <FormField label={`Anzahl (${displayUnit})`}>
+          <input
+            autoFocus
+            type="number"
+            min="0"
+            step="any"
+            value={raw || ""}
+            onChange={(e) =>
+              setRaw(Math.max(0, parseFloat(e.target.value) || 0))
+            }
+            className={INPUT_CLS}
+          />
+        </FormField>
+      </FormGrid>
+      <FormFooter
+        total={total}
+        addDisabled={baseQty <= 0}
+        onAdd={() => {
           onAdd({
             ...baseItem,
             id: crypto.randomUUID(),
@@ -739,7 +754,7 @@ function SimpleForm({
           setRaw(0)
         }}
       />
-    </FormGrid>
+    </>
   )
 }
 
@@ -759,41 +774,43 @@ function AreaForm({
   const m2 = (lengthCm / 100) * (widthCm / 100)
   const total = Math.round(m2 * unitPrice * 100) / 100
   return (
-    <FormGrid>
-      <FormField label="Länge (cm)">
-        <input
-          autoFocus
-          type="number"
-          min="0"
-          step="any"
-          value={lengthCm || ""}
-          onChange={(e) =>
-            setLengthCm(Math.max(0, parseFloat(e.target.value) || 0))
-          }
-          className={INPUT_CLS}
-        />
-      </FormField>
-      <FormField label="Breite (cm)">
-        <input
-          type="number"
-          min="0"
-          step="any"
-          value={widthCm || ""}
-          onChange={(e) =>
-            setWidthCm(Math.max(0, parseFloat(e.target.value) || 0))
-          }
-          className={INPUT_CLS}
-        />
-      </FormField>
-      <FormField label={getUnitLabel(config, "area")}>
-        <div className="flex h-9 items-center text-sm tabular-nums">
-          {m2.toFixed(2)}
-        </div>
-      </FormField>
-      <LiveTotal value={total} />
-      <AddButton
-        disabled={m2 <= 0}
-        onClick={() => {
+    <>
+      <FormGrid>
+        <FormField label="Länge (cm)">
+          <input
+            autoFocus
+            type="number"
+            min="0"
+            step="any"
+            value={lengthCm || ""}
+            onChange={(e) =>
+              setLengthCm(Math.max(0, parseFloat(e.target.value) || 0))
+            }
+            className={INPUT_CLS}
+          />
+        </FormField>
+        <FormField label="Breite (cm)">
+          <input
+            type="number"
+            min="0"
+            step="any"
+            value={widthCm || ""}
+            onChange={(e) =>
+              setWidthCm(Math.max(0, parseFloat(e.target.value) || 0))
+            }
+            className={INPUT_CLS}
+          />
+        </FormField>
+        <FormField label={getUnitLabel(config, "area")}>
+          <div className="flex h-9 items-center text-sm tabular-nums">
+            {m2.toFixed(2)}
+          </div>
+        </FormField>
+      </FormGrid>
+      <FormFooter
+        total={total}
+        addDisabled={m2 <= 0}
+        onAdd={() => {
           onAdd({
             ...baseItem,
             id: crypto.randomUUID(),
@@ -808,7 +825,7 @@ function AreaForm({
           setWidthCm(0)
         }}
       />
-    </FormGrid>
+    </>
   )
 }
 
@@ -827,29 +844,31 @@ function LengthForm({
   const meters = lengthCm / 100
   const total = Math.round(meters * unitPrice * 100) / 100
   return (
-    <FormGrid>
-      <FormField label={`Länge (cm)`}>
-        <input
-          autoFocus
-          type="number"
-          min="0"
-          step="any"
-          value={lengthCm || ""}
-          onChange={(e) =>
-            setLengthCm(Math.max(0, parseFloat(e.target.value) || 0))
-          }
-          className={INPUT_CLS}
-        />
-      </FormField>
-      <FormField label={getUnitLabel(config, "length")}>
-        <div className="flex h-9 items-center text-sm tabular-nums">
-          {meters.toFixed(2)}
-        </div>
-      </FormField>
-      <LiveTotal value={total} />
-      <AddButton
-        disabled={meters <= 0}
-        onClick={() => {
+    <>
+      <FormGrid>
+        <FormField label={`Länge (cm)`}>
+          <input
+            autoFocus
+            type="number"
+            min="0"
+            step="any"
+            value={lengthCm || ""}
+            onChange={(e) =>
+              setLengthCm(Math.max(0, parseFloat(e.target.value) || 0))
+            }
+            className={INPUT_CLS}
+          />
+        </FormField>
+        <FormField label={getUnitLabel(config, "length")}>
+          <div className="flex h-9 items-center text-sm tabular-nums">
+            {meters.toFixed(2)}
+          </div>
+        </FormField>
+      </FormGrid>
+      <FormFooter
+        total={total}
+        addDisabled={meters <= 0}
+        onAdd={() => {
           onAdd({
             ...baseItem,
             id: crypto.randomUUID(),
@@ -860,7 +879,7 @@ function LengthForm({
           setLengthCm(0)
         }}
       />
-    </FormGrid>
+    </>
   )
 }
 
@@ -885,43 +904,45 @@ function SlaForm({
     Math.round(((resinMl / 1000) * unitPrice + layers * layerPrice) * 100) /
     100
   return (
-    <FormGrid>
-      <FormField label="Resin (ml)">
-        <input
-          autoFocus
-          type="number"
-          min="0"
-          step="0.1"
-          value={resinMl || ""}
-          onChange={(e) =>
-            setResinMl(Math.max(0, parseFloat(e.target.value) || 0))
-          }
-          className={INPUT_CLS}
-        />
-      </FormField>
-      <FormField label="Layer">
-        <input
-          type="number"
-          min="0"
-          step="1"
-          value={layers || ""}
-          onChange={(e) =>
-            setLayers(
-              Math.max(0, Math.floor(parseFloat(e.target.value) || 0)),
-            )
-          }
-          className={INPUT_CLS}
-        />
-      </FormField>
-      <FormField label="Preis Layer">
-        <div className="flex h-9 items-center text-sm tabular-nums">
-          {formatPricePerCount(layerPrice, "Layer")}
-        </div>
-      </FormField>
-      <LiveTotal value={total} />
-      <AddButton
-        disabled={total <= 0}
-        onClick={() => {
+    <>
+      <FormGrid>
+        <FormField label="Resin (ml)">
+          <input
+            autoFocus
+            type="number"
+            min="0"
+            step="0.1"
+            value={resinMl || ""}
+            onChange={(e) =>
+              setResinMl(Math.max(0, parseFloat(e.target.value) || 0))
+            }
+            className={INPUT_CLS}
+          />
+        </FormField>
+        <FormField label="Layer">
+          <input
+            type="number"
+            min="0"
+            step="1"
+            value={layers || ""}
+            onChange={(e) =>
+              setLayers(
+                Math.max(0, Math.floor(parseFloat(e.target.value) || 0)),
+              )
+            }
+            className={INPUT_CLS}
+          />
+        </FormField>
+        <FormField label="Preis Layer">
+          <div className="flex h-9 items-center text-sm tabular-nums">
+            {formatPricePerCount(layerPrice, "Layer")}
+          </div>
+        </FormField>
+      </FormGrid>
+      <FormFooter
+        total={total}
+        addDisabled={total <= 0}
+        onAdd={() => {
           onAdd({
             ...baseItem,
             id: crypto.randomUUID(),
@@ -936,7 +957,7 @@ function SlaForm({
           setLayers(0)
         }}
       />
-    </FormGrid>
+    </>
   )
 }
 
@@ -953,32 +974,34 @@ function DirectForm({
   const [description, setDescription] = useState(baseItem.description)
   const [cost, setCost] = useState(0)
   return (
-    <FormGrid>
-      <FormField label="Bezogene Leistungen" wide>
-        <input
-          autoFocus
-          value={description}
-          placeholder="Was hast du gebraucht?"
-          onChange={(e) => setDescription(e.target.value)}
-          className={INPUT_CLS}
-        />
-      </FormField>
-      <FormField label="Kosten (CHF)">
-        <input
-          type="number"
-          min="0"
-          step="any"
-          value={cost || ""}
-          onChange={(e) =>
-            setCost(Math.max(0, parseFloat(e.target.value) || 0))
-          }
-          className={INPUT_CLS}
-        />
-      </FormField>
-      <LiveTotal value={cost} />
-      <AddButton
-        disabled={cost <= 0 || !description.trim()}
-        onClick={() => {
+    <>
+      <FormGrid>
+        <FormField label="Bezogene Leistungen" wide>
+          <input
+            autoFocus
+            value={description}
+            placeholder="Was hast du gebraucht?"
+            onChange={(e) => setDescription(e.target.value)}
+            className={INPUT_CLS}
+          />
+        </FormField>
+        <FormField label="Kosten (CHF)">
+          <input
+            type="number"
+            min="0"
+            step="any"
+            value={cost || ""}
+            onChange={(e) =>
+              setCost(Math.max(0, parseFloat(e.target.value) || 0))
+            }
+            className={INPUT_CLS}
+          />
+        </FormField>
+      </FormGrid>
+      <FormFooter
+        total={cost}
+        addDisabled={cost <= 0 || !description.trim()}
+        onAdd={() => {
           onAdd({
             ...baseItem,
             id: crypto.randomUUID(),
@@ -990,7 +1013,7 @@ function DirectForm({
           setCost(0)
         }}
       />
-    </FormGrid>
+    </>
   )
 }
 
@@ -1182,35 +1205,37 @@ function AdHocCountWeightTimeForm({
   const baseQty = isWeight ? raw / 1000 : isTime ? raw / 60 : raw
   const total = Math.round(baseQty * unitPrice * 100) / 100
   return (
-    <FormGrid>
-      <FormField label={`Anzahl (${displayUnit})`}>
-        <input
-          type="number"
-          min="0"
-          step="any"
-          value={raw || ""}
-          onChange={(e) =>
-            setRaw(Math.max(0, parseFloat(e.target.value) || 0))
-          }
-          className={INPUT_CLS}
-        />
-      </FormField>
-      <FormField label={`Preis/${baseUnit}`}>
-        <input
-          type="number"
-          min="0"
-          step="any"
-          value={unitPrice || ""}
-          onChange={(e) =>
-            setUnitPrice(Math.max(0, parseFloat(e.target.value) || 0))
-          }
-          className={INPUT_CLS}
-        />
-      </FormField>
-      <LiveTotal value={total} />
-      <AddButton
-        disabled={!descriptionFilled || total <= 0}
-        onClick={() => {
+    <>
+      <FormGrid>
+        <FormField label={`Anzahl (${displayUnit})`}>
+          <input
+            type="number"
+            min="0"
+            step="any"
+            value={raw || ""}
+            onChange={(e) =>
+              setRaw(Math.max(0, parseFloat(e.target.value) || 0))
+            }
+            className={INPUT_CLS}
+          />
+        </FormField>
+        <FormField label={`Preis/${baseUnit}`}>
+          <input
+            type="number"
+            min="0"
+            step="any"
+            value={unitPrice || ""}
+            onChange={(e) =>
+              setUnitPrice(Math.max(0, parseFloat(e.target.value) || 0))
+            }
+            className={INPUT_CLS}
+          />
+        </FormField>
+      </FormGrid>
+      <FormFooter
+        total={total}
+        addDisabled={!descriptionFilled || total <= 0}
+        onAdd={() => {
           onAdd({
             ...baseItem,
             id: crypto.randomUUID(),
@@ -1223,7 +1248,7 @@ function AdHocCountWeightTimeForm({
           setUnitPrice(0)
         }}
       />
-    </FormGrid>
+    </>
   )
 }
 
@@ -1243,56 +1268,55 @@ function AdHocAreaForm({
   const [unitPrice, setUnitPrice] = useState(0)
   const m2 = (lengthCm / 100) * (widthCm / 100)
   const total = Math.round(m2 * unitPrice * 100) / 100
-  // Five-input ad-hoc area is wider than the four-column FormGrid; the
-  // grid auto-flows excess children to a second row, which keeps the
-  // layout readable on both desktop and mobile without a custom grid.
   return (
-    <FormGrid>
-      <FormField label="Länge (cm)">
-        <input
-          type="number"
-          min="0"
-          step="any"
-          value={lengthCm || ""}
-          onChange={(e) =>
-            setLengthCm(Math.max(0, parseFloat(e.target.value) || 0))
-          }
-          className={INPUT_CLS}
-        />
-      </FormField>
-      <FormField label="Breite (cm)">
-        <input
-          type="number"
-          min="0"
-          step="any"
-          value={widthCm || ""}
-          onChange={(e) =>
-            setWidthCm(Math.max(0, parseFloat(e.target.value) || 0))
-          }
-          className={INPUT_CLS}
-        />
-      </FormField>
-      <FormField label={getUnitLabel(config, "area")}>
-        <div className="flex h-9 items-center text-sm tabular-nums">
-          {m2.toFixed(2)}
-        </div>
-      </FormField>
-      <FormField label={`Preis/${getUnitLabel(config, "area")}`}>
-        <input
-          type="number"
-          min="0"
-          step="any"
-          value={unitPrice || ""}
-          onChange={(e) =>
-            setUnitPrice(Math.max(0, parseFloat(e.target.value) || 0))
-          }
-          className={INPUT_CLS}
-        />
-      </FormField>
-      <LiveTotal value={total} />
-      <AddButton
-        disabled={!descriptionFilled || total <= 0}
-        onClick={() => {
+    <>
+      <FormGrid>
+        <FormField label="Länge (cm)">
+          <input
+            type="number"
+            min="0"
+            step="any"
+            value={lengthCm || ""}
+            onChange={(e) =>
+              setLengthCm(Math.max(0, parseFloat(e.target.value) || 0))
+            }
+            className={INPUT_CLS}
+          />
+        </FormField>
+        <FormField label="Breite (cm)">
+          <input
+            type="number"
+            min="0"
+            step="any"
+            value={widthCm || ""}
+            onChange={(e) =>
+              setWidthCm(Math.max(0, parseFloat(e.target.value) || 0))
+            }
+            className={INPUT_CLS}
+          />
+        </FormField>
+        <FormField label={getUnitLabel(config, "area")}>
+          <div className="flex h-9 items-center text-sm tabular-nums">
+            {m2.toFixed(2)}
+          </div>
+        </FormField>
+        <FormField label={`Preis/${getUnitLabel(config, "area")}`}>
+          <input
+            type="number"
+            min="0"
+            step="any"
+            value={unitPrice || ""}
+            onChange={(e) =>
+              setUnitPrice(Math.max(0, parseFloat(e.target.value) || 0))
+            }
+            className={INPUT_CLS}
+          />
+        </FormField>
+      </FormGrid>
+      <FormFooter
+        total={total}
+        addDisabled={!descriptionFilled || total <= 0}
+        onAdd={() => {
           onAdd({
             ...baseItem,
             id: crypto.randomUUID(),
@@ -1309,7 +1333,7 @@ function AdHocAreaForm({
           setUnitPrice(0)
         }}
       />
-    </FormGrid>
+    </>
   )
 }
 
@@ -1329,35 +1353,37 @@ function AdHocLengthForm({
   const meters = lengthCm / 100
   const total = Math.round(meters * unitPrice * 100) / 100
   return (
-    <FormGrid>
-      <FormField label="Länge (cm)">
-        <input
-          type="number"
-          min="0"
-          step="any"
-          value={lengthCm || ""}
-          onChange={(e) =>
-            setLengthCm(Math.max(0, parseFloat(e.target.value) || 0))
-          }
-          className={INPUT_CLS}
-        />
-      </FormField>
-      <FormField label={`Preis/${getUnitLabel(config, "length")}`}>
-        <input
-          type="number"
-          min="0"
-          step="any"
-          value={unitPrice || ""}
-          onChange={(e) =>
-            setUnitPrice(Math.max(0, parseFloat(e.target.value) || 0))
-          }
-          className={INPUT_CLS}
-        />
-      </FormField>
-      <LiveTotal value={total} />
-      <AddButton
-        disabled={!descriptionFilled || total <= 0}
-        onClick={() => {
+    <>
+      <FormGrid>
+        <FormField label="Länge (cm)">
+          <input
+            type="number"
+            min="0"
+            step="any"
+            value={lengthCm || ""}
+            onChange={(e) =>
+              setLengthCm(Math.max(0, parseFloat(e.target.value) || 0))
+            }
+            className={INPUT_CLS}
+          />
+        </FormField>
+        <FormField label={`Preis/${getUnitLabel(config, "length")}`}>
+          <input
+            type="number"
+            min="0"
+            step="any"
+            value={unitPrice || ""}
+            onChange={(e) =>
+              setUnitPrice(Math.max(0, parseFloat(e.target.value) || 0))
+            }
+            className={INPUT_CLS}
+          />
+        </FormField>
+      </FormGrid>
+      <FormFooter
+        total={total}
+        addDisabled={!descriptionFilled || total <= 0}
+        onAdd={() => {
           onAdd({
             ...baseItem,
             id: crypto.randomUUID(),
@@ -1370,13 +1396,14 @@ function AdHocLengthForm({
           setUnitPrice(0)
         }}
       />
-    </FormGrid>
+    </>
   )
 }
 
 function FormGrid({ children }: { children: React.ReactNode }) {
-  // 2-col on mobile, 4-col on desktop. Total + Add button live at the right
-  // end on desktop and stack below the inputs on mobile.
+  // 2-col on mobile, 4-col on desktop. FormFooter renders the live total
+  // and Hinzufügen button beneath the grid so the input layout is
+  // independent of the form's button placement.
   return (
     <div className="grid grid-cols-2 items-end gap-x-3 gap-y-2 sm:grid-cols-[100px_100px_1fr_auto]">
       {children}
