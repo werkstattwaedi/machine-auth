@@ -145,8 +145,8 @@ describe("StepCheckout — round-up tip stays in sync with the billed subtotal (
     const user = userEvent.setup()
     render(<Harness onState={(s) => states.push(s)} />)
 
-    // Type a manual donation of 5 CHF.
-    const spendeInput = screen.getByLabelText("Spende") as HTMLInputElement
+    // Type a manual tip of 5 CHF.
+    const spendeInput = screen.getByLabelText("Trinkgeld/Spende") as HTMLInputElement
     await act(async () => {
       await user.type(spendeInput, "5")
     })

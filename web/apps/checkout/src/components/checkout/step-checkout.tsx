@@ -56,7 +56,7 @@ export function roundUpOptions(base: number): number[] {
   if (base <= 0) return []
   // If the base is already a whole franc, no round-up is necessary —
   // hide the suggestion row entirely (the Spende input remains for
-  // free-form donations).
+  // free-form tipping).
   if (base % 1 === 0) return []
   // Cap how much we're willing to suggest as a bump. At low bases the
   // 5 CHF floor lets us suggest natural targets like `0.30 → 5`. At
@@ -142,7 +142,7 @@ interface StepCheckoutProps {
  * server-side authoritative {@link recomputeSummary} contract: when
  * {@link usageType} is `"intern"` the visit is never billed, so entry
  * fees, machine cost, and material cost all collapse to 0 regardless of
- * what items / config say. Donation stays honoured. The wizard's
+ * what items / config say. Tip stays honoured. The wizard's
  * `handleSubmit` and `StepCheckout` both flow through this helper so the
  * displayed total always matches what the server will bill.
  */
@@ -202,18 +202,12 @@ export function StepCheckout({
   )
   const subtotal = personFees + machineCost + materialCost
 
-  // Donation is split: manual entry + optional round-up top-up to a chosen
-  // target. The underlying CheckoutState field is still named `tip` (kept
-  // for back-compat with already-issued bills and the persisted
-  // `checkout.summary.tip` shape); the UI and local variables call it
-  // "Spende" / donation because that's what it actually is. See issue
-  // #250 + ADR-equivalent decision: option A — single donation field, no
-  // tip semantics.
-  const [manualDonation, setManualDonation] = useState(0)
+  // Tip is split: manual entry + optional round-up to a chosen target.
+  const [manualTip, setManualTip] = useState(0)
   const [roundUpEnabled, setRoundUpEnabled] = useState(false)
   const [roundUpTarget, setRoundUpTarget] = useState<number | null>(null)
 
-  const roundBase = subtotal + manualDonation
+  const roundBase = subtotal + manualTip
   const roundOpts = useMemo(() => roundUpOptions(roundBase), [roundBase])
 
   // Auto-pick the smallest target when options first appear / the chosen
@@ -226,10 +220,10 @@ export function StepCheckout({
     roundUpEnabled && activeTarget != null
       ? Math.max(0, +(activeTarget - roundBase).toFixed(2))
       : 0
-  const donationTotal = manualDonation + effectiveRoundUp
-  const total = subtotal + donationTotal
+  const tipTotal = manualTip + effectiveRoundUp
+  const total = subtotal + tipTotal
 
-  const syncDonation = useCallback(
+  const syncTip = useCallback(
     (manual: number, enabled: boolean, target: number | null) => {
       const base = subtotal + manual
       const round = enabled && target != null
@@ -240,58 +234,58 @@ export function StepCheckout({
     [subtotal, dispatch],
   )
 
-  const handleManualDonationChange = (value: number) => {
-    setManualDonation(value)
-    syncDonation(value, roundUpEnabled, activeTarget)
+  const handleManualTipChange = (value: number) => {
+    setManualTip(value)
+    syncTip(value, roundUpEnabled, activeTarget)
   }
   const handleRoundUpToggle = (enabled: boolean) => {
     setRoundUpEnabled(enabled)
-    syncDonation(manualDonation, enabled, activeTarget)
+    syncTip(manualTip, enabled, activeTarget)
   }
   const handleRoundUpTarget = (target: number) => {
     setRoundUpTarget(target)
     // Picking a target also turns the round-up on — matches the user
     // intent of "I just chose this" without an extra checkbox click.
     setRoundUpEnabled(true)
-    syncDonation(manualDonation, true, target)
+    syncTip(manualTip, true, target)
   }
 
-  // Keep the dispatched donation honest when the offered round-up set
-  // changes out from under the user — e.g. switching usageType to
-  // "intern" zeroes the billed subtotal, so the previously-selected
-  // 0.60 CHF round-up would otherwise linger in global state (issue
-  // #236). The render path already shows the correct value via
-  // `effectiveRoundUp`; this effect keeps the dispatched value in sync.
+  // Keep the dispatched tip honest when the offered round-up set changes
+  // out from under the user — e.g. switching usageType to "intern" zeroes
+  // the billed subtotal, so the previously-selected 0.60 CHF round-up
+  // would otherwise linger in global state (issue #236). The render path
+  // already shows the correct tip via `effectiveRoundUp`; this effect
+  // keeps the dispatched value in sync.
   //
   // Disable round-up entirely when no options remain (per Mike's "or
   // uncheck it"); re-pick the auto target when the previously-chosen one
-  // dropped out of the offered set. The manual donation portion is
-  // preserved — that was entered intentionally and should not be reset.
-  const dispatchedDonation = state.tip
+  // dropped out of the offered set. The manual tip portion is preserved —
+  // that was entered intentionally and should not be reset.
+  const dispatchedTip = state.tip
   useEffect(() => {
     if (roundOpts.length === 0) {
       if (roundUpEnabled) setRoundUpEnabled(false)
-      // Drop any lingering round-up from the dispatched donation without
+      // Drop any lingering round-up from the dispatched tip without
       // disturbing the manual portion.
-      if (dispatchedDonation !== manualDonation) {
-        dispatch({ type: "SET_TIP", amount: manualDonation })
+      if (dispatchedTip !== manualTip) {
+        dispatch({ type: "SET_TIP", amount: manualTip })
       }
       return
     }
     if (!roundUpEnabled) return
     // Options exist + round-up enabled: ensure the dispatched amount
-    // matches the currently-displayed donation (manualDonation +
-    // effectiveRoundUp recomputed against the new base/target).
-    const expected = +(manualDonation + effectiveRoundUp).toFixed(2)
-    if (Math.abs(dispatchedDonation - expected) > 0.001) {
+    // matches the currently-displayed tip (manualTip + effectiveRoundUp
+    // recomputed against the new base/target).
+    const expected = +(manualTip + effectiveRoundUp).toFixed(2)
+    if (Math.abs(dispatchedTip - expected) > 0.001) {
       dispatch({ type: "SET_TIP", amount: expected })
     }
   }, [
     roundOpts,
     roundUpEnabled,
-    manualDonation,
+    manualTip,
     effectiveRoundUp,
-    dispatchedDonation,
+    dispatchedTip,
     dispatch,
   ])
 
@@ -454,8 +448,8 @@ export function StepCheckout({
 
       {/* Spende — gold card, sits below items */}
       <SpendeCard
-        spende={manualDonation}
-        onSpendeChange={handleManualDonationChange}
+        spende={manualTip}
+        onSpendeChange={handleManualTipChange}
         roundUpEnabled={roundUpEnabled}
         roundUpOptions={roundOpts}
         roundUpTarget={activeTarget}
@@ -654,7 +648,7 @@ export function SpendeCard({
       <div className="min-w-0">
         <div className="flex items-center gap-2 font-heading font-bold text-base text-oww-gold-text">
           <Heart className="h-4 w-4 text-oww-gold-dark" />
-          Spende
+          Trinkgeld/Spende
         </div>
         <p className="mt-1 text-[14px] leading-relaxed text-oww-gold-text">
           Hast du bei uns einen tollen Tag erlebt, dir wurde von unseren
@@ -689,7 +683,7 @@ export function SpendeCard({
               setText(v > 0 ? v.toFixed(2) : "")
               if (v !== spende) onSpendeChange(v)
             }}
-            aria-label="Spende"
+            aria-label="Trinkgeld/Spende"
             className="w-[140px] h-11 pl-12 pr-3.5 rounded-md border border-oww-gold-border bg-background text-base font-semibold tabular-nums text-oww-gold-text text-right placeholder:text-oww-gold-border placeholder:font-normal focus:outline-none focus:border-oww-gold-dark focus:ring-2 focus:ring-oww-gold-dark/20"
           />
         </div>
