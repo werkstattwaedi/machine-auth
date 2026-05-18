@@ -277,8 +277,9 @@ describe("MaterialPicker", () => {
     expect(screen.queryByText("MDF Platte 3mm")).toBeNull()
   })
 
-  it("narrows visible items when a category chip is selected", async () => {
-    // Two catalogs, two distinct top-level categories.
+  it("narrows visible items via breadcrumb-style category chips", async () => {
+    // Two catalog items, two top-level categories. Holzplatten has a
+    // sub-category so we can verify the sub-row appears after drill-down.
     const catalogItems: CatalogItem[] = [
       {
         id: "cat-a",
@@ -316,12 +317,29 @@ describe("MaterialPicker", () => {
     const user = userEvent.setup()
     renderSection({ catalogItems })
     await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
-    // Both items visible initially.
+
+    // Top-level row shows both categories; no sub-row yet.
+    expect(screen.getByRole("button", { name: "Massivholz" })).toBeTruthy()
+    expect(screen.getByRole("button", { name: "Holzplatten" })).toBeTruthy()
+    expect(screen.queryByRole("button", { name: "Sperrholz" })).toBeNull()
     expect(screen.getByText("Latte Kiefer")).toBeTruthy()
     expect(screen.getByText("Sperrholz Pappel 3mm")).toBeTruthy()
-    // Click the "Holzplatten" chip — only that category remains.
+
+    // Drill in: click "Holzplatten". Its sibling "Massivholz" disappears
+    // and the sub-chip "Sperrholz" surfaces.
     await user.click(screen.getByRole("button", { name: "Holzplatten" }))
+    expect(screen.queryByRole("button", { name: "Massivholz" })).toBeNull()
+    expect(screen.getByRole("button", { name: "Holzplatten" })).toBeTruthy()
+    expect(screen.getByRole("button", { name: "Sperrholz" })).toBeTruthy()
     expect(screen.queryByText("Latte Kiefer")).toBeNull()
+    expect(screen.getByText("Sperrholz Pappel 3mm")).toBeTruthy()
+
+    // Step back: clicking the active "Holzplatten" chip restores siblings
+    // and removes the sub-row.
+    await user.click(screen.getByRole("button", { name: "Holzplatten" }))
+    expect(screen.getByRole("button", { name: "Massivholz" })).toBeTruthy()
+    expect(screen.queryByRole("button", { name: "Sperrholz" })).toBeNull()
+    expect(screen.getByText("Latte Kiefer")).toBeTruthy()
     expect(screen.getByText("Sperrholz Pappel 3mm")).toBeTruthy()
   })
 

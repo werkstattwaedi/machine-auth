@@ -110,14 +110,13 @@ export function MaterialPicker({
           workshopLabel={workshopLabel}
           onClose={() => onOpenChange(false)}
         >
-          {(query, scope) => (
+          {(query) => (
             <PickerBody
               workshopId={workshopId}
               catalogItems={catalogItems}
               config={config}
               discountLevel={discountLevel}
               query={query}
-              scope={scope}
               onAdd={onAdd}
             />
           )}
@@ -128,20 +127,15 @@ export function MaterialPicker({
 }
 
 function PickerHeader({
-  workshopLabel,
   onClose,
   children,
 }: {
   workshopId: WorkshopId
   workshopLabel: string
   onClose: () => void
-  children: (
-    query: string,
-    scope: "workshop" | "all",
-  ) => React.ReactNode
+  children: (query: string) => React.ReactNode
 }) {
   const [query, setQuery] = useState("")
-  const [scope, setScope] = useState<"workshop" | "all">("workshop")
 
   return (
     <>
@@ -180,20 +174,9 @@ function PickerHeader({
             </button>
           )}
         </div>
-        <div className="flex flex-wrap gap-1.5">
-          <FilterPill
-            active={scope === "workshop"}
-            onClick={() => setScope("workshop")}
-          >
-            {workshopLabel}
-          </FilterPill>
-          <FilterPill active={scope === "all"} onClick={() => setScope("all")}>
-            Alle
-          </FilterPill>
-        </div>
       </div>
 
-      {children(query, scope)}
+      {children(query)}
     </>
   )
 }
@@ -204,7 +187,6 @@ function PickerBody({
   config,
   discountLevel,
   query,
-  scope,
   onAdd,
 }: {
   workshopId: WorkshopId
@@ -212,7 +194,6 @@ function PickerBody({
   config: PricingConfig
   discountLevel: DiscountLevel
   query: string
-  scope: "workshop" | "all"
   onAdd: (item: CheckoutItemLocal) => void
 }) {
   // At most one row is expanded at a time — either a catalog row or one of
@@ -225,26 +206,20 @@ function PickerBody({
   const [expansion, setExpansion] = useState<Expansion>(null)
 
   // Selected category path (a prefix of `category[]`). Empty = no filter.
-  // Resets when the workshop scope toggles so a stale prefix doesn't
-  // strand the user with zero results.
   const [categoryPrefix, setCategoryPrefix] = useState<string[]>([])
-  const lastScope = React.useRef(scope)
-  if (lastScope.current !== scope) {
-    lastScope.current = scope
-    if (categoryPrefix.length > 0) setCategoryPrefix([])
-  }
 
+  // Picker is always scoped to the workshop it was opened from. The
+  // earlier "workshop / Alle" toggle didn't add value — cross-workshop
+  // adds are not a real-world flow.
   const scoped = useMemo(
-    () =>
-      scope === "all"
-        ? catalogItems
-        : catalogItems.filter((c) => c.workshops.includes(workshopId)),
-    [catalogItems, scope, workshopId],
+    () => catalogItems.filter((c) => c.workshops.includes(workshopId)),
+    [catalogItems, workshopId],
   )
 
-  // Chip rows: one per category-depth currently in play. Each row's chip
-  // set is derived from the workshop-scoped items (NOT the text-filtered
-  // ones) so typing a query doesn't make chips appear/disappear.
+  // Chip rows render as a breadcrumb: at each depth where a category is
+  // selected, only that chip is visible. At the next-deeper depth we
+  // surface the available siblings (none selected). Click the active
+  // chip to step back; click a sibling to drill in.
   const chipRows = useMemo(() => {
     const rows: {
       level: number
@@ -252,14 +227,17 @@ function PickerBody({
       selected: string | null
     }[] = []
     for (let level = 0; level <= categoryPrefix.length; level++) {
-      const prefix = categoryPrefix.slice(0, level)
-      const values = nextLevelValues(scoped, prefix)
+      if (level < categoryPrefix.length) {
+        rows.push({
+          level,
+          values: [categoryPrefix[level]],
+          selected: categoryPrefix[level],
+        })
+        continue
+      }
+      const values = nextLevelValues(scoped, categoryPrefix.slice(0, level))
       if (values.length === 0) break
-      rows.push({
-        level,
-        values,
-        selected: categoryPrefix[level] ?? null,
-      })
+      rows.push({ level, values, selected: null })
     }
     return rows
   }, [scoped, categoryPrefix])
