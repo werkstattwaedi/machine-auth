@@ -1,0 +1,34 @@
+[
+  {
+    "id": "bWJodoXu3B3kiHMyFd7f",
+    "code": "MEMBERSHIP",
+    "name": "Mitgliedschaft",
+    "workshops": [
+      "diverses"
+    ],
+    "category": [
+      "Mitgliedschaft"
+    ],
+    "active": true,
+    "userCanAdd": false,
+    "description": "Jahresmitgliedschaft Verein Offene Werkstatt Wädenswil.",
+    "variants": [
+      {
+        "id": "single",
+        "label": "Einzel (Jahr)",
+        "pricingModel": "direct",
+        "unitPrice": {
+          "default": 50
+        }
+      },
+      {
+        "id": "family",
+        "label": "Familie (Jahr)",
+        "pricingModel": "direct",
+        "unitPrice": {
+          "default": 70
+        }
+      }
+    ]
+  }
+]

@@ -1,0 +1,3662 @@
+[
+  {
+    "id": "uvG1mZ8HYjGrcfI1Wjap",
+    "code": "3001",
+    "name": "Ahorn 24 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 57.6
+        }
+      }
+    ]
+  },
+  {
+    "id": "f4VcbIp8z6vwFw5Mjm9c",
+    "code": "3002",
+    "name": "Ahorn 30 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 72
+        }
+      }
+    ]
+  },
+  {
+    "id": "GXYxC9sbIB6VAreDW5o9",
+    "code": "3003",
+    "name": "Ahorn 40 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 96
+        }
+      }
+    ]
+  },
+  {
+    "id": "NWFEbuvEDuFw5yr8DmxE",
+    "code": "3004",
+    "name": "Ahorn 50 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 120
+        }
+      }
+    ]
+  },
+  {
+    "id": "oPgdy1SrCpQN0fuBg5oV",
+    "code": "3005",
+    "name": "Ahorn 60 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 144
+        }
+      }
+    ]
+  },
+  {
+    "id": "2N8PwtAfqf6FALkFwjSR",
+    "code": "3006",
+    "name": "Arve 24 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 84.5
+        }
+      }
+    ]
+  },
+  {
+    "id": "ZCHMvgZ8JkjyREJg78Fo",
+    "code": "3007",
+    "name": "Arve 30 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 105.6
+        }
+      }
+    ]
+  },
+  {
+    "id": "glqXWJQL6DCbg9O3wNE7",
+    "code": "3008",
+    "name": "Arve 40 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 140.8
+        }
+      }
+    ]
+  },
+  {
+    "id": "rkXov4T25wLybCbyd4RC",
+    "code": "3009",
+    "name": "Arve 50 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 176
+        }
+      }
+    ]
+  },
+  {
+    "id": "8tinoRm5CZwjmP85mNEl",
+    "code": "3010",
+    "name": "Arve 60 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 211.2
+        }
+      }
+    ]
+  },
+  {
+    "id": "WpkFoVmhKTANYDYz0d2h",
+    "code": "3011",
+    "name": "Birnbaum 24 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 76.8
+        }
+      }
+    ]
+  },
+  {
+    "id": "JYdOlef6ngp6pg5ctaTG",
+    "code": "3012",
+    "name": "Birnbaum 30 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 96
+        }
+      }
+    ]
+  },
+  {
+    "id": "ADSJOv2NaxKf01Gn0HoN",
+    "code": "3013",
+    "name": "Birnbaum 40 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 128
+        }
+      }
+    ]
+  },
+  {
+    "id": "LC9ajg50VgT6z4TihyxS",
+    "code": "3014",
+    "name": "Birnbaum 50 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 160
+        }
+      }
+    ]
+  },
+  {
+    "id": "iZm9qvo3crGLeteN2jyZ",
+    "code": "3015",
+    "name": "Birnbaum 60 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 192
+        }
+      }
+    ]
+  },
+  {
+    "id": "DA3UfqTOpMHwDev4ZAxO",
+    "code": "3016",
+    "name": "Buche natur 24 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 34.6
+        }
+      }
+    ]
+  },
+  {
+    "id": "S1otu3mTOvcraN8jIBSb",
+    "code": "3017",
+    "name": "Buche natur 30 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 43.2
+        }
+      }
+    ]
+  },
+  {
+    "id": "5eBKjszQHkpcvYx4xQRY",
+    "code": "3018",
+    "name": "Buche natur 40 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 57.6
+        }
+      }
+    ]
+  },
+  {
+    "id": "gzCNeZsnINufUTYZkZkl",
+    "code": "3019",
+    "name": "Buche natur 50 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 72
+        }
+      }
+    ]
+  },
+  {
+    "id": "JgdoXK5kBC7QpeJuPsji",
+    "code": "3020",
+    "name": "Buche natur 60 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 86.4
+        }
+      }
+    ]
+  },
+  {
+    "id": "qj838T0pChclUXIBOFYL",
+    "code": "3021",
+    "name": "Buche gedämpft 24 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 45.15
+        }
+      }
+    ]
+  },
+  {
+    "id": "vm7mvYFghGJu7SviJqpK",
+    "code": "3022",
+    "name": "Buche gedämpft 30 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 57.6
+        }
+      }
+    ]
+  },
+  {
+    "id": "WBA7aPI5wLUX2NUZ69Ur",
+    "code": "3023",
+    "name": "Buche gedämpft 40 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 76.8
+        }
+      }
+    ]
+  },
+  {
+    "id": "dErOvALmv4duxQhUnqdw",
+    "code": "3024",
+    "name": "Buche gedämpft 50 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 96
+        }
+      }
+    ]
+  },
+  {
+    "id": "izA523yPuFanOrCrM9cT",
+    "code": "3025",
+    "name": "Buche gedämpft 60 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 115.2
+        }
+      }
+    ]
+  },
+  {
+    "id": "mtOz8fGjQR0xKvqFuX2p",
+    "code": "3026",
+    "name": "Eiche 24 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 84.5
+        }
+      }
+    ]
+  },
+  {
+    "id": "X2haxO1ersj2x8de7WXc",
+    "code": "3027",
+    "name": "Eiche 30 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 105.6
+        }
+      }
+    ]
+  },
+  {
+    "id": "81YpoBsdyhEr8z0tyR6J",
+    "code": "3028",
+    "name": "Eiche 40 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 140.8
+        }
+      }
+    ]
+  },
+  {
+    "id": "J0F6DwvKxQRE32Dof8FO",
+    "code": "3029",
+    "name": "Eiche 50 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 176
+        }
+      }
+    ]
+  },
+  {
+    "id": "gNofK7eN4bEXirST0pGV",
+    "code": "3030",
+    "name": "Eiche 60 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 211.2
+        }
+      }
+    ]
+  },
+  {
+    "id": "UjkLUpStghCByBGTynEl",
+    "code": "3031",
+    "name": "Esche 24 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 42.25
+        }
+      }
+    ]
+  },
+  {
+    "id": "FszwFY9oB8vKbS3oFmjY",
+    "code": "3032",
+    "name": "Esche 30 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 52.8
+        }
+      }
+    ]
+  },
+  {
+    "id": "qH2HuPCDUD6tSNcfy5S1",
+    "code": "3033",
+    "name": "Esche 40 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 70.4
+        }
+      }
+    ]
+  },
+  {
+    "id": "HAPgHanqP8DKR4fmROJM",
+    "code": "3034",
+    "name": "Esche 50 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 88
+        }
+      }
+    ]
+  },
+  {
+    "id": "IziROTQXOJADsVA9whIt",
+    "code": "3035",
+    "name": "Esche 60 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 105.6
+        }
+      }
+    ]
+  },
+  {
+    "id": "JCXcBknyFadcZoDOfAzE",
+    "code": "3036",
+    "name": "Kirschbaum 24 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 76.8
+        }
+      }
+    ]
+  },
+  {
+    "id": "WTeTEbuZmNypMHghmDYf",
+    "code": "3037",
+    "name": "Kirschbaum 30 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 96
+        }
+      }
+    ]
+  },
+  {
+    "id": "fopYbKXIz6TG70VafWHY",
+    "code": "3038",
+    "name": "Kirschbaum 40 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 128
+        }
+      }
+    ]
+  },
+  {
+    "id": "Yp8HCdUb0NKtCxIfyl4T",
+    "code": "3039",
+    "name": "Kirschbaum 50 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 160
+        }
+      }
+    ]
+  },
+  {
+    "id": "BSZi5OlctCXeX470d47M",
+    "code": "3040",
+    "name": "Kirschbaum 60 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 192
+        }
+      }
+    ]
+  },
+  {
+    "id": "g96nOnA9e1ID2Dwx05yn",
+    "code": "3041",
+    "name": "Lärche 24 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 43.78
+        }
+      }
+    ]
+  },
+  {
+    "id": "TsvsPwzY3It0FkTat6PM",
+    "code": "3042",
+    "name": "Lärche 30 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 54.72
+        }
+      }
+    ]
+  },
+  {
+    "id": "erg9kh2F212NEncVanYR",
+    "code": "3043",
+    "name": "Lärche 40 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 72.96
+        }
+      }
+    ]
+  },
+  {
+    "id": "lqNQ9S9s1kFo9qpMLUha",
+    "code": "3044",
+    "name": "Lärche 50 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 91.2
+        }
+      }
+    ]
+  },
+  {
+    "id": "st4hU9CZwTOB4t2H2Buf",
+    "code": "3045",
+    "name": "Lärche 60 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 109.44
+        }
+      }
+    ]
+  },
+  {
+    "id": "qVI9i9AfKfU50nIxkzU5",
+    "code": "3046",
+    "name": "Linde 24 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 42.25
+        }
+      }
+    ]
+  },
+  {
+    "id": "JKR6dsV8nk7oHcvSzKHW",
+    "code": "3047",
+    "name": "Linde 30 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 52.8
+        }
+      }
+    ]
+  },
+  {
+    "id": "A3K1G9sPa1cNSt6d21Yd",
+    "code": "3048",
+    "name": "Linde 40 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 70.4
+        }
+      }
+    ]
+  },
+  {
+    "id": "bshUdKP2ZsnoNeDgVKPu",
+    "code": "3049",
+    "name": "Linde 50 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 88
+        }
+      }
+    ]
+  },
+  {
+    "id": "w1sXWhm5gZKZYngnedGP",
+    "code": "3050",
+    "name": "Linde 60 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 105.6
+        }
+      }
+    ]
+  },
+  {
+    "id": "azijYFINcne9G7QF8Bwb",
+    "code": "3051",
+    "name": "Nussbaum 24 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 172.8
+        }
+      }
+    ]
+  },
+  {
+    "id": "L8xKJyzI3ANEtODaLAVO",
+    "code": "3052",
+    "name": "Nussbaum 30 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 216
+        }
+      }
+    ]
+  },
+  {
+    "id": "wb0fup2hMFYroNmR8TAr",
+    "code": "3053",
+    "name": "Nussbaum 40 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 288
+        }
+      }
+    ]
+  },
+  {
+    "id": "3ahwJa5OHyhEjQzMpAJw",
+    "code": "3054",
+    "name": "Nussbaum 50 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 360
+        }
+      }
+    ]
+  },
+  {
+    "id": "OFgpSpG1GLcBERKv250j",
+    "code": "3055",
+    "name": "Nussbaum 60 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 432
+        }
+      }
+    ]
+  },
+  {
+    "id": "SP2D41uVQDaxidYTiXGB",
+    "code": "3056",
+    "name": "Tanne 24 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 42.14
+        }
+      }
+    ]
+  },
+  {
+    "id": "DYHotkbQveF2LuLozWly",
+    "code": "3057",
+    "name": "Tanne 30 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 52.68
+        }
+      }
+    ]
+  },
+  {
+    "id": "oxK5UbepEjQbGtufipUV",
+    "code": "3058",
+    "name": "Tanne 40 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 70.24
+        }
+      }
+    ]
+  },
+  {
+    "id": "v01MtMhW9SZ2Bw7aTada",
+    "code": "3059",
+    "name": "Tanne 50 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 87.8
+        }
+      }
+    ]
+  },
+  {
+    "id": "Kf0Fyfs98pUzcxS9gRKJ",
+    "code": "3060",
+    "name": "Tanne 60 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Massivholz"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 105.36
+        }
+      }
+    ]
+  },
+  {
+    "id": "LyRAN6vIBOlQ1MPitE56",
+    "code": "3061",
+    "name": "3-Schichtplatte, Fichte B/C+ 19 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Holzplatten",
+      "1- und 3-Schicht-Platten"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 34.8
+        }
+      }
+    ]
+  },
+  {
+    "id": "KDaxwFQzKz4zI189Wdsl",
+    "code": "3062",
+    "name": "3-Schichtplatte, Fichte B/C+ 27 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Holzplatten",
+      "1- und 3-Schicht-Platten"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 38.65
+        }
+      }
+    ]
+  },
+  {
+    "id": "ENavMridOxmT8dGRInc9",
+    "code": "3063",
+    "name": "1-Schichtplatte, Fichte A 18 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Holzplatten",
+      "1- und 3-Schicht-Platten"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 47.8
+        }
+      }
+    ]
+  },
+  {
+    "id": "oJ2buJsfgl0nOLU74hmX",
+    "code": "3064",
+    "name": "1-Schichtplatte, Fichte A 21 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Holzplatten",
+      "1- und 3-Schicht-Platten"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 49.6
+        }
+      }
+    ]
+  },
+  {
+    "id": "q12LcjgZCdK5C56dIlQD",
+    "code": "3065",
+    "name": "MDF, roh, ungeschliffen 3 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Holzplatten",
+      "MDF- und Spanplatten"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 4.65
+        }
+      }
+    ]
+  },
+  {
+    "id": "WJ2vAfEd67uVSr83ehyL",
+    "code": "3066",
+    "name": "MDF, roh, geschliffen 4 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Holzplatten",
+      "MDF- und Spanplatten"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 6
+        }
+      }
+    ]
+  },
+  {
+    "id": "hilYRyHszi3itA5EnWR2",
+    "code": "3067",
+    "name": "MDF, roh, geschliffen 5 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Holzplatten",
+      "MDF- und Spanplatten"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 7.45
+        }
+      }
+    ]
+  },
+  {
+    "id": "a1wdery94bAd8Bonctwl",
+    "code": "3068",
+    "name": "MDF, roh, geschliffen 6 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Holzplatten",
+      "MDF- und Spanplatten"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 7.45
+        }
+      }
+    ]
+  },
+  {
+    "id": "k1QV0FeZYTwNeVWJoRAd",
+    "code": "3069",
+    "name": "MDF, roh, geschliffen 8 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Holzplatten",
+      "MDF- und Spanplatten"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 10.2
+        }
+      }
+    ]
+  },
+  {
+    "id": "7kr6b8ZonCHe7yDyLkNM",
+    "code": "3070",
+    "name": "MDF, roh, geschliffen 10 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Holzplatten",
+      "MDF- und Spanplatten"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 10.9
+        }
+      }
+    ]
+  },
+  {
+    "id": "xqZYX2ji5m9AzgXeXmTQ",
+    "code": "3071",
+    "name": "MDF, roh, geschliffen 12 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Holzplatten",
+      "MDF- und Spanplatten"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 12.4
+        }
+      }
+    ]
+  },
+  {
+    "id": "9iJaLQtyD6vIvCbiDA7M",
+    "code": "3072",
+    "name": "MDF, roh, geschliffen 16 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Holzplatten",
+      "MDF- und Spanplatten"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 16.6
+        }
+      }
+    ]
+  },
+  {
+    "id": "92fGvghu1IlWxCLGD8Lk",
+    "code": "3073",
+    "name": "MDF, roh, geschliffen 18 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Holzplatten",
+      "MDF- und Spanplatten"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 18.15
+        }
+      }
+    ]
+  },
+  {
+    "id": "CH6vQv8BETCpYhM9aL4P",
+    "code": "3074",
+    "name": "Decorspan, weiss 8 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Holzplatten",
+      "MDF- und Spanplatten"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 12.55
+        }
+      }
+    ]
+  },
+  {
+    "id": "tiVOL61CVcPETcvC3MDo",
+    "code": "3075",
+    "name": "Decorspan, weiss 10 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Holzplatten",
+      "MDF- und Spanplatten"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 12.85
+        }
+      }
+    ]
+  },
+  {
+    "id": "V2xw1WNIrCVczuR0nYtY",
+    "code": "3076",
+    "name": "Decorspan, weiss 16 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Holzplatten",
+      "MDF- und Spanplatten"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 14.5
+        }
+      }
+    ]
+  },
+  {
+    "id": "A3It0hu98JGZe5Cpwzgp",
+    "code": "3077",
+    "name": "Decorspan, weiss 19 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Holzplatten",
+      "MDF- und Spanplatten"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 14.95
+        }
+      }
+    ]
+  },
+  {
+    "id": "FCnUvClaDiBGz4JOpsJE",
+    "code": "3078",
+    "name": "Rohspan 8 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Holzplatten",
+      "MDF- und Spanplatten"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 6.7
+        }
+      }
+    ]
+  },
+  {
+    "id": "6n6NGrWhOFQNIpsHMTKL",
+    "code": "3079",
+    "name": "Rohspan 10 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Holzplatten",
+      "MDF- und Spanplatten"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 8.1
+        }
+      }
+    ]
+  },
+  {
+    "id": "6NuLkDAP2xGRkJar2Vyp",
+    "code": "3080",
+    "name": "Rohspan 16 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Holzplatten",
+      "MDF- und Spanplatten"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 9.75
+        }
+      }
+    ]
+  },
+  {
+    "id": "bMVUTQf6jI147oj6fAhq",
+    "code": "3081",
+    "name": "Rohspan 19 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Holzplatten",
+      "MDF- und Spanplatten"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 10.75
+        }
+      }
+    ]
+  },
+  {
+    "id": "IJUbqNQpkzoJmFcNQR2N",
+    "code": "3082",
+    "name": "Birke BB 4 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Holzplatten",
+      "Sperrholz-Platten"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 36.75
+        }
+      }
+    ]
+  },
+  {
+    "id": "FWloHKd0LknuhmRU9yNg",
+    "code": "3083",
+    "name": "Birke BB 6.5 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Holzplatten",
+      "Sperrholz-Platten"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 41.05
+        }
+      }
+    ]
+  },
+  {
+    "id": "zEryFapkdoRej4l0zCj0",
+    "code": "3084",
+    "name": "Birke BB 9 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Holzplatten",
+      "Sperrholz-Platten"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 48
+        }
+      }
+    ]
+  },
+  {
+    "id": "X83sjmHiTq1SpMVMFMFQ",
+    "code": "3085",
+    "name": "Birke BB 12 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Holzplatten",
+      "Sperrholz-Platten"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 56.55
+        }
+      }
+    ]
+  },
+  {
+    "id": "A54hqb6zkFgDSJeP0RqF",
+    "code": "3086",
+    "name": "Birke BB 15 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Holzplatten",
+      "Sperrholz-Platten"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 63.75
+        }
+      }
+    ]
+  },
+  {
+    "id": "HuJa9WBMtK3MlmheBIvI",
+    "code": "3087",
+    "name": "Birke BB 18 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Holzplatten",
+      "Sperrholz-Platten"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 73.6
+        }
+      }
+    ]
+  },
+  {
+    "id": "fAzqx25uD0RcbiBaZgFY",
+    "code": "3088",
+    "name": "Birke BB 21 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Holzplatten",
+      "Sperrholz-Platten"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 81.85
+        }
+      }
+    ]
+  },
+  {
+    "id": "qt0fUtsX0dEpkZiVwDsZ",
+    "code": "3089",
+    "name": "Birke, 2x Phenolharz beschichtet 9 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Holzplatten",
+      "Sperrholz-Platten"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 40.9
+        }
+      }
+    ]
+  },
+  {
+    "id": "o1oFaXsTAr8bKZAP4pa1",
+    "code": "3090",
+    "name": "Birke, 2x Phenolharz beschichtet 12 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Holzplatten",
+      "Sperrholz-Platten"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 65.2
+        }
+      }
+    ]
+  },
+  {
+    "id": "dAB0NkZIbeXah636LsrQ",
+    "code": "3091",
+    "name": "Birke, 2x Phenolharz beschichtet 15 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Holzplatten",
+      "Sperrholz-Platten"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 55.05
+        }
+      }
+    ]
+  },
+  {
+    "id": "yLKpiV0REjUb47CPgP6J",
+    "code": "3092",
+    "name": "Birke, 2x Phenolharz beschichtet 18 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Holzplatten",
+      "Sperrholz-Platten"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 59.95
+        }
+      }
+    ]
+  },
+  {
+    "id": "4tghK14ZWHgZqhoDeBa9",
+    "code": "3093",
+    "name": "Birke, 2x Phenolharz beschichtet 21 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Holzplatten",
+      "Sperrholz-Platten"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 68.4
+        }
+      }
+    ]
+  },
+  {
+    "id": "Kp03MFUJA9WNqbidipKF",
+    "code": "3094",
+    "name": "Buche, glatt 4 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Dübel- und Rundstäbe",
+      "Rundstab, Länge 1'000mm"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "length",
+        "unitPrice": {
+          "default": 1.35
+        }
+      }
+    ]
+  },
+  {
+    "id": "TQhOdMxQnI94TqLi3EtI",
+    "code": "3095",
+    "name": "Buche, glatt 5 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Dübel- und Rundstäbe",
+      "Rundstab, Länge 1'000mm"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "length",
+        "unitPrice": {
+          "default": 1.35
+        }
+      }
+    ]
+  },
+  {
+    "id": "CrW1ovKPeFq3snUZOD6l",
+    "code": "3096",
+    "name": "Buche, glatt 6 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Dübel- und Rundstäbe",
+      "Rundstab, Länge 1'000mm"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "length",
+        "unitPrice": {
+          "default": 1.5
+        }
+      }
+    ]
+  },
+  {
+    "id": "Ux8xaTMDOrspmLG3onSX",
+    "code": "3097",
+    "name": "Buche, glatt 8 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Dübel- und Rundstäbe",
+      "Rundstab, Länge 1'000mm"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "length",
+        "unitPrice": {
+          "default": 1.7
+        }
+      }
+    ]
+  },
+  {
+    "id": "Bm9w3a1UhejSF8389Qdm",
+    "code": "3098",
+    "name": "Buche, glatt 10 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Dübel- und Rundstäbe",
+      "Rundstab, Länge 1'000mm"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "length",
+        "unitPrice": {
+          "default": 2.05
+        }
+      }
+    ]
+  },
+  {
+    "id": "rqHO58jehYpOnwRubirc",
+    "code": "3099",
+    "name": "Buche, glatt 12 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Dübel- und Rundstäbe",
+      "Rundstab, Länge 1'000mm"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "length",
+        "unitPrice": {
+          "default": 2.45
+        }
+      }
+    ]
+  },
+  {
+    "id": "2XofsNYHafM9oHAJghK3",
+    "code": "3100",
+    "name": "Buche, glatt 20 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Dübel- und Rundstäbe",
+      "Rundstab, Länge 1'000mm"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "length",
+        "unitPrice": {
+          "default": 5.85
+        }
+      }
+    ]
+  },
+  {
+    "id": "xGPUdAdClsxUF2lCxMnI",
+    "code": "3101",
+    "name": "Buche, glatt 25 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Dübel- und Rundstäbe",
+      "Rundstab, Länge 1'000mm"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "length",
+        "unitPrice": {
+          "default": 9.65
+        }
+      }
+    ]
+  },
+  {
+    "id": "B0duN0BaZstIPEnwlcDo",
+    "code": "3102",
+    "name": "Buche, glatt 30 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Dübel- und Rundstäbe",
+      "Rundstab, Länge 1'000mm"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "length",
+        "unitPrice": {
+          "default": 14.85
+        }
+      }
+    ]
+  },
+  {
+    "id": "47O1456DQnS96lkhel8l",
+    "code": "3103",
+    "name": "Buche, glatt 35 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Dübel- und Rundstäbe",
+      "Rundstab, Länge 1'000mm"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "length",
+        "unitPrice": {
+          "default": 16.4
+        }
+      }
+    ]
+  },
+  {
+    "id": "AHUhsty5g7A1UpQ7utMP",
+    "code": "3104",
+    "name": "Buche, glatt 40 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Dübel- und Rundstäbe",
+      "Rundstab, Länge 1'000mm"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "length",
+        "unitPrice": {
+          "default": 20.8
+        }
+      }
+    ]
+  },
+  {
+    "id": "EBaBI1IbaLMjIj0lkTG1",
+    "code": "3105",
+    "name": "Buche, glatt 60 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Dübel- und Rundstäbe",
+      "Rundstab, Länge 1'000mm"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "length",
+        "unitPrice": {
+          "default": 80.15
+        }
+      }
+    ]
+  },
+  {
+    "id": "3cjUzi9mPmdMVmRmfoXe",
+    "code": "3106",
+    "name": "Buche, gerillt 6 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Dübel- und Rundstäbe",
+      "Rundstab, Länge 1'000mm"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "length",
+        "unitPrice": {
+          "default": 1.4
+        }
+      }
+    ]
+  },
+  {
+    "id": "ZEBijcNYhqNqbeBoRCrW",
+    "code": "3107",
+    "name": "Buche, gerillt 8 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Dübel- und Rundstäbe",
+      "Rundstab, Länge 1'000mm"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "length",
+        "unitPrice": {
+          "default": 1.55
+        }
+      }
+    ]
+  },
+  {
+    "id": "S7MJeroleHKvgb0PI7gp",
+    "code": "3108",
+    "name": "Buche, gerillt 10 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Dübel- und Rundstäbe",
+      "Rundstab, Länge 1'000mm"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "length",
+        "unitPrice": {
+          "default": 1.85
+        }
+      }
+    ]
+  },
+  {
+    "id": "yzSFMjyb6pA9mxQNc3A9",
+    "code": "3109",
+    "name": "Buche, gerillt 12 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Dübel- und Rundstäbe",
+      "Rundstab, Länge 1'000mm"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "length",
+        "unitPrice": {
+          "default": 2.2
+        }
+      }
+    ]
+  },
+  {
+    "id": "8rmBKnwZWr6hmjWJExin",
+    "code": "3110",
+    "name": "Buche, gerillt 14 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Dübel- und Rundstäbe",
+      "Rundstab, Länge 1'000mm"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "length",
+        "unitPrice": {
+          "default": 2.65
+        }
+      }
+    ]
+  },
+  {
+    "id": "zI7Ur2fQ7SBsTCrQHuze",
+    "code": "3111",
+    "name": "Buche, gerillt 15 mm",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Dübel- und Rundstäbe",
+      "Rundstab, Länge 1'000mm"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "length",
+        "unitPrice": {
+          "default": 3
+        }
+      }
+    ]
+  },
+  {
+    "id": "tqXyns5mj0B2d05Wbq3q",
+    "code": "3112",
+    "name": "Festool Garant, Korn 60",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Schleifmittel",
+      "Schleifscheiben, Festool Excenter, ⌀125mm"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 2
+        }
+      }
+    ]
+  },
+  {
+    "id": "XGnKlAt8zwRY7wJajifm",
+    "code": "3113",
+    "name": "Festool Garant, Korn 80",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Schleifmittel",
+      "Schleifscheiben, Festool Excenter, ⌀125mm"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.5
+        }
+      }
+    ]
+  },
+  {
+    "id": "AniZUX8bCzIpOjEV01aZ",
+    "code": "3114",
+    "name": "Festool Garant, Korn 100",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Schleifmittel",
+      "Schleifscheiben, Festool Excenter, ⌀125mm"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 2
+        }
+      }
+    ]
+  },
+  {
+    "id": "oVGHspsNCxQ7Mj2fIliJ",
+    "code": "3115",
+    "name": "Festool Garant, Korn 120",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Schleifmittel",
+      "Schleifscheiben, Festool Excenter, ⌀125mm"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.5
+        }
+      }
+    ]
+  },
+  {
+    "id": "CPm5yR2NcxqBmJ4TiRif",
+    "code": "3116",
+    "name": "Festool Garant, Korn 180",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Schleifmittel",
+      "Schleifscheiben, Festool Excenter, ⌀125mm"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.5
+        }
+      }
+    ]
+  },
+  {
+    "id": "tONiDmFcnEhKpede3sZM",
+    "code": "3117",
+    "name": "Festool Garant, Korn 240",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Schleifmittel",
+      "Schleifscheiben, Festool Excenter, ⌀125mm"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.5
+        }
+      }
+    ]
+  },
+  {
+    "id": "xQlKF4TmxupE7snMTe5m",
+    "code": "3118",
+    "name": "Festool Garant, Korn 60",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Schleifmittel",
+      "Dreick-Schleifblätter, Festool Dreiecksschleifer, DX93"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1
+        }
+      }
+    ]
+  },
+  {
+    "id": "H6vmvghMZsNS7OF8jOZO",
+    "code": "3119",
+    "name": "Festool Garant, Korn 80",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Schleifmittel",
+      "Dreick-Schleifblätter, Festool Dreiecksschleifer, DX93"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1
+        }
+      }
+    ]
+  },
+  {
+    "id": "ezY32dcHczOZgpqPAXch",
+    "code": "3120",
+    "name": "Festool Garant, Korn 100",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Schleifmittel",
+      "Dreick-Schleifblätter, Festool Dreiecksschleifer, DX93"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1
+        }
+      }
+    ]
+  },
+  {
+    "id": "MjiJ8dcbuDutcJ4p2rWH",
+    "code": "3121",
+    "name": "Festool Garant, Korn 120",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Schleifmittel",
+      "Dreick-Schleifblätter, Festool Dreiecksschleifer, DX93"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1
+        }
+      }
+    ]
+  },
+  {
+    "id": "FOLeJ4DW3oNavMTIx2D8",
+    "code": "3122",
+    "name": "Festool Garant, Korn 150",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Schleifmittel",
+      "Dreick-Schleifblätter, Festool Dreiecksschleifer, DX93"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1
+        }
+      }
+    ]
+  },
+  {
+    "id": "U3MNOLSngrY1mzknsP8z",
+    "code": "3123",
+    "name": "Festool Garant, Korn 180",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Schleifmittel",
+      "Dreick-Schleifblätter, Festool Dreiecksschleifer, DX93"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1
+        }
+      }
+    ]
+  },
+  {
+    "id": "hIdQxa12TojO50PEfYR4",
+    "code": "3124",
+    "name": "Festool Garant, Korn 240",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Schleifmittel",
+      "Dreick-Schleifblätter, Festool Dreiecksschleifer, DX93"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1
+        }
+      }
+    ]
+  },
+  {
+    "id": "iL2ZQponiZqrO7ehEnan",
+    "code": "3125",
+    "name": "Festool Garant, Korn 60",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Schleifmittel",
+      "Schleifstreifen gelocht, Festool Rutscher RS-2"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 2
+        }
+      }
+    ]
+  },
+  {
+    "id": "ezC3ADSjA5O1UXQ3KlG5",
+    "code": "3126",
+    "name": "Festool Garant, Korn 80",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Schleifmittel",
+      "Schleifstreifen gelocht, Festool Rutscher RS-2"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 2
+        }
+      }
+    ]
+  },
+  {
+    "id": "nc5KJubcD4naTgFMTABW",
+    "code": "3127",
+    "name": "Festool Garant, Korn 100",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Schleifmittel",
+      "Schleifstreifen gelocht, Festool Rutscher RS-2"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.5
+        }
+      }
+    ]
+  },
+  {
+    "id": "9yXcvcrq9AfIZgVCBQ3m",
+    "code": "3128",
+    "name": "Festool Garant, Korn 120",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Schleifmittel",
+      "Schleifstreifen gelocht, Festool Rutscher RS-2"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.5
+        }
+      }
+    ]
+  },
+  {
+    "id": "wf2XuH03MDQfwfkxg7yD",
+    "code": "3129",
+    "name": "Festool Garant, Korn 150",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Schleifmittel",
+      "Schleifstreifen gelocht, Festool Rutscher RS-2"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.5
+        }
+      }
+    ]
+  },
+  {
+    "id": "dgpejcR4H0x6Zu9kB2do",
+    "code": "3130",
+    "name": "Festool Garant, Korn 180",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Schleifmittel",
+      "Schleifstreifen gelocht, Festool Rutscher RS-2"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.5
+        }
+      }
+    ]
+  },
+  {
+    "id": "W9wR2L8nGZKB0b2dU3mP",
+    "code": "3131",
+    "name": "Festool Garant, Korn 240",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Schleifmittel",
+      "Schleifstreifen gelocht, Festool Rutscher RS-2"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.5
+        }
+      }
+    ]
+  },
+  {
+    "id": "HY5AFkXQtMtGFobiFsnG",
+    "code": "3132",
+    "name": "Korn 60",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Schleifmittel",
+      "Handschleifpaper, Siarex, Bogen 115/280mm"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.5
+        }
+      }
+    ]
+  },
+  {
+    "id": "RI7sH4bWZKf0DUts9Uj6",
+    "code": "3133",
+    "name": "Korn 80",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Schleifmittel",
+      "Handschleifpaper, Siarex, Bogen 115/280mm"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.5
+        }
+      }
+    ]
+  },
+  {
+    "id": "U7uFcNwpGpiLivarEpil",
+    "code": "3134",
+    "name": "Korn 100",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Schleifmittel",
+      "Handschleifpaper, Siarex, Bogen 115/280mm"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.5
+        }
+      }
+    ]
+  },
+  {
+    "id": "y1YnMDCJYtyt6LeDwdCp",
+    "code": "3135",
+    "name": "Korn 120",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Schleifmittel",
+      "Handschleifpaper, Siarex, Bogen 115/280mm"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.5
+        }
+      }
+    ]
+  },
+  {
+    "id": "6HCncv2RKXg1G1KFmFoX",
+    "code": "3136",
+    "name": "Korn 180",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Schleifmittel",
+      "Handschleifpaper, Siarex, Bogen 115/280mm"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.5
+        }
+      }
+    ]
+  },
+  {
+    "id": "bg9q9gjUd6pWNGpYnCPO",
+    "code": "3137",
+    "name": "Korn 40",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Schleifmittel",
+      "Schleifband, Makita Elektrofeile, 30/533mm"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.5
+        }
+      }
+    ]
+  },
+  {
+    "id": "tsze3gjALsN8Vmb8vsVo",
+    "code": "3138",
+    "name": "Korn 60",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Schleifmittel",
+      "Schleifband, Makita Elektrofeile, 30/533mm"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.5
+        }
+      }
+    ]
+  },
+  {
+    "id": "dINk5ml81A90TkdcFen6",
+    "code": "3139",
+    "name": "Korn 80",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Schleifmittel",
+      "Schleifband, Makita Elektrofeile, 30/533mm"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.5
+        }
+      }
+    ]
+  },
+  {
+    "id": "upM30nGfifkjIrcd2xO1",
+    "code": "3140",
+    "name": "Korn 100",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Schleifmittel",
+      "Schleifband, Makita Elektrofeile, 30/533mm"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.5
+        }
+      }
+    ]
+  },
+  {
+    "id": "Sf4bgdaD4n0HgHk3ols9",
+    "code": "3141",
+    "name": "Korn 120",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Schleifmittel",
+      "Schleifband, Makita Elektrofeile, 30/533mm"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.5
+        }
+      }
+    ]
+  },
+  {
+    "id": "HYRix85wNUD4fA16Z4FC",
+    "code": "3142",
+    "name": "Araldit, Rapid",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Varia",
+      "Klebstoffe"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 56.95
+        }
+      }
+    ]
+  },
+  {
+    "id": "SBGfMZGBoVKLkBUJcbiD",
+    "code": "3143",
+    "name": "Holzleim, Geistlich 8",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Varia",
+      "Klebstoffe"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 31.15
+        }
+      }
+    ]
+  },
+  {
+    "id": "MPsFajof4hgDAR0pULMd",
+    "code": "3144",
+    "name": "Collano, Semparoc Rapid V",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Varia",
+      "Klebstoffe"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 57.15
+        }
+      }
+    ]
+  },
+  {
+    "id": "H8XohEBY5cr0xUzMpUXi",
+    "code": "3145",
+    "name": "Einweghandschuhe, S",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Varia",
+      "Handschuhe"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 0.4
+        }
+      }
+    ]
+  },
+  {
+    "id": "ZKhkhcFaJoF8noVSfili",
+    "code": "3146",
+    "name": "Einweghandschuhe, M",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Varia",
+      "Handschuhe"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 0.4
+        }
+      }
+    ]
+  },
+  {
+    "id": "6rgn85aTM38zEri7aR2b",
+    "code": "3147",
+    "name": "Einweghandschuhe, L",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Varia",
+      "Handschuhe"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 0.4
+        }
+      }
+    ]
+  },
+  {
+    "id": "QpiHE3axMxGrMh63El0J",
+    "code": "3148",
+    "name": "Biofa, Arbeitsplattenöl",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Varia",
+      "Öle und Lacke"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 138.25
+        }
+      }
+    ]
+  },
+  {
+    "id": "OFUN2lKfAfCjkB23G9W3",
+    "code": "3149",
+    "name": "2K-Holzreparaturmasse",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Varia",
+      "Spachtel und Dichtungsmassen"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 39.1
+        }
+      }
+    ]
+  },
+  {
+    "id": "qzAJM7exSfCpA5oLi1ed",
+    "code": "3150",
+    "name": "Dosiergerät für 2K-Holzrep.",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Varia",
+      "Spachtel und Dichtungsmassen"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 27.6
+        }
+      }
+    ]
+  },
+  {
+    "id": "ulqXWTsbOps52Hc3Sdqj",
+    "code": "3151",
+    "name": "Schmierspray Interflon, 300ml",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Varia",
+      "Schmieren & Fetten"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 96.6
+        }
+      }
+    ]
+  },
+  {
+    "id": "lcDe1cRURARcVaxKXifi",
+    "code": "3152",
+    "name": "Flüssigkeitszerstäuber, leer",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Varia",
+      "Schmieren & Fetten"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 45.75
+        }
+      }
+    ]
+  },
+  {
+    "id": "YnAv8lKD4pCNKFihmBev",
+    "code": "3153",
+    "name": "Handsprüher, Birchmeier, 500ml",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Varia",
+      "Schmieren & Fetten"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 35.7
+        }
+      }
+    ]
+  },
+  {
+    "id": "hw5oFIpQTeFYLkHAPIt6",
+    "code": "3154",
+    "name": "Abdeckklebeband, 24mm, natur",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Varia",
+      "Klebebänder"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 5.25
+        }
+      }
+    ]
+  },
+  {
+    "id": "9obw3iDGZSd8vub8lqFu",
+    "code": "3155",
+    "name": "Teppichklebeband, 50mm, 25m",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Varia",
+      "Klebebänder"
+    ],
+    "description": null,
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 32.95
+        }
+      }
+    ]
+  }
+]

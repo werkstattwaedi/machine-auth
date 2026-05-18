@@ -1,0 +1,803 @@
+[
+  {
+    "id": "YB3jmyQ4nPRn4QdSL0r2",
+    "code": "9002",
+    "name": "Filament Spezial",
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "3D-Druck",
+      "FDM"
+    ],
+    "description": "FDM-3D-Druck-Filament, Spezial-Kategorie (z.B. flexibel, transparent).",
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "weight",
+        "unitPrice": {
+          "default": 0.1
+        }
+      }
+    ]
+  },
+  {
+    "id": "UktnpwyJBpy4qSDP6nYg",
+    "code": "9001",
+    "name": "Filament Standard",
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "3D-Druck",
+      "FDM"
+    ],
+    "description": "FDM-3D-Druck-Filament, Standardkategorie. Verrechnet pro Gramm gedruckten Materials.",
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "weight",
+        "unitPrice": {
+          "default": 0.1
+        }
+      }
+    ]
+  },
+  {
+    "id": "uLycIXO6PZ0ku2FlHxvv",
+    "code": "9003",
+    "name": "Filament Technisch",
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "3D-Druck",
+      "FDM"
+    ],
+    "description": "FDM-3D-Druck-Filament, technische Kategorie (z.B. PETG, Nylon, faserverstärkt).",
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "weight",
+        "unitPrice": {
+          "default": 0.1
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat0sla000009010",
+    "code": "9010",
+    "name": "SLA Druck",
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "3D-Druck",
+      "SLA"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Resin-Druck: Preis nach Harzverbrauch (CHF/L) und Layeranzahl (global)",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "sla",
+        "unitPrice": {
+          "default": 250,
+          "member": 200
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000006011",
+    "code": "6011",
+    "name": "MDF roh 3mm",
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Holz",
+      "MDF"
+    ],
+    "description": "MDF-Platte roh, ungeschliffen, Laser",
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "m2",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 5.55
+        }
+      },
+      {
+        "id": "320-620",
+        "label": "Zuschnitt 320×620 mm",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.1
+        }
+      },
+      {
+        "id": "500-1250",
+        "label": "Zuschnitt 500×1250 mm",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 3.4
+        }
+      },
+      {
+        "id": "a3",
+        "label": "Zuschnitt A3",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 0.7
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000006012",
+    "code": "6012",
+    "name": "MDF roh 4mm",
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Holz",
+      "MDF"
+    ],
+    "description": "MDF-Platte roh, ungeschliffen, Laser",
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "m2",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 7.05
+        }
+      },
+      {
+        "id": "320-620",
+        "label": "Zuschnitt 320×620 mm",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.4
+        }
+      },
+      {
+        "id": "500-1250",
+        "label": "Zuschnitt 500×1250 mm",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 4.4
+        }
+      },
+      {
+        "id": "a3",
+        "label": "Zuschnitt A3",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 0.89
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000006013",
+    "code": "6013",
+    "name": "MDF roh 5mm",
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Holz",
+      "MDF"
+    ],
+    "description": "MDF-Platte roh, ungeschliffen, Laser",
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "m2",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 8.6
+        }
+      },
+      {
+        "id": "320-620",
+        "label": "Zuschnitt 320×620 mm",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.7
+        }
+      },
+      {
+        "id": "500-1250",
+        "label": "Zuschnitt 500×1250 mm",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 5.4
+        }
+      },
+      {
+        "id": "a3",
+        "label": "Zuschnitt A3",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.08
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000006014",
+    "code": "6014",
+    "name": "MDF roh 6mm",
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Holz",
+      "MDF"
+    ],
+    "description": "MDF-Platte roh, ungeschliffen, Laser",
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "m2",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 10.6
+        }
+      },
+      {
+        "id": "320-620",
+        "label": "Zuschnitt 320×620 mm",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 2.1
+        }
+      },
+      {
+        "id": "500-1250",
+        "label": "Zuschnitt 500×1250 mm",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 6.65
+        }
+      },
+      {
+        "id": "a3",
+        "label": "Zuschnitt A3",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.34
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000006003",
+    "code": "6003",
+    "name": "Sperrholz Birke 3mm",
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Holz",
+      "Sperrholz"
+    ],
+    "description": "3-lagig AA natur, Laser",
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "m2",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 36
+        }
+      },
+      {
+        "id": "a3",
+        "label": "Zuschnitt A3",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 4.5
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000006001",
+    "code": "6001",
+    "name": "Sperrholz Linde 2mm",
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Holz",
+      "Sperrholz"
+    ],
+    "description": "3-lagig AA natur, Laser",
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "m2",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 24
+        }
+      },
+      {
+        "id": "a3",
+        "label": "Zuschnitt A3",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 3
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000006002",
+    "code": "6002",
+    "name": "Sperrholz Linde 3mm",
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Holz",
+      "Sperrholz"
+    ],
+    "description": "3-lagig AA natur, Laser",
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "m2",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 31
+        }
+      },
+      {
+        "id": "a3",
+        "label": "Zuschnitt A3",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 3.9
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000006010",
+    "code": "6010",
+    "name": "Sperrholz Pappel 12mm",
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Holz",
+      "Sperrholz"
+    ],
+    "description": "IF 20 A/BB, Laser",
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "m2",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 42.34
+        }
+      },
+      {
+        "id": "320-620",
+        "label": "Zuschnitt 320×620 mm",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 8.4
+        }
+      },
+      {
+        "id": "500-1250",
+        "label": "Zuschnitt 500×1250 mm",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 26.4
+        }
+      },
+      {
+        "id": "a3",
+        "label": "Zuschnitt A3",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 5.33
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000006005",
+    "code": "6005",
+    "name": "Sperrholz Pappel 3mm",
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Holz",
+      "Sperrholz"
+    ],
+    "description": "IF 20 A/BB, Laser",
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "m2",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 15.9
+        }
+      },
+      {
+        "id": "320-620",
+        "label": "Zuschnitt 320×620 mm",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 3.15
+        }
+      },
+      {
+        "id": "500-1250",
+        "label": "Zuschnitt 500×1250 mm",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 10
+        }
+      },
+      {
+        "id": "a3",
+        "label": "Zuschnitt A3",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 2
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000006006",
+    "code": "6006",
+    "name": "Sperrholz Pappel 4mm",
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Holz",
+      "Sperrholz"
+    ],
+    "description": "IF 20 A/BB, Laser",
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "m2",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 18.15
+        }
+      },
+      {
+        "id": "320-620",
+        "label": "Zuschnitt 320×620 mm",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 3.6
+        }
+      },
+      {
+        "id": "500-1250",
+        "label": "Zuschnitt 500×1250 mm",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 11.4
+        }
+      },
+      {
+        "id": "a3",
+        "label": "Zuschnitt A3",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 2.29
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000006007",
+    "code": "6007",
+    "name": "Sperrholz Pappel 5mm",
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Holz",
+      "Sperrholz"
+    ],
+    "description": "5-lagig IF 20 A/BB, Laser",
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "m2",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 25.2
+        }
+      },
+      {
+        "id": "320-620",
+        "label": "Zuschnitt 320×620 mm",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 5
+        }
+      },
+      {
+        "id": "500-1250",
+        "label": "Zuschnitt 500×1250 mm",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 15.8
+        }
+      },
+      {
+        "id": "a3",
+        "label": "Zuschnitt A3",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 3.18
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000006008",
+    "code": "6008",
+    "name": "Sperrholz Pappel 6mm",
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Holz",
+      "Sperrholz"
+    ],
+    "description": "IF 20 A/BB, Laser",
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "m2",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 26.45
+        }
+      },
+      {
+        "id": "320-620",
+        "label": "Zuschnitt 320×620 mm",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 5.25
+        }
+      },
+      {
+        "id": "500-1250",
+        "label": "Zuschnitt 500×1250 mm",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 16.6
+        }
+      },
+      {
+        "id": "a3",
+        "label": "Zuschnitt A3",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 3.33
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000006009",
+    "code": "6009",
+    "name": "Sperrholz Pappel 8mm",
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Holz",
+      "Sperrholz"
+    ],
+    "description": "IF 20 A/BB, Laser",
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "m2",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 30.25
+        }
+      },
+      {
+        "id": "320-620",
+        "label": "Zuschnitt 320×620 mm",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 6
+        }
+      },
+      {
+        "id": "500-1250",
+        "label": "Zuschnitt 500×1250 mm",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 19.1
+        }
+      },
+      {
+        "id": "a3",
+        "label": "Zuschnitt A3",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 3.81
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000006016",
+    "code": "6016",
+    "name": "Sperrholz Seekiefer 12mm",
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Holz",
+      "Sperrholz"
+    ],
+    "description": "3-lagig beidseitig geschlossen, Laser",
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "m2",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 26.7
+        }
+      },
+      {
+        "id": "320-620",
+        "label": "Zuschnitt 320×620 mm",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 5.3
+        }
+      },
+      {
+        "id": "500-1250",
+        "label": "Zuschnitt 500×1250 mm",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 16.7
+        }
+      },
+      {
+        "id": "a3",
+        "label": "Zuschnitt A3",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 3.36
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000006015",
+    "code": "6015",
+    "name": "Sperrholz Seekiefer 7mm",
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Holz",
+      "Sperrholz"
+    ],
+    "description": "3-lagig beidseitig geschlossen, Laser",
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "m2",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 18.65
+        }
+      },
+      {
+        "id": "320-620",
+        "label": "Zuschnitt 320×620 mm",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 3.7
+        }
+      },
+      {
+        "id": "500-1250",
+        "label": "Zuschnitt 500×1250 mm",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 11.7
+        }
+      },
+      {
+        "id": "a3",
+        "label": "Zuschnitt A3",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 2.35
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000006004",
+    "code": "6004",
+    "name": "Sperrholz Wallnuss 3mm",
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Holz",
+      "Sperrholz"
+    ],
+    "description": "3-lagig AA natur, Laser",
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "m2",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 54
+        }
+      },
+      {
+        "id": "a3",
+        "label": "Zuschnitt A3",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 6.8
+        }
+      }
+    ]
+  }
+]

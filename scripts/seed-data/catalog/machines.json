@@ -1,0 +1,274 @@
+[
+  {
+    "id": "dfoYVuO3bhRJoRCbgND1",
+    "code": "1001",
+    "name": "Stationäre Maschinen",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Maschinen"
+    ],
+    "description": "Holzbearbeitungsmaschinen (Kreissäge, Bandsäge, Hobel, Fräse). Verrechnet pro Stunde.",
+    "active": true,
+    "userCanAdd": false,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "time",
+        "unitPrice": {
+          "default": 40,
+          "member": 20
+        }
+      }
+    ]
+  },
+  {
+    "id": "LZ04lfdfdEieqQOsKhzi",
+    "code": "1002",
+    "name": "Drechselbank",
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Maschinen"
+    ],
+    "description": "Drechseln. Verrechnet pro Stunde.",
+    "active": true,
+    "userCanAdd": false,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "time",
+        "unitPrice": {
+          "default": 40,
+          "member": 20
+        }
+      }
+    ]
+  },
+  {
+    "id": "7SlZb0jUKcyE8sMcvyzD",
+    "code": "2001",
+    "name": "Maschinen / Schweissanlage",
+    "workshops": [
+      "metall"
+    ],
+    "category": [
+      "Maschinen"
+    ],
+    "description": "Stationäre Metallbearbeitungsmaschinen und Schweissanlage. Verrechnet pro Stunde.",
+    "active": true,
+    "userCanAdd": false,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "time",
+        "unitPrice": {
+          "default": 40,
+          "member": 20
+        }
+      }
+    ]
+  },
+  {
+    "id": "kcspOmeZ3lsj4hNfHD4V",
+    "code": "2002",
+    "name": "Plasmaschneider / Brenner",
+    "workshops": [
+      "metall"
+    ],
+    "category": [
+      "Maschinen"
+    ],
+    "description": "Plasmaschneider und Autogenbrenner. Verrechnet pro Stunde.",
+    "active": true,
+    "userCanAdd": false,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "time",
+        "unitPrice": {
+          "default": 40,
+          "member": 20
+        }
+      }
+    ]
+  },
+  {
+    "id": "3XpXkmq3mGovXJ21h4pw",
+    "code": "8001",
+    "name": "Sandstrahlen Stein",
+    "workshops": [
+      "stein"
+    ],
+    "category": [
+      "Maschinen"
+    ],
+    "description": "Sandstrahlanlage Stein-Atelier. Verrechnet pro Werkstück nach Grösse.",
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "klein",
+        "label": "Klein (bis 13×9×9 cm)",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 5
+        }
+      },
+      {
+        "id": "mittel",
+        "label": "Mittel (bis 21×14×14 cm)",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 10
+        }
+      },
+      {
+        "id": "gross",
+        "label": "Gross (ab 21×14×14 cm)",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 20
+        }
+      }
+    ]
+  },
+  {
+    "id": "qG7OVbhnFp0vZM6BwCBB",
+    "code": "2003",
+    "name": "Sandstrahlen Metall",
+    "workshops": [
+      "metall"
+    ],
+    "category": [
+      "Maschinen"
+    ],
+    "description": "Sandstrahlanlage Metallwerkstatt. Verrechnet pro Werkstück nach Grösse.",
+    "active": true,
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "klein",
+        "label": "Klein (bis 13×9×9 cm)",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 5
+        }
+      },
+      {
+        "id": "mittel",
+        "label": "Mittel (bis 21×14×14 cm)",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 10
+        }
+      },
+      {
+        "id": "gross",
+        "label": "Gross (ab 21×14×14 cm)",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 20
+        }
+      }
+    ]
+  },
+  {
+    "id": "tot0yitdBPf2hseDSuFf",
+    "code": "7001",
+    "name": "Lötstation",
+    "workshops": [
+      "schmuck"
+    ],
+    "category": [
+      "Maschinen"
+    ],
+    "description": "Lötstation Schmuck-Atelier. Verrechnet pro Stunde.",
+    "active": true,
+    "userCanAdd": false,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "time",
+        "unitPrice": {
+          "default": 20,
+          "member": 10
+        }
+      }
+    ]
+  },
+  {
+    "id": "17mC1Qe4xn2dfGNpsdfo",
+    "code": "5001",
+    "name": "Glasperlenstation",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Maschinen"
+    ],
+    "description": "Glasperlenstation. Verrechnet pro Stunde.",
+    "active": true,
+    "userCanAdd": false,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "time",
+        "unitPrice": {
+          "default": 20,
+          "member": 10
+        }
+      }
+    ]
+  },
+  {
+    "id": "ljE5dcV7qDv0Z50BdwHY",
+    "code": "8002",
+    "name": "Schleifmaschinen",
+    "workshops": [
+      "stein"
+    ],
+    "category": [
+      "Maschinen"
+    ],
+    "description": "Schleifmaschinen Stein-Atelier. Verrechnet pro Stunde.",
+    "active": true,
+    "userCanAdd": false,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "time",
+        "unitPrice": {
+          "default": 20,
+          "member": 10
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catalog0laser0012",
+    "code": "1012",
+    "name": "Laser Cutter",
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Maschinen"
+    ],
+    "active": true,
+    "userCanAdd": false,
+    "description": "CO2 Laser Cutter",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "time",
+        "unitPrice": {
+          "default": 20,
+          "member": 10
+        }
+      }
+    ]
+  }
+]

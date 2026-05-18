@@ -10,13 +10,16 @@
  * Document IDs are hardcoded 20-char Firebase-style IDs for reproducibility.
  */
 
-import { readFileSync } from "fs";
+import { readFileSync, readdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
-import { MEMBERSHIP_CATALOG_ID } from "./seed-data/catalog-ids";
+import {
+  COGNITOFORMS_CATALOG_IDS,
+  MEMBERSHIP_CATALOG_ID,
+} from "./seed-data/catalog-ids";
 
 // Connect to emulator
 process.env.FIRESTORE_EMULATOR_HOST ??= "127.0.0.1:8080";
@@ -65,18 +68,11 @@ const ID = {
   machineFraese:       "00machine0fraese0003",
   machineLasercutter:  "00machine0laser00004",
 
-  // catalog
-  catStationaer:   "00catalog0station001",
-  catDrechselbank: "00catalog0drechs002",
-  catSchweissen:   "00catalog0schweis03",
-  catPlasma:       "00catalog0plasma004",
-  catSandblastK:   "00catalog0sandblk05",
-  catSandblastG:   "00catalog0sandblg06",
-  cat3dPLA:        "00catalog03dpla0007",
-  cat3dPETG:       "00catalog03dpetg008",
-  catSperrholz:    "00catalog0sperrh009",
-  catKantholz:     "00catalog0kanth0010",
-  catLaser:        "00catalog0laser0012",
+  // catalog doc IDs that production code references via pinned constants
+  // live in scripts/seed-data/catalog-ids.ts (MEMBERSHIP_CATALOG_ID,
+  // COGNITOFORMS_CATALOG_IDS). The remaining catalog entries are loaded
+  // from scripts/seed-data/catalog/*.json at seed time; machine refs
+  // resolve their template via the code → docId map built in seed().
 
   // memberships
   membershipSimon: "00membership0simon01",
@@ -335,20 +331,41 @@ async function seed() {
   await db.collection("maco").doc(ID.macoLasercutter).set({ name: "Laser Cutter" });
   console.log("  Created 3 MaCo devices");
 
-  // --- Catalog (loaded from JSON) ---
-  const catalogJson = JSON.parse(
-    readFileSync(join(dirname(fileURLToPath(import.meta.url)), "seed-data", "catalog.json"), "utf-8")
-  ) as Array<{ id: string; [key: string]: any }>;
-
-  for (const item of catalogJson) {
-    const { id, ...data } = item;
-    await db.collection("catalog").doc(id).set(data);
+  // --- Catalog (loaded from scripts/seed-data/catalog/*.json) ---
+  // Split per workshop so diffs stay reviewable. Order is unspecified;
+  // each entry's `id` field is its committed doc ID. We also build a
+  // `code → docId` lookup so the machine-template refs below can stay
+  // decoupled from specific doc IDs.
+  const catalogDir = join(dirname(fileURLToPath(import.meta.url)), "seed-data", "catalog");
+  const catalogFiles = readdirSync(catalogDir).filter((f) => f.endsWith(".json")).sort();
+  const codeToDocId = new Map<string, string>();
+  let totalCatalog = 0;
+  for (const file of catalogFiles) {
+    const entries = JSON.parse(readFileSync(join(catalogDir, file), "utf-8")) as Array<{
+      id: string;
+      code?: string;
+      [key: string]: unknown;
+    }>;
+    for (const item of entries) {
+      const { id, ...data } = item;
+      await db.collection("catalog").doc(id).set(data);
+      if (typeof item.code === "string" && item.code.length > 0) {
+        codeToDocId.set(item.code, id);
+      }
+    }
+    totalCatalog += entries.length;
   }
+  console.log(`  Created ${totalCatalog} catalog entries from ${catalogFiles.length} files`);
 
-  // Membership SKU is part of catalog.json now (single doc with `single` +
-  // `family` variants at the pinned MEMBERSHIP_CATALOG_ID — see
-  // scripts/seed-data/catalog-ids.ts). No separate seed step needed.
-  console.log(`  Created ${catalogJson.length} catalog entries`);
+  function catalogRef(code: string) {
+    const id = codeToDocId.get(code);
+    if (!id) {
+      throw new Error(
+        `seed-emulator: catalog code "${code}" not found in any of scripts/seed-data/catalog/*.json`,
+      );
+    }
+    return db.doc(`catalog/${id}`);
+  }
 
   // Catalog-references config doc. Production code (membership purchase,
   // post-checkout trigger, web membership page) reads this to find
@@ -360,10 +377,13 @@ async function seed() {
   console.log("  Wrote config/catalog-references");
 
   // --- Machines (with checkoutTemplateId + workshop) ---
+  // checkoutTemplateId refs resolve via the code → docId lookup so the
+  // seed doesn't hardcode any catalog IDs. Codes are stable across the
+  // committed seed JSON files.
   await db.collection("machine").doc(ID.machineLaserVirtual).set({
     name: "Laser Cutter (Virtual)",
     workshop: "makerspace",
-    checkoutTemplateId: db.doc(`catalog/${ID.catLaser}`),
+    checkoutTemplateId: catalogRef("1012"), // Laser Cutter
     requiredPermission: [db.doc(`permission/${ID.permLaser}`)],
     maco: db.doc(`maco/${ID.macoDevterm}`),
     control: {},
@@ -371,7 +391,7 @@ async function seed() {
   await db.collection("machine").doc(ID.machineCnc).set({
     name: "CNC Fräse",
     workshop: "holz",
-    checkoutTemplateId: db.doc(`catalog/${ID.catStationaer}`),
+    checkoutTemplateId: catalogRef("1001"), // Stationäre Maschinen
     requiredPermission: [db.doc(`permission/${ID.permCnc}`)],
     maco: db.doc(`maco/${ID.macoDevterm}`),
     control: {},
@@ -379,7 +399,7 @@ async function seed() {
   await db.collection("machine").doc(ID.machineFraese).set({
     name: "Fräse",
     workshop: "holz",
-    checkoutTemplateId: db.doc(`catalog/${ID.catStationaer}`),
+    checkoutTemplateId: catalogRef("1001"), // Stationäre Maschinen
     requiredPermission: [db.doc(`permission/${ID.permHolz}`)],
     maco: db.doc(`maco/${ID.macoFraese}`),
     control: {},
@@ -387,7 +407,7 @@ async function seed() {
   await db.collection("machine").doc(ID.machineLasercutter).set({
     name: "Laser Cutter",
     workshop: "makerspace",
-    checkoutTemplateId: db.doc(`catalog/${ID.catLaser}`),
+    checkoutTemplateId: catalogRef("1012"), // Laser Cutter
     requiredPermission: [db.doc(`permission/${ID.permLaser}`)],
     maco: db.doc(`maco/${ID.macoLasercutter}`),
     control: {},
@@ -423,56 +443,63 @@ async function seed() {
   console.log("  Created config/pricing");
 
   // --- Price Lists ---
-  await db.collection("price_lists").doc("00pricelist0holz0001").set({
-    name: "Holzwerkstatt MDF Platten",
-    items: [
-      "00catmat000000003110", // MDF 3mm
-      "00catmat000000003111", // MDF 4mm
-      "00catmat000000003112", // MDF 6mm
-      "00catmat000000003113", // MDF 8mm
-      "00catmat000000003114", // MDF 10mm
-      "00catmat000000003115", // MDF 12mm
-      "00catmat000000003116", // MDF 16mm
-      "00catmat000000003117", // MDF 19mm
-      "00catmat000000003118", // MDF 22mm
-    ],
-    footer: "Offene Werkstatt Wädenswil – Holzwerkstatt",
-    active: true,
-    modifiedBy: null,
-    modifiedAt: Timestamp.now(),
-  });
-  console.log("  Created 1 price list");
+  // Sample MDF price list pointing at the xlsx-driven Holz entries.
+  // Item references resolve via codeToDocId so this doesn't hardcode any
+  // doc IDs; Mike can regenerate from the admin price-list editor.
+  const mdfCodes = ["3065", "3066", "3067", "3068", "3069", "3070", "3071", "3072", "3073"];
+  const mdfItemIds = mdfCodes
+    .map((code) => codeToDocId.get(code))
+    .filter((id): id is string => id != null);
+  if (mdfItemIds.length > 0) {
+    await db.collection("price_lists").doc("00pricelist0holz0001").set({
+      name: "Holzwerkstatt MDF Platten",
+      items: mdfItemIds,
+      footer: "Offene Werkstatt Wädenswil – Holzwerkstatt",
+      active: true,
+      modifiedBy: null,
+      modifiedAt: Timestamp.now(),
+    });
+    console.log("  Created 1 price list");
+  }
 
   // --- Sample open checkout with items for Mike ---
-  const mikeRef = db.doc(`users/${ID.userMike}`);
-  const checkoutRef = db.collection("checkouts").doc("00checkout0mike00001");
-  await checkoutRef.set({
-    userId: mikeRef,
-    status: "open",
-    usageType: "regular",
-    created: Timestamp.now(),
-    workshopsVisited: ["holz"],
-    persons: [],
-    modifiedBy: null,
-    modifiedAt: Timestamp.now(),
-  });
-
-  // Add a material item to the checkout
-  await checkoutRef.collection("items").add({
-    workshop: "holz",
-    description: "Sperrholz Birke 4mm",
-    origin: "manual",
-    catalogId: db.doc(`catalog/${ID.catSperrholz}`),
-    created: Timestamp.now(),
-    quantity: 0.24,
-    unitPrice: 45,
-    totalPrice: 10.8,
-    formInputs: [
-      { quantity: 60, unit: "cm" },
-      { quantity: 40, unit: "cm" },
-    ],
-  });
-  console.log("  Created open checkout with 1 item for Mike");
+  // Picks any Sperrholz entry available in the new Holz catalog so the
+  // sample remains valid across xlsx revisions.
+  const sampleSperrholz =
+    [...codeToDocId.entries()].find(([code]) => {
+      const n = parseInt(code, 10);
+      return n >= 3080 && n <= 3093; // Sperrholz-Platten block in holz.json
+    })?.[1] ?? null;
+  if (sampleSperrholz) {
+    const mikeRef = db.doc(`users/${ID.userMike}`);
+    const checkoutRef = db.collection("checkouts").doc("00checkout0mike00001");
+    await checkoutRef.set({
+      userId: mikeRef,
+      status: "open",
+      usageType: "regular",
+      created: Timestamp.now(),
+      workshopsVisited: ["holz"],
+      persons: [],
+      modifiedBy: null,
+      modifiedAt: Timestamp.now(),
+    });
+    await checkoutRef.collection("items").add({
+      workshop: "holz",
+      description: "Sperrholz (Beispiel)",
+      origin: "manual",
+      catalogId: db.doc(`catalog/${sampleSperrholz}`),
+      variantId: "default",
+      created: Timestamp.now(),
+      quantity: 0.24,
+      unitPrice: 45,
+      totalPrice: 10.8,
+      formInputs: [
+        { quantity: 60, unit: "cm" },
+        { quantity: 40, unit: "cm" },
+      ],
+    });
+    console.log("  Created open checkout with 1 item for Mike");
+  }
 
   console.log("Done! Emulator seeded successfully.");
 }

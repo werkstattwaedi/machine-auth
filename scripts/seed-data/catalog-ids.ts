@@ -3,9 +3,9 @@
 
 /**
  * Pinned 20-char Firestore-shaped IDs for catalog items referenced from
- * production code. Mirror of the corresponding `id` fields in the seed
- * JSON (`scripts/seed-data/catalog.json`); the seed is the source of
- * truth, this file is a typed handle.
+ * production code. Mirror of the corresponding `id` fields in the per-
+ * workshop seed JSON files under `scripts/seed-data/catalog/*.json` —
+ * the seed is the source of truth, this file is a typed handle.
  *
  * Generated once with Firestore's auto-ID character set
  * (A-Z, a-z, 0-9, length 20) and committed here. Reseeds preserve them.

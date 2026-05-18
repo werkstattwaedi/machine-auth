@@ -1,0 +1,968 @@
+[
+  {
+    "id": "00catmat000000005101",
+    "code": "5101",
+    "name": "Effetre-Glasstäbe klar (50cm)",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Glasperlen, pro 50cm Stab",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.5
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005102",
+    "code": "5102",
+    "name": "Effetre-Glasstäbe diverse Farben transparent (50cm)",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Glasperlen, pro 50cm Stab",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.7
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005103",
+    "code": "5103",
+    "name": "Effetre-Glasstäbe diverse Farben opak (50cm)",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Glasperlen, pro 50cm Stab",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 2
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005104",
+    "code": "5104",
+    "name": "Effetre-Glasstäbe spezielle Farben (50cm)",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Glasperlen, pro 50cm Stab",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 5
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005105",
+    "code": "5105",
+    "name": "Effetre-Glasstäbe (50cm)",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Glasperlen, pro 50cm Stab",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 3
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005106",
+    "code": "5106",
+    "name": "Metal-Stäbe 1.5/2/3mm (10 Stk.)",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Perlenform, Set à 10 Stück",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 28
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005107",
+    "code": "5107",
+    "name": "Metal-Stab 4mm",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Perlenform, pro Stück",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 4
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005108",
+    "code": "5108",
+    "name": "Metal-Stab 5mm",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Perlenform, pro Stück",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 5
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005109",
+    "code": "5109",
+    "name": "Metal-Stab 6mm",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Perlenform, pro Stück",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 6
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005110",
+    "code": "5110",
+    "name": "Putzer (10min)",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Glasperlen, pro 10 Minuten",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 4
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005111",
+    "code": "5111",
+    "name": "Perlen-Set (10 Stäbe, Trennmittel, Abdrähtsand)",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Glasperlen, Starter-Set",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 4
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005112",
+    "code": "5112",
+    "name": "Trennmittel Bullseye rot (1 Dose)",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Glasperlen",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 7
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005113",
+    "code": "5113",
+    "name": "Abdrähtsand (1 Sack)",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Glasperlen",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 8
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005201",
+    "code": "5201",
+    "name": "Antrazytglas CF/Float 6mm",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Glas Fusing, AK 82",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 195
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005202",
+    "code": "5202",
+    "name": "Clear-Fuse Glas CF/Float 4mm",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Glas Fusing, AK 82",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 85
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005203",
+    "code": "5203",
+    "name": "Clear-Base Glas CF/Float 6mm",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Glas Fusing, AK 82",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 130
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005204",
+    "code": "5204",
+    "name": "Float Glas CF/Float 2mm",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Glas Fusing, AK 82",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 50
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005205",
+    "code": "5205",
+    "name": "Float Glas CF/Float 8mm",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Glas Fusing, AK 82",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 120
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005206",
+    "code": "5206",
+    "name": "Float Glas CF/Float 10mm",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Glas Fusing, AK 82",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 350
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005207",
+    "code": "5207",
+    "name": "Bullseye Glas farbig 3mm",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Glas Fusing, AK 82",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 250
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005208",
+    "code": "5208",
+    "name": "Bullseye Glas klar 2mm",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Glas Fusing, AK 90",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 260
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005209",
+    "code": "5209",
+    "name": "Bullseye Glas klar 3mm",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Glas Fusing, AK 90",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 170
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005210",
+    "code": "5210",
+    "name": "Tektos Glas 3mm",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Glas Fusing, Bullseye AK 90",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 165
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005211",
+    "code": "5211",
+    "name": "Uroboros Glas",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Glas Fusing, Bullseye AK 90",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 195
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005212",
+    "code": "5212",
+    "name": "Brennfolie 1mm",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Glas Fusing Zubehör",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 20
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005213",
+    "code": "5213",
+    "name": "Faserpapier 3/5mm",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Glas Fusing Zubehör",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 40
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005214",
+    "code": "5214",
+    "name": "Keramikfaserplatte 10mm",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Glas Fusing Zubehör",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 60
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005215",
+    "code": "5215",
+    "name": "Polsterplatte 20mm",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Glas Fusing Zubehör",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 115
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005301",
+    "code": "5301",
+    "name": "Bullseye Stringers Sizzle Black Dichroic 3mm (Dose 50g)",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Glas Fusing, Bullseye AK 90, Dose à 50g",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 30
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005302",
+    "code": "5302",
+    "name": "Bullseye Stringers Sizzle Black Dichroic 3mm (40cm)",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Glas Fusing, Bullseye AK 90, pro 40cm",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 16
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005303",
+    "code": "5303",
+    "name": "Bullseye Stringers Sizzle Black Dichroic 6mm",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Glas Fusing, Bullseye AK 90",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 25.5
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005304",
+    "code": "5304",
+    "name": "Bullseye Stringers Sizzle Black Dichroic 3mm (40cm)",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Glas Fusing, Bullseye AK 90",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.5
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005305",
+    "code": "5305",
+    "name": "Bullseye Stringers Sizzle Black Dichroic 6mm",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Glas Fusing, Bullseye AK 90, Dose à 50g",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 50
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005306",
+    "code": "5306",
+    "name": "Confetti (Dose 50g)",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Glas Fusing, Bullseye AK 90",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 50
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005307",
+    "code": "5307",
+    "name": "Stringers gemischt 2mm (45cm/Stk.)",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Glas Fusing, Bullseye AK 90, pro 45cm Stück",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 2
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005308",
+    "code": "5308",
+    "name": "Stringers gemischt 1mm",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Glas Fusing, Bullseye AK 90",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005309",
+    "code": "5309",
+    "name": "Uroboros Dichroic",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Glas Fusing, Bullseye AK 90",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 20
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005310",
+    "code": "5310",
+    "name": "Uroboros Dichroic klein",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Glas Fusing, Bullseye AK 90",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 0.5
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005401",
+    "code": "5401",
+    "name": "Ofen GF 75 (klein)",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Öfen Pauschale, pro Brand",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 20
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005402",
+    "code": "5402",
+    "name": "Ofen GF 240 (gross)",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Öfen Pauschale, pro Brand",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 40
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005501",
+    "code": "5501",
+    "name": "Sandstrahlanlage",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Sandstrahlen, pro Stunde",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "time",
+        "unitPrice": {
+          "default": 20
+        }
+      }
+    ]
+  },
+  {
+    "id": "00catmat000000005502",
+    "code": "5502",
+    "name": "Glasstrahlstation",
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Sandstrahlen, pro Stunde",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "time",
+        "unitPrice": {
+          "default": 10
+        }
+      }
+    ]
+  }
+]
