@@ -20,7 +20,7 @@ import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { httpsCallable } from "firebase/functions"
 import { serverTimestamp } from "firebase/firestore"
-import { Download, FileText, Loader2 } from "lucide-react"
+import { CheckCircle2, Download, FileText, Loader2 } from "lucide-react"
 import { QRCodeSVG } from "qrcode.react"
 import { cn } from "@modules/lib/utils"
 import type { PaymentMethod } from "./use-checkout-state"
@@ -106,11 +106,18 @@ export function PaymentResult({
   const [qrError, setQrError] = useState(false)
   const [tab, setTab] = useState<PaymentMethod>("rechnung")
 
+  // Issue #237: a CHF 0 visit ("Interne Nutzung") has nothing payable —
+  // skip the QR/PayLink dance entirely and render a "nichts zu bezahlen"
+  // screen below. We never fetch payment data, never render a QR, never
+  // pick a method.
+  const isFree = totalPrice === 0
+
   // Legacy fallback: subscribe to billRef on the checkout doc and fetch
   // payment data once the Firestore trigger has created the bill. Skipped
-  // when initialPaymentData is supplied (the normal flow now), and also
-  // skipped when no checkoutId is available.
-  const skipFallback = !!initialPaymentData || !checkoutId
+  // when initialPaymentData is supplied (the normal flow now), also
+  // skipped when no checkoutId is available, and skipped for free visits
+  // (nothing to load).
+  const skipFallback = !!initialPaymentData || !checkoutId || isFree
   const { data: checkout } = useDocument(
     skipFallback || !checkoutId ? null : checkoutRef(db, checkoutId),
   )
@@ -135,6 +142,40 @@ export function PaymentResult({
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [skipFallback, billIdFromCheckout, functions])
+
+  if (isFree) {
+    return (
+      <div className="space-y-6">
+        <div className="rounded-md border border-border bg-background px-6 py-7">
+          <div className="flex items-start gap-4">
+            <CheckCircle2
+              className="h-10 w-10 text-cog-teal shrink-0"
+              strokeWidth={1.8}
+              aria-hidden="true"
+            />
+            <div className="min-w-0">
+              <div className="font-heading font-bold text-2xl sm:text-3xl leading-tight text-foreground">
+                Keine Zahlung erforderlich
+              </div>
+              <p className="mt-2 text-sm text-foreground leading-relaxed max-w-2xl">
+                Diese Nutzung ist kostenlos &mdash; du musst nichts bezahlen.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end pt-2">
+          <button
+            type="button"
+            onClick={onReset}
+            className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-cog-teal rounded-[3px] hover:bg-cog-teal-dark transition-colors"
+          >
+            Werkstatt verlassen
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   if (qrError) {
     return (

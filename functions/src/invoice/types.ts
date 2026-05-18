@@ -13,7 +13,7 @@ export interface BillEntity {
   storagePath: string | null;
   created: Timestamp;
   paidAt: Timestamp | null;
-  paidVia: "twint" | "ebanking" | "cash" | null;
+  paidVia: "twint" | "ebanking" | "cash" | "free" | null;
   pdfGeneratedAt: Timestamp | null;
   emailSentAt: Timestamp | null;
 }
@@ -62,7 +62,7 @@ export interface InvoiceData {
   grandTotal: number;
   currency: string;
   paidAt?: Date | null;
-  paidVia?: "twint" | "ebanking" | "cash" | null;
+  paidVia?: "twint" | "ebanking" | "cash" | "free" | null;
 }
 
 /** Format a numeric reference number for display, e.g. 1 → "RE-000001" */

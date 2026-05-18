@@ -1268,4 +1268,90 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
       expect(checkout.status).to.equal("open");
     });
   });
+
+  // Issue #237: a zero-amount visit ("Interne Nutzung", or any
+  // intern-flagged checkout) used to write a bill with `paidAt: null`
+  // and `paidVia: null`. Server-side it sat as "unpaid" forever,
+  // waiting for a QR-bill scan that would never come. The new contract
+  // is: amount === 0 → auto-mark as paid via "free" so the bill is a
+  // record-only entry rather than an open receivable.
+  describe("issue #237: zero-amount bills auto-close as paidVia=free", () => {
+    it("marks the bill paid (paidVia=free, paidAt set) when amount is 0", async () => {
+      const uid = "user-free-1";
+      const checkoutId = "co-free-1";
+      await seedUser(uid, "erwachsen");
+      // Intern checkout with NFC items the recompute will zero out.
+      await seedCheckout(checkoutId, {
+        ownerUid: uid,
+        items: [
+          {
+            workshop: "holz",
+            description: "Bandsäge",
+            origin: "nfc",
+            quantity: 1,
+            unitPrice: 20,
+            totalPrice: 20,
+          },
+        ],
+      });
+
+      await call({
+        uid,
+        data: {
+          checkoutId,
+          usageType: "intern" as UsageType,
+          persons: [ADULT],
+          summary: {
+            totalPrice: 0,
+            entryFees: 0,
+            machineCost: 0,
+            materialCost: 0,
+            tip: 0,
+          },
+        },
+      });
+
+      const bills = await listBills();
+      expect(bills).to.have.length(1);
+      const bill = bills[0].data;
+      // Intern usageType zeros entry+machine+material (see issue #199),
+      // so the recomputed total is 0.
+      expect(bill.amount).to.equal(0);
+      expect(bill.paidVia).to.equal("free");
+      expect(bill.paidAt, "paidAt should be set, not null").to.exist;
+      expect(bill.paidAt).to.be.instanceOf(Timestamp);
+    });
+
+    it("leaves paidAt=null and paidVia=null for non-zero bills (regression)", async () => {
+      // Sanity check that the new branch is amount-gated and doesn't
+      // accidentally pre-mark every bill as paid.
+      const uid = "user-free-control";
+      const checkoutId = "co-free-control";
+      await seedUser(uid, "erwachsen");
+      await seedCheckout(checkoutId, { ownerUid: uid });
+
+      await call({
+        uid,
+        data: {
+          checkoutId,
+          usageType: "regular" as UsageType,
+          persons: [ADULT],
+          summary: {
+            totalPrice: 0,
+            entryFees: 0,
+            machineCost: 0,
+            materialCost: 0,
+            tip: 0,
+          },
+        },
+      });
+
+      const bills = await listBills();
+      expect(bills).to.have.length(1);
+      const bill = bills[0].data;
+      expect(bill.amount).to.equal(15);
+      expect(bill.paidVia).to.equal(null);
+      expect(bill.paidAt).to.equal(null);
+    });
+  });
 });
