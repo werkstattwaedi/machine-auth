@@ -16,7 +16,7 @@ import {
   formatUnitPrice,
   formatPricePerCount,
 } from "@modules/lib/units"
-import { Search, X } from "lucide-react"
+import { ChevronRight, Search, X } from "lucide-react"
 import {
   getUnitLabel,
   getShortUnit,
@@ -220,6 +220,11 @@ function PickerBody({
   // selected, only that chip is visible. At the next-deeper depth we
   // surface the available siblings (none selected). Click the active
   // chip to step back; click a sibling to drill in.
+  //
+  // A row with exactly one sibling is hidden — there's no meaningful
+  // choice for the user, and the items below already share that
+  // single category implicitly. Example: Dübel-und-Rundstäbe has one
+  // sub-category, so no sub-row appears.
   const chipRows = useMemo(() => {
     const rows: {
       level: number
@@ -236,7 +241,7 @@ function PickerBody({
         continue
       }
       const values = nextLevelValues(scoped, categoryPrefix.slice(0, level))
-      if (values.length === 0) break
+      if (values.length <= 1) break
       rows.push({ level, values, selected: null })
     }
     return rows
@@ -278,10 +283,16 @@ function PickerBody({
       {chipRows.length > 0 && (
         <div
           aria-label="Kategorien"
-          className="flex flex-col gap-1.5 border-b border-border bg-background px-4 py-2"
+          className="flex flex-wrap items-center gap-1.5 border-b border-border bg-background px-4 py-2"
         >
-          {chipRows.map((row) => (
-            <div key={row.level} className="flex flex-wrap gap-1.5">
+          {chipRows.map((row, idx) => (
+            <React.Fragment key={row.level}>
+              {idx > 0 && (
+                <ChevronRight
+                  aria-hidden
+                  className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                />
+              )}
               {row.values.map((value) => (
                 <FilterPill
                   key={value}
@@ -291,7 +302,7 @@ function PickerBody({
                   {value}
                 </FilterPill>
               ))}
-            </div>
+            </React.Fragment>
           ))}
         </div>
       )}

@@ -278,8 +278,9 @@ describe("MaterialPicker", () => {
   })
 
   it("narrows visible items via breadcrumb-style category chips", async () => {
-    // Two catalog items, two top-level categories. Holzplatten has a
-    // sub-category so we can verify the sub-row appears after drill-down.
+    // Three catalog items spread across two top-level categories.
+    // Holzplatten has TWO sub-categories so the sub-row is meaningful;
+    // single-sibling rows are hidden per the picker rule.
     const catalogItems: CatalogItem[] = [
       {
         id: "cat-a",
@@ -313,34 +314,117 @@ describe("MaterialPicker", () => {
         active: true,
         userCanAdd: true,
       },
+      {
+        id: "cat-c",
+        code: "CCC",
+        name: "MDF roh 3mm",
+        workshops: ["holz"],
+        category: ["Holzplatten", "MDF"],
+        variants: [
+          {
+            id: "default",
+            pricingModel: "area",
+            unitPrice: { default: 5.55 },
+          },
+        ],
+        active: true,
+        userCanAdd: true,
+      },
     ]
     const user = userEvent.setup()
     renderSection({ catalogItems })
     await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
 
-    // Top-level row shows both categories; no sub-row yet.
+    // Top-level row shows both categories; no sub-chips yet.
     expect(screen.getByRole("button", { name: "Massivholz" })).toBeTruthy()
     expect(screen.getByRole("button", { name: "Holzplatten" })).toBeTruthy()
     expect(screen.queryByRole("button", { name: "Sperrholz" })).toBeNull()
+    expect(screen.queryByRole("button", { name: "MDF" })).toBeNull()
     expect(screen.getByText("Latte Kiefer")).toBeTruthy()
     expect(screen.getByText("Sperrholz Pappel 3mm")).toBeTruthy()
+    expect(screen.getByText("MDF roh 3mm")).toBeTruthy()
 
     // Drill in: click "Holzplatten". Its sibling "Massivholz" disappears
-    // and the sub-chip "Sperrholz" surfaces.
+    // and both Holzplatten sub-chips surface (single-sibling rows are
+    // hidden, but here we have two).
     await user.click(screen.getByRole("button", { name: "Holzplatten" }))
     expect(screen.queryByRole("button", { name: "Massivholz" })).toBeNull()
     expect(screen.getByRole("button", { name: "Holzplatten" })).toBeTruthy()
     expect(screen.getByRole("button", { name: "Sperrholz" })).toBeTruthy()
+    expect(screen.getByRole("button", { name: "MDF" })).toBeTruthy()
     expect(screen.queryByText("Latte Kiefer")).toBeNull()
     expect(screen.getByText("Sperrholz Pappel 3mm")).toBeTruthy()
+    expect(screen.getByText("MDF roh 3mm")).toBeTruthy()
 
-    // Step back: clicking the active "Holzplatten" chip restores siblings
-    // and removes the sub-row.
+    // Drill deeper into "Sperrholz" — single value at that depth means
+    // no further chip row appears, but items narrow.
+    await user.click(screen.getByRole("button", { name: "Sperrholz" }))
+    expect(screen.getByRole("button", { name: "Sperrholz" })).toBeTruthy()
+    expect(screen.queryByRole("button", { name: "MDF" })).toBeNull()
+    expect(screen.getByText("Sperrholz Pappel 3mm")).toBeTruthy()
+    expect(screen.queryByText("MDF roh 3mm")).toBeNull()
+
+    // Step back twice: Sperrholz → restores sub-row; Holzplatten →
+    // restores top-level siblings and all items.
+    await user.click(screen.getByRole("button", { name: "Sperrholz" }))
+    expect(screen.getByRole("button", { name: "MDF" })).toBeTruthy()
     await user.click(screen.getByRole("button", { name: "Holzplatten" }))
     expect(screen.getByRole("button", { name: "Massivholz" })).toBeTruthy()
     expect(screen.queryByRole("button", { name: "Sperrholz" })).toBeNull()
     expect(screen.getByText("Latte Kiefer")).toBeTruthy()
     expect(screen.getByText("Sperrholz Pappel 3mm")).toBeTruthy()
+    expect(screen.getByText("MDF roh 3mm")).toBeTruthy()
+  })
+
+  it("hides the sub-chip row when there is only one sub-category", async () => {
+    // Dübel-und-Rundstäbe-style scenario: one top-level category with a
+    // single sub-category. Drilling in must not render a sub-row.
+    const catalogItems: CatalogItem[] = [
+      {
+        id: "cat-x",
+        code: "XXX",
+        name: "Massivholz Ahorn 30mm",
+        workshops: ["holz"],
+        category: ["Massivholz"],
+        variants: [
+          {
+            id: "default",
+            pricingModel: "area",
+            unitPrice: { default: 72 },
+          },
+        ],
+        active: true,
+        userCanAdd: true,
+      },
+      {
+        id: "cat-y",
+        code: "YYY",
+        name: "Buche, glatt 6mm",
+        workshops: ["holz"],
+        category: ["Dübel- und Rundstäbe", "Rundstab"],
+        variants: [
+          {
+            id: "default",
+            pricingModel: "length",
+            unitPrice: { default: 1.5 },
+          },
+        ],
+        active: true,
+        userCanAdd: true,
+      },
+    ]
+    const user = userEvent.setup()
+    renderSection({ catalogItems })
+    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    await user.click(screen.getByRole("button", { name: "Dübel- und Rundstäbe" }))
+    // Breadcrumb chip stays visible; the single sub-category "Rundstab"
+    // is NOT rendered as a chip.
+    expect(
+      screen.getByRole("button", { name: "Dübel- und Rundstäbe" }),
+    ).toBeTruthy()
+    expect(screen.queryByRole("button", { name: "Rundstab" })).toBeNull()
+    expect(screen.getByText("Buche, glatt 6mm")).toBeTruthy()
+    expect(screen.queryByText("Massivholz Ahorn 30mm")).toBeNull()
   })
 
   it("renders a variant selector for multi-variant items and switches the form", async () => {
