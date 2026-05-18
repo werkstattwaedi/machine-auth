@@ -432,11 +432,7 @@ function CollapsedRow({
         <div className="font-heading text-sm font-semibold truncate">
           {catalog.name}
         </div>
-        {catalog.code && (
-          <div className="text-xs text-muted-foreground truncate">
-            #{catalog.code}
-          </div>
-        )}
+        <CatalogRowSubtitle catalog={catalog} />
       </div>
       <div className="font-heading text-sm font-semibold tabular-nums whitespace-nowrap">
         {formatCHF(unitPrice)}
@@ -445,6 +441,28 @@ function CollapsedRow({
         </span>
       </div>
     </button>
+  )
+}
+
+/**
+ * Subtitle shown under each catalog item's name in the picker. Renders
+ * the category path with " › " separators plus the SKU code, so a row
+ * like "Festool Garant, Korn 80" carries enough context for the user to
+ * tell which Schleifmittel sub-family it belongs to (without that, a
+ * text search across categories returns several rows that look
+ * identical).
+ */
+function CatalogRowSubtitle({ catalog }: { catalog: CatalogItem }) {
+  const path = catalog.category?.filter((p) => p && p.length > 0).join(" › ")
+  const hasPath = path && path.length > 0
+  const hasCode = Boolean(catalog.code)
+  if (!hasPath && !hasCode) return null
+  return (
+    <div className="text-xs text-muted-foreground truncate">
+      {hasPath ? path : null}
+      {hasPath && hasCode ? " · " : null}
+      {hasCode ? `#${catalog.code}` : null}
+    </div>
   )
 }
 
