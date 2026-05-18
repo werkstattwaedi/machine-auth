@@ -23,6 +23,7 @@ function Harness({ onChange }: { onChange?: (v: number) => void }) {
         onChange?.(v)
       }}
       roundUpEnabled={false}
+      roundUpBase={0}
       roundUpOptions={[]}
       roundUpTarget={null}
       roundUpDelta={0}

@@ -55,8 +55,12 @@ describe("roundUpOptions", () => {
     expect(roundUpOptions(23.4)).toEqual([24, 25])
   })
 
-  it("42.30 keeps the 2-franc and 5-franc step", () => {
-    expect(roundUpOptions(42.3)).toEqual([44, 45])
+  it("42.30 keeps the literal next franc, 2-franc and 5-franc step", () => {
+    // Issue #249 — dominance must not swallow the literal next whole
+    // franc (43) just because 45 (d=5) is within the dominance gap.
+    // The closely-adjacent rule keeps suppressing the awkward `[N-1, N]`
+    // pattern, but 43 → 45 has a 2 CHF gap, comfortably > 1.
+    expect(roundUpOptions(42.3)).toEqual([43, 44, 45])
   })
 
   it("56.33 — next franc and next 10", () => {
@@ -65,29 +69,45 @@ describe("roundUpOptions", () => {
     expect(roundUpOptions(56.33)).toEqual([57, 60])
   })
 
+  // Issue #249 regression line — the user reported that a base of
+  // CHF 66.32 was offered only "auf nächsten Franken — +CHF 3.68" (target
+  // 70). The literal next franc is 67, a 0.68 CHF bump; it must stay in
+  // the option set so the user can pick it.
+  it("66.32 → [67, 70] (literal next franc preserved, issue #249)", () => {
+    expect(roundUpOptions(66.32)).toEqual([67, 70])
+    expect(roundUpOptions(66.32)[0]).toBe(67)
+  })
+
   // --- Magnitude-aware: the headline #233 fix --------------------------
   // (Use bases just above a whole franc — whole-franc bases short-circuit
   // to `[]`, by design, since there's nothing to round.)
-  // 95.10 should propose 100, NOT 96. d=2 → 96 is dominated by d=100→100
-  // (gap ≤ dominanceGap, divisor 50× larger).
-  it("95.10 → [100] (no degenerate 96)", () => {
-    expect(roundUpOptions(95.1)).toEqual([100])
+  // After the #249 relaxation, the literal next franc (96) is preserved
+  // alongside the rounder 100 — only the closely-adjacent `[99, 100]`
+  // pattern is still suppressed.
+  it("95.10 → [96, 100] (literal next franc + next 100)", () => {
+    expect(roundUpOptions(95.1)).toEqual([96, 100])
   })
 
-  // 195.20 should propose 200, NOT 196. Same dominance pattern.
-  it("195.20 → [200] (no degenerate 196)", () => {
-    expect(roundUpOptions(195.2)).toEqual([200])
+  it("195.20 → [196, 200] (literal next franc + next 100)", () => {
+    expect(roundUpOptions(195.2)).toEqual([196, 200])
   })
 
-  // 247.10 — the monotonicity filter kicks in: 260 (d=20) is rejected
-  // because 250 (d=50) comes before it with a larger divisor. Without
-  // monotonicity we'd get the awkward [250, 260].
-  it("247.10 → [250] (no monotonicity-violating 260)", () => {
-    expect(roundUpOptions(247.1)).toEqual([250])
+  // 247.10 — the literal next franc (248) survives; 250 (d=50) is the
+  // natural next-50 target. 260 (d=20) is then dropped by the
+  // monotonicity filter (d=20 < running max d=50).
+  it("247.10 → [248, 250] (next franc + next 50, 260 dropped by monotonicity)", () => {
+    expect(roundUpOptions(247.1)).toEqual([248, 250])
   })
 
-  it("497.50 → [500]", () => {
-    expect(roundUpOptions(497.5)).toEqual([500])
+  it("497.50 → [498, 500] (literal next franc + next 100)", () => {
+    expect(roundUpOptions(497.5)).toEqual([498, 500])
+  })
+
+  // The closely-adjacent rule still drops the literal next franc when
+  // its rounder neighbour is exactly 1 CHF above (the `[199, 200]` /
+  // `[99, 100]` pattern that motivated #233).
+  it("198.50 → [200] (closely-adjacent 199 dropped)", () => {
+    expect(roundUpOptions(198.5)).toEqual([200])
   })
 
   it("999.99 → [1000]", () => {
@@ -147,21 +167,39 @@ describe("roundUpOptions", () => {
 })
 
 describe("roundUpOptionLabel", () => {
-  it("calls the smallest integer target the next franc", () => {
-    expect(roundUpOptionLabel(7, true)).toBe("nächsten Franken")
+  it("calls the smallest integer target the next franc when delta ≤ 1", () => {
+    // base 6.30 → target 7, delta 0.70 — fits "next franc".
+    expect(roundUpOptionLabel(7, 6.3, true)).toBe("nächsten Franken")
   })
 
-  it("calls a half-franc smallest target the next half franc", () => {
-    expect(roundUpOptionLabel(3.5, true)).toBe("nächsten halben Franken")
-    expect(roundUpOptionLabel(12.5, true)).toBe("nächsten halben Franken")
+  it("calls a half-franc smallest target the next half franc when delta ≤ 0.5", () => {
+    expect(roundUpOptionLabel(3.5, 3.2, true)).toBe("nächsten halben Franken")
+    expect(roundUpOptionLabel(12.5, 12.1, true)).toBe("nächsten halben Franken")
+  })
+
+  // Issue #249 — when the dominance filter still drops the literal next
+  // franc (e.g. base 198.50 → smallest option 200), the label MUST fall
+  // through to the explicit "X Franken" form. Otherwise the UI claims
+  // "nächsten Franken" for a 1.50 CHF bump, which is the bug.
+  it("falls through to 'X Franken' when the smallest delta exceeds 1 CHF", () => {
+    expect(roundUpOptionLabel(200, 198.5, true)).toBe("200 Franken")
+    expect(roundUpOptionLabel(70, 66.32, true)).toBe("70 Franken")
+  })
+
+  it("falls through to 'X.YY Franken' when a half-franc delta exceeds 0.5", () => {
+    // base 13 → target 13.5, delta 0.5 — still fits "half franc".
+    expect(roundUpOptionLabel(13.5, 13, true)).toBe("nächsten halben Franken")
+    // base 12.4 → target 13.5 would be delta 1.1 — too large for "half
+    // franc" copy.
+    expect(roundUpOptionLabel(13.5, 12.4, true)).toBe("13.50 Franken")
   })
 
   it("formats non-smallest integer targets as 'X Franken'", () => {
-    expect(roundUpOptionLabel(40, false)).toBe("40 Franken")
-    expect(roundUpOptionLabel(50, false)).toBe("50 Franken")
+    expect(roundUpOptionLabel(40, 35.1, false)).toBe("40 Franken")
+    expect(roundUpOptionLabel(50, 35.1, false)).toBe("50 Franken")
   })
 
   it("formats non-smallest half-franc targets with two decimals", () => {
-    expect(roundUpOptionLabel(6.5, false)).toBe("6.50 Franken")
+    expect(roundUpOptionLabel(6.5, 5.2, false)).toBe("6.50 Franken")
   })
 })
