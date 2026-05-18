@@ -14,7 +14,7 @@
     "sync-config": "npx tsx scripts/sync-device-config.ts",
     "test:web": "cd web && npm test",
     "test:web:integration": "npx tsx scripts/port-block.ts -- bash -c 'scripts/emulator-exec.sh --config \"$FIREBASE_E2E_CONFIG\" --only firestore \"cd web && npm run test:integration\"'",
-    "test:web:e2e": "npx tsx scripts/port-block.ts -- bash -c 'scripts/emulator-exec.sh --config \"$FIREBASE_E2E_CONFIG\" --only firestore,auth,functions \"cd web && npm run test:e2e\"'",
+    "test:web:e2e": "npx tsx scripts/port-block.ts -- bash -c 'scripts/emulator-exec.sh --config \"$FIREBASE_E2E_CONFIG\" --only firestore,auth,functions,storage \"cd web && npm run test:e2e\"'",
     "test:all": "npm run test:web && cd functions && npm test",
     "test:precommit": "cd web && npm run build && npm test && cd .. && npm run test:web:integration && cd functions && npm test",
     "snapshots:normalize": "node scripts/normalize-snapshots.mjs",
