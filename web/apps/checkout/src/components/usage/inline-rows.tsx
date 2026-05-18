@@ -32,6 +32,8 @@ export interface CheckoutItemLocal {
   description: string
   origin: "nfc" | "manual" | "qr"
   catalogId: string | null
+  /** Matches catalog.variants[i].id when catalogId is set. Null for ad-hoc fallback rows. */
+  variantId?: string | null
   pricingModel: PricingModel | null
   quantity: number
   // For `pricingModel === "sla"` this is CHF per liter of resin, already

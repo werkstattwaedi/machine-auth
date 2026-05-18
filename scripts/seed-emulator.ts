@@ -16,6 +16,7 @@ import { fileURLToPath } from "url";
 import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
+import { MEMBERSHIP_CATALOG_ID } from "./seed-data/catalog-ids";
 
 // Connect to emulator
 process.env.FIRESTORE_EMULATOR_HOST ??= "127.0.0.1:8080";
@@ -76,9 +77,6 @@ const ID = {
   catSperrholz:    "00catalog0sperrh009",
   catKantholz:     "00catalog0kanth0010",
   catLaser:        "00catalog0laser0012",
-  // Membership fee SKUs — keyed by `kind` discriminator on the catalog doc.
-  catMemberSingle: "00catalog0memb0sng01",
-  catMemberFamily: "00catalog0memb0fam02",
 
   // memberships
   membershipSimon: "00membership0simon01",
@@ -347,34 +345,19 @@ async function seed() {
     await db.collection("catalog").doc(id).set(data);
   }
 
-  // Membership fee SKUs — looked up by `kind` discriminator. The
-  // post-checkout trigger creates/extends the matching membership when the
-  // checkout closes. CHF amounts are placeholders; staff edit through the
-  // admin UI / Firestore.
-  await db.collection("catalog").doc(ID.catMemberSingle).set({
-    code: "MEMBER-SINGLE",
-    name: "Mitgliedschaft Einzel (Jahr)",
-    workshops: ["diverses"],
-    pricingModel: "direct",
-    unitPrice: { none: 50, member: 50 },
-    active: true,
-    userCanAdd: false,
-    description: "Jahres-Einzelmitgliedschaft Verein Offene Werkstatt Wädenswil.",
-    kind: "membership-single",
+  // Membership SKU is part of catalog.json now (single doc with `single` +
+  // `family` variants at the pinned MEMBERSHIP_CATALOG_ID — see
+  // scripts/seed-data/catalog-ids.ts). No separate seed step needed.
+  console.log(`  Created ${catalogJson.length} catalog entries`);
+
+  // Catalog-references config doc. Production code (membership purchase,
+  // post-checkout trigger, web membership page) reads this to find
+  // catalog items it depends on, instead of importing pinned IDs from
+  // source. Lets ops rebind the membership ref without a code deploy.
+  await db.doc("config/catalog-references").set({
+    membership: db.doc(`catalog/${MEMBERSHIP_CATALOG_ID}`),
   });
-  await db.collection("catalog").doc(ID.catMemberFamily).set({
-    code: "MEMBER-FAMILY",
-    name: "Mitgliedschaft Familie (Jahr)",
-    workshops: ["diverses"],
-    pricingModel: "direct",
-    unitPrice: { none: 70, member: 70 },
-    active: true,
-    userCanAdd: false,
-    description:
-      "Jahres-Familienmitgliedschaft. Inhaber:in plus weitere Familienmitglieder (inkl. Kindkonten).",
-    kind: "membership-family",
-  });
-  console.log(`  Created ${catalogJson.length + 2} catalog entries (incl. 2 membership SKUs)`);
+  console.log("  Wrote config/catalog-references");
 
   // --- Machines (with checkoutTemplateId + workshop) ---
   await db.collection("machine").doc(ID.machineLaserVirtual).set({

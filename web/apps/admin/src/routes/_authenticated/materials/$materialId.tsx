@@ -32,14 +32,23 @@ function CatalogDetailPage() {
 
   useEffect(() => {
     if (catalog) {
+      // The form is single-variant-aware only — multi-variant editing is
+      // out of scope for this admin route until the picker/UI work in PR C
+      // lands. Read from variants[0]; saving below overwrites the whole
+      // variants array.
+      const primary = catalog.variants?.[0]
       reset({
         code: catalog.code,
         name: catalog.name,
         description: catalog.description ?? "",
         workshops: catalog.workshops?.join(", ") ?? "",
-        pricingModel: catalog.pricingModel,
-        priceNone: String(catalog.unitPrice?.none ?? 0),
-        priceMember: String(catalog.unitPrice?.member ?? 0),
+        pricingModel: primary?.pricingModel ?? "direct",
+        priceNone: String(primary?.unitPrice?.default ?? 0),
+        priceMember: String(
+          typeof primary?.unitPrice?.member === "number"
+            ? primary.unitPrice.member
+            : primary?.unitPrice?.default ?? 0,
+        ),
         active: catalog.active,
         userCanAdd: catalog.userCanAdd,
       })
@@ -50,6 +59,25 @@ function CatalogDetailPage() {
   if (!catalog) return <div>Katalogeintrag nicht gefunden.</div>
 
   const onSubmit = async (values: CatalogFormValues) => {
+    // Preserve any extra variants on the doc (the admin form edits only
+    // variants[0] today). PR C will introduce a multi-variant editor.
+    const existingVariants = catalog?.variants ?? []
+    const defaultPrice = parseFloat(values.priceNone) || 0
+    const memberPrice = parseFloat(values.priceMember) || 0
+    const updatedPrimary = {
+      id: existingVariants[0]?.id ?? "default",
+      // Preserve any meaningful label on the existing primary; admin form
+      // doesn't edit labels yet (multi-variant editor is a PR C followup).
+      ...(existingVariants[0]?.label
+        ? { label: existingVariants[0].label }
+        : {}),
+      pricingModel: values.pricingModel as PricingModel,
+      unitPrice:
+        memberPrice !== defaultPrice
+          ? { default: defaultPrice, member: memberPrice }
+          : { default: defaultPrice },
+    }
+    const nextVariants = [updatedPrimary, ...existingVariants.slice(1)]
     await update(
       catalogRef(db, materialId),
       {
@@ -57,13 +85,7 @@ function CatalogDetailPage() {
         name: values.name,
         description: values.description || null,
         workshops: values.workshops.split(",").map((w) => w.trim()).filter(Boolean),
-        // The form keeps `pricingModel` as a free string; the catalog
-        // schema narrows it to a union. Trust the form widget's options.
-        pricingModel: values.pricingModel as PricingModel,
-        unitPrice: {
-          none: parseFloat(values.priceNone) || 0,
-          member: parseFloat(values.priceMember) || 0,
-        },
+        variants: nextVariants,
         active: values.active,
         userCanAdd: values.userCanAdd,
       },

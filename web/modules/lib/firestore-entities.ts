@@ -134,22 +134,50 @@ export type PricingModel =
 export type DiscountLevel = "none" | "member"
 
 /**
- * Optional discriminator for special-purpose catalog items. Absent for
- * regular billable items. The post-checkout trigger keys off this to
- * create or extend a membership when the item is paid.
+ * Per-variant price. `default` is mandatory and is what an un-discounted
+ * customer pays. Additional tiers (today only `member`) are optional
+ * overrides; if absent, the default applies. Schema-extensible to future
+ * tiers (volunteer, child, …) without touching items that don't use them.
  */
-export type CatalogItemKind = "membership-single" | "membership-family"
+export interface VariantPrice {
+  default: number
+  member?: number
+}
+
+export interface CatalogVariant {
+  /** Stable within the item, e.g. "default", "m2", "zuschnitt-a3", "single", "family". */
+  id: string
+  /**
+   * Display label, e.g. "Per m²", "Zuschnitt A3", "Einzel (Jahr)". Only
+   * meaningful when an item has more than one variant; for single-variant
+   * items the catalog `name` already carries everything. Picker UI gates
+   * variant-selector rendering on `variants.length > 1`; inline rows
+   * append the label after the item name only when it's set.
+   */
+  label?: string | null
+  pricingModel: PricingModel
+  unitPrice: VariantPrice
+}
 
 export interface CatalogItemDoc extends AuditFields {
   code: string
   name: string
   workshops: string[]
-  pricingModel: PricingModel
-  unitPrice: Record<DiscountLevel, number>
+  /**
+   * Root-to-leaf category path. Free-form values, not pre-registered;
+   * queryable with `array-contains` at any depth. The picker derives the
+   * chip tree from the values present among items in the current scope.
+   */
+  category: string[]
   active: boolean
   userCanAdd: boolean
   description?: string | null
-  kind?: CatalogItemKind | null
+  /**
+   * 1..n purchase options. `variants[0]` is canonical: the picker uses it
+   * silently when length == 1; auto-bill flows resolve through it. Array
+   * order is meaningful — keep the default first.
+   */
+  variants: CatalogVariant[]
 }
 
 // ── price_lists ──────────────────────────────────────────────────────────
@@ -222,6 +250,8 @@ export interface CheckoutItemDoc extends AuditFields {
   description: string
   origin: "nfc" | "manual" | "qr"
   catalogId: DocumentReference<CatalogItemDoc> | null
+  /** Matches catalog.variants[i].id when catalogId is set; null for ad-hoc origin="manual" / "qr". */
+  variantId?: string | null
   created: Timestamp
   quantity: number
   unitPrice: number
@@ -335,4 +365,24 @@ export interface PricingConfigDoc extends AuditFields {
   slaLayerPrice: Record<DiscountLevel, number>
 }
 
-export type ConfigDoc = PricingConfigDoc | Record<string, unknown>
+/**
+ * Doc at `config/catalog-references`. Singleton lookup table for catalog
+ * items referenced by production code. The seed writes this alongside
+ * the catalog itself; ops can rebind a reference to a fresh catalog doc
+ * (e.g. mid-year membership-price change with a new active SKU) without
+ * a code deploy. Mirrors how `config/pricing` decouples fee values from
+ * code today.
+ *
+ * Only `membership` is populated today. The 12 CognitoForms-importer
+ * references are added in PR D as a server-only field — the web app
+ * doesn't read them, so they can stay outside this doc until needed.
+ */
+export interface CatalogReferencesDoc extends AuditFields {
+  /** The Mitgliedschaft catalog item (variants: "single", "family"). */
+  membership: DocumentReference<CatalogItemDoc>
+}
+
+export type ConfigDoc =
+  | PricingConfigDoc
+  | CatalogReferencesDoc
+  | Record<string, unknown>

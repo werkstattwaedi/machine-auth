@@ -26,12 +26,13 @@ import {
 } from "firebase-admin/firestore";
 import type {
   CatalogEntity,
-  CatalogItemKind,
+  CatalogReferencesEntity,
   CheckoutEntity,
   CheckoutItemEntity,
   MembershipType,
   UserEntity,
 } from "../types/firestore_entities";
+import { priceForTier } from "../types/firestore_entities";
 import { callerUserRef, db, detectMembershipKindForItems } from "./shared";
 import { formatFullName } from "../util/username-utils";
 
@@ -85,39 +86,58 @@ export async function handlePurchaseMembership(
     );
   }
 
-  // Locate the catalog SKU for the requested membership type. We use the
-  // `kind` discriminator rather than hardcoded doc IDs so prices/labels
-  // can be edited freely. Active SKU only — staff disable an old fee item
-  // by toggling `active: false` rather than deleting.
-  const wantedKind: CatalogItemKind =
-    type === "single" ? "membership-single" : "membership-family";
-  const catalogSnap = await database
-    .collection("catalog")
-    .where("kind", "==", wantedKind)
-    .where("active", "==", true)
-    .limit(1)
-    .get();
-  if (catalogSnap.empty) {
-    logger.error("Membership catalog SKU not configured", { wantedKind });
+  // Resolve the Mitgliedschaft catalog item via `config/catalog-references`
+  // — the same indirection `config/pricing` uses for entry fees today.
+  // Ops can rebind the membership ref to a fresh catalog doc (e.g. a
+  // mid-year price change with a new active SKU) without a code deploy.
+  const refsSnap = await database.doc("config/catalog-references").get();
+  const refs = refsSnap.data() as CatalogReferencesEntity | undefined;
+  if (!refs?.membership) {
+    logger.error("config/catalog-references.membership not configured");
     throw new HttpsError(
       "failed-precondition",
-      `No active catalog item for ${wantedKind}`,
+      "config/catalog-references.membership is missing",
     );
   }
-  const catalogDoc = catalogSnap.docs[0];
+  const catalogDoc = await refs.membership.get();
+  if (!catalogDoc.exists) {
+    logger.error("Membership catalog SKU not configured", {
+      docId: refs.membership.id,
+    });
+    throw new HttpsError(
+      "failed-precondition",
+      `No catalog doc at ${refs.membership.path}`,
+    );
+  }
   const catalog = catalogDoc.data() as CatalogEntity;
+  if (!catalog.active) {
+    throw new HttpsError(
+      "failed-precondition",
+      `Mitgliedschaft catalog item is inactive`,
+    );
+  }
+  const wantedVariantId = type === "single" ? "single" : "family";
+  const variant = catalog.variants?.find((v) => v.id === wantedVariantId);
+  if (!variant) {
+    logger.error("Membership variant not configured", {
+      docId: catalogDoc.id,
+      wantedVariantId,
+    });
+    throw new HttpsError(
+      "failed-precondition",
+      `No variant "${wantedVariantId}" on catalog/${catalogDoc.id}`,
+    );
+  }
   // Membership fees use the same pricing tiers as everything else; the
-  // member-renewal price is the `member` tier, first-time signup is `none`.
-  // Server is authoritative here so a stale client-side discount can't
-  // sneak through.
-  const tier: keyof CatalogEntity["unitPrice"] = user.activeMembership
-    ? "member"
-    : "none";
-  const unitPrice = catalog.unitPrice[tier] ?? catalog.unitPrice.none ?? 0;
+  // member-renewal price is the `member` override (if set), first-time
+  // signup is the variant's `default`. Server is authoritative so a
+  // stale client-side discount can't sneak through.
+  const tier = user.activeMembership ? "member" : "none";
+  const unitPrice = priceForTier(variant.unitPrice, tier);
   if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
     throw new HttpsError(
       "failed-precondition",
-      `Catalog item ${catalogDoc.id} has invalid unitPrice for tier ${tier}`,
+      `Variant ${wantedVariantId} has invalid unitPrice for tier ${tier}`,
     );
   }
 
@@ -128,9 +148,13 @@ export async function handlePurchaseMembership(
   const now = Timestamp.now();
   const item: CheckoutItemEntity = {
     workshop: "diverses",
-    description: catalog.name,
+    description: variant.label
+      ? `${catalog.name} — ${variant.label}`
+      : catalog.name,
     origin: "manual",
     catalogId: catalogDoc.ref,
+    variantId: variant.id,
+    pricingModel: variant.pricingModel,
     created: now,
     quantity: 1,
     unitPrice,
@@ -184,6 +208,7 @@ export async function handlePurchaseMembership(
       const existingMembership = await detectMembershipKindForItems(
         database,
         existingItems,
+        catalogDoc.id,
       );
       if (existingMembership !== null) {
         throw new HttpsError(

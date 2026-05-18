@@ -57,13 +57,15 @@ const columns: ColumnDef<CatalogItem>[] = [
     cell: ({ row }) => row.original.workshops?.join(", ") ?? "–",
   },
   {
-    accessorKey: "pricingModel",
+    id: "pricingModel",
     header: "Modell",
+    cell: ({ row }) => row.original.variants?.[0]?.pricingModel ?? "—",
   },
   {
-    accessorKey: "unitPrice",
+    id: "unitPrice",
     header: ({ column }) => <ColumnHeader column={column} title="Preis (Voll)" />,
-    cell: ({ row }) => formatCHF(row.original.unitPrice?.none ?? 0),
+    cell: ({ row }) =>
+      formatCHF(row.original.variants?.[0]?.unitPrice?.default ?? 0),
   },
   {
     accessorKey: "userCanAdd",
@@ -128,17 +130,26 @@ function CreateCatalogDialog({ open, onOpenChange }: { open: boolean; onOpenChan
   })
 
   const onSubmit = async (values: CatalogFormValues) => {
+    const defaultPrice = parseFloat(values.priceNone) || 0
+    const memberPrice = parseFloat(values.priceMember) || 0
     await add(catalogCollection(db), {
       code: values.code,
       name: values.name,
       description: values.description || null,
       workshops: values.workshops.split(",").map((w) => w.trim()).filter(Boolean),
-      // Form widget keeps `pricingModel` as a free string; trust its options.
-      pricingModel: values.pricingModel as PricingModel,
-      unitPrice: {
-        none: parseFloat(values.priceNone) || 0,
-        member: parseFloat(values.priceMember) || 0,
-      },
+      // New entries start as single-variant items in the placeholder
+      // "Sonstiges" category. PR C will introduce multi-variant editing.
+      category: ["Sonstiges"],
+      variants: [
+        {
+          id: "default",
+          pricingModel: values.pricingModel as PricingModel,
+          unitPrice:
+            memberPrice !== defaultPrice
+              ? { default: defaultPrice, member: memberPrice }
+              : { default: defaultPrice },
+        },
+      ],
       active: true,
       userCanAdd: values.userCanAdd,
     }, {

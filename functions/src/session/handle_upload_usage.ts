@@ -261,7 +261,22 @@ async function accumulateForUser(
     }
   }
 
-  const unitPrice = catalogData.unitPrice?.[discountLevel] ?? catalogData.unitPrice?.none ?? 0;
+  // Machine auto-bill resolves through the catalog item's canonical
+  // variant (`variants[0]`). Machines have a single variant by design.
+  const primaryVariant = catalogData.variants?.[0];
+  if (!primaryVariant) {
+    logger.warn("Catalog template has no variants — billing 0", {
+      catalogId: catalogRef.id,
+    });
+  }
+  const variantId = primaryVariant?.id ?? null;
+  const pricingModel = primaryVariant?.pricingModel ?? null;
+  const variantUnitPrice = primaryVariant?.unitPrice;
+  const unitPrice = variantUnitPrice
+    ? (discountLevel === "member" && typeof variantUnitPrice.member === "number"
+        ? variantUnitPrice.member
+        : variantUnitPrice.default)
+    : 0;
 
   // Find or create open checkout
   const checkoutsQuery = await db.collection("checkouts")
@@ -343,6 +358,8 @@ async function accumulateForUser(
       description: catalogData.name,
       origin: "nfc",
       catalogId: catalogRef,
+      variantId,
+      pricingModel,
       created: Timestamp.now(),
       quantity: totalHours,
       unitPrice,

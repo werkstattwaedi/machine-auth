@@ -29,11 +29,17 @@ interface PriceListDoc {
   active?: boolean;
 }
 
+interface CatalogVariant {
+  id: string;
+  label: string;
+  pricingModel: PricingModel;
+  unitPrice?: { default?: number; member?: number };
+}
+
 interface CatalogItemDoc {
   code: string;
   name: string;
-  pricingModel: PricingModel;
-  unitPrice?: Record<string, number>;
+  variants?: CatalogVariant[];
 }
 
 /**
@@ -108,18 +114,28 @@ export const getPriceListPdfUrl = onCall({ memory: "512MiB" }, async (request) =
 
   // Preserve the order from priceList.items but skip deleted ones, then
   // sort by code (numeric-aware) for a stable, human-friendly listing.
+  // For now we render one row per catalog item, using the canonical variant
+  // (variants[0]). Multi-variant items (e.g. Makerspace plywood with m² +
+  // Zuschnitt options) collapse to their primary in the price-list PDF —
+  // PR C can expand this into a per-variant render when the picker UI
+  // grows variant support.
   const items: PriceListCatalogItem[] = itemIds
     .map((id) => catalog.get(id))
     .filter((doc): doc is CatalogItemDoc => doc != null)
-    .map((doc) => ({
-      code: doc.code,
-      name: doc.name,
-      pricingModel: doc.pricingModel,
-      unitPrice: {
-        none: doc.unitPrice?.none ?? 0,
-        member: doc.unitPrice?.member ?? 0,
-      },
-    }))
+    .map((doc) => {
+      const primary = doc.variants?.[0];
+      const defaultPrice = primary?.unitPrice?.default ?? 0;
+      const memberPrice =
+        typeof primary?.unitPrice?.member === "number"
+          ? primary.unitPrice.member
+          : defaultPrice;
+      return {
+        code: doc.code,
+        name: doc.name,
+        pricingModel: primary?.pricingModel ?? "direct",
+        unitPrice: { none: defaultPrice, member: memberPrice },
+      };
+    })
     .sort((a, b) =>
       a.code.localeCompare(b.code, undefined, { numeric: true })
     );

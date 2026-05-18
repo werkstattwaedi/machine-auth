@@ -17,35 +17,41 @@ import type {
   UserEntity,
 } from "../../src/types/firestore_entities";
 
-const SINGLE_SKU_ID = "test-cat-mem-single";
-const FAMILY_SKU_ID = "test-cat-mem-family";
+// The membership SKU is referenced from production code via the
+// `config/catalog-references` doc — the test seeds both the catalog
+// entry and the pointer. The specific doc ID is opaque to runtime code;
+// we use a recognisable test sentinel.
+const MEMBERSHIP_CATALOG_ID = "test-membership-catalog";
 
 async function seedCatalog() {
   const db = getFirestore();
-  const single: CatalogEntity = {
-    code: "MEMBER-SINGLE",
-    name: "Mitgliedschaft Einzel (Jahr)",
+  const membership: CatalogEntity = {
+    code: "MEMBERSHIP",
+    name: "Mitgliedschaft",
     workshops: ["diverses"],
-    pricingModel: "direct",
-    unitPrice: { none: 50, member: 50 },
+    category: ["Mitgliedschaft"],
     active: true,
     userCanAdd: false,
-    description: "Single membership.",
-    kind: "membership-single",
+    description: "Jahresmitgliedschaft Verein Offene Werkstatt Wädenswil.",
+    variants: [
+      {
+        id: "single",
+        label: "Einzel (Jahr)",
+        pricingModel: "direct",
+        unitPrice: { default: 50 },
+      },
+      {
+        id: "family",
+        label: "Familie (Jahr)",
+        pricingModel: "direct",
+        unitPrice: { default: 70 },
+      },
+    ],
   };
-  const family: CatalogEntity = {
-    code: "MEMBER-FAMILY",
-    name: "Mitgliedschaft Familie (Jahr)",
-    workshops: ["diverses"],
-    pricingModel: "direct",
-    unitPrice: { none: 70, member: 70 },
-    active: true,
-    userCanAdd: false,
-    description: "Family membership.",
-    kind: "membership-family",
-  };
-  await db.collection("catalog").doc(SINGLE_SKU_ID).set(single);
-  await db.collection("catalog").doc(FAMILY_SKU_ID).set(family);
+  await db.collection("catalog").doc(MEMBERSHIP_CATALOG_ID).set(membership);
+  await db
+    .doc("config/catalog-references")
+    .set({ membership: db.collection("catalog").doc(MEMBERSHIP_CATALOG_ID) });
 }
 
 async function seedUser(uid: string): Promise<void> {
@@ -95,7 +101,7 @@ describe("purchaseMembership (Integration)", () => {
     );
 
     expect(res.unitPrice).to.equal(50);
-    expect(res.catalogId).to.equal(SINGLE_SKU_ID);
+    expect(res.catalogId).to.equal(MEMBERSHIP_CATALOG_ID);
 
     const db = getFirestore();
     const checkoutSnap = await db.collection("checkouts").doc(res.checkoutId).get();
@@ -113,7 +119,7 @@ describe("purchaseMembership (Integration)", () => {
     expect(item.workshop).to.equal("diverses");
     expect(item.unitPrice).to.equal(50);
     expect(item.totalPrice).to.equal(50);
-    expect(item.catalogId?.id).to.equal(SINGLE_SKU_ID);
+    expect(item.catalogId?.id).to.equal(MEMBERSHIP_CATALOG_ID);
   });
 
   it("appends to an existing open checkout instead of creating a new one", async () => {
@@ -174,7 +180,7 @@ describe("purchaseMembership (Integration)", () => {
     expect(itemsSnap.size).to.equal(2);
     const membershipItem = itemsSnap.docs
       .map((d) => d.data() as CheckoutItemEntity)
-      .find((i) => i.catalogId?.id === FAMILY_SKU_ID);
+      .find((i) => i.catalogId?.id === MEMBERSHIP_CATALOG_ID);
     expect(membershipItem).to.exist;
     expect(membershipItem!.workshop).to.equal("diverses");
     expect(membershipItem!.unitPrice).to.equal(70);
@@ -204,9 +210,10 @@ describe("purchaseMembership (Integration)", () => {
     } satisfies CheckoutEntity);
     await existingRef.collection("items").add({
       workshop: "diverses",
-      description: "Mitgliedschaft Einzel (Jahr)",
+      description: "Mitgliedschaft — Einzel (Jahr)",
       origin: "manual",
-      catalogId: db.collection("catalog").doc(SINGLE_SKU_ID),
+      catalogId: db.collection("catalog").doc(MEMBERSHIP_CATALOG_ID),
+      variantId: "single",
       created: Timestamp.now(),
       quantity: 1,
       unitPrice: 50,

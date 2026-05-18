@@ -142,7 +142,7 @@ function MaterialAddPage() {
                   <span className="text-sm font-medium">{item.name}</span>
                 </div>
                 <span className="text-sm text-muted-foreground">
-                  {formatCHF(item.unitPrice?.none ?? 0)}/{getShortUnit(item.pricingModel)}
+                  {formatCHF(item.variants?.[0]?.unitPrice.default ?? 0)}/{getShortUnit(item.variants?.[0]?.pricingModel ?? "direct")}
                 </span>
               </CardContent>
             </Card>
@@ -205,10 +205,17 @@ function MaterialAddPage() {
   )
     ? "member"
     : "none"
-  const unitPrice = catalogItem.unitPrice[discountLevel] ?? catalogItem.unitPrice.none ?? 0
+  // Material QR flow always uses the canonical variant (no variant
+  // selector UI yet — PR C adds that).
+  const variant = catalogItem.variants?.[0]
+  const unitPrice = variant
+    ? (discountLevel === "member" && typeof variant.unitPrice.member === "number"
+        ? variant.unitPrice.member
+        : variant.unitPrice.default)
+    : 0
 
   // Compute quantity and price based on pricing model
-  const pm = catalogItem.pricingModel
+  const pm = variant?.pricingModel ?? "direct"
   const pricing = computePricing(pm, unitPrice, {
     quantity: parseFloat(quantity) || 0,
     lengthCm: parseFloat(lengthCm) || 0,
@@ -256,7 +263,8 @@ function MaterialAddPage() {
             description: catalogItem.name,
             origin: "qr",
             catalogId: catalogRef(db, id),
-            pricingModel: catalogItem.pricingModel ?? null,
+            variantId: variant?.id ?? null,
+            pricingModel: variant?.pricingModel ?? null,
             created: serverTimestamp(),
             quantity: computedQty,
             unitPrice,
@@ -272,7 +280,8 @@ function MaterialAddPage() {
             description: catalogItem.name,
             origin: "qr",
             catalogId: catalogRef(db, id),
-            pricingModel: catalogItem.pricingModel ?? null,
+            variantId: variant?.id ?? null,
+            pricingModel: variant?.pricingModel ?? null,
             created: serverTimestamp(),
             quantity: computedQty,
             unitPrice,

@@ -23,13 +23,18 @@ import { useAuth } from "@modules/lib/auth"
 import { useDb, useFunctions } from "@modules/lib/firebase-context"
 import { useDocument, useCollection } from "@modules/lib/firestore"
 import {
-  catalogCollection,
   checkoutItemsCollection,
   checkoutsCollection,
+  configRef,
   membershipInvitesCollection,
   membershipsCollection,
   userRef,
 } from "@modules/lib/firestore-helpers"
+import type {
+  CatalogItemDoc,
+  CatalogReferencesDoc,
+} from "@modules/lib/firestore-entities"
+import type { DocumentReference } from "firebase/firestore"
 import { formatDate } from "@modules/lib/format"
 import { formatFullName } from "@modules/lib/username-utils"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
@@ -94,27 +99,36 @@ function MembershipPage() {
   const { data: openCheckoutItems } = useCollection(
     openCheckout ? checkoutItemsCollection(db, openCheckout.id) : null,
   )
-  const { data: membershipSkus } = useCollection(
-    catalogCollection(db),
-    where("kind", "in", ["membership-single", "membership-family"]),
+  // Resolve the membership catalog item via `config/catalog-references`
+  // (same indirection `config/pricing` uses for entry fees). Then read
+  // the catalog doc itself for prices. Two reactive reads chained; both
+  // null-tolerant. The previous collection-group `where("kind", "in",
+  // [...])` query is gone — the two membership types live as variants
+  // on the one referenced doc.
+  const { data: catalogRefsDoc } = useDocument(
+    configRef(db, "catalog-references") as unknown as DocumentReference<CatalogReferencesDoc>,
   )
-  const skuKindById = React.useMemo(() => {
-    const m = new Map<string, "single" | "family">()
-    for (const sku of membershipSkus) {
-      if (sku.kind === "membership-single") m.set(sku.id, "single")
-      else if (sku.kind === "membership-family") m.set(sku.id, "family")
-    }
-    return m
-  }, [membershipSkus])
-  const pendingMembershipType: "single" | "family" | null = React.useMemo(() => {
-    for (const item of openCheckoutItems) {
-      const skuId = item.catalogId?.id
-      if (skuId && skuKindById.has(skuId)) {
-        return skuKindById.get(skuId)!
+  const membershipDocRef =
+    catalogRefsDoc?.membership as DocumentReference<CatalogItemDoc> | undefined
+  const { data: membershipCatalog } = useDocument(membershipDocRef ?? null)
+  const membershipPriceByType: Record<"single" | "family", string> =
+    React.useMemo(() => {
+      const lookup = (id: "single" | "family") => {
+        const v = membershipCatalog?.variants?.find((x) => x.id === id)
+        return v ? String(v.unitPrice.default) : "—"
       }
+      return { single: lookup("single"), family: lookup("family") }
+    }, [membershipCatalog])
+  const pendingMembershipType: "single" | "family" | null = React.useMemo(() => {
+    const membershipId = membershipDocRef?.id
+    if (!membershipId) return null
+    for (const item of openCheckoutItems) {
+      if (item.catalogId?.id !== membershipId) continue
+      if (item.variantId === "single") return "single"
+      if (item.variantId === "family") return "family"
     }
     return null
-  }, [openCheckoutItems, skuKindById])
+  }, [openCheckoutItems, membershipDocRef])
 
   const startPurchase = async (
     type: "single" | "family",
@@ -150,7 +164,11 @@ function MembershipPage() {
       {pendingMembershipType ? (
         <PendingMembershipCheckout type={pendingMembershipType} />
       ) : !membership ? (
-        <NoMembership onPurchase={startPurchase} loading={purchase.loading} />
+        <NoMembership
+          onPurchase={startPurchase}
+          loading={purchase.loading}
+          priceByType={membershipPriceByType}
+        />
       ) : (
         <StatusHero
           type={membership.type}
@@ -319,9 +337,11 @@ function PendingMembershipCheckout({
 function NoMembership({
   onPurchase,
   loading,
+  priceByType,
 }: {
   onPurchase: (type: "single" | "family", renewExisting: boolean) => void
   loading: boolean
+  priceByType: Record<"single" | "family", string>
 }) {
   const benefits: React.ReactNode[] = [
     <>
@@ -369,7 +389,7 @@ function NoMembership({
             }
             title="Einzel"
             description="Eine Person. Mitglieder-Preise auf alle Werkstätten und Material."
-            price="50"
+            price={priceByType.single}
             onClick={() => onPurchase("single", false)}
             disabled={loading}
           />
@@ -382,7 +402,7 @@ function NoMembership({
             }
             title="Familie"
             description="Bis zu 5 Erwachsene + Kinderkonten. Alle bekommen Mitglieder-Preise."
-            price="70"
+            price={priceByType.family}
             onClick={() => onPurchase("family", false)}
             disabled={loading}
           />

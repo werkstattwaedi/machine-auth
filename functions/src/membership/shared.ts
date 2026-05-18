@@ -18,7 +18,7 @@ import {
   type Transaction,
 } from "firebase-admin/firestore";
 import type {
-  CatalogEntity,
+  CatalogReferencesEntity,
   CheckoutItemEntity,
   MembershipEntity,
   MembershipType,
@@ -28,36 +28,54 @@ import type {
 export const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
 export const INVITE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
-export function membershipTypeForCatalogKind(
-  kind: string | null | undefined,
+/**
+ * Look up the Mitgliedschaft catalog doc ID via `config/catalog-references`.
+ * Returns null when the config doc or the `membership` field is missing —
+ * callers should treat that as "no membership SKU configured" and bail
+ * gracefully (e.g. dedup guards short-circuit, trigger no-ops).
+ */
+export async function loadMembershipCatalogId(
+  database: Firestore,
+): Promise<string | null> {
+  const snap = await database.doc("config/catalog-references").get();
+  const data = snap.data() as CatalogReferencesEntity | undefined;
+  return data?.membership?.id ?? null;
+}
+
+/**
+ * Map a CheckoutItem's variant id (when it points at the membership
+ * catalog doc) to a `MembershipType`. Returns null when the item isn't a
+ * membership purchase. Caller passes the membership catalog id resolved
+ * via `loadMembershipCatalogId` (or already in hand).
+ */
+export function membershipTypeForCheckoutItem(
+  item: Pick<CheckoutItemEntity, "catalogId" | "variantId">,
+  membershipCatalogId: string,
 ): MembershipType | null {
-  if (kind === "membership-single") return "single";
-  if (kind === "membership-family") return "family";
+  if (item.catalogId?.id !== membershipCatalogId) return null;
+  if (item.variantId === "single") return "single";
+  if (item.variantId === "family") return "family";
   return null;
 }
 
 /**
  * Inspect a checkout's items and return the membership type implied by any
- * membership-fee SKU present, or null if none. Resolves each item's catalog
- * doc to read its `kind` discriminator. Family wins over single (higher tier
- * supersedes) — same disambiguation rule as `processMembershipPayment`.
+ * membership-fee SKU present, or null if none. Reads the item's
+ * `variantId` directly — no Firestore lookup on the catalog needed.
+ * Family wins over single (higher tier supersedes) — same disambiguation
+ * rule as `processMembershipPayment`.
  *
  * Used by `purchaseMembership` to reject double-adds and by the post-checkout
- * trigger to decide whether to create/extend a membership.
+ * trigger to decide whether to create/extend a membership. Caller passes
+ * the membership catalog id (resolved once via `loadMembershipCatalogId`).
  */
 export async function detectMembershipKindForItems(
-  database: Firestore,
+  _database: Firestore,
   items: CheckoutItemEntity[],
+  membershipCatalogId: string,
 ): Promise<MembershipType | null> {
-  const catalogIds = items
-    .map((i) => i.catalogId)
-    .filter((r): r is DocumentReference => r != null);
-  if (catalogIds.length === 0) return null;
-
-  const catalogDocs = await Promise.all(catalogIds.map((r) => r.get()));
-  const kinds = catalogDocs
-    .map((d) => (d.data() as CatalogEntity | undefined)?.kind ?? null)
-    .map((k) => membershipTypeForCatalogKind(k))
+  const kinds = items
+    .map((i) => membershipTypeForCheckoutItem(i, membershipCatalogId))
     .filter((k): k is MembershipType => k !== null);
 
   if (kinds.length === 0) return null;

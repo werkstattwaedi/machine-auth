@@ -251,8 +251,12 @@ function PickerBody({
         filtered.map((cat) => {
           const isExpanded =
             expansion?.kind === "catalog" && expansion.id === cat.id
-          const unitPrice =
-            cat.unitPrice[discountLevel] ?? cat.unitPrice.none ?? 0
+          const variant = cat.variants?.[0]
+          const unitPrice = variant
+            ? (discountLevel === "member" && typeof variant.unitPrice.member === "number"
+                ? variant.unitPrice.member
+                : variant.unitPrice.default)
+            : 0
           return isExpanded ? (
             <ExpandedRow
               key={cat.id}
@@ -375,7 +379,7 @@ function CollapsedRow({
       <div className="font-heading text-sm font-semibold tabular-nums whitespace-nowrap">
         {formatCHF(unitPrice)}
         <span className="ml-0.5 font-body text-[11px] font-normal text-muted-foreground">
-          /{getShortUnit(catalog.pricingModel)}
+          /{getShortUnit(catalog.variants?.[0]?.pricingModel ?? "direct")}
         </span>
       </div>
     </button>
@@ -407,6 +411,7 @@ function ExpandedRow({
   onCancel: () => void
   onAdd: (item: CheckoutItemLocal) => void
 }) {
+  const variant = catalog.variants?.[0]
   const baseItem: Omit<
     CheckoutItemLocal,
     "quantity" | "totalPrice" | "formInputs"
@@ -416,7 +421,8 @@ function ExpandedRow({
     description: catalog.name,
     origin: "manual",
     catalogId: catalog.id,
-    pricingModel: catalog.pricingModel,
+    variantId: variant?.id ?? null,
+    pricingModel: variant?.pricingModel ?? null,
     unitPrice,
   }
 
@@ -457,12 +463,13 @@ function formatPriceForCatalog(
   config: PricingConfig,
   unitPrice: number,
 ): string {
-  if (cat.pricingModel === "sla") {
+  const pm = cat.variants?.[0]?.pricingModel ?? "direct"
+  if (pm === "sla") {
     // SLA has two price axes; expose the resin per-ml figure as the lead
     // line, the per-layer cost shows up below the layer input.
     return formatUnitPrice(unitPrice, "l", { referenceQuantity: 0.05 })
   }
-  return `${formatCHF(unitPrice)} / ${getUnitLabel(config, cat.pricingModel)}`
+  return `${formatCHF(unitPrice)} / ${getUnitLabel(config, pm)}`
 }
 
 function PickerEntryForm({
@@ -480,7 +487,7 @@ function PickerEntryForm({
   baseItem: Omit<CheckoutItemLocal, "quantity" | "totalPrice" | "formInputs">
   onAdd: (item: CheckoutItemLocal) => void
 }) {
-  const pm = catalog.pricingModel as PricingModel
+  const pm = (catalog.variants?.[0]?.pricingModel ?? "direct") as PricingModel
   switch (pm) {
     case "area":
       return (

@@ -95,21 +95,67 @@ export interface UsageMachineEntity {
 export type PricingModel = "time" | "area" | "length" | "count" | "weight" | "direct" | "sla";
 export type DiscountLevel = "none" | "member";
 
-// Discriminator for special-purpose catalog items. Absent for regular items.
-// The post-checkout membership-payment trigger uses this to identify which
-// items, when paid, create or extend a membership.
-export type CatalogItemKind = "membership-single" | "membership-family";
+/**
+ * Per-variant price. `default` is mandatory and is what an un-discounted
+ * customer pays. Any additional tier (today only `member`) is an optional
+ * override; if absent, the default applies. Schema-extensible to future
+ * tiers (volunteer, child, …) without touching items that don't use them.
+ */
+export interface VariantPrice {
+  default: number;
+  member?: number;
+}
+
+/**
+ * Resolve a `VariantPrice` for a given customer tier. `DiscountLevel`
+ * `"none"` maps to `default` (un-discounted baseline). Other tiers fall
+ * back to `default` when the override is not set on the variant.
+ */
+export function priceForTier(price: VariantPrice, tier: DiscountLevel): number {
+  if (tier === "member" && typeof price.member === "number") return price.member;
+  return price.default;
+}
+
+export interface CatalogVariant {
+  id: string;                            // stable within the item, e.g. "default", "m2", "zuschnitt-a3", "single", "family"
+  // Display label (e.g. "Per m²", "Zuschnitt A3"). Only meaningful when
+  // an item has more than one variant; single-variant items rely on the
+  // catalog `name` to describe themselves and leave `label` unset.
+  label?: string | null;
+  pricingModel: PricingModel;
+  unitPrice: VariantPrice;
+}
+
+/**
+ * Doc at `config/catalog-references`. Singleton lookup table for catalog
+ * items referenced by production code. The seed writes this alongside
+ * the catalog; ops can rebind a reference (e.g. roll a new membership
+ * SKU mid-year) without a code deploy.
+ */
+export interface CatalogReferencesEntity {
+  /** The Mitgliedschaft catalog item (variants: "single", "family"). */
+  membership: DocumentReference;
+}
 
 export interface CatalogEntity {
   code: string;
   name: string;
   workshops: string[];
-  pricingModel: PricingModel;
-  unitPrice: Record<DiscountLevel, number>;
+  /**
+   * Root-to-leaf category path. Free-form values, not pre-registered;
+   * queryable with `array-contains` at any depth. The picker derives the
+   * chip tree from the values present among items in the current scope.
+   */
+  category: string[];
   active: boolean;
   userCanAdd: boolean;
   description?: string | null;
-  kind?: CatalogItemKind | null;
+  /**
+   * 1..n purchase options. `variants[0]` is canonical: the picker uses it
+   * silently when length == 1; auto-bill flows resolve through it. Array
+   * order is meaningful — keep the default first.
+   */
+  variants: CatalogVariant[];
 }
 
 // --- Checkouts ---
@@ -171,6 +217,8 @@ export interface CheckoutItemEntity {
   description: string;
   origin: ItemOrigin;
   catalogId: DocumentReference | null; // Reference to /catalog/{itemId}, null for free-form
+  /** Matches catalog.variants[i].id when catalogId is set; null for ad-hoc origin="manual" / "qr". */
+  variantId?: string | null;
   created: Timestamp;
   quantity: number;
   unitPrice: number;

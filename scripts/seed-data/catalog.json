@@ -3,1865 +3,3932 @@
     "id": "00catalog0station001",
     "code": "1001",
     "name": "Stationäre Maschinen",
-    "workshops": ["holz"],
-    "pricingModel": "time",
-    "unitPrice": { "none": 40, "member": 20 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": false,
-    "description": "Holzbearbeitungsmaschinen (Kreissäge, Bandsäge, etc.)"
+    "description": "Holzbearbeitungsmaschinen (Kreissäge, Bandsäge, etc.)",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "time",
+        "unitPrice": {
+          "default": 40,
+          "member": 20
+        }
+      }
+    ]
   },
   {
     "id": "00catalog0laser0012",
     "code": "1012",
     "name": "Laser Cutter",
-    "workshops": ["makerspace"],
-    "pricingModel": "time",
-    "unitPrice": { "none": 20, "member": 10 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": false,
-    "description": "CO2 Laser Cutter"
+    "description": "CO2 Laser Cutter",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "time",
+        "unitPrice": {
+          "default": 20,
+          "member": 10
+        }
+      }
+    ]
   },
   {
     "id": "00catalog0drechs002",
     "code": "1002",
     "name": "Drechselbank",
-    "workshops": ["holz"],
-    "pricingModel": "time",
-    "unitPrice": { "none": 40, "member": 20 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
-    "userCanAdd": false
+    "userCanAdd": false,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "time",
+        "unitPrice": {
+          "default": 40,
+          "member": 20
+        }
+      }
+    ]
   },
   {
     "id": "00catalog0schweis03",
     "code": "2001",
     "name": "Maschinen / Schweissanlage",
-    "workshops": ["metall"],
-    "pricingModel": "time",
-    "unitPrice": { "none": 40, "member": 20 },
+    "workshops": [
+      "metall"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
-    "userCanAdd": false
+    "userCanAdd": false,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "time",
+        "unitPrice": {
+          "default": 40,
+          "member": 20
+        }
+      }
+    ]
   },
   {
     "id": "00catalog0plasma004",
     "code": "2002",
     "name": "Plasmaschneider / Brenner",
-    "workshops": ["metall"],
-    "pricingModel": "time",
-    "unitPrice": { "none": 40, "member": 20 },
+    "workshops": [
+      "metall"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
-    "userCanAdd": true
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "time",
+        "unitPrice": {
+          "default": 40,
+          "member": 20
+        }
+      }
+    ]
   },
   {
     "id": "00catalog0sandblk05",
     "code": "2003",
     "name": "Sandstrahlen Klein",
-    "workshops": ["metall", "glas"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 5, "member": 5 },
+    "workshops": [
+      "metall",
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
-    "userCanAdd": true
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 5
+        }
+      }
+    ]
   },
   {
     "id": "00catalog0sandblg06",
     "code": "2004",
     "name": "Sandstrahlen Gross",
-    "workshops": ["metall", "glas"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 20, "member": 20 },
+    "workshops": [
+      "metall",
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
-    "userCanAdd": true
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 20
+        }
+      }
+    ]
   },
   {
     "id": "00catalog03dpla0007",
     "code": "9001",
     "name": "Filament",
-    "workshops": ["makerspace"],
-    "pricingModel": "weight",
-    "unitPrice": { "none": 65, "member": 65 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
-    "userCanAdd": true
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "weight",
+        "unitPrice": {
+          "default": 65
+        }
+      }
+    ]
   },
   {
     "id": "00catalog03dpetg008",
     "code": "9002",
     "name": "Filament (Spezial)",
-    "workshops": ["makerspace"],
-    "pricingModel": "weight",
-    "unitPrice": { "none": 105, "member": 105 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
-    "userCanAdd": true
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "weight",
+        "unitPrice": {
+          "default": 105
+        }
+      }
+    ]
   },
   {
-    "id": "00catalog03dpetg008",
+    "id": "Z2dVCDeuVMsgx64t6f6D",
     "code": "9002",
     "name": "Filament (Technisch)",
-    "workshops": ["makerspace"],
-    "pricingModel": "weight",
-    "unitPrice": { "none": 210, "member": 210 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
-    "userCanAdd": true
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "weight",
+        "unitPrice": {
+          "default": 210
+        }
+      }
+    ]
   },
   {
     "id": "00catalog0sperrh009",
     "code": "3001",
     "name": "Sperrholz Birke 4mm",
-    "workshops": ["holz"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 45, "member": 45 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
-    "userCanAdd": true
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 45
+        }
+      }
+    ]
   },
   {
     "id": "00catalog0kanth0010",
     "code": "3002",
     "name": "Kantholz Fichte",
-    "workshops": ["holz"],
-    "pricingModel": "length",
-    "unitPrice": { "none": 12, "member": 12 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
-    "userCanAdd": true
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "length",
+        "unitPrice": {
+          "default": 12
+        }
+      }
+    ]
   },
-
   {
     "id": "00catmat000000003101",
     "code": "3101",
     "name": "Spanplatte roh 16mm",
-    "workshops": ["holz"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 13.35, "member": 13.35 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Format 2800×2070mm"
+    "description": "Format 2800×2070mm",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 13.35
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000003102",
     "code": "3102",
     "name": "Spanplatte roh 19mm",
-    "workshops": ["holz"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 15.40, "member": 15.40 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Format 2800×2070mm"
+    "description": "Format 2800×2070mm",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 15.4
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000003103",
     "code": "3103",
     "name": "Spanplatte weiss beschichtet 8mm",
-    "workshops": ["holz"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 15.12, "member": 15.12 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Format 2800×2070mm"
+    "description": "Format 2800×2070mm",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 15.12
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000003104",
     "code": "3104",
     "name": "Spanplatte weiss beschichtet 16mm",
-    "workshops": ["holz"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 17.60, "member": 17.60 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Format 2800×2070mm"
+    "description": "Format 2800×2070mm",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 17.6
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000003105",
     "code": "3105",
     "name": "Spanplatte weiss beschichtet 19mm",
-    "workshops": ["holz"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 18.45, "member": 18.45 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Format 2800×2070mm"
+    "description": "Format 2800×2070mm",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 18.45
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000003110",
     "code": "3110",
     "name": "MDF 3mm",
-    "workshops": ["holz"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 6.70, "member": 6.70 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Format 2800×2070mm"
+    "description": "Format 2800×2070mm",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 6.7
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000003111",
     "code": "3111",
     "name": "MDF 4mm",
-    "workshops": ["holz"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 8.80, "member": 8.80 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Format 2800×2070mm"
+    "description": "Format 2800×2070mm",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 8.8
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000003112",
     "code": "3112",
     "name": "MDF 6mm",
-    "workshops": ["holz"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 7.90, "member": 7.90 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Format 2800×2070mm"
+    "description": "Format 2800×2070mm",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 7.9
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000003113",
     "code": "3113",
     "name": "MDF 8mm",
-    "workshops": ["holz"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 10.20, "member": 10.20 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Format 2800×2070mm"
+    "description": "Format 2800×2070mm",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 10.2
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000003114",
     "code": "3114",
     "name": "MDF 10mm",
-    "workshops": ["holz"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 11.25, "member": 11.25 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Format 2800×2070mm"
+    "description": "Format 2800×2070mm",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 11.25
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000003115",
     "code": "3115",
     "name": "MDF 12mm",
-    "workshops": ["holz"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 12.45, "member": 12.45 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Format 2800×2070mm"
+    "description": "Format 2800×2070mm",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 12.45
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000003116",
     "code": "3116",
     "name": "MDF 16mm",
-    "workshops": ["holz"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 18.20, "member": 18.20 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Format 2800×2070mm"
+    "description": "Format 2800×2070mm",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 18.2
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000003117",
     "code": "3117",
     "name": "MDF 19mm",
-    "workshops": ["holz"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 18.70, "member": 18.70 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Format 2800×2070mm"
+    "description": "Format 2800×2070mm",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 18.7
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000003118",
     "code": "3118",
     "name": "MDF 22mm",
-    "workshops": ["holz"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 26.05, "member": 26.05 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Format 2800×2070mm"
+    "description": "Format 2800×2070mm",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 26.05
+        }
+      }
+    ]
   },
-
   {
     "id": "00catmat000000003201",
     "code": "3201",
     "name": "Sperrholz Birke AW100 4mm",
-    "workshops": ["holz"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 19.65, "member": 19.65 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Birke normal AW 100, Format 1525×3050mm"
+    "description": "Birke normal AW 100, Format 1525×3050mm",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 19.65
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000003202",
     "code": "3202",
     "name": "Sperrholz Birke AW100 6.5mm",
-    "workshops": ["holz"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 24.80, "member": 24.80 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Birke normal AW 100, Format 1525×3050mm"
+    "description": "Birke normal AW 100, Format 1525×3050mm",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 24.8
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000003203",
     "code": "3203",
     "name": "Sperrholz Birke AW100 9mm",
-    "workshops": ["holz"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 39.95, "member": 39.95 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Birke normal AW 100, Format 1525×3050mm"
+    "description": "Birke normal AW 100, Format 1525×3050mm",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 39.95
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000003204",
     "code": "3204",
     "name": "Sperrholz Birke AW100 12mm",
-    "workshops": ["holz"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 51.15, "member": 51.15 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Birke normal AW 100, Format 1525×3050mm"
+    "description": "Birke normal AW 100, Format 1525×3050mm",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 51.15
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000003205",
     "code": "3205",
     "name": "Sperrholz Birke AW100 15mm",
-    "workshops": ["holz"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 59.80, "member": 59.80 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Birke normal AW 100, Format 1525×3050mm"
+    "description": "Birke normal AW 100, Format 1525×3050mm",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 59.8
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000003206",
     "code": "3206",
     "name": "Sperrholz Birke AW100 18mm",
-    "workshops": ["holz"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 69.00, "member": 69.00 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Birke normal AW 100, Format 1525×3050mm"
+    "description": "Birke normal AW 100, Format 1525×3050mm",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 69
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000003207",
     "code": "3207",
     "name": "Sperrholz Birke AW100 21mm",
-    "workshops": ["holz"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 79.95, "member": 79.95 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Birke normal AW 100, Format 1525×3050mm"
+    "description": "Birke normal AW 100, Format 1525×3050mm",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 79.95
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000003210",
     "code": "3210",
     "name": "Sperrholz Birke Film/Film Schneeweiss Satin 18mm",
-    "workshops": ["holz"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 176.25, "member": 176.25 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Format 1500×3000mm"
+    "description": "Format 1500×3000mm",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 176.25
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000003211",
     "code": "3211",
     "name": "Sperrholz Birke Phenolharzfilm 15mm",
-    "workshops": ["holz"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 41.88, "member": 41.88 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Birke 2-seitig Phenolharzfilm AW100, Format 1500×3000mm"
+    "description": "Birke 2-seitig Phenolharzfilm AW100, Format 1500×3000mm",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 41.88
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000003212",
     "code": "3212",
     "name": "Sperrholz Birke Phenolharzfilm 18mm",
-    "workshops": ["holz"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 47.02, "member": 47.02 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Birke 2-seitig Phenolharzfilm AW100, Format 1500×3000mm"
+    "description": "Birke 2-seitig Phenolharzfilm AW100, Format 1500×3000mm",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 47.02
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000003213",
     "code": "3213",
     "name": "Sperrholz Birke Phenolharzfilm 21mm",
-    "workshops": ["holz"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 54.13, "member": 54.13 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Birke 2-seitig Phenolharzfilm AW100, Format 1500×3000mm"
+    "description": "Birke 2-seitig Phenolharzfilm AW100, Format 1500×3000mm",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 54.13
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000003214",
     "code": "3214",
     "name": "Sperrholz Birke Phenolharzfilm 24mm",
-    "workshops": ["holz"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 69.85, "member": 69.85 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Birke 2-seitig Phenolharzfilm AW100, Format 1500×3000mm"
+    "description": "Birke 2-seitig Phenolharzfilm AW100, Format 1500×3000mm",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 69.85
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000003220",
     "code": "3220",
     "name": "Sperrholz Okoumé 4mm",
-    "workshops": ["holz"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 17.85, "member": 17.85 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Okoumé Industrie AW 100, Format 2500×1700mm"
+    "description": "Okoumé Industrie AW 100, Format 2500×1700mm",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 17.85
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000003221",
     "code": "3221",
     "name": "Sperrholz Okoumé 6mm",
-    "workshops": ["holz"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 24.05, "member": 24.05 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Okoumé Industrie AW 100, Format 2500×1700mm"
+    "description": "Okoumé Industrie AW 100, Format 2500×1700mm",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 24.05
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000003222",
     "code": "3222",
     "name": "Sperrholz Okoumé 8mm",
-    "workshops": ["holz"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 28.45, "member": 28.45 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Okoumé Industrie AW 100, Format 2500×1700mm"
+    "description": "Okoumé Industrie AW 100, Format 2500×1700mm",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 28.45
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000003223",
     "code": "3223",
     "name": "Sperrholz Okoumé 10mm",
-    "workshops": ["holz"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 29.80, "member": 29.80 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Okoumé Industrie AW 100, Format 2500×1700mm"
+    "description": "Okoumé Industrie AW 100, Format 2500×1700mm",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 29.8
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000003224",
     "code": "3224",
     "name": "Sperrholz Okoumé 12mm",
-    "workshops": ["holz"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 37.50, "member": 37.50 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Okoumé Industrie AW 100, Format 2500×1700mm"
+    "description": "Okoumé Industrie AW 100, Format 2500×1700mm",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 37.5
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000003225",
     "code": "3225",
     "name": "Sperrholz Okoumé 15mm",
-    "workshops": ["holz"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 43.70, "member": 43.70 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Okoumé Industrie AW 100, Format 2500×1700mm"
+    "description": "Okoumé Industrie AW 100, Format 2500×1700mm",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 43.7
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000003226",
     "code": "3226",
     "name": "Sperrholz Okoumé 19mm",
-    "workshops": ["holz"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 55.65, "member": 55.65 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Okoumé Industrie AW 100, Format 2500×1700mm"
+    "description": "Okoumé Industrie AW 100, Format 2500×1700mm",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 55.65
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000003230",
     "code": "3230",
     "name": "Sperrholz Birke Flugzeug 1mm",
-    "workshops": ["holz"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 43.80, "member": 43.80 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Birke Flugzeugsperrholz"
+    "description": "Birke Flugzeugsperrholz",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 43.8
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000003231",
     "code": "3231",
     "name": "Sperrholz Birke Flugzeug 2mm",
-    "workshops": ["holz"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 51.65, "member": 51.65 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Birke Flugzeugsperrholz"
+    "description": "Birke Flugzeugsperrholz",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 51.65
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000003232",
     "code": "3232",
     "name": "Sperrholz Birke Flugzeug 3mm",
-    "workshops": ["holz"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 65.10, "member": 65.10 },
+    "workshops": [
+      "holz"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Birke Flugzeugsperrholz"
+    "description": "Birke Flugzeugsperrholz",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 65.1
+        }
+      }
+    ]
   },
-
   {
     "id": "00catmat000000004101",
     "code": "4101",
     "name": "Raku Rohling Kugel Ø90mm",
-    "workshops": ["keramik"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 18.00, "member": 18.00 },
+    "workshops": [
+      "keramik"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
-    "userCanAdd": true
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 18
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000004102",
     "code": "4102",
     "name": "Raku Rohling Schale Ø90mm",
-    "workshops": ["keramik"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 15.00, "member": 15.00 },
+    "workshops": [
+      "keramik"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
-    "userCanAdd": true
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 15
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000004103",
     "code": "4103",
     "name": "Raku Rohling Schale Ø150mm",
-    "workshops": ["keramik"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 20.00, "member": 20.00 },
+    "workshops": [
+      "keramik"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
-    "userCanAdd": true
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 20
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000004104",
     "code": "4104",
     "name": "Raku Rohling Schale flach Ø200mm",
-    "workshops": ["keramik"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 24.00, "member": 24.00 },
+    "workshops": [
+      "keramik"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
-    "userCanAdd": true
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 24
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000004105",
     "code": "4105",
     "name": "Raku Rohling Schale Viereck Ø200mm",
-    "workshops": ["keramik"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 24.00, "member": 24.00 },
+    "workshops": [
+      "keramik"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
-    "userCanAdd": true
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 24
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000004106",
     "code": "4106",
     "name": "Raku Rohling Struktur Schale Ø90mm",
-    "workshops": ["keramik"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 15.00, "member": 15.00 },
+    "workshops": [
+      "keramik"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
-    "userCanAdd": true
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 15
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000004107",
     "code": "4107",
     "name": "Raku Rohling Struktur Schale gross",
-    "workshops": ["keramik"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 20.00, "member": 20.00 },
+    "workshops": [
+      "keramik"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
-    "userCanAdd": true
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 20
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000004108",
     "code": "4108",
     "name": "Raku Rohling Struktur gross",
-    "workshops": ["keramik"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 24.00, "member": 24.00 },
+    "workshops": [
+      "keramik"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
-    "userCanAdd": true
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 24
+        }
+      }
+    ]
   },
-
   {
     "id": "00catmat000000004201",
     "code": "4201",
     "name": "G-Ton, unschamottiert, rot",
-    "workshops": ["keramik"],
-    "pricingModel": "weight",
-    "unitPrice": { "none": 2.10, "member": 2.10 },
+    "workshops": [
+      "keramik"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Niederbrand Ton, 1020°C"
+    "description": "Niederbrand Ton, 1020°C",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "weight",
+        "unitPrice": {
+          "default": 2.1
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000004202",
     "code": "4202",
     "name": "K144 Manganton, unschamottiert, dunkelbraun",
-    "workshops": ["keramik"],
-    "pricingModel": "weight",
-    "unitPrice": { "none": 3.50, "member": 3.50 },
+    "workshops": [
+      "keramik"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Niederbrand Ton, 1020°C"
+    "description": "Niederbrand Ton, 1020°C",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "weight",
+        "unitPrice": {
+          "default": 3.5
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000004203",
     "code": "4203",
     "name": "K127 Manganton, feinschamottiert, dunkelbraun",
-    "workshops": ["keramik"],
-    "pricingModel": "weight",
-    "unitPrice": { "none": 3.70, "member": 3.70 },
+    "workshops": [
+      "keramik"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Niederbrand Ton, 1020°C"
+    "description": "Niederbrand Ton, 1020°C",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "weight",
+        "unitPrice": {
+          "default": 3.7
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000004204",
     "code": "4204",
     "name": "B128, fein, cremeweiss",
-    "workshops": ["keramik"],
-    "pricingModel": "weight",
-    "unitPrice": { "none": 3.50, "member": 3.50 },
+    "workshops": [
+      "keramik"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Niederbrand Ton, 1020°C"
+    "description": "Niederbrand Ton, 1020°C",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "weight",
+        "unitPrice": {
+          "default": 3.5
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000004205",
     "code": "4205",
     "name": "B128 CH, feinschamottiert, cremeweiss, Raku",
-    "workshops": ["keramik"],
-    "pricingModel": "weight",
-    "unitPrice": { "none": 3.50, "member": 3.50 },
+    "workshops": [
+      "keramik"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Steinzeug Ton, 1250°C"
+    "description": "Steinzeug Ton, 1250°C",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "weight",
+        "unitPrice": {
+          "default": 3.5
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000004206",
     "code": "4206",
     "name": "B128 CHF, feinschamottiert, cremeweiss, Raku",
-    "workshops": ["keramik"],
-    "pricingModel": "weight",
-    "unitPrice": { "none": 3.60, "member": 3.60 },
+    "workshops": [
+      "keramik"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Steinzeug Ton, 1250°C"
+    "description": "Steinzeug Ton, 1250°C",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "weight",
+        "unitPrice": {
+          "default": 3.6
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000004207",
     "code": "4207",
     "name": "B128 CH, grobschamottiert, cremeweiss, Raku",
-    "workshops": ["keramik"],
-    "pricingModel": "weight",
-    "unitPrice": { "none": 3.50, "member": 3.50 },
+    "workshops": [
+      "keramik"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Steinzeug Ton, 1250°C"
+    "description": "Steinzeug Ton, 1250°C",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "weight",
+        "unitPrice": {
+          "default": 3.5
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000004208",
     "code": "4208",
     "name": "GECH 30 F, schamottiert, beige, stabil",
-    "workshops": ["keramik"],
-    "pricingModel": "weight",
-    "unitPrice": { "none": 3.20, "member": 3.20 },
+    "workshops": [
+      "keramik"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Steinzeug Ton, 1250°C"
+    "description": "Steinzeug Ton, 1250°C",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "weight",
+        "unitPrice": {
+          "default": 3.2
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000004209",
     "code": "4209",
     "name": "GECH 30, grobschamottiert, beige, stabil",
-    "workshops": ["keramik"],
-    "pricingModel": "weight",
-    "unitPrice": { "none": 3.20, "member": 3.20 },
+    "workshops": [
+      "keramik"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Steinzeug Ton, 1250°C"
+    "description": "Steinzeug Ton, 1250°C",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "weight",
+        "unitPrice": {
+          "default": 3.2
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000004210",
     "code": "4210",
     "name": "K110 Pyrit-Ton, feinschamottiert, cremeweiss",
-    "workshops": ["keramik"],
-    "pricingModel": "weight",
-    "unitPrice": { "none": 3.20, "member": 3.20 },
+    "workshops": [
+      "keramik"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Steinzeug Ton, 1250°C, mit Pyrit"
+    "description": "Steinzeug Ton, 1250°C, mit Pyrit",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "weight",
+        "unitPrice": {
+          "default": 3.2
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000004211",
     "code": "4211",
     "name": "GRX 10, feinschamottiert 0–0.3mm, schwarz",
-    "workshops": ["keramik"],
-    "pricingModel": "weight",
-    "unitPrice": { "none": 3.30, "member": 3.30 },
+    "workshops": [
+      "keramik"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Steinzeug Ton, 1250°C"
+    "description": "Steinzeug Ton, 1250°C",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "weight",
+        "unitPrice": {
+          "default": 3.3
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000004212",
     "code": "4212",
     "name": "GRX 20, grobschamottiert 0–3mm, schwarz",
-    "workshops": ["keramik"],
-    "pricingModel": "weight",
-    "unitPrice": { "none": 4.10, "member": 4.10 },
+    "workshops": [
+      "keramik"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Steinzeug Ton, 1250°C"
+    "description": "Steinzeug Ton, 1250°C",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "weight",
+        "unitPrice": {
+          "default": 4.1
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000004213",
     "code": "4213",
     "name": "Brasil, feinschamottiert, dunkelrot/rotbraun",
-    "workshops": ["keramik"],
-    "pricingModel": "weight",
-    "unitPrice": { "none": 4.10, "member": 4.10 },
+    "workshops": [
+      "keramik"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Steinzeug Ton, 1250°C"
+    "description": "Steinzeug Ton, 1250°C",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "weight",
+        "unitPrice": {
+          "default": 4.1
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000004214",
     "code": "4214",
     "name": "Porzellan TM15, Giessporzellan flüssig C42",
-    "workshops": ["keramik"],
-    "pricingModel": "weight",
-    "unitPrice": { "none": 4.40, "member": 4.40 },
+    "workshops": [
+      "keramik"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Steinzeug Ton, 1250°C, weiss, hochgebrannt transluszent"
+    "description": "Steinzeug Ton, 1250°C, weiss, hochgebrannt transluszent",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "weight",
+        "unitPrice": {
+          "default": 4.4
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000004215",
     "code": "4215",
     "name": "Porzellan, hochgebrannt transluszent",
-    "workshops": ["keramik"],
-    "pricingModel": "weight",
-    "unitPrice": { "none": 6.00, "member": 6.00 },
+    "workshops": [
+      "keramik"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Porzellan, max. 1280°C"
+    "description": "Porzellan, max. 1280°C",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "weight",
+        "unitPrice": {
+          "default": 6
+        }
+      }
+    ]
   },
-
   {
     "id": "00catmat000000005101",
     "code": "5101",
     "name": "Effetre-Glasstäbe klar (50cm)",
-    "workshops": ["glas"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 1.50, "member": 1.50 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Glasperlen, pro 50cm Stab"
+    "description": "Glasperlen, pro 50cm Stab",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.5
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000005102",
     "code": "5102",
     "name": "Effetre-Glasstäbe diverse Farben transparent (50cm)",
-    "workshops": ["glas"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 1.70, "member": 1.70 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Glasperlen, pro 50cm Stab"
+    "description": "Glasperlen, pro 50cm Stab",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.7
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000005103",
     "code": "5103",
     "name": "Effetre-Glasstäbe diverse Farben opak (50cm)",
-    "workshops": ["glas"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 2.00, "member": 2.00 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Glasperlen, pro 50cm Stab"
+    "description": "Glasperlen, pro 50cm Stab",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 2
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000005104",
     "code": "5104",
     "name": "Effetre-Glasstäbe spezielle Farben (50cm)",
-    "workshops": ["glas"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 5.00, "member": 5.00 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Glasperlen, pro 50cm Stab"
+    "description": "Glasperlen, pro 50cm Stab",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 5
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000005105",
     "code": "5105",
     "name": "Effetre-Glasstäbe (50cm)",
-    "workshops": ["glas"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 3.00, "member": 3.00 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Glasperlen, pro 50cm Stab"
+    "description": "Glasperlen, pro 50cm Stab",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 3
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000005106",
     "code": "5106",
     "name": "Metal-Stäbe 1.5/2/3mm (10 Stk.)",
-    "workshops": ["glas"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 28.00, "member": 28.00 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Perlenform, Set à 10 Stück"
+    "description": "Perlenform, Set à 10 Stück",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 28
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000005107",
     "code": "5107",
     "name": "Metal-Stab 4mm",
-    "workshops": ["glas"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 4.00, "member": 4.00 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Perlenform, pro Stück"
+    "description": "Perlenform, pro Stück",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 4
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000005108",
     "code": "5108",
     "name": "Metal-Stab 5mm",
-    "workshops": ["glas"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 5.00, "member": 5.00 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Perlenform, pro Stück"
+    "description": "Perlenform, pro Stück",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 5
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000005109",
     "code": "5109",
     "name": "Metal-Stab 6mm",
-    "workshops": ["glas"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 6.00, "member": 6.00 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Perlenform, pro Stück"
+    "description": "Perlenform, pro Stück",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 6
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000005110",
     "code": "5110",
     "name": "Putzer (10min)",
-    "workshops": ["glas"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 4.00, "member": 4.00 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Glasperlen, pro 10 Minuten"
+    "description": "Glasperlen, pro 10 Minuten",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 4
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000005111",
     "code": "5111",
     "name": "Perlen-Set (10 Stäbe, Trennmittel, Abdrähtsand)",
-    "workshops": ["glas"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 4.00, "member": 4.00 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Glasperlen, Starter-Set"
+    "description": "Glasperlen, Starter-Set",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 4
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000005112",
     "code": "5112",
     "name": "Trennmittel Bullseye rot (1 Dose)",
-    "workshops": ["glas"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 7.00, "member": 7.00 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Glasperlen"
+    "description": "Glasperlen",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 7
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000005113",
     "code": "5113",
     "name": "Abdrähtsand (1 Sack)",
-    "workshops": ["glas"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 8.00, "member": 8.00 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Glasperlen"
+    "description": "Glasperlen",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 8
+        }
+      }
+    ]
   },
-
   {
     "id": "00catmat000000005201",
     "code": "5201",
     "name": "Antrazytglas CF/Float 6mm",
-    "workshops": ["glas"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 195.00, "member": 195.00 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Glas Fusing, AK 82"
+    "description": "Glas Fusing, AK 82",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 195
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000005202",
     "code": "5202",
     "name": "Clear-Fuse Glas CF/Float 4mm",
-    "workshops": ["glas"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 85.00, "member": 85.00 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Glas Fusing, AK 82"
+    "description": "Glas Fusing, AK 82",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 85
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000005203",
     "code": "5203",
     "name": "Clear-Base Glas CF/Float 6mm",
-    "workshops": ["glas"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 130.00, "member": 130.00 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Glas Fusing, AK 82"
+    "description": "Glas Fusing, AK 82",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 130
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000005204",
     "code": "5204",
     "name": "Float Glas CF/Float 2mm",
-    "workshops": ["glas"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 50.00, "member": 50.00 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Glas Fusing, AK 82"
+    "description": "Glas Fusing, AK 82",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 50
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000005205",
     "code": "5205",
     "name": "Float Glas CF/Float 8mm",
-    "workshops": ["glas"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 120.00, "member": 120.00 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Glas Fusing, AK 82"
+    "description": "Glas Fusing, AK 82",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 120
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000005206",
     "code": "5206",
     "name": "Float Glas CF/Float 10mm",
-    "workshops": ["glas"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 350.00, "member": 350.00 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Glas Fusing, AK 82"
+    "description": "Glas Fusing, AK 82",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 350
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000005207",
     "code": "5207",
     "name": "Bullseye Glas farbig 3mm",
-    "workshops": ["glas"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 250.00, "member": 250.00 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Glas Fusing, AK 82"
+    "description": "Glas Fusing, AK 82",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 250
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000005208",
     "code": "5208",
     "name": "Bullseye Glas klar 2mm",
-    "workshops": ["glas"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 260.00, "member": 260.00 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Glas Fusing, AK 90"
+    "description": "Glas Fusing, AK 90",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 260
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000005209",
     "code": "5209",
     "name": "Bullseye Glas klar 3mm",
-    "workshops": ["glas"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 170.00, "member": 170.00 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Glas Fusing, AK 90"
+    "description": "Glas Fusing, AK 90",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 170
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000005210",
     "code": "5210",
     "name": "Tektos Glas 3mm",
-    "workshops": ["glas"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 165.00, "member": 165.00 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Glas Fusing, Bullseye AK 90"
+    "description": "Glas Fusing, Bullseye AK 90",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 165
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000005211",
     "code": "5211",
     "name": "Uroboros Glas",
-    "workshops": ["glas"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 195.00, "member": 195.00 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Glas Fusing, Bullseye AK 90"
+    "description": "Glas Fusing, Bullseye AK 90",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 195
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000005212",
     "code": "5212",
     "name": "Brennfolie 1mm",
-    "workshops": ["glas"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 20.00, "member": 20.00 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Glas Fusing Zubehör"
+    "description": "Glas Fusing Zubehör",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 20
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000005213",
     "code": "5213",
     "name": "Faserpapier 3/5mm",
-    "workshops": ["glas"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 40.00, "member": 40.00 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Glas Fusing Zubehör"
+    "description": "Glas Fusing Zubehör",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 40
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000005214",
     "code": "5214",
     "name": "Keramikfaserplatte 10mm",
-    "workshops": ["glas"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 60.00, "member": 60.00 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Glas Fusing Zubehör"
+    "description": "Glas Fusing Zubehör",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 60
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000005215",
     "code": "5215",
     "name": "Polsterplatte 20mm",
-    "workshops": ["glas"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 115.00, "member": 115.00 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Glas Fusing Zubehör"
+    "description": "Glas Fusing Zubehör",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 115
+        }
+      }
+    ]
   },
-
   {
     "id": "00catmat000000005301",
     "code": "5301",
     "name": "Bullseye Stringers Sizzle Black Dichroic 3mm (Dose 50g)",
-    "workshops": ["glas"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 30.00, "member": 30.00 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Glas Fusing, Bullseye AK 90, Dose à 50g"
+    "description": "Glas Fusing, Bullseye AK 90, Dose à 50g",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 30
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000005302",
     "code": "5302",
     "name": "Bullseye Stringers Sizzle Black Dichroic 3mm (40cm)",
-    "workshops": ["glas"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 16.00, "member": 16.00 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Glas Fusing, Bullseye AK 90, pro 40cm"
+    "description": "Glas Fusing, Bullseye AK 90, pro 40cm",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 16
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000005303",
     "code": "5303",
     "name": "Bullseye Stringers Sizzle Black Dichroic 6mm",
-    "workshops": ["glas"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 25.50, "member": 25.50 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Glas Fusing, Bullseye AK 90"
+    "description": "Glas Fusing, Bullseye AK 90",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 25.5
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000005304",
     "code": "5304",
     "name": "Bullseye Stringers Sizzle Black Dichroic 3mm (40cm)",
-    "workshops": ["glas"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 1.50, "member": 1.50 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Glas Fusing, Bullseye AK 90"
+    "description": "Glas Fusing, Bullseye AK 90",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.5
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000005305",
     "code": "5305",
     "name": "Bullseye Stringers Sizzle Black Dichroic 6mm",
-    "workshops": ["glas"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 50.00, "member": 50.00 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Glas Fusing, Bullseye AK 90, Dose à 50g"
+    "description": "Glas Fusing, Bullseye AK 90, Dose à 50g",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 50
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000005306",
     "code": "5306",
     "name": "Confetti (Dose 50g)",
-    "workshops": ["glas"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 50.00, "member": 50.00 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Glas Fusing, Bullseye AK 90"
+    "description": "Glas Fusing, Bullseye AK 90",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 50
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000005307",
     "code": "5307",
     "name": "Stringers gemischt 2mm (45cm/Stk.)",
-    "workshops": ["glas"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 2.00, "member": 2.00 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Glas Fusing, Bullseye AK 90, pro 45cm Stück"
+    "description": "Glas Fusing, Bullseye AK 90, pro 45cm Stück",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 2
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000005308",
     "code": "5308",
     "name": "Stringers gemischt 1mm",
-    "workshops": ["glas"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 1.00, "member": 1.00 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Glas Fusing, Bullseye AK 90"
+    "description": "Glas Fusing, Bullseye AK 90",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000005309",
     "code": "5309",
     "name": "Uroboros Dichroic",
-    "workshops": ["glas"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 20.00, "member": 20.00 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Glas Fusing, Bullseye AK 90"
+    "description": "Glas Fusing, Bullseye AK 90",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 20
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000005310",
     "code": "5310",
     "name": "Uroboros Dichroic klein",
-    "workshops": ["glas"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 0.50, "member": 0.50 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Glas Fusing, Bullseye AK 90"
+    "description": "Glas Fusing, Bullseye AK 90",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 0.5
+        }
+      }
+    ]
   },
-
   {
     "id": "00catmat000000005401",
     "code": "5401",
     "name": "Ofen GF 75 (klein)",
-    "workshops": ["glas"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 20.00, "member": 20.00 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Öfen Pauschale, pro Brand"
+    "description": "Öfen Pauschale, pro Brand",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 20
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000005402",
     "code": "5402",
     "name": "Ofen GF 240 (gross)",
-    "workshops": ["glas"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 40.00, "member": 40.00 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Öfen Pauschale, pro Brand"
+    "description": "Öfen Pauschale, pro Brand",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 40
+        }
+      }
+    ]
   },
-
   {
     "id": "00catmat000000005501",
     "code": "5501",
     "name": "Sandstrahlanlage",
-    "workshops": ["glas"],
-    "pricingModel": "time",
-    "unitPrice": { "none": 20.00, "member": 20.00 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Sandstrahlen, pro Stunde"
+    "description": "Sandstrahlen, pro Stunde",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "time",
+        "unitPrice": {
+          "default": 20
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000005502",
     "code": "5502",
     "name": "Glasstrahlstation",
-    "workshops": ["glas"],
-    "pricingModel": "time",
-    "unitPrice": { "none": 10.00, "member": 10.00 },
+    "workshops": [
+      "glas"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Sandstrahlen, pro Stunde"
+    "description": "Sandstrahlen, pro Stunde",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "time",
+        "unitPrice": {
+          "default": 10
+        }
+      }
+    ]
   },
-
   {
     "id": "00catmat000000006001",
     "code": "6001",
     "name": "Sperrholz Linde 2mm (pro m²)",
-    "workshops": ["makerspace"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 24.00, "member": 24.00 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "3-lagig AA natur, Laser"
+    "description": "3-lagig AA natur, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 24
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006002",
     "code": "6002",
     "name": "Sperrholz Linde 3mm (pro m²)",
-    "workshops": ["makerspace"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 31.00, "member": 31.00 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "3-lagig AA natur, Laser"
+    "description": "3-lagig AA natur, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 31
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006003",
     "code": "6003",
     "name": "Sperrholz Birke 3mm (pro m²)",
-    "workshops": ["makerspace"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 36.00, "member": 36.00 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "3-lagig AA natur, Laser"
+    "description": "3-lagig AA natur, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 36
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006004",
     "code": "6004",
     "name": "Sperrholz Wallnuss 3mm (pro m²)",
-    "workshops": ["makerspace"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 54.00, "member": 54.00 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "3-lagig AA natur, Laser"
+    "description": "3-lagig AA natur, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 54
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006005",
     "code": "6005",
     "name": "Sperrholz Pappel 3mm (pro m²)",
-    "workshops": ["makerspace"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 15.90, "member": 15.90 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "IF 20 A/BB, Laser"
+    "description": "IF 20 A/BB, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 15.9
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006006",
     "code": "6006",
     "name": "Sperrholz Pappel 4mm (pro m²)",
-    "workshops": ["makerspace"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 18.15, "member": 18.15 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "IF 20 A/BB, Laser"
+    "description": "IF 20 A/BB, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 18.15
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006007",
     "code": "6007",
     "name": "Sperrholz Pappel 5mm (pro m²)",
-    "workshops": ["makerspace"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 25.20, "member": 25.20 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "5-lagig IF 20 A/BB, Laser"
+    "description": "5-lagig IF 20 A/BB, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 25.2
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006008",
     "code": "6008",
     "name": "Sperrholz Pappel 6mm (pro m²)",
-    "workshops": ["makerspace"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 26.45, "member": 26.45 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "IF 20 A/BB, Laser"
+    "description": "IF 20 A/BB, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 26.45
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006009",
     "code": "6009",
     "name": "Sperrholz Pappel 8mm (pro m²)",
-    "workshops": ["makerspace"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 30.25, "member": 30.25 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "IF 20 A/BB, Laser"
+    "description": "IF 20 A/BB, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 30.25
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006010",
     "code": "6010",
     "name": "Sperrholz Pappel 12mm (pro m²)",
-    "workshops": ["makerspace"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 42.34, "member": 42.34 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "IF 20 A/BB, Laser"
+    "description": "IF 20 A/BB, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 42.34
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006011",
     "code": "6011",
     "name": "MDF roh 3mm (pro m²)",
-    "workshops": ["makerspace"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 5.55, "member": 5.55 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "MDF-Platte roh, ungeschliffen, Laser"
+    "description": "MDF-Platte roh, ungeschliffen, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 5.55
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006012",
     "code": "6012",
     "name": "MDF roh 4mm (pro m²)",
-    "workshops": ["makerspace"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 7.05, "member": 7.05 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "MDF-Platte roh, ungeschliffen, Laser"
+    "description": "MDF-Platte roh, ungeschliffen, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 7.05
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006013",
     "code": "6013",
     "name": "MDF roh 5mm (pro m²)",
-    "workshops": ["makerspace"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 8.60, "member": 8.60 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "MDF-Platte roh, ungeschliffen, Laser"
+    "description": "MDF-Platte roh, ungeschliffen, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 8.6
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006014",
     "code": "6014",
     "name": "MDF roh 6mm (pro m²)",
-    "workshops": ["makerspace"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 10.60, "member": 10.60 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "MDF-Platte roh, ungeschliffen, Laser"
+    "description": "MDF-Platte roh, ungeschliffen, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 10.6
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006015",
     "code": "6015",
     "name": "Sperrholz Seekiefer 7mm (pro m²)",
-    "workshops": ["makerspace"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 18.65, "member": 18.65 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "3-lagig beidseitig geschlossen, Laser"
+    "description": "3-lagig beidseitig geschlossen, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 18.65
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006016",
     "code": "6016",
     "name": "Sperrholz Seekiefer 12mm (pro m²)",
-    "workshops": ["makerspace"],
-    "pricingModel": "area",
-    "unitPrice": { "none": 26.70, "member": 26.70 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "3-lagig beidseitig geschlossen, Laser"
+    "description": "3-lagig beidseitig geschlossen, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "area",
+        "unitPrice": {
+          "default": 26.7
+        }
+      }
+    ]
   },
-
   {
     "id": "00catmat000000006101",
     "code": "6101",
     "name": "Sperrholz Linde 2mm A3",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 3.00, "member": 3.00 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 297×420mm, Laser"
+    "description": "Standardzuschnitt 297×420mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 3
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006102",
     "code": "6102",
     "name": "Sperrholz Linde 3mm A3",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 3.90, "member": 3.90 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 297×420mm, Laser"
+    "description": "Standardzuschnitt 297×420mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 3.9
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006103",
     "code": "6103",
     "name": "Sperrholz Birke 3mm A3",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 4.50, "member": 4.50 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 297×420mm, Laser"
+    "description": "Standardzuschnitt 297×420mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 4.5
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006104",
     "code": "6104",
     "name": "Sperrholz Wallnuss 3mm A3",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 6.80, "member": 6.80 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 297×420mm, Laser"
+    "description": "Standardzuschnitt 297×420mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 6.8
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006105",
     "code": "6105",
     "name": "Sperrholz Pappel 3mm A3",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 2.00, "member": 2.00 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 297×420mm, Laser"
+    "description": "Standardzuschnitt 297×420mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 2
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006106",
     "code": "6106",
     "name": "Sperrholz Pappel 4mm A3",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 2.29, "member": 2.29 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 297×420mm, Laser"
+    "description": "Standardzuschnitt 297×420mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 2.29
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006107",
     "code": "6107",
     "name": "Sperrholz Pappel 5mm A3",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 3.18, "member": 3.18 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 297×420mm, Laser"
+    "description": "Standardzuschnitt 297×420mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 3.18
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006108",
     "code": "6108",
     "name": "Sperrholz Pappel 6mm A3",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 3.33, "member": 3.33 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 297×420mm, Laser"
+    "description": "Standardzuschnitt 297×420mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 3.33
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006109",
     "code": "6109",
     "name": "Sperrholz Pappel 8mm A3",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 3.81, "member": 3.81 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 297×420mm, Laser"
+    "description": "Standardzuschnitt 297×420mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 3.81
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006110",
     "code": "6110",
     "name": "Sperrholz Pappel 12mm A3",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 5.33, "member": 5.33 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 297×420mm, Laser"
+    "description": "Standardzuschnitt 297×420mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 5.33
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006111",
     "code": "6111",
     "name": "MDF roh 3mm A3",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 0.70, "member": 0.70 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 297×420mm, Laser"
+    "description": "Standardzuschnitt 297×420mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 0.7
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006112",
     "code": "6112",
     "name": "MDF roh 4mm A3",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 0.89, "member": 0.89 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 297×420mm, Laser"
+    "description": "Standardzuschnitt 297×420mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 0.89
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006113",
     "code": "6113",
     "name": "MDF roh 5mm A3",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 1.08, "member": 1.08 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 297×420mm, Laser"
+    "description": "Standardzuschnitt 297×420mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.08
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006114",
     "code": "6114",
     "name": "MDF roh 6mm A3",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 1.34, "member": 1.34 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 297×420mm, Laser"
+    "description": "Standardzuschnitt 297×420mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.34
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006115",
     "code": "6115",
     "name": "Sperrholz Seekiefer 7mm A3",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 2.35, "member": 2.35 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 297×420mm, Laser"
+    "description": "Standardzuschnitt 297×420mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 2.35
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006116",
     "code": "6116",
     "name": "Sperrholz Seekiefer 12mm A3",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 3.36, "member": 3.36 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 297×420mm, Laser"
+    "description": "Standardzuschnitt 297×420mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 3.36
+        }
+      }
+    ]
   },
-
   {
     "id": "00catmat000000006205",
     "code": "6205",
     "name": "Sperrholz Pappel 3mm 320×620",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 3.15, "member": 3.15 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 320×620mm, Laser"
+    "description": "Standardzuschnitt 320×620mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 3.15
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006206",
     "code": "6206",
     "name": "Sperrholz Pappel 4mm 320×620",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 3.60, "member": 3.60 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 320×620mm, Laser"
+    "description": "Standardzuschnitt 320×620mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 3.6
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006207",
     "code": "6207",
     "name": "Sperrholz Pappel 5mm 320×620",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 5.00, "member": 5.00 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 320×620mm, Laser"
+    "description": "Standardzuschnitt 320×620mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 5
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006208",
     "code": "6208",
     "name": "Sperrholz Pappel 6mm 320×620",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 5.25, "member": 5.25 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 320×620mm, Laser"
+    "description": "Standardzuschnitt 320×620mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 5.25
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006209",
     "code": "6209",
     "name": "Sperrholz Pappel 8mm 320×620",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 6.00, "member": 6.00 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 320×620mm, Laser"
+    "description": "Standardzuschnitt 320×620mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 6
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006210",
     "code": "6210",
     "name": "Sperrholz Pappel 12mm 320×620",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 8.40, "member": 8.40 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 320×620mm, Laser"
+    "description": "Standardzuschnitt 320×620mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 8.4
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006211",
     "code": "6211",
     "name": "MDF roh 3mm 320×620",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 1.10, "member": 1.10 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 320×620mm, Laser"
+    "description": "Standardzuschnitt 320×620mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.1
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006212",
     "code": "6212",
     "name": "MDF roh 4mm 320×620",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 1.40, "member": 1.40 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 320×620mm, Laser"
+    "description": "Standardzuschnitt 320×620mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.4
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006213",
     "code": "6213",
     "name": "MDF roh 5mm 320×620",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 1.70, "member": 1.70 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 320×620mm, Laser"
+    "description": "Standardzuschnitt 320×620mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.7
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006214",
     "code": "6214",
     "name": "MDF roh 6mm 320×620",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 2.10, "member": 2.10 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 320×620mm, Laser"
+    "description": "Standardzuschnitt 320×620mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 2.1
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006215",
     "code": "6215",
     "name": "Sperrholz Seekiefer 7mm 320×620",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 3.70, "member": 3.70 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 320×620mm, Laser"
+    "description": "Standardzuschnitt 320×620mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 3.7
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006216",
     "code": "6216",
     "name": "Sperrholz Seekiefer 12mm 320×620",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 5.30, "member": 5.30 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 320×620mm, Laser"
+    "description": "Standardzuschnitt 320×620mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 5.3
+        }
+      }
+    ]
   },
-
   {
     "id": "00catmat000000006305",
     "code": "6305",
     "name": "Sperrholz Pappel 3mm 500×1250",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 10.00, "member": 10.00 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 500×1250mm, Laser"
+    "description": "Standardzuschnitt 500×1250mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 10
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006306",
     "code": "6306",
     "name": "Sperrholz Pappel 4mm 500×1250",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 11.40, "member": 11.40 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 500×1250mm, Laser"
+    "description": "Standardzuschnitt 500×1250mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 11.4
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006307",
     "code": "6307",
     "name": "Sperrholz Pappel 5mm 500×1250",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 15.80, "member": 15.80 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 500×1250mm, Laser"
+    "description": "Standardzuschnitt 500×1250mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 15.8
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006308",
     "code": "6308",
     "name": "Sperrholz Pappel 6mm 500×1250",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 16.60, "member": 16.60 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 500×1250mm, Laser"
+    "description": "Standardzuschnitt 500×1250mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 16.6
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006309",
     "code": "6309",
     "name": "Sperrholz Pappel 8mm 500×1250",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 19.10, "member": 19.10 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 500×1250mm, Laser"
+    "description": "Standardzuschnitt 500×1250mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 19.1
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006310",
     "code": "6310",
     "name": "Sperrholz Pappel 12mm 500×1250",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 26.40, "member": 26.40 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 500×1250mm, Laser"
+    "description": "Standardzuschnitt 500×1250mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 26.4
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006311",
     "code": "6311",
     "name": "MDF roh 3mm 500×1250",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 3.40, "member": 3.40 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 500×1250mm, Laser"
+    "description": "Standardzuschnitt 500×1250mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 3.4
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006312",
     "code": "6312",
     "name": "MDF roh 4mm 500×1250",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 4.40, "member": 4.40 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 500×1250mm, Laser"
+    "description": "Standardzuschnitt 500×1250mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 4.4
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006313",
     "code": "6313",
     "name": "MDF roh 5mm 500×1250",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 5.40, "member": 5.40 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 500×1250mm, Laser"
+    "description": "Standardzuschnitt 500×1250mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 5.4
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006314",
     "code": "6314",
     "name": "MDF roh 6mm 500×1250",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 6.65, "member": 6.65 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 500×1250mm, Laser"
+    "description": "Standardzuschnitt 500×1250mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 6.65
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006315",
     "code": "6315",
     "name": "Sperrholz Seekiefer 7mm 500×1250",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 11.70, "member": 11.70 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 500×1250mm, Laser"
+    "description": "Standardzuschnitt 500×1250mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 11.7
+        }
+      }
+    ]
   },
   {
     "id": "00catmat000000006316",
     "code": "6316",
     "name": "Sperrholz Seekiefer 12mm 500×1250",
-    "workshops": ["makerspace"],
-    "pricingModel": "count",
-    "unitPrice": { "none": 16.70, "member": 16.70 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Standardzuschnitt 500×1250mm, Laser"
+    "description": "Standardzuschnitt 500×1250mm, Laser",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 16.7
+        }
+      }
+    ]
   },
   {
     "id": "00catmat0sla000009010",
     "code": "9010",
     "name": "SLA Druck",
-    "workshops": ["makerspace"],
-    "pricingModel": "sla",
-    "unitPrice": { "none": 250, "member": 200 },
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "Sonstiges"
+    ],
     "active": true,
     "userCanAdd": true,
-    "description": "Resin-Druck: Preis nach Harzverbrauch (CHF/L) und Layeranzahl (global)"
+    "description": "Resin-Druck: Preis nach Harzverbrauch (CHF/L) und Layeranzahl (global)",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "sla",
+        "unitPrice": {
+          "default": 250,
+          "member": 200
+        }
+      }
+    ]
+  },
+  {
+    "id": "bWJodoXu3B3kiHMyFd7f",
+    "code": "MEMBERSHIP",
+    "name": "Mitgliedschaft",
+    "workshops": [
+      "diverses"
+    ],
+    "category": [
+      "Mitgliedschaft"
+    ],
+    "active": true,
+    "userCanAdd": false,
+    "description": "Jahresmitgliedschaft Verein Offene Werkstatt Wädenswil.",
+    "variants": [
+      {
+        "id": "single",
+        "label": "Einzel (Jahr)",
+        "pricingModel": "direct",
+        "unitPrice": {
+          "default": 50
+        }
+      },
+      {
+        "id": "family",
+        "label": "Familie (Jahr)",
+        "pricingModel": "direct",
+        "unitPrice": {
+          "default": 70
+        }
+      }
+    ]
   }
 ]

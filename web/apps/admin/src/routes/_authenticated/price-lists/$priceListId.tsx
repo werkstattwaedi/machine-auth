@@ -187,7 +187,7 @@ function PriceListDetailPage() {
                 <span className="font-mono text-xs w-12">{item.code}</span>
                 <span className="flex-1 text-sm">{item.name}</span>
                 <span className="text-xs text-muted-foreground">
-                  {formatCHF(item.unitPrice?.none ?? 0)}
+                  {formatCHF(item.variants?.[0]?.unitPrice.default ?? 0)}
                 </span>
               </label>
             ))}

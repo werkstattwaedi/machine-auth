@@ -53,11 +53,17 @@ export function WorkshopSectionWithCatalog({
       let resolved = item
       if (item.catalogId) {
         const cat = rawCatalog.find((c) => c.id === item.catalogId)
-        if (cat) {
-          resolved = {
-            ...item,
-            unitPrice: cat.unitPrice[discountLevel] ?? cat.unitPrice.none ?? 0,
-          }
+        const variant =
+          item.variantId != null
+            ? cat?.variants?.find((v) => v.id === item.variantId)
+            : cat?.variants?.[0]
+        if (variant) {
+          const unitPrice =
+            discountLevel === "member" &&
+            typeof variant.unitPrice.member === "number"
+              ? variant.unitPrice.member
+              : variant.unitPrice.default
+          resolved = { ...item, unitPrice }
         }
       }
       callbacks.addItem(resolved)

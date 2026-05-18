@@ -74,15 +74,22 @@ async function seedCatalog(
   data: { name: string; unitPrice: { none: number; member?: number } },
 ): Promise<void> {
   const db = getFirestore();
+  const unitPrice: { default: number; member?: number } =
+    data.unitPrice.member != null && data.unitPrice.member !== data.unitPrice.none
+      ? { default: data.unitPrice.none, member: data.unitPrice.member }
+      : { default: data.unitPrice.none };
   await db.collection("catalog").doc(catalogId).set({
     code: catalogId,
     name: data.name,
     workshops: ["holz"],
-    pricingModel: "time",
-    unitPrice: {
-      none: data.unitPrice.none,
-      member: data.unitPrice.member ?? data.unitPrice.none,
-    },
+    category: ["Sonstiges"],
+    variants: [
+      {
+        id: "default",
+        pricingModel: "time",
+        unitPrice,
+      },
+    ],
     active: true,
     userCanAdd: false,
   });

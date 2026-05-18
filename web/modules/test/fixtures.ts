@@ -17,6 +17,22 @@
 import { FakeFirestore } from "./fake-firestore"
 import { FakeAuth, createFakeUser, type FakeUser } from "./fake-auth"
 
+/**
+ * Convert the legacy `{ none, member }` unitPrice shape (or the new
+ * `{ default, member? }` shape) used by test fixture inputs into the
+ * canonical `VariantPrice` stored on the catalog. Treats `none` as the
+ * default tier and copies `member` through.
+ */
+function variantPriceFromShorthand(
+  input: { none?: number; default?: number; member?: number } | undefined,
+): { default: number; member?: number } {
+  const defaultPrice = input?.default ?? input?.none ?? 0
+  const memberPrice = input?.member
+  return memberPrice != null && memberPrice !== defaultPrice
+    ? { default: defaultPrice, member: memberPrice }
+    : { default: defaultPrice }
+}
+
 // ── Input types (test-friendly, minimal required fields) ──
 
 interface UserInput {
@@ -49,8 +65,21 @@ interface CatalogItemInput {
   code: string
   name: string
   workshops?: string[]
+  category?: string[]
+  /**
+   * Convenience: define a single-variant catalog item by passing the
+   * variant's pricingModel + unitPrice at the top level. The builder
+   * wraps these into `variants: [{ id: "default", … }]`. Use `variants`
+   * directly for multi-variant fixtures.
+   */
   pricingModel?: string
-  unitPrice?: Record<string, number>
+  unitPrice?: { none?: number; default?: number; member?: number }
+  variants?: Array<{
+    id: string
+    label?: string
+    pricingModel: string
+    unitPrice: { default: number; member?: number }
+  }>
   active?: boolean
   userCanAdd?: boolean
 }
@@ -191,12 +220,21 @@ export class TestFixture {
 
     // Seed catalog items
     for (const c of this.catalogItems) {
+      const variants =
+        c.variants ??
+        [
+          {
+            id: "default",
+            pricingModel: c.pricingModel ?? "count",
+            unitPrice: variantPriceFromShorthand(c.unitPrice),
+          },
+        ]
       db.setDoc(db.doc("catalog", c.id), {
         code: c.code,
         name: c.name,
         workshops: c.workshops ?? [],
-        pricingModel: c.pricingModel ?? "count",
-        unitPrice: c.unitPrice ?? { none: 0 },
+        category: c.category ?? ["Sonstiges"],
+        variants,
         active: c.active ?? true,
         userCanAdd: c.userCanAdd ?? true,
       })

@@ -3,7 +3,14 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Write the two membership-fee catalog SKUs (single + family).
+ * Write the singleton Mitgliedschaft catalog SKU.
+ *
+ * The two membership types (single + family) live as variants on one
+ * catalog doc at the pinned `MEMBERSHIP_CATALOG_ID` (see
+ * `scripts/seed-data/catalog-ids.ts`). The post-checkout
+ * `processMembershipPayment` trigger keys off the chosen
+ * `CheckoutItem.variantId` (`"single"` or `"family"`) rather than a
+ * catalog-level discriminator.
  *
  * Targets the project named by FIREBASE_PROJECT_ID. Honours
  * FIRESTORE_EMULATOR_HOST when set; otherwise uses
@@ -23,6 +30,7 @@ import { config as loadEnv } from "dotenv";
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
+import { MEMBERSHIP_CATALOG_ID } from "./seed-data/catalog-ids";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROD_MODE = process.argv.slice(2).includes("--prod");
@@ -32,32 +40,28 @@ loadEnv({
     : [path.join(__dirname, ".env.local"), path.join(__dirname, ".env")],
 });
 
-const ID_SINGLE = "00catalog0memb0sng01";
-const ID_FAMILY = "00catalog0memb0fam02";
-
-const singleSku = {
-  code: "MEMBER-SINGLE",
-  name: "Mitgliedschaft Einzel (Jahr)",
+const membershipSku = {
+  code: "MEMBERSHIP",
+  name: "Mitgliedschaft",
   workshops: ["diverses"],
-  pricingModel: "direct",
-  unitPrice: { none: 50, member: 50 },
+  category: ["Mitgliedschaft"],
   active: true,
   userCanAdd: false,
-  description: "Jahres-Einzelmitgliedschaft Verein Offene Werkstatt Wädenswil.",
-  kind: "membership-single",
-};
-
-const familySku = {
-  code: "MEMBER-FAMILY",
-  name: "Mitgliedschaft Familie (Jahr)",
-  workshops: ["diverses"],
-  pricingModel: "direct",
-  unitPrice: { none: 70, member: 70 },
-  active: true,
-  userCanAdd: false,
-  description:
-    "Jahres-Familienmitgliedschaft. Inhaber:in plus weitere Familienmitglieder (inkl. Kindkonten).",
-  kind: "membership-family",
+  description: "Jahresmitgliedschaft Verein Offene Werkstatt Wädenswil.",
+  variants: [
+    {
+      id: "single",
+      label: "Einzel (Jahr)",
+      pricingModel: "direct" as const,
+      unitPrice: { default: 50 },
+    },
+    {
+      id: "family",
+      label: "Familie (Jahr)",
+      pricingModel: "direct" as const,
+      unitPrice: { default: 70 },
+    },
+  ],
 };
 
 async function main() {
@@ -103,11 +107,24 @@ async function main() {
 
   const db = admin.firestore();
 
-  console.log(`Writing catalog/${ID_SINGLE} (Mitgliedschaft Einzel, CHF 50)...`);
-  await db.collection("catalog").doc(ID_SINGLE).set(singleSku, { merge: true });
+  console.log(
+    `Writing catalog/${MEMBERSHIP_CATALOG_ID} (Mitgliedschaft, ${membershipSku.variants.length} variants)...`
+  );
+  await db
+    .collection("catalog")
+    .doc(MEMBERSHIP_CATALOG_ID)
+    .set(membershipSku, { merge: true });
 
-  console.log(`Writing catalog/${ID_FAMILY} (Mitgliedschaft Familie, CHF 70)...`);
-  await db.collection("catalog").doc(ID_FAMILY).set(familySku, { merge: true });
+  // Production code reads the membership ID via config/catalog-references
+  // — no pinned-ID import in functions/web. Write that pointer too so a
+  // fresh project bootstrap is self-contained.
+  console.log("Writing config/catalog-references.membership ...");
+  await db.doc("config/catalog-references").set(
+    {
+      membership: db.collection("catalog").doc(MEMBERSHIP_CATALOG_ID),
+    },
+    { merge: true },
+  );
 
   console.log("Done.");
 }

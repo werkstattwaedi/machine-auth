@@ -234,8 +234,14 @@ describe("Catalog and pricing config", () => {
       code: "1001",
       name: "Laser Stunde",
       workshops: ["holz"],
-      pricingModel: "time",
-      unitPrice: { none: 20, member: 15 },
+      category: ["Sonstiges"],
+      variants: [
+        {
+          id: "default",
+          pricingModel: "time",
+          unitPrice: { default: 20, member: 15 },
+        },
+      ],
       active: true,
       userCanAdd: true,
     })
@@ -243,8 +249,14 @@ describe("Catalog and pricing config", () => {
       code: "2001",
       name: "Schweissdraht",
       workshops: ["metall"],
-      pricingModel: "weight",
-      unitPrice: { none: 10 },
+      category: ["Sonstiges"],
+      variants: [
+        {
+          id: "default",
+          pricingModel: "weight",
+          unitPrice: { default: 10 },
+        },
+      ],
       active: true,
       userCanAdd: true,
     })
@@ -252,8 +264,14 @@ describe("Catalog and pricing config", () => {
       code: "1002",
       name: "Inactive item",
       workshops: ["holz"],
-      pricingModel: "count",
-      unitPrice: { none: 5 },
+      category: ["Sonstiges"],
+      variants: [
+        {
+          id: "default",
+          pricingModel: "count",
+          unitPrice: { default: 5 },
+        },
+      ],
       active: false,
       userCanAdd: true,
     })

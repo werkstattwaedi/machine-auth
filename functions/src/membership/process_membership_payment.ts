@@ -34,7 +34,12 @@ import type {
   MembershipEntity,
   MembershipType,
 } from "../types/firestore_entities";
-import { db, detectMembershipKindForItems, plusOneYear } from "./shared";
+import {
+  db,
+  detectMembershipKindForItems,
+  loadMembershipCatalogId,
+  plusOneYear,
+} from "./shared";
 
 /**
  * Inspect a closed checkout and, for any membership-fee items it contains,
@@ -58,9 +63,15 @@ export async function processMembershipPayment(
   if (items.length === 0) return;
 
   const database = db();
+  const membershipCatalogId = await loadMembershipCatalogId(database);
+  if (!membershipCatalogId) {
+    // No membership SKU configured — checkout cannot contain one. No-op.
+    return;
+  }
   const membershipKindForCheckout = await detectMembershipKindForItems(
     database,
     items,
+    membershipCatalogId,
   );
   if (!membershipKindForCheckout) return;
 
