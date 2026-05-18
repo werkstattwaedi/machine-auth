@@ -9,52 +9,47 @@
  * Drechselbank" or "all kg of Standard filament" across the imported
  * history.
  *
- * Values are intentionally `TBD` placeholders. The catalog cleanup
- * tracked in issue #253 will assign the real IDs before the importer
- * deploys. `assertCatalogIdsReady()` fails loudly at runtime if any are
- * still `TBD`, so we can't accidentally ship an import with broken refs.
+ * Server-only mirror of `scripts/seed-data/catalog-ids.ts`. The web app
+ * never reads these IDs, so we keep the duplication here rather than
+ * route it through `config/catalog-references` (the membership SKU lives
+ * there because both functions and web consume it; the CognitoForms refs
+ * are server-only by nature). The catalog seed under
+ * `scripts/seed-data/catalog/machines.json` writes the corresponding
+ * catalog docs at these exact IDs.
+ *
+ * Keep this file in sync with `scripts/seed-data/catalog-ids.ts`. With
+ * `as const` the literal types are narrowed, so a typo in either file
+ * is caught at compile time when the importer references a key that no
+ * longer exists.
  */
 export const COGNITOFORMS_CATALOG_IDS = {
   /** NutzungStationäreMaschinen — workshop "holz", pricingModel "time". */
-  stationaereMaschinen: "TBD",
+  stationaereMaschinen: "dfoYVuO3bhRJoRCbgND1",
   /** NutzungDrechselbank — workshop "holz", pricingModel "time". */
-  drechselbank: "TBD",
+  drechselbank: "LZ04lfdfdEieqQOsKhzi",
   /** NutzungMaschinenSchweissanlage — workshop "metall", pricingModel "time". */
-  maschinenSchweissanlage: "TBD",
+  maschinenSchweissanlage: "7SlZb0jUKcyE8sMcvyzD",
   /** NutzungPlasmaschneiderBrenner — workshop "metall", pricingModel "time". */
-  plasmaschneiderBrenner: "TBD",
+  plasmaschneiderBrenner: "kcspOmeZ3lsj4hNfHD4V",
   /** NutzungLötstation — workshop "schmuck", pricingModel "time". */
-  loetstation: "TBD",
+  loetstation: "tot0yitdBPf2hseDSuFf",
   /** NutzungGlasperlenstation — workshop "glas", pricingModel "time". */
-  glasperlenstation: "TBD",
+  glasperlenstation: "17mC1Qe4xn2dfGNpsdfo",
   /** NutzungSchleifmaschinen — workshop "stein", pricingModel "time". */
-  schleifmaschinen: "TBD",
+  schleifmaschinen: "ljE5dcV7qDv0Z50BdwHY",
   /** NutzungSandstrahlen (stein/glas area) — workshop "stein", pricingModel "count" (by Grösse). */
-  sandstrahlenStein: "TBD",
+  sandstrahlenStein: "3XpXkmq3mGovXJ21h4pw",
   /** NutzungSandstrahlenMetall — workshop "metall", pricingModel "count" (by Grösse). */
-  sandstrahlenMetall: "TBD",
+  sandstrahlenMetall: "qG7OVbhnFp0vZM6BwCBB",
   /** NutzungFDM3DDrucker Kategorie 1 (Standard) — workshop "makerspace", pricingModel "weight". */
-  fdmFilamentStandard: "TBD",
+  fdmFilamentStandard: "UktnpwyJBpy4qSDP6nYg",
   /** NutzungFDM3DDrucker Kategorie 2 (Spezial) — workshop "makerspace", pricingModel "weight". */
-  fdmFilamentSpezial: "TBD",
+  fdmFilamentSpezial: "YB3jmyQ4nPRn4QdSL0r2",
   /** NutzungFDM3DDrucker Kategorie 3 (Technisch) — workshop "makerspace", pricingModel "weight". */
-  fdmFilamentTechnisch: "TBD",
+  fdmFilamentTechnisch: "uLycIXO6PZ0ku2FlHxvv",
 } as const;
 
 export type CognitoformsCatalogKey = keyof typeof COGNITOFORMS_CATALOG_IDS;
-
-/** Throws if any catalog ID is still the `TBD` placeholder. */
-export function assertCatalogIdsReady(): void {
-  const missing = Object.entries(COGNITOFORMS_CATALOG_IDS)
-    .filter(([, id]) => id === "TBD")
-    .map(([key]) => key);
-  if (missing.length > 0) {
-    throw new Error(
-      `COGNITOFORMS_CATALOG_IDS not configured for: ${missing.join(", ")}. ` +
-        `Fill in functions/src/import/cognitoforms/catalog_map.ts before running the importer.`,
-    );
-  }
-}
 
 /** Maps an FDM filament Kategorie enum value to its catalog key. */
 export function fdmFilamentKeyForKategorie(

@@ -16,10 +16,7 @@ import {
   entryFeeFor,
   recomputeSummary,
 } from "../../invoice/close_checkout_and_get_payment";
-import {
-  COGNITOFORMS_CATALOG_IDS,
-  assertCatalogIdsReady,
-} from "./catalog_map";
+import { COGNITOFORMS_CATALOG_IDS } from "./catalog_map";
 import {
   checkoutIdForEntry,
   mapEntryToCheckout,
@@ -78,7 +75,6 @@ export interface RunImportResult {
 export async function runImport(
   opts: RunImportOptions,
 ): Promise<RunImportResult> {
-  assertCatalogIdsReady();
   const db = getFirestore();
   const formId = opts.formId ?? COGNITOFORMS_FORM_ID;
   const cursorRef = db.doc(SYNC_DOC_PATH) as DocumentReference<CognitoformsSyncState>;

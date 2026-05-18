@@ -25,21 +25,13 @@ import {
   SYNC_DOC_PATH,
   runImport,
 } from "../../src/import/cognitoforms/run_import";
-import { COGNITOFORMS_CATALOG_IDS } from "../../src/import/cognitoforms/catalog_map";
 import type { CfEntry } from "../../src/import/cognitoforms/schema_types";
 
-// Pin every catalog ID before runImport's assertCatalogIdsReady() trips.
-// The orchestrator only reads `COGNITOFORMS_CATALOG_IDS[key]` to build a
-// DocumentReference at write time, so any non-empty string works for the
-// integration test.
-function pinCatalogIds(): void {
-  for (const key of Object.keys(COGNITOFORMS_CATALOG_IDS) as Array<
-    keyof typeof COGNITOFORMS_CATALOG_IDS
-  >) {
-    (COGNITOFORMS_CATALOG_IDS as Record<string, string>)[key] =
-      `00cf-${key}`;
-  }
-}
+// `COGNITOFORMS_CATALOG_IDS` are now real Firestore-shaped IDs that
+// match the seeded catalog entries in
+// `scripts/seed-data/catalog/machines.json` and `makerspace.json`. The
+// test doesn't read the catalog itself (the orchestrator only stores
+// DocumentReferences on the imported items), so we don't seed it here.
 
 function loadFixture(name: string): CfEntry {
   // After tsc: this file lives at lib/test/integration/...; fixtures at
@@ -102,7 +94,6 @@ describe("CognitoForms importer (integration)", function () {
 
   before(async () => {
     await setupEmulator();
-    pinCatalogIds();
   });
 
   beforeEach(async () => {
