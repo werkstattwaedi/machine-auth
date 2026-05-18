@@ -36,7 +36,33 @@ If the body or comments contain image URLs (markdown images like ![...](https://
 3. Incorporate what you see into your understanding
 
 ### Detect approved plan
-Look for a comment containing the marker `<!-- claude-workqueue-plan -->`. If one exists, that is the APPROVED plan — skip to Step 5 (Implement) and follow it. Do not re-triage.
+
+Look for comments containing the marker `<!-- claude-workqueue-plan -->`.
+Use the **most recent** one. If any exists, the orchestrator has already
+confirmed the human approved it (the `claude-workqueue-plan-review` label
+is absent — the orchestrator wouldn't have sent you this issue otherwise).
+
+**You are now in implement mode. Skip to Step 5.** Do not re-triage, do
+not post a new plan, do not return to Step 2.
+
+If the user posted comments AFTER the latest plan with refinements,
+clarifications, or scope adjustments ("just do X instead", "actually only
+the label should change", "ignore the second bullet"), treat those as
+part of the approved plan. Read them carefully and let them override the
+corresponding parts of the plan during implementation. The user is
+giving you the final word on what to build — incorporate their intent,
+don't replan.
+
+**Only if** during Step 5 implementation you discover that the plan + user
+comments are genuinely contradictory or impossible to reconcile (the user
+asked for two opposite things; the named file doesn't exist; the
+described behavior conflicts with existing tested behavior), STOP and
+output:
+```
+WORKQUEUE_RESULT: question | <one-line description of the contradiction>
+```
+Post a comment on the issue explaining what's contradictory. Do NOT
+silently post a new plan as a workaround.
 
 ## Step 2: Assess feasibility (only if no approved plan)
 
@@ -230,6 +256,32 @@ WORKQUEUE_RESULT: error | <what went wrong>
 Never leave uncommitted changes without reporting. Always output a `WORKQUEUE_RESULT` line.
 
 --- END PROMPT ---
+
+## Optional prepend: Implement mode banner
+
+When the orchestrator's Phase 3 classified the issue as **IMPLEMENT**
+(plan marker exists in comments AND `claude-workqueue-plan-review` label
+is absent), it prepends this paragraph **before** the "You are a
+workqueue worker…" line:
+
+```
+**Mode: IMPLEMENT.** Phase 3 already verified this issue has an
+approved plan (marker present, plan-review label absent). Skip Steps
+2-4 entirely. Your entry point is Step 5. Follow the most recent
+`<!-- claude-workqueue-plan -->` comment; if the user posted comments
+after it, treat those as part of the approved plan (refinements
+override the original). Do not under any circumstances post a new
+plan or re-triage — even if the user's revision comment seems to
+invalidate the original plan, your job is to deliver, not to replan.
+If implementation reveals the plan + revisions are genuinely
+impossible to reconcile, STOP and emit
+`WORKQUEUE_RESULT: question | <contradiction>` per Step 1's "Detect
+approved plan" instructions.
+```
+
+(Without this banner, the worker falls back to Step 1's detection logic,
+which should produce the same outcome — but the banner removes any
+ambiguity for the most common path.)
 
 ## Optional prepend: Baseline note
 

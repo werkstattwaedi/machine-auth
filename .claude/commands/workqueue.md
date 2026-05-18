@@ -667,11 +667,17 @@ To spawn the agent:
 1. Read `.claude/workqueue/worker-prompt.md`.
 2. Take the text between `--- BEGIN PROMPT ---` and `--- END PROMPT ---`.
 3. Substitute every `<N>` with the issue number and `<TITLE>` with the issue title.
-4. **If a Phase 2 self-heal PR is currently outstanding** (rare — Phase 2
+4. **If you classified this issue as IMPLEMENT in Phase 3** (plan marker
+   present, `claude-workqueue-plan-review` absent), prepend the
+   "Implement mode banner" paragraph from `worker-prompt.md`. This is
+   load-bearing — without it the worker has historically (incorrectly)
+   posted a new plan instead of implementing, especially when the user's
+   revision comment after the plan seems to invalidate parts of it.
+5. **If a Phase 2 self-heal PR is currently outstanding** (rare — Phase 2
    normally STOPs the run when it opens one), prepend the "Baseline note"
    paragraph from the bottom of `worker-prompt.md`, substituting
    `<FIX_PR_URL>`.
-5. Spawn the **Agent tool without `isolation`** (no worktree), in background,
+6. Spawn the **Agent tool without `isolation`** (no worktree), in background,
    with the substituted prompt as input.
 
 **Entry state:** issue is labeled `claude-workqueue-wip`; working tree
