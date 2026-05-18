@@ -54,12 +54,14 @@ class TagUid {
   std::array<std::byte, kSize> value_;
 };
 
-/// 20-character Firebase document ID.
+/// Firebase document ID. Sized to cover Firebase Auth UIDs (28 chars) used
+/// as `users/{userId}` doc IDs and 20-char Firestore auto-IDs, rounded up to
+/// 32 for headroom.
 class FirebaseId {
  public:
-  static constexpr size_t kMaxSize = 20;
+  static constexpr size_t kMaxSize = 32;
 
-  /// Create from a string view (must be <= 20 characters).
+  /// Create from a string view (must be <= 32 characters).
   static pw::Result<FirebaseId> FromString(std::string_view str) {
     if (str.size() > kMaxSize) {
       return pw::Status::InvalidArgument();
