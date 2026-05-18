@@ -277,6 +277,104 @@ describe("MaterialPicker", () => {
     expect(screen.queryByText("MDF Platte 3mm")).toBeNull()
   })
 
+  it("narrows visible items when a category chip is selected", async () => {
+    // Two catalogs, two distinct top-level categories.
+    const catalogItems: CatalogItem[] = [
+      {
+        id: "cat-a",
+        code: "AAA",
+        name: "Latte Kiefer",
+        workshops: ["holz"],
+        category: ["Massivholz"],
+        variants: [
+          {
+            id: "default",
+            pricingModel: "length",
+            unitPrice: { default: 3 },
+          },
+        ],
+        active: true,
+        userCanAdd: true,
+      },
+      {
+        id: "cat-b",
+        code: "BBB",
+        name: "Sperrholz Pappel 3mm",
+        workshops: ["holz"],
+        category: ["Holzplatten", "Sperrholz"],
+        variants: [
+          {
+            id: "default",
+            pricingModel: "area",
+            unitPrice: { default: 15.9 },
+          },
+        ],
+        active: true,
+        userCanAdd: true,
+      },
+    ]
+    const user = userEvent.setup()
+    renderSection({ catalogItems })
+    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    // Both items visible initially.
+    expect(screen.getByText("Latte Kiefer")).toBeTruthy()
+    expect(screen.getByText("Sperrholz Pappel 3mm")).toBeTruthy()
+    // Click the "Holzplatten" chip — only that category remains.
+    await user.click(screen.getByRole("button", { name: "Holzplatten" }))
+    expect(screen.queryByText("Latte Kiefer")).toBeNull()
+    expect(screen.getByText("Sperrholz Pappel 3mm")).toBeTruthy()
+  })
+
+  it("renders a variant selector for multi-variant items and switches the form", async () => {
+    const catalogItems: CatalogItem[] = [
+      {
+        id: "cat-pappel",
+        code: "PPL",
+        name: "Sperrholz Pappel 3mm",
+        workshops: ["holz"],
+        category: ["Holzplatten", "Sperrholz"],
+        variants: [
+          {
+            id: "m2",
+            pricingModel: "area",
+            unitPrice: { default: 15.9 },
+          },
+          {
+            id: "a3",
+            label: "Zuschnitt A3",
+            pricingModel: "count",
+            unitPrice: { default: 2 },
+          },
+        ],
+        active: true,
+        userCanAdd: true,
+      },
+    ]
+    const user = userEvent.setup()
+    const callbacks = makeCallbacks()
+    renderSection({ catalogItems, callbacks })
+    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    await user.click(screen.getByText("Sperrholz Pappel 3mm"))
+    // The picker is now expanded with two variant chips. m² is canonical
+    // (variants[0]) and selected by default. Switch to the cut variant.
+    const a3Chip = screen.getByRole("radio", { name: "Zuschnitt A3" })
+    await user.click(a3Chip)
+    // Enter a quantity (count form: single spinbutton) and submit.
+    const qty = screen.getByRole("spinbutton")
+    await user.clear(qty)
+    await user.type(qty, "4")
+    await user.click(screen.getByRole("button", { name: "Hinzufügen" }))
+    expect(callbacks.addItem).toHaveBeenCalledTimes(1)
+    expect(callbacks.addItem.mock.calls[0][0]).toMatchObject({
+      catalogId: "cat-pappel",
+      variantId: "a3",
+      pricingModel: "count",
+      quantity: 4,
+      unitPrice: 2,
+      totalPrice: 8,
+    })
+  })
+
   it("filters catalog items by code", async () => {
     const user = userEvent.setup()
     renderSection({})

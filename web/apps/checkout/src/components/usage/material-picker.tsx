@@ -1,7 +1,7 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { useMemo, useState } from "react"
+import React, { useMemo, useState } from "react"
 import {
   Sheet,
   SheetContent,
@@ -28,6 +28,10 @@ import type {
   DiscountLevel,
   PricingModel,
 } from "@modules/lib/workshop-config"
+import {
+  filterByCategoryPrefix,
+  nextLevelValues,
+} from "@modules/lib/categories"
 import type { CheckoutItemLocal } from "./inline-rows"
 
 const INPUT_CLS =
@@ -220,21 +224,71 @@ function PickerBody({
     | null
   const [expansion, setExpansion] = useState<Expansion>(null)
 
-  const filtered = useMemo(() => {
-    const items =
+  // Selected category path (a prefix of `category[]`). Empty = no filter.
+  // Resets when the workshop scope toggles so a stale prefix doesn't
+  // strand the user with zero results.
+  const [categoryPrefix, setCategoryPrefix] = useState<string[]>([])
+  const lastScope = React.useRef(scope)
+  if (lastScope.current !== scope) {
+    lastScope.current = scope
+    if (categoryPrefix.length > 0) setCategoryPrefix([])
+  }
+
+  const scoped = useMemo(
+    () =>
       scope === "all"
         ? catalogItems
-        : catalogItems.filter((c) => c.workshops.includes(workshopId))
+        : catalogItems.filter((c) => c.workshops.includes(workshopId)),
+    [catalogItems, scope, workshopId],
+  )
+
+  // Chip rows: one per category-depth currently in play. Each row's chip
+  // set is derived from the workshop-scoped items (NOT the text-filtered
+  // ones) so typing a query doesn't make chips appear/disappear.
+  const chipRows = useMemo(() => {
+    const rows: {
+      level: number
+      values: string[]
+      selected: string | null
+    }[] = []
+    for (let level = 0; level <= categoryPrefix.length; level++) {
+      const prefix = categoryPrefix.slice(0, level)
+      const values = nextLevelValues(scoped, prefix)
+      if (values.length === 0) break
+      rows.push({
+        level,
+        values,
+        selected: categoryPrefix[level] ?? null,
+      })
+    }
+    return rows
+  }, [scoped, categoryPrefix])
+
+  const filtered = useMemo(() => {
+    const byCategory = filterByCategoryPrefix(scoped, categoryPrefix)
     const q = query.trim().toLowerCase()
     const matches = q
-      ? items.filter(
+      ? byCategory.filter(
           (c) =>
             c.name.toLowerCase().includes(q) ||
             c.code?.toLowerCase().includes(q),
         )
-      : items
+      : byCategory
     return [...matches].sort((a, b) => a.name.localeCompare(b.name, "de"))
-  }, [catalogItems, query, scope, workshopId])
+  }, [scoped, categoryPrefix, query])
+
+  function onChipClick(level: number, value: string) {
+    setCategoryPrefix((prev) => {
+      if (prev[level] === value) {
+        // Click an already-active chip → deselect that level + drop deeper.
+        return prev.slice(0, level)
+      }
+      return [...prev.slice(0, level), value]
+    })
+    // Collapse any expanded row when the filter changes — the user's about
+    // to look at a different set of items.
+    setExpansion(null)
+  }
 
   // Ad-hoc creation needs a description; show the fallback section only
   // when the user has typed something they can use as the item name.
@@ -243,6 +297,26 @@ function PickerBody({
 
   return (
     <div className="flex-1 overflow-y-auto">
+      {chipRows.length > 0 && (
+        <div
+          aria-label="Kategorien"
+          className="flex flex-col gap-1.5 border-b border-border bg-background px-4 py-2"
+        >
+          {chipRows.map((row) => (
+            <div key={row.level} className="flex flex-wrap gap-1.5">
+              {row.values.map((value) => (
+                <FilterPill
+                  key={value}
+                  active={row.selected === value}
+                  onClick={() => onChipClick(row.level, value)}
+                >
+                  {value}
+                </FilterPill>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
       {filtered.length === 0 && !showFallbacks ? (
         <div className="px-4 py-8 text-center text-sm text-muted-foreground">
           Keine Treffer. Such-Begriff anpassen oder einen anderen Filter wählen.
@@ -262,7 +336,6 @@ function PickerBody({
               key={cat.id}
               catalog={cat}
               config={config}
-              unitPrice={unitPrice}
               discountLevel={discountLevel}
               workshopId={workshopId}
               onCancel={() => setExpansion(null)}
@@ -397,7 +470,6 @@ function CollapsedRow({
 function ExpandedRow({
   catalog,
   config,
-  unitPrice,
   discountLevel,
   workshopId,
   onCancel,
@@ -405,20 +477,36 @@ function ExpandedRow({
 }: {
   catalog: CatalogItem
   config: PricingConfig
-  unitPrice: number
   discountLevel: DiscountLevel
   workshopId: WorkshopId
   onCancel: () => void
   onAdd: (item: CheckoutItemLocal) => void
 }) {
-  const variant = catalog.variants?.[0]
+  // Multi-variant items get a chooser above the form. Single-variant
+  // items render no chooser; variants[0] is used silently. State resets
+  // implicitly because ExpandedRow remounts when the user picks a
+  // different catalog row.
+  const variants = catalog.variants ?? []
+  const [selectedVariantId, setSelectedVariantId] = useState<string>(
+    variants[0]?.id ?? "default",
+  )
+  const variant =
+    variants.find((v) => v.id === selectedVariantId) ?? variants[0]
+  const unitPrice = variant
+    ? discountLevel === "member" &&
+      typeof variant.unitPrice.member === "number"
+      ? variant.unitPrice.member
+      : variant.unitPrice.default
+    : 0
   const baseItem: Omit<
     CheckoutItemLocal,
     "quantity" | "totalPrice" | "formInputs"
   > = {
     id: "",
     workshop: workshopId,
-    description: catalog.name,
+    description: variant?.label
+      ? `${catalog.name} · ${variant.label}`
+      : catalog.name,
     origin: "manual",
     catalogId: catalog.id,
     variantId: variant?.id ?? null,
@@ -434,7 +522,7 @@ function ExpandedRow({
             {catalog.name}
           </div>
           <div className="text-xs text-muted-foreground">
-            {formatPriceForCatalog(catalog, config, unitPrice)}
+            {formatPriceForCatalog(variant?.pricingModel ?? "direct", config, unitPrice)}
           </div>
         </div>
         <button
@@ -446,9 +534,37 @@ function ExpandedRow({
           <X className="h-3 w-3" />
         </button>
       </div>
+      {variants.length > 1 && (
+        <div
+          role="radiogroup"
+          aria-label="Variante"
+          className="mb-3 flex flex-wrap gap-1.5"
+        >
+          {variants.map((v) => (
+            <button
+              key={v.id}
+              type="button"
+              role="radio"
+              aria-checked={selectedVariantId === v.id}
+              onClick={() => setSelectedVariantId(v.id)}
+              className={[
+                "rounded-[3px] border px-2.5 py-1 text-xs",
+                selectedVariantId === v.id
+                  ? "border-cog-teal bg-cog-teal text-white"
+                  : "border-border bg-background text-foreground hover:bg-secondary",
+              ].join(" ")}
+            >
+              {v.label ?? "Standard"}
+            </button>
+          ))}
+        </div>
+      )}
       <PickerEntryForm
+        // remount when the variant changes so each form state stays clean
+        key={variant?.id ?? "default"}
         catalog={catalog}
         config={config}
+        pricingModel={variant?.pricingModel ?? "direct"}
         unitPrice={unitPrice}
         discountLevel={discountLevel}
         baseItem={baseItem}
@@ -459,11 +575,10 @@ function ExpandedRow({
 }
 
 function formatPriceForCatalog(
-  cat: CatalogItem,
+  pm: PricingModel,
   config: PricingConfig,
   unitPrice: number,
 ): string {
-  const pm = cat.variants?.[0]?.pricingModel ?? "direct"
   if (pm === "sla") {
     // SLA has two price axes; expose the resin per-ml figure as the lead
     // line, the per-layer cost shows up below the layer input.
@@ -473,8 +588,9 @@ function formatPriceForCatalog(
 }
 
 function PickerEntryForm({
-  catalog,
+  catalog: _catalog,
   config,
+  pricingModel,
   unitPrice,
   discountLevel,
   baseItem,
@@ -482,12 +598,13 @@ function PickerEntryForm({
 }: {
   catalog: CatalogItem
   config: PricingConfig
+  pricingModel: PricingModel
   unitPrice: number
   discountLevel: DiscountLevel
   baseItem: Omit<CheckoutItemLocal, "quantity" | "totalPrice" | "formInputs">
   onAdd: (item: CheckoutItemLocal) => void
 }) {
-  const pm = (catalog.variants?.[0]?.pricingModel ?? "direct") as PricingModel
+  const pm = pricingModel
   switch (pm) {
     case "area":
       return (
