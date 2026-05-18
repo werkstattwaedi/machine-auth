@@ -94,7 +94,7 @@ function CheckoutsPage() {
       },
       {
         id: "tip",
-        header: "Trinkgeld",
+        header: "Spende",
         cell: ({ row }) =>
           row.original.summary?.tip != null && row.original.summary.tip > 0
             ? formatCHF(row.original.summary.tip)

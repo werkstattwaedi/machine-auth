@@ -76,14 +76,18 @@ describe("buildInvoicePdf — content", () => {
     expect(text).to.not.include("Industriestrasse");
   });
 
-  it("with tip: Trinkgeld section present", async () => {
+  it("with donation: Spende section present (issue #250)", async () => {
     const text = await pdfText(checkoutWithTipInvoice());
-    expect(text).to.include("Trinkgeld");
+    // Per issue #250 the line label is now "Spende"; the field is still
+    // named `tip` for back-compat with already-issued bills.
+    expect(text).to.include("Spende");
     expect(text).to.include("5.00");
+    expect(text).to.not.include("Trinkgeld");
   });
 
-  it("without tip: Trinkgeld section absent", async () => {
+  it("without donation: Spende section absent", async () => {
     const text = await pdfText(singleCheckoutInvoice());
+    expect(text).to.not.include("Spende");
     expect(text).to.not.include("Trinkgeld");
   });
 

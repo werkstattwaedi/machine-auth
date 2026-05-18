@@ -386,11 +386,14 @@ function renderCheckoutSection(
     y = renderSubtotalRow(doc, y, workshopTotal);
   }
 
-  // Tip
+  // Donation (label: "Spende"). The underlying field is still named `tip`
+  // for back-compat with already-issued bills and the persisted
+  // `checkout.summary.tip` shape; only the rendered label changed — see
+  // issue #250.
   if (checkout.tip > 0) {
     y = ensureSpace(doc, y, 30);
     doc.fontSize(10).font("Helvetica-Bold");
-    doc.text("Trinkgeld", MARGIN_LEFT, y);
+    doc.text("Spende", MARGIN_LEFT, y);
     y += 16;
     doc.font("Helvetica").fontSize(9);
     doc.text(formatAmount(checkout.tip), COL_TOTAL_X, y, {

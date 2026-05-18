@@ -10,8 +10,8 @@ import { SpendeCard } from "./step-checkout"
 afterEach(cleanup)
 
 /**
- * Wrapper that mirrors the parent's `manualTip` numeric state, so we exercise
- * the same controlled-input contract `StepCheckout` uses.
+ * Wrapper that mirrors the parent's `manualDonation` numeric state, so we
+ * exercise the same controlled-input contract `StepCheckout` uses.
  */
 function Harness({ onChange }: { onChange?: (v: number) => void }) {
   const [spende, setSpende] = useState(0)
@@ -32,13 +32,32 @@ function Harness({ onChange }: { onChange?: (v: number) => void }) {
   )
 }
 
+describe("SpendeCard labels (issue #250)", () => {
+  it("renders the gold card title as 'Spende' (no more 'Trinkgeld/Spende')", () => {
+    render(<Harness />)
+
+    // The title is the visible card header. With option A we drop the
+    // "Trinkgeld" word entirely — the contribution is a donation, not a
+    // tip.
+    expect(screen.getByText("Spende")).toBeTruthy()
+    expect(screen.queryByText(/Trinkgeld/)).toBeNull()
+  })
+
+  it("input is reachable via the 'Spende' aria-label", () => {
+    render(<Harness />)
+    // Throws if no element matches — the assertion is the lookup itself.
+    const input = screen.getByLabelText("Spende") as HTMLInputElement
+    expect(input.tagName).toBe("INPUT")
+  })
+})
+
 describe("SpendeCard input", () => {
   it("accepts trailing digits like '20' without truncating to '2'", async () => {
     const onChange = vi.fn()
     const user = userEvent.setup()
     render(<Harness onChange={onChange} />)
 
-    const input = screen.getByLabelText("Trinkgeld/Spende") as HTMLInputElement
+    const input = screen.getByLabelText("Spende") as HTMLInputElement
     await user.type(input, "20")
 
     // The bug: previous behaviour reformatted "2" -> "2.00" on each
@@ -52,7 +71,7 @@ describe("SpendeCard input", () => {
     const user = userEvent.setup()
     render(<Harness onChange={onChange} />)
 
-    const input = screen.getByLabelText("Trinkgeld/Spende") as HTMLInputElement
+    const input = screen.getByLabelText("Spende") as HTMLInputElement
     await user.type(input, "0.5")
 
     expect(input.value).toBe("0.5")
@@ -63,7 +82,7 @@ describe("SpendeCard input", () => {
     const user = userEvent.setup()
     render(<Harness />)
 
-    const input = screen.getByLabelText("Trinkgeld/Spende") as HTMLInputElement
+    const input = screen.getByLabelText("Spende") as HTMLInputElement
     await user.type(input, "20")
     expect(input.value).toBe("20")
 
@@ -77,7 +96,7 @@ describe("SpendeCard input", () => {
     const user = userEvent.setup()
     render(<Harness onChange={onChange} />)
 
-    const input = screen.getByLabelText("Trinkgeld/Spende") as HTMLInputElement
+    const input = screen.getByLabelText("Spende") as HTMLInputElement
     await user.type(input, "1,5")
 
     expect(input.value).toBe("1,5")
@@ -88,7 +107,7 @@ describe("SpendeCard input", () => {
     const user = userEvent.setup()
     render(<Harness />)
 
-    const input = screen.getByLabelText("Trinkgeld/Spende") as HTMLInputElement
+    const input = screen.getByLabelText("Spende") as HTMLInputElement
     await user.type(input, "0")
     await user.tab()
     expect(input.value).toBe("")
