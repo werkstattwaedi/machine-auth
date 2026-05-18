@@ -246,16 +246,20 @@ async function main(): Promise<never> {
     EMULATOR_AUTH_PORT: String(9199 + block.offset),
     EMULATOR_FIRESTORE_PORT: String(8180 + block.offset),
     EMULATOR_FUNCTIONS_PORT: String(5101 + block.offset),
+    EMULATOR_STORAGE_PORT: String(9299 + block.offset),
     // Vite reads VITE_EMULATOR_*_PORT for connectXEmulator()
     VITE_EMULATOR_AUTH_PORT: String(9199 + block.offset),
     VITE_EMULATOR_FIRESTORE_PORT: String(8180 + block.offset),
     VITE_EMULATOR_FUNCTIONS_PORT: String(5101 + block.offset),
+    VITE_EMULATOR_STORAGE_PORT: String(9299 + block.offset),
   };
 
   console.error(
     `[port-block] Generated ${runtimeConfigName} (firestore=${
       8180 + block.offset
-    }, auth=${9199 + block.offset}, functions=${5101 + block.offset})`
+    }, auth=${9199 + block.offset}, functions=${5101 + block.offset}, storage=${
+      9299 + block.offset
+    })`
   );
   console.error(`[port-block] Running: ${cmd} ${cmdArgs.join(" ")}`);
 
