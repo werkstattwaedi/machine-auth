@@ -87,6 +87,38 @@ interface Row {
   cells: Record<string, string | number | null>;
 }
 
+/**
+ * Resolve a sheet tab name (the human-readable label on the worksheet
+ * tab in Excel) to its `xl/worksheets/sheetN.xml` archive path. xlsx
+ * sheet numbering is insertion-order — *not* tab position — so a
+ * hard-wired `sheet2.xml` silently drifts the moment Mike inserts or
+ * re-orders sheets. Resolving through `workbook.xml` + its rels file
+ * locks the parser to the named worksheet.
+ */
+function resolveSheetPath(xlsxPath: string, sheetName: string): string {
+  const workbookXml = unzipMember(xlsxPath, "xl/workbook.xml");
+  const sheetMatch = new RegExp(
+    `<sheet\\b[^>]*\\bname="${sheetName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"[^>]*\\br:id="([^"]+)"[^>]*/?>`,
+  ).exec(workbookXml);
+  if (!sheetMatch) {
+    throw new Error(
+      `build-catalog-from-xlsx: sheet "${sheetName}" not found in xl/workbook.xml`,
+    );
+  }
+  const rId = sheetMatch[1];
+  const relsXml = unzipMember(xlsxPath, "xl/_rels/workbook.xml.rels");
+  const relMatch = new RegExp(
+    `<Relationship\\b[^>]*\\bId="${rId}"[^>]*\\bTarget="([^"]+)"`,
+  ).exec(relsXml);
+  if (!relMatch) {
+    throw new Error(
+      `build-catalog-from-xlsx: relationship "${rId}" for sheet "${sheetName}" not found`,
+    );
+  }
+  // Target is relative to xl/ (e.g. "worksheets/sheet2.xml").
+  return relMatch[1].startsWith("/") ? relMatch[1].slice(1) : `xl/${relMatch[1]}`;
+}
+
 function parseSheet(xlsxPath: string, sheetXmlPath: string, sharedStrings: string[]): Row[] {
   const xml = unzipMember(xlsxPath, sheetXmlPath);
   const rows: Row[] = [];
@@ -172,7 +204,12 @@ function pricingModelFromHeader(
   topLevelSection: string | null,
 ): CatalogEntry["variants"][0]["pricingModel"] {
   if (topLevelSection === "Schleifmittel") return "count";
-  if (header.startsWith("Preis/m2")) return "area";
+  // Accept both the ASCII "m2" (today's xlsx) and the Unicode "m²"
+  // (what Excel renders by default) so a future revision that pastes
+  // the superscript doesn't silently fall through to "length".
+  if (header.startsWith("Preis/m2") || header.startsWith("Preis/m²")) {
+    return "area";
+  }
   if (header.startsWith("Preis/Stk")) return "count";
   if (header.startsWith("Preis/m")) return "length";
   return "count";
@@ -212,7 +249,8 @@ function deterministicId(seed: string): string {
 
 function buildHolzCatalog(xlsxPath: string): CatalogEntry[] {
   const sharedStrings = loadSharedStrings(xlsxPath);
-  const rows = parseSheet(xlsxPath, "xl/worksheets/sheet2.xml", sharedStrings); // Holz PL
+  const sheetPath = resolveSheetPath(xlsxPath, "Holz PL");
+  const rows = parseSheet(xlsxPath, sheetPath, sharedStrings);
 
   const entries: CatalogEntry[] = [];
   let topLevelSection: string | null = null;

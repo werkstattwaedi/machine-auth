@@ -339,11 +339,13 @@ async function seed() {
   const catalogDir = join(dirname(fileURLToPath(import.meta.url)), "seed-data", "catalog");
   const catalogFiles = readdirSync(catalogDir).filter((f) => f.endsWith(".json")).sort();
   const codeToDocId = new Map<string, string>();
+  const allCatalog: Array<{ id: string; category?: string[] }> = [];
   let totalCatalog = 0;
   for (const file of catalogFiles) {
     const entries = JSON.parse(readFileSync(join(catalogDir, file), "utf-8")) as Array<{
       id: string;
       code?: string;
+      category?: string[];
       [key: string]: unknown;
     }>;
     for (const item of entries) {
@@ -352,6 +354,7 @@ async function seed() {
       if (typeof item.code === "string" && item.code.length > 0) {
         codeToDocId.set(item.code, id);
       }
+      allCatalog.push({ id, category: item.category });
     }
     totalCatalog += entries.length;
   }
@@ -463,13 +466,12 @@ async function seed() {
   }
 
   // --- Sample open checkout with items for Mike ---
-  // Picks any Sperrholz entry available in the new Holz catalog so the
-  // sample remains valid across xlsx revisions.
+  // Picks any real Sperrholz-Platten entry available in the new Holz
+  // catalog so the sample remains valid across xlsx revisions. Matching
+  // by category instead of code range avoids picking up adjacent
+  // non-Sperrholz codes (e.g. Rohspan) if Mike renumbers later.
   const sampleSperrholz =
-    [...codeToDocId.entries()].find(([code]) => {
-      const n = parseInt(code, 10);
-      return n >= 3080 && n <= 3093; // Sperrholz-Platten block in holz.json
-    })?.[1] ?? null;
+    allCatalog.find((c) => c.category?.[1] === "Sperrholz-Platten")?.id ?? null;
   if (sampleSperrholz) {
     const mikeRef = db.doc(`users/${ID.userMike}`);
     const checkoutRef = db.collection("checkouts").doc("00checkout0mike00001");
