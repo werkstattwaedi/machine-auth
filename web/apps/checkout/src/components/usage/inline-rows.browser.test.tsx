@@ -277,6 +277,43 @@ describe("MaterialPicker", () => {
     expect(screen.queryByText("MDF Platte 3mm")).toBeNull()
   })
 
+  it("renders empty-state copy when the workshop has no catalog items", async () => {
+    const user = userEvent.setup()
+    renderSection({ catalogItems: [] })
+    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    expect(
+      screen.getByText(
+        /Keine Treffer\. Such-Begriff anpassen oder einen anderen Filter wählen\./,
+      ),
+    ).toBeTruthy()
+  })
+
+  it("renders zero-variant items at unitPrice 0 without crashing", async () => {
+    // Defensive: a malformed catalog doc (variants: []) should still
+    // appear in the list and be clickable; total falls back to 0.
+    const malformed: CatalogItem[] = [
+      {
+        id: "cat-malformed",
+        code: "ZZZ",
+        name: "Item ohne Variante",
+        workshops: ["holz"],
+        category: ["Sonstiges"],
+        variants: [],
+        active: true,
+        userCanAdd: true,
+      },
+    ]
+    const user = userEvent.setup()
+    renderSection({ catalogItems: malformed })
+    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    const row = screen.getByText("Item ohne Variante")
+    expect(row).toBeTruthy()
+    // Row stays clickable; expanding shouldn't throw. With no variants we
+    // expect no radiogroup to appear.
+    await user.click(row)
+    expect(screen.queryByRole("radiogroup")).toBeNull()
+  })
+
   it("narrows visible items via breadcrumb-style category chips", async () => {
     // Three catalog items spread across two top-level categories.
     // Holzplatten has TWO sub-categories so the sub-row is meaningful;
