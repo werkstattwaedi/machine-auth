@@ -15,6 +15,27 @@ import { getAdminFirestore, E2E_PORTS } from "./helpers"
 import { FieldValue } from "firebase-admin/firestore"
 import { getAuth } from "firebase-admin/auth"
 import { generateValidPICCAndCMAC } from "./sdm-test-helper"
+import type { CatalogItemDoc } from "@modules/lib/firestore-entities"
+
+/**
+ * Compile-time shape guard for catalog seed entries — picks up the
+ * non-audit catalog fields the picker UI actually reads. If a future
+ * `CatalogItemDoc` schema change drops/renames `variants[]` or
+ * `category[]`, this typing fails to compile and the seed (and thus the
+ * whole e2e suite) breaks loudly at build time instead of silently
+ * shipping items the picker can no longer render — the failure mode
+ * that produced #285.
+ */
+type CatalogSeed = Pick<
+  CatalogItemDoc,
+  | "code"
+  | "name"
+  | "workshops"
+  | "category"
+  | "active"
+  | "userCanAdd"
+  | "variants"
+> & { description?: string | null }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -69,65 +90,150 @@ export default async function globalSetup() {
   })
 
   // ── Seed catalog items ──
-  await db.collection("catalog").doc("e2e-item-1").set({
+  //
+  // Catalog items use the v5 schema: `variants[]` carries pricingModel +
+  // unitPrice ({ default, member? }), and `category[]` is required (may
+  // be empty for items that don't surface category chips). The picker
+  // reads `variants[0]` for pricing model and price display; without
+  // `variants`, the picker defaults to the "direct" form and the
+  // expected labels (Anzahl / Resin / Länge) never render — see #285.
+  //
+  // `seedCatalog()` is typed against `CatalogSeed` so a future schema
+  // change that drops `variants[]` or `category[]` breaks the build
+  // here, not in a downstream pixel-diff.
+  const seedCatalog = async (id: string, doc: CatalogSeed): Promise<void> => {
+    await db.collection("catalog").doc(id).set(doc)
+  }
+
+  await seedCatalog("e2e-item-1", {
     code: "9001",
     name: "E2E Testmaterial",
     workshops: ["holz"],
-    pricingModel: "area",
-    unitPrice: { none: 10, member: 8 },
+    category: [],
     active: true,
     userCanAdd: true,
     description: "Testmaterial für E2E Tests",
+    variants: [
+      {
+        id: "default",
+        pricingModel: "area",
+        unitPrice: { default: 10, member: 8 },
+      },
+    ],
   })
 
-  await db.collection("catalog").doc("e2e-item-2").set({
+  await seedCatalog("e2e-item-2", {
     code: "9002",
     name: "E2E Holzplatte",
     workshops: ["holz"],
-    pricingModel: "area",
-    unitPrice: { none: 5, member: 4 },
+    category: [],
     active: true,
     userCanAdd: true,
+    variants: [
+      {
+        id: "default",
+        pricingModel: "area",
+        unitPrice: { default: 5, member: 4 },
+      },
+    ],
   })
 
-  await db.collection("catalog").doc("e2e-item-count").set({
+  await seedCatalog("e2e-item-count", {
     code: "9010",
     name: "Schleifpapier",
     workshops: ["holz"],
-    pricingModel: "count",
-    unitPrice: { none: 2, member: 1.5 },
+    category: [],
     active: true,
     userCanAdd: true,
+    variants: [
+      {
+        id: "default",
+        pricingModel: "count",
+        unitPrice: { default: 2, member: 1.5 },
+      },
+    ],
   })
 
-  await db.collection("catalog").doc("e2e-item-3").set({
+  await seedCatalog("e2e-item-3", {
     code: "9003",
     name: "Filament",
     workshops: ["makerspace"],
-    pricingModel: "weight",
-    unitPrice: { none: 65, member: 65 },
+    category: [],
     active: true,
     userCanAdd: true,
+    variants: [
+      {
+        id: "default",
+        pricingModel: "weight",
+        unitPrice: { default: 65, member: 65 },
+      },
+    ],
   })
 
-  await db.collection("catalog").doc("e2e-item-4").set({
+  await seedCatalog("e2e-item-4", {
     code: "9004",
     name: "Filament (Spezial)",
     workshops: ["makerspace"],
-    pricingModel: "weight",
-    unitPrice: { none: 105, member: 105 },
+    category: [],
     active: true,
     userCanAdd: true,
+    variants: [
+      {
+        id: "default",
+        pricingModel: "weight",
+        unitPrice: { default: 105, member: 105 },
+      },
+    ],
   })
 
-  await db.collection("catalog").doc("e2e-item-sla").set({
+  await seedCatalog("e2e-item-sla", {
     code: "9099",
     name: "E2E SLA Resin",
     workshops: ["makerspace"],
-    pricingModel: "sla",
-    unitPrice: { none: 250, member: 200 },
+    category: [],
     active: true,
     userCanAdd: true,
+    variants: [
+      {
+        id: "default",
+        pricingModel: "sla",
+        unitPrice: { default: 250, member: 200 },
+      },
+    ],
+  })
+
+  // ── Seed membership catalog + catalog-references indirection ──
+  //
+  // The /membership page resolves prices via `config/catalog-references`
+  // → membership catalog doc → `variants` (`single` and `family`). When
+  // these are missing the page renders "—" instead of the price, which
+  // shifts text positioning on the "Mitglied werden" card and trips the
+  // membership-none screenshot baseline (#285).
+  await seedCatalog("e2e-membership", {
+    code: "9100",
+    name: "Mitgliedschaft",
+    workshops: [],
+    category: [],
+    active: true,
+    userCanAdd: false,
+    variants: [
+      {
+        id: "single",
+        label: "Einzel",
+        pricingModel: "direct",
+        unitPrice: { default: 80 },
+      },
+      {
+        id: "family",
+        label: "Familie",
+        pricingModel: "direct",
+        unitPrice: { default: 120 },
+      },
+    ],
+  })
+
+  await db.doc("config/catalog-references").set({
+    membership: db.doc("catalog/e2e-membership"),
   })
 
   // ── Seed permission ──
