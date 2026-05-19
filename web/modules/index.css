@@ -168,3 +168,15 @@
   from { height: var(--radix-collapsible-content-height) }
   to { height: 0 }
 }
+
+/* Respect prefers-reduced-motion. The keyframes are referenced by name
+   from Tailwind utility classes, so we collapse their duration instead
+   of disabling animation outright — the Collapsible state still
+   transitions (Radix needs that), just without visible motion.
+   tw-animate-css's `animate-in` utilities already honor reduced-motion. */
+@media (prefers-reduced-motion: reduce) {
+  [data-state="open"][class*="collapsible-down"],
+  [data-state="closed"][class*="collapsible-up"] {
+    animation-duration: 1ms !important;
+  }
+}

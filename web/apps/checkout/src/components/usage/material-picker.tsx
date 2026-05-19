@@ -501,9 +501,10 @@ function CatalogRowSubtitle({ catalog }: { catalog: CatalogItem }) {
 // is wrapped in Radix `Collapsible.Content` so it animates between 0 and
 // its measured height via `--radix-collapsible-content-height`.
 //
-// State note: variant selection lives on the row, but resets each time
-// the row opens because we key the inner content by `isExpanded`. That
-// matches the old behaviour where `ExpandedRow` remounted per open.
+// State note: variant selection survives for the duration of one open;
+// the body unmounts on close (Collapsible.Content unmounts after the
+// close animation finishes) so re-opening produces a fresh
+// `PickerRowBody` with `variants[0]` selected again.
 // ---------------------------------------------------------------------------
 
 function PickerRow({
@@ -566,7 +567,11 @@ function PickerRow({
         className="overflow-hidden data-[state=open]:animate-[collapsible-down_180ms_ease-out] data-[state=closed]:animate-[collapsible-up_140ms_ease-in]"
       >
         <PickerRowBody
-          key={isExpanded ? `${catalog.id}:open` : `${catalog.id}:closed`}
+          // No `:open/:closed` key suffix here — Collapsible.Content's
+          // own mount lifecycle handles the close-then-reopen reset. A
+          // per-isExpanded key would remount mid-animation, leaving the
+          // closing panel blank.
+          key={catalog.id}
           catalog={catalog}
           config={config}
           discountLevel={discountLevel}
