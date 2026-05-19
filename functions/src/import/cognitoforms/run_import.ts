@@ -278,11 +278,21 @@ function mappedItemToEntity(
   m: MappedCheckoutItem,
   created: Timestamp,
 ): CheckoutItemEntity {
-  const catalogRef = m.catalogKey
-    ? (db.doc(
-        `catalog/${COGNITOFORMS_CATALOG_IDS[m.catalogKey]}`,
-      ) as DocumentReference)
-    : null;
+  let catalogRef: DocumentReference | null = null;
+  if (m.catalogKey) {
+    // `m.catalogKey` originates from CognitoForms JSON via mappers.ts.
+    // The type system narrows it at compile time, but if the form
+    // schema gains a new Kategorie or someone widens the mapper output,
+    // we'd otherwise stamp `catalog/undefined` onto the item silently.
+    const id = COGNITOFORMS_CATALOG_IDS[m.catalogKey];
+    if (!id) {
+      throw new Error(
+        `CognitoForms importer: unknown catalogKey "${m.catalogKey}". ` +
+          "Add it to COGNITOFORMS_CATALOG_IDS or fix the mapper.",
+      );
+    }
+    catalogRef = db.doc(`catalog/${id}`) as DocumentReference;
+  }
   return {
     workshop: m.workshop,
     description: m.description,

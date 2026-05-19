@@ -27,11 +27,14 @@ import {
 } from "../../src/import/cognitoforms/run_import";
 import type { CfEntry } from "../../src/import/cognitoforms/schema_types";
 
-// `COGNITOFORMS_CATALOG_IDS` are now real Firestore-shaped IDs that
-// match the seeded catalog entries in
-// `scripts/seed-data/catalog/machines.json` and `makerspace.json`. The
-// test doesn't read the catalog itself (the orchestrator only stores
-// DocumentReferences on the imported items), so we don't seed it here.
+// Invariant: the importer never *reads* a catalog doc — it only stamps
+// `DocumentReference`s onto items, so we intentionally don't seed the
+// 12 catalog docs in this test. If a future test asserts a resolved
+// field off the catalog (e.g. name, price), it must seed catalog/<id>
+// for every COGNITOFORMS_CATALOG_IDS entry it relies on.
+//
+// The IDs themselves are real Firestore-shaped strings that match the
+// seed entries in `scripts/seed-data/catalog/{machines,makerspace}.json`.
 
 function loadFixture(name: string): CfEntry {
   // After tsc: this file lives at lib/test/integration/...; fixtures at
