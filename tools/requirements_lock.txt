@@ -27,4 +27,4 @@ lz4==4.4.5
 python-dotenv==1.2.2
 
 # Common dependencies
-idna==3.10
+idna==3.15
