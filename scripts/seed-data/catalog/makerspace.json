@@ -17,7 +17,7 @@
         "id": "default",
         "pricingModel": "weight",
         "unitPrice": {
-          "default": 0.1
+          "default": 105
         }
       }
     ]
@@ -32,7 +32,7 @@
     "category": [
       "FDM"
     ],
-    "description": "FDM-3D-Druck-Filament, Standardkategorie. Verrechnet pro Gramm gedruckten Materials.",
+    "description": "FDM-3D-Druck-Filament. PLA, PETG, ASA",
     "active": true,
     "userCanAdd": true,
     "variants": [
@@ -40,7 +40,7 @@
         "id": "default",
         "pricingModel": "weight",
         "unitPrice": {
-          "default": 0.1
+          "default": 65
         }
       }
     ]
@@ -55,7 +55,7 @@
     "category": [
       "FDM"
     ],
-    "description": "FDM-3D-Druck-Filament, technische Kategorie (z.B. PETG, Nylon, faserverstärkt).",
+    "description": "FDM-3D-Druck-Filament, technische Kategorie (Nylon, faserverstärkt).",
     "active": true,
     "userCanAdd": true,
     "variants": [
@@ -63,15 +63,15 @@
         "id": "default",
         "pricingModel": "weight",
         "unitPrice": {
-          "default": 0.1
+          "default": 210
         }
       }
     ]
   },
   {
-    "id": "00catmat0sla000009010",
+    "id": "xmRvylz89zXUlZBF4rGJ",
     "code": "9010",
-    "name": "SLA Druck",
+    "name": "Clear Resin",
     "workshops": [
       "makerspace"
     ],
@@ -86,8 +86,53 @@
         "id": "default",
         "pricingModel": "sla",
         "unitPrice": {
-          "default": 250,
-          "member": 200
+          "default": 250
+        }
+      }
+    ]
+  },
+  {
+    "id": "2szBzebHul8VMLjXHxO5",
+    "code": "9011",
+    "name": "Grey Resin",
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "SLA"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Resin-Druck: Preis nach Harzverbrauch (CHF/L) und Layeranzahl (global)",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "sla",
+        "unitPrice": {
+          "default": 250
+        }
+      }
+    ]
+  },
+  {
+    "id": "XrjYHs0dS6fXNRyT37WC",
+    "code": "9012",
+    "name": "White Resin",
+    "workshops": [
+      "makerspace"
+    ],
+    "category": [
+      "SLA"
+    ],
+    "active": true,
+    "userCanAdd": true,
+    "description": "Resin-Druck: Preis nach Harzverbrauch (CHF/L) und Layeranzahl (global)",
+    "variants": [
+      {
+        "id": "default",
+        "pricingModel": "sla",
+        "unitPrice": {
+          "default": 250
         }
       }
     ]
