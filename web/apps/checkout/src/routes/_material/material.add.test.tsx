@@ -141,9 +141,14 @@ describe("material.add submit error envelope (issue #182)", () => {
             id: "cat-1",
             name: "Test Material",
             description: "",
-            unitPrice: { none: 5 },
             workshops: ["makerspace"],
-            pricingModel: "quantity",
+            variants: [
+              {
+                id: "default",
+                pricingModel: "count",
+                unitPrice: { default: 5 },
+              },
+            ],
           },
           loading: false,
           error: null,

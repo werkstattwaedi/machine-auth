@@ -69,11 +69,10 @@ export function membershipTypeForCheckoutItem(
  * trigger to decide whether to create/extend a membership. Caller passes
  * the membership catalog id (resolved once via `loadMembershipCatalogId`).
  */
-export async function detectMembershipKindForItems(
-  _database: Firestore,
+export function detectMembershipKindForItems(
   items: CheckoutItemEntity[],
   membershipCatalogId: string,
-): Promise<MembershipType | null> {
+): MembershipType | null {
   const kinds = items
     .map((i) => membershipTypeForCheckoutItem(i, membershipCatalogId))
     .filter((k): k is MembershipType => k !== null);

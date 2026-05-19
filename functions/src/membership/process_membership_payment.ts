@@ -68,8 +68,7 @@ export async function processMembershipPayment(
     // No membership SKU configured — checkout cannot contain one. No-op.
     return;
   }
-  const membershipKindForCheckout = await detectMembershipKindForItems(
-    database,
+  const membershipKindForCheckout = detectMembershipKindForItems(
     items,
     membershipCatalogId,
   );

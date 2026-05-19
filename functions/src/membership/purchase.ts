@@ -205,8 +205,7 @@ export async function handlePurchaseMembership(
       const existingItems = existingItemsSnap.docs.map(
         (d) => d.data() as CheckoutItemEntity,
       );
-      const existingMembership = await detectMembershipKindForItems(
-        database,
+      const existingMembership = detectMembershipKindForItems(
         existingItems,
         catalogDoc.id,
       );
