@@ -279,6 +279,7 @@ function PickerBody({
     <>
       {chipRows.length > 0 && (
         <div
+          role="group"
           aria-label="Kategorien"
           className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-border bg-background px-4 py-2"
         >
@@ -292,7 +293,7 @@ function PickerBody({
               )}
               {row.values.map((value) => (
                 <FilterPill
-                  key={value}
+                  key={`${row.level}:${value}`}
                   active={row.selected === value}
                   onClick={() => onChipClick(row.level, value)}
                 >
@@ -373,6 +374,72 @@ function PickerBody({
       )}
       </div>
     </>
+  )
+}
+
+/**
+ * Variant chooser used by `PickerRowBody` when an item has more than one
+ * variant. Implements the ARIA radiogroup keyboard contract — the
+ * selected radio holds `tabIndex=0` and arrow keys cycle the selection
+ * among siblings (other radios are `tabIndex=-1` so Tab moves focus
+ * past the group). Without this, keyboard users had to Tab through
+ * every variant individually.
+ */
+function VariantChooser({
+  variants,
+  selectedId,
+  onChange,
+}: {
+  variants: ReadonlyArray<{ id: string; label?: string | null }>
+  selectedId: string
+  onChange: (id: string) => void
+}) {
+  const rootRef = React.useRef<HTMLDivElement>(null)
+  const focusByIndex = (idx: number) => {
+    const buttons = rootRef.current?.querySelectorAll<HTMLButtonElement>(
+      'button[role="radio"]',
+    )
+    buttons?.[idx]?.focus()
+  }
+  return (
+    <div
+      ref={rootRef}
+      role="radiogroup"
+      aria-label="Variante"
+      className="mb-3 flex flex-wrap gap-1.5"
+      onKeyDown={(e) => {
+        if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return
+        const idx = variants.findIndex((v) => v.id === selectedId)
+        if (idx < 0) return
+        const dir = e.key === "ArrowRight" ? 1 : -1
+        const next = (idx + dir + variants.length) % variants.length
+        e.preventDefault()
+        onChange(variants[next].id)
+        focusByIndex(next)
+      }}
+    >
+      {variants.map((v) => {
+        const isSelected = selectedId === v.id
+        return (
+          <button
+            key={v.id}
+            type="button"
+            role="radio"
+            aria-checked={isSelected}
+            tabIndex={isSelected ? 0 : -1}
+            onClick={() => onChange(v.id)}
+            className={[
+              "rounded-[3px] border px-2.5 py-1 text-xs",
+              isSelected
+                ? "border-cog-teal bg-cog-teal text-white"
+                : "border-border bg-background text-foreground hover:bg-secondary",
+            ].join(" ")}
+          >
+            {v.label ?? "Standard"}
+          </button>
+        )
+      })}
+    </div>
   )
 }
 
@@ -573,29 +640,11 @@ function PickerRowBody({
   return (
     <div className="px-4 pb-4">
       {variants.length > 1 && (
-        <div
-          role="radiogroup"
-          aria-label="Variante"
-          className="mb-3 flex flex-wrap gap-1.5"
-        >
-          {variants.map((v) => (
-            <button
-              key={v.id}
-              type="button"
-              role="radio"
-              aria-checked={selectedVariantId === v.id}
-              onClick={() => setSelectedVariantId(v.id)}
-              className={[
-                "rounded-[3px] border px-2.5 py-1 text-xs",
-                selectedVariantId === v.id
-                  ? "border-cog-teal bg-cog-teal text-white"
-                  : "border-border bg-background text-foreground hover:bg-secondary",
-              ].join(" ")}
-            >
-              {v.label ?? "Standard"}
-            </button>
-          ))}
-        </div>
+        <VariantChooser
+          variants={variants}
+          selectedId={selectedVariantId}
+          onChange={setSelectedVariantId}
+        />
       )}
       <PickerEntryForm
         key={variant?.id ?? "default"}
