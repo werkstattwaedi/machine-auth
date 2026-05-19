@@ -8,7 +8,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@modules/components/ui/sheet"
-import { VisuallyHidden } from "radix-ui"
+import { Collapsible, VisuallyHidden } from "radix-ui"
 import { Label } from "@modules/components/ui/label"
 import { useIsMobile } from "@modules/hooks/use-mobile"
 import { formatCHF } from "@modules/lib/format"
@@ -287,7 +287,7 @@ function PickerBody({
               {idx > 0 && (
                 <ChevronRight
                   aria-hidden
-                  className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                  className="h-3.5 w-3.5 shrink-0 text-muted-foreground animate-in fade-in duration-150"
                 />
               )}
               {row.values.map((value) => (
@@ -312,33 +312,21 @@ function PickerBody({
         filtered.map((cat) => {
           const isExpanded =
             expansion?.kind === "catalog" && expansion.id === cat.id
-          const variant = cat.variants?.[0]
-          const unitPrice = variant
-            ? (discountLevel === "member" && typeof variant.unitPrice.member === "number"
-                ? variant.unitPrice.member
-                : variant.unitPrice.default)
-            : 0
-          return isExpanded ? (
-            <ExpandedRow
+          return (
+            <PickerRow
               key={cat.id}
               catalog={cat}
+              isExpanded={isExpanded}
               config={config}
               discountLevel={discountLevel}
               workshopId={workshopId}
-              onCancel={() => setExpansion(null)}
+              onToggle={(open) =>
+                setExpansion(open ? { kind: "catalog", id: cat.id } : null)
+              }
               onAdd={(item) => {
                 onAdd(item)
                 setExpansion(null)
               }}
-            />
-          ) : (
-            <CollapsedRow
-              key={cat.id}
-              catalog={cat}
-              unitPrice={unitPrice}
-              onClick={() =>
-                setExpansion({ kind: "catalog", id: cat.id })
-              }
             />
           )
         })
@@ -397,48 +385,22 @@ function FilterPill({
   onClick: () => void
   children: React.ReactNode
 }) {
+  // Entry animation fires when the pill first mounts — i.e. when a
+  // sibling row of chips becomes visible after the user drills into (or
+  // back out of) a category level.
+  const base =
+    "inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-1 text-xs animate-in fade-in slide-in-from-top-1 duration-150"
   return (
     <button
       type="button"
       onClick={onClick}
       className={
         active
-          ? "inline-flex shrink-0 items-center gap-1 rounded-full bg-cog-teal px-3 py-1 text-xs text-white"
-          : "inline-flex shrink-0 items-center gap-1 rounded-full bg-secondary px-3 py-1 text-xs text-foreground hover:bg-cog-teal-light"
+          ? `${base} bg-cog-teal text-white`
+          : `${base} bg-secondary text-foreground hover:bg-cog-teal-light`
       }
     >
       {children}
-    </button>
-  )
-}
-
-function CollapsedRow({
-  catalog,
-  unitPrice,
-  onClick,
-}: {
-  catalog: CatalogItem
-  unitPrice: number
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="grid w-full grid-cols-[1fr_auto] items-center gap-3 border-b border-border px-4 py-3 text-left hover:bg-cog-teal-light"
-    >
-      <div className="min-w-0">
-        <div className="font-heading text-sm font-semibold truncate">
-          {catalog.name}
-        </div>
-        <CatalogRowSubtitle catalog={catalog} />
-      </div>
-      <div className="font-heading text-sm font-semibold tabular-nums whitespace-nowrap">
-        {formatCHF(unitPrice)}
-        <span className="ml-0.5 font-body text-[11px] font-normal text-muted-foreground">
-          /{getShortUnit(catalog.variants?.[0]?.pricingModel ?? "direct")}
-        </span>
-      </div>
     </button>
   )
 }
@@ -466,32 +428,120 @@ function CatalogRowSubtitle({ catalog }: { catalog: CatalogItem }) {
 }
 
 // ---------------------------------------------------------------------------
-// Expanded entry rows — one component per pricing model. Each owns its own
-// local form state and converts user input to base units before calling
-// `onAdd`. Conversions mirror the editing rows in inline-rows.tsx so a
-// material added via the picker has the same on-disk shape as items the
-// existing UI created.
+// PickerRow — unified collapsed/expanded entry row. The header (name +
+// subtitle + price/unit) stays in place regardless of state so the row
+// doesn't reorganise on expand. The expansion (variant selector + form)
+// is wrapped in Radix `Collapsible.Content` so it animates between 0 and
+// its measured height via `--radix-collapsible-content-height`.
+//
+// State note: variant selection lives on the row, but resets each time
+// the row opens because we key the inner content by `isExpanded`. That
+// matches the old behaviour where `ExpandedRow` remounted per open.
 // ---------------------------------------------------------------------------
 
-function ExpandedRow({
+function PickerRow({
+  catalog,
+  isExpanded,
+  config,
+  discountLevel,
+  workshopId,
+  onToggle,
+  onAdd,
+}: {
+  catalog: CatalogItem
+  isExpanded: boolean
+  config: PricingConfig
+  discountLevel: DiscountLevel
+  workshopId: WorkshopId
+  onToggle: (open: boolean) => void
+  onAdd: (item: CheckoutItemLocal) => void
+}) {
+  const variants = catalog.variants ?? []
+  return (
+    <Collapsible.Root
+      open={isExpanded}
+      onOpenChange={onToggle}
+      className={[
+        "border-b border-border",
+        isExpanded ? "bg-secondary" : "",
+      ].join(" ")}
+    >
+      <Collapsible.Trigger asChild>
+        <button
+          type="button"
+          className="grid w-full grid-cols-[1fr_auto_auto] items-center gap-3 px-4 py-3 text-left hover:bg-cog-teal-light data-[state=open]:hover:bg-secondary"
+        >
+          <div className="min-w-0">
+            <div className="font-heading text-sm font-semibold truncate">
+              {catalog.name}
+            </div>
+            <CatalogRowSubtitle catalog={catalog} />
+          </div>
+          <div className="font-heading text-sm font-semibold tabular-nums whitespace-nowrap">
+            {formatCHF(headerUnitPrice(catalog, discountLevel))}
+            <span className="ml-0.5 font-body text-[11px] font-normal text-muted-foreground">
+              /{getShortUnit(variants[0]?.pricingModel ?? "direct")}
+            </span>
+          </div>
+          {isExpanded ? (
+            <span
+              aria-hidden
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[3px] text-muted-foreground hover:bg-background"
+            >
+              <X className="h-3 w-3" />
+            </span>
+          ) : (
+            <span className="h-5 w-5 shrink-0" aria-hidden />
+          )}
+        </button>
+      </Collapsible.Trigger>
+      <Collapsible.Content
+        className="overflow-hidden data-[state=open]:animate-[collapsible-down_180ms_ease-out] data-[state=closed]:animate-[collapsible-up_140ms_ease-in]"
+      >
+        <PickerRowBody
+          key={isExpanded ? `${catalog.id}:open` : `${catalog.id}:closed`}
+          catalog={catalog}
+          config={config}
+          discountLevel={discountLevel}
+          workshopId={workshopId}
+          onAdd={onAdd}
+        />
+      </Collapsible.Content>
+    </Collapsible.Root>
+  )
+}
+
+/**
+ * Unit price for the header — uses `variants[0]` (the canonical
+ * default). When the row is expanded and the user picks a different
+ * variant the inner body shows that variant's price; the header keeps
+ * the canonical one so the row doesn't visually flicker while the user
+ * is browsing options.
+ */
+function headerUnitPrice(
+  catalog: CatalogItem,
+  discountLevel: DiscountLevel,
+): number {
+  const v = catalog.variants?.[0]
+  if (!v) return 0
+  return discountLevel === "member" && typeof v.unitPrice.member === "number"
+    ? v.unitPrice.member
+    : v.unitPrice.default
+}
+
+function PickerRowBody({
   catalog,
   config,
   discountLevel,
   workshopId,
-  onCancel,
   onAdd,
 }: {
   catalog: CatalogItem
   config: PricingConfig
   discountLevel: DiscountLevel
   workshopId: WorkshopId
-  onCancel: () => void
   onAdd: (item: CheckoutItemLocal) => void
 }) {
-  // Multi-variant items get a chooser above the form. Single-variant
-  // items render no chooser; variants[0] is used silently. State resets
-  // implicitly because ExpandedRow remounts when the user picks a
-  // different catalog row.
   const variants = catalog.variants ?? []
   const [selectedVariantId, setSelectedVariantId] = useState<string>(
     variants[0]?.id ?? "default",
@@ -521,33 +571,7 @@ function ExpandedRow({
   }
 
   return (
-    <div className="border-b border-border bg-secondary">
-      {/* Header mirrors the CollapsedRow layout (name + subtitle | price/unit)
-          so the row doesn't reorganise on expand. The × close button sits
-          to the right of the price; everything else stays put. */}
-      <div className="grid w-full grid-cols-[1fr_auto_auto] items-center gap-3 px-4 py-3">
-        <div className="min-w-0">
-          <div className="font-heading text-sm font-semibold truncate">
-            {catalog.name}
-          </div>
-          <CatalogRowSubtitle catalog={catalog} />
-        </div>
-        <div className="font-heading text-sm font-semibold tabular-nums whitespace-nowrap">
-          {formatCHF(unitPrice)}
-          <span className="ml-0.5 font-body text-[11px] font-normal text-muted-foreground">
-            /{getShortUnit(variant?.pricingModel ?? "direct")}
-          </span>
-        </div>
-        <button
-          type="button"
-          aria-label="Auswahl schliessen"
-          onClick={onCancel}
-          className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[3px] text-muted-foreground hover:bg-background"
-        >
-          <X className="h-3 w-3" />
-        </button>
-      </div>
-      <div className="px-4 pb-4">
+    <div className="px-4 pb-4">
       {variants.length > 1 && (
         <div
           role="radiogroup"
@@ -574,7 +598,6 @@ function ExpandedRow({
         </div>
       )}
       <PickerEntryForm
-        // remount when the variant changes so each form state stays clean
         key={variant?.id ?? "default"}
         catalog={catalog}
         config={config}
@@ -584,7 +607,6 @@ function ExpandedRow({
         baseItem={baseItem}
         onAdd={onAdd}
       />
-      </div>
     </div>
   )
 }

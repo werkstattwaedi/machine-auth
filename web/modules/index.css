@@ -155,3 +155,16 @@
 @utility font-body {
   font-family: "Roboto Slab", "Helvetica Neue", sans-serif;
 }
+
+/* Height-aware collapsible animations. Radix sets the
+   `--radix-collapsible-content-height` custom property on the
+   Collapsible.Content element so we can tween between 0 and the actual
+   open height without measuring in JS. */
+@keyframes collapsible-down {
+  from { height: 0 }
+  to { height: var(--radix-collapsible-content-height) }
+}
+@keyframes collapsible-up {
+  from { height: var(--radix-collapsible-content-height) }
+  to { height: 0 }
+}
