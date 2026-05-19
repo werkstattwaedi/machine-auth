@@ -25,6 +25,7 @@ import type {
   AuditLogDoc,
   BillDoc,
   CatalogItemDoc,
+  CatalogReferencesDoc,
   CheckoutDoc,
   CheckoutItemDoc,
   ConfigDoc,
@@ -35,6 +36,7 @@ import type {
   OperationsLogDoc,
   PermissionDoc,
   PriceListDoc,
+  PricingConfigDoc,
   TokenDoc,
   UsageMachineDoc,
   UserDoc,
@@ -220,6 +222,24 @@ export function configRef(
   id: string,
 ): DocumentReference<ConfigDoc> {
   return doc(db, "config", id) as DocumentReference<ConfigDoc>
+}
+
+/** Typed handle to the singleton `config/pricing` document. */
+export function pricingConfigRef(
+  db: Firestore,
+): DocumentReference<PricingConfigDoc> {
+  return doc(db, "config", "pricing") as DocumentReference<PricingConfigDoc>
+}
+
+/** Typed handle to the singleton `config/catalog-references` document. */
+export function catalogReferencesRef(
+  db: Firestore,
+): DocumentReference<CatalogReferencesDoc> {
+  return doc(
+    db,
+    "config",
+    "catalog-references",
+  ) as DocumentReference<CatalogReferencesDoc>
 }
 
 // ── memberships ──────────────────────────────────────────────────────────

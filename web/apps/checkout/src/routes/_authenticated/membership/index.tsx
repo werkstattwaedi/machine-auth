@@ -23,18 +23,16 @@ import { useAuth } from "@modules/lib/auth"
 import { useDb, useFunctions } from "@modules/lib/firebase-context"
 import { useDocument, useCollection } from "@modules/lib/firestore"
 import {
+  catalogReferencesRef,
   checkoutItemsCollection,
   checkoutsCollection,
-  configRef,
   membershipInvitesCollection,
   membershipsCollection,
   userRef,
 } from "@modules/lib/firestore-helpers"
-import type {
-  CatalogItemDoc,
-  CatalogReferencesDoc,
-} from "@modules/lib/firestore-entities"
+import type { CatalogItemDoc } from "@modules/lib/firestore-entities"
 import type { DocumentReference } from "firebase/firestore"
+import { priceForTier } from "@modules/lib/pricing"
 import { formatDate } from "@modules/lib/format"
 import { formatFullName } from "@modules/lib/username-utils"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
@@ -105,20 +103,21 @@ function MembershipPage() {
   // null-tolerant. The previous collection-group `where("kind", "in",
   // [...])` query is gone — the two membership types live as variants
   // on the one referenced doc.
-  const { data: catalogRefsDoc } = useDocument(
-    configRef(db, "catalog-references") as unknown as DocumentReference<CatalogReferencesDoc>,
-  )
+  const { data: catalogRefsDoc } = useDocument(catalogReferencesRef(db))
   const membershipDocRef =
     catalogRefsDoc?.membership as DocumentReference<CatalogItemDoc> | undefined
   const { data: membershipCatalog } = useDocument(membershipDocRef ?? null)
+  // Renewals get the member tier (server enforces this too); first-time
+  // signups pay default. Mirrors the tier resolution in `purchase.ts`.
+  const discountLevel = userDoc?.activeMembership ? "member" : "none"
   const membershipPriceByType: Record<"single" | "family", string> =
     React.useMemo(() => {
       const lookup = (id: "single" | "family") => {
         const v = membershipCatalog?.variants?.find((x) => x.id === id)
-        return v ? String(v.unitPrice.default) : "—"
+        return v ? String(priceForTier(v.unitPrice, discountLevel)) : "—"
       }
       return { single: lookup("single"), family: lookup("family") }
-    }, [membershipCatalog])
+    }, [membershipCatalog, discountLevel])
   const pendingMembershipType: "single" | "family" | null = React.useMemo(() => {
     const membershipId = membershipDocRef?.id
     if (!membershipId) return null
