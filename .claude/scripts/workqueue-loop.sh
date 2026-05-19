@@ -198,6 +198,21 @@ while true; do
     while [[ ! -f "$signal_file" ]]; do sleep 3; done
     sleep 2   # let claude flush its final output
     tmux send-keys "/exit" Enter
+
+    # If claude has pending background work (e.g. a /loop wakeup scheduled
+    # externally), /exit pops a "Background work is running" prompt with
+    # "1. Exit anyway / 2. Stay". The default-highlighted option is "Exit
+    # anyway"; we explicitly send "1" then Enter to be unambiguous in case
+    # the default changes. Poll for ~10s; if the prompt doesn't appear,
+    # claude exited cleanly and we don't need to do anything.
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+      sleep 1
+      if tmux capture-pane -p 2>/dev/null | grep -q "Background work is running"; then
+        sleep 1
+        tmux send-keys 1 Enter
+        break
+      fi
+    done
   ) &
   watchdog_pid=$!
 
