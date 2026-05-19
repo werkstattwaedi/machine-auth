@@ -25,6 +25,12 @@
  * The xlsx is NOT a build-time input: this script runs by hand when Mike
  * ships a new pricelist. Output goes to `scripts/seed-data/catalog/holz.json`,
  * which is what `seed-emulator.ts` actually loads.
+ *
+ * NOTE: the current `holz.json` carries hand-tuned tweaks on top of the
+ * parser output (shorter Schleifmittel names, per-species sub-categories
+ * inside Sperrholz/MDF/Massivholz). Re-running this script will revert
+ * those — fold the tweaks back in before regenerating, or apply them to
+ * the xlsx upstream so the next run produces them natively.
  */
 
 import { execFileSync } from "node:child_process";
