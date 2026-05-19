@@ -595,6 +595,13 @@ async function allocateBill(
     tx.set(configRef, { nextBillNumber: nextBillNumber + 1 });
   }
 
+  // Issue #237: zero-amount bills (e.g. "Interne Nutzung") are auto-closed
+  // as `paidVia: "free"` so they don't sit "unpaid forever" waiting for a
+  // bank QR scan that will never come. The PDF generator gates its
+  // QR-bill section on `paidAt` already, so the same flag also keeps the
+  // payment slip out of the generated invoice.
+  const isFree = args.amount === 0;
+  const now = Timestamp.now();
   const bill: BillEntity = {
     userId: args.userId as DocumentReference,
     checkouts: [args.checkoutRef],
@@ -602,9 +609,9 @@ async function allocateBill(
     amount: args.amount,
     currency: "CHF",
     storagePath: null,
-    created: Timestamp.now(),
-    paidAt: null,
-    paidVia: null,
+    created: now,
+    paidAt: isFree ? now : null,
+    paidVia: isFree ? "free" : null,
     pdfGeneratedAt: null,
     emailSentAt: null,
   };

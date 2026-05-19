@@ -640,7 +640,7 @@ Options files provide field-level configuration without modifying `.proto` files
 // Format: fully.qualified.field.name option:value [option:value ...]
 
 maco.proto.TagUid.value max_size:7 fixed_size:true
-maco.proto.FirebaseId.value max_size:20
+maco.proto.FirebaseId.value max_size:32
 maco.proto.KeyBytes.value max_size:16 fixed_size:true
 ```
 
@@ -660,7 +660,7 @@ Define semantic wrapper types in proto for type safety:
 ```protobuf
 // proto/common.proto
 message TagUid { bytes value = 1; }      // 7-byte NFC UID
-message FirebaseId { string value = 1; } // 20-char document ID
+message FirebaseId { string value = 1; } // up to 32-char document ID
 message KeyBytes { bytes value = 1; }    // 16-byte AES key
 ```
 

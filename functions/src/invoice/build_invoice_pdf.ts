@@ -184,8 +184,28 @@ export async function buildInvoicePdf(
     y += 20;
 
     const isPaid = !!data.paidAt;
+    // Issue #237: a zero-amount "free" bill (e.g. Interne Nutzung) is
+    // recorded for the books but has no payable balance — replace the
+    // QR-bill section and the regular "Bezahlt via …" notice with a
+    // dedicated nothing-to-pay block.
+    const isFreeZero =
+      data.paidVia === "free" && data.grandTotal === 0;
 
-    if (isPaid) {
+    if (isFreeZero) {
+      // --- Nothing-to-pay notice (zero-amount bill) ---
+      y = ensureSpace(doc, y, 40);
+      doc.fontSize(11).font("Helvetica-Bold");
+      doc.text("Keine Zahlung erforderlich", MARGIN_LEFT, y);
+      y += 16;
+      doc.fontSize(9).font("Helvetica");
+      doc.text(
+        `Für diesen Besuch ist nichts zu bezahlen (Betrag ${data.currency} 0.00).`,
+        MARGIN_LEFT,
+        y,
+      );
+
+      addPageFooters(doc, data, doc.bufferedPageRange().count);
+    } else if (isPaid) {
       // --- Paid notice ---
       y = ensureSpace(doc, y, 40);
       const viaLabel = PAID_VIA_LABELS[data.paidVia ?? ""] ?? "";

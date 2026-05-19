@@ -198,4 +198,32 @@ describe("StepCheckout — round-up tip stays in sync with the billed subtotal (
     const aufrundenAfter = screen.getByRole("checkbox", { name: /aufrunden/i }) as HTMLInputElement
     expect(aufrundenAfter.checked).toBe(false)
   })
+
+  // Issue #249 — the dominance filter previously stripped the literal
+  // next franc and left the user with a single multi-franc bump that
+  // was still labelled "nächsten Franken". The user reported base
+  // CHF 66.32 → only option +CHF 3.68 (target 70). After the fix the
+  // smallest option is 67 (+CHF 0.68) and the dispatched tip reflects
+  // that.
+  it("dispatches the literal-next-franc round-up for base 66.32 (#249)", async () => {
+    const states: CheckoutState[] = []
+    const user = userEvent.setup()
+    render(<Harness onState={(s) => states.push(s)} />)
+
+    // Type a manual tip of 51.92 — subtotal is 14.4 (one stubbed adult),
+    // so roundBase = 14.4 + 51.92 = 66.32, matching the issue scenario.
+    const spendeInput = screen.getByLabelText("Trinkgeld/Spende") as HTMLInputElement
+    await act(async () => {
+      await user.type(spendeInput, "51.92")
+    })
+    expect(states.at(-1)!.tip).toBeCloseTo(51.92, 2)
+
+    // Enable Aufrunden — the smallest target must be 67 (not 70), so
+    // the dispatched tip becomes manualTip + 0.68 = 52.60.
+    const aufrunden = screen.getByRole("checkbox", { name: /aufrunden/i })
+    await act(async () => {
+      await user.click(aufrunden)
+    })
+    expect(states.at(-1)!.tip).toBeCloseTo(52.6, 2)
+  })
 })

@@ -271,7 +271,7 @@ export interface BillDoc extends AuditFields {
   storagePath: string | null
   created: Timestamp
   paidAt?: Timestamp | null
-  paidVia?: "twint" | "ebanking" | "cash" | null
+  paidVia?: "twint" | "ebanking" | "cash" | "free" | null
   pdfGeneratedAt?: Timestamp | null
   emailSentAt?: Timestamp | null
 }

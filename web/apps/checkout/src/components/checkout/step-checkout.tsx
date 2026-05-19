@@ -64,6 +64,11 @@ export function roundUpOptions(base: number): number[] {
   const bumpCap = Math.max(5, base * 0.1)
   // "Much rounder, slightly higher" tolerance for the dominance filter.
   const dominanceGap = Math.max(0.5, base * 0.05)
+  // The literal next whole franc — the user's "Auf nächsten Franken
+  // aufrunden" intent must always be reachable when it's plausible
+  // (i.e., not aggressively dropped by the dominance filter just
+  // because some rounder neighbour exists a few francs above).
+  const nextWholeFranc = Math.ceil(base)
   // Divisors grow geometrically (×2, ×2.5 alternating) and cover the
   // range up to a few thousand francs — enough headroom for any realistic
   // workshop bill.
@@ -89,11 +94,25 @@ export function roundUpOptions(base: number): number[] {
     ([a], [b]) => a - b,
   )
 
-  // Step 4 — dominance filter.
+  // Step 4 — dominance filter. Drop `c` if a higher candidate `c2` with
+  // a 4×-larger divisor sits within `dominanceGap`. EXCEPTION: when `c`
+  // is the literal next whole franc (`nextWholeFranc`) it's only dropped
+  // if `c2` is *closely adjacent* (≤ 1 + ε CHF away). This preserves the
+  // user's intuitive "next franc" option for bases like 66.32 — where 67
+  // would otherwise be suppressed by 70 — while still killing the
+  // `[199, 200]`-style awkward adjacent pairs that motivated #233.
   const afterDominance: [number, number][] = sorted.filter(([c, dc]) =>
     !sorted.some(
-      ([c2, d2]) =>
-        c2 > c && c2 - c <= dominanceGap + 1e-9 && d2 >= dc * 4,
+      ([c2, d2]) => {
+        if (c2 <= c || c2 - c > dominanceGap + 1e-9) return false
+        if (d2 < dc * 4) return false
+        if (c === nextWholeFranc) {
+          // Only drop the literal next franc when its rounder neighbour
+          // is right next door (≤ 1 CHF away).
+          return c2 - c <= 1 + 1e-9
+        }
+        return true
+      },
     ),
   )
 
@@ -112,15 +131,30 @@ export function roundUpOptions(base: number): number[] {
 
 /** Label for a round-up target. The smallest entry (the "natural next
  *  step") reads "nächsten Franken" / "nächsten halben Franken" so the
- *  sentence "Auf X aufrunden" stays human-friendly. Non-smallest
- *  entries name the target value explicitly; half-franc values are
- *  formatted with one decimal place so e.g. `12.50` doesn't print as
- *  `13 Franken`. */
-export function roundUpOptionLabel(target: number, isNextStep: boolean): string {
+ *  sentence "Auf X aufrunden" stays human-friendly — but only when the
+ *  bump from `base` actually fits that description (≤ 1 CHF / ≤ 0.5
+ *  CHF). When the dominance filter has dropped the literal next franc
+ *  and the smallest remaining target is several francs higher, we fall
+ *  through to the explicit "X Franken" form instead of misleading the
+ *  user (regression for #249). Non-smallest entries name the target
+ *  value explicitly; half-franc values are formatted with two decimal
+ *  places so e.g. `12.50` doesn't print as `13 Franken`. */
+export function roundUpOptionLabel(
+  target: number,
+  base: number,
+  isNextStep: boolean,
+): string {
+  const delta = target - base
   if (isNextStep) {
     // Half-franc step only happens for tiny totals or .50-base totals.
-    if (target % 1 !== 0) return "nächsten halben Franken"
-    return "nächsten Franken"
+    if (target % 1 !== 0 && delta <= 0.5 + 1e-9) {
+      return "nächsten halben Franken"
+    }
+    if (target % 1 === 0 && delta <= 1 + 1e-9) {
+      return "nächsten Franken"
+    }
+    // Bump too large to honestly call "next franc" — fall through to
+    // the explicit form below.
   }
   if (target % 1 !== 0) return `${target.toFixed(2)} Franken`
   return `${target.toFixed(0)} Franken`
@@ -451,6 +485,7 @@ export function StepCheckout({
         spende={manualTip}
         onSpendeChange={handleManualTipChange}
         roundUpEnabled={roundUpEnabled}
+        roundUpBase={roundBase}
         roundUpOptions={roundOpts}
         roundUpTarget={activeTarget}
         roundUpDelta={effectiveRoundUp}
@@ -600,6 +635,9 @@ interface SpendeCardProps {
   spende: number
   onSpendeChange: (v: number) => void
   roundUpEnabled: boolean
+  /** Base amount being rounded — needed so {@link roundUpOptionLabel}
+   *  can decide whether the smallest option truly is the "next franc". */
+  roundUpBase: number
   /** Available round-up targets in ascending order. The first entry is
    *  the "natural next step" (next franc / 0.50). */
   roundUpOptions: number[]
@@ -619,6 +657,7 @@ export function SpendeCard({
   spende,
   onSpendeChange,
   roundUpEnabled,
+  roundUpBase,
   roundUpOptions: roundOpts,
   roundUpTarget,
   roundUpDelta,
@@ -718,7 +757,7 @@ export function SpendeCard({
           >
             {roundOpts.map((target, i) => (
               <option key={target} value={String(target)}>
-                {roundUpOptionLabel(target, i === 0)}
+                {roundUpOptionLabel(target, roundUpBase, i === 0)}
               </option>
             ))}
           </select>
