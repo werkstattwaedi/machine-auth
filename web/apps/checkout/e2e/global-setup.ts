@@ -15,6 +15,7 @@ import { getAdminFirestore, E2E_PORTS } from "./helpers"
 import { FieldValue } from "firebase-admin/firestore"
 import { getAuth } from "firebase-admin/auth"
 import { generateValidPICCAndCMAC } from "./sdm-test-helper"
+import { E2E_CATALOG_DOCS } from "./catalog-fixtures"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -69,66 +70,9 @@ export default async function globalSetup() {
   })
 
   // ── Seed catalog items ──
-  await db.collection("catalog").doc("e2e-item-1").set({
-    code: "9001",
-    name: "E2E Testmaterial",
-    workshops: ["holz"],
-    pricingModel: "area",
-    unitPrice: { none: 10, member: 8 },
-    active: true,
-    userCanAdd: true,
-    description: "Testmaterial für E2E Tests",
-  })
-
-  await db.collection("catalog").doc("e2e-item-2").set({
-    code: "9002",
-    name: "E2E Holzplatte",
-    workshops: ["holz"],
-    pricingModel: "area",
-    unitPrice: { none: 5, member: 4 },
-    active: true,
-    userCanAdd: true,
-  })
-
-  await db.collection("catalog").doc("e2e-item-count").set({
-    code: "9010",
-    name: "Schleifpapier",
-    workshops: ["holz"],
-    pricingModel: "count",
-    unitPrice: { none: 2, member: 1.5 },
-    active: true,
-    userCanAdd: true,
-  })
-
-  await db.collection("catalog").doc("e2e-item-3").set({
-    code: "9003",
-    name: "Filament",
-    workshops: ["makerspace"],
-    pricingModel: "weight",
-    unitPrice: { none: 65, member: 65 },
-    active: true,
-    userCanAdd: true,
-  })
-
-  await db.collection("catalog").doc("e2e-item-4").set({
-    code: "9004",
-    name: "Filament (Spezial)",
-    workshops: ["makerspace"],
-    pricingModel: "weight",
-    unitPrice: { none: 105, member: 105 },
-    active: true,
-    userCanAdd: true,
-  })
-
-  await db.collection("catalog").doc("e2e-item-sla").set({
-    code: "9099",
-    name: "E2E SLA Resin",
-    workshops: ["makerspace"],
-    pricingModel: "sla",
-    unitPrice: { none: 250, member: 200 },
-    active: true,
-    userCanAdd: true,
-  })
+  for (const [id, doc] of Object.entries(E2E_CATALOG_DOCS)) {
+    await db.collection("catalog").doc(id).set(doc)
+  }
 
   // ── Seed permission ──
   await db.collection("permission").doc("laser").set({
