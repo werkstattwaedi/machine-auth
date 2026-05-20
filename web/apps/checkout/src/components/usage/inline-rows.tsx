@@ -382,11 +382,11 @@ export function WorkshopInlineSection({
       <MaterialPicker
         open={pickerOpen}
         onOpenChange={setPickerOpen}
-        workshopId={workshopId}
-        workshopLabel={workshop.label}
+        scope={{ kind: "workshop", workshopId, workshopLabel: workshop.label }}
         catalogItems={catalogItems}
         config={config}
         discountLevel={discountLevel}
+        resolveWorkshop={() => workshopId}
         onAdd={callbacks.addItem}
       />
     </section>
