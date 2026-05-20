@@ -34,14 +34,21 @@ function AddListRoute() {
   )
 
   // documentId() `in` query caps at 30 entries. Pricelists in practice
-  // stay well under this (a single category PDF), so chunking is not
-  // worth the complexity yet — if a list grows past it the picker will
-  // silently miss the tail; revisit then.
-  const itemIds = (priceList?.items ?? []).slice(0, 30)
+  // stay well under this (a single category PDF). If a list grows past
+  // the cap, surface the truncation via telemetry so it shows up in
+  // observability before users notice missing items.
+  const rawItemIds = priceList?.items ?? []
+  const itemIds = rawItemIds.slice(0, 30)
+  if (rawItemIds.length > itemIds.length) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `Pricelist ${listId} has ${rawItemIds.length} items; picker only loads the first ${itemIds.length} (Firestore documentId() in [] cap).`,
+    )
+  }
   const { data: catalogItems, loading: loadingItems } =
     useCollection<CatalogItemDoc>(
       itemIds.length > 0 ? catalogCollection(db) : null,
-      where(documentId(), "in", itemIds.length > 0 ? itemIds : ["__none__"]),
+      where(documentId(), "in", itemIds),
     )
 
   if (loadingList || loadingItems) return <PageLoading />
