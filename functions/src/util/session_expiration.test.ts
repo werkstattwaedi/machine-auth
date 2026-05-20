@@ -116,11 +116,22 @@ describe("Session Expiration", () => {
 
   describe("isSessionExpired", () => {
     it("should return false for a session that hasn't expired yet", () => {
-      // Create a session that started 1 hour ago
-      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      // Anchor "now" at 10 AM local so the 1-hour-old session sits comfortably
+      // inside the active window. Without the stub this test is flaky between
+      // 03:00–04:00 local: "1 hour ago" then anchors before 3 AM, so its
+      // same-day 3 AM expiration can already be in the past.
+      const mockNow = new Date();
+      mockNow.setHours(10, 0, 0, 0);
+      const timestampStub = sinon
+        .stub(Timestamp, "now")
+        .returns(Timestamp.fromDate(mockNow));
+
+      const oneHourAgo = new Date(mockNow.getTime() - 60 * 60 * 1000);
       const startTime = Timestamp.fromDate(oneHourAgo);
-      
+
       expect(isSessionExpired(startTime)).to.equal(false);
+
+      timestampStub.restore();
     });
 
     it("should return true for a session that has expired", () => {
