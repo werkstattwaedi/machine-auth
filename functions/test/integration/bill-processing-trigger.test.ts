@@ -308,6 +308,90 @@ describe("bill processing triggers (Integration)", () => {
       expect(updated.storagePath).to.equal(`invoices/${billId}.pdf`);
     });
 
+    // Issue #269: a registered (logged-in) non-firma user whose user doc
+    // carries `billingAddress` gets the full address rendered in the PDF
+    // recipient block. We assert by parsing the generated PDF text.
+    it("renders registered-user billing address from user doc (#269)", async function () {
+      this.timeout(15000);
+      const db = getFirestore();
+
+      // Seed the registered user with a billingAddress on their user doc.
+      const userId = "u-registered-269";
+      await db.collection("users").doc(userId).set({
+        created: Timestamp.now(),
+        firstName: "Mike",
+        lastName: "Schneider",
+        email: "mike@example.com",
+        permissions: [],
+        roles: [],
+        userType: "erwachsen",
+        billingAddress: {
+          company: "",
+          street: "Bahnhofstrasse 7",
+          zip: "8820",
+          city: "Wädenswil",
+        },
+      });
+      const userRef = db.collection("users").doc(userId);
+
+      const billId = "bill-269-registered-user";
+      await seedCheckout("co-default", {
+        userId,
+        persons: [
+          {
+            name: "Mike Schneider",
+            email: "mike@example.com",
+            userType: "erwachsen",
+            userRef,
+          },
+        ],
+        summary: { totalPrice: 40, entryFees: 15, machineCost: 25, materialCost: 0, tip: 0 },
+      });
+      await seedBill(billId);
+
+      const ok = await tryGeneratePdf(billId);
+      expect(ok).to.be.true;
+
+      const file = fakeBucket.__files.get(`invoices/${billId}.pdf`)!;
+      const [buffer] = file.save.firstCall.args as [Buffer];
+      // Parse text out of the buffer with pdf-parse for the address assertions.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const pdfParse = require("pdf-parse") as (b: Buffer) => Promise<{ text: string }>;
+      const { text } = await pdfParse(buffer);
+
+      expect(text).to.include("Mike Schneider");
+      expect(text).to.include("Bahnhofstrasse 7");
+      expect(text).to.include("8820 Wädenswil");
+    });
+
+    // Issue #269: when the registered user lacks a billingAddress (or there
+    // is no userRef at all — anonymous walk-in), the address block falls
+    // back to the name-only rendering.
+    it("anonymous person without userRef: address block shows only the name (#269)", async function () {
+      this.timeout(15000);
+      const billId = "bill-269-anon";
+      await seedCheckout("co-default", {
+        persons: [
+          { name: "Anon User", email: "anon@example.com", userType: "erwachsen" },
+        ],
+        summary: { totalPrice: 15, entryFees: 15, machineCost: 0, materialCost: 0, tip: 0 },
+      });
+      await seedBill(billId);
+
+      const ok = await tryGeneratePdf(billId);
+      expect(ok).to.be.true;
+
+      const file = fakeBucket.__files.get(`invoices/${billId}.pdf`)!;
+      const [buffer] = file.save.firstCall.args as [Buffer];
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const pdfParse = require("pdf-parse") as (b: Buffer) => Promise<{ text: string }>;
+      const { text } = await pdfParse(buffer);
+
+      // Name renders, but no address lines should appear.
+      expect(text).to.include("Anon User");
+      expect(text).to.not.include("Bahnhofstrasse");
+    });
+
     it("releases the lock on PDF save failure and writes operations_log", async function () {
       this.timeout(15000);
       const billId = "bill-pdf-fail";

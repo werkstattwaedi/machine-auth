@@ -14,6 +14,7 @@ import {
   longInvoice,
   paidInvoice,
   freeZeroAmountInvoice,
+  registeredUserInvoice,
 } from "./invoice_test_fixtures";
 
 // pdf-parse needs firebase-admin initialized for Timestamp usage in fixtures
@@ -53,6 +54,10 @@ describe("buildInvoicePdf — content", () => {
     // Itemized columns: unit, quantity, and unit price present
     expect(text).to.include("50.00");  // unit price for Stationäre Maschinen (50 CHF/h)
     expect(text).to.include("0.50");   // quantity (0.5 h)
+    // Issue #269: replaced the verbose "Preise inkl. Material, exkl. MWST
+    // (keine MWST)" line with the shorter "keine MWST" notice.
+    expect(text).to.not.include("Preise inkl. Material");
+    expect(text).to.not.include("exkl. MWST");
   });
 
   it("multi-checkout: multiple visit date headers", async () => {
@@ -136,6 +141,27 @@ describe("buildInvoicePdf — content", () => {
     // Should NOT show the "Bezahlt via …" notice — that's for an
     // explicitly-paid bill, not a free one.
     expect(text).to.not.include("bereits beglichen");
+  });
+
+  // Issue #269: even when the entry fee is 0 (e.g. interne Nutzung,
+  // materialbezug) the Nutzungsgebühren table must still list the person
+  // so the bill recipient is identifiable.
+  it("zero entry fee: Nutzungsgebühren table still lists the person (#269)", async () => {
+    const text = await pdfText(freeZeroAmountInvoice());
+    expect(text).to.include("Nutzungsgebühren");
+    expect(text).to.include("Ines Intern");
+    expect(text).to.include("Erwachsen");
+  });
+
+  // Issue #269: a registered (logged-in) non-firma user with a stored
+  // billingAddress gets a full address block where their name used to be.
+  it("registered user with address: renders full postal address block (#269)", async () => {
+    const text = await pdfText(registeredUserInvoice());
+    // Person name is the first line of the recipient block.
+    expect(text).to.include("Mike Schneider");
+    // Street + zip/city present from user-doc billingAddress.
+    expect(text).to.include("Bahnhofstrasse 7");
+    expect(text).to.include("8820 Wädenswil");
   });
 
   it("paid invoice: no QR bill, shows payment confirmation", async () => {

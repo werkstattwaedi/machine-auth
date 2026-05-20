@@ -15,6 +15,7 @@ import {
   longInvoice,
   paidInvoice,
   freeZeroAmountInvoice,
+  registeredUserInvoice,
 } from "./invoice_test_fixtures";
 import type { InvoiceData } from "../../src/invoice/types";
 
@@ -161,5 +162,11 @@ describe("buildInvoicePdf — visual regression", function () {
   // Swiss QR-bill payment slip. The visual baseline pins that layout.
   it("free zero-amount (Interne Nutzung)", async () => {
     await compareAllPages("free-zero-amount", freeZeroAmountInvoice());
+  });
+
+  // Issue #269: registered (logged-in) user with a stored billingAddress —
+  // recipient block renders person name + street + zip/city (no company).
+  it("registered user (full postal address)", async () => {
+    await compareAllPages("registered-user-address", registeredUserInvoice());
   });
 });

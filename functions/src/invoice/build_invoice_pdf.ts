@@ -137,14 +137,25 @@ export async function buildInvoicePdf(
     y += 16;
 
     // --- Recipient address (left-aligned) ---
+    // Standard Swiss invoice convention: full postal address block. For
+    // firma the company line identifies the recipient and stands alone.
+    // For a registered (logged-in) non-firma user we render the person
+    // name above their stored street/zip/city (issue #269). Anonymous
+    // walk-ins fall back to the name-only rendering.
     y = ensureSpace(doc, y, 60);
     doc.fontSize(10).font("Helvetica");
     if (data.billingAddress) {
-      doc.text(data.billingAddress.company, MARGIN_LEFT, y);
+      const { company, street, zip, city } = data.billingAddress;
+      if (company) {
+        doc.text(company, MARGIN_LEFT, y);
+        y += 14;
+      } else {
+        doc.text(data.recipientName, MARGIN_LEFT, y);
+        y += 14;
+      }
+      doc.text(street, MARGIN_LEFT, y);
       y += 14;
-      doc.text(data.billingAddress.street, MARGIN_LEFT, y);
-      y += 14;
-      doc.text(`${data.billingAddress.zip} ${data.billingAddress.city}`, MARGIN_LEFT, y);
+      doc.text(`${zip} ${city}`, MARGIN_LEFT, y);
       y += 14;
     } else {
       doc.text(data.recipientName, MARGIN_LEFT, y);
@@ -180,7 +191,7 @@ export async function buildInvoicePdf(
     });
     y += 18;
     doc.fontSize(8).font("Helvetica");
-    doc.text("Preise inkl. Material, exkl. MWST (keine MWST)", MARGIN_LEFT, y);
+    doc.text("keine MWST", MARGIN_LEFT, y);
     y += 20;
 
     const isPaid = !!data.paidAt;
@@ -350,8 +361,12 @@ function renderCheckoutSection(
   doc.text(`Besuch vom ${formatDate(checkout.date)}`, MARGIN_LEFT, y);
   y += 20;
 
-  // Entry fees (Nutzungsgebühren)
-  if (checkout.entryFees > 0) {
+  // Nutzungsgebühren (entry fees). Always rendered when persons are
+  // present so the invoice shows who attended — even for usage types
+  // where the per-person fee is 0 (e.g. interne Nutzung, materialbezug).
+  // See issue #269: Marco's bill omitted the user line because the fee
+  // was zero, leaving the recipient unclear.
+  if (checkout.personEntryFees.length > 0) {
     y = ensureSpace(doc, y, 20 + checkout.persons.length * 14 + 30);
     doc.fontSize(10).font("Helvetica-Bold");
     doc.text("Nutzungsgebühren", MARGIN_LEFT, y);

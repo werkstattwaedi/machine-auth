@@ -357,6 +357,51 @@ export function freeZeroAmountInvoice(): InvoiceData {
   };
 }
 
+/**
+ * Issue #269: a registered (logged-in) non-firma user whose user doc
+ * carries a `billingAddress`. The PDF renders the standard Swiss recipient
+ * address block — person name on top, then street + zip/city — and no
+ * blank company line.
+ */
+export function registeredUserInvoice(): InvoiceData {
+  return {
+    referenceNumber: 9,
+    invoiceDate: zurich(2025, 4, 20),
+    billingAddress: {
+      // Empty company → PDF emits the recipientName instead of a blank line.
+      company: "",
+      street: "Bahnhofstrasse 7",
+      zip: "8820",
+      city: "Wädenswil",
+    },
+    recipientName: "Mike Schneider",
+    checkouts: [
+      {
+        date: zurich(2025, 4, 19, 19, 55),
+        usageType: "regular",
+        persons: [
+          { name: "Mike Schneider", email: "mike@example.com", userType: "erwachsen" },
+        ],
+        personEntryFees: [{ name: "Mike Schneider", userType: "erwachsen", fee: 15 }],
+        items: [
+          makeItem({ description: "Tischfräse", workshop: "holz", pricingModel: "time", quantity: 1, unitPrice: 25, totalPrice: 25 }),
+        ],
+        workshopsVisited: ["holz"],
+        entryFees: 15,
+        machineCost: 25,
+        materialCost: 0,
+        tip: 0,
+        totalPrice: 40,
+      },
+    ],
+    workshops: {
+      holz: { label: "Holzwerkstatt", order: 1 },
+    },
+    grandTotal: 40,
+    currency: "CHF",
+  };
+}
+
 export function zeroItemsInvoice(): InvoiceData {
   return {
     referenceNumber: 5,
