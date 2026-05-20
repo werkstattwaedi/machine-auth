@@ -362,6 +362,14 @@ describe("bill processing triggers (Integration)", () => {
       expect(text).to.include("Mike Schneider");
       expect(text).to.include("Bahnhofstrasse 7");
       expect(text).to.include("8820 Wädenswil");
+      // Issue #269 review: the user-doc billingAddress also feeds the
+      // Swiss QR bill "Zahlbar durch" debtor section. End-to-end coverage:
+      // street must appear in BOTH the recipient block and the QR debtor.
+      const streetMatches = text.split("Bahnhofstrasse 7").length - 1;
+      expect(
+        streetMatches,
+        "Bahnhofstrasse 7 must appear in both the recipient block and the QR debtor",
+      ).to.be.greaterThan(1);
     });
 
     // Issue #269: when the registered user lacks a billingAddress (or there

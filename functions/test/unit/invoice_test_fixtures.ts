@@ -44,7 +44,14 @@ export function singleCheckoutInvoice(): InvoiceData {
   return {
     referenceNumber: 1,
     invoiceDate: zurich(2025, 5, 15),
-    billingAddress: null,
+    // Registered users carry a billingAddress on their user doc (issue
+    // #269 review). Empty company → registered-user shape.
+    billingAddress: {
+      company: "",
+      street: "Lindenweg 12",
+      zip: "8820",
+      city: "Wädenswil",
+    },
     recipientName: "Max Mustermann",
     checkouts: [
       {
@@ -122,7 +129,13 @@ export function multiCheckoutInvoice(): InvoiceData {
   return {
     referenceNumber: 3,
     invoiceDate: zurich(2025, 6, 10),
-    billingAddress: null,
+    // Registered user with billingAddress (issue #269 review).
+    billingAddress: {
+      company: "",
+      street: "Mühlebachstrasse 5",
+      zip: "8810",
+      city: "Horgen",
+    },
     recipientName: "Lisa Beispiel",
     checkouts: [
       {
@@ -326,7 +339,15 @@ export function freeZeroAmountInvoice(): InvoiceData {
   return {
     referenceNumber: 8,
     invoiceDate: now,
-    billingAddress: null,
+    // Registered user with billingAddress (issue #269 review). Interne
+    // Nutzung is normally booked by a known member, not an anonymous
+    // walk-in — the address belongs on the bill.
+    billingAddress: {
+      company: "",
+      street: "Schulhausstrasse 3",
+      zip: "8810",
+      city: "Horgen",
+    },
     recipientName: "Ines Intern",
     checkouts: [
       {
@@ -402,6 +423,13 @@ export function registeredUserInvoice(): InvoiceData {
   };
 }
 
+/**
+ * Issue #269: deliberately the anonymous-walk-in coverage. `billingAddress`
+ * stays null so the PDF renders no recipient block above the title (the name
+ * appears only in the Nutzungsgebühren table) and the Swiss QR bill leaves
+ * the "Zahlbar durch" debtor section as an empty handwriting box. All other
+ * registered-user fixtures now carry a billingAddress per the PR #297 review.
+ */
 export function zeroItemsInvoice(): InvoiceData {
   return {
     referenceNumber: 5,

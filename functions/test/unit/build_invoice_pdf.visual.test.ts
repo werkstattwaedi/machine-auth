@@ -16,6 +16,7 @@ import {
   paidInvoice,
   freeZeroAmountInvoice,
   registeredUserInvoice,
+  zeroItemsInvoice,
 } from "./invoice_test_fixtures";
 import type { InvoiceData } from "../../src/invoice/types";
 
@@ -168,5 +169,13 @@ describe("buildInvoicePdf — visual regression", function () {
   // recipient block renders person name + street + zip/city (no company).
   it("registered user (full postal address)", async () => {
     await compareAllPages("registered-user-address", registeredUserInvoice());
+  });
+
+  // Issue #269 review: anonymous walk-in (no billingAddress) — the
+  // recipient block is empty above the title, the name appears only in
+  // the Nutzungsgebühren table, and the Swiss QR bill leaves the
+  // "Zahlbar durch" debtor box empty for handwriting.
+  it("anonymous walk-in (no recipient block, no QR debtor)", async () => {
+    await compareAllPages("anonymous-walkin", zeroItemsInvoice());
   });
 });

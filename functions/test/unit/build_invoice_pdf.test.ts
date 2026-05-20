@@ -76,10 +76,23 @@ describe("buildInvoicePdf — content", () => {
     expect(text).to.include("8001 Zürich");
   });
 
-  it("non-firma user: no billing address, shows name", async () => {
+  // Issue #269 review: anonymous walk-ins (no billingAddress) render NO
+  // recipient block above the title — the person is identified by the
+  // Nutzungsgebühren table instead. zeroItemsInvoice is the explicit
+  // anonymous-walk-in fixture; the other registered-user fixtures now
+  // carry a billingAddress.
+  it("anonymous walk-in: name appears only in Nutzungsgebühren, no recipient block (#269)", async () => {
+    const text = await pdfText(zeroItemsInvoice());
+    expect(text).to.include("Erika Nur-Eintritt");
+    // No street block at the top — anonymous fixture has no billingAddress.
+    expect(text).to.not.include("Industriestrasse");
+  });
+
+  it("registered user (singleCheckout): full address block present (#269)", async () => {
     const text = await pdfText(singleCheckoutInvoice());
     expect(text).to.include("Max Mustermann");
-    expect(text).to.not.include("Industriestrasse");
+    expect(text).to.include("Lindenweg 12");
+    expect(text).to.include("8820 Wädenswil");
   });
 
   it("with donation: Spende section present (issue #250)", async () => {
@@ -162,6 +175,36 @@ describe("buildInvoicePdf — content", () => {
     // Street + zip/city present from user-doc billingAddress.
     expect(text).to.include("Bahnhofstrasse 7");
     expect(text).to.include("8820 Wädenswil");
+  });
+
+  // Issue #269 review: logged-in user's name+address must pre-fill the QR
+  // bill's "Zahlbar durch" section. Anonymous walk-ins keep the empty
+  // handwriting box (no debtor field on the Swiss QR bill).
+  it("registered user: QR bill debtor (Zahlbar durch) is pre-filled (#269)", async () => {
+    const text = await pdfText(registeredUserInvoice());
+    // Street appears in BOTH the recipient block AND the QR debtor section.
+    // Two occurrences proves the debtor was populated (recipient block
+    // alone would give exactly one).
+    const streetMatches = text.split("Bahnhofstrasse 7").length - 1;
+    expect(
+      streetMatches,
+      "Bahnhofstrasse 7 must appear in both the recipient block and the QR debtor",
+    ).to.be.greaterThan(1);
+  });
+
+  it("anonymous walk-in: QR bill debtor is omitted (empty Zahlbar durch box) (#269)", async () => {
+    // zeroItemsInvoice has no billingAddress and no paidAt → unpaid branch
+    // renders the QR bill. The debtor field must NOT be set so the printed
+    // QR bill leaves the "Zahlbar durch" box empty for handwriting.
+    const text = await pdfText(zeroItemsInvoice());
+    // Erika appears in the Nutzungsgebühren table — exactly once. If we
+    // accidentally populated the debtor with the recipientName, she'd
+    // show up a second time.
+    const nameMatches = text.split("Erika Nur-Eintritt").length - 1;
+    expect(
+      nameMatches,
+      "Erika should appear only in Nutzungsgebühren, not as QR debtor",
+    ).to.equal(1);
   });
 
   it("paid invoice: no QR bill, shows payment confirmation", async () => {

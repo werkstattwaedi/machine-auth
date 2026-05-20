@@ -141,7 +141,9 @@ export async function buildInvoicePdf(
     // firma the company line identifies the recipient and stands alone.
     // For a registered (logged-in) non-firma user we render the person
     // name above their stored street/zip/city (issue #269). Anonymous
-    // walk-ins fall back to the name-only rendering.
+    // walk-ins have no recipient block — the person already appears in
+    // the Nutzungsgebühren table further down, and a stray name above
+    // the title looked like a layout glitch (issue #269 review).
     y = ensureSpace(doc, y, 60);
     doc.fontSize(10).font("Helvetica");
     if (data.billingAddress) {
@@ -156,9 +158,6 @@ export async function buildInvoicePdf(
       doc.text(street, MARGIN_LEFT, y);
       y += 14;
       doc.text(`${zip} ${city}`, MARGIN_LEFT, y);
-      y += 14;
-    } else {
-      doc.text(data.recipientName, MARGIN_LEFT, y);
       y += 14;
     }
     y += 24;
@@ -237,6 +236,23 @@ export async function buildInvoicePdf(
 
       // --- Swiss QR Bill (added on a new page by swissqrbill) ---
       const contentPages = doc.bufferedPageRange().count;
+      // Issue #269: pre-fill the "Zahlbar durch" debtor section when we
+      // have a billing address. Anonymous walk-ins (no billingAddress)
+      // intentionally omit the debtor so the printed QR bill leaves the
+      // box empty for handwriting. Country is hardcoded "CH" — the
+      // billingAddress shape doesn't carry a country and the whole
+      // product is Swiss-only (creditor.country is hardcoded upstream).
+      const billingAddr = data.billingAddress;
+      const debtor = billingAddr
+        ? {
+            // Firma → use the company line; registered users → person name.
+            name: billingAddr.company || data.recipientName,
+            address: billingAddr.street,
+            zip: billingAddr.zip,
+            city: billingAddr.city,
+            country: "CH",
+          }
+        : undefined;
       const qrBill = new SwissQRBill({
         currency: payment.currency as "CHF" | "EUR",
         amount: data.grandTotal,
@@ -248,6 +264,7 @@ export async function buildInvoicePdf(
           city: payment.recipientCity,
           country: payment.recipientCountry,
         },
+        ...(debtor && { debtor }),
         reference: generateScorReference(String(data.referenceNumber).padStart(9, "0")),
       }, { language: "DE" });
       qrBill.attachTo(doc);
