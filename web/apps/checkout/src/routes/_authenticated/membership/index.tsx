@@ -333,7 +333,22 @@ function PendingMembershipCheckout({
 /* No-membership purchase entry                                       */
 /* ------------------------------------------------------------------ */
 
-function NoMembership({
+/** Statuten PDF hosted on the Werkstatt-Wädenswil Squarespace site. */
+const STATUTEN_URL =
+  "https://static1.squarespace.com/static/64671911eefe89405a1c141c/t/64c0d17d08167476c68a6a2d/1690358141557/230609+OWW+Statuten+aktualisiert.pdf"
+
+const SINGLE_BENEFITS: string[] = [
+  "Vergünstigungen bei der Maschinennutzung",
+  "Ein Stimmrecht an der jährlichen Mitgliederversammlung",
+]
+
+const FAMILY_BENEFITS: string[] = [
+  "Vergünstigungen bei der Maschinennutzung",
+  "Ein Stimmrecht an der jährlichen Mitgliederversammlung",
+  "Gültig für alle im selben Haushalt lebende Personen",
+]
+
+export function NoMembership({
   onPurchase,
   loading,
   priceByType,
@@ -342,21 +357,6 @@ function NoMembership({
   loading: boolean
   priceByType: Record<"single" | "family", string>
 }) {
-  const benefits: React.ReactNode[] = [
-    <>
-      <strong className="font-bold">Mitglieder-Preise</strong> auf alle
-      Werkstätten und Material.
-    </>,
-    <>
-      <strong className="font-bold">Familie:</strong> Bis zu 5 Erwachsene +
-      Kinderkonten teilen sich die Mitgliedschaft.
-    </>,
-    <>
-      <strong className="font-bold">Stimmrecht</strong> an der jährlichen
-      Mitgliederversammlung.
-    </>,
-  ]
-
   return (
     <Card>
       <CardContent className="pt-6 space-y-5">
@@ -368,17 +368,6 @@ function NoMembership({
           </p>
         </div>
 
-        <ul className="space-y-2.5">
-          {benefits.map((b, i) => (
-            <li key={i} className="flex items-start gap-2.5 text-sm">
-              <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-cog-teal-light text-cog-teal-dark">
-                <Check className="size-3" />
-              </span>
-              <span>{b}</span>
-            </li>
-          ))}
-        </ul>
-
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <BuyCard
             eyebrow={
@@ -386,8 +375,8 @@ function NoMembership({
                 <User className="inline size-3 align-[-2px]" /> Für dich
               </>
             }
-            title="Einzel"
-            description="Eine Person. Mitglieder-Preise auf alle Werkstätten und Material."
+            title="Einzel-Mitgliedschaft"
+            benefits={SINGLE_BENEFITS}
             price={priceByType.single}
             onClick={() => onPurchase("single", false)}
             disabled={loading}
@@ -399,17 +388,29 @@ function NoMembership({
                 Familie
               </>
             }
-            title="Familie"
-            description="Bis zu 5 Erwachsene + Kinderkonten. Alle bekommen Mitglieder-Preise."
+            title="Familien-Mitgliedschaft"
+            benefits={FAMILY_BENEFITS}
             price={priceByType.family}
             onClick={() => onPurchase("family", false)}
             disabled={loading}
           />
         </div>
 
+        <p className="text-sm text-muted-foreground">
+          <a
+            href={STATUTEN_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-cog-teal-dark underline underline-offset-2 hover:no-underline"
+            data-testid="membership-statuten-link"
+          >
+            Statuten des Vereins (PDF)
+          </a>
+        </p>
+
         <Note kind="info">
-          Bezahlt wird wie üblich beim Self-Checkout (Twint, Rechnung, Bar). Du
-          wirst dorthin weitergeleitet.
+          Die Mitgliedschaft wird über den Self-Checkout abgerechnet (Twint oder
+          E-Banking).
         </Note>
       </CardContent>
     </Card>
@@ -419,14 +420,14 @@ function NoMembership({
 function BuyCard({
   eyebrow,
   title,
-  description,
+  benefits,
   price,
   onClick,
   disabled,
 }: {
   eyebrow: React.ReactNode
   title: string
-  description: string
+  benefits: string[]
   price: string
   onClick: () => void
   disabled: boolean
@@ -444,9 +445,16 @@ function BuyCard({
       <span className="font-heading text-[22px] font-bold leading-tight">
         {title}
       </span>
-      <span className="text-sm leading-snug text-muted-foreground">
-        {description}
-      </span>
+      <ul className="space-y-1.5 text-sm leading-snug text-muted-foreground">
+        {benefits.map((b) => (
+          <li key={b} className="flex items-start gap-2">
+            <span className="mt-1 inline-flex size-4 shrink-0 items-center justify-center rounded-full bg-cog-teal-light text-cog-teal-dark">
+              <Check className="size-2.5" />
+            </span>
+            <span>{b}</span>
+          </li>
+        ))}
+      </ul>
       <span className="mt-auto flex items-end justify-between pt-1">
         <span className="text-lg font-bold tabular-nums text-foreground">
           CHF {price}
@@ -455,7 +463,7 @@ function BuyCard({
           </span>
         </span>
         <span className="inline-flex items-center gap-1 text-sm font-semibold text-cog-teal-dark">
-          Zum Checkout →
+          Zum Self-Checkout →
         </span>
       </span>
     </button>
