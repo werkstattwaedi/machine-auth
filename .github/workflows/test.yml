@@ -39,5 +39,92 @@ jobs:
       - name: Install functions dependencies
         run: cd functions && npm ci
 
+      # Freshness guard (issue #296): the committed `.env.test` fixtures
+      # MUST match what `generate-env --emit-test-files` produces. If a
+      # new param is added to the operations config without updating the
+      # `TEST_FIXTURE_CONFIG` / `TEST_FIXTURE_OVERRIDES` maps in
+      # `scripts/generate-env.ts`, this fails fast — the e2e job below
+      # would otherwise hang on a missing env var. `git status` catches
+      # both content drift and a missing checked-in file (untracked
+      # output is also a freshness failure).
+      - name: Verify .env.test fixtures are fresh
+        run: |
+          npx tsx scripts/generate-env.ts --emit-test-files
+          changed=$(git status --porcelain -- \
+              functions/.env.test \
+              web/apps/checkout/.env.test \
+              web/apps/admin/.env.test)
+          if [ -n "$changed" ]; then
+            echo "::error::.env.test fixtures are stale. Run 'npx tsx scripts/generate-env.ts --emit-test-files' and commit:" >&2
+            echo "$changed" >&2
+            git diff --no-color -- \
+                functions/.env.test \
+                web/apps/checkout/.env.test \
+                web/apps/admin/.env.test >&2 || true
+            exit 1
+          fi
+
       - name: Build & test (web + functions + integration)
         run: npm run test:precommit
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
+            functions/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install web dependencies
+        run: cd web && npm ci
+
+      - name: Install functions dependencies
+        run: cd functions && npm ci
+
+      - name: Install Playwright browsers
+        # `--with-deps` pulls the runtime system libraries chromium needs
+        # (ffmpeg, fonts, NSS). Chromium only — Firefox/WebKit aren't part
+        # of the e2e matrix.
+        run: cd web/apps/checkout && npx playwright install --with-deps chromium
+
+      - name: Show Playwright version
+        # Surfacing the pinned version makes screenshot drift across
+        # bundle bumps debuggable from the CI log alone.
+        run: cd web/apps/checkout && npx playwright --version
+
+      - name: Run e2e tests
+        # `npm run test:web:e2e` already wraps itself in the port-block
+        # broker, which falls back to the committed `.env.test` fixtures
+        # when the operations repo isn't present (i.e. on CI). See
+        # docs/port-blocks.md.
+        run: npm run test:web:e2e
+
+      - name: Upload Playwright traces + screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          path: |
+            web/apps/checkout/test-results/
+            web/apps/admin/test-results/
+          if-no-files-found: ignore
+          retention-days: 7

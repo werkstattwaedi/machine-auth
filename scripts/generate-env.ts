@@ -3,6 +3,14 @@
 
 // Reads operations config.jsonc + config.local.jsonc and generates all .env files.
 // Run via: npm run generate-env (or npx tsx scripts/generate-env.ts)
+//
+// With `--emit-test-files`, emits a parallel set of `.env.test` fixtures
+// instead of the normal `.env.local` / `.env.development` outputs. These
+// fixtures hold only dummy/public values (TEST_FIXTURE_OVERRIDES below)
+// and are committed to git so CI runners that cannot clone the operations
+// repo can still boot the emulator suite + Playwright for presubmit e2e.
+// In this mode an embedded TEST_FIXTURE_CONFIG drives the resolver so the
+// command works even without the operations repo present.
 
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
@@ -95,6 +103,92 @@ const GATEWAY: VarMapping[] = [
   { envVar: "GATEWAY_API_KEY", jsonPath: "gateway.gatewayApiKey" },
 ];
 
+// --- Test fixtures ---
+//
+// Values used when emitting `.env.test` files (`--emit-test-files`).
+// Two sources stack:
+//
+//   1. `TEST_FIXTURE_CONFIG` — a synthesized operations config with
+//      emulator-safe defaults. Mirrors the public + local-overrides
+//      shape (firebase emulator project, fake API key, payment / web
+//      branding) so the resolver produces sensible values without
+//      requiring the operations repo to be cloned.
+//
+//   2. `TEST_FIXTURE_OVERRIDES` — per-envVar literal overrides applied
+//      after `resolveValue`. Used for anything that doesn't naturally
+//      come from the config tree (test crypto keys hard-coded in
+//      `e2e/global-setup.ts`, dummy Resend / Particle / gateway keys
+//      that must NEVER hold real production values).
+//
+// The values below are public-safe by construction:
+//   - `TERMINAL_KEY`/`MASTER_KEY` match the e2e seed (`global-setup.ts`)
+//     and are inert without an NTAG424 tag personalized with them.
+//   - `RESEND_API_KEY` uses the standard test-key prefix.
+//   - `PARTICLE_TOKEN` is a placeholder; firmware paths are not exercised
+//     by the web e2e suite.
+//   - `RAISENOW_PAYLINK_SOLUTION_ID` uses `test-fake-solution`; the e2e
+//     suite doesn't hit RaiseNow.
+const TEST_FIXTURE_CONFIG: Record<string, unknown> = {
+  firebase: {
+    projectId: "oww-maco",
+    region: "us-central1",
+    apiKey: "fake-api-key",
+    authDomain: "checkout.werkstattwaedi.ch",
+    storageBucket: "oww-maco.firebasestorage.app",
+    messagingSenderId: "000000000000",
+    appId: "1:000000000000:web:000000000000",
+  },
+  functions: {
+    diversificationSystemName: "Oww8820Maco",
+    particleProductId: "ci-test-product",
+    loginAllowedOrigins: "https://localhost:5188,https://localhost:5189",
+    loginPerEmailWindowMs: "86400000",
+    loginMaxCodesPerEmail: "20",
+    loginMaxAttemptsPerEmail: "30",
+    resendFromEmail: "OWW CI <ci@test.localhost>",
+    resendQrBillTemplateId: "ci-test-qrbill-template",
+    resendLoginTemplateId: "ci-test-login-template",
+    resendInviteTemplateId: "ci-test-invite-template",
+    resendTwintTemplateId: "",
+  },
+  web: {
+    checkoutDomain: "localhost:5188",
+    locale: "de-CH",
+    currency: "CHF",
+    organizationName: "Verein Offene Werkstatt Wädenswil (CI)",
+    iban: "CH00 0000 0000 0000 0000 0",
+    raisenowPaylinkSolutionId: "test-fake-solution",
+    paymentRecipientName: "OWW CI Recipient",
+    paymentRecipientStreet: "Teststrasse 1",
+    paymentRecipientPostalCode: "0000",
+    paymentRecipientCity: "Teststadt",
+    paymentRecipientCountry: "CH",
+  },
+  nfc: {
+    sdmBaseUrl: "id.test.localhost/",
+  },
+  gateway: {
+    host: "0.0.0.0",
+    port: 5000,
+    masterKey: "000102030405060708090a0b0c0d0e0f",
+    firebaseUrl: "http://127.0.0.1:5101/oww-maco/us-central1",
+    gatewayApiKey: "ci-test-gateway-key",
+    deviceHost: "maco-gateway.internal",
+    devicePort: 5000,
+  },
+};
+
+const TEST_FIXTURE_OVERRIDES: Record<string, string> = {
+  // Crypto keys baked into the e2e seed (`global-setup.ts`). Inert
+  // without an NTAG424 tag personalized with them.
+  DIVERSIFICATION_MASTER_KEY: "c025f541727ecd8b6eb92055c88a2a70",
+  TERMINAL_KEY: "f5e4b999d5aa629f193a874529c4aa2f",
+  // Dummy / standard test prefixes — no real production credentials.
+  PARTICLE_TOKEN: "ci-test-particle-token",
+  GATEWAY_API_KEY: "ci-test-gateway-key",
+  RESEND_API_KEY: "re_test_fake_ci_key",
+};
+
 // --- Helpers ---
 
 function parseJsonc(text: string): Record<string, unknown> {
@@ -166,14 +260,16 @@ function deepMerge(
 
 function generateEnvContent(
   config: Record<string, unknown>,
-  file: OutputFile
+  file: OutputFile,
+  overrides: Record<string, string> = {}
 ): string {
   const lines: string[] = [file.header, ""];
 
   for (const section of file.sections) {
     lines.push(section.comment);
     for (const { envVar, jsonPath } of section.vars) {
-      const value = resolveValue(config, jsonPath);
+      const value =
+        envVar in overrides ? overrides[envVar] : resolveValue(config, jsonPath);
       lines.push(`${envVar}=${value}`);
     }
     lines.push("");
@@ -185,7 +281,19 @@ function generateEnvContent(
 // --- Main ---
 
 function main() {
+  const args = process.argv.slice(2);
+  const emitTestFiles = args.includes("--emit-test-files");
+
   const projectRoot = resolve(dirname(new URL(import.meta.url).pathname), "..");
+
+  // Test-file mode is self-contained — it uses the embedded
+  // TEST_FIXTURE_CONFIG and does not require the operations repo. This
+  // lets CI runners regenerate / verify fixtures without secrets.
+  if (emitTestFiles) {
+    emitTestFixtures(projectRoot);
+    return;
+  }
+
   const configDir =
     process.env.OPERATIONS_CONFIG_DIR ||
     resolve(projectRoot, "..", "machine-auth-operations");
@@ -217,7 +325,84 @@ function main() {
 
   const header = "# Generated by scripts/generate-env.ts — do not edit";
 
-  const outputFiles: OutputFile[] = [
+  const outputFiles = buildOutputFiles({ projectId, header, mode: "default" });
+
+  // Generate env files
+  for (const file of outputFiles) {
+    const config = file.source === "local" ? localConfig : prodConfig;
+    const content = generateEnvContent(config, file);
+    const fullPath = resolve(projectRoot, file.path);
+    writeFileSync(fullPath, content);
+    console.log(`  ✓ ${file.path}`);
+  }
+
+  // Generate .firebaserc
+  const firebaserc = JSON.stringify(
+    {
+      projects: { default: projectId },
+      targets: {
+        [projectId]: {
+          hosting: {
+            checkout: [projectId],
+            admin: [`${projectId}-admin`],
+          },
+        },
+      },
+    },
+    null,
+    2
+  ) + "\n";
+  writeFileSync(resolve(projectRoot, ".firebaserc"), firebaserc);
+  console.log("  ✓ .firebaserc");
+
+  console.log("\nDone. Generated env files from", configDir);
+}
+
+function buildOutputFiles(opts: {
+  projectId: string;
+  header: string;
+  mode: "default" | "test";
+}): OutputFile[] {
+  const { header, mode } = opts;
+  if (mode === "test") {
+    // In test mode we only emit the "local" / development variants — the
+    // checked-in fixtures are the local-dev equivalents that CI uses to
+    // run the emulator suite. Production deploys never read .env.test.
+    return [
+      {
+        path: "functions/.env.test",
+        source: "local",
+        header,
+        sections: [
+          { comment: "# Firebase Functions — parameters", vars: FUNCTIONS_PARAMS },
+          { comment: "# Firebase Functions — test secrets (emulator only)", vars: FUNCTIONS_SECRETS },
+          { comment: "# Firebase Functions — payment config", vars: FUNCTIONS_PAYMENT },
+          { comment: "# Firebase Functions — Resend email", vars: FUNCTIONS_RESEND },
+        ],
+      },
+      {
+        path: "web/apps/checkout/.env.test",
+        source: "local",
+        header,
+        sections: [
+          { comment: "# Firebase (emulator)", vars: VITE_FIREBASE },
+          { comment: "# Deployment", vars: VITE_DEPLOYMENT },
+        ],
+      },
+      {
+        path: "web/apps/admin/.env.test",
+        source: "local",
+        header,
+        sections: [
+          { comment: "# Firebase (emulator)", vars: VITE_FIREBASE },
+          { comment: "# Deployment", vars: VITE_DEPLOYMENT },
+        ],
+      },
+    ];
+  }
+
+  const { projectId } = opts;
+  return [
     {
       path: "functions/.env.local",
       source: "local",
@@ -306,36 +491,29 @@ function main() {
       ],
     },
   ];
+}
 
-  // Generate env files
+function emitTestFixtures(projectRoot: string) {
+  const projectId = resolveValue(TEST_FIXTURE_CONFIG, "firebase.projectId");
+  const header =
+    "# Generated by scripts/generate-env.ts --emit-test-files — do not edit\n" +
+    "# Committed to git so CI runners can boot emulators + Playwright\n" +
+    "# without the operations repo. Contains only dummy / public values.";
+
+  const outputFiles = buildOutputFiles({ projectId, header, mode: "test" });
+
   for (const file of outputFiles) {
-    const config = file.source === "local" ? localConfig : prodConfig;
-    const content = generateEnvContent(config, file);
+    const content = generateEnvContent(
+      TEST_FIXTURE_CONFIG,
+      file,
+      TEST_FIXTURE_OVERRIDES
+    );
     const fullPath = resolve(projectRoot, file.path);
     writeFileSync(fullPath, content);
     console.log(`  ✓ ${file.path}`);
   }
 
-  // Generate .firebaserc
-  const firebaserc = JSON.stringify(
-    {
-      projects: { default: projectId },
-      targets: {
-        [projectId]: {
-          hosting: {
-            checkout: [projectId],
-            admin: [`${projectId}-admin`],
-          },
-        },
-      },
-    },
-    null,
-    2
-  ) + "\n";
-  writeFileSync(resolve(projectRoot, ".firebaserc"), firebaserc);
-  console.log("  ✓ .firebaserc");
-
-  console.log("\nDone. Generated env files from", configDir);
+  console.log("\nDone. Emitted .env.test fixtures.");
 }
 
 main();
