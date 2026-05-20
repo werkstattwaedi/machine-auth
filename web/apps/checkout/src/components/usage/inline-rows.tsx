@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { useState, Fragment } from "react"
+import { Link } from "@tanstack/react-router"
 import { formatCHF } from "@modules/lib/format"
 import { Plus } from "lucide-react"
 import { useCollection } from "@modules/lib/firestore"
@@ -22,7 +23,6 @@ import type {
   DiscountLevel,
   PricingModel,
 } from "@modules/lib/workshop-config"
-import { MaterialPicker } from "./material-picker"
 import { PositionTable, type PositionRow, rowFromItem } from "./position-table"
 
 /** Shape of a checkout item used by the workshop block. */
@@ -253,38 +253,28 @@ export function NfcMachineItemRow({
 export function WorkshopInlineSection({
   workshopId,
   workshop,
-  config,
   items,
-  catalogItems,
   callbacks,
-  discountLevel,
   checkoutId,
   sectionRef,
 }: {
   workshopId: WorkshopId
   workshop: WorkshopConfig
-  config: PricingConfig
   items: CheckoutItemLocal[]
-  catalogItems: CatalogItem[]
   callbacks: ItemCallbacks
-  discountLevel: DiscountLevel
-  /**
-   * Legacy prop kept for callers that pass it; the v5 picker advances state
-   * via the picker's local form instead of inline editing, so the wiring
-   * is a no-op here. Removed in a follow-up cleanup once all callers stop
-   * setting it.
-   */
+  /** Unused since the picker moved to /visit/add/* routes (issue #213). */
+  config?: PricingConfig
+  /** Unused since the picker moved to /visit/add/* routes (issue #213). */
+  catalogItems?: CatalogItem[]
+  /** Unused since the picker moved to /visit/add/* routes (issue #213). */
+  discountLevel?: DiscountLevel
+  /** Legacy no-op kept for callers that still set it. */
   onBlurSave?: boolean
   checkoutId?: string | null
-  /**
-   * Legacy prop — v5 surfaces validation through disabled "Hinzufügen" in
-   * the picker rather than red-bordered cart rows. Retained only so the
-   * existing call sites keep type-checking.
-   */
+  /** Legacy no-op kept for callers that still set it. */
   itemErrors?: Record<string, unknown>
   sectionRef?: (el: HTMLDivElement | null) => void
 }) {
-  const [pickerOpen, setPickerOpen] = useState(false)
   const [expandedNfc, setExpandedNfc] = useState<Record<string, boolean>>({})
 
   const nfcItems = items.filter((i) => i.origin === "nfc")
@@ -359,14 +349,14 @@ export function WorkshopInlineSection({
               : "pl-[48px] pr-3 sm:pl-[60px] sm:pr-4")
           }
         >
-          <button
-            type="button"
-            onClick={() => setPickerOpen(true)}
+          <Link
+            to="/visit/add/workshop/$workshopId"
+            params={{ workshopId }}
             className="inline-flex items-center gap-2 rounded-[3px] border border-dashed border-border px-3 py-2 text-sm font-medium text-cog-teal-dark hover:border-cog-teal hover:bg-cog-teal-light"
           >
             <Plus className="h-3.5 w-3.5" />
             Material hinzufügen
-          </button>
+          </Link>
         </div>
       </div>
 
@@ -378,17 +368,6 @@ export function WorkshopInlineSection({
           {formatCHF(wsTotal)}
         </span>
       </div>
-
-      <MaterialPicker
-        open={pickerOpen}
-        onOpenChange={setPickerOpen}
-        scope={{ kind: "workshop", workshopId, workshopLabel: workshop.label }}
-        catalogItems={catalogItems}
-        config={config}
-        discountLevel={discountLevel}
-        resolveWorkshop={() => workshopId}
-        onAdd={callbacks.addItem}
-      />
     </section>
   )
 }

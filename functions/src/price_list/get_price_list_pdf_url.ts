@@ -67,7 +67,7 @@ export function buildPriceListQrUrl(
   domain: string,
   priceListId: string
 ): string {
-  return `https://${domain}/material/add?priceList=${priceListId}`;
+  return `https://${domain}/visit/add/list/${priceListId}`;
 }
 
 /**

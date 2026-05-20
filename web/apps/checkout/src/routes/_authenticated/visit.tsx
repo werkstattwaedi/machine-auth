@@ -1,8 +1,8 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { useState, useMemo } from "react"
-import { createFileRoute, Link } from "@tanstack/react-router"
+import { useState, useMemo, createContext, useContext } from "react"
+import { createFileRoute, Link, Outlet } from "@tanstack/react-router"
 import { useAuth, type UserDoc } from "@modules/lib/auth"
 import { useCollection } from "@modules/lib/firestore"
 import {
@@ -43,13 +43,46 @@ import {
   usePricingConfig,
   getSortedWorkshops,
 } from "@modules/lib/workshop-config"
-import type { WorkshopId, DiscountLevel, PricingModel } from "@modules/lib/workshop-config"
+import type { WorkshopId, DiscountLevel, PricingModel, PricingConfig, CatalogItem } from "@modules/lib/workshop-config"
 import { type CheckoutItemLocal, type ItemCallbacks } from "@/components/usage/inline-rows"
 import { WorkshopSectionWithCatalog } from "@/components/usage/workshop-section-with-catalog"
 
 export const Route = createFileRoute("/_authenticated/visit")({
   component: DashboardPage,
 })
+
+/**
+ * Shared by `/visit/add/*` sub-routes (the URL-driven picker overlays).
+ * The dashboard owns checkout + pricing state; the sub-routes only need
+ * a way to attribute the picker's add to the right workshop and a
+ * mutation that writes to the same checkout the dashboard is rendering.
+ */
+export interface VisitContextValue {
+  checkoutId: string | null
+  discountLevel: DiscountLevel
+  pricingConfig: PricingConfig
+  /**
+   * Resolve which workshop a given catalog item is attributed to on add.
+   * Overlap-first against `checkout.workshopsVisited`, falling back to
+   * `catalog.workshops[0]`. Called with `null` only from the ad-hoc
+   * fallback rows, which are gated to `workshop` scope (so non-workshop
+   * sub-routes never invoke that branch).
+   */
+  resolveWorkshop: (catalog: CatalogItem | null) => WorkshopId
+  addItem: (item: CheckoutItemLocal) => void
+}
+
+const VisitContext = createContext<VisitContextValue | null>(null)
+
+export function useVisitContext(): VisitContextValue {
+  const ctx = useContext(VisitContext)
+  if (!ctx) {
+    throw new Error(
+      "useVisitContext must be used inside the /visit layout (sub-route mounted outside the dashboard?)",
+    )
+  }
+  return ctx
+}
 
 function DashboardPage() {
   const { userDoc, userDocLoading } = useAuth()
@@ -145,6 +178,12 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
     [checkoutItems],
   )
 
+  // Workshops the user is currently checked in to. Used by addItem so a
+  // pricelist/QR-driven add to a not-yet-visited workshop also surfaces
+  // that workshop's section (and its checkbox).
+  const workshopsVisitedKey =
+    openCheckout?.workshopsVisited?.join(",") ?? ""
+
   // Firestore-backed item callbacks
   const callbacks: ItemCallbacks = useMemo(
     () => ({
@@ -152,6 +191,8 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
         try {
           await addItemMutation.mutate(async () => {
             let coId = checkoutId
+            const visited = openCheckout?.workshopsVisited ?? []
+            const workshopIsNew = !visited.includes(item.workshop)
             // Create checkout first, then add item (sequential so security
             // rules can read the parent checkout when validating the item)
             if (!coId) {
@@ -164,6 +205,15 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
                 persons: [],
               })
               coId = coRef.id
+            } else if (workshopIsNew) {
+              // QR/pricelist adds can route items to a workshop the user
+              // has not yet checked in to (overlap-first attribution
+              // falls back to catalog.workshops[0]). Mirror that into
+              // workshopsVisited so the dashboard section + checkbox
+              // appear without a second user action.
+              await update(checkoutRef(db, coId), {
+                workshopsVisited: arrayUnion(item.workshop),
+              })
             }
             await add(checkoutItemsCollection(db, coId), {
               workshop: item.workshop,
@@ -209,8 +259,12 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
           })
       },
     }),
+    // workshopsVisitedKey is a stable string serialization of
+    // openCheckout.workshopsVisited so the addItem closure picks up
+    // newly-visited workshops (otherwise the staleness here masks the
+    // arrayUnion above for the second item added during a session).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [checkoutId, ref],
+    [checkoutId, ref, workshopsVisitedKey],
   )
 
   if (loadingCheckout || loadingItems || loadingConfig) return <PageLoading />
@@ -251,6 +305,30 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
   const hasUsage = effectiveWorkshops.size > 0
 
   const itemsTotal = items.reduce((sum, i) => sum + i.totalPrice, 0)
+
+  // Workshop attribution policy for non-workshop picker scopes
+  // (`/visit/add/list/...`, `/visit/add/item/...`, `/visit/add`). Picks
+  // an already-visited workshop when the catalog item declares one;
+  // otherwise the item's first declared workshop. Null catalog (ad-hoc
+  // rows) shouldn't surface in those scopes, but if it ever does, fall
+  // back to the first sorted workshop so the type stays total.
+  const resolveWorkshop = (catalog: CatalogItem | null): WorkshopId => {
+    if (!catalog || catalog.workshops.length === 0) {
+      return sortedWorkshops[0]?.[0] ?? ("makerspace" as WorkshopId)
+    }
+    const overlap = catalog.workshops.find((w) =>
+      visitedWorkshops.has(w as WorkshopId),
+    )
+    return (overlap ?? catalog.workshops[0]) as WorkshopId
+  }
+
+  const visitContextValue: VisitContextValue = {
+    checkoutId,
+    discountLevel,
+    pricingConfig,
+    resolveWorkshop,
+    addItem: callbacks.addItem,
+  }
 
   const toggleWorkshop = (wsId: WorkshopId) => {
     const hasExistingItems = workshopsWithItems.has(wsId)
@@ -331,7 +409,8 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
   }
 
   return (
-    <div className="max-w-[1000px] mx-auto space-y-4">
+    <VisitContext.Provider value={visitContextValue}>
+      <div className="max-w-[1000px] mx-auto space-y-4">
       <h1 className="text-2xl font-bold">
         Hallo, {userDoc.name}
       </h1>
@@ -420,7 +499,12 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+      </div>
+      {/* /visit/add/* sub-routes mount their picker Sheet here; the Sheet
+          renders via a Radix portal so visual layering is independent of
+          this position in the tree. */}
+      <Outlet />
+    </VisitContext.Provider>
   )
 }
 

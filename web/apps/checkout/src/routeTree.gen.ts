@@ -8,331 +8,395 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
-import { Route as rootRouteImport } from "./routes/__root"
-import { Route as LoginRouteImport } from "./routes/login"
-import { Route as LinkAccountRouteImport } from "./routes/link-account"
-import { Route as ReportRouteImport } from "./routes/_report"
-import { Route as MaterialRouteImport } from "./routes/_material"
-import { Route as AuthonlyRouteImport } from "./routes/_authonly"
-import { Route as AuthenticatedRouteImport } from "./routes/_authenticated"
-import { Route as IndexRouteImport } from "./routes/index"
-import { Route as LoginVerifyRouteImport } from "./routes/login_.verify"
-import { Route as ReportReportRouteImport } from "./routes/_report/report"
-import { Route as AuthonlyCompleteProfileRouteImport } from "./routes/_authonly/complete-profile"
-import { Route as AuthenticatedVisitRouteImport } from "./routes/_authenticated/visit"
-import { Route as AuthenticatedUsageRouteImport } from "./routes/_authenticated/usage"
-import { Route as AuthenticatedProfileRouteImport } from "./routes/_authenticated/profile"
-import { Route as AuthenticatedMembershipIndexRouteImport } from "./routes/_authenticated/membership/index"
-import { Route as MaterialMaterialAddRouteImport } from "./routes/_material/material.add"
-import { Route as AuthenticatedInviteMembershipIdInviteIdRouteImport } from "./routes/_authenticated/invite/$membershipId/$inviteId"
+import { Route as rootRouteImport } from './routes/__root'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as LinkAccountRouteImport } from './routes/link-account'
+import { Route as ReportRouteImport } from './routes/_report'
+import { Route as AuthonlyRouteImport } from './routes/_authonly'
+import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
+import { Route as IndexRouteImport } from './routes/index'
+import { Route as LoginVerifyRouteImport } from './routes/login_.verify'
+import { Route as ReportReportRouteImport } from './routes/_report/report'
+import { Route as AuthonlyCompleteProfileRouteImport } from './routes/_authonly/complete-profile'
+import { Route as AuthenticatedVisitRouteImport } from './routes/_authenticated/visit'
+import { Route as AuthenticatedUsageRouteImport } from './routes/_authenticated/usage'
+import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
+import { Route as AuthenticatedMembershipIndexRouteImport } from './routes/_authenticated/membership/index'
+import { Route as AuthenticatedVisitAddIndexRouteImport } from './routes/_authenticated/visit/add.index'
+import { Route as AuthenticatedInviteMembershipIdInviteIdRouteImport } from './routes/_authenticated/invite/$membershipId/$inviteId'
+import { Route as AuthenticatedVisitAddWorkshopWorkshopIdRouteImport } from './routes/_authenticated/visit/add.workshop.$workshopId'
+import { Route as AuthenticatedVisitAddListListIdRouteImport } from './routes/_authenticated/visit/add.list.$listId'
+import { Route as AuthenticatedVisitAddItemCodeRouteImport } from './routes/_authenticated/visit/add.item.$code'
 
 const LoginRoute = LoginRouteImport.update({
-  id: "/login",
-  path: "/login",
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LinkAccountRoute = LinkAccountRouteImport.update({
-  id: "/link-account",
-  path: "/link-account",
+  id: '/link-account',
+  path: '/link-account',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ReportRoute = ReportRouteImport.update({
-  id: "/_report",
-  getParentRoute: () => rootRouteImport,
-} as any)
-const MaterialRoute = MaterialRouteImport.update({
-  id: "/_material",
+  id: '/_report',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthonlyRoute = AuthonlyRouteImport.update({
-  id: "/_authonly",
+  id: '/_authonly',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedRoute = AuthenticatedRouteImport.update({
-  id: "/_authenticated",
+  id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
-  id: "/",
-  path: "/",
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginVerifyRoute = LoginVerifyRouteImport.update({
-  id: "/login_/verify",
-  path: "/login/verify",
+  id: '/login_/verify',
+  path: '/login/verify',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ReportReportRoute = ReportReportRouteImport.update({
-  id: "/report",
-  path: "/report",
+  id: '/report',
+  path: '/report',
   getParentRoute: () => ReportRoute,
 } as any)
 const AuthonlyCompleteProfileRoute = AuthonlyCompleteProfileRouteImport.update({
-  id: "/complete-profile",
-  path: "/complete-profile",
+  id: '/complete-profile',
+  path: '/complete-profile',
   getParentRoute: () => AuthonlyRoute,
 } as any)
 const AuthenticatedVisitRoute = AuthenticatedVisitRouteImport.update({
-  id: "/visit",
-  path: "/visit",
+  id: '/visit',
+  path: '/visit',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedUsageRoute = AuthenticatedUsageRouteImport.update({
-  id: "/usage",
-  path: "/usage",
+  id: '/usage',
+  path: '/usage',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedProfileRoute = AuthenticatedProfileRouteImport.update({
-  id: "/profile",
-  path: "/profile",
+  id: '/profile',
+  path: '/profile',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedMembershipIndexRoute =
   AuthenticatedMembershipIndexRouteImport.update({
-    id: "/membership/",
-    path: "/membership/",
+    id: '/membership/',
+    path: '/membership/',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
-const MaterialMaterialAddRoute = MaterialMaterialAddRouteImport.update({
-  id: "/material/add",
-  path: "/material/add",
-  getParentRoute: () => MaterialRoute,
-} as any)
+const AuthenticatedVisitAddIndexRoute =
+  AuthenticatedVisitAddIndexRouteImport.update({
+    id: '/add/',
+    path: '/add/',
+    getParentRoute: () => AuthenticatedVisitRoute,
+  } as any)
 const AuthenticatedInviteMembershipIdInviteIdRoute =
   AuthenticatedInviteMembershipIdInviteIdRouteImport.update({
-    id: "/invite/$membershipId/$inviteId",
-    path: "/invite/$membershipId/$inviteId",
+    id: '/invite/$membershipId/$inviteId',
+    path: '/invite/$membershipId/$inviteId',
     getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedVisitAddWorkshopWorkshopIdRoute =
+  AuthenticatedVisitAddWorkshopWorkshopIdRouteImport.update({
+    id: '/add/workshop/$workshopId',
+    path: '/add/workshop/$workshopId',
+    getParentRoute: () => AuthenticatedVisitRoute,
+  } as any)
+const AuthenticatedVisitAddListListIdRoute =
+  AuthenticatedVisitAddListListIdRouteImport.update({
+    id: '/add/list/$listId',
+    path: '/add/list/$listId',
+    getParentRoute: () => AuthenticatedVisitRoute,
+  } as any)
+const AuthenticatedVisitAddItemCodeRoute =
+  AuthenticatedVisitAddItemCodeRouteImport.update({
+    id: '/add/item/$code',
+    path: '/add/item/$code',
+    getParentRoute: () => AuthenticatedVisitRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
-  "/": typeof IndexRoute
-  "/link-account": typeof LinkAccountRoute
-  "/login": typeof LoginRoute
-  "/profile": typeof AuthenticatedProfileRoute
-  "/usage": typeof AuthenticatedUsageRoute
-  "/visit": typeof AuthenticatedVisitRoute
-  "/complete-profile": typeof AuthonlyCompleteProfileRoute
-  "/report": typeof ReportReportRoute
-  "/login/verify": typeof LoginVerifyRoute
-  "/material/add": typeof MaterialMaterialAddRoute
-  "/membership/": typeof AuthenticatedMembershipIndexRoute
-  "/invite/$membershipId/$inviteId": typeof AuthenticatedInviteMembershipIdInviteIdRoute
+  '/': typeof IndexRoute
+  '/link-account': typeof LinkAccountRoute
+  '/login': typeof LoginRoute
+  '/profile': typeof AuthenticatedProfileRoute
+  '/usage': typeof AuthenticatedUsageRoute
+  '/visit': typeof AuthenticatedVisitRouteWithChildren
+  '/complete-profile': typeof AuthonlyCompleteProfileRoute
+  '/report': typeof ReportReportRoute
+  '/login/verify': typeof LoginVerifyRoute
+  '/membership/': typeof AuthenticatedMembershipIndexRoute
+  '/invite/$membershipId/$inviteId': typeof AuthenticatedInviteMembershipIdInviteIdRoute
+  '/visit/add/': typeof AuthenticatedVisitAddIndexRoute
+  '/visit/add/item/$code': typeof AuthenticatedVisitAddItemCodeRoute
+  '/visit/add/list/$listId': typeof AuthenticatedVisitAddListListIdRoute
+  '/visit/add/workshop/$workshopId': typeof AuthenticatedVisitAddWorkshopWorkshopIdRoute
 }
 export interface FileRoutesByTo {
-  "/": typeof IndexRoute
-  "/link-account": typeof LinkAccountRoute
-  "/login": typeof LoginRoute
-  "/profile": typeof AuthenticatedProfileRoute
-  "/usage": typeof AuthenticatedUsageRoute
-  "/visit": typeof AuthenticatedVisitRoute
-  "/complete-profile": typeof AuthonlyCompleteProfileRoute
-  "/report": typeof ReportReportRoute
-  "/login/verify": typeof LoginVerifyRoute
-  "/material/add": typeof MaterialMaterialAddRoute
-  "/membership": typeof AuthenticatedMembershipIndexRoute
-  "/invite/$membershipId/$inviteId": typeof AuthenticatedInviteMembershipIdInviteIdRoute
+  '/': typeof IndexRoute
+  '/link-account': typeof LinkAccountRoute
+  '/login': typeof LoginRoute
+  '/profile': typeof AuthenticatedProfileRoute
+  '/usage': typeof AuthenticatedUsageRoute
+  '/visit': typeof AuthenticatedVisitRouteWithChildren
+  '/complete-profile': typeof AuthonlyCompleteProfileRoute
+  '/report': typeof ReportReportRoute
+  '/login/verify': typeof LoginVerifyRoute
+  '/membership': typeof AuthenticatedMembershipIndexRoute
+  '/invite/$membershipId/$inviteId': typeof AuthenticatedInviteMembershipIdInviteIdRoute
+  '/visit/add': typeof AuthenticatedVisitAddIndexRoute
+  '/visit/add/item/$code': typeof AuthenticatedVisitAddItemCodeRoute
+  '/visit/add/list/$listId': typeof AuthenticatedVisitAddListListIdRoute
+  '/visit/add/workshop/$workshopId': typeof AuthenticatedVisitAddWorkshopWorkshopIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  "/": typeof IndexRoute
-  "/_authenticated": typeof AuthenticatedRouteWithChildren
-  "/_authonly": typeof AuthonlyRouteWithChildren
-  "/_material": typeof MaterialRouteWithChildren
-  "/_report": typeof ReportRouteWithChildren
-  "/link-account": typeof LinkAccountRoute
-  "/login": typeof LoginRoute
-  "/_authenticated/profile": typeof AuthenticatedProfileRoute
-  "/_authenticated/usage": typeof AuthenticatedUsageRoute
-  "/_authenticated/visit": typeof AuthenticatedVisitRoute
-  "/_authonly/complete-profile": typeof AuthonlyCompleteProfileRoute
-  "/_report/report": typeof ReportReportRoute
-  "/login_/verify": typeof LoginVerifyRoute
-  "/_material/material/add": typeof MaterialMaterialAddRoute
-  "/_authenticated/membership/": typeof AuthenticatedMembershipIndexRoute
-  "/_authenticated/invite/$membershipId/$inviteId": typeof AuthenticatedInviteMembershipIdInviteIdRoute
+  '/': typeof IndexRoute
+  '/_authenticated': typeof AuthenticatedRouteWithChildren
+  '/_authonly': typeof AuthonlyRouteWithChildren
+  '/_report': typeof ReportRouteWithChildren
+  '/link-account': typeof LinkAccountRoute
+  '/login': typeof LoginRoute
+  '/_authenticated/profile': typeof AuthenticatedProfileRoute
+  '/_authenticated/usage': typeof AuthenticatedUsageRoute
+  '/_authenticated/visit': typeof AuthenticatedVisitRouteWithChildren
+  '/_authonly/complete-profile': typeof AuthonlyCompleteProfileRoute
+  '/_report/report': typeof ReportReportRoute
+  '/login_/verify': typeof LoginVerifyRoute
+  '/_authenticated/membership/': typeof AuthenticatedMembershipIndexRoute
+  '/_authenticated/invite/$membershipId/$inviteId': typeof AuthenticatedInviteMembershipIdInviteIdRoute
+  '/_authenticated/visit/add/': typeof AuthenticatedVisitAddIndexRoute
+  '/_authenticated/visit/add/item/$code': typeof AuthenticatedVisitAddItemCodeRoute
+  '/_authenticated/visit/add/list/$listId': typeof AuthenticatedVisitAddListListIdRoute
+  '/_authenticated/visit/add/workshop/$workshopId': typeof AuthenticatedVisitAddWorkshopWorkshopIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    | "/"
-    | "/link-account"
-    | "/login"
-    | "/profile"
-    | "/usage"
-    | "/visit"
-    | "/complete-profile"
-    | "/report"
-    | "/login/verify"
-    | "/material/add"
-    | "/membership/"
-    | "/invite/$membershipId/$inviteId"
+    | '/'
+    | '/link-account'
+    | '/login'
+    | '/profile'
+    | '/usage'
+    | '/visit'
+    | '/complete-profile'
+    | '/report'
+    | '/login/verify'
+    | '/membership/'
+    | '/invite/$membershipId/$inviteId'
+    | '/visit/add/'
+    | '/visit/add/item/$code'
+    | '/visit/add/list/$listId'
+    | '/visit/add/workshop/$workshopId'
   fileRoutesByTo: FileRoutesByTo
   to:
-    | "/"
-    | "/link-account"
-    | "/login"
-    | "/profile"
-    | "/usage"
-    | "/visit"
-    | "/complete-profile"
-    | "/report"
-    | "/login/verify"
-    | "/material/add"
-    | "/membership"
-    | "/invite/$membershipId/$inviteId"
+    | '/'
+    | '/link-account'
+    | '/login'
+    | '/profile'
+    | '/usage'
+    | '/visit'
+    | '/complete-profile'
+    | '/report'
+    | '/login/verify'
+    | '/membership'
+    | '/invite/$membershipId/$inviteId'
+    | '/visit/add'
+    | '/visit/add/item/$code'
+    | '/visit/add/list/$listId'
+    | '/visit/add/workshop/$workshopId'
   id:
-    | "__root__"
-    | "/"
-    | "/_authenticated"
-    | "/_authonly"
-    | "/_material"
-    | "/_report"
-    | "/link-account"
-    | "/login"
-    | "/_authenticated/profile"
-    | "/_authenticated/usage"
-    | "/_authenticated/visit"
-    | "/_authonly/complete-profile"
-    | "/_report/report"
-    | "/login_/verify"
-    | "/_material/material/add"
-    | "/_authenticated/membership/"
-    | "/_authenticated/invite/$membershipId/$inviteId"
+    | '__root__'
+    | '/'
+    | '/_authenticated'
+    | '/_authonly'
+    | '/_report'
+    | '/link-account'
+    | '/login'
+    | '/_authenticated/profile'
+    | '/_authenticated/usage'
+    | '/_authenticated/visit'
+    | '/_authonly/complete-profile'
+    | '/_report/report'
+    | '/login_/verify'
+    | '/_authenticated/membership/'
+    | '/_authenticated/invite/$membershipId/$inviteId'
+    | '/_authenticated/visit/add/'
+    | '/_authenticated/visit/add/item/$code'
+    | '/_authenticated/visit/add/list/$listId'
+    | '/_authenticated/visit/add/workshop/$workshopId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   AuthonlyRoute: typeof AuthonlyRouteWithChildren
-  MaterialRoute: typeof MaterialRouteWithChildren
   ReportRoute: typeof ReportRouteWithChildren
   LinkAccountRoute: typeof LinkAccountRoute
   LoginRoute: typeof LoginRoute
   LoginVerifyRoute: typeof LoginVerifyRoute
 }
 
-declare module "@tanstack/react-router" {
+declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    "/login": {
-      id: "/login"
-      path: "/login"
-      fullPath: "/login"
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
-    "/link-account": {
-      id: "/link-account"
-      path: "/link-account"
-      fullPath: "/link-account"
+    '/link-account': {
+      id: '/link-account'
+      path: '/link-account'
+      fullPath: '/link-account'
       preLoaderRoute: typeof LinkAccountRouteImport
       parentRoute: typeof rootRouteImport
     }
-    "/_report": {
-      id: "/_report"
-      path: ""
-      fullPath: "/"
+    '/_report': {
+      id: '/_report'
+      path: ''
+      fullPath: '/'
       preLoaderRoute: typeof ReportRouteImport
       parentRoute: typeof rootRouteImport
     }
-    "/_material": {
-      id: "/_material"
-      path: ""
-      fullPath: "/"
-      preLoaderRoute: typeof MaterialRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    "/_authonly": {
-      id: "/_authonly"
-      path: ""
-      fullPath: "/"
+    '/_authonly': {
+      id: '/_authonly'
+      path: ''
+      fullPath: '/'
       preLoaderRoute: typeof AuthonlyRouteImport
       parentRoute: typeof rootRouteImport
     }
-    "/_authenticated": {
-      id: "/_authenticated"
-      path: ""
-      fullPath: "/"
+    '/_authenticated': {
+      id: '/_authenticated'
+      path: ''
+      fullPath: '/'
       preLoaderRoute: typeof AuthenticatedRouteImport
       parentRoute: typeof rootRouteImport
     }
-    "/": {
-      id: "/"
-      path: "/"
-      fullPath: "/"
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    "/login_/verify": {
-      id: "/login_/verify"
-      path: "/login/verify"
-      fullPath: "/login/verify"
+    '/login_/verify': {
+      id: '/login_/verify'
+      path: '/login/verify'
+      fullPath: '/login/verify'
       preLoaderRoute: typeof LoginVerifyRouteImport
       parentRoute: typeof rootRouteImport
     }
-    "/_report/report": {
-      id: "/_report/report"
-      path: "/report"
-      fullPath: "/report"
+    '/_report/report': {
+      id: '/_report/report'
+      path: '/report'
+      fullPath: '/report'
       preLoaderRoute: typeof ReportReportRouteImport
       parentRoute: typeof ReportRoute
     }
-    "/_authonly/complete-profile": {
-      id: "/_authonly/complete-profile"
-      path: "/complete-profile"
-      fullPath: "/complete-profile"
+    '/_authonly/complete-profile': {
+      id: '/_authonly/complete-profile'
+      path: '/complete-profile'
+      fullPath: '/complete-profile'
       preLoaderRoute: typeof AuthonlyCompleteProfileRouteImport
       parentRoute: typeof AuthonlyRoute
     }
-    "/_authenticated/visit": {
-      id: "/_authenticated/visit"
-      path: "/visit"
-      fullPath: "/visit"
+    '/_authenticated/visit': {
+      id: '/_authenticated/visit'
+      path: '/visit'
+      fullPath: '/visit'
       preLoaderRoute: typeof AuthenticatedVisitRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    "/_authenticated/usage": {
-      id: "/_authenticated/usage"
-      path: "/usage"
-      fullPath: "/usage"
+    '/_authenticated/usage': {
+      id: '/_authenticated/usage'
+      path: '/usage'
+      fullPath: '/usage'
       preLoaderRoute: typeof AuthenticatedUsageRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    "/_authenticated/profile": {
-      id: "/_authenticated/profile"
-      path: "/profile"
-      fullPath: "/profile"
+    '/_authenticated/profile': {
+      id: '/_authenticated/profile'
+      path: '/profile'
+      fullPath: '/profile'
       preLoaderRoute: typeof AuthenticatedProfileRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    "/_authenticated/membership/": {
-      id: "/_authenticated/membership/"
-      path: "/membership"
-      fullPath: "/membership/"
+    '/_authenticated/membership/': {
+      id: '/_authenticated/membership/'
+      path: '/membership'
+      fullPath: '/membership/'
       preLoaderRoute: typeof AuthenticatedMembershipIndexRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    "/_material/material/add": {
-      id: "/_material/material/add"
-      path: "/material/add"
-      fullPath: "/material/add"
-      preLoaderRoute: typeof MaterialMaterialAddRouteImport
-      parentRoute: typeof MaterialRoute
+    '/_authenticated/visit/add/': {
+      id: '/_authenticated/visit/add/'
+      path: '/add'
+      fullPath: '/visit/add/'
+      preLoaderRoute: typeof AuthenticatedVisitAddIndexRouteImport
+      parentRoute: typeof AuthenticatedVisitRoute
     }
-    "/_authenticated/invite/$membershipId/$inviteId": {
-      id: "/_authenticated/invite/$membershipId/$inviteId"
-      path: "/invite/$membershipId/$inviteId"
-      fullPath: "/invite/$membershipId/$inviteId"
+    '/_authenticated/invite/$membershipId/$inviteId': {
+      id: '/_authenticated/invite/$membershipId/$inviteId'
+      path: '/invite/$membershipId/$inviteId'
+      fullPath: '/invite/$membershipId/$inviteId'
       preLoaderRoute: typeof AuthenticatedInviteMembershipIdInviteIdRouteImport
       parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/visit/add/workshop/$workshopId': {
+      id: '/_authenticated/visit/add/workshop/$workshopId'
+      path: '/add/workshop/$workshopId'
+      fullPath: '/visit/add/workshop/$workshopId'
+      preLoaderRoute: typeof AuthenticatedVisitAddWorkshopWorkshopIdRouteImport
+      parentRoute: typeof AuthenticatedVisitRoute
+    }
+    '/_authenticated/visit/add/list/$listId': {
+      id: '/_authenticated/visit/add/list/$listId'
+      path: '/add/list/$listId'
+      fullPath: '/visit/add/list/$listId'
+      preLoaderRoute: typeof AuthenticatedVisitAddListListIdRouteImport
+      parentRoute: typeof AuthenticatedVisitRoute
+    }
+    '/_authenticated/visit/add/item/$code': {
+      id: '/_authenticated/visit/add/item/$code'
+      path: '/add/item/$code'
+      fullPath: '/visit/add/item/$code'
+      preLoaderRoute: typeof AuthenticatedVisitAddItemCodeRouteImport
+      parentRoute: typeof AuthenticatedVisitRoute
     }
   }
 }
 
+interface AuthenticatedVisitRouteChildren {
+  AuthenticatedVisitAddIndexRoute: typeof AuthenticatedVisitAddIndexRoute
+  AuthenticatedVisitAddItemCodeRoute: typeof AuthenticatedVisitAddItemCodeRoute
+  AuthenticatedVisitAddListListIdRoute: typeof AuthenticatedVisitAddListListIdRoute
+  AuthenticatedVisitAddWorkshopWorkshopIdRoute: typeof AuthenticatedVisitAddWorkshopWorkshopIdRoute
+}
+
+const AuthenticatedVisitRouteChildren: AuthenticatedVisitRouteChildren = {
+  AuthenticatedVisitAddIndexRoute: AuthenticatedVisitAddIndexRoute,
+  AuthenticatedVisitAddItemCodeRoute: AuthenticatedVisitAddItemCodeRoute,
+  AuthenticatedVisitAddListListIdRoute: AuthenticatedVisitAddListListIdRoute,
+  AuthenticatedVisitAddWorkshopWorkshopIdRoute:
+    AuthenticatedVisitAddWorkshopWorkshopIdRoute,
+}
+
+const AuthenticatedVisitRouteWithChildren =
+  AuthenticatedVisitRoute._addFileChildren(AuthenticatedVisitRouteChildren)
+
 interface AuthenticatedRouteChildren {
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedUsageRoute: typeof AuthenticatedUsageRoute
-  AuthenticatedVisitRoute: typeof AuthenticatedVisitRoute
+  AuthenticatedVisitRoute: typeof AuthenticatedVisitRouteWithChildren
   AuthenticatedMembershipIndexRoute: typeof AuthenticatedMembershipIndexRoute
   AuthenticatedInviteMembershipIdInviteIdRoute: typeof AuthenticatedInviteMembershipIdInviteIdRoute
 }
@@ -340,7 +404,7 @@ interface AuthenticatedRouteChildren {
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedUsageRoute: AuthenticatedUsageRoute,
-  AuthenticatedVisitRoute: AuthenticatedVisitRoute,
+  AuthenticatedVisitRoute: AuthenticatedVisitRouteWithChildren,
   AuthenticatedMembershipIndexRoute: AuthenticatedMembershipIndexRoute,
   AuthenticatedInviteMembershipIdInviteIdRoute:
     AuthenticatedInviteMembershipIdInviteIdRoute,
@@ -362,18 +426,6 @@ const AuthonlyRouteWithChildren = AuthonlyRoute._addFileChildren(
   AuthonlyRouteChildren,
 )
 
-interface MaterialRouteChildren {
-  MaterialMaterialAddRoute: typeof MaterialMaterialAddRoute
-}
-
-const MaterialRouteChildren: MaterialRouteChildren = {
-  MaterialMaterialAddRoute: MaterialMaterialAddRoute,
-}
-
-const MaterialRouteWithChildren = MaterialRoute._addFileChildren(
-  MaterialRouteChildren,
-)
-
 interface ReportRouteChildren {
   ReportReportRoute: typeof ReportReportRoute
 }
@@ -389,7 +441,6 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   AuthonlyRoute: AuthonlyRouteWithChildren,
-  MaterialRoute: MaterialRouteWithChildren,
   ReportRoute: ReportRouteWithChildren,
   LinkAccountRoute: LinkAccountRoute,
   LoginRoute: LoginRoute,

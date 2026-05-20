@@ -27,12 +27,12 @@ describe("buildPriceListQrUrl", () => {
   it("encodes the canonical production URL", () => {
     expect(
       buildPriceListQrUrl("checkout.werkstattwaedi.ch", "abc123")
-    ).to.equal("https://checkout.werkstattwaedi.ch/material/add?priceList=abc123");
+    ).to.equal("https://checkout.werkstattwaedi.ch/visit/add/list/abc123");
   });
 
   it("preserves an emulator-style host so dev flows still work", () => {
     expect(buildPriceListQrUrl("localhost:5173", "x")).to.equal(
-      "https://localhost:5173/material/add?priceList=x"
+      "https://localhost:5173/visit/add/list/x"
     );
   });
 });
