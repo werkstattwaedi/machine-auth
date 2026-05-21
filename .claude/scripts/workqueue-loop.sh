@@ -139,18 +139,29 @@ has_actionable_work() {
     reason="${reason:+$reason; }${approved_prs} approved PR(s) to land"
   fi
 
-  # 4. For each open workqueue PR, check unaddressed review comments. Skipped
+  # 4. For each open workqueue PR, check unaddressed review threads. Skipped
   #    when another signal already triggered, to keep the chatty per-PR calls
   #    off the critical path of every poll.
+  #
+  #    A review thread is "addressed" when its newest reply carries the
+  #    `<!-- claude-workqueue-ack -->` marker. Counting raw comments without
+  #    the marker is wrong: the original review comment (authored by a
+  #    human or CodeQL bot) can never contain it, so a fully-acked thread
+  #    still has 1+ non-ack comments and the loop would fire claude on
+  #    every poll forever. Group by thread root (in_reply_to_id // id) and
+  #    inspect only the latest reply in each group.
   if [[ -z "$reason" ]]; then
     local pr_numbers
     pr_numbers=$(printf '%s' "$prs_json" | jq -r '.[].number' 2>/dev/null || true)
     local unaddressed_prs=0
     for pr in $pr_numbers; do
       local n
-      n=$(wq_gh api "repos/$repo/pulls/$pr/comments" --jq \
-        '[.[] | select(.body | contains("<!-- claude-workqueue-ack -->") | not)] | length' \
-        2>/dev/null || echo 0)
+      n=$(wq_gh api "repos/$repo/pulls/$pr/comments" --jq '
+        group_by(.in_reply_to_id // .id)
+        | map(sort_by(.created_at) | last)
+        | [.[] | select(.body | contains("<!-- claude-workqueue-ack -->") | not)]
+        | length
+      ' 2>/dev/null || echo 0)
       if [[ "${n:-0}" -gt 0 ]]; then
         unaddressed_prs=$((unaddressed_prs + 1))
       fi
@@ -193,11 +204,18 @@ while true; do
   rm -f "$signal_file"   # ensure it doesn't exist at start of run
   export WORKQUEUE_SIGNAL_FILE="$signal_file"
 
+  # Capture the pane the wrapper was launched in. The watchdog MUST target
+  # this pane explicitly — without `-t`, tmux send-keys / capture-pane act
+  # on whichever pane happens to be active when the watchdog fires, so if
+  # you've switched panes/windows while claude was running the /exit lands
+  # in the wrong pane and claude never shuts down.
+  target_pane="${TMUX_PANE:-}"
+
   (
     trap 'exit 0' TERM
     while [[ ! -f "$signal_file" ]]; do sleep 3; done
     sleep 2   # let claude flush its final output
-    tmux send-keys "/exit" Enter
+    tmux send-keys -t "$target_pane" "/exit" Enter
 
     # If claude has pending background work (e.g. a /loop wakeup scheduled
     # externally), /exit pops a "Background work is running" prompt with
@@ -207,9 +225,9 @@ while true; do
     # claude exited cleanly and we don't need to do anything.
     for _ in 1 2 3 4 5 6 7 8 9 10; do
       sleep 1
-      if tmux capture-pane -p 2>/dev/null | grep -q "Background work is running"; then
+      if tmux capture-pane -t "$target_pane" -p 2>/dev/null | grep -q "Background work is running"; then
         sleep 1
-        tmux send-keys 1 Enter
+        tmux send-keys -t "$target_pane" 1 Enter
         break
       fi
     done
