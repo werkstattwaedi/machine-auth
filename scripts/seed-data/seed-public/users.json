@@ -14,7 +14,12 @@
     "roles": ["admin"],
     "termsAcceptedAt": "$now",
     "userType": "erwachsen",
-    "billingAddress": null
+    "billingAddress": {
+      "city": "Wädenswil",
+      "company": "",
+      "street": "Teststrasse 1",
+      "zip": "8820"
+    }
   },
   "NVO6YBzzuBi4K0EuuQ63HHsi7kTa": {
     "created": "$now",
@@ -29,7 +34,12 @@
     "roles": ["admin", "vereinsmitglied"],
     "termsAcceptedAt": "$now",
     "userType": "erwachsen",
-    "billingAddress": null
+    "billingAddress": {
+      "city": "Wädenswil",
+      "company": "",
+      "street": "Teststrasse 1",
+      "zip": "8820"
+    }
   },
   "cM2a3Sosx4LEdTEZFbWOqPKXGF9U": {
     "created": "$now",
@@ -40,7 +50,12 @@
     "roles": ["admin"],
     "termsAcceptedAt": "$now",
     "userType": "erwachsen",
-    "billingAddress": null
+    "billingAddress": {
+      "city": "Wädenswil",
+      "company": "",
+      "street": "Teststrasse 1",
+      "zip": "8820"
+    }
   },
   "mzEFn75h8hRi3U5tx1uHFdqIQxYf": {
     "created": "$now",
@@ -51,7 +66,12 @@
     "roles": [],
     "termsAcceptedAt": "$now",
     "userType": "erwachsen",
-    "billingAddress": null
+    "billingAddress": {
+      "city": "Wädenswil",
+      "company": "",
+      "street": "Teststrasse 1",
+      "zip": "8820"
+    }
   },
   "ziDW8kMcB1aAYd4D5Wd0ZKQqGwRH": {
     "created": "$now",
@@ -62,7 +82,12 @@
     "roles": [],
     "termsAcceptedAt": "$now",
     "userType": "erwachsen",
-    "billingAddress": null
+    "billingAddress": {
+      "city": "Wädenswil",
+      "company": "",
+      "street": "Teststrasse 1",
+      "zip": "8820"
+    }
   },
   "VBfkBQLmdsgHbH4dTCYumVVKPABe": {
     "created": "$now",
