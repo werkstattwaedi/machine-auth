@@ -5,6 +5,19 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      update_snapshots:
+        description: "Run e2e with --update-snapshots and upload the regenerated PNGs as an artifact you can unzip into the snapshot dirs to update baselines."
+        type: boolean
+        default: false
+
+# `contents: read` is the minimum scope this workflow needs (checkout
+# only; no pushes, no comments, no releases). Locking it down silences
+# the CodeQL "Workflow does not contain permissions" warning and limits
+# the blast radius if a dependency in this pipeline is ever compromised.
+permissions:
+  contents: read
 
 jobs:
   test:
@@ -116,8 +129,23 @@ jobs:
         # broker, which falls back to the committed `.env.test` fixtures
         # when the operations repo isn't present (i.e. on CI). See
         # docs/port-blocks.md.
-        run: npm run test:web:e2e
+        #
+        # On a `workflow_dispatch` with `update_snapshots: true`, run the
+        # `:update-snapshots` variant instead, which threads
+        # `--update-snapshots` all the way down to `playwright test`.
+        # The "Upload regenerated snapshot baselines" step below ships
+        # the resulting PNGs back as a flat artifact.
+        run: |
+          if [ "${{ inputs.update_snapshots }}" = "true" ]; then
+            npm run test:web:e2e:update-snapshots
+          else
+            npm run test:web:e2e
+          fi
 
+      # Regular CI failure artifact. Inside each failed-test directory
+      # Playwright writes `*-actual.png` / `*-expected.png` / `*-diff.png`
+      # alongside the trace.zip — drop the `*-actual.png` into the
+      # corresponding `e2e/*.spec.ts-snapshots/` path to update a baseline.
       - name: Upload Playwright traces + screenshots
         if: failure()
         uses: actions/upload-artifact@v4
@@ -127,4 +155,18 @@ jobs:
             web/apps/checkout/test-results/
             web/apps/admin/test-results/
           if-no-files-found: ignore
+          retention-days: 7
+
+      # On `workflow_dispatch` with `update_snapshots: true`, ship the
+      # regenerated baselines as a flat artifact. Download, unzip into
+      # the repo (`unzip -o updated-snapshots.zip`), commit, push.
+      - name: Upload regenerated snapshot baselines
+        if: always() && inputs.update_snapshots == true
+        uses: actions/upload-artifact@v4
+        with:
+          name: updated-snapshots
+          path: |
+            web/apps/checkout/e2e/**/*-snapshots/**
+            web/apps/admin/e2e/**/*-snapshots/**
+          if-no-files-found: warn
           retention-days: 7
