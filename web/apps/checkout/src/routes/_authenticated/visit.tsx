@@ -46,6 +46,7 @@ import {
 import type { WorkshopId, DiscountLevel, PricingModel, PricingConfig, CatalogItem } from "@modules/lib/workshop-config"
 import { type CheckoutItemLocal, type ItemCallbacks } from "@/components/usage/inline-rows"
 import { WorkshopSectionWithCatalog } from "@/components/usage/workshop-section-with-catalog"
+import { ScanFab } from "@/components/qr-scanner/scan-fab"
 
 export const Route = createFileRoute("/_authenticated/visit")({
   component: DashboardPage,
@@ -504,6 +505,9 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
           renders via a Radix portal so visual layering is independent of
           this position in the tree. */}
       <Outlet />
+      {/* Touch-device-only QR scanner FAB. Internal `useCanScanQr()`
+          gate keeps it off mouse-driven desktops. */}
+      <ScanFab />
     </VisitContext.Provider>
   )
 }

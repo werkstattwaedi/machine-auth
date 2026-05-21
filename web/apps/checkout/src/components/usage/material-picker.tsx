@@ -13,7 +13,9 @@ import { Label } from "@modules/components/ui/label"
 import { useIsMobile } from "@modules/hooks/use-mobile"
 import { formatCHF } from "@modules/lib/format"
 import { formatPricePerCount } from "@modules/lib/units"
-import { ChevronRight, Search, X } from "lucide-react"
+import { ChevronRight, ScanLine, Search, X } from "lucide-react"
+import { QrScannerSheet } from "@/components/qr-scanner/qr-scanner-sheet"
+import { useCanScanQr } from "@/components/qr-scanner/use-can-scan-qr"
 import {
   getUnitLabel,
   getShortUnit,
@@ -171,6 +173,8 @@ function PickerHeader({
   children: (query: string) => React.ReactNode
 }) {
   const [query, setQuery] = useState("")
+  const [scannerOpen, setScannerOpen] = useState(false)
+  const canScan = useCanScanQr()
 
   return (
     <>
@@ -208,10 +212,23 @@ function PickerHeader({
               <X className="h-3 w-3" />
             </button>
           )}
+          {canScan && (
+            <button
+              type="button"
+              aria-label="QR-Code scannen"
+              onClick={() => setScannerOpen(true)}
+              className="flex h-7 w-7 items-center justify-center rounded-[3px] text-muted-foreground hover:bg-secondary hover:text-foreground"
+            >
+              <ScanLine className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </div>
 
       {children(query)}
+      {canScan && (
+        <QrScannerSheet open={scannerOpen} onOpenChange={setScannerOpen} />
+      )}
     </>
   )
 }
