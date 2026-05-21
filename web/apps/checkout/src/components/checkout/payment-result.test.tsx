@@ -200,6 +200,22 @@ describe("PaymentResult", () => {
       // MonthlyPanel-only copy — the tab label also contains "Sammelrechnung",
       // so match on the unique panel sentence instead.
       expect(screen.getByText(/1\. des nächsten Monats/)).toBeDefined()
+      // Issue #267: lock in Marco's wording for the Sammelrechnung confirmation
+      // copy. The "werden deiner Sammelrechnung hinzugefügt" and
+      // "QR-Rechnung über alle offenen Posten" phrasings replaced the older
+      // "Wir setzen … auf deine Sammelrechnung" / "QR-Rechnung mit allen
+      // offenen Posten" wording, so guard against regressions in both
+      // directions.
+      expect(
+        screen.getByText(/werden deiner Sammelrechnung hinzugefügt/),
+      ).toBeDefined()
+      expect(
+        screen.getByText(/QR-Rechnung über alle offenen Posten/),
+      ).toBeDefined()
+      expect(screen.queryByText(/Wir setzen/)).toBeNull()
+      expect(
+        screen.queryByText(/QR-Rechnung mit allen offenen Posten/),
+      ).toBeNull()
       expect(
         screen.getByRole("button", {
           name: /Auf Sammelrechnung setzen & Werkstatt verlassen/,

@@ -218,6 +218,15 @@ service cloud.firestore {
       // transitions go through closeCheckoutAndGetPayment so the server
       // can recompute prices and allocate a bill atomically.
       //
+      // Issue #246: anonymous-auth sessions may also update an open
+      // null-userId checkout (e.g. to persist the person roster between
+      // step 0 and step 1 so a nav-away-and-back can rehydrate). Same
+      // field gate as the principal branch — status/summary/closedAt/
+      // billRef must still flow through the callable. No per-session
+      // scoping (any anon session can write any null-userId open
+      // checkout): doc IDs are random Firebase IDs so this is no worse
+      // than the existing items subcollection write rule.
+      //
       // Closed-checkout extension: the principal (real, tag, or — for
       // null-userId checkouts — the anonymous-auth caller) can write the
       // customer-stated payment-method acknowledgement fields exactly once.
@@ -235,6 +244,11 @@ service cloud.firestore {
          resource.data.status == "open" &&
          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
            'status', 'summary', 'closedAt', 'billRef'
+         ])) ||
+        (resource.data.userId == null && isAnonymousAuth() &&
+         resource.data.status == "open" &&
+         !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+           'status', 'summary', 'closedAt', 'billRef', 'userId'
          ])) ||
         (resource.data.status == "closed" &&
          !('paymentMethodConfirmed' in resource.data) &&
