@@ -672,17 +672,23 @@ function PickerRowBody({
   onAdd: (item: CheckoutItemLocal) => void
 }) {
   const variants = catalog.variants ?? []
-  const initialId =
-    (initialVariantId && variants.find((v) => v.id === initialVariantId)?.id) ??
-    variants[0]?.id ??
-    "default"
-  if (initialVariantId && initialId !== initialVariantId) {
-    // eslint-disable-next-line no-console
-    console.warn(
-      `Unknown variantId "${initialVariantId}" for catalog item ${catalog.code}; falling back to variants[0].`,
-    )
-  }
-  const [selectedVariantId, setSelectedVariantId] = useState<string>(initialId)
+  // Lazy initializer: runs once per mount. Keeping the warn in here
+  // (rather than the component body) avoids logging on every render
+  // / strict-mode double-invoke.
+  const [selectedVariantId, setSelectedVariantId] = useState<string>(() => {
+    const resolved =
+      (initialVariantId &&
+        variants.find((v) => v.id === initialVariantId)?.id) ??
+      variants[0]?.id ??
+      "default"
+    if (initialVariantId && resolved !== initialVariantId) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `Unknown variantId "${initialVariantId}" for catalog item ${catalog.code}; falling back to variants[0].`,
+      )
+    }
+    return resolved
+  })
   const variant =
     variants.find((v) => v.id === selectedVariantId) ?? variants[0]
   const unitPrice = variant
