@@ -463,9 +463,9 @@ function RechnungPanel({
 function MonthlyPanel({ totalPrice }: { totalPrice: number }) {
   return (
     <p className="text-sm text-foreground leading-relaxed max-w-2xl">
-      Wir setzen <strong>{formatCHF(totalPrice)}</strong> auf deine
-      Sammelrechnung. Du erhältst am{" "}
-      <strong>1. des nächsten Monats</strong> eine QR-Rechnung mit allen
+      Die <strong>{formatCHF(totalPrice)}</strong> werden deiner
+      Sammelrechnung hinzugefügt. Du erhältst am{" "}
+      <strong>1. des nächsten Monats</strong> eine QR-Rechnung über alle
       offenen Posten.
     </p>
   )

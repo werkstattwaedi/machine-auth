@@ -119,7 +119,7 @@ function PriceListDetailPage() {
   if (loading || catalogLoading) return <PageLoading />
   if (!priceList) return <div>Preisliste nicht gefunden.</div>
 
-  const qrUrl = `https://${import.meta.env.VITE_CHECKOUT_DOMAIN}/material/add?priceList=${priceListId}`
+  const qrUrl = `https://${import.meta.env.VITE_CHECKOUT_DOMAIN}/visit/add/list/${priceListId}`
 
   // Sort catalog by code for the picker
   const sortedCatalog = [...allCatalog].sort((a, b) =>

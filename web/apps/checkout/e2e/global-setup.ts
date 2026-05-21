@@ -202,6 +202,33 @@ export default async function globalSetup() {
     ],
   })
 
+  // Multi-variant item used by `/visit/add/item/$code/$variantId`
+  // coverage — needs ≥ 2 variants so the variant chooser actually
+  // renders (single-variant items never show the chooser per the picker
+  // rule).
+  await seedCatalog("e2e-item-multivariant", {
+    code: "9200",
+    name: "E2E Sperrholz",
+    workshops: ["holz"],
+    category: [],
+    active: true,
+    userCanAdd: true,
+    variants: [
+      {
+        id: "default",
+        label: "Per m²",
+        pricingModel: "area",
+        unitPrice: { default: 30, member: 25 },
+      },
+      {
+        id: "zuschnitt-a3",
+        label: "Zuschnitt A3",
+        pricingModel: "count",
+        unitPrice: { default: 4, member: 3 },
+      },
+    ],
+  })
+
   // ── Seed membership catalog + catalog-references indirection ──
   //
   // The /membership page resolves prices via `config/catalog-references`

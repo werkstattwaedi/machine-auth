@@ -51,14 +51,44 @@ const FALLBACK_MODELS: ReadonlyArray<{
   { pricingModel: "time", label: "h", hint: "Maschinenzeit" },
 ]
 
+/**
+ * What set of catalog items the picker should surface, and how to label
+ * the panel. The host is responsible for pre-filtering `catalogItems`
+ * to match the scope (no extra narrowing happens inside the picker).
+ *
+ * - `all`: full catalog, browse-and-search entry point (also the QR
+ *   scanner's empty-state fallback).
+ * - `workshop`: catalog narrowed to one workshop — the "+ Material
+ *   hinzufügen" button on a workshop card.
+ * - `list`: the items defined by a pricelist (reached via the price-list
+ *   QR code on a printed PDF).
+ * - `item`: a single catalog item, e.g. from a per-item QR sticker.
+ *   The variant chooser auto-expands on open. `variantId` is optional
+ *   — when set, that variant is pre-selected (per-variant QR stickers,
+ *   e.g. "Zuschnitt A3"). Unknown variantIds fall back to `variants[0]`.
+ */
+export type PickerScope =
+  | { kind: "all" }
+  | { kind: "workshop"; workshopId: WorkshopId; workshopLabel: string }
+  | { kind: "list"; listId: string; listName: string }
+  | { kind: "item"; code: string; itemId: string; variantId?: string }
+
 interface MaterialPickerProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  workshopId: WorkshopId
-  workshopLabel: string
+  scope: PickerScope
   catalogItems: CatalogItem[]
   config: PricingConfig
   discountLevel: DiscountLevel
+  /**
+   * Resolve which workshop a given catalog item is attributed to on add.
+   * For `workshop` scope, always returns the scope's workshopId. For
+   * other scopes, the host consults `checkout.workshopsVisited`
+   * (overlap-first) then falls back to `catalog.workshops[0]`. Called
+   * with `null` for ad-hoc rows (only visible in `workshop` scope, so
+   * the host can return the scope's workshopId there).
+   */
+  resolveWorkshop: (catalog: CatalogItem | null) => WorkshopId
   /**
    * Called when the user confirms an entry. The picker stays open so the
    * member can add several items in one trip; the host UI handles closing
@@ -70,14 +100,15 @@ interface MaterialPickerProps {
 export function MaterialPicker({
   open,
   onOpenChange,
-  workshopId,
-  workshopLabel,
+  scope,
   catalogItems,
   config,
   discountLevel,
+  resolveWorkshop,
   onAdd,
 }: MaterialPickerProps) {
   const isMobile = useIsMobile()
+  const description = describeScope(scope)
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
@@ -91,9 +122,7 @@ export function MaterialPicker({
       >
         <VisuallyHidden.Root>
           <SheetTitle>Material hinzufügen</SheetTitle>
-          <SheetDescription>
-            Wähle Material für die Werkstatt {workshopLabel}.
-          </SheetDescription>
+          <SheetDescription>{description}</SheetDescription>
         </VisuallyHidden.Root>
 
         {isMobile && (
@@ -102,18 +131,15 @@ export function MaterialPicker({
           </div>
         )}
 
-        <PickerHeader
-          workshopId={workshopId}
-          workshopLabel={workshopLabel}
-          onClose={() => onOpenChange(false)}
-        >
+        <PickerHeader onClose={() => onOpenChange(false)}>
           {(query) => (
             <PickerBody
-              workshopId={workshopId}
+              scope={scope}
               catalogItems={catalogItems}
               config={config}
               discountLevel={discountLevel}
               query={query}
+              resolveWorkshop={resolveWorkshop}
               onAdd={onAdd}
             />
           )}
@@ -123,12 +149,24 @@ export function MaterialPicker({
   )
 }
 
+function describeScope(scope: PickerScope): string {
+  switch (scope.kind) {
+    case "workshop":
+      return `Wähle Material für die Werkstatt ${scope.workshopLabel}.`
+    case "list":
+      return `Wähle Material aus der Preisliste ${scope.listName}.`
+    case "item":
+      return "Material erfassen."
+    case "all":
+    default:
+      return "Wähle Material."
+  }
+}
+
 function PickerHeader({
   onClose,
   children,
 }: {
-  workshopId: WorkshopId
-  workshopLabel: string
   onClose: () => void
   children: (query: string) => React.ReactNode
 }) {
@@ -179,18 +217,20 @@ function PickerHeader({
 }
 
 function PickerBody({
-  workshopId,
+  scope,
   catalogItems,
   config,
   discountLevel,
   query,
+  resolveWorkshop,
   onAdd,
 }: {
-  workshopId: WorkshopId
+  scope: PickerScope
   catalogItems: CatalogItem[]
   config: PricingConfig
   discountLevel: DiscountLevel
   query: string
+  resolveWorkshop: (catalog: CatalogItem | null) => WorkshopId
   onAdd: (item: CheckoutItemLocal) => void
 }) {
   // At most one row is expanded at a time — either a catalog row or one of
@@ -200,18 +240,15 @@ function PickerBody({
     | { kind: "catalog"; id: string }
     | { kind: "fallback"; pricingModel: PricingModel }
     | null
-  const [expansion, setExpansion] = useState<Expansion>(null)
+  // For `item` scope, auto-expand the single catalog row so the user
+  // lands on the variant chooser / form — the scanned-the-sticker
+  // intent is "add this thing", not "browse a one-item list".
+  const initialExpansion: Expansion =
+    scope.kind === "item" ? { kind: "catalog", id: scope.itemId } : null
+  const [expansion, setExpansion] = useState<Expansion>(initialExpansion)
 
   // Selected category path (a prefix of `category[]`). Empty = no filter.
   const [categoryPrefix, setCategoryPrefix] = useState<string[]>([])
-
-  // Picker is always scoped to the workshop it was opened from. The
-  // earlier "workshop / Alle" toggle didn't add value — cross-workshop
-  // adds are not a real-world flow.
-  const scoped = useMemo(
-    () => catalogItems.filter((c) => c.workshops.includes(workshopId)),
-    [catalogItems, workshopId],
-  )
 
   // Chip rows render as a breadcrumb: at each depth where a category is
   // selected, only that chip is visible. At the next-deeper depth we
@@ -237,15 +274,18 @@ function PickerBody({
         })
         continue
       }
-      const values = nextLevelValues(scoped, categoryPrefix.slice(0, level))
+      const values = nextLevelValues(
+        catalogItems,
+        categoryPrefix.slice(0, level),
+      )
       if (values.length <= 1) break
       rows.push({ level, values, selected: null })
     }
     return rows
-  }, [scoped, categoryPrefix])
+  }, [catalogItems, categoryPrefix])
 
   const filtered = useMemo(() => {
-    const byCategory = filterByCategoryPrefix(scoped, categoryPrefix)
+    const byCategory = filterByCategoryPrefix(catalogItems, categoryPrefix)
     const q = query.trim().toLowerCase()
     const matches = q
       ? byCategory.filter(
@@ -255,7 +295,7 @@ function PickerBody({
         )
       : byCategory
     return [...matches].sort((a, b) => a.name.localeCompare(b.name, "de"))
-  }, [scoped, categoryPrefix, query])
+  }, [catalogItems, categoryPrefix, query])
 
   function onChipClick(level: number, value: string) {
     setCategoryPrefix((prev) => {
@@ -272,8 +312,12 @@ function PickerBody({
 
   // Ad-hoc creation needs a description; show the fallback section only
   // when the user has typed something they can use as the item name.
+  // Also: ad-hoc rows only make sense in `workshop` scope — list/item
+  // scopes are bounded by definition, and the `all` scope doesn't have a
+  // natural workshop to attribute the ad-hoc to.
   const trimmedQuery = query.trim()
-  const showFallbacks = trimmedQuery.length > 0
+  const showFallbacks =
+    scope.kind === "workshop" && trimmedQuery.length > 0
 
   return (
     <>
@@ -320,7 +364,12 @@ function PickerBody({
               isExpanded={isExpanded}
               config={config}
               discountLevel={discountLevel}
-              workshopId={workshopId}
+              workshopId={resolveWorkshop(cat)}
+              initialVariantId={
+                scope.kind === "item" && scope.itemId === cat.id
+                  ? scope.variantId
+                  : undefined
+              }
               onToggle={(open) =>
                 setExpansion(open ? { kind: "catalog", id: cat.id } : null)
               }
@@ -348,7 +397,7 @@ function PickerBody({
                 pricingModel={fb.pricingModel}
                 label={fb.label}
                 initialDescription={trimmedQuery}
-                workshopId={workshopId}
+                workshopId={resolveWorkshop(null)}
                 config={config}
                 onCancel={() => setExpansion(null)}
                 onAdd={(item) => {
@@ -513,6 +562,7 @@ function PickerRow({
   config,
   discountLevel,
   workshopId,
+  initialVariantId,
   onToggle,
   onAdd,
 }: {
@@ -521,6 +571,9 @@ function PickerRow({
   config: PricingConfig
   discountLevel: DiscountLevel
   workshopId: WorkshopId
+  /** Pre-select a specific variant (set by the `item` scope when its
+   *  URL carries a variantId segment). Unknown ids fall back silently. */
+  initialVariantId?: string
   onToggle: (open: boolean) => void
   onAdd: (item: CheckoutItemLocal) => void
 }) {
@@ -576,6 +629,7 @@ function PickerRow({
           config={config}
           discountLevel={discountLevel}
           workshopId={workshopId}
+          initialVariantId={initialVariantId}
           onAdd={onAdd}
         />
       </Collapsible.Content>
@@ -606,18 +660,35 @@ function PickerRowBody({
   config,
   discountLevel,
   workshopId,
+  initialVariantId,
   onAdd,
 }: {
   catalog: CatalogItem
   config: PricingConfig
   discountLevel: DiscountLevel
   workshopId: WorkshopId
+  /** Pre-select a specific variant; unknown ids fall back to variants[0]. */
+  initialVariantId?: string
   onAdd: (item: CheckoutItemLocal) => void
 }) {
   const variants = catalog.variants ?? []
-  const [selectedVariantId, setSelectedVariantId] = useState<string>(
-    variants[0]?.id ?? "default",
-  )
+  // Lazy initializer: runs once per mount. Keeping the warn in here
+  // (rather than the component body) avoids logging on every render
+  // / strict-mode double-invoke.
+  const [selectedVariantId, setSelectedVariantId] = useState<string>(() => {
+    const resolved =
+      (initialVariantId &&
+        variants.find((v) => v.id === initialVariantId)?.id) ??
+      variants[0]?.id ??
+      "default"
+    if (initialVariantId && resolved !== initialVariantId) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `Unknown variantId "${initialVariantId}" for catalog item ${catalog.code}; falling back to variants[0].`,
+      )
+    }
+    return resolved
+  })
   const variant =
     variants.find((v) => v.id === selectedVariantId) ?? variants[0]
   const unitPrice = variant

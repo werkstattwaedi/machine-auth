@@ -12,7 +12,6 @@ import { Route as rootRouteImport } from "./routes/__root"
 import { Route as LoginRouteImport } from "./routes/login"
 import { Route as LinkAccountRouteImport } from "./routes/link-account"
 import { Route as ReportRouteImport } from "./routes/_report"
-import { Route as MaterialRouteImport } from "./routes/_material"
 import { Route as AuthonlyRouteImport } from "./routes/_authonly"
 import { Route as AuthenticatedRouteImport } from "./routes/_authenticated"
 import { Route as IndexRouteImport } from "./routes/index"
@@ -23,8 +22,12 @@ import { Route as AuthenticatedVisitRouteImport } from "./routes/_authenticated/
 import { Route as AuthenticatedUsageRouteImport } from "./routes/_authenticated/usage"
 import { Route as AuthenticatedProfileRouteImport } from "./routes/_authenticated/profile"
 import { Route as AuthenticatedMembershipIndexRouteImport } from "./routes/_authenticated/membership/index"
-import { Route as MaterialMaterialAddRouteImport } from "./routes/_material/material.add"
+import { Route as AuthenticatedVisitAddIndexRouteImport } from "./routes/_authenticated/visit/add.index"
 import { Route as AuthenticatedInviteMembershipIdInviteIdRouteImport } from "./routes/_authenticated/invite/$membershipId/$inviteId"
+import { Route as AuthenticatedVisitAddWorkshopWorkshopIdRouteImport } from "./routes/_authenticated/visit/add.workshop.$workshopId"
+import { Route as AuthenticatedVisitAddListListIdRouteImport } from "./routes/_authenticated/visit/add.list.$listId"
+import { Route as AuthenticatedVisitAddItemCodeIndexRouteImport } from "./routes/_authenticated/visit/add.item.$code.index"
+import { Route as AuthenticatedVisitAddItemCodeVariantIdRouteImport } from "./routes/_authenticated/visit/add.item.$code.$variantId"
 
 const LoginRoute = LoginRouteImport.update({
   id: "/login",
@@ -38,10 +41,6 @@ const LinkAccountRoute = LinkAccountRouteImport.update({
 } as any)
 const ReportRoute = ReportRouteImport.update({
   id: "/_report",
-  getParentRoute: () => rootRouteImport,
-} as any)
-const MaterialRoute = MaterialRouteImport.update({
-  id: "/_material",
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthonlyRoute = AuthonlyRouteImport.update({
@@ -93,16 +92,41 @@ const AuthenticatedMembershipIndexRoute =
     path: "/membership/",
     getParentRoute: () => AuthenticatedRoute,
   } as any)
-const MaterialMaterialAddRoute = MaterialMaterialAddRouteImport.update({
-  id: "/material/add",
-  path: "/material/add",
-  getParentRoute: () => MaterialRoute,
-} as any)
+const AuthenticatedVisitAddIndexRoute =
+  AuthenticatedVisitAddIndexRouteImport.update({
+    id: "/add/",
+    path: "/add/",
+    getParentRoute: () => AuthenticatedVisitRoute,
+  } as any)
 const AuthenticatedInviteMembershipIdInviteIdRoute =
   AuthenticatedInviteMembershipIdInviteIdRouteImport.update({
     id: "/invite/$membershipId/$inviteId",
     path: "/invite/$membershipId/$inviteId",
     getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedVisitAddWorkshopWorkshopIdRoute =
+  AuthenticatedVisitAddWorkshopWorkshopIdRouteImport.update({
+    id: "/add/workshop/$workshopId",
+    path: "/add/workshop/$workshopId",
+    getParentRoute: () => AuthenticatedVisitRoute,
+  } as any)
+const AuthenticatedVisitAddListListIdRoute =
+  AuthenticatedVisitAddListListIdRouteImport.update({
+    id: "/add/list/$listId",
+    path: "/add/list/$listId",
+    getParentRoute: () => AuthenticatedVisitRoute,
+  } as any)
+const AuthenticatedVisitAddItemCodeIndexRoute =
+  AuthenticatedVisitAddItemCodeIndexRouteImport.update({
+    id: "/add/item/$code/",
+    path: "/add/item/$code/",
+    getParentRoute: () => AuthenticatedVisitRoute,
+  } as any)
+const AuthenticatedVisitAddItemCodeVariantIdRoute =
+  AuthenticatedVisitAddItemCodeVariantIdRouteImport.update({
+    id: "/add/item/$code/$variantId",
+    path: "/add/item/$code/$variantId",
+    getParentRoute: () => AuthenticatedVisitRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -111,13 +135,17 @@ export interface FileRoutesByFullPath {
   "/login": typeof LoginRoute
   "/profile": typeof AuthenticatedProfileRoute
   "/usage": typeof AuthenticatedUsageRoute
-  "/visit": typeof AuthenticatedVisitRoute
+  "/visit": typeof AuthenticatedVisitRouteWithChildren
   "/complete-profile": typeof AuthonlyCompleteProfileRoute
   "/report": typeof ReportReportRoute
   "/login/verify": typeof LoginVerifyRoute
-  "/material/add": typeof MaterialMaterialAddRoute
   "/membership/": typeof AuthenticatedMembershipIndexRoute
   "/invite/$membershipId/$inviteId": typeof AuthenticatedInviteMembershipIdInviteIdRoute
+  "/visit/add/": typeof AuthenticatedVisitAddIndexRoute
+  "/visit/add/list/$listId": typeof AuthenticatedVisitAddListListIdRoute
+  "/visit/add/workshop/$workshopId": typeof AuthenticatedVisitAddWorkshopWorkshopIdRoute
+  "/visit/add/item/$code/$variantId": typeof AuthenticatedVisitAddItemCodeVariantIdRoute
+  "/visit/add/item/$code/": typeof AuthenticatedVisitAddItemCodeIndexRoute
 }
 export interface FileRoutesByTo {
   "/": typeof IndexRoute
@@ -125,32 +153,39 @@ export interface FileRoutesByTo {
   "/login": typeof LoginRoute
   "/profile": typeof AuthenticatedProfileRoute
   "/usage": typeof AuthenticatedUsageRoute
-  "/visit": typeof AuthenticatedVisitRoute
+  "/visit": typeof AuthenticatedVisitRouteWithChildren
   "/complete-profile": typeof AuthonlyCompleteProfileRoute
   "/report": typeof ReportReportRoute
   "/login/verify": typeof LoginVerifyRoute
-  "/material/add": typeof MaterialMaterialAddRoute
   "/membership": typeof AuthenticatedMembershipIndexRoute
   "/invite/$membershipId/$inviteId": typeof AuthenticatedInviteMembershipIdInviteIdRoute
+  "/visit/add": typeof AuthenticatedVisitAddIndexRoute
+  "/visit/add/list/$listId": typeof AuthenticatedVisitAddListListIdRoute
+  "/visit/add/workshop/$workshopId": typeof AuthenticatedVisitAddWorkshopWorkshopIdRoute
+  "/visit/add/item/$code/$variantId": typeof AuthenticatedVisitAddItemCodeVariantIdRoute
+  "/visit/add/item/$code": typeof AuthenticatedVisitAddItemCodeIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   "/": typeof IndexRoute
   "/_authenticated": typeof AuthenticatedRouteWithChildren
   "/_authonly": typeof AuthonlyRouteWithChildren
-  "/_material": typeof MaterialRouteWithChildren
   "/_report": typeof ReportRouteWithChildren
   "/link-account": typeof LinkAccountRoute
   "/login": typeof LoginRoute
   "/_authenticated/profile": typeof AuthenticatedProfileRoute
   "/_authenticated/usage": typeof AuthenticatedUsageRoute
-  "/_authenticated/visit": typeof AuthenticatedVisitRoute
+  "/_authenticated/visit": typeof AuthenticatedVisitRouteWithChildren
   "/_authonly/complete-profile": typeof AuthonlyCompleteProfileRoute
   "/_report/report": typeof ReportReportRoute
   "/login_/verify": typeof LoginVerifyRoute
-  "/_material/material/add": typeof MaterialMaterialAddRoute
   "/_authenticated/membership/": typeof AuthenticatedMembershipIndexRoute
   "/_authenticated/invite/$membershipId/$inviteId": typeof AuthenticatedInviteMembershipIdInviteIdRoute
+  "/_authenticated/visit/add/": typeof AuthenticatedVisitAddIndexRoute
+  "/_authenticated/visit/add/list/$listId": typeof AuthenticatedVisitAddListListIdRoute
+  "/_authenticated/visit/add/workshop/$workshopId": typeof AuthenticatedVisitAddWorkshopWorkshopIdRoute
+  "/_authenticated/visit/add/item/$code/$variantId": typeof AuthenticatedVisitAddItemCodeVariantIdRoute
+  "/_authenticated/visit/add/item/$code/": typeof AuthenticatedVisitAddItemCodeIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -164,9 +199,13 @@ export interface FileRouteTypes {
     | "/complete-profile"
     | "/report"
     | "/login/verify"
-    | "/material/add"
     | "/membership/"
     | "/invite/$membershipId/$inviteId"
+    | "/visit/add/"
+    | "/visit/add/list/$listId"
+    | "/visit/add/workshop/$workshopId"
+    | "/visit/add/item/$code/$variantId"
+    | "/visit/add/item/$code/"
   fileRoutesByTo: FileRoutesByTo
   to:
     | "/"
@@ -178,15 +217,18 @@ export interface FileRouteTypes {
     | "/complete-profile"
     | "/report"
     | "/login/verify"
-    | "/material/add"
     | "/membership"
     | "/invite/$membershipId/$inviteId"
+    | "/visit/add"
+    | "/visit/add/list/$listId"
+    | "/visit/add/workshop/$workshopId"
+    | "/visit/add/item/$code/$variantId"
+    | "/visit/add/item/$code"
   id:
     | "__root__"
     | "/"
     | "/_authenticated"
     | "/_authonly"
-    | "/_material"
     | "/_report"
     | "/link-account"
     | "/login"
@@ -196,16 +238,19 @@ export interface FileRouteTypes {
     | "/_authonly/complete-profile"
     | "/_report/report"
     | "/login_/verify"
-    | "/_material/material/add"
     | "/_authenticated/membership/"
     | "/_authenticated/invite/$membershipId/$inviteId"
+    | "/_authenticated/visit/add/"
+    | "/_authenticated/visit/add/list/$listId"
+    | "/_authenticated/visit/add/workshop/$workshopId"
+    | "/_authenticated/visit/add/item/$code/$variantId"
+    | "/_authenticated/visit/add/item/$code/"
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   AuthonlyRoute: typeof AuthonlyRouteWithChildren
-  MaterialRoute: typeof MaterialRouteWithChildren
   ReportRoute: typeof ReportRouteWithChildren
   LinkAccountRoute: typeof LinkAccountRoute
   LoginRoute: typeof LoginRoute
@@ -233,13 +278,6 @@ declare module "@tanstack/react-router" {
       path: ""
       fullPath: "/"
       preLoaderRoute: typeof ReportRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    "/_material": {
-      id: "/_material"
-      path: ""
-      fullPath: "/"
-      preLoaderRoute: typeof MaterialRouteImport
       parentRoute: typeof rootRouteImport
     }
     "/_authonly": {
@@ -312,12 +350,12 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthenticatedMembershipIndexRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    "/_material/material/add": {
-      id: "/_material/material/add"
-      path: "/material/add"
-      fullPath: "/material/add"
-      preLoaderRoute: typeof MaterialMaterialAddRouteImport
-      parentRoute: typeof MaterialRoute
+    "/_authenticated/visit/add/": {
+      id: "/_authenticated/visit/add/"
+      path: "/add"
+      fullPath: "/visit/add/"
+      preLoaderRoute: typeof AuthenticatedVisitAddIndexRouteImport
+      parentRoute: typeof AuthenticatedVisitRoute
     }
     "/_authenticated/invite/$membershipId/$inviteId": {
       id: "/_authenticated/invite/$membershipId/$inviteId"
@@ -326,13 +364,63 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthenticatedInviteMembershipIdInviteIdRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    "/_authenticated/visit/add/workshop/$workshopId": {
+      id: "/_authenticated/visit/add/workshop/$workshopId"
+      path: "/add/workshop/$workshopId"
+      fullPath: "/visit/add/workshop/$workshopId"
+      preLoaderRoute: typeof AuthenticatedVisitAddWorkshopWorkshopIdRouteImport
+      parentRoute: typeof AuthenticatedVisitRoute
+    }
+    "/_authenticated/visit/add/list/$listId": {
+      id: "/_authenticated/visit/add/list/$listId"
+      path: "/add/list/$listId"
+      fullPath: "/visit/add/list/$listId"
+      preLoaderRoute: typeof AuthenticatedVisitAddListListIdRouteImport
+      parentRoute: typeof AuthenticatedVisitRoute
+    }
+    "/_authenticated/visit/add/item/$code/": {
+      id: "/_authenticated/visit/add/item/$code/"
+      path: "/add/item/$code"
+      fullPath: "/visit/add/item/$code/"
+      preLoaderRoute: typeof AuthenticatedVisitAddItemCodeIndexRouteImport
+      parentRoute: typeof AuthenticatedVisitRoute
+    }
+    "/_authenticated/visit/add/item/$code/$variantId": {
+      id: "/_authenticated/visit/add/item/$code/$variantId"
+      path: "/add/item/$code/$variantId"
+      fullPath: "/visit/add/item/$code/$variantId"
+      preLoaderRoute: typeof AuthenticatedVisitAddItemCodeVariantIdRouteImport
+      parentRoute: typeof AuthenticatedVisitRoute
+    }
   }
 }
+
+interface AuthenticatedVisitRouteChildren {
+  AuthenticatedVisitAddIndexRoute: typeof AuthenticatedVisitAddIndexRoute
+  AuthenticatedVisitAddListListIdRoute: typeof AuthenticatedVisitAddListListIdRoute
+  AuthenticatedVisitAddWorkshopWorkshopIdRoute: typeof AuthenticatedVisitAddWorkshopWorkshopIdRoute
+  AuthenticatedVisitAddItemCodeVariantIdRoute: typeof AuthenticatedVisitAddItemCodeVariantIdRoute
+  AuthenticatedVisitAddItemCodeIndexRoute: typeof AuthenticatedVisitAddItemCodeIndexRoute
+}
+
+const AuthenticatedVisitRouteChildren: AuthenticatedVisitRouteChildren = {
+  AuthenticatedVisitAddIndexRoute: AuthenticatedVisitAddIndexRoute,
+  AuthenticatedVisitAddListListIdRoute: AuthenticatedVisitAddListListIdRoute,
+  AuthenticatedVisitAddWorkshopWorkshopIdRoute:
+    AuthenticatedVisitAddWorkshopWorkshopIdRoute,
+  AuthenticatedVisitAddItemCodeVariantIdRoute:
+    AuthenticatedVisitAddItemCodeVariantIdRoute,
+  AuthenticatedVisitAddItemCodeIndexRoute:
+    AuthenticatedVisitAddItemCodeIndexRoute,
+}
+
+const AuthenticatedVisitRouteWithChildren =
+  AuthenticatedVisitRoute._addFileChildren(AuthenticatedVisitRouteChildren)
 
 interface AuthenticatedRouteChildren {
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedUsageRoute: typeof AuthenticatedUsageRoute
-  AuthenticatedVisitRoute: typeof AuthenticatedVisitRoute
+  AuthenticatedVisitRoute: typeof AuthenticatedVisitRouteWithChildren
   AuthenticatedMembershipIndexRoute: typeof AuthenticatedMembershipIndexRoute
   AuthenticatedInviteMembershipIdInviteIdRoute: typeof AuthenticatedInviteMembershipIdInviteIdRoute
 }
@@ -340,7 +428,7 @@ interface AuthenticatedRouteChildren {
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedUsageRoute: AuthenticatedUsageRoute,
-  AuthenticatedVisitRoute: AuthenticatedVisitRoute,
+  AuthenticatedVisitRoute: AuthenticatedVisitRouteWithChildren,
   AuthenticatedMembershipIndexRoute: AuthenticatedMembershipIndexRoute,
   AuthenticatedInviteMembershipIdInviteIdRoute:
     AuthenticatedInviteMembershipIdInviteIdRoute,
@@ -362,18 +450,6 @@ const AuthonlyRouteWithChildren = AuthonlyRoute._addFileChildren(
   AuthonlyRouteChildren,
 )
 
-interface MaterialRouteChildren {
-  MaterialMaterialAddRoute: typeof MaterialMaterialAddRoute
-}
-
-const MaterialRouteChildren: MaterialRouteChildren = {
-  MaterialMaterialAddRoute: MaterialMaterialAddRoute,
-}
-
-const MaterialRouteWithChildren = MaterialRoute._addFileChildren(
-  MaterialRouteChildren,
-)
-
 interface ReportRouteChildren {
   ReportReportRoute: typeof ReportReportRoute
 }
@@ -389,7 +465,6 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   AuthonlyRoute: AuthonlyRouteWithChildren,
-  MaterialRoute: MaterialRouteWithChildren,
   ReportRoute: ReportRouteWithChildren,
   LinkAccountRoute: LinkAccountRoute,
   LoginRoute: LoginRoute,

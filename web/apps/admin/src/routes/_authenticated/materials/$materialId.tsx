@@ -3,8 +3,7 @@
 
 import { createFileRoute } from "@tanstack/react-router"
 import { useDocument } from "@modules/lib/firestore"
-import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
-import { useDb } from "@modules/lib/firebase-context"
+import { useDb, useFunctions } from "@modules/lib/firebase-context"
 import { catalogRef } from "@modules/lib/firestore-helpers"
 import type { PricingModel } from "@modules/lib/firestore-entities"
 import { PageLoading } from "@modules/components/page-loading"
@@ -14,6 +13,8 @@ import { Button } from "@modules/components/ui/button"
 import { useForm } from "react-hook-form"
 import { Loader2, Save } from "lucide-react"
 import { useEffect } from "react"
+import { httpsCallable } from "firebase/functions"
+import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { CatalogFormFields, type CatalogFormValues } from "@/components/admin/catalog-form-fields"
 
 export const Route = createFileRoute(
@@ -24,9 +25,18 @@ export const Route = createFileRoute(
 
 function CatalogDetailPage() {
   const db = useDb()
+  const functions = useFunctions()
   const { materialId } = Route.useParams()
   const { data: catalog, loading } = useDocument(catalogRef(db, materialId))
-  const { update, loading: saving } = useFirestoreMutation()
+  // Catalog writes flow through upsertCatalogItem; client-side Firestore
+  // writes to catalog are denied by rules so the `code` uniqueness
+  // invariant can be enforced server-side. See ADR-0026.
+  const save = useAsyncMutation({
+    context: "admin.upsertCatalogItem",
+    successMessage: "Katalogeintrag gespeichert",
+    errorMessage: "Katalogeintrag konnte nicht gespeichert werden",
+  })
+  const saving = save.loading
 
   const { register, handleSubmit, reset, control } = useForm<CatalogFormValues>()
 
@@ -78,21 +88,39 @@ function CatalogDetailPage() {
           : { default: defaultPrice },
     }
     const nextVariants = [updatedPrimary, ...existingVariants.slice(1)]
-    await update(
-      catalogRef(db, materialId),
-      {
-        code: values.code,
-        name: values.name,
-        description: values.description || null,
-        workshops: values.workshops.split(",").map((w) => w.trim()).filter(Boolean),
-        variants: nextVariants,
-        active: values.active,
-        userCanAdd: values.userCanAdd,
-      },
-      {
-        successMessage: "Katalogeintrag gespeichert",
-      },
-    )
+    try {
+      await save.mutate(async () => {
+        const fn = httpsCallable<
+          {
+            id: string
+            code: string
+            name: string
+            description: string | null
+            workshops: string[]
+            variants: typeof nextVariants
+            active: boolean
+            userCanAdd: boolean
+          },
+          { id: string }
+        >(functions, "upsertCatalogItem")
+        await fn({
+          id: materialId,
+          code: values.code,
+          name: values.name,
+          description: values.description || null,
+          workshops: values.workshops
+            .split(",")
+            .map((w) => w.trim())
+            .filter(Boolean),
+          variants: nextVariants,
+          active: values.active,
+          userCanAdd: values.userCanAdd,
+        })
+      })
+    } catch {
+      // Hook surfaced the toast + telemetry; stay on the page so the
+      // user can adjust and retry.
+    }
   }
 
   return (

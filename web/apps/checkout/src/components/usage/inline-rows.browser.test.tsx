@@ -13,6 +13,15 @@ import { render, screen, cleanup, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest"
 import { type ReactNode } from "react"
+
+// WorkshopInlineSection uses a TanStack Router Link for the "Material
+// hinzufügen" affordance; without a router context the real Link
+// throws. Render it as a plain <a> for the tests.
+vi.mock("@tanstack/react-router", () => ({
+  Link: ({ children, ...props }: { children: ReactNode } & Record<string, unknown>) => (
+    <a {...(props as Record<string, string>)}>{children}</a>
+  ),
+}))
 import {
   FirebaseProvider,
   type FirebaseServices,
@@ -23,6 +32,7 @@ import {
   type CheckoutItemLocal,
   type ItemCallbacks,
 } from "./inline-rows"
+import { MaterialPicker } from "./material-picker"
 import type {
   PricingConfig,
   CatalogItem,
@@ -172,12 +182,41 @@ function renderSection(props: {
     <WorkshopInlineSection
       workshopId="holz"
       workshop={{ label: "Holz", order: 1 }}
-      config={makeConfig()}
       items={props.items ?? []}
-      catalogItems={props.catalogItems ?? makeCatalogItems()}
       callbacks={callbacks}
-      discountLevel={props.discountLevel ?? "none"}
       checkoutId={props.checkoutId ?? null}
+    />,
+    { wrapper: FirebaseWrapper },
+  )
+  return { callbacks }
+}
+
+/**
+ * Mount the MaterialPicker directly (open) with workshop scope.
+ *
+ * The picker used to live inside WorkshopInlineSection; since issue
+ * #213 it's a route-level overlay reached via /visit/add/...
+ * The tests still want to exercise picker behaviour without
+ * spinning up TanStack Router, so they mount the picker in
+ * isolation here.
+ */
+function renderPicker(props: {
+  catalogItems?: CatalogItem[]
+  callbacks?: ReturnType<typeof makeCallbacks>
+  discountLevel?: DiscountLevel
+}) {
+  const callbacks = props.callbacks ?? makeCallbacks()
+  const catalogItems = props.catalogItems ?? makeCatalogItems()
+  render(
+    <MaterialPicker
+      open
+      onOpenChange={() => {}}
+      scope={{ kind: "workshop", workshopId: "holz", workshopLabel: "Holz" }}
+      catalogItems={catalogItems}
+      config={makeConfig()}
+      discountLevel={props.discountLevel ?? "none"}
+      resolveWorkshop={() => "holz" as const}
+      onAdd={callbacks.addItem}
     />,
     { wrapper: FirebaseWrapper },
   )
@@ -255,32 +294,27 @@ describe("WorkshopInlineSection v5", () => {
     expect(callbacks.removeItem).toHaveBeenCalledWith("m-1")
   })
 
-  it("opens the material picker when 'Material hinzufügen' is clicked", async () => {
-    const user = userEvent.setup()
-    renderSection({})
-    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
-    expect(screen.getByPlaceholderText("Material suchen…")).toBeTruthy()
-  })
+  // The "Material hinzufügen" affordance is now a TanStack Router Link
+  // to /visit/add/workshop/$workshopId; navigation correctness is exercised
+  // by the e2e tests since rendering Link here would need a router context.
 })
 
 // ============================================================================
-// MaterialPicker (covered through WorkshopInlineSection)
+// MaterialPicker (mounted in isolation; in the app it sits behind
+// /visit/add/* routes — see inline-rows tests above for the link wiring.)
 // ============================================================================
 
 describe("MaterialPicker", () => {
   it("filters catalog items by name", async () => {
     const user = userEvent.setup()
-    renderSection({})
-    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    renderPicker({})
     await user.type(screen.getByPlaceholderText("Material suchen…"), "Schraub")
     expect(screen.getByText("Schrauben M5")).toBeTruthy()
     expect(screen.queryByText("MDF Platte 3mm")).toBeNull()
   })
 
   it("renders empty-state copy when the workshop has no catalog items", async () => {
-    const user = userEvent.setup()
-    renderSection({ catalogItems: [] })
-    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    renderPicker({ catalogItems: [] })
     expect(
       screen.getByText(
         /Keine Treffer\. Such-Begriff anpassen oder einen anderen Filter wählen\./,
@@ -304,8 +338,7 @@ describe("MaterialPicker", () => {
       },
     ]
     const user = userEvent.setup()
-    renderSection({ catalogItems: malformed })
-    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    renderPicker({ catalogItems: malformed })
     const row = screen.getByText("Item ohne Variante")
     expect(row).toBeTruthy()
     // Row stays clickable; expanding shouldn't throw. With no variants we
@@ -369,8 +402,7 @@ describe("MaterialPicker", () => {
       },
     ]
     const user = userEvent.setup()
-    renderSection({ catalogItems })
-    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    renderPicker({ catalogItems })
 
     // Top-level row shows both categories; no sub-chips yet.
     expect(screen.getByRole("button", { name: "Massivholz" })).toBeTruthy()
@@ -451,8 +483,7 @@ describe("MaterialPicker", () => {
       },
     ]
     const user = userEvent.setup()
-    renderSection({ catalogItems })
-    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    renderPicker({ catalogItems })
     await user.click(screen.getByRole("button", { name: "Dübel- und Rundstäbe" }))
     // Breadcrumb chip stays visible; the single sub-category "Rundstab"
     // is NOT rendered as a chip.
@@ -491,8 +522,7 @@ describe("MaterialPicker", () => {
     ]
     const user = userEvent.setup()
     const callbacks = makeCallbacks()
-    renderSection({ catalogItems, callbacks })
-    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    renderPicker({ catalogItems, callbacks })
     await user.click(screen.getByText("Sperrholz Pappel 3mm"))
     // The picker is now expanded with two variant chips. m² is canonical
     // (variants[0]) and selected by default. Switch to the cut variant.
@@ -516,8 +546,7 @@ describe("MaterialPicker", () => {
 
   it("filters catalog items by code", async () => {
     const user = userEvent.setup()
-    renderSection({})
-    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    renderPicker({})
     await user.type(screen.getByPlaceholderText("Material suchen…"), "PLT001")
     expect(screen.getByText("MDF Platte 3mm")).toBeTruthy()
     expect(screen.queryByText("Schrauben M5")).toBeNull()
@@ -526,9 +555,8 @@ describe("MaterialPicker", () => {
   it("calls addItem after the user enters a quantity and clicks Hinzufügen", async () => {
     const user = userEvent.setup()
     const callbacks = makeCallbacks()
-    renderSection({ callbacks })
+    renderPicker({ callbacks })
 
-    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
     await user.click(screen.getByText("Schrauben M5"))
 
     // Form is now expanded — fill the count input and submit.
@@ -550,8 +578,7 @@ describe("MaterialPicker", () => {
 
   it("keeps the picker open after Hinzufügen so the member can add another item", async () => {
     const user = userEvent.setup()
-    renderSection({})
-    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    renderPicker({})
     await user.click(screen.getByText("Schrauben M5"))
     const qty = screen.getByRole("spinbutton")
     await user.type(qty, "3")
@@ -563,8 +590,7 @@ describe("MaterialPicker", () => {
 
   it("disables Hinzufügen until a positive quantity is entered", async () => {
     const user = userEvent.setup()
-    renderSection({})
-    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    renderPicker({})
     await user.click(screen.getByText("Schrauben M5"))
     const addBtn = screen.getByRole("button", { name: "Hinzufügen" })
     expect((addBtn as HTMLButtonElement).disabled).toBe(true)
@@ -575,8 +601,7 @@ describe("MaterialPicker", () => {
   it("converts cm to m² when adding an area-priced item", async () => {
     const user = userEvent.setup()
     const callbacks = makeCallbacks()
-    renderSection({ callbacks })
-    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    renderPicker({ callbacks })
     await user.click(screen.getByText("MDF Platte 3mm"))
     const inputs = screen.getAllByRole("spinbutton")
     await user.type(inputs[0], "100")
@@ -593,8 +618,7 @@ describe("MaterialPicker", () => {
   it("uses the member-discounted unit price", async () => {
     const user = userEvent.setup()
     const callbacks = makeCallbacks()
-    renderSection({ callbacks, discountLevel: "member" })
-    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    renderPicker({ callbacks, discountLevel: "member" })
     await user.click(screen.getByText("Schrauben M5"))
     await user.type(screen.getByRole("spinbutton"), "10")
     await user.click(screen.getByRole("button", { name: "Hinzufügen" }))
@@ -607,8 +631,7 @@ describe("MaterialPicker", () => {
   it("computes the SLA total from resin volume and layer count", async () => {
     const user = userEvent.setup()
     const callbacks = makeCallbacks()
-    renderSection({ callbacks })
-    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    renderPicker({ callbacks })
     await user.click(screen.getByText("SLA Druck"))
     const inputs = screen.getAllByRole("spinbutton")
     await user.type(inputs[0], "50") // resin ml
@@ -626,9 +649,7 @@ describe("MaterialPicker", () => {
   })
 
   it("sorts catalog items alphabetically", async () => {
-    const user = userEvent.setup()
-    renderSection({})
-    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    renderPicker({})
     const buttons = screen
       .getAllByRole("button")
       .filter((b) => b.querySelector(".tabular-nums"))
@@ -640,16 +661,13 @@ describe("MaterialPicker", () => {
   })
 
   it("shows the empty-state message when the catalog has no items and the query is empty", async () => {
-    const user = userEvent.setup()
-    renderSection({ catalogItems: [] })
-    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    renderPicker({ catalogItems: [] })
     expect(screen.getByText(/Keine Treffer/)).toBeTruthy()
   })
 
   it("hides the empty-state when the user types so the ad-hoc fallbacks can appear", async () => {
     const user = userEvent.setup()
-    renderSection({ catalogItems: [] })
-    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    renderPicker({ catalogItems: [] })
     await user.type(
       screen.getByPlaceholderText("Material suchen…"),
       "Reststück",
@@ -659,9 +677,7 @@ describe("MaterialPicker", () => {
   })
 
   it("does not render the legacy 'Frage am Empfang' footer", async () => {
-    const user = userEvent.setup()
-    renderSection({})
-    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    renderPicker({})
     expect(screen.queryByText(/Frage am Empfang/)).toBeNull()
   })
 })
@@ -673,8 +689,7 @@ describe("MaterialPicker", () => {
 describe("MaterialPicker ad-hoc fallback", () => {
   it("only shows the fallback section when the search query is non-empty", async () => {
     const user = userEvent.setup()
-    renderSection({})
-    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    renderPicker({})
     expect(screen.queryByText("Kein passender Eintrag?")).toBeNull()
     await user.type(screen.getByPlaceholderText("Material suchen…"), "Holzkitt")
     expect(screen.getByText("Kein passender Eintrag?")).toBeTruthy()
@@ -683,8 +698,7 @@ describe("MaterialPicker ad-hoc fallback", () => {
   it("adds a Pauschal CHF item with the typed description", async () => {
     const user = userEvent.setup()
     const callbacks = makeCallbacks()
-    renderSection({ callbacks })
-    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    renderPicker({ callbacks })
     await user.type(screen.getByPlaceholderText("Material suchen…"), "Sondermaterial")
     // Click the Pauschal CHF fallback row.
     await user.click(screen.getByText("+ Pauschal CHF"))
@@ -707,8 +721,7 @@ describe("MaterialPicker ad-hoc fallback", () => {
   it("adds a count-priced ad-hoc item with editable unit price", async () => {
     const user = userEvent.setup()
     const callbacks = makeCallbacks()
-    renderSection({ callbacks })
-    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    renderPicker({ callbacks })
     await user.type(screen.getByPlaceholderText("Material suchen…"), "Spezialschraube")
     await user.click(screen.getByText("+ Stk"))
     // First spinbutton = qty, second = unit price.
@@ -730,8 +743,7 @@ describe("MaterialPicker ad-hoc fallback", () => {
   it("adds an ad-hoc area item with cm→m² conversion and editable unit price", async () => {
     const user = userEvent.setup()
     const callbacks = makeCallbacks()
-    renderSection({ callbacks })
-    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    renderPicker({ callbacks })
     await user.type(screen.getByPlaceholderText("Material suchen…"), "Plattenrest")
     await user.click(screen.getByText("+ m²"))
     const inputs = screen.getAllByRole("spinbutton")
@@ -752,8 +764,7 @@ describe("MaterialPicker ad-hoc fallback", () => {
 
   it("disables Hinzufügen for an ad-hoc row until description, quantity and price are filled", async () => {
     const user = userEvent.setup()
-    renderSection({})
-    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    renderPicker({})
     await user.type(screen.getByPlaceholderText("Material suchen…"), "X")
     await user.click(screen.getByText("+ Stk"))
     const addBtn = screen.getByRole("button", { name: "Hinzufügen" })
@@ -768,8 +779,7 @@ describe("MaterialPicker ad-hoc fallback", () => {
   it("converts grams to kg for ad-hoc weight items", async () => {
     const user = userEvent.setup()
     const callbacks = makeCallbacks()
-    renderSection({ callbacks })
-    await user.click(screen.getByRole("button", { name: /Material hinzufügen/ }))
+    renderPicker({ callbacks })
     await user.type(screen.getByPlaceholderText("Material suchen…"), "Filament-Rest")
     await user.click(screen.getByText("+ kg"))
     const inputs = screen.getAllByRole("spinbutton")

@@ -497,3 +497,98 @@ describe("Person removal (#209)", () => {
     expect(screen.queryByRole("button", { name: /Person 1 entfernen/ })).toBeNull()
   })
 })
+
+// Issue #246: layout, animation, and re-add-self regressions.
+describe("StepCheckin layout / animation (#246)", () => {
+  const preFilled: CheckoutState["persons"][number] = {
+    id: "p-self",
+    firstName: "Max",
+    lastName: "Muster",
+    email: "max@example.com",
+    userType: "erwachsen",
+    termsAccepted: true,
+    isPreFilled: true,
+    userId: "u-self",
+  }
+  const familyMember: CheckoutState["persons"][number] = {
+    id: "p-lia",
+    firstName: "Lia",
+    lastName: "Pfeffer",
+    email: "lia@example.com",
+    userType: "kind",
+    termsAccepted: true,
+    isPreFilled: true,
+    userId: "u-lia",
+  }
+
+  // Subfix 1: the X on the first signed-in card should sit on a heading
+  // row that has the same height as the other rows' "Person N" heading.
+  // We assert the heading row contains an h3 element so the column
+  // alignment is grid-stable instead of the X floating on its own.
+  it("reserves the heading row height on the first card when removable", () => {
+    renderCheckin({
+      isAnonymous: false,
+      isAccountLoggedIn: true,
+      stateOverrides: { persons: [preFilled, familyMember] },
+    })
+    const removeBtn = screen.getByRole("button", { name: /Person 1 entfernen/ })
+    // The heading row is the X button's parent — walk up to it.
+    const headingRow = removeBtn.parentElement
+    expect(headingRow).not.toBeNull()
+    // The heading row must contain an h3 sibling (even when the wizard
+    // passes title=""). Without it the row collapses to the X's height
+    // and the X drifts above the data row.
+    expect(headingRow!.querySelector("h3")).not.toBeNull()
+  })
+
+  // Subfix 3: person cards animate in. The actual transition runs in the
+  // browser; here we just assert the trigger class is present so a future
+  // refactor doesn't silently drop the animation.
+  it("applies an enter-animation class to each person card", () => {
+    renderCheckin({
+      isAnonymous: false,
+      isAccountLoggedIn: true,
+      stateOverrides: { persons: [preFilled, familyMember] },
+    })
+    const cards = screen.getAllByTestId("person-card")
+    expect(cards.length).toBe(2)
+    for (const card of cards) {
+      expect(card.className).toContain("animate-in")
+    }
+  })
+
+  // Subfix 2: after the signed-in user removes themselves, the wizard's
+  // family-roster picker should surface a "+ Self" chip again. The
+  // candidate filter lives in checkout-wizard.tsx (not StepCheckin), so
+  // here we emulate the wizard's behavior: when self is no longer in
+  // `state.persons`, the wizard hands StepCheckin a self candidate, and
+  // clicking it dispatches ADD_FAMILY_PERSON with userId === self.
+  it("re-adds self via a quick-add chip after self was removed", async () => {
+    const user = userEvent.setup()
+    const selfCandidate: FamilyCandidate = {
+      userId: "u-self",
+      firstName: "Max",
+      lastName: "Muster",
+      email: "max@example.com",
+      userType: "erwachsen",
+    }
+    const { dispatched } = renderCheckin({
+      isAnonymous: false,
+      isAccountLoggedIn: true,
+      // Persons list has only Lia (self was removed earlier in the flow).
+      stateOverrides: { persons: [familyMember] },
+      familyCandidates: [selfCandidate],
+    })
+
+    // The chip for self should render again.
+    const chip = screen.getByRole("button", { name: /Max Muster/ })
+    expect(chip).toBeTruthy()
+    await user.click(chip)
+
+    const action = dispatched.find((a) => a.type === "ADD_FAMILY_PERSON")
+    expect(action).toMatchObject({
+      type: "ADD_FAMILY_PERSON",
+      person: { userId: "u-self", firstName: "Max", lastName: "Muster" },
+    })
+  })
+})

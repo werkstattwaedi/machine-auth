@@ -1,21 +1,24 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { useState, useEffect, useRef, useMemo } from "react"
+import { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { useAuth } from "@modules/lib/auth"
 import { useTokenAuth } from "@modules/lib/token-auth"
 import { useCollection } from "@modules/lib/firestore"
 import { where, orderBy, documentId } from "firebase/firestore"
 import { httpsCallable } from "firebase/functions"
+import { serverTimestamp, type Firestore } from "firebase/firestore"
 import {
   userRef,
+  checkoutRef,
   checkoutsCollection,
   checkoutItemsCollection,
   membershipsCollection,
   usersCollection,
 } from "@modules/lib/firestore-helpers"
-import { useDb, useFunctions } from "@modules/lib/firebase-context"
+import { useDb, useFunctions, useFirebaseAuth } from "@modules/lib/firebase-context"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
+import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
 import { usePricingConfig } from "@modules/lib/workshop-config"
 import { PageLoading } from "@modules/components/page-loading"
 import { EmptyState } from "@modules/components/empty-state"
@@ -32,6 +35,11 @@ import {
 import type { UserType, UsageType } from "@modules/lib/pricing"
 import type { CheckoutItemLocal } from "@/components/usage/inline-rows"
 import type { PricingModel } from "@modules/lib/workshop-config"
+import type {
+  CheckoutDoc,
+  CheckoutPersonDoc,
+} from "@modules/lib/firestore-entities"
+import type { CheckoutPerson } from "./use-checkout-state"
 
 interface CheckoutWizardProps {
   picc?: string
@@ -168,6 +176,12 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
   const familyMembership = familyMemberships[0] ?? null
   // Member ids excluding self. Bound the `in` query at 30 (Firestore limit);
   // a family is capped at five members + self in practice.
+  //
+  // Self is intentionally excluded from the query (the caller already has
+  // their own user doc via `identifiedUserDoc`); a "re-add self" candidate
+  // is synthesized below from that doc when self is no longer on the
+  // visit (issue #246), so we don't pay an extra Firestore read for
+  // something we can derive client-side.
   const otherMemberIds = useMemo(() => {
     if (!familyMembership || !selfUserId) return [] as string[]
     const ids = familyMembership.members
@@ -186,21 +200,119 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
     () => new Set(state.persons.map((p) => p.userId).filter(Boolean) as string[]),
     [state.persons],
   )
-  const familyCandidates = useMemo(
-    () =>
-      familyMemberDocs
-        .filter((m) => !claimedUserIds.has(m.id))
-        .map((m) => ({
-          userId: m.id,
-          firstName: m.firstName,
-          lastName: m.lastName,
-          // Child accounts have email: null; surface as empty string so
-          // the pre-filled card simply hides the field.
-          email: m.email ?? "",
-          userType: (m.userType as UserType) ?? "erwachsen",
-        })),
-    [familyMemberDocs, claimedUserIds],
-  )
+  const familyCandidates = useMemo(() => {
+    const candidates = familyMemberDocs
+      .filter((m) => !claimedUserIds.has(m.id))
+      .map((m) => ({
+        userId: m.id,
+        firstName: m.firstName,
+        lastName: m.lastName,
+        // Child accounts have email: null; surface as empty string so
+        // the pre-filled card simply hides the field.
+        email: m.email ?? "",
+        userType: (m.userType as UserType) ?? "erwachsen",
+      }))
+    // Issue #246: after the signed-in user removes themselves, re-surface
+    // them as a quick-add chip so the family owner can put themselves
+    // back on the visit without re-typing. Synthesized from
+    // `identifiedUserDoc` so no extra Firestore read is needed.
+    if (
+      identifiedUserDoc &&
+      familyMembership &&
+      !claimedUserIds.has(identifiedUserDoc.id)
+    ) {
+      candidates.unshift({
+        userId: identifiedUserDoc.id,
+        firstName: identifiedUserDoc.firstName,
+        lastName: identifiedUserDoc.lastName,
+        email: identifiedUserDoc.email ?? "",
+        userType: (identifiedUserDoc.userType as UserType) ?? "erwachsen",
+      })
+    }
+    return candidates
+  }, [familyMemberDocs, claimedUserIds, identifiedUserDoc, familyMembership])
+
+  // Issue #246: rehydrate persons from the open Firestore checkout doc.
+  // When the user navs to /profile and back, the wizard remounts with a
+  // fresh reducer state — but the still-open checkout doc carries the
+  // person roster we wrote at the previous "Weiter" click. Restore it
+  // exactly once per `openCheckout` arrival so subsequent local edits
+  // (`UPDATE_PERSON`, etc.) are not clobbered.
+  const rehydratedRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!openCheckout) {
+      // The current open checkout is gone (kiosk reset, submit, etc.) —
+      // clear the latch so a future doc with the same id (unlikely) would
+      // still rehydrate. Also covers the test path where the doc
+      // arrives after the initial mount.
+      rehydratedRef.current = null
+      return
+    }
+    if (rehydratedRef.current === openCheckout.id) return
+    if (!openCheckout.persons || openCheckout.persons.length === 0) {
+      // Nothing to rehydrate — but latch so we don't keep re-checking.
+      rehydratedRef.current = openCheckout.id
+      return
+    }
+    const rehydrated = openCheckout.persons.map((p) =>
+      personDocToLocal(p),
+    )
+    dispatch({ type: "REPLACE_PERSONS", persons: rehydrated })
+    rehydratedRef.current = openCheckout.id
+  }, [openCheckout, dispatch])
+
+  // Issue #246: persist the current `persons` array to the open checkout
+  // doc so a nav-away-and-back can rehydrate. Called from step 0's
+  // "Weiter" handler (via `onAdvance`), after validation passes and the
+  // anonymous principal (if any) has signed in.
+  //
+  // - If a checkout doc already exists for this principal, update its
+  //   `persons` array in place.
+  // - Otherwise create the doc with the persons already populated; the
+  //   step-workshops add-item path will see an existing doc and skip
+  //   its lazy-create.
+  //
+  // Errors are swallowed (useFirestoreMutation already toasts +
+  // telemeters). A failed persist must not block the step transition —
+  // the user can keep going; the worst case is the persons aren't
+  // restored after a nav-away.
+  const auth = useFirebaseAuth()
+  const fsMutation = useFirestoreMutation()
+  const persistPersons = useCallback(async () => {
+    const personDocs = state.persons.map((p) => personLocalToDoc(p, db))
+    try {
+      if (openCheckout) {
+        await fsMutation.update(checkoutRef(db, openCheckout.id), {
+          persons: personDocs,
+        })
+      } else {
+        // Create a new open checkout doc with persons populated. Mirrors
+        // the lazy-create path in step-workshops.tsx so the schema and
+        // the security-rule field set stay in sync.
+        const callerUid = auth?.currentUser?.uid ?? null
+        await fsMutation.add(checkoutsCollection(db), {
+          userId: identifiedUserRef ?? null,
+          status: "open",
+          usageType: state.usageType,
+          created: serverTimestamp() as unknown as CheckoutDoc["created"],
+          workshopsVisited: [],
+          persons: personDocs,
+          modifiedBy: callerUid,
+          modifiedAt: serverTimestamp() as unknown as CheckoutDoc["modifiedAt"],
+        } as unknown as CheckoutDoc)
+      }
+    } catch {
+      // Hook already toasted + reported telemetry.
+    }
+  }, [
+    state.persons,
+    state.usageType,
+    openCheckout,
+    fsMutation,
+    db,
+    identifiedUserRef,
+    auth,
+  ])
 
   // Pre-fill primary person for tag-identified users and auto-advance
   useEffect(() => {
@@ -504,6 +616,11 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
             // Issue #151: eager anonymous sign-in. No-op for already
             // identified users (real, anonymous-already, or tag).
             if (isAnonymous) await signInAnonymouslyIfNeeded()
+            // Issue #246: persist the current person roster onto the
+            // open checkout doc so a nav-away-and-back rehydrates it.
+            // Must run AFTER anon sign-in so the create/update is
+            // attributable to a Firebase principal.
+            await persistPersons()
           }}
         />
       )}
@@ -612,4 +729,71 @@ function usePreFillPerson(
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userDoc?.id])
+}
+
+/**
+ * Issue #246: serialize a local `CheckoutPerson` (firstName/lastName,
+ * userId, billing fields) into the `CheckoutPersonDoc` shape that the
+ * server stores on the open checkout doc. Mirrors the `persons` payload
+ * the wizard sends to `closeCheckoutAndGetPayment` on submit so the
+ * shape on the doc is identical regardless of which write path stamped
+ * it.
+ */
+export function personLocalToDoc(
+  p: CheckoutPerson,
+  db: Firestore,
+): CheckoutPersonDoc {
+  const doc: CheckoutPersonDoc = {
+    name: `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim(),
+    email: p.email ?? "",
+    userType: p.userType,
+  }
+  if (p.userId) {
+    doc.userRef = userRef(db, p.userId)
+  }
+  if (p.billingCompany) {
+    doc.billingAddress = {
+      company: p.billingCompany,
+      street: p.billingStreet ?? "",
+      zip: p.billingZip ?? "",
+      city: p.billingCity ?? "",
+    }
+  }
+  return doc
+}
+
+/**
+ * Issue #246: rehydrate a `CheckoutPersonDoc` into the local
+ * `CheckoutPerson` shape consumed by the reducer. Splits `name` on
+ * the first space; this is lossy for last names with spaces (treated as
+ * part of the last name) but symmetric with the server's `${first}
+ * ${last}` join. `userRef` is unwrapped back into the doc id so the
+ * family-roster dedupe logic and the closeCheckoutAndGetPayment submit
+ * path both see a consistent `userId`.
+ */
+export function personDocToLocal(
+  p: CheckoutPersonDoc,
+): CheckoutPerson {
+  const name = (p.name ?? "").trim()
+  const spaceIdx = name.indexOf(" ")
+  const firstName = spaceIdx >= 0 ? name.slice(0, spaceIdx) : name
+  const lastName = spaceIdx >= 0 ? name.slice(spaceIdx + 1).trim() : ""
+  const userId = p.userRef?.id ?? null
+  return {
+    id: crypto.randomUUID(),
+    firstName,
+    lastName,
+    email: p.email ?? "",
+    userType: p.userType,
+    // Rehydrated persons were valid at the previous "Weiter" — treat them
+    // as pre-filled so they bypass step-checkin re-validation. The user
+    // can still remove them and add fresh entries.
+    isPreFilled: true,
+    termsAccepted: true,
+    userId,
+    billingCompany: p.billingAddress?.company ?? "",
+    billingStreet: p.billingAddress?.street ?? "",
+    billingZip: p.billingAddress?.zip ?? "",
+    billingCity: p.billingAddress?.city ?? "",
+  }
 }

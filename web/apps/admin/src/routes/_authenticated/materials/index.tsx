@@ -3,7 +3,7 @@
 
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { useCollection } from "@modules/lib/firestore"
-import { useDb } from "@modules/lib/firebase-context"
+import { useDb, useFunctions } from "@modules/lib/firebase-context"
 import { catalogCollection } from "@modules/lib/firestore-helpers"
 import type { PricingModel } from "@modules/lib/firestore-entities"
 import { PageLoading } from "@modules/components/page-loading"
@@ -20,7 +20,8 @@ import {
 import { type ColumnDef } from "@tanstack/react-table"
 import { Plus, Loader2 } from "lucide-react"
 import { useState } from "react"
-import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
+import { httpsCallable } from "firebase/functions"
+import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { useForm } from "react-hook-form"
 import { formatCHF } from "@modules/lib/format"
 import type { CatalogItem } from "@modules/lib/workshop-config"
@@ -119,8 +120,15 @@ function CatalogPage() {
 }
 
 function CreateCatalogDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
-  const db = useDb()
-  const { add, loading } = useFirestoreMutation()
+  const functions = useFunctions()
+  // Catalog writes flow through upsertCatalogItem; client-side Firestore
+  // writes to catalog are denied by rules so the `code` uniqueness
+  // invariant can be enforced server-side. See ADR-0026.
+  const create = useAsyncMutation({
+    context: "admin.upsertCatalogItem.create",
+    successMessage: "Katalogeintrag erstellt",
+    errorMessage: "Katalogeintrag konnte nicht erstellt werden",
+  })
   const { register, handleSubmit, reset, control } = useForm<CatalogFormValues>({
     defaultValues: {
       pricingModel: "count",
@@ -132,29 +140,49 @@ function CreateCatalogDialog({ open, onOpenChange }: { open: boolean; onOpenChan
   const onSubmit = async (values: CatalogFormValues) => {
     const defaultPrice = parseFloat(values.priceNone) || 0
     const memberPrice = parseFloat(values.priceMember) || 0
-    await add(catalogCollection(db), {
-      code: values.code,
-      name: values.name,
-      description: values.description || null,
-      workshops: values.workshops.split(",").map((w) => w.trim()).filter(Boolean),
-      // New entries start as single-variant items in the placeholder
-      // "Sonstiges" category. PR C will introduce multi-variant editing.
-      category: ["Sonstiges"],
-      variants: [
-        {
-          id: "default",
-          pricingModel: values.pricingModel as PricingModel,
-          unitPrice:
-            memberPrice !== defaultPrice
-              ? { default: defaultPrice, member: memberPrice }
-              : { default: defaultPrice },
-        },
-      ],
-      active: true,
-      userCanAdd: values.userCanAdd,
-    }, {
-      successMessage: "Katalogeintrag erstellt",
-    })
+    const variant = {
+      id: "default",
+      pricingModel: values.pricingModel as PricingModel,
+      unitPrice:
+        memberPrice !== defaultPrice
+          ? { default: defaultPrice, member: memberPrice }
+          : { default: defaultPrice },
+    }
+    try {
+      await create.mutate(async () => {
+        const fn = httpsCallable<
+          {
+            code: string
+            name: string
+            description: string | null
+            workshops: string[]
+            category: string[]
+            variants: typeof variant[]
+            active: boolean
+            userCanAdd: boolean
+          },
+          { id: string }
+        >(functions, "upsertCatalogItem")
+        await fn({
+          code: values.code,
+          name: values.name,
+          description: values.description || null,
+          workshops: values.workshops
+            .split(",")
+            .map((w) => w.trim())
+            .filter(Boolean),
+          // New entries start as single-variant items in the placeholder
+          // "Sonstiges" category. Multi-variant editing is a follow-up.
+          category: ["Sonstiges"],
+          variants: [variant],
+          active: true,
+          userCanAdd: values.userCanAdd,
+        })
+      })
+    } catch {
+      // Stay open so the user can adjust (e.g. duplicate code) and retry.
+      return
+    }
     reset()
     onOpenChange(false)
   }
@@ -169,8 +197,8 @@ function CreateCatalogDialog({ open, onOpenChange }: { open: boolean; onOpenChan
           <CatalogFormFields register={register} control={control} />
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Abbrechen</Button>
-            <Button type="submit" disabled={loading}>
-              {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+            <Button type="submit" disabled={create.loading}>
+              {create.loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
               Erstellen
             </Button>
           </div>

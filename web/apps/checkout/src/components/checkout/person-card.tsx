@@ -80,13 +80,20 @@ export function PersonCard({
     `space-y-1${err(field) ? " bg-[#fce4e4] p-2 -m-2 rounded-sm" : ""}`
 
   return (
-    <div data-testid="person-card" className="bg-[rgba(204,204,204,0.2)] rounded-none p-[25px] space-y-4">
+    <div
+      data-testid="person-card"
+      // Issue #246: enter animation on mount (no exit — would require a
+      // <Presence> wrapper which is overkill for this list).
+      className="bg-[rgba(204,204,204,0.2)] rounded-none p-[25px] space-y-4 animate-in fade-in slide-in-from-top-2 duration-200"
+    >
       {/*
         Issue #209: the wizard passes `title=""` for the first card when an
         account user is signed in (the "Eingeloggt" hint sits in `IdentityHint`
         instead). The X button must still render in that case so a family
-        owner can drop themselves from the visit, so we render the X
-        independently of the title row.
+        owner can drop themselves from the visit.
+        Issue #246: keep the heading row's height grid-stable when only the
+        X is shown — the wrapping h3 gives a consistent baseline so the X
+        doesn't visually float above the data row.
       */}
       {(title === undefined || title || canRemove) && (
         <div className="flex items-center gap-1.5">
@@ -102,9 +109,15 @@ export function PersonCard({
               <XCircle className="h-4 w-4" />
             </button>
           )}
-          {(title === undefined || title) && (
+          {/*
+            Always render an h3 when the heading row is visible (even when
+            `title === ""`) so the row keeps a consistent height matching
+            the other cards' "Person N" heading — the X stays grid-stable
+            on the first row of a signed-in account.
+          */}
+          {(title === undefined || title || canRemove) && (
             <h3 className="text-base font-bold font-body">
-              {title || `Person ${index + 1}`}
+              {title === undefined ? `Person ${index + 1}` : title}
             </h3>
           )}
         </div>

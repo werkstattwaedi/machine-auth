@@ -40,6 +40,9 @@ vi.mock("@tanstack/react-router", () => ({
   Link: ({ children, ...props }: { children: ReactNode } & Record<string, unknown>) => (
     <a {...(props as Record<string, string>)}>{children}</a>
   ),
+  // /visit is now a layout for the picker sub-routes (issue #213).
+  // The unit test never activates a child route, so Outlet is a no-op.
+  Outlet: () => null,
 }))
 
 const mockUseAuth = vi.fn()
