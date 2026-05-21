@@ -1,0 +1,90 @@
+{
+  "ZWVLzWQi40rRvM30MGnb": {
+    "name": "Laser Cutter",
+    "workshop": "makerspace",
+    "checkoutTemplateId": "$ref:catalog/37n2KSXmmgFbN7JJdQ2s",
+    "requiredPermission": ["$ref:permission/39ozgRe5iMWF5LccFNir"],
+    "maco": "$ref:maco/aaa5427ee1cca38aeea743ae",
+    "control": {}
+  },
+  "kMeIRDWEaDUzIbzGCZzP": {
+    "name": "Lampe",
+    "workshop": "makerspace",
+    "checkoutTemplateId": "$ref:catalog/37n2KSXmmgFbN7JJdQ2s",
+    "requiredPermission": ["$ref:permission/39ozgRe5iMWF5LccFNir"],
+    "maco": "$ref:maco/513803d6d96a166da166f635",
+    "control": {}
+  },
+  "wrNc72jYujjKMEZfBtMy": {
+    "name": "Tischfräse",
+    "workshop": "holz",
+    "checkoutTemplateId": "$ref:catalog/dfoYVuO3bhRJoRCbgND1",
+    "requiredPermission": ["$ref:permission/AyvxAXAj0P05a2jPB2d1"],
+    "maco": null,
+    "control": {}
+  },
+  "Tt3QVODsaqB2WC3IVYEE": {
+    "name": "Plattenfräse",
+    "workshop": "holz",
+    "checkoutTemplateId": "$ref:catalog/dfoYVuO3bhRJoRCbgND1",
+    "requiredPermission": ["$ref:permission/AyvxAXAj0P05a2jPB2d1"],
+    "maco": null,
+    "control": {}
+  },
+  "yTv9T4sd8LqfDXizBJkY": {
+    "name": "Hobelmaschine",
+    "workshop": "holz",
+    "checkoutTemplateId": "$ref:catalog/dfoYVuO3bhRJoRCbgND1",
+    "requiredPermission": ["$ref:permission/AyvxAXAj0P05a2jPB2d1"],
+    "maco": null,
+    "control": {}
+  },
+  "Auk2RTzgZg1oalZpk5Xs": {
+    "name": "Bandsäge",
+    "workshop": "holz",
+    "checkoutTemplateId": "$ref:catalog/dfoYVuO3bhRJoRCbgND1",
+    "requiredPermission": ["$ref:permission/AyvxAXAj0P05a2jPB2d1"],
+    "maco": null,
+    "control": {}
+  },
+  "sZSA6B1jpMfo7VJs7pwN": {
+    "name": "Standbohrmaschine",
+    "workshop": "holz",
+    "checkoutTemplateId": "$ref:catalog/dfoYVuO3bhRJoRCbgND1",
+    "requiredPermission": ["$ref:permission/AyvxAXAj0P05a2jPB2d1"],
+    "maco": null,
+    "control": {}
+  },
+  "3IKzY8rKxJwOUqtGJuY3": {
+    "name": "Langlochbohrmaschine",
+    "workshop": "holz",
+    "checkoutTemplateId": "$ref:catalog/dfoYVuO3bhRJoRCbgND1",
+    "requiredPermission": ["$ref:permission/AyvxAXAj0P05a2jPB2d1"],
+    "maco": null,
+    "control": {}
+  },
+  "0uPInXeBgUCospMfE1px": {
+    "name": "Bandschleifmaschine",
+    "workshop": "holz",
+    "checkoutTemplateId": "$ref:catalog/dfoYVuO3bhRJoRCbgND1",
+    "requiredPermission": ["$ref:permission/AyvxAXAj0P05a2jPB2d1"],
+    "maco": null,
+    "control": {}
+  },
+  "sF2oZZzX7wOwshA61FWJ": {
+    "name": "Drechselbank",
+    "workshop": "holz",
+    "checkoutTemplateId": "$ref:catalog/LZ04lfdfdEieqQOsKhzi",
+    "requiredPermission": ["$ref:permission/2owwR7svIkOfrDNVuGRQ"],
+    "maco": null,
+    "control": {}
+  },
+  "RinNN3ulmVFrwNGSfzE3": {
+    "name": "CNC",
+    "workshop": "holz",
+    "checkoutTemplateId": "$ref:catalog/dfoYVuO3bhRJoRCbgND1",
+    "requiredPermission": ["$ref:permission/idbSWhdREvfNmL6fwxvv"],
+    "maco": null,
+    "control": {}
+  }
+}

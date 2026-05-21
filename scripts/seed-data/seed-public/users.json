@@ -1,0 +1,78 @@
+{
+  "WwTa2ukGYWqABqybZnExksB5WDjW": {
+    "created": "$now",
+    "firstName": "Test",
+    "lastName": "Admin",
+    "email": "admin@example.com",
+    "permissions": [
+      "$ref:permission/39ozgRe5iMWF5LccFNir",
+      "$ref:permission/idbSWhdREvfNmL6fwxvv",
+      "$ref:permission/2owwR7svIkOfrDNVuGRQ",
+      "$ref:permission/gKFAL9apYUIegsdCzPnK",
+      "$ref:permission/AyvxAXAj0P05a2jPB2d1"
+    ],
+    "roles": ["admin"],
+    "termsAcceptedAt": "$now",
+    "userType": "erwachsen",
+    "billingAddress": null
+  },
+  "NVO6YBzzuBi4K0EuuQ63HHsi7kTa": {
+    "created": "$now",
+    "firstName": "Test",
+    "lastName": "User 1",
+    "email": "user1@example.com",
+    "permissions": [
+      "$ref:permission/39ozgRe5iMWF5LccFNir",
+      "$ref:permission/gKFAL9apYUIegsdCzPnK",
+      "$ref:permission/AyvxAXAj0P05a2jPB2d1"
+    ],
+    "roles": ["admin", "vereinsmitglied"],
+    "termsAcceptedAt": "$now",
+    "userType": "erwachsen",
+    "billingAddress": null
+  },
+  "cM2a3Sosx4LEdTEZFbWOqPKXGF9U": {
+    "created": "$now",
+    "firstName": "Test",
+    "lastName": "User 2",
+    "email": "user2@example.com",
+    "permissions": [],
+    "roles": ["admin"],
+    "termsAcceptedAt": "$now",
+    "userType": "erwachsen",
+    "billingAddress": null
+  },
+  "mzEFn75h8hRi3U5tx1uHFdqIQxYf": {
+    "created": "$now",
+    "firstName": "Test",
+    "lastName": "User 3",
+    "email": "user3@example.com",
+    "permissions": [],
+    "roles": [],
+    "termsAcceptedAt": "$now",
+    "userType": "erwachsen",
+    "billingAddress": null
+  },
+  "ziDW8kMcB1aAYd4D5Wd0ZKQqGwRH": {
+    "created": "$now",
+    "firstName": "Test",
+    "lastName": "Family Partner",
+    "email": "partner@example.com",
+    "permissions": [],
+    "roles": [],
+    "termsAcceptedAt": "$now",
+    "userType": "erwachsen",
+    "billingAddress": null
+  },
+  "VBfkBQLmdsgHbH4dTCYumVVKPABe": {
+    "created": "$now",
+    "firstName": "Test",
+    "lastName": "Family Kid",
+    "email": null,
+    "permissions": [],
+    "roles": [],
+    "termsAcceptedAt": null,
+    "userType": "kind",
+    "billingAddress": null
+  }
+}

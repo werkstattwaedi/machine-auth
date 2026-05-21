@@ -1,0 +1,24 @@
+{
+  "entryFees": {
+    "erwachsen": { "regular": 5, "materialbezug": 0, "intern": 0, "hangenmoos": 0 },
+    "kind":      { "regular": 2.5, "materialbezug": 0, "intern": 0, "hangenmoos": 0 },
+    "firma":     { "regular": 5, "materialbezug": 0, "intern": 0, "hangenmoos": 0 }
+  },
+  "slaLayerPrice": { "none": 0.00109, "member": 0.00109, "intern": 0 },
+  "workshops": {
+    "holz":       { "label": "Holz",              "order": 1 },
+    "metall":     { "label": "Metall",            "order": 2 },
+    "textil":     { "label": "Textil",            "order": 3 },
+    "keramik":    { "label": "Keramik",           "order": 4 },
+    "schmuck":    { "label": "Schmuck",           "order": 5 },
+    "glas":       { "label": "Glas",              "order": 6 },
+    "stein":      { "label": "Stein",             "order": 7 },
+    "malen":      { "label": "Malen und Basteln", "order": 8 },
+    "makerspace": { "label": "Maker Space",       "order": 9 },
+    "diverses":   { "label": "Diverses",          "order": 10 }
+  },
+  "labels": {
+    "units": { "m2": "m²", "m": "m", "stk": "Stk.", "chf": "CHF", "h": "Std.", "kg": "kg", "g": "g", "l": "l" },
+    "discounts": { "none": "Kein Rabatt", "member": "Mitglied OWW", "intern": "Intern" }
+  }
+}

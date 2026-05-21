@@ -1,0 +1,40 @@
+[
+  {
+    "uid": "WwTa2ukGYWqABqybZnExksB5WDjW",
+    "email": "admin@example.com",
+    "password": "admin123",
+    "displayName": "Test Admin",
+    "customClaims": { "admin": true }
+  },
+  {
+    "uid": "NVO6YBzzuBi4K0EuuQ63HHsi7kTa",
+    "email": "user1@example.com",
+    "password": "user1234",
+    "displayName": "Test User 1",
+    "customClaims": { "admin": true }
+  },
+  {
+    "uid": "cM2a3Sosx4LEdTEZFbWOqPKXGF9U",
+    "email": "user2@example.com",
+    "password": "user1234",
+    "displayName": "Test User 2",
+    "customClaims": { "admin": true }
+  },
+  {
+    "uid": "mzEFn75h8hRi3U5tx1uHFdqIQxYf",
+    "email": "user3@example.com",
+    "password": "user1234",
+    "displayName": "Test User 3"
+  },
+  {
+    "uid": "ziDW8kMcB1aAYd4D5Wd0ZKQqGwRH",
+    "email": "partner@example.com",
+    "password": "partner1",
+    "displayName": "Test Family Partner"
+  },
+  {
+    "uid": "VBfkBQLmdsgHbH4dTCYumVVKPABe",
+    "displayName": "Test Family Kid",
+    "disabled": true
+  }
+]
