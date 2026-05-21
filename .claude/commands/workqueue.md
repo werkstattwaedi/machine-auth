@@ -635,14 +635,26 @@ issue and processes it normally.)
 .claude/scripts/wq-gh.sh pr list --repo werkstattwaedi/machine-auth --search "head:workqueue/issue-" --state open --json number,title,headRefName,url --limit 50
 ```
 
-2. For each PR, check for unaddressed review comments:
+2. For each PR, check for unaddressed review comments. A review thread is
+   "addressed" when its newest reply carries the `<!-- claude-workqueue-ack -->`
+   marker; the original review comment (authored by a human or CodeQL) can
+   never carry the marker itself, so counting raw non-ack comments is a
+   false-positive trap — group by thread root and inspect only the latest
+   reply per group:
 
 ```bash
-.claude/scripts/wq-gh.sh api repos/werkstattwaedi/machine-auth/pulls/<PR>/comments --jq '[.[] | select(.body | contains("<!-- claude-workqueue-ack -->") | not)] | length'
+.claude/scripts/wq-gh.sh api repos/werkstattwaedi/machine-auth/pulls/<PR>/comments --jq '
+  group_by(.in_reply_to_id // .id)
+  | map(sort_by(.created_at) | last)
+  | [.[] | select(.body | contains("<!-- claude-workqueue-ack -->") | not)]
+  | length
+'
 .claude/scripts/wq-gh.sh pr view <PR> --repo werkstattwaedi/machine-auth --json comments --jq '[.comments[] | select(.body | contains("<!-- claude-workqueue") | not)] | length'
 ```
 
-   A PR needs attention if there are review comments without a `<!-- claude-workqueue-ack -->` reply, OR general comments that aren't from the bot.
+   A PR needs attention if any review thread's latest reply lacks the
+   `<!-- claude-workqueue-ack -->` marker, OR general (top-level) comments
+   exist that aren't from the bot.
 
 3. Extract the issue number from the branch name (`workqueue/issue-<N>` → `N`).
 
