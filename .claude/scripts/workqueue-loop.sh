@@ -139,18 +139,29 @@ has_actionable_work() {
     reason="${reason:+$reason; }${approved_prs} approved PR(s) to land"
   fi
 
-  # 4. For each open workqueue PR, check unaddressed review comments. Skipped
+  # 4. For each open workqueue PR, check unaddressed review threads. Skipped
   #    when another signal already triggered, to keep the chatty per-PR calls
   #    off the critical path of every poll.
+  #
+  #    A review thread is "addressed" when its newest reply carries the
+  #    `<!-- claude-workqueue-ack -->` marker. Counting raw comments without
+  #    the marker is wrong: the original review comment (authored by a
+  #    human or CodeQL bot) can never contain it, so a fully-acked thread
+  #    still has 1+ non-ack comments and the loop would fire claude on
+  #    every poll forever. Group by thread root (in_reply_to_id // id) and
+  #    inspect only the latest reply in each group.
   if [[ -z "$reason" ]]; then
     local pr_numbers
     pr_numbers=$(printf '%s' "$prs_json" | jq -r '.[].number' 2>/dev/null || true)
     local unaddressed_prs=0
     for pr in $pr_numbers; do
       local n
-      n=$(wq_gh api "repos/$repo/pulls/$pr/comments" --jq \
-        '[.[] | select(.body | contains("<!-- claude-workqueue-ack -->") | not)] | length' \
-        2>/dev/null || echo 0)
+      n=$(wq_gh api "repos/$repo/pulls/$pr/comments" --jq '
+        group_by(.in_reply_to_id // .id)
+        | map(sort_by(.created_at) | last)
+        | [.[] | select(.body | contains("<!-- claude-workqueue-ack -->") | not)]
+        | length
+      ' 2>/dev/null || echo 0)
       if [[ "${n:-0}" -gt 0 ]]; then
         unaddressed_prs=$((unaddressed_prs + 1))
       fi
