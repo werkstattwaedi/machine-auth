@@ -32,7 +32,8 @@ of `/visit` each render the picker with a specific scope:
 | Generic "add anything" (QR scanner empty-state) | `/visit/add` | `all` — every `active && userCanAdd` catalog item |
 | Workshop "+" button | `/visit/add/workshop/$workshopId` | `workshop` — items where `workshops` array-contains the id |
 | Pricelist QR (PDF) | `/visit/add/list/$listId` | `list` — items whose doc id ∈ `priceList.items[]` |
-| Per-item QR / sticker (future) | `/visit/add/item/$code` | `item` — single item resolved by `code` |
+| Per-item QR / sticker (future) | `/visit/add/item/$code` | `item` — single item resolved by `code`, `variants[0]` pre-selected |
+| Per-variant QR / sticker (future) | `/visit/add/item/$code/$variantId` | `item` — same item lookup; the named variant is pre-selected. Unknown variantIds fall back to `variants[0]` silently. |
 
 All path segments are English (per house style: German only in UI labels).
 The `/add` segment is retained — it disambiguates "open the add
@@ -48,7 +49,7 @@ type PickerScope =
   | { kind: "all" }
   | { kind: "workshop"; workshopId; workshopLabel }
   | { kind: "list"; listId; listName }
-  | { kind: "item"; code; itemId }
+  | { kind: "item"; code; itemId; variantId? }
 ```
 
 The host route loads the appropriate catalog slice (workshop query,

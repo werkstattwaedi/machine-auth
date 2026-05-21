@@ -135,6 +135,42 @@ test.describe("Visit /add/* sub-routes (issue #213)", () => {
     await expect(page.getByRole("button", { name: "Hinzufügen" })).toBeVisible()
   })
 
+  test("/visit/add/item/$code/$variantId — pre-selects the named variant", async ({
+    page,
+  }) => {
+    await signIn(page)
+    // 9200 = E2E Sperrholz, 2 variants: "default" (Per m²) and
+    // "zuschnitt-a3" (Zuschnitt A3, count pricing). Targeting the
+    // count variant means the form should show a Stück input, not the
+    // length × width m² inputs of the default variant.
+    await page.goto("/visit/add/item/9200/zuschnitt-a3")
+
+    await expect(page.getByPlaceholder("Material suchen…")).toBeVisible({
+      timeout: 10_000,
+    })
+    await expect(page.getByText("E2E Sperrholz")).toBeVisible()
+    // The variant chooser (radiogroup) is visible for ≥ 2 variants;
+    // "Zuschnitt A3" should be the active variant.
+    const variantButton = page.getByRole("radio", { name: "Zuschnitt A3" })
+    await expect(variantButton).toHaveAttribute("aria-checked", "true")
+  })
+
+  test("/visit/add/item/$code/$variantId — unknown variant falls back silently", async ({
+    page,
+  }) => {
+    await signIn(page)
+    await page.goto("/visit/add/item/9200/typo-variant")
+
+    // Picker still mounts; the per-m² (default) variant is selected
+    // because the unknown id fell back to variants[0].
+    await expect(page.getByPlaceholder("Material suchen…")).toBeVisible({
+      timeout: 10_000,
+    })
+    await expect(page.getByText("E2E Sperrholz")).toBeVisible()
+    const defaultVariant = page.getByRole("radio", { name: "Per m²" })
+    await expect(defaultVariant).toHaveAttribute("aria-checked", "true")
+  })
+
   test("/visit/add/item/$code — unknown code shows error", async ({ page }) => {
     await signIn(page)
     await page.goto("/visit/add/item/does-not-exist")

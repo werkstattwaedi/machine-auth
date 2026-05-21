@@ -63,13 +63,15 @@ const FALLBACK_MODELS: ReadonlyArray<{
  * - `list`: the items defined by a pricelist (reached via the price-list
  *   QR code on a printed PDF).
  * - `item`: a single catalog item, e.g. from a per-item QR sticker.
- *   The variant chooser auto-expands on open.
+ *   The variant chooser auto-expands on open. `variantId` is optional
+ *   — when set, that variant is pre-selected (per-variant QR stickers,
+ *   e.g. "Zuschnitt A3"). Unknown variantIds fall back to `variants[0]`.
  */
 export type PickerScope =
   | { kind: "all" }
   | { kind: "workshop"; workshopId: WorkshopId; workshopLabel: string }
   | { kind: "list"; listId: string; listName: string }
-  | { kind: "item"; code: string; itemId: string }
+  | { kind: "item"; code: string; itemId: string; variantId?: string }
 
 interface MaterialPickerProps {
   open: boolean
@@ -363,6 +365,11 @@ function PickerBody({
               config={config}
               discountLevel={discountLevel}
               workshopId={resolveWorkshop(cat)}
+              initialVariantId={
+                scope.kind === "item" && scope.itemId === cat.id
+                  ? scope.variantId
+                  : undefined
+              }
               onToggle={(open) =>
                 setExpansion(open ? { kind: "catalog", id: cat.id } : null)
               }
@@ -555,6 +562,7 @@ function PickerRow({
   config,
   discountLevel,
   workshopId,
+  initialVariantId,
   onToggle,
   onAdd,
 }: {
@@ -563,6 +571,9 @@ function PickerRow({
   config: PricingConfig
   discountLevel: DiscountLevel
   workshopId: WorkshopId
+  /** Pre-select a specific variant (set by the `item` scope when its
+   *  URL carries a variantId segment). Unknown ids fall back silently. */
+  initialVariantId?: string
   onToggle: (open: boolean) => void
   onAdd: (item: CheckoutItemLocal) => void
 }) {
@@ -618,6 +629,7 @@ function PickerRow({
           config={config}
           discountLevel={discountLevel}
           workshopId={workshopId}
+          initialVariantId={initialVariantId}
           onAdd={onAdd}
         />
       </Collapsible.Content>
@@ -648,18 +660,29 @@ function PickerRowBody({
   config,
   discountLevel,
   workshopId,
+  initialVariantId,
   onAdd,
 }: {
   catalog: CatalogItem
   config: PricingConfig
   discountLevel: DiscountLevel
   workshopId: WorkshopId
+  /** Pre-select a specific variant; unknown ids fall back to variants[0]. */
+  initialVariantId?: string
   onAdd: (item: CheckoutItemLocal) => void
 }) {
   const variants = catalog.variants ?? []
-  const [selectedVariantId, setSelectedVariantId] = useState<string>(
-    variants[0]?.id ?? "default",
-  )
+  const initialId =
+    (initialVariantId && variants.find((v) => v.id === initialVariantId)?.id) ??
+    variants[0]?.id ??
+    "default"
+  if (initialVariantId && initialId !== initialVariantId) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `Unknown variantId "${initialVariantId}" for catalog item ${catalog.code}; falling back to variants[0].`,
+    )
+  }
+  const [selectedVariantId, setSelectedVariantId] = useState<string>(initialId)
   const variant =
     variants.find((v) => v.id === selectedVariantId) ?? variants[0]
   const unitPrice = variant

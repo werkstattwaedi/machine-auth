@@ -14,7 +14,7 @@ import { AlertTriangle } from "lucide-react"
 import type { CatalogItemDoc } from "@modules/lib/firestore-entities"
 
 export const Route = createFileRoute(
-  "/_authenticated/visit/add/item/$code",
+  "/_authenticated/visit/add/item/$code/",
 )({
   component: AddItemRoute,
 })

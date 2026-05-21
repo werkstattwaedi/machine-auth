@@ -26,7 +26,8 @@ import { Route as AuthenticatedVisitAddIndexRouteImport } from "./routes/_authen
 import { Route as AuthenticatedInviteMembershipIdInviteIdRouteImport } from "./routes/_authenticated/invite/$membershipId/$inviteId"
 import { Route as AuthenticatedVisitAddWorkshopWorkshopIdRouteImport } from "./routes/_authenticated/visit/add.workshop.$workshopId"
 import { Route as AuthenticatedVisitAddListListIdRouteImport } from "./routes/_authenticated/visit/add.list.$listId"
-import { Route as AuthenticatedVisitAddItemCodeRouteImport } from "./routes/_authenticated/visit/add.item.$code"
+import { Route as AuthenticatedVisitAddItemCodeIndexRouteImport } from "./routes/_authenticated/visit/add.item.$code.index"
+import { Route as AuthenticatedVisitAddItemCodeVariantIdRouteImport } from "./routes/_authenticated/visit/add.item.$code.$variantId"
 
 const LoginRoute = LoginRouteImport.update({
   id: "/login",
@@ -115,10 +116,16 @@ const AuthenticatedVisitAddListListIdRoute =
     path: "/add/list/$listId",
     getParentRoute: () => AuthenticatedVisitRoute,
   } as any)
-const AuthenticatedVisitAddItemCodeRoute =
-  AuthenticatedVisitAddItemCodeRouteImport.update({
-    id: "/add/item/$code",
-    path: "/add/item/$code",
+const AuthenticatedVisitAddItemCodeIndexRoute =
+  AuthenticatedVisitAddItemCodeIndexRouteImport.update({
+    id: "/add/item/$code/",
+    path: "/add/item/$code/",
+    getParentRoute: () => AuthenticatedVisitRoute,
+  } as any)
+const AuthenticatedVisitAddItemCodeVariantIdRoute =
+  AuthenticatedVisitAddItemCodeVariantIdRouteImport.update({
+    id: "/add/item/$code/$variantId",
+    path: "/add/item/$code/$variantId",
     getParentRoute: () => AuthenticatedVisitRoute,
   } as any)
 
@@ -135,9 +142,10 @@ export interface FileRoutesByFullPath {
   "/membership/": typeof AuthenticatedMembershipIndexRoute
   "/invite/$membershipId/$inviteId": typeof AuthenticatedInviteMembershipIdInviteIdRoute
   "/visit/add/": typeof AuthenticatedVisitAddIndexRoute
-  "/visit/add/item/$code": typeof AuthenticatedVisitAddItemCodeRoute
   "/visit/add/list/$listId": typeof AuthenticatedVisitAddListListIdRoute
   "/visit/add/workshop/$workshopId": typeof AuthenticatedVisitAddWorkshopWorkshopIdRoute
+  "/visit/add/item/$code/$variantId": typeof AuthenticatedVisitAddItemCodeVariantIdRoute
+  "/visit/add/item/$code/": typeof AuthenticatedVisitAddItemCodeIndexRoute
 }
 export interface FileRoutesByTo {
   "/": typeof IndexRoute
@@ -152,9 +160,10 @@ export interface FileRoutesByTo {
   "/membership": typeof AuthenticatedMembershipIndexRoute
   "/invite/$membershipId/$inviteId": typeof AuthenticatedInviteMembershipIdInviteIdRoute
   "/visit/add": typeof AuthenticatedVisitAddIndexRoute
-  "/visit/add/item/$code": typeof AuthenticatedVisitAddItemCodeRoute
   "/visit/add/list/$listId": typeof AuthenticatedVisitAddListListIdRoute
   "/visit/add/workshop/$workshopId": typeof AuthenticatedVisitAddWorkshopWorkshopIdRoute
+  "/visit/add/item/$code/$variantId": typeof AuthenticatedVisitAddItemCodeVariantIdRoute
+  "/visit/add/item/$code": typeof AuthenticatedVisitAddItemCodeIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -173,9 +182,10 @@ export interface FileRoutesById {
   "/_authenticated/membership/": typeof AuthenticatedMembershipIndexRoute
   "/_authenticated/invite/$membershipId/$inviteId": typeof AuthenticatedInviteMembershipIdInviteIdRoute
   "/_authenticated/visit/add/": typeof AuthenticatedVisitAddIndexRoute
-  "/_authenticated/visit/add/item/$code": typeof AuthenticatedVisitAddItemCodeRoute
   "/_authenticated/visit/add/list/$listId": typeof AuthenticatedVisitAddListListIdRoute
   "/_authenticated/visit/add/workshop/$workshopId": typeof AuthenticatedVisitAddWorkshopWorkshopIdRoute
+  "/_authenticated/visit/add/item/$code/$variantId": typeof AuthenticatedVisitAddItemCodeVariantIdRoute
+  "/_authenticated/visit/add/item/$code/": typeof AuthenticatedVisitAddItemCodeIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -192,9 +202,10 @@ export interface FileRouteTypes {
     | "/membership/"
     | "/invite/$membershipId/$inviteId"
     | "/visit/add/"
-    | "/visit/add/item/$code"
     | "/visit/add/list/$listId"
     | "/visit/add/workshop/$workshopId"
+    | "/visit/add/item/$code/$variantId"
+    | "/visit/add/item/$code/"
   fileRoutesByTo: FileRoutesByTo
   to:
     | "/"
@@ -209,9 +220,10 @@ export interface FileRouteTypes {
     | "/membership"
     | "/invite/$membershipId/$inviteId"
     | "/visit/add"
-    | "/visit/add/item/$code"
     | "/visit/add/list/$listId"
     | "/visit/add/workshop/$workshopId"
+    | "/visit/add/item/$code/$variantId"
+    | "/visit/add/item/$code"
   id:
     | "__root__"
     | "/"
@@ -229,9 +241,10 @@ export interface FileRouteTypes {
     | "/_authenticated/membership/"
     | "/_authenticated/invite/$membershipId/$inviteId"
     | "/_authenticated/visit/add/"
-    | "/_authenticated/visit/add/item/$code"
     | "/_authenticated/visit/add/list/$listId"
     | "/_authenticated/visit/add/workshop/$workshopId"
+    | "/_authenticated/visit/add/item/$code/$variantId"
+    | "/_authenticated/visit/add/item/$code/"
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -365,11 +378,18 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthenticatedVisitAddListListIdRouteImport
       parentRoute: typeof AuthenticatedVisitRoute
     }
-    "/_authenticated/visit/add/item/$code": {
-      id: "/_authenticated/visit/add/item/$code"
+    "/_authenticated/visit/add/item/$code/": {
+      id: "/_authenticated/visit/add/item/$code/"
       path: "/add/item/$code"
-      fullPath: "/visit/add/item/$code"
-      preLoaderRoute: typeof AuthenticatedVisitAddItemCodeRouteImport
+      fullPath: "/visit/add/item/$code/"
+      preLoaderRoute: typeof AuthenticatedVisitAddItemCodeIndexRouteImport
+      parentRoute: typeof AuthenticatedVisitRoute
+    }
+    "/_authenticated/visit/add/item/$code/$variantId": {
+      id: "/_authenticated/visit/add/item/$code/$variantId"
+      path: "/add/item/$code/$variantId"
+      fullPath: "/visit/add/item/$code/$variantId"
+      preLoaderRoute: typeof AuthenticatedVisitAddItemCodeVariantIdRouteImport
       parentRoute: typeof AuthenticatedVisitRoute
     }
   }
@@ -377,17 +397,21 @@ declare module "@tanstack/react-router" {
 
 interface AuthenticatedVisitRouteChildren {
   AuthenticatedVisitAddIndexRoute: typeof AuthenticatedVisitAddIndexRoute
-  AuthenticatedVisitAddItemCodeRoute: typeof AuthenticatedVisitAddItemCodeRoute
   AuthenticatedVisitAddListListIdRoute: typeof AuthenticatedVisitAddListListIdRoute
   AuthenticatedVisitAddWorkshopWorkshopIdRoute: typeof AuthenticatedVisitAddWorkshopWorkshopIdRoute
+  AuthenticatedVisitAddItemCodeVariantIdRoute: typeof AuthenticatedVisitAddItemCodeVariantIdRoute
+  AuthenticatedVisitAddItemCodeIndexRoute: typeof AuthenticatedVisitAddItemCodeIndexRoute
 }
 
 const AuthenticatedVisitRouteChildren: AuthenticatedVisitRouteChildren = {
   AuthenticatedVisitAddIndexRoute: AuthenticatedVisitAddIndexRoute,
-  AuthenticatedVisitAddItemCodeRoute: AuthenticatedVisitAddItemCodeRoute,
   AuthenticatedVisitAddListListIdRoute: AuthenticatedVisitAddListListIdRoute,
   AuthenticatedVisitAddWorkshopWorkshopIdRoute:
     AuthenticatedVisitAddWorkshopWorkshopIdRoute,
+  AuthenticatedVisitAddItemCodeVariantIdRoute:
+    AuthenticatedVisitAddItemCodeVariantIdRoute,
+  AuthenticatedVisitAddItemCodeIndexRoute:
+    AuthenticatedVisitAddItemCodeIndexRoute,
 }
 
 const AuthenticatedVisitRouteWithChildren =
