@@ -50,6 +50,13 @@ export interface WorkshopInfo {
 export interface InvoiceData {
   referenceNumber: number;
   invoiceDate: Date;
+  /**
+   * Postal address rendered in the top-left recipient block (Swiss invoice
+   * convention). When `company` is empty the company line is skipped — for a
+   * registered (logged-in) non-firma user we render their `recipientName`
+   * plus street/zip/city. For a firma checkout `company` carries the
+   * company name and identifies the recipient.
+   */
   billingAddress: {
     company: string;
     street: string;

@@ -15,7 +15,7 @@ import * as logger from "firebase-functions/logger";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret, defineString } from "firebase-functions/params";
-import { getFirestore, Timestamp } from "firebase-admin/firestore";
+import { DocumentReference, getFirestore, Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { formatWorkshopDateTime } from "../util/workshop_timezone";
 import { formatInvoiceNumber } from "./types";
@@ -31,6 +31,7 @@ import type {
 import type {
   CheckoutEntity,
   CheckoutItemEntity,
+  UserEntity,
 } from "../types/firestore_entities";
 
 // --- Params ---
@@ -153,9 +154,19 @@ async function assembleInvoiceData(
     };
   });
 
-  // Determine billing address
+  // Determine the recipient block (issue #269):
+  //   1. firma person with a person-level billingAddress → use it (company
+  //      identifies the recipient, no separate person-name line).
+  //   2. else, if the first person is linked to a registered user via
+  //      `userRef` and that user has a non-empty `billingAddress`, surface
+  //      it as the recipient address with `company` left empty — the PDF
+  //      renders person-name + street + zip/city (standard CH invoice).
+  //   3. else (anonymous walk-in or registered user without an address),
+  //      keep `billingAddress: null` and render the person's name only.
   let billingAddress: InvoiceData["billingAddress"] = null;
   let recipientName = "";
+  let firstPersonUserRef: DocumentReference | null = null;
+
   for (const checkout of invoiceCheckouts) {
     for (const person of checkout.persons) {
       if (person.userType === "firma" && person.billingAddress) {
@@ -165,12 +176,44 @@ async function assembleInvoiceData(
       }
       if (!recipientName) {
         recipientName = person.name;
+        // Capture the userRef of whichever person we picked the name from
+        // so we can look up their stored billing address.
+        firstPersonUserRef = person.userRef ?? null;
       }
     }
     if (billingAddress) break;
   }
   if (!recipientName && invoiceCheckouts.length > 0) {
     recipientName = invoiceCheckouts[0].persons[0]?.name ?? "Unbekannt";
+  }
+
+  // No firma address picked up — try the registered-user fallback so a
+  // standard Swiss invoice rendering has the recipient's postal address.
+  if (!billingAddress && firstPersonUserRef) {
+    try {
+      const userSnap = await firstPersonUserRef.get();
+      if (userSnap.exists) {
+        const userData = userSnap.data() as UserEntity | undefined;
+        const addr = userData?.billingAddress;
+        if (addr && addr.street && addr.zip && addr.city) {
+          billingAddress = {
+            // company is intentionally blank for non-firma users — the PDF
+            // skips the line and renders recipientName instead.
+            company: addr.company ?? "",
+            street: addr.street,
+            zip: addr.zip,
+            city: addr.city,
+          };
+        }
+      }
+    } catch (error) {
+      // Fail soft: the bill still renders, just without the address block.
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn(
+        `assembleInvoiceData: failed to load user ${firstPersonUserRef.path} for billing address`,
+        { error: message },
+      );
+    }
   }
 
   return {
