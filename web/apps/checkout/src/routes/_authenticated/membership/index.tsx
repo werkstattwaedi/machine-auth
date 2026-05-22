@@ -363,8 +363,9 @@ export function NoMembership({
         <div>
           <h2 className="font-heading text-xl font-bold">Mitglied werden</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Als Mitglied erhältst du vergünstigte Preise auf Maschinen und
-            Material und unterstützt den Verein.
+            Mit deiner Mitgliedschaft unterstützt du den Verein «Offene
+            Werkstatt Wädenswil» und hilfst mit, dass die Werkstätten und
+            Ateliers auch in Zukunft für alle offen bleiben.
           </p>
         </div>
 
