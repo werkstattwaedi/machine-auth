@@ -29,7 +29,7 @@
       "target": "checkout",
       "public": "web/apps/checkout/dist",
       "predeploy": [
-        "cd web && npm install && npm run build -w @oww/checkout"
+        "npm install && npm run build:shared && npm run build -w @oww/checkout"
       ],
       "rewrites": [
         {
@@ -47,7 +47,7 @@
       "target": "admin",
       "public": "web/apps/admin/dist",
       "predeploy": [
-        "cd web && npm install && npm run build -w @oww/admin"
+        "npm install && npm run build:shared && npm run build -w @oww/admin"
       ],
       "rewrites": [
         {

@@ -30,10 +30,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            web/package-lock.json
-            functions/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - uses: actions/setup-java@v4
         with:
@@ -43,14 +40,8 @@ jobs:
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
 
-      - name: Install root dependencies
+      - name: Install dependencies (root workspaces)
         run: npm ci
-
-      - name: Install web dependencies
-        run: cd web && npm ci
-
-      - name: Install functions dependencies
-        run: cd functions && npm ci
 
       # Freshness guard (issue #296): the committed `.env.test` fixtures
       # MUST match what `generate-env --emit-test-files` produces. If a
@@ -91,10 +82,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            web/package-lock.json
-            functions/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - uses: actions/setup-java@v4
         with:
@@ -104,14 +92,8 @@ jobs:
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
 
-      - name: Install root dependencies
+      - name: Install dependencies (root workspaces)
         run: npm ci
-
-      - name: Install web dependencies
-        run: cd web && npm ci
-
-      - name: Install functions dependencies
-        run: cd functions && npm ci
 
       # Functions are compiled TypeScript — the Firebase Functions emulator
       # loads `functions/lib/src/index.js`, which only exists after `tsc`

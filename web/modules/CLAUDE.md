@@ -29,12 +29,14 @@ Browser tests run through `apps/checkout/vitest.browser.config.ts`
 
 ## Dependency boundary
 
-This workspace has no `package.json` dependencies of its own — it relies
-on workspace hoisting from the consuming app(s). When a shared component
-imports a package that only one consumer has installed (e.g.
-`@tanstack/react-table` for `data-table/`), the **other** consumer must
-add the dep to its own `package.json` before importing the shared
-component.
+Workspace-internal packages (`@oww/shared`, `convert`) are declared
+directly in this workspace's `package.json`. External packages (React,
+Firebase, lucide-react, TanStack Router, …) are not declared here —
+this workspace consumes them via hoisting from the consuming app(s).
+When a shared component imports an external package that only one
+consumer has installed (e.g. `@tanstack/react-table` for `data-table/`),
+the **other** consumer must add the dep to its own `package.json`
+before importing the shared component.
 
 ## Typed router caveat
 

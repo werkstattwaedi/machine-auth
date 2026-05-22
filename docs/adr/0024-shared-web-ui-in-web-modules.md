@@ -37,11 +37,14 @@ mounts the shared component under TanStack's typed router.
 
 ### Dependency boundary
 
-`web/modules/` declares no `package.json` dependencies of its own. It
-relies on workspace hoisting from the consuming apps. When a shared
-component imports a package that only one consumer has installed (e.g.
-`@tanstack/react-table` for `data-table/`), the *other* consumer must
-add the dep to its own `package.json` before adopting the component.
+Workspace-internal packages (e.g. `@oww/shared`, `convert`) are declared
+directly in `web/modules/package.json`. External packages (React,
+Firebase, lucide-react, TanStack Router, …) are *not* declared here;
+`web/modules/` consumes them via workspace hoisting from the apps that
+do declare them. When a shared component imports an external package
+that only one consumer has installed (e.g. `@tanstack/react-table` for
+`data-table/`), the *other* consumer must add the dep to its own
+`package.json` before adopting the component.
 
 ### TypeScript navigate quirk
 

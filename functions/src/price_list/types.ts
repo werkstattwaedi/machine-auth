@@ -2,21 +2,14 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Price-list rendering types. Mirrors the web schema in
- * web/modules/lib/workshop-config.ts but kept independent so the PDF builder
- * can be unit-tested without firebase-admin types.
+ * Price-list rendering types. Kept SDK-free so the PDF builder can be
+ * unit-tested without firebase-admin types. PricingModel + DiscountLevel
+ * come from @oww/shared so this stays in lockstep with the catalog wire
+ * format.
  */
 
-export type PricingModel =
-  | "time"
-  | "area"
-  | "length"
-  | "count"
-  | "weight"
-  | "direct"
-  | "sla";
-
-export type DiscountLevel = "none" | "member";
+import type { DiscountLevel, PricingModel } from "@oww/shared";
+export type { DiscountLevel, PricingModel } from "@oww/shared";
 
 export interface PriceListCatalogItem {
   code: string;

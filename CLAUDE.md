@@ -15,6 +15,8 @@ This is a comprehensive IoT machine authentication system featuring secure NFC-b
 | **Web (Checkout)** | `web/apps/checkout/` | Public checkout app (React + Vite + shadcn/ui) |
 | **Web (Admin)** | `web/apps/admin/` | Admin dashboard (React + Vite + shadcn/ui) |
 | **Web (Shared)** | `web/modules/` | Shared Firebase, hooks, UI components |
+| **Shared TS** | `shared/` | `@oww/shared` — SDK-agnostic types/helpers consumed by web, functions, and the Electron kiosk. See [ADR-0027](docs/adr/0027-shared-typescript-package.md). |
+| **Checkout Kiosk** | `checkout-kiosk/` | Electron hardware bridge (NFC today; printer next per #313/#314) |
 | **Gateway** | `maco_gateway/` | Python pw_rpc proxy (ASCON + Firebase) |
 
 **Component-specific documentation:**

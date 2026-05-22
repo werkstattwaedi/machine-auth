@@ -42,17 +42,23 @@ firebase use
 step "Generating env files from operations config"
 npm run generate-env
 
-step "Functions: install + build"
-(cd functions && npm install && npm run build)
+step "Install all workspace dependencies (root)"
+npm install
 
-step "Web: install + build (checkout + admin)"
-(cd web && npm install && npm run build)
+step "Shared TS package: build"
+npm run build:shared
+
+step "Functions: build"
+(cd functions && npm run build)
+
+step "Web: build (checkout + admin)"
+(cd web && npm run build)
 
 step "Gateway: build payload + generate .env from gcloud secrets"
 npx tsx scripts/deploy-gateway.ts --build-only
 
-step "Checkout kiosk: install + electron-rebuild"
-(cd checkout-kiosk && npm install)
+step "Checkout kiosk: typecheck (electron-rebuild ran in postinstall)"
+(cd checkout-kiosk && npm run typecheck)
 
 cat <<EOF
 

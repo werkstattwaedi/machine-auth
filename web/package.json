@@ -3,15 +3,11 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "workspaces": [
-    "modules",
-    "apps/*"
-  ],
   "scripts": {
     "dev:checkout": "cd apps/checkout && npm run dev",
     "dev:admin": "cd apps/admin && npm run dev -- --port 5174",
-    "build": "npm run build -w @oww/checkout -w @oww/admin",
-    "test": "npm run test -w @oww/checkout -w @oww/admin",
+    "build": "npm --prefix apps/checkout run build && npm --prefix apps/admin run build",
+    "test": "npm --prefix apps/checkout test && npm --prefix apps/admin test",
     "test:integration": "cd apps/checkout && npm run test:integration",
     "test:browser": "cd apps/checkout && npm run test:browser",
     "test:e2e": "cd apps/checkout && npm run test:e2e && cd ../admin && npm run test:e2e",
