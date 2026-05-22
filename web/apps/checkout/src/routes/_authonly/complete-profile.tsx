@@ -1,13 +1,15 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { z } from "zod/v4/mini"
 import { useAuth, isProfileComplete } from "@modules/lib/auth"
 import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
 import { useDb } from "@modules/lib/firebase-context"
 import { userRef } from "@modules/lib/firestore-helpers"
+import { parseSwissPhone } from "@modules/lib/phone"
+import { isValidSwissPlz } from "@modules/lib/postal"
 import { Label } from "@modules/components/ui/label"
 import { Checkbox } from "@modules/components/ui/checkbox"
 import {
@@ -85,6 +87,11 @@ function CompleteProfilePage() {
   const isFirma = userType === "firma"
   const profileComplete = userDoc ? isProfileComplete(userDoc) : false
 
+  // Cache the parsed E.164 phone result from validation so we don't have to
+  // parse twice (validate → submit). `useRef` keeps it stable across renders
+  // without triggering re-validation.
+  const normalisedPhoneRef = useRef<string | null>(null)
+
   useEffect(() => {
     if (profileComplete) {
       navigate({ to: redirectTo || "/visit" })
@@ -110,7 +117,10 @@ function CompleteProfilePage() {
         firstName: values.firstName.trim(),
         lastName: values.lastName.trim(),
         userType: values.userType,
-        phone: values.phone.trim() || null,
+        // Phone was already parsed + normalised during validation; use the
+        // cached E.164 form. Empty input is stored as `null` (matches
+        // `UserDoc.phone: string | null`).
+        phone: normalisedPhoneRef.current,
         billingAddress: {
           company: values.userType === "firma" ? values.company.trim() : "",
           street: values.street.trim(),
@@ -148,7 +158,8 @@ function CompleteProfilePage() {
             <input
               id="firstName"
               {...register("firstName", {
-                required: "Vorname ist erforderlich",
+                validate: (v) =>
+                  v.trim() !== "" || "Vorname ist erforderlich",
               })}
               className={fieldCls("firstName")}
               autoComplete="given-name"
@@ -164,7 +175,8 @@ function CompleteProfilePage() {
             <input
               id="lastName"
               {...register("lastName", {
-                required: "Nachname ist erforderlich",
+                validate: (v) =>
+                  v.trim() !== "" || "Nachname ist erforderlich",
               })}
               className={fieldCls("lastName")}
               autoComplete="family-name"
@@ -252,7 +264,12 @@ function CompleteProfilePage() {
             <Label className="text-sm font-bold">PLZ</Label>
             <input
               {...register("zip", {
-                validate: (v) => v.trim() !== "" || "PLZ ist erforderlich",
+                validate: (v) => {
+                  if (v.trim() === "") return "PLZ ist erforderlich"
+                  if (!isValidSwissPlz(v))
+                    return "PLZ muss vierstellig sein (z.B. 8820)"
+                  return true
+                },
               })}
               className={`${fieldCls("zip")} tabular-nums`}
               placeholder="8820"
@@ -293,12 +310,31 @@ function CompleteProfilePage() {
             </span>
           </Label>
           <input
-            {...register("phone")}
+            {...register("phone", {
+              validate: async (v) => {
+                // Optional field: empty is fine. Non-empty must parse as a
+                // Swiss phone number (libphonenumber-js, lazy-loaded).
+                const result = await parseSwissPhone(v)
+                if (result.ok) {
+                  normalisedPhoneRef.current = result.e164
+                  return true
+                }
+                if (result.reason === "empty") {
+                  normalisedPhoneRef.current = null
+                  return true
+                }
+                normalisedPhoneRef.current = null
+                return "Bitte gib eine gültige Schweizer Telefonnummer ein (z.B. +41 79 123 45 67)"
+              },
+            })}
             type="tel"
-            className={INPUT_OK}
+            className={fieldCls("phone")}
             placeholder="+41 79 123 45 67"
             autoComplete="tel"
           />
+          {isSubmitted && errors.phone && (
+            <ErrorBadge message={errors.phone.message!} />
+          )}
         </div>
 
         <Controller

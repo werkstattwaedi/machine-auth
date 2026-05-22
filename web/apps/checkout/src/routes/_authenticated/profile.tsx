@@ -10,6 +10,8 @@ import {
   permissionsCollection,
   userRef,
 } from "@modules/lib/firestore-helpers"
+import { parseSwissPhone } from "@modules/lib/phone"
+import { isValidSwissPlz } from "@modules/lib/postal"
 import { Label } from "@modules/components/ui/label"
 import { Badge } from "@modules/components/ui/badge"
 import {
@@ -18,7 +20,7 @@ import {
 } from "@modules/components/profile-form"
 import { useForm } from "react-hook-form"
 import { Check, KeyRound, Loader2, Mail, MapPin, Save } from "lucide-react"
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 import { USER_TYPE_LABELS, type UserType } from "@modules/lib/pricing"
 import { cn } from "@modules/lib/utils"
 
@@ -80,6 +82,10 @@ function ProfilePage() {
   const fieldCls = (field: keyof ProfileFormValues) =>
     isSubmitted && errors[field] ? INPUT_ERR : INPUT
 
+  // Cache the parsed E.164 phone result from validation so we don't have to
+  // parse twice (validate → submit). See complete-profile.tsx for context.
+  const normalisedPhoneRef = useRef<string | null>(null)
+
   useEffect(() => {
     if (userDoc) {
       reset({
@@ -103,7 +109,9 @@ function ProfilePage() {
         firstName: values.firstName.trim(),
         lastName: values.lastName.trim(),
         userType: values.userType,
-        phone: values.phone.trim() || null,
+        // Phone was already parsed + normalised during validation; use the
+        // cached E.164 form. Empty input is stored as `null`.
+        phone: normalisedPhoneRef.current,
         billingAddress: {
           company: values.userType === "firma" ? values.company.trim() : "",
           street: values.street.trim(),
@@ -173,7 +181,8 @@ function ProfilePage() {
             <Label className="text-sm font-bold">Vorname</Label>
             <input
               {...register("firstName", {
-                required: "Vorname ist erforderlich",
+                validate: (v) =>
+                  v.trim() !== "" || "Vorname ist erforderlich",
               })}
               className={fieldCls("firstName")}
               autoComplete="given-name"
@@ -184,7 +193,8 @@ function ProfilePage() {
             <Label className="text-sm font-bold">Nachname</Label>
             <input
               {...register("lastName", {
-                required: "Nachname ist erforderlich",
+                validate: (v) =>
+                  v.trim() !== "" || "Nachname ist erforderlich",
               })}
               className={fieldCls("lastName")}
               autoComplete="family-name"
@@ -218,7 +228,9 @@ function ProfilePage() {
         <div className="flex flex-col gap-1">
           <Label className="text-sm font-bold">Strasse und Hausnummer</Label>
           <input
-            {...register("street", { required: "Strasse ist erforderlich" })}
+            {...register("street", {
+              validate: (v) => v.trim() !== "" || "Strasse ist erforderlich",
+            })}
             className={fieldCls("street")}
             autoComplete="street-address"
           />
@@ -229,7 +241,14 @@ function ProfilePage() {
           <div className="flex flex-col gap-1">
             <Label className="text-sm font-bold">PLZ</Label>
             <input
-              {...register("zip", { required: "PLZ ist erforderlich" })}
+              {...register("zip", {
+                validate: (v) => {
+                  if (v.trim() === "") return "PLZ ist erforderlich"
+                  if (!isValidSwissPlz(v))
+                    return "PLZ muss vierstellig sein (z.B. 8820)"
+                  return true
+                },
+              })}
               className={`${fieldCls("zip")} tabular-nums`}
               maxLength={4}
               inputMode="numeric"
@@ -240,7 +259,9 @@ function ProfilePage() {
           <div className="flex flex-col gap-1">
             <Label className="text-sm font-bold">Ort</Label>
             <input
-              {...register("city", { required: "Ort ist erforderlich" })}
+              {...register("city", {
+                validate: (v) => v.trim() !== "" || "Ort ist erforderlich",
+              })}
               className={fieldCls("city")}
               autoComplete="address-level2"
             />
@@ -271,11 +292,28 @@ function ProfilePage() {
             <span className="text-muted-foreground font-normal">(optional)</span>
           </Label>
           <input
-            {...register("phone")}
+            {...register("phone", {
+              validate: async (v) => {
+                // Optional field: empty is fine. Non-empty must parse as a
+                // Swiss phone number (libphonenumber-js, lazy-loaded).
+                const result = await parseSwissPhone(v)
+                if (result.ok) {
+                  normalisedPhoneRef.current = result.e164
+                  return true
+                }
+                if (result.reason === "empty") {
+                  normalisedPhoneRef.current = null
+                  return true
+                }
+                normalisedPhoneRef.current = null
+                return "Bitte gib eine gültige Schweizer Telefonnummer ein (z.B. +41 79 123 45 67)"
+              },
+            })}
             type="tel"
-            className={INPUT}
+            className={fieldCls("phone")}
             autoComplete="tel"
           />
+          <ErrorText message={errors.phone?.message} />
         </div>
 
         <div className="flex items-center gap-3 mt-2 pt-5 border-t border-border">
