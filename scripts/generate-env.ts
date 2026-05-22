@@ -62,9 +62,12 @@ const FUNCTIONS_SECRETS: VarMapping[] = [
 const FUNCTIONS_RESEND: VarMapping[] = [
   { envVar: "RESEND_FROM_EMAIL", jsonPath: "functions.resendFromEmail" },
   { envVar: "RESEND_TWINT_TEMPLATE_ID", jsonPath: "functions.resendTwintTemplateId" },
+  { envVar: "RESEND_MONTHLY_TEMPLATE_ID", jsonPath: "functions.resendMonthlyTemplateId" },
   { envVar: "RESEND_QRBILL_TEMPLATE_ID", jsonPath: "functions.resendQrBillTemplateId" },
   { envVar: "RESEND_LOGIN_TEMPLATE_ID", jsonPath: "functions.resendLoginTemplateId" },
   { envVar: "RESEND_INVITE_TEMPLATE_ID", jsonPath: "functions.resendInviteTemplateId" },
+  { envVar: "KASSE_EMAIL", jsonPath: "functions.kasseEmail" },
+  { envVar: "AUTO_ACK_MIN_AGE_HOURS", jsonPath: "functions.autoAckMinAgeHours" },
 ];
 
 const VITE_FIREBASE: VarMapping[] = [
@@ -149,7 +152,10 @@ const TEST_FIXTURE_CONFIG: Record<string, unknown> = {
     resendQrBillTemplateId: "ci-test-qrbill-template",
     resendLoginTemplateId: "ci-test-login-template",
     resendInviteTemplateId: "ci-test-invite-template",
-    resendTwintTemplateId: "",
+    resendTwintTemplateId: "ci-test-twint-template",
+    resendMonthlyTemplateId: "ci-test-monthly-template",
+    kasseEmail: "kasse@test.localhost",
+    autoAckMinAgeHours: "1",
   },
   web: {
     checkoutDomain: "localhost:5188",

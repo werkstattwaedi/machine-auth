@@ -28,8 +28,8 @@ process.env.PAYMENT_CURRENCY = "CHF";
 process.env.RESEND_API_KEY = "re_test_fake";
 process.env.RESEND_FROM_EMAIL = "OWW Test <test@localhost>";
 process.env.RESEND_QRBILL_TEMPLATE_ID = "test-qrbill-template";
-process.env.RESEND_INVOICE_TWINT_TEMPLATE_ID = "test-twint-template";
-process.env.RESEND_INVOICE_MONTHLY_TEMPLATE_ID = "test-monthly-template";
+process.env.RESEND_TWINT_TEMPLATE_ID = "test-twint-template";
+process.env.RESEND_MONTHLY_TEMPLATE_ID = "test-monthly-template";
 process.env.KASSE_EMAIL = "kasse@test.localhost";
 
 import { expect } from "chai";

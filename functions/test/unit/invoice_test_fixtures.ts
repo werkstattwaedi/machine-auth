@@ -330,6 +330,31 @@ export function paidInvoice(): InvoiceData {
 }
 
 /**
+ * Issue #251: TWINT-method invoice. The customer selected TWINT in the
+ * Bezahlen step, so the PDF shows a "Zahlweise: TWINT" notice and omits
+ * the QR payment slip. paidVia stays null — we have no bank confirmation
+ * at the point this PDF is regenerated.
+ */
+export function twintMethodInvoice(): InvoiceData {
+  const base = singleCheckoutInvoice();
+  base.referenceNumber = 10;
+  base.paymentMethod = "twint";
+  return base;
+}
+
+/**
+ * Issue #251: Sammelrechnung-method invoice. The customer routed this
+ * checkout onto their monthly bill, so the PDF shows a "Zahlweise:
+ * Sammelrechnung" notice and omits the QR payment slip.
+ */
+export function monthlyMethodInvoice(): InvoiceData {
+  const base = singleCheckoutInvoice();
+  base.referenceNumber = 11;
+  base.paymentMethod = "monthly";
+  return base;
+}
+
+/**
  * Issue #237: zero-amount "free" bill (e.g. Interne Nutzung).
  * paidVia="free" + grandTotal=0 — the PDF must show a "Keine Zahlung
  * erforderlich" notice and NO Swiss QR-bill payment slip.

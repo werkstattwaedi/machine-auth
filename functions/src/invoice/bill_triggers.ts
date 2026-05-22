@@ -55,12 +55,12 @@ const resendFromEmail = defineString("RESEND_FROM_EMAIL");
 const resendQrBillTemplateId = defineString("RESEND_QRBILL_TEMPLATE_ID");
 // Issue #251: method-aware invoice emails. Ops repo populates the values;
 // emulator runs send fine with empty defaults via assertTemplateConfigured.
-const resendInvoiceMonthlyTemplateId = defineString(
-  "RESEND_INVOICE_MONTHLY_TEMPLATE_ID",
+const resendMonthlyTemplateId = defineString(
+  "RESEND_MONTHLY_TEMPLATE_ID",
   { default: "" },
 );
-const resendInvoiceTwintTemplateId = defineString(
-  "RESEND_INVOICE_TWINT_TEMPLATE_ID",
+const resendTwintTemplateId = defineString(
+  "RESEND_TWINT_TEMPLATE_ID",
   { default: "" },
 );
 // Contact address surfaced on the TWINT email ("contact kasse@... if in
@@ -235,6 +235,12 @@ async function assembleInvoiceData(
     }
   }
 
+  // Read the customer's chosen payment method from the first checkout.
+  // Null at bill-create time; set after acknowledgeBill / the cron lands.
+  // Gates whether the QR-bill payment slip is rendered (#251).
+  const primaryCheckoutData = checkoutDocs[0]?.data() as CheckoutEntity | undefined;
+  const paymentMethod = primaryCheckoutData?.paymentMethod ?? null;
+
   return {
     referenceNumber: bill.referenceNumber,
     invoiceDate: new Date(),
@@ -246,6 +252,7 @@ async function assembleInvoiceData(
     currency: bill.currency,
     paidAt: bill.paidAt?.toDate() ?? null,
     paidVia: bill.paidVia ?? null,
+    paymentMethod,
   };
 }
 
@@ -260,7 +267,10 @@ async function assembleInvoiceData(
  * Exported for integration testing — invoked directly to bypass the
  * Firestore trigger wrapper.
  */
-export async function tryGeneratePdf(billId: string): Promise<boolean> {
+export async function tryGeneratePdf(
+  billId: string,
+  options: { force?: boolean } = {},
+): Promise<boolean> {
   const db = getFirestore();
   const billRef = db.collection("bills").doc(billId);
 
@@ -268,8 +278,9 @@ export async function tryGeneratePdf(billId: string): Promise<boolean> {
   if (!billDoc.exists) return false;
   const bill = billDoc.data() as BillEntity;
 
-  // Already generated
-  if (bill.storagePath) return true;
+  // Already generated — `force` bypasses to allow ack-time regeneration
+  // when the payment method changes the PDF content (#251).
+  if (bill.storagePath && !options.force) return true;
 
   // Another process is working on it (and the lock isn't stale)
   if (bill.pdfGeneratedAt) {
@@ -326,13 +337,13 @@ function pickTemplate(method: PaymentMethod | null | undefined): TemplateChoice 
   switch (method) {
     case "twint":
       return {
-        id: resendInvoiceTwintTemplateId.value(),
-        paramName: "RESEND_INVOICE_TWINT_TEMPLATE_ID",
+        id: resendTwintTemplateId.value(),
+        paramName: "RESEND_TWINT_TEMPLATE_ID",
       };
     case "monthly":
       return {
-        id: resendInvoiceMonthlyTemplateId.value(),
-        paramName: "RESEND_INVOICE_MONTHLY_TEMPLATE_ID",
+        id: resendMonthlyTemplateId.value(),
+        paramName: "RESEND_MONTHLY_TEMPLATE_ID",
       };
     case "rechnung":
     default:
@@ -503,6 +514,23 @@ export const onBillUpdate = onDocumentUpdated(
     if (!before || !after) return;
     if (before.paymentMethodConfirmationTime) return;
     if (!after.paymentMethodConfirmationTime) return;
+
+    // Regenerate the PDF so it reflects the user's chosen method
+    // (#251). At create-time the PDF is built before the user picks a
+    // method, which means rechnung gets the QR slip by default. For
+    // TWINT / Sammelrechnung we don't want the QR slip in the PDF
+    // (the user already paid via TWINT or it's going on the next
+    // Sammelrechnung — they shouldn't see "pay this" again).
+    // tryGeneratePdf with `force: true` overwrites the existing PDF.
+    try {
+      await tryGeneratePdf(billId, { force: true });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error(
+        `onBillUpdate: tryGeneratePdf regen threw for bill ${billId}, continuing with existing PDF`,
+        { error: message },
+      );
+    }
 
     // Email + membership activation must be independent: a Resend
     // outage or template misconfiguration cannot block the user's

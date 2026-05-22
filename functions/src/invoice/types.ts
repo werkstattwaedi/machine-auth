@@ -77,6 +77,16 @@ export interface InvoiceData {
   currency: string;
   paidAt?: Date | null;
   paidVia?: "twint" | "ebanking" | "cash" | "free" | null;
+  /**
+   * Customer's chosen payment method from Step 4 (Bezahlen). Null at
+   * bill-create time (PDF generated before the user picks). Set after
+   * `acknowledgeBill` lands and the PDF is regenerated. Gates the QR
+   * payment slip: only rendered for `rechnung` or null — TWINT /
+   * Sammelrechnung get a method-specific notice instead, so users
+   * don't think they need to pay via QR after already settling via
+   * TWINT or having it routed to their monthly bill.
+   */
+  paymentMethod?: "rechnung" | "twint" | "monthly" | null;
 }
 
 /** Format a numeric reference number for display, e.g. 1 → "RE-000001" */
