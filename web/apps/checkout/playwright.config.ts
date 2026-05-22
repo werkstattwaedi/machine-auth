@@ -19,7 +19,13 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   timeout: 30_000,
-  expect: { timeout: 10_000 },
+  // Tolerate sub-percent font/subpixel rendering drift between dev hosts
+  // and CI (issue #317). Observed drift is ~50–160 pixels (ratio < 0.001);
+  // 1% gives generous headroom while still catching layout regressions.
+  expect: {
+    timeout: 10_000,
+    toHaveScreenshot: { maxDiffPixelRatio: 0.01 },
+  },
 
   use: {
     baseURL: `https://localhost:${E2E_PORTS.vite}`,
