@@ -146,7 +146,7 @@ export function PersonCard({
                 className="text-sm text-muted-foreground hover:text-foreground transition-colors"
                 onClick={onSignOut}
               >
-                Nicht {person.firstName} {person.lastName}?{" "}
+                Du bist nicht {person.firstName} {person.lastName}?{" "}
                 <span className="underline">Abmelden</span>
               </button>
             </div>

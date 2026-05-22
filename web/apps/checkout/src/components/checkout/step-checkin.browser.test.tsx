@@ -295,6 +295,11 @@ describe("Identity hint", () => {
     })
 
     expect(screen.queryByText("Bereits registriert oder Konto erstellen?")).toBeNull()
+    // Issue #259: line must read as a full sentence so users notice it —
+    // "Du bist nicht <Name>? Abmelden" rather than just "Nicht <Name>?".
+    expect(
+      screen.getByText(/Du bist nicht Max Muster\?/),
+    ).toBeTruthy()
     expect(screen.getByText(/Abmelden/)).toBeTruthy()
   })
 
