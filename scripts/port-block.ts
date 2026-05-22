@@ -19,7 +19,14 @@
 
 import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:net";
-import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, resolve } from "node:path";
 
 interface BlockSpec {
@@ -104,6 +111,73 @@ function shiftedKillPorts(basePath: string, offset: number): number[] {
   return [...new Set(ports)].sort((a, b) => a - b);
 }
 
+/**
+ * CI fallback: when the operations repo isn't available, copy committed
+ * `.env.test` fixtures into the file paths the emulator / Vite expect
+ * (`functions/.env.local`, `web/apps/{checkout,admin}/.env.development`).
+ *
+ * Existing files are backed up to a sibling `.env.test-backup` and
+ * restored at cleanup so this is safe to invoke on a developer machine
+ * that happens to lack the operations repo. Returns an array of restore
+ * functions to invoke during cleanup.
+ */
+function installTestFixtureEnvFiles(projectRoot: string): Array<() => void> {
+  const fixtures: Array<{ src: string; dst: string }> = [
+    {
+      src: resolve(projectRoot, "functions/.env.test"),
+      dst: resolve(projectRoot, "functions/.env.local"),
+    },
+    {
+      src: resolve(projectRoot, "web/apps/checkout/.env.test"),
+      dst: resolve(projectRoot, "web/apps/checkout/.env.development"),
+    },
+    {
+      src: resolve(projectRoot, "web/apps/admin/.env.test"),
+      dst: resolve(projectRoot, "web/apps/admin/.env.development"),
+    },
+  ];
+
+  const restorers: Array<() => void> = [];
+  for (const { src, dst } of fixtures) {
+    if (!existsSync(src)) {
+      console.error(
+        `[port-block] Missing test fixture ${src} — regenerate via 'npm run generate-env -- --emit-test-files'`
+      );
+      process.exit(78); // EX_CONFIG
+    }
+    const backup = dst + ".port-block-backup";
+    const hadOriginal = existsSync(dst);
+    if (hadOriginal) {
+      try {
+        renameSync(dst, backup);
+      } catch (err) {
+        console.error(
+          `[port-block] Failed to back up ${dst}: ${(err as Error).message}`
+        );
+        process.exit(70);
+      }
+    }
+    copyFileSync(src, dst);
+    console.error(`[port-block]   ${src} -> ${dst}`);
+
+    restorers.push(() => {
+      try {
+        if (existsSync(dst)) unlinkSync(dst);
+      } catch {
+        /* ignore */
+      }
+      if (hadOriginal && existsSync(backup)) {
+        try {
+          renameSync(backup, dst);
+        } catch {
+          /* ignore */
+        }
+      }
+    });
+  }
+  return restorers;
+}
+
 async function main(): Promise<never> {
   const sepIdx = process.argv.indexOf("--");
   if (sepIdx === -1 || sepIdx === process.argv.length - 1) {
@@ -121,10 +195,10 @@ async function main(): Promise<never> {
   // param added to config.jsonc but not yet reflected in
   // functions/.env.local) makes Firebase prompt interactively during
   // emulator startup and the test run hangs forever. CI runners don't
-  // have the operations repo cloned — they materialize env files via
-  // other means (committed fixtures, secrets injection) — so we silently
-  // skip when the config isn't present. Nested invocations skip this
-  // entirely; the parent already handled it.
+  // have the operations repo cloned — they fall back to the committed
+  // .env.test fixtures (installTestFixtureEnvFiles below). Nested
+  // invocations skip this entirely; the parent already handled it.
+  const restoreEnvFiles: Array<() => void> = [];
   if (!process.env.PORT_BLOCK) {
     const configDir =
       process.env.OPERATIONS_CONFIG_DIR ||
@@ -144,8 +218,9 @@ async function main(): Promise<never> {
       }
     } else {
       console.error(
-        `[port-block] Skipping generate-env (no operations config at ${configPath})`
+        `[port-block] No operations config at ${configPath} — falling back to checked-in .env.test fixtures`
       );
+      restoreEnvFiles.push(...installTestFixtureEnvFiles(projectRoot));
     }
   }
 
@@ -218,6 +293,14 @@ async function main(): Promise<never> {
       if (existsSync(runtimeConfigPath)) unlinkSync(runtimeConfigPath);
     } catch {
       /* ignore */
+    }
+    // Undo any .env.test → .env.local copies installed earlier
+    for (const restore of restoreEnvFiles) {
+      try {
+        restore();
+      } catch {
+        /* ignore */
+      }
     }
   };
 

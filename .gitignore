@@ -71,6 +71,12 @@ scripts/.env
 scripts/.env.local
 maco_gateway/.env.local
 
+# Test fixtures (committed — see scripts/generate-env.ts --emit-test-files
+# and docs/port-blocks.md). These hold only dummy / public values and are
+# the CI fallback when the operations repo isn't available.
+!functions/.env.test
+!web/**/.env.test
+
 # Firebase emulator data (auto-exported, persisted between runs)
 firebase-seed/
 firebase-data/

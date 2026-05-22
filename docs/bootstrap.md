@@ -220,6 +220,14 @@ npm run generate-env                 # reads ../machine-auth-operations/config*.
 If this step fails, check that the operations repo has `config.jsonc` and
 `config.local.jsonc` populated — see its README.
 
+**No access to the operations repo?** For test-only workflows (running
+`npm run test:web:e2e` or browsing the emulator UI without exercising
+production-shaped paths), you can fall back to the committed
+`.env.test` fixtures. The port-block broker auto-copies them into the
+runtime env paths when the operations config is missing — see
+[`docs/port-blocks.md`](port-blocks.md) ("Updating test fixtures").
+This is the same path CI uses on every PR (issue #296).
+
 ---
 
 ## 8. Particle udev rule (P2 hardware only)

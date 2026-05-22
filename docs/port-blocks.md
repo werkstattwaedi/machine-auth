@@ -23,11 +23,43 @@ propagated to `functions/.env.local`) makes Firebase prompt
 interactively for the missing value during emulator startup, and the
 test hangs forever — the auto-regen prevents that for local dev.
 
-On CI runners that don't clone the operations repo, the broker prints
-`[port-block] Skipping generate-env (no operations config at …)` and
-proceeds. Env files are expected to be materialized by the CI workflow
-itself (committed fixtures, secrets injection, etc.). Nested broker
-invocations also skip the regen — the parent already handled it.
+On CI runners that don't clone the operations repo, the broker logs
+`[port-block] No operations config at … — falling back to checked-in
+.env.test fixtures` and copies the committed `.env.test` files
+(`functions/.env.test`, `web/apps/{checkout,admin}/.env.test`) into the
+runtime paths the emulator and Vite expect (`functions/.env.local`,
+`web/apps/{checkout,admin}/.env.development`). Any pre-existing file at
+the destination is moved to a `.port-block-backup` sibling and
+restored when the broker exits, so this is safe to invoke on a
+developer machine that happens to lack the operations repo. Nested
+broker invocations skip the regen entirely — the parent already
+handled it.
+
+## Updating test fixtures
+
+The `.env.test` files contain only dummy / public values (test crypto
+keys, `re_test_fake_*` Resend keys, placeholder Particle / gateway
+keys, fake-API Firebase emulator config). They are committed to git so
+CI runners can boot the emulator suite + Playwright without the
+operations repo. When the operations config gains a new param, two
+things must happen:
+
+1. Add the new key to `TEST_FIXTURE_CONFIG` (or
+   `TEST_FIXTURE_OVERRIDES`, if it's a secret) in
+   [`scripts/generate-env.ts`](../scripts/generate-env.ts).
+2. Regenerate and commit the fixtures:
+
+   ```bash
+   npx tsx scripts/generate-env.ts --emit-test-files
+   git add functions/.env.test web/apps/checkout/.env.test web/apps/admin/.env.test
+   ```
+
+CI fails fast if the committed fixtures don't match what
+`--emit-test-files` produces — see the `Verify .env.test fixtures are
+fresh` step in [`.github/workflows/test.yml`](../.github/workflows/test.yml).
+The dedicated `e2e` workflow job then runs `npm run test:web:e2e` on
+every PR (issue #296), so stale screenshot baselines block merge
+instead of slipping to `main`.
 
 ## Usage
 

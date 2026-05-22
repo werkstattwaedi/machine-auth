@@ -5,6 +5,19 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      update_snapshots:
+        description: "Run e2e with --update-snapshots and upload the regenerated PNGs as an artifact you can unzip into the snapshot dirs to update baselines."
+        type: boolean
+        default: false
+
+# `contents: read` is the minimum scope this workflow needs (checkout
+# only; no pushes, no comments, no releases). Locking it down silences
+# the CodeQL "Workflow does not contain permissions" warning and limits
+# the blast radius if a dependency in this pipeline is ever compromised.
+permissions:
+  contents: read
 
 jobs:
   test:
@@ -39,5 +52,131 @@ jobs:
       - name: Install functions dependencies
         run: cd functions && npm ci
 
+      # Freshness guard (issue #296): the committed `.env.test` fixtures
+      # MUST match what `generate-env --emit-test-files` produces. If a
+      # new param is added to the operations config without updating the
+      # `TEST_FIXTURE_CONFIG` / `TEST_FIXTURE_OVERRIDES` maps in
+      # `scripts/generate-env.ts`, this fails fast — the e2e job below
+      # would otherwise hang on a missing env var. `git status` catches
+      # both content drift and a missing checked-in file (untracked
+      # output is also a freshness failure).
+      - name: Verify .env.test fixtures are fresh
+        run: |
+          npx tsx scripts/generate-env.ts --emit-test-files
+          changed=$(git status --porcelain -- \
+              functions/.env.test \
+              web/apps/checkout/.env.test \
+              web/apps/admin/.env.test)
+          if [ -n "$changed" ]; then
+            echo "::error::.env.test fixtures are stale. Run 'npx tsx scripts/generate-env.ts --emit-test-files' and commit:" >&2
+            echo "$changed" >&2
+            git diff --no-color -- \
+                functions/.env.test \
+                web/apps/checkout/.env.test \
+                web/apps/admin/.env.test >&2 || true
+            exit 1
+          fi
+
       - name: Build & test (web + functions + integration)
         run: npm run test:precommit
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
+            functions/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install web dependencies
+        run: cd web && npm ci
+
+      - name: Install functions dependencies
+        run: cd functions && npm ci
+
+      # Functions are compiled TypeScript — the Firebase Functions emulator
+      # loads `functions/lib/src/index.js`, which only exists after `tsc`
+      # runs. The `test` job builds it implicitly as part of `npm run
+      # test:precommit`, but this is a separate runner so we have to do
+      # it again. Without this step the emulator silently runs without
+      # Functions and every e2e that touches `requestLoginCode` /
+      # checkout APIs fails on `getByTestId('login-code-stage')` timeouts.
+      - name: Build functions
+        run: cd functions && npm run build
+
+      - name: Install Playwright browsers
+        # `--with-deps` pulls the runtime system libraries chromium needs
+        # (ffmpeg, fonts, NSS). Chromium only — Firefox/WebKit aren't part
+        # of the e2e matrix.
+        run: cd web/apps/checkout && npx playwright install --with-deps chromium
+
+      - name: Show Playwright version
+        # Surfacing the pinned version makes screenshot drift across
+        # bundle bumps debuggable from the CI log alone.
+        run: cd web/apps/checkout && npx playwright --version
+
+      - name: Run e2e tests
+        # `npm run test:web:e2e` already wraps itself in the port-block
+        # broker, which falls back to the committed `.env.test` fixtures
+        # when the operations repo isn't present (i.e. on CI). See
+        # docs/port-blocks.md.
+        #
+        # On a `workflow_dispatch` with `update_snapshots: true`, run the
+        # `:update-snapshots` variant instead, which threads
+        # `--update-snapshots` all the way down to `playwright test`.
+        # The "Upload regenerated snapshot baselines" step below ships
+        # the resulting PNGs back as a flat artifact.
+        run: |
+          if [ "${{ inputs.update_snapshots }}" = "true" ]; then
+            npm run test:web:e2e:update-snapshots
+          else
+            npm run test:web:e2e
+          fi
+
+      # Regular CI failure artifact. Inside each failed-test directory
+      # Playwright writes `*-actual.png` / `*-expected.png` / `*-diff.png`
+      # alongside the trace.zip — drop the `*-actual.png` into the
+      # corresponding `e2e/*.spec.ts-snapshots/` path to update a baseline.
+      - name: Upload Playwright traces + screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          path: |
+            web/apps/checkout/test-results/
+            web/apps/admin/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      # On `workflow_dispatch` with `update_snapshots: true`, ship the
+      # regenerated baselines as a flat artifact. Download, unzip into
+      # the repo (`unzip -o updated-snapshots.zip`), commit, push.
+      - name: Upload regenerated snapshot baselines
+        if: always() && inputs.update_snapshots == true
+        uses: actions/upload-artifact@v4
+        with:
+          name: updated-snapshots
+          path: |
+            web/apps/checkout/e2e/**/*-snapshots/**
+            web/apps/admin/e2e/**/*-snapshots/**
+          if-no-files-found: warn
+          retention-days: 7
