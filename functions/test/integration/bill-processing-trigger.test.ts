@@ -29,8 +29,9 @@ process.env.RESEND_API_KEY = "re_test_fake";
 process.env.RESEND_FROM_EMAIL = "OWW Test <test@localhost>";
 process.env.RESEND_QRBILL_TEMPLATE_ID = "test-qrbill-template";
 process.env.RESEND_TWINT_TEMPLATE_ID = "test-twint-template";
+// Issue #245: RESEND_MONTHLY_TEMPLATE_ID is now the *aggregated*
+// Sammelrechnung template (per-visit Belege no longer email).
 process.env.RESEND_MONTHLY_TEMPLATE_ID = "test-monthly-template";
-process.env.RESEND_SAMMELRECHNUNG_TEMPLATE_ID = "test-sammelrechnung-template";
 process.env.KASSE_EMAIL = "kasse@test.localhost";
 
 import { expect } from "chai";
@@ -657,8 +658,9 @@ describe("bill processing triggers (Integration)", () => {
       it("picks Sammelrechnung template for monthly-acked invoice (aggregated bill, #245)", async () => {
         // Post-#245 a `kind: "invoice"` bill whose linked checkout has
         // paymentMethod "monthly" is the aggregated Sammelrechnung
-        // emitted by monthlyBillRun. The per-visit Belege never reach
-        // trySendEmail (kind === "beleg" short-circuits earlier).
+        // emitted by monthlyBillRun. Reuses RESEND_MONTHLY_TEMPLATE_ID —
+        // the per-visit Belege never reach trySendEmail (kind === "beleg"
+        // short-circuits earlier).
         const billId = "bill-sammelrechnung";
         await seedCheckout("co-default", {
           paymentMethod: "monthly",
@@ -676,7 +678,7 @@ describe("bill processing triggers (Integration)", () => {
           string,
           { template: { id: string } },
         ];
-        expect(entity.template.id).to.equal("test-sammelrechnung-template");
+        expect(entity.template.id).to.equal("test-monthly-template");
       });
 
       it("defaults to QR-Rechnung template when paymentMethod is null (auto-ack with no last selection)", async () => {

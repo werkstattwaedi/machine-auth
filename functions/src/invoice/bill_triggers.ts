@@ -63,14 +63,12 @@ const resendTwintTemplateId = defineString(
   "RESEND_TWINT_TEMPLATE_ID",
   { default: "" },
 );
-// Aggregated Sammelrechnung email — emitted by `monthlyBillRun` on the 1st
-// of each month (issue #245). Distinct from RESEND_MONTHLY_TEMPLATE_ID,
-// which still ships per-visit Beleg notifications. Falls back to the
-// generic QR-bill template if unset.
-const resendSammelrechnungTemplateId = defineString(
-  "RESEND_SAMMELRECHNUNG_TEMPLATE_ID",
-  { default: "" },
-);
+// Aggregated Sammelrechnung email (issue #245). Repurposes the existing
+// `RESEND_MONTHLY_TEMPLATE_ID` ops param — per-visit Belege no longer
+// email, so the template content shifts from "queued for monthly" to
+// "your Sammelrechnung is ready" via an ops template-copy update. Falls
+// back to the generic QR-bill template when unset (emulator mode).
+const resendSammelrechnungTemplateId = resendMonthlyTemplateId;
 // Contact address surfaced on the TWINT email ("contact kasse@... if in
 // error"). Set in the operations repo per env.
 const kasseEmail = defineString("KASSE_EMAIL", { default: "" });
@@ -358,13 +356,14 @@ function pickTemplate(
 ): TemplateChoice {
   // Aggregated Sammelrechnung (issue #245): kind "invoice" + the linked
   // checkout still records paymentMethod "monthly" (each visit was
-  // monthly-acked). Falls back to the generic QR-bill template if the
-  // dedicated Sammelrechnung template id is unset.
+  // monthly-acked). Reuses RESEND_MONTHLY_TEMPLATE_ID — per-visit Belege
+  // no longer email, so the ops team owns shifting the template copy
+  // from per-visit "queued for monthly" to "your Sammelrechnung is ready".
   if ((bill.kind ?? "invoice") === "invoice" && method === "monthly") {
     const id = resendSammelrechnungTemplateId.value();
     return {
       id: id || resendQrBillTemplateId.value(),
-      paramName: id ? "RESEND_SAMMELRECHNUNG_TEMPLATE_ID" : "RESEND_QRBILL_TEMPLATE_ID",
+      paramName: id ? "RESEND_MONTHLY_TEMPLATE_ID" : "RESEND_QRBILL_TEMPLATE_ID",
     };
   }
   switch (method) {
