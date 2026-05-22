@@ -264,7 +264,17 @@
       // membership-activation triggers key off this transitioning from
       // null to set.
       "paymentMethodConfirmationTime": "timestamp | null",
-      "paymentMethodConfirmationSource": "user | auto | null"
+      "paymentMethodConfirmationSource": "user | auto | null",
+      // Document kind (issue #245). "invoice" = real, payable QR-bill
+      // (RE-XXXXXX); "beleg" = per-visit record for a member who picked
+      // Sammelrechnung (BL-XXXXXX, no QR slip). Belege are aggregated
+      // into a monthly invoice on the 1st by monthlyBillRun. Missing
+      // value is treated as "invoice" so legacy docs migrate-free.
+      "kind": "invoice | beleg",
+      // Set on a "beleg" once the monthlyBillRun cron has folded it into
+      // a "kind: invoice" Sammelrechnung. Re-runs skip Belege where this
+      // is set — provides the cron's idempotency guarantee.
+      "aggregatedIntoBillRef": "DocumentReference | null"
     }
   },
   "operations_log": {

@@ -140,7 +140,9 @@ export const acknowledgeBill = onCall<
 
   // Idempotent: a second click after the first one landed returns OK
   // without rewriting. The frontend may double-fire under double-tap.
-  if (bill.paymentMethodConfirmationTime) {
+  // For monthly: the bill has already been flipped to kind "beleg" — same
+  // short-circuit, since the kind transition is the commit-of-record.
+  if (bill.paymentMethodConfirmationTime || (bill.kind ?? "invoice") === "beleg") {
     return { ok: true };
   }
 
@@ -156,12 +158,26 @@ export const acknowledgeBill = onCall<
     if (freshBill.paymentMethodConfirmationTime) {
       return;
     }
+    if ((freshBill.kind ?? "invoice") === "beleg") {
+      return;
+    }
 
     const now = Timestamp.now();
-    tx.update(billRef, {
-      paymentMethodConfirmationTime: now,
-      paymentMethodConfirmationSource: "user",
-    });
+    if (paymentMethod === "monthly") {
+      // Sammelrechnung path (issue #245): the per-visit bill becomes a
+      // "Beleg" — a non-payable record of what was used this visit. The
+      // monthlyBillRun cron aggregates Belege into a real Sammelrechnung
+      // QR-bill on the 1st of the following month. We deliberately do
+      // NOT stamp paymentMethodConfirmationTime — keeping it null means
+      // the email/membership triggers in `onBillUpdate` stay no-ops, and
+      // the auto-ack cron doesn't pick this back up (it skips Belege).
+      tx.update(billRef, { kind: "beleg" });
+    } else {
+      tx.update(billRef, {
+        paymentMethodConfirmationTime: now,
+        paymentMethodConfirmationSource: "user",
+      });
+    }
 
     if (linkedCheckoutRef) {
       tx.update(linkedCheckoutRef, {
@@ -176,6 +192,7 @@ export const acknowledgeBill = onCall<
     billId,
     paymentMethod,
     callerUid,
+    flipped: paymentMethod === "monthly" ? "beleg" : "ack",
   });
 
   return { ok: true };
@@ -214,6 +231,8 @@ export async function runAutoAcknowledgeBills(
 
     // Free bills are pre-acked at creation, but defensive belt-and-suspenders.
     if (bill.paidVia === "free") continue;
+    // Belege are never acked — they wait for monthlyBillRun.
+    if ((bill.kind ?? "invoice") === "beleg") continue;
 
     const linkedCheckoutRef: DocumentReference | null =
       bill.checkouts.length > 0 ? bill.checkouts[0] : null;
@@ -226,6 +245,7 @@ export async function runAutoAcknowledgeBills(
       if (!fresh.exists) return;
       const freshBill = fresh.data() as BillEntity;
       if (freshBill.paymentMethodConfirmationTime) return;
+      if ((freshBill.kind ?? "invoice") === "beleg") return;
 
       let checkoutPaymentMethod: PaymentMethod | null = null;
       if (linkedCheckoutRef) {
@@ -234,6 +254,16 @@ export async function runAutoAcknowledgeBills(
           const co = coSnap.data() as CheckoutEntity;
           checkoutPaymentMethod = co.paymentMethod ?? null;
         }
+      }
+
+      // Sammelrechnung path (issue #245): a member who picked the
+      // monthly tab on Step 4 but never tapped commit. Mirror the
+      // user-ack-for-monthly transition — flip to Beleg instead of
+      // emailing a per-visit invoice. The monthlyBillRun cron sweeps
+      // up these Belege on the 1st.
+      if (checkoutPaymentMethod === "monthly") {
+        tx.update(doc.ref, { kind: "beleg" });
+        return;
       }
 
       tx.update(doc.ref, {

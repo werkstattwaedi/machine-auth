@@ -4,6 +4,8 @@
 import { DocumentReference, Timestamp } from "firebase-admin/firestore";
 import { CheckoutPersonEntity, CheckoutItemEntity, UsageType } from "../types/firestore_entities";
 
+export type BillKind = "invoice" | "beleg";
+
 export interface BillEntity {
   userId: DocumentReference;
   checkouts: DocumentReference[];
@@ -23,6 +25,14 @@ export interface BillEntity {
   // to set.
   paymentMethodConfirmationTime: Timestamp | null;
   paymentMethodConfirmationSource: "user" | "auto" | null;
+  // "invoice" = real, payable QR-bill. "beleg" = per-visit record for a
+  // member who picked Sammelrechnung — the QR-bill is emitted as the
+  // aggregated monthly invoice (`aggregatedIntoBillRef`) on the 1st.
+  // Missing `kind` is treated as "invoice" so legacy docs migrate-free.
+  kind?: BillKind;
+  // Set on a `kind: "beleg"` once monthlyBillRun has folded it into a
+  // monthly `kind: "invoice"`. Re-runs skip Belege where this is set.
+  aggregatedIntoBillRef?: DocumentReference | null;
 }
 
 /** Per-person entry fee for display on the invoice */
@@ -87,11 +97,30 @@ export interface InvoiceData {
    * TWINT or having it routed to their monthly bill.
    */
   paymentMethod?: "rechnung" | "twint" | "monthly" | null;
+  /**
+   * Discriminator for the rendered document. "invoice" → "Rechnung
+   * RE-XXXXXX" with QR slip; "beleg" → "Beleg BL-XXXXXX" without QR
+   * slip (a record of one Sammelrechnung-acked visit).
+   */
+  kind?: BillKind;
 }
 
-/** Format a numeric reference number for display, e.g. 1 → "RE-000001" */
+/** Format an invoice reference number for display, e.g. 1 → "RE-000001" */
 export function formatInvoiceNumber(n: number): string {
   return `RE-${String(n).padStart(6, "0")}`;
+}
+
+/** Format a Beleg reference number for display, e.g. 1 → "BL-000001" */
+export function formatBelegNumber(n: number): string {
+  return `BL-${String(n).padStart(6, "0")}`;
+}
+
+/** Format a bill's reference number using its `kind`. */
+export function formatBillReference(
+  n: number,
+  kind: BillKind | undefined,
+): string {
+  return kind === "beleg" ? formatBelegNumber(n) : formatInvoiceNumber(n);
 }
 
 /** Payment recipient configuration (from environment params) */

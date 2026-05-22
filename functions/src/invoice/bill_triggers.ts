@@ -21,7 +21,7 @@ import { defineSecret, defineString } from "firebase-functions/params";
 import { DocumentReference, getFirestore, Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { formatWorkshopDateTime } from "../util/workshop_timezone";
-import { formatInvoiceNumber } from "./types";
+import { formatBillReference } from "./types";
 import { logOperationError } from "../operations_log";
 import { assertTemplateConfigured } from "../util/resend_template";
 import { processMembershipForAckedBill } from "../membership/process_membership_payment";
@@ -61,6 +61,14 @@ const resendMonthlyTemplateId = defineString(
 );
 const resendTwintTemplateId = defineString(
   "RESEND_TWINT_TEMPLATE_ID",
+  { default: "" },
+);
+// Aggregated Sammelrechnung email — emitted by `monthlyBillRun` on the 1st
+// of each month (issue #245). Distinct from RESEND_MONTHLY_TEMPLATE_ID,
+// which still ships per-visit Beleg notifications. Falls back to the
+// generic QR-bill template if unset.
+const resendSammelrechnungTemplateId = defineString(
+  "RESEND_SAMMELRECHNUNG_TEMPLATE_ID",
   { default: "" },
 );
 // Contact address surfaced on the TWINT email ("contact kasse@... if in
@@ -238,8 +246,18 @@ async function assembleInvoiceData(
   // Read the customer's chosen payment method from the first checkout.
   // Null at bill-create time; set after acknowledgeBill / the cron lands.
   // Gates whether the QR-bill payment slip is rendered (#251).
+  // For the monthly aggregated bill (kind "invoice" with paymentMethod
+  // "monthly" on every linked checkout): the bill IS the Sammelrechnung,
+  // so it must show the QR slip. We don't want the
+  // "Dieser Betrag wird der nächsten Sammelrechnung […] hinzugefügt"
+  // notice — fall through to the rechnung path.
   const primaryCheckoutData = checkoutDocs[0]?.data() as CheckoutEntity | undefined;
-  const paymentMethod = primaryCheckoutData?.paymentMethod ?? null;
+  const rawPaymentMethod = primaryCheckoutData?.paymentMethod ?? null;
+  const kind = bill.kind ?? "invoice";
+  const paymentMethod =
+    kind === "invoice" && rawPaymentMethod === "monthly"
+      ? "rechnung"
+      : rawPaymentMethod;
 
   return {
     referenceNumber: bill.referenceNumber,
@@ -253,6 +271,7 @@ async function assembleInvoiceData(
     paidAt: bill.paidAt?.toDate() ?? null,
     paidVia: bill.paidVia ?? null,
     paymentMethod,
+    kind,
   };
 }
 
@@ -333,7 +352,21 @@ interface TemplateChoice {
   paramName: string;
 }
 
-function pickTemplate(method: PaymentMethod | null | undefined): TemplateChoice {
+function pickTemplate(
+  method: PaymentMethod | null | undefined,
+  bill: BillEntity,
+): TemplateChoice {
+  // Aggregated Sammelrechnung (issue #245): kind "invoice" + the linked
+  // checkout still records paymentMethod "monthly" (each visit was
+  // monthly-acked). Falls back to the generic QR-bill template if the
+  // dedicated Sammelrechnung template id is unset.
+  if ((bill.kind ?? "invoice") === "invoice" && method === "monthly") {
+    const id = resendSammelrechnungTemplateId.value();
+    return {
+      id: id || resendQrBillTemplateId.value(),
+      paramName: id ? "RESEND_SAMMELRECHNUNG_TEMPLATE_ID" : "RESEND_QRBILL_TEMPLATE_ID",
+    };
+  }
   switch (method) {
     case "twint":
       return {
@@ -372,6 +405,11 @@ export async function trySendEmail(billId: string): Promise<boolean> {
   // can be called directly from tests / one-off scripts — keep the guard.
   if (!bill.paymentMethodConfirmationTime) return false;
 
+  // Belege are per-visit records for a Sammelrechnung member (issue #245).
+  // They never email — the monthly aggregated invoice that supersedes
+  // them does. Defensive: the ack stamp shouldn't land on a Beleg anyway.
+  if ((bill.kind ?? "invoice") === "beleg") return false;
+
   // Free bills are auto-acked at creation to keep the cron out, but we
   // don't email a "here's your zero-amount invoice" PDF.
   if (bill.paidVia === "free") return false;
@@ -398,7 +436,7 @@ export async function trySendEmail(billId: string): Promise<boolean> {
   // Template selection always reads the checkout's last paymentMethod.
   // Auto-ack on a user who tapped TWINT but didn't commit still uses the
   // TWINT-was-selected template (safe because it doesn't claim payment).
-  const template = pickTemplate(checkout.paymentMethod ?? null);
+  const template = pickTemplate(checkout.paymentMethod ?? null, bill);
 
   // Acquire lock
   await billRef.update({ emailSentAt: Timestamp.now() });
@@ -418,7 +456,7 @@ export async function trySendEmail(billId: string): Promise<boolean> {
       expires: Date.now() + 24 * 3600 * 1000,
     });
 
-    const invoiceNumber = formatInvoiceNumber(bill.referenceNumber);
+    const invoiceNumber = formatBillReference(bill.referenceNumber, bill.kind);
     const recipientName = checkout.persons[0]?.name ?? "Kunde";
     const checkoutDate = formatWorkshopDateTime(
       checkout.created.toDate(),
@@ -446,7 +484,7 @@ export async function trySendEmail(billId: string): Promise<boolean> {
       attachments: [
         {
           path: signedUrl,
-          filename: `Rechnung-${invoiceNumber}.pdf`,
+          filename: `${(bill.kind ?? "invoice") === "beleg" ? "Beleg" : "Rechnung"}-${invoiceNumber}.pdf`,
         },
       ],
     });
@@ -512,8 +550,32 @@ export const onBillUpdate = onDocumentUpdated(
     const before = event.data?.before.data() as BillEntity | undefined;
     const after = event.data?.after.data() as BillEntity | undefined;
     if (!before || !after) return;
+
+    // Sammelrechnung path (issue #245): when acknowledgeBill /
+    // autoAcknowledgeBills flip a bill to kind "beleg", regenerate the
+    // PDF so the title reads "Beleg" / "Belegnummer:" instead of
+    // "Rechnung". No email, no membership activation — Belege wait for
+    // the monthly aggregation cron.
+    const beforeKind = before.kind ?? "invoice";
+    const afterKind = after.kind ?? "invoice";
+    if (beforeKind !== "beleg" && afterKind === "beleg") {
+      try {
+        await tryGeneratePdf(billId, { force: true });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.error(
+          `onBillUpdate: Beleg PDF regen threw for bill ${billId}`,
+          { error: message },
+        );
+      }
+      return;
+    }
+
     if (before.paymentMethodConfirmationTime) return;
     if (!after.paymentMethodConfirmationTime) return;
+    // Defensive: Belege never carry an ack stamp, but if one ever lands
+    // (manual ops repair?) we still skip the email side-effects.
+    if (afterKind === "beleg") return;
 
     // Regenerate the PDF so it reflects the user's chosen method
     // (#251). At create-time the PDF is built before the user picks a

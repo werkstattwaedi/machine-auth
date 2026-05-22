@@ -23,7 +23,6 @@ import {
   FieldValue,
   Timestamp,
   type DocumentReference,
-  type Transaction,
 } from "firebase-admin/firestore";
 import type {
   CheckoutEntity,
@@ -35,6 +34,7 @@ import type {
 } from "../types/firestore_entities";
 import type { BillEntity } from "./types";
 import { buildPaymentData, type PaymentData } from "./get_payment_qr_data";
+import { allocateBill } from "./create_bill";
 
 /**
  * The user the caller is authorized to act as.
@@ -424,7 +424,7 @@ async function closeExistingCheckout(
 
     const bill = await allocateBill(tx, db, {
       userId: checkout.userId,
-      checkoutRef,
+      checkoutRefs: [checkoutRef],
       amount: summary.totalPrice,
       billRef,
     });
@@ -521,7 +521,7 @@ async function createAnonymousCheckout(
   const result = await db.runTransaction(async (tx) => {
     const bill = await allocateBill(tx, db, {
       userId: userIdRef,
-      checkoutRef,
+      checkoutRefs: [checkoutRef],
       amount: summary.totalPrice,
       billRef,
     });
@@ -566,62 +566,6 @@ async function createAnonymousCheckout(
   });
 
   return buildPaymentData(result.bill, result.payer, result.billId, checkoutRef.id);
-}
-
-/**
- * Allocate a sequential bill number from `config/billing` and write the bill
- * doc inside the supplied transaction. Returns the constructed bill entity
- * for downstream PaymentData assembly.
- */
-async function allocateBill(
-  tx: Transaction,
-  db: FirebaseFirestore.Firestore,
-  args: {
-    userId: DocumentReference | null;
-    checkoutRef: DocumentReference;
-    amount: number;
-    billRef: DocumentReference;
-  },
-): Promise<BillEntity> {
-  const configRef = db.doc("config/billing");
-  const configDoc = await tx.get(configRef);
-  const nextBillNumber = configDoc.exists
-    ? (configDoc.data()?.nextBillNumber as number) ?? 1
-    : 1;
-
-  if (configDoc.exists) {
-    tx.update(configRef, { nextBillNumber: FieldValue.increment(1) });
-  } else {
-    tx.set(configRef, { nextBillNumber: nextBillNumber + 1 });
-  }
-
-  // Issue #237: zero-amount bills (e.g. "Interne Nutzung") are auto-closed
-  // as `paidVia: "free"` so they don't sit "unpaid forever" waiting for a
-  // bank QR scan that will never come. The PDF generator gates its
-  // QR-bill section on `paidAt` already, so the same flag also keeps the
-  // payment slip out of the generated invoice.
-  const isFree = args.amount === 0;
-  const now = Timestamp.now();
-  const bill: BillEntity = {
-    userId: args.userId as DocumentReference,
-    checkouts: [args.checkoutRef],
-    referenceNumber: nextBillNumber,
-    amount: args.amount,
-    currency: "CHF",
-    storagePath: null,
-    created: now,
-    paidAt: isFree ? now : null,
-    paidVia: isFree ? "free" : null,
-    pdfGeneratedAt: null,
-    emailSentAt: null,
-    // Free bills are treated as already-acked at creation: the email path
-    // skips them anyway (paidVia "free"), but stamping the ack keeps the
-    // cron from picking them up the next morning.
-    paymentMethodConfirmationTime: isFree ? now : null,
-    paymentMethodConfirmationSource: isFree ? "auto" : null,
-  };
-  tx.set(args.billRef, bill);
-  return bill;
 }
 
 function payerFromPersons(
