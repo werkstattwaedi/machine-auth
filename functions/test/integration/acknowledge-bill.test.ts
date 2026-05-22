@@ -249,6 +249,55 @@ describe("acknowledgeBill callable (Integration)", () => {
       expect(e.code).to.equal("invalid-argument");
     }
   });
+
+  // Sammelrechnung path (issue #245): picking monthly flips the per-visit
+  // bill to a Beleg rather than acking it. The monthly aggregation cron
+  // is the customer-of-record commitment, not this callable.
+  it("flips bill to kind 'beleg' on paymentMethod 'monthly' (no ack-time)", async () => {
+    await seedBillAndCheckout({
+      billId: "b-monthly",
+      ownerUid: "alice",
+      checkoutId: "co-monthly",
+    });
+
+    const res = await call("alice", {
+      billId: "b-monthly",
+      paymentMethod: "monthly",
+    });
+    expect(res).to.deep.equal({ ok: true });
+
+    const bill = await readBill("b-monthly");
+    expect(bill.kind).to.equal("beleg");
+    expect(bill.paymentMethodConfirmationTime).to.be.null;
+    expect(bill.paymentMethodConfirmationSource).to.be.null;
+
+    const checkout = await readCheckout("co-monthly");
+    expect(checkout.paymentMethod).to.equal("monthly");
+  });
+
+  it("is idempotent on a bill already flipped to 'beleg' (double-click)", async () => {
+    await seedBillAndCheckout({
+      billId: "b-beleg-idem",
+      ownerUid: "alice",
+      checkoutId: "co-beleg-idem",
+    });
+
+    await call("alice", { billId: "b-beleg-idem", paymentMethod: "monthly" });
+    const first = await readBill("b-beleg-idem");
+    expect(first.kind).to.equal("beleg");
+
+    // Second click with a different method must not corrupt the Beleg
+    // — once a doc is a Beleg it stays a Beleg until the cron sweeps it up.
+    const res = await call("alice", {
+      billId: "b-beleg-idem",
+      paymentMethod: "rechnung",
+    });
+    expect(res).to.deep.equal({ ok: true });
+
+    const second = await readBill("b-beleg-idem");
+    expect(second.kind).to.equal("beleg");
+    expect(second.paymentMethodConfirmationTime).to.be.null;
+  });
 });
 
 describe("runAutoAcknowledgeBills cron (Integration)", () => {
@@ -366,5 +415,46 @@ describe("runAutoAcknowledgeBills cron (Integration)", () => {
 
     const checkout = await readCheckout("co-twint-pick");
     expect(checkout.paymentMethod).to.equal("twint");
+  });
+
+  // Sammelrechnung path (issue #245): a member who picked the monthly
+  // tab on Step 4 but walked out without committing. Symmetric with the
+  // user-ack-for-monthly callable transition — flip to Beleg, don't
+  // email a per-visit invoice. The monthly cron picks these up.
+  it("flips bill to kind 'beleg' when checkout.paymentMethod is 'monthly' (no ack-time)", async () => {
+    await seedBillAndCheckout({
+      billId: "b-monthly-walkout",
+      ownerUid: "alice",
+      checkoutId: "co-monthly-walkout",
+      createdMsAgo: 90 * 60 * 1000,
+      paymentMethod: "monthly",
+    });
+
+    const res = await runAutoAcknowledgeBills(new Date());
+    expect(res.ackedIds).to.deep.equal(["b-monthly-walkout"]);
+
+    const bill = await readBill("b-monthly-walkout");
+    expect(bill.kind).to.equal("beleg");
+    expect(bill.paymentMethodConfirmationTime).to.be.null;
+    expect(bill.paymentMethodConfirmationSource).to.be.null;
+  });
+
+  it("skips bills already flipped to kind 'beleg' (defensive — query filter would too)", async () => {
+    await seedBillAndCheckout({
+      billId: "b-beleg-existing",
+      ownerUid: "alice",
+      checkoutId: "co-beleg-existing",
+      createdMsAgo: 90 * 60 * 1000,
+      paymentMethod: "monthly",
+    });
+    const db = getFirestore();
+    await db.collection("bills").doc("b-beleg-existing").update({ kind: "beleg" });
+
+    const res = await runAutoAcknowledgeBills(new Date());
+    expect(res.ackedIds).to.deep.equal([]);
+
+    const bill = await readBill("b-beleg-existing");
+    expect(bill.kind).to.equal("beleg");
+    expect(bill.paymentMethodConfirmationTime).to.be.null;
   });
 });

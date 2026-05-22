@@ -16,6 +16,7 @@ import {
   paidInvoice,
   twintMethodInvoice,
   monthlyMethodInvoice,
+  belegPerVisit,
   freeZeroAmountInvoice,
   registeredUserInvoice,
   zeroItemsInvoice,
@@ -172,6 +173,13 @@ describe("buildInvoicePdf — visual regression", function () {
   // Sammelrechnung" notice and omits the QR payment slip.
   it("Monthly-method invoice (no QR slip)", async () => {
     await compareAllPages("monthly-method", monthlyMethodInvoice());
+  });
+
+  // Issue #245: per-visit Beleg. Title and number label switch from
+  // "Rechnung"/"Rechnungsnummer:" to "Beleg"/"Belegnummer:" and the
+  // BL- prefix replaces RE-.
+  it("Beleg per-visit (Sammelrechnung member)", async () => {
+    await compareAllPages("beleg-per-visit", belegPerVisit());
   });
 
   // Issue #237 / PR #256 review: a free zero-amount bill (e.g. Interne

@@ -355,6 +355,19 @@ export function monthlyMethodInvoice(): InvoiceData {
 }
 
 /**
+ * Issue #245: per-visit Beleg (kind: "beleg"). Title reads "Beleg Self
+ * Checkout", number label "Belegnummer: BL-XXXXXX", and the Sammelrechnung
+ * notice replaces the QR payment slip.
+ */
+export function belegPerVisit(): InvoiceData {
+  const base = singleCheckoutInvoice();
+  base.referenceNumber = 42;
+  base.paymentMethod = "monthly";
+  base.kind = "beleg";
+  return base;
+}
+
+/**
  * Issue #237: zero-amount "free" bill (e.g. Interne Nutzung).
  * paidVia="free" + grandTotal=0 — the PDF must show a "Keine Zahlung
  * erforderlich" notice and NO Swiss QR-bill payment slip.
