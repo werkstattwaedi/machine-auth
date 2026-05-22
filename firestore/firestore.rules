@@ -96,9 +96,9 @@ service cloud.firestore {
     }
 
     // True when the user pointed to by `userIdRef` has a non-null
-    // `activeMembership`. Used to gate the `paymentMethodConfirmed:
-    // "monthly"` ack write — only Vereinsmitglieder may roll an open
-    // balance onto their monthly bill.
+    // `activeMembership`. Used to gate the `paymentMethod: "monthly"`
+    // write on a closed checkout — only Vereinsmitglieder may roll an
+    // open balance onto their monthly bill.
     function hasActiveMembership(userIdRef) {
       return userIdRef != null &&
         get(userIdRef).data.get('activeMembership', null) != null;

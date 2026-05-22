@@ -159,6 +159,9 @@ export function PaymentResult({
       checkoutRef(db, persistedCheckoutId),
       { paymentMethod: tab },
     )
+    // `db` and `tabSelectionMutation` are stable singletons / hook
+    // results from a useFunctions provider — re-firing on every render
+    // would re-write the same value with no observable benefit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [persistedCheckoutId, tab])
 

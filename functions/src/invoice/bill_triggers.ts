@@ -388,12 +388,18 @@ export async function trySendEmail(billId: string): Promise<boolean> {
   // Auto-ack on a user who tapped TWINT but didn't commit still uses the
   // TWINT-was-selected template (safe because it doesn't claim payment).
   const template = pickTemplate(checkout.paymentMethod ?? null);
-  assertTemplateConfigured(template.id, template.paramName);
 
   // Acquire lock
   await billRef.update({ emailSentAt: Timestamp.now() });
 
   try {
+    // Configured-template assertion runs after the lock so a thrown
+    // misconfiguration goes through the catch block (lock released,
+    // operations_log written, returns false). Without this, an unset
+    // template id in prod would throw past trySendEmail and block any
+    // downstream onBillUpdate work (membership activation).
+    assertTemplateConfigured(template.id, template.paramName);
+
     const bucket = getStorage().bucket();
     const file = bucket.file(bill.storagePath);
     const [signedUrl] = await file.getSignedUrl({
@@ -498,11 +504,23 @@ export const onBillUpdate = onDocumentUpdated(
     if (before.paymentMethodConfirmationTime) return;
     if (!after.paymentMethodConfirmationTime) return;
 
-    await trySendEmail(billId);
-    // Membership activation runs independently — even if email fails the
-    // user's membership should land. Errors here will propagate so
-    // Firestore retries the trigger; processMembershipForAckedBill is
-    // idempotent (paymentCheckouts arrayUnion).
+    // Email + membership activation must be independent: a Resend
+    // outage or template misconfiguration cannot block the user's
+    // membership from landing. trySendEmail already swallows its own
+    // failures (catch + operations_log + return false) but a thrown
+    // exception is still possible — log it and continue.
+    try {
+      await trySendEmail(billId);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error(
+        `onBillUpdate: trySendEmail threw for bill ${billId}, continuing to membership activation`,
+        { error: message },
+      );
+    }
+    // Membership activation propagates errors so Firestore retries the
+    // trigger; processMembershipForAckedBill is idempotent
+    // (paymentCheckouts arrayUnion).
     await processMembershipForAckedBill(billId);
   },
 );

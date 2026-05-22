@@ -123,7 +123,14 @@ export const acknowledgeBill = onCall<
   if (!isOwner && !isAdmin && bill.userId === null && isAnonymousCaller(request)) {
     // null-userId bills come from the truly-anonymous flow; any anon
     // session can ack them, mirroring the existing firestore.rules
-    // carve-out for null-userId closed checkouts.
+    // carve-out for null-userId closed checkouts. The previous write-
+    // once protection is gone (the checkout's paymentMethod is multi-
+    // write now), so an attacker who learns a bill ID could in theory
+    // fix the email template to "rechnung" before the legitimate user
+    // commits. Threat model: bill IDs are random 20-char Firebase doc
+    // IDs, the email only reveals what method was selected, and the
+    // 03:00 cron is a backstop. Acceptable, but flagged here so the
+    // next reviewer doesn't have to re-derive it.
     isAnonOwner = true;
   }
 
@@ -211,20 +218,23 @@ export async function runAutoAcknowledgeBills(
     const linkedCheckoutRef: DocumentReference | null =
       bill.checkouts.length > 0 ? bill.checkouts[0] : null;
 
-    let checkoutPaymentMethod: PaymentMethod | null = null;
-    if (linkedCheckoutRef) {
-      const coSnap = await linkedCheckoutRef.get();
-      if (coSnap.exists) {
-        const co = coSnap.data() as CheckoutEntity;
-        checkoutPaymentMethod = co.paymentMethod ?? null;
-      }
-    }
-
     await db.runTransaction(async (tx) => {
+      // Read both docs INSIDE the transaction so a tab-click that lands
+      // between the outer query and the transaction commit isn't
+      // overwritten by the auto-rechnung backfill below.
       const fresh = await tx.get(doc.ref);
       if (!fresh.exists) return;
       const freshBill = fresh.data() as BillEntity;
       if (freshBill.paymentMethodConfirmationTime) return;
+
+      let checkoutPaymentMethod: PaymentMethod | null = null;
+      if (linkedCheckoutRef) {
+        const coSnap = await tx.get(linkedCheckoutRef);
+        if (coSnap.exists) {
+          const co = coSnap.data() as CheckoutEntity;
+          checkoutPaymentMethod = co.paymentMethod ?? null;
+        }
+      }
 
       tx.update(doc.ref, {
         paymentMethodConfirmationTime: ackTime,
