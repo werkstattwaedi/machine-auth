@@ -113,6 +113,16 @@ jobs:
       - name: Install functions dependencies
         run: cd functions && npm ci
 
+      # Functions are compiled TypeScript — the Firebase Functions emulator
+      # loads `functions/lib/src/index.js`, which only exists after `tsc`
+      # runs. The `test` job builds it implicitly as part of `npm run
+      # test:precommit`, but this is a separate runner so we have to do
+      # it again. Without this step the emulator silently runs without
+      # Functions and every e2e that touches `requestLoginCode` /
+      # checkout APIs fails on `getByTestId('login-code-stage')` timeouts.
+      - name: Build functions
+        run: cd functions && npm run build
+
       - name: Install Playwright browsers
         # `--with-deps` pulls the runtime system libraries chromium needs
         # (ffmpeg, fonts, NSS). Chromium only — Firefox/WebKit aren't part
