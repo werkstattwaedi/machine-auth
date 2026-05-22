@@ -268,17 +268,23 @@ export { verifyMagicLink } from "./auth/login-code/verify-link";
 export { getInvoiceDownloadUrl } from "./invoice/get_invoice_download_url";
 export { getPaymentQrData } from "./invoice/get_payment_qr_data";
 export { closeCheckoutAndGetPayment } from "./invoice/close_checkout_and_get_payment";
+export { acknowledgeBill } from "./invoice/acknowledge_bill";
 export { getPriceListPdfUrl } from "./price_list/get_price_list_pdf_url";
 export { upsertCatalogItem } from "./catalog/upsert_catalog_item";
 export { logClientError } from "./util/log_client_error";
 
-// Export bill lifecycle triggers
+// Export bill lifecycle triggers + the daily auto-ack cron (#251).
 export { onCheckoutClosed, onCheckoutCreatedClosed } from "./invoice/create_bill";
-export { onBillCreate, retryBillProcessing } from "./invoice/bill_triggers";
+export {
+  onBillCreate,
+  onBillUpdate,
+  retryBillProcessing,
+} from "./invoice/bill_triggers";
+export { autoAcknowledgeBills } from "./invoice/acknowledge_bill";
 
-// Export membership module — callables, triggers, scheduled job. The
-// process_membership_payment triggers run alongside the bill triggers
-// (independent concerns) and detect membership-fee items in closed checkouts.
+// Export membership module — callables, triggers, scheduled job.
+// Membership activation now runs from `onBillUpdate` (gated on the
+// customer's payment-method ack), not on checkout close (#251 / #302).
 export { purchaseMembership } from "./membership/purchase";
 export { inviteFamilyMember } from "./membership/invite";
 export { acceptFamilyInvite } from "./membership/accept_invite";
@@ -291,10 +297,6 @@ export {
   adminCreateMembership,
   adminExtendMembership,
 } from "./membership/admin";
-export {
-  onCheckoutClosedForMembership,
-  onCheckoutCreatedClosedForMembership,
-} from "./membership/process_membership_payment";
 export { onMembershipWritten } from "./membership/on_membership_written";
 export { hourlyMembershipExpiryCheck } from "./membership/expiry_check";
 

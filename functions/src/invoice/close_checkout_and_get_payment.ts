@@ -614,6 +614,11 @@ async function allocateBill(
     paidVia: isFree ? "free" : null,
     pdfGeneratedAt: null,
     emailSentAt: null,
+    // Free bills are treated as already-acked at creation: the email path
+    // skips them anyway (paidVia "free"), but stamping the ack keeps the
+    // cron from picking them up the next morning.
+    paymentMethodConfirmationTime: isFree ? now : null,
+    paymentMethodConfirmationSource: isFree ? "auto" : null,
   };
   tx.set(args.billRef, bill);
   return bill;

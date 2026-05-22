@@ -223,12 +223,13 @@ export type CheckoutUsageType =
   | "hangenmoos"
 
 /**
- * Customer-stated acknowledgement of how they intend to (or just did) settle
- * the bill. Distinct from `BillDoc.paidVia`, which is a server-stamped
- * confirmation written when the cash arrives. Recorded once on the checkout
- * doc when the user clicks the commit button on the Bezahlen step.
+ * Customer's last-selected payment method on the Bezahlen step. Written
+ * fire-and-forget on every tab click so the workshop has a record of what
+ * the user intended even when they leave without committing. The commit-
+ * time ack itself lives on the bill (paymentMethodConfirmationTime /
+ * paymentMethodConfirmationSource).
  */
-export type PaymentMethodConfirmed = "rechnung" | "monthly" | "twint"
+export type PaymentMethod = "rechnung" | "monthly" | "twint"
 
 export interface CheckoutDoc extends AuditFields {
   userId: DocumentReference<UserDoc> | null
@@ -241,8 +242,7 @@ export interface CheckoutDoc extends AuditFields {
   closedAt?: Timestamp
   notes?: string | null
   summary?: CheckoutSummaryDoc
-  paymentMethodConfirmed?: PaymentMethodConfirmed
-  paymentMethodConfirmedAt?: Timestamp
+  paymentMethod?: PaymentMethod | null
 }
 
 export interface CheckoutItemDoc extends AuditFields {
@@ -274,6 +274,8 @@ export interface BillDoc extends AuditFields {
   paidVia?: "twint" | "ebanking" | "cash" | "free" | null
   pdfGeneratedAt?: Timestamp | null
   emailSentAt?: Timestamp | null
+  paymentMethodConfirmationTime?: Timestamp | null
+  paymentMethodConfirmationSource?: "user" | "auto" | null
 }
 
 // ── memberships ──────────────────────────────────────────────────────────

@@ -16,6 +16,13 @@ export interface BillEntity {
   paidVia: "twint" | "ebanking" | "cash" | "free" | null;
   pdfGeneratedAt: Timestamp | null;
   emailSentAt: Timestamp | null;
+  // The customer-stated "I'll pay this" ack. Server-only — written by
+  // the acknowledgeBill callable (source: "user") or the
+  // autoAcknowledgeBills cron (source: "auto"). The email and
+  // membership-activation triggers key off this transitioning from null
+  // to set.
+  paymentMethodConfirmationTime: Timestamp | null;
+  paymentMethodConfirmationSource: "user" | "auto" | null;
 }
 
 /** Per-person entry fee for display on the invoice */

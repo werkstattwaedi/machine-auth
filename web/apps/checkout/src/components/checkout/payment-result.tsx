@@ -19,7 +19,6 @@ import { checkoutRef } from "@modules/lib/firestore-helpers"
 import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { httpsCallable } from "firebase/functions"
-import { serverTimestamp } from "firebase/firestore"
 import { CheckCircle2, Download, FileText, Loader2 } from "lucide-react"
 import { QRCodeSVG } from "qrcode.react"
 import { cn } from "@modules/lib/utils"
@@ -94,7 +93,14 @@ export function PaymentResult({
     context: "checkout.paymentQrFallback",
     errorMessage: "QR-Code konnte nicht geladen werden",
   })
-  const ackMutation = useFirestoreMutation()
+  // Fire-and-forget writes of the user's last-selected tab on the
+  // checkout doc. The commit-time ack itself flows through the callable
+  // below (acknowledgeBill on the bill).
+  const tabSelectionMutation = useFirestoreMutation()
+  const ackMutation = useAsyncMutation<{ ok: true }>({
+    context: "checkout.acknowledgeBill",
+    errorMessage: "Bestätigung konnte nicht gespeichert werden",
+  })
   const downloadMutation = useAsyncMutation<{ url: string }>({
     context: "checkout.downloadInvoice",
     errorMessage: "PDF konnte nicht geladen werden",
@@ -142,6 +148,19 @@ export function PaymentResult({
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [skipFallback, billIdFromCheckout, functions])
+
+  // Persist the user's last-selected tab on the checkout doc so the
+  // workshop has a record of intent even if the user closes the tab.
+  // Fire-and-forget; the commit-time callable also stamps the field.
+  const persistedCheckoutId = paymentData?.checkoutId ?? checkoutId
+  useEffect(() => {
+    if (!persistedCheckoutId || isFree) return
+    void tabSelectionMutation.update(
+      checkoutRef(db, persistedCheckoutId),
+      { paymentMethod: tab },
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [persistedCheckoutId, tab])
 
   if (isFree) {
     return (
@@ -212,21 +231,26 @@ export function PaymentResult({
 
   const handleCommit = async () => {
     // paymentData is non-null here (the !paymentData early return above
-    // guards this block). checkoutId is always populated by
-    // closeCheckoutAndGetPayment; the legacy getPaymentQrData fallback
-    // pulls it from bill.checkouts[0]. If we somehow reach the commit
-    // without one, skip the ack write rather than block the user.
-    if (paymentData.checkoutId) {
-      try {
-        await ackMutation.update(checkoutRef(db, paymentData.checkoutId), {
-          paymentMethodConfirmed: tab,
-          paymentMethodConfirmedAt: serverTimestamp(),
+    // guards this block). The callable stamps
+    // paymentMethodConfirmationTime on the bill, which the onBillUpdate
+    // trigger then keys the invoice email + membership activation off
+    // (issues #251, #302).
+    try {
+      const callable = httpsCallable<
+        { billId: string; paymentMethod: PaymentMethod },
+        { ok: true }
+      >(functions, "acknowledgeBill")
+      await ackMutation.mutate(async () => {
+        const res = await callable({
+          billId: paymentData.billId,
+          paymentMethod: tab,
         })
-      } catch {
-        // Hook already toasted + telemetered. Keep the user on the page so
-        // they can retry rather than dropping them out without a record.
-        return
-      }
+        return res.data
+      })
+    } catch {
+      // Hook already toasted + telemetered. Keep the user on the page so
+      // they can retry rather than dropping them out without a record.
+      return
     }
     onReset()
   }

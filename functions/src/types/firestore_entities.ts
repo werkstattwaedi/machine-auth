@@ -208,7 +208,15 @@ export interface CheckoutEntity {
   closedAt?: Timestamp;
   notes?: string | null;
   summary?: CheckoutSummaryEntity;
+
+  // Customer's last selected payment-method tab on Step 4 (Bezahlen).
+  // Written fire-and-forget on every tab click. Distinct from the bill's
+  // paymentMethodConfirmationTime/Source, which mark the commit-time ack
+  // and gate the invoice email + membership activation.
+  paymentMethod?: PaymentMethod | null;
 }
+
+export type PaymentMethod = "rechnung" | "monthly" | "twint";
 
 export type ItemOrigin = "nfc" | "manual" | "qr";
 

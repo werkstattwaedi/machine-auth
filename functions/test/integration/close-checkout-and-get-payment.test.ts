@@ -215,6 +215,8 @@ async function seedBill(
     paidVia: null,
     pdfGeneratedAt: null,
     emailSentAt: null,
+    paymentMethodConfirmationTime: null,
+    paymentMethodConfirmationSource: null,
   };
   await db.collection("bills").doc(billId).set(bill);
 }

@@ -41,9 +41,10 @@ export interface PaymentData {
   // actions (PDF download, etc.) without fetching the checkout doc.
   billId: string;
   // Doc id of the checkout this payment was generated for. Lets the client
-  // record the user's payment-method acknowledgement (`paymentMethodConfirmed`)
-  // without an extra fetch — needed for the anonymous flow where the
-  // checkout doc was created server-side and the client never had its id.
+  // persist the user's last-selected payment method (`paymentMethod`)
+  // on the checkout without an extra fetch — needed for the anonymous
+  // flow where the checkout doc was created server-side and the client
+  // never had its id.
   checkoutId: string | null;
   qrBillPayload: string;
   paylinkUrl: string;

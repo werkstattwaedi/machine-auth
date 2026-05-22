@@ -2,7 +2,12 @@
 // SPDX-License-Identifier: MIT
 
 import { test, expect, type Page, type Locator } from "@playwright/test"
-import { clearCollections, getCheckoutDocs, getCheckoutItems } from "./helpers"
+import {
+  clearCollections,
+  getBillDocs,
+  getCheckoutDocs,
+  getCheckoutItems,
+} from "./helpers"
 
 /** Locate an input field by its preceding label text within a person card */
 function personField(page: Page, label: string, nth = 0): Locator {
@@ -83,25 +88,32 @@ test.describe("Anonymous checkout", () => {
       .click()
 
     // ── Verify Firestore ──
-    // Wait for the ack write to land before reading the doc.
+    // Wait for the bill ack write to land before reading the doc. The
+    // callable stamps both the checkout's paymentMethod and the bill's
+    // paymentMethodConfirmationTime / Source in one transaction.
     await expect
       .poll(
         async () => {
-          const docs = await getCheckoutDocs()
-          const co = docs[0] as Record<string, unknown> | undefined
-          return co?.paymentMethodConfirmed
+          const docs = await getBillDocs()
+          const b = docs[0] as Record<string, unknown> | undefined
+          return b?.paymentMethodConfirmationSource
         },
         { timeout: 10_000 },
       )
-      .toBe("rechnung")
+      .toBe("user")
 
     const checkouts = await getCheckoutDocs()
     expect(checkouts.length).toBeGreaterThanOrEqual(1)
 
     const checkout = checkouts[0] as Record<string, unknown>
     expect(checkout.status).toBe("closed")
-    expect(checkout.paymentMethodConfirmed).toBe("rechnung")
-    expect(checkout.paymentMethodConfirmedAt).toBeDefined()
+    expect(checkout.paymentMethod).toBe("rechnung")
+
+    const bills = await getBillDocs()
+    expect(bills.length).toBeGreaterThanOrEqual(1)
+    const bill = bills[0] as Record<string, unknown>
+    expect(bill.paymentMethodConfirmationTime).toBeDefined()
+    expect(bill.paymentMethodConfirmationSource).toBe("user")
 
     const persons = checkout.persons as { name: string }[]
     expect(persons[0].name).toBe("Max Muster")
