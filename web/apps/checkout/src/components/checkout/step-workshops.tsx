@@ -5,11 +5,15 @@ import { useState, useMemo, useCallback, useRef, useEffect } from "react"
 import { Checkbox } from "@modules/components/ui/checkbox"
 import { useIsMobile } from "@modules/hooks/use-mobile"
 import { ArrowLeft, ArrowRight } from "lucide-react"
-import { getSortedWorkshops } from "@modules/lib/workshop-config"
+import {
+  getSortedWorkshops,
+  useCatalogForWorkshop,
+} from "@modules/lib/workshop-config"
 import type { PricingConfig, WorkshopId, DiscountLevel } from "@modules/lib/workshop-config"
 import type { CheckoutState, CheckoutAction } from "./use-checkout-state"
 import { type CheckoutItemLocal, type ItemCallbacks } from "@/components/usage/inline-rows"
 import { WorkshopSectionWithCatalog } from "@/components/usage/workshop-section-with-catalog"
+import { MaterialPicker } from "@/components/usage/material-picker"
 import { validateCheckoutItem, hasItemErrors, type ItemErrors } from "./validation"
 import { serverTimestamp, type DocumentReference } from "firebase/firestore"
 import { useDb, useFirebaseAuth } from "@modules/lib/firebase-context"
@@ -71,6 +75,18 @@ export function StepWorkshops({
   const sortedWorkshops = config ? getSortedWorkshops(config) : []
 
   const [itemsSubmitted, setItemsSubmitted] = useState(false)
+
+  // The anonymous checkout flow does not (yet) have its own routes for
+  // the material picker — adding public sub-routes is the broader
+  // checkout-step-routes refactor flagged in #307. For now, hold the
+  // picker open-state locally and render the same `MaterialPicker`
+  // component the `/visit/add/*` overlays use.
+  const [pickerWorkshopId, setPickerWorkshopId] = useState<WorkshopId | null>(
+    null,
+  )
+  const { data: pickerCatalog } = useCatalogForWorkshop(pickerWorkshopId)
+  const pickerWorkshop =
+    pickerWorkshopId && config ? config.workshops[pickerWorkshopId] : null
 
   // Recompute errors reactively so fixing an item clears its error
   const itemErrors = useMemo(() => {
@@ -316,8 +332,28 @@ export function StepWorkshops({
               checkoutId={checkoutId}
               itemErrors={itemErrors}
               sectionRef={registerSectionRef(wsId)}
+              onAddMaterial={() => setPickerWorkshopId(wsId)}
             />
           ))}
+
+      {pickerWorkshopId && pickerWorkshop && config && (
+        <MaterialPicker
+          open
+          onOpenChange={(open) => {
+            if (!open) setPickerWorkshopId(null)
+          }}
+          scope={{
+            kind: "workshop",
+            workshopId: pickerWorkshopId,
+            workshopLabel: pickerWorkshop.label,
+          }}
+          catalogItems={pickerCatalog}
+          config={config}
+          discountLevel={discountLevel}
+          resolveWorkshop={() => pickerWorkshopId}
+          onAdd={callbacks.addItem}
+        />
+      )}
 
       <div className="flex-1" />
 

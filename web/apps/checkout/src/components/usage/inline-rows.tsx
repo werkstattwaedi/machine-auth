@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MIT
 
 import { useState, Fragment } from "react"
-import { Link } from "@tanstack/react-router"
 import { formatCHF } from "@modules/lib/format"
 import { Plus } from "lucide-react"
 import { useCollection } from "@modules/lib/firestore"
@@ -257,16 +256,17 @@ export function WorkshopInlineSection({
   callbacks,
   checkoutId,
   sectionRef,
+  onAddMaterial,
 }: {
   workshopId: WorkshopId
   workshop: WorkshopConfig
   items: CheckoutItemLocal[]
   callbacks: ItemCallbacks
-  /** Unused since the picker moved to /visit/add/* routes (issue #213). */
+  /** Unused since the picker moved to a separate component (issue #213). */
   config?: PricingConfig
-  /** Unused since the picker moved to /visit/add/* routes (issue #213). */
+  /** Unused since the picker moved to a separate component (issue #213). */
   catalogItems?: CatalogItem[]
-  /** Unused since the picker moved to /visit/add/* routes (issue #213). */
+  /** Unused since the picker moved to a separate component (issue #213). */
   discountLevel?: DiscountLevel
   /** Legacy no-op kept for callers that still set it. */
   onBlurSave?: boolean
@@ -274,6 +274,13 @@ export function WorkshopInlineSection({
   /** Legacy no-op kept for callers that still set it. */
   itemErrors?: Record<string, unknown>
   sectionRef?: (el: HTMLDivElement | null) => void
+  /**
+   * Open the material picker for this workshop. The host owns how the
+   * picker mounts — auth dashboard navigates to a route overlay
+   * (`/visit/add/workshop/$id`); the anonymous checkout opens an inline
+   * Sheet — so this component stays route-agnostic and works in both.
+   */
+  onAddMaterial: () => void
 }) {
   const [expandedNfc, setExpandedNfc] = useState<Record<string, boolean>>({})
 
@@ -349,14 +356,14 @@ export function WorkshopInlineSection({
               : "pl-[48px] pr-3 sm:pl-[60px] sm:pr-4")
           }
         >
-          <Link
-            to="/visit/add/workshop/$workshopId"
-            params={{ workshopId }}
+          <button
+            type="button"
+            onClick={onAddMaterial}
             className="inline-flex items-center gap-2 rounded-[3px] border border-dashed border-border px-3 py-2 text-sm font-medium text-cog-teal-dark hover:border-cog-teal hover:bg-cog-teal-light"
           >
             <Plus className="h-3.5 w-3.5" />
             Material hinzufügen
-          </Link>
+          </button>
         </div>
       </div>
 

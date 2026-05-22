@@ -28,6 +28,7 @@ export function WorkshopSectionWithCatalog({
   callbacks,
   checkoutId,
   sectionRef,
+  onAddMaterial,
 }: {
   workshopId: WorkshopId
   workshop: WorkshopConfig
@@ -43,6 +44,7 @@ export function WorkshopSectionWithCatalog({
   /** Legacy; kept for backwards-compat. */
   itemErrors?: Record<string, ItemErrors>
   sectionRef?: (el: HTMLDivElement | null) => void
+  onAddMaterial: () => void
 }) {
   return (
     <WorkshopInlineSection
@@ -52,6 +54,7 @@ export function WorkshopSectionWithCatalog({
       callbacks={callbacks}
       checkoutId={checkoutId}
       sectionRef={sectionRef}
+      onAddMaterial={onAddMaterial}
     />
   )
 }
