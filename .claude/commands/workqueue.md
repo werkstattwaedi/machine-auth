@@ -25,13 +25,14 @@ Phase 1   stay up to main       → Phase 1b
 Phase 1b auto-merge approved   → Phase 2
 Phase 2   baseline + self-heal
   ├─ green / push-direct safe   → Phase 3
-  ├─ fix-PR opened              → Phase 5 (score fix-PR) → Phase 6 → STOP
+  ├─ fix-PR opened              → Phase 4c (review fix-PR) → Phase 5 → Phase 6 → STOP
   ├─ escalated (issue filed)    → STOP
   └─ baseline-red (interactive) → STOP
 Phase 3   fetch issues          → Phase 3b
 Phase 3b  fetch PR feedback     → Phase 4
 Phase 4   process each issue    → Phase 4b
-Phase 4b  process PR feedback   → Phase 5
+Phase 4b  process PR feedback   → Phase 4c
+Phase 4c  code-review touched PRs → Phase 5
 Phase 5   confidence scoring    → Phase 6
 Phase 6   daily digest          → Phase 7
 Phase 7   stdout summary        → STOP
@@ -41,7 +42,7 @@ Phase 7   stdout summary        → STOP
 - Phase 0, 1, 1.5, Phase 2 self-heal, and Phase 6 are skipped.
 - Phase 2 still runs the baseline; red baseline → STOP.
 - Phase 3 / 3b filters to just the requested item.
-- Phase 5 runs against the one item if it produced a PR.
+- Phase 4c and Phase 5 run against the one item if it produced or modified a PR.
 
 **Support files** (read by the orchestrator when needed; not slash commands):
 - `.claude/workqueue/worker-prompt.md` — issue-worker prompt template (Phase 4b).
@@ -537,11 +538,12 @@ PR_EOF
 git checkout main
 ```
 
-Record the PR URL as **outstanding baseline-fix**. Run Phase 5 scoring on
-this PR. Then **skip Phases 3 and 4 entirely for this run** — main is
-still red, so spawning workers would just produce broken PRs. Jump
-straight to Phase 6 (the digest will list the queue as blocked on this
-fix PR). Output:
+Record the PR URL as **outstanding baseline-fix** and add it to the
+`reviewed_prs` list for Phase 4c. Run Phase 4c (code review) then Phase 5
+(scoring) on this PR. Then **skip Phases 3 and 4 entirely for this run** —
+main is still red, so spawning workers would just produce broken PRs.
+Jump straight to Phase 6 (the digest will list the queue as blocked on
+this fix PR). Output:
 
 ```
 WORKQUEUE_RESULT: baseline-fix-pr | <URL> | queue paused until merged
@@ -720,7 +722,7 @@ line — one of `implemented | <summary> | <PR URL>`, `plan-posted | <summary>`,
 
 Parse the `WORKQUEUE_RESULT` line and update labels:
 
-- **`implemented`** → remove `claude-workqueue-wip` and `claude-workqueue`. Record the PR URL. Run Phase 5 scoring on the new PR.
+- **`implemented`** → remove `claude-workqueue-wip` and `claude-workqueue`. Record the PR URL and add it to the `reviewed_prs` list (Phase 4c will pick it up before Phase 5).
 - **`plan-posted`** → remove `claude-workqueue-wip` (the agent already added `claude-workqueue-plan-review`). Record under "Plans awaiting review."
 - **`question`** → remove `claude-workqueue-wip`, add `claude-workqueue-question`.
 - **`error`** → remove `claude-workqueue-wip`. Record the error. Do NOT remove `claude-workqueue`.
@@ -757,13 +759,252 @@ replies; working tree clean; on `main`.
 
 ### 4b.3. Handle the result
 
-- **`pr-fixed`** → record as fixed. Re-run Phase 5 scoring (the PR diff has changed).
+- **`pr-fixed`** → record as fixed and add the PR to the `reviewed_prs` list (Phase 4c re-reviews because the diff changed; Phase 5 re-scores).
 - **`error`** → record the error.
+
+## Phase 4c — Code review on workqueue PRs
+
+Run this against every PR the workqueue produced or modified this run.
+The `reviewed_prs` list is populated by Phase 2 (baseline-fix PR), Phase 4
+(`implemented`), and Phase 4b (`pr-fixed`). For interactive single-item
+runs, the list contains at most one PR.
+
+For each PR in `reviewed_prs`, process **sequentially** (tests use
+fixed-port emulators, so no parallelism). For each PR:
+
+### 4c.1. Idempotency check
+
+Fetch the PR's current head SHA and check whether we already reviewed
+this revision:
+
+```bash
+HEAD_SHA=$(.claude/scripts/wq-gh.sh pr view <PR> --repo werkstattwaedi/machine-auth --json headRefOid --jq '.headRefOid')
+ALREADY_REVIEWED=$(.claude/scripts/wq-gh.sh pr view <PR> --repo werkstattwaedi/machine-auth --json comments \
+  --jq "[.comments[] | select(.body | contains(\"<!-- claude-workqueue-review:${HEAD_SHA} -->\"))] | length")
+```
+
+If `ALREADY_REVIEWED > 0`, skip — this revision has a review comment.
+Move to the next PR.
+
+### 4c.2. Checkout the PR branch
+
+```bash
+git fetch origin
+git checkout <BRANCH>
+git pull --ff-only origin <BRANCH>
+BEFORE_SHA=$(git rev-parse HEAD)
+```
+
+If the local branch is dirty or the pull is not fast-forward, skip this
+PR and record `error: dirty tree before code review` for the digest.
+
+### 4c.3. Spawn the code-reviewer agent
+
+Spawn the project's local `code-reviewer` agent (no isolation, in
+background). It will fan out to `docs-expert` plus domain experts based
+on file patterns (see `.claude/agents/code-reviewer.md`).
+
+Substitute `<PR>`, `<BRANCH>`, and `<BEFORE_SHA>` and pass this prompt:
+
+```
+You are running as Phase 4c of the autonomous /workqueue, reviewing PR
+#<PR> on branch `<BRANCH>` (HEAD <BEFORE_SHA>). Project root:
+/home/michschn/werkstattwaedi/machine-auth. The branch is already
+checked out.
+
+## Goal
+
+Behave exactly like you would in an interactive `/code-review` session:
+fix everything reasonable inline, flag what's beyond "trivial" for the
+human. Your fixes land as a single separate commit on top of the base
+PR commits, so the human can revert with `git revert <sha>` if you
+overreached. The orchestrator re-runs the cheap test suite before
+pushing; if it goes red, your fixes are dropped and only the findings
+are posted.
+
+## Auto-fix scope (your judgement — same as interactive `/code-review`)
+
+You SHOULD edit and stage a fix whenever the change is "trivial" by the
+same bar you'd use sitting next to the user: typos, dead code, obvious
+naming nits, missing-but-clear error handling, simple refactors,
+addressing a reviewer-style style comment, fixing a clearly-wrong
+conditional, adding a missing null check, etc. The human can `git
+revert` your single fix commit if any of it misses the mark, so bias
+toward fixing instead of leaving a long list of paper-cuts.
+
+Keep all fixes within files already modified by this PR (do not expand
+the PR's blast radius into unrelated files).
+
+FLAG (don't fix) when:
+- The fix needs a design or product decision.
+- Multiple reasonable approaches exist and you can't tell which the
+  author preferred.
+- It touches `functions/src/auth/`, `firestore/firestore.rules`,
+  `firestore/schema.jsonc`, `functions/src/sessions/`, or anything
+  security/permission/schema-sensitive — these are the same paths
+  Phase 5 marks `wq-needs-review`; defer to the human there.
+- The fix would require expanding to files not already in the PR diff.
+- You'd want to discuss it before changing it.
+
+## Steps
+
+1. Read CLAUDE.md so you have project conventions.
+2. Get the diff: `git diff origin/main...HEAD`.
+3. Follow the workflow in .claude/agents/code-reviewer.md: always spawn
+   docs-expert, plus the domain experts whose patterns match the
+   changed files. Aggregate findings.
+4. If — and only if — you have at least one fix that meets the
+   auto-fix scope above:
+   - Edit the files.
+   - Stage them with `git add <specific paths>` (never `git add -A`).
+   - **Do NOT commit.** The orchestrator commits and decides whether to
+     push based on test results.
+5. Output your report in this exact format, to stdout, ending with the
+   WORKQUEUE_RESULT line:
+
+```
+## Code review
+
+### Fixes applied
+- `<path>:<line>` — <one-line description of the change>
+- (or: "none" if you didn't fix anything inline)
+
+### Findings
+- **<severity: high|medium|low>** `<path>:<line>` — <one-line description>
+  Suggestion: <what to do>
+- (or: "no issues found" if nothing flagged)
+
+WORKQUEUE_RESULT: code-review | fixes=<count> | flagged=<count>
+```
+
+(The orchestrator commits the staged fixes itself and turns the "Fixes
+applied" list into a real commit on top of the PR. Just list what you
+changed — don't run `git commit`.)
+
+## Constraints
+
+- Do NOT commit. Do NOT push. Do NOT modify main.
+- Do NOT spawn worker agents for fixes — only the docs-expert + domain
+  experts named in the agent file, for review purposes.
+- If you cannot complete the review (agent error, file access issue),
+  emit `WORKQUEUE_RESULT: code-review | error | <reason>` and exit.
+```
+
+Capture the agent's full stdout — the markdown report becomes the PR
+comment body in step 4c.5.
+
+### 4c.4. Validate auto-applied fixes
+
+If `git diff --quiet && git diff --cached --quiet` is true, no fixes
+were applied. Skip to step 4c.5 (post comment).
+
+Otherwise, the agent staged fixes. Commit them as a single isolated
+commit on top of the base PR so the human can drop just this commit
+with `git revert <sha>` if any of the fixes missed the mark:
+
+```bash
+git diff --cached --name-only   # capture file list for the digest + comment
+git commit -m "$(cat <<'EOF'
+chore(code-review): auto-applied fixes from /workqueue Phase 4c
+
+Trivial fixes the reviewer agent judged safe to apply inline. This is a
+single isolated commit on top of the original PR — revert with
+`git revert <this sha>` to drop all fixes if any are off the mark.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+EOF
+)"
+FIX_SHA=$(git rev-parse HEAD)   # remember for the PR comment in 4c.5
+```
+
+Re-run the cheap baseline (do NOT run e2e — too slow for an inline gate;
+the human review is still the merge gate, and a clean `git revert
+<FIX_SHA>` is one command away if e2e later finds something):
+
+```bash
+npm run test:precommit   # Bash timeout: 600000
+```
+
+- **Green** → push: `git push --force-with-lease origin <BRANCH>`. Record
+  `FIX_SHA` for the comment.
+- **Red** → drop the fixes and continue with the report-only path:
+  ```bash
+  git reset --hard "$BEFORE_SHA"
+  unset FIX_SHA
+  ```
+  Replace the "Fixes applied" section of the report with a note that
+  fixes were attempted but dropped because `npm run test:precommit`
+  failed (include the failing test name). The findings still get posted
+  so the human can act on them manually.
+
+### 4c.5. Post the PR comment
+
+Compute the final head SHA (after push, or the unchanged `BEFORE_SHA` if
+no fixes / reverted). Use it in the idempotency marker so a later run
+re-reviews if more commits land. If a fix commit was pushed, prepend a
+"How to drop these fixes" note so the human reviewer doesn't need to dig
+through `git log` to undo them:
+
+```bash
+FINAL_SHA=$(git rev-parse HEAD)
+
+if [[ -n "${FIX_SHA:-}" ]]; then
+  FIX_NOTE=$(cat <<EOF
+
+> **Auto-fixes applied as a separate commit (\`${FIX_SHA}\`).** If any
+> of them missed the mark, drop them all with:
+> \`\`\`
+> git revert ${FIX_SHA}
+> \`\`\`
+> The original PR commits are untouched underneath.
+
+EOF
+)
+else
+  FIX_NOTE=""
+fi
+
+.claude/scripts/wq-gh.sh pr comment <PR> --repo werkstattwaedi/machine-auth --body "$(cat <<EOF
+<!-- claude-workqueue-review:${FINAL_SHA} -->
+${REPORT}
+${FIX_NOTE}
+---
+🤖 Automated by \`/workqueue\` Phase 4c (code review)
+EOF
+)"
+```
+
+(Use a double-quoted heredoc so `${FINAL_SHA}`, `${REPORT}`, and
+`${FIX_NOTE}` are substituted by the shell.)
+
+### 4c.6. Return to main
+
+```bash
+git checkout main
+git status --porcelain   # must be clean
+```
+
+If the tree is dirty after checkout, stop the loop with
+`WORKQUEUE_RESULT: error | Phase 4c left dirty tree on main: <details>`
+— never auto-clean.
+
+### Tracking for the digest
+
+For each PR, record:
+- `pr`: number / url
+- `fixes_applied`: count (after test-revert handling)
+- `findings`: count
+- `fixes_pushed`: bool (true if step 4c.4 pushed)
+- `revert_reason`: string if fixes were reverted
+
+Phase 6's digest renders these as a one-liner under each PR (see Phase 6).
 
 ## Phase 5 — Confidence scoring
 
 Run this against every PR the workqueue produced or modified this run
 (implemented issues, PR-feedback fixes, and baseline self-heal PRs).
+Phase 4c may have pushed a commit since the PR was created, so always
+re-fetch the PR JSON here rather than relying on cached numbers.
 The score is advisory — it feeds the morning digest so you can decide
 which PRs to read carefully and which to skim before approving. The
 score itself never gates merge; **the merge gate is your `APPROVED`
@@ -853,12 +1094,13 @@ the morning review is one URL, not a search across PRs.
    
    ## Ready for morning review (`wq-low-risk`)
    - [#<PR>](<url>) — <title> — score <N>/10, CI <PASSING|PENDING|FAILING>, <one-sentence what-it-does>
+     - Code review: <X fixes pushed, Y findings flagged> | <or "no issues found"> | <or "reverted: <reason>">
    
    ## Worth a real look (`wq-medium`)
-   - <same format>
+   - <same format, with code-review sub-line>
    
    ## Needs careful review (`wq-needs-review`)
-   - <same format>
+   - <same format, with code-review sub-line>
    
    ## Merged this run (Phase 1b)
    - [#<PR>](<url>) — <title> — merged immediately
@@ -907,6 +1149,10 @@ Print a short summary table to stdout:
 ...
 
 ### PR review fixes
+...
+
+### Code review (Phase 4c)
+| PR | Fixes pushed | Findings | Notes |
 ...
 
 ### Baseline self-heal
