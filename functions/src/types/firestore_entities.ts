@@ -1,5 +1,19 @@
 import { DocumentReference, Timestamp } from "firebase-admin/firestore";
 
+import type {
+  DiscountLevel,
+  PricingModel,
+  UsageType,
+  VariantPrice,
+} from "@oww/shared";
+export {
+  priceForTier,
+  type DiscountLevel,
+  type PricingModel,
+  type UsageType,
+  type VariantPrice,
+} from "@oww/shared";
+
 /**
  * Firestore entity type definitions
  * These represent the actual shape of documents in Firestore
@@ -92,29 +106,10 @@ export interface UsageMachineEntity {
 
 // --- Catalog ---
 
-export type PricingModel = "time" | "area" | "length" | "count" | "weight" | "direct" | "sla";
-export type DiscountLevel = "none" | "member";
-
-/**
- * Per-variant price. `default` is mandatory and is what an un-discounted
- * customer pays. Any additional tier (today only `member`) is an optional
- * override; if absent, the default applies. Schema-extensible to future
- * tiers (volunteer, child, …) without touching items that don't use them.
- */
-export interface VariantPrice {
-  default: number;
-  member?: number;
-}
-
-/**
- * Resolve a `VariantPrice` for a given customer tier. `DiscountLevel`
- * `"none"` maps to `default` (un-discounted baseline). Other tiers fall
- * back to `default` when the override is not set on the variant.
- */
-export function priceForTier(price: VariantPrice, tier: DiscountLevel): number {
-  if (tier === "member" && typeof price.member === "number") return price.member;
-  return price.default;
-}
+// PricingModel, DiscountLevel, VariantPrice, and priceForTier are re-exported
+// from `@oww/shared` at the top of this file — they live there because the
+// web app and (future) printer encoder need the same definitions, and the
+// types have no firebase SDK coupling.
 
 export interface CatalogVariant {
   id: string;                            // stable within the item, e.g. "default", "m2", "zuschnitt-a3", "single", "family"
@@ -161,12 +156,6 @@ export interface CatalogEntity {
 // --- Checkouts ---
 
 export type CheckoutStatus = "open" | "closed";
-export type UsageType =
-  | "regular"
-  | "ermaessigt"
-  | "materialbezug"
-  | "intern"
-  | "hangenmoos";
 
 export interface CheckoutPersonEntity {
   name: string;

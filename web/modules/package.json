@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "dependencies": {
+    "@oww/shared": "*",
     "convert": "^7.0.0"
   }
 }

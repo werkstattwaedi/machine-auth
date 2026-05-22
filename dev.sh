@@ -32,28 +32,22 @@ if [ "$NODE_VERSION" -lt 20 ]; then
   error "Node.js 20+ required, found $(node -v)"
 fi
 
-# Install root deps if needed
+# Install all workspaces (shared, web/*, functions, kiosk, scripts) at root
 if [ ! -d "node_modules" ]; then
-  info "Installing root dependencies..."
+  info "Installing all workspace dependencies..."
   npm install
 fi
 
-# Install functions deps if needed
-if [ ! -d "functions/node_modules" ]; then
-  info "Installing functions dependencies..."
-  (cd functions && npm install)
+# Build shared TS package if needed (consumed by web + functions + kiosk)
+if [ ! -d "shared/dist" ]; then
+  info "Building @oww/shared..."
+  npm run build:shared
 fi
 
 # Build functions if needed
 if [ ! -d "functions/lib" ]; then
   info "Building functions..."
   (cd functions && npm run build)
-fi
-
-# Install web workspace deps if needed
-if [ -d "web" ] && [ ! -d "web/node_modules" ]; then
-  info "Installing web dependencies..."
-  (cd web && npm install)
 fi
 
 # Generate env files from operations config

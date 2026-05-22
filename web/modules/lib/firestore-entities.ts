@@ -18,6 +18,13 @@ import type {
   Timestamp,
 } from "firebase/firestore"
 
+import type {
+  DiscountLevel,
+  PricingModel,
+  VariantPrice,
+} from "@oww/shared"
+export type { DiscountLevel, PricingModel, VariantPrice } from "@oww/shared"
+
 // ── Cross-cutting ────────────────────────────────────────────────────────
 
 /**
@@ -122,27 +129,10 @@ export interface UsageMachineDoc extends AuditFields {
 
 // ── catalog ──────────────────────────────────────────────────────────────
 
-export type PricingModel =
-  | "time"
-  | "area"
-  | "length"
-  | "count"
-  | "weight"
-  | "direct"
-  | "sla"
-
-export type DiscountLevel = "none" | "member"
-
-/**
- * Per-variant price. `default` is mandatory and is what an un-discounted
- * customer pays. Additional tiers (today only `member`) are optional
- * overrides; if absent, the default applies. Schema-extensible to future
- * tiers (volunteer, child, …) without touching items that don't use them.
- */
-export interface VariantPrice {
-  default: number
-  member?: number
-}
+// PricingModel, DiscountLevel, and VariantPrice are re-exported from
+// `@oww/shared` at the top of this file — they live there because both
+// functions and the (future) printer-encoder package consume them, and
+// they have no firebase SDK coupling.
 
 export interface CatalogVariant {
   /** Stable within the item, e.g. "default", "m2", "zuschnitt-a3", "single", "family". */

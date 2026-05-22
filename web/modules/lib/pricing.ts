@@ -1,26 +1,22 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import type {
-  CatalogItemDoc,
-  CatalogVariant,
-  DiscountLevel,
-  VariantPrice,
-} from "./firestore-entities"
+import {
+  priceForTier,
+  type DiscountLevel,
+  type UsageType,
+  type UserType,
+} from "@oww/shared"
+import type { CatalogItemDoc, CatalogVariant } from "./firestore-entities"
 import type { PricingConfig } from "./workshop-config"
 
-/** User type affects base fee */
-export type UserType = "erwachsen" | "kind" | "firma"
-
-/**
- * Resolve a `VariantPrice` for a given customer tier. `DiscountLevel`
- * `"none"` maps to `default` (un-discounted baseline). Other tiers fall
- * back to `default` when the override is not set on the variant.
- */
-export function priceForTier(price: VariantPrice, tier: DiscountLevel): number {
-  if (tier === "member" && typeof price.member === "number") return price.member
-  return price.default
-}
+export {
+  priceForTier,
+  USAGE_TYPE_LABELS,
+  USER_TYPE_LABELS,
+  type UsageType,
+  type UserType,
+} from "@oww/shared"
 
 /**
  * The canonical variant for a catalog item. `variants[0]` by convention.
@@ -47,28 +43,6 @@ export function catalogPriceForTier(
 ): number {
   const v = primaryVariant(catalog)
   return v ? priceForTier(v.unitPrice, tier) : 0
-}
-
-/** Usage type affects fee calculation — top-level on checkout */
-export type UsageType =
-  | "regular"
-  | "ermaessigt"
-  | "materialbezug"
-  | "intern"
-  | "hangenmoos"
-
-export const USER_TYPE_LABELS: Record<UserType, string> = {
-  erwachsen: "Erwachsen",
-  kind: "Kind (u. 18)",
-  firma: "Firma",
-}
-
-export const USAGE_TYPE_LABELS: Record<UsageType, string> = {
-  regular: "Reguläre Nutzung",
-  ermaessigt: "Ermässigte Nutzung (KulturLegi)",
-  materialbezug: "Nur Materialbezug",
-  intern: "Interne Nutzung",
-  hangenmoos: "Hangenmoos AG",
 }
 
 /**

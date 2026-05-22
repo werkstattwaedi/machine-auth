@@ -1,13 +1,13 @@
 {
   "name": "functions",
   "scripts": {
-    "proto:generate": "cd ../proto && ../functions/node_modules/.bin/buf generate --template ../functions/buf.gen.yaml",
+    "proto:generate": "cd ../proto && npx buf generate --template ../functions/buf.gen.yaml",
     "lint": "eslint .",
     "lint:fix": "npm run lint -- --fix",
     "prettier": "npx prettier src test --check",
     "prettier:fix": "npm run prettier -- --write",
     "format": "npm run prettier:fix && npm run lint:fix",
-    "prebuild": "npm run proto:generate",
+    "prebuild": "npm run build --prefix ../shared && npm run proto:generate",
     "build": "tsc",
     "build:watch": "tsc --watch",
     "seed-test-sessions": "npm run build && firebase emulators:exec --only firestore 'node lib/scripts/seed-test-sessions.js'",
@@ -26,6 +26,7 @@
   "main": "lib/src/index.js",
   "dependencies": {
     "@bufbuild/protobuf": "^2.10.2",
+    "@oww/shared": "*",
     "date-fns": "^4.1.0",
     "date-fns-tz": "^3.2.0",
     "express-rate-limit": "^7.5.0",

@@ -2,8 +2,18 @@
   "name": "oww-maco",
   "private": true,
   "description": "IoT machine authentication system - dev orchestration",
+  "workspaces": [
+    "shared",
+    "web/modules",
+    "web/apps/*",
+    "functions",
+    "checkout-kiosk",
+    "scripts"
+  ],
   "scripts": {
     "generate-env": "npx tsx scripts/generate-env.ts",
+    "build:shared": "npm run build -w @oww/shared",
+    "build": "npm run build:shared && npm run build -w @oww/admin -w @oww/checkout && npm --prefix functions run build && npm --prefix checkout-kiosk run typecheck",
     "dev": "concurrently -n emu,checkout,admin -c blue,green,yellow \"npm run dev:emulators\" \"npm run dev:checkout\" \"npm run dev:admin\"",
     "dev:fresh": "rm -rf firebase-data && npm run dev",
     "dev:emulators": "firebase emulators:start --import=./firebase-data --export-on-exit=./firebase-data",
@@ -17,12 +27,13 @@
     "test:web:e2e": "npx tsx scripts/port-block.ts -- bash -c 'scripts/emulator-exec.sh --config \"$FIREBASE_E2E_CONFIG\" --only firestore,auth,functions,storage \"cd web && npm run test:e2e\"'",
     "test:web:e2e:update-snapshots": "npx tsx scripts/port-block.ts -- bash -c 'scripts/emulator-exec.sh --config \"$FIREBASE_E2E_CONFIG\" --only firestore,auth,functions,storage \"cd web/apps/checkout && npx playwright test --update-snapshots && cd ../admin && npx playwright test --update-snapshots\"'",
     "test:all": "npm run test:web && cd functions && npm test",
-    "test:precommit": "cd web && npm run build && npm test && cd .. && npm run test:web:integration && cd functions && npm test",
+    "test:precommit": "npm run build:shared && cd web && npm run build && npm test && cd .. && npm run test:web:integration && cd functions && npm test",
     "snapshots:normalize": "node scripts/normalize-snapshots.mjs",
     "block": "npx tsx scripts/port-block.ts --",
     "predeploy": "scripts/predeploy.sh",
     "deploy:gateway": "npx tsx scripts/deploy-gateway.ts",
-    "prepare": "husky"
+    "prepare": "husky",
+    "postinstall": "npm run build:shared"
   },
   "devDependencies": {
     "@bufbuild/protobuf": "^2.10.2",
