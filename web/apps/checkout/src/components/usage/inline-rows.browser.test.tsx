@@ -14,14 +14,6 @@ import userEvent from "@testing-library/user-event"
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest"
 import { type ReactNode } from "react"
 
-// WorkshopInlineSection uses a TanStack Router Link for the "Material
-// hinzufügen" affordance; without a router context the real Link
-// throws. Render it as a plain <a> for the tests.
-vi.mock("@tanstack/react-router", () => ({
-  Link: ({ children, ...props }: { children: ReactNode } & Record<string, unknown>) => (
-    <a {...(props as Record<string, string>)}>{children}</a>
-  ),
-}))
 import {
   FirebaseProvider,
   type FirebaseServices,
@@ -176,8 +168,10 @@ function renderSection(props: {
   callbacks?: ReturnType<typeof makeCallbacks>
   discountLevel?: DiscountLevel
   checkoutId?: string | null
+  onAddMaterial?: () => void
 }) {
   const callbacks = props.callbacks ?? makeCallbacks()
+  const onAddMaterial = props.onAddMaterial ?? (() => {})
   render(
     <WorkshopInlineSection
       workshopId="holz"
@@ -185,10 +179,11 @@ function renderSection(props: {
       items={props.items ?? []}
       callbacks={callbacks}
       checkoutId={props.checkoutId ?? null}
+      onAddMaterial={onAddMaterial}
     />,
     { wrapper: FirebaseWrapper },
   )
-  return { callbacks }
+  return { callbacks, onAddMaterial }
 }
 
 /**
@@ -294,9 +289,13 @@ describe("WorkshopInlineSection v5", () => {
     expect(callbacks.removeItem).toHaveBeenCalledWith("m-1")
   })
 
-  // The "Material hinzufügen" affordance is now a TanStack Router Link
-  // to /visit/add/workshop/$workshopId; navigation correctness is exercised
-  // by the e2e tests since rendering Link here would need a router context.
+  it("invokes onAddMaterial when the 'Material hinzufügen' button is clicked", async () => {
+    const user = userEvent.setup()
+    const onAddMaterial = vi.fn()
+    renderSection({ items: [], onAddMaterial })
+    await user.click(screen.getByRole("button", { name: "Material hinzufügen" }))
+    expect(onAddMaterial).toHaveBeenCalledTimes(1)
+  })
 })
 
 // ============================================================================

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { useState, useMemo, createContext, useContext } from "react"
-import { createFileRoute, Link, Outlet } from "@tanstack/react-router"
+import { createFileRoute, Link, Outlet, useNavigate } from "@tanstack/react-router"
 import { useAuth, type UserDoc } from "@modules/lib/auth"
 import { useCollection } from "@modules/lib/firestore"
 import {
@@ -104,6 +104,7 @@ function DashboardPage() {
 
 function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
   const db = useDb()
+  const navigate = useNavigate()
   const { add, update, remove } = useFirestoreMutation()
   // ADR-0025: multi-write composite (item deletes + workshopsVisited
   // update) — wrapped here so a failed leg surfaces a German toast +
@@ -451,6 +452,12 @@ function DashboardContent({ userDoc }: { userDoc: UserDoc }) {
             callbacks={callbacks}
             discountLevel={discountLevel}
             checkoutId={checkoutId}
+            onAddMaterial={() =>
+              navigate({
+                to: "/visit/add/workshop/$workshopId",
+                params: { workshopId: wsId },
+              })
+            }
           />
         ))}
 

@@ -43,6 +43,10 @@ vi.mock("@tanstack/react-router", () => ({
   // /visit is now a layout for the picker sub-routes (issue #213).
   // The unit test never activates a child route, so Outlet is a no-op.
   Outlet: () => null,
+  // The dashboard wires "+ Material hinzufügen" to navigate into the
+  // picker overlay route (#307). The unit test never clicks that
+  // button, so the navigate fn is a no-op.
+  useNavigate: () => () => {},
 }))
 
 const mockUseAuth = vi.fn()
