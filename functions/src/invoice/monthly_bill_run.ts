@@ -38,6 +38,14 @@ import { fromZonedTime, toZonedTime } from "date-fns-tz";
 
 const resendApiKey = defineSecret("RESEND_API_KEY");
 
+// Per-run cap on Belege fetched (and per-user aggregation size, since
+// each user's group is bounded by this). Designed for normal volume:
+// ~50 monthly-acked members × 10 visits/month ≈ 500. Pathological cases
+// where the cron has been down for months and a single user accumulated
+// > 500 Belege would be split across consecutive days: the first run
+// emits a partial Sammelrechnung; the next day's run aggregates the
+// remainder into a second Sammelrechnung for that user/month. Not a
+// correctness issue, but worth knowing during a backfill.
 const BATCH_LIMIT = 500;
 
 /**

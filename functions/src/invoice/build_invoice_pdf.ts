@@ -168,6 +168,14 @@ export async function buildInvoicePdf(
     // multi-checkout invoice (the monthlyBillRun output) append the
     // earliest-checkout's month so the customer reads "Sammelrechnung —
     // Mai 2026" rather than the bare title.
+    //
+    // Catch-up runs (a stale prior-month Beleg swept into a later
+    // month's aggregation — see monthly_bill_run.ts self-heal docs)
+    // produce a multi-month invoice. The title shows the earliest
+    // visit's month, which is honest but understates the range. Acceptable
+    // because: (a) the per-checkout sections inside the PDF list the real
+    // dates; (b) catch-up runs only happen after a cron failure, which
+    // is rare enough not to justify a "Mai–Juni 2026" label.
     const isBeleg = data.kind === "beleg";
     let title: string;
     if (isBeleg) {

@@ -171,6 +171,12 @@ export const acknowledgeBill = onCall<
       // NOT stamp paymentMethodConfirmationTime — keeping it null means
       // the email/membership triggers in `onBillUpdate` stay no-ops, and
       // the auto-ack cron doesn't pick this back up (it skips Belege).
+      //
+      // We don't write `aggregatedIntoBillRef: null` here because the
+      // field is initialized by `allocateBill` at bill-creation time.
+      // For pre-deploy bills the field is absent, but Firestore's
+      // `== null` predicate on the cron query matches both absent and
+      // explicit null — so no backfill is needed.
       tx.update(billRef, { kind: "beleg" });
     } else {
       tx.update(billRef, {
