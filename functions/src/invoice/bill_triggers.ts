@@ -366,16 +366,15 @@ function pickTemplate(
       paramName: id ? "RESEND_MONTHLY_TEMPLATE_ID" : "RESEND_QRBILL_TEMPLATE_ID",
     };
   }
+  // Per-visit monthly bills never reach this function — trySendEmail
+  // short-circuits on `kind === "beleg"` before calling pickTemplate.
+  // So the only paths remaining are TWINT, rechnung, and the null
+  // pre-ack default.
   switch (method) {
     case "twint":
       return {
         id: resendTwintTemplateId.value(),
         paramName: "RESEND_TWINT_TEMPLATE_ID",
-      };
-    case "monthly":
-      return {
-        id: resendMonthlyTemplateId.value(),
-        paramName: "RESEND_MONTHLY_TEMPLATE_ID",
       };
     case "rechnung":
     default:
