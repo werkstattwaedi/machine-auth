@@ -392,7 +392,7 @@ Use this checklist when setting up a new environment:
 ### Firebase Functions
 
 - [ ] All secrets set via `firebase functions:secrets:set`
-- [ ] Functions deployed: `firebase deploy --only functions`
+- [ ] Functions deployed: `npm run deploy:functions`
 
 ### Web App
 
