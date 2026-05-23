@@ -376,8 +376,9 @@ test.describe("Checkout step screenshots", () => {
     // Stamp an active-single membership on the seeded auth user so the
     // Sammelrechnung tab renders. Reset is handled by the describe-level
     // afterAll.
-    const uid = process.env.E2E_AUTH_USER_UID!
-    await seedMembershipState(uid, { kind: "active-single" })
+    const uid = process.env.E2E_AUTH_USER_UID
+    test.skip(!uid, "E2E_AUTH_USER_UID not set (global-setup did not run)")
+    await seedMembershipState(uid!, { kind: "active-single" })
 
     await submitAndWaitForPaymentResult(page)
 
