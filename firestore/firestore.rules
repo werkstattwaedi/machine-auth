@@ -96,9 +96,9 @@ service cloud.firestore {
     }
 
     // True when the user pointed to by `userIdRef` has a non-null
-    // `activeMembership`. Used to gate the `paymentMethodConfirmed:
-    // "monthly"` ack write — only Vereinsmitglieder may roll an open
-    // balance onto their monthly bill.
+    // `activeMembership`. Used to gate the `paymentMethod: "monthly"`
+    // write on a closed checkout — only Vereinsmitglieder may roll an
+    // open balance onto their monthly bill.
     function hasActiveMembership(userIdRef) {
       return userIdRef != null &&
         get(userIdRef).data.get('activeMembership', null) != null;
@@ -227,18 +227,18 @@ service cloud.firestore {
       // checkout): doc IDs are random Firebase IDs so this is no worse
       // than the existing items subcollection write rule.
       //
-      // Closed-checkout extension: the principal (real, tag, or — for
-      // null-userId checkouts — the anonymous-auth caller) can write the
-      // customer-stated payment-method acknowledgement fields exactly once.
-      // Only the ack fields plus auto-stamped audit fields may change; the
-      // field must not already be set (write-once); and the value must be
-      // a known method. `monthly` additionally requires `activeMembership`
-      // on the principal's user doc, so anonymous flows can never opt into
-      // it.
+      // Closed-checkout extension (#251): the principal (real, tag, or —
+      // for null-userId checkouts — the anonymous-auth caller) can
+      // write `paymentMethod` on the closed checkout. Not write-once —
+      // the user may switch tabs and the field tracks last selection.
+      // The commit-time ack itself lives on the bill and only the
+      // server may set it (acknowledgeBill callable / autoAcknowledgeBills
+      // cron); clients are denied writes on bills outright.
       //
-      // NOTE: anonymous-auth callers may ack any null-userId closed
-      // checkout (no per-session scoping). Combined with write-once and
-      // random 20-char doc IDs, the practical attack surface is negligible.
+      // Value validation: `rechnung` or `twint` always; `monthly` only
+      // when the user doc has an active membership. Anonymous flow on a
+      // null-userId checkout can't consult a membership doc, so monthly
+      // is intentionally denied.
       allow update: if isAdmin() ||
         (isCheckoutPrincipalFor(resource.data.userId) &&
          resource.data.status == "open" &&
@@ -251,23 +251,17 @@ service cloud.firestore {
            'status', 'summary', 'closedAt', 'billRef', 'userId'
          ])) ||
         (resource.data.status == "closed" &&
-         !('paymentMethodConfirmed' in resource.data) &&
          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-           'paymentMethodConfirmed', 'paymentMethodConfirmedAt',
-           'modifiedBy', 'modifiedAt'
+           'paymentMethod', 'modifiedBy', 'modifiedAt'
          ]) &&
          (
-           // Real / tag-tap principal: rechnung + twint always; monthly
-           // only if their user doc has an active membership.
            (isCheckoutPrincipalFor(resource.data.userId) && (
-             request.resource.data.paymentMethodConfirmed in ['rechnung', 'twint'] ||
-             (request.resource.data.paymentMethodConfirmed == 'monthly' &&
+             request.resource.data.paymentMethod in ['rechnung', 'twint'] ||
+             (request.resource.data.paymentMethod == 'monthly' &&
               hasActiveMembership(resource.data.userId))
            )) ||
-           // Anonymous flow on a null-userId checkout: no membership doc
-           // to consult, so monthly is intentionally denied.
            (resource.data.userId == null && isAnonymousAuth() &&
-            request.resource.data.paymentMethodConfirmed in ['rechnung', 'twint'])
+            request.resource.data.paymentMethod in ['rechnung', 'twint'])
          ));
       allow delete: if isAdmin();
 

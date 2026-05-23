@@ -53,6 +53,13 @@ export async function getCheckoutDocs() {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
 }
 
+/** Query bill docs (most recent first) */
+export async function getBillDocs() {
+  const db = getAdminFirestore()
+  const snap = await db.collection("bills").orderBy("created", "desc").get()
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+}
+
 /** Get items subcollection for a checkout */
 export async function getCheckoutItems(checkoutId: string) {
   const db = getAdminFirestore()

@@ -227,8 +227,45 @@ export async function buildInvoicePdf(
       doc.text("Diese Rechnung wurde bereits beglichen. Vielen Dank!", MARGIN_LEFT, y);
 
       addPageFooters(doc, data, doc.bufferedPageRange().count);
+    } else if (data.paymentMethod === "twint") {
+      // --- TWINT-selected notice (issue #251) ---
+      // The user said TWINT in the UI; we have no bank-side confirmation
+      // yet, so the PDF doesn't claim "Bezahlt". The QR-bill payment slip
+      // is intentionally omitted — folks who already paid via TWINT in
+      // the app shouldn't think they need to pay again. The email
+      // surfaces the kasse@ contact for the "TWINT didn't go through"
+      // recovery path.
+      y = ensureSpace(doc, y, 40);
+      doc.fontSize(11).font("Helvetica-Bold");
+      doc.text("Zahlweise: TWINT", MARGIN_LEFT, y);
+      y += 16;
+      doc.fontSize(9).font("Helvetica");
+      doc.text(
+        "Du hast deinen Self-Checkout mit TWINT abgeschlossen. Falls die Zahlung nicht durchgegangen ist, melde dich bitte bei der Kasse.",
+        MARGIN_LEFT,
+        y,
+        { width: CONTENT_WIDTH },
+      );
+
+      addPageFooters(doc, data, doc.bufferedPageRange().count);
+    } else if (data.paymentMethod === "monthly") {
+      // --- Sammelrechnung notice (issue #251) ---
+      // Goes onto next month's Sammelrechnung — no QR slip needed.
+      y = ensureSpace(doc, y, 40);
+      doc.fontSize(11).font("Helvetica-Bold");
+      doc.text("Zahlweise: Sammelrechnung", MARGIN_LEFT, y);
+      y += 16;
+      doc.fontSize(9).font("Helvetica");
+      doc.text(
+        "Dieser Betrag wird der nächsten Sammelrechnung am 1. des nächsten Monats hinzugefügt.",
+        MARGIN_LEFT,
+        y,
+        { width: CONTENT_WIDTH },
+      );
+
+      addPageFooters(doc, data, doc.bufferedPageRange().count);
     } else {
-      // --- Payment terms ---
+      // --- Payment terms (rechnung or pre-ack default) ---
       y = ensureSpace(doc, y, 30);
       doc.fontSize(9).font("Helvetica");
       doc.text("Zahlbar innert 30 Tagen. Besten Dank.", MARGIN_LEFT, y);

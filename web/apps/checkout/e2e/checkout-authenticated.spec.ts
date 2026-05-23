@@ -2,7 +2,12 @@
 // SPDX-License-Identifier: MIT
 
 import { test, expect } from "@playwright/test"
-import { clearCollections, waitForLoginCode, getCheckoutDocs } from "./helpers"
+import {
+  clearCollections,
+  getBillDocs,
+  getCheckoutDocs,
+  waitForLoginCode,
+} from "./helpers"
 import { AUTH_USER_EMAIL } from "./global-setup"
 
 test.beforeEach(async () => {
@@ -93,26 +98,31 @@ test.describe("Authenticated checkout", () => {
       })
       .click()
 
-    // ── Verify Firestore: checkout has userId as DocumentReference ──
-    // Wait for the ack write to land.
+    // ── Verify Firestore: checkout has userId as DocumentReference,
+    //    and the linked bill carries the ack stamp. ──
     await expect
       .poll(
         async () => {
-          const docs = await getCheckoutDocs()
-          const co = docs[0] as Record<string, unknown> | undefined
-          return co?.paymentMethodConfirmed
+          const docs = await getBillDocs()
+          const b = docs[0] as Record<string, unknown> | undefined
+          return b?.paymentMethodConfirmationSource
         },
         { timeout: 10_000 },
       )
-      .toBe("rechnung")
+      .toBe("user")
 
     const checkouts = await getCheckoutDocs()
     expect(checkouts.length).toBeGreaterThanOrEqual(1)
 
     const checkout = checkouts[0] as Record<string, unknown>
     expect(checkout.status).toBe("closed")
-    expect(checkout.paymentMethodConfirmed).toBe("rechnung")
-    expect(checkout.paymentMethodConfirmedAt).toBeDefined()
+    expect(checkout.paymentMethod).toBe("rechnung")
+
+    const bills = await getBillDocs()
+    expect(bills.length).toBeGreaterThanOrEqual(1)
+    const bill = bills[0] as Record<string, unknown>
+    expect(bill.paymentMethodConfirmationTime).toBeDefined()
+    expect(bill.paymentMethodConfirmationSource).toBe("user")
 
     // userId should be a DocumentReference (has path property)
     const userIdRef = checkout.userId as { path: string }

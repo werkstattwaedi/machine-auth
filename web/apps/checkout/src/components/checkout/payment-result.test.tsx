@@ -42,25 +42,28 @@ vi.mock("sonner", () => ({
   },
 }))
 
-// Mock httpsCallable
-const mockCallableResult = vi.fn()
+// Mock httpsCallable. The component creates two callables —
+// `getPaymentQrData` (legacy fallback when no initialPaymentData) and
+// `acknowledgeBill` (commit click). The test selects which mock based on
+// the callable name.
+const mockGetPaymentQrData = vi.fn()
+const mockAcknowledgeBill = vi.fn()
 vi.mock("firebase/functions", () => ({
-  httpsCallable: () => mockCallableResult,
+  httpsCallable: (_functions: unknown, name: string) => {
+    if (name === "acknowledgeBill") return mockAcknowledgeBill
+    return mockGetPaymentQrData
+  },
 }))
 
-// Mock the firestore mutation hook used to record the customer's
-// payment-method acknowledgement on the checkout doc.
-const mockAckUpdate = vi.fn()
+// Mock the firestore mutation hook used for the fire-and-forget
+// tab-selection write on the checkout doc.
+const mockTabSelectionUpdate = vi.fn()
 vi.mock("@modules/hooks/use-firestore-mutation", () => ({
   useFirestoreMutation: () => ({
-    update: mockAckUpdate,
+    update: mockTabSelectionUpdate,
     loading: false,
     error: null,
   }),
-}))
-
-vi.mock("firebase/firestore", () => ({
-  serverTimestamp: () => "server-ts",
 }))
 
 import { render, screen, cleanup } from "@testing-library/react"
@@ -95,8 +98,9 @@ describe("PaymentResult", () => {
       return { data: null, loading: false, error: null }
     })
 
-    mockCallableResult.mockResolvedValue({ data: PAYMENT_FIXTURE })
-    mockAckUpdate.mockResolvedValue(undefined)
+    mockGetPaymentQrData.mockResolvedValue({ data: PAYMENT_FIXTURE })
+    mockAcknowledgeBill.mockResolvedValue({ data: { ok: true } })
+    mockTabSelectionUpdate.mockResolvedValue(undefined)
   })
 
   afterEach(() => {
@@ -249,8 +253,8 @@ describe("PaymentResult", () => {
     })
   })
 
-  describe("commit click → ack write → onReset", () => {
-    it("writes the selected method to the checkout doc and then calls onReset", async () => {
+  describe("commit click → acknowledgeBill callable → onReset", () => {
+    it("calls acknowledgeBill with the selected method then calls onReset", async () => {
       const handleReset = vi.fn()
       render(
         <PaymentResult
@@ -269,19 +273,17 @@ describe("PaymentResult", () => {
         }),
       )
 
-      expect(mockAckUpdate).toHaveBeenCalledOnce()
-      const [ref, payload] = mockAckUpdate.mock.calls[0]
-      expect(ref.path).toBe("checkouts/checkout-1")
-      expect(payload).toEqual({
-        paymentMethodConfirmed: "monthly",
-        paymentMethodConfirmedAt: "server-ts",
+      expect(mockAcknowledgeBill).toHaveBeenCalledOnce()
+      expect(mockAcknowledgeBill).toHaveBeenCalledWith({
+        billId: "bill-1",
+        paymentMethod: "monthly",
       })
       expect(handleReset).toHaveBeenCalledOnce()
     })
 
-    it("does NOT call onReset when the ack write fails (lets the user retry)", async () => {
+    it("does NOT call onReset when the callable fails (lets the user retry)", async () => {
       const handleReset = vi.fn()
-      mockAckUpdate.mockRejectedValueOnce(new Error("offline"))
+      mockAcknowledgeBill.mockRejectedValueOnce(new Error("offline"))
 
       render(
         <PaymentResult
@@ -299,11 +301,11 @@ describe("PaymentResult", () => {
         }),
       )
 
-      expect(mockAckUpdate).toHaveBeenCalledOnce()
+      expect(mockAcknowledgeBill).toHaveBeenCalledOnce()
       expect(handleReset).not.toHaveBeenCalled()
     })
 
-    it("uses the checkoutId from PaymentData (the prop is decorative; the callable always threads it back)", async () => {
+    it("passes the bill id from PaymentData even when checkoutId prop is null", async () => {
       const handleReset = vi.fn()
       render(
         <PaymentResult
@@ -321,9 +323,39 @@ describe("PaymentResult", () => {
         }),
       )
 
-      const [ref] = mockAckUpdate.mock.calls[0]
-      expect(ref.path).toBe("checkouts/co-anon-9")
+      expect(mockAcknowledgeBill).toHaveBeenCalledOnce()
+      expect(mockAcknowledgeBill).toHaveBeenCalledWith({
+        billId: "bill-1",
+        paymentMethod: "rechnung",
+      })
       expect(handleReset).toHaveBeenCalledOnce()
+    })
+  })
+
+  describe("tab selection → fire-and-forget paymentMethod write", () => {
+    it("writes paymentMethod on the checkout doc when the user switches tabs", async () => {
+      render(
+        <PaymentResult
+          checkoutId="checkout-1"
+          totalPrice={25}
+          isMember
+          onReset={() => {}}
+          initialPaymentData={PAYMENT_FIXTURE}
+        />,
+      )
+
+      // Initial mount fires the effect once with "rechnung".
+      expect(mockTabSelectionUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ path: "checkouts/checkout-1" }),
+        { paymentMethod: "rechnung" },
+      )
+
+      await userEvent.click(screen.getByRole("tab", { name: /Sammelrechnung/ }))
+
+      const calls = mockTabSelectionUpdate.mock.calls
+      const lastCall = calls[calls.length - 1]
+      expect(lastCall[0].path).toBe("checkouts/checkout-1")
+      expect(lastCall[1]).toEqual({ paymentMethod: "monthly" })
     })
   })
 
@@ -348,7 +380,7 @@ describe("PaymentResult", () => {
     })
 
     it("shows error state when callable fails", async () => {
-      mockCallableResult.mockRejectedValue(new Error("fail"))
+      mockGetPaymentQrData.mockRejectedValue(new Error("fail"))
 
       render(
         <PaymentResult
@@ -369,14 +401,7 @@ describe("PaymentResult", () => {
     // inline `qrError` UI) so the failure shows up in client telemetry.
     it("toasts the German error message via useAsyncMutation when the callable fails (#182)", async () => {
       mockToastError.mockReset()
-      let isFirstCall = true
-      mockCallableResult.mockImplementation(() => {
-        if (isFirstCall) {
-          isFirstCall = false
-          return Promise.reject(new Error("qr fetch failed"))
-        }
-        return Promise.resolve({ data: { ok: true } })
-      })
+      mockGetPaymentQrData.mockRejectedValueOnce(new Error("qr fetch failed"))
 
       render(
         <PaymentResult
@@ -454,7 +479,8 @@ describe("PaymentResult", () => {
       )
       expect(handleReset).toHaveBeenCalledOnce()
       // No ack write — there is no method to acknowledge.
-      expect(mockAckUpdate).not.toHaveBeenCalled()
+      expect(mockAcknowledgeBill).not.toHaveBeenCalled()
+      expect(mockTabSelectionUpdate).not.toHaveBeenCalled()
     })
 
     it("does not attempt to load QR payment data when totalPrice is 0", () => {
@@ -483,7 +509,7 @@ describe("PaymentResult", () => {
         />,
       )
 
-      expect(mockCallableResult).not.toHaveBeenCalled()
+      expect(mockGetPaymentQrData).not.toHaveBeenCalled()
       expect(screen.getByText(/kostenlos/i)).toBeDefined()
     })
   })

@@ -116,7 +116,11 @@ export async function createBillForCheckout(
       tx.set(configRef, { nextBillNumber: nextBillNumber + 1 });
     }
 
-    // Create bill document
+    // Create bill document. Free bills are pre-acked so the cron skips
+    // them and the email path (which also bails on paidVia "free") doesn't
+    // need a user click to make sense of them.
+    const isFree = grandTotal === 0;
+    const now = Timestamp.now();
     const bill: BillEntity = {
       userId: checkout.userId,
       checkouts: [checkoutRef],
@@ -124,11 +128,13 @@ export async function createBillForCheckout(
       amount: grandTotal,
       currency: "CHF",
       storagePath: null,
-      created: Timestamp.now(),
-      paidAt: null,
-      paidVia: null,
+      created: now,
+      paidAt: isFree ? now : null,
+      paidVia: isFree ? "free" : null,
       pdfGeneratedAt: null,
       emailSentAt: null,
+      paymentMethodConfirmationTime: isFree ? now : null,
+      paymentMethodConfirmationSource: isFree ? "auto" : null,
     };
     tx.set(billRef, bill);
 

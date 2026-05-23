@@ -12,7 +12,10 @@
  */
 
 import * as logger from "firebase-functions/logger";
-import { onDocumentCreated } from "firebase-functions/v2/firestore";
+import {
+  onDocumentCreated,
+  onDocumentUpdated,
+} from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret, defineString } from "firebase-functions/params";
 import { DocumentReference, getFirestore, Timestamp } from "firebase-admin/firestore";
@@ -20,6 +23,8 @@ import { getStorage } from "firebase-admin/storage";
 import { formatWorkshopDateTime } from "../util/workshop_timezone";
 import { formatInvoiceNumber } from "./types";
 import { logOperationError } from "../operations_log";
+import { assertTemplateConfigured } from "../util/resend_template";
+import { processMembershipForAckedBill } from "../membership/process_membership_payment";
 import type {
   BillEntity,
   InvoiceData,
@@ -31,6 +36,7 @@ import type {
 import type {
   CheckoutEntity,
   CheckoutItemEntity,
+  PaymentMethod,
   UserEntity,
 } from "../types/firestore_entities";
 
@@ -47,6 +53,19 @@ const paymentCurrency = defineString("PAYMENT_CURRENCY");
 const resendApiKey = defineSecret("RESEND_API_KEY");
 const resendFromEmail = defineString("RESEND_FROM_EMAIL");
 const resendQrBillTemplateId = defineString("RESEND_QRBILL_TEMPLATE_ID");
+// Issue #251: method-aware invoice emails. Ops repo populates the values;
+// emulator runs send fine with empty defaults via assertTemplateConfigured.
+const resendMonthlyTemplateId = defineString(
+  "RESEND_MONTHLY_TEMPLATE_ID",
+  { default: "" },
+);
+const resendTwintTemplateId = defineString(
+  "RESEND_TWINT_TEMPLATE_ID",
+  { default: "" },
+);
+// Contact address surfaced on the TWINT email ("contact kasse@... if in
+// error"). Set in the operations repo per env.
+const kasseEmail = defineString("KASSE_EMAIL", { default: "" });
 
 // Stale lock threshold: if a lock is older than this, treat it as failed
 const STALE_LOCK_MS = 5 * 60 * 1000; // 5 minutes
@@ -216,6 +235,12 @@ async function assembleInvoiceData(
     }
   }
 
+  // Read the customer's chosen payment method from the first checkout.
+  // Null at bill-create time; set after acknowledgeBill / the cron lands.
+  // Gates whether the QR-bill payment slip is rendered (#251).
+  const primaryCheckoutData = checkoutDocs[0]?.data() as CheckoutEntity | undefined;
+  const paymentMethod = primaryCheckoutData?.paymentMethod ?? null;
+
   return {
     referenceNumber: bill.referenceNumber,
     invoiceDate: new Date(),
@@ -227,6 +252,7 @@ async function assembleInvoiceData(
     currency: bill.currency,
     paidAt: bill.paidAt?.toDate() ?? null,
     paidVia: bill.paidVia ?? null,
+    paymentMethod,
   };
 }
 
@@ -241,7 +267,10 @@ async function assembleInvoiceData(
  * Exported for integration testing — invoked directly to bypass the
  * Firestore trigger wrapper.
  */
-export async function tryGeneratePdf(billId: string): Promise<boolean> {
+export async function tryGeneratePdf(
+  billId: string,
+  options: { force?: boolean } = {},
+): Promise<boolean> {
   const db = getFirestore();
   const billRef = db.collection("bills").doc(billId);
 
@@ -249,8 +278,9 @@ export async function tryGeneratePdf(billId: string): Promise<boolean> {
   if (!billDoc.exists) return false;
   const bill = billDoc.data() as BillEntity;
 
-  // Already generated
-  if (bill.storagePath) return true;
+  // Already generated — `force` bypasses to allow ack-time regeneration
+  // when the payment method changes the PDF content (#251).
+  if (bill.storagePath && !options.force) return true;
 
   // Another process is working on it (and the lock isn't stale)
   if (bill.pdfGeneratedAt) {
@@ -298,6 +328,32 @@ export async function tryGeneratePdf(billId: string): Promise<boolean> {
  * Exported for integration testing — invoked directly to bypass the
  * Firestore trigger wrapper.
  */
+interface TemplateChoice {
+  id: string;
+  paramName: string;
+}
+
+function pickTemplate(method: PaymentMethod | null | undefined): TemplateChoice {
+  switch (method) {
+    case "twint":
+      return {
+        id: resendTwintTemplateId.value(),
+        paramName: "RESEND_TWINT_TEMPLATE_ID",
+      };
+    case "monthly":
+      return {
+        id: resendMonthlyTemplateId.value(),
+        paramName: "RESEND_MONTHLY_TEMPLATE_ID",
+      };
+    case "rechnung":
+    default:
+      return {
+        id: resendQrBillTemplateId.value(),
+        paramName: "RESEND_QRBILL_TEMPLATE_ID",
+      };
+  }
+}
+
 export async function trySendEmail(billId: string): Promise<boolean> {
   if (process.env.FUNCTIONS_EMULATOR === "true") {
     logger.info(`Emulator: skipping email for bill ${billId}`);
@@ -310,6 +366,15 @@ export async function trySendEmail(billId: string): Promise<boolean> {
   const billDoc = await billRef.get();
   if (!billDoc.exists) return false;
   const bill = billDoc.data() as BillEntity;
+
+  // Email is gated on the customer's payment-method ack (issue #251).
+  // retryBillProcessing also checks this, but the helper is exported and
+  // can be called directly from tests / one-off scripts — keep the guard.
+  if (!bill.paymentMethodConfirmationTime) return false;
+
+  // Free bills are auto-acked at creation to keep the cron out, but we
+  // don't email a "here's your zero-amount invoice" PDF.
+  if (bill.paidVia === "free") return false;
 
   // No PDF yet — can't send email without attachment
   if (!bill.storagePath) return false;
@@ -330,10 +395,22 @@ export async function trySendEmail(billId: string): Promise<boolean> {
     return true; // Nothing to retry
   }
 
+  // Template selection always reads the checkout's last paymentMethod.
+  // Auto-ack on a user who tapped TWINT but didn't commit still uses the
+  // TWINT-was-selected template (safe because it doesn't claim payment).
+  const template = pickTemplate(checkout.paymentMethod ?? null);
+
   // Acquire lock
   await billRef.update({ emailSentAt: Timestamp.now() });
 
   try {
+    // Configured-template assertion runs after the lock so a thrown
+    // misconfiguration goes through the catch block (lock released,
+    // operations_log written, returns false). Without this, an unset
+    // template id in prod would throw past trySendEmail and block any
+    // downstream onBillUpdate work (membership activation).
+    assertTemplateConfigured(template.id, template.paramName);
+
     const bucket = getStorage().bucket();
     const file = bucket.file(bill.storagePath);
     const [signedUrl] = await file.getSignedUrl({
@@ -355,13 +432,15 @@ export async function trySendEmail(billId: string): Promise<boolean> {
       from: resendFromEmail.value(),
       to: recipientEmail,
       template: {
-        id: resendQrBillTemplateId.value(),
+        id: template.id,
         variables: {
           RECIPIENT_NAME: recipientName,
           CHECKOUT_DATE: checkoutDate,
           INVOICE_NUMBER: invoiceNumber,
           AMOUNT: bill.amount.toFixed(2),
           CURRENCY: bill.currency,
+          KASSE_EMAIL: kasseEmail.value(),
+          CONFIRMATION_SOURCE: bill.paymentMethodConfirmationSource ?? "",
         },
       },
       attachments: [
@@ -391,8 +470,10 @@ export async function trySendEmail(billId: string): Promise<boolean> {
 // --- Triggers ---
 
 /**
- * Fast path: when a bill is created, attempt PDF generation and email.
- * Failures are silently caught — the retry function will pick them up.
+ * Fast path: when a bill is created, generate the PDF so it (and the
+ * SCOR reference) is ready by the time the user reaches Step 4. The
+ * email no longer fires here — it's gated on the user acking the
+ * payment method (see `onBillUpdate`).
  */
 export const onBillCreate = onDocumentCreated(
   {
@@ -401,7 +482,6 @@ export const onBillCreate = onDocumentCreated(
     // PDF generation builds the full invoice Buffer in memory (pdfkit +
     // swissqrbill); 256 MiB is tight for non-trivial invoices.
     memory: "512MiB",
-    secrets: [resendApiKey],
   },
   async (event) => {
     const billId = event.params.billId;
@@ -409,11 +489,67 @@ export const onBillCreate = onDocumentCreated(
       logger.error(`onBillCreate: no data for bill ${billId}`);
       return;
     }
+    await tryGeneratePdf(billId);
+  },
+);
 
-    const pdfOk = await tryGeneratePdf(billId);
-    if (pdfOk) {
-      await trySendEmail(billId);
+/**
+ * Ack trigger: when `paymentMethodConfirmationTime` flips from null to
+ * set (either via the `acknowledgeBill` callable or the daily 03:00
+ * cron), run the two gated side-effects — email + membership activation.
+ * Both helpers are individually idempotent so this trigger firing twice
+ * is safe.
+ */
+export const onBillUpdate = onDocumentUpdated(
+  {
+    document: "bills/{billId}",
+    timeoutSeconds: 120,
+    memory: "512MiB",
+    secrets: [resendApiKey],
+  },
+  async (event) => {
+    const billId = event.params.billId;
+    const before = event.data?.before.data() as BillEntity | undefined;
+    const after = event.data?.after.data() as BillEntity | undefined;
+    if (!before || !after) return;
+    if (before.paymentMethodConfirmationTime) return;
+    if (!after.paymentMethodConfirmationTime) return;
+
+    // Regenerate the PDF so it reflects the user's chosen method
+    // (#251). At create-time the PDF is built before the user picks a
+    // method, which means rechnung gets the QR slip by default. For
+    // TWINT / Sammelrechnung we don't want the QR slip in the PDF
+    // (the user already paid via TWINT or it's going on the next
+    // Sammelrechnung — they shouldn't see "pay this" again).
+    // tryGeneratePdf with `force: true` overwrites the existing PDF.
+    try {
+      await tryGeneratePdf(billId, { force: true });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error(
+        `onBillUpdate: tryGeneratePdf regen threw for bill ${billId}, continuing with existing PDF`,
+        { error: message },
+      );
     }
+
+    // Email + membership activation must be independent: a Resend
+    // outage or template misconfiguration cannot block the user's
+    // membership from landing. trySendEmail already swallows its own
+    // failures (catch + operations_log + return false) but a thrown
+    // exception is still possible — log it and continue.
+    try {
+      await trySendEmail(billId);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error(
+        `onBillUpdate: trySendEmail threw for bill ${billId}, continuing to membership activation`,
+        { error: message },
+      );
+    }
+    // Membership activation propagates errors so Firestore retries the
+    // trigger; processMembershipForAckedBill is idempotent
+    // (paymentCheckouts arrayUnion).
+    await processMembershipForAckedBill(billId);
   },
 );
 
@@ -452,7 +588,10 @@ export const retryBillProcessing = onSchedule(
         if (!isLocked) {
           pdfRetries++;
           const pdfOk = await tryGeneratePdf(billId);
-          if (pdfOk) {
+          // Email retry is gated on the user's ack; if the user hasn't
+          // committed yet, the cron / next ack click will trigger the
+          // send via onBillUpdate.
+          if (pdfOk && bill.paymentMethodConfirmationTime) {
             emailRetries++;
             await trySendEmail(billId);
           }
@@ -460,8 +599,8 @@ export const retryBillProcessing = onSchedule(
         continue;
       }
 
-      // PDF exists but email not sent
-      if (!bill.emailSentAt) {
+      // PDF exists but email not sent — same ack gate.
+      if (!bill.emailSentAt && bill.paymentMethodConfirmationTime) {
         emailRetries++;
         await trySendEmail(billId);
       }

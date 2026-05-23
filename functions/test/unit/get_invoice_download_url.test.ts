@@ -26,6 +26,8 @@ function makeBill(partial: Partial<BillEntity>): BillEntity {
     paidVia: null,
     pdfGeneratedAt: null,
     emailSentAt: null,
+    paymentMethodConfirmationTime: null,
+    paymentMethodConfirmationSource: null,
     ...partial,
   };
 }

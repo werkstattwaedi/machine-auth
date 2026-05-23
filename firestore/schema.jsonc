@@ -153,14 +153,14 @@
         "tip": "number"
       },
 
-      // --- Customer-stated payment-method acknowledgement ---
-      // Written once by the principal when they click the commit button on
-      // the Bezahlen step. Distinct from /bills/{id}.paidVia, which is a
-      // server-stamped confirmation written when the cash actually arrives.
-      // The acting principal is recorded via the existing `modifiedBy`
-      // audit field — no separate `paymentMethodConfirmedBy`.
-      "paymentMethodConfirmed": "rechnung | monthly | twint",
-      "paymentMethodConfirmedAt": "timestamp",
+      // --- Customer's last-selected payment method on the Bezahlen step ---
+      // Written fire-and-forget on every tab click, so the workshop has a
+      // record of intent even if the user leaves without committing. The
+      // commit-time ack itself lives on the bill (paymentMethodConfirmationTime
+      // / paymentMethodConfirmationSource on /bills/{id}). Distinct from
+      // /bills/{id}.paidVia, which is a server-stamped confirmation written
+      // when the cash actually arrives.
+      "paymentMethod": "rechnung | monthly | twint | null",
 
       "items": {
         "{itemId}": { // Auto-generated — subcollection of checkouts/{checkoutId}
@@ -255,9 +255,16 @@
       "storagePath": "string | null",       // "invoices/{billId}.pdf"
       "created": "timestamp",
       "paidAt": "timestamp | null",
-      "paidVia": "twint | ebanking | cash | null",
+      "paidVia": "twint | ebanking | cash | free | null",
       "pdfGeneratedAt": "timestamp | null", // optimistic lock for PDF generation
-      "emailSentAt": "timestamp | null"     // optimistic lock for email sending
+      "emailSentAt": "timestamp | null",    // optimistic lock for email sending
+      // The customer-stated "I'll pay this" ack. Server-only — written by
+      // the acknowledgeBill callable (source: "user") or the
+      // autoAcknowledgeBills cron (source: "auto"). The email and
+      // membership-activation triggers key off this transitioning from
+      // null to set.
+      "paymentMethodConfirmationTime": "timestamp | null",
+      "paymentMethodConfirmationSource": "user | auto | null"
     }
   },
   "operations_log": {

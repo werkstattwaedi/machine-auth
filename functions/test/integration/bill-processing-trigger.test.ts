@@ -28,6 +28,9 @@ process.env.PAYMENT_CURRENCY = "CHF";
 process.env.RESEND_API_KEY = "re_test_fake";
 process.env.RESEND_FROM_EMAIL = "OWW Test <test@localhost>";
 process.env.RESEND_QRBILL_TEMPLATE_ID = "test-qrbill-template";
+process.env.RESEND_TWINT_TEMPLATE_ID = "test-twint-template";
+process.env.RESEND_MONTHLY_TEMPLATE_ID = "test-monthly-template";
+process.env.KASSE_EMAIL = "kasse@test.localhost";
 
 import { expect } from "chai";
 import * as sinon from "sinon";
@@ -92,6 +95,9 @@ interface SeedBillOptions {
   storagePath?: string | null;
   pdfGeneratedAt?: Timestamp | null;
   emailSentAt?: Timestamp | null;
+  paymentMethodConfirmationTime?: Timestamp | null;
+  paymentMethodConfirmationSource?: "user" | "auto" | null;
+  paidVia?: "twint" | "ebanking" | "cash" | "free" | null;
   checkoutIds?: string[];
 }
 
@@ -101,6 +107,7 @@ interface SeedCheckoutOptions {
   summary?: CheckoutSummaryEntity | null;
   workshopsVisited?: string[];
   userId?: string;
+  paymentMethod?: "rechnung" | "monthly" | "twint" | null;
 }
 
 async function seedCheckout(
@@ -125,6 +132,7 @@ async function seedCheckout(
     closedAt: now,
   };
   if (opts.summary) checkout.summary = opts.summary;
+  if (opts.paymentMethod !== undefined) checkout.paymentMethod = opts.paymentMethod;
 
   await db.collection("checkouts").doc(checkoutId).set(checkout);
 }
@@ -148,10 +156,12 @@ async function seedBill(
     currency: "CHF",
     storagePath: opts.storagePath ?? null,
     created: Timestamp.now(),
-    paidAt: null,
-    paidVia: null,
+    paidAt: opts.paidVia === "free" ? Timestamp.now() : null,
+    paidVia: opts.paidVia ?? null,
     pdfGeneratedAt: opts.pdfGeneratedAt ?? null,
     emailSentAt: opts.emailSentAt ?? null,
+    paymentMethodConfirmationTime: opts.paymentMethodConfirmationTime ?? null,
+    paymentMethodConfirmationSource: opts.paymentMethodConfirmationSource ?? null,
   };
 
   await db.collection("bills").doc(billId).set(bill);
@@ -475,6 +485,8 @@ describe("bill processing triggers (Integration)", () => {
           storagePath: "invoices/bill-email-ok.pdf",
           referenceNumber: 7,
           amount: 42.5,
+          paymentMethodConfirmationTime: Timestamp.now(),
+          paymentMethodConfirmationSource: "user",
         });
 
         const ok = await trySendEmail(billId);
@@ -515,7 +527,11 @@ describe("bill processing triggers (Integration)", () => {
           // Person with no email
           persons: [{ name: "Anon", email: "", userType: "kind" }],
         });
-        await seedBill(billId, { storagePath: "invoices/bill-no-email.pdf" });
+        await seedBill(billId, {
+          storagePath: "invoices/bill-no-email.pdf",
+          paymentMethodConfirmationTime: Timestamp.now(),
+          paymentMethodConfirmationSource: "user",
+        });
 
         const ok = await trySendEmail(billId);
         expect(ok).to.be.true; // Nothing to retry
@@ -528,7 +544,11 @@ describe("bill processing triggers (Integration)", () => {
       it("releases lock and writes operations_log on Resend failure", async () => {
         const billId = "bill-email-fail";
         await seedCheckout("co-default", {});
-        await seedBill(billId, { storagePath: "invoices/bill-email-fail.pdf" });
+        await seedBill(billId, {
+          storagePath: "invoices/bill-email-fail.pdf",
+          paymentMethodConfirmationTime: Timestamp.now(),
+          paymentMethodConfirmationSource: "user",
+        });
 
         // Override stub to return error
         resendSendStub.resolves({
@@ -555,6 +575,8 @@ describe("bill processing triggers (Integration)", () => {
         await seedBill(billId, {
           storagePath: "invoices/bill-email-already.pdf",
           emailSentAt: Timestamp.now(),
+          paymentMethodConfirmationTime: Timestamp.now(),
+          paymentMethodConfirmationSource: "user",
         });
 
         const ok = await trySendEmail(billId);
@@ -565,11 +587,105 @@ describe("bill processing triggers (Integration)", () => {
       it("does nothing if PDF storagePath is missing (cannot attach)", async () => {
         const billId = "bill-no-pdf";
         await seedCheckout("co-default", {});
-        await seedBill(billId, { storagePath: null });
+        await seedBill(billId, {
+          storagePath: null,
+          paymentMethodConfirmationTime: Timestamp.now(),
+          paymentMethodConfirmationSource: "user",
+        });
 
         const ok = await trySendEmail(billId);
         expect(ok).to.be.false;
         expect(resendSendStub.called).to.be.false;
+      });
+
+      // Issue #251: email is gated on the customer's ack — un-acked
+      // bills must not send, even if PDF + recipient are present.
+      it("skips sending when paymentMethodConfirmationTime is null (#251)", async () => {
+        const billId = "bill-no-ack";
+        await seedCheckout("co-default", {});
+        await seedBill(billId, {
+          storagePath: "invoices/bill-no-ack.pdf",
+          paymentMethodConfirmationTime: null,
+        });
+
+        const ok = await trySendEmail(billId);
+        expect(ok).to.be.false;
+        expect(resendSendStub.called, "Resend not called for un-acked bill").to
+          .be.false;
+      });
+
+      it("skips sending when paidVia is free", async () => {
+        const billId = "bill-free";
+        await seedCheckout("co-default", {});
+        await seedBill(billId, {
+          storagePath: "invoices/bill-free.pdf",
+          paymentMethodConfirmationTime: Timestamp.now(),
+          paymentMethodConfirmationSource: "auto",
+          paidVia: "free",
+        });
+
+        const ok = await trySendEmail(billId);
+        expect(ok).to.be.false;
+        expect(resendSendStub.called, "Resend not called for free bill").to.be
+          .false;
+      });
+
+      it("picks twint template when checkout.paymentMethod is 'twint'", async () => {
+        const billId = "bill-twint";
+        await seedCheckout("co-default", {
+          paymentMethod: "twint",
+        });
+        await seedBill(billId, {
+          storagePath: "invoices/bill-twint.pdf",
+          referenceNumber: 11,
+          paymentMethodConfirmationTime: Timestamp.now(),
+          paymentMethodConfirmationSource: "user",
+        });
+
+        await trySendEmail(billId);
+        const [, entity] = resendSendStub.firstCall.args as [
+          string,
+          { template: { id: string } },
+        ];
+        expect(entity.template.id).to.equal("test-twint-template");
+      });
+
+      it("picks monthly template when checkout.paymentMethod is 'monthly'", async () => {
+        const billId = "bill-monthly";
+        await seedCheckout("co-default", {
+          paymentMethod: "monthly",
+        });
+        await seedBill(billId, {
+          storagePath: "invoices/bill-monthly.pdf",
+          referenceNumber: 12,
+          paymentMethodConfirmationTime: Timestamp.now(),
+          paymentMethodConfirmationSource: "user",
+        });
+
+        await trySendEmail(billId);
+        const [, entity] = resendSendStub.firstCall.args as [
+          string,
+          { template: { id: string } },
+        ];
+        expect(entity.template.id).to.equal("test-monthly-template");
+      });
+
+      it("defaults to QR-Rechnung template when paymentMethod is null (auto-ack with no last selection)", async () => {
+        const billId = "bill-default-template";
+        await seedCheckout("co-default", {});
+        await seedBill(billId, {
+          storagePath: "invoices/bill-default-template.pdf",
+          referenceNumber: 13,
+          paymentMethodConfirmationTime: Timestamp.now(),
+          paymentMethodConfirmationSource: "auto",
+        });
+
+        await trySendEmail(billId);
+        const [, entity] = resendSendStub.firstCall.args as [
+          string,
+          { template: { id: string } },
+        ];
+        expect(entity.template.id).to.equal("test-qrbill-template");
       });
     });
   });

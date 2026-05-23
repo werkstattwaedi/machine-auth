@@ -16,6 +16,13 @@ export interface BillEntity {
   paidVia: "twint" | "ebanking" | "cash" | "free" | null;
   pdfGeneratedAt: Timestamp | null;
   emailSentAt: Timestamp | null;
+  // The customer-stated "I'll pay this" ack. Server-only — written by
+  // the acknowledgeBill callable (source: "user") or the
+  // autoAcknowledgeBills cron (source: "auto"). The email and
+  // membership-activation triggers key off this transitioning from null
+  // to set.
+  paymentMethodConfirmationTime: Timestamp | null;
+  paymentMethodConfirmationSource: "user" | "auto" | null;
 }
 
 /** Per-person entry fee for display on the invoice */
@@ -70,6 +77,16 @@ export interface InvoiceData {
   currency: string;
   paidAt?: Date | null;
   paidVia?: "twint" | "ebanking" | "cash" | "free" | null;
+  /**
+   * Customer's chosen payment method from Step 4 (Bezahlen). Null at
+   * bill-create time (PDF generated before the user picks). Set after
+   * `acknowledgeBill` lands and the PDF is regenerated. Gates the QR
+   * payment slip: only rendered for `rechnung` or null — TWINT /
+   * Sammelrechnung get a method-specific notice instead, so users
+   * don't think they need to pay via QR after already settling via
+   * TWINT or having it routed to their monthly bill.
+   */
+  paymentMethod?: "rechnung" | "twint" | "monthly" | null;
 }
 
 /** Format a numeric reference number for display, e.g. 1 → "RE-000001" */

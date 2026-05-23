@@ -14,6 +14,8 @@ import {
   checkoutWithTipInvoice,
   longInvoice,
   paidInvoice,
+  twintMethodInvoice,
+  monthlyMethodInvoice,
   freeZeroAmountInvoice,
   registeredUserInvoice,
   zeroItemsInvoice,
@@ -156,6 +158,20 @@ describe("buildInvoicePdf — visual regression", function () {
 
   it("paid invoice (TWINT)", async () => {
     await compareAllPages("paid-twint", paidInvoice());
+  });
+
+  // Issue #251: TWINT-method invoice. paidVia is null (no bank
+  // confirmation yet) but the customer chose TWINT in the UI. PDF
+  // shows a "Zahlweise: TWINT" notice and omits the QR payment slip
+  // so users don't think they need to pay again.
+  it("TWINT-method invoice (no QR slip)", async () => {
+    await compareAllPages("twint-method", twintMethodInvoice());
+  });
+
+  // Issue #251: Sammelrechnung-method invoice. PDF shows a "Zahlweise:
+  // Sammelrechnung" notice and omits the QR payment slip.
+  it("Monthly-method invoice (no QR slip)", async () => {
+    await compareAllPages("monthly-method", monthlyMethodInvoice());
   });
 
   // Issue #237 / PR #256 review: a free zero-amount bill (e.g. Interne

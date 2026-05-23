@@ -2,26 +2,24 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Trigger: when a checkout closes containing a membership-fee catalog item,
- * create or extend the corresponding membership.
+ * Membership activation, gated on the customer's payment-method ack
+ * (issues #251, #302).
  *
- * Two trigger entrypoints (mirroring the bill-creation triggers in
- * invoice/create_bill.ts):
- *   - onCheckoutClosedForMembership: open → closed update path
- *   - onCheckoutCreatedClosedForMembership: anonymous one-shot create path
+ * Until #251 the activation fired the moment a checkout closed, eagerly
+ * stamping `users/{uid}.activeMembership` before the user had even
+ * picked a payment method. That made the Sammelrechnung tab pop in
+ * mid-flow for a first-time membership purchase. Now activation runs
+ * from the unified `onBillUpdate` trigger — i.e. when the user (or the
+ * autoAcknowledgeBills cron) sets `paymentMethodConfirmationTime` on
+ * the bill.
  *
- * Both delegate to `processMembershipPayment(checkoutRef, checkout)`.
- *
- * Idempotency: each membership records `paymentCheckouts: DocumentReference[]`.
- * If the trigger sees a checkout already in that array, it no-ops. This
- * matches the pattern used by createBillForCheckout (skip if billRef set).
+ * Idempotency: each membership records `paymentCheckouts:
+ * DocumentReference[]`. If the helper sees a checkout already in that
+ * array, it no-ops. The bill retry / trigger-retry paths both rely on
+ * this.
  */
 
 import * as logger from "firebase-functions/logger";
-import {
-  onDocumentCreated,
-  onDocumentUpdated,
-} from "firebase-functions/v2/firestore";
 import {
   FieldValue,
   Timestamp,
@@ -34,6 +32,7 @@ import type {
   MembershipEntity,
   MembershipType,
 } from "../types/firestore_entities";
+import type { BillEntity } from "../invoice/types";
 import {
   db,
   detectMembershipKindForItems,
@@ -179,23 +178,24 @@ async function applyMembershipPayment(
   });
 }
 
-export const onCheckoutClosedForMembership = onDocumentUpdated(
-  "checkouts/{checkoutId}",
-  async (event) => {
-    const before = event.data?.before.data() as CheckoutEntity | undefined;
-    const after = event.data?.after.data() as CheckoutEntity | undefined;
-    if (!before || !after) return;
-    if (before.status === "closed" || after.status !== "closed") return;
-    await processMembershipPayment(event.data!.after.ref, after);
-  },
-);
+/**
+ * Invoked from the bill-update ack trigger: walk every checkout linked
+ * to the acked bill and run `processMembershipPayment` on it. Most
+ * bills bundle one checkout, but allocateBill takes an array and the
+ * trigger respects that.
+ */
+export async function processMembershipForAckedBill(
+  billId: string,
+): Promise<void> {
+  const database = db();
+  const billSnap = await database.doc(`bills/${billId}`).get();
+  if (!billSnap.exists) return;
+  const bill = billSnap.data() as BillEntity;
 
-export const onCheckoutCreatedClosedForMembership = onDocumentCreated(
-  "checkouts/{checkoutId}",
-  async (event) => {
-    const data = event.data?.data() as CheckoutEntity | undefined;
-    if (!data) return;
-    if (data.status !== "closed") return;
-    await processMembershipPayment(event.data!.ref, data);
-  },
-);
+  for (const checkoutRef of bill.checkouts) {
+    const coSnap = await checkoutRef.get();
+    if (!coSnap.exists) continue;
+    const checkout = coSnap.data() as CheckoutEntity;
+    await processMembershipPayment(checkoutRef, checkout);
+  }
+}
