@@ -186,6 +186,12 @@ export async function buildInvoicePdf(
       );
       title = `Sammelrechnung — ${formatWorkshopDateTime(earliest.date, "MMMM yyyy")}`;
     } else {
+      // Single-checkout aggregated invoice (a member who visited once in
+      // the prior month). Keeps the standard "Rechnung Self Checkout"
+      // title rather than a "Sammelrechnung" label — a single line item
+      // doesn't read as an aggregation, and the per-visit Beleg the
+      // member received earlier already mentioned the upcoming
+      // Sammelrechnung. Accounting treats it as a regular Rechnung.
       title = "Rechnung Self Checkout";
     }
     y = ensureSpace(doc, y, 40);
