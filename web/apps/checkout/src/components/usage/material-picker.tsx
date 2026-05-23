@@ -117,7 +117,7 @@ export function MaterialPicker({
         side={isMobile ? "bottom" : "right"}
         className={
           isMobile
-            ? "h-[88%] w-full rounded-t-2xl border-t p-0 sm:max-w-none flex flex-col gap-0"
+            ? "h-[88dvh] w-full rounded-t-2xl border-t p-0 sm:max-w-none flex flex-col gap-0"
             : "w-full sm:max-w-md md:max-w-[480px] p-0 flex flex-col gap-0"
         }
         showCloseButton={false}
