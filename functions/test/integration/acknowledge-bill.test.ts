@@ -431,7 +431,8 @@ describe("runAutoAcknowledgeBills cron (Integration)", () => {
     });
 
     const res = await runAutoAcknowledgeBills(new Date());
-    expect(res.ackedIds).to.deep.equal(["b-monthly-walkout"]);
+    expect(res.ackedIds).to.deep.equal([]);
+    expect(res.belegFlippedIds).to.deep.equal(["b-monthly-walkout"]);
 
     const bill = await readBill("b-monthly-walkout");
     expect(bill.kind).to.equal("beleg");
@@ -452,6 +453,7 @@ describe("runAutoAcknowledgeBills cron (Integration)", () => {
 
     const res = await runAutoAcknowledgeBills(new Date());
     expect(res.ackedIds).to.deep.equal([]);
+    expect(res.belegFlippedIds).to.deep.equal([]);
 
     const bill = await readBill("b-beleg-existing");
     expect(bill.kind).to.equal("beleg");

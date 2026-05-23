@@ -198,14 +198,23 @@ export const acknowledgeBill = onCall<
   return { ok: true };
 });
 
+interface AutoAckSummary {
+  /** Bills where the auto-ack stamp landed (will email + activate membership). */
+  ackedIds: string[];
+  /** Bills flipped to Beleg because the linked checkout had paymentMethod "monthly". */
+  belegFlippedIds: string[];
+}
+
 /**
  * Core loop, exported so the integration test can invoke it directly
  * against the Firestore emulator (no scheduler runtime needed). Returns
- * the number of bills auto-acked.
+ * the bills that landed an auto-ack stamp and (separately) the bills
+ * that were flipped to Beleg for the monthly aggregation cron — they
+ * share the same loop but mean different things downstream.
  */
 export async function runAutoAcknowledgeBills(
   now: Date = new Date(),
-): Promise<{ ackedCount: number; ackedIds: string[] }> {
+): Promise<AutoAckSummary> {
   const db = getFirestore();
   const minAgeHours = Number(autoAckMinAgeHours.value()) || 1;
   const cutoff = Timestamp.fromMillis(
@@ -220,10 +229,11 @@ export async function runAutoAcknowledgeBills(
     .get();
 
   if (snap.empty) {
-    return { ackedCount: 0, ackedIds: [] };
+    return { ackedIds: [], belegFlippedIds: [] };
   }
 
   const ackedIds: string[] = [];
+  const belegFlippedIds: string[] = [];
   const ackTime = Timestamp.fromDate(now);
 
   for (const doc of snap.docs) {
@@ -237,15 +247,16 @@ export async function runAutoAcknowledgeBills(
     const linkedCheckoutRef: DocumentReference | null =
       bill.checkouts.length > 0 ? bill.checkouts[0] : null;
 
-    await db.runTransaction(async (tx) => {
+    type Outcome = "acked" | "beleg" | "skipped";
+    const outcome = await db.runTransaction<Outcome>(async (tx) => {
       // Read both docs INSIDE the transaction so a tab-click that lands
       // between the outer query and the transaction commit isn't
       // overwritten by the auto-rechnung backfill below.
       const fresh = await tx.get(doc.ref);
-      if (!fresh.exists) return;
+      if (!fresh.exists) return "skipped";
       const freshBill = fresh.data() as BillEntity;
-      if (freshBill.paymentMethodConfirmationTime) return;
-      if ((freshBill.kind ?? "invoice") === "beleg") return;
+      if (freshBill.paymentMethodConfirmationTime) return "skipped";
+      if ((freshBill.kind ?? "invoice") === "beleg") return "skipped";
 
       let checkoutPaymentMethod: PaymentMethod | null = null;
       if (linkedCheckoutRef) {
@@ -263,7 +274,7 @@ export async function runAutoAcknowledgeBills(
       // up these Belege on the 1st.
       if (checkoutPaymentMethod === "monthly") {
         tx.update(doc.ref, { kind: "beleg" });
-        return;
+        return "beleg";
       }
 
       tx.update(doc.ref, {
@@ -279,19 +290,23 @@ export async function runAutoAcknowledgeBills(
           modifiedAt: FieldValue.serverTimestamp(),
         });
       }
+      return "acked";
     });
 
-    ackedIds.push(doc.id);
+    if (outcome === "acked") ackedIds.push(doc.id);
+    else if (outcome === "beleg") belegFlippedIds.push(doc.id);
   }
 
-  logger.info("autoAcknowledgeBills: acked unconfirmed bills", {
+  logger.info("autoAcknowledgeBills: processed unconfirmed bills", {
     ackedCount: ackedIds.length,
+    belegFlippedCount: belegFlippedIds.length,
     cutoffIso: cutoff.toDate().toISOString(),
     minAgeHours,
-    sampleIds: ackedIds.slice(0, 10),
+    sampleAckedIds: ackedIds.slice(0, 10),
+    sampleBelegFlippedIds: belegFlippedIds.slice(0, 10),
   });
 
-  return { ackedCount: ackedIds.length, ackedIds };
+  return { ackedIds, belegFlippedIds };
 }
 
 /**
