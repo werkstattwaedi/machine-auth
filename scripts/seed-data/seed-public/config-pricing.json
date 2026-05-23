@@ -4,7 +4,7 @@
     "kind":      { "regular": 2.5, "ermaessigt": 1.25, "materialbezug": 0, "intern": 0, "hangenmoos": 0 },
     "firma":     { "regular": 5, "ermaessigt": 2.5, "materialbezug": 0, "intern": 0, "hangenmoos": 0 }
   },
-  "slaLayerPrice": { "none": 0.00109, "member": 0.00109, "intern": 0 },
+  "slaLayerPrice": { "none": 0.00109, "member": 0.00109 },
   "workshops": {
     "holz":       { "label": "Holz",              "order": 1 },
     "metall":     { "label": "Metall",            "order": 2 },
@@ -19,6 +19,6 @@
   },
   "labels": {
     "units": { "m2": "m²", "m": "m", "stk": "Stk.", "chf": "CHF", "h": "Std.", "kg": "kg", "g": "g", "l": "l" },
-    "discounts": { "none": "Kein Rabatt", "member": "Mitglied OWW", "intern": "Intern" }
+    "discounts": { "none": "Kein Rabatt", "member": "Mitglied OWW" }
   }
 }
