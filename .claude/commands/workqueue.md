@@ -240,6 +240,9 @@ don't waste the baseline run on nothing:
 ```bash
 .claude/scripts/wq-gh.sh issue list --repo werkstattwaedi/machine-auth --label "claude-workqueue" --state open --json number,labels --limit 50
 .claude/scripts/wq-gh.sh pr list   --repo werkstattwaedi/machine-auth --search "head:workqueue/issue-" --state open --json number,mergeStateStatus,reviewDecision --limit 50
+# App tokens can't use `--search "review:approved"` (routes through GraphQL,
+# returns 401). List all open PRs and filter client-side.
+.claude/scripts/wq-gh.sh pr list   --repo werkstattwaedi/machine-auth --state open --json number,reviewDecision --limit 100 --jq '[.[] | select(.reviewDecision == "APPROVED")]'
 ```
 
 Work exists if **any** of these is true:
@@ -330,14 +333,16 @@ and approved it, the bot finishes the job.
 > If it's not enabled, `gh pr merge --auto` will error out and we'll
 > fall back to immediate merge when conditions are met.
 
-Fetch the candidate set:
+Fetch the candidate set. App installation tokens can't use
+`--search "review:approved"` (it routes through GraphQL and returns 401),
+so list all open PRs and filter client-side:
 
 ```bash
 .claude/scripts/wq-gh.sh pr list --repo werkstattwaedi/machine-auth \
   --state open \
-  --search "review:approved" \
-  --json number,headRefName,mergeStateStatus,autoMergeRequest,url,title \
-  --limit 50
+  --json number,headRefName,mergeStateStatus,reviewDecision,autoMergeRequest,url,title \
+  --limit 100 \
+  --jq '[.[] | select(.reviewDecision == "APPROVED")]'
 ```
 
 For each approved PR:
