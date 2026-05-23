@@ -14,7 +14,7 @@
     "serve": "npm run build && firebase emulators:start --only functions",
     "shell": "npm run build && firebase functions:shell",
     "start": "npm run shell",
-    "deploy": "firebase deploy --only functions",
+    "deploy": "npx tsx ../scripts/deploy-functions.ts",
     "test:unit": "npm run build && mocha --require test/snapshot-normalize-hook.cjs 'lib/src/**/*.test.js' 'lib/test/unit/**/*.test.js'",
     "test:integration": "npm run build && npx tsx ../scripts/port-block.ts -- bash -c 'firebase emulators:exec --project oww-maco --config \"../$FIREBASE_E2E_CONFIG\" --only firestore,auth \"mocha lib/test/integration/**/*.test.js\"'",
     "test": "npm run build && npm run test:unit && npm run test:integration",

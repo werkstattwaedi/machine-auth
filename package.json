@@ -31,6 +31,8 @@
     "snapshots:normalize": "node scripts/normalize-snapshots.mjs",
     "block": "npx tsx scripts/port-block.ts --",
     "predeploy": "scripts/predeploy.sh",
+    "deploy:functions": "npx tsx scripts/deploy-functions.ts",
+    "deploy:functions:cleanup": "git restore functions/package.json && rm -f functions/oww-shared-*.tgz",
     "deploy:gateway": "npx tsx scripts/deploy-gateway.ts",
     "prepare": "husky",
     "postinstall": "npm run build:shared"

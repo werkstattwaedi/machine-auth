@@ -95,8 +95,12 @@ cd functions/
 npm run build          # Build
 npm run serve          # Local emulator
 npm run test           # All tests
-firebase deploy --only functions
+npm run deploy         # Deploy (wraps firebase deploy + bundles @oww/shared)
 ```
+
+Deploy uses `scripts/deploy-functions.ts` to pack `@oww/shared` and rewrite
+`functions/package.json` to a `file:` ref before invoking
+`firebase deploy --only functions`. See [ADR-0027](docs/adr/0027-shared-typescript-package.md).
 
 **Clean rebuild if stale:**
 ```bash

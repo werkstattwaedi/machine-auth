@@ -92,13 +92,33 @@ it ever happens.
 
 **Firebase Functions deploy:**
 
-`firebase-tools` resolves npm workspace deps when packing a function
-bundle. If a deploy ever fails with `MODULE_NOT_FOUND` for
-`@oww/shared`, the established fallback is to extend
-`functions[].predeploy` in `firebase.json` with steps that `npm pack`
-`shared/` and `npm install --no-save` the resulting tarball inside
-`functions/` before deploy. This shouldn't be needed under normal
-circumstances and exists only so the failure mode is pre-decided.
+`firebase-tools` does **not** resolve workspace deps when packing a
+function bundle — Cloud Build's `npm install` tries to fetch
+`@oww/shared@*` from the public registry and 404s. `npm install
+--no-save <tarball>` from inside the `functions/` workspace doesn't
+help either: npm walks up to the root `package.json`, sees `functions`
+listed as a workspace member, and re-creates the symlink instead of
+installing from the tarball.
+
+The shipping fix lives in `scripts/prepare-functions-deploy.ts`,
+invoked as a Firebase predeploy hook (`functions[].predeploy` in
+`firebase.json`). It packs `shared/` into
+`functions/oww-shared-X.Y.Z.tgz` and rewrites `functions/package.json`
+so `@oww/shared` points at the tarball via `file:`. Cloud Build then
+installs from the local tarball.
+
+The mutation persists until cleanup. Two paths:
+
+- `npm run deploy:functions` — the wrapper script
+  (`scripts/deploy-functions.ts`) runs `firebase deploy --only functions
+  [args...]` and restores `functions/package.json` + removes the tarball
+  on exit (including on failure or Ctrl+C). Snapshots the pre-deploy
+  bytes so it works regardless of whether `HEAD` is clean.
+- `firebase deploy --only functions` — the predeploy still does the
+  prep, and the deploy still succeeds, but the dirty state stays in the
+  working tree. Run `npm run deploy:functions:cleanup` afterwards. The
+  Husky pre-commit hook refuses commits while the dirty state is in
+  effect, so the modified `package.json` can't leak into git.
 
 ## When to re-evaluate
 
