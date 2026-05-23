@@ -35,6 +35,11 @@ body {
   background: #21867a;
 }
 
+#webview-container {
+  flex: 1;
+  display: flex;
+}
+
 #checkout-view {
   flex: 1;
   border: none;

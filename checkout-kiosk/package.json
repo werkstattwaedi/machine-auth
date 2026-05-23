@@ -1,13 +1,22 @@
 {
   "name": "checkout-kiosk",
   "version": "1.0.0",
-  "description": "Electron kiosk app for self-checkout with USB NFC reader",
-  "main": "main.js",
+  "description": "Electron hardware bridge for OWW kiosk + admin (NFC, future printer). Same codebase produces two named binaries via build-time mode injection.",
+  "main": "dist/main.js",
   "scripts": {
-    "start": "electron .",
+    "inject-mode": "node scripts/inject-mode.mjs",
+    "tsc:main": "tsc -p tsconfig.json",
+    "tsc:renderer": "tsc -p src/renderer/tsconfig.json",
+    "_compile": "npm run inject-mode && npm run tsc:main && npm run tsc:renderer",
+    "start:kiosk": "cross-env BRIDGE_MODE=kiosk npm run _compile && electron .",
+    "start:admin": "cross-env BRIDGE_MODE=admin npm run _compile && electron .",
+    "dev:kiosk": "npm run start:kiosk",
+    "dev:admin": "npm run start:admin",
+    "build:kiosk": "cross-env BRIDGE_MODE=kiosk npm run _compile && electron-builder --config electron-builder.kiosk.yml",
+    "build:admin": "cross-env BRIDGE_MODE=admin npm run _compile && electron-builder --config electron-builder.admin.yml",
     "rebuild": "electron-rebuild",
     "postinstall": "electron-rebuild",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "cross-env BRIDGE_MODE=kiosk npm run inject-mode && tsc --noEmit -p tsconfig.json && tsc --noEmit -p src/renderer/tsconfig.json"
   },
   "dependencies": {
     "@oww/shared": "*",
@@ -15,7 +24,10 @@
   },
   "devDependencies": {
     "electron": "^39.8.5",
+    "electron-builder": "^26.8.1",
     "@electron/rebuild": "^4.0.3",
+    "@types/node": "^22.0.0",
+    "cross-env": "^7.0.3",
     "typescript": "^6.0.0"
   }
 }

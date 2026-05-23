@@ -4,6 +4,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { useAuth } from "@modules/lib/auth"
 import { useTokenAuth } from "@modules/lib/token-auth"
+import { useBridge } from "@modules/lib/use-bridge"
 import { useCollection } from "@modules/lib/firestore"
 import { where, orderBy, documentId } from "firebase/firestore"
 import { httpsCallable } from "firebase/functions"
@@ -57,6 +58,7 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
     picc ?? null,
     cmac ?? null,
   )
+  const bridge = useBridge()
   const { state, dispatch } = useCheckoutState(initialStep)
   // ADR-0025: route the checkout submit through useAsyncMutation so a
   // failed callable surfaces a German error toast + inline alert (B5
@@ -345,17 +347,14 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
   onResetRef.current = async () => {
     dispatch({ type: "RESET" })
     await tagSignOut()
-    // In the Electron kiosk app, also wipe the webview's session storage
-    // so any leftover Firebase Auth state from this session is gone.
-    // Defined by the kiosk preload (see checkout-kiosk/preload.js); a
-    // no-op in regular browsers.
-    const kioskApi = (window as unknown as { kiosk?: { resetSession?: () => Promise<void> } }).kiosk
-    if (kioskApi?.resetSession) {
-      try {
-        await kioskApi.resetSession()
-      } catch (err) {
-        console.error("Failed to reset kiosk session:", err)
-      }
+    // In the Electron kiosk build, also wipe the webview's session storage
+    // so any leftover Firebase Auth state is gone. A no-op outside the
+    // bridge (regular browser) and in admin-mode builds (resetSession is
+    // intentionally a no-op there).
+    try {
+      await bridge.resetSession()
+    } catch (err) {
+      console.error("Failed to reset bridge session:", err)
     }
     window.history.replaceState(null, "", kiosk ? "/?kiosk" : "/")
   }

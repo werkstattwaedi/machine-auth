@@ -1,1 +1,7 @@
+if grep -q '"@oww/shared": "file:' functions/package.json 2>/dev/null; then
+  echo "ERROR: functions/package.json is in deploy state (@oww/shared points at a tarball)."
+  echo "       Run 'npm run deploy:functions:cleanup' to restore."
+  exit 1
+fi
+
 npm run test:precommit

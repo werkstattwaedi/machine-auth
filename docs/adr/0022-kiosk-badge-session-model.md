@@ -84,7 +84,7 @@ The transaction serializes concurrent calls with the same picc, so two parallel 
 
 ### 3. Per-kiosk Bearer on `verifyTagCheckout`
 
-The endpoint is registered with a per-route middleware that requires `Authorization: Bearer ${KIOSK_BEARER_KEY}` in production (emulator bypass via `FUNCTIONS_EMULATOR === "true"`). The Electron app reads the secret from env and exposes it to the renderer via `contextBridge` IPC; the web app's `useTokenAuth` reads it via `window.kiosk.bearer()` and sets the header.
+The endpoint is registered with a per-route middleware that requires `Authorization: Bearer ${KIOSK_BEARER_KEY}` in production (emulator bypass via `FUNCTIONS_EMULATOR === "true"`). The Electron app reads the secret from env (client-side env var `BRIDGE_BEARER_KEY` since #314 — server-side Functions secret name `KIOSK_BEARER_KEY` is unchanged) and exposes it to the renderer via `contextBridge` IPC; the web app's `useTokenAuth` reads it via `window.bridge.bearer()` and sets the header.
 
 **This is intentionally not real attestation.** Anyone with local admin on the kiosk Windows box can extract the secret. Its actual value:
 - **Audit:** every accepted call is logged with `kioskId`.

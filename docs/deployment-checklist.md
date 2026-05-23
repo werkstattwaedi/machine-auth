@@ -65,10 +65,16 @@ Verify `config/pricing` exists in Firestore (Admin → Firestore → `config/pri
 ## 3. Deploy Functions
 
 ```bash
-cd functions
-npm run build
-firebase deploy --only functions
+npm run deploy:functions
 ```
+
+The wrapper packs `@oww/shared` into `functions/` and rewrites
+`functions/package.json` to point at the tarball before invoking
+`firebase deploy --only functions`, then restores both on exit.
+Running `firebase deploy --only functions` directly also works (the
+predeploy hook does the same prep), but leaves the dirty state behind —
+run `npm run deploy:functions:cleanup` afterwards. The Husky pre-commit
+hook refuses commits while the dirty state is in effect.
 
 Verify: Check Functions logs in Firebase Console for startup errors.
 

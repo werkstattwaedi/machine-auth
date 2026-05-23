@@ -9,6 +9,7 @@ import {
   signOut as firebaseSignOut,
 } from "firebase/auth"
 import { useFunctions, useFirebaseAuth } from "./firebase-context"
+import { resolveBridgeBearer } from "./use-bridge"
 
 interface TokenUser {
   tokenId: string
@@ -39,34 +40,6 @@ function functionsBaseUrl(projectId: string | undefined): string {
     return `http://127.0.0.1:${port}/${import.meta.env.VITE_FIREBASE_PROJECT_ID}/${FUNCTIONS_REGION}`
   }
   return `https://${FUNCTIONS_REGION}-${projectId}.cloudfunctions.net`
-}
-
-/**
- * Kiosk runtime contract: the Electron preload exposes `window.kiosk` with
- * an IPC handle for the per-kiosk Bearer secret used to authenticate the
- * verifyTagCheckout call. The Bearer is intentionally a soft revocation/
- * audit knob, not real attestation — the structural defense is the
- * synthetic-UID custom token returned by verifyTagCheckout.
- */
-interface KioskWindow {
-  bearer?: () => Promise<string | null | undefined>
-}
-
-function getKiosk(): KioskWindow | undefined {
-  return (window as unknown as { kiosk?: KioskWindow }).kiosk
-}
-
-/**
- * Resolve the kiosk Bearer if running inside the Electron kiosk shell.
- * Returns null if not in the kiosk (regular browser, phone tap, dev). The
- * dev/emulator Functions middleware bypasses the Bearer check, so a
- * missing header is fine in development.
- */
-async function resolveKioskBearer(): Promise<string | null> {
-  const kiosk = getKiosk()
-  if (!kiosk?.bearer) return null
-  const value = await kiosk.bearer()
-  return typeof value === "string" && value.length > 0 ? value : null
 }
 
 interface VerifyTagResponse {
@@ -131,7 +104,7 @@ export function useTokenAuth(
             const headers: Record<string, string> = {
               "Content-Type": "application/json",
             }
-            const bearer = await resolveKioskBearer()
+            const bearer = await resolveBridgeBearer()
             if (bearer) headers["Authorization"] = `Bearer ${bearer}`
 
             const res = await fetch(url, {

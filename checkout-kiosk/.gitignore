@@ -1,0 +1,8 @@
+node_modules/
+dist/
+release/
+# Build-time injected by scripts/inject-mode.mjs. Never commit — the
+# typecheck/start/build scripts always re-inject before tsc runs, so a
+# fresh clone runs through `npm run typecheck` cleanly because the
+# script writes the file first.
+src/mode.generated.ts
