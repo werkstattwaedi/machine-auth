@@ -37,6 +37,15 @@ jobs:
           distribution: temurin
           java-version: 21
 
+      # The `checkout-kiosk` workspace pulls `nfc-pcsc` → `@pokusew/pcsclite`,
+      # which compiles a native addon that `#include <winscard.h>`. On Linux
+      # that header ships with `libpcsclite-dev`; without it `npm ci` aborts
+      # during gyp build. Kiosk isn't exercised by `test:precommit`, but the
+      # root install resolves every workspace and there's no per-workspace
+      # opt-out for gyp scripts.
+      - name: Install system dependencies (libpcsclite-dev for kiosk native module)
+        run: sudo apt-get update && sudo apt-get install -y libpcsclite-dev
+
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
 
@@ -88,6 +97,10 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
+
+      # Kiosk native dep — see comment in the `test` job above.
+      - name: Install system dependencies (libpcsclite-dev for kiosk native module)
+        run: sudo apt-get update && sudo apt-get install -y libpcsclite-dev
 
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
