@@ -66,6 +66,14 @@ interface MonthlyBillRunSummary {
   groupedUsers: number;
   invoicesCreated: number;
   invoiceIds: string[];
+  /**
+   * Belege with `userId == null` that we couldn't aggregate (no user to
+   * bill). Tracked separately so a non-zero value surfaces in ops logs
+   * — a null-userId Beleg is data corruption and should never happen
+   * via the regular ack flow. Disambiguates `scannedBelege > 0,
+   * invoicesCreated === 0` cases from "transaction race lost".
+   */
+  skippedNullUserId: number;
 }
 
 /**
@@ -92,16 +100,24 @@ export async function runMonthlyBillRun(
     .get();
 
   if (snap.empty) {
-    return { scannedBelege: 0, groupedUsers: 0, invoicesCreated: 0, invoiceIds: [] };
+    return {
+      scannedBelege: 0,
+      groupedUsers: 0,
+      invoicesCreated: 0,
+      invoiceIds: [],
+      skippedNullUserId: 0,
+    };
   }
 
   // Group Belege by userId.id. A Beleg without userId can never be
   // aggregated (we wouldn't know who to bill) — log and skip.
   const groups = new Map<string, Array<{ ref: DocumentReference; bill: BillEntity }>>();
+  let skippedNullUserId = 0;
   for (const doc of snap.docs) {
     const bill = doc.data() as BillEntity;
     if (!bill.userId) {
       logger.warn(`monthlyBillRun: skipping Beleg ${doc.id} with no userId`);
+      skippedNullUserId++;
       continue;
     }
     const key = bill.userId.id;
@@ -192,6 +208,7 @@ export async function runMonthlyBillRun(
     groupedUsers: groups.size,
     invoicesCreated: invoiceIds.length,
     invoiceIds,
+    skippedNullUserId,
   };
   logger.info("monthlyBillRun: complete", summary);
   return summary;

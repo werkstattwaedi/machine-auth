@@ -361,6 +361,7 @@ describe("runMonthlyBillRun (Integration, #245)", () => {
       groupedUsers: 0,
       invoicesCreated: 0,
       invoiceIds: [],
+      skippedNullUserId: 0,
     });
   });
 });
