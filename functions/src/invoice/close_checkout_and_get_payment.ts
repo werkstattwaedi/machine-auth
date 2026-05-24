@@ -32,9 +32,33 @@ import type {
   ItemOrigin,
   UsageType,
 } from "../types/firestore_entities";
+import { usageDiscount } from "@oww/shared";
 import type { BillEntity } from "./types";
 import { buildPaymentData, type PaymentData } from "./get_payment_qr_data";
 import { allocateBill } from "./create_bill";
+import {
+  loadMembershipCatalogId,
+  detectMembershipKindForItems,
+} from "../membership/shared";
+
+/**
+ * True iff any item is a membership-fee SKU. Resolved from the
+ * `config/catalog-references.membership` catalog doc; returns false when no
+ * membership SKU is configured. Used for the `intern` loophole guard
+ * (issue #284).
+ */
+function hasMembershipItem(
+  items: CheckoutItemEntity[],
+  membershipCatalogId: string | null,
+): boolean {
+  if (!membershipCatalogId) return false;
+  return detectMembershipKindForItems(items, membershipCatalogId) !== null;
+}
+
+/** True iff any item is machine usage (origin "nfc"). */
+function hasMachineUsage(items: { origin: ItemOrigin }[]): boolean {
+  return items.some((i) => i.origin === "nfc");
+}
 
 /**
  * The user the caller is authorized to act as.
@@ -70,16 +94,23 @@ function isAnonymousCaller(request: CallableRequest<unknown>): boolean {
 }
 
 /**
- * Exported for unit tests. Returns the per-person entry fee for a given
- * userType + usageType combo from `config/pricing.entryFees`.
+ * Exported for unit tests. Returns the *standard* (regular) per-person
+ * entry fee for a user type from `config/pricing.entryFees.{userType}.regular`.
+ *
+ * There is one standard fee per user type; the usage-type discount
+ * (`USAGE_TYPE_DISCOUNTS`, hardcoded in `@oww/shared`) is the fractional
+ * multiplier applied on top — so `ermaessigt` is `regular × 0.5`,
+ * `intern`/`volunteering`/`materialbezug`/`hangenmoos` waive the entry fee
+ * entirely (issue #284). The `usageType` argument is retained for log /
+ * error context only; the lookup is always the `regular` row.
  *
  * Throws `failed-precondition` when the config doc is missing or doesn't
- * contain a row for the requested combo (issue #149). The previous
+ * contain a `regular` fee for the user type (issue #149). The previous
  * silent-fallback path shipped hardcoded fees that diverged from the
  * seeded production prices, so a misconfigured Firestore document would
- * have silently misbilled every checkout — exactly the bug A8 was filed
- * for. We bail loudly here so staff sees the failure immediately rather
- * than discovering it at month-end reconciliation.
+ * have silently misbilled every checkout. We bail loudly here so staff
+ * sees the failure immediately rather than discovering it at month-end
+ * reconciliation.
  */
 export function entryFeeFor(
   userType: string,
@@ -88,19 +119,52 @@ export function entryFeeFor(
 ): number {
   if (configFees) {
     const row = configFees[userType];
-    if (row && usageType in row) {
-      const value = row[usageType];
-      if (typeof value === "number") return value;
+    if (row && "regular" in row) {
+      const standard = row["regular"];
+      if (typeof standard === "number") {
+        return standard * usageDiscount(usageType as UsageType).entryFee;
+      }
     }
   }
-  logger.error("Pricing config missing entry fee row", {
+  logger.error("Pricing config missing standard (regular) entry fee row", {
     userType,
     usageType,
   });
   throw new HttpsError(
     "failed-precondition",
-    `Pricing config missing entry fee for ${userType}/${usageType}`,
+    `Pricing config missing standard entry fee for ${userType}`,
   );
+}
+
+/**
+ * Loophole guards (issue #284). Enforced server-side because the bill
+ * amount is authoritative here — a client could otherwise post a usage
+ * type that waives charges it shouldn't.
+ *
+ *  - `materialbezug` ("only picking up material") cannot coexist with
+ *    machine usage: if you ran a machine, it's not a pure material pickup.
+ *  - `intern` (everything on the house) cannot coexist with buying a
+ *    membership: a paid membership must not be zeroed out.
+ *
+ * Throws `failed-precondition` on violation. `hasMembershipItem` is
+ * resolved by the caller (it needs catalog refs the summary doesn't carry).
+ */
+export function assertUsageTypeAllowed(
+  usageType: UsageType,
+  opts: { hasMachineUsage: boolean; hasMembershipItem: boolean },
+): void {
+  if (usageType === "materialbezug" && opts.hasMachineUsage) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Materialbezug ist nicht möglich, wenn Maschinen genutzt wurden.",
+    );
+  }
+  if (usageType === "intern" && opts.hasMembershipItem) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Interne Nutzung ist nicht möglich, wenn eine Mitgliedschaft gekauft wird.",
+    );
+  }
 }
 
 /**
@@ -117,36 +181,60 @@ export function recomputeSummary(
   configFees: Record<string, Record<string, number>> | null,
   clientTip: number,
 ): CheckoutSummaryEntity {
-  // Internal usage is never billed: zero out entry fees, machine, and
-  // material costs regardless of what items / config say. Tip stays
-  // honoured so a contributor can still leave a tip on an internal visit.
-  const isIntern = usageType === "intern";
-  const entryFees = isIntern
-    ? 0
-    : persons.reduce(
-        (sum, p) => sum + entryFeeFor(p.userType, usageType, configFees),
-        0,
-      );
-  const machineCost = isIntern
-    ? 0
-    : items
-        .filter((i) => i.origin === "nfc")
-        .reduce((sum, i) => sum + (i.totalPrice ?? 0), 0);
-  const materialCost = isIntern
-    ? 0
-    : items
-        .filter((i) => i.origin !== "nfc")
-        .reduce((sum, i) => sum + (i.totalPrice ?? 0), 0);
-  const tip = Math.max(0, clientTip ?? 0);
-  const totalPrice =
-    Math.round((entryFees + machineCost + materialCost + tip) * 100) / 100;
+  const round = (n: number) => Math.round(n * 100) / 100;
+  const discount = usageDiscount(usageType);
+
+  // RAW (pre-discount) section amounts. `entryFeeFor` returns the standard
+  // regular fee already scaled by the entry-fee discount multiplier, so to
+  // recover the raw entry fee we divide it back out (the only section whose
+  // discount lives in the per-person fee). For waived entry fees (multiplier
+  // 0) the raw is the un-waived standard fee.
+  const standardEntryFees = persons.reduce(
+    (sum, p) => sum + standardEntryFeeFor(p.userType, configFees),
+    0,
+  );
+  const machineRaw = items
+    .filter((i) => i.origin === "nfc")
+    .reduce((sum, i) => sum + (i.totalPrice ?? 0), 0);
+  const materialRaw = items
+    .filter((i) => i.origin !== "nfc")
+    .reduce((sum, i) => sum + (i.totalPrice ?? 0), 0);
+  const tipRaw = Math.max(0, clientTip ?? 0);
+
+  // NET (billed) section amounts = raw × per-section discount multiplier.
+  const entryFeesNet = standardEntryFees * discount.entryFee;
+  const machineNet = machineRaw * discount.machine;
+  const materialNet = materialRaw * discount.material;
+  const tipNet = tipRaw * discount.tip;
+
+  const totalPrice = round(entryFeesNet + machineNet + materialNet + tipNet);
+  const rawTotal = round(standardEntryFees + machineRaw + materialRaw + tipRaw);
+  const discountAmount = round(rawTotal - totalPrice);
+
+  // Store RAW section amounts (issue #284) so the invoice can re-render the
+  // standard prices and spell out what was waived per section. `totalPrice`
+  // is the authoritative net the bill is charged at.
   return {
     totalPrice,
-    entryFees: Math.round(entryFees * 100) / 100,
-    machineCost: Math.round(machineCost * 100) / 100,
-    materialCost: Math.round(materialCost * 100) / 100,
-    tip: Math.round(tip * 100) / 100,
+    entryFees: round(standardEntryFees),
+    machineCost: round(machineRaw),
+    materialCost: round(materialRaw),
+    tip: round(tipRaw),
+    discountAmount,
   };
+}
+
+/**
+ * Standard (regular) entry fee per person, before any usage-type discount.
+ * Shares the fail-loud config contract with {@link entryFeeFor}.
+ */
+function standardEntryFeeFor(
+  userType: string,
+  configFees: Record<string, Record<string, number>> | null,
+): number {
+  // entryFeeFor with usageType "regular" returns the standard fee unscaled
+  // (regular's entry-fee multiplier is 1).
+  return entryFeeFor(userType, "regular", configFees);
 }
 
 /**
@@ -341,6 +429,11 @@ async function closeExistingCheckout(
     (pricingDoc.data() as { entryFees?: Record<string, Record<string, number>> } | undefined)
       ?.entryFees ?? null;
 
+  // Membership SKU id for the `intern` loophole guard (issue #284). Read
+  // outside the transaction — config changes infrequently and it isn't
+  // tied to the checkout's atomicity.
+  const membershipCatalogId = await loadMembershipCatalogId(db);
+
   // Cross-check the primary person's userType against the user's stored
   // profile. We know the userIdRef from callerUid; fetched outside the
   // transaction to keep the txn small. A registered user can't claim
@@ -420,6 +513,13 @@ async function closeExistingCheckout(
       .map((d) => d.data() as CheckoutItemEntity)
       .filter(isValidItem);
 
+    // Loophole guards (issue #284): reject materialbezug-with-machine and
+    // intern-with-membership before billing.
+    assertUsageTypeAllowed(args.usageType, {
+      hasMachineUsage: hasMachineUsage(items),
+      hasMembershipItem: hasMembershipItem(items, membershipCatalogId),
+    });
+
     const summary = recomputeSummary(
       enforcedPersons,
       args.usageType,
@@ -489,6 +589,15 @@ async function createAnonymousCheckout(
       kept: validItems.length,
     });
   }
+
+  // Loophole guard (issue #284): materialbezug cannot coexist with machine
+  // usage. The membership guard is a no-op on this path — the anonymous
+  // create input carries no variantId, and memberships are bought through
+  // purchaseMembership (which closes via closeExistingCheckout).
+  assertUsageTypeAllowed(args.usageType, {
+    hasMachineUsage: hasMachineUsage(validItems),
+    hasMembershipItem: false,
+  });
 
   const db = getFirestore();
   const pricingDoc = await db.doc("config/pricing").get();

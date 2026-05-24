@@ -67,15 +67,16 @@ export function validatePricingConfig(value: unknown): string | null {
   if (!entryFees || typeof entryFees !== "object") {
     return "config/pricing.entryFees is missing"
   }
+  // Issue #284: there is one standard entry fee per user type
+  // (`regular`); the usage-type discount (hardcoded in `@oww/shared`)
+  // derives the rest. Only `regular` is required in config now.
   for (const userType of ["erwachsen", "kind", "firma"] as const) {
     const row = entryFees[userType] as Record<string, unknown> | undefined
     if (!row || typeof row !== "object") {
       return `config/pricing.entryFees.${userType} is missing`
     }
-    for (const usage of ["regular", "ermaessigt", "materialbezug", "intern", "hangenmoos"] as const) {
-      if (typeof row[usage] !== "number") {
-        return `config/pricing.entryFees.${userType}.${usage} must be a number`
-      }
+    if (typeof row.regular !== "number") {
+      return `config/pricing.entryFees.${userType}.regular must be a number`
     }
   }
 

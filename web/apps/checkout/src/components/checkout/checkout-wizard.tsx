@@ -471,22 +471,21 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
     // user reaches the checkout step they're already a Firebase
     // principal (anonymous, real, or tag), so no extra round-trip here.
 
-    // Calculate entry fees (client-side estimate for the receipt; the
-    // server recomputes authoritatively in closeCheckoutAndGetPayment).
+    // Calculate the cost breakdown (client-side estimate for the receipt;
+    // the server recomputes authoritatively in closeCheckoutAndGetPayment).
     // pricingConfig is non-null here — render is gated by the configError
-    // check above. calculateFee returns null for unknown userType+usageType
-    // combinations; treat those as zero to avoid blocking the submit on a
-    // misconfigured row (the server will throw and surface the error).
-    // Internal usage is never billed — entry fees, machine, and material
-    // costs all collapse to 0. Mirror the server-side defense in
-    // `recomputeSummary` so the displayed receipt matches what gets
-    // billed; both this wizard and StepCheckout flow through
-    // `computeCheckoutCosts`.
+    // check above. The usage-type discount (issue #284) waives sections per
+    // `USAGE_TYPE_DISCOUNTS`; we store RAW section amounts in the summary
+    // and compute the NET total here. Both this wizard and StepCheckout
+    // flow through `computeCheckoutCosts` so the displayed total matches.
     const {
       personFees: entryFees,
       machineCost,
       materialCost,
       membershipCost,
+      personFeesNet,
+      machineCostNet,
+      materialCostNet,
     } = computeCheckoutCosts({
       persons: state.persons,
       usageType: state.usageType,
@@ -497,10 +496,16 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
     // The persisted server-side `summary.materialCost` keeps membership
     // bundled in (the server's recomputeSummary buckets the membership SKU
     // under non-nfc material). Splitting it out is purely a display concern
-    // (issue #262/#263), so the submitted estimate folds it back in and the
-    // total still sums every bucket.
+    // (issue #262/#263), so the submitted estimate folds it back in.
     const billedMaterialCost = materialCost + membershipCost
-    const total = entryFees + machineCost + billedMaterialCost + state.tip
+    // NET total (issue #284): each section after its usage-type discount,
+    // plus the never-discounted membership fee and the tip. rawTotal is the
+    // pre-discount sum (membership folded in); their difference is the
+    // discountAmount stored on the summary below. Membership and tip appear
+    // in both, so they contribute 0 discount.
+    const total =
+      personFeesNet + machineCostNet + materialCostNet + membershipCost + state.tip
+    const rawTotal = entryFees + machineCost + billedMaterialCost + state.tip
 
     const persons = state.persons.map((p) => ({
       name: `${p.firstName} ${p.lastName}`,
@@ -518,12 +523,15 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
         : {}),
     }))
 
+    // Store RAW section amounts (issue #284); the server is authoritative
+    // and recomputes both net and discount.
     const summary = {
       totalPrice: total,
       entryFees,
       machineCost,
       materialCost: billedMaterialCost,
       tip: state.tip,
+      discountAmount: Math.round((rawTotal - total) * 100) / 100,
     }
 
     // One callable round-trip closes (or creates+closes) the checkout,

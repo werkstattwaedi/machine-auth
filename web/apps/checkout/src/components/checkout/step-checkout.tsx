@@ -6,8 +6,11 @@ import { Label } from "@modules/components/ui/label"
 import { formatCHF } from "@modules/lib/format"
 import {
   USAGE_TYPE_LABELS,
+  USAGE_DISCOUNT_LABELS,
   USER_TYPE_LABELS,
   calculateFee,
+  standardFee,
+  usageDiscount,
 } from "@modules/lib/pricing"
 import { type PricingConfig } from "@modules/lib/workshop-config"
 import {
@@ -175,14 +178,37 @@ interface StepCheckoutProps {
   membershipCatalogId?: string | null
 }
 
+export interface CheckoutCosts {
+  /** RAW (pre-discount) standard entry fees, summed across persons. */
+  personFees: number
+  /** RAW machine usage cost (nfc items). */
+  machineCost: number
+  /** RAW material cost (non-nfc items, excluding the membership SKU). */
+  materialCost: number
+  /**
+   * RAW Vereinsmitgliedschaft cost (issue #262/#263), split out of
+   * {@link materialCost} so the summary can render a dedicated section.
+   * Never discounted — the only material-waiving usage type (`intern`) is
+   * guarded against coexisting with a membership purchase.
+   */
+  membershipCost: number
+  /** NET (billed) entry fees after the usage-type discount. */
+  personFeesNet: number
+  /** NET (billed) machine cost after the usage-type discount. */
+  machineCostNet: number
+  /** NET (billed) material cost after the usage-type discount. */
+  materialCostNet: number
+}
+
 /**
  * Compute the displayed cost breakdown for the receipt step. Mirrors the
- * server-side authoritative {@link recomputeSummary} contract: when
- * {@link usageType} is `"intern"` the visit is never billed, so entry
- * fees, machine cost, and material cost all collapse to 0 regardless of
- * what items / config say. Tip stays honoured. The wizard's
- * `handleSubmit` and `StepCheckout` both flow through this helper so the
- * displayed total always matches what the server will bill.
+ * server-side authoritative {@link recomputeSummary} contract (issue #284):
+ * each section has a RAW (standard) amount and a NET amount after the
+ * usage-type discount multiplier (`USAGE_TYPE_DISCOUNTS`). e.g. a
+ * Freiwilligengruppe (`volunteering`) sees its raw entry + machine fees,
+ * but pays 0 for them; `intern` waives material too. Tip stays honoured.
+ * The wizard's `handleSubmit` and `StepCheckout` both flow through this
+ * helper so the displayed total always matches what the server bills.
  */
 export function computeCheckoutCosts({
   persons,
@@ -208,24 +234,14 @@ export function computeCheckoutCosts({
    * four buckets.
    */
   membershipCatalogId?: string | null
-}): {
-  personFees: number
-  machineCost: number
-  materialCost: number
-  membershipCost: number
-} {
-  // Internal usage is never billed.
-  if (usageType === "intern") {
-    return { personFees: 0, machineCost: 0, materialCost: 0, membershipCost: 0 }
-  }
+}): CheckoutCosts {
+  // No `intern` early-return: the usage-type discount multipliers
+  // (issue #284) zero out entry + machine + material for `intern` via the
+  // *Net fields, while the RAW fields stay populated so the receipt can show
+  // each waived amount with a per-section discount line.
+  const discount = usageDiscount(usageType)
   const personFees = persons.reduce(
-    (sum, p) =>
-      sum +
-      (calculateFee(
-        p.userType as Parameters<typeof calculateFee>[0],
-        usageType,
-        config,
-      ) ?? 0),
+    (sum, p) => sum + (standardFee(p.userType as Parameters<typeof standardFee>[0], config) ?? 0),
     0,
   )
   const machineCost = items
@@ -237,7 +253,15 @@ export function computeCheckoutCosts({
   })
   const membershipCost = membershipItems.reduce((s, i) => s + i.totalPrice, 0)
   const materialCost = otherItems.reduce((s, i) => s + i.totalPrice, 0)
-  return { personFees, machineCost, materialCost, membershipCost }
+  return {
+    personFees,
+    machineCost,
+    materialCost,
+    membershipCost,
+    personFeesNet: personFees * discount.entryFee,
+    machineCostNet: machineCost * discount.machine,
+    materialCostNet: materialCost * discount.material,
+  }
 }
 
 export function StepCheckout({
@@ -250,14 +274,23 @@ export function StepCheckout({
   config,
   membershipCatalogId,
 }: StepCheckoutProps) {
-  const { personFees, machineCost, materialCost, membershipCost } =
-    computeCheckoutCosts({
-      persons: state.persons,
-      usageType: state.usageType,
-      items,
-      config,
-      membershipCatalogId,
-    })
+  // Display NET (billed) section amounts — what the customer actually pays
+  // after the usage-type discount (issue #284). `membershipCost` renders the
+  // never-discounted Vereinsmitgliedschaft section (issue #262/#263).
+  const {
+    membershipCost,
+    personFeesNet,
+    machineCostNet,
+    materialCostNet,
+  } = computeCheckoutCosts({
+    persons: state.persons,
+    usageType: state.usageType,
+    items,
+    config,
+    membershipCatalogId,
+  })
+  const discount = usageDiscount(state.usageType)
+  const discountLabel = USAGE_DISCOUNT_LABELS[state.usageType]
   const nfcItems = useMemo(() => items.filter((i) => i.origin === "nfc"), [items])
   // Issue #262/#263: split the non-machine items into the Vereinsmitgliedschaft
   // bucket and everything else, so membership renders as its own first-position
@@ -274,12 +307,20 @@ export function StepCheckout({
   // fee, no machine, no material). Hide the three regular buckets so the
   // summary shows a single, unambiguous Vereinsmitgliedschaft section
   // (issue #262). A mixed cart still shows everything.
+  // Gate on the NET entry fee (issue #284): `personFees` is now the RAW
+  // standard fee, so a waived usage type (e.g. materialbezug) still has a
+  // non-zero raw fee. `personFeesNet === 0` is what "no entry fee billed"
+  // means under the discount model.
   const membershipOnly =
     membershipItems.length > 0 &&
     materialItems.length === 0 &&
     nfcItems.length === 0 &&
-    personFees === 0
-  const subtotal = personFees + machineCost + materialCost + membershipCost
+    personFeesNet === 0
+  // NET section amounts + the (never-discounted) membership fee. Membership
+  // is added at full price: the receipt renders it at full price and the only
+  // material-waiving usage type (`intern`) can't carry a membership.
+  const subtotal =
+    personFeesNet + machineCostNet + materialCostNet + membershipCost
 
   // Tip is split: manual entry + optional round-up to a chosen target.
   const [manualTip, setManualTip] = useState(0)
@@ -432,7 +473,7 @@ export function StepCheckout({
           summary={`${state.persons.length} ${
             state.persons.length === 1 ? "Person" : "Personen"
           } · ${USAGE_TYPE_LABELS[state.usageType]}`}
-          amount={personFees}
+          amount={personFeesNet}
           open={openSections.has("nutzung")}
           onToggle={() => toggle("nutzung")}
         >
@@ -463,12 +504,8 @@ export function StepCheckout({
           <DetailLabel>Personen</DetailLabel>
           <ul className="flex flex-col mt-1">
             {state.persons.map((p) => {
-              // Internal usage is never billed — display 0 per person to
-              // match `computeCheckoutCosts` and the server.
-              const fee =
-                state.usageType === "intern"
-                  ? 0
-                  : calculateFee(p.userType, state.usageType, config) ?? 0
+              // Billed (net) fee per person after the usage-type discount.
+              const fee = calculateFee(p.userType, state.usageType, config) ?? 0
               return (
                 <li
                   key={p.id}
@@ -487,6 +524,16 @@ export function StepCheckout({
               )
             })}
           </ul>
+          {discount.entryFee < 1 && discountLabel && (
+            <SectionDiscountNote
+              label={discountLabel}
+              text={
+                discount.entryFee === 0
+                  ? "Eintritt wird nicht verrechnet"
+                  : "Eintritt ermässigt"
+              }
+            />
+          )}
         </ExpandableSection>
 
         <ExpandableSection
@@ -500,7 +547,7 @@ export function StepCheckout({
                   nfcItems.length === 1 ? "Maschine" : "Maschinen"
                 } · ${totalMachineMinutes} Min total`
           }
-          amount={machineCost}
+          amount={machineCostNet}
           open={openSections.has("maschinen")}
           onToggle={() => toggle("maschinen")}
         >
@@ -509,17 +556,25 @@ export function StepCheckout({
               Keine Maschinen oder Werkzeuge erfasst.
             </p>
           ) : (
-            <PositionTable
-              firstColLabel="Akkumulierte Nutzungszeit"
-              rows={nfcItems.map((item) => ({
-                key: item.id,
-                title: item.description,
-                subtitle: null,
-                menge: `${Math.round(item.quantity * 60)} Min`,
-                kosten: `${item.unitPrice.toFixed(2)}/h`,
-                preis: item.totalPrice.toFixed(2),
-              }))}
-            />
+            <>
+              <PositionTable
+                firstColLabel="Akkumulierte Nutzungszeit"
+                rows={nfcItems.map((item) => ({
+                  key: item.id,
+                  title: item.description,
+                  subtitle: null,
+                  menge: `${Math.round(item.quantity * 60)} Min`,
+                  kosten: `${item.unitPrice.toFixed(2)}/h`,
+                  preis: item.totalPrice.toFixed(2),
+                }))}
+              />
+              {discount.machine < 1 && discountLabel && (
+                <SectionDiscountNote
+                  label={discountLabel}
+                  text="Maschinengebühren werden nicht verrechnet"
+                />
+              )}
+            </>
           )}
         </ExpandableSection>
 
@@ -534,7 +589,7 @@ export function StepCheckout({
                   materialItems.length === 1 ? "Position" : "Positionen"
                 }`
           }
-          amount={materialCost}
+          amount={materialCostNet}
           open={openSections.has("material")}
           onToggle={() => toggle("material")}
         >
@@ -543,10 +598,18 @@ export function StepCheckout({
               Kein Material bezogen.
             </p>
           ) : (
-            <PositionTable
-              firstColLabel="Bezogenes Material"
-              rows={materialItems.map(rowFromItem)}
-            />
+            <>
+              <PositionTable
+                firstColLabel="Bezogenes Material"
+                rows={materialItems.map(rowFromItem)}
+              />
+              {discount.material < 1 && discountLabel && (
+                <SectionDiscountNote
+                  label={discountLabel}
+                  text="Material wird nicht verrechnet"
+                />
+              )}
+            </>
           )}
         </ExpandableSection>
         </>
@@ -626,6 +689,22 @@ function DetailLabel({ children }: { children: React.ReactNode }) {
     <span className="block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
       {children}
     </span>
+  )
+}
+
+/**
+ * Inline note explaining why a section was discounted/waived (issue #284).
+ * Marco's complaint was that a checkout silently showed full prices but a
+ * CHF 0.00 total — this spells out the reason on the section itself.
+ */
+function SectionDiscountNote({ label, text }: { label: string; text: string }) {
+  return (
+    <p
+      data-testid="section-discount-note"
+      className="mt-3 text-[13px] italic text-cog-teal-dark"
+    >
+      {label}: {text}
+    </p>
   )
 }
 

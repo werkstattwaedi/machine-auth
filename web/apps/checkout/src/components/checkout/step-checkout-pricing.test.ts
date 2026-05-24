@@ -5,11 +5,13 @@ import { describe, it, expect } from "vitest"
 import { computeCheckoutCosts } from "./step-checkout"
 import type { PricingConfig } from "@modules/lib/workshop-config"
 
+// Issue #284: one standard fee per user type; the usage-type discount
+// (USAGE_TYPE_DISCOUNTS in @oww/shared) derives the rest.
 const config: PricingConfig = {
   entryFees: {
-    erwachsen: { regular: 15, materialbezug: 0, intern: 99, hangenmoos: 15 },
-    kind: { regular: 7.5, materialbezug: 0, intern: 99, hangenmoos: 7.5 },
-    firma: { regular: 30, materialbezug: 0, intern: 99, hangenmoos: 30 },
+    erwachsen: { regular: 15 },
+    kind: { regular: 7.5 },
+    firma: { regular: 30 },
   },
   workshops: {} as PricingConfig["workshops"],
   slaLayerPrice: { none: 0.01, member: 0.008 },
@@ -20,14 +22,10 @@ const config: PricingConfig = {
 }
 
 describe("computeCheckoutCosts", () => {
-  // Regression for issue #199: when usageType is "intern" the visit is
-  // never billed — entry fees, machine, and material costs all collapse
-  // to 0 regardless of items / config. This mirrors the server-side
-  // `recomputeSummary` defense so the displayed total matches what the
-  // server bills. A test that passes without the intern carve-out is
-  // not a regression test: removing the early-return in
-  // `computeCheckoutCosts` MUST make this case fail.
-  it("zeros entry fees, machine and material costs when usageType is intern", () => {
+  // Regression for issue #284: `computeCheckoutCosts` now returns BOTH raw
+  // (standard) and net (post-discount) section amounts. The displayed
+  // total mirrors the server-side `recomputeSummary` net.
+  it("stores raw amounts and waives everything but tip for intern (net = 0)", () => {
     const result = computeCheckoutCosts({
       persons: [{ userType: "erwachsen" }, { userType: "kind" }],
       usageType: "intern",
@@ -38,14 +36,50 @@ describe("computeCheckoutCosts", () => {
       ],
       config,
     })
-    expect(result.personFees).toBe(0)
-    expect(result.machineCost).toBe(0)
-    expect(result.materialCost).toBe(0)
+    // RAW (standard) amounts preserved.
+    expect(result.personFees).toBe(22.5) // 15 + 7.5
+    expect(result.machineCost).toBe(25)
+    expect(result.materialCost).toBe(19) // 12 + 7
+    // NET: intern waives entry + machine + material.
+    expect(result.personFeesNet).toBe(0)
+    expect(result.machineCostNet).toBe(0)
+    expect(result.materialCostNet).toBe(0)
   })
 
-  it("bills entry fees + items normally for non-intern usageType", () => {
-    // Sanity check: when usageType is "regular", the same inputs return
-    // non-zero costs, confirming the intern branch is the difference.
+  // Regression for issue #284: volunteering (Freiwilligengruppe) waives
+  // entry + machine but bills material.
+  it("waives entry + machine but bills material for volunteering", () => {
+    const result = computeCheckoutCosts({
+      persons: [{ userType: "erwachsen" }],
+      usageType: "volunteering",
+      items: [
+        { origin: "nfc", totalPrice: 25 },
+        { origin: "qr", totalPrice: 12 },
+      ],
+      config,
+    })
+    expect(result.personFees).toBe(15)
+    expect(result.machineCost).toBe(25)
+    expect(result.materialCost).toBe(12)
+    // NET: only material is billed.
+    expect(result.personFeesNet).toBe(0)
+    expect(result.machineCostNet).toBe(0)
+    expect(result.materialCostNet).toBe(12)
+  })
+
+  it("halves the entry fee for ermaessigt", () => {
+    const result = computeCheckoutCosts({
+      persons: [{ userType: "erwachsen" }],
+      usageType: "ermaessigt",
+      items: [{ origin: "nfc", totalPrice: 20 }],
+      config,
+    })
+    expect(result.personFees).toBe(15)
+    expect(result.personFeesNet).toBe(7.5)
+    expect(result.machineCostNet).toBe(20)
+  })
+
+  it("bills entry fees + items in full for regular usageType", () => {
     const result = computeCheckoutCosts({
       persons: [{ userType: "erwachsen" }],
       usageType: "regular",
@@ -59,6 +93,9 @@ describe("computeCheckoutCosts", () => {
     expect(result.machineCost).toBe(25)
     expect(result.materialCost).toBe(12)
     expect(result.membershipCost).toBe(0)
+    expect(result.personFeesNet).toBe(15)
+    expect(result.machineCostNet).toBe(25)
+    expect(result.materialCostNet).toBe(12)
   })
 
   // Issue #262/#263: the Vereinsmitgliedschaft SKU is broken out of
@@ -95,7 +132,10 @@ describe("computeCheckoutCosts", () => {
       config,
       membershipCatalogId: MEMBERSHIP_ID,
     })
-    expect(result.personFees).toBe(0)
+    // RAW entry fee is the standard fee (issue #284); materialbezug waives it
+    // via the discount multiplier, so the NET (billed) entry fee is 0.
+    expect(result.personFees).toBe(15)
+    expect(result.personFeesNet).toBe(0)
     expect(result.machineCost).toBe(0)
     expect(result.materialCost).toBe(0)
     expect(result.membershipCost).toBe(80)
