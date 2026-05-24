@@ -119,9 +119,12 @@ async function submitAndWaitForPaymentResult(page: Page) {
 
 test.describe("Checkout step screenshots", () => {
   // The Sammelrechnung-member test below stamps an active-single
-  // membership on the auth user doc. Reset to `none` so the stamp
-  // doesn't leak into other tests that expect a non-member view.
-  test.afterAll(async () => {
+  // membership on the shared auth user doc. Reset after *every* test so
+  // the stamp can't leak forward into a later test that expects a
+  // non-member view (e.g. the TWINT tab test). afterAll is insufficient:
+  // it runs only after the whole describe, leaving the leaked membership
+  // visible to tests that run between the seeding test and the end.
+  test.afterEach(async () => {
     const uid = process.env.E2E_AUTH_USER_UID
     if (uid) await seedMembershipState(uid, { kind: "none" })
   })
@@ -375,7 +378,7 @@ test.describe("Checkout step screenshots", () => {
 
     // Stamp an active-single membership on the seeded auth user so the
     // Sammelrechnung tab renders. Reset is handled by the describe-level
-    // afterAll.
+    // afterEach.
     const uid = process.env.E2E_AUTH_USER_UID
     test.skip(!uid, "E2E_AUTH_USER_UID not set (global-setup did not run)")
     await seedMembershipState(uid!, { kind: "active-single" })
