@@ -20,6 +20,8 @@ import {
   freeZeroAmountInvoice,
   registeredUserInvoice,
   zeroItemsInvoice,
+  membershipOnlyInvoice,
+  membershipMixedInvoice,
 } from "./invoice_test_fixtures";
 import type { InvoiceData } from "../../src/invoice/types";
 
@@ -201,5 +203,17 @@ describe("buildInvoicePdf — visual regression", function () {
   // "Zahlbar durch" debtor box empty for handwriting.
   it("anonymous walk-in (no recipient block, no QR debtor)", async () => {
     await compareAllPages("anonymous-walkin", zeroItemsInvoice());
+  });
+
+  // Issue #262: membership-only bill — a dedicated "Mitgliedschaft" block,
+  // no workshop groups, no "Diverses" heading.
+  it("membership-only (Mitgliedschaft block, no workshop groups)", async () => {
+    await compareAllPages("membership-only", membershipOnlyInvoice());
+  });
+
+  // Issue #263: mixed bill — "Mitgliedschaft" block first, then the
+  // workshop group; membership does not bleed into a Diverses heading.
+  it("membership + workshop items (Mitgliedschaft block above workshops)", async () => {
+    await compareAllPages("membership-mixed", membershipMixedInvoice());
   });
 });

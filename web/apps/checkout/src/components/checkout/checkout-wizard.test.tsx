@@ -71,6 +71,9 @@ vi.mock("@modules/lib/token-auth", () => ({
 // the submit branches into `newCheckout`.
 vi.mock("@modules/lib/firestore", () => ({
   useCollection: () => ({ data: [], loading: false, error: null }),
+  // Issue #262/#263: the wizard reads `config/catalog-references` to resolve
+  // the membership SKU id. No membership in these tests → null doc.
+  useDocument: () => ({ data: null, loading: false, error: null }),
 }))
 
 // --- firestore-helpers (refs are unused values in our fakes) ---
@@ -78,6 +81,7 @@ vi.mock("@modules/lib/firestore-helpers", () => ({
   userRef: () => ({ id: "test-user", path: "users/test-user" }),
   checkoutsCollection: () => ({ path: "checkouts" }),
   checkoutItemsCollection: () => ({ path: "checkouts/x/items" }),
+  catalogReferencesRef: () => ({ path: "config/catalog-references" }),
   // Issue #209: family-roster quick-add subscribes to `memberships` and
   // `users`; the test's `useCollection` mock returns an empty list, so the
   // refs themselves are unused — but the imports must resolve.

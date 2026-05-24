@@ -58,5 +58,63 @@ describe("computeCheckoutCosts", () => {
     expect(result.personFees).toBe(15)
     expect(result.machineCost).toBe(25)
     expect(result.materialCost).toBe(12)
+    expect(result.membershipCost).toBe(0)
+  })
+
+  // Issue #262/#263: the Vereinsmitgliedschaft SKU is broken out of
+  // materialCost into its own membershipCost bucket so the summary can show
+  // it as a dedicated section.
+  const MEMBERSHIP_ID = "membership-sku-001"
+
+  it("breaks the membership SKU out into membershipCost (mixed cart)", () => {
+    const result = computeCheckoutCosts({
+      persons: [{ userType: "erwachsen" }],
+      usageType: "regular",
+      items: [
+        { origin: "nfc", totalPrice: 25 },
+        { origin: "manual", totalPrice: 80, catalogId: MEMBERSHIP_ID },
+        { origin: "manual", totalPrice: 12, catalogId: "wood-1" },
+      ],
+      config,
+      membershipCatalogId: MEMBERSHIP_ID,
+    })
+    expect(result.personFees).toBe(15)
+    expect(result.machineCost).toBe(25)
+    // membership (80) is NOT in materialCost; only the wood item (12) is.
+    expect(result.materialCost).toBe(12)
+    expect(result.membershipCost).toBe(80)
+  })
+
+  it("a membership-only cart yields membershipCost only (materialbezug, fee 0)", () => {
+    const result = computeCheckoutCosts({
+      persons: [{ userType: "erwachsen" }],
+      usageType: "materialbezug",
+      items: [
+        { origin: "manual", totalPrice: 80, catalogId: MEMBERSHIP_ID },
+      ],
+      config,
+      membershipCatalogId: MEMBERSHIP_ID,
+    })
+    expect(result.personFees).toBe(0)
+    expect(result.machineCost).toBe(0)
+    expect(result.materialCost).toBe(0)
+    expect(result.membershipCost).toBe(80)
+  })
+
+  it("keeps membership in materialCost when no membership SKU is configured", () => {
+    // Without a membershipCatalogId nothing is classified as membership —
+    // behaviour is identical to before the feature (regression guard).
+    const result = computeCheckoutCosts({
+      persons: [{ userType: "erwachsen" }],
+      usageType: "regular",
+      items: [
+        { origin: "manual", totalPrice: 80, catalogId: MEMBERSHIP_ID },
+        { origin: "manual", totalPrice: 12, catalogId: "wood-1" },
+      ],
+      config,
+      membershipCatalogId: null,
+    })
+    expect(result.materialCost).toBe(92)
+    expect(result.membershipCost).toBe(0)
   })
 })

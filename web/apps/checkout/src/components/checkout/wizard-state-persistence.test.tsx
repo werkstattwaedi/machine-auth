@@ -84,6 +84,9 @@ vi.mock("@modules/lib/firestore", () => ({
     const next = collectionQueue.shift()
     return next ?? { data: [], loading: false, error: null }
   },
+  // Issue #262/#263: the wizard reads `config/catalog-references` for the
+  // membership SKU id. Not under test here → stable null doc.
+  useDocument: () => ({ data: null, loading: false, error: null }),
 }))
 
 // --- firestore-helpers ---
@@ -98,6 +101,7 @@ vi.mock("@modules/lib/firestore-helpers", () => ({
   }),
   checkoutsCollection: () => ({ path: "checkouts" }),
   checkoutItemsCollection: () => ({ path: "checkouts/x/items" }),
+  catalogReferencesRef: () => ({ path: "config/catalog-references" }),
   membershipsCollection: () => ({ path: "memberships" }),
   usersCollection: () => ({ path: "users" }),
 }))

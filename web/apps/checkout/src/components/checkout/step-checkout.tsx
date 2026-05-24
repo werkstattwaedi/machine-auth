@@ -24,6 +24,8 @@ import type { CheckoutState, CheckoutAction } from "./use-checkout-state"
 import type { CheckoutItemLocal } from "@/components/usage/inline-rows"
 import { PositionTable, rowFromItem } from "@/components/usage/position-table"
 import type { UsageType } from "@modules/lib/pricing"
+import { partitionMembership } from "@oww/shared"
+import { BadgeCheck } from "lucide-react"
 
 /**
  * Compute up to 4 sensible round-up total targets for the current base.
@@ -169,6 +171,8 @@ interface StepCheckoutProps {
   submitError?: string | null
   items: CheckoutItemLocal[]
   config: PricingConfig | null
+  /** Vereinsmitgliedschaft catalog id (issue #262/#263); null when unset. */
+  membershipCatalogId?: string | null
 }
 
 /**
@@ -185,15 +189,34 @@ export function computeCheckoutCosts({
   usageType,
   items,
   config,
+  membershipCatalogId,
 }: {
   persons: { userType: string }[]
   usageType: UsageType
-  items: { origin: string; totalPrice: number }[]
+  items: {
+    origin: string
+    totalPrice: number
+    catalogId?: string | null
+  }[]
   config: PricingConfig | null
-}): { personFees: number; machineCost: number; materialCost: number } {
+  /**
+   * Vereinsmitgliedschaft catalog id (issue #262/#263). When set, membership
+   * items are broken out of {@link materialCost} into {@link membershipCost}
+   * so the summary can render a dedicated section. The persisted server-side
+   * `summary.materialCost` keeps membership bundled in (see
+   * `recomputeSummary`); the submit total is unaffected because it sums all
+   * four buckets.
+   */
+  membershipCatalogId?: string | null
+}): {
+  personFees: number
+  machineCost: number
+  materialCost: number
+  membershipCost: number
+} {
   // Internal usage is never billed.
   if (usageType === "intern") {
-    return { personFees: 0, machineCost: 0, materialCost: 0 }
+    return { personFees: 0, machineCost: 0, materialCost: 0, membershipCost: 0 }
   }
   const personFees = persons.reduce(
     (sum, p) =>
@@ -208,10 +231,13 @@ export function computeCheckoutCosts({
   const machineCost = items
     .filter((i) => i.origin === "nfc")
     .reduce((s, i) => s + i.totalPrice, 0)
-  const materialCost = items
-    .filter((i) => i.origin !== "nfc")
-    .reduce((s, i) => s + i.totalPrice, 0)
-  return { personFees, machineCost, materialCost }
+  const nonMachine = items.filter((i) => i.origin !== "nfc")
+  const { membershipItems, otherItems } = partitionMembership(nonMachine, {
+    membershipCatalogId,
+  })
+  const membershipCost = membershipItems.reduce((s, i) => s + i.totalPrice, 0)
+  const materialCost = otherItems.reduce((s, i) => s + i.totalPrice, 0)
+  return { personFees, machineCost, materialCost, membershipCost }
 }
 
 export function StepCheckout({
@@ -222,19 +248,38 @@ export function StepCheckout({
   submitError,
   items,
   config,
+  membershipCatalogId,
 }: StepCheckoutProps) {
-  const { personFees, machineCost, materialCost } = computeCheckoutCosts({
-    persons: state.persons,
-    usageType: state.usageType,
-    items,
-    config,
-  })
+  const { personFees, machineCost, materialCost, membershipCost } =
+    computeCheckoutCosts({
+      persons: state.persons,
+      usageType: state.usageType,
+      items,
+      config,
+      membershipCatalogId,
+    })
   const nfcItems = useMemo(() => items.filter((i) => i.origin === "nfc"), [items])
-  const materialItems = useMemo(
-    () => items.filter((i) => i.origin !== "nfc"),
-    [items],
+  // Issue #262/#263: split the non-machine items into the Vereinsmitgliedschaft
+  // bucket and everything else, so membership renders as its own first-position
+  // section instead of being lumped under Materialbezug.
+  const { membershipItems, otherItems: materialItems } = useMemo(
+    () =>
+      partitionMembership(
+        items.filter((i) => i.origin !== "nfc"),
+        { membershipCatalogId },
+      ),
+    [items, membershipCatalogId],
   )
-  const subtotal = personFees + machineCost + materialCost
+  // Membership-only checkout: the visitor bought just a membership (no entry
+  // fee, no machine, no material). Hide the three regular buckets so the
+  // summary shows a single, unambiguous Vereinsmitgliedschaft section
+  // (issue #262). A mixed cart still shows everything.
+  const membershipOnly =
+    membershipItems.length > 0 &&
+    materialItems.length === 0 &&
+    nfcItems.length === 0 &&
+    personFees === 0
+  const subtotal = personFees + machineCost + materialCost + membershipCost
 
   // Tip is split: manual entry + optional round-up to a chosen target.
   const [manualTip, setManualTip] = useState(0)
@@ -352,8 +397,34 @@ export function StepCheckout({
       {/* Block — Dein Besuch */}
       <SectionEyebrow>Dein Besuch</SectionEyebrow>
 
-      {/* Three type-of-cost rows in one bordered card */}
+      {/* Type-of-cost rows in one bordered card. Issue #262: the
+          Vereinsmitgliedschaft section is rendered first and only when a
+          membership SKU is in the cart; a membership-only checkout hides the
+          three regular buckets below. */}
       <div className="rounded-md border border-border bg-background overflow-hidden">
+        {membershipItems.length > 0 && (
+          <ExpandableSection
+            id="mitgliedschaft"
+            icon={<BadgeCheck className="h-4 w-4 text-cog-teal-dark" />}
+            title="Vereinsmitgliedschaft"
+            summary={
+              membershipItems.length === 1
+                ? membershipItems[0].description
+                : `${membershipItems.length} Positionen`
+            }
+            amount={membershipCost}
+            open={openSections.has("mitgliedschaft")}
+            onToggle={() => toggle("mitgliedschaft")}
+          >
+            <PositionTable
+              firstColLabel="Mitgliedschaft"
+              rows={membershipItems.map(rowFromItem)}
+            />
+          </ExpandableSection>
+        )}
+
+        {!membershipOnly && (
+        <>
         <ExpandableSection
           id="nutzung"
           icon={<Coins className="h-4 w-4 text-cog-teal-dark" />}
@@ -478,6 +549,8 @@ export function StepCheckout({
             />
           )}
         </ExpandableSection>
+        </>
+        )}
       </div>
 
       {/* Spende — gold card, sits below items */}

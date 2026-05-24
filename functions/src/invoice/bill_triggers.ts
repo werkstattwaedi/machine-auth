@@ -24,6 +24,7 @@ import { formatWorkshopDateTime } from "../util/workshop_timezone";
 import { formatBillReference } from "./types";
 import { logOperationError } from "../operations_log";
 import { assertTemplateConfigured } from "../util/resend_template";
+import { loadMembershipCatalogId } from "../membership/shared";
 import { processMembershipForAckedBill } from "../membership/process_membership_payment";
 import type {
   BillEntity,
@@ -134,6 +135,12 @@ async function assembleInvoiceData(
   } | undefined;
   const workshops = pricingData?.workshops ?? {};
   const configFees = pricingData?.entryFees ?? null;
+
+  // Issue #262/#263: resolve the Vereinsmitgliedschaft catalog id once so the
+  // renderer can break membership items out of the workshop groups into a
+  // dedicated "Mitgliedschaft" block. Null when no membership SKU is
+  // configured — the renderer then groups items exactly as before.
+  const membershipCatalogId = await loadMembershipCatalogId(db);
 
   // Load all checkouts + items
   const checkoutDocs = await Promise.all(
@@ -270,6 +277,7 @@ async function assembleInvoiceData(
     paidVia: bill.paidVia ?? null,
     paymentMethod,
     kind,
+    membershipCatalogId,
   };
 }
 
