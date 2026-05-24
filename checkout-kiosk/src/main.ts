@@ -11,6 +11,7 @@ import {
 import path from "node:path"
 import { resolveConfig } from "./config"
 import { startNfc } from "./bridge/nfc"
+import { sendToPrinter } from "./bridge/printer"
 import type { NfcTagEvent } from "./types"
 
 const config = resolveConfig()
@@ -122,13 +123,39 @@ function dispatchNfc(event: NfcTagEvent): void {
   }
 }
 
+// Synchronous bootstrap payload delivered to the preload at startup.
+// Sandboxed preloads can't `require("./mode.generated")` reliably, so
+// the mode is plumbed through here alongside the feature list. Keep
+// this serialisable — `event.returnValue` goes through Electron's
+// structured clone.
+const bridgeBootstrap = {
+  mode: config.mode,
+  features: ["nfc", ...(config.printer ? ["print"] : [])] as readonly string[],
+}
+
 // IPC handles backing the `window.bridge.*` preload API
+ipcMain.on("bridge:bootstrap", (event) => {
+  event.returnValue = bridgeBootstrap
+})
 ipcMain.handle("bridge:get-url", () => config.url)
 ipcMain.handle("bridge:bearer", () => config.bearer || null)
 ipcMain.handle("bridge:reset-session", async () => {
   if (config.mode !== "kiosk") return
   await clearSession()
 })
+ipcMain.handle(
+  "bridge:print",
+  async (_event, bytes: Uint8Array | ArrayBuffer) => {
+    if (!config.printer) {
+      throw new Error(
+        "Printer not configured (BRIDGE_PRINTER_HOST is unset)"
+      )
+    }
+    const buf =
+      bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)
+    return sendToPrinter(config.printer, buf)
+  }
+)
 
 app.whenReady().then(async () => {
   // Always start kiosk from a clean session — any leftover IndexedDB /

@@ -11,10 +11,14 @@ import { PageHeader } from "@/components/admin/page-header"
 import { Card, CardContent } from "@modules/components/ui/card"
 import { Button } from "@modules/components/ui/button"
 import { useForm } from "react-hook-form"
-import { Loader2, Save } from "lucide-react"
+import { Loader2, Printer, Save } from "lucide-react"
 import { useEffect } from "react"
 import { httpsCallable } from "firebase/functions"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
+import { useBridge } from "@modules/lib/use-bridge"
+import { printer } from "@oww/shared"
+import { useLabelBitmap } from "@/printer/use-label-bitmap"
+import { LabelPreview } from "@/printer/label-preview"
 import { CatalogFormFields, type CatalogFormValues } from "@/components/admin/catalog-form-fields"
 
 export const Route = createFileRoute(
@@ -37,6 +41,14 @@ function CatalogDetailPage() {
     errorMessage: "Katalogeintrag konnte nicht gespeichert werden",
   })
   const saving = save.loading
+
+  const bridge = useBridge()
+  const canPrint = bridge.features.includes("print")
+  const print = useAsyncMutation({
+    context: "admin.printLabel",
+    successMessage: "Etikett gedruckt",
+    errorMessage: "Etikett konnte nicht gedruckt werden",
+  })
 
   const { register, handleSubmit, reset, control } = useForm<CatalogFormValues>()
 
@@ -65,8 +77,35 @@ function CatalogDetailPage() {
     }
   }, [catalog, reset])
 
+  const checkoutDomain = import.meta.env.VITE_CHECKOUT_DOMAIN
+  const labelInput =
+    canPrint && catalog && checkoutDomain
+      ? {
+          url: `${checkoutDomain}/visit/add/item/${catalog.code}`,
+          title: catalog.name,
+          code: `#${catalog.code}`,
+          tape: "18mm" as const,
+        }
+      : null
+  const { bitmap: previewBitmap, loading: rendering } = useLabelBitmap(
+    labelInput,
+    canPrint,
+  )
+
   if (loading) return <PageLoading />
   if (!catalog) return <div>Katalogeintrag nicht gefunden.</div>
+
+  const onPrint = async () => {
+    if (!previewBitmap) return
+    try {
+      await print.mutate(async () => {
+        const bytes = printer.buildRasterJob(previewBitmap, { tape: "18mm" })
+        await bridge.print(bytes)
+      })
+    } catch {
+      // useAsyncMutation already toasted + logged.
+    }
+  }
 
   const onSubmit = async (values: CatalogFormValues) => {
     // Preserve any extra variants on the doc (the admin form edits only
@@ -138,14 +177,34 @@ function CatalogDetailPage() {
             className="space-y-4 max-w-lg"
           >
             <CatalogFormFields register={register} control={control} showActive />
-            <Button type="submit" disabled={saving}>
-              {saving ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : (
-                <Save className="h-4 w-4 mr-2" />
+            <div className="flex gap-2">
+              <Button type="submit" disabled={saving}>
+                {saving ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Save className="h-4 w-4 mr-2" />
+                )}
+                Speichern
+              </Button>
+              {canPrint && (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={onPrint}
+                    disabled={print.loading || !previewBitmap}
+                  >
+                    {print.loading ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : (
+                      <Printer className="h-4 w-4 mr-2" />
+                    )}
+                    Etikett drucken
+                  </Button>
+                  <LabelPreview bitmap={previewBitmap} loading={rendering} />
+                </>
               )}
-              Speichern
-            </Button>
+            </div>
           </form>
         </CardContent>
       </Card>

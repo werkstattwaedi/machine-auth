@@ -62,6 +62,15 @@ export const GRANTABLE_PERMISSION_NAME = "CNC Fräse"
 export const GRANT_TARGET_USER_ID = SEEDED_DIRECTORY_USERS[0].id
 
 export default async function globalSetup() {
+  // Pure-render specs (e.g. label-preview-screenshot) don't need Auth or
+  // Firestore. Set PLAYWRIGHT_SKIP_GLOBAL_SETUP=1 to skip the emulator
+  // setup entirely — the spec runner still gets a Vite dev server via
+  // webServer, which is all those specs need.
+  if (process.env.PLAYWRIGHT_SKIP_GLOBAL_SETUP === "1") {
+    console.log("[global-setup] Skipped (PLAYWRIGHT_SKIP_GLOBAL_SETUP=1)")
+    return
+  }
+
   const db = getAdminFirestore()
 
   await clearEmulatorFirestore()

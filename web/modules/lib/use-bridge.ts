@@ -25,6 +25,7 @@ interface BridgeApi {
   getUrl: () => Promise<string>
   onUrlChange: (cb: (url: string) => void) => () => void
   onNfcTag: (cb: (payload: NfcTagEvent) => void) => () => void
+  print: (bytes: Uint8Array) => Promise<{ bytesSent: number }>
 }
 
 interface UseBridgeResult {
@@ -34,6 +35,10 @@ interface UseBridgeResult {
   bearer: () => Promise<string | null>
   resetSession: () => Promise<void>
   onNfcTag: (cb: (payload: NfcTagEvent) => void) => () => void
+  /** Send a raw byte stream to the configured label printer. Rejects
+   *  when the bridge is absent or `features` doesn't include "print" —
+   *  callers should feature-detect before invoking. */
+  print: (bytes: Uint8Array) => Promise<{ bytesSent: number }>
 }
 
 function getBridge(): BridgeApi | undefined {
@@ -66,6 +71,9 @@ export function useBridge(): UseBridgeResult {
         bearer: async () => null,
         resetSession: async () => {},
         onNfcTag: () => NO_OP_UNSUBSCRIBE,
+        print: async () => {
+          throw new Error("Bridge not available")
+        },
       }
     }
     return {
@@ -75,6 +83,7 @@ export function useBridge(): UseBridgeResult {
       bearer: bridge.bearer,
       resetSession: bridge.resetSession,
       onNfcTag: bridge.onNfcTag,
+      print: bridge.print,
     }
   }, [])
 }
