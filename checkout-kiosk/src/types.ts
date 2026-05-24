@@ -23,6 +23,10 @@ export interface Bridge {
   getUrl: () => Promise<string>
   onUrlChange: (cb: (url: string) => void) => () => void
   onNfcTag: (cb: (payload: NfcTagEvent) => void) => () => void
+  /** Send a raw byte stream to the configured label printer (TCP:9100).
+   *  Available only when `features.includes("print")`. Rejects with a
+   *  human-readable error on connect/write failure. */
+  print: (bytes: Uint8Array) => Promise<{ bytesSent: number }>
 }
 
 // Compile-time proof that the kiosk can resolve @oww/shared.

@@ -65,6 +65,7 @@ on a Windows machine or Windows CI runner.
 | `BRIDGE_KIOSK_URL` | `https://localhost:5173/?kiosk` | kiosk mode | Base URL for the checkout web app |
 | `BRIDGE_ADMIN_URL` | `https://localhost:5174/` | admin mode | Base URL for the admin web app |
 | `BRIDGE_BEARER_KEY` | `""` | both | Per-build Bearer secret. **Required in production** (refusing to start without it). The web app passes it as `Authorization: Bearer …` to backend endpoints that decode the tag (`/api/verifyTagCheckout` today). The dev/emulator path bypasses the check, so an empty value is fine when the URL points at localhost. |
+| `BRIDGE_PRINTER_HOST` | _(unset)_ | admin mode (today) | `host[:port]` of a Brother PT-P950NW on the LAN (e.g. `labeler.internal:9100`). When set, the bridge advertises the `"print"` feature and forwards `window.bridge.print(bytes)` calls over TCP. Unset → admin "Etikett drucken" buttons are hidden. Defaults to port 9100 when no port given. |
 
 The Bearer is a soft revocation/audit knob, not real attestation — anyone
 with local admin on this machine can extract it. The actual security
