@@ -124,7 +124,7 @@ function dispatchNfc(event: NfcTagEvent): void {
 }
 
 // Synchronous bootstrap payload delivered to the preload at startup.
-// Sandboxed preloads can't `require("./mode.generated")` reliably, so
+// Sandboxed preloads can't `require("./build-config.generated")` reliably, so
 // the mode is plumbed through here alongside the feature list. Keep
 // this serialisable — `event.returnValue` goes through Electron's
 // structured clone.

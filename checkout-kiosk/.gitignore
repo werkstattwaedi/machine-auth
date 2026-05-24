@@ -1,8 +1,9 @@
 node_modules/
 dist/
 release/
-# Build-time injected by scripts/inject-mode.mjs. Never commit — the
-# typecheck/start/build scripts always re-inject before tsc runs, so a
-# fresh clone runs through `npm run typecheck` cleanly because the
-# script writes the file first.
-src/mode.generated.ts
+# Build-time injected by scripts/inject-build-config.mjs. Never commit —
+# typecheck/start/build always re-inject before tsc runs, so a fresh
+# clone runs through `npm run typecheck` cleanly because the script
+# writes the file first. Production builds bake the bearer secret into
+# this file, which is a second reason to keep it out of git.
+src/build-config.generated.ts

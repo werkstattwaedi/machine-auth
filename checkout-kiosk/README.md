@@ -7,10 +7,11 @@ Single Electron codebase that produces **two** named binaries:
 - **OWW Admin** — normal admin desktop app, loads the admin web app,
   persistent session (admins stay signed in).
 
-Both binaries expose the same `window.bridge.*` IPC API to the loaded web
-app — NFC today, label printer next (issue #313). The mode is **baked at
-build time** by `scripts/inject-mode.mjs`; there is no `--mode` runtime
-flag.
+Both binaries expose the same `window.bridge.*` IPC API to the loaded
+web app — NFC + label printer (issue #313). The mode, target URL,
+bearer secret, and printer host are all **baked at build time** by
+`scripts/inject-build-config.mjs`; there are no runtime flags or env
+vars on the installed host.
 
 **Tested readers:** ACS ACR1252 (recommended). The Identiv uTrust 3700 F
 has reliability issues with READ BINARY on NTAG424 DNA tags.
@@ -41,7 +42,8 @@ npm run start:admin     # injects BRIDGE_MODE=admin, compiles, launches
 
 `start:kiosk` defaults to `https://localhost:5173/?kiosk`,
 `start:admin` to `https://localhost:5174/`. Override per-env via
-`BRIDGE_KIOSK_URL` / `BRIDGE_ADMIN_URL`.
+`BRIDGE_KIOSK_URL` / `BRIDGE_ADMIN_URL`. See [Build-time
+Configuration](#build-time-configuration) for the full env-var list.
 
 ## Packaging
 
@@ -58,14 +60,22 @@ Cross-compiling for Windows from Linux works through Wine (see the
 electron-builder docs); the recommended path is to run the Windows build
 on a Windows machine or Windows CI runner.
 
-## Environment Variables
+## Build-time Configuration
+
+All settings are **baked into the binary at build time** by
+`scripts/inject-build-config.mjs` (one kiosk and one admin host in
+production; managing per-host env vars is more painful than reshipping
+a self-contained binary). The script reads env vars on the build host
+and writes `src/build-config.generated.ts`, which the runtime imports
+as plain constants.
 
 | Variable | Default | Used by | Description |
 |----------|---------|---------|-------------|
-| `BRIDGE_KIOSK_URL` | `https://localhost:5173/?kiosk` | kiosk mode | Base URL for the checkout web app |
-| `BRIDGE_ADMIN_URL` | `https://localhost:5174/` | admin mode | Base URL for the admin web app |
-| `BRIDGE_BEARER_KEY` | `""` | both | Per-build Bearer secret. **Required in production** (refusing to start without it). The web app passes it as `Authorization: Bearer …` to backend endpoints that decode the tag (`/api/verifyTagCheckout` today). The dev/emulator path bypasses the check, so an empty value is fine when the URL points at localhost. |
-| `BRIDGE_PRINTER_HOST` | _(unset)_ | admin mode (today) | `host[:port]` of a Brother PT-P950NW on the LAN (e.g. `labeler.internal:9100`). When set, the bridge advertises the `"print"` feature and forwards `window.bridge.print(bytes)` calls over TCP. Unset → admin "Etikett drucken" buttons are hidden. Defaults to port 9100 when no port given. |
+| `BRIDGE_MODE` | _(required)_ | inject script | `kiosk` or `admin`. Set automatically by `npm run build:kiosk` / `build:admin` / `dev:kiosk` / `dev:admin`. |
+| `BRIDGE_KIOSK_URL` | `https://localhost:5173/?kiosk` | kiosk builds | Base URL for the checkout web app. |
+| `BRIDGE_ADMIN_URL` | `https://localhost:5174/` | admin builds | Base URL for the admin web app. |
+| `BRIDGE_BEARER_KEY` | `""` | both | Per-build Bearer secret. **The build fails** when the URL points at a non-localhost host and this is empty. Web app sends it as `Authorization: Bearer …` to backend endpoints that decode the tag (`/api/verifyTagCheckout` today). The dev/emulator path bypasses the check, so empty is fine on localhost. |
+| `BRIDGE_PRINTER_HOST` | _(unset)_ | admin builds (today) | `host[:port]` of a Brother PT-P950NW on the LAN (e.g. `labeler.internal:9100`). When set, the bridge advertises the `"print"` feature and forwards `window.bridge.print(bytes)` over TCP. Unset → admin "Etikett drucken" buttons stay hidden. Defaults to port 9100 when no port given. |
 
 The Bearer is a soft revocation/audit knob, not real attestation — anyone
 with local admin on this machine can extract it. The actual security
@@ -73,19 +83,58 @@ defense for the kiosk badge flow is the synthetic-UID custom token
 returned by `verifyTagCheckout`. See `docs/Security Analysis.md` for the
 threat model.
 
-Production (kiosk):
+### Production builds (`--prod`)
+
 ```bash
-BRIDGE_KIOSK_URL=https://checkout.werkstattwaedi.ch/?kiosk \
-BRIDGE_BEARER_KEY="$(cat /etc/oww-kiosk/bearer.key)" \
-  npm run start:kiosk
+npm run build:kiosk:prod    # → release/kiosk/oww-kiosk-<ver>-…
+npm run build:admin:prod    # → release/admin/oww-admin-<ver>-…
 ```
 
-The Bearer should be installed on the host outside the checked-in source
-tree (e.g., a file owned by root, or a systemd EnvironmentFile / Windows
-machine-wide environment variable). Rotate the secret with
-`firebase functions:secrets:set KIOSK_BEARER_KEY` (the server-side secret
-name stays as `KIOSK_BEARER_KEY`; only the client-side env var was
-renamed in #314).
+The `:prod` scripts pass `--prod` to `inject-build-config.mjs`, which:
+
+* Reads URLs + printer host from the operations repo
+  (`../machine-auth-operations/config.jsonc`, same file
+  `scripts/generate-env.ts` reads — keeps Electron + web apps +
+  Cloud Functions in sync). Override the location with
+  `OPERATIONS_CONFIG_DIR`.
+* Fetches the bearer from Google Secret Manager
+  (`gcloud secrets versions access latest --secret=KIOSK_BEARER_KEY`)
+  — same secret Cloud Functions reads server-side. Requires `gcloud`
+  authenticated against the OWW project.
+
+Any explicit env var still wins, so you can override single values
+without losing the rest:
+
+```bash
+# Build a kiosk binary pointing at the staging URL but using prod bearer:
+BRIDGE_KIOSK_URL=https://checkout.staging.werkstattwaedi.ch/?kiosk \
+  npm run build:kiosk:prod
+```
+
+#### Required keys in the operations config
+
+```jsonc
+{
+  "web": {
+    "checkoutDomain": "checkout.werkstattwaedi.ch",   // already present
+    "adminDomain":    "admin.werkstattwaedi.ch"       // NEW for --prod admin builds
+  },
+  "electron": {
+    "printerHost":    "labeler.internal:9100"         // NEW for --prod admin builds
+  }
+}
+```
+
+Kiosk builds only need `web.checkoutDomain`; admin builds also need
+`web.adminDomain` + `electron.printerHost`. The script fails the build
+with a clear error if any required key is missing.
+
+The bearer secret is baked into the JavaScript bundle, so the
+`.AppImage` / installer is itself confidential. Build on a trusted
+host (e.g. your laptop) and hand-carry the installer to the kiosk /
+admin workstation. **Rotating the bearer = rebuild + reinstall.**
+Server-side rotation lives at `firebase functions:secrets:set
+KIOSK_BEARER_KEY` (same secret name on both sides).
 
 ## How It Works
 
@@ -106,23 +155,24 @@ renamed in #314).
 
 ```
 src/
-├── main.ts                  Main process entry (Electron lifecycle, IPC)
-├── preload.ts               Exposes window.bridge to renderer + webview
-├── config.ts                Mode/URL/window resolver (pure function)
-├── mode.generated.ts        Build-injected BRIDGE_MODE constant
+├── main.ts                       Main process entry (Electron lifecycle, IPC)
+├── preload.ts                    Exposes window.bridge to renderer + webview
+├── config.ts                     Mode/URL/window resolver (pure function)
+├── build-config.generated.ts     Build-injected constants (mode + URL + bearer + printer)
 ├── bridge/
-│   └── nfc.ts               nfc-pcsc wrapper, APDU + NDEF parsing
-├── types.ts                 Shared Bridge / NfcTagEvent types
+│   ├── nfc.ts                    nfc-pcsc wrapper, APDU + NDEF parsing
+│   └── printer.ts                TCP forwarder to Brother PT-P950NW
+├── types.ts                      Shared Bridge / NfcTagEvent types
 └── renderer/
-    ├── renderer.ts          Chrome script (creates webview, wires reset)
-    └── tsconfig.json        ESM/DOM target (separate from main tsconfig)
+    ├── renderer.ts               Chrome script (creates webview, wires reset)
+    └── tsconfig.json             ESM/DOM target (separate from main tsconfig)
 
 renderer/
-├── index.html               Chrome HTML (loads dist/renderer/renderer.js)
-└── styles.css               Chrome CSS
+├── index.html                    Chrome HTML (loads dist/renderer/renderer.js)
+└── styles.css                    Chrome CSS
 
 scripts/
-└── inject-mode.mjs          Writes src/mode.generated.ts before each build
+└── inject-build-config.mjs       Writes src/build-config.generated.ts before each build
 ```
 
 ## Notes

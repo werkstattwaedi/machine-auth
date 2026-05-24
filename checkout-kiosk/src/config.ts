@@ -1,7 +1,12 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { BRIDGE_MODE } from "./mode.generated"
+import {
+  BRIDGE_BEARER_KEY,
+  BRIDGE_MODE,
+  BRIDGE_PRINTER_HOST,
+  BRIDGE_URL,
+} from "./build-config.generated"
 import { parsePrinterEndpoint, type PrinterEndpoint } from "./bridge/printer"
 import type { BridgeMode } from "./types"
 
@@ -18,38 +23,24 @@ export interface BridgeConfig {
     autoHideMenuBar: boolean
     showResetButton: boolean
   }
-  /** Resolved from `BRIDGE_PRINTER_HOST` (e.g. `labeler.internal:9100`).
-   *  `null` when unset → bridge does not advertise the `"print"` feature. */
+  /** Resolved from the baked `BRIDGE_PRINTER_HOST` build constant
+   *  (e.g. `labeler.internal:9100`). `null` when empty → bridge does
+   *  not advertise the `"print"` feature. */
   printer: PrinterEndpoint | null
-}
-
-const DEFAULT_URLS: Record<BridgeMode, string> = {
-  kiosk: "https://localhost:5173/?kiosk",
-  admin: "https://localhost:5174/",
-}
-
-function urlEnvVar(mode: BridgeMode): string {
-  return mode === "kiosk" ? "BRIDGE_KIOSK_URL" : "BRIDGE_ADMIN_URL"
 }
 
 export function resolveConfig(): BridgeConfig {
   const mode = BRIDGE_MODE
-  const url = process.env[urlEnvVar(mode)] ?? DEFAULT_URLS[mode]
+  const url = BRIDGE_URL
+  // Anything still pointing at localhost is by definition a dev build;
+  // `inject-build-config.mjs` enforces that production builds carry a
+  // real URL + bearer.
   const isDev = url.includes("localhost")
-  const bearer = process.env.BRIDGE_BEARER_KEY ?? ""
-
-  if (!bearer && !isDev) {
-    console.error(
-      "FATAL: BRIDGE_BEARER_KEY env var is required in production. " +
-        "Refusing to start."
-    )
-    process.exit(1)
-  }
 
   return {
     mode,
     url,
-    bearer,
+    bearer: BRIDGE_BEARER_KEY,
     isDev,
     partition: mode === "kiosk" ? "persist:kiosk:volatile" : "persist:admin",
     productName: mode === "kiosk" ? "OWW Kiosk" : "OWW Admin",
@@ -59,6 +50,6 @@ export function resolveConfig(): BridgeConfig {
       autoHideMenuBar: mode === "kiosk",
       showResetButton: mode === "kiosk",
     },
-    printer: parsePrinterEndpoint(process.env.BRIDGE_PRINTER_HOST),
+    printer: parsePrinterEndpoint(BRIDGE_PRINTER_HOST),
   }
 }
