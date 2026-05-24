@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { BRIDGE_MODE } from "./mode.generated"
+import { parsePrinterEndpoint, type PrinterEndpoint } from "./bridge/printer"
 import type { BridgeMode } from "./types"
 
 export interface BridgeConfig {
@@ -17,6 +18,9 @@ export interface BridgeConfig {
     autoHideMenuBar: boolean
     showResetButton: boolean
   }
+  /** Resolved from `BRIDGE_PRINTER_HOST` (e.g. `labeler.internal:9100`).
+   *  `null` when unset → bridge does not advertise the `"print"` feature. */
+  printer: PrinterEndpoint | null
 }
 
 const DEFAULT_URLS: Record<BridgeMode, string> = {
@@ -55,5 +59,6 @@ export function resolveConfig(): BridgeConfig {
       autoHideMenuBar: mode === "kiosk",
       showResetButton: mode === "kiosk",
     },
+    printer: parsePrinterEndpoint(process.env.BRIDGE_PRINTER_HOST),
   }
 }

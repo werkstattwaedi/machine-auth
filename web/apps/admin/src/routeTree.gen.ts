@@ -14,6 +14,7 @@ import { Route as LinkAccountRouteImport } from "./routes/link-account"
 import { Route as AuthenticatedRouteImport } from "./routes/_authenticated"
 import { Route as IndexRouteImport } from "./routes/index"
 import { Route as LoginVerifyRouteImport } from "./routes/login_.verify"
+import { Route as TestLabelPreviewRouteImport } from "./routes/_test.label-preview"
 import { Route as AuthenticatedUsersRouteImport } from "./routes/_authenticated/users"
 import { Route as AuthenticatedTerminalsRouteImport } from "./routes/_authenticated/terminals"
 import { Route as AuthenticatedSessionsRouteImport } from "./routes/_authenticated/sessions"
@@ -58,6 +59,11 @@ const IndexRoute = IndexRouteImport.update({
 const LoginVerifyRoute = LoginVerifyRouteImport.update({
   id: "/login_/verify",
   path: "/login/verify",
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TestLabelPreviewRoute = TestLabelPreviewRouteImport.update({
+  id: "/_test/label-preview",
+  path: "/label-preview",
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedUsersRoute = AuthenticatedUsersRouteImport.update({
@@ -191,6 +197,7 @@ export interface FileRoutesByFullPath {
   "/sessions": typeof AuthenticatedSessionsRoute
   "/terminals": typeof AuthenticatedTerminalsRoute
   "/users": typeof AuthenticatedUsersRouteWithChildren
+  "/label-preview": typeof TestLabelPreviewRoute
   "/login/verify": typeof LoginVerifyRoute
   "/machines/$machineId": typeof AuthenticatedMachinesMachineIdRoute
   "/materials/$materialId": typeof AuthenticatedMaterialsMaterialIdRoute
@@ -213,6 +220,7 @@ export interface FileRoutesByTo {
   "/checkouts": typeof AuthenticatedCheckoutsRoute
   "/sessions": typeof AuthenticatedSessionsRoute
   "/terminals": typeof AuthenticatedTerminalsRoute
+  "/label-preview": typeof TestLabelPreviewRoute
   "/login/verify": typeof LoginVerifyRoute
   "/machines/$machineId": typeof AuthenticatedMachinesMachineIdRoute
   "/materials/$materialId": typeof AuthenticatedMaterialsMaterialIdRoute
@@ -242,6 +250,7 @@ export interface FileRoutesById {
   "/_authenticated/sessions": typeof AuthenticatedSessionsRoute
   "/_authenticated/terminals": typeof AuthenticatedTerminalsRoute
   "/_authenticated/users": typeof AuthenticatedUsersRouteWithChildren
+  "/_test/label-preview": typeof TestLabelPreviewRoute
   "/login_/verify": typeof LoginVerifyRoute
   "/_authenticated/machines/$machineId": typeof AuthenticatedMachinesMachineIdRoute
   "/_authenticated/materials/$materialId": typeof AuthenticatedMaterialsMaterialIdRoute
@@ -271,6 +280,7 @@ export interface FileRouteTypes {
     | "/sessions"
     | "/terminals"
     | "/users"
+    | "/label-preview"
     | "/login/verify"
     | "/machines/$machineId"
     | "/materials/$materialId"
@@ -293,6 +303,7 @@ export interface FileRouteTypes {
     | "/checkouts"
     | "/sessions"
     | "/terminals"
+    | "/label-preview"
     | "/login/verify"
     | "/machines/$machineId"
     | "/materials/$materialId"
@@ -321,6 +332,7 @@ export interface FileRouteTypes {
     | "/_authenticated/sessions"
     | "/_authenticated/terminals"
     | "/_authenticated/users"
+    | "/_test/label-preview"
     | "/login_/verify"
     | "/_authenticated/machines/$machineId"
     | "/_authenticated/materials/$materialId"
@@ -341,6 +353,7 @@ export interface RootRouteChildren {
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   LinkAccountRoute: typeof LinkAccountRoute
   LoginRoute: typeof LoginRoute
+  TestLabelPreviewRoute: typeof TestLabelPreviewRoute
   LoginVerifyRoute: typeof LoginVerifyRoute
 }
 
@@ -379,6 +392,13 @@ declare module "@tanstack/react-router" {
       path: "/login/verify"
       fullPath: "/login/verify"
       preLoaderRoute: typeof LoginVerifyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    "/_test/label-preview": {
+      id: "/_test/label-preview"
+      path: "/label-preview"
+      fullPath: "/label-preview"
+      preLoaderRoute: typeof TestLabelPreviewRouteImport
       parentRoute: typeof rootRouteImport
     }
     "/_authenticated/users": {
@@ -648,6 +668,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   LinkAccountRoute: LinkAccountRoute,
   LoginRoute: LoginRoute,
+  TestLabelPreviewRoute: TestLabelPreviewRoute,
   LoginVerifyRoute: LoginVerifyRoute,
 }
 export const routeTree = rootRouteImport

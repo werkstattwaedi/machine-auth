@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { contextBridge, ipcRenderer } from "electron"
-import { BRIDGE_MODE } from "./mode.generated"
-import type { Bridge, NfcTagEvent } from "./types"
+import type { Bridge, BridgeMode, NfcTagEvent } from "./types"
 
 // Per-context subscriber sets. The main process broadcasts NFC events to
 // every webContents that has called `bridge:nfc-subscribe`, so a single
@@ -23,9 +22,17 @@ ipcRenderer.on("bridge:url-change", (_event, url: string) => {
   urlCallbacks.forEach((cb) => cb(url))
 })
 
+// Bootstrap (mode + features) is delivered synchronously from main so
+// the preload doesn't depend on any sibling module (sandboxed preloads
+// can't reliably resolve relative requires).
+const bootstrap = ipcRenderer.sendSync("bridge:bootstrap") as {
+  mode: BridgeMode
+  features: readonly string[]
+}
+
 const bridge: Bridge = {
-  mode: BRIDGE_MODE,
-  features: ["nfc"],
+  mode: bootstrap.mode,
+  features: bootstrap.features,
   bearer: () => ipcRenderer.invoke("bridge:bearer"),
   resetSession: () => ipcRenderer.invoke("bridge:reset-session"),
   getUrl: () => ipcRenderer.invoke("bridge:get-url"),
@@ -43,6 +50,7 @@ const bridge: Bridge = {
       nfcCallbacks.delete(cb)
     }
   },
+  print: (bytes) => ipcRenderer.invoke("bridge:print", bytes),
 }
 
 contextBridge.exposeInMainWorld("bridge", bridge)
