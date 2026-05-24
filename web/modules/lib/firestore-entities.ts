@@ -228,6 +228,16 @@ export interface CheckoutDoc extends AuditFields {
   created: Timestamp
   workshopsVisited: string[]
   persons: CheckoutPersonDoc[]
+  /**
+   * Firebase Auth UID of the user who created this checkout. Set to
+   * `request.auth.uid` for every client-side create (anonymous OR
+   * signed-in Firebase Auth). Stable across the doc's lifetime (unlike
+   * `modifiedBy`, which tracks the last writer) so the cleanup job can
+   * pair an expired anon auth user with the checkouts they created.
+   * Null only for system / admin-SDK writes such as CognitoForms
+   * imports. Issue #318.
+   */
+  firebaseUid?: string | null
   billRef?: DocumentReference<BillDoc> | null
   closedAt?: Timestamp
   notes?: string | null

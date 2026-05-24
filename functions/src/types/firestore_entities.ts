@@ -190,6 +190,15 @@ export interface CheckoutEntity {
   modifiedBy: string | null;
   modifiedAt: Timestamp;
 
+  // Firebase Auth UID of the user who created this checkout. Set to
+  // `request.auth.uid` for every client-side create (anonymous OR
+  // signed-in Firebase Auth). Stable across the checkout's lifetime —
+  // unlike `modifiedBy`, which tracks the last writer — so the
+  // abandoned-checkout cleanup job can pair an expired anon auth user
+  // with the checkouts they created. Null only for system / admin-SDK
+  // writes such as CognitoForms imports. Issue #318.
+  firebaseUid?: string | null;
+
   // Set when a bill is created for this checkout
   billRef?: DocumentReference | null;
 

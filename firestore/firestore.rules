@@ -201,12 +201,21 @@ service cloud.firestore {
       //
       // Closes Security Analysis §R2 (no more attacker-supplied userId
       // from an unauth client) and the legacy `if true` branch.
+      // Issue #318: every client-side create must stamp `firebaseUid`
+      // with the caller's own `request.auth.uid` (anonymous OR
+      // signed-in). This gives the abandoned-checkout cleanup a single,
+      // generally-applicable join key — and forge protection drops out:
+      // a session cannot tag a checkout with anyone else's UID. Admin
+      // SDK writes (e.g. CognitoForms imports) bypass rules and may
+      // leave `firebaseUid` null.
       allow create: if (request.resource.data.status == 'open' || request.resource.data.status == 'closed')
         && request.resource.data.keys().hasOnly([
              'userId', 'status', 'usageType', 'created',
              'workshopsVisited', 'persons', 'modifiedBy', 'modifiedAt',
+             'firebaseUid',
              'closedAt', 'notes', 'summary'
            ])
+        && request.resource.data.get('firebaseUid', null) == request.auth.uid
         && (
              (request.resource.data.userId == null && isAnonymousAuth()) ||
              isCheckoutPrincipalFor(request.resource.data.userId)
@@ -243,12 +252,12 @@ service cloud.firestore {
         (isCheckoutPrincipalFor(resource.data.userId) &&
          resource.data.status == "open" &&
          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-           'status', 'summary', 'closedAt', 'billRef'
+           'status', 'summary', 'closedAt', 'billRef', 'firebaseUid'
          ])) ||
         (resource.data.userId == null && isAnonymousAuth() &&
          resource.data.status == "open" &&
          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-           'status', 'summary', 'closedAt', 'billRef', 'userId'
+           'status', 'summary', 'closedAt', 'billRef', 'userId', 'firebaseUid'
          ])) ||
         (resource.data.status == "closed" &&
          request.resource.data.diff(resource.data).affectedKeys().hasOnly([

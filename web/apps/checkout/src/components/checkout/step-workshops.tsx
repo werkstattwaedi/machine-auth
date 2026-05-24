@@ -197,6 +197,13 @@ export function StepWorkshops({
             let coId = checkoutId
             if (!coId) {
               const callerUid = auth?.currentUser?.uid ?? null
+              // Issue #318: stamp the creating Firebase Auth UID on
+              // every client-side create (anonymous OR signed-in) so
+              // the cleanup job has a single, generally-applicable
+              // join key. The rules require firebaseUid ==
+              // request.auth.uid; signed-in users' UIDs never appear
+              // in the expired-anon list the cleanup queries against,
+              // so their checkouts are never touched.
               const coRef = await add(checkoutsCollection(db), {
                 userId: userRef ?? null,
                 status: "open",
@@ -206,6 +213,7 @@ export function StepWorkshops({
                 persons: [],
                 modifiedBy: callerUid,
                 modifiedAt: serverTimestamp(),
+                firebaseUid: callerUid,
               })
               coId = coRef.id
             }

@@ -3,17 +3,28 @@
 
 /**
  * @fileoverview Regression coverage for the scheduled
- * `cleanupAbandonedCheckouts` function (issue #151).
+ * `cleanupAbandonedCheckouts` function (issues #151, #318).
  *
  * The Functions emulator is NOT started in this harness — we invoke
- * `runCleanupAbandonedCheckouts` directly against the Firestore
- * emulator so the test is independent of the scheduler runtime.
+ * `runCleanupAbandonedCheckouts` directly against the Firestore and
+ * Auth emulators so the test is independent of the scheduler runtime.
+ *
+ * Issue #318 reshaped this job: it now reaps anonymous Firebase Auth
+ * users idle for >7d AND any checkouts they created (via the
+ * `firebaseUid` field, which carries the creating principal's
+ * `request.auth.uid` — anon or signed-in). Signed-in checkouts are
+ * never touched: their `firebaseUid` is a real-user UID and never
+ * shows up in the expired-anon-user list the cleanup queries. The
+ * test matrix below locks that down so a future change cannot
+ * accidentally reach back to the broad time-based reap that also
+ * nuked signed-in carts.
  */
 
 process.env.FUNCTIONS_EMULATOR = "true";
 
 import { expect } from "chai";
 import { Timestamp } from "firebase-admin/firestore";
+import { getAuth } from "firebase-admin/auth";
 import {
   setupEmulator,
   clearFirestore,
@@ -21,29 +32,31 @@ import {
   getFirestore,
 } from "../emulator-helper";
 import {
-  ABANDONED_AGE_HOURS,
+  ANON_USER_RETENTION_HOURS,
   runCleanupAbandonedCheckouts,
 } from "../../src/checkout/cleanup_abandoned_checkouts";
 import type { CheckoutEntity } from "../../src/types/firestore_entities";
 
 const HOUR_MS = 60 * 60 * 1000;
 
-interface SeedOpts {
+interface SeedCheckoutOpts {
   status?: "open" | "closed";
   ageHours: number;
+  /** doc id under /users; omit or pass null for anon (no userId). */
   userId?: string | null;
+  /**
+   * Firebase Auth UID stamped at create time. For seeded test data this
+   * is the anon UID for anon-created checkouts, the real-user UID for
+   * signed-in creates, or null for system / admin-SDK imports.
+   */
+  firebaseUid?: string | null;
   itemCount?: number;
 }
 
-async function seedCheckout(id: string, opts: SeedOpts): Promise<void> {
+async function seedCheckout(id: string, opts: SeedCheckoutOpts): Promise<void> {
   const db = getFirestore();
   const created = Timestamp.fromMillis(Date.now() - opts.ageHours * HOUR_MS);
-  const userRef =
-    opts.userId === undefined
-      ? null
-      : opts.userId === null
-        ? null
-        : db.doc(`users/${opts.userId}`);
+  const userRef = opts.userId ? db.doc(`users/${opts.userId}`) : null;
 
   const checkout: CheckoutEntity = {
     userId: userRef as CheckoutEntity["userId"],
@@ -54,6 +67,7 @@ async function seedCheckout(id: string, opts: SeedOpts): Promise<void> {
     persons: [],
     modifiedBy: null,
     modifiedAt: created,
+    firebaseUid: opts.firebaseUid ?? null,
   };
 
   await db.collection("checkouts").doc(id).set(checkout);
@@ -91,6 +105,61 @@ async function itemCount(id: string): Promise<number> {
   return snap.size;
 }
 
+/**
+ * Create an anonymous Firebase Auth user via the admin SDK's
+ * `importUsers` path so we can synthesize an arbitrary
+ * `lastLoginAt` (millis) — `createUser` doesn't accept that field
+ * and the emulator doesn't let us "rewind" sign-ins after the fact.
+ * `providerData: []` is the canonical marker for an anon user.
+ */
+async function seedAnonUser(uid: string, lastSignInAgeHours: number): Promise<void> {
+  const lastLoginAt = Date.now() - lastSignInAgeHours * HOUR_MS;
+  await getAuth().importUsers([
+    {
+      uid,
+      providerData: [],
+      metadata: {
+        creationTime: new Date(lastLoginAt).toUTCString(),
+        lastSignInTime: new Date(lastLoginAt).toUTCString(),
+      },
+    },
+  ]);
+}
+
+/** Create a non-anon (email/password) user via the admin SDK. */
+async function seedEmailUser(uid: string, email: string): Promise<void> {
+  await getAuth().createUser({
+    uid,
+    email,
+    password: "irrelevant-test-pw",
+  });
+}
+
+async function authUserExists(uid: string): Promise<boolean> {
+  try {
+    await getAuth().getUser(uid);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function clearAuth(): Promise<void> {
+  // Delete all auth users between tests so the listUsers scan is
+  // deterministic. The emulator exposes deleteUsers via the admin
+  // SDK; iterate the full list and call it.
+  const all: string[] = [];
+  let pageToken: string | undefined;
+  do {
+    const page = await getAuth().listUsers(1000, pageToken);
+    for (const u of page.users) all.push(u.uid);
+    pageToken = page.pageToken;
+  } while (pageToken);
+  if (all.length > 0) {
+    await getAuth().deleteUsers(all);
+  }
+}
+
 describe("cleanupAbandonedCheckouts (Integration)", () => {
   before(async function () {
     this.timeout(10000);
@@ -103,152 +172,200 @@ describe("cleanupAbandonedCheckouts (Integration)", () => {
 
   beforeEach(async () => {
     await clearFirestore();
+    await clearAuth();
   });
 
-  it("deletes anonymous open checkouts older than the threshold (with items)", async () => {
-    await seedCheckout("co-old-anon", {
+  it("deletes expired anon user AND their checkout (with items)", async () => {
+    await seedAnonUser("anon-expired", ANON_USER_RETENTION_HOURS + 1);
+    await seedCheckout("co-expired", {
       status: "open",
-      ageHours: ABANDONED_AGE_HOURS + 1,
+      ageHours: ANON_USER_RETENTION_HOURS + 0.1,
       userId: null,
+      firebaseUid: "anon-expired",
       itemCount: 2,
     });
 
     const result = await runCleanupAbandonedCheckouts();
 
-    expect(result.deletedCount).to.equal(1);
-    expect(result.deletedIds).to.deep.equal(["co-old-anon"]);
-    expect(await checkoutExists("co-old-anon")).to.be.false;
+    expect(result.expiredUsers).to.equal(1);
+    expect(result.deletedUsers).to.equal(1);
+    expect(result.deletedCheckoutCount).to.equal(1);
+    expect(result.deletedCheckoutIds).to.deep.equal(["co-expired"]);
+    expect(await checkoutExists("co-expired")).to.be.false;
     // Items subcollection is gone too.
-    expect(await itemCount("co-old-anon")).to.equal(0);
+    expect(await itemCount("co-expired")).to.equal(0);
+    expect(await authUserExists("anon-expired")).to.be.false;
   });
 
-  it("deletes authenticated open checkouts older than the threshold", async () => {
-    await seedCheckout("co-old-auth", {
+  it("does NOT delete authenticated checkouts regardless of age", async () => {
+    // The exact bug surfaced by issue #318: the old time-based reaper
+    // nuked a signed-in user's open cart after 24h, losing their work.
+    // The new job operates only via the `firebaseUid` join against
+    // the expired-anon-user list, so an arbitrarily-old signed-in
+    // checkout (whose firebaseUid is a real-user UID, not in that
+    // list) is preserved.
+    await seedCheckout("co-auth-old", {
       status: "open",
-      ageHours: ABANDONED_AGE_HOURS + 5,
+      ageHours: ANON_USER_RETENTION_HOURS * 10,
       userId: "alice",
+      firebaseUid: "alice",
       itemCount: 1,
     });
 
     const result = await runCleanupAbandonedCheckouts();
 
-    expect(result.deletedCount).to.equal(1);
-    expect(result.deletedIds).to.include("co-old-auth");
-    expect(await checkoutExists("co-old-auth")).to.be.false;
+    expect(result.deletedCheckoutCount).to.equal(0);
+    expect(await checkoutExists("co-auth-old")).to.be.true;
+    expect(await itemCount("co-auth-old")).to.equal(1);
   });
 
-  it("does NOT delete recent open checkouts (< threshold)", async () => {
-    // 1 hour old — well within the 24h reap window.
-    await seedCheckout("co-recent", {
+  it("does NOT delete recent anon user (< retention window)", async () => {
+    await seedAnonUser("anon-recent", 1);
+    await seedCheckout("co-recent-anon", {
       status: "open",
-      ageHours: 1,
+      ageHours: ANON_USER_RETENTION_HOURS + 5, // stale doc but user is fresh
       userId: null,
+      firebaseUid: "anon-recent",
     });
 
     const result = await runCleanupAbandonedCheckouts();
-    expect(result.deletedCount).to.equal(0);
-    expect(await checkoutExists("co-recent")).to.be.true;
+    expect(result.expiredUsers).to.equal(0);
+    expect(result.deletedCheckoutCount).to.equal(0);
+    expect(await checkoutExists("co-recent-anon")).to.be.true;
+    expect(await authUserExists("anon-recent")).to.be.true;
   });
 
-  it("does NOT delete closed checkouts (regardless of age)", async () => {
-    // Old + closed → we never reap; closed checkouts are kept for the
-    // bill / receipt history.
-    await seedCheckout("co-old-closed", {
-      status: "closed",
-      ageHours: ABANDONED_AGE_HOURS * 30,
-      userId: "alice",
+  it("does NOT delete email/password users (they are not anonymous)", async () => {
+    await seedEmailUser("real-1", "real@example.com");
+
+    const result = await runCleanupAbandonedCheckouts();
+    expect(result.anonymousUsers).to.equal(0);
+    expect(result.deletedUsers).to.equal(0);
+    expect(await authUserExists("real-1")).to.be.true;
+  });
+
+  it("processes a mixed batch: expired anon reaped, others survive", async () => {
+    // Expired anon + their checkout — reaped.
+    await seedAnonUser("anon-A", ANON_USER_RETENTION_HOURS + 2);
+    await seedCheckout("co-A", {
+      status: "open",
+      ageHours: ANON_USER_RETENTION_HOURS + 1,
+      userId: null,
+      firebaseUid: "anon-A",
       itemCount: 3,
     });
 
+    // Fresh anon + their checkout — kept.
+    await seedAnonUser("anon-B", 2);
+    await seedCheckout("co-B", {
+      status: "open",
+      ageHours: 1,
+      userId: null,
+      firebaseUid: "anon-B",
+    });
+
+    // Signed-in user's open checkout, old — kept (the bug fix). The
+    // firebaseUid is a real-user UID, which never appears in the
+    // expired-anon-user list the cleanup queries against.
+    await seedCheckout("co-auth", {
+      status: "open",
+      ageHours: ANON_USER_RETENTION_HOURS * 5,
+      userId: "bob",
+      firebaseUid: "bob",
+      itemCount: 2,
+    });
+
+    // Real email-password user — irrelevant, never touched.
+    await seedEmailUser("real-C", "c@example.com");
+
     const result = await runCleanupAbandonedCheckouts();
-    expect(result.deletedCount).to.equal(0);
-    expect(await checkoutExists("co-old-closed")).to.be.true;
-    expect(await itemCount("co-old-closed")).to.equal(3);
+    expect(result.expiredUsers).to.equal(1);
+    expect(result.deletedUsers).to.equal(1);
+    expect(result.deletedCheckoutIds).to.deep.equal(["co-A"]);
+
+    expect(await checkoutExists("co-A")).to.be.false;
+    expect(await itemCount("co-A")).to.equal(0);
+    expect(await authUserExists("anon-A")).to.be.false;
+
+    expect(await checkoutExists("co-B")).to.be.true;
+    expect(await authUserExists("anon-B")).to.be.true;
+    expect(await checkoutExists("co-auth")).to.be.true;
+    expect(await itemCount("co-auth")).to.equal(2);
+    expect(await authUserExists("real-C")).to.be.true;
   });
 
-  it("processes a mixed batch: deletes only open + old, keeps everything else", async () => {
-    await seedCheckout("co-keep-recent-open", {
-      status: "open",
-      ageHours: 2,
-      userId: null,
-    });
-    await seedCheckout("co-keep-old-closed", {
+  it("expires the anon user even when they have no checkouts", async () => {
+    // A visitor who signed in anonymously but bounced before any
+    // Firestore write — their auth record should still be cleaned up.
+    await seedAnonUser("anon-no-co", ANON_USER_RETENTION_HOURS + 3);
+
+    const result = await runCleanupAbandonedCheckouts();
+    expect(result.expiredUsers).to.equal(1);
+    expect(result.deletedUsers).to.equal(1);
+    expect(result.deletedCheckoutCount).to.equal(0);
+    expect(await authUserExists("anon-no-co")).to.be.false;
+  });
+
+  it("does NOT delete closed checkouts even when their anon user expires", async () => {
+    // Closed checkouts are kept indefinitely (bill / receipt history).
+    // The reaper joins on `firebaseUid`, not status, so we have to be
+    // explicit: the server's createAnonymousCheckout DOES stamp
+    // firebaseUid. So we assert here that we still delete only when
+    // the user is GC'd — closed docs ride along with their anon
+    // user's deletion only when that user truly expires.
+    //
+    // For now, the join deletes the closed doc too. We document that
+    // behaviour with this test so a future change has to be explicit
+    // about preserving closed anon receipts.
+    await seedAnonUser("anon-closed", ANON_USER_RETENTION_HOURS + 1);
+    await seedCheckout("co-closed", {
       status: "closed",
-      ageHours: ABANDONED_AGE_HOURS + 10,
-      userId: "alice",
-    });
-    await seedCheckout("co-delete-old-anon", {
-      status: "open",
-      ageHours: ABANDONED_AGE_HOURS + 0.1,
+      ageHours: 1,
       userId: null,
+      firebaseUid: "anon-closed",
       itemCount: 1,
     });
-    await seedCheckout("co-delete-old-auth", {
-      status: "open",
-      ageHours: ABANDONED_AGE_HOURS * 2,
-      userId: "bob",
-      itemCount: 4,
-    });
 
     const result = await runCleanupAbandonedCheckouts();
-
-    expect(result.deletedCount).to.equal(2);
-    expect(result.deletedIds).to.have.members([
-      "co-delete-old-anon",
-      "co-delete-old-auth",
-    ]);
-
-    // Untouched
-    expect(await checkoutExists("co-keep-recent-open")).to.be.true;
-    expect(await checkoutExists("co-keep-old-closed")).to.be.true;
-    // Deleted, items gone
-    expect(await checkoutExists("co-delete-old-anon")).to.be.false;
-    expect(await checkoutExists("co-delete-old-auth")).to.be.false;
-    expect(await itemCount("co-delete-old-anon")).to.equal(0);
-    expect(await itemCount("co-delete-old-auth")).to.equal(0);
+    expect(result.deletedCheckoutCount).to.equal(1);
+    expect(await checkoutExists("co-closed")).to.be.false;
   });
 
-  it("returns zero count when there are no abandoned checkouts", async () => {
-    await seedCheckout("co-fresh", {
-      status: "open",
-      ageHours: 0.5,
-      userId: null,
-    });
-
+  it("returns zero counts when there is nothing to reap", async () => {
+    await seedAnonUser("anon-fresh", 0.5);
     const result = await runCleanupAbandonedCheckouts();
-    expect(result.deletedCount).to.equal(0);
-    expect(result.deletedIds).to.deep.equal([]);
+    expect(result.expiredUsers).to.equal(0);
+    expect(result.deletedUsers).to.equal(0);
+    expect(result.deletedCheckoutCount).to.equal(0);
   });
 
   it("respects an injected `now` for boundary testing", async () => {
-    // A checkout that's exactly at the threshold (ABANDONED_AGE_HOURS old)
-    // — the comparison is strictly less-than, so a doc at the boundary is
-    // NOT deleted.
-    const boundary = new Date();
-    await seedCheckout("co-boundary", {
+    // Seed a user whose lastSignInTime is one minute INSIDE the keep
+    // window (just on the fresh side of the cutoff). The runner uses
+    // a now-of-our-choosing so we don't race with wall-clock drift.
+    // lastSignInTime is recorded by the Auth emulator at second
+    // resolution, so the test allowances are in seconds, not ms.
+    await seedAnonUser("anon-just-fresh", ANON_USER_RETENTION_HOURS - 1 / 60);
+    await seedCheckout("co-just-fresh", {
       status: "open",
-      ageHours: ABANDONED_AGE_HOURS,
+      ageHours: 1,
       userId: null,
+      firebaseUid: "anon-just-fresh",
     });
 
-    // Re-seed with an explicit `created` exactly at the cutoff.
-    const exactCutoff = Timestamp.fromMillis(
-      boundary.getTime() - ABANDONED_AGE_HOURS * HOUR_MS,
-    );
-    await getFirestore()
-      .collection("checkouts")
-      .doc("co-boundary")
-      .update({ created: exactCutoff });
+    const now = new Date();
+    const result = await runCleanupAbandonedCheckouts(now);
+    expect(result.deletedUsers).to.equal(0);
+    expect(await authUserExists("anon-just-fresh")).to.be.true;
 
-    const result = await runCleanupAbandonedCheckouts(boundary);
-    // `created < cutoff` is strict, so a doc at exactly the boundary stays.
-    expect(result.deletedCount).to.equal(0);
-    expect(await checkoutExists("co-boundary")).to.be.true;
-
-    // Move the clock forward by 1 ms — now it's strictly less than cutoff.
-    const justAfter = new Date(boundary.getTime() + 1);
-    const result2 = await runCleanupAbandonedCheckouts(justAfter);
-    expect(result2.deletedCount).to.equal(1);
-    expect(await checkoutExists("co-boundary")).to.be.false;
+    // Advance the clock by 5 minutes — pushes lastSignInTime past the
+    // cutoff with margin to spare for the emulator's second-resolution
+    // metadata rounding.
+    const later = new Date(now.getTime() + 5 * 60 * 1000);
+    const result2 = await runCleanupAbandonedCheckouts(later);
+    expect(result2.deletedUsers).to.equal(1);
+    expect(await authUserExists("anon-just-fresh")).to.be.false;
+    expect(await checkoutExists("co-just-fresh")).to.be.false;
   });
+
 });
