@@ -197,10 +197,13 @@ export function StepWorkshops({
             let coId = checkoutId
             if (!coId) {
               const callerUid = auth?.currentUser?.uid ?? null
-              // Issue #318: stamp the originating anon Firebase Auth UID so
-              // the cleanup job can pair an expired anon auth user with
-              // their leftover checkouts. Null for signed-in / tag-tap.
-              const isAnonCreate = !userRef && !!auth?.currentUser?.isAnonymous
+              // Issue #318: stamp the creating Firebase Auth UID on
+              // every client-side create (anonymous OR signed-in) so
+              // the cleanup job has a single, generally-applicable
+              // join key. The rules require firebaseUid ==
+              // request.auth.uid; signed-in users' UIDs never appear
+              // in the expired-anon list the cleanup queries against,
+              // so their checkouts are never touched.
               const coRef = await add(checkoutsCollection(db), {
                 userId: userRef ?? null,
                 status: "open",
@@ -210,7 +213,7 @@ export function StepWorkshops({
                 persons: [],
                 modifiedBy: callerUid,
                 modifiedAt: serverTimestamp(),
-                anonymousUid: isAnonCreate ? callerUid : null,
+                firebaseUid: callerUid,
               })
               coId = coRef.id
             }

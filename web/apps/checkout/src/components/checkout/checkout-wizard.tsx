@@ -292,12 +292,12 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
         // the lazy-create path in step-workshops.tsx so the schema and
         // the security-rule field set stay in sync.
         const callerUid = auth?.currentUser?.uid ?? null
-        // Issue #318: stamp the originating anon Firebase Auth UID on
-        // truly-anonymous creates so the cleanup job can pair an expired
-        // anon auth user with their leftover checkouts. Null for
-        // signed-in / tag-tap creates.
-        const isAnonCreate =
-          !identifiedUserRef && !!auth?.currentUser?.isAnonymous
+        // Issue #318: stamp the creating Firebase Auth UID on every
+        // client-side create (anonymous OR signed-in) so the cleanup
+        // job has a single, generally-applicable join key. The rules
+        // require firebaseUid == request.auth.uid; signed-in users'
+        // UIDs never appear in the expired-anon list the cleanup
+        // queries against, so their checkouts are never touched.
         await fsMutation.add(checkoutsCollection(db), {
           userId: identifiedUserRef ?? null,
           status: "open",
@@ -307,7 +307,7 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
           persons: personDocs,
           modifiedBy: callerUid,
           modifiedAt: serverTimestamp() as unknown as CheckoutDoc["modifiedAt"],
-          anonymousUid: isAnonCreate ? callerUid : null,
+          firebaseUid: callerUid,
         } as unknown as CheckoutDoc)
       }
     } catch {

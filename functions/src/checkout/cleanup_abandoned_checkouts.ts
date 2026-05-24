@@ -14,15 +14,17 @@
  *   1. Anonymous Firebase Auth user whose `metadata.lastSignInTime` is
  *      older than ANON_USER_RETENTION_HOURS expires.
  *   2. For each expired user, any checkout doc stamped with
- *      `anonymousUid == <expiredUid>` is `recursiveDelete`d (the doc
+ *      `firebaseUid == <expiredUid>` is `recursiveDelete`d (the doc
  *      and its `items` subcollection).
  *   3. The expired anon Firebase Auth user is then `deleteUser`d.
  *
- * Signed-in / tag-tap checkouts are NEVER touched by this job; they
- * are scoped via the `anonymousUid == null` invariant set at create
- * time in the wizard's lazy-create path, the wizard's persistPersons
- * path, and the server's createAnonymousCheckout path. The previous
- * 24h time-based reaper that also nuked signed-in carts (the bug this
+ * Signed-in checkouts are safe by construction: `firebaseUid` is set
+ * to the creating principal's `auth.uid` (anon OR real), so the only
+ * UIDs that ever appear in step 2's query are the ones the listUsers
+ * scan flagged as expired anonymous-auth users. A signed-in user's
+ * `firebaseUid` will never match an expired anon UID, so their
+ * checkouts are never touched by this job. The previous 24h
+ * time-based reaper that also nuked signed-in carts (the bug this
  * issue addresses) is gone.
  *
  * Run cadence is daily; the cap is one batch of users per run so a
@@ -68,22 +70,25 @@ function lastSignInMs(user: UserRecord): number | null {
 }
 
 /**
- * Delete every checkout stamped with the supplied anonymous Firebase
- * Auth UID. Returns the deleted checkout doc IDs (used for log/test
- * assertions).
+ * Delete every checkout stamped with the supplied Firebase Auth UID.
+ * Returns the deleted checkout doc IDs (used for log/test assertions).
  *
- * `anonymousUid` is set at create time in all three anon-create paths
- * (wizard lazy-create, persistPersons, createAnonymousCheckout) and is
- * not writable thereafter (security rules block updates that affect
- * `anonymousUid`), so the join is reliable.
+ * The caller only ever passes UIDs of expired anonymous-auth users
+ * here, so even though `firebaseUid` is set on every client-side
+ * create (signed-in too), a signed-in user's UID will never appear in
+ * the input and their checkouts are never touched. `firebaseUid` is
+ * set at create time in all three create paths (wizard lazy-create,
+ * persistPersons, createAnonymousCheckout) and is not writable
+ * thereafter (security rules block updates that affect `firebaseUid`),
+ * so the join is reliable.
  */
-async function deleteCheckoutsForAnonymousUid(
+async function deleteCheckoutsForFirebaseUid(
   uid: string,
 ): Promise<string[]> {
   const db = getFirestore();
   const snap = await db
     .collection("checkouts")
-    .where("anonymousUid", "==", uid)
+    .where("firebaseUid", "==", uid)
     .get();
   if (snap.empty) return [];
   const deletedIds: string[] = [];
@@ -137,7 +142,7 @@ export async function runCleanupAbandonedCheckouts(
       // unreferenced) auth user around for the next run — which will
       // re-discover it and retry. The opposite ordering would orphan
       // checkouts with no anon user to ever re-discover them.
-      const ids = await deleteCheckoutsForAnonymousUid(user.uid);
+      const ids = await deleteCheckoutsForFirebaseUid(user.uid);
       deletedCheckoutIds.push(...ids);
 
       try {

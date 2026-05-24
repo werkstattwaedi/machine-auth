@@ -139,14 +139,15 @@
       "modifiedBy": "string | null", // Firebase Auth UID
       "modifiedAt": "timestamp",
 
-      // Originating anonymous Firebase Auth UID, stamped at create time
-      // ONLY when the caller is a Firebase Anonymous Auth session creating
-      // a null-userId checkout. Null for signed-in / tag-tap creates and
-      // for CognitoForms imports. Stable across the checkout's lifetime
-      // (unlike `modifiedBy`, which tracks the last writer) so the
-      // abandoned-checkout cleanup can pair an expired anon auth user
-      // with the checkouts they created. See issue #318.
-      "anonymousUid": "string | null",
+      // Firebase Auth UID of the user who created this checkout. Set to
+      // `request.auth.uid` for every client-side create (anonymous OR
+      // signed-in Firebase Auth). Null only for system / admin-SDK
+      // writes such as CognitoForms imports. Stable across the
+      // checkout's lifetime (unlike `modifiedBy`, which tracks the last
+      // writer); the abandoned-checkout cleanup pairs an expired anon
+      // auth user with the checkouts they created via this field. See
+      // issue #318.
+      "firebaseUid": "string | null",
 
       // --- Optional: set when a bill is created ---
       "billRef": "DocumentReference | null", // DocumentReference to /bills/{billId}

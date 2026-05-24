@@ -11,10 +11,13 @@
  *
  * Issue #318 reshaped this job: it now reaps anonymous Firebase Auth
  * users idle for >7d AND any checkouts they created (via the
- * `anonymousUid` field). Signed-in / tag-tap checkouts are never
- * touched. The test matrix below locks that down so a future change
- * cannot accidentally reach back to the broad time-based reap that
- * also nuked signed-in carts.
+ * `firebaseUid` field, which carries the creating principal's
+ * `request.auth.uid` — anon or signed-in). Signed-in checkouts are
+ * never touched: their `firebaseUid` is a real-user UID and never
+ * shows up in the expired-anon-user list the cleanup queries. The
+ * test matrix below locks that down so a future change cannot
+ * accidentally reach back to the broad time-based reap that also
+ * nuked signed-in carts.
  */
 
 process.env.FUNCTIONS_EMULATOR = "true";
@@ -41,8 +44,12 @@ interface SeedCheckoutOpts {
   ageHours: number;
   /** doc id under /users; omit or pass null for anon (no userId). */
   userId?: string | null;
-  /** Anon Firebase Auth UID stamp; null for signed-in / tag-tap. */
-  anonymousUid?: string | null;
+  /**
+   * Firebase Auth UID stamped at create time. For seeded test data this
+   * is the anon UID for anon-created checkouts, the real-user UID for
+   * signed-in creates, or null for system / admin-SDK imports.
+   */
+  firebaseUid?: string | null;
   itemCount?: number;
 }
 
@@ -60,7 +67,7 @@ async function seedCheckout(id: string, opts: SeedCheckoutOpts): Promise<void> {
     persons: [],
     modifiedBy: null,
     modifiedAt: created,
-    anonymousUid: opts.anonymousUid ?? null,
+    firebaseUid: opts.firebaseUid ?? null,
   };
 
   await db.collection("checkouts").doc(id).set(checkout);
@@ -174,7 +181,7 @@ describe("cleanupAbandonedCheckouts (Integration)", () => {
       status: "open",
       ageHours: ANON_USER_RETENTION_HOURS + 0.1,
       userId: null,
-      anonymousUid: "anon-expired",
+      firebaseUid: "anon-expired",
       itemCount: 2,
     });
 
@@ -193,13 +200,15 @@ describe("cleanupAbandonedCheckouts (Integration)", () => {
   it("does NOT delete authenticated checkouts regardless of age", async () => {
     // The exact bug surfaced by issue #318: the old time-based reaper
     // nuked a signed-in user's open cart after 24h, losing their work.
-    // The new job operates only via the `anonymousUid` join, so an
-    // arbitrarily-old signed-in checkout is preserved.
+    // The new job operates only via the `firebaseUid` join against
+    // the expired-anon-user list, so an arbitrarily-old signed-in
+    // checkout (whose firebaseUid is a real-user UID, not in that
+    // list) is preserved.
     await seedCheckout("co-auth-old", {
       status: "open",
       ageHours: ANON_USER_RETENTION_HOURS * 10,
       userId: "alice",
-      anonymousUid: null,
+      firebaseUid: "alice",
       itemCount: 1,
     });
 
@@ -216,7 +225,7 @@ describe("cleanupAbandonedCheckouts (Integration)", () => {
       status: "open",
       ageHours: ANON_USER_RETENTION_HOURS + 5, // stale doc but user is fresh
       userId: null,
-      anonymousUid: "anon-recent",
+      firebaseUid: "anon-recent",
     });
 
     const result = await runCleanupAbandonedCheckouts();
@@ -242,7 +251,7 @@ describe("cleanupAbandonedCheckouts (Integration)", () => {
       status: "open",
       ageHours: ANON_USER_RETENTION_HOURS + 1,
       userId: null,
-      anonymousUid: "anon-A",
+      firebaseUid: "anon-A",
       itemCount: 3,
     });
 
@@ -252,15 +261,17 @@ describe("cleanupAbandonedCheckouts (Integration)", () => {
       status: "open",
       ageHours: 1,
       userId: null,
-      anonymousUid: "anon-B",
+      firebaseUid: "anon-B",
     });
 
-    // Signed-in user's open checkout, old — kept (the bug fix).
+    // Signed-in user's open checkout, old — kept (the bug fix). The
+    // firebaseUid is a real-user UID, which never appears in the
+    // expired-anon-user list the cleanup queries against.
     await seedCheckout("co-auth", {
       status: "open",
       ageHours: ANON_USER_RETENTION_HOURS * 5,
       userId: "bob",
-      anonymousUid: null,
+      firebaseUid: "bob",
       itemCount: 2,
     });
 
@@ -297,13 +308,11 @@ describe("cleanupAbandonedCheckouts (Integration)", () => {
 
   it("does NOT delete closed checkouts even when their anon user expires", async () => {
     // Closed checkouts are kept indefinitely (bill / receipt history).
-    // The reaper joins on `anonymousUid`, not status, so we have to be
-    // explicit: closed docs are kept by virtue of NOT having
-    // `anonymousUid` set on the closed-via-callable path… except the
-    // server's createAnonymousCheckout DOES stamp it. So we assert
-    // here that we still delete only when the user is GC'd — closed
-    // docs ride along with their anon user's deletion only when that
-    // user truly expires.
+    // The reaper joins on `firebaseUid`, not status, so we have to be
+    // explicit: the server's createAnonymousCheckout DOES stamp
+    // firebaseUid. So we assert here that we still delete only when
+    // the user is GC'd — closed docs ride along with their anon
+    // user's deletion only when that user truly expires.
     //
     // For now, the join deletes the closed doc too. We document that
     // behaviour with this test so a future change has to be explicit
@@ -313,7 +322,7 @@ describe("cleanupAbandonedCheckouts (Integration)", () => {
       status: "closed",
       ageHours: 1,
       userId: null,
-      anonymousUid: "anon-closed",
+      firebaseUid: "anon-closed",
       itemCount: 1,
     });
 
@@ -341,7 +350,7 @@ describe("cleanupAbandonedCheckouts (Integration)", () => {
       status: "open",
       ageHours: 1,
       userId: null,
-      anonymousUid: "anon-just-fresh",
+      firebaseUid: "anon-just-fresh",
     });
 
     const now = new Date();

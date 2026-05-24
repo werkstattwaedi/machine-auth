@@ -279,6 +279,13 @@ export const closeCheckoutAndGetPayment = onCall<
 
   const callerUid = effectiveUid(request);
   const isAnonymous = isAnonymousCaller(request);
+  // The raw Firebase Auth UID stamped onto `firebaseUid` on new
+  // checkouts (issue #318). Distinct from `callerUid`, which may have
+  // been rewritten to the `actsAs` target for tag-tap sessions: the
+  // stamp tracks the Firebase principal, not the user it represents,
+  // so the cleanup job can pair an expired anon auth user with their
+  // leftover checkouts even when the session was authenticated.
+  const firebaseAuthUid = request.auth?.uid ?? null;
 
   if (checkoutId) {
     return closeExistingCheckout(callerUid, isAnonymous, {
@@ -289,7 +296,7 @@ export const closeCheckoutAndGetPayment = onCall<
     });
   }
   if (newCheckout) {
-    return createAnonymousCheckout(callerUid, {
+    return createAnonymousCheckout(callerUid, firebaseAuthUid, {
       newCheckout,
       usageType,
       persons,
@@ -449,6 +456,7 @@ async function closeExistingCheckout(
 
 async function createAnonymousCheckout(
   callerUid: string | null,
+  firebaseAuthUid: string | null,
   args: {
     newCheckout: NewCheckoutInput;
     usageType: UsageType;
@@ -527,11 +535,12 @@ async function createAnonymousCheckout(
     });
 
     const now = Timestamp.now();
-    // Issue #318: stamp the originating anon Firebase Auth UID on truly-
-    // anonymous creates (null userIdRef + the caller is the anon session).
-    // The cleanup job uses this to pair an expired anon auth user with
-    // their leftover checkouts. Null for signed-in / tag-tap creates.
-    const anonymousUid = userIdRef == null ? callerUid : null;
+    // Issue #318: stamp the originating Firebase Auth UID on every
+    // client-side create — anonymous OR signed-in / tag-tap. The
+    // cleanup job uses this to pair an expired anon auth user with
+    // their leftover checkouts; signed-in users' UIDs never appear in
+    // the expired-anon list so their checkouts are safe. Null only for
+    // unauthenticated callers, which can't reach this path today.
     tx.set(checkoutRef, {
       userId: userIdRef,
       status: "closed",
@@ -541,7 +550,7 @@ async function createAnonymousCheckout(
       persons: enforcedPersons,
       modifiedBy: callerUid,
       modifiedAt: FieldValue.serverTimestamp(),
-      anonymousUid,
+      firebaseUid: firebaseAuthUid,
       closedAt: FieldValue.serverTimestamp(),
       notes: null,
       summary,

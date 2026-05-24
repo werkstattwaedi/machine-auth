@@ -83,11 +83,16 @@ async function createOpenCheckout(checkoutId: string, ownerUid: string) {
     persons: [],
     modifiedBy: null,
     modifiedAt: serverTimestamp(),
+    // Issue #318: every client-side create must stamp firebaseUid
+    // with the caller's own auth.uid.
+    firebaseUid: ownerUid,
   })
 }
 
 describe("Checkout create rules", () => {
-  it("allows creating an open checkout", async () => {
+  it("allows creating an open checkout (signed-in stamps firebaseUid)", async () => {
+    // Issue #318: every client-side create must stamp firebaseUid with
+    // the caller's own auth.uid — signed-in too, not just anon.
     const db = authedDb("u1")
     await assertSucceeds(
       addDoc(collection(db, "checkouts"), {
@@ -99,6 +104,7 @@ describe("Checkout create rules", () => {
         persons: [],
         modifiedBy: null,
         modifiedAt: serverTimestamp(),
+        firebaseUid: "u1",
       }),
     )
   })
@@ -115,9 +121,10 @@ describe("Checkout create rules", () => {
         persons: [{ name: "Max", email: "max@test.com", userType: "erwachsen" }],
         modifiedBy: null,
         modifiedAt: serverTimestamp(),
-        // Issue #318: anon creates must stamp their own UID so the
-        // cleanup job can pair them with the auth user later.
-        anonymousUid: "anon-1",
+        // Issue #318: every client-side create must stamp firebaseUid
+        // with the caller's own auth.uid so the cleanup job can pair
+        // an expired anon auth user with the checkouts they created.
+        firebaseUid: "anon-1",
         closedAt: serverTimestamp(),
         notes: null,
         summary: { totalPrice: 15, entryFees: 15, machineCost: 0, materialCost: 0, tip: 0 },
@@ -126,7 +133,7 @@ describe("Checkout create rules", () => {
   })
 
   it("rejects anon-auth create that forges another anon session's UID", async () => {
-    // Issue #318: anonymousUid must match the caller's own auth.uid;
+    // Issue #318: firebaseUid must match the caller's own auth.uid;
     // an anon session cannot steal another's checkout slot by spoofing.
     const db = anonAuthDb("anon-1")
     await assertFails(
@@ -139,13 +146,13 @@ describe("Checkout create rules", () => {
         persons: [],
         modifiedBy: null,
         modifiedAt: serverTimestamp(),
-        anonymousUid: "anon-2", // forged
+        firebaseUid: "anon-2", // forged
       }),
     )
   })
 
-  it("rejects anon-auth create that omits anonymousUid", async () => {
-    // Issue #318: anon creates without anonymousUid leak past the
+  it("rejects anon-auth create that omits firebaseUid", async () => {
+    // Issue #318: client creates without firebaseUid leak past the
     // cleanup job (no way to pair with the auth user). Reject so we
     // never re-introduce the orphan.
     const db = anonAuthDb("anon-1")
@@ -159,14 +166,15 @@ describe("Checkout create rules", () => {
         persons: [],
         modifiedBy: null,
         modifiedAt: serverTimestamp(),
-        // no anonymousUid
+        // no firebaseUid
       }),
     )
   })
 
-  it("rejects signed-in create that stamps anonymousUid", async () => {
-    // Issue #318: a real user cannot tag their checkout as anonymous
-    // (would let the cleanup job nuke their cart later).
+  it("rejects signed-in create that omits firebaseUid", async () => {
+    // Issue #318: signed-in client creates without firebaseUid would
+    // also leave the doc unpaired with its auth principal. Reject so
+    // the field stays mandatory for every client-side create.
     const db = authedDb("u1")
     await assertFails(
       addDoc(collection(db, "checkouts"), {
@@ -178,7 +186,26 @@ describe("Checkout create rules", () => {
         persons: [],
         modifiedBy: "u1",
         modifiedAt: serverTimestamp(),
-        anonymousUid: "u1", // not allowed for signed-in creates
+        // no firebaseUid
+      }),
+    )
+  })
+
+  it("rejects signed-in create that stamps a different user's firebaseUid", async () => {
+    // Issue #318: forge protection applies to signed-in callers too —
+    // u1 cannot tag a checkout with u2's UID.
+    const db = authedDb("u1")
+    await assertFails(
+      addDoc(collection(db, "checkouts"), {
+        userId: doc(db, "users/u1"),
+        status: "open",
+        usageType: "regular",
+        created: serverTimestamp(),
+        workshopsVisited: [],
+        persons: [],
+        modifiedBy: "u1",
+        modifiedAt: serverTimestamp(),
+        firebaseUid: "u2", // forged
       }),
     )
   })
@@ -216,6 +243,7 @@ describe("Checkout create rules", () => {
         persons: [{ name: "Max", email: "max@test.com", userType: "erwachsen" }],
         modifiedBy: "u1",
         modifiedAt: serverTimestamp(),
+        firebaseUid: "u1",
         closedAt: serverTimestamp(),
         notes: null,
         summary: { totalPrice: 15, entryFees: 15, machineCost: 0, materialCost: 0, tip: 0 },
@@ -235,6 +263,7 @@ describe("Checkout create rules", () => {
         persons: [],
         modifiedBy: null,
         modifiedAt: serverTimestamp(),
+        firebaseUid: "u1",
       }),
     )
   })
@@ -251,6 +280,7 @@ describe("Checkout create rules", () => {
         persons: [],
         modifiedBy: null,
         modifiedAt: serverTimestamp(),
+        firebaseUid: "u1",
         extraField: "not allowed",
       }),
     )
@@ -288,6 +318,7 @@ describe("Checkout create rules", () => {
         persons: [],
         modifiedBy: null,
         modifiedAt: serverTimestamp(),
+        firebaseUid: "u1",
       }),
     )
   })
@@ -345,6 +376,7 @@ describe("Checkout items create rules", () => {
       persons: [],
       modifiedBy: null,
       modifiedAt: serverTimestamp(),
+      firebaseUid: "u1",
       closedAt: serverTimestamp(),
       notes: null,
       summary: { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 },
@@ -377,7 +409,7 @@ describe("Checkout items create rules", () => {
       persons: [],
       modifiedBy: null,
       modifiedAt: serverTimestamp(),
-      anonymousUid: "anon-1",
+      firebaseUid: "anon-1",
     })
 
     await assertSucceeds(
@@ -408,7 +440,7 @@ describe("Checkout items create rules", () => {
       persons: [],
       modifiedBy: null,
       modifiedAt: serverTimestamp(),
-      anonymousUid: "anon-1",
+      firebaseUid: "anon-1",
     })
 
     // A fully unauthenticated client must not be able to write items.
