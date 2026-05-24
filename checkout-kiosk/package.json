@@ -4,10 +4,10 @@
   "description": "Electron hardware bridge for OWW kiosk + admin (NFC, future printer). Same codebase produces two named binaries via build-time mode injection.",
   "main": "dist/main.js",
   "scripts": {
-    "inject-mode": "node scripts/inject-mode.mjs",
+    "inject-build-config": "node scripts/inject-build-config.mjs",
     "tsc:main": "tsc -p tsconfig.json",
     "tsc:renderer": "tsc -p src/renderer/tsconfig.json",
-    "_compile": "npm run inject-mode && npm run tsc:main && npm run tsc:renderer",
+    "_compile": "npm run inject-build-config && npm run tsc:main && npm run tsc:renderer",
     "start:kiosk": "cross-env BRIDGE_MODE=kiosk npm run _compile && electron .",
     "start:admin": "cross-env BRIDGE_MODE=admin npm run _compile && electron .",
     "dev:kiosk": "npm run start:kiosk",
@@ -16,7 +16,7 @@
     "build:admin": "cross-env BRIDGE_MODE=admin npm run _compile && electron-builder --config electron-builder.admin.yml",
     "rebuild": "electron-rebuild",
     "postinstall": "electron-rebuild",
-    "typecheck": "cross-env BRIDGE_MODE=kiosk npm run inject-mode && tsc --noEmit -p tsconfig.json && tsc --noEmit -p src/renderer/tsconfig.json"
+    "typecheck": "cross-env BRIDGE_MODE=kiosk npm run inject-build-config && tsc --noEmit -p tsconfig.json && tsc --noEmit -p src/renderer/tsconfig.json"
   },
   "dependencies": {
     "@oww/shared": "*",

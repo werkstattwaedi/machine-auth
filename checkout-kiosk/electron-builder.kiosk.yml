@@ -1,8 +1,9 @@
 # Copyright Offene Werkstatt Wädenswil
 # SPDX-License-Identifier: MIT
 #
-# Builds the kiosk-mode binary. Mode is baked in by scripts/inject-mode.mjs
-# before this config is read (npm run build:kiosk sets BRIDGE_MODE=kiosk).
+# Builds the kiosk-mode binary. Mode + URL + bearer + printer-host are
+# baked in by scripts/inject-build-config.mjs before this config is read
+# (npm run build:kiosk sets BRIDGE_MODE=kiosk).
 
 appId: ch.werkstattwaedi.checkout-kiosk
 productName: OWW Kiosk
