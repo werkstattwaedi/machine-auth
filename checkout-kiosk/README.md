@@ -86,17 +86,20 @@ threat model.
 ### Production builds (`--prod`)
 
 ```bash
-npm run build:kiosk:prod    # → release/kiosk/oww-kiosk-<ver>-setup.exe
-npm run build:admin:prod    # → release/admin/oww-admin-<ver>-setup.exe
+npm run build:kiosk:prod    # → release/kiosk/oww-kiosk-<ver>-x64.zip
+npm run build:admin:prod    # → release/admin/oww-admin-<ver>-x64.zip
 ```
 
-The `:prod` scripts always target **Windows x64 NSIS installers**
-(`--win` flag to electron-builder) because both OWW hosts run Windows.
-Cross-compiling from Linux requires Wine
-(`sudo apt install wine64` on WSL2 / Debian); the dev scripts
-(`build:kiosk` / `build:admin` without `:prod`) build for the host
-platform (AppImage on Linux, .dmg on macOS) if you just want to
-smoke-test locally.
+Both OWW hosts run Windows, so the `:prod` scripts cross-compile a
+Windows x64 build via `--win`. The output is a **zip of the
+unpacked Electron app** — no NSIS installer step (which would need
+Wine on Linux). To install: unzip on the Windows host, run
+`OWW Admin.exe` / `OWW Kiosk.exe` directly. Rotating to a new
+version is "replace the folder".
+
+The dev scripts (`build:kiosk` / `build:admin` without `:prod`)
+build for the host platform (AppImage on Linux, .dmg on macOS) if
+you just want to smoke-test locally.
 
 The `:prod` scripts pass `--prod` to `inject-build-config.mjs`, which:
 

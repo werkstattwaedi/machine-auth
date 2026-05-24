@@ -17,14 +17,14 @@ files:
 extraMetadata:
   name: oww-kiosk
 win:
+  # `zip` is the no-Wine path: cross-compiles from Linux/WSL with no
+  # extra tooling, produces a self-contained folder zip. Unzip on the
+  # target Windows host and run `OWW Kiosk.exe` directly. See the
+  # admin yml for the rationale.
   target:
-    - target: nsis
+    - target: zip
       arch: x64
-  artifactName: oww-kiosk-${version}-setup.${ext}
-nsis:
-  oneClick: false
-  perMachine: false
-  allowToChangeInstallationDirectory: true
+  artifactName: oww-kiosk-${version}-${arch}.${ext}
 linux:
   target:
     - AppImage

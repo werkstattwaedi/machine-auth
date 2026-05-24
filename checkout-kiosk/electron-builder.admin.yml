@@ -17,14 +17,15 @@ files:
 extraMetadata:
   name: oww-admin
 win:
+  # `zip` is the no-Wine path: cross-compiles from Linux/WSL with no
+  # extra tooling, produces a self-contained folder zip. Unzip on the
+  # target Windows host and run `OWW Admin.exe` directly. `nsis` is
+  # also listed for when a Windows / Wine-equipped host wants the
+  # installer, but the build doesn't fail without it.
   target:
-    - target: nsis
+    - target: zip
       arch: x64
-  artifactName: oww-admin-${version}-setup.${ext}
-nsis:
-  oneClick: false
-  perMachine: false
-  allowToChangeInstallationDirectory: true
+  artifactName: oww-admin-${version}-${arch}.${ext}
 linux:
   target:
     - AppImage
