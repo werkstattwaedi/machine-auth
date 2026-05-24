@@ -92,10 +92,11 @@ npm run build:admin:prod    # → release/admin/oww-admin-<ver>-…
 
 The `:prod` scripts pass `--prod` to `inject-build-config.mjs`, which:
 
-* Fills in the production URLs
-  (`https://checkout.werkstattwaedi.ch/?kiosk`,
-  `https://admin.werkstattwaedi.ch/`).
-* For admin: sets `BRIDGE_PRINTER_HOST=labeler.internal:9100`.
+* Reads URLs + printer host from the operations repo
+  (`../machine-auth-operations/config.jsonc`, same file
+  `scripts/generate-env.ts` reads — keeps Electron + web apps +
+  Cloud Functions in sync). Override the location with
+  `OPERATIONS_CONFIG_DIR`.
 * Fetches the bearer from Google Secret Manager
   (`gcloud secrets versions access latest --secret=KIOSK_BEARER_KEY`)
   — same secret Cloud Functions reads server-side. Requires `gcloud`
@@ -109,6 +110,24 @@ without losing the rest:
 BRIDGE_KIOSK_URL=https://checkout.staging.werkstattwaedi.ch/?kiosk \
   npm run build:kiosk:prod
 ```
+
+#### Required keys in the operations config
+
+```jsonc
+{
+  "web": {
+    "checkoutDomain": "checkout.werkstattwaedi.ch",   // already present
+    "adminDomain":    "admin.werkstattwaedi.ch"       // NEW for --prod admin builds
+  },
+  "electron": {
+    "printerHost":    "labeler.internal:9100"         // NEW for --prod admin builds
+  }
+}
+```
+
+Kiosk builds only need `web.checkoutDomain`; admin builds also need
+`web.adminDomain` + `electron.printerHost`. The script fails the build
+with a clear error if any required key is missing.
 
 The bearer secret is baked into the JavaScript bundle, so the
 `.AppImage` / installer is itself confidential. Build on a trusted
