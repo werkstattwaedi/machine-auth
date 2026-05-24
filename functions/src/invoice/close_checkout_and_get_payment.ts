@@ -527,6 +527,11 @@ async function createAnonymousCheckout(
     });
 
     const now = Timestamp.now();
+    // Issue #318: stamp the originating anon Firebase Auth UID on truly-
+    // anonymous creates (null userIdRef + the caller is the anon session).
+    // The cleanup job uses this to pair an expired anon auth user with
+    // their leftover checkouts. Null for signed-in / tag-tap creates.
+    const anonymousUid = userIdRef == null ? callerUid : null;
     tx.set(checkoutRef, {
       userId: userIdRef,
       status: "closed",
@@ -536,6 +541,7 @@ async function createAnonymousCheckout(
       persons: enforcedPersons,
       modifiedBy: callerUid,
       modifiedAt: FieldValue.serverTimestamp(),
+      anonymousUid,
       closedAt: FieldValue.serverTimestamp(),
       notes: null,
       summary,

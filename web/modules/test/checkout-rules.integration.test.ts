@@ -115,9 +115,70 @@ describe("Checkout create rules", () => {
         persons: [{ name: "Max", email: "max@test.com", userType: "erwachsen" }],
         modifiedBy: null,
         modifiedAt: serverTimestamp(),
+        // Issue #318: anon creates must stamp their own UID so the
+        // cleanup job can pair them with the auth user later.
+        anonymousUid: "anon-1",
         closedAt: serverTimestamp(),
         notes: null,
         summary: { totalPrice: 15, entryFees: 15, machineCost: 0, materialCost: 0, tip: 0 },
+      }),
+    )
+  })
+
+  it("rejects anon-auth create that forges another anon session's UID", async () => {
+    // Issue #318: anonymousUid must match the caller's own auth.uid;
+    // an anon session cannot steal another's checkout slot by spoofing.
+    const db = anonAuthDb("anon-1")
+    await assertFails(
+      addDoc(collection(db, "checkouts"), {
+        userId: null,
+        status: "open",
+        usageType: "regular",
+        created: serverTimestamp(),
+        workshopsVisited: [],
+        persons: [],
+        modifiedBy: null,
+        modifiedAt: serverTimestamp(),
+        anonymousUid: "anon-2", // forged
+      }),
+    )
+  })
+
+  it("rejects anon-auth create that omits anonymousUid", async () => {
+    // Issue #318: anon creates without anonymousUid leak past the
+    // cleanup job (no way to pair with the auth user). Reject so we
+    // never re-introduce the orphan.
+    const db = anonAuthDb("anon-1")
+    await assertFails(
+      addDoc(collection(db, "checkouts"), {
+        userId: null,
+        status: "open",
+        usageType: "regular",
+        created: serverTimestamp(),
+        workshopsVisited: [],
+        persons: [],
+        modifiedBy: null,
+        modifiedAt: serverTimestamp(),
+        // no anonymousUid
+      }),
+    )
+  })
+
+  it("rejects signed-in create that stamps anonymousUid", async () => {
+    // Issue #318: a real user cannot tag their checkout as anonymous
+    // (would let the cleanup job nuke their cart later).
+    const db = authedDb("u1")
+    await assertFails(
+      addDoc(collection(db, "checkouts"), {
+        userId: doc(db, "users/u1"),
+        status: "open",
+        usageType: "regular",
+        created: serverTimestamp(),
+        workshopsVisited: [],
+        persons: [],
+        modifiedBy: "u1",
+        modifiedAt: serverTimestamp(),
+        anonymousUid: "u1", // not allowed for signed-in creates
       }),
     )
   })
@@ -316,6 +377,7 @@ describe("Checkout items create rules", () => {
       persons: [],
       modifiedBy: null,
       modifiedAt: serverTimestamp(),
+      anonymousUid: "anon-1",
     })
 
     await assertSucceeds(
@@ -346,6 +408,7 @@ describe("Checkout items create rules", () => {
       persons: [],
       modifiedBy: null,
       modifiedAt: serverTimestamp(),
+      anonymousUid: "anon-1",
     })
 
     // A fully unauthenticated client must not be able to write items.

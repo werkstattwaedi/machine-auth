@@ -197,6 +197,10 @@ export function StepWorkshops({
             let coId = checkoutId
             if (!coId) {
               const callerUid = auth?.currentUser?.uid ?? null
+              // Issue #318: stamp the originating anon Firebase Auth UID so
+              // the cleanup job can pair an expired anon auth user with
+              // their leftover checkouts. Null for signed-in / tag-tap.
+              const isAnonCreate = !userRef && !!auth?.currentUser?.isAnonymous
               const coRef = await add(checkoutsCollection(db), {
                 userId: userRef ?? null,
                 status: "open",
@@ -206,6 +210,7 @@ export function StepWorkshops({
                 persons: [],
                 modifiedBy: callerUid,
                 modifiedAt: serverTimestamp(),
+                anonymousUid: isAnonCreate ? callerUid : null,
               })
               coId = coRef.id
             }
