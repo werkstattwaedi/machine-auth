@@ -39,7 +39,7 @@ const HOUR_MS = 60 * 60 * 1000;
 interface SeedCheckoutOpts {
   status?: "open" | "closed";
   ageHours: number;
-  /** doc id under /users; `null` for anon, `undefined` matches `null` */
+  /** doc id under /users; omit or pass null for anon (no userId). */
   userId?: string | null;
   /** Anon Firebase Auth UID stamp; null for signed-in / tag-tap. */
   anonymousUid?: string | null;

@@ -45,7 +45,7 @@ export const ANON_USER_RETENTION_HOURS = 7 * 24;
 /** Page size for the Auth listing scan. */
 const AUTH_LIST_PAGE_SIZE = 1000;
 
-/** Cap how many expired users we touch per run. */
+/** Cap how many expired users we successfully delete per run. */
 const USER_BATCH_LIMIT = 500;
 
 /** True iff the auth user was created via anonymous sign-in. */
