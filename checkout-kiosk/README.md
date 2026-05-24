@@ -83,32 +83,39 @@ defense for the kiosk badge flow is the synthetic-UID custom token
 returned by `verifyTagCheckout`. See `docs/Security Analysis.md` for the
 threat model.
 
-### Production kiosk build
+### Production builds (`--prod`)
 
 ```bash
-BRIDGE_KIOSK_URL=https://checkout.werkstattwaedi.ch/?kiosk \
-BRIDGE_BEARER_KEY="$(cat /tmp/oww-kiosk-bearer.key)" \
-  npm run build:kiosk
-# → release/kiosk/oww-kiosk-<ver>-…  install on the kiosk host
+npm run build:kiosk:prod    # → release/kiosk/oww-kiosk-<ver>-…
+npm run build:admin:prod    # → release/admin/oww-admin-<ver>-…
 ```
 
-### Production admin build (with printer)
+The `:prod` scripts pass `--prod` to `inject-build-config.mjs`, which:
+
+* Fills in the production URLs
+  (`https://checkout.werkstattwaedi.ch/?kiosk`,
+  `https://admin.werkstattwaedi.ch/`).
+* For admin: sets `BRIDGE_PRINTER_HOST=labeler.internal:9100`.
+* Fetches the bearer from Google Secret Manager
+  (`gcloud secrets versions access latest --secret=KIOSK_BEARER_KEY`)
+  — same secret Cloud Functions reads server-side. Requires `gcloud`
+  authenticated against the OWW project.
+
+Any explicit env var still wins, so you can override single values
+without losing the rest:
 
 ```bash
-BRIDGE_ADMIN_URL=https://admin.werkstattwaedi.ch/ \
-BRIDGE_BEARER_KEY="$(cat /tmp/oww-admin-bearer.key)" \
-BRIDGE_PRINTER_HOST=labeler.internal:9100 \
-  npm run build:admin
-# → release/admin/oww-admin-<ver>-…  install on the admin workstation
+# Build a kiosk binary pointing at the staging URL but using prod bearer:
+BRIDGE_KIOSK_URL=https://checkout.staging.werkstattwaedi.ch/?kiosk \
+  npm run build:kiosk:prod
 ```
 
 The bearer secret is baked into the JavaScript bundle, so the
-`.AppImage` / installer is itself confidential. Keep build inputs on a
-trusted host (e.g. only build from your laptop, hand-carry the
-installer to the kiosk). **Rotating the bearer = rebuild + reinstall.**
+`.AppImage` / installer is itself confidential. Build on a trusted
+host (e.g. your laptop) and hand-carry the installer to the kiosk /
+admin workstation. **Rotating the bearer = rebuild + reinstall.**
 Server-side rotation lives at `firebase functions:secrets:set
-KIOSK_BEARER_KEY` (the server-side secret name stays as
-`KIOSK_BEARER_KEY`; only the client-side env var was renamed in #314).
+KIOSK_BEARER_KEY` (same secret name on both sides).
 
 ## How It Works
 

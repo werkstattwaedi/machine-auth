@@ -14,6 +14,8 @@
     "dev:admin": "npm run start:admin",
     "build:kiosk": "cross-env BRIDGE_MODE=kiosk npm run _compile && electron-builder --config electron-builder.kiosk.yml",
     "build:admin": "cross-env BRIDGE_MODE=admin npm run _compile && electron-builder --config electron-builder.admin.yml",
+    "build:kiosk:prod": "cross-env BRIDGE_MODE=kiosk node scripts/inject-build-config.mjs --prod && npm run tsc:main && npm run tsc:renderer && electron-builder --config electron-builder.kiosk.yml",
+    "build:admin:prod": "cross-env BRIDGE_MODE=admin node scripts/inject-build-config.mjs --prod && npm run tsc:main && npm run tsc:renderer && electron-builder --config electron-builder.admin.yml",
     "rebuild": "electron-rebuild",
     "postinstall": "electron-rebuild",
     "typecheck": "cross-env BRIDGE_MODE=kiosk npm run inject-build-config && tsc --noEmit -p tsconfig.json && tsc --noEmit -p src/renderer/tsconfig.json"
