@@ -33,7 +33,13 @@ const COL_TOTAL_X = COL_PRICE_X + COL_PRICE_W;
 // Swiss QR bill is 105mm = ~297.6pt tall; leave that space at bottom
 const QR_BILL_HEIGHT = 297.6;
 const PAGE_HEIGHT = 841.89; // A4
-const USABLE_HEIGHT = PAGE_HEIGHT - QR_BILL_HEIGHT - 20; // 20pt safety margin
+// Reserve room for the QR slip when one will be appended below the
+// content. For PDFs that omit the QR slip entirely (Belege,
+// Sammelrechnung-method, TWINT-method, paid, free-zero) the content
+// area extends to the bottom margin instead. See `buildInvoicePdf`
+// where `maxY` is chosen per-invoice.
+const USABLE_HEIGHT_WITH_QR = PAGE_HEIGHT - QR_BILL_HEIGHT - 20; // 20pt safety margin
+const USABLE_HEIGHT_NO_QR = PAGE_HEIGHT - 50; // bottom margin reserves the footer line
 
 const LOGO_WIDTH = 160;
 
@@ -82,8 +88,13 @@ function formatDateOnly(date: Date): string {
   return formatWorkshopDateTime(date, "dd.MM.yyyy");
 }
 
-function ensureSpace(doc: PDFKit.PDFDocument, y: number, needed: number): number {
-  if (y + needed > USABLE_HEIGHT) {
+function ensureSpace(
+  doc: PDFKit.PDFDocument,
+  y: number,
+  needed: number,
+  maxY: number,
+): number {
+  if (y + needed > maxY) {
     doc.addPage();
     return 60;
   }
@@ -113,6 +124,22 @@ export async function buildInvoicePdf(
 
     doc.addPage();
     let y = 60;
+
+    // Decide whether a Swiss QR slip will be appended at the bottom of
+    // the content. When it won't (Belege, Sammelrechnung-method,
+    // TWINT-method, paid, free-zero) the content area extends all the
+    // way to the footer; otherwise we reserve ~298pt for the QR slip.
+    // This prevents a short "Zahlweise: …" notice from spilling onto a
+    // near-empty page 2 just because the layout was conservatively
+    // sized for a QR slip that never gets drawn (PR #332 review).
+    const isPaid = !!data.paidAt;
+    const isFreeZero = data.paidVia === "free" && data.grandTotal === 0;
+    const hasQrBill =
+      !isFreeZero &&
+      !isPaid &&
+      data.paymentMethod !== "twint" &&
+      data.paymentMethod !== "monthly";
+    const maxY = hasQrBill ? USABLE_HEIGHT_WITH_QR : USABLE_HEIGHT_NO_QR;
 
     // --- Logo (right-aligned) + sender address ---
     // Logo PNG has ~5% left padding; offset text to visually align with logo content
@@ -144,7 +171,7 @@ export async function buildInvoicePdf(
     // walk-ins have no recipient block — the person already appears in
     // the Nutzungsgebühren table further down, and a stray name above
     // the title looked like a layout glitch (issue #269 review).
-    y = ensureSpace(doc, y, 60);
+    y = ensureSpace(doc, y, 60, maxY);
     doc.fontSize(10).font("Helvetica");
     if (data.billingAddress) {
       const { company, street, zip, city } = data.billingAddress;
@@ -194,7 +221,7 @@ export async function buildInvoicePdf(
       // Sammelrechnung. Accounting treats it as a regular Rechnung.
       title = "Rechnung Self Checkout";
     }
-    y = ensureSpace(doc, y, 40);
+    y = ensureSpace(doc, y, 40, maxY);
     doc.fontSize(16).font("Helvetica-Bold");
     doc.text(title, MARGIN_LEFT, y);
     y += 22;
@@ -211,11 +238,11 @@ export async function buildInvoicePdf(
 
     // --- Per-checkout sections ---
     for (const checkout of data.checkouts) {
-      y = renderCheckoutSection(doc, y, checkout, data);
+      y = renderCheckoutSection(doc, y, checkout, data, maxY);
     }
 
     // --- Grand Total ---
-    y = ensureSpace(doc, y, 50);
+    y = ensureSpace(doc, y, 50, maxY);
     doc.moveTo(MARGIN_LEFT, y).lineTo(PAGE_WIDTH - MARGIN_RIGHT, y).lineWidth(1).stroke();
     y += 12;
     doc.fontSize(12).font("Helvetica-Bold");
@@ -229,17 +256,15 @@ export async function buildInvoicePdf(
     doc.text("keine MWST", MARGIN_LEFT, y);
     y += 20;
 
-    const isPaid = !!data.paidAt;
     // Issue #237: a zero-amount "free" bill (e.g. Interne Nutzung) is
     // recorded for the books but has no payable balance — replace the
     // QR-bill section and the regular "Bezahlt via …" notice with a
-    // dedicated nothing-to-pay block.
-    const isFreeZero =
-      data.paidVia === "free" && data.grandTotal === 0;
+    // dedicated nothing-to-pay block. `isFreeZero` / `isPaid` are
+    // computed at the top of buildInvoicePdf (feed into `hasQrBill`).
 
     if (isFreeZero) {
       // --- Nothing-to-pay notice (zero-amount bill) ---
-      y = ensureSpace(doc, y, 40);
+      y = ensureSpace(doc, y, 40, maxY);
       doc.fontSize(11).font("Helvetica-Bold");
       doc.text("Keine Zahlung erforderlich", MARGIN_LEFT, y);
       y += 16;
@@ -253,7 +278,7 @@ export async function buildInvoicePdf(
       addPageFooters(doc, data, doc.bufferedPageRange().count);
     } else if (isPaid) {
       // --- Paid notice ---
-      y = ensureSpace(doc, y, 40);
+      y = ensureSpace(doc, y, 40, maxY);
       const viaLabel = PAID_VIA_LABELS[data.paidVia ?? ""] ?? "";
       const paidDateStr = formatDateOnly(data.paidAt!);
       doc.fontSize(11).font("Helvetica-Bold");
@@ -271,7 +296,7 @@ export async function buildInvoicePdf(
       // the app shouldn't think they need to pay again. The email
       // surfaces the kasse@ contact for the "TWINT didn't go through"
       // recovery path.
-      y = ensureSpace(doc, y, 40);
+      y = ensureSpace(doc, y, 40, maxY);
       doc.fontSize(11).font("Helvetica-Bold");
       doc.text("Zahlweise: TWINT", MARGIN_LEFT, y);
       y += 16;
@@ -287,7 +312,7 @@ export async function buildInvoicePdf(
     } else if (data.paymentMethod === "monthly") {
       // --- Sammelrechnung notice (issue #251) ---
       // Goes onto next month's Sammelrechnung — no QR slip needed.
-      y = ensureSpace(doc, y, 40);
+      y = ensureSpace(doc, y, 40, maxY);
       doc.fontSize(11).font("Helvetica-Bold");
       doc.text("Zahlweise: Sammelrechnung", MARGIN_LEFT, y);
       y += 16;
@@ -302,7 +327,7 @@ export async function buildInvoicePdf(
       addPageFooters(doc, data, doc.bufferedPageRange().count);
     } else {
       // --- Payment terms (rechnung or pre-ack default) ---
-      y = ensureSpace(doc, y, 30);
+      y = ensureSpace(doc, y, 30, maxY);
       doc.fontSize(9).font("Helvetica");
       doc.text("Zahlbar innert 30 Tagen. Besten Dank.", MARGIN_LEFT, y);
       y += 20;
@@ -387,8 +412,12 @@ function addPageFooters(
 }
 
 /** Render column headers for the item table */
-function renderTableHeader(doc: PDFKit.PDFDocument, y: number): number {
-  y = ensureSpace(doc, y, 20);
+function renderTableHeader(
+  doc: PDFKit.PDFDocument,
+  y: number,
+  maxY: number,
+): number {
+  y = ensureSpace(doc, y, 20, maxY);
   doc.fontSize(8).font("Helvetica-Bold");
   doc.text("Beschreibung", MARGIN_LEFT + INDENT, y, { width: COL_DESC_W - INDENT });
   doc.text("Einh.", COL_UNIT_X, y, { width: COL_UNIT_W, align: "right" });
@@ -409,9 +438,10 @@ function renderItemRow(
   unit: string,
   qty: number | null,
   unitPrice: number | null,
-  totalPrice: number
+  totalPrice: number,
+  maxY: number,
 ): number {
-  y = ensureSpace(doc, y, 14);
+  y = ensureSpace(doc, y, 14, maxY);
   doc.fontSize(9).font("Helvetica");
   doc.text(description, MARGIN_LEFT + INDENT, y, { width: COL_DESC_W - INDENT });
   if (unit) {
@@ -429,8 +459,13 @@ function renderItemRow(
 }
 
 /** Render a subtotal row */
-function renderSubtotalRow(doc: PDFKit.PDFDocument, y: number, total: number): number {
-  y = ensureSpace(doc, y, 14);
+function renderSubtotalRow(
+  doc: PDFKit.PDFDocument,
+  y: number,
+  total: number,
+  maxY: number,
+): number {
+  y = ensureSpace(doc, y, 14, maxY);
   doc.fontSize(9).font("Helvetica-Bold");
   doc.text("Zwischentotal", MARGIN_LEFT + INDENT, y, { width: COL_DESC_W - INDENT });
   doc.text(formatAmount(total), COL_TOTAL_X, y, { width: COL_TOTAL_W, align: "right" });
@@ -443,10 +478,11 @@ function renderCheckoutSection(
   doc: PDFKit.PDFDocument,
   y: number,
   checkout: InvoiceCheckout,
-  data: InvoiceData
+  data: InvoiceData,
+  maxY: number,
 ): number {
   // Visit date header
-  y = ensureSpace(doc, y, 30);
+  y = ensureSpace(doc, y, 30, maxY);
   doc.fontSize(11).font("Helvetica-Bold");
   doc.text(`Besuch vom ${formatDate(checkout.date)}`, MARGIN_LEFT, y);
   y += 20;
@@ -457,18 +493,18 @@ function renderCheckoutSection(
   // See issue #269: Marco's bill omitted the user line because the fee
   // was zero, leaving the recipient unclear.
   if (checkout.personEntryFees.length > 0) {
-    y = ensureSpace(doc, y, 20 + checkout.persons.length * 14 + 30);
+    y = ensureSpace(doc, y, 20 + checkout.persons.length * 14 + 30, maxY);
     doc.fontSize(10).font("Helvetica-Bold");
     doc.text("Nutzungsgebühren", MARGIN_LEFT, y);
     y += 16;
 
-    y = renderTableHeader(doc, y);
+    y = renderTableHeader(doc, y, maxY);
 
     for (const pf of checkout.personEntryFees) {
       const label = `${pf.name} (${USER_TYPE_LABELS[pf.userType] ?? pf.userType})`;
-      y = renderItemRow(doc, y, label, "", 1, pf.fee, pf.fee);
+      y = renderItemRow(doc, y, label, "", 1, pf.fee, pf.fee, maxY);
     }
-    y = renderSubtotalRow(doc, y, checkout.entryFees);
+    y = renderSubtotalRow(doc, y, checkout.entryFees, maxY);
   }
 
   // Items grouped by workshop
@@ -483,12 +519,12 @@ function renderCheckoutSection(
     const items = itemsByWorkshop[workshopId];
     const workshopLabel = data.workshops[workshopId]?.label ?? workshopId;
 
-    y = ensureSpace(doc, y, 20 + items.length * 14 + 30);
+    y = ensureSpace(doc, y, 20 + items.length * 14 + 30, maxY);
     doc.fontSize(10).font("Helvetica-Bold");
     doc.text(workshopLabel, MARGIN_LEFT, y);
     y += 16;
 
-    y = renderTableHeader(doc, y);
+    y = renderTableHeader(doc, y, maxY);
 
     let workshopTotal = 0;
     for (const item of items) {
@@ -501,14 +537,14 @@ function renderCheckoutSection(
           .map((fi) => `${formatQty(fi.quantity)} ${fi.unit}`)
           .join(" · ");
         const desc = axes ? `${item.description} (${axes})` : item.description;
-        y = renderItemRow(doc, y, desc, "", null, null, item.totalPrice);
+        y = renderItemRow(doc, y, desc, "", null, null, item.totalPrice, maxY);
       } else {
         const unit = unitLabel(item.pricingModel);
-        y = renderItemRow(doc, y, item.description, unit, item.quantity, item.unitPrice, item.totalPrice);
+        y = renderItemRow(doc, y, item.description, unit, item.quantity, item.unitPrice, item.totalPrice, maxY);
       }
       workshopTotal += item.totalPrice;
     }
-    y = renderSubtotalRow(doc, y, workshopTotal);
+    y = renderSubtotalRow(doc, y, workshopTotal, maxY);
   }
 
   // Donation (label: "Spende"). The underlying field is still named `tip`
@@ -516,7 +552,7 @@ function renderCheckoutSection(
   // `checkout.summary.tip` shape; only the rendered label changed — see
   // issue #250.
   if (checkout.tip > 0) {
-    y = ensureSpace(doc, y, 30);
+    y = ensureSpace(doc, y, 30, maxY);
     doc.fontSize(10).font("Helvetica-Bold");
     doc.text("Spende", MARGIN_LEFT, y);
     y += 16;

@@ -374,34 +374,46 @@ test.describe("Checkout step screenshots", () => {
     testInfo.setTimeout(60_000)
 
     // Stamp an active-single membership on the seeded auth user so the
-    // Sammelrechnung tab renders. Reset is handled by the describe-level
-    // afterAll.
+    // Sammelrechnung tab renders. The describe-level afterAll resets
+    // membership to "none" at the very end as a belt-and-suspenders
+    // safety net, but we ALSO reset inline at the end of this test
+    // because subsequent tests in this describe block (e.g. the TWINT
+    // tab screenshot) capture the payment-method picker — leaving the
+    // membership stamped would render an extra Sammelrechnung tab in
+    // their baselines and fail with a layout diff.
     const uid = process.env.E2E_AUTH_USER_UID
     test.skip(!uid, "E2E_AUTH_USER_UID not set (global-setup did not run)")
     await seedMembershipState(uid!, { kind: "active-single" })
 
-    await submitAndWaitForPaymentResult(page)
+    try {
+      await submitAndWaitForPaymentResult(page)
 
-    // Sammelrechnung tab should be visible only for members.
-    await page.getByRole("tab", { name: /Sammelrechnung/ }).click()
+      // Sammelrechnung tab should be visible only for members.
+      await page.getByRole("tab", { name: /Sammelrechnung/ }).click()
 
-    // Monthly panel copy: the QR is suppressed, the user reads the
-    // queue-for-next-month notice.
-    await expect(page.getByText(/am 1\. des nächsten Monats/)).toBeVisible({
-      timeout: 30_000,
-    })
-    // Commit button label uses the Sammelrechnung-specific phrasing.
-    await expect(
-      page.getByRole("button", {
-        name: /Auf Sammelrechnung setzen & Werkstatt verlassen/,
-      }),
-    ).toBeVisible()
-    // QR creditor block must NOT render on the Sammelrechnung tab.
-    await expect(page.getByText("Konto / Zahlbar an")).toBeHidden()
-    // PDF download stays in the hero across all tabs.
-    await expect(page.getByRole("button", { name: /Rechnung als PDF/ })).toBeVisible()
+      // Monthly panel copy: the QR is suppressed, the user reads the
+      // queue-for-next-month notice.
+      await expect(page.getByText(/am 1\. des nächsten Monats/)).toBeVisible({
+        timeout: 30_000,
+      })
+      // Commit button label uses the Sammelrechnung-specific phrasing.
+      await expect(
+        page.getByRole("button", {
+          name: /Auf Sammelrechnung setzen & Werkstatt verlassen/,
+        }),
+      ).toBeVisible()
+      // QR creditor block must NOT render on the Sammelrechnung tab.
+      await expect(page.getByText("Konto / Zahlbar an")).toBeHidden()
+      // PDF download stays in the hero across all tabs.
+      await expect(page.getByRole("button", { name: /Rechnung als PDF/ })).toBeVisible()
 
-    await expect(page).toHaveScreenshot("checkout-payment-monthly-member.png")
+      await expect(page).toHaveScreenshot("checkout-payment-monthly-member.png")
+    } finally {
+      // Reset immediately so the next test sees a non-member user even
+      // if the assertions above threw (Playwright will still mark the
+      // test failed; we just stop the leak).
+      await seedMembershipState(uid!, { kind: "none" })
+    }
   })
 
   test("Step 4 · TWINT tab — pay-link, no QR bill", async ({ page }, testInfo) => {
