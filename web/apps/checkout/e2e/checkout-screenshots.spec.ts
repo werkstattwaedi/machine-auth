@@ -2,7 +2,11 @@
 // SPDX-License-Identifier: MIT
 
 import { test, expect, type Page } from "@playwright/test"
-import { clearCollections, waitForLoginCode } from "./helpers"
+import {
+  clearCollections,
+  seedMembershipState,
+  waitForLoginCode,
+} from "./helpers"
 
 const AUTH_USER_EMAIL = "e2e-test@werkstattwaedi.ch"
 
@@ -114,6 +118,14 @@ async function submitAndWaitForPaymentResult(page: Page) {
 }
 
 test.describe("Checkout step screenshots", () => {
+  // The Sammelrechnung-member test below stamps an active-single
+  // membership on the auth user doc. Reset to `none` so the stamp
+  // doesn't leak into other tests that expect a non-member view.
+  test.afterAll(async () => {
+    const uid = process.env.E2E_AUTH_USER_UID
+    if (uid) await seedMembershipState(uid, { kind: "none" })
+  })
+
   test("empty workshop form", async ({ page }) => {
     await goToWorkshops(page)
 
@@ -350,6 +362,46 @@ test.describe("Checkout step screenshots", () => {
     await expect(page.getByRole("button", { name: /Werkstatt verlassen/ })).toBeVisible()
 
     await expect(page).toHaveScreenshot("checkout-payment-zero.png")
+  })
+
+  // Issue #245: the Sammelrechnung tab on Step 4 is gated by
+  // `activeMembership`. The original issue body called out this gap —
+  // no screenshot test ever rendered the member view, so the tab's
+  // German copy and layout had no pixel-regression coverage.
+  test("Step 4 · Sammelrechnung tab (member) — monthly notice, no QR bill", async ({
+    page,
+  }, testInfo) => {
+    testInfo.setTimeout(60_000)
+
+    // Stamp an active-single membership on the seeded auth user so the
+    // Sammelrechnung tab renders. Reset is handled by the describe-level
+    // afterAll.
+    const uid = process.env.E2E_AUTH_USER_UID
+    test.skip(!uid, "E2E_AUTH_USER_UID not set (global-setup did not run)")
+    await seedMembershipState(uid!, { kind: "active-single" })
+
+    await submitAndWaitForPaymentResult(page)
+
+    // Sammelrechnung tab should be visible only for members.
+    await page.getByRole("tab", { name: /Sammelrechnung/ }).click()
+
+    // Monthly panel copy: the QR is suppressed, the user reads the
+    // queue-for-next-month notice.
+    await expect(page.getByText(/am 1\. des nächsten Monats/)).toBeVisible({
+      timeout: 30_000,
+    })
+    // Commit button label uses the Sammelrechnung-specific phrasing.
+    await expect(
+      page.getByRole("button", {
+        name: /Auf Sammelrechnung setzen & Werkstatt verlassen/,
+      }),
+    ).toBeVisible()
+    // QR creditor block must NOT render on the Sammelrechnung tab.
+    await expect(page.getByText("Konto / Zahlbar an")).toBeHidden()
+    // PDF download stays in the hero across all tabs.
+    await expect(page.getByRole("button", { name: /Rechnung als PDF/ })).toBeVisible()
+
+    await expect(page).toHaveScreenshot("checkout-payment-monthly-member.png")
   })
 
   test("Step 4 · TWINT tab — pay-link, no QR bill", async ({ page }, testInfo) => {

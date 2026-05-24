@@ -16,12 +16,91 @@ import {
   onDocumentUpdated,
 } from "firebase-functions/v2/firestore";
 import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
-import type { DocumentReference } from "firebase-admin/firestore";
+import type {
+  DocumentReference,
+  Firestore,
+  Transaction,
+} from "firebase-admin/firestore";
 import type {
   CheckoutEntity,
   CheckoutItemEntity,
 } from "../types/firestore_entities";
-import type { BillEntity } from "./types";
+import type { BillEntity, BillKind } from "./types";
+
+/**
+ * Allocate a sequential reference number from `config/billing` and write a
+ * bill doc inside the supplied transaction. Shared by every code path that
+ * mints a bill — per-visit triggers (`createBillForCheckout`), the
+ * `closeCheckoutAndGetPayment` callable, and the monthlyBillRun cron — so
+ * the counter increment lives in one place.
+ *
+ * Returns the constructed bill entity so callers can build PaymentData /
+ * trigger downstream PDF generation without re-reading from Firestore.
+ */
+export async function allocateBill(
+  tx: Transaction,
+  db: Firestore,
+  args: {
+    userId: DocumentReference | null;
+    checkoutRefs: DocumentReference[];
+    amount: number;
+    billRef: DocumentReference;
+    /** Defaults to "invoice". Pass "beleg" for per-visit Sammelrechnung records. */
+    kind?: BillKind;
+    /**
+     * Pre-ack the bill at creation. Used by the monthlyBillRun cron — the
+     * monthly Sammelrechnung is implicitly acked (the member acked by
+     * picking monthly on each visit). The acknowledgeBill code paths never
+     * pass this — the ack stamp lands later via the callable / auto-ack cron.
+     */
+     preAck?: { source: "user" | "auto" };
+  },
+): Promise<BillEntity> {
+  const configRef = db.doc("config/billing");
+  const configDoc = await tx.get(configRef);
+  const nextBillNumber = configDoc.exists
+    ? (configDoc.data()?.nextBillNumber as number) ?? 1
+    : 1;
+
+  if (configDoc.exists) {
+    tx.update(configRef, { nextBillNumber: FieldValue.increment(1) });
+  } else {
+    tx.set(configRef, { nextBillNumber: nextBillNumber + 1 });
+  }
+
+  // Issue #237: zero-amount bills (e.g. "Interne Nutzung") are auto-closed
+  // as `paidVia: "free"` so they don't sit "unpaid forever" waiting for a
+  // bank QR scan that will never come. The PDF generator gates its
+  // QR-bill section on `paidAt` already, so the same flag also keeps the
+  // payment slip out of the generated invoice.
+  const isFree = args.amount === 0;
+  const now = Timestamp.now();
+  const ackTime = args.preAck ? now : isFree ? now : null;
+  const ackSource: "user" | "auto" | null = args.preAck
+    ? args.preAck.source
+    : isFree
+    ? "auto"
+    : null;
+  const bill: BillEntity = {
+    userId: args.userId as DocumentReference,
+    checkouts: args.checkoutRefs,
+    referenceNumber: nextBillNumber,
+    amount: args.amount,
+    currency: "CHF",
+    storagePath: null,
+    created: now,
+    paidAt: isFree ? now : null,
+    paidVia: isFree ? "free" : null,
+    pdfGeneratedAt: null,
+    emailSentAt: null,
+    paymentMethodConfirmationTime: ackTime,
+    paymentMethodConfirmationSource: ackSource,
+    kind: args.kind ?? "invoice",
+    aggregatedIntoBillRef: null,
+  };
+  tx.set(args.billRef, bill);
+  return bill;
+}
 
 /**
  * Look up the per-person entry fee from `config/pricing.entryFees`.
@@ -102,41 +181,12 @@ export async function createBillForCheckout(
       return;
     }
 
-    // Allocate sequential reference number
-    const configRef = db.doc("config/billing");
-    const configDoc = await tx.get(configRef);
-    let nextBillNumber = 1;
-    if (configDoc.exists) {
-      nextBillNumber = (configDoc.data()?.nextBillNumber as number) ?? 1;
-    }
-
-    if (configDoc.exists) {
-      tx.update(configRef, { nextBillNumber: FieldValue.increment(1) });
-    } else {
-      tx.set(configRef, { nextBillNumber: nextBillNumber + 1 });
-    }
-
-    // Create bill document. Free bills are pre-acked so the cron skips
-    // them and the email path (which also bails on paidVia "free") doesn't
-    // need a user click to make sense of them.
-    const isFree = grandTotal === 0;
-    const now = Timestamp.now();
-    const bill: BillEntity = {
+    await allocateBill(tx, db, {
       userId: checkout.userId,
-      checkouts: [checkoutRef],
-      referenceNumber: nextBillNumber,
+      checkoutRefs: [checkoutRef],
       amount: grandTotal,
-      currency: "CHF",
-      storagePath: null,
-      created: now,
-      paidAt: isFree ? now : null,
-      paidVia: isFree ? "free" : null,
-      pdfGeneratedAt: null,
-      emailSentAt: null,
-      paymentMethodConfirmationTime: isFree ? now : null,
-      paymentMethodConfirmationSource: isFree ? "auto" : null,
-    };
-    tx.set(billRef, bill);
+      billRef,
+    });
 
     // Link bill to checkout
     tx.update(checkoutRef, { billRef: billRef });

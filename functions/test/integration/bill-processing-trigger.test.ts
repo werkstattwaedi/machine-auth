@@ -29,6 +29,8 @@ process.env.RESEND_API_KEY = "re_test_fake";
 process.env.RESEND_FROM_EMAIL = "OWW Test <test@localhost>";
 process.env.RESEND_QRBILL_TEMPLATE_ID = "test-qrbill-template";
 process.env.RESEND_TWINT_TEMPLATE_ID = "test-twint-template";
+// Issue #245: RESEND_MONTHLY_TEMPLATE_ID is now the *aggregated*
+// Sammelrechnung template (per-visit Belege no longer email).
 process.env.RESEND_MONTHLY_TEMPLATE_ID = "test-monthly-template";
 process.env.KASSE_EMAIL = "kasse@test.localhost";
 
@@ -99,6 +101,7 @@ interface SeedBillOptions {
   paymentMethodConfirmationSource?: "user" | "auto" | null;
   paidVia?: "twint" | "ebanking" | "cash" | "free" | null;
   checkoutIds?: string[];
+  kind?: "invoice" | "beleg";
 }
 
 interface SeedCheckoutOptions {
@@ -162,6 +165,8 @@ async function seedBill(
     emailSentAt: opts.emailSentAt ?? null,
     paymentMethodConfirmationTime: opts.paymentMethodConfirmationTime ?? null,
     paymentMethodConfirmationSource: opts.paymentMethodConfirmationSource ?? null,
+    kind: opts.kind ?? "invoice",
+    aggregatedIntoBillRef: null,
   };
 
   await db.collection("bills").doc(billId).set(bill);
@@ -650,16 +655,22 @@ describe("bill processing triggers (Integration)", () => {
         expect(entity.template.id).to.equal("test-twint-template");
       });
 
-      it("picks monthly template when checkout.paymentMethod is 'monthly'", async () => {
-        const billId = "bill-monthly";
+      it("picks Sammelrechnung template for monthly-acked invoice (aggregated bill, #245)", async () => {
+        // Post-#245 a `kind: "invoice"` bill whose linked checkout has
+        // paymentMethod "monthly" is the aggregated Sammelrechnung
+        // emitted by monthlyBillRun. Reuses RESEND_MONTHLY_TEMPLATE_ID —
+        // the per-visit Belege never reach trySendEmail (kind === "beleg"
+        // short-circuits earlier).
+        const billId = "bill-sammelrechnung";
         await seedCheckout("co-default", {
           paymentMethod: "monthly",
         });
         await seedBill(billId, {
-          storagePath: "invoices/bill-monthly.pdf",
+          storagePath: "invoices/bill-sammelrechnung.pdf",
           referenceNumber: 12,
           paymentMethodConfirmationTime: Timestamp.now(),
-          paymentMethodConfirmationSource: "user",
+          paymentMethodConfirmationSource: "auto",
+          kind: "invoice",
         });
 
         await trySendEmail(billId);

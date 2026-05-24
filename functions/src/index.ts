@@ -281,6 +281,7 @@ export {
   retryBillProcessing,
 } from "./invoice/bill_triggers";
 export { autoAcknowledgeBills } from "./invoice/acknowledge_bill";
+export { monthlyBillRun } from "./invoice/monthly_bill_run";
 
 // Export membership module — callables, triggers, scheduled job.
 // Membership activation now runs from `onBillUpdate` (gated on the

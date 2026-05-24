@@ -5,7 +5,7 @@ import PDFDocument from "pdfkit";
 import { SwissQRBill } from "swissqrbill/pdf";
 import { resolve } from "node:path";
 import { formatWorkshopDateTime } from "../util/workshop_timezone";
-import { formatInvoiceNumber } from "./types";
+import { formatBillReference } from "./types";
 import type { InvoiceData, InvoiceCheckout, PaymentConfig } from "./types";
 import type { PricingModel } from "../types/firestore_entities";
 import { generateScorReference } from "./scor_reference";
@@ -163,12 +163,48 @@ export async function buildInvoicePdf(
     y += 24;
 
     // --- Title ---
+    // "Beleg" is the per-visit Sammelrechnung record (issue #245); the
+    // QR-bill is emitted as the aggregated monthly Sammelrechnung. For a
+    // multi-checkout invoice (the monthlyBillRun output) append the
+    // earliest-checkout's month so the customer reads "Sammelrechnung —
+    // Mai 2026" rather than the bare title.
+    //
+    // Catch-up runs (a stale prior-month Beleg swept into a later
+    // month's aggregation — see monthly_bill_run.ts self-heal docs)
+    // produce a multi-month invoice. The title shows the earliest
+    // visit's month, which is honest but understates the range. Acceptable
+    // because: (a) the per-checkout sections inside the PDF list the real
+    // dates; (b) catch-up runs only happen after a cron failure, which
+    // is rare enough not to justify a "Mai–Juni 2026" label.
+    const isBeleg = data.kind === "beleg";
+    let title: string;
+    if (isBeleg) {
+      title = "Beleg Self Checkout";
+    } else if (data.checkouts.length > 1) {
+      const earliest = data.checkouts.reduce(
+        (a, b) => (a.date.getTime() < b.date.getTime() ? a : b),
+      );
+      title = `Sammelrechnung — ${formatWorkshopDateTime(earliest.date, "MMMM yyyy")}`;
+    } else {
+      // Single-checkout aggregated invoice (a member who visited once in
+      // the prior month). Keeps the standard "Rechnung Self Checkout"
+      // title rather than a "Sammelrechnung" label — a single line item
+      // doesn't read as an aggregation, and the per-visit Beleg the
+      // member received earlier already mentioned the upcoming
+      // Sammelrechnung. Accounting treats it as a regular Rechnung.
+      title = "Rechnung Self Checkout";
+    }
     y = ensureSpace(doc, y, 40);
     doc.fontSize(16).font("Helvetica-Bold");
-    doc.text("Rechnung Self Checkout", MARGIN_LEFT, y);
+    doc.text(title, MARGIN_LEFT, y);
     y += 22;
     doc.fontSize(10).font("Helvetica");
-    doc.text(`Rechnungsnummer: ${formatInvoiceNumber(data.referenceNumber)}`, MARGIN_LEFT, y);
+    const numberLabel = isBeleg ? "Belegnummer" : "Rechnungsnummer";
+    doc.text(
+      `${numberLabel}: ${formatBillReference(data.referenceNumber, data.kind)}`,
+      MARGIN_LEFT,
+      y,
+    );
     y += 14;
     doc.text(`Datum: ${formatDateOnly(data.invoiceDate)}`, MARGIN_LEFT, y);
     y += 28;
@@ -332,7 +368,7 @@ function addPageFooters(
     // Page number + reference in footer (lineBreak: false to prevent auto-pagination)
     doc.fontSize(8).font("Helvetica");
     doc.text(
-      `${formatInvoiceNumber(data.referenceNumber)}`,
+      `${formatBillReference(data.referenceNumber, data.kind)}`,
       MARGIN_LEFT, footerY,
       { width: CONTENT_WIDTH / 2, align: "left", lineBreak: false }
     );

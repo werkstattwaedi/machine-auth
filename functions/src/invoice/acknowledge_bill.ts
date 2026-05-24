@@ -140,7 +140,9 @@ export const acknowledgeBill = onCall<
 
   // Idempotent: a second click after the first one landed returns OK
   // without rewriting. The frontend may double-fire under double-tap.
-  if (bill.paymentMethodConfirmationTime) {
+  // For monthly: the bill has already been flipped to kind "beleg" — same
+  // short-circuit, since the kind transition is the commit-of-record.
+  if (bill.paymentMethodConfirmationTime || (bill.kind ?? "invoice") === "beleg") {
     return { ok: true };
   }
 
@@ -156,12 +158,32 @@ export const acknowledgeBill = onCall<
     if (freshBill.paymentMethodConfirmationTime) {
       return;
     }
+    if ((freshBill.kind ?? "invoice") === "beleg") {
+      return;
+    }
 
     const now = Timestamp.now();
-    tx.update(billRef, {
-      paymentMethodConfirmationTime: now,
-      paymentMethodConfirmationSource: "user",
-    });
+    if (paymentMethod === "monthly") {
+      // Sammelrechnung path (issue #245): the per-visit bill becomes a
+      // "Beleg" — a non-payable record of what was used this visit. The
+      // monthlyBillRun cron aggregates Belege into a real Sammelrechnung
+      // QR-bill on the 1st of the following month. We deliberately do
+      // NOT stamp paymentMethodConfirmationTime — keeping it null means
+      // the email/membership triggers in `onBillUpdate` stay no-ops, and
+      // the auto-ack cron doesn't pick this back up (it skips Belege).
+      //
+      // We don't write `aggregatedIntoBillRef: null` here because the
+      // field is initialized by `allocateBill` at bill-creation time.
+      // For pre-deploy bills the field is absent, but Firestore's
+      // `== null` predicate on the cron query matches both absent and
+      // explicit null — so no backfill is needed.
+      tx.update(billRef, { kind: "beleg" });
+    } else {
+      tx.update(billRef, {
+        paymentMethodConfirmationTime: now,
+        paymentMethodConfirmationSource: "user",
+      });
+    }
 
     if (linkedCheckoutRef) {
       tx.update(linkedCheckoutRef, {
@@ -176,19 +198,29 @@ export const acknowledgeBill = onCall<
     billId,
     paymentMethod,
     callerUid,
+    flipped: paymentMethod === "monthly" ? "beleg" : "ack",
   });
 
   return { ok: true };
 });
 
+interface AutoAckSummary {
+  /** Bills where the auto-ack stamp landed (will email + activate membership). */
+  ackedIds: string[];
+  /** Bills flipped to Beleg because the linked checkout had paymentMethod "monthly". */
+  belegFlippedIds: string[];
+}
+
 /**
  * Core loop, exported so the integration test can invoke it directly
  * against the Firestore emulator (no scheduler runtime needed). Returns
- * the number of bills auto-acked.
+ * the bills that landed an auto-ack stamp and (separately) the bills
+ * that were flipped to Beleg for the monthly aggregation cron — they
+ * share the same loop but mean different things downstream.
  */
 export async function runAutoAcknowledgeBills(
   now: Date = new Date(),
-): Promise<{ ackedCount: number; ackedIds: string[] }> {
+): Promise<AutoAckSummary> {
   const db = getFirestore();
   const minAgeHours = Number(autoAckMinAgeHours.value()) || 1;
   const cutoff = Timestamp.fromMillis(
@@ -203,10 +235,11 @@ export async function runAutoAcknowledgeBills(
     .get();
 
   if (snap.empty) {
-    return { ackedCount: 0, ackedIds: [] };
+    return { ackedIds: [], belegFlippedIds: [] };
   }
 
   const ackedIds: string[] = [];
+  const belegFlippedIds: string[] = [];
   const ackTime = Timestamp.fromDate(now);
 
   for (const doc of snap.docs) {
@@ -214,18 +247,22 @@ export async function runAutoAcknowledgeBills(
 
     // Free bills are pre-acked at creation, but defensive belt-and-suspenders.
     if (bill.paidVia === "free") continue;
+    // Belege are never acked — they wait for monthlyBillRun.
+    if ((bill.kind ?? "invoice") === "beleg") continue;
 
     const linkedCheckoutRef: DocumentReference | null =
       bill.checkouts.length > 0 ? bill.checkouts[0] : null;
 
-    await db.runTransaction(async (tx) => {
+    type Outcome = "acked" | "beleg" | "skipped";
+    const outcome = await db.runTransaction<Outcome>(async (tx) => {
       // Read both docs INSIDE the transaction so a tab-click that lands
       // between the outer query and the transaction commit isn't
       // overwritten by the auto-rechnung backfill below.
       const fresh = await tx.get(doc.ref);
-      if (!fresh.exists) return;
+      if (!fresh.exists) return "skipped";
       const freshBill = fresh.data() as BillEntity;
-      if (freshBill.paymentMethodConfirmationTime) return;
+      if (freshBill.paymentMethodConfirmationTime) return "skipped";
+      if ((freshBill.kind ?? "invoice") === "beleg") return "skipped";
 
       let checkoutPaymentMethod: PaymentMethod | null = null;
       if (linkedCheckoutRef) {
@@ -234,6 +271,16 @@ export async function runAutoAcknowledgeBills(
           const co = coSnap.data() as CheckoutEntity;
           checkoutPaymentMethod = co.paymentMethod ?? null;
         }
+      }
+
+      // Sammelrechnung path (issue #245): a member who picked the
+      // monthly tab on Step 4 but never tapped commit. Mirror the
+      // user-ack-for-monthly transition — flip to Beleg instead of
+      // emailing a per-visit invoice. The monthlyBillRun cron sweeps
+      // up these Belege on the 1st.
+      if (checkoutPaymentMethod === "monthly") {
+        tx.update(doc.ref, { kind: "beleg" });
+        return "beleg";
       }
 
       tx.update(doc.ref, {
@@ -249,19 +296,23 @@ export async function runAutoAcknowledgeBills(
           modifiedAt: FieldValue.serverTimestamp(),
         });
       }
+      return "acked";
     });
 
-    ackedIds.push(doc.id);
+    if (outcome === "acked") ackedIds.push(doc.id);
+    else if (outcome === "beleg") belegFlippedIds.push(doc.id);
   }
 
-  logger.info("autoAcknowledgeBills: acked unconfirmed bills", {
+  logger.info("autoAcknowledgeBills: processed unconfirmed bills", {
     ackedCount: ackedIds.length,
+    belegFlippedCount: belegFlippedIds.length,
     cutoffIso: cutoff.toDate().toISOString(),
     minAgeHours,
-    sampleIds: ackedIds.slice(0, 10),
+    sampleAckedIds: ackedIds.slice(0, 10),
+    sampleBelegFlippedIds: belegFlippedIds.slice(0, 10),
   });
 
-  return { ackedCount: ackedIds.length, ackedIds };
+  return { ackedIds, belegFlippedIds };
 }
 
 /**
