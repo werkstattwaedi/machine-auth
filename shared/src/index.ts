@@ -2,4 +2,4 @@
 // SPDX-License-Identifier: MIT
 
 export * from "./pricing"
-export * as printer from "./printer"
+export * from "./printer"

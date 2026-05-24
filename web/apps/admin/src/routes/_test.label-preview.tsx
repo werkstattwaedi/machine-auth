@@ -2,11 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 import { createFileRoute } from "@tanstack/react-router"
-import { printer } from "@oww/shared"
+import { TAPE_SPECS, type TapeKey } from "@oww/shared"
 import { useLabelBitmap } from "@/printer/use-label-bitmap"
 import { LabelPreview } from "@/printer/label-preview"
-
-type TapeKey = printer.TapeKey
 
 interface LabelPreviewSearch {
   url: string
@@ -16,7 +14,7 @@ interface LabelPreviewSearch {
 }
 
 function coerceTape(value: unknown): TapeKey {
-  return typeof value === "string" && value in printer.TAPE_SPECS
+  return typeof value === "string" && value in TAPE_SPECS
     ? (value as TapeKey)
     : "18mm"
 }
