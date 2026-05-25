@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { createConnection } from "node:net"
-import { printer } from "@oww/shared"
+import { parseStatus } from "@oww/shared"
 
 export interface PrinterEndpoint {
   host: string
@@ -111,7 +111,7 @@ export function sendToPrinter(
           // change" noise.
           for (let off = 0; off + 32 <= reply.length; off += 32) {
             const frame = new Uint8Array(reply.subarray(off, off + 32))
-            const status = printer.parseStatus(frame)
+            const status = parseStatus(frame)
             if (status && status.errors.length > 0) {
               finish(new Error(status.errors.join("; ")))
               return

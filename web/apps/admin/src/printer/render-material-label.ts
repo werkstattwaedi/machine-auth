@@ -2,11 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 import QRCode from "qrcode"
-import { printer } from "@oww/shared"
+import { TAPE_SPECS, type TapeKey, type Bitmap1 } from "@oww/shared"
 
-const { TAPE_SPECS } = printer
-export type TapeKey = printer.TapeKey
-export type Bitmap1 = printer.Bitmap1
+export type { TapeKey, Bitmap1 }
 
 export interface MaterialLabelInput {
   /** Encoded into the QR code. */
@@ -38,7 +36,7 @@ async function ensureFontsLoaded(titlePx: number, codePx: number) {
 /**
  * Render a material label on an offscreen canvas at the printer's
  * native 360 DPI, threshold to 1-bit, and return a column-major
- * `Bitmap1` suitable for `printer.buildRasterJob`.
+ * `Bitmap1` suitable for `buildRasterJob`.
  *
  * Layout: QR on the left (height-matched to the tape's print pins
  * minus a small inset), then a 2-column right region with `title` on
