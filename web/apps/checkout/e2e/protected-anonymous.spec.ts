@@ -70,7 +70,7 @@ test.describe("Protected routes block anonymous principals (#179)", () => {
   }) => {
     await signInEagerAnonymous(page)
 
-    await page.goto("/profile")
+    await page.goto("/account/profile")
 
     await page.waitForURL((url) => url.pathname === "/login", {
       timeout: 10_000,
@@ -84,7 +84,7 @@ test.describe("Protected routes block anonymous principals (#179)", () => {
   }) => {
     await signInEagerAnonymous(page)
 
-    await page.goto("/complete-profile")
+    await page.goto("/account/complete-profile")
 
     await page.waitForURL((url) => url.pathname === "/login", {
       timeout: 10_000,

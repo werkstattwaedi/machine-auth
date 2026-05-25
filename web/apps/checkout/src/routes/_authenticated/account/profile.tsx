@@ -24,7 +24,7 @@ import { useEffect, useRef } from "react"
 import { USER_TYPE_LABELS, type UserType } from "@modules/lib/pricing"
 import { cn } from "@modules/lib/utils"
 
-export const Route = createFileRoute("/_authenticated/profile")({
+export const Route = createFileRoute("/_authenticated/account/profile")({
   component: ProfilePage,
 })
 

@@ -24,7 +24,7 @@ export interface LoginPageProps {
   defaultRedirect: string
   /** When true, render the "Konto erstellen" link and honour `mode=signup`. */
   signupEnabled?: boolean
-  /** Where to send the user after sign-up. Defaults to "/complete-profile". */
+  /** Where to send the user after sign-up. Defaults to "/account/complete-profile". */
   signupRedirect?: string
   /** Optional small caption under the logo (e.g. "Administration"). */
   subtitle?: string
@@ -39,7 +39,7 @@ export interface LoginPageProps {
 export function LoginPage({
   defaultRedirect,
   signupEnabled = false,
-  signupRedirect = "/complete-profile",
+  signupRedirect = "/account/complete-profile",
   subtitle,
   googleButtonPosition = "bottom",
   redirect: redirectTo,

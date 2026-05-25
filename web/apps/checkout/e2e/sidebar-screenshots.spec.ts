@@ -31,7 +31,7 @@ async function signIn(page: Page) {
 test.describe("Sidebar screenshots", () => {
   test("profile page — sidebar with avatar footer", async ({ page }) => {
     await signIn(page)
-    await page.goto("/profile")
+    await page.goto("/account/profile")
     await expect(
       page.getByRole("heading", { name: "Profil" }),
     ).toBeVisible({ timeout: 10_000 })
@@ -42,7 +42,7 @@ test.describe("Sidebar screenshots", () => {
 
   test("membership page — sidebar with avatar footer", async ({ page }) => {
     await signIn(page)
-    await page.goto("/membership")
+    await page.goto("/account/membership")
     await expect(
       page.getByRole("heading", { name: "Mitgliedschaft" }),
     ).toBeVisible({ timeout: 10_000 })

@@ -44,7 +44,7 @@ import { Input } from "@modules/components/ui/input"
 import { Label } from "@modules/components/ui/label"
 import { PageLoading } from "@modules/components/page-loading"
 
-export const Route = createFileRoute("/_authenticated/membership/")({
+export const Route = createFileRoute("/_authenticated/account/membership")({
   component: MembershipPage,
 })
 

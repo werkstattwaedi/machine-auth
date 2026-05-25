@@ -30,7 +30,7 @@ import {
 } from "lucide-react"
 import { useMemo, useState } from "react"
 
-export const Route = createFileRoute("/_authenticated/usage")({
+export const Route = createFileRoute("/_authenticated/account/usage")({
   component: UsagePage,
 })
 

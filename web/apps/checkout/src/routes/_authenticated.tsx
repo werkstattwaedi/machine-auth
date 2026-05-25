@@ -14,16 +14,16 @@ export const Route = createFileRoute("/_authenticated")({
 
 const navItems: AuthenticatedLayoutNavItem[] = [
   { to: "/visit", label: "Aktueller Besuch", icon: Home },
-  { to: "/membership", label: "Mitgliedschaft", icon: BadgeCheck },
-  { to: "/profile", label: "Profil", icon: User },
-  { to: "/usage", label: "Nutzungsverlauf", icon: History },
+  { to: "/account/membership", label: "Mitgliedschaft", icon: BadgeCheck },
+  { to: "/account/profile", label: "Profil", icon: User },
+  { to: "/account/usage", label: "Nutzungsverlauf", icon: History },
 ]
 
 function CheckoutAuthenticatedLayout() {
   return (
     <AuthenticatedLayout
       navItems={navItems}
-      gate={{ kind: "member", completeProfilePath: "/complete-profile" }}
+      gate={{ kind: "member", completeProfilePath: "/account/complete-profile" }}
     />
   )
 }

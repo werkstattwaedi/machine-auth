@@ -26,7 +26,7 @@ const completeProfileSearchSchema = z.object({
   redirect: z.optional(z.string()),
 })
 
-export const Route = createFileRoute("/_authonly/complete-profile")({
+export const Route = createFileRoute("/_authonly/account/complete-profile")({
   validateSearch: completeProfileSearchSchema,
   component: CompleteProfilePage,
 })

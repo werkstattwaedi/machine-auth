@@ -144,7 +144,7 @@ export async function handleInviteFamilyMember(
     tx.set(inviteRef, invite);
   });
 
-  const acceptLink = `${origin}/invite/${membershipId}/${inviteRef.id}`;
+  const acceptLink = `${origin}/account/invite/${membershipId}/${inviteRef.id}`;
 
   // Resolve display strings for the email body. Best-effort: a stale or
   // missing user doc shouldn't block the invite from being delivered.

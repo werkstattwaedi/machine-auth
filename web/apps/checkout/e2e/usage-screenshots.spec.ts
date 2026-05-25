@@ -34,7 +34,7 @@ test.describe("Usage page screenshots", () => {
     const uid = process.env.E2E_AUTH_USER_UID!
     await seedUsageBills(uid)
 
-    await page.goto("/usage")
+    await page.goto("/account/usage")
     await expect(
       page.getByRole("heading", { name: "Rechnungen" }),
     ).toBeVisible({ timeout: 10_000 })

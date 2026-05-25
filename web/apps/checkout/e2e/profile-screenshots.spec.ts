@@ -25,7 +25,7 @@ async function signIn(page: Page) {
 test.describe("Profile page screenshots", () => {
   test("default — Nutzer:in at top, no example placeholders", async ({ page }) => {
     await signIn(page)
-    await page.goto("/profile")
+    await page.goto("/account/profile")
     await expect(
       page.getByRole("heading", { name: "Profil" }),
     ).toBeVisible({ timeout: 10_000 })

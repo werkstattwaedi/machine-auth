@@ -6,7 +6,7 @@
  * the membership and invite IDs in the path) and decides to accept or
  * reject.
  *
- * Route shape: /_authenticated/invite/$membershipId/$inviteId
+ * Route shape: /_authenticated/account/invite/$membershipId/$inviteId
  *
  * Both IDs live in the path so the URL survives a /login redirect when
  * an unauthenticated invitee opens the email link — TanStack Router's
@@ -28,7 +28,7 @@ import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { httpsCallable } from "firebase/functions"
 
 export const Route = createFileRoute(
-  "/_authenticated/invite/$membershipId/$inviteId",
+  "/_authenticated/account/invite/$membershipId/$inviteId",
 )({
   component: InviteAcceptPage,
 })
@@ -73,14 +73,14 @@ function InviteAcceptPage() {
     await acceptMutation.mutate(async () => {
       const fn = httpsCallable(functions, "acceptFamilyInvite")
       await fn({ membershipId, inviteId })
-      navigate({ to: "/membership" as never } as never)
+      navigate({ to: "/account/membership" as never } as never)
     })
   }
   const handleReject = async () => {
     await rejectMutation.mutate(async () => {
       const fn = httpsCallable(functions, "rejectFamilyInvite")
       await fn({ membershipId, inviteId })
-      navigate({ to: "/membership" as never } as never)
+      navigate({ to: "/account/membership" as never } as never)
     })
   }
 

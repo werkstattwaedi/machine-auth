@@ -150,7 +150,7 @@ describe("AuthenticatedLayout", () => {
     render(
       <AuthenticatedLayout
         navItems={navItems}
-        gate={{ kind: "member", completeProfilePath: "/complete-profile" }}
+        gate={{ kind: "member", completeProfilePath: "/account/complete-profile" }}
       />,
     )
 
@@ -172,12 +172,12 @@ describe("AuthenticatedLayout", () => {
     render(
       <AuthenticatedLayout
         navItems={navItems}
-        gate={{ kind: "member", completeProfilePath: "/complete-profile" }}
+        gate={{ kind: "member", completeProfilePath: "/account/complete-profile" }}
       />,
     )
 
     expect(navigateMock).toHaveBeenCalledWith({
-      to: "/complete-profile",
+      to: "/account/complete-profile",
       search: { redirect: "/protected" },
     })
   })
@@ -202,7 +202,7 @@ describe("AuthenticatedLayout", () => {
     render(
       <AuthenticatedLayout
         navItems={navItems}
-        gate={{ kind: "member", completeProfilePath: "/complete-profile" }}
+        gate={{ kind: "member", completeProfilePath: "/account/complete-profile" }}
       />,
     )
 
