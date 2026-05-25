@@ -5,7 +5,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { useAuth } from "@modules/lib/auth"
 import { useTokenAuth } from "@modules/lib/token-auth"
 import { useBridge } from "@modules/lib/use-bridge"
-import { useCollection } from "@modules/lib/firestore"
+import { useCollection, useDocument } from "@modules/lib/firestore"
 import { where, orderBy, documentId } from "firebase/firestore"
 import { httpsCallable } from "firebase/functions"
 import { serverTimestamp, type Firestore } from "firebase/firestore"
@@ -14,6 +14,7 @@ import {
   checkoutRef,
   checkoutsCollection,
   checkoutItemsCollection,
+  catalogReferencesRef,
   membershipsCollection,
   usersCollection,
 } from "@modules/lib/firestore-helpers"
@@ -141,6 +142,7 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
         description: item.description,
         origin: item.origin,
         catalogId: item.catalogId?.id ?? null,
+        variantId: item.variantId ?? null,
         pricingModel: (item.pricingModel as PricingModel) ?? null,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
@@ -149,6 +151,16 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
       })),
     [checkoutItems],
   )
+
+  // Issue #262/#263: resolve the Vereinsmitgliedschaft catalog id so the
+  // summary + workshops step can break membership out of the Materialbezug /
+  // Diverses buckets into a dedicated section. The `config/catalog-references`
+  // doc is world-readable (same indirection the /membership page uses) and
+  // rarely changes, so a single subscription here is cheap. `null` until it
+  // loads or when no membership SKU is configured — the classifier treats
+  // that as "no membership present" and the UI is unchanged.
+  const { data: catalogRefs } = useDocument(catalogReferencesRef(db))
+  const membershipCatalogId = catalogRefs?.membership?.id ?? null
 
   // Issue #151: anonymous users now sign in eagerly after step 1, so they
   // write items to the Firestore subcollection just like authenticated
@@ -474,13 +486,21 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
       personFees: entryFees,
       machineCost,
       materialCost,
+      membershipCost,
     } = computeCheckoutCosts({
       persons: state.persons,
       usageType: state.usageType,
       items,
       config: pricingConfig,
+      membershipCatalogId,
     })
-    const total = entryFees + machineCost + materialCost + state.tip
+    // The persisted server-side `summary.materialCost` keeps membership
+    // bundled in (the server's recomputeSummary buckets the membership SKU
+    // under non-nfc material). Splitting it out is purely a display concern
+    // (issue #262/#263), so the submitted estimate folds it back in and the
+    // total still sums every bucket.
+    const billedMaterialCost = materialCost + membershipCost
+    const total = entryFees + machineCost + billedMaterialCost + state.tip
 
     const persons = state.persons.map((p) => ({
       name: `${p.firstName} ${p.lastName}`,
@@ -502,7 +522,7 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
       totalPrice: total,
       entryFees,
       machineCost,
-      materialCost,
+      materialCost: billedMaterialCost,
       tip: state.tip,
     }
 
@@ -641,6 +661,7 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
           discountLevel={
             identifiedUserDoc?.activeMembership ? "member" : "none"
           }
+          membershipCatalogId={membershipCatalogId}
         />
       )}
       {state.step === 2 && (
@@ -652,6 +673,7 @@ export function CheckoutWizard({ picc, cmac, kiosk, initialStep, onActiveChange 
           submitError={submit.error?.message ?? null}
           items={items}
           config={pricingConfig}
+          membershipCatalogId={membershipCatalogId}
         />
       )}
       {state.step === 3 && state.submitted && (

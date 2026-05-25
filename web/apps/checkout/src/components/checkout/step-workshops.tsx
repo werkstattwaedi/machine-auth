@@ -26,6 +26,8 @@ import {
 import type { UserDoc } from "@modules/lib/firestore-entities"
 import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
+import { partitionMembership } from "@oww/shared"
+import { MembershipInlineSection } from "@/components/usage/membership-inline-section"
 
 interface StepWorkshopsProps {
   state: CheckoutState
@@ -42,6 +44,8 @@ interface StepWorkshopsProps {
    */
   userRef: DocumentReference<UserDoc> | null
   discountLevel: DiscountLevel
+  /** Vereinsmitgliedschaft catalog id (issue #262/#263); null when unset. */
+  membershipCatalogId?: string | null
 }
 
 export function StepWorkshops({
@@ -52,6 +56,7 @@ export function StepWorkshops({
   checkoutId,
   userRef,
   discountLevel,
+  membershipCatalogId,
 }: StepWorkshopsProps) {
   const db = useDb()
   const { add, update, remove } = useFirestoreMutation()
@@ -73,6 +78,20 @@ export function StepWorkshops({
   const auth = useFirebaseAuth()
   const isMobile = useIsMobile()
   const sortedWorkshops = config ? getSortedWorkshops(config) : []
+
+  // Issue #262/#263: break the Vereinsmitgliedschaft SKU out of the workshop
+  // sections. Membership items get their own read-only inline section
+  // (rendered first), and they must not bleed into the `diverses` workshop
+  // block — otherwise the bill/summary would still group them under Diverses.
+  const { membershipItems, otherItems: workshopItems } = useMemo(
+    () => partitionMembership(items, { membershipCatalogId }),
+    [items, membershipCatalogId],
+  )
+  // A membership-only cart hides the "Werkstätten wählen" picker grid and the
+  // per-workshop sections so the page is just the membership block + nav
+  // (Marco's "you can't add material to a membership" intuition, #263).
+  const membershipOnly =
+    membershipItems.length > 0 && workshopItems.length === 0
 
   const [itemsSubmitted, setItemsSubmitted] = useState(false)
 
@@ -108,14 +127,16 @@ export function StepWorkshops({
     prevItemCount.current = items.length
   }, [items.length])
 
-  // Workshops that already have items (cannot be unchecked)
+  // Workshops that already have items (cannot be unchecked). Membership
+  // items are excluded (issue #262/#263) so a membership purchase doesn't
+  // force-select the `diverses` workshop checkbox.
   const workshopsWithItems = useMemo(() => {
     const s = new Set<WorkshopId>()
-    for (const item of items) {
+    for (const item of workshopItems) {
       if (item.workshop) s.add(item.workshop as WorkshopId)
     }
     return s
-  }, [items])
+  }, [workshopItems])
 
   // Track checkbox toggles explicitly made by the user. Workshops that already
   // have items are always considered selected (derived below); keeping manual
@@ -284,7 +305,9 @@ export function StepWorkshops({
 
   return (
     <div className="flex flex-col flex-1 gap-8">
-      {/* Workshop checkbox selector */}
+      {/* Workshop checkbox selector. Hidden for a membership-only cart so the
+          page is just the Vereinsmitgliedschaft block + nav (issue #263). */}
+      {!membershipOnly && (
       <div>
         <h2 className="text-xl font-bold font-body mb-2">
           Werkstätten wählen
@@ -323,8 +346,18 @@ export function StepWorkshops({
           })}
         </div>
       </div>
+      )}
 
-      {/* Per-workshop inline sections */}
+      {/* Vereinsmitgliedschaft — rendered inline with the other workshop
+          sessions (issue #262/#263). It's a read-only block: a membership is
+          purchased on /membership, and you can't add material to it. */}
+      {membershipItems.length > 0 && (
+        <MembershipInlineSection items={membershipItems} />
+      )}
+
+      {/* Per-workshop inline sections. Membership items are filtered out of
+          their (legacy) `diverses` bucket so they only appear in the
+          dedicated section above (issue #262/#263). */}
       {config &&
         sortedWorkshops
           .filter(([wsId]) => selectedWorkshops.has(wsId))
@@ -334,7 +367,7 @@ export function StepWorkshops({
               workshopId={wsId}
               workshop={wsConfig}
               config={config}
-              items={items.filter((i) => i.workshop === wsId)}
+              items={workshopItems.filter((i) => i.workshop === wsId)}
               callbacks={callbacks}
               discountLevel={discountLevel}
               checkoutId={checkoutId}

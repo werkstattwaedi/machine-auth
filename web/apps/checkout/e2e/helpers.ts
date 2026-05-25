@@ -341,6 +341,115 @@ export async function seedUsageBills(authUserUid: string): Promise<void> {
   })
 }
 
+// ── Open-checkout seeding (used by checkout-screenshots.spec.ts) ────────
+//
+// Issue #262/#263: seed an open checkout carrying a Vereinsmitgliedschaft
+// SKU so the summary + workshops step can be screenshotted. The membership
+// catalog is `catalog/e2e-membership` (see global-setup.ts), variant
+// `single`. Stable id so the baseline stays reproducible.
+
+const E2E_OPEN_CHECKOUT_ID = "e2e-open-checkout-001"
+
+/**
+ * Replace the auth user's open checkout with one that contains a membership
+ * item, and optionally a regular workshop material item (mixed cart). The
+ * checkout is created the same way the membership-purchase callable does:
+ * `usageType: "materialbezug"` for a membership-only cart, `regular` when a
+ * workshop item is present. `firebaseUid` / `modifiedBy` are stamped with the
+ * auth UID so the wizard's open-checkout subscription (scoped by `userId`)
+ * picks it up for a signed-in user.
+ */
+/**
+ * Recursively delete every `checkouts` doc AND its `items` subcollection.
+ * `clearCollections` deletes only the parent docs — Firestore keeps
+ * subcollection docs alive under a deleted parent — so re-seeding the same
+ * fixed-id checkout would otherwise accumulate orphaned items across tests
+ * (the membership count would climb 1→2→3…). Use this whenever a test seeds
+ * or leaves behind a checkout with items.
+ */
+export async function clearCheckoutsDeep(): Promise<void> {
+  const db = getAdminFirestore()
+  const existing = await db.collection("checkouts").get()
+  for (const doc of existing.docs) {
+    const items = await doc.ref.collection("items").get()
+    const batch = db.batch()
+    items.docs.forEach((d) => batch.delete(d.ref))
+    batch.delete(doc.ref)
+    await batch.commit()
+  }
+}
+
+export async function seedOpenCheckoutWithMembership(
+  authUserUid: string,
+  { withWorkshopItem = false }: { withWorkshopItem?: boolean } = {},
+): Promise<void> {
+  const db = getAdminFirestore()
+  await clearCheckoutsDeep()
+  const userRef = db.collection("users").doc(authUserUid)
+  const membershipCatalog = db.doc("catalog/e2e-membership")
+  const now = Timestamp.now()
+
+  const checkoutRef = db.collection("checkouts").doc(E2E_OPEN_CHECKOUT_ID)
+  // Defensive: clear orphaned items left under this fixed-id path even when the
+  // parent doc was shallow-deleted elsewhere. Other specs call the shallow
+  // `clearCollections("checkouts")`, which deletes the parent doc but leaves its
+  // `items` subcollection orphaned — `clearCheckoutsDeep` only sees items whose
+  // parent doc still exists, so it can't reach those. Re-`.set()`-ing the same
+  // fixed id below would re-attach the orphans, making the membership/material
+  // counts climb across runs (1→2→3…). Sweep them explicitly first.
+  const stale = await checkoutRef.collection("items").get()
+  if (!stale.empty) {
+    const batch = db.batch()
+    stale.docs.forEach((d) => batch.delete(d.ref))
+    await batch.commit()
+  }
+  await checkoutRef.set({
+    userId: userRef,
+    status: "open",
+    usageType: withWorkshopItem ? "regular" : "materialbezug",
+    created: now,
+    workshopsVisited: withWorkshopItem ? ["diverses", "holz"] : ["diverses"],
+    persons: [
+      {
+        name: "E2E Testuser",
+        email: "e2e-test@werkstattwaedi.ch",
+        userType: "erwachsen",
+        userRef,
+      },
+    ],
+    modifiedBy: authUserUid,
+    modifiedAt: now,
+    firebaseUid: authUserUid,
+  })
+
+  await checkoutRef.collection("items").add({
+    workshop: "diverses",
+    description: "Mitgliedschaft — Einzel",
+    origin: "manual",
+    catalogId: membershipCatalog,
+    variantId: "single",
+    pricingModel: "direct",
+    created: now,
+    quantity: 1,
+    unitPrice: 80,
+    totalPrice: 80,
+  })
+
+  if (withWorkshopItem) {
+    await checkoutRef.collection("items").add({
+      workshop: "holz",
+      description: "Schleifpapier",
+      origin: "manual",
+      catalogId: null,
+      pricingModel: "count",
+      created: now,
+      quantity: 3,
+      unitPrice: 2,
+      totalPrice: 6,
+    })
+  }
+}
+
 export type LoginCodeEntry = {
   docId: string
   code: string

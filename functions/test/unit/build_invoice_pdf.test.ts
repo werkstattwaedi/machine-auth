@@ -15,6 +15,8 @@ import {
   paidInvoice,
   freeZeroAmountInvoice,
   registeredUserInvoice,
+  membershipOnlyInvoice,
+  membershipMixedInvoice,
 } from "./invoice_test_fixtures";
 
 // pdf-parse needs firebase-admin initialized for Timestamp usage in fixtures
@@ -226,6 +228,56 @@ describe("buildInvoicePdf — content", () => {
     expect(text).to.include("Offene Werkstatt Wädenswil");
     // IBAN appears in QR bill payment part
     expect(text).to.include("CH93 0076 2011 6238 5295 7");
+  });
+
+  // Issue #262: a membership-only bill renders a dedicated "Mitgliedschaft"
+  // heading and no "Diverses" workshop group.
+  it("membership-only: Mitgliedschaft heading present, no Diverses group", async () => {
+    const text = await pdfText(membershipOnlyInvoice());
+    expect(text).to.include("Mitgliedschaft");
+    expect(text).to.include("Mitgliedschaft — Einzel");
+    expect(text).to.include("80.00");
+    // The legacy "diverses" workshop heading must NOT appear — that was the
+    // confusing rendering Marco reported.
+    expect(text).to.not.include("Diverses");
+    expect(text).to.not.include("diverses");
+  });
+
+  // Issue #262/#263 (PR #347 review): a membership-only bill (membership item,
+  // no other items, entryFees 0) omits the Nutzungsgebühren block entirely,
+  // mirroring the checkout summary's `membershipOnly` view. The membership SKU
+  // is not a workshop visit, so the zero-fee Nutzungsgebühren line read as noise.
+  it("membership-only: Nutzungsgebühren block is omitted", async () => {
+    const text = await pdfText(membershipOnlyInvoice());
+    expect(text).to.not.include("Nutzungsgebühren");
+    // The membership block itself must still be there (we only dropped the
+    // entry-fees block, not the whole section).
+    expect(text).to.include("Mitgliedschaft — Einzel");
+  });
+
+  // Issue #269 carve-out (must survive the #262/#263 membership-only change):
+  // a NON-membership zero-fee bill (interne Nutzung, materialbezug without a
+  // membership) must STILL render Nutzungsgebühren so the recipient is
+  // identifiable. freeZeroAmountInvoice is interne Nutzung — entryFees 0, no
+  // items, no membership SKU. If a future change broadens the membership-only
+  // suppression to all zero-fee bills, this locks in the regression.
+  it("non-membership zero-fee bill: Nutzungsgebühren still rendered (#269)", async () => {
+    const text = await pdfText(freeZeroAmountInvoice());
+    expect(text).to.include("Nutzungsgebühren");
+    expect(text).to.include("Ines Intern");
+  });
+
+  // Issue #263: a mixed bill keeps membership in its own block and the
+  // workshop material under the workshop group — membership never bleeds
+  // into a Diverses heading.
+  it("membership + workshop items: separate Mitgliedschaft + workshop groups, no Diverses", async () => {
+    const text = await pdfText(membershipMixedInvoice());
+    expect(text).to.include("Mitgliedschaft");
+    expect(text).to.include("Mitgliedschaft — Einzel");
+    expect(text).to.include("Holzwerkstatt");
+    expect(text).to.include("Sperrholz Birke 4mm");
+    expect(text).to.not.include("Diverses");
+    expect(text).to.not.include("diverses");
   });
 });
 

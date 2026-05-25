@@ -112,6 +112,17 @@ export interface InvoiceData {
    * slip (a record of one Sammelrechnung-acked visit).
    */
   kind?: BillKind;
+  /**
+   * Vereinsmitgliedschaft catalog doc id (issue #262/#263), resolved once
+   * via `config/catalog-references` → `membership`. When set, items whose
+   * `catalogId` matches are rendered under a dedicated "Mitgliedschaft"
+   * heading at the top of each checkout section instead of bleeding into
+   * the (legacy) `diverses` workshop group. `null` when no membership SKU
+   * is configured — the renderer then behaves exactly as before. Kept on
+   * `InvoiceData` (not per-checkout) because it's an invoice-wide constant
+   * and the renderer stays pure (no Firestore reads).
+   */
+  membershipCatalogId?: string | null;
 }
 
 /** Format an invoice reference number for display, e.g. 1 → "RE-000001" */
