@@ -25,7 +25,7 @@ import type {
   CheckoutEntity,
   CheckoutItemEntity,
 } from "../types/firestore_entities";
-import type { BillEntity, BillKind } from "./types";
+import type { BillEntity, BillKind, BillSource } from "./types";
 
 /**
  * Allocate a sequential reference number from `config/billing` and write a
@@ -54,6 +54,12 @@ export async function allocateBill(
      * pass this — the ack stamp lands later via the callable / auto-ack cron.
      */
      preAck?: { source: "user" | "auto" };
+    /**
+     * Origin discriminator (issue #323). Defaults to "checkout". The
+     * renewalInvoicer cron passes "membership-renewal" to mark bills it
+     * auto-issued for an expiring membership.
+     */
+    source?: BillSource;
   },
 ): Promise<BillEntity> {
   const configRef = db.doc("config/billing");
@@ -97,6 +103,7 @@ export async function allocateBill(
     paymentMethodConfirmationSource: ackSource,
     kind: args.kind ?? "invoice",
     aggregatedIntoBillRef: null,
+    source: args.source ?? "checkout",
   };
   tx.set(args.billRef, bill);
   return bill;

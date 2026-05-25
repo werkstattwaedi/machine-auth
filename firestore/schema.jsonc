@@ -284,7 +284,14 @@
       // Set on a "beleg" once the monthlyBillRun cron has folded it into
       // a "kind: invoice" Sammelrechnung. Re-runs skip Belege where this
       // is set — provides the cron's idempotency guarantee.
-      "aggregatedIntoBillRef": "DocumentReference | null"
+      "aggregatedIntoBillRef": "DocumentReference | null",
+      // Origin discriminator (issue #323). "checkout" = a normal Self-
+      // Checkout visit bill (the default — missing value is treated as
+      // "checkout" so legacy docs migrate-free). "membership-renewal" =
+      // a bill the daily renewalInvoicer cron auto-issued for an
+      // expiring membership (no in-person checkout). Surfaces on bill
+      // PDFs / admin views and is the marker the renewal cron uses.
+      "source": "checkout | membership-renewal"
     }
   },
   "operations_log": {
@@ -372,6 +379,20 @@
       // Audit trail of payments — references into /checkouts/{id} that paid for this membership.
       // Source of truth for "when/how much/which method" is the checkout itself.
       "paymentCheckouts": ["DocumentReference"],
+
+      // Annual auto-renewal (issue #323). When true (the default for new
+      // and backfilled memberships), the daily renewalInvoicer cron
+      // auto-issues a QR-Rechnung ~30 days before validUntil. The member
+      // cancels auto-renewal via the cancelMembershipAutoRenew callable
+      // (account page or admin) — that sets this to false; the membership
+      // still stays active until validUntil. Missing value is treated as
+      // true so legacy docs renew until explicitly cancelled.
+      "autoRenew": "boolean",
+      // Set to the open renewal bill ref while a renewal invoice is
+      // outstanding; the cron skips memberships where this is non-null so
+      // it never double-invoices. Cleared back to null when that bill is
+      // paid (membership extended) — see applyMembershipPayment.
+      "pendingRenewalBill": "DocumentReference | null",
 
       "notes": "string | null", // Admin notes only
 

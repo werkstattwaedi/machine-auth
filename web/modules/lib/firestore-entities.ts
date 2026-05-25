@@ -276,6 +276,9 @@ export interface BillDoc extends AuditFields {
   emailSentAt?: Timestamp | null
   paymentMethodConfirmationTime?: Timestamp | null
   paymentMethodConfirmationSource?: "user" | "auto" | null
+  // Origin discriminator (issue #323). Missing value is treated as
+  // "checkout" so legacy docs migrate-free.
+  source?: "checkout" | "membership-renewal"
 }
 
 // ── memberships ──────────────────────────────────────────────────────────
@@ -291,6 +294,12 @@ export interface MembershipDoc extends AuditFields {
   ownerUserId: DocumentReference<UserDoc>
   members: DocumentReference<UserDoc>[]
   paymentCheckouts: DocumentReference<CheckoutDoc>[]
+  // Annual auto-renewal flag (issue #323). Missing value is treated as
+  // true so legacy docs keep renewing until explicitly cancelled.
+  autoRenew?: boolean
+  // Open renewal bill while a renewal invoice is outstanding; cleared to
+  // null once the renewal is paid.
+  pendingRenewalBill?: DocumentReference<BillDoc> | null
   notes?: string | null
   created?: Timestamp
   createdBy?: string | null
