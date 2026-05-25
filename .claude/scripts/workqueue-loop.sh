@@ -11,7 +11,13 @@
 #    in claude's input buffer; once Phase 7 returns and claude is back at
 #    its prompt, it processes /exit and shuts down. This loop's `while`
 #    body unblocks and the next iteration starts.
-#  - Sleep $WORKQUEUE_INTERVAL between iterations.
+#  - After claude exits, read its next-cadence verdict from the signal
+#    file (see WORKQUEUE_SIGNAL_FILE below): `recheck` re-checks for work
+#    immediately (drains a ready queue back-to-back); `sleep` backs off
+#    for $WORKQUEUE_IDLE_INTERVAL. The full run is authoritative over the
+#    wrapper's *optimistic* pre-check — that's what prevents the idle
+#    tight-loop where an over-eager pre-check re-fires claude every few
+#    seconds on a queue that's really blocked on a human.
 #
 # Wire it up: open a tmux pane you can leave running, then:
 #   ./.claude/scripts/workqueue-loop.sh
@@ -256,9 +262,29 @@ while true; do
   rc=$?
   set -e
 
-  # Tear down the watchdog and signal file regardless of how claude exited.
+  # Tear down the watchdog regardless of how claude exited.
   kill "$watchdog_pid" 2>/dev/null || true
   wait "$watchdog_pid" 2>/dev/null || true
+
+  # Read claude's next-cadence verdict from the signal file. /workqueue
+  # writes one line: "<directive> | <reason>", where <directive> is
+  # `recheck` (real work happened — there may be more queued, re-check
+  # immediately) or `sleep` (nothing actionable / queue blocked on a
+  # human — back off for $idle_interval). This is how the authoritative
+  # full run overrides the wrapper's *optimistic* pre-check: the
+  # pre-check counts e.g. open question-issues even when the human hasn't
+  # replied, so without this the wrapper would re-fire claude forever on
+  # a queue that's really idle. Default to `sleep` when the file is empty
+  # or unrecognized — under-polling is harmless; tight-looping is not.
+  verdict="sleep"
+  verdict_line=""
+  if [[ -s "$signal_file" ]]; then
+    verdict_line=$(head -n1 "$signal_file" 2>/dev/null || true)
+    case "$(printf '%s' "$verdict_line" | cut -d'|' -f1 | tr -d '[:space:]')" in
+      recheck) verdict="recheck" ;;
+      *)       verdict="sleep" ;;
+    esac
+  fi
   rm -f "$signal_file"
   unset WORKQUEUE_SIGNAL_FILE
 
@@ -272,15 +298,21 @@ while true; do
     exit "$rc"
   fi
 
-  # Successful run (or a real run that errored after >10s): re-check work
-  # immediately. The pre-check is ~3 cheap gh calls; the *real* minimum
-  # iteration time is the baseline (~15min inside claude itself), so this
-  # can't tight-loop. If there's more queued work (e.g., a rebase opened
-  # a new PR, or a baseline-escalated issue is now ready to triage), we
-  # fire claude again right away. Once truly idle, we fall through to
-  # the no-work branch and sleep $idle_interval.
-  echo "$(stamp) claude exited with rc=$rc; re-checking for more work"
-  echo "$(stamp) done rc=$rc" >> "$status_file"
+  # Honor claude's verdict. `recheck` falls through to the top of the
+  # loop, which re-runs the cheap pre-check immediately and fires claude
+  # again if work remains — this drains a queue of ready items
+  # back-to-back (e.g. a rebase opened a new PR, an issue became ready to
+  # triage). `sleep` backs off for $idle_interval; this is the path that
+  # breaks the idle tight-loop, because the full run knows the queue is
+  # blocked even when the optimistic pre-check still says "has work".
+  echo "$(stamp) claude exited with rc=$rc; verdict=${verdict} (${verdict_line:-no signal})"
+  echo "$(stamp) done rc=$rc verdict=${verdict}" >> "$status_file"
+
+  if [[ "$verdict" == "sleep" ]]; then
+    echo "$(stamp) claude reported nothing more to do; sleeping ${idle_interval}"
+    echo "$(stamp) idle (verdict=sleep)" >> "$status_file"
+    sleep "$idle_interval" || break
+  fi
 done
 
 echo "$(stamp) workqueue-loop terminated"

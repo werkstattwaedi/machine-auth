@@ -64,17 +64,43 @@ The `workqueue-loop.sh` wrapper runs `claude` interactively in a tmux pane
 and watches for a signal file at `$WORKQUEUE_SIGNAL_FILE`. **Every** path
 that ends the run — normal Phase 7 completion, idle gate, dirty tree,
 baseline-red, baseline-fix-pr, baseline-escalated, or any error — MUST,
-as its final tool call, touch that file:
+as its final tool call, write a one-line **cadence verdict** to that file.
+The verdict tells the wrapper what to do next:
+
+| Verdict | Wrapper behavior | Emit when |
+|---------|------------------|-----------|
+| `recheck` | Re-runs the cheap pre-check immediately and fires another `/workqueue` if work remains — drains a ready queue back-to-back. | This run did real, state-changing work that may have cascading follow-ups: processed an issue into a PR, merged or rebased a PR (Phase 1b), or pushed a baseline self-heal to main. |
+| `sleep` | Backs off for `$WORKQUEUE_IDLE_INTERVAL` (default 1h), then re-checks. | Nothing actionable was done, or everything left is blocked on a human: idle gate, every issue skipped (already has a PR / WIP / plan-review / unanswered question), PR awaiting approval, baseline-fix PR pending review, baseline escalated. |
+
+Write it as the final tool call:
 
 ```bash
+# Set VERDICT to "recheck" or "sleep" per the table above.
+VERDICT="sleep"   # default; use "recheck" only when real work happened
 if [[ -n "${WORKQUEUE_SIGNAL_FILE:-}" ]]; then
-  touch "$WORKQUEUE_SIGNAL_FILE"
+  printf '%s | %s\n' "$VERDICT" "<one-line reason>" > "$WORKQUEUE_SIGNAL_FILE"
 fi
 ```
 
-When the wrapper sees the file, it sends `/exit` to the pane and claude
-shuts down, letting the loop's next iteration fire. Without this, the
-wrapper sits forever waiting at the prompt after an early-abort path.
+**Why a verdict and not just a `touch`:** the wrapper's pre-check is
+deliberately *optimistic* — it counts, e.g., open `claude-workqueue-question`
+issues even when the human hasn't replied yet. The full run is the only
+thing that knows precisely whether there's actionable work. Without an
+authoritative verdict, an optimistic pre-check that always says "has work"
+plus an idle full run that always exits fast = a tight loop that re-fires
+claude every few seconds (the idle gate runs *before* the ~15min baseline,
+so nothing rate-limits the idle path). The verdict lets the full run say
+"I checked precisely; there's nothing actionable — back off."
+
+**Default to `sleep` whenever unsure.** Under-polling costs at most one
+`$WORKQUEUE_IDLE_INTERVAL` of latency before the next item is picked up;
+a wrong `recheck` reintroduces the tight loop. Only emit `recheck` when
+you're confident productive, state-changing work happened this run.
+
+When the wrapper sees the file it sends `/exit` to the pane and claude
+shuts down, letting the loop's next iteration fire — immediately on
+`recheck`, after the idle interval on `sleep`. Without writing the file,
+the wrapper sits forever waiting at the prompt after an early-abort path.
 
 If you're running `/workqueue` outside the loop wrapper (manual run, env
 var unset), the snippet is a harmless no-op — claude returns to its
@@ -256,6 +282,9 @@ If none of these match, stop here and output:
 ```
 WORKQUEUE_RESULT: idle | no actionable work
 ```
+Then write the termination signal with verdict **`sleep`** (see
+"Termination signal" above) — there is nothing to drain, so the wrapper
+must back off rather than re-fire immediately.
 
 ## Phase 1 — Stay up to main
 
@@ -554,6 +583,9 @@ this fix PR). Output:
 WORKQUEUE_RESULT: baseline-fix-pr | <URL> | queue paused until merged
 ```
 
+Write the termination signal with verdict **`sleep`** — the queue is
+paused until a human reviews the fix PR, so there is nothing to drain.
+
 Next run will see main green (once merged) and process the queue normally.
 
 ### ESCALATE → file an issue, abort
@@ -592,7 +624,10 @@ Then output:
 ```
 WORKQUEUE_RESULT: baseline-escalated | <issue URL>
 ```
-and stop. (Phases 3+ are skipped this run. Next run picks up the new
+Write the termination signal with verdict **`sleep`** — main is red and
+will stay red until a human acts, so re-firing immediately would only
+re-run a doomed baseline (and risk filing a duplicate escalation issue).
+Then stop. (Phases 3+ are skipped this run. Next run picks up the new
 issue and processes it normally.)
 
 ## Phase 3 — Fetch & filter issues
@@ -1176,9 +1211,20 @@ Omit sections with no entries.
 
 ### Final action: termination
 
-After printing the summary, perform the termination snippet from the
-top-of-file "Termination signal" rule. This is the *only* mechanism that
-unblocks the loop wrapper.
+After printing the summary, write the cadence verdict to
+`$WORKQUEUE_SIGNAL_FILE` per the top-of-file "Termination signal" rule —
+this is the *only* mechanism that unblocks the loop wrapper.
+
+Choose the verdict from what this run actually did:
+- **`recheck`** if this run changed state that could cascade — processed
+  an issue into a PR, merged or rebased a PR (Phase 1b), or pushed a
+  baseline self-heal to main. There may be more ready work to drain
+  back-to-back.
+- **`sleep`** if this run made no state change — every queued issue was
+  skipped (already has a PR, in `claude-workqueue-wip`, plan-review, or an
+  unanswered question), no PR needed review, and nothing was approved to
+  land. The queue is blocked on a human; re-firing would just hit the same
+  optimistic pre-check and tight-loop.
 
 ## Reliability & error recovery
 
