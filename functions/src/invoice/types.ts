@@ -6,6 +6,12 @@ import { CheckoutPersonEntity, CheckoutItemEntity, UsageType } from "../types/fi
 
 export type BillKind = "invoice" | "beleg";
 
+// Origin discriminator (issue #323). "checkout" = a normal Self-Checkout
+// visit bill (the default — a missing value is treated as "checkout" so
+// legacy docs migrate-free). "membership-renewal" = a bill auto-issued by
+// the daily renewalInvoicer cron for an expiring membership.
+export type BillSource = "checkout" | "membership-renewal";
+
 export interface BillEntity {
   userId: DocumentReference;
   checkouts: DocumentReference[];
@@ -33,6 +39,9 @@ export interface BillEntity {
   // Set on a `kind: "beleg"` once monthlyBillRun has folded it into a
   // monthly `kind: "invoice"`. Re-runs skip Belege where this is set.
   aggregatedIntoBillRef?: DocumentReference | null;
+  // Origin discriminator (issue #323). Missing value is treated as
+  // "checkout" so legacy docs migrate-free.
+  source?: BillSource;
 }
 
 /** Per-person entry fee for display on the invoice */

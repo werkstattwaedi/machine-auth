@@ -294,12 +294,14 @@ export { revokeFamilyInvite } from "./membership/revoke_invite";
 export { removeFamilyMember } from "./membership/remove";
 export { createChildAccount } from "./membership/create_child";
 export { cancelMembership } from "./membership/cancel";
+export { cancelMembershipAutoRenew } from "./membership/cancel_auto_renew";
 export {
   adminCreateMembership,
   adminExtendMembership,
 } from "./membership/admin";
 export { onMembershipWritten } from "./membership/on_membership_written";
 export { hourlyMembershipExpiryCheck } from "./membership/expiry_check";
+export { issueMembershipRenewalBills } from "./membership/renewal_invoicer";
 
 // Export scheduled cleanup
 export { cleanupAbandonedCheckouts } from "./checkout/cleanup_abandoned_checkouts";

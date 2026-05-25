@@ -87,6 +87,11 @@ test.describe("Membership page screenshots", () => {
       .getByRole("button", { name: "Kindkonto hinzufügen" })
       .click()
     await expect(page.getByText("Kindkonto erstellen")).toBeVisible()
+    // The kid-first input is autoFocus'd, which scrolls it into view. On the
+    // taller owner view (issue #323 added the auto-renewal block) that scroll
+    // races the viewport screenshot; anchor at the top so the captured frame
+    // is deterministic.
+    await page.evaluate(() => window.scrollTo(0, 0))
     await expect(page).toHaveScreenshot(
       "membership-active-family-owner-kid-form.png",
     )

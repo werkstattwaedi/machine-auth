@@ -146,6 +146,11 @@ async function seedMembership(
       ownerUserId: db.doc(`users/${ownerUid}`),
       members: memberRefs,
       paymentCheckouts: [],
+      // Issue #323: annual auto-renewal fields. Seeded so the read tests
+      // exercise a membership doc that actually carries them — proving the
+      // new client-readable fields don't widen read access.
+      autoRenew: true,
+      pendingRenewalBill: null,
       notes: null,
       created: FieldValue.serverTimestamp(),
       modifiedAt: FieldValue.serverTimestamp(),
@@ -972,6 +977,46 @@ describe("cross-user: memberships", () => {
     await seedUser("bob")
     await seedMembership("m1", "alice", "family", ["alice", "bob"])
     await assertSucceeds(getDoc(doc(authedDb("bob"), "memberships", "m1")))
+  })
+
+  // Issue #323: the auto-renewal fields (autoRenew, pendingRenewalBill) are
+  // client-readable but callable-only for writes — they must NOT open a
+  // cross-user leak nor a client write path.
+  it("denies bob reading alice's membership even with auto-renewal fields present", async () => {
+    await seedUser("alice")
+    await seedMembership("m1", "alice")
+    await assertCrossUserDenied(
+      "memberships/{id} read leaked to non-member (#323 fields)",
+      "firestore.rules: memberships read",
+      () => getDoc(doc(authedDb("bob"), "memberships", "m1")),
+    )
+  })
+
+  it("denies the owner client-side toggling autoRenew (callable-only, #323)", async () => {
+    await seedUser("alice")
+    await seedMembership("m1", "alice")
+    await assertCrossUserDenied(
+      "memberships/{id} autoRenew write leaked to client (must be callable-only)",
+      "firestore.rules: memberships write deny",
+      () =>
+        updateDoc(doc(authedDb("alice"), "memberships", "m1"), {
+          autoRenew: false,
+        }),
+    )
+  })
+
+  it("denies a non-owner client-side toggling autoRenew on another's membership (#323)", async () => {
+    await seedUser("alice")
+    await seedUser("bob")
+    await seedMembership("m1", "alice")
+    await assertCrossUserDenied(
+      "memberships/{id} autoRenew write leaked across users",
+      "firestore.rules: memberships write deny",
+      () =>
+        updateDoc(doc(authedDb("bob"), "memberships", "m1"), {
+          autoRenew: false,
+        }),
+    )
   })
 })
 

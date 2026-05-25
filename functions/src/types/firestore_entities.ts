@@ -246,6 +246,13 @@ export interface MembershipEntity {
   ownerUserId: DocumentReference; // Reference to /users/{userId}
   members: DocumentReference[]; // References to /users/{userId}[]
   paymentCheckouts: DocumentReference[]; // References to /checkouts/{id}[]
+  // Annual auto-renewal flag (issue #323). Missing value is treated as
+  // true so legacy docs keep renewing until explicitly cancelled.
+  autoRenew?: boolean;
+  // Open renewal bill while a renewal invoice is outstanding; non-null
+  // makes the daily renewalInvoicer cron skip this membership. Cleared
+  // to null once the renewal is paid (applyMembershipPayment).
+  pendingRenewalBill?: DocumentReference | null;
   notes?: string | null;
   created?: Timestamp;
   createdBy?: string | null;
