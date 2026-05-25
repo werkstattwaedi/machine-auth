@@ -390,6 +390,19 @@ export async function seedOpenCheckoutWithMembership(
   const now = Timestamp.now()
 
   const checkoutRef = db.collection("checkouts").doc(E2E_OPEN_CHECKOUT_ID)
+  // Defensive: clear orphaned items left under this fixed-id path even when the
+  // parent doc was shallow-deleted elsewhere. Other specs call the shallow
+  // `clearCollections("checkouts")`, which deletes the parent doc but leaves its
+  // `items` subcollection orphaned — `clearCheckoutsDeep` only sees items whose
+  // parent doc still exists, so it can't reach those. Re-`.set()`-ing the same
+  // fixed id below would re-attach the orphans, making the membership/material
+  // counts climb across runs (1→2→3…). Sweep them explicitly first.
+  const stale = await checkoutRef.collection("items").get()
+  if (!stale.empty) {
+    const batch = db.batch()
+    stale.docs.forEach((d) => batch.delete(d.ref))
+    await batch.commit()
+  }
   await checkoutRef.set({
     userId: userRef,
     status: "open",

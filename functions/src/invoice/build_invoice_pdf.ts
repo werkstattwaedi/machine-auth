@@ -452,12 +452,38 @@ function renderCheckoutSection(
   doc.text(`Besuch vom ${formatDate(checkout.date)}`, MARGIN_LEFT, y);
   y += 20;
 
+  // Issue #262/#263: break the Vereinsmitgliedschaft SKU out of the workshop
+  // groups into a dedicated "Mitgliedschaft" block at the very top of the
+  // checkout's items. Marco's complaint was that the membership read as a
+  // "Diverses" material purchase. When no membership SKU is configured (or
+  // none is present) the partition leaves `otherItems` as the full set and
+  // the workshop loop renders exactly as before.
+  //
+  // Computed here (before Nutzungsgebühren) because the membership-only case
+  // suppresses the Nutzungsgebühren block — see below.
+  const { membershipItems, otherItems } = partitionMembership(checkout.items, {
+    membershipCatalogId: data.membershipCatalogId,
+  });
+
+  // Issue #262/#263: a membership-only checkout (membership item present, no
+  // other items, no entry fee) suppresses the Nutzungsgebühren block, mirroring
+  // the checkout summary's `membershipOnly` view (step-checkout.tsx) which hides
+  // the three regular buckets and shows only the Vereinsmitgliedschaft section.
+  // CRITICAL: this is scoped to membership-only — a non-membership zero-fee bill
+  // (e.g. interne Nutzung, materialbezug without a membership) must STILL render
+  // Nutzungsgebühren so the recipient is identified (issue #269).
+  const isMembershipOnly =
+    membershipItems.length > 0 &&
+    otherItems.length === 0 &&
+    checkout.entryFees === 0;
+
   // Nutzungsgebühren (entry fees). Always rendered when persons are
   // present so the invoice shows who attended — even for usage types
   // where the per-person fee is 0 (e.g. interne Nutzung, materialbezug).
   // See issue #269: Marco's bill omitted the user line because the fee
-  // was zero, leaving the recipient unclear.
-  if (checkout.personEntryFees.length > 0) {
+  // was zero, leaving the recipient unclear. The membership-only carve-out
+  // above is the one exception.
+  if (checkout.personEntryFees.length > 0 && !isMembershipOnly) {
     y = ensureSpace(doc, y, 20 + checkout.persons.length * 14 + 30);
     doc.fontSize(10).font("Helvetica-Bold");
     doc.text("Nutzungsgebühren", MARGIN_LEFT, y);
@@ -471,16 +497,6 @@ function renderCheckoutSection(
     }
     y = renderSubtotalRow(doc, y, checkout.entryFees);
   }
-
-  // Issue #262/#263: break the Vereinsmitgliedschaft SKU out of the workshop
-  // groups into a dedicated "Mitgliedschaft" block at the very top of the
-  // checkout's items. Marco's complaint was that the membership read as a
-  // "Diverses" material purchase. When no membership SKU is configured (or
-  // none is present) the partition leaves `otherItems` as the full set and
-  // the workshop loop renders exactly as before.
-  const { membershipItems, otherItems } = partitionMembership(checkout.items, {
-    membershipCatalogId: data.membershipCatalogId,
-  });
 
   if (membershipItems.length > 0) {
     y = renderItemGroup(doc, y, "Mitgliedschaft", membershipItems);
