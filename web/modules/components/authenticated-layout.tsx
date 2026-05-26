@@ -45,12 +45,19 @@ export interface AuthenticatedLayoutProps {
    * mount LookupProvider above the content tree.
    */
   wrapper?: (props: { children: ReactNode }) => ReactNode
+  /**
+   * Optional ReactNode rendered prominently above the sidebar nav items
+   * — used by the checkout app for the state-aware "Mein Besuch" /
+   * "Neuer Besuch" CTA. Pass null to hide.
+   */
+  headerAction?: ReactNode
 }
 
 export function AuthenticatedLayout({
   navItems,
   gate,
   wrapper: Wrapper,
+  headerAction,
 }: AuthenticatedLayoutProps) {
   const { user, userDoc, isAdmin, loading, userDocLoading, signOut, sessionKind } = useAuth()
   const navigate = useNavigate()
@@ -153,6 +160,11 @@ export function AuthenticatedLayout({
 
   const navContent = (
     <>
+      {headerAction && (
+        <div className="mb-3" onClick={() => setSheetOpen(false)}>
+          {headerAction}
+        </div>
+      )}
       {navItems.map(({ to, label, icon: Icon }) => (
         <Link
           key={to}
