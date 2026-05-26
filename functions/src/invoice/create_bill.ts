@@ -26,6 +26,7 @@ import type {
   CheckoutItemEntity,
 } from "../types/firestore_entities";
 import type { BillEntity, BillKind, BillSource } from "./types";
+import { usageDiscount, type UsageType } from "@oww/shared";
 
 /**
  * Allocate a sequential reference number from `config/billing` and write a
@@ -124,13 +125,17 @@ function calculateEntryFee(
 ): number {
   if (configFees) {
     const row = configFees[userType];
-    if (row && usageType in row) {
-      const value = row[usageType];
-      if (typeof value === "number") return value;
+    if (row && "regular" in row) {
+      const standard = row["regular"];
+      if (typeof standard === "number") {
+        // Issue #284: standard fee scaled by the usage-type entry-fee
+        // discount (hardcoded in @oww/shared).
+        return standard * usageDiscount(usageType as UsageType).entryFee;
+      }
     }
   }
   throw new Error(
-    `Pricing config missing entry fee for ${userType}/${usageType}`,
+    `Pricing config missing standard entry fee for ${userType} (usageType ${usageType})`,
   );
 }
 
@@ -163,17 +168,23 @@ export async function createBillForCheckout(
   if (checkout.summary?.totalPrice != null) {
     grandTotal = checkout.summary.totalPrice;
   } else {
+    // Safety-net fallback (the callable normally writes summary.totalPrice).
+    // Apply the usage-type discount per section (issue #284). calculateEntryFee
+    // already scales the entry fee by its discount multiplier.
+    const discount = usageDiscount(checkout.usageType as UsageType);
     const entryFees = checkout.persons.reduce(
       (sum, p) => sum + calculateEntryFee(p.userType, checkout.usageType, configFees),
       0,
     );
-    const machineCost = items
-      .filter((i) => i.origin === "nfc")
-      .reduce((sum, i) => sum + i.totalPrice, 0);
-    const materialCost = items
-      .filter((i) => i.origin !== "nfc")
-      .reduce((sum, i) => sum + i.totalPrice, 0);
-    grandTotal = entryFees + machineCost + materialCost;
+    const machineCost =
+      items
+        .filter((i) => i.origin === "nfc")
+        .reduce((sum, i) => sum + i.totalPrice, 0) * discount.machine;
+    const materialCost =
+      items
+        .filter((i) => i.origin !== "nfc")
+        .reduce((sum, i) => sum + i.totalPrice, 0) * discount.material;
+    grandTotal = Math.round((entryFees + machineCost + materialCost) * 100) / 100;
   }
 
   // Transaction: allocate reference number and create bill

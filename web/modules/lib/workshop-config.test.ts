@@ -83,11 +83,13 @@ describe("validatePricingConfig (issue #149)", () => {
   // The fail-loud check that gates the checkout UI from rendering with a
   // malformed `config/pricing` document. Each invalid case must return a
   // non-null error string identifying the offending field.
+  // Issue #284: only the standard `regular` fee per user type is required;
+  // the usage-type discount (in @oww/shared) derives the rest.
   const valid: unknown = {
     entryFees: {
-      erwachsen: { regular: 5, ermaessigt: 2.5, materialbezug: 0, intern: 0, hangenmoos: 0 },
-      kind: { regular: 2.5, ermaessigt: 1.25, materialbezug: 0, intern: 0, hangenmoos: 0 },
-      firma: { regular: 5, ermaessigt: 2.5, materialbezug: 0, intern: 0, hangenmoos: 0 },
+      erwachsen: { regular: 5 },
+      kind: { regular: 2.5 },
+      firma: { regular: 5 },
     },
     workshops: { holz: { label: "Holz", order: 1 } },
     labels: { units: { h: "Std." }, discounts: { none: "" } },
@@ -115,33 +117,33 @@ describe("validatePricingConfig (issue #149)", () => {
     const broken = {
       ...(valid as object),
       entryFees: {
-        erwachsen: { regular: 5, ermaessigt: 2.5, materialbezug: 0, intern: 0, hangenmoos: 0 },
-        kind: { regular: 2.5, ermaessigt: 1.25, materialbezug: 0, intern: 0, hangenmoos: 0 },
+        erwachsen: { regular: 5 },
+        kind: { regular: 2.5 },
         // firma missing
       },
     }
     expect(validatePricingConfig(broken)).toMatch(/firma/)
   })
 
-  it("rejects a config with a missing usage type column", () => {
+  it("rejects a config with a missing regular fee", () => {
     const broken = {
       ...(valid as object),
       entryFees: {
-        erwachsen: { regular: 5, ermaessigt: 2.5, materialbezug: 0, intern: 0 /* hangenmoos missing */ },
-        kind: { regular: 2.5, ermaessigt: 1.25, materialbezug: 0, intern: 0, hangenmoos: 0 },
-        firma: { regular: 5, ermaessigt: 2.5, materialbezug: 0, intern: 0, hangenmoos: 0 },
+        erwachsen: { ermaessigt: 2.5 /* regular missing */ },
+        kind: { regular: 2.5 },
+        firma: { regular: 5 },
       },
     }
-    expect(validatePricingConfig(broken)).toMatch(/hangenmoos/)
+    expect(validatePricingConfig(broken)).toMatch(/erwachsen.*regular/)
   })
 
   it("rejects a config with non-numeric fee", () => {
     const broken = {
       ...(valid as object),
       entryFees: {
-        erwachsen: { regular: "free", ermaessigt: 2.5, materialbezug: 0, intern: 0, hangenmoos: 0 },
-        kind: { regular: 2.5, ermaessigt: 1.25, materialbezug: 0, intern: 0, hangenmoos: 0 },
-        firma: { regular: 5, ermaessigt: 2.5, materialbezug: 0, intern: 0, hangenmoos: 0 },
+        erwachsen: { regular: "free" },
+        kind: { regular: 2.5 },
+        firma: { regular: 5 },
       },
     }
     expect(validatePricingConfig(broken)).toMatch(/erwachsen.*regular.*number/)

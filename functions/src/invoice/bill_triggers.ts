@@ -78,7 +78,11 @@ const kasseEmail = defineString("KASSE_EMAIL", { default: "" });
 const STALE_LOCK_MS = 5 * 60 * 1000; // 5 minutes
 
 /**
- * Look up the per-person entry fee from `config/pricing.entryFees`.
+ * Standard (regular) per-person entry fee from
+ * `config/pricing.entryFees.{userType}.regular`. The usage-type discount
+ * is applied separately by the renderer (issue #284) so the invoice can
+ * show the raw fee with a per-section "waived" note rather than a silent
+ * zero. The `usageType` argument is kept for error context only.
  *
  * Throws when the config row is missing (issue #149). The previous silent
  * fallback shipped hardcoded prices that diverged from the seeded
@@ -94,13 +98,13 @@ function calculateEntryFee(
 ): number {
   if (configFees) {
     const row = configFees[userType];
-    if (row && usageType in row) {
-      const value = row[usageType];
-      if (typeof value === "number") return value;
+    if (row && "regular" in row) {
+      const standard = row["regular"];
+      if (typeof standard === "number") return standard;
     }
   }
   throw new Error(
-    `Pricing config missing entry fee for ${userType}/${usageType}`,
+    `Pricing config missing standard entry fee for ${userType} (usageType ${usageType})`,
   );
 }
 

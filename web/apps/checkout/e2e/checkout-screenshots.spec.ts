@@ -298,6 +298,52 @@ test.describe("Checkout step screenshots", () => {
     await expect(page).toHaveScreenshot("checkout-summary-material-expanded.png")
   })
 
+  // Issue #284: a discounted usage type changes the summary — entry/machine
+  // fees are waived (net 0) and an inline SectionDiscountNote explains why,
+  // while non-waived sections (material for volunteering) still bill in full.
+  // No existing fixture used a discounted usage type, so the new rendering
+  // had no visual-regression coverage (PR #346 review feedback).
+  test("summary — Freiwilligengruppe waives entry, bills material (discount note)", async ({ page }) => {
+    await goToSummaryWithItems(page)
+
+    // Expand Nutzungsgebühren so the Nutzungsart dropdown + the per-section
+    // discount note are visible.
+    await page.getByRole("button", { name: /Nutzungsgebühren/ }).click()
+    await expect(page.getByLabel("Nutzungsart")).toBeVisible()
+    await page.getByLabel("Nutzungsart").selectOption({ value: "volunteering" })
+
+    // The waived-entry note must appear inside the expanded section.
+    await expect(page.getByTestId("section-discount-note").first()).toBeVisible()
+
+    // Click a neutral spot so the screenshot is stable.
+    await page.locator("h1").first().click()
+
+    await expect(page).toHaveScreenshot("checkout-summary-volunteering-discount.png")
+  })
+
+  // Issue #284 / Marco's original complaint: an "Interne Nutzung" checkout
+  // showed full line items but a CHF 0.00 total with no explanation. The
+  // discount notes now spell out every waived section. Expand both
+  // Nutzungsgebühren and Materialbezug so all notes are captured.
+  test("summary — Interne Nutzung waives all sections (discount notes, CHF 0)", async ({ page }) => {
+    await goToSummaryWithItems(page)
+
+    await page.getByRole("button", { name: /Nutzungsgebühren/ }).click()
+    await expect(page.getByLabel("Nutzungsart")).toBeVisible()
+    await page.getByLabel("Nutzungsart").selectOption({ value: "intern" })
+
+    // Expand Materialbezug too so its waived note is visible.
+    await page.getByRole("button", { name: /Materialbezug/ }).click()
+    await expect(page.getByText("Bezogenes Material")).toBeVisible()
+
+    // Entry + material both waived → at least two discount notes present.
+    await expect(page.getByTestId("section-discount-note").first()).toBeVisible()
+
+    await page.locator("h1").first().click()
+
+    await expect(page).toHaveScreenshot("checkout-summary-intern-discount.png")
+  })
+
   test("Step 4 · Rechnung tab (default) — QR bill + PDF download in hero", async ({ page }, testInfo) => {
     testInfo.setTimeout(60_000)
     await submitAndWaitForPaymentResult(page)

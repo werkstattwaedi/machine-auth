@@ -124,7 +124,11 @@ vi.mock("@modules/lib/workshop-config", () => ({
 // --- pricing helpers used by the wizard / step-checkout ---
 vi.mock("@modules/lib/pricing", () => ({
   calculateFee: () => 5,
+  standardFee: () => 5,
+  // usageType "regular" → no discount (all multipliers 1).
+  usageDiscount: () => ({ entryFee: 1, machine: 1, material: 1, tip: 1 }),
   USAGE_TYPE_LABELS: { regular: "Regulär" },
+  USAGE_DISCOUNT_LABELS: {},
   USER_TYPE_LABELS: { erwachsen: "Erwachsen", kind: "Kind" },
 }))
 

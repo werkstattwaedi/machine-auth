@@ -198,6 +198,13 @@ describe("checkoutReducer", () => {
         reduce({ type: "SET_USAGE_TYPE", usageType: "materialbezug" }).usageType,
       ).toBe("materialbezug")
     })
+
+    // Issue #284: the new Freiwilligengruppe option must flow through state.
+    it("accepts the new volunteering usage type", () => {
+      expect(
+        reduce({ type: "SET_USAGE_TYPE", usageType: "volunteering" }).usageType,
+      ).toBe("volunteering")
+    })
   })
 
   describe("SET_TIP", () => {

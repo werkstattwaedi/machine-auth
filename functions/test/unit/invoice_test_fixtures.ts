@@ -96,10 +96,15 @@ export function membershipOnlyInvoice(): InvoiceData {
         persons: [
           { name: "Marco Mitglied", email: "marco@example.com", userType: "erwachsen" },
         ],
-        personEntryFees: [{ name: "Marco Mitglied", userType: "erwachsen", fee: 0 }],
+        // RAW (standard) entry fee — bill_triggers computes personEntryFees
+        // from the standard fee regardless of usage type (issue #284); the
+        // materialbezug waiver lives in the discount multiplier. The
+        // membership-only carve-out must key off the NET fee, so a non-zero
+        // raw fee here is what guards that gate.
+        personEntryFees: [{ name: "Marco Mitglied", userType: "erwachsen", fee: 15 }],
         items: [makeMembershipItem("Mitgliedschaft — Einzel", 80)],
         workshopsVisited: ["diverses"],
-        entryFees: 0,
+        entryFees: 15,
         machineCost: 0,
         materialCost: 80,
         tip: 0,
@@ -529,6 +534,104 @@ export function freeZeroAmountInvoice(): InvoiceData {
     ],
     workshops: {
       holz: { label: "Holzwerkstatt", order: 1 },
+    },
+    grandTotal: 0,
+    currency: "CHF",
+    paidAt: now,
+    paidVia: "free",
+  };
+}
+
+/**
+ * Issue #284: a Freiwilligengruppe (`volunteering`) checkout. Entry + machine
+ * usage are waived (rendered raw with a per-section "wird nicht verrechnet"
+ * discount line), but material is still billed — so the bill has a real
+ * payable balance and renders the QR slip.
+ */
+export function volunteeringDiscountInvoice(): InvoiceData {
+  return {
+    referenceNumber: 50,
+    invoiceDate: zurich(2025, 4, 20),
+    billingAddress: {
+      company: "",
+      street: "Vereinsweg 4",
+      zip: "8820",
+      city: "Wädenswil",
+    },
+    recipientName: "Vera Freiwillig",
+    checkouts: [
+      {
+        date: zurich(2025, 4, 19, 18, 0),
+        usageType: "volunteering",
+        persons: [
+          { name: "Vera Freiwillig", email: "vera@example.com", userType: "erwachsen" },
+        ],
+        // RAW fee — the renderer waives it via the discount line (issue #284).
+        personEntryFees: [{ name: "Vera Freiwillig", userType: "erwachsen", fee: 15 }],
+        items: [
+          // Machine usage — waived for volunteering.
+          makeItem({ description: "Stationäre Maschinen", workshop: "holz", origin: "nfc", pricingModel: "time", quantity: 1, unitPrice: 25, totalPrice: 25 }),
+          // Material — still billed.
+          makeItem({ description: "Sperrholz Birke 4mm", workshop: "holz", pricingModel: "area", quantity: 0.4, unitPrice: 25, totalPrice: 10 }),
+        ],
+        workshopsVisited: ["holz"],
+        // RAW section amounts.
+        entryFees: 15,
+        machineCost: 25,
+        materialCost: 10,
+        tip: 0,
+        totalPrice: 10,
+      },
+    ],
+    workshops: {
+      holz: { label: "Holzwerkstatt", order: 1 },
+    },
+    // NET: only the 10 CHF material is payable.
+    grandTotal: 10,
+    currency: "CHF",
+  };
+}
+
+/**
+ * Issue #284: an `intern` checkout that DID consume material. Everything
+ * but the tip is waived; the PDF renders the raw entry/machine/material
+ * prices each with a "Interne Nutzung: … wird nicht verrechnet" discount
+ * line, then a CHF 0.00 free-zero notice (no QR slip).
+ */
+export function internDiscountInvoice(): InvoiceData {
+  const now = zurich(2025, 4, 12);
+  return {
+    referenceNumber: 51,
+    invoiceDate: now,
+    billingAddress: {
+      company: "",
+      street: "Schulhausstrasse 3",
+      zip: "8810",
+      city: "Horgen",
+    },
+    recipientName: "Ines Intern",
+    checkouts: [
+      {
+        date: zurich(2025, 4, 12, 10, 0),
+        usageType: "intern",
+        persons: [
+          { name: "Ines Intern", email: "ines@example.com", userType: "erwachsen" },
+        ],
+        personEntryFees: [{ name: "Ines Intern", userType: "erwachsen", fee: 15 }],
+        items: [
+          makeItem({ description: "Laser", workshop: "makerspace", origin: "nfc", pricingModel: "time", quantity: 0.5, unitPrice: 60, totalPrice: 30 }),
+          makeItem({ description: "MDF 10mm", workshop: "makerspace", pricingModel: "area", quantity: 4, unitPrice: 11.25, totalPrice: 45 }),
+        ],
+        workshopsVisited: ["makerspace"],
+        entryFees: 15,
+        machineCost: 30,
+        materialCost: 45,
+        tip: 0,
+        totalPrice: 0,
+      },
+    ],
+    workshops: {
+      makerspace: { label: "Maker Space", order: 1 },
     },
     grandTotal: 0,
     currency: "CHF",

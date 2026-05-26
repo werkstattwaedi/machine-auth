@@ -31,20 +31,23 @@ import type { PricingConfig } from "@modules/lib/workshop-config"
 
 afterEach(cleanup)
 
-// `calculateFee` is the only thing the step pulls in from pricing that
-// depends on config shape; stub it so the test config below stays small.
+// The step pulls the per-person entry fee from pricing; stub `standardFee`
+// (which `computeCheckoutCosts` uses for the subtotal) and `calculateFee`
+// (the per-person display) so the test config below stays small. usageType
+// is "regular" here, so the usage-type discount is a no-op (net = raw).
 vi.mock("@modules/lib/pricing", async () => {
   const actual = await vi.importActual<typeof import("@modules/lib/pricing")>(
     "@modules/lib/pricing",
   )
   return {
     ...actual,
-    USAGE_TYPE_LABELS: { regular: "Regulär", ermaessigt: "Ermässigt", intern: "Intern", materialbezug: "Materialbezug", hangenmoos: "Hangenmoos" },
+    USAGE_TYPE_LABELS: { regular: "Regulär", ermaessigt: "Ermässigt", intern: "Intern", materialbezug: "Materialbezug", hangenmoos: "Hangenmoos", volunteering: "Freiwilligengruppe" },
     USER_TYPE_LABELS: { erwachsen: "Erwachsen", kind: "Kind", firma: "Firma" },
     // Fractional fee so `roundUpOptions(subtotal)` produces non-empty
     // options (e.g. 14.40 → 15, 16, 17 — the smallest "next franc" is
     // a 0.60 round-up, which matches the exact CHF 0.60 leftover Mike
     // saw in #236).
+    standardFee: () => 14.4,
     calculateFee: () => 14.4,
   }
 })
