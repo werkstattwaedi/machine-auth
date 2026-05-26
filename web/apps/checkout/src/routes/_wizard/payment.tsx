@@ -6,8 +6,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { PaymentResult } from "@/components/checkout/payment-result"
 import { useWizardContext } from "@/components/checkout/wizard-context"
 import { CompletionDialog } from "@/components/checkout/completion-dialog"
-import { EmptyState } from "@modules/components/empty-state"
-import { ShoppingCart } from "lucide-react"
+import { NoCheckoutGate } from "@/components/checkout/no-checkout-gate"
 
 export const Route = createFileRoute("/_wizard/payment")({
   component: PaymentRoute,
@@ -18,15 +17,14 @@ function PaymentRoute() {
   const navigate = useNavigate()
   const [completed, setCompleted] = useState(false)
 
-  // C4 guard: empty-state if landed on /payment with no closed checkout
-  // payload. The route is only meaningful immediately after a successful
-  // submit on /checkout. Loop-safe — no auto-redirect.
-  if (!ctx.paymentData) {
+  // C4 guard: /payment is only meaningful immediately after a successful
+  // submit on /checkout (paymentData stamped by the callable). Direct
+  // navigation without an open checkout OR without payment data prompts
+  // the user to start at /checkin. Loop-safe — no auto-redirect.
+  if (!ctx.openCheckout || !ctx.paymentData) {
     return (
-      <EmptyState
-        icon={ShoppingCart}
-        title="Keine Zahlung offen"
-        description="Bezahle zuerst über die Checkout-Seite, um hierher zu gelangen."
+      <NoCheckoutGate
+        description="Es ist keine Zahlung offen. Starte einen neuen Besuch über den Check-In."
       />
     )
   }

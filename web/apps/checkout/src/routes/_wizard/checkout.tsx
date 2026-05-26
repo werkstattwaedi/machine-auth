@@ -4,6 +4,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { StepCheckout } from "@/components/checkout/step-checkout"
 import { useWizardContext } from "@/components/checkout/wizard-context"
+import { NoCheckoutGate } from "@/components/checkout/no-checkout-gate"
 
 export const Route = createFileRoute("/_wizard/checkout")({
   component: CheckoutRoute,
@@ -12,6 +13,12 @@ export const Route = createFileRoute("/_wizard/checkout")({
 function CheckoutRoute() {
   const navigate = useNavigate()
   const ctx = useWizardContext()
+
+  // C4 guard: /checkout requires an open checkout. Bare navigation here
+  // shows a dialog offering /checkin instead of an empty review screen.
+  if (!ctx.openCheckout) {
+    return <NoCheckoutGate />
+  }
 
   return (
     <StepCheckout

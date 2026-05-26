@@ -42,23 +42,31 @@ function RootDispatcher() {
   const db = useDb()
   const navigate = useNavigate()
   const { picc, cmac, kiosk } = Route.useSearch()
-  const { user, userDoc, loading: authLoading, sessionKind } = useAuth()
-  const { tokenUser, isTagAuth, loading: tokenLoading } = useTokenAuth(
+  const {
+    user,
+    userDoc,
+    loading: authLoading,
+    userDocLoading,
+    sessionKind,
+  } = useAuth()
+  const { tokenUser, loading: tokenLoading } = useTokenAuth(
     picc ?? null,
     cmac ?? null,
   )
 
-  // Same principal-scoping as WizardProvider: identified users query by
-  // userId ref; anonymous principals scope by modifiedBy == auth.uid.
-  const isAccountLoggedIn = !!user && !!userDoc && !isTagAuth
-  const isTagIdentified = isTagAuth && !!tokenUser
-  const isAnonymous = !isAccountLoggedIn && !isTagIdentified
-  const identifiedUserRef = isAccountLoggedIn
-    ? userRef(db, userDoc!.id)
-    : isTagIdentified
-      ? userRef(db, tokenUser!.userId)
-      : null
-  const anonUid = isAnonymous && user?.isAnonymous ? user.uid : null
+  // Classify the principal by sessionKind so a still-loading userDoc on
+  // a real login doesn't get misread as anonymous. Without this the
+  // dispatcher would briefly query as "anonymous" with anonUid=null,
+  // see no checkout, and bounce to /checkin — even though the user has
+  // an open checkout under their real userId.
+  const identifiedUserRef =
+    sessionKind === "real" && userDoc
+      ? userRef(db, userDoc.id)
+      : sessionKind === "tag" && tokenUser
+        ? userRef(db, tokenUser.userId)
+        : null
+  const anonUid =
+    sessionKind === "anonymous" && user?.isAnonymous ? user.uid : null
 
   const { data: openCheckouts, loading: loadingCheckout } = useCollection(
     identifiedUserRef
@@ -80,36 +88,44 @@ function RootDispatcher() {
         : []),
   )
 
+  // Wait for everything that materially changes the principal-scoping
+  // before deciding. In particular `userDocLoading` matters for real
+  // logins — without gating on it the dispatcher reads a still-null
+  // userDoc and forwards to /checkin even though the open checkout for
+  // that user already exists.
+  const principalLoading =
+    authLoading ||
+    tokenLoading ||
+    (sessionKind === "real" && userDocLoading) ||
+    (sessionKind === "tag" && !tokenUser && !!(picc && cmac))
+
   // Latch so a navigate() racing against the next React tick doesn't
   // re-fire after the redirector mounted on the destination route.
   const dispatchedRef = useRef(false)
 
   useEffect(() => {
     if (dispatchedRef.current) return
-    if (authLoading || tokenLoading) return
+    if (principalLoading) return
 
-    // For anonymous-but-not-yet-signed-in browser sessions (sessionKind null
-    // and no user) there's nothing to query — go to /checkin and let the
-    // wizard create the anon principal on advance.
-    if (sessionKind === null && !user) {
-      dispatchedRef.current = true
-      const search: { picc?: string; cmac?: string; kiosk?: string } = {}
-      if (picc) search.picc = picc
-      if (cmac) search.cmac = cmac
-      if (kiosk !== undefined) search.kiosk = ""
-      navigate({ to: "/checkin", search })
-      return
-    }
-
-    // For any other principal, wait for the open-checkout query to resolve.
-    if (loadingCheckout) return
-
-    dispatchedRef.current = true
-    const openCheckout = openCheckouts[0] ?? null
     const search: { picc?: string; cmac?: string; kiosk?: string } = {}
     if (picc) search.picc = picc
     if (cmac) search.cmac = cmac
     if (kiosk !== undefined) search.kiosk = ""
+
+    // No principal at all → send the visitor to /checkin so the wizard
+    // can collect their persons + create an anon principal on advance.
+    if (sessionKind === null || !user) {
+      dispatchedRef.current = true
+      navigate({ to: "/checkin", search })
+      return
+    }
+
+    // Principal exists — wait for the open-checkout subscription to
+    // resolve before deciding.
+    if (loadingCheckout) return
+
+    dispatchedRef.current = true
+    const openCheckout = openCheckouts[0] ?? null
 
     if (!openCheckout) {
       navigate({ to: "/checkin", search })
@@ -124,8 +140,7 @@ function RootDispatcher() {
     }
     navigate({ to: "/visit", search })
   }, [
-    authLoading,
-    tokenLoading,
+    principalLoading,
     loadingCheckout,
     openCheckouts,
     sessionKind,
