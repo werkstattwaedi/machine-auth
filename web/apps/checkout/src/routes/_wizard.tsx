@@ -21,6 +21,7 @@ import { AlertTriangle, Loader2 } from "lucide-react"
 import { WizardProvider } from "@/components/checkout/wizard-context"
 import { CheckoutProgress } from "@/components/checkout/checkout-progress"
 import { StaleCheckoutBanner } from "@/components/checkout/stale-checkout-banner"
+import { KioskInactivityWatcher } from "@/components/checkout/kiosk-inactivity-watcher"
 
 const wizardSearchSchema = z.object({
   picc: z.optional(z.string()),
@@ -153,6 +154,7 @@ function WizardLayout() {
           <StaleCheckoutBanner />
           <Outlet />
         </div>
+        <KioskInactivityWatcher />
       </div>
     </WizardProvider>
   )
