@@ -146,14 +146,17 @@ function WizardChrome({
   userId?: string
 }) {
   const { pathname } = useLocation()
-  const { openCheckout } = useWizardContext()
+  const { openCheckout, pendingCheckout } = useWizardContext()
   const currentStep = stepForPathname(pathname)
 
   const gateableRoute =
     pathname.startsWith("/visit") ||
     pathname.startsWith("/checkout") ||
     pathname.startsWith("/payment")
-  const showGate = gateableRoute && !openCheckout
+  // pendingCheckout is true between /checkin's "Weiter" creating a
+  // fresh doc and the onSnapshot listener surfacing it — without this
+  // check /visit would briefly flash the no-checkout gate.
+  const showGate = gateableRoute && !openCheckout && !pendingCheckout
 
   return (
     <div className="min-h-screen flex flex-col items-center bg-background">

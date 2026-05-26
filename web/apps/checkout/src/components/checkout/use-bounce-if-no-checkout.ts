@@ -17,12 +17,15 @@ import { useWizardContext } from "./wizard-context"
  */
 export function useBounceIfNoCheckout() {
   const navigate = useNavigate()
-  const { openCheckout, kiosk } = useWizardContext()
+  const { openCheckout, pendingCheckout, kiosk } = useWizardContext()
   const bouncedRef = useRef(false)
 
   useEffect(() => {
     if (bouncedRef.current) return
     if (openCheckout) return
+    // A fresh checkout was just written but the onSnapshot listener
+    // hasn't surfaced it — give it a beat before bouncing.
+    if (pendingCheckout) return
     bouncedRef.current = true
     navigate({
       to: "/checkin",
@@ -30,5 +33,5 @@ export function useBounceIfNoCheckout() {
         ? { kiosk: "", rescan: "1" }
         : { rescan: "1" },
     })
-  }, [openCheckout, kiosk, navigate])
+  }, [openCheckout, pendingCheckout, kiosk, navigate])
 }

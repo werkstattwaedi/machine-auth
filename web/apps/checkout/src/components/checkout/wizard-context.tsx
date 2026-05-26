@@ -73,6 +73,13 @@ export interface WizardContextValue {
   // ----- query results -----
   openCheckout: CheckoutDoc | null
   checkoutId: string | null
+  /**
+   * True while `persistPersons` has written a new checkout doc but the
+   * `onSnapshot` subscription hasn't surfaced it yet. The wizard's
+   * no-checkout gate honours this so /visit doesn't briefly render the
+   * "Kein offener Besuch" dialog after a freshly-clicked Weiter.
+   */
+  pendingCheckout: boolean
   items: CheckoutItemLocal[]
   pricingConfig: PricingConfig
   discountLevel: DiscountLevel
@@ -357,6 +364,16 @@ export function WizardProvider({
     rehydratedRef.current = openCheckout.id
   }, [openCheckout, personsDispatch])
 
+  // Bridge the "we just wrote a checkout, listener hasn't surfaced it
+  // yet" gap. /checkin's onAdvance navigates to /visit synchronously
+  // after persistPersons resolves, but the onSnapshot callback only
+  // fires on a later microtask — without the latch /visit would render
+  // its no-checkout gate for a beat and bounce the user back.
+  const [pendingCheckout, setPendingCheckout] = useState(false)
+  useEffect(() => {
+    if (openCheckout && pendingCheckout) setPendingCheckout(false)
+  }, [openCheckout, pendingCheckout])
+
   // Persist the current persons array to the open checkout doc.
   const persistPersons = useCallback(async () => {
     const personDocs = persons.map((p) => personLocalToDoc(p, db))
@@ -366,6 +383,7 @@ export function WizardProvider({
           persons: personDocs,
         })
       } else {
+        setPendingCheckout(true)
         const callerUid = auth?.currentUser?.uid ?? null
         await fsMutation.add(checkoutsCollection(db), {
           userId: identifiedUserRef ?? null,
@@ -380,7 +398,9 @@ export function WizardProvider({
         } as unknown as CheckoutDoc)
       }
     } catch {
-      // Hook already toasted + telemetered.
+      // Hook already toasted + telemetered. Clear the latch so the gate
+      // can do its job next time the user navigates.
+      setPendingCheckout(false)
     }
   }, [persons, usageType, openCheckout, fsMutation, db, identifiedUserRef, auth])
 
@@ -640,6 +660,7 @@ export function WizardProvider({
     identifiedUserRef,
     openCheckout: openCheckout ?? null,
     checkoutId,
+    pendingCheckout,
     items,
     pricingConfig,
     discountLevel,
