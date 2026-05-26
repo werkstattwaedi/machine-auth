@@ -33,7 +33,6 @@ import {
   getSortedWorkshops,
   type WorkshopId,
 } from "@modules/lib/workshop-config"
-import { formatCHF } from "@modules/lib/format"
 import { WorkshopSectionWithCatalog } from "@/components/usage/workshop-section-with-catalog"
 import { ScanFab } from "@/components/qr-scanner/scan-fab"
 import { useWizardContext } from "@/components/checkout/wizard-context"
@@ -203,9 +202,6 @@ function VisitRoute() {
     [addItem, updateItem, removeItem],
   )
 
-  const itemsTotal = items.reduce((sum, i) => sum + i.totalPrice, 0)
-  const hasUsage = effectiveWorkshops.size > 0
-
   return (
     <>
       <div className="flex flex-col flex-1 gap-8">
@@ -294,45 +290,19 @@ function VisitRoute() {
             <ArrowLeft className="h-4 w-4" />
             Zurück
           </button>
-          {hasUsage ? (
-            <div className="flex items-center gap-4">
-              <div className="text-right">
-                <div className="text-xs text-muted-foreground">
-                  Kosten (laufend)
-                </div>
-                <div className="text-lg font-bold tabular-nums">
-                  {formatCHF(itemsTotal)}
-                </div>
-              </div>
-              <Button
-                className="bg-cog-teal hover:bg-cog-teal-dark"
-                onClick={() =>
-                  navigate({
-                    to: "/checkout",
-                    search: kiosk ? { kiosk: "" } : {},
-                  })
-                }
-              >
-                <ShoppingCart className="h-4 w-4 mr-2" />
-                Zum Checkout
-                <ArrowRight className="h-4 w-4 ml-1" />
-              </Button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-white bg-cog-teal rounded-[3px] hover:bg-cog-teal-dark transition-colors"
-              onClick={() =>
-                navigate({
-                  to: "/checkout",
-                  search: kiosk ? { kiosk: "" } : {},
-                })
-              }
-            >
-              Check-Out
-              <ArrowRight className="h-4 w-4" />
-            </button>
-          )}
+          <Button
+            className="bg-cog-teal hover:bg-cog-teal-dark"
+            onClick={() =>
+              navigate({
+                to: "/checkout",
+                search: kiosk ? { kiosk: "" } : {},
+              })
+            }
+          >
+            <ShoppingCart className="h-4 w-4 mr-2" />
+            Zum Checkout
+            <ArrowRight className="h-4 w-4 ml-1" />
+          </Button>
         </div>
 
         <AlertDialog
