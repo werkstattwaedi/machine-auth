@@ -62,6 +62,17 @@ async function signIn(page: Page) {
   await page.waitForURL((url) => !url.pathname.startsWith("/login"), {
     timeout: 10_000,
   })
+  // After sign-in the / dispatcher forwards to /checkin (no open checkout).
+  // Walk through /checkin so subsequent /visit/add/* deep-links don't
+  // bounce back via useBounceIfNoCheckout — the wizard now persists a
+  // persons roster + creates an open checkout doc on advance.
+  await page.waitForURL((url) => url.pathname === "/checkin", {
+    timeout: 10_000,
+  })
+  await page.getByRole("button", { name: "Weiter" }).click()
+  await page.waitForURL((url) => url.pathname === "/visit", {
+    timeout: 10_000,
+  })
 }
 
 test.describe("Visit /add/* sub-routes (issue #213)", () => {

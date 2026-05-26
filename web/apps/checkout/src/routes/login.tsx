@@ -13,7 +13,7 @@ function CheckoutLoginPage() {
   const { redirect, mode } = Route.useSearch()
   return (
     <LoginPage
-      defaultRedirect="/visit"
+      defaultRedirect="/"
       signupEnabled
       googleButtonPosition="bottom"
       redirect={redirect}

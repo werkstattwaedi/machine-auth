@@ -3,10 +3,12 @@
 
 // Regression for issue #179: an eager-anon Firebase principal (created
 // mid-wizard for the no-account checkout flow) must NOT be allowed to
-// reach member-area routes like /visit, /profile, or /complete-profile.
-// The route guards in `authenticated-layout.tsx` and `_authonly.tsx`
-// should redirect to /login with ?redirect=<pathname> and never render
-// the protected chrome.
+// reach member-area routes like /account/profile or
+// /account/complete-profile. The route guards in
+// `authenticated-layout.tsx` and `_authonly.tsx` should redirect to
+// /login with ?redirect=<pathname> and never render the protected
+// chrome. (Note: /visit is no longer member-only — after the wizard
+// URL-routes refactor it's part of the public checkout flow.)
 
 import { test, expect, type Page, type Locator } from "@playwright/test"
 import { clearCollections } from "./helpers"
@@ -44,28 +46,7 @@ test.describe("Protected routes block anonymous principals (#179)", () => {
     await clearCollections("checkouts")
   })
 
-  test("anonymous user is redirected away from /visit to /login", async ({
-    page,
-  }) => {
-    await signInEagerAnonymous(page)
-
-    await page.goto("/visit")
-
-    // Redirected to /login with redirect=/visit search param.
-    await page.waitForURL((url) => url.pathname === "/login", {
-      timeout: 10_000,
-    })
-    await expect(page).toHaveURL(/\/login\?.*redirect=%2Fvisit/)
-
-    // The login email form is reachable (auto-redirect was suppressed for
-    // the anonymous principal). The "Abmelden" sign-out button only ever
-    // appears in the protected layout — its absence proves the chrome
-    // never rendered.
-    await expect(page.getByTestId("login-email-stage")).toBeVisible()
-    await expect(page.getByRole("button", { name: "Abmelden" })).not.toBeVisible()
-  })
-
-  test("anonymous user is redirected away from /profile to /login", async ({
+  test("anonymous user is redirected away from /account/profile to /login", async ({
     page,
   }) => {
     await signInEagerAnonymous(page)
@@ -75,11 +56,11 @@ test.describe("Protected routes block anonymous principals (#179)", () => {
     await page.waitForURL((url) => url.pathname === "/login", {
       timeout: 10_000,
     })
-    await expect(page).toHaveURL(/\/login\?.*redirect=%2Fprofile/)
+    await expect(page).toHaveURL(/\/login\?.*redirect=%2Faccount%2Fprofile/)
     await expect(page.getByTestId("login-email-stage")).toBeVisible()
   })
 
-  test("anonymous user is redirected away from /complete-profile to /login", async ({
+  test("anonymous user is redirected away from /account/complete-profile to /login", async ({
     page,
   }) => {
     await signInEagerAnonymous(page)
@@ -89,7 +70,7 @@ test.describe("Protected routes block anonymous principals (#179)", () => {
     await page.waitForURL((url) => url.pathname === "/login", {
       timeout: 10_000,
     })
-    await expect(page).toHaveURL(/\/login\?.*redirect=%2Fcomplete-profile/)
+    await expect(page).toHaveURL(/\/login\?.*redirect=%2Faccount%2Fcomplete-profile/)
     await expect(page.getByTestId("login-email-stage")).toBeVisible()
   })
 })
