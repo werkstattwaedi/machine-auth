@@ -13,7 +13,6 @@ import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { useIsMobile } from "@modules/hooks/use-mobile"
 import { Checkbox } from "@modules/components/ui/checkbox"
 import { Button } from "@modules/components/ui/button"
-import { EmptyState } from "@modules/components/empty-state"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,7 +23,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@modules/components/ui/alert-dialog"
-import { ArrowLeft, ArrowRight, Coffee, ShoppingCart } from "lucide-react"
+import { ArrowLeft, ArrowRight, ShoppingCart } from "lucide-react"
 import { arrayRemove, arrayUnion } from "firebase/firestore"
 import {
   checkoutItemRef,
@@ -277,14 +276,6 @@ function VisitRoute() {
               }
             />
           ))}
-
-        {!hasUsage && (
-          <EmptyState
-            icon={Coffee}
-            title="Kein aktiver Besuch"
-            description="Wähle eine Werkstatt oben, um deine Nutzung zu erfassen."
-          />
-        )}
 
         <div className="flex-1" />
 
