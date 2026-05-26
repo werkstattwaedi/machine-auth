@@ -29,6 +29,11 @@ interface StepCheckinProps {
   isAnonymous: boolean
   kiosk: boolean
   isAccountLoggedIn: boolean
+  /** userDoc id of the logged-in user. We key the "this card is the
+   *  signed-in user" decision off `person.userId === signedInUserId`
+   *  instead of array index — the signed-in user can be removed and
+   *  re-added in any order. */
+  signedInUserId?: string | null
   /** Email of the signed-in user — surfaced in the compact identity
    *  strip so the page doesn't redundantly show the editable
    *  PersonCard fields for the user themselves. */
@@ -54,7 +59,7 @@ interface StepCheckinProps {
   familyCandidates?: FamilyCandidate[]
 }
 
-export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAccountLoggedIn, signedInEmail, isMember, onSignOut, onAdvance, familyCandidates }: StepCheckinProps) {
+export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAccountLoggedIn, signedInUserId, signedInEmail, isMember, onSignOut, onAdvance, familyCandidates }: StepCheckinProps) {
   // touched: personId → field → true
   const [touched, setTouched] = useState<Record<string, Record<string, boolean>>>({})
   const [submitted, setSubmitted] = useState(false)
@@ -135,7 +140,13 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
       />
 
       {persons.map((person, i) => {
-        const isSignedInUser = i === 0 && isAccountLoggedIn
+        // The signed-in user is identified by userId match, NOT array
+        // index — a parent can remove themselves and re-add via a
+        // quick-add chip, ending up at any position in the array.
+        const isSignedInUser =
+          isAccountLoggedIn &&
+          !!signedInUserId &&
+          person.userId === signedInUserId
         // Pre-filled persons with a known identity (signed-in user or a
         // family quick-add member) render as the compact identity strip
         // — there's nothing to edit. Anonymous / kiosk first-time

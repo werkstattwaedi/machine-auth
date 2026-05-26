@@ -23,6 +23,7 @@ function renderCheckin({
   isAnonymous = true,
   kiosk = false,
   isAccountLoggedIn = false,
+  signedInUserId,
   signedInEmail,
   isMember = false,
   personsOverride,
@@ -32,6 +33,7 @@ function renderCheckin({
   isAnonymous?: boolean
   kiosk?: boolean
   isAccountLoggedIn?: boolean
+  signedInUserId?: string | null
   signedInEmail?: string | null
   isMember?: boolean
   personsOverride?: CheckoutPerson[]
@@ -50,6 +52,13 @@ function renderCheckin({
       dispatched.push(action)
       dispatch(action)
     }
+    // Default to "u-self" when the caller didn't pass an explicit id but
+    // is exercising the logged-in branch — keeps existing tests terse
+    // while still letting individual tests inject a different id.
+    const effectiveSignedInUserId =
+      signedInUserId === undefined && isAccountLoggedIn
+        ? "u-self"
+        : signedInUserId
     return (
       <StepCheckin
         persons={persons}
@@ -57,6 +66,7 @@ function renderCheckin({
         isAnonymous={isAnonymous}
         kiosk={kiosk}
         isAccountLoggedIn={isAccountLoggedIn}
+        signedInUserId={effectiveSignedInUserId}
         signedInEmail={signedInEmail}
         isMember={isMember}
         onSignOut={onSignOut}
@@ -231,6 +241,7 @@ describe("Identity hint", () => {
     renderCheckin({
       isAnonymous: false,
       isAccountLoggedIn: true,
+      signedInUserId: "u-self",
       signedInEmail: "max@test.com",
       personsOverride: [{
         id: "p1",
@@ -240,6 +251,7 @@ describe("Identity hint", () => {
         userType: "erwachsen",
         termsAccepted: true,
         isPreFilled: true,
+        userId: "u-self",
       }],
     })
 
@@ -254,6 +266,7 @@ describe("Identity hint", () => {
     renderCheckin({
       isAnonymous: false,
       isAccountLoggedIn: true,
+      signedInUserId: "u-self",
       signedInEmail: "max@test.com",
       isMember: true,
       personsOverride: [{
@@ -264,6 +277,7 @@ describe("Identity hint", () => {
         userType: "erwachsen",
         termsAccepted: true,
         isPreFilled: true,
+        userId: "u-self",
       }],
     })
 
@@ -275,6 +289,7 @@ describe("Identity hint", () => {
     const { onSignOut } = renderCheckin({
       isAnonymous: false,
       isAccountLoggedIn: true,
+      signedInUserId: "u-self",
       signedInEmail: "max@test.com",
       personsOverride: [{
         id: "p1",
@@ -284,6 +299,7 @@ describe("Identity hint", () => {
         userType: "erwachsen",
         termsAccepted: true,
         isPreFilled: true,
+        userId: "u-self",
       }],
     })
 
@@ -475,5 +491,81 @@ describe("Person removal", () => {
 
     const action = dispatched.find((a) => a.type === "REMOVE_PERSON")
     expect(action).toMatchObject({ type: "REMOVE_PERSON", id: "p-lia" })
+  })
+})
+
+// Regression: the "signed-in user" decision used to key off the array
+// index (i === 0). Removing self and re-adding via a quick-add chip
+// shifted self to index 1 — at that point the kid (now at index 0)
+// inherited Abmelden + Vereinsmitglied + the parent's email, and self
+// lost their identity affordances.
+describe("Identity strip — keyed by userId, not index", () => {
+  const familyMember: CheckoutPerson = {
+    id: "p-lia",
+    firstName: "Lia",
+    lastName: "Pfeffer",
+    email: "lia@example.com",
+    userType: "kind",
+    termsAccepted: true,
+    isPreFilled: true,
+    userId: "u-lia",
+  }
+  const selfPerson: CheckoutPerson = {
+    id: "p-self",
+    firstName: "Max",
+    lastName: "Muster",
+    email: "max@example.com",
+    userType: "erwachsen",
+    termsAccepted: true,
+    isPreFilled: true,
+    userId: "u-self",
+  }
+
+  it("does not show Abmelden / Vereinsmitglied on the kid's strip when self was removed", () => {
+    renderCheckin({
+      isAnonymous: false,
+      isAccountLoggedIn: true,
+      signedInUserId: "u-self",
+      signedInEmail: "max@example.com",
+      isMember: true,
+      personsOverride: [familyMember],
+    })
+
+    const strip = screen.getByTestId("identity-strip")
+    expect(strip.textContent).toContain("Lia Pfeffer")
+    expect(strip.textContent).toContain("lia@example.com")
+    // Crucially: the kid's strip must NOT inherit the parent's email,
+    // membership tag, or sign-out affordance.
+    expect(strip.textContent).not.toContain("max@example.com")
+    expect(strip.textContent).not.toContain("Vereinsmitglied")
+    expect(strip.textContent).not.toContain("Abmelden")
+  })
+
+  it("keeps Abmelden + Vereinsmitglied on self even when re-added at a higher index", () => {
+    // Persons array has self at index 1 (kid at 0) — the order the
+    // user lands on after remove-then-quick-add-back.
+    renderCheckin({
+      isAnonymous: false,
+      isAccountLoggedIn: true,
+      signedInUserId: "u-self",
+      signedInEmail: "max@example.com",
+      isMember: true,
+      personsOverride: [familyMember, selfPerson],
+    })
+
+    const strips = screen.getAllByTestId("identity-strip")
+    expect(strips).toHaveLength(2)
+
+    const kidStrip = strips[0]
+    const selfStrip = strips[1]
+
+    expect(kidStrip.textContent).toContain("Lia Pfeffer")
+    expect(kidStrip.textContent).not.toContain("Vereinsmitglied")
+    expect(kidStrip.textContent).not.toContain("Abmelden")
+
+    expect(selfStrip.textContent).toContain("Max Muster")
+    expect(selfStrip.textContent).toContain("max@example.com")
+    expect(selfStrip.textContent).toContain("Vereinsmitglied")
+    expect(selfStrip.textContent).toContain("Abmelden")
   })
 })

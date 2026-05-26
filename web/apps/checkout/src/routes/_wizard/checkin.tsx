@@ -33,6 +33,7 @@ function CheckinRoute() {
       isAnonymous={ctx.isAnonymous}
       kiosk={ctx.kiosk}
       isAccountLoggedIn={ctx.isAccountLoggedIn}
+      signedInUserId={ctx.identifiedUserDoc?.id ?? null}
       signedInEmail={ctx.identifiedUserDoc?.email ?? null}
       isMember={!!ctx.identifiedUserDoc?.activeMembership}
       familyCandidates={ctx.familyCandidates}
