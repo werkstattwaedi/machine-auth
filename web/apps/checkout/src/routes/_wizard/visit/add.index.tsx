@@ -8,6 +8,7 @@ import { useDb } from "@modules/lib/firebase-context"
 import { where } from "firebase/firestore"
 import { MaterialPicker } from "@/components/usage/material-picker"
 import { useWizardContext } from "@/components/checkout/wizard-context"
+import { useBounceIfNoCheckout } from "@/components/checkout/use-bounce-if-no-checkout"
 import type { CatalogItemDoc } from "@modules/lib/firestore-entities"
 
 export const Route = createFileRoute("/_wizard/visit/add/")({
@@ -15,6 +16,7 @@ export const Route = createFileRoute("/_wizard/visit/add/")({
 })
 
 function AddIndexRoute() {
+  useBounceIfNoCheckout()
   const db = useDb()
   const navigate = useNavigate()
   const ctx = useWizardContext()

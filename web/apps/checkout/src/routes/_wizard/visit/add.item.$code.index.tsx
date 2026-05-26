@@ -8,6 +8,7 @@ import { useDb } from "@modules/lib/firebase-context"
 import { limit, where } from "firebase/firestore"
 import { MaterialPicker } from "@/components/usage/material-picker"
 import { useWizardContext } from "@/components/checkout/wizard-context"
+import { useBounceIfNoCheckout } from "@/components/checkout/use-bounce-if-no-checkout"
 import { PageLoading } from "@modules/components/page-loading"
 import { EmptyState } from "@modules/components/empty-state"
 import { AlertTriangle } from "lucide-react"
@@ -18,6 +19,7 @@ export const Route = createFileRoute("/_wizard/visit/add/item/$code/")({
 })
 
 function AddItemRoute() {
+  useBounceIfNoCheckout()
   const db = useDb()
   const { code } = Route.useParams()
   const navigate = useNavigate()

@@ -11,6 +11,7 @@ import { useDb } from "@modules/lib/firebase-context"
 import { documentId, where } from "firebase/firestore"
 import { MaterialPicker } from "@/components/usage/material-picker"
 import { useWizardContext } from "@/components/checkout/wizard-context"
+import { useBounceIfNoCheckout } from "@/components/checkout/use-bounce-if-no-checkout"
 import { PageLoading } from "@modules/components/page-loading"
 import { EmptyState } from "@modules/components/empty-state"
 import { AlertTriangle } from "lucide-react"
@@ -21,6 +22,7 @@ export const Route = createFileRoute("/_wizard/visit/add/list/$listId")({
 })
 
 function AddListRoute() {
+  useBounceIfNoCheckout()
   const db = useDb()
   const { listId } = Route.useParams()
   const navigate = useNavigate()

@@ -1,8 +1,20 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { createFileRoute, redirect } from "@tanstack/react-router"
+import { useEffect, useRef } from "react"
+import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { z } from "zod/v4/mini"
+import { Loader2 } from "lucide-react"
+import { useAuth } from "@modules/lib/auth"
+import { useTokenAuth } from "@modules/lib/token-auth"
+import { useCollection } from "@modules/lib/firestore"
+import {
+  checkoutsCollection,
+  userRef,
+} from "@modules/lib/firestore-helpers"
+import { useDb } from "@modules/lib/firebase-context"
+import { where } from "firebase/firestore"
+import { isCheckoutStale } from "@modules/lib/session-day"
 
 const indexSearchSchema = z.object({
   picc: z.optional(z.string()),
@@ -11,17 +23,122 @@ const indexSearchSchema = z.object({
 })
 
 /**
- * Root URL is a dispatcher to the wizard's first step. Smart dispatch
- * (no checkout → /checkin; open today → /visit; stale → /checkout with
- * banner) lands in phase 4 of the wizard-routes refactor. For now `/` just
- * forwards into /checkin, preserving any tag-auth / kiosk search params.
+ * Root URL is a dispatcher. It checks the current Firebase principal's
+ * open checkout state and forwards to the appropriate wizard step:
+ *
+ *   no open checkout                  →  /checkin
+ *   open checkout from today          →  /visit
+ *   open checkout from a previous day →  /checkout (red/orange banner)
+ *
+ * Tag-auth params (picc/cmac/kiosk) and the kiosk flag are preserved on
+ * the redirect so the wizard layer picks them up.
  */
 export const Route = createFileRoute("/")({
   validateSearch: indexSearchSchema,
-  beforeLoad: ({ search }) => {
-    throw redirect({
-      to: "/checkin",
-      search,
-    })
-  },
+  component: RootDispatcher,
 })
+
+function RootDispatcher() {
+  const db = useDb()
+  const navigate = useNavigate()
+  const { picc, cmac, kiosk } = Route.useSearch()
+  const { user, userDoc, loading: authLoading, sessionKind } = useAuth()
+  const { tokenUser, isTagAuth, loading: tokenLoading } = useTokenAuth(
+    picc ?? null,
+    cmac ?? null,
+  )
+
+  // Same principal-scoping as WizardProvider: identified users query by
+  // userId ref; anonymous principals scope by modifiedBy == auth.uid.
+  const isAccountLoggedIn = !!user && !!userDoc && !isTagAuth
+  const isTagIdentified = isTagAuth && !!tokenUser
+  const isAnonymous = !isAccountLoggedIn && !isTagIdentified
+  const identifiedUserRef = isAccountLoggedIn
+    ? userRef(db, userDoc!.id)
+    : isTagIdentified
+      ? userRef(db, tokenUser!.userId)
+      : null
+  const anonUid = isAnonymous && user?.isAnonymous ? user.uid : null
+
+  const { data: openCheckouts, loading: loadingCheckout } = useCollection(
+    identifiedUserRef
+      ? checkoutsCollection(db)
+      : anonUid
+        ? checkoutsCollection(db)
+        : null,
+    ...(identifiedUserRef
+      ? [
+          where("userId", "==", identifiedUserRef),
+          where("status", "==", "open"),
+        ]
+      : anonUid
+        ? [
+            where("userId", "==", null),
+            where("modifiedBy", "==", anonUid),
+            where("status", "==", "open"),
+          ]
+        : []),
+  )
+
+  // Latch so a navigate() racing against the next React tick doesn't
+  // re-fire after the redirector mounted on the destination route.
+  const dispatchedRef = useRef(false)
+
+  useEffect(() => {
+    if (dispatchedRef.current) return
+    if (authLoading || tokenLoading) return
+
+    // For anonymous-but-not-yet-signed-in browser sessions (sessionKind null
+    // and no user) there's nothing to query — go to /checkin and let the
+    // wizard create the anon principal on advance.
+    if (sessionKind === null && !user) {
+      dispatchedRef.current = true
+      const search: { picc?: string; cmac?: string; kiosk?: string } = {}
+      if (picc) search.picc = picc
+      if (cmac) search.cmac = cmac
+      if (kiosk !== undefined) search.kiosk = ""
+      navigate({ to: "/checkin", search })
+      return
+    }
+
+    // For any other principal, wait for the open-checkout query to resolve.
+    if (loadingCheckout) return
+
+    dispatchedRef.current = true
+    const openCheckout = openCheckouts[0] ?? null
+    const search: { picc?: string; cmac?: string; kiosk?: string } = {}
+    if (picc) search.picc = picc
+    if (cmac) search.cmac = cmac
+    if (kiosk !== undefined) search.kiosk = ""
+
+    if (!openCheckout) {
+      navigate({ to: "/checkin", search })
+      return
+    }
+
+    const created = (openCheckout.created as { toDate(): Date } | undefined)
+      ?.toDate()
+    if (created && isCheckoutStale(created)) {
+      navigate({ to: "/checkout", search })
+      return
+    }
+    navigate({ to: "/visit", search })
+  }, [
+    authLoading,
+    tokenLoading,
+    loadingCheckout,
+    openCheckouts,
+    sessionKind,
+    user,
+    picc,
+    cmac,
+    kiosk,
+    navigate,
+  ])
+
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <Loader2 className="h-6 w-6 animate-spin" />
+    </div>
+  )
+}

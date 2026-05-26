@@ -20,11 +20,15 @@ import { Avatar } from "@modules/components/ui/avatar"
 import { AlertTriangle, Loader2 } from "lucide-react"
 import { WizardProvider } from "@/components/checkout/wizard-context"
 import { CheckoutProgress } from "@/components/checkout/checkout-progress"
+import { StaleCheckoutBanner } from "@/components/checkout/stale-checkout-banner"
 
 const wizardSearchSchema = z.object({
   picc: z.optional(z.string()),
   cmac: z.optional(z.string()),
   kiosk: z.optional(z.string()),
+  /** Set by `/visit/add/*` redirects when a QR is scanned cold (no
+   * open checkout). /checkin shows a "re-scan after check-in" banner. */
+  rescan: z.optional(z.string()),
 })
 
 export const Route = createFileRoute("/_wizard")({
@@ -146,6 +150,7 @@ function WizardLayout() {
             Self-Checkout
           </h1>
           {currentStep != null && <CheckoutProgress currentStep={currentStep} />}
+          <StaleCheckoutBanner />
           <Outlet />
         </div>
       </div>

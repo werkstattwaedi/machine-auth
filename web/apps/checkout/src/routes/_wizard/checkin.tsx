@@ -1,7 +1,8 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { createFileRoute, useNavigate } from "@tanstack/react-router"
+import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router"
+import { QrCode } from "lucide-react"
 import { StepCheckin } from "@/components/checkout/step-checkin"
 import { useWizardContext } from "@/components/checkout/wizard-context"
 
@@ -12,9 +13,21 @@ export const Route = createFileRoute("/_wizard/checkin")({
 function CheckinRoute() {
   const navigate = useNavigate()
   const ctx = useWizardContext()
+  const search = useSearch({ from: "/_wizard" })
+  const rescan = search.rescan === "1"
 
   return (
-    <StepCheckin
+    <>
+      {rescan && (
+        <div className="mb-6 flex items-start gap-3 rounded-md border border-cog-teal/40 bg-cog-teal/5 px-4 py-3">
+          <QrCode className="h-5 w-5 mt-0.5 shrink-0 text-cog-teal-dark" aria-hidden />
+          <p className="text-sm text-foreground">
+            Bitte zuerst einchecken — danach den QR-Code nochmals scannen,
+            um das Material hinzuzufügen.
+          </p>
+        </div>
+      )}
+      <StepCheckin
       persons={ctx.persons}
       personsDispatch={ctx.personsDispatch}
       isAnonymous={ctx.isAnonymous}
@@ -37,5 +50,6 @@ function CheckinRoute() {
         })
       }}
     />
+    </>
   )
 }

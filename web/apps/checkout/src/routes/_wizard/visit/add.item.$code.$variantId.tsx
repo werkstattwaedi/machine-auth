@@ -8,6 +8,7 @@ import { useDb } from "@modules/lib/firebase-context"
 import { limit, where } from "firebase/firestore"
 import { MaterialPicker } from "@/components/usage/material-picker"
 import { useWizardContext } from "@/components/checkout/wizard-context"
+import { useBounceIfNoCheckout } from "@/components/checkout/use-bounce-if-no-checkout"
 import { PageLoading } from "@modules/components/page-loading"
 import { EmptyState } from "@modules/components/empty-state"
 import { AlertTriangle } from "lucide-react"
@@ -20,6 +21,7 @@ export const Route = createFileRoute(
 })
 
 function AddItemVariantRoute() {
+  useBounceIfNoCheckout()
   const db = useDb()
   const { code, variantId } = Route.useParams()
   const navigate = useNavigate()
