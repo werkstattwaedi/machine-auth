@@ -146,7 +146,7 @@ function WizardChrome({
   userId?: string
 }) {
   const { pathname } = useLocation()
-  const { openCheckout, pendingCheckout } = useWizardContext()
+  const { openCheckout, pendingCheckout, paymentData } = useWizardContext()
   const currentStep = stepForPathname(pathname)
 
   const gateableRoute =
@@ -156,7 +156,15 @@ function WizardChrome({
   // pendingCheckout is true between /checkin's "Weiter" creating a
   // fresh doc and the onSnapshot listener surfacing it — without this
   // check /visit would briefly flash the no-checkout gate.
-  const showGate = gateableRoute && !openCheckout && !pendingCheckout
+  //
+  // /payment's transition closes the checkout (status flips open →
+  // closed, so it falls out of the open-checkout query). paymentData
+  // is the post-submit handoff — when set on /payment, the user is
+  // legitimately on the payment screen and must not be gated.
+  const justSubmittedPayment =
+    pathname.startsWith("/payment") && !!paymentData
+  const showGate =
+    gateableRoute && !openCheckout && !pendingCheckout && !justSubmittedPayment
 
   return (
     <div className="min-h-screen flex flex-col items-center bg-background">

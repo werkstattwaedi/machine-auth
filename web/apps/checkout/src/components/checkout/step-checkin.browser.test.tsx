@@ -402,12 +402,10 @@ describe("Family-roster quick-add (#209)", () => {
   })
 })
 
-// After the URL-routes refactor the signed-in user is rendered as a
-// compact IdentityStrip (avatar + name + Abmelden) instead of an
-// editable PersonCard. The strip has no remove affordance — the user
-// can't remove themselves via UI, only sign out. Additional persons
-// (family quick-add or manually added) still render as PersonCards
-// with the X button.
+// Pre-filled persons render as IdentityStrips. The signed-in user's
+// strip carries an Abmelden link AND — once a second person is on the
+// visit — an X to remove themselves (Mike's "I added my kid, now I
+// want to drop myself" flow). Family-added strips just get the X.
 describe("Person removal", () => {
   const preFilled: CheckoutPerson = {
     id: "p-self",
@@ -430,19 +428,42 @@ describe("Person removal", () => {
     userId: "u-lia",
   }
 
-  it("does NOT show an X button on the signed-in user's identity strip", () => {
+  it("hides the X when only one person is on the visit", () => {
+    renderCheckin({
+      isAnonymous: false,
+      isAccountLoggedIn: true,
+      personsOverride: [preFilled],
+    })
+    expect(screen.queryByRole("button", { name: /Person 1 entfernen/ })).toBeNull()
+    // Abmelden is still reachable.
+    expect(screen.getByText("Abmelden")).toBeTruthy()
+  })
+
+  it("shows X on both strips when two persons are on the visit", () => {
     renderCheckin({
       isAnonymous: false,
       isAccountLoggedIn: true,
       personsOverride: [preFilled, familyMember],
     })
-    // No "Person 1 entfernen" — that's the strip, not removable.
-    expect(screen.queryByRole("button", { name: /Person 1 entfernen/ })).toBeNull()
-    // The added family member (Person 2) keeps its X.
+    expect(screen.getByRole("button", { name: /Person 1 entfernen/ })).toBeTruthy()
     expect(screen.getByRole("button", { name: /Person 2 entfernen/ })).toBeTruthy()
   })
 
-  it("removes a family-added card when its X button is clicked", async () => {
+  it("removes the signed-in user when their strip's X is clicked", async () => {
+    const user = userEvent.setup()
+    const { dispatched } = renderCheckin({
+      isAnonymous: false,
+      isAccountLoggedIn: true,
+      personsOverride: [preFilled, familyMember],
+    })
+
+    await user.click(screen.getByRole("button", { name: /Person 1 entfernen/ }))
+
+    const action = dispatched.find((a) => a.type === "REMOVE_PERSON")
+    expect(action).toMatchObject({ type: "REMOVE_PERSON", id: "p-self" })
+  })
+
+  it("removes a family-added strip when its X button is clicked", async () => {
     const user = userEvent.setup()
     const { dispatched } = renderCheckin({
       isAnonymous: false,

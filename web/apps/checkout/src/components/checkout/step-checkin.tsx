@@ -4,9 +4,8 @@
 import { useState, useMemo, useCallback } from "react"
 import { Checkbox } from "@modules/components/ui/checkbox"
 import { Button } from "@modules/components/ui/button"
-import { Avatar } from "@modules/components/ui/avatar"
 import { PersonCard } from "./person-card"
-import { Plus, ArrowRight, LogIn, UserPlus } from "lucide-react"
+import { Plus, ArrowRight, LogIn, UserPlus, X } from "lucide-react"
 import type { CheckoutPerson, PersonsAction } from "./use-checkout-state"
 import type { UserType } from "@modules/lib/pricing"
 import { validatePerson } from "./validation"
@@ -136,18 +135,26 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
       />
 
       {persons.map((person, i) => {
-        // Logged-in primary person: render the compact identity strip
-        // (avatar + name + email + Abmelden) per the visit-flow mockup.
-        // The editable PersonCard isn't useful here — the user can edit
-        // their profile under /account/profile if they need to.
-        if (i === 0 && isAccountLoggedIn) {
+        const isSignedInUser = i === 0 && isAccountLoggedIn
+        // Pre-filled persons with a known identity (signed-in user or a
+        // family quick-add member) render as the compact identity strip
+        // — there's nothing to edit. Anonymous / kiosk first-time
+        // entries fall through to the full PersonCard form.
+        if (isSignedInUser || (person.isPreFilled && person.userId)) {
           return (
             <IdentityStrip
               key={person.id}
               person={person}
-              email={signedInEmail ?? person.email}
-              isMember={!!isMember}
-              onSignOut={onSignOut}
+              index={i}
+              email={isSignedInUser ? (signedInEmail ?? person.email) : person.email}
+              suffix={isSignedInUser && isMember ? "Vereinsmitglied" : null}
+              onSignOut={isSignedInUser ? onSignOut : undefined}
+              onRemove={
+                persons.length > 1
+                  ? () =>
+                      personsDispatch({ type: "REMOVE_PERSON", id: person.id })
+                  : undefined
+              }
             />
           )
         }
@@ -269,32 +276,43 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
 }
 
 /**
- * Compact identity strip for the signed-in user on /checkin — avatar +
- * name + (email · Vereinsmitglied) + Abmelden link. Replaces the full
- * editable PersonCard since the user can manage their own profile
- * under /account/profile. Matches the visit-flow mockup.
+ * Compact identity strip rendered for any pre-filled person on
+ * /checkin — the signed-in user themselves, and family-roster members
+ * added via the quick-add chips. There's nothing to edit in either
+ * case (the signed-in user manages their profile under
+ * /account/profile; family members are pulled from their own user
+ * docs), so we show just the name + a short subtitle + the
+ * action affordances.
+ *
+ * Action slot, right side:
+ *   - Abmelden (only for the signed-in user — signs the whole session out)
+ *   - X (only when persons.length > 1 — removes this card from the visit)
+ *
+ * Mike's "if I add my kid, I need to be able to remove myself" rule:
+ * the signed-in user's strip carries both Abmelden and X.
  */
 function IdentityStrip({
   person,
+  index,
   email,
-  isMember,
+  suffix,
   onSignOut,
+  onRemove,
 }: {
   person: CheckoutPerson
+  index: number
   email: string | null
-  isMember: boolean
-  onSignOut: () => void
+  suffix: string | null
+  onSignOut?: () => void
+  onRemove?: () => void
 }) {
   const name = `${person.firstName} ${person.lastName}`.trim() || "—"
-  const subtitleParts = [email, isMember ? "Vereinsmitglied" : null].filter(
-    Boolean,
-  ) as string[]
+  const subtitleParts = [email, suffix].filter(Boolean) as string[]
   return (
     <div
       data-testid="identity-strip"
-      className="flex items-center gap-4 rounded-md bg-muted/50 px-4 py-3 sm:px-5 sm:py-4 animate-in fade-in duration-200"
+      className="flex items-center gap-3 rounded-md bg-muted/50 px-4 py-3 sm:px-5 sm:py-4 animate-in fade-in duration-200"
     >
-      <Avatar name={name} seed={person.userId ?? person.id} size="lg" />
       <div className="min-w-0 flex-1">
         <div className="font-bold text-foreground truncate">{name}</div>
         {subtitleParts.length > 0 && (
@@ -303,13 +321,25 @@ function IdentityStrip({
           </div>
         )}
       </div>
-      <button
-        type="button"
-        onClick={onSignOut}
-        className="text-sm text-muted-foreground underline hover:text-foreground transition-colors"
-      >
-        Abmelden
-      </button>
+      {onSignOut && (
+        <button
+          type="button"
+          onClick={onSignOut}
+          className="text-sm text-muted-foreground underline hover:text-foreground transition-colors"
+        >
+          Abmelden
+        </button>
+      )}
+      {onRemove && (
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label={`Person ${index + 1} entfernen`}
+          className="inline-flex items-center justify-center h-8 w-8 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      )}
     </div>
   )
 }
