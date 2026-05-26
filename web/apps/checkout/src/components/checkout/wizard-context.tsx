@@ -1,0 +1,756 @@
+// Copyright Offene Werkstatt Wädenswil
+// SPDX-License-Identifier: MIT
+
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useRef,
+  useMemo,
+  useCallback,
+} from "react"
+import type { ReactNode } from "react"
+import { useNavigate } from "@tanstack/react-router"
+import { useAuth, type UserDoc } from "@modules/lib/auth"
+import { useTokenAuth } from "@modules/lib/token-auth"
+import { useBridge } from "@modules/lib/use-bridge"
+import { useCollection } from "@modules/lib/firestore"
+import {
+  where,
+  orderBy,
+  documentId,
+  serverTimestamp,
+  arrayUnion,
+  type DocumentReference,
+} from "firebase/firestore"
+import { httpsCallable } from "firebase/functions"
+import {
+  userRef,
+  catalogRef,
+  checkoutRef,
+  checkoutsCollection,
+  checkoutItemsCollection,
+  checkoutItemRef,
+  membershipsCollection,
+  usersCollection,
+} from "@modules/lib/firestore-helpers"
+import {
+  useDb,
+  useFunctions,
+  useFirebaseAuth,
+} from "@modules/lib/firebase-context"
+import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
+import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
+import type {
+  CatalogItem,
+  PricingConfig,
+  WorkshopId,
+  DiscountLevel,
+} from "@modules/lib/workshop-config"
+import type {
+  CheckoutDoc,
+  CheckoutPersonDoc,
+} from "@modules/lib/firestore-entities"
+import { calculateFee, type UserType, type UsageType } from "@modules/lib/pricing"
+import type { CheckoutItemLocal } from "@/components/usage/inline-rows"
+import type { PricingModel } from "@modules/lib/workshop-config"
+import {
+  usePersonsState,
+  type CheckoutPerson,
+  type PersonsAction,
+} from "./use-checkout-state"
+import type { FamilyCandidate } from "./step-checkin"
+import type { PaymentData } from "./payment-result"
+
+export interface WizardContextValue {
+  // ----- identification -----
+  isAccountLoggedIn: boolean
+  isTagIdentified: boolean
+  isAnonymous: boolean
+  identifiedUserDoc: UserDoc | null
+  identifiedUserRef: DocumentReference | null
+  // ----- query results -----
+  openCheckout: CheckoutDoc | null
+  checkoutId: string | null
+  items: CheckoutItemLocal[]
+  pricingConfig: PricingConfig
+  discountLevel: DiscountLevel
+  familyCandidates: FamilyCandidate[]
+  // ----- mutable wizard state -----
+  persons: CheckoutPerson[]
+  personsDispatch: React.Dispatch<PersonsAction>
+  usageType: UsageType
+  setUsageType: (t: UsageType) => void
+  tip: number
+  setTip: (n: number) => void
+  paymentData: PaymentData | null
+  totalPrice: number
+  // ----- search params -----
+  picc?: string
+  cmac?: string
+  kiosk: boolean
+  // ----- actions -----
+  signOut: () => Promise<void>
+  resetWizard: () => Promise<void>
+  /**
+   * Sign in anonymously if not already signed in. Used by /checkin's
+   * onAdvance so subsequent Firestore writes have a stable Firebase UID.
+   */
+  signInAnonymouslyIfNeeded: () => Promise<void>
+  /**
+   * Persist the current `persons` array to the open checkout doc, creating
+   * the doc if none exists. Called from /checkin's onAdvance.
+   */
+  persistPersons: () => Promise<void>
+  /**
+   * Close the open checkout and return payment data. Called from /checkout's
+   * submit. Sets paymentData on success; the wizard navigates to /payment.
+   */
+  submitCheckout: () => Promise<PaymentData | null>
+  submitting: boolean
+  submitError: string | null
+  // ----- item callbacks (shared with picker sub-routes) -----
+  addItem: (item: CheckoutItemLocal) => Promise<void>
+  updateItem: (id: string, item: CheckoutItemLocal) => void
+  removeItem: (id: string) => void
+  /**
+   * Resolve which workshop a catalog item is attributed to. Overlap-first
+   * against checkout.workshopsVisited, falling back to the catalog's first
+   * declared workshop.
+   */
+  resolveWorkshop: (catalog: CatalogItem | null) => WorkshopId
+}
+
+const WizardContext = createContext<WizardContextValue | null>(null)
+
+export function useWizardContext(): WizardContextValue {
+  const ctx = useContext(WizardContext)
+  if (!ctx) {
+    throw new Error(
+      "useWizardContext must be used inside a /_wizard route (or its children).",
+    )
+  }
+  return ctx
+}
+
+interface WizardProviderProps {
+  picc?: string
+  cmac?: string
+  kiosk: boolean
+  children: ReactNode
+  /** Pricing config is loaded by the layout; provider only renders once it
+   * resolves so child components don't need null-check it. */
+  pricingConfig: PricingConfig
+}
+
+export function WizardProvider({
+  picc,
+  cmac,
+  kiosk,
+  pricingConfig,
+  children,
+}: WizardProviderProps) {
+  const db = useDb()
+  const functions = useFunctions()
+  const navigate = useNavigate()
+  const auth = useFirebaseAuth()
+  const { user, userDoc, signOut, signInAnonymouslyIfNeeded } = useAuth()
+  const { tokenUser, isTagAuth, tagSignOut } = useTokenAuth(
+    picc ?? null,
+    cmac ?? null,
+  )
+  const bridge = useBridge()
+  const fsMutation = useFirestoreMutation()
+  const { add, update, remove } = fsMutation
+  const { persons, dispatch: personsDispatch } = usePersonsState()
+  const [usageType, setUsageType] = useState<UsageType>("regular")
+  const [tip, setTip] = useState(0)
+  const [paymentData, setPaymentData] = useState<PaymentData | null>(null)
+
+  // ADR-0025: route the checkout submit through useAsyncMutation so a
+  // failed callable surfaces a German error toast + inline alert.
+  const submit = useAsyncMutation<PaymentData>({
+    context: "checkout.closeAndPay",
+    errorMessage:
+      "Bezahlung konnte nicht erstellt werden. Bitte erneut versuchen.",
+  })
+
+  // Per-item-callback wrappers so failures toast + telemeter.
+  const addItemMutation = useAsyncMutation({
+    context: "wizard.addItem",
+    errorMessage: "Eintrag konnte nicht hinzugefügt werden",
+  })
+  const updateItemMutation = useAsyncMutation({
+    context: "wizard.updateItem",
+    errorMessage: "Eintrag konnte nicht aktualisiert werden",
+  })
+  const removeItemMutation = useAsyncMutation({
+    context: "wizard.removeItem",
+    errorMessage: "Eintrag konnte nicht gelöscht werden",
+  })
+
+  const isAccountLoggedIn = !!user && !!userDoc && !isTagAuth
+  const isTagIdentified = isTagAuth && !!tokenUser
+  const isAnonymous = !isAccountLoggedIn && !isTagIdentified
+  const identifiedUserDoc = isAccountLoggedIn ? userDoc : null
+  const identifiedUserRef = useMemo<DocumentReference | null>(() => {
+    if (identifiedUserDoc) return userRef(db, identifiedUserDoc.id)
+    if (isTagIdentified) return userRef(db, tokenUser!.userId)
+    return null
+  }, [db, identifiedUserDoc, isTagIdentified, tokenUser])
+
+  // Find open checkout for the current principal.
+  const anonUid = isAnonymous && user?.isAnonymous ? user.uid : null
+  const { data: openCheckouts } = useCollection(
+    identifiedUserRef
+      ? checkoutsCollection(db)
+      : anonUid
+        ? checkoutsCollection(db)
+        : null,
+    ...(identifiedUserRef
+      ? [
+          where("userId", "==", identifiedUserRef),
+          where("status", "==", "open"),
+        ]
+      : anonUid
+        ? [
+            where("userId", "==", null),
+            where("modifiedBy", "==", anonUid),
+            where("status", "==", "open"),
+          ]
+        : []),
+  )
+  const openCheckout = openCheckouts[0] ?? null
+  const checkoutId = openCheckout?.id ?? null
+
+  // Load checkout items
+  const { data: checkoutItems } = useCollection(
+    checkoutId ? checkoutItemsCollection(db, checkoutId) : null,
+    orderBy("created"),
+  )
+
+  const items: CheckoutItemLocal[] = useMemo(
+    () =>
+      checkoutItems.map((item) => ({
+        id: item.id,
+        workshop: item.workshop,
+        description: item.description,
+        origin: item.origin,
+        catalogId: item.catalogId?.id ?? null,
+        pricingModel: (item.pricingModel as PricingModel) ?? null,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        totalPrice: item.totalPrice,
+        formInputs: item.formInputs ?? undefined,
+      })),
+    [checkoutItems],
+  )
+
+  const discountLevel: DiscountLevel = identifiedUserDoc?.activeMembership
+    ? "member"
+    : "none"
+
+  // Sync usageType from open checkout
+  useEffect(() => {
+    if (openCheckout?.usageType) {
+      setUsageType(openCheckout.usageType as UsageType)
+    }
+  }, [openCheckout?.usageType])
+
+  // Pre-fill primary person for logged-in users
+  usePreFillPerson(identifiedUserDoc, personsDispatch, persons)
+
+  // Pre-fill primary person for tag-identified users
+  useEffect(() => {
+    if (!tokenUser || isAccountLoggedIn) return
+    const primary = persons[0]
+    if (!primary || primary.isPreFilled) return
+    personsDispatch({
+      type: "UPDATE_PERSON",
+      id: primary.id,
+      updates: {
+        firstName: tokenUser.firstName ?? "",
+        lastName: tokenUser.lastName ?? "",
+        email: tokenUser.email ?? "",
+        userType: (tokenUser.userType as UserType) ?? "erwachsen",
+        isPreFilled: true,
+        termsAccepted: true,
+      },
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tokenUser?.userId])
+
+  // Family-roster quick-add (issue #209).
+  const selfUserId = identifiedUserDoc?.id ?? null
+  const selfRef = selfUserId ? userRef(db, selfUserId) : null
+  const { data: familyMemberships } = useCollection(
+    selfRef ? membershipsCollection(db) : null,
+    ...(selfRef
+      ? [
+          where("members", "array-contains", selfRef),
+          where("type", "==", "family"),
+          where("status", "==", "active"),
+        ]
+      : []),
+  )
+  const familyMembership = familyMemberships[0] ?? null
+  const otherMemberIds = useMemo(() => {
+    if (!familyMembership || !selfUserId) return [] as string[]
+    const ids = familyMembership.members
+      .map((m) => m.id)
+      .filter((id) => id !== selfUserId)
+    return ids.slice(0, 30)
+  }, [familyMembership, selfUserId])
+  const { data: familyMemberDocs } = useCollection(
+    otherMemberIds.length > 0 ? usersCollection(db) : null,
+    where(
+      documentId(),
+      "in",
+      otherMemberIds.length > 0 ? otherMemberIds : [""],
+    ),
+  )
+  const claimedUserIds = useMemo(
+    () => new Set(persons.map((p) => p.userId).filter(Boolean) as string[]),
+    [persons],
+  )
+  const familyCandidates: FamilyCandidate[] = useMemo(() => {
+    const candidates = familyMemberDocs
+      .filter((m) => !claimedUserIds.has(m.id))
+      .map((m) => ({
+        userId: m.id,
+        firstName: m.firstName,
+        lastName: m.lastName,
+        email: m.email ?? "",
+        userType: (m.userType as UserType) ?? "erwachsen",
+      }))
+    if (
+      identifiedUserDoc &&
+      familyMembership &&
+      !claimedUserIds.has(identifiedUserDoc.id)
+    ) {
+      candidates.unshift({
+        userId: identifiedUserDoc.id,
+        firstName: identifiedUserDoc.firstName,
+        lastName: identifiedUserDoc.lastName,
+        email: identifiedUserDoc.email ?? "",
+        userType: (identifiedUserDoc.userType as UserType) ?? "erwachsen",
+      })
+    }
+    return candidates
+  }, [familyMemberDocs, claimedUserIds, identifiedUserDoc, familyMembership])
+
+  // Rehydrate persons from open Firestore checkout doc (issue #246).
+  const rehydratedRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!openCheckout) {
+      rehydratedRef.current = null
+      return
+    }
+    if (rehydratedRef.current === openCheckout.id) return
+    if (!openCheckout.persons || openCheckout.persons.length === 0) {
+      rehydratedRef.current = openCheckout.id
+      return
+    }
+    const rehydrated = openCheckout.persons.map((p) => personDocToLocal(p))
+    personsDispatch({ type: "REPLACE_PERSONS", persons: rehydrated })
+    rehydratedRef.current = openCheckout.id
+  }, [openCheckout, personsDispatch])
+
+  // Persist the current persons array to the open checkout doc.
+  const persistPersons = useCallback(async () => {
+    const personDocs = persons.map((p) => personLocalToDoc(p, db))
+    try {
+      if (openCheckout) {
+        await fsMutation.update(checkoutRef(db, openCheckout.id), {
+          persons: personDocs,
+        })
+      } else {
+        const callerUid = auth?.currentUser?.uid ?? null
+        await fsMutation.add(checkoutsCollection(db), {
+          userId: identifiedUserRef ?? null,
+          status: "open",
+          usageType,
+          created: serverTimestamp() as unknown as CheckoutDoc["created"],
+          workshopsVisited: [],
+          persons: personDocs,
+          modifiedBy: callerUid,
+          modifiedAt: serverTimestamp() as unknown as CheckoutDoc["modifiedAt"],
+          firebaseUid: callerUid,
+        } as unknown as CheckoutDoc)
+      }
+    } catch {
+      // Hook already toasted + telemetered.
+    }
+  }, [persons, usageType, openCheckout, fsMutation, db, identifiedUserRef, auth])
+
+  // Workshop attribution policy for non-workshop picker scopes.
+  const visitedWorkshopSet = useMemo(() => {
+    const s = new Set<WorkshopId>()
+    if (openCheckout?.workshopsVisited) {
+      for (const ws of openCheckout.workshopsVisited) s.add(ws as WorkshopId)
+    }
+    return s
+  }, [openCheckout?.workshopsVisited])
+  const resolveWorkshop = useCallback(
+    (catalog: CatalogItem | null): WorkshopId => {
+      if (!catalog || catalog.workshops.length === 0) {
+        const first = Object.keys(pricingConfig.workshops)[0]
+        return (first ?? "makerspace") as WorkshopId
+      }
+      const overlap = catalog.workshops.find((w) =>
+        visitedWorkshopSet.has(w as WorkshopId),
+      )
+      return (overlap ?? catalog.workshops[0]) as WorkshopId
+    },
+    [pricingConfig.workshops, visitedWorkshopSet],
+  )
+
+  // Item callbacks (shared with picker sub-routes).
+  const workshopsVisitedKey = openCheckout?.workshopsVisited?.join(",") ?? ""
+  const addItem = useCallback(
+    async (item: CheckoutItemLocal) => {
+      try {
+        await addItemMutation.mutate(async () => {
+          let coId = checkoutId
+          const visited = openCheckout?.workshopsVisited ?? []
+          const workshopIsNew = !visited.includes(item.workshop)
+          const callerUid = auth?.currentUser?.uid ?? null
+          if (!coId) {
+            const coRef = await add(checkoutsCollection(db), {
+              userId: identifiedUserRef ?? null,
+              status: "open",
+              usageType,
+              created: serverTimestamp(),
+              workshopsVisited: [item.workshop],
+              persons: persons.map((p) => personLocalToDoc(p, db)),
+              modifiedBy: callerUid,
+              modifiedAt: serverTimestamp(),
+              firebaseUid: callerUid,
+            })
+            coId = coRef.id
+          } else if (workshopIsNew) {
+            await update(checkoutRef(db, coId), {
+              workshopsVisited: arrayUnion(item.workshop),
+            })
+          }
+          await add(checkoutItemsCollection(db, coId), {
+            workshop: item.workshop,
+            description: item.description,
+            origin: item.origin,
+            catalogId: item.catalogId ? catalogRef(db, item.catalogId) : null,
+            pricingModel: item.pricingModel ?? null,
+            created: serverTimestamp(),
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            totalPrice: item.totalPrice,
+            formInputs: item.formInputs ?? null,
+          })
+        })
+      } catch {
+        // Hook already toasted; swallow at boundary.
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [checkoutId, identifiedUserRef, usageType, auth, workshopsVisitedKey],
+  )
+
+  const updateItem = useCallback(
+    (_id: string, item: CheckoutItemLocal) => {
+      if (!checkoutId) return
+      void updateItemMutation
+        .mutate(() =>
+          update(checkoutItemRef(db, checkoutId, item.id), {
+            description: item.description,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            totalPrice: item.totalPrice,
+            formInputs: item.formInputs ?? null,
+          }),
+        )
+        .catch(() => {})
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [checkoutId],
+  )
+
+  const removeItem = useCallback(
+    (id: string) => {
+      if (!checkoutId) return
+      void removeItemMutation
+        .mutate(() => remove(checkoutItemRef(db, checkoutId, id)))
+        .catch(() => {})
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [checkoutId],
+  )
+
+  // Reset wizard: clear local state, sign out tag/anon, navigate to /checkin.
+  const resetWizard = useCallback(async () => {
+    personsDispatch({ type: "RESET" })
+    setUsageType("regular")
+    setTip(0)
+    setPaymentData(null)
+    await tagSignOut()
+    try {
+      await bridge.resetSession()
+    } catch (err) {
+      console.error("Failed to reset bridge session:", err)
+    }
+    navigate({ to: "/checkin", search: kiosk ? { kiosk: "" } : {} })
+  }, [personsDispatch, tagSignOut, bridge, navigate, kiosk])
+
+  // Submit: close checkout, get payment data. Used by /checkout's commit.
+  const totalPriceRef = useRef(0)
+  const submitCheckout = useCallback(async (): Promise<PaymentData | null> => {
+    // Compute summary locally (server re-computes authoritatively).
+    const personFees =
+      usageType === "intern"
+        ? 0
+        : persons.reduce(
+            (sum, p) =>
+              sum + (calculateFee(p.userType, usageType, pricingConfig) ?? 0),
+            0,
+          )
+    const machineCost =
+      usageType === "intern"
+        ? 0
+        : items
+            .filter((i) => i.origin === "nfc")
+            .reduce((s, i) => s + i.totalPrice, 0)
+    const materialCost =
+      usageType === "intern"
+        ? 0
+        : items
+            .filter((i) => i.origin !== "nfc")
+            .reduce((s, i) => s + i.totalPrice, 0)
+    const total = personFees + machineCost + materialCost + tip
+    totalPriceRef.current = total
+
+    const personsPayload = persons.map((p) => ({
+      name: `${p.firstName} ${p.lastName}`,
+      email: p.email,
+      userType: p.userType,
+      ...(p.billingCompany
+        ? {
+            billingAddress: {
+              company: p.billingCompany,
+              street: p.billingStreet ?? "",
+              zip: p.billingZip ?? "",
+              city: p.billingCity ?? "",
+            },
+          }
+        : {}),
+    }))
+
+    const summary = {
+      totalPrice: total,
+      entryFees: personFees,
+      machineCost,
+      materialCost,
+      tip,
+    }
+
+    const closeCheckoutAndGetPayment = httpsCallable<
+      {
+        checkoutId?: string
+        newCheckout?: {
+          userId: string | null
+          workshopsVisited: string[]
+          items: {
+            workshop: string
+            description: string
+            origin: string
+            catalogId: string | null
+            quantity: number
+            unitPrice: number
+            totalPrice: number
+            formInputs?: { quantity: number; unit: string }[]
+            pricingModel?: string | null
+          }[]
+        }
+        usageType: string
+        persons: typeof personsPayload
+        summary: typeof summary
+      },
+      PaymentData
+    >(functions, "closeCheckoutAndGetPayment")
+
+    try {
+      let data: PaymentData
+      if (checkoutId) {
+        data = await submit.mutate(async () => {
+          const res = await closeCheckoutAndGetPayment({
+            checkoutId,
+            usageType,
+            persons: personsPayload,
+            summary,
+          })
+          return res.data
+        })
+      } else {
+        const newCheckout = {
+          userId: identifiedUserRef?.id ?? null,
+          workshopsVisited: [...new Set(items.map((i) => i.workshop))],
+          items: items.map((item) => ({
+            workshop: item.workshop,
+            description: item.description,
+            origin: item.origin,
+            catalogId: item.catalogId,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            totalPrice: item.totalPrice,
+            ...(item.formInputs ? { formInputs: item.formInputs } : {}),
+            ...(item.pricingModel ? { pricingModel: item.pricingModel } : {}),
+          })),
+        }
+        data = await submit.mutate(async () => {
+          const res = await closeCheckoutAndGetPayment({
+            newCheckout,
+            usageType,
+            persons: personsPayload,
+            summary,
+          })
+          return res.data
+        })
+      }
+      setPaymentData(data)
+      return data
+    } catch {
+      // Hook already toasted + telemetered.
+      return null
+    }
+  }, [
+    checkoutId,
+    identifiedUserRef,
+    items,
+    persons,
+    pricingConfig,
+    tip,
+    usageType,
+    functions,
+    submit,
+  ])
+
+  const value: WizardContextValue = {
+    isAccountLoggedIn,
+    isTagIdentified,
+    isAnonymous,
+    identifiedUserDoc,
+    identifiedUserRef,
+    openCheckout: openCheckout ?? null,
+    checkoutId,
+    items,
+    pricingConfig,
+    discountLevel,
+    familyCandidates,
+    persons,
+    personsDispatch,
+    usageType,
+    setUsageType,
+    tip,
+    setTip,
+    paymentData,
+    totalPrice: totalPriceRef.current,
+    picc,
+    cmac,
+    kiosk,
+    signOut: async () => {
+      await signOut()
+    },
+    resetWizard,
+    signInAnonymouslyIfNeeded,
+    persistPersons,
+    submitCheckout,
+    submitting: submit.loading,
+    submitError: submit.error?.message ?? null,
+    addItem,
+    updateItem,
+    removeItem,
+    resolveWorkshop,
+  }
+
+  return <WizardContext.Provider value={value}>{children}</WizardContext.Provider>
+}
+
+/**
+ * Pre-fill the primary person card with data from an identified user doc.
+ */
+function usePreFillPerson(
+  userDoc: UserDoc | null,
+  dispatch: React.Dispatch<PersonsAction>,
+  persons: CheckoutPerson[],
+) {
+  useEffect(() => {
+    if (!userDoc) return
+    if (persons.some((p) => p.userId === userDoc.id)) return
+    const target = persons.find((p) => !p.isPreFilled && !p.userId)
+    if (!target) return
+    dispatch({
+      type: "UPDATE_PERSON",
+      id: target.id,
+      updates: {
+        firstName: userDoc.firstName,
+        lastName: userDoc.lastName,
+        email: userDoc.email ?? "",
+        userType: (userDoc.userType as UserType) ?? "erwachsen",
+        isPreFilled: true,
+        termsAccepted: !!userDoc.termsAcceptedAt,
+        userId: userDoc.id,
+        billingCompany: userDoc.billingAddress?.company ?? "",
+        billingStreet: userDoc.billingAddress?.street ?? "",
+        billingZip: userDoc.billingAddress?.zip ?? "",
+        billingCity: userDoc.billingAddress?.city ?? "",
+      },
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userDoc?.id])
+}
+
+// Person <-> Firestore doc converters (extracted from the old wizard).
+
+export function personLocalToDoc(
+  p: CheckoutPerson,
+  db: ReturnType<typeof useDb>,
+): CheckoutPersonDoc {
+  const doc: CheckoutPersonDoc = {
+    name: `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim(),
+    email: p.email ?? "",
+    userType: p.userType,
+  }
+  if (p.userId) {
+    doc.userRef = userRef(db, p.userId)
+  }
+  if (p.billingCompany) {
+    doc.billingAddress = {
+      company: p.billingCompany,
+      street: p.billingStreet ?? "",
+      zip: p.billingZip ?? "",
+      city: p.billingCity ?? "",
+    }
+  }
+  return doc
+}
+
+export function personDocToLocal(p: CheckoutPersonDoc): CheckoutPerson {
+  const name = (p.name ?? "").trim()
+  const spaceIdx = name.indexOf(" ")
+  const firstName = spaceIdx >= 0 ? name.slice(0, spaceIdx) : name
+  const lastName = spaceIdx >= 0 ? name.slice(spaceIdx + 1).trim() : ""
+  const userId = p.userRef?.id ?? null
+  return {
+    id: crypto.randomUUID(),
+    firstName,
+    lastName,
+    email: p.email ?? "",
+    userType: p.userType,
+    isPreFilled: true,
+    termsAccepted: true,
+    userId,
+    billingCompany: p.billingAddress?.company ?? "",
+    billingStreet: p.billingAddress?.street ?? "",
+    billingZip: p.billingAddress?.zip ?? "",
+    billingCity: p.billingAddress?.city ?? "",
+  }
+}
+

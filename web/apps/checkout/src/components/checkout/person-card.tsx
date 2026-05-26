@@ -7,14 +7,14 @@ import {
   type UserType,
 } from "@modules/lib/pricing"
 import { XCircle } from "lucide-react"
-import type { CheckoutPerson, CheckoutAction } from "./use-checkout-state"
+import type { CheckoutPerson, PersonsAction } from "./use-checkout-state"
 
 interface PersonCardProps {
   person: CheckoutPerson
   index: number
   isOnly: boolean
   showTerms: boolean
-  dispatch: React.Dispatch<CheckoutAction>
+  dispatch: React.Dispatch<PersonsAction>
   errors?: Record<string, string>
   touched?: Record<string, boolean>
   submitted?: boolean

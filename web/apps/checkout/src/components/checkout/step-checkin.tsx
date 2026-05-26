@@ -6,7 +6,7 @@ import { Checkbox } from "@modules/components/ui/checkbox"
 import { Button } from "@modules/components/ui/button"
 import { PersonCard } from "./person-card"
 import { Plus, ArrowRight, LogIn, UserPlus } from "lucide-react"
-import type { CheckoutState, CheckoutAction } from "./use-checkout-state"
+import type { CheckoutPerson, PersonsAction } from "./use-checkout-state"
 import type { UserType } from "@modules/lib/pricing"
 import { validatePerson } from "./validation"
 
@@ -24,17 +24,19 @@ export interface FamilyCandidate {
 }
 
 interface StepCheckinProps {
-  state: CheckoutState
-  dispatch: React.Dispatch<CheckoutAction>
+  persons: CheckoutPerson[]
+  personsDispatch: React.Dispatch<PersonsAction>
   isAnonymous: boolean
   kiosk: boolean
   isAccountLoggedIn: boolean
   onSignOut: () => void
   /**
-   * Called when the user advances past step 1 with a valid form. For the
+   * Called when the user advances past /checkin with a valid form. For the
    * truly-anonymous flow this signs the visitor into Firebase Anonymous
-   * Auth so step 2 can write items to a Firestore subcollection (issue
-   * #151). A no-op for already-identified users (real login or tag-tap).
+   * Auth so /visit can write items to a Firestore subcollection (issue
+   * #151), persists persons to the open checkout doc (#246), and then
+   * navigates to /visit. A no-op identity-side for already-identified
+   * users (real login or tag-tap), but the route nav still happens.
    */
   onAdvance?: () => Promise<void>
   /**
@@ -45,7 +47,7 @@ interface StepCheckinProps {
   familyCandidates?: FamilyCandidate[]
 }
 
-export function StepCheckin({ state, dispatch, isAnonymous, kiosk, isAccountLoggedIn, onSignOut, onAdvance, familyCandidates }: StepCheckinProps) {
+export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAccountLoggedIn, onSignOut, onAdvance, familyCandidates }: StepCheckinProps) {
   // touched: personId → field → true
   const [touched, setTouched] = useState<Record<string, Record<string, boolean>>>({})
   const [submitted, setSubmitted] = useState(false)
@@ -63,21 +65,21 @@ export function StepCheckin({ state, dispatch, isAnonymous, kiosk, isAccountLogg
   const allErrors = useMemo(
     () =>
       Object.fromEntries(
-        state.persons.map((p, i) => [p.id, validatePerson(p, isAnonymous, i === 0)]),
+        persons.map((p, i) => [p.id, validatePerson(p, isAnonymous, i === 0)]),
       ),
-    [state.persons, isAnonymous],
+    [persons, isAnonymous],
   )
 
   const allValid = useMemo(
-    () => state.persons.every((p) => Object.keys(allErrors[p.id] ?? {}).length === 0),
-    [state.persons, allErrors],
+    () => persons.every((p) => Object.keys(allErrors[p.id] ?? {}).length === 0),
+    [persons, allErrors],
   )
 
   const termsError = useMemo(() => {
     if (!isAnonymous) return null
-    const person = state.persons.find((p) => !p.isPreFilled && allErrors[p.id]?.termsAccepted)
+    const person = persons.find((p) => !p.isPreFilled && allErrors[p.id]?.termsAccepted)
     return person ? allErrors[person.id].termsAccepted : null
-  }, [state.persons, allErrors, isAnonymous])
+  }, [persons, allErrors, isAnonymous])
 
   const handleWeiter = async () => {
     setSubmitted(true)
@@ -85,12 +87,10 @@ export function StepCheckin({ state, dispatch, isAnonymous, kiosk, isAccountLogg
     if (advancing) return
     setAdvancing(true)
     try {
-      // Eagerly sign in anonymously here (issue #151) so step 2 can write
+      // Eagerly sign in anonymously here (issue #151) so /visit can write
       // checkout items straight to Firestore — same code path as the
-      // authenticated flow. If sign-in fails we keep the user on step 0
-      // rather than advancing into a broken step 2.
+      // authenticated flow. `onAdvance` also handles the nav to /visit.
       if (onAdvance) await onAdvance()
-      dispatch({ type: "SET_STEP", step: 1 })
     } finally {
       setAdvancing(false)
     }
@@ -98,12 +98,12 @@ export function StepCheckin({ state, dispatch, isAnonymous, kiosk, isAccountLogg
 
   const handleAddPerson = () => {
     setSubmitted(false)
-    dispatch({ type: "ADD_PERSON" })
+    personsDispatch({ type: "ADD_PERSON" })
   }
 
   const handleAddFamilyPerson = (candidate: FamilyCandidate) => {
     setSubmitted(false)
-    dispatch({
+    personsDispatch({
       type: "ADD_FAMILY_PERSON",
       person: {
         userId: candidate.userId,
@@ -127,14 +127,14 @@ export function StepCheckin({ state, dispatch, isAnonymous, kiosk, isAccountLogg
         isTagIdentified={!isAnonymous && !isAccountLoggedIn}
       />
 
-      {state.persons.map((person, i) => (
+      {persons.map((person, i) => (
         <PersonCard
           key={person.id}
           person={person}
           index={i}
-          isOnly={state.persons.length === 1}
+          isOnly={persons.length === 1}
           showTerms={false}
-          dispatch={dispatch}
+          dispatch={personsDispatch}
           errors={allErrors[person.id]}
           touched={touched[person.id]}
           submitted={submitted}
@@ -190,11 +190,11 @@ export function StepCheckin({ state, dispatch, isAnonymous, kiosk, isAccountLogg
                 <Checkbox
                   id="terms-accept"
                   className="bg-white"
-                  checked={state.persons.every((p) => p.termsAccepted || p.isPreFilled)}
+                  checked={persons.every((p) => p.termsAccepted || p.isPreFilled)}
                   onCheckedChange={(checked) => {
-                    state.persons.forEach((p) => {
+                    persons.forEach((p) => {
                       if (!p.isPreFilled) {
-                        dispatch({
+                        personsDispatch({
                           type: "UPDATE_PERSON",
                           id: p.id,
                           updates: { termsAccepted: checked === true },

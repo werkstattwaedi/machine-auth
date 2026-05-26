@@ -20,7 +20,7 @@ import {
   Wrench,
 } from "lucide-react"
 import { cn } from "@modules/lib/utils"
-import type { CheckoutState, CheckoutAction } from "./use-checkout-state"
+import type { CheckoutPerson } from "./use-checkout-state"
 import type { CheckoutItemLocal } from "@/components/usage/inline-rows"
 import { PositionTable, rowFromItem } from "@/components/usage/position-table"
 import type { UsageType } from "@modules/lib/pricing"
@@ -161,9 +161,13 @@ export function roundUpOptionLabel(
 }
 
 interface StepCheckoutProps {
-  state: CheckoutState
-  dispatch: React.Dispatch<CheckoutAction>
+  persons: CheckoutPerson[]
+  usageType: UsageType
+  setUsageType: (t: UsageType) => void
+  tip: number
+  setTip: (n: number) => void
   onSubmit: () => Promise<void>
+  onBack: () => void
   submitting: boolean
   /** Inline alert after a failed submit (ADR-0025). */
   submitError?: string | null
@@ -215,17 +219,21 @@ export function computeCheckoutCosts({
 }
 
 export function StepCheckout({
-  state,
-  dispatch,
+  persons,
+  usageType,
+  setUsageType,
+  tip,
+  setTip,
   onSubmit,
+  onBack,
   submitting,
   submitError,
   items,
   config,
 }: StepCheckoutProps) {
   const { personFees, machineCost, materialCost } = computeCheckoutCosts({
-    persons: state.persons,
-    usageType: state.usageType,
+    persons,
+    usageType,
     items,
     config,
   })
@@ -263,9 +271,9 @@ export function StepCheckout({
       const round = enabled && target != null
         ? Math.max(0, +(target - base).toFixed(2))
         : 0
-      dispatch({ type: "SET_TIP", amount: manual + round })
+      setTip(Math.max(0, manual + round))
     },
-    [subtotal, dispatch],
+    [subtotal, setTip],
   )
 
   const handleManualTipChange = (value: number) => {
@@ -295,32 +303,26 @@ export function StepCheckout({
   // uncheck it"); re-pick the auto target when the previously-chosen one
   // dropped out of the offered set. The manual tip portion is preserved —
   // that was entered intentionally and should not be reset.
-  const dispatchedTip = state.tip
   useEffect(() => {
     if (roundOpts.length === 0) {
       if (roundUpEnabled) setRoundUpEnabled(false)
-      // Drop any lingering round-up from the dispatched tip without
-      // disturbing the manual portion.
-      if (dispatchedTip !== manualTip) {
-        dispatch({ type: "SET_TIP", amount: manualTip })
+      if (tip !== manualTip) {
+        setTip(Math.max(0, manualTip))
       }
       return
     }
     if (!roundUpEnabled) return
-    // Options exist + round-up enabled: ensure the dispatched amount
-    // matches the currently-displayed tip (manualTip + effectiveRoundUp
-    // recomputed against the new base/target).
     const expected = +(manualTip + effectiveRoundUp).toFixed(2)
-    if (Math.abs(dispatchedTip - expected) > 0.001) {
-      dispatch({ type: "SET_TIP", amount: expected })
+    if (Math.abs(tip - expected) > 0.001) {
+      setTip(Math.max(0, expected))
     }
   }, [
     roundOpts,
     roundUpEnabled,
     manualTip,
     effectiveRoundUp,
-    dispatchedTip,
-    dispatch,
+    tip,
+    setTip,
   ])
 
   const [openSections, setOpenSections] = useState<Set<string>>(new Set())
@@ -358,9 +360,9 @@ export function StepCheckout({
           id="nutzung"
           icon={<Coins className="h-4 w-4 text-cog-teal-dark" />}
           title="Nutzungsgebühren"
-          summary={`${state.persons.length} ${
-            state.persons.length === 1 ? "Person" : "Personen"
-          } · ${USAGE_TYPE_LABELS[state.usageType]}`}
+          summary={`${persons.length} ${
+            persons.length === 1 ? "Person" : "Personen"
+          } · ${USAGE_TYPE_LABELS[usageType]}`}
           amount={personFees}
           open={openSections.has("nutzung")}
           onToggle={() => toggle("nutzung")}
@@ -373,13 +375,8 @@ export function StepCheckout({
           </Label>
           <select
             id="usage-type"
-            value={state.usageType}
-            onChange={(e) =>
-              dispatch({
-                type: "SET_USAGE_TYPE",
-                usageType: e.target.value as UsageType,
-              })
-            }
+            value={usageType}
+            onChange={(e) => setUsageType(e.target.value as UsageType)}
             className="mt-1.5 mb-4 h-10 w-full max-w-xs rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:border-cog-teal focus:ring-2 focus:ring-cog-teal/30"
           >
             {Object.entries(USAGE_TYPE_LABELS).map(([key, label]) => (
@@ -391,13 +388,13 @@ export function StepCheckout({
 
           <DetailLabel>Personen</DetailLabel>
           <ul className="flex flex-col mt-1">
-            {state.persons.map((p) => {
+            {persons.map((p) => {
               // Internal usage is never billed — display 0 per person to
               // match `computeCheckoutCosts` and the server.
               const fee =
-                state.usageType === "intern"
+                usageType === "intern"
                   ? 0
-                  : calculateFee(p.userType, state.usageType, config) ?? 0
+                  : calculateFee(p.userType, usageType, config) ?? 0
               return (
                 <li
                   key={p.id}
@@ -517,7 +514,7 @@ export function StepCheckout({
         <button
           type="button"
           className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-cog-teal border border-cog-teal rounded-[3px] bg-white hover:bg-cog-teal-light transition-colors"
-          onClick={() => dispatch({ type: "SET_STEP", step: 1 })}
+          onClick={onBack}
         >
           <ArrowLeft className="h-4 w-4" />
           Zurück

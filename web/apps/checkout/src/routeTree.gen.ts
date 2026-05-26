@@ -11,24 +11,28 @@
 import { Route as rootRouteImport } from "./routes/__root"
 import { Route as LoginRouteImport } from "./routes/login"
 import { Route as LinkAccountRouteImport } from "./routes/link-account"
+import { Route as WizardRouteImport } from "./routes/_wizard"
 import { Route as ReportRouteImport } from "./routes/_report"
 import { Route as AuthonlyRouteImport } from "./routes/_authonly"
 import { Route as AuthenticatedRouteImport } from "./routes/_authenticated"
 import { Route as IndexRouteImport } from "./routes/index"
 import { Route as LoginVerifyRouteImport } from "./routes/login_.verify"
+import { Route as WizardVisitRouteImport } from "./routes/_wizard/visit"
+import { Route as WizardPaymentRouteImport } from "./routes/_wizard/payment"
+import { Route as WizardCheckoutRouteImport } from "./routes/_wizard/checkout"
+import { Route as WizardCheckinRouteImport } from "./routes/_wizard/checkin"
 import { Route as ReportReportRouteImport } from "./routes/_report/report"
-import { Route as AuthenticatedVisitRouteImport } from "./routes/_authenticated/visit"
 import { Route as AuthenticatedAccountIndexRouteImport } from "./routes/_authenticated/account/index"
 import { Route as AuthonlyAccountCompleteProfileRouteImport } from "./routes/_authonly/account/complete-profile"
 import { Route as AuthenticatedAccountUsageRouteImport } from "./routes/_authenticated/account/usage"
 import { Route as AuthenticatedAccountProfileRouteImport } from "./routes/_authenticated/account/profile"
 import { Route as AuthenticatedAccountMembershipRouteImport } from "./routes/_authenticated/account/membership"
-import { Route as AuthenticatedVisitAddIndexRouteImport } from "./routes/_authenticated/visit/add.index"
-import { Route as AuthenticatedVisitAddWorkshopWorkshopIdRouteImport } from "./routes/_authenticated/visit/add.workshop.$workshopId"
-import { Route as AuthenticatedVisitAddListListIdRouteImport } from "./routes/_authenticated/visit/add.list.$listId"
+import { Route as WizardVisitAddIndexRouteImport } from "./routes/_wizard/visit/add.index"
+import { Route as WizardVisitAddWorkshopWorkshopIdRouteImport } from "./routes/_wizard/visit/add.workshop.$workshopId"
+import { Route as WizardVisitAddListListIdRouteImport } from "./routes/_wizard/visit/add.list.$listId"
 import { Route as AuthenticatedAccountInviteMembershipIdInviteIdRouteImport } from "./routes/_authenticated/account/invite/$membershipId/$inviteId"
-import { Route as AuthenticatedVisitAddItemCodeIndexRouteImport } from "./routes/_authenticated/visit/add.item.$code.index"
-import { Route as AuthenticatedVisitAddItemCodeVariantIdRouteImport } from "./routes/_authenticated/visit/add.item.$code.$variantId"
+import { Route as WizardVisitAddItemCodeIndexRouteImport } from "./routes/_wizard/visit/add.item.$code.index"
+import { Route as WizardVisitAddItemCodeVariantIdRouteImport } from "./routes/_wizard/visit/add.item.$code.$variantId"
 
 const LoginRoute = LoginRouteImport.update({
   id: "/login",
@@ -38,6 +42,10 @@ const LoginRoute = LoginRouteImport.update({
 const LinkAccountRoute = LinkAccountRouteImport.update({
   id: "/link-account",
   path: "/link-account",
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WizardRoute = WizardRouteImport.update({
+  id: "/_wizard",
   getParentRoute: () => rootRouteImport,
 } as any)
 const ReportRoute = ReportRouteImport.update({
@@ -62,15 +70,30 @@ const LoginVerifyRoute = LoginVerifyRouteImport.update({
   path: "/login/verify",
   getParentRoute: () => rootRouteImport,
 } as any)
+const WizardVisitRoute = WizardVisitRouteImport.update({
+  id: "/visit",
+  path: "/visit",
+  getParentRoute: () => WizardRoute,
+} as any)
+const WizardPaymentRoute = WizardPaymentRouteImport.update({
+  id: "/payment",
+  path: "/payment",
+  getParentRoute: () => WizardRoute,
+} as any)
+const WizardCheckoutRoute = WizardCheckoutRouteImport.update({
+  id: "/checkout",
+  path: "/checkout",
+  getParentRoute: () => WizardRoute,
+} as any)
+const WizardCheckinRoute = WizardCheckinRouteImport.update({
+  id: "/checkin",
+  path: "/checkin",
+  getParentRoute: () => WizardRoute,
+} as any)
 const ReportReportRoute = ReportReportRouteImport.update({
   id: "/report",
   path: "/report",
   getParentRoute: () => ReportRoute,
-} as any)
-const AuthenticatedVisitRoute = AuthenticatedVisitRouteImport.update({
-  id: "/visit",
-  path: "/visit",
-  getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedAccountIndexRoute =
   AuthenticatedAccountIndexRouteImport.update({
@@ -102,23 +125,22 @@ const AuthenticatedAccountMembershipRoute =
     path: "/account/membership",
     getParentRoute: () => AuthenticatedRoute,
   } as any)
-const AuthenticatedVisitAddIndexRoute =
-  AuthenticatedVisitAddIndexRouteImport.update({
-    id: "/add/",
-    path: "/add/",
-    getParentRoute: () => AuthenticatedVisitRoute,
-  } as any)
-const AuthenticatedVisitAddWorkshopWorkshopIdRoute =
-  AuthenticatedVisitAddWorkshopWorkshopIdRouteImport.update({
+const WizardVisitAddIndexRoute = WizardVisitAddIndexRouteImport.update({
+  id: "/add/",
+  path: "/add/",
+  getParentRoute: () => WizardVisitRoute,
+} as any)
+const WizardVisitAddWorkshopWorkshopIdRoute =
+  WizardVisitAddWorkshopWorkshopIdRouteImport.update({
     id: "/add/workshop/$workshopId",
     path: "/add/workshop/$workshopId",
-    getParentRoute: () => AuthenticatedVisitRoute,
+    getParentRoute: () => WizardVisitRoute,
   } as any)
-const AuthenticatedVisitAddListListIdRoute =
-  AuthenticatedVisitAddListListIdRouteImport.update({
+const WizardVisitAddListListIdRoute =
+  WizardVisitAddListListIdRouteImport.update({
     id: "/add/list/$listId",
     path: "/add/list/$listId",
-    getParentRoute: () => AuthenticatedVisitRoute,
+    getParentRoute: () => WizardVisitRoute,
   } as any)
 const AuthenticatedAccountInviteMembershipIdInviteIdRoute =
   AuthenticatedAccountInviteMembershipIdInviteIdRouteImport.update({
@@ -126,56 +148,62 @@ const AuthenticatedAccountInviteMembershipIdInviteIdRoute =
     path: "/account/invite/$membershipId/$inviteId",
     getParentRoute: () => AuthenticatedRoute,
   } as any)
-const AuthenticatedVisitAddItemCodeIndexRoute =
-  AuthenticatedVisitAddItemCodeIndexRouteImport.update({
+const WizardVisitAddItemCodeIndexRoute =
+  WizardVisitAddItemCodeIndexRouteImport.update({
     id: "/add/item/$code/",
     path: "/add/item/$code/",
-    getParentRoute: () => AuthenticatedVisitRoute,
+    getParentRoute: () => WizardVisitRoute,
   } as any)
-const AuthenticatedVisitAddItemCodeVariantIdRoute =
-  AuthenticatedVisitAddItemCodeVariantIdRouteImport.update({
+const WizardVisitAddItemCodeVariantIdRoute =
+  WizardVisitAddItemCodeVariantIdRouteImport.update({
     id: "/add/item/$code/$variantId",
     path: "/add/item/$code/$variantId",
-    getParentRoute: () => AuthenticatedVisitRoute,
+    getParentRoute: () => WizardVisitRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
   "/": typeof IndexRoute
   "/link-account": typeof LinkAccountRoute
   "/login": typeof LoginRoute
-  "/visit": typeof AuthenticatedVisitRouteWithChildren
   "/report": typeof ReportReportRoute
+  "/checkin": typeof WizardCheckinRoute
+  "/checkout": typeof WizardCheckoutRoute
+  "/payment": typeof WizardPaymentRoute
+  "/visit": typeof WizardVisitRouteWithChildren
   "/login/verify": typeof LoginVerifyRoute
   "/account/membership": typeof AuthenticatedAccountMembershipRoute
   "/account/profile": typeof AuthenticatedAccountProfileRoute
   "/account/usage": typeof AuthenticatedAccountUsageRoute
   "/account/complete-profile": typeof AuthonlyAccountCompleteProfileRoute
   "/account/": typeof AuthenticatedAccountIndexRoute
-  "/visit/add/": typeof AuthenticatedVisitAddIndexRoute
+  "/visit/add/": typeof WizardVisitAddIndexRoute
   "/account/invite/$membershipId/$inviteId": typeof AuthenticatedAccountInviteMembershipIdInviteIdRoute
-  "/visit/add/list/$listId": typeof AuthenticatedVisitAddListListIdRoute
-  "/visit/add/workshop/$workshopId": typeof AuthenticatedVisitAddWorkshopWorkshopIdRoute
-  "/visit/add/item/$code/$variantId": typeof AuthenticatedVisitAddItemCodeVariantIdRoute
-  "/visit/add/item/$code/": typeof AuthenticatedVisitAddItemCodeIndexRoute
+  "/visit/add/list/$listId": typeof WizardVisitAddListListIdRoute
+  "/visit/add/workshop/$workshopId": typeof WizardVisitAddWorkshopWorkshopIdRoute
+  "/visit/add/item/$code/$variantId": typeof WizardVisitAddItemCodeVariantIdRoute
+  "/visit/add/item/$code/": typeof WizardVisitAddItemCodeIndexRoute
 }
 export interface FileRoutesByTo {
   "/": typeof IndexRoute
   "/link-account": typeof LinkAccountRoute
   "/login": typeof LoginRoute
-  "/visit": typeof AuthenticatedVisitRouteWithChildren
   "/report": typeof ReportReportRoute
+  "/checkin": typeof WizardCheckinRoute
+  "/checkout": typeof WizardCheckoutRoute
+  "/payment": typeof WizardPaymentRoute
+  "/visit": typeof WizardVisitRouteWithChildren
   "/login/verify": typeof LoginVerifyRoute
   "/account/membership": typeof AuthenticatedAccountMembershipRoute
   "/account/profile": typeof AuthenticatedAccountProfileRoute
   "/account/usage": typeof AuthenticatedAccountUsageRoute
   "/account/complete-profile": typeof AuthonlyAccountCompleteProfileRoute
   "/account": typeof AuthenticatedAccountIndexRoute
-  "/visit/add": typeof AuthenticatedVisitAddIndexRoute
+  "/visit/add": typeof WizardVisitAddIndexRoute
   "/account/invite/$membershipId/$inviteId": typeof AuthenticatedAccountInviteMembershipIdInviteIdRoute
-  "/visit/add/list/$listId": typeof AuthenticatedVisitAddListListIdRoute
-  "/visit/add/workshop/$workshopId": typeof AuthenticatedVisitAddWorkshopWorkshopIdRoute
-  "/visit/add/item/$code/$variantId": typeof AuthenticatedVisitAddItemCodeVariantIdRoute
-  "/visit/add/item/$code": typeof AuthenticatedVisitAddItemCodeIndexRoute
+  "/visit/add/list/$listId": typeof WizardVisitAddListListIdRoute
+  "/visit/add/workshop/$workshopId": typeof WizardVisitAddWorkshopWorkshopIdRoute
+  "/visit/add/item/$code/$variantId": typeof WizardVisitAddItemCodeVariantIdRoute
+  "/visit/add/item/$code": typeof WizardVisitAddItemCodeIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -183,22 +211,26 @@ export interface FileRoutesById {
   "/_authenticated": typeof AuthenticatedRouteWithChildren
   "/_authonly": typeof AuthonlyRouteWithChildren
   "/_report": typeof ReportRouteWithChildren
+  "/_wizard": typeof WizardRouteWithChildren
   "/link-account": typeof LinkAccountRoute
   "/login": typeof LoginRoute
-  "/_authenticated/visit": typeof AuthenticatedVisitRouteWithChildren
   "/_report/report": typeof ReportReportRoute
+  "/_wizard/checkin": typeof WizardCheckinRoute
+  "/_wizard/checkout": typeof WizardCheckoutRoute
+  "/_wizard/payment": typeof WizardPaymentRoute
+  "/_wizard/visit": typeof WizardVisitRouteWithChildren
   "/login_/verify": typeof LoginVerifyRoute
   "/_authenticated/account/membership": typeof AuthenticatedAccountMembershipRoute
   "/_authenticated/account/profile": typeof AuthenticatedAccountProfileRoute
   "/_authenticated/account/usage": typeof AuthenticatedAccountUsageRoute
   "/_authonly/account/complete-profile": typeof AuthonlyAccountCompleteProfileRoute
   "/_authenticated/account/": typeof AuthenticatedAccountIndexRoute
-  "/_authenticated/visit/add/": typeof AuthenticatedVisitAddIndexRoute
+  "/_wizard/visit/add/": typeof WizardVisitAddIndexRoute
   "/_authenticated/account/invite/$membershipId/$inviteId": typeof AuthenticatedAccountInviteMembershipIdInviteIdRoute
-  "/_authenticated/visit/add/list/$listId": typeof AuthenticatedVisitAddListListIdRoute
-  "/_authenticated/visit/add/workshop/$workshopId": typeof AuthenticatedVisitAddWorkshopWorkshopIdRoute
-  "/_authenticated/visit/add/item/$code/$variantId": typeof AuthenticatedVisitAddItemCodeVariantIdRoute
-  "/_authenticated/visit/add/item/$code/": typeof AuthenticatedVisitAddItemCodeIndexRoute
+  "/_wizard/visit/add/list/$listId": typeof WizardVisitAddListListIdRoute
+  "/_wizard/visit/add/workshop/$workshopId": typeof WizardVisitAddWorkshopWorkshopIdRoute
+  "/_wizard/visit/add/item/$code/$variantId": typeof WizardVisitAddItemCodeVariantIdRoute
+  "/_wizard/visit/add/item/$code/": typeof WizardVisitAddItemCodeIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -206,8 +238,11 @@ export interface FileRouteTypes {
     | "/"
     | "/link-account"
     | "/login"
-    | "/visit"
     | "/report"
+    | "/checkin"
+    | "/checkout"
+    | "/payment"
+    | "/visit"
     | "/login/verify"
     | "/account/membership"
     | "/account/profile"
@@ -225,8 +260,11 @@ export interface FileRouteTypes {
     | "/"
     | "/link-account"
     | "/login"
-    | "/visit"
     | "/report"
+    | "/checkin"
+    | "/checkout"
+    | "/payment"
+    | "/visit"
     | "/login/verify"
     | "/account/membership"
     | "/account/profile"
@@ -245,22 +283,26 @@ export interface FileRouteTypes {
     | "/_authenticated"
     | "/_authonly"
     | "/_report"
+    | "/_wizard"
     | "/link-account"
     | "/login"
-    | "/_authenticated/visit"
     | "/_report/report"
+    | "/_wizard/checkin"
+    | "/_wizard/checkout"
+    | "/_wizard/payment"
+    | "/_wizard/visit"
     | "/login_/verify"
     | "/_authenticated/account/membership"
     | "/_authenticated/account/profile"
     | "/_authenticated/account/usage"
     | "/_authonly/account/complete-profile"
     | "/_authenticated/account/"
-    | "/_authenticated/visit/add/"
+    | "/_wizard/visit/add/"
     | "/_authenticated/account/invite/$membershipId/$inviteId"
-    | "/_authenticated/visit/add/list/$listId"
-    | "/_authenticated/visit/add/workshop/$workshopId"
-    | "/_authenticated/visit/add/item/$code/$variantId"
-    | "/_authenticated/visit/add/item/$code/"
+    | "/_wizard/visit/add/list/$listId"
+    | "/_wizard/visit/add/workshop/$workshopId"
+    | "/_wizard/visit/add/item/$code/$variantId"
+    | "/_wizard/visit/add/item/$code/"
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -268,6 +310,7 @@ export interface RootRouteChildren {
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   AuthonlyRoute: typeof AuthonlyRouteWithChildren
   ReportRoute: typeof ReportRouteWithChildren
+  WizardRoute: typeof WizardRouteWithChildren
   LinkAccountRoute: typeof LinkAccountRoute
   LoginRoute: typeof LoginRoute
   LoginVerifyRoute: typeof LoginVerifyRoute
@@ -287,6 +330,13 @@ declare module "@tanstack/react-router" {
       path: "/link-account"
       fullPath: "/link-account"
       preLoaderRoute: typeof LinkAccountRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    "/_wizard": {
+      id: "/_wizard"
+      path: ""
+      fullPath: "/"
+      preLoaderRoute: typeof WizardRouteImport
       parentRoute: typeof rootRouteImport
     }
     "/_report": {
@@ -324,19 +374,40 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof LoginVerifyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    "/_wizard/visit": {
+      id: "/_wizard/visit"
+      path: "/visit"
+      fullPath: "/visit"
+      preLoaderRoute: typeof WizardVisitRouteImport
+      parentRoute: typeof WizardRoute
+    }
+    "/_wizard/payment": {
+      id: "/_wizard/payment"
+      path: "/payment"
+      fullPath: "/payment"
+      preLoaderRoute: typeof WizardPaymentRouteImport
+      parentRoute: typeof WizardRoute
+    }
+    "/_wizard/checkout": {
+      id: "/_wizard/checkout"
+      path: "/checkout"
+      fullPath: "/checkout"
+      preLoaderRoute: typeof WizardCheckoutRouteImport
+      parentRoute: typeof WizardRoute
+    }
+    "/_wizard/checkin": {
+      id: "/_wizard/checkin"
+      path: "/checkin"
+      fullPath: "/checkin"
+      preLoaderRoute: typeof WizardCheckinRouteImport
+      parentRoute: typeof WizardRoute
+    }
     "/_report/report": {
       id: "/_report/report"
       path: "/report"
       fullPath: "/report"
       preLoaderRoute: typeof ReportReportRouteImport
       parentRoute: typeof ReportRoute
-    }
-    "/_authenticated/visit": {
-      id: "/_authenticated/visit"
-      path: "/visit"
-      fullPath: "/visit"
-      preLoaderRoute: typeof AuthenticatedVisitRouteImport
-      parentRoute: typeof AuthenticatedRoute
     }
     "/_authenticated/account/": {
       id: "/_authenticated/account/"
@@ -373,26 +444,26 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthenticatedAccountMembershipRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    "/_authenticated/visit/add/": {
-      id: "/_authenticated/visit/add/"
+    "/_wizard/visit/add/": {
+      id: "/_wizard/visit/add/"
       path: "/add"
       fullPath: "/visit/add/"
-      preLoaderRoute: typeof AuthenticatedVisitAddIndexRouteImport
-      parentRoute: typeof AuthenticatedVisitRoute
+      preLoaderRoute: typeof WizardVisitAddIndexRouteImport
+      parentRoute: typeof WizardVisitRoute
     }
-    "/_authenticated/visit/add/workshop/$workshopId": {
-      id: "/_authenticated/visit/add/workshop/$workshopId"
+    "/_wizard/visit/add/workshop/$workshopId": {
+      id: "/_wizard/visit/add/workshop/$workshopId"
       path: "/add/workshop/$workshopId"
       fullPath: "/visit/add/workshop/$workshopId"
-      preLoaderRoute: typeof AuthenticatedVisitAddWorkshopWorkshopIdRouteImport
-      parentRoute: typeof AuthenticatedVisitRoute
+      preLoaderRoute: typeof WizardVisitAddWorkshopWorkshopIdRouteImport
+      parentRoute: typeof WizardVisitRoute
     }
-    "/_authenticated/visit/add/list/$listId": {
-      id: "/_authenticated/visit/add/list/$listId"
+    "/_wizard/visit/add/list/$listId": {
+      id: "/_wizard/visit/add/list/$listId"
       path: "/add/list/$listId"
       fullPath: "/visit/add/list/$listId"
-      preLoaderRoute: typeof AuthenticatedVisitAddListListIdRouteImport
-      parentRoute: typeof AuthenticatedVisitRoute
+      preLoaderRoute: typeof WizardVisitAddListListIdRouteImport
+      parentRoute: typeof WizardVisitRoute
     }
     "/_authenticated/account/invite/$membershipId/$inviteId": {
       id: "/_authenticated/account/invite/$membershipId/$inviteId"
@@ -401,47 +472,24 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthenticatedAccountInviteMembershipIdInviteIdRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    "/_authenticated/visit/add/item/$code/": {
-      id: "/_authenticated/visit/add/item/$code/"
+    "/_wizard/visit/add/item/$code/": {
+      id: "/_wizard/visit/add/item/$code/"
       path: "/add/item/$code"
       fullPath: "/visit/add/item/$code/"
-      preLoaderRoute: typeof AuthenticatedVisitAddItemCodeIndexRouteImport
-      parentRoute: typeof AuthenticatedVisitRoute
+      preLoaderRoute: typeof WizardVisitAddItemCodeIndexRouteImport
+      parentRoute: typeof WizardVisitRoute
     }
-    "/_authenticated/visit/add/item/$code/$variantId": {
-      id: "/_authenticated/visit/add/item/$code/$variantId"
+    "/_wizard/visit/add/item/$code/$variantId": {
+      id: "/_wizard/visit/add/item/$code/$variantId"
       path: "/add/item/$code/$variantId"
       fullPath: "/visit/add/item/$code/$variantId"
-      preLoaderRoute: typeof AuthenticatedVisitAddItemCodeVariantIdRouteImport
-      parentRoute: typeof AuthenticatedVisitRoute
+      preLoaderRoute: typeof WizardVisitAddItemCodeVariantIdRouteImport
+      parentRoute: typeof WizardVisitRoute
     }
   }
 }
 
-interface AuthenticatedVisitRouteChildren {
-  AuthenticatedVisitAddIndexRoute: typeof AuthenticatedVisitAddIndexRoute
-  AuthenticatedVisitAddListListIdRoute: typeof AuthenticatedVisitAddListListIdRoute
-  AuthenticatedVisitAddWorkshopWorkshopIdRoute: typeof AuthenticatedVisitAddWorkshopWorkshopIdRoute
-  AuthenticatedVisitAddItemCodeVariantIdRoute: typeof AuthenticatedVisitAddItemCodeVariantIdRoute
-  AuthenticatedVisitAddItemCodeIndexRoute: typeof AuthenticatedVisitAddItemCodeIndexRoute
-}
-
-const AuthenticatedVisitRouteChildren: AuthenticatedVisitRouteChildren = {
-  AuthenticatedVisitAddIndexRoute: AuthenticatedVisitAddIndexRoute,
-  AuthenticatedVisitAddListListIdRoute: AuthenticatedVisitAddListListIdRoute,
-  AuthenticatedVisitAddWorkshopWorkshopIdRoute:
-    AuthenticatedVisitAddWorkshopWorkshopIdRoute,
-  AuthenticatedVisitAddItemCodeVariantIdRoute:
-    AuthenticatedVisitAddItemCodeVariantIdRoute,
-  AuthenticatedVisitAddItemCodeIndexRoute:
-    AuthenticatedVisitAddItemCodeIndexRoute,
-}
-
-const AuthenticatedVisitRouteWithChildren =
-  AuthenticatedVisitRoute._addFileChildren(AuthenticatedVisitRouteChildren)
-
 interface AuthenticatedRouteChildren {
-  AuthenticatedVisitRoute: typeof AuthenticatedVisitRouteWithChildren
   AuthenticatedAccountMembershipRoute: typeof AuthenticatedAccountMembershipRoute
   AuthenticatedAccountProfileRoute: typeof AuthenticatedAccountProfileRoute
   AuthenticatedAccountUsageRoute: typeof AuthenticatedAccountUsageRoute
@@ -450,7 +498,6 @@ interface AuthenticatedRouteChildren {
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
-  AuthenticatedVisitRoute: AuthenticatedVisitRouteWithChildren,
   AuthenticatedAccountMembershipRoute: AuthenticatedAccountMembershipRoute,
   AuthenticatedAccountProfileRoute: AuthenticatedAccountProfileRoute,
   AuthenticatedAccountUsageRoute: AuthenticatedAccountUsageRoute,
@@ -486,11 +533,49 @@ const ReportRouteChildren: ReportRouteChildren = {
 const ReportRouteWithChildren =
   ReportRoute._addFileChildren(ReportRouteChildren)
 
+interface WizardVisitRouteChildren {
+  WizardVisitAddIndexRoute: typeof WizardVisitAddIndexRoute
+  WizardVisitAddListListIdRoute: typeof WizardVisitAddListListIdRoute
+  WizardVisitAddWorkshopWorkshopIdRoute: typeof WizardVisitAddWorkshopWorkshopIdRoute
+  WizardVisitAddItemCodeVariantIdRoute: typeof WizardVisitAddItemCodeVariantIdRoute
+  WizardVisitAddItemCodeIndexRoute: typeof WizardVisitAddItemCodeIndexRoute
+}
+
+const WizardVisitRouteChildren: WizardVisitRouteChildren = {
+  WizardVisitAddIndexRoute: WizardVisitAddIndexRoute,
+  WizardVisitAddListListIdRoute: WizardVisitAddListListIdRoute,
+  WizardVisitAddWorkshopWorkshopIdRoute: WizardVisitAddWorkshopWorkshopIdRoute,
+  WizardVisitAddItemCodeVariantIdRoute: WizardVisitAddItemCodeVariantIdRoute,
+  WizardVisitAddItemCodeIndexRoute: WizardVisitAddItemCodeIndexRoute,
+}
+
+const WizardVisitRouteWithChildren = WizardVisitRoute._addFileChildren(
+  WizardVisitRouteChildren,
+)
+
+interface WizardRouteChildren {
+  WizardCheckinRoute: typeof WizardCheckinRoute
+  WizardCheckoutRoute: typeof WizardCheckoutRoute
+  WizardPaymentRoute: typeof WizardPaymentRoute
+  WizardVisitRoute: typeof WizardVisitRouteWithChildren
+}
+
+const WizardRouteChildren: WizardRouteChildren = {
+  WizardCheckinRoute: WizardCheckinRoute,
+  WizardCheckoutRoute: WizardCheckoutRoute,
+  WizardPaymentRoute: WizardPaymentRoute,
+  WizardVisitRoute: WizardVisitRouteWithChildren,
+}
+
+const WizardRouteWithChildren =
+  WizardRoute._addFileChildren(WizardRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   AuthonlyRoute: AuthonlyRouteWithChildren,
   ReportRoute: ReportRouteWithChildren,
+  WizardRoute: WizardRouteWithChildren,
   LinkAccountRoute: LinkAccountRoute,
   LoginRoute: LoginRoute,
   LoginVerifyRoute: LoginVerifyRoute,

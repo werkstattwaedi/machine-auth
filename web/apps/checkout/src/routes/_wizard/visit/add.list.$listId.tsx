@@ -10,15 +10,13 @@ import {
 import { useDb } from "@modules/lib/firebase-context"
 import { documentId, where } from "firebase/firestore"
 import { MaterialPicker } from "@/components/usage/material-picker"
-import { useVisitContext } from "@/routes/_authenticated/visit"
+import { useWizardContext } from "@/components/checkout/wizard-context"
 import { PageLoading } from "@modules/components/page-loading"
 import { EmptyState } from "@modules/components/empty-state"
 import { AlertTriangle } from "lucide-react"
 import type { CatalogItemDoc } from "@modules/lib/firestore-entities"
 
-export const Route = createFileRoute(
-  "/_authenticated/visit/add/list/$listId",
-)({
+export const Route = createFileRoute("/_wizard/visit/add/list/$listId")({
   component: AddListRoute,
 })
 
@@ -26,17 +24,12 @@ function AddListRoute() {
   const db = useDb()
   const { listId } = Route.useParams()
   const navigate = useNavigate()
-  const { pricingConfig, discountLevel, resolveWorkshop, addItem } =
-    useVisitContext()
+  const ctx = useWizardContext()
 
   const { data: priceList, loading: loadingList } = useDocument(
     priceListRef(db, listId),
   )
 
-  // documentId() `in` query caps at 30 entries. Pricelists in practice
-  // stay well under this (a single category PDF). If a list grows past
-  // the cap, surface the truncation via telemetry so it shows up in
-  // observability before users notice missing items.
   const rawItemIds = priceList?.items ?? []
   const itemIds = rawItemIds.slice(0, 30)
   if (rawItemIds.length > itemIds.length) {
@@ -67,14 +60,19 @@ function AddListRoute() {
     <MaterialPicker
       open
       onOpenChange={(open) => {
-        if (!open) navigate({ to: "/visit" })
+        if (!open) {
+          navigate({
+            to: "/visit",
+            search: ctx.kiosk ? { kiosk: "" } : {},
+          })
+        }
       }}
       scope={{ kind: "list", listId, listName: priceList.name }}
       catalogItems={catalogItems}
-      config={pricingConfig}
-      discountLevel={discountLevel}
-      resolveWorkshop={resolveWorkshop}
-      onAdd={addItem}
+      config={ctx.pricingConfig}
+      discountLevel={ctx.discountLevel}
+      resolveWorkshop={ctx.resolveWorkshop}
+      onAdd={ctx.addItem}
     />
   )
 }
