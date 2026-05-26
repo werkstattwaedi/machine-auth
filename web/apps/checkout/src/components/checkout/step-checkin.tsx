@@ -4,6 +4,7 @@
 import { useState, useMemo, useCallback } from "react"
 import { Checkbox } from "@modules/components/ui/checkbox"
 import { Button } from "@modules/components/ui/button"
+import { Avatar } from "@modules/components/ui/avatar"
 import { PersonCard } from "./person-card"
 import { Plus, ArrowRight, LogIn, UserPlus } from "lucide-react"
 import type { CheckoutPerson, PersonsAction } from "./use-checkout-state"
@@ -29,6 +30,13 @@ interface StepCheckinProps {
   isAnonymous: boolean
   kiosk: boolean
   isAccountLoggedIn: boolean
+  /** Email of the signed-in user — surfaced in the compact identity
+   *  strip so the page doesn't redundantly show the editable
+   *  PersonCard fields for the user themselves. */
+  signedInEmail?: string | null
+  /** True when the signed-in user has an active membership; toggles the
+   *  "Vereinsmitglied" suffix on the identity strip. */
+  isMember?: boolean
   onSignOut: () => void
   /**
    * Called when the user advances past /checkin with a valid form. For the
@@ -47,7 +55,7 @@ interface StepCheckinProps {
   familyCandidates?: FamilyCandidate[]
 }
 
-export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAccountLoggedIn, onSignOut, onAdvance, familyCandidates }: StepCheckinProps) {
+export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAccountLoggedIn, signedInEmail, isMember, onSignOut, onAdvance, familyCandidates }: StepCheckinProps) {
   // touched: personId → field → true
   const [touched, setTouched] = useState<Record<string, Record<string, boolean>>>({})
   const [submitted, setSubmitted] = useState(false)
@@ -127,22 +135,37 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
         isTagIdentified={!isAnonymous && !isAccountLoggedIn}
       />
 
-      {persons.map((person, i) => (
-        <PersonCard
-          key={person.id}
-          person={person}
-          index={i}
-          isOnly={persons.length === 1}
-          showTerms={false}
-          dispatch={personsDispatch}
-          errors={allErrors[person.id]}
-          touched={touched[person.id]}
-          submitted={submitted}
-          onBlur={(field) => handleBlur(person.id, field)}
-          title={i === 0 && isAccountLoggedIn ? "" : undefined}
-          onSignOut={i === 0 && isAccountLoggedIn ? onSignOut : undefined}
-        />
-      ))}
+      {persons.map((person, i) => {
+        // Logged-in primary person: render the compact identity strip
+        // (avatar + name + email + Abmelden) per the visit-flow mockup.
+        // The editable PersonCard isn't useful here — the user can edit
+        // their profile under /account/profile if they need to.
+        if (i === 0 && isAccountLoggedIn) {
+          return (
+            <IdentityStrip
+              key={person.id}
+              person={person}
+              email={signedInEmail ?? person.email}
+              isMember={!!isMember}
+              onSignOut={onSignOut}
+            />
+          )
+        }
+        return (
+          <PersonCard
+            key={person.id}
+            person={person}
+            index={i}
+            isOnly={persons.length === 1}
+            showTerms={false}
+            dispatch={personsDispatch}
+            errors={allErrors[person.id]}
+            touched={touched[person.id]}
+            submitted={submitted}
+            onBlur={(field) => handleBlur(person.id, field)}
+          />
+        )
+      })}
 
       <div className="flex flex-col items-start gap-3">
         {/*
@@ -241,6 +264,52 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
           <ArrowRight className="h-4 w-4" />
         </button>
       </div>
+    </div>
+  )
+}
+
+/**
+ * Compact identity strip for the signed-in user on /checkin — avatar +
+ * name + (email · Vereinsmitglied) + Abmelden link. Replaces the full
+ * editable PersonCard since the user can manage their own profile
+ * under /account/profile. Matches the visit-flow mockup.
+ */
+function IdentityStrip({
+  person,
+  email,
+  isMember,
+  onSignOut,
+}: {
+  person: CheckoutPerson
+  email: string | null
+  isMember: boolean
+  onSignOut: () => void
+}) {
+  const name = `${person.firstName} ${person.lastName}`.trim() || "—"
+  const subtitleParts = [email, isMember ? "Vereinsmitglied" : null].filter(
+    Boolean,
+  ) as string[]
+  return (
+    <div
+      data-testid="identity-strip"
+      className="flex items-center gap-4 rounded-md bg-muted/50 px-4 py-3 sm:px-5 sm:py-4 animate-in fade-in duration-200"
+    >
+      <Avatar name={name} seed={person.userId ?? person.id} size="lg" />
+      <div className="min-w-0 flex-1">
+        <div className="font-bold text-foreground truncate">{name}</div>
+        {subtitleParts.length > 0 && (
+          <div className="text-sm text-muted-foreground truncate">
+            {subtitleParts.join(" · ")}
+          </div>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={onSignOut}
+        className="text-sm text-muted-foreground underline hover:text-foreground transition-colors"
+      >
+        Abmelden
+      </button>
     </div>
   )
 }

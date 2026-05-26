@@ -23,6 +23,8 @@ function renderCheckin({
   isAnonymous = true,
   kiosk = false,
   isAccountLoggedIn = false,
+  signedInEmail,
+  isMember = false,
   personsOverride,
   onAdvance,
   familyCandidates,
@@ -30,6 +32,8 @@ function renderCheckin({
   isAnonymous?: boolean
   kiosk?: boolean
   isAccountLoggedIn?: boolean
+  signedInEmail?: string | null
+  isMember?: boolean
   personsOverride?: CheckoutPerson[]
   onAdvance?: () => Promise<void>
   familyCandidates?: FamilyCandidate[]
@@ -53,6 +57,8 @@ function renderCheckin({
         isAnonymous={isAnonymous}
         kiosk={kiosk}
         isAccountLoggedIn={isAccountLoggedIn}
+        signedInEmail={signedInEmail}
+        isMember={isMember}
         onSignOut={onSignOut}
         onAdvance={onAdvance}
         familyCandidates={familyCandidates}
@@ -221,10 +227,11 @@ describe("Identity hint", () => {
     expect(screen.queryByText("Bereits registriert oder Konto erstellen?")).toBeNull()
   })
 
-  it("shows sign-out in person card for logged-in users", () => {
+  it("renders the identity strip with name + Abmelden for logged-in users", () => {
     renderCheckin({
       isAnonymous: false,
       isAccountLoggedIn: true,
+      signedInEmail: "max@test.com",
       personsOverride: [{
         id: "p1",
         firstName: "Max",
@@ -237,15 +244,18 @@ describe("Identity hint", () => {
     })
 
     expect(screen.queryByText("Bereits registriert oder Konto erstellen?")).toBeNull()
-    expect(screen.getByText(/Du bist nicht Max Muster\?/)).toBeTruthy()
-    expect(screen.getByText(/Abmelden/)).toBeTruthy()
+    expect(screen.getByTestId("identity-strip")).toBeTruthy()
+    expect(screen.getByText("Max Muster")).toBeTruthy()
+    expect(screen.getByText(/max@test\.com/)).toBeTruthy()
+    expect(screen.getByText("Abmelden")).toBeTruthy()
   })
 
-  it("calls onSignOut when Abmelden is clicked", async () => {
-    const user = userEvent.setup()
-    const { onSignOut } = renderCheckin({
+  it("appends · Vereinsmitglied when the signed-in user has an active membership", () => {
+    renderCheckin({
       isAnonymous: false,
       isAccountLoggedIn: true,
+      signedInEmail: "max@test.com",
+      isMember: true,
       personsOverride: [{
         id: "p1",
         firstName: "Max",
@@ -257,7 +267,27 @@ describe("Identity hint", () => {
       }],
     })
 
-    await user.click(screen.getByText(/Abmelden/))
+    expect(screen.getByText(/max@test\.com · Vereinsmitglied/)).toBeTruthy()
+  })
+
+  it("calls onSignOut when Abmelden is clicked", async () => {
+    const user = userEvent.setup()
+    const { onSignOut } = renderCheckin({
+      isAnonymous: false,
+      isAccountLoggedIn: true,
+      signedInEmail: "max@test.com",
+      personsOverride: [{
+        id: "p1",
+        firstName: "Max",
+        lastName: "Muster",
+        email: "max@test.com",
+        userType: "erwachsen",
+        termsAccepted: true,
+        isPreFilled: true,
+      }],
+    })
+
+    await user.click(screen.getByText("Abmelden"))
     expect(onSignOut).toHaveBeenCalledOnce()
   })
 
@@ -372,10 +402,13 @@ describe("Family-roster quick-add (#209)", () => {
   })
 })
 
-// Issue #209: any card (incl. the pre-filled / first card) can be removed
-// when ≥ 2 persons are on the visit. The `isOnly` guard still pins at
-// least one person.
-describe("Person removal (#209)", () => {
+// After the URL-routes refactor the signed-in user is rendered as a
+// compact IdentityStrip (avatar + name + Abmelden) instead of an
+// editable PersonCard. The strip has no remove affordance — the user
+// can't remove themselves via UI, only sign out. Additional persons
+// (family quick-add or manually added) still render as PersonCards
+// with the X button.
+describe("Person removal", () => {
   const preFilled: CheckoutPerson = {
     id: "p-self",
     firstName: "Max",
@@ -397,25 +430,19 @@ describe("Person removal (#209)", () => {
     userId: "u-lia",
   }
 
-  it("does NOT show the X button when only one person is on the visit", () => {
-    renderCheckin({
-      isAnonymous: false,
-      isAccountLoggedIn: true,
-      personsOverride: [preFilled],
-    })
-    expect(screen.queryByRole("button", { name: /Person 1 entfernen/ })).toBeNull()
-  })
-
-  it("shows the X button on the pre-filled first card when ≥ 2 persons are on the visit", () => {
+  it("does NOT show an X button on the signed-in user's identity strip", () => {
     renderCheckin({
       isAnonymous: false,
       isAccountLoggedIn: true,
       personsOverride: [preFilled, familyMember],
     })
-    expect(screen.getByRole("button", { name: /Person 1 entfernen/ })).toBeTruthy()
+    // No "Person 1 entfernen" — that's the strip, not removable.
+    expect(screen.queryByRole("button", { name: /Person 1 entfernen/ })).toBeNull()
+    // The added family member (Person 2) keeps its X.
+    expect(screen.getByRole("button", { name: /Person 2 entfernen/ })).toBeTruthy()
   })
 
-  it("removes the pre-filled first card when the X button is clicked", async () => {
+  it("removes a family-added card when its X button is clicked", async () => {
     const user = userEvent.setup()
     const { dispatched } = renderCheckin({
       isAnonymous: false,
@@ -423,87 +450,9 @@ describe("Person removal (#209)", () => {
       personsOverride: [preFilled, familyMember],
     })
 
-    await user.click(screen.getByRole("button", { name: /Person 1 entfernen/ }))
+    await user.click(screen.getByRole("button", { name: /Person 2 entfernen/ }))
 
     const action = dispatched.find((a) => a.type === "REMOVE_PERSON")
-    expect(action).toMatchObject({ type: "REMOVE_PERSON", id: "p-self" })
-
-    expect(screen.queryByRole("button", { name: /Person 1 entfernen/ })).toBeNull()
-  })
-})
-
-// Issue #246: layout, animation, and re-add-self regressions.
-describe("StepCheckin layout / animation (#246)", () => {
-  const preFilled: CheckoutPerson = {
-    id: "p-self",
-    firstName: "Max",
-    lastName: "Muster",
-    email: "max@example.com",
-    userType: "erwachsen",
-    termsAccepted: true,
-    isPreFilled: true,
-    userId: "u-self",
-  }
-  const familyMember: CheckoutPerson = {
-    id: "p-lia",
-    firstName: "Lia",
-    lastName: "Pfeffer",
-    email: "lia@example.com",
-    userType: "kind",
-    termsAccepted: true,
-    isPreFilled: true,
-    userId: "u-lia",
-  }
-
-  it("reserves the heading row height on the first card when removable", () => {
-    renderCheckin({
-      isAnonymous: false,
-      isAccountLoggedIn: true,
-      personsOverride: [preFilled, familyMember],
-    })
-    const removeBtn = screen.getByRole("button", { name: /Person 1 entfernen/ })
-    const headingRow = removeBtn.parentElement
-    expect(headingRow).not.toBeNull()
-    expect(headingRow!.querySelector("h3")).not.toBeNull()
-  })
-
-  it("applies an enter-animation class to each person card", () => {
-    renderCheckin({
-      isAnonymous: false,
-      isAccountLoggedIn: true,
-      personsOverride: [preFilled, familyMember],
-    })
-    const cards = screen.getAllByTestId("person-card")
-    expect(cards.length).toBe(2)
-    for (const card of cards) {
-      expect(card.className).toContain("animate-in")
-    }
-  })
-
-  it("re-adds self via a quick-add chip after self was removed", async () => {
-    const user = userEvent.setup()
-    const selfCandidate: FamilyCandidate = {
-      userId: "u-self",
-      firstName: "Max",
-      lastName: "Muster",
-      email: "max@example.com",
-      userType: "erwachsen",
-    }
-    const { dispatched } = renderCheckin({
-      isAnonymous: false,
-      isAccountLoggedIn: true,
-      personsOverride: [familyMember],
-      familyCandidates: [selfCandidate],
-    })
-
-    const chip = screen.getByRole("button", { name: /Max Muster/ })
-    expect(chip).toBeTruthy()
-    await user.click(chip)
-
-    const action = dispatched.find((a) => a.type === "ADD_FAMILY_PERSON")
-    expect(action).toMatchObject({
-      type: "ADD_FAMILY_PERSON",
-      person: { userId: "u-self", firstName: "Max", lastName: "Muster" },
-    })
+    expect(action).toMatchObject({ type: "REMOVE_PERSON", id: "p-lia" })
   })
 })

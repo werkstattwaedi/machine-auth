@@ -33,6 +33,8 @@ function CheckinRoute() {
       isAnonymous={ctx.isAnonymous}
       kiosk={ctx.kiosk}
       isAccountLoggedIn={ctx.isAccountLoggedIn}
+      signedInEmail={ctx.identifiedUserDoc?.email ?? null}
+      isMember={!!ctx.identifiedUserDoc?.activeMembership}
       familyCandidates={ctx.familyCandidates}
       onSignOut={async () => {
         await ctx.signOut()
