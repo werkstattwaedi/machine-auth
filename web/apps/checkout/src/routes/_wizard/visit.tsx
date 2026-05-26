@@ -38,25 +38,15 @@ import { formatCHF } from "@modules/lib/format"
 import { WorkshopSectionWithCatalog } from "@/components/usage/workshop-section-with-catalog"
 import { ScanFab } from "@/components/qr-scanner/scan-fab"
 import { useWizardContext } from "@/components/checkout/wizard-context"
-import { NoCheckoutGate } from "@/components/checkout/no-checkout-gate"
 
 export const Route = createFileRoute("/_wizard/visit")({
   component: VisitRoute,
 })
 
+// The wizard layout gates this route — when there's no open checkout
+// it renders <NoCheckoutGate /> against a blank page instead of mounting
+// VisitRoute, so we can safely assume `openCheckout` is set here.
 function VisitRoute() {
-  const { openCheckout } = useWizardContext()
-
-  // C4 guard: navigating directly to /visit without an open checkout
-  // shows a "Kein offener Besuch" dialog instead of the workshop UI.
-  // Loop-safe: explicit click to /checkin, no auto-redirect.
-  if (!openCheckout) {
-    return <NoCheckoutGate />
-  }
-  return <VisitContent />
-}
-
-function VisitContent() {
   const navigate = useNavigate()
   const db = useDb()
   const { update, remove } = useFirestoreMutation()

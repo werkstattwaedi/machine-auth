@@ -18,10 +18,11 @@ import { PageLoading } from "@modules/components/page-loading"
 import { EmptyState } from "@modules/components/empty-state"
 import { Avatar } from "@modules/components/ui/avatar"
 import { AlertTriangle, Loader2 } from "lucide-react"
-import { WizardProvider } from "@/components/checkout/wizard-context"
+import { WizardProvider, useWizardContext } from "@/components/checkout/wizard-context"
 import { CheckoutProgress } from "@/components/checkout/checkout-progress"
 import { StaleCheckoutBanner } from "@/components/checkout/stale-checkout-banner"
 import { KioskInactivityWatcher } from "@/components/checkout/kiosk-inactivity-watcher"
+import { NoCheckoutGate } from "@/components/checkout/no-checkout-gate"
 
 const wizardSearchSchema = z.object({
   picc: z.optional(z.string()),
@@ -115,7 +116,6 @@ function WizardLayout() {
   }
 
   const headerName = userDoc?.name || null
-  const currentStep = stepForPathname(pathname)
 
   return (
     <WizardProvider
@@ -124,28 +124,65 @@ function WizardLayout() {
       kiosk={isKiosk}
       pricingConfig={pricingConfig}
     >
-      <div className="min-h-screen flex flex-col items-center bg-background">
-        <header className="w-full bg-background border-b border-border">
-          <div className="w-full max-w-[1000px] mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
-            <img
-              src="/logo_oww.png"
-              alt="Offene Werkstatt Wädenswil"
-              className="h-12 shrink-0"
-            />
-            {headerName && (
-              <Link
-                to="/account/profile"
-                className="flex items-center gap-3 min-w-0 rounded-full -m-1 p-1 hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-cog-teal/40 focus-visible:outline-offset-2 transition-colors"
-                aria-label="Profil öffnen"
-              >
-                <span className="text-sm text-foreground truncate">
-                  {headerName}
-                </span>
-                <Avatar name={headerName} seed={userDoc?.id} />
-              </Link>
-            )}
-          </div>
-        </header>
+      <WizardChrome headerName={headerName} userId={userDoc?.id} />
+      <KioskInactivityWatcher />
+    </WizardProvider>
+  )
+}
+
+/**
+ * Renders the wizard chrome (header, "Self-Checkout" title, progress
+ * indicator, stale banner, current step via Outlet) OR — when the
+ * visitor lands directly on /visit /checkout /payment without an open
+ * checkout — strips the chrome and shows the NoCheckoutGate dialog
+ * against a blank page. The progress indicator is intentionally hidden
+ * for that case: there's no step to be "on" yet.
+ */
+function WizardChrome({
+  headerName,
+  userId,
+}: {
+  headerName: string | null
+  userId?: string
+}) {
+  const { pathname } = useLocation()
+  const { openCheckout } = useWizardContext()
+  const currentStep = stepForPathname(pathname)
+
+  const gateableRoute =
+    pathname.startsWith("/visit") ||
+    pathname.startsWith("/checkout") ||
+    pathname.startsWith("/payment")
+  const showGate = gateableRoute && !openCheckout
+
+  return (
+    <div className="min-h-screen flex flex-col items-center bg-background">
+      <header className="w-full bg-background border-b border-border">
+        <div className="w-full max-w-[1000px] mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
+          <img
+            src="/logo_oww.png"
+            alt="Offene Werkstatt Wädenswil"
+            className="h-12 shrink-0"
+          />
+          {headerName && (
+            <Link
+              to="/account/profile"
+              className="flex items-center gap-3 min-w-0 rounded-full -m-1 p-1 hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-cog-teal/40 focus-visible:outline-offset-2 transition-colors"
+              aria-label="Profil öffnen"
+            >
+              <span className="text-sm text-foreground truncate">
+                {headerName}
+              </span>
+              <Avatar name={headerName} seed={userId} />
+            </Link>
+          )}
+        </div>
+      </header>
+      {showGate ? (
+        // Intentionally blank below the header — only the modal dialog
+        // is meaningful when there's no checkout to act on.
+        <NoCheckoutGate />
+      ) : (
         <div className="w-full max-w-[1000px] px-4 sm:px-6 py-6 flex-1 flex flex-col">
           <h1 className="text-2xl sm:text-[37px] font-bold mb-6">
             Self-Checkout
@@ -154,8 +191,7 @@ function WizardLayout() {
           <StaleCheckoutBanner />
           <Outlet />
         </div>
-        <KioskInactivityWatcher />
-      </div>
-    </WizardProvider>
+      )}
+    </div>
   )
 }
