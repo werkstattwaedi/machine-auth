@@ -151,6 +151,11 @@ async function applyMembershipPayment(
         lastPaidAt: now,
         validUntil: newValidUntil,
         paymentCheckouts: FieldValue.arrayUnion(checkoutRef),
+        // Clear the open renewal bill (issue #323). For a first-time
+        // purchase this branch isn't taken (no existing membership), and
+        // even on a manual wizard renewal the field is simply absent, so
+        // setting it to null is a safe no-op there.
+        pendingRenewalBill: null,
         modifiedAt: FieldValue.serverTimestamp(),
         modifiedBy: null, // server-side write
       });

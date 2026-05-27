@@ -80,6 +80,11 @@ function MembershipPage() {
     context: "checkout.purchaseMembership",
     errorMessage: "Mitgliedschaft konnte nicht gestartet werden",
   })
+  const cancelAutoRenew = useAsyncMutation({
+    context: "checkout.cancelMembershipAutoRenew",
+    successMessage: "Automatische Verlängerung beendet",
+    errorMessage: "Verlängerung konnte nicht beendet werden",
+  })
 
   // Detect a membership SKU already sitting in the user's open checkout so
   // we can hide the buy buttons and route the user to the summary step
@@ -149,6 +154,29 @@ function MembershipPage() {
     })
   }
 
+  // Issue #323: renewals are now auto-invoiced ~30 days before validUntil
+  // by the renewalInvoicer cron — the member can opt out of the next
+  // invoice (membership stays active until validUntil).
+  const handleCancelAutoRenew = async (membershipId: string) => {
+    if (
+      !confirm(
+        "Automatische Verlängerung beenden? Deine Mitgliedschaft bleibt bis zum Ablaufdatum aktiv, wird danach aber nicht mehr automatisch verlängert.",
+      )
+    )
+      return
+    try {
+      await cancelAutoRenew.mutate(async () => {
+        const fn = httpsCallable<{ membershipId: string }, { ok: true }>(
+          functions,
+          "cancelMembershipAutoRenew",
+        )
+        await fn({ membershipId })
+      })
+    } catch {
+      // Hook already toasted + reported telemetry; nothing else to advance.
+    }
+  }
+
   if (loading) return <PageLoading />
 
   const isOwner = membership?.ownerUserId.id === userDoc?.id
@@ -174,9 +202,15 @@ function MembershipPage() {
           status={membership.status}
           validUntil={formatDate(membership.validUntil)}
           isOwner={isOwner}
-          loading={purchase.loading}
-          onRenew={() =>
-            startPurchase(membership.type, membership.status === "active")
+          // autoRenew defaults to true when the field is absent (legacy docs).
+          autoRenew={membership.autoRenew !== false}
+          loading={purchase.loading || cancelAutoRenew.loading}
+          // Expired/cancelled memberships are no longer auto-renewed, so the
+          // member re-signs up through the wizard. Active memberships are
+          // auto-invoiced — the only action offered is opting out.
+          onRenew={() => startPurchase(membership.type, false)}
+          onCancelAutoRenew={
+            isOwner ? () => handleCancelAutoRenew(membership.id) : null
           }
         />
       )}
@@ -215,15 +249,19 @@ function StatusHero({
   status,
   validUntil,
   isOwner,
+  autoRenew,
   loading,
   onRenew,
+  onCancelAutoRenew,
 }: {
   type: "single" | "family"
   status: "active" | "expired" | "cancelled"
   validUntil: string
   isOwner: boolean
+  autoRenew: boolean
   loading: boolean
   onRenew: () => void
+  onCancelAutoRenew: (() => void) | null
 }) {
   return (
     <Card>
@@ -273,19 +311,50 @@ function StatusHero({
               <>Vergünstigte Preise auf Maschinen und Material.</>
             )}
             {status === "expired" && (
-              <>Verlängere, um wieder Mitglieder-Preise zu erhalten.</>
+              <>Erneuere, um wieder Mitglieder-Preise zu erhalten.</>
             )}
             {status === "cancelled" && (
               <>Reaktivierung nur durch Admin möglich.</>
             )}
           </p>
-          {(status === "active" || status === "expired") && (
+          {/* Expired memberships are no longer auto-renewed (#323) — the
+              member re-signs up through the wizard. */}
+          {status === "expired" && (
             <Button onClick={onRenew} disabled={loading}>
               <RefreshCw />
-              {status === "expired" ? "Erneuern" : "Verlängern"}
+              Erneuern
             </Button>
           )}
         </div>
+
+        {/* Active memberships auto-renew (#323): show the status and let the
+            owner opt out of the next invoice. */}
+        {status === "active" && (
+          <div className="mt-5 border-t pt-4">
+            {autoRenew ? (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-muted-foreground">
+                  Deine Mitgliedschaft wird automatisch verlängert. Rund 30 Tage
+                  vor Ablauf erhältst du eine Rechnung per E-Mail.
+                </p>
+                {onCancelAutoRenew && (
+                  <Button
+                    variant="outline"
+                    onClick={onCancelAutoRenew}
+                    disabled={loading}
+                  >
+                    Automatische Verlängerung beenden
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Die automatische Verlängerung ist beendet. Deine Mitgliedschaft
+                bleibt bis zum {validUntil} aktiv und läuft danach aus.
+              </p>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   )

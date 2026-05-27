@@ -198,11 +198,25 @@ export interface CheckoutPersonDoc {
 }
 
 export interface CheckoutSummaryDoc {
+  /** Net amount actually billed (raw sections minus the usage discount). */
   totalPrice: number
+  /**
+   * Raw (pre-discount) section amounts. The usage-type discount is applied
+   * on top (see {@link discountAmount}); storing raw lets the invoice
+   * re-render the standard prices with a per-section "waived" note instead
+   * of silently showing zero (issue #284). No legacy data to migrate.
+   */
   entryFees: number
   machineCost: number
   materialCost: number
   tip: number
+  /**
+   * Total discount waived by the usage type, i.e.
+   * `(entryFees + machineCost + materialCost + tip) - totalPrice`.
+   * Zero for `regular`. Stored so downstream consumers don't have to
+   * re-derive the multiplier table. Issue #284.
+   */
+  discountAmount?: number
 }
 
 export type CheckoutUsageType =
@@ -211,6 +225,7 @@ export type CheckoutUsageType =
   | "materialbezug"
   | "intern"
   | "hangenmoos"
+  | "volunteering"
 
 /**
  * Customer's last-selected payment method on the Bezahlen step. Written
@@ -276,6 +291,9 @@ export interface BillDoc extends AuditFields {
   emailSentAt?: Timestamp | null
   paymentMethodConfirmationTime?: Timestamp | null
   paymentMethodConfirmationSource?: "user" | "auto" | null
+  // Origin discriminator (issue #323). Missing value is treated as
+  // "checkout" so legacy docs migrate-free.
+  source?: "checkout" | "membership-renewal"
 }
 
 // ── memberships ──────────────────────────────────────────────────────────
@@ -291,6 +309,12 @@ export interface MembershipDoc extends AuditFields {
   ownerUserId: DocumentReference<UserDoc>
   members: DocumentReference<UserDoc>[]
   paymentCheckouts: DocumentReference<CheckoutDoc>[]
+  // Annual auto-renewal flag (issue #323). Missing value is treated as
+  // true so legacy docs keep renewing until explicitly cancelled.
+  autoRenew?: boolean
+  // Open renewal bill while a renewal invoice is outstanding; cleared to
+  // null once the renewal is paid.
+  pendingRenewalBill?: DocumentReference<BillDoc> | null
   notes?: string | null
   created?: Timestamp
   createdBy?: string | null

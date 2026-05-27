@@ -20,6 +20,10 @@ import {
   freeZeroAmountInvoice,
   registeredUserInvoice,
   zeroItemsInvoice,
+  membershipOnlyInvoice,
+  membershipMixedInvoice,
+  volunteeringDiscountInvoice,
+  internDiscountInvoice,
 } from "./invoice_test_fixtures";
 import type { InvoiceData } from "../../src/invoice/types";
 
@@ -201,5 +205,31 @@ describe("buildInvoicePdf — visual regression", function () {
   // "Zahlbar durch" debtor box empty for handwriting.
   it("anonymous walk-in (no recipient block, no QR debtor)", async () => {
     await compareAllPages("anonymous-walkin", zeroItemsInvoice());
+  });
+
+  // Issue #262: membership-only bill — a dedicated "Mitgliedschaft" block,
+  // no workshop groups, no "Diverses" heading.
+  it("membership-only (Mitgliedschaft block, no workshop groups)", async () => {
+    await compareAllPages("membership-only", membershipOnlyInvoice());
+  });
+
+  // Issue #263: mixed bill — "Mitgliedschaft" block first, then the
+  // workshop group; membership does not bleed into a Diverses heading.
+  it("membership + workshop items (Mitgliedschaft block above workshops)", async () => {
+    await compareAllPages("membership-mixed", membershipMixedInvoice());
+  });
+
+  // Issue #284: Freiwilligengruppe (volunteering). Entry + machine usage
+  // render at full price each with a "Freiwilligengruppe: … wird nicht
+  // verrechnet" discount line; material stays billed, so a QR slip renders.
+  it("volunteering discount (entry + machine waived, material billed)", async () => {
+    await compareAllPages("volunteering-discount", volunteeringDiscountInvoice());
+  });
+
+  // Issue #284: interne Nutzung with material. Every section renders at
+  // full price with an "Interne Nutzung: … wird nicht verrechnet" discount
+  // line; the net is CHF 0.00 (free-zero notice, no QR slip).
+  it("intern discount (everything waived, per-section lines)", async () => {
+    await compareAllPages("intern-discount", internDiscountInvoice());
   });
 });

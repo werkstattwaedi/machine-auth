@@ -23,6 +23,7 @@ function CheckoutRoute() {
       setTip={ctx.setTip}
       items={ctx.items}
       config={ctx.pricingConfig}
+      membershipCatalogId={ctx.membershipCatalogId}
       submitting={ctx.submitting}
       submitError={ctx.submitError}
       onBack={() =>

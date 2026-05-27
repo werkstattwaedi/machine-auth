@@ -46,6 +46,11 @@ function MembershipDetailPage() {
     successMessage: "Mitgliedschaft verlängert",
     errorMessage: "Mitgliedschaft konnte nicht verlängert werden",
   })
+  const cancelAutoRenewMutation = useAsyncMutation({
+    context: "admin.cancelMembershipAutoRenew",
+    successMessage: "Automatische Verlängerung beendet",
+    errorMessage: "Verlängerung konnte nicht beendet werden",
+  })
 
   if (loading) return <PageLoading />
   if (!membership) return <div>Mitgliedschaft nicht gefunden.</div>
@@ -70,6 +75,25 @@ function MembershipDetailPage() {
       await fn({ membershipId, days: 365 })
     })
   }
+
+  const handleCancelAutoRenew = async () => {
+    if (!confirm("Automatische Verlängerung für diese Mitgliedschaft beenden?"))
+      return
+    try {
+      await cancelAutoRenewMutation.mutate(async () => {
+        const fn = httpsCallable<{ membershipId: string }, { ok: true }>(
+          functions,
+          "cancelMembershipAutoRenew",
+        )
+        await fn({ membershipId })
+      })
+    } catch {
+      // Hook already toasted + reported telemetry; nothing else to advance.
+    }
+  }
+
+  // autoRenew defaults to true when the field is absent (legacy docs).
+  const autoRenewOn = membership.autoRenew !== false
 
   return (
     <div>
@@ -114,8 +138,13 @@ function MembershipDetailPage() {
               {formatDateTime(membership.lastPaidAt ?? null)}
             </Field>
             <Field label="Mitglieder">{membership.members?.length ?? 0}</Field>
+            <Field label="Auto-Verlängerung">
+              <Badge variant={autoRenewOn ? "default" : "outline"}>
+                {autoRenewOn ? "Aktiv" : "Beendet"}
+              </Badge>
+            </Field>
           </div>
-          <div className="flex gap-2 pt-4">
+          <div className="flex flex-wrap gap-2 pt-4">
             <Button
               variant="outline"
               onClick={handleExtendOneYear}
@@ -123,6 +152,17 @@ function MembershipDetailPage() {
             >
               +1 Jahr verlängern
             </Button>
+            {/* Issue #323: opt out of the next auto-issued renewal invoice.
+                The membership stays active until validUntil. */}
+            {membership.status === "active" && autoRenewOn && (
+              <Button
+                variant="outline"
+                onClick={handleCancelAutoRenew}
+                disabled={cancelAutoRenewMutation.loading}
+              >
+                Auto-Verlängerung beenden
+              </Button>
+            )}
             {membership.status !== "cancelled" && (
               <Button
                 variant="destructive"

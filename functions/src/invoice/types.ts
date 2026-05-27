@@ -6,6 +6,12 @@ import { CheckoutPersonEntity, CheckoutItemEntity, UsageType } from "../types/fi
 
 export type BillKind = "invoice" | "beleg";
 
+// Origin discriminator (issue #323). "checkout" = a normal Self-Checkout
+// visit bill (the default — a missing value is treated as "checkout" so
+// legacy docs migrate-free). "membership-renewal" = a bill auto-issued by
+// the daily renewalInvoicer cron for an expiring membership.
+export type BillSource = "checkout" | "membership-renewal";
+
 export interface BillEntity {
   userId: DocumentReference;
   checkouts: DocumentReference[];
@@ -33,6 +39,9 @@ export interface BillEntity {
   // Set on a `kind: "beleg"` once monthlyBillRun has folded it into a
   // monthly `kind: "invoice"`. Re-runs skip Belege where this is set.
   aggregatedIntoBillRef?: DocumentReference | null;
+  // Origin discriminator (issue #323). Missing value is treated as
+  // "checkout" so legacy docs migrate-free.
+  source?: BillSource;
 }
 
 /** Per-person entry fee for display on the invoice */
@@ -103,6 +112,17 @@ export interface InvoiceData {
    * slip (a record of one Sammelrechnung-acked visit).
    */
   kind?: BillKind;
+  /**
+   * Vereinsmitgliedschaft catalog doc id (issue #262/#263), resolved once
+   * via `config/catalog-references` → `membership`. When set, items whose
+   * `catalogId` matches are rendered under a dedicated "Mitgliedschaft"
+   * heading at the top of each checkout section instead of bleeding into
+   * the (legacy) `diverses` workshop group. `null` when no membership SKU
+   * is configured — the renderer then behaves exactly as before. Kept on
+   * `InvoiceData` (not per-checkout) because it's an invoice-wide constant
+   * and the renderer stays pure (no Firestore reads).
+   */
+  membershipCatalogId?: string | null;
 }
 
 /** Format an invoice reference number for display, e.g. 1 → "RE-000001" */

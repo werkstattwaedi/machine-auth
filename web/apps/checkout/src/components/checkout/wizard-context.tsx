@@ -15,7 +15,7 @@ import { useNavigate } from "@tanstack/react-router"
 import { useAuth, type UserDoc } from "@modules/lib/auth"
 import { useTokenAuth } from "@modules/lib/token-auth"
 import { useBridge } from "@modules/lib/use-bridge"
-import { useCollection } from "@modules/lib/firestore"
+import { useCollection, useDocument } from "@modules/lib/firestore"
 import {
   where,
   orderBy,
@@ -28,6 +28,7 @@ import { httpsCallable } from "firebase/functions"
 import {
   userRef,
   catalogRef,
+  catalogReferencesRef,
   checkoutRef,
   checkoutsCollection,
   checkoutItemsCollection,
@@ -52,7 +53,7 @@ import type {
   CheckoutDoc,
   CheckoutPersonDoc,
 } from "@modules/lib/firestore-entities"
-import { calculateFee, type UserType, type UsageType } from "@modules/lib/pricing"
+import { type UserType, type UsageType } from "@modules/lib/pricing"
 import type { CheckoutItemLocal } from "@/components/usage/inline-rows"
 import type { PricingModel } from "@modules/lib/workshop-config"
 import {
@@ -62,6 +63,7 @@ import {
 } from "./use-checkout-state"
 import type { FamilyCandidate } from "./step-checkin"
 import type { PaymentData } from "./payment-result"
+import { computeCheckoutCosts } from "./step-checkout"
 
 export interface WizardContextValue {
   // ----- identification -----
@@ -83,6 +85,8 @@ export interface WizardContextValue {
   items: CheckoutItemLocal[]
   pricingConfig: PricingConfig
   discountLevel: DiscountLevel
+  /** Vereinsmitgliedschaft catalog id (issue #262/#263); null when unset. */
+  membershipCatalogId: string | null
   familyCandidates: FamilyCandidate[]
   // ----- mutable wizard state -----
   persons: CheckoutPerson[]
@@ -245,6 +249,7 @@ export function WizardProvider({
         description: item.description,
         origin: item.origin,
         catalogId: item.catalogId?.id ?? null,
+        variantId: item.variantId ?? null,
         pricingModel: (item.pricingModel as PricingModel) ?? null,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
@@ -253,6 +258,15 @@ export function WizardProvider({
       })),
     [checkoutItems],
   )
+
+  // Issue #262/#263: resolve the Vereinsmitgliedschaft catalog id so the
+  // /visit and /checkout steps can break membership out of the Materialbezug /
+  // Diverses buckets into a dedicated section. The `config/catalog-references`
+  // doc is world-readable and rarely changes, so a single subscription here is
+  // cheap. `null` until it loads or when no membership SKU is configured — the
+  // classifier treats that as "no membership present" and the UI is unchanged.
+  const { data: catalogRefs } = useDocument(catalogReferencesRef(db))
+  const membershipCatalogId = catalogRefs?.membership?.id ?? null
 
   const discountLevel: DiscountLevel = identifiedUserDoc?.activeMembership
     ? "member"
@@ -523,28 +537,38 @@ export function WizardProvider({
   // Submit: close checkout, get payment data. Used by /checkout's commit.
   const totalPriceRef = useRef(0)
   const submitCheckout = useCallback(async (): Promise<PaymentData | null> => {
-    // Compute summary locally (server re-computes authoritatively).
-    const personFees =
-      usageType === "intern"
-        ? 0
-        : persons.reduce(
-            (sum, p) =>
-              sum + (calculateFee(p.userType, usageType, pricingConfig) ?? 0),
-            0,
-          )
-    const machineCost =
-      usageType === "intern"
-        ? 0
-        : items
-            .filter((i) => i.origin === "nfc")
-            .reduce((s, i) => s + i.totalPrice, 0)
-    const materialCost =
-      usageType === "intern"
-        ? 0
-        : items
-            .filter((i) => i.origin !== "nfc")
-            .reduce((s, i) => s + i.totalPrice, 0)
-    const total = personFees + machineCost + materialCost + tip
+    // Compute the cost breakdown locally for the receipt (the server
+    // recomputes authoritatively in closeCheckoutAndGetPayment). The
+    // usage-type discount (issue #284) waives sections per
+    // `USAGE_TYPE_DISCOUNTS`; we store RAW section amounts in the summary
+    // and submit the NET total. Both this submit and StepCheckout flow
+    // through `computeCheckoutCosts` so the displayed total matches.
+    const {
+      personFees: entryFees,
+      machineCost,
+      materialCost,
+      membershipCost,
+      personFeesNet,
+      machineCostNet,
+      materialCostNet,
+    } = computeCheckoutCosts({
+      persons,
+      usageType,
+      items,
+      config: pricingConfig,
+      membershipCatalogId,
+    })
+    // The persisted server-side `summary.materialCost` keeps membership
+    // bundled in (recomputeSummary buckets the membership SKU under non-nfc
+    // material). Splitting it out is purely a display concern (#262/#263),
+    // so the submitted estimate folds it back in.
+    const billedMaterialCost = materialCost + membershipCost
+    // NET total (#284): each section after its usage-type discount, plus the
+    // never-discounted membership fee and the tip. rawTotal is the
+    // pre-discount sum; their difference is the discountAmount stored below.
+    const total =
+      personFeesNet + machineCostNet + materialCostNet + membershipCost + tip
+    const rawTotal = entryFees + machineCost + billedMaterialCost + tip
     totalPriceRef.current = total
 
     const personsPayload = persons.map((p) => ({
@@ -563,12 +587,15 @@ export function WizardProvider({
         : {}),
     }))
 
+    // Store RAW section amounts (issue #284); the server is authoritative
+    // and recomputes both net and discount.
     const summary = {
       totalPrice: total,
-      entryFees: personFees,
+      entryFees,
       machineCost,
-      materialCost,
+      materialCost: billedMaterialCost,
       tip,
+      discountAmount: Math.round((rawTotal - total) * 100) / 100,
     }
 
     const closeCheckoutAndGetPayment = httpsCallable<
@@ -646,6 +673,7 @@ export function WizardProvider({
     items,
     persons,
     pricingConfig,
+    membershipCatalogId,
     tip,
     usageType,
     functions,
@@ -664,6 +692,7 @@ export function WizardProvider({
     items,
     pricingConfig,
     discountLevel,
+    membershipCatalogId,
     familyCandidates,
     persons,
     personsDispatch,

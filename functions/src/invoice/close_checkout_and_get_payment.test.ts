@@ -11,6 +11,7 @@
 
 import { expect } from "chai";
 import {
+  assertUsageTypeAllowed,
   entryFeeFor,
   isValidItem,
   recomputeSummary,
@@ -37,23 +38,34 @@ function item(origin: ItemOrigin, totalPrice: number) {
 }
 
 describe("entryFeeFor", () => {
-  it("returns config fee when present", () => {
-    const config = { erwachsen: { regular: 17.5, materialbezug: 0, intern: 0, hangenmoos: 17.5 } };
+  // Issue #284: there is one standard fee per user type (the `regular`
+  // row); the usage-type discount (USAGE_TYPE_DISCOUNTS in @oww/shared) is
+  // the fractional multiplier applied on top.
+  it("returns the standard regular fee when present", () => {
+    const config = { erwachsen: { regular: 17.5 } };
     expect(entryFeeFor("erwachsen", "regular", config)).to.equal(17.5);
   });
 
   it("preserves explicit zero (not coerced)", () => {
-    const config = { erwachsen: { regular: 0, materialbezug: 0, intern: 0, hangenmoos: 0 } };
+    const config = { erwachsen: { regular: 0 } };
     expect(entryFeeFor("erwachsen", "regular", config)).to.equal(0);
   });
 
-  it("returns the configured ermaessigt fee (KulturLegi)", () => {
+  it("applies the ermaessigt discount (half the standard fee)", () => {
     const config = {
-      erwachsen: { regular: 5, ermaessigt: 2.5, materialbezug: 0, intern: 0, hangenmoos: 0 },
-      kind: { regular: 2.5, ermaessigt: 1.25, materialbezug: 0, intern: 0, hangenmoos: 0 },
+      erwachsen: { regular: 5 },
+      kind: { regular: 2.5 },
     };
     expect(entryFeeFor("erwachsen", "ermaessigt", config)).to.equal(2.5);
     expect(entryFeeFor("kind", "ermaessigt", config)).to.equal(1.25);
+  });
+
+  it("waives the entry fee for intern / volunteering / materialbezug / hangenmoos", () => {
+    const config = { erwachsen: { regular: 5 } };
+    expect(entryFeeFor("erwachsen", "intern", config)).to.equal(0);
+    expect(entryFeeFor("erwachsen", "volunteering", config)).to.equal(0);
+    expect(entryFeeFor("erwachsen", "materialbezug", config)).to.equal(0);
+    expect(entryFeeFor("erwachsen", "hangenmoos", config)).to.equal(0);
   });
 
   // Issue #149: previously the function silently substituted hardcoded
@@ -77,12 +89,12 @@ describe("entryFeeFor", () => {
     });
 
     it("throws when userType absent in config", () => {
-      const config = { kind: { regular: 8, materialbezug: 0, intern: 0, hangenmoos: 8 } };
+      const config = { kind: { regular: 8 } };
       expectThrows(() => entryFeeFor("erwachsen", "regular", config));
     });
 
-    it("throws when usageType absent in user-type row", () => {
-      const config = { erwachsen: { regular: 5 } } as Record<string, Record<string, number>>;
+    it("throws when the regular row is absent for the user type", () => {
+      const config = { erwachsen: { ermaessigt: 5 } } as Record<string, Record<string, number>>;
       expectThrows(() => entryFeeFor("erwachsen", "materialbezug", config));
     });
 
@@ -227,11 +239,11 @@ describe("recomputeSummary", () => {
     expect(summary.totalPrice).to.equal(42);
   });
 
-  // Regression for issue #199: usageType "intern" must zero out entry
-  // fees, machine cost, and material cost regardless of items/config. Tip
-  // is still honoured. This is the authoritative server-side defense — a
-  // matching client-side projection lives in step-checkout/checkout-wizard.
-  it("zeros entry fees, machine and material costs when usageType is intern", () => {
+  // Regression for issue #284: usageType "intern" stores the RAW section
+  // amounts but bills only the tip — entry, machine, and material are
+  // waived. The raw amounts let the invoice render the standard prices
+  // with a per-section "waived" note rather than a silent zero.
+  it("stores raw amounts and waives everything but tip when usageType is intern", () => {
     const summary = recomputeSummary(
       [adultPerson],
       "intern",
@@ -239,16 +251,126 @@ describe("recomputeSummary", () => {
         item("nfc", 25),
         item("qr", 12),
       ],
-      // Pricing config carries non-zero entry fees on the intern row to
-      // prove the function ignores them. Even if an admin tweaks
-      // entryFees.*.intern up, the bill stays at 0.
-      { erwachsen: { regular: 0, materialbezug: 0, intern: 99, hangenmoos: 0 } },
+      { erwachsen: { regular: 5 } },
       3,
     );
-    expect(summary.entryFees).to.equal(0);
-    expect(summary.machineCost).to.equal(0);
-    expect(summary.materialCost).to.equal(0);
+    // RAW (pre-discount) amounts.
+    expect(summary.entryFees).to.equal(5);
+    expect(summary.machineCost).to.equal(25);
+    expect(summary.materialCost).to.equal(12);
     expect(summary.tip).to.equal(3);
+    // NET: only the tip is billed.
     expect(summary.totalPrice).to.equal(3);
+    // Discount = everything except the tip.
+    expect(summary.discountAmount).to.equal(42);
+  });
+
+  // Regression for issue #284: usageType "volunteering" (Freiwilligengruppe)
+  // waives entry + machine usage but still bills material and tip.
+  it("waives entry + machine but bills material + tip when usageType is volunteering", () => {
+    const summary = recomputeSummary(
+      [adultPerson],
+      "volunteering",
+      [
+        item("nfc", 25), // machine — waived
+        item("qr", 12), // material — billed
+      ],
+      { erwachsen: { regular: 5 } },
+      3,
+    );
+    // RAW amounts stored.
+    expect(summary.entryFees).to.equal(5);
+    expect(summary.machineCost).to.equal(25);
+    expect(summary.materialCost).to.equal(12);
+    expect(summary.tip).to.equal(3);
+    // NET: material (12) + tip (3) only.
+    expect(summary.totalPrice).to.equal(15);
+    // Discount = entry (5) + machine (25).
+    expect(summary.discountAmount).to.equal(30);
+  });
+
+  // Regression for issue #284: ermaessigt halves the entry fee but bills
+  // machine + material + tip in full.
+  it("halves the entry fee for ermaessigt", () => {
+    const summary = recomputeSummary(
+      [adultPerson],
+      "ermaessigt",
+      [item("nfc", 20), item("manual", 10)],
+      { erwachsen: { regular: 6 } },
+      0,
+    );
+    expect(summary.entryFees).to.equal(6); // raw
+    expect(summary.machineCost).to.equal(20);
+    expect(summary.materialCost).to.equal(10);
+    // NET: 3 (half of 6) + 20 + 10 = 33.
+    expect(summary.totalPrice).to.equal(33);
+    expect(summary.discountAmount).to.equal(3);
+  });
+
+  it("applies no discount for usageType regular (discountAmount 0)", () => {
+    const summary = recomputeSummary(
+      [adultPerson],
+      "regular",
+      [item("nfc", 12.5), item("manual", 4.5)],
+      { erwachsen: { regular: 15 } },
+      2,
+    );
+    expect(summary.totalPrice).to.equal(34);
+    expect(summary.discountAmount).to.equal(0);
+  });
+});
+
+describe("assertUsageTypeAllowed (issue #284 loophole guards)", () => {
+  function expectThrows(fn: () => unknown, codeContains = "failed-precondition") {
+    try {
+      fn();
+      throw new Error("expected throw, got success");
+    } catch (err: any) {
+      expect(err.code ?? "").to.contain(codeContains);
+    }
+  }
+
+  it("rejects materialbezug when there is machine usage", () => {
+    expectThrows(() =>
+      assertUsageTypeAllowed("materialbezug", {
+        hasMachineUsage: true,
+        hasMembershipItem: false,
+      }),
+    );
+  });
+
+  it("allows materialbezug without machine usage", () => {
+    // No throw.
+    assertUsageTypeAllowed("materialbezug", {
+      hasMachineUsage: false,
+      hasMembershipItem: false,
+    });
+  });
+
+  it("rejects intern when a membership is being bought", () => {
+    expectThrows(() =>
+      assertUsageTypeAllowed("intern", {
+        hasMachineUsage: false,
+        hasMembershipItem: true,
+      }),
+    );
+  });
+
+  it("allows intern without a membership purchase", () => {
+    assertUsageTypeAllowed("intern", {
+      hasMachineUsage: true,
+      hasMembershipItem: false,
+    });
+  });
+
+  it("does not constrain volunteering / regular", () => {
+    assertUsageTypeAllowed("volunteering", {
+      hasMachineUsage: true,
+      hasMembershipItem: true,
+    });
+    assertUsageTypeAllowed("regular", {
+      hasMachineUsage: true,
+      hasMembershipItem: true,
+    });
   });
 });

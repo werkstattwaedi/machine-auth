@@ -11,6 +11,61 @@ export type UsageType =
   | "materialbezug"
   | "intern"
   | "hangenmoos"
+  | "volunteering"
+
+/**
+ * The four billable sections of a checkout. The discount table
+ * (`USAGE_TYPE_DISCOUNTS`) carries one multiplier per section, so adding a
+ * new section is a compile error until every usage type provides a value.
+ */
+export type BillingSection = "entryFee" | "machine" | "material" | "tip"
+
+/**
+ * Per-usage-type discount: a multiplier in [0, 1] applied to each billing
+ * section's *standard* amount. `1` bills the full standard amount, `0`
+ * waives it, fractions discount it (e.g. `ermaessigt` pays half the entry
+ * fee). This is the single authoritative pricing model — there is exactly
+ * one set of standard fees (`config/pricing.entryFees.{userType}.regular`
+ * for entry fees; the per-item prices for machine/material) and this table
+ * is the fractional discount on top.
+ *
+ * Hardcoded here in `@oww/shared` (not config-driven) per issue #284 so
+ * the server, web, and the invoice renderer all agree on the same waiving
+ * rules without a Firestore round-trip. Tweaking these requires a code
+ * change and review — intentional, because loosening them changes what
+ * customers are billed.
+ *
+ * | usage type   | entry fee | machine | material | tip |
+ * |--------------|-----------|---------|----------|-----|
+ * | regular      | 1         | 1       | 1        | 1   |
+ * | ermaessigt   | .5        | 1       | 1        | 1   |
+ * | materialbezug| 0         | 0 (n/a) | 1        | 1   |
+ * | hangenmoos   | 0         | 1       | 1        | 1   |
+ * | volunteering | 0         | 0       | 1        | 1   |
+ * | intern       | 0         | 0       | 0        | 1   |
+ */
+export type UsageDiscount = Record<BillingSection, number>
+
+export const USAGE_TYPE_DISCOUNTS: Record<UsageType, UsageDiscount> = {
+  regular: { entryFee: 1, machine: 1, material: 1, tip: 1 },
+  ermaessigt: { entryFee: 0.5, machine: 1, material: 1, tip: 1 },
+  // materialbezug waives entry + cannot have machine usage (guarded
+  // server-side); the machine multiplier is 0 as a defensive belt-and-
+  // suspenders should an nfc item ever slip through.
+  materialbezug: { entryFee: 0, machine: 0, material: 1, tip: 1 },
+  hangenmoos: { entryFee: 0, machine: 1, material: 1, tip: 1 },
+  // volunteering (issue #284): a Freiwilligengruppe works on its own
+  // projects — entry + machine on the house, material still billed.
+  volunteering: { entryFee: 0, machine: 0, material: 1, tip: 1 },
+  // intern: an internal OWW project — everything but the (optional) tip
+  // is on the house.
+  intern: { entryFee: 0, machine: 0, material: 0, tip: 1 },
+}
+
+/** The multiplier table for a usage type, defaulting to no discount. */
+export function usageDiscount(usageType: UsageType): UsageDiscount {
+  return USAGE_TYPE_DISCOUNTS[usageType] ?? USAGE_TYPE_DISCOUNTS.regular
+}
 
 export type PricingModel =
   | "time"
@@ -56,4 +111,23 @@ export const USAGE_TYPE_LABELS: Record<UsageType, string> = {
   materialbezug: "Nur Materialbezug",
   intern: "Interne Nutzung",
   hangenmoos: "Hangenmoos AG",
+  volunteering: "Freiwilligengruppe",
+}
+
+/**
+ * Short German reason shown on a discounted section line ("…wird nicht
+ * verrechnet (Freiwilligengruppe)"). Only set for usage types that waive
+ * at least one section; `regular` has no discount and so no label.
+ *
+ * Marco's complaint (issue #284) was that an `intern` checkout silently
+ * showed the line items at full price but a CHF 0.00 total — the discount
+ * was invisible. The renderer uses this to spell out *why* a section was
+ * waived on the section itself, rather than as a mystery negative line.
+ */
+export const USAGE_DISCOUNT_LABELS: Partial<Record<UsageType, string>> = {
+  ermaessigt: "Ermässigung",
+  materialbezug: "Nur Materialbezug",
+  hangenmoos: "Hangenmoos AG",
+  volunteering: "Freiwilligengruppe",
+  intern: "Interne Nutzung",
 }

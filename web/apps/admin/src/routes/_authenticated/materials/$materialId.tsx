@@ -16,7 +16,7 @@ import { useEffect } from "react"
 import { httpsCallable } from "firebase/functions"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { useBridge } from "@modules/lib/use-bridge"
-import { printer } from "@oww/shared"
+import { buildRasterJob } from "@oww/shared"
 import { useLabelBitmap } from "@/printer/use-label-bitmap"
 import { LabelPreview } from "@/printer/label-preview"
 import { CatalogFormFields, type CatalogFormValues } from "@/components/admin/catalog-form-fields"
@@ -99,7 +99,7 @@ function CatalogDetailPage() {
     if (!previewBitmap) return
     try {
       await print.mutate(async () => {
-        const bytes = printer.buildRasterJob(previewBitmap, { tape: "18mm" })
+        const bytes = buildRasterJob(previewBitmap, { tape: "18mm" })
         await bridge.print(bytes)
       })
     } catch {

@@ -9,6 +9,12 @@ import { formatBillReference } from "./types";
 import type { InvoiceData, InvoiceCheckout, PaymentConfig } from "./types";
 import type { PricingModel } from "../types/firestore_entities";
 import { generateScorReference } from "./scor_reference";
+import {
+  partitionMembership,
+  usageDiscount,
+  USAGE_DISCOUNT_LABELS,
+  type UsageType,
+} from "@oww/shared";
 
 const LOGO_PATH = resolve(__dirname, "../../../assets/logo_oww.png");
 
@@ -439,24 +445,90 @@ function renderSubtotalRow(doc: PDFKit.PDFDocument, y: number, total: number): n
   return y;
 }
 
+/**
+ * Render a per-section discount row spelling out *why* an amount was
+ * waived (issue #284). Marco's bill silently showed full prices but a 0.00
+ * total — this makes the waiver explicit on the section it applies to,
+ * e.g. "Freiwilligengruppe: keine Maschinengebühren   -25.00".
+ *
+ * `waived` is a positive amount; it's rendered as a negative figure.
+ */
+function renderDiscountRow(
+  doc: PDFKit.PDFDocument,
+  y: number,
+  label: string,
+  waived: number,
+): number {
+  y = ensureSpace(doc, y, 14);
+  doc.fontSize(9).font("Helvetica-Oblique");
+  doc.text(label, MARGIN_LEFT + INDENT, y, { width: COL_DESC_W + COL_UNIT_W + COL_QTY_W + COL_PRICE_W - INDENT });
+  doc.text(`-${formatAmount(waived)}`, COL_TOTAL_X, y, { width: COL_TOTAL_W, align: "right" });
+  y += 14;
+  doc.font("Helvetica");
+  return y;
+}
+
+/** Round to centimes for display sums. */
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
 function renderCheckoutSection(
   doc: PDFKit.PDFDocument,
   y: number,
   checkout: InvoiceCheckout,
   data: InvoiceData
 ): number {
+  // Per-usage-type discount multipliers (issue #284). Section amounts in
+  // InvoiceCheckout are RAW (pre-discount); the multipliers say how much of
+  // each section is actually billed. `regular` has all-1 multipliers, so
+  // no discount rows are rendered for it.
+  const discount = usageDiscount(checkout.usageType as UsageType);
+  const discountLabel = USAGE_DISCOUNT_LABELS[checkout.usageType as UsageType];
+
   // Visit date header
   y = ensureSpace(doc, y, 30);
   doc.fontSize(11).font("Helvetica-Bold");
   doc.text(`Besuch vom ${formatDate(checkout.date)}`, MARGIN_LEFT, y);
   y += 20;
 
+  // Issue #262/#263: break the Vereinsmitgliedschaft SKU out of the workshop
+  // groups into a dedicated "Mitgliedschaft" block at the very top of the
+  // checkout's items. Marco's complaint was that the membership read as a
+  // "Diverses" material purchase. When no membership SKU is configured (or
+  // none is present) the partition leaves `otherItems` as the full set and
+  // the workshop loop renders exactly as before.
+  //
+  // Computed here (before Nutzungsgebühren) because the membership-only case
+  // suppresses the Nutzungsgebühren block — see below.
+  const { membershipItems, otherItems } = partitionMembership(checkout.items, {
+    membershipCatalogId: data.membershipCatalogId,
+  });
+
+  // Issue #262/#263: a membership-only checkout (membership item present, no
+  // other items, no entry fee) suppresses the Nutzungsgebühren block, mirroring
+  // the checkout summary's `membershipOnly` view (step-checkout.tsx) which hides
+  // the three regular buckets and shows only the Vereinsmitgliedschaft section.
+  // CRITICAL: this is scoped to membership-only — a non-membership zero-fee bill
+  // (e.g. interne Nutzung, materialbezug without a membership) must STILL render
+  // Nutzungsgebühren so the recipient is identified (issue #269).
+  //
+  // `checkout.entryFees` is the RAW (standard) fee under issue #284, so a
+  // waived usage type (materialbezug, Freiwilligengruppe, intern) has a
+  // non-zero raw fee. Gate on the NET entry fee (raw × the discount
+  // multiplier) — that is what "no entry fee billed" actually means.
+  const isMembershipOnly =
+    membershipItems.length > 0 &&
+    otherItems.length === 0 &&
+    round2(checkout.entryFees * discount.entryFee) === 0;
+
   // Nutzungsgebühren (entry fees). Always rendered when persons are
   // present so the invoice shows who attended — even for usage types
   // where the per-person fee is 0 (e.g. interne Nutzung, materialbezug).
   // See issue #269: Marco's bill omitted the user line because the fee
-  // was zero, leaving the recipient unclear.
-  if (checkout.personEntryFees.length > 0) {
+  // was zero, leaving the recipient unclear. The membership-only carve-out
+  // above is the one exception.
+  if (checkout.personEntryFees.length > 0 && !isMembershipOnly) {
     y = ensureSpace(doc, y, 20 + checkout.persons.length * 14 + 30);
     doc.fontSize(10).font("Helvetica-Bold");
     doc.text("Nutzungsgebühren", MARGIN_LEFT, y);
@@ -469,10 +541,27 @@ function renderCheckoutSection(
       y = renderItemRow(doc, y, label, "", 1, pf.fee, pf.fee);
     }
     y = renderSubtotalRow(doc, y, checkout.entryFees);
+    // Waive entry fees per the usage-type discount (e.g. Freiwilligengruppe,
+    // interne Nutzung, Hangenmoos). ermaessigt waives half.
+    const entryWaived = round2(checkout.entryFees * (1 - discount.entryFee));
+    if (entryWaived > 0 && discountLabel) {
+      y = renderDiscountRow(
+        doc,
+        y,
+        `${discountLabel}: Eintritt ${
+          discount.entryFee === 0 ? "wird nicht verrechnet" : "ermässigt"
+        }`,
+        entryWaived,
+      );
+    }
   }
 
-  // Items grouped by workshop
-  const itemsByWorkshop = groupItemsByWorkshop(checkout);
+  if (membershipItems.length > 0) {
+    y = renderItemGroup(doc, y, "Mitgliedschaft", membershipItems);
+  }
+
+  // Items grouped by workshop (membership items already removed).
+  const itemsByWorkshop = groupItemsByWorkshop(otherItems);
   const sortedWorkshops = Object.keys(itemsByWorkshop).sort((a, b) => {
     const orderA = data.workshops[a]?.order ?? 999;
     const orderB = data.workshops[b]?.order ?? 999;
@@ -491,6 +580,8 @@ function renderCheckoutSection(
     y = renderTableHeader(doc, y);
 
     let workshopTotal = 0;
+    let machineRaw = 0;
+    let materialRaw = 0;
     for (const item of items) {
       if (item.pricingModel === "sla") {
         // SLA has two pricing axes (resin volume + layer count); the single
@@ -507,8 +598,33 @@ function renderCheckoutSection(
         y = renderItemRow(doc, y, item.description, unit, item.quantity, item.unitPrice, item.totalPrice);
       }
       workshopTotal += item.totalPrice;
+      // Split by section so the right discount multiplier applies: nfc =
+      // machine usage, everything else = material.
+      if (item.origin === "nfc") machineRaw += item.totalPrice;
+      else materialRaw += item.totalPrice;
     }
     y = renderSubtotalRow(doc, y, workshopTotal);
+
+    // Per-section waivers within the workshop (issue #284). volunteering and
+    // intern waive machine usage; intern also waives material.
+    const machineWaived = round2(machineRaw * (1 - discount.machine));
+    if (machineWaived > 0 && discountLabel) {
+      y = renderDiscountRow(
+        doc,
+        y,
+        `${discountLabel}: keine Maschinengebühren`,
+        machineWaived,
+      );
+    }
+    const materialWaived = round2(materialRaw * (1 - discount.material));
+    if (materialWaived > 0 && discountLabel) {
+      y = renderDiscountRow(
+        doc,
+        y,
+        `${discountLabel}: kein Materialbezug verrechnet`,
+        materialWaived,
+      );
+    }
   }
 
   // Donation (label: "Spende"). The underlying field is still named `tip`
@@ -532,14 +648,54 @@ function renderCheckoutSection(
 }
 
 function groupItemsByWorkshop(
-  checkout: InvoiceCheckout
+  items: InvoiceCheckout["items"]
 ): Record<string, InvoiceCheckout["items"]> {
   const groups: Record<string, InvoiceCheckout["items"]> = {};
-  for (const item of checkout.items) {
+  for (const item of items) {
     const ws = item.workshop;
     if (!groups[ws]) groups[ws] = [];
     groups[ws].push(item);
   }
   return groups;
+}
+
+/**
+ * Render a labeled group of checkout items: a bold heading, the column
+ * header, one row per item (SLA items render their pricing axes inline),
+ * and a Zwischentotal. Shared by the per-workshop groups and the
+ * Vereinsmitgliedschaft block (issue #262/#263) so they look identical.
+ */
+function renderItemGroup(
+  doc: PDFKit.PDFDocument,
+  y: number,
+  label: string,
+  items: InvoiceCheckout["items"]
+): number {
+  y = ensureSpace(doc, y, 20 + items.length * 14 + 30);
+  doc.fontSize(10).font("Helvetica-Bold");
+  doc.text(label, MARGIN_LEFT, y);
+  y += 16;
+
+  y = renderTableHeader(doc, y);
+
+  let groupTotal = 0;
+  for (const item of items) {
+    if (item.pricingModel === "sla") {
+      // SLA has two pricing axes (resin volume + layer count); the single
+      // quantity × unitPrice column pair can't express that without reading
+      // as an arithmetic falsehood. Render the axes in the description and
+      // skip the middle columns — only totalPrice stays.
+      const axes = (item.formInputs ?? [])
+        .map((fi) => `${formatQty(fi.quantity)} ${fi.unit}`)
+        .join(" · ");
+      const desc = axes ? `${item.description} (${axes})` : item.description;
+      y = renderItemRow(doc, y, desc, "", null, null, item.totalPrice);
+    } else {
+      const unit = unitLabel(item.pricingModel);
+      y = renderItemRow(doc, y, item.description, unit, item.quantity, item.unitPrice, item.totalPrice);
+    }
+    groupTotal += item.totalPrice;
+  }
+  return renderSubtotalRow(doc, y, groupTotal);
 }
 

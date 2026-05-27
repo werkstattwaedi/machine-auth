@@ -13,12 +13,14 @@ import type { CatalogItemDoc } from "./firestore-entities"
 import type { PricingConfig } from "./workshop-config"
 
 describe("calculateFee", () => {
+  // Issue #284: one standard fee per user type (`regular`); the usage-type
+  // discount (USAGE_TYPE_DISCOUNTS in @oww/shared) derives the rest.
   describe("with config", () => {
     const config: PricingConfig = {
       entryFees: {
-        erwachsen: { regular: 20, ermaessigt: 10, materialbezug: 5, intern: 0, hangenmoos: 25 },
-        kind: { regular: 10, ermaessigt: 5, materialbezug: 0, intern: 0, hangenmoos: 10 },
-        firma: { regular: 50, ermaessigt: 25, materialbezug: 10, intern: 0, hangenmoos: 50 },
+        erwachsen: { regular: 20 },
+        kind: { regular: 10 },
+        firma: { regular: 50 },
       },
       slaLayerPrice: { none: 0.01, member: 0.008 },
       workshops: {} as PricingConfig["workshops"],
@@ -26,15 +28,20 @@ describe("calculateFee", () => {
     }
 
     it.each([
+      // regular = full standard fee.
       ["erwachsen", "regular", 20],
+      // ermaessigt = half.
       ["erwachsen", "ermaessigt", 10],
-      ["erwachsen", "materialbezug", 5],
-      ["kind", "regular", 10],
       ["kind", "ermaessigt", 5],
+      // materialbezug / intern / volunteering / hangenmoos = waived.
+      ["erwachsen", "materialbezug", 0],
       ["kind", "materialbezug", 0],
-      ["firma", "hangenmoos", 50],
+      ["firma", "hangenmoos", 0],
+      ["erwachsen", "intern", 0],
+      ["erwachsen", "volunteering", 0],
+      ["kind", "regular", 10],
     ] as [UserType, UsageType, number][])(
-      "returns the configured fee for %s + %s",
+      "returns the discounted fee for %s + %s",
       (userType, usageType, expected) => {
         expect(calculateFee(userType, usageType, config)).toBe(expected)
       },
@@ -65,26 +72,26 @@ describe("calculateFee", () => {
     it("returns null when the user type row is missing", () => {
       const config = {
         entryFees: {
-          erwachsen: { regular: 20, materialbezug: 5, intern: 0, hangenmoos: 25 },
+          erwachsen: { regular: 20 },
         },
       } as unknown as PricingConfig
       expect(calculateFee("kind", "regular", config)).toBeNull()
     })
 
-    it("returns null when the usage type column is missing", () => {
+    it("returns null when the regular fee is missing for the user type", () => {
       const config = {
         entryFees: {
-          erwachsen: { regular: 20 },
+          erwachsen: { ermaessigt: 10 },
         },
       } as unknown as PricingConfig
-      // "materialbezug" not in row → null
+      // No `regular` → null even for materialbezug.
       expect(calculateFee("erwachsen", "materialbezug", config)).toBeNull()
     })
 
     it("preserves explicit zero (not coerced to null)", () => {
       const config = {
         entryFees: {
-          erwachsen: { regular: 0, materialbezug: 0, intern: 0, hangenmoos: 0 },
+          erwachsen: { regular: 0 },
         },
       } as unknown as PricingConfig
       expect(calculateFee("erwachsen", "regular", config)).toBe(0)

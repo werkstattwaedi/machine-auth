@@ -3,8 +3,10 @@
 
 import { test, expect, type Page } from "@playwright/test"
 import {
+  clearCheckoutsDeep,
   clearCollections,
   seedMembershipState,
+  seedOpenCheckoutWithMembership,
   waitForLoginCode,
 } from "./helpers"
 
@@ -296,6 +298,52 @@ test.describe("Checkout step screenshots", () => {
     await expect(page).toHaveScreenshot("checkout-summary-material-expanded.png")
   })
 
+  // Issue #284: a discounted usage type changes the summary — entry/machine
+  // fees are waived (net 0) and an inline SectionDiscountNote explains why,
+  // while non-waived sections (material for volunteering) still bill in full.
+  // No existing fixture used a discounted usage type, so the new rendering
+  // had no visual-regression coverage (PR #346 review feedback).
+  test("summary — Freiwilligengruppe waives entry, bills material (discount note)", async ({ page }) => {
+    await goToSummaryWithItems(page)
+
+    // Expand Nutzungsgebühren so the Nutzungsart dropdown + the per-section
+    // discount note are visible.
+    await page.getByRole("button", { name: /Nutzungsgebühren/ }).click()
+    await expect(page.getByLabel("Nutzungsart")).toBeVisible()
+    await page.getByLabel("Nutzungsart").selectOption({ value: "volunteering" })
+
+    // The waived-entry note must appear inside the expanded section.
+    await expect(page.getByTestId("section-discount-note").first()).toBeVisible()
+
+    // Click a neutral spot so the screenshot is stable.
+    await page.locator("h1").first().click()
+
+    await expect(page).toHaveScreenshot("checkout-summary-volunteering-discount.png")
+  })
+
+  // Issue #284 / Marco's original complaint: an "Interne Nutzung" checkout
+  // showed full line items but a CHF 0.00 total with no explanation. The
+  // discount notes now spell out every waived section. Expand both
+  // Nutzungsgebühren and Materialbezug so all notes are captured.
+  test("summary — Interne Nutzung waives all sections (discount notes, CHF 0)", async ({ page }) => {
+    await goToSummaryWithItems(page)
+
+    await page.getByRole("button", { name: /Nutzungsgebühren/ }).click()
+    await expect(page.getByLabel("Nutzungsart")).toBeVisible()
+    await page.getByLabel("Nutzungsart").selectOption({ value: "intern" })
+
+    // Expand Materialbezug too so its waived note is visible.
+    await page.getByRole("button", { name: /Materialbezug/ }).click()
+    await expect(page.getByText("Bezogenes Material")).toBeVisible()
+
+    // Entry + material both waived → at least two discount notes present.
+    await expect(page.getByTestId("section-discount-note").first()).toBeVisible()
+
+    await page.locator("h1").first().click()
+
+    await expect(page).toHaveScreenshot("checkout-summary-intern-discount.png")
+  })
+
   test("Step 4 · Rechnung tab (default) — QR bill + PDF download in hero", async ({ page }, testInfo) => {
     testInfo.setTimeout(60_000)
     await submitAndWaitForPaymentResult(page)
@@ -522,5 +570,114 @@ test.describe("Checkout step screenshots", () => {
     await goToWorkshops(page)
     await page.getByLabel("Holz").click()
     await expect(page).toHaveScreenshot("checkout-validation-errors.png")
+  })
+
+  // ── Vereinsmitgliedschaft as a dedicated section (issues #262 / #263) ──
+  //
+  // These seed an open checkout for the signed-in user carrying the
+  // membership SKU (see seedOpenCheckoutWithMembership), so the wizard
+  // rehydrates it and renders the new Vereinsmitgliedschaft bucket. The
+  // seeded checkout is wiped at the end of each test so it can't leak into
+  // later tests that expect a fresh cart (the describe-level afterEach only
+  // resets membership state, not checkouts).
+
+  test("summary — Vereinsmitgliedschaft membership-only cart", async ({
+    page,
+  }) => {
+    const uid = process.env.E2E_AUTH_USER_UID
+    test.skip(!uid, "E2E_AUTH_USER_UID not set (global-setup did not run)")
+    await signIn(page)
+    await seedOpenCheckoutWithMembership(uid!)
+
+    await page.goto("/")
+    await expect(page.getByText("Abmelden")).toBeVisible({ timeout: 10_000 })
+
+    // Advance check-in → workshops → summary.
+    await page.getByRole("button", { name: "Weiter" }).click()
+    await expect(page.getByText("Werkstätten wählen")).toBeHidden()
+    const checkoutBtn = page.getByRole("button", { name: "Check-Out" })
+    await checkoutBtn.scrollIntoViewIfNeeded()
+    await checkoutBtn.click()
+    await expect(page.getByText("Dein Besuch")).toBeVisible()
+
+    // The Vereinsmitgliedschaft section is present and the three regular
+    // buckets are hidden (membership-only cart).
+    await expect(
+      page.getByRole("button", { name: /Vereinsmitgliedschaft/ }),
+    ).toBeVisible()
+    await expect(
+      page.getByRole("button", { name: /Nutzungsgebühren/ }),
+    ).toBeHidden()
+    await expect(
+      page.getByRole("button", { name: /Materialbezug/ }),
+    ).toBeHidden()
+
+    await expect(page).toHaveScreenshot("checkout-summary-membership-only.png")
+
+    await clearCheckoutsDeep()
+  })
+
+  test("summary — Vereinsmitgliedschaft + workshop items", async ({ page }) => {
+    const uid = process.env.E2E_AUTH_USER_UID
+    test.skip(!uid, "E2E_AUTH_USER_UID not set (global-setup did not run)")
+    await signIn(page)
+    await seedOpenCheckoutWithMembership(uid!, { withWorkshopItem: true })
+
+    await page.goto("/")
+    await expect(page.getByText("Abmelden")).toBeVisible({ timeout: 10_000 })
+
+    await page.getByRole("button", { name: "Weiter" }).click()
+    await expect(page.getByText("Werkstätten wählen")).toBeVisible()
+    const checkoutBtn = page.getByRole("button", { name: "Check-Out" })
+    await checkoutBtn.scrollIntoViewIfNeeded()
+    await checkoutBtn.click()
+    await expect(page.getByText("Dein Besuch")).toBeVisible()
+
+    // Mixed cart: Vereinsmitgliedschaft sits above and the three regular
+    // buckets stay visible.
+    await expect(
+      page.getByRole("button", { name: /Vereinsmitgliedschaft/ }),
+    ).toBeVisible()
+    await expect(
+      page.getByRole("button", { name: /Nutzungsgebühren/ }),
+    ).toBeVisible()
+    await expect(
+      page.getByRole("button", { name: /Materialbezug/ }),
+    ).toBeVisible()
+
+    await expect(page).toHaveScreenshot("checkout-summary-membership-mixed.png")
+
+    await clearCheckoutsDeep()
+  })
+
+  test("workshops step — Vereinsmitgliedschaft inline (no add button, no Diverses)", async ({
+    page,
+  }) => {
+    const uid = process.env.E2E_AUTH_USER_UID
+    test.skip(!uid, "E2E_AUTH_USER_UID not set (global-setup did not run)")
+    await signIn(page)
+    await seedOpenCheckoutWithMembership(uid!)
+
+    await page.goto("/")
+    await expect(page.getByText("Abmelden")).toBeVisible({ timeout: 10_000 })
+
+    // Advance to the workshops step (step 1).
+    await page.getByRole("button", { name: "Weiter" }).click()
+
+    // The inline Vereinsmitgliedschaft block renders, but the workshop
+    // picker grid, the "Material hinzufügen" affordance, and any Diverses
+    // heading are all absent for a membership-only cart.
+    await expect(page.getByTestId("membership-block")).toBeVisible()
+    await expect(page.getByText("Werkstätten wählen")).toBeHidden()
+    await expect(
+      page.getByRole("button", { name: "Material hinzufügen" }),
+    ).toBeHidden()
+    await expect(page.getByText("Diverses")).toBeHidden()
+
+    await expect(page).toHaveScreenshot(
+      "checkout-workshops-membership-only.png",
+    )
+
+    await clearCheckoutsDeep()
   })
 })

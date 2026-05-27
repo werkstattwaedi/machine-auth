@@ -33,7 +33,9 @@ import {
   getSortedWorkshops,
   type WorkshopId,
 } from "@modules/lib/workshop-config"
+import { partitionMembership } from "@oww/shared"
 import { WorkshopSectionWithCatalog } from "@/components/usage/workshop-section-with-catalog"
+import { MembershipInlineSection } from "@/components/usage/membership-inline-section"
 import { ScanFab } from "@/components/qr-scanner/scan-fab"
 import { useWizardContext } from "@/components/checkout/wizard-context"
 
@@ -56,11 +58,24 @@ function VisitRoute() {
     items,
     pricingConfig,
     discountLevel,
+    membershipCatalogId,
     addItem,
     updateItem,
     removeItem,
     kiosk,
   } = ctx
+
+  // Issue #262/#263: break the Vereinsmitgliedschaft SKU out of the workshop
+  // sections. Membership items get their own read-only inline section
+  // (rendered first) and must not bleed into the `diverses` workshop block.
+  const { membershipItems, otherItems: workshopItems } = useMemo(
+    () => partitionMembership(items, { membershipCatalogId }),
+    [items, membershipCatalogId],
+  )
+  // A membership-only cart hides the "Werkstätten wählen" picker grid and the
+  // per-workshop sections so the page is just the membership block + nav.
+  const membershipOnly =
+    membershipItems.length > 0 && workshopItems.length === 0
 
   const toggleVisitedMutation = useAsyncMutation({
     context: "visit.toggleWorkshopVisited",
@@ -76,13 +91,15 @@ function VisitRoute() {
     [pricingConfig],
   )
 
+  // Membership items are excluded (issue #262/#263) so a membership purchase
+  // doesn't force-select the legacy `diverses` workshop checkbox.
   const workshopsWithItems = useMemo(() => {
     const s = new Set<WorkshopId>()
-    for (const item of items) {
+    for (const item of workshopItems) {
       if (item.workshop) s.add(item.workshop as WorkshopId)
     }
     return s
-  }, [items])
+  }, [workshopItems])
 
   const visitedWorkshops = useMemo(() => {
     const s = new Set<WorkshopId>()
@@ -205,6 +222,9 @@ function VisitRoute() {
   return (
     <>
       <div className="flex flex-col flex-1 gap-8">
+        {/* Workshop checkbox selector. Hidden for a membership-only cart so the
+            page is just the Vereinsmitgliedschaft block + nav (issue #263). */}
+        {!membershipOnly && (
         <div>
           <h2 className="text-xl font-bold font-body mb-2">
             Werkstätten wählen
@@ -249,6 +269,14 @@ function VisitRoute() {
             })}
           </div>
         </div>
+        )}
+
+        {/* Vereinsmitgliedschaft — rendered inline with the other workshop
+            sessions (issue #262/#263). Read-only: a membership is purchased on
+            /membership, and you can't add material to it. */}
+        {membershipItems.length > 0 && (
+          <MembershipInlineSection items={membershipItems} />
+        )}
 
         {sortedWorkshops
           .filter(([wsId]) => effectiveWorkshops.has(wsId))
@@ -258,7 +286,7 @@ function VisitRoute() {
               workshopId={wsId}
               workshop={wsConfig}
               config={pricingConfig}
-              items={items.filter((i) => i.workshop === wsId)}
+              items={workshopItems.filter((i) => i.workshop === wsId)}
               callbacks={callbacks}
               discountLevel={discountLevel}
               checkoutId={checkoutId}

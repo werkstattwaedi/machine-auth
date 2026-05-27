@@ -24,6 +24,7 @@ import { formatWorkshopDateTime } from "../util/workshop_timezone";
 import { formatBillReference } from "./types";
 import { logOperationError } from "../operations_log";
 import { assertTemplateConfigured } from "../util/resend_template";
+import { loadMembershipCatalogId } from "../membership/shared";
 import { processMembershipForAckedBill } from "../membership/process_membership_payment";
 import type {
   BillEntity,
@@ -77,7 +78,11 @@ const kasseEmail = defineString("KASSE_EMAIL", { default: "" });
 const STALE_LOCK_MS = 5 * 60 * 1000; // 5 minutes
 
 /**
- * Look up the per-person entry fee from `config/pricing.entryFees`.
+ * Standard (regular) per-person entry fee from
+ * `config/pricing.entryFees.{userType}.regular`. The usage-type discount
+ * is applied separately by the renderer (issue #284) so the invoice can
+ * show the raw fee with a per-section "waived" note rather than a silent
+ * zero. The `usageType` argument is kept for error context only.
  *
  * Throws when the config row is missing (issue #149). The previous silent
  * fallback shipped hardcoded prices that diverged from the seeded
@@ -93,13 +98,13 @@ function calculateEntryFee(
 ): number {
   if (configFees) {
     const row = configFees[userType];
-    if (row && usageType in row) {
-      const value = row[usageType];
-      if (typeof value === "number") return value;
+    if (row && "regular" in row) {
+      const standard = row["regular"];
+      if (typeof standard === "number") return standard;
     }
   }
   throw new Error(
-    `Pricing config missing entry fee for ${userType}/${usageType}`,
+    `Pricing config missing standard entry fee for ${userType} (usageType ${usageType})`,
   );
 }
 
@@ -134,6 +139,12 @@ async function assembleInvoiceData(
   } | undefined;
   const workshops = pricingData?.workshops ?? {};
   const configFees = pricingData?.entryFees ?? null;
+
+  // Issue #262/#263: resolve the Vereinsmitgliedschaft catalog id once so the
+  // renderer can break membership items out of the workshop groups into a
+  // dedicated "Mitgliedschaft" block. Null when no membership SKU is
+  // configured — the renderer then groups items exactly as before.
+  const membershipCatalogId = await loadMembershipCatalogId(db);
 
   // Load all checkouts + items
   const checkoutDocs = await Promise.all(
@@ -270,6 +281,7 @@ async function assembleInvoiceData(
     paidVia: bill.paidVia ?? null,
     paymentMethod,
     kind,
+    membershipCatalogId,
   };
 }
 
