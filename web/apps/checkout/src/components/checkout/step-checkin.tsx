@@ -4,8 +4,8 @@
 import { useState, useMemo, useCallback } from "react"
 import { Checkbox } from "@modules/components/ui/checkbox"
 import { Button } from "@modules/components/ui/button"
-import { PersonCard } from "./person-card"
-import { Plus, ArrowRight, LogIn, UserPlus, X } from "lucide-react"
+import { PersonCard, RemovePersonButton } from "./person-card"
+import { Plus, ArrowRight, LogIn, UserPlus } from "lucide-react"
 import type { CheckoutPerson, PersonsAction } from "./use-checkout-state"
 import type { UserType } from "@modules/lib/pricing"
 import { validatePerson } from "./validation"
@@ -93,6 +93,25 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
     return person ? allErrors[person.id].termsAccepted : null
   }, [persons, allErrors, isAnonymous])
 
+  // A checkout must stay anchored to at least one account-linked member —
+  // walk-in guests (no userId) can't stand alone. So an account-linked
+  // person (the signed-in user or a family quick-add member) may only be
+  // removed while another member remains. With no family membership the
+  // signed-in user is the only member and therefore can't remove themselves.
+  // Guests are always removable (down to "at least one person stays").
+  const memberCount = useMemo(
+    () => persons.filter((p) => !!p.userId).length,
+    [persons],
+  )
+  const canRemovePerson = useCallback(
+    (person: CheckoutPerson) => {
+      if (persons.length <= 1) return false
+      if (person.userId && memberCount <= 1) return false
+      return true
+    },
+    [persons.length, memberCount],
+  )
+
   const handleWeiter = async () => {
     setSubmitted(true)
     if (!allValid) return
@@ -161,7 +180,7 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
               suffix={isSignedInUser && isMember ? "Vereinsmitglied" : null}
               onSignOut={isSignedInUser ? onSignOut : undefined}
               onRemove={
-                persons.length > 1
+                canRemovePerson(person)
                   ? () =>
                       personsDispatch({ type: "REMOVE_PERSON", id: person.id })
                   : undefined
@@ -174,13 +193,18 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
             key={person.id}
             person={person}
             index={i}
-            isOnly={persons.length === 1}
             showTerms={false}
             dispatch={personsDispatch}
             errors={allErrors[person.id]}
             touched={touched[person.id]}
             submitted={submitted}
             onBlur={(field) => handleBlur(person.id, field)}
+            onRemove={
+              canRemovePerson(person)
+                ? () =>
+                    personsDispatch({ type: "REMOVE_PERSON", id: person.id })
+                : undefined
+            }
           />
         )
       })}
@@ -295,12 +319,15 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
  * docs), so we show just the name + a short subtitle + the
  * action affordances.
  *
- * Action slot, right side:
+ * Action slot, right side (shared RemovePersonButton so it lines up with
+ * the guest PersonCard's remove):
  *   - Abmelden (only for the signed-in user — signs the whole session out)
- *   - X (only when persons.length > 1 — removes this card from the visit)
+ *   - X (when `onRemove` is supplied — the caller gates this so the last
+ *     account-linked member can't be removed; see `canRemovePerson`)
  *
- * Mike's "if I add my kid, I need to be able to remove myself" rule:
- * the signed-in user's strip carries both Abmelden and X.
+ * Mike's "if I add my kid, I need to be able to remove myself" rule holds
+ * once another family member is on the visit; with no family membership the
+ * signed-in user is the only member and the X is withheld.
  */
 function IdentityStrip({
   person,
@@ -341,16 +368,7 @@ function IdentityStrip({
           Abmelden
         </button>
       )}
-      {onRemove && (
-        <button
-          type="button"
-          onClick={onRemove}
-          aria-label={`Person ${index + 1} entfernen`}
-          className="inline-flex items-center justify-center h-8 w-8 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      )}
+      {onRemove && <RemovePersonButton index={index} onRemove={onRemove} />}
     </div>
   )
 }
