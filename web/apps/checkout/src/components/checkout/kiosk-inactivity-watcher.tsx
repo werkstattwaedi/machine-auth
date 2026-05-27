@@ -1,7 +1,7 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,32 +39,49 @@ export function KioskInactivityWatcher() {
   const [open, setOpen] = useState(false)
   const [secondsLeft, setSecondsLeft] = useState(POPUP_AUTO_CLOSE_SECONDS)
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Read the dialog's open state from inside the activity handler without
+  // putting `open` in the listener effect's deps (which would tear down and
+  // re-add the window listeners on every open/close).
+  const openRef = useRef(open)
+  openRef.current = open
 
-  // Only run for kiosk sessions.
+  const armIdle = useCallback(() => {
+    if (!kiosk) return
+    if (idleTimer.current) clearTimeout(idleTimer.current)
+    idleTimer.current = setTimeout(() => setOpen(true), IDLE_MS)
+  }, [kiosk])
+
+  // Activity listeners — attached once per kiosk session (no churn on
+  // open/close). Each activity re-arms the idle timer only while the dialog
+  // is closed.
   useEffect(() => {
     if (!kiosk) return
-
-    const resetIdle = () => {
-      if (idleTimer.current) clearTimeout(idleTimer.current)
-      idleTimer.current = setTimeout(() => {
-        setOpen(true)
-      }, IDLE_MS)
-    }
-
-    resetIdle()
     const handler = () => {
-      if (!open) resetIdle()
+      if (!openRef.current) armIdle()
     }
     for (const evt of ACTIVITY_EVENTS) {
       window.addEventListener(evt, handler, { passive: true })
     }
     return () => {
-      if (idleTimer.current) clearTimeout(idleTimer.current)
       for (const evt of ACTIVITY_EVENTS) {
         window.removeEventListener(evt, handler)
       }
     }
-  }, [kiosk, open])
+  }, [kiosk, armIdle])
+
+  // Arm the idle countdown while the dialog is closed; clear it while open
+  // (the auto-close effect below owns the timing once the dialog is up).
+  useEffect(() => {
+    if (!kiosk) return
+    if (open) {
+      if (idleTimer.current) clearTimeout(idleTimer.current)
+      return
+    }
+    armIdle()
+    return () => {
+      if (idleTimer.current) clearTimeout(idleTimer.current)
+    }
+  }, [kiosk, open, armIdle])
 
   // 30-second auto-close once the dialog is open.
   useEffect(() => {

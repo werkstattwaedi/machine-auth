@@ -45,8 +45,15 @@ function CheckinRoute() {
       onAdvance={async () => {
         // Issue #151: eager anonymous sign-in so /visit can write items.
         if (ctx.isAnonymous) await ctx.signInAnonymouslyIfNeeded()
-        // Issue #246: persist the person roster onto the open checkout doc.
-        await ctx.persistPersons()
+        try {
+          // Issue #246: persist the person roster onto the open checkout doc.
+          await ctx.persistPersons()
+        } catch {
+          // persistPersons already toasted (ADR-0025) and re-threw; stay on
+          // /checkin so the user can retry instead of bouncing to the
+          // no-checkout gate on /visit.
+          return
+        }
         navigate({
           to: "/visit",
           search: ctx.kiosk ? { kiosk: "" } : {},

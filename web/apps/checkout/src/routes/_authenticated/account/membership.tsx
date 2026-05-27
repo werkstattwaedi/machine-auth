@@ -145,12 +145,9 @@ function MembershipPage() {
       >(functions, "purchaseMembership")
       await fn({ type, renewExisting })
       // The membership SKU is appended to the user's open checkout (or a
-      // fresh `materialbezug` checkout). Land directly on the wizard's
-      // summary step so the user can review and pay in one click.
-      navigate({
-        to: "/",
-        search: { step: "summary" } as never,
-      } as never)
+      // fresh `materialbezug` checkout). Land directly on the checkout
+      // summary so the user can review and pay in one click.
+      navigate({ to: "/checkout" })
     })
   }
 
@@ -388,7 +385,7 @@ function PendingMembershipCheckout({
           offenen Checkout. Schliesse den Checkout ab, um sie zu aktivieren.
         </p>
         <Button asChild>
-          <Link to="/" search={{ step: "summary" } as never}>
+          <Link to="/checkout">
             Zur Zahlung
             <ArrowRight />
           </Link>

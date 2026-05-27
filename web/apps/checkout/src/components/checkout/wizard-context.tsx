@@ -411,10 +411,12 @@ export function WizardProvider({
           firebaseUid: callerUid,
         } as unknown as CheckoutDoc)
       }
-    } catch {
-      // Hook already toasted + telemetered. Clear the latch so the gate
-      // can do its job next time the user navigates.
+    } catch (err) {
+      // Hook already toasted + telemetered. Clear the latch and re-throw so
+      // the caller can abort navigation — otherwise /checkin would advance to
+      // /visit with no open checkout and flash the "Kein offener Besuch" gate.
       setPendingCheckout(false)
+      throw err
     }
   }, [persons, usageType, openCheckout, fsMutation, db, identifiedUserRef, auth])
 
