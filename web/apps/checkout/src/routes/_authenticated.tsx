@@ -41,6 +41,7 @@ function CheckoutAuthenticatedLayout() {
       navItems={navItems}
       gate={{ kind: "member", completeProfilePath: "/account/complete-profile" }}
       headerAction={<VisitCta />}
+      signOutRedirect="/checkin"
     />
   )
 }
