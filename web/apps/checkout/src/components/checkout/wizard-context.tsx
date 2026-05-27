@@ -178,6 +178,12 @@ export function WizardProvider({
   const [usageType, setUsageType] = useState<UsageType>("regular")
   const [tip, setTip] = useState(0)
   const [paymentData, setPaymentData] = useState<PaymentData | null>(null)
+  // Bumped by resetWizard so the logged-in pre-fill effect re-seeds the
+  // roster after "Neuer Besuch starten". RESET clears persons but the user
+  // stays logged in (userDoc.id unchanged), so a purely userDoc-keyed effect
+  // would not re-run and /checkin would show empty anonymous fields until a
+  // page reload remounts the provider.
+  const [prefillNonce, setPrefillNonce] = useState(0)
 
   // ADR-0025: route the checkout submit through useAsyncMutation so a
   // failed callable surfaces a German error toast + inline alert.
@@ -280,7 +286,7 @@ export function WizardProvider({
   }, [openCheckout?.usageType])
 
   // Pre-fill primary person for logged-in users
-  usePreFillPerson(identifiedUserDoc, personsDispatch, persons)
+  usePreFillPerson(identifiedUserDoc, personsDispatch, persons, prefillNonce)
 
   // Pre-fill primary person for tag-identified users
   useEffect(() => {
@@ -527,6 +533,9 @@ export function WizardProvider({
     setUsageType("regular")
     setTip(0)
     setPaymentData(null)
+    // Re-run the logged-in pre-fill against the freshly RESET roster so the
+    // user's identity shows on /checkin without a reload.
+    setPrefillNonce((n) => n + 1)
     await tagSignOut()
     try {
       await bridge.resetSession()
@@ -727,11 +736,17 @@ export function WizardProvider({
 
 /**
  * Pre-fill the primary person card with data from an identified user doc.
+ * Exported for unit testing the reset re-trigger (see wizard-prefill.test.tsx).
  */
-function usePreFillPerson(
+export function usePreFillPerson(
   userDoc: UserDoc | null,
   dispatch: React.Dispatch<PersonsAction>,
   persons: CheckoutPerson[],
+  // Re-runs the pre-fill when bumped (resetWizard) even though userDoc.id is
+  // unchanged. Deliberately NOT keyed on `persons` itself — that would
+  // re-inject the logged-in user into a fresh empty slot the moment they
+  // remove themselves and start adding a guest.
+  resetNonce: number,
 ) {
   useEffect(() => {
     if (!userDoc) return
@@ -756,7 +771,7 @@ function usePreFillPerson(
       },
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userDoc?.id])
+  }, [userDoc?.id, resetNonce])
 }
 
 // Person <-> Firestore doc converters (extracted from the old wizard).
