@@ -233,7 +233,17 @@ export function WizardProvider({
       : anonUid
         ? [
             where("userId", "==", null),
-            where("modifiedBy", "==", anonUid),
+            // Scope to the checkout THIS anon session created. Key on
+            // `firebaseUid` (stamped from the SDK's `auth.currentUser.uid`
+            // at create, write-once per the security rules) — NOT
+            // `modifiedBy`, which is an audit field stamped from the
+            // AuthProvider's React `user` state. That state lags the SDK, so
+            // a create racing an auth transition (logout → eager-anon)
+            // stamps `modifiedBy: null` and this query would never match its
+            // own doc. `modifiedBy` also tracks the *last* writer, which any
+            // anon session may become (rules allow any anon to edit a
+            // null-userId checkout), so it isn't a stable ownership key.
+            where("firebaseUid", "==", anonUid),
             where("status", "==", "open"),
           ]
         : []),

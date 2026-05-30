@@ -82,7 +82,13 @@ function RootDispatcher() {
       : anonUid
         ? [
             where("userId", "==", null),
-            where("modifiedBy", "==", anonUid),
+            // Key on `firebaseUid` (stable, write-once creator id), not the
+            // `modifiedBy` audit field — see wizard-context.tsx for the full
+            // rationale. `modifiedBy` is stamped from lagging React auth
+            // state and is null when a create races an auth transition, so
+            // the dispatcher would miss the freshly-created anon checkout and
+            // bounce a returning visitor back to /checkin.
+            where("firebaseUid", "==", anonUid),
             where("status", "==", "open"),
           ]
         : []),
