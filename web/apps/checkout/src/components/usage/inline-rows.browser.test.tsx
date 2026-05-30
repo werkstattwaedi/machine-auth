@@ -543,6 +543,109 @@ describe("MaterialPicker", () => {
     })
   })
 
+  it("updates the header price to the selected variant's price (#354)", async () => {
+    // Sandstrahlen-Stein-style item: Klein (variants[0]) @ CHF 5,
+    // Mittel @ CHF 10. Before the fix the header stayed at CHF 5.00
+    // even after selecting Mittel, contradicting the form total below.
+    const catalogItems: CatalogItem[] = [
+      {
+        id: "cat-stein",
+        code: "8001",
+        name: "Sandstrahlen Stein",
+        workshops: ["holz"],
+        category: ["Maschinen"],
+        variants: [
+          {
+            id: "klein",
+            label: "Klein (bis 13×9×9 cm)",
+            pricingModel: "count",
+            unitPrice: { default: 5 },
+          },
+          {
+            id: "mittel",
+            label: "Mittel (bis 21×14×14 cm)",
+            pricingModel: "count",
+            unitPrice: { default: 10 },
+          },
+        ],
+        active: true,
+        userCanAdd: true,
+      },
+    ]
+    const user = userEvent.setup()
+    renderPicker({ catalogItems })
+
+    const row = screen.getByRole("button", { name: /Sandstrahlen Stein/ })
+    // The header price lives in the row's `.tabular-nums` cell (formatCHF
+    // text + a `/unit` span). Read it directly and normalise whitespace so
+    // the assertion doesn't hinge on Intl's (non-breaking) space codepoint.
+    const headerPrice = () =>
+      (row.querySelector(".tabular-nums")?.textContent ?? "")
+        .replace(/\s+/g, " ")
+        .trim()
+
+    // Collapsed/initial header shows the canonical variants[0] price.
+    expect(headerPrice()).toContain("CHF 5.00")
+
+    await user.click(row)
+    // Still CHF 5.00 right after expand (Klein is selected by default).
+    expect(headerPrice()).toContain("CHF 5.00")
+
+    // Select Mittel — the header must now reflect CHF 10.00 (the bug:
+    // it stayed at CHF 5.00).
+    await user.click(
+      screen.getByRole("radio", { name: "Mittel (bis 21×14×14 cm)" }),
+    )
+    expect(headerPrice()).toContain("CHF 10.00")
+    expect(headerPrice()).not.toContain("CHF 5.00")
+  })
+
+  it("updates the header unit suffix when the selected variant changes pricing model (#354)", async () => {
+    // Count variant (/Stk.) is canonical; switching to the area variant
+    // must update the header's unit suffix to /m², guarding getShortUnit.
+    const catalogItems: CatalogItem[] = [
+      {
+        id: "cat-mixed",
+        code: "MIX",
+        name: "Mixed Pricing Item",
+        workshops: ["holz"],
+        category: ["Sonstiges"],
+        variants: [
+          {
+            id: "stk",
+            label: "Pro Stück",
+            pricingModel: "count",
+            unitPrice: { default: 5 },
+          },
+          {
+            id: "flaeche",
+            label: "Pro Fläche",
+            pricingModel: "area",
+            unitPrice: { default: 25 },
+          },
+        ],
+        active: true,
+        userCanAdd: true,
+      },
+    ]
+    const user = userEvent.setup()
+    renderPicker({ catalogItems })
+
+    const row = screen.getByRole("button", { name: /Mixed Pricing Item/ })
+    const headerCell = () =>
+      (row.querySelector(".tabular-nums")?.textContent ?? "")
+        .replace(/\s+/g, " ")
+        .trim()
+
+    await user.click(row)
+    // Count variant selected by default → /Stk. suffix in the header.
+    expect(headerCell()).toContain("/Stk.")
+
+    await user.click(screen.getByRole("radio", { name: "Pro Fläche" }))
+    expect(headerCell()).toContain("/m²")
+    expect(headerCell()).not.toContain("/Stk.")
+  })
+
   it("filters catalog items by code", async () => {
     const user = userEvent.setup()
     renderPicker({})
