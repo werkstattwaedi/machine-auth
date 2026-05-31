@@ -567,10 +567,14 @@ function CatalogRowSubtitle({ catalog }: { catalog: CatalogItem }) {
 // is wrapped in Radix `Collapsible.Content` so it animates between 0 and
 // its measured height via `--radix-collapsible-content-height`.
 //
-// State note: variant selection survives for the duration of one open;
-// the body unmounts on close (Collapsible.Content unmounts after the
-// close animation finishes) so re-opening produces a fresh
-// `PickerRowBody` with `variants[0]` selected again.
+// State note: the selected-variant state lives here (not in the inner
+// `PickerRowBody`) so the header price/unit and the body's form share a
+// single source of truth — otherwise the header keeps showing
+// `variants[0]` while the form below reflects the picked variant (#354).
+// When expanded the header tracks the selection; when collapsed it falls
+// back to `variants[0]` so list rows show the canonical price during
+// browse. Closing the row resets the selection back to the initial
+// variant, matching the previous body-unmount-on-close behaviour.
 // ---------------------------------------------------------------------------
 
 function PickerRow({
@@ -595,10 +599,47 @@ function PickerRow({
   onAdd: (item: CheckoutItemLocal) => void
 }) {
   const variants = catalog.variants ?? []
+  // Resolve the variant the row should start (and reset to on close)
+  // from. The `warn` argument is only `true` for the one-time lazy
+  // `useState` initializer — the close-reset path passes `false` so an
+  // unknown `initialVariantId` doesn't re-log on every collapse.
+  const resolveInitialVariantId = (warn: boolean) => {
+    const resolved =
+      (initialVariantId &&
+        variants.find((v) => v.id === initialVariantId)?.id) ??
+      variants[0]?.id ??
+      "default"
+    if (warn && initialVariantId && resolved !== initialVariantId) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `Unknown variantId "${initialVariantId}" for catalog item ${catalog.code}; falling back to variants[0].`,
+      )
+    }
+    return resolved
+  }
+  // Lazy initializer: runs once per mount; the warn lives here (not the
+  // component body) so it doesn't log on every render / strict-mode
+  // double-invoke.
+  const [selectedVariantId, setSelectedVariantId] = useState<string>(() =>
+    resolveInitialVariantId(true),
+  )
+
+  // The header reflects the live selection only while the row is open; a
+  // collapsed row in the list shows the canonical `variants[0]` price.
+  const headerVariant = isExpanded
+    ? (variants.find((v) => v.id === selectedVariantId) ?? variants[0])
+    : variants[0]
+
   return (
     <Collapsible.Root
       open={isExpanded}
-      onOpenChange={onToggle}
+      onOpenChange={(open) => {
+        // Reset the selection back to the initial variant when the row
+        // collapses, so re-opening starts from the canonical default
+        // (previously achieved by the body unmounting on close).
+        if (!open) setSelectedVariantId(resolveInitialVariantId(false))
+        onToggle(open)
+      }}
       className={[
         "border-b border-border",
         isExpanded ? "bg-secondary" : "",
@@ -616,9 +657,9 @@ function PickerRow({
             <CatalogRowSubtitle catalog={catalog} />
           </div>
           <div className="font-heading text-sm font-semibold tabular-nums whitespace-nowrap">
-            {formatCHF(headerUnitPrice(catalog, discountLevel))}
+            {formatCHF(variantUnitPrice(headerVariant, discountLevel))}
             <span className="ml-0.5 font-body text-[11px] font-normal text-muted-foreground">
-              /{getShortUnit(variants[0]?.pricingModel ?? "direct")}
+              /{getShortUnit(headerVariant?.pricingModel ?? "direct")}
             </span>
           </div>
           {isExpanded ? (
@@ -646,7 +687,8 @@ function PickerRow({
           config={config}
           discountLevel={discountLevel}
           workshopId={workshopId}
-          initialVariantId={initialVariantId}
+          selectedVariantId={selectedVariantId}
+          onVariantChange={setSelectedVariantId}
           onAdd={onAdd}
         />
       </Collapsible.Content>
@@ -655,21 +697,19 @@ function PickerRow({
 }
 
 /**
- * Unit price for the header — uses `variants[0]` (the canonical
- * default). When the row is expanded and the user picks a different
- * variant the inner body shows that variant's price; the header keeps
- * the canonical one so the row doesn't visually flicker while the user
- * is browsing options.
+ * Unit price for a single variant at the given discount level. Used for
+ * the header price and the body form. Returns 0 for a missing variant
+ * (defensive against malformed catalog docs with no variants).
  */
-function headerUnitPrice(
-  catalog: CatalogItem,
+function variantUnitPrice(
+  variant: CatalogItem["variants"][number] | undefined,
   discountLevel: DiscountLevel,
 ): number {
-  const v = catalog.variants?.[0]
-  if (!v) return 0
-  return discountLevel === "member" && typeof v.unitPrice.member === "number"
-    ? v.unitPrice.member
-    : v.unitPrice.default
+  if (!variant) return 0
+  return discountLevel === "member" &&
+    typeof variant.unitPrice.member === "number"
+    ? variant.unitPrice.member
+    : variant.unitPrice.default
 }
 
 function PickerRowBody({
@@ -677,43 +717,24 @@ function PickerRowBody({
   config,
   discountLevel,
   workshopId,
-  initialVariantId,
+  selectedVariantId,
+  onVariantChange,
   onAdd,
 }: {
   catalog: CatalogItem
   config: PricingConfig
   discountLevel: DiscountLevel
   workshopId: WorkshopId
-  /** Pre-select a specific variant; unknown ids fall back to variants[0]. */
-  initialVariantId?: string
+  /** Selected variant id, owned by `PickerRow` so the header and the
+   *  body stay in sync. */
+  selectedVariantId: string
+  onVariantChange: (id: string) => void
   onAdd: (item: CheckoutItemLocal) => void
 }) {
   const variants = catalog.variants ?? []
-  // Lazy initializer: runs once per mount. Keeping the warn in here
-  // (rather than the component body) avoids logging on every render
-  // / strict-mode double-invoke.
-  const [selectedVariantId, setSelectedVariantId] = useState<string>(() => {
-    const resolved =
-      (initialVariantId &&
-        variants.find((v) => v.id === initialVariantId)?.id) ??
-      variants[0]?.id ??
-      "default"
-    if (initialVariantId && resolved !== initialVariantId) {
-      // eslint-disable-next-line no-console
-      console.warn(
-        `Unknown variantId "${initialVariantId}" for catalog item ${catalog.code}; falling back to variants[0].`,
-      )
-    }
-    return resolved
-  })
   const variant =
     variants.find((v) => v.id === selectedVariantId) ?? variants[0]
-  const unitPrice = variant
-    ? discountLevel === "member" &&
-      typeof variant.unitPrice.member === "number"
-      ? variant.unitPrice.member
-      : variant.unitPrice.default
-    : 0
+  const unitPrice = variantUnitPrice(variant, discountLevel)
   const baseItem: Omit<
     CheckoutItemLocal,
     "quantity" | "totalPrice" | "formInputs"
@@ -736,7 +757,7 @@ function PickerRowBody({
         <VariantChooser
           variants={variants}
           selectedId={selectedVariantId}
-          onChange={setSelectedVariantId}
+          onChange={onVariantChange}
         />
       )}
       <PickerEntryForm
