@@ -76,7 +76,7 @@ test.describe("Authenticated checkout", () => {
     await expect(page.getByText("Dein Besuch")).toBeVisible()
 
     // Expand the collapsible Nutzungsgebühren section to verify person is listed.
-    // The display name also renders in the page header ("Profil öffnen" link),
+    // The display name also renders in the page header ("Nutzungsverlauf öffnen" link),
     // so scope the assertion to the section detail to avoid strict-mode dupes.
     await page.getByRole("button", { name: /Nutzungsgebühren/ }).click()
     await expect(
