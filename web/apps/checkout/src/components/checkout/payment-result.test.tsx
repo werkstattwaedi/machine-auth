@@ -42,15 +42,15 @@ vi.mock("sonner", () => ({
   },
 }))
 
-// Mock httpsCallable. The component creates two callables —
+// Mock the grouped-callable client. The component creates two callables —
 // `getPaymentQrData` (legacy fallback when no initialPaymentData) and
 // `acknowledgeBill` (commit click). The test selects which mock based on
-// the callable name.
+// the RPC method name.
 const mockGetPaymentQrData = vi.fn()
 const mockAcknowledgeBill = vi.fn()
-vi.mock("firebase/functions", () => ({
-  httpsCallable: (_functions: unknown, name: string) => {
-    if (name === "acknowledgeBill") return mockAcknowledgeBill
+vi.mock("@modules/lib/rpc", () => ({
+  rpcCallable: (_functions: unknown, _group: string, method: string) => {
+    if (method === "acknowledgeBill") return mockAcknowledgeBill
     return mockGetPaymentQrData
   },
 }))

@@ -24,10 +24,11 @@ vi.mock("sonner", () => ({
   },
 }))
 
-// httpsCallable returns a function; the returned callable's resolution is
-// controlled per-test via `mockCallable`. `useAsyncMutation` also fires a
-// fire-and-forget `logClientError` callable on failure — route that to a
-// resolved no-op so it doesn't consume `mockCallable` invocations.
+// The membership callables now go through the grouped `rpcCallable` client;
+// the returned callable's resolution is controlled per-test via `mockCallable`.
+// `useAsyncMutation` also fires a fire-and-forget `logClientError` callable
+// (still a standalone `httpsCallable`) on failure — route that to a resolved
+// no-op so it doesn't consume `mockCallable` invocations.
 const mockCallable = vi.fn()
 vi.mock("firebase/functions", () => ({
   getFunctions: () => ({}),
@@ -35,6 +36,12 @@ vi.mock("firebase/functions", () => ({
     name === "logClientError"
       ? () => Promise.resolve({ data: { ok: true } })
       : (...args: unknown[]) => mockCallable(...args),
+}))
+vi.mock("@modules/lib/rpc", () => ({
+  rpcCallable:
+    (_functions: unknown, _group: string, _method: string) =>
+    (...args: unknown[]) =>
+      mockCallable(...args),
 }))
 
 let CapturedComponent: (() => React.JSX.Element) | null = null

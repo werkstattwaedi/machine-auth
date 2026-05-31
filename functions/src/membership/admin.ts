@@ -15,7 +15,7 @@
  */
 
 import * as logger from "firebase-functions/logger";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import {
   FieldValue,
   Timestamp,
@@ -43,10 +43,7 @@ interface AdminCreateMembershipRequest {
   notes?: string | null;
 }
 
-export const adminCreateMembership = onCall<
-  AdminCreateMembershipRequest,
-  Promise<{ membershipId: string }>
->(async (request) => {
+export const adminCreateMembershipHandler = async (request: CallableRequest<AdminCreateMembershipRequest>) => {
   if (request.auth?.token?.admin !== true) {
     throw new HttpsError("permission-denied", "Admin access required");
   }
@@ -96,7 +93,7 @@ export const adminCreateMembership = onCall<
   });
 
   return { membershipId: memRef.id };
-});
+};
 
 interface AdminExtendMembershipRequest {
   membershipId: string;
@@ -111,10 +108,7 @@ interface AdminExtendMembershipRequest {
   reactivateCancelled?: boolean;
 }
 
-export const adminExtendMembership = onCall<
-  AdminExtendMembershipRequest,
-  Promise<{ validUntilMs: number }>
->(async (request) => {
+export const adminExtendMembershipHandler = async (request: CallableRequest<AdminExtendMembershipRequest>) => {
   if (request.auth?.token?.admin !== true) {
     throw new HttpsError("permission-denied", "Admin access required");
   }
@@ -173,4 +167,4 @@ export const adminExtendMembership = onCall<
   });
 
   return { validUntilMs: newValidUntilMs };
-});
+};

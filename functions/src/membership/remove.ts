@@ -10,7 +10,7 @@
  */
 
 import * as logger from "firebase-functions/logger";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import { FieldValue } from "firebase-admin/firestore";
 import {
   assertOwnerOrAdmin,
@@ -25,10 +25,7 @@ interface RemoveFamilyMemberRequest {
   userId: string;
 }
 
-export const removeFamilyMember = onCall<
-  RemoveFamilyMemberRequest,
-  Promise<{ ok: true }>
->(async (request) => {
+export const removeFamilyMemberHandler = async (request: CallableRequest<RemoveFamilyMemberRequest>) => {
   const { membershipId, userId } = request.data ?? ({} as RemoveFamilyMemberRequest);
   if (!membershipId || !userId) {
     throw new HttpsError(
@@ -83,4 +80,4 @@ export const removeFamilyMember = onCall<
   });
 
   return { ok: true };
-});
+};

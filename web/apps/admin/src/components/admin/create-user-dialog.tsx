@@ -12,7 +12,7 @@ import { Input } from "@modules/components/ui/input"
 import { Label } from "@modules/components/ui/label"
 import { useForm } from "react-hook-form"
 import { Loader2 } from "lucide-react"
-import { httpsCallable } from "firebase/functions"
+import { rpcCallable } from "@modules/lib/rpc"
 import { useFunctions } from "@modules/lib/firebase-context"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 
@@ -42,7 +42,7 @@ export function CreateUserDialog({ open, onOpenChange }: CreateUserDialogProps) 
   const onSubmit = async (values: CreateUserFormValues) => {
     try {
       await create.mutate(async () => {
-        const createUser = httpsCallable(functions, "createUser")
+        const createUser = rpcCallable(functions, "authCall", "createUser")
         await createUser(values)
       })
     } catch {

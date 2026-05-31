@@ -20,7 +20,7 @@ import {
 import { type ColumnDef } from "@tanstack/react-table"
 import { Plus, Loader2 } from "lucide-react"
 import { useState } from "react"
-import { httpsCallable } from "firebase/functions"
+import { rpcCallable } from "@modules/lib/rpc"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { useForm } from "react-hook-form"
 import { formatCHF } from "@modules/lib/format"
@@ -150,7 +150,7 @@ function CreateCatalogDialog({ open, onOpenChange }: { open: boolean; onOpenChan
     }
     try {
       await create.mutate(async () => {
-        const fn = httpsCallable<
+        const fn = rpcCallable<
           {
             code: string
             name: string
@@ -162,7 +162,7 @@ function CreateCatalogDialog({ open, onOpenChange }: { open: boolean; onOpenChan
             userCanAdd: boolean
           },
           { id: string }
-        >(functions, "upsertCatalogItem")
+        >(functions, "catalogCall", "upsertCatalogItem")
         await fn({
           code: values.code,
           name: values.name,

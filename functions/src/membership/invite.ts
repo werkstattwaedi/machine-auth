@@ -16,7 +16,7 @@
  */
 
 import * as logger from "firebase-functions/logger";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import {
   Timestamp,
   type DocumentReference,
@@ -36,10 +36,7 @@ import {
   membershipRef,
 } from "./shared";
 import { isAllowedOrigin, isEmulator } from "../auth/login-code/helpers";
-import {
-  resendApiKey,
-  sendTemplate,
-} from "../util/resend_template";
+import { sendTemplate } from "../util/resend_template";
 import { formatFullName } from "../util/username-utils";
 import { defineString } from "firebase-functions/params";
 
@@ -198,17 +195,14 @@ export async function handleInviteFamilyMember(
   return { inviteId: inviteRef.id };
 }
 
-export const inviteFamilyMember = onCall<
-  InviteFamilyMemberRequest,
-  Promise<InviteFamilyMemberResponse>
->({ secrets: [resendApiKey] }, async (request) => {
+export const inviteFamilyMemberHandler = async (request: CallableRequest<InviteFamilyMemberRequest>) => {
   return handleInviteFamilyMember(request.data, {
     authUid: request.auth?.uid,
     authToken: request.auth?.token as Record<string, unknown> | undefined,
     requestOrigin:
       (request.rawRequest.headers.origin as string | undefined) ?? null,
   });
-});
+};
 
 /**
  * Best-effort display name for the inviter, in priority order:

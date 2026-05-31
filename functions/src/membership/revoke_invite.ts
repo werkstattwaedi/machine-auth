@@ -6,7 +6,7 @@
  */
 
 import * as logger from "firebase-functions/logger";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import { Timestamp } from "firebase-admin/firestore";
 import type { MembershipInviteEntity } from "../types/firestore_entities";
 import {
@@ -22,10 +22,7 @@ interface RevokeFamilyInviteRequest {
   inviteId: string;
 }
 
-export const revokeFamilyInvite = onCall<
-  RevokeFamilyInviteRequest,
-  Promise<{ ok: true }>
->(async (request) => {
+export const revokeFamilyInviteHandler = async (request: CallableRequest<RevokeFamilyInviteRequest>) => {
   const { membershipId, inviteId } = request.data ?? ({} as RevokeFamilyInviteRequest);
   if (!membershipId || !inviteId) {
     throw new HttpsError(
@@ -72,4 +69,4 @@ export const revokeFamilyInvite = onCall<
   });
 
   return { ok: true };
-});
+};

@@ -19,7 +19,7 @@
  */
 
 import * as logger from "firebase-functions/logger";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import {
   Timestamp,
   type DocumentReference,
@@ -240,12 +240,9 @@ export async function handlePurchaseMembership(
   };
 }
 
-export const purchaseMembership = onCall<
-  PurchaseMembershipRequest,
-  Promise<PurchaseMembershipResponse>
->(async (request) => {
+export const purchaseMembershipHandler = async (request: CallableRequest<PurchaseMembershipRequest>) => {
   return handlePurchaseMembership(request.data, {
     authUid: request.auth?.uid,
     authToken: request.auth?.token as Record<string, unknown> | undefined,
   });
-});
+};

@@ -16,7 +16,7 @@
  */
 
 import * as logger from "firebase-functions/logger";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import { FieldValue } from "firebase-admin/firestore";
 import {
   assertOwnerOrAdmin,
@@ -30,10 +30,7 @@ interface CancelMembershipAutoRenewRequest {
   membershipId: string;
 }
 
-export const cancelMembershipAutoRenew = onCall<
-  CancelMembershipAutoRenewRequest,
-  Promise<{ ok: true }>
->(async (request) => {
+export const cancelMembershipAutoRenewHandler = async (request: CallableRequest<CancelMembershipAutoRenewRequest>) => {
   const { membershipId } =
     request.data ?? ({} as CancelMembershipAutoRenewRequest);
   if (!membershipId) {
@@ -67,4 +64,4 @@ export const cancelMembershipAutoRenew = onCall<
   });
 
   return { ok: true };
-});
+};

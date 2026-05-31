@@ -116,11 +116,15 @@ vi.mock("firebase/firestore", async () => {
   }
 })
 
-// Mock firebase/functions
+// Mock firebase/functions (getFunctions for the firebase init path) and the
+// grouped-callable client used by the download button.
 const mockCallable = vi.fn()
 vi.mock("firebase/functions", () => ({
   httpsCallable: () => mockCallable,
   getFunctions: () => ({}),
+}))
+vi.mock("@modules/lib/rpc", () => ({
+  rpcCallable: () => mockCallable,
 }))
 
 // Mock sonner

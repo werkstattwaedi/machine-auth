@@ -14,7 +14,7 @@ import {
   Users,
   X,
 } from "lucide-react"
-import { httpsCallable } from "firebase/functions"
+import { rpcCallable } from "@modules/lib/rpc"
 import { where } from "firebase/firestore"
 import * as React from "react"
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router"
@@ -139,10 +139,10 @@ function MembershipPage() {
     renewExisting: boolean,
   ) => {
     await purchase.mutate(async () => {
-      const fn = httpsCallable<
+      const fn = rpcCallable<
         { type: "single" | "family"; renewExisting?: boolean },
         { checkoutId: string }
-      >(functions, "purchaseMembership")
+      >(functions, "membershipCall", "purchaseMembership")
       await fn({ type, renewExisting })
       // The membership SKU is appended to the user's open checkout (or a
       // fresh `materialbezug` checkout). Land directly on the checkout
@@ -163,8 +163,9 @@ function MembershipPage() {
       return
     try {
       await cancelAutoRenew.mutate(async () => {
-        const fn = httpsCallable<{ membershipId: string }, { ok: true }>(
+        const fn = rpcCallable<{ membershipId: string }, { ok: true }>(
           functions,
+          "membershipCall",
           "cancelMembershipAutoRenew",
         )
         await fn({ membershipId })
@@ -590,10 +591,10 @@ function FamilySection({
     e.preventDefault()
     if (!inviteEmail.includes("@")) return
     await inviteMutation.mutate(async () => {
-      const fn = httpsCallable<
+      const fn = rpcCallable<
         { membershipId: string; email: string },
         { inviteId: string }
-      >(functions, "inviteFamilyMember")
+      >(functions, "membershipCall", "inviteFamilyMember")
       await fn({ membershipId, email: inviteEmail.trim() })
       setInviteEmail("")
     })
@@ -601,7 +602,7 @@ function FamilySection({
 
   const handleRevoke = async (inviteId: string) => {
     await revokeMutation.mutate(async () => {
-      const fn = httpsCallable(functions, "revokeFamilyInvite")
+      const fn = rpcCallable(functions, "membershipCall", "revokeFamilyInvite")
       await fn({ membershipId, inviteId })
     })
   }
@@ -609,7 +610,7 @@ function FamilySection({
   const handleRemove = async (uid: string) => {
     if (!confirm("Diese Person aus der Familie entfernen?")) return
     await removeMutation.mutate(async () => {
-      const fn = httpsCallable(functions, "removeFamilyMember")
+      const fn = rpcCallable(functions, "membershipCall", "removeFamilyMember")
       await fn({ membershipId, userId: uid })
     })
   }
@@ -618,7 +619,7 @@ function FamilySection({
     e.preventDefault()
     if (!kidFirst.trim() || !kidLast.trim()) return
     await createChildMutation.mutate(async () => {
-      const fn = httpsCallable(functions, "createChildAccount")
+      const fn = rpcCallable(functions, "membershipCall", "createChildAccount")
       await fn({
         membershipId,
         firstName: kidFirst.trim(),

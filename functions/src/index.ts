@@ -263,17 +263,16 @@ export const api = onRequest(
 // Export admin API
 export { admin } from "./admin-api";
 
-// Export callable functions
-export { createUser } from "./auth/create-user";
-export { requestLoginCode } from "./auth/login-code/request";
-export { verifyLoginCode } from "./auth/login-code/verify-code";
-export { verifyMagicLink } from "./auth/login-code/verify-link";
-export { getInvoiceDownloadUrl } from "./invoice/get_invoice_download_url";
-export { getPaymentQrData } from "./invoice/get_payment_qr_data";
-export { closeCheckoutAndGetPayment } from "./invoice/close_checkout_and_get_payment";
-export { acknowledgeBill } from "./invoice/acknowledge_bill";
-export { getPriceListPdfUrl } from "./price_list/get_price_list_pdf_url";
-export { upsertCatalogItem } from "./catalog/upsert_catalog_item";
+// Export grouped callable dispatchers (#277). The ~20 individual callables
+// collapsed into one onCall per domain, so a session that touches several
+// reuses one warm instance instead of cold-starting each. See ./rpc/dispatch.
+export { authCall } from "./auth/dispatcher";
+export { membershipCall } from "./membership/dispatcher";
+export { billingCall } from "./invoice/dispatcher";
+export { catalogCall } from "./catalog/dispatcher";
+
+// logClientError stays standalone: it's the unauthenticated, fire-and-forget
+// error reporter and must not depend on a dispatcher that may itself be failing.
 export { logClientError } from "./util/log_client_error";
 
 // Export bill lifecycle triggers + the daily auto-ack cron (#251).
@@ -286,22 +285,10 @@ export {
 export { autoAcknowledgeBills } from "./invoice/acknowledge_bill";
 export { monthlyBillRun } from "./invoice/monthly_bill_run";
 
-// Export membership module — callables, triggers, scheduled job.
-// Membership activation now runs from `onBillUpdate` (gated on the
-// customer's payment-method ack), not on checkout close (#251 / #302).
-export { purchaseMembership } from "./membership/purchase";
-export { inviteFamilyMember } from "./membership/invite";
-export { acceptFamilyInvite } from "./membership/accept_invite";
-export { rejectFamilyInvite } from "./membership/reject_invite";
-export { revokeFamilyInvite } from "./membership/revoke_invite";
-export { removeFamilyMember } from "./membership/remove";
-export { createChildAccount } from "./membership/create_child";
-export { cancelMembership } from "./membership/cancel";
-export { cancelMembershipAutoRenew } from "./membership/cancel_auto_renew";
-export {
-  adminCreateMembership,
-  adminExtendMembership,
-} from "./membership/admin";
+// Membership callables are grouped into `membershipCall` (./membership/dispatcher).
+// Here we export only the membership triggers + scheduled jobs. Membership
+// activation runs from `onBillUpdate` (gated on the customer's payment-method
+// ack), not on checkout close (#251 / #302).
 export { onMembershipWritten } from "./membership/on_membership_written";
 export { hourlyMembershipExpiryCheck } from "./membership/expiry_check";
 export { issueMembershipRenewalBills } from "./membership/renewal_invoicer";
@@ -309,11 +296,8 @@ export { issueMembershipRenewalBills } from "./membership/renewal_invoicer";
 // Export scheduled cleanup
 export { cleanupAbandonedCheckouts } from "./checkout/cleanup_abandoned_checkouts";
 
-// Export CognitoForms importer — daily schedule + admin backfill callable.
-export {
-  scheduledCognitoformsImport,
-  backfillCognitoforms,
-} from "./import/cognitoforms";
+// Export CognitoForms importer — daily schedule.
+export { scheduledCognitoformsImport } from "./import/cognitoforms";
 
 // Export Firestore triggers
 export { syncCustomClaims } from "./auth/set-custom-claims";

@@ -17,7 +17,7 @@
  */
 
 import * as logger from "firebase-functions/logger";
-import { HttpsError, onCall, type CallableRequest } from "firebase-functions/v2/https";
+import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import {
   getFirestore,
   FieldValue,
@@ -351,10 +351,9 @@ interface CloseCheckoutRequest {
   summary: CheckoutSummaryEntity;
 }
 
-export const closeCheckoutAndGetPayment = onCall<
-  CloseCheckoutRequest,
-  Promise<PaymentData>
->({ memory: "512MiB" }, async (request) => {
+export const closeCheckoutAndGetPaymentHandler = async (
+  request: CallableRequest<CloseCheckoutRequest>
+) => {
   const data = request.data ?? ({} as CloseCheckoutRequest);
   const { checkoutId, newCheckout, usageType, persons, summary } = data;
 
@@ -395,7 +394,7 @@ export const closeCheckoutAndGetPayment = onCall<
     "invalid-argument",
     "Either checkoutId or newCheckout is required",
   );
-});
+};
 
 async function closeExistingCheckout(
   callerUid: string | null,

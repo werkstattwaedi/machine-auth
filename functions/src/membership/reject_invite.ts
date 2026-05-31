@@ -6,7 +6,7 @@
  */
 
 import * as logger from "firebase-functions/logger";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import { Timestamp, type DocumentReference } from "firebase-admin/firestore";
 import type { MembershipInviteEntity } from "../types/firestore_entities";
 import { callerUserRef, db, membershipRef } from "./shared";
@@ -16,10 +16,7 @@ interface RejectFamilyInviteRequest {
   inviteId: string;
 }
 
-export const rejectFamilyInvite = onCall<
-  RejectFamilyInviteRequest,
-  Promise<{ ok: true }>
->(async (request) => {
+export const rejectFamilyInviteHandler = async (request: CallableRequest<RejectFamilyInviteRequest>) => {
   const { membershipId, inviteId } = request.data ?? ({} as RejectFamilyInviteRequest);
   if (!membershipId || !inviteId) {
     throw new HttpsError(
@@ -70,4 +67,4 @@ export const rejectFamilyInvite = onCall<
   });
 
   return { ok: true };
-});
+};
