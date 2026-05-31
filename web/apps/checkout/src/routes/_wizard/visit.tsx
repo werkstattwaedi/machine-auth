@@ -278,8 +278,12 @@ function VisitRoute() {
           <MembershipInlineSection items={membershipItems} />
         )}
 
+        {/* Per-workshop sections — suppressed for a membership-only cart, same
+            as the picker above (issue #262/#263). A membership SKU lives in the
+            "diverses" workshop, so its workshopsVisited entry would otherwise
+            render an empty Diverses section with a "Material hinzufügen" button. */}
         {sortedWorkshops
-          .filter(([wsId]) => effectiveWorkshops.has(wsId))
+          .filter(([wsId]) => !membershipOnly && effectiveWorkshops.has(wsId))
           .map(([wsId, wsConfig]) => (
             <WorkshopSectionWithCatalog
               key={wsId}
