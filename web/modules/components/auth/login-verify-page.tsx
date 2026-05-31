@@ -21,7 +21,7 @@ export interface LoginVerifyPageProps {
   defaultRedirect: string
   /** When true, honour loginRedirect / loginMode in localStorage. */
   signupEnabled?: boolean
-  /** Where to send a sign-up flow user after redemption. Defaults to "/complete-profile". */
+  /** Where to send a sign-up flow user after redemption. Defaults to "/account/complete-profile". */
   signupRedirect?: string
 }
 
@@ -29,7 +29,7 @@ export function LoginVerifyPage({
   token,
   defaultRedirect,
   signupEnabled = false,
-  signupRedirect = "/complete-profile",
+  signupRedirect = "/account/complete-profile",
 }: LoginVerifyPageProps) {
   const { completeMagicLink, user, loading } = useAuth()
   const navigate = useNavigate()

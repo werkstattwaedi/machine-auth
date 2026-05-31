@@ -6,15 +6,39 @@ import {
   USER_TYPE_LABELS,
   type UserType,
 } from "@modules/lib/pricing"
-import { XCircle } from "lucide-react"
-import type { CheckoutPerson, CheckoutAction } from "./use-checkout-state"
+import { X } from "lucide-react"
+import type { CheckoutPerson, PersonsAction } from "./use-checkout-state"
+
+/**
+ * Shared remove (X) affordance for a person on /checkin. Used by both the
+ * compact IdentityStrip (signed-in / family members) and the full PersonCard
+ * (walk-in guests) so the button looks and sits the same — a right-aligned
+ * round icon button — regardless of which card type a person renders as.
+ */
+export function RemovePersonButton({
+  index,
+  onRemove,
+}: {
+  index: number
+  onRemove: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onRemove}
+      aria-label={`Person ${index + 1} entfernen`}
+      className="inline-flex shrink-0 items-center justify-center h-8 w-8 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+    >
+      <X className="h-4 w-4" />
+    </button>
+  )
+}
 
 interface PersonCardProps {
   person: CheckoutPerson
   index: number
-  isOnly: boolean
   showTerms: boolean
-  dispatch: React.Dispatch<CheckoutAction>
+  dispatch: React.Dispatch<PersonsAction>
   errors?: Record<string, string>
   touched?: Record<string, boolean>
   submitted?: boolean
@@ -23,6 +47,14 @@ interface PersonCardProps {
   title?: string
   /** Sign-out affordance shown below the pre-filled fields */
   onSignOut?: () => void
+  /** Parent-controlled remove. Omitted when this person can't be removed
+   *  (e.g. the only person, or the last account-linked member). */
+  onRemove?: () => void
+  /** When true, render editable inputs even for a pre-filled person.
+   *  Anonymous walk-ins pass this so their rehydrated roster stays
+   *  correctable; identity-linked pre-fills (signed-in user, family
+   *  member) leave it false and render read-only. */
+  editable?: boolean
 }
 
 function showError(
@@ -53,7 +85,6 @@ function ErrorBadge({ message }: { message: string }) {
 export function PersonCard({
   person,
   index,
-  isOnly,
   dispatch,
   errors,
   touched,
@@ -61,18 +92,16 @@ export function PersonCard({
   onBlur,
   title,
   onSignOut,
+  onRemove,
+  editable,
 }: PersonCardProps) {
   const update = (updates: Partial<CheckoutPerson>) =>
     dispatch({ type: "UPDATE_PERSON", id: person.id, updates })
 
   const showBillingAddress = person.userType === "firma"
-
-  // Issue #209: any card (including the pre-filled / first card) is
-  // removable as long as another remains — so a family owner can drop
-  // themselves from the visit and keep e.g. their kid on it. The
-  // `!isOnly` guard already enforces "at least one person stays" because
-  // the X button gates `REMOVE_PERSON`.
-  const canRemove = !isOnly
+  // Identity-linked pre-fills render read-only; anonymous walk-ins pass
+  // `editable` so a rehydrated person can still be corrected in place.
+  const readOnly = person.isPreFilled && !editable
 
   const err = (field: string) => showError(field, errors, touched, submitted)
   const fieldCls = (field: string) => (err(field) ? INPUT_ERR : INPUT_OK)
@@ -87,43 +116,21 @@ export function PersonCard({
       className="bg-[rgba(204,204,204,0.2)] rounded-none p-[25px] space-y-4 animate-in fade-in slide-in-from-top-2 duration-200"
     >
       {/*
-        Issue #209: the wizard passes `title=""` for the first card when an
-        account user is signed in (the "Eingeloggt" hint sits in `IdentityHint`
-        instead). The X button must still render in that case so a family
-        owner can drop themselves from the visit.
-        Issue #246: keep the heading row's height grid-stable when only the
-        X is shown — the wrapping h3 gives a consistent baseline so the X
-        doesn't visually float above the data row.
+        Heading row: title on the left, remove (X) on the right — the same
+        right-aligned placement as the IdentityStrip so a mixed roster
+        (signed-in strip + guest card) has its remove affordances lined up.
+        The wrapping h3 keeps the row height stable across card types.
       */}
-      {(title === undefined || title || canRemove) && (
-        <div className="flex items-center gap-1.5">
-          {canRemove && (
-            <button
-              type="button"
-              aria-label={`Person ${index + 1} entfernen`}
-              className="-ml-[18px] shrink-0 text-muted-foreground hover:text-destructive"
-              onClick={() =>
-                dispatch({ type: "REMOVE_PERSON", id: person.id })
-              }
-            >
-              <XCircle className="h-4 w-4" />
-            </button>
-          )}
-          {/*
-            Always render an h3 when the heading row is visible (even when
-            `title === ""`) so the row keeps a consistent height matching
-            the other cards' "Person N" heading — the X stays grid-stable
-            on the first row of a signed-in account.
-          */}
-          {(title === undefined || title || canRemove) && (
-            <h3 className="text-base font-bold font-body">
-              {title === undefined ? `Person ${index + 1}` : title}
-            </h3>
-          )}
+      {(title === undefined || title || onRemove) && (
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-base font-bold font-body">
+            {title === undefined ? `Person ${index + 1}` : title}
+          </h3>
+          {onRemove && <RemovePersonButton index={index} onRemove={onRemove} />}
         </div>
       )}
 
-      {person.isPreFilled ? (
+      {readOnly ? (
         <div className="space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-1">
@@ -193,7 +200,7 @@ export function PersonCard({
         </div>
       )}
 
-      {!person.isPreFilled && (
+      {!readOnly && (
         <div className="space-y-1">
           <Label className="text-sm font-bold">Nutzer:in</Label>
           <div className="flex gap-3 pt-1">
@@ -230,7 +237,7 @@ export function PersonCard({
       {showBillingAddress && (
         <div className="space-y-3 border-t pt-4">
           <Label className="text-sm font-bold">Rechnungsadresse</Label>
-          {person.isPreFilled ? (
+          {readOnly ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1">
                 <Label className="text-sm">Firma</Label>

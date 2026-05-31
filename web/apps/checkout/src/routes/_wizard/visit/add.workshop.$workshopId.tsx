@@ -5,22 +5,24 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { useCatalogForWorkshop } from "@modules/lib/workshop-config"
 import type { WorkshopId } from "@modules/lib/workshop-config"
 import { MaterialPicker } from "@/components/usage/material-picker"
-import { useVisitContext } from "@/routes/_authenticated/visit"
+import { useWizardContext } from "@/components/checkout/wizard-context"
+import { useBounceIfNoCheckout } from "@/components/checkout/use-bounce-if-no-checkout"
 import { EmptyState } from "@modules/components/empty-state"
 import { AlertTriangle } from "lucide-react"
 
 export const Route = createFileRoute(
-  "/_authenticated/visit/add/workshop/$workshopId",
+  "/_wizard/visit/add/workshop/$workshopId",
 )({
   component: AddWorkshopRoute,
 })
 
 function AddWorkshopRoute() {
+  useBounceIfNoCheckout()
   const { workshopId } = Route.useParams()
   const navigate = useNavigate()
-  const { pricingConfig, discountLevel, addItem } = useVisitContext()
+  const ctx = useWizardContext()
 
-  const workshop = pricingConfig.workshops[workshopId as WorkshopId]
+  const workshop = ctx.pricingConfig.workshops[workshopId as WorkshopId]
   const { data: catalogItems } = useCatalogForWorkshop(workshopId)
 
   if (!workshop) {
@@ -39,7 +41,12 @@ function AddWorkshopRoute() {
     <MaterialPicker
       open
       onOpenChange={(open) => {
-        if (!open) navigate({ to: "/visit" })
+        if (!open) {
+          navigate({
+            to: "/visit",
+            search: ctx.kiosk ? { kiosk: "" } : {},
+          })
+        }
       }}
       scope={{
         kind: "workshop",
@@ -47,10 +54,10 @@ function AddWorkshopRoute() {
         workshopLabel: workshop.label,
       }}
       catalogItems={catalogItems}
-      config={pricingConfig}
-      discountLevel={discountLevel}
+      config={ctx.pricingConfig}
+      discountLevel={ctx.discountLevel}
       resolveWorkshop={() => wsId}
-      onAdd={addItem}
+      onAdd={ctx.addItem}
     />
   )
 }

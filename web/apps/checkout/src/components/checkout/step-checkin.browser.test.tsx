@@ -7,50 +7,68 @@ import { describe, it, expect, afterEach, vi } from "vitest"
 import { useReducer } from "react"
 import { StepCheckin, type FamilyCandidate } from "./step-checkin"
 import {
-  checkoutReducer,
-  initialState,
-  type CheckoutState,
-  type CheckoutAction,
+  personsReducer,
+  initialPersons,
+  type CheckoutPerson,
+  type PersonsAction,
 } from "./use-checkout-state"
 
 afterEach(cleanup)
 
 /**
- * Wrapper that provides a real reducer so dispatch actually updates state.
- * Captures dispatched actions for assertions.
+ * Wrapper that provides a real persons reducer so dispatch actually
+ * updates state. Captures dispatched actions for assertions.
  */
 function renderCheckin({
   isAnonymous = true,
   kiosk = false,
   isAccountLoggedIn = false,
-  stateOverrides,
+  signedInUserId,
+  signedInEmail,
+  isMember = false,
+  personsOverride,
   onAdvance,
   familyCandidates,
 }: {
   isAnonymous?: boolean
   kiosk?: boolean
   isAccountLoggedIn?: boolean
-  stateOverrides?: Partial<CheckoutState>
+  signedInUserId?: string | null
+  signedInEmail?: string | null
+  isMember?: boolean
+  personsOverride?: CheckoutPerson[]
   onAdvance?: () => Promise<void>
   familyCandidates?: FamilyCandidate[]
 } = {}) {
-  const dispatched: CheckoutAction[] = []
+  const dispatched: PersonsAction[] = []
   const onSignOut = vi.fn()
 
   function Wrapper() {
-    const init = { ...initialState, ...stateOverrides }
-    const [state, dispatch] = useReducer(checkoutReducer, init)
-    const wrappedDispatch = (action: CheckoutAction) => {
+    const [persons, dispatch] = useReducer(
+      personsReducer,
+      personsOverride ?? initialPersons,
+    )
+    const wrappedDispatch = (action: PersonsAction) => {
       dispatched.push(action)
       dispatch(action)
     }
+    // Default to "u-self" when the caller didn't pass an explicit id but
+    // is exercising the logged-in branch — keeps existing tests terse
+    // while still letting individual tests inject a different id.
+    const effectiveSignedInUserId =
+      signedInUserId === undefined && isAccountLoggedIn
+        ? "u-self"
+        : signedInUserId
     return (
       <StepCheckin
-        state={state}
-        dispatch={wrappedDispatch}
+        persons={persons}
+        personsDispatch={wrappedDispatch}
         isAnonymous={isAnonymous}
         kiosk={kiosk}
         isAccountLoggedIn={isAccountLoggedIn}
+        signedInUserId={effectiveSignedInUserId}
+        signedInEmail={signedInEmail}
+        isMember={isMember}
         onSignOut={onSignOut}
         onAdvance={onAdvance}
         familyCandidates={familyCandidates}
@@ -65,34 +83,30 @@ function renderCheckin({
 describe("StepCheckin validation", () => {
   it("shows errors when Weiter is clicked with empty fields", async () => {
     const user = userEvent.setup()
-    const { dispatched } = renderCheckin()
+    const onAdvance = vi.fn(async () => {})
+    renderCheckin({ onAdvance })
 
     await user.click(screen.getByRole("button", { name: /Weiter/ }))
 
-    // Errors visible
     expect(screen.getByText("Vorname ist erforderlich.")).toBeTruthy()
     expect(screen.getByText("Nachname ist erforderlich.")).toBeTruthy()
     expect(screen.getByText("E-Mail ist erforderlich.")).toBeTruthy()
     expect(screen.getByText("Nutzungsbestimmungen ist erforderlich.")).toBeTruthy()
 
-    // Step not advanced
-    expect(dispatched.find((a) => a.type === "SET_STEP")).toBeUndefined()
+    // onAdvance not called → step not advanced (URL nav lives there)
+    expect(onAdvance).not.toHaveBeenCalled()
   })
 
   it("shows email format error for invalid email", async () => {
     const user = userEvent.setup()
     renderCheckin()
 
-    // Fill fields but with bad email
     const inputs = screen.getAllByRole("textbox")
-    // inputs: firstName, lastName, email (textbox type)
     await user.type(inputs[0], "Max")
     await user.type(inputs[1], "Muster")
-
     await user.type(inputs[2], "not-valid")
-    await user.tab() // blur
+    await user.tab()
 
-    // Click Weiter to trigger submitted state
     await user.click(screen.getByRole("button", { name: /Weiter/ }))
 
     expect(
@@ -104,12 +118,10 @@ describe("StepCheckin validation", () => {
     const user = userEvent.setup()
     renderCheckin()
 
-    // Focus and blur firstName without typing
     const inputs = screen.getAllByRole("textbox")
     await user.click(inputs[0])
     await user.tab()
 
-    // Error should appear because field was touched
     expect(screen.getByText("Vorname ist erforderlich.")).toBeTruthy()
   })
 
@@ -117,36 +129,30 @@ describe("StepCheckin validation", () => {
     const user = userEvent.setup()
     renderCheckin()
 
-    // Trigger errors
     await user.click(screen.getByRole("button", { name: /Weiter/ }))
     expect(screen.getByText("Vorname ist erforderlich.")).toBeTruthy()
 
-    // Fix firstName
     const inputs = screen.getAllByRole("textbox")
     await user.type(inputs[0], "Max")
 
-    // Error should be gone
     expect(screen.queryByText("Vorname ist erforderlich.")).toBeNull()
   })
 
   it("advances when all fields are valid", async () => {
     const user = userEvent.setup()
-    const { dispatched } = renderCheckin()
+    const onAdvance = vi.fn(async () => {})
+    renderCheckin({ onAdvance })
 
     const inputs = screen.getAllByRole("textbox")
     await user.type(inputs[0], "Max")
     await user.type(inputs[1], "Muster")
+    await user.type(inputs[2], "max@test.com")
 
-    const emailInput = inputs[2]
-    await user.type(emailInput, "max@test.com")
-
-    // Accept terms
     await user.click(screen.getByRole("checkbox"))
 
-    // Click Weiter
     await user.click(screen.getByRole("button", { name: /Weiter/ }))
 
-    expect(dispatched).toContainEqual({ type: "SET_STEP", step: 1 })
+    expect(onAdvance).toHaveBeenCalledOnce()
   })
 
   it("Weiter button is always enabled (not disabled)", () => {
@@ -157,7 +163,8 @@ describe("StepCheckin validation", () => {
 
   it("does not require terms for non-anonymous users", async () => {
     const user = userEvent.setup()
-    const { dispatched } = renderCheckin({ isAnonymous: false })
+    const onAdvance = vi.fn(async () => {})
+    renderCheckin({ isAnonymous: false, onAdvance })
 
     const inputs = screen.getAllByRole("textbox")
     await user.type(inputs[0], "Max")
@@ -166,79 +173,39 @@ describe("StepCheckin validation", () => {
 
     await user.click(screen.getByRole("button", { name: /Weiter/ }))
 
-    expect(dispatched).toContainEqual({ type: "SET_STEP", step: 1 })
+    expect(onAdvance).toHaveBeenCalledOnce()
   })
 
   it("newly added person does not show errors immediately after prior submit", async () => {
     const user = userEvent.setup()
     renderCheckin()
 
-    // Click Weiter with empty first person → errors shown
     await user.click(screen.getByRole("button", { name: /Weiter/ }))
     expect(screen.getByText("Vorname ist erforderlich.")).toBeTruthy()
 
-    // Add a second person — resets submitted, clears submit-triggered errors
     await user.click(screen.getByRole("button", { name: /Person hinzufügen/ }))
 
-    // No submit-triggered errors visible (submitted was reset)
     expect(screen.queryByText("Vorname ist erforderlich.")).toBeNull()
   })
 
-  // Issue #151 regression: anonymous sign-in must run BEFORE the
-  // step transition so step 2 can write to Firestore as a real principal.
-  // If we dispatched SET_STEP first, step-workshops.tsx would mount and
-  // try to addDoc against `checkouts` while still unauthenticated — the
-  // rule for anon-userId checkouts requires `isAnonymousAuth()`.
+  // Issue #151 regression: onAdvance (anonymous sign-in + persist persons +
+  // navigate to /visit) only runs once validation passes. Failed validation
+  // must not call onAdvance.
   describe("eager anonymous sign-in (#151)", () => {
-    it("calls onAdvance before dispatching SET_STEP", async () => {
-      const user = userEvent.setup()
-      const order: string[] = []
-      const onAdvance = vi.fn(async () => {
-        order.push("onAdvance")
-      })
-
-      const { dispatched } = renderCheckin({ isAnonymous: true, onAdvance })
-
-      // Capture dispatch order via a side-effect on the array reference.
-      const originalPush = dispatched.push.bind(dispatched)
-      dispatched.push = (...items: CheckoutAction[]) => {
-        for (const item of items) {
-          if (item.type === "SET_STEP") order.push("SET_STEP")
-        }
-        return originalPush(...items)
-      }
-
-      // Fill valid form
-      const inputs = screen.getAllByRole("textbox")
-      await user.type(inputs[0], "Max")
-      await user.type(inputs[1], "Muster")
-      await user.type(inputs[2], "max@test.com")
-      await user.click(screen.getByRole("checkbox"))
-
-      await user.click(screen.getByRole("button", { name: /Weiter/ }))
-
-      expect(onAdvance).toHaveBeenCalledOnce()
-      expect(order).toEqual(["onAdvance", "SET_STEP"])
-    })
-
-    it("does NOT call onAdvance or advance when validation fails", async () => {
+    it("does NOT call onAdvance when validation fails", async () => {
       const user = userEvent.setup()
       const onAdvance = vi.fn(async () => {})
-      const { dispatched } = renderCheckin({ isAnonymous: true, onAdvance })
+      renderCheckin({ isAnonymous: true, onAdvance })
 
-      // Click Weiter with empty form → errors shown, onAdvance not called
       await user.click(screen.getByRole("button", { name: /Weiter/ }))
 
       expect(onAdvance).not.toHaveBeenCalled()
-      expect(dispatched.find((a) => a.type === "SET_STEP")).toBeUndefined()
     })
 
-    it("does not advance if onAdvance throws (sign-in failure)", async () => {
+    it("calls onAdvance when validation passes", async () => {
       const user = userEvent.setup()
-      const onAdvance = vi.fn(async () => {
-        throw new Error("network down")
-      })
-      const { dispatched } = renderCheckin({ isAnonymous: true, onAdvance })
+      const onAdvance = vi.fn(async () => {})
+      renderCheckin({ isAnonymous: true, onAdvance })
 
       const inputs = screen.getAllByRole("textbox")
       await user.type(inputs[0], "Max")
@@ -246,15 +213,9 @@ describe("StepCheckin validation", () => {
       await user.type(inputs[2], "max@test.com")
       await user.click(screen.getByRole("checkbox"))
 
-      // The button click rejects; user-event surfaces the rejection but the
-      // assertion afterwards is what matters.
-      await user
-        .click(screen.getByRole("button", { name: /Weiter/ }))
-        .catch(() => {})
+      await user.click(screen.getByRole("button", { name: /Weiter/ }))
 
       expect(onAdvance).toHaveBeenCalledOnce()
-      // Crucially: SET_STEP was NOT dispatched.
-      expect(dispatched.find((a) => a.type === "SET_STEP")).toBeUndefined()
     })
   })
 })
@@ -276,31 +237,51 @@ describe("Identity hint", () => {
     expect(screen.queryByText("Bereits registriert oder Konto erstellen?")).toBeNull()
   })
 
-  it("shows sign-out in person card for logged-in users", () => {
+  it("renders the identity strip with name + Abmelden for logged-in users", () => {
     renderCheckin({
       isAnonymous: false,
       isAccountLoggedIn: true,
-
-      stateOverrides: {
-        persons: [{
-          id: "p1",
-          firstName: "Max",
-          lastName: "Muster",
-          email: "max@test.com",
-          userType: "erwachsen",
-          termsAccepted: true,
-          isPreFilled: true,
-        }],
-      },
+      signedInUserId: "u-self",
+      signedInEmail: "max@test.com",
+      personsOverride: [{
+        id: "p1",
+        firstName: "Max",
+        lastName: "Muster",
+        email: "max@test.com",
+        userType: "erwachsen",
+        termsAccepted: true,
+        isPreFilled: true,
+        userId: "u-self",
+      }],
     })
 
     expect(screen.queryByText("Bereits registriert oder Konto erstellen?")).toBeNull()
-    // Issue #259: line must read as a full sentence so users notice it —
-    // "Du bist nicht <Name>? Abmelden" rather than just "Nicht <Name>?".
-    expect(
-      screen.getByText(/Du bist nicht Max Muster\?/),
-    ).toBeTruthy()
-    expect(screen.getByText(/Abmelden/)).toBeTruthy()
+    expect(screen.getByTestId("identity-strip")).toBeTruthy()
+    expect(screen.getByText("Max Muster")).toBeTruthy()
+    expect(screen.getByText(/max@test\.com/)).toBeTruthy()
+    expect(screen.getByText("Abmelden")).toBeTruthy()
+  })
+
+  it("appends · Vereinsmitglied when the signed-in user has an active membership", () => {
+    renderCheckin({
+      isAnonymous: false,
+      isAccountLoggedIn: true,
+      signedInUserId: "u-self",
+      signedInEmail: "max@test.com",
+      isMember: true,
+      personsOverride: [{
+        id: "p1",
+        firstName: "Max",
+        lastName: "Muster",
+        email: "max@test.com",
+        userType: "erwachsen",
+        termsAccepted: true,
+        isPreFilled: true,
+        userId: "u-self",
+      }],
+    })
+
+    expect(screen.getByText(/max@test\.com · Vereinsmitglied/)).toBeTruthy()
   })
 
   it("calls onSignOut when Abmelden is clicked", async () => {
@@ -308,21 +289,21 @@ describe("Identity hint", () => {
     const { onSignOut } = renderCheckin({
       isAnonymous: false,
       isAccountLoggedIn: true,
-
-      stateOverrides: {
-        persons: [{
-          id: "p1",
-          firstName: "Max",
-          lastName: "Muster",
-          email: "max@test.com",
-          userType: "erwachsen",
-          termsAccepted: true,
-          isPreFilled: true,
-        }],
-      },
+      signedInUserId: "u-self",
+      signedInEmail: "max@test.com",
+      personsOverride: [{
+        id: "p1",
+        firstName: "Max",
+        lastName: "Muster",
+        email: "max@test.com",
+        userType: "erwachsen",
+        termsAccepted: true,
+        isPreFilled: true,
+        userId: "u-self",
+      }],
     })
 
-    await user.click(screen.getByText(/Abmelden/))
+    await user.click(screen.getByText("Abmelden"))
     expect(onSignOut).toHaveBeenCalledOnce()
   })
 
@@ -336,7 +317,7 @@ describe("Identity hint", () => {
 
 // Issue #209: family-roster quick-add buttons & first-card removal.
 describe("Family-roster quick-add (#209)", () => {
-  const ownerPrimary: CheckoutState["persons"][number] = {
+  const ownerPrimary: CheckoutPerson = {
     id: "p-self",
     firstName: "Max",
     lastName: "Muster",
@@ -367,7 +348,7 @@ describe("Family-roster quick-add (#209)", () => {
     renderCheckin({
       isAnonymous: false,
       isAccountLoggedIn: true,
-      stateOverrides: { persons: [ownerPrimary] },
+      personsOverride: [ownerPrimary],
       familyCandidates: candidates,
     })
 
@@ -379,7 +360,7 @@ describe("Family-roster quick-add (#209)", () => {
     renderCheckin({
       isAnonymous: false,
       isAccountLoggedIn: true,
-      stateOverrides: { persons: [ownerPrimary] },
+      personsOverride: [ownerPrimary],
       familyCandidates: [],
     })
     expect(screen.queryByRole("button", { name: /Pfeffer/ })).toBeNull()
@@ -391,7 +372,7 @@ describe("Family-roster quick-add (#209)", () => {
     const { dispatched } = renderCheckin({
       isAnonymous: false,
       isAccountLoggedIn: true,
-      stateOverrides: { persons: [ownerPrimary] },
+      personsOverride: [ownerPrimary],
       familyCandidates: candidates,
     })
 
@@ -412,27 +393,23 @@ describe("Family-roster quick-add (#209)", () => {
   })
 
   it("only shows candidates not already on the visit (caller-side filter)", () => {
-    // The wizard filters out members already attached via `userId`. We
-    // emulate the filtered list and assert that the rendered set matches.
     const remaining = candidates.filter((c) => c.userId !== "u-yvonne")
     renderCheckin({
       isAnonymous: false,
       isAccountLoggedIn: true,
-      stateOverrides: {
-        persons: [
-          ownerPrimary,
-          {
-            id: "p-yvonne",
-            firstName: "Yvonne",
-            lastName: "Pfeiffer",
-            email: "yvonne@example.com",
-            userType: "erwachsen",
-            termsAccepted: true,
-            isPreFilled: true,
-            userId: "u-yvonne",
-          },
-        ],
-      },
+      personsOverride: [
+        ownerPrimary,
+        {
+          id: "p-yvonne",
+          firstName: "Yvonne",
+          lastName: "Pfeiffer",
+          email: "yvonne@example.com",
+          userType: "erwachsen",
+          termsAccepted: true,
+          isPreFilled: true,
+          userId: "u-yvonne",
+        },
+      ],
       familyCandidates: remaining,
     })
 
@@ -441,11 +418,12 @@ describe("Family-roster quick-add (#209)", () => {
   })
 })
 
-// Issue #209: any card (incl. the pre-filled / first card) can be removed
-// when ≥ 2 persons are on the visit. The `isOnly` guard still pins at
-// least one person.
-describe("Person removal (#209)", () => {
-  const preFilled: CheckoutState["persons"][number] = {
+// Pre-filled persons render as IdentityStrips. The signed-in user's
+// strip carries an Abmelden link AND — once a second person is on the
+// visit — an X to remove themselves (Mike's "I added my kid, now I
+// want to drop myself" flow). Family-added strips just get the X.
+describe("Person removal", () => {
+  const preFilled: CheckoutPerson = {
     id: "p-self",
     firstName: "Max",
     lastName: "Muster",
@@ -455,7 +433,7 @@ describe("Person removal (#209)", () => {
     isPreFilled: true,
     userId: "u-self",
   }
-  const familyMember: CheckoutState["persons"][number] = {
+  const familyMember: CheckoutPerson = {
     id: "p-lia",
     firstName: "Lia",
     lastName: "Pfeffer",
@@ -466,56 +444,63 @@ describe("Person removal (#209)", () => {
     userId: "u-lia",
   }
 
-  it("does NOT show the X button when only one person is on the visit", () => {
+  it("hides the X when only one person is on the visit", () => {
     renderCheckin({
       isAnonymous: false,
       isAccountLoggedIn: true,
-      stateOverrides: { persons: [preFilled] },
+      personsOverride: [preFilled],
     })
     expect(screen.queryByRole("button", { name: /Person 1 entfernen/ })).toBeNull()
+    // Abmelden is still reachable.
+    expect(screen.getByText("Abmelden")).toBeTruthy()
   })
 
-  it("shows the X button on the pre-filled first card when ≥ 2 persons are on the visit", () => {
+  it("shows X on both strips when two persons are on the visit", () => {
     renderCheckin({
       isAnonymous: false,
       isAccountLoggedIn: true,
-      stateOverrides: { persons: [preFilled, familyMember] },
+      personsOverride: [preFilled, familyMember],
     })
-    // First card (the pre-filled / signed-in user) is now removable too.
     expect(screen.getByRole("button", { name: /Person 1 entfernen/ })).toBeTruthy()
+    expect(screen.getByRole("button", { name: /Person 2 entfernen/ })).toBeTruthy()
   })
 
-  it("removes the pre-filled first card when the X button is clicked", async () => {
+  it("removes the signed-in user when their strip's X is clicked", async () => {
     const user = userEvent.setup()
     const { dispatched } = renderCheckin({
       isAnonymous: false,
       isAccountLoggedIn: true,
-      stateOverrides: { persons: [preFilled, familyMember] },
+      personsOverride: [preFilled, familyMember],
     })
 
     await user.click(screen.getByRole("button", { name: /Person 1 entfernen/ }))
 
     const action = dispatched.find((a) => a.type === "REMOVE_PERSON")
     expect(action).toMatchObject({ type: "REMOVE_PERSON", id: "p-self" })
+  })
 
-    // X button on the remaining (now sole) card is gone.
-    expect(screen.queryByRole("button", { name: /Person 1 entfernen/ })).toBeNull()
+  it("removes a family-added strip when its X button is clicked", async () => {
+    const user = userEvent.setup()
+    const { dispatched } = renderCheckin({
+      isAnonymous: false,
+      isAccountLoggedIn: true,
+      personsOverride: [preFilled, familyMember],
+    })
+
+    await user.click(screen.getByRole("button", { name: /Person 2 entfernen/ }))
+
+    const action = dispatched.find((a) => a.type === "REMOVE_PERSON")
+    expect(action).toMatchObject({ type: "REMOVE_PERSON", id: "p-lia" })
   })
 })
 
-// Issue #246: layout, animation, and re-add-self regressions.
-describe("StepCheckin layout / animation (#246)", () => {
-  const preFilled: CheckoutState["persons"][number] = {
-    id: "p-self",
-    firstName: "Max",
-    lastName: "Muster",
-    email: "max@example.com",
-    userType: "erwachsen",
-    termsAccepted: true,
-    isPreFilled: true,
-    userId: "u-self",
-  }
-  const familyMember: CheckoutState["persons"][number] = {
+// Regression: the "signed-in user" decision used to key off the array
+// index (i === 0). Removing self and re-adding via a quick-add chip
+// shifted self to index 1 — at that point the kid (now at index 0)
+// inherited Abmelden + Vereinsmitglied + the parent's email, and self
+// lost their identity affordances.
+describe("Identity strip — keyed by userId, not index", () => {
+  const familyMember: CheckoutPerson = {
     id: "p-lia",
     firstName: "Lia",
     lastName: "Pfeffer",
@@ -525,75 +510,62 @@ describe("StepCheckin layout / animation (#246)", () => {
     isPreFilled: true,
     userId: "u-lia",
   }
+  const selfPerson: CheckoutPerson = {
+    id: "p-self",
+    firstName: "Max",
+    lastName: "Muster",
+    email: "max@example.com",
+    userType: "erwachsen",
+    termsAccepted: true,
+    isPreFilled: true,
+    userId: "u-self",
+  }
 
-  // Subfix 1: the X on the first signed-in card should sit on a heading
-  // row that has the same height as the other rows' "Person N" heading.
-  // We assert the heading row contains an h3 element so the column
-  // alignment is grid-stable instead of the X floating on its own.
-  it("reserves the heading row height on the first card when removable", () => {
+  it("does not show Abmelden / Vereinsmitglied on the kid's strip when self was removed", () => {
     renderCheckin({
       isAnonymous: false,
       isAccountLoggedIn: true,
-      stateOverrides: { persons: [preFilled, familyMember] },
+      signedInUserId: "u-self",
+      signedInEmail: "max@example.com",
+      isMember: true,
+      personsOverride: [familyMember],
     })
-    const removeBtn = screen.getByRole("button", { name: /Person 1 entfernen/ })
-    // The heading row is the X button's parent — walk up to it.
-    const headingRow = removeBtn.parentElement
-    expect(headingRow).not.toBeNull()
-    // The heading row must contain an h3 sibling (even when the wizard
-    // passes title=""). Without it the row collapses to the X's height
-    // and the X drifts above the data row.
-    expect(headingRow!.querySelector("h3")).not.toBeNull()
+
+    const strip = screen.getByTestId("identity-strip")
+    expect(strip.textContent).toContain("Lia Pfeffer")
+    expect(strip.textContent).toContain("lia@example.com")
+    // Crucially: the kid's strip must NOT inherit the parent's email,
+    // membership tag, or sign-out affordance.
+    expect(strip.textContent).not.toContain("max@example.com")
+    expect(strip.textContent).not.toContain("Vereinsmitglied")
+    expect(strip.textContent).not.toContain("Abmelden")
   })
 
-  // Subfix 3: person cards animate in. The actual transition runs in the
-  // browser; here we just assert the trigger class is present so a future
-  // refactor doesn't silently drop the animation.
-  it("applies an enter-animation class to each person card", () => {
+  it("keeps Abmelden + Vereinsmitglied on self even when re-added at a higher index", () => {
+    // Persons array has self at index 1 (kid at 0) — the order the
+    // user lands on after remove-then-quick-add-back.
     renderCheckin({
       isAnonymous: false,
       isAccountLoggedIn: true,
-      stateOverrides: { persons: [preFilled, familyMember] },
-    })
-    const cards = screen.getAllByTestId("person-card")
-    expect(cards.length).toBe(2)
-    for (const card of cards) {
-      expect(card.className).toContain("animate-in")
-    }
-  })
-
-  // Subfix 2: after the signed-in user removes themselves, the wizard's
-  // family-roster picker should surface a "+ Self" chip again. The
-  // candidate filter lives in checkout-wizard.tsx (not StepCheckin), so
-  // here we emulate the wizard's behavior: when self is no longer in
-  // `state.persons`, the wizard hands StepCheckin a self candidate, and
-  // clicking it dispatches ADD_FAMILY_PERSON with userId === self.
-  it("re-adds self via a quick-add chip after self was removed", async () => {
-    const user = userEvent.setup()
-    const selfCandidate: FamilyCandidate = {
-      userId: "u-self",
-      firstName: "Max",
-      lastName: "Muster",
-      email: "max@example.com",
-      userType: "erwachsen",
-    }
-    const { dispatched } = renderCheckin({
-      isAnonymous: false,
-      isAccountLoggedIn: true,
-      // Persons list has only Lia (self was removed earlier in the flow).
-      stateOverrides: { persons: [familyMember] },
-      familyCandidates: [selfCandidate],
+      signedInUserId: "u-self",
+      signedInEmail: "max@example.com",
+      isMember: true,
+      personsOverride: [familyMember, selfPerson],
     })
 
-    // The chip for self should render again.
-    const chip = screen.getByRole("button", { name: /Max Muster/ })
-    expect(chip).toBeTruthy()
-    await user.click(chip)
+    const strips = screen.getAllByTestId("identity-strip")
+    expect(strips).toHaveLength(2)
 
-    const action = dispatched.find((a) => a.type === "ADD_FAMILY_PERSON")
-    expect(action).toMatchObject({
-      type: "ADD_FAMILY_PERSON",
-      person: { userId: "u-self", firstName: "Max", lastName: "Muster" },
-    })
+    const kidStrip = strips[0]
+    const selfStrip = strips[1]
+
+    expect(kidStrip.textContent).toContain("Lia Pfeffer")
+    expect(kidStrip.textContent).not.toContain("Vereinsmitglied")
+    expect(kidStrip.textContent).not.toContain("Abmelden")
+
+    expect(selfStrip.textContent).toContain("Max Muster")
+    expect(selfStrip.textContent).toContain("max@example.com")
+    expect(selfStrip.textContent).toContain("Vereinsmitglied")
+    expect(selfStrip.textContent).toContain("Abmelden")
   })
 })

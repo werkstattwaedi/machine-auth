@@ -12,15 +12,12 @@
 import { describe, it, expect, afterEach } from "vitest"
 import { render, screen, cleanup, act } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { useReducer } from "react"
+import { useState } from "react"
 import { StepCheckout } from "./step-checkout"
-import {
-  checkoutReducer,
-  initialState,
-  type CheckoutAction,
-} from "./use-checkout-state"
+import type { CheckoutPerson } from "./use-checkout-state"
 import type { CheckoutItemLocal } from "@/components/usage/inline-rows"
 import type { PricingConfig } from "@modules/lib/workshop-config"
+import type { UsageType } from "@modules/lib/pricing"
 
 afterEach(cleanup)
 
@@ -59,28 +56,30 @@ const items: CheckoutItemLocal[] = [
   } as CheckoutItemLocal,
 ]
 
+const persons: CheckoutPerson[] = [
+  {
+    id: "p1",
+    firstName: "Max",
+    lastName: "Muster",
+    email: "max@example.com",
+    userType: "erwachsen",
+    termsAccepted: true,
+    isPreFilled: false,
+  },
+]
+
 function Harness() {
-  const [state, dispatch] = useReducer(checkoutReducer, {
-    ...initialState,
-    step: 2,
-    persons: [
-      {
-        id: "p1",
-        firstName: "Max",
-        lastName: "Muster",
-        email: "max@example.com",
-        userType: "erwachsen",
-        termsAccepted: true,
-        isPreFilled: false,
-      },
-    ],
-  })
-  const tracked: React.Dispatch<CheckoutAction> = (action) => dispatch(action)
+  const [usageType, setUsageType] = useState<UsageType>("regular")
+  const [tip, setTip] = useState(0)
   return (
     <StepCheckout
-      state={state}
-      dispatch={tracked}
+      persons={persons}
+      usageType={usageType}
+      setUsageType={setUsageType}
+      tip={tip}
+      setTip={setTip}
       onSubmit={async () => {}}
+      onBack={() => {}}
       submitting={false}
       submitError={null}
       items={items}

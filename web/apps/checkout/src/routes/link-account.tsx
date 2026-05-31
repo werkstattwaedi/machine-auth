@@ -9,5 +9,5 @@ export const Route = createFileRoute("/link-account")({
 })
 
 function CheckoutLinkAccountPage() {
-  return <LinkAccountPage defaultRedirect="/visit" />
+  return <LinkAccountPage defaultRedirect="/" />
 }

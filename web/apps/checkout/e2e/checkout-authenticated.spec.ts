@@ -53,12 +53,14 @@ test.describe("Authenticated checkout", () => {
       timeout: 10_000,
     })
 
-    // Navigate to the checkout page — the logged-in user sees a pre-filled
-    // person card (read-only paragraph with last name).
+    // Navigate to the checkout page — the logged-in user's identity renders
+    // as a compact strip (full name), not an editable card. (The header also
+    // shows the name, so scope to the strip to avoid a strict-mode match.)
     await page.goto("/")
-    await expect(page.getByText("Testuser", { exact: true })).toBeVisible({
-      timeout: 10_000,
-    })
+    await expect(page.getByTestId("identity-strip")).toContainText(
+      "E2E Testuser",
+      { timeout: 10_000 },
+    )
 
     // "Weiter" should be enabled (pre-filled user)
     await expect(
@@ -72,7 +74,7 @@ test.describe("Authenticated checkout", () => {
     await page.getByRole("button", { name: "Weiter" }).click()
     await expect(page.getByText("Werkstätten wählen")).toBeVisible()
 
-    await page.getByRole("button", { name: "Check-Out" }).click()
+    await page.getByRole("button", { name: "Zum Checkout" }).click()
     await expect(page.getByText("Dein Besuch")).toBeVisible()
 
     // Expand the collapsible Nutzungsgebühren section to verify person is listed.

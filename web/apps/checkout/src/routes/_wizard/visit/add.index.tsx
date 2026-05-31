@@ -7,22 +7,20 @@ import { catalogCollection } from "@modules/lib/firestore-helpers"
 import { useDb } from "@modules/lib/firebase-context"
 import { where } from "firebase/firestore"
 import { MaterialPicker } from "@/components/usage/material-picker"
-import { useVisitContext } from "@/routes/_authenticated/visit"
+import { useWizardContext } from "@/components/checkout/wizard-context"
+import { useBounceIfNoCheckout } from "@/components/checkout/use-bounce-if-no-checkout"
 import type { CatalogItemDoc } from "@modules/lib/firestore-entities"
 
-export const Route = createFileRoute("/_authenticated/visit/add/")({
+export const Route = createFileRoute("/_wizard/visit/add/")({
   component: AddIndexRoute,
 })
 
 function AddIndexRoute() {
+  useBounceIfNoCheckout()
   const db = useDb()
   const navigate = useNavigate()
-  const { pricingConfig, discountLevel, resolveWorkshop, addItem } =
-    useVisitContext()
+  const ctx = useWizardContext()
 
-  // Full catalog the member is allowed to add — no workshop narrowing.
-  // The bare /visit/add entry is the "search anything" / QR-scanner
-  // fallback; the category breadcrumbs do the narrowing.
   const { data: catalogItems } = useCollection<CatalogItemDoc>(
     catalogCollection(db),
     where("active", "==", true),
@@ -33,14 +31,19 @@ function AddIndexRoute() {
     <MaterialPicker
       open
       onOpenChange={(open) => {
-        if (!open) navigate({ to: "/visit" })
+        if (!open) {
+          navigate({
+            to: "/visit",
+            search: ctx.kiosk ? { kiosk: "" } : {},
+          })
+        }
       }}
       scope={{ kind: "all" }}
       catalogItems={catalogItems}
-      config={pricingConfig}
-      discountLevel={discountLevel}
-      resolveWorkshop={resolveWorkshop}
-      onAdd={addItem}
+      config={ctx.pricingConfig}
+      discountLevel={ctx.discountLevel}
+      resolveWorkshop={ctx.resolveWorkshop}
+      onAdd={ctx.addItem}
     />
   )
 }

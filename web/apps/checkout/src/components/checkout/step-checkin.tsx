@@ -4,9 +4,9 @@
 import { useState, useMemo, useCallback } from "react"
 import { Checkbox } from "@modules/components/ui/checkbox"
 import { Button } from "@modules/components/ui/button"
-import { PersonCard } from "./person-card"
+import { PersonCard, RemovePersonButton } from "./person-card"
 import { Plus, ArrowRight, LogIn, UserPlus } from "lucide-react"
-import type { CheckoutState, CheckoutAction } from "./use-checkout-state"
+import type { CheckoutPerson, PersonsAction } from "./use-checkout-state"
 import type { UserType } from "@modules/lib/pricing"
 import { validatePerson } from "./validation"
 
@@ -24,17 +24,31 @@ export interface FamilyCandidate {
 }
 
 interface StepCheckinProps {
-  state: CheckoutState
-  dispatch: React.Dispatch<CheckoutAction>
+  persons: CheckoutPerson[]
+  personsDispatch: React.Dispatch<PersonsAction>
   isAnonymous: boolean
   kiosk: boolean
   isAccountLoggedIn: boolean
+  /** userDoc id of the logged-in user. We key the "this card is the
+   *  signed-in user" decision off `person.userId === signedInUserId`
+   *  instead of array index — the signed-in user can be removed and
+   *  re-added in any order. */
+  signedInUserId?: string | null
+  /** Email of the signed-in user — surfaced in the compact identity
+   *  strip so the page doesn't redundantly show the editable
+   *  PersonCard fields for the user themselves. */
+  signedInEmail?: string | null
+  /** True when the signed-in user has an active membership; toggles the
+   *  "Vereinsmitglied" suffix on the identity strip. */
+  isMember?: boolean
   onSignOut: () => void
   /**
-   * Called when the user advances past step 1 with a valid form. For the
+   * Called when the user advances past /checkin with a valid form. For the
    * truly-anonymous flow this signs the visitor into Firebase Anonymous
-   * Auth so step 2 can write items to a Firestore subcollection (issue
-   * #151). A no-op for already-identified users (real login or tag-tap).
+   * Auth so /visit can write items to a Firestore subcollection (issue
+   * #151), persists persons to the open checkout doc (#246), and then
+   * navigates to /visit. A no-op identity-side for already-identified
+   * users (real login or tag-tap), but the route nav still happens.
    */
   onAdvance?: () => Promise<void>
   /**
@@ -45,7 +59,7 @@ interface StepCheckinProps {
   familyCandidates?: FamilyCandidate[]
 }
 
-export function StepCheckin({ state, dispatch, isAnonymous, kiosk, isAccountLoggedIn, onSignOut, onAdvance, familyCandidates }: StepCheckinProps) {
+export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAccountLoggedIn, signedInUserId, signedInEmail, isMember, onSignOut, onAdvance, familyCandidates }: StepCheckinProps) {
   // touched: personId → field → true
   const [touched, setTouched] = useState<Record<string, Record<string, boolean>>>({})
   const [submitted, setSubmitted] = useState(false)
@@ -63,21 +77,40 @@ export function StepCheckin({ state, dispatch, isAnonymous, kiosk, isAccountLogg
   const allErrors = useMemo(
     () =>
       Object.fromEntries(
-        state.persons.map((p, i) => [p.id, validatePerson(p, isAnonymous, i === 0)]),
+        persons.map((p, i) => [p.id, validatePerson(p, isAnonymous, i === 0)]),
       ),
-    [state.persons, isAnonymous],
+    [persons, isAnonymous],
   )
 
   const allValid = useMemo(
-    () => state.persons.every((p) => Object.keys(allErrors[p.id] ?? {}).length === 0),
-    [state.persons, allErrors],
+    () => persons.every((p) => Object.keys(allErrors[p.id] ?? {}).length === 0),
+    [persons, allErrors],
   )
 
   const termsError = useMemo(() => {
     if (!isAnonymous) return null
-    const person = state.persons.find((p) => !p.isPreFilled && allErrors[p.id]?.termsAccepted)
+    const person = persons.find((p) => !p.isPreFilled && allErrors[p.id]?.termsAccepted)
     return person ? allErrors[person.id].termsAccepted : null
-  }, [state.persons, allErrors, isAnonymous])
+  }, [persons, allErrors, isAnonymous])
+
+  // A checkout must stay anchored to at least one account-linked member —
+  // walk-in guests (no userId) can't stand alone. So an account-linked
+  // person (the signed-in user or a family quick-add member) may only be
+  // removed while another member remains. With no family membership the
+  // signed-in user is the only member and therefore can't remove themselves.
+  // Guests are always removable (down to "at least one person stays").
+  const memberCount = useMemo(
+    () => persons.filter((p) => !!p.userId).length,
+    [persons],
+  )
+  const canRemovePerson = useCallback(
+    (person: CheckoutPerson) => {
+      if (persons.length <= 1) return false
+      if (person.userId && memberCount <= 1) return false
+      return true
+    },
+    [persons.length, memberCount],
+  )
 
   const handleWeiter = async () => {
     setSubmitted(true)
@@ -85,12 +118,10 @@ export function StepCheckin({ state, dispatch, isAnonymous, kiosk, isAccountLogg
     if (advancing) return
     setAdvancing(true)
     try {
-      // Eagerly sign in anonymously here (issue #151) so step 2 can write
+      // Eagerly sign in anonymously here (issue #151) so /visit can write
       // checkout items straight to Firestore — same code path as the
-      // authenticated flow. If sign-in fails we keep the user on step 0
-      // rather than advancing into a broken step 2.
+      // authenticated flow. `onAdvance` also handles the nav to /visit.
       if (onAdvance) await onAdvance()
-      dispatch({ type: "SET_STEP", step: 1 })
     } finally {
       setAdvancing(false)
     }
@@ -98,12 +129,12 @@ export function StepCheckin({ state, dispatch, isAnonymous, kiosk, isAccountLogg
 
   const handleAddPerson = () => {
     setSubmitted(false)
-    dispatch({ type: "ADD_PERSON" })
+    personsDispatch({ type: "ADD_PERSON" })
   }
 
   const handleAddFamilyPerson = (candidate: FamilyCandidate) => {
     setSubmitted(false)
-    dispatch({
+    personsDispatch({
       type: "ADD_FAMILY_PERSON",
       person: {
         userId: candidate.userId,
@@ -127,22 +158,60 @@ export function StepCheckin({ state, dispatch, isAnonymous, kiosk, isAccountLogg
         isTagIdentified={!isAnonymous && !isAccountLoggedIn}
       />
 
-      {state.persons.map((person, i) => (
-        <PersonCard
-          key={person.id}
-          person={person}
-          index={i}
-          isOnly={state.persons.length === 1}
-          showTerms={false}
-          dispatch={dispatch}
-          errors={allErrors[person.id]}
-          touched={touched[person.id]}
-          submitted={submitted}
-          onBlur={(field) => handleBlur(person.id, field)}
-          title={i === 0 && isAccountLoggedIn ? "" : undefined}
-          onSignOut={i === 0 && isAccountLoggedIn ? onSignOut : undefined}
-        />
-      ))}
+      {persons.map((person, i) => {
+        // The signed-in user is identified by userId match, NOT array
+        // index — a parent can remove themselves and re-add via a
+        // quick-add chip, ending up at any position in the array.
+        const isSignedInUser =
+          isAccountLoggedIn &&
+          !!signedInUserId &&
+          person.userId === signedInUserId
+        // Pre-filled persons with a known identity (signed-in user or a
+        // family quick-add member) render as the compact identity strip
+        // — there's nothing to edit. Anonymous / kiosk first-time
+        // entries fall through to the full PersonCard form.
+        if (isSignedInUser || (person.isPreFilled && person.userId)) {
+          return (
+            <IdentityStrip
+              key={person.id}
+              person={person}
+              index={i}
+              email={isSignedInUser ? (signedInEmail ?? person.email) : person.email}
+              suffix={isSignedInUser && isMember ? "Vereinsmitglied" : null}
+              onSignOut={isSignedInUser ? onSignOut : undefined}
+              onRemove={
+                canRemovePerson(person)
+                  ? () =>
+                      personsDispatch({ type: "REMOVE_PERSON", id: person.id })
+                  : undefined
+              }
+            />
+          )
+        }
+        return (
+          <PersonCard
+            key={person.id}
+            person={person}
+            index={i}
+            showTerms={false}
+            // Anonymous walk-ins stay editable even when rehydrated from the
+            // open checkout (isPreFilled) — they have no account profile to
+            // manage, so /checkin is the only place to correct their data.
+            editable={isAnonymous}
+            dispatch={personsDispatch}
+            errors={allErrors[person.id]}
+            touched={touched[person.id]}
+            submitted={submitted}
+            onBlur={(field) => handleBlur(person.id, field)}
+            onRemove={
+              canRemovePerson(person)
+                ? () =>
+                    personsDispatch({ type: "REMOVE_PERSON", id: person.id })
+                : undefined
+            }
+          />
+        )
+      })}
 
       <div className="flex flex-col items-start gap-3">
         {/*
@@ -187,14 +256,20 @@ export function StepCheckin({ state, dispatch, isAnonymous, kiosk, isAccountLogg
               }
             >
               <div className="flex items-start gap-3">
+                {/* Terms gate on `isPreFilled` even though anon walk-ins now
+                    render editable: a rehydrated person is always
+                    `termsAccepted: true` (personDocToLocal), and editing
+                    fields never flips that — so "pre-filled ⇒ already
+                    accepted" holds. A fresh guest (isPreFilled false) still
+                    must tick the box. */}
                 <Checkbox
                   id="terms-accept"
                   className="bg-white"
-                  checked={state.persons.every((p) => p.termsAccepted || p.isPreFilled)}
+                  checked={persons.every((p) => p.termsAccepted || p.isPreFilled)}
                   onCheckedChange={(checked) => {
-                    state.persons.forEach((p) => {
+                    persons.forEach((p) => {
                       if (!p.isPreFilled) {
-                        dispatch({
+                        personsDispatch({
                           type: "UPDATE_PERSON",
                           id: p.id,
                           updates: { termsAccepted: checked === true },
@@ -241,6 +316,69 @@ export function StepCheckin({ state, dispatch, isAnonymous, kiosk, isAccountLogg
           <ArrowRight className="h-4 w-4" />
         </button>
       </div>
+    </div>
+  )
+}
+
+/**
+ * Compact identity strip rendered for any pre-filled person on
+ * /checkin — the signed-in user themselves, and family-roster members
+ * added via the quick-add chips. There's nothing to edit in either
+ * case (the signed-in user manages their profile under
+ * /account/profile; family members are pulled from their own user
+ * docs), so we show just the name + a short subtitle + the
+ * action affordances.
+ *
+ * Action slot, right side (shared RemovePersonButton so it lines up with
+ * the guest PersonCard's remove):
+ *   - Abmelden (only for the signed-in user — signs the whole session out)
+ *   - X (when `onRemove` is supplied — the caller gates this so the last
+ *     account-linked member can't be removed; see `canRemovePerson`)
+ *
+ * Mike's "if I add my kid, I need to be able to remove myself" rule holds
+ * once another family member is on the visit; with no family membership the
+ * signed-in user is the only member and the X is withheld.
+ */
+function IdentityStrip({
+  person,
+  index,
+  email,
+  suffix,
+  onSignOut,
+  onRemove,
+}: {
+  person: CheckoutPerson
+  index: number
+  email: string | null
+  suffix: string | null
+  onSignOut?: () => void
+  onRemove?: () => void
+}) {
+  const name = `${person.firstName} ${person.lastName}`.trim() || "—"
+  const subtitleParts = [email, suffix].filter(Boolean) as string[]
+  return (
+    <div
+      data-testid="identity-strip"
+      className="flex items-center gap-3 rounded-md bg-muted/50 px-4 py-3 sm:px-5 sm:py-4 animate-in fade-in duration-200"
+    >
+      <div className="min-w-0 flex-1">
+        <div className="font-bold text-foreground truncate">{name}</div>
+        {subtitleParts.length > 0 && (
+          <div className="text-sm text-muted-foreground truncate">
+            {subtitleParts.join(" · ")}
+          </div>
+        )}
+      </div>
+      {onSignOut && (
+        <button
+          type="button"
+          onClick={onSignOut}
+          className="text-sm text-muted-foreground underline hover:text-foreground transition-colors"
+        >
+          Abmelden
+        </button>
+      )}
+      {onRemove && <RemovePersonButton index={index} onRemove={onRemove} />}
     </div>
   )
 }

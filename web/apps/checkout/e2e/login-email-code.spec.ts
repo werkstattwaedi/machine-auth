@@ -50,7 +50,7 @@ test.describe("Login flow (email code + magic link)", () => {
     // New users land on /complete-profile; existing users on /visit
     await page.waitForURL(
       (url) =>
-        url.pathname.includes("/complete-profile") ||
+        url.pathname.includes("/account/complete-profile") ||
         url.pathname.includes("/visit"),
       { timeout: 10_000 },
     )
@@ -86,7 +86,7 @@ test.describe("Login flow (email code + magic link)", () => {
     await page.goto(`/login/verify?token=${encodeURIComponent(entry!.docId)}`)
     await page.waitForURL(
       (url) =>
-        url.pathname.includes("/complete-profile") ||
+        url.pathname.includes("/account/complete-profile") ||
         url.pathname.includes("/visit"),
       { timeout: 10_000 },
     )

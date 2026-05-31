@@ -17,5 +17,5 @@ export const Route = createFileRoute("/login_/verify")({
 
 function CheckoutVerifyMagicLinkPage() {
   const { token } = Route.useSearch()
-  return <LoginVerifyPage token={token} defaultRedirect="/visit" signupEnabled />
+  return <LoginVerifyPage token={token} defaultRedirect="/" signupEnabled />
 }

@@ -155,7 +155,7 @@ describe("Family invite (Integration)", () => {
     const debugLink = inviteDoc.data()?.debugLink as string | undefined;
     expect(debugLink).to.be.a("string");
     expect(debugLink).to.equal(
-      `${ORIGIN}/invite/${membershipId}/${inviteId}`,
+      `${ORIGIN}/account/invite/${membershipId}/${inviteId}`,
     );
   });
 
@@ -267,7 +267,7 @@ describe("Family invite (Integration)", () => {
       .doc(inviteId)
       .get();
     expect(inviteDoc.data()?.debugLink).to.contain(
-      `/invite/${membershipId}/${inviteId}`,
+      `/account/invite/${membershipId}/${inviteId}`,
     );
   });
 });

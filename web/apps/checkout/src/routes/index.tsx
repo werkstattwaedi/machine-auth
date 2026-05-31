@@ -1,182 +1,165 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { useState, useRef, useEffect } from "react"
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router"
+import { useEffect, useRef } from "react"
+import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { z } from "zod/v4/mini"
-import { signOut } from "firebase/auth"
-import { useFirebaseAuth } from "@modules/lib/firebase-context"
-import { useAuth, isProfileComplete } from "@modules/lib/auth"
-import { CheckoutWizard } from "@/components/checkout/checkout-wizard"
-import { ConfirmDialog } from "@modules/components/confirm-dialog"
-import { Avatar } from "@modules/components/ui/avatar"
 import { Loader2 } from "lucide-react"
+import { useAuth } from "@modules/lib/auth"
+import { useTokenAuth } from "@modules/lib/token-auth"
+import { useCollection } from "@modules/lib/firestore"
+import {
+  checkoutsCollection,
+  userRef,
+} from "@modules/lib/firestore-helpers"
+import { useDb } from "@modules/lib/firebase-context"
+import { where } from "firebase/firestore"
+import { isCheckoutStale } from "@modules/lib/session-day"
 
-const checkoutSearchSchema = z.object({
+const indexSearchSchema = z.object({
   picc: z.optional(z.string()),
   cmac: z.optional(z.string()),
   kiosk: z.optional(z.string()),
-  step: z.optional(z.string()),
 })
 
+/**
+ * Root URL is a dispatcher. It checks the current Firebase principal's
+ * open checkout state and forwards to the appropriate wizard step:
+ *
+ *   no open checkout                  →  /checkin
+ *   open checkout from today          →  /visit
+ *   open checkout from a previous day →  /checkout (red/orange banner)
+ *
+ * Tag-auth params (picc/cmac/kiosk) and the kiosk flag are preserved on
+ * the redirect so the wizard layer picks them up.
+ */
 export const Route = createFileRoute("/")({
-  validateSearch: checkoutSearchSchema,
-  component: CheckoutPage,
+  validateSearch: indexSearchSchema,
+  component: RootDispatcher,
 })
 
-function CheckoutPage() {
-  const auth = useFirebaseAuth()
-  const { userDoc, loading, userDocLoading, sessionKind } = useAuth()
-  const { picc, cmac, kiosk, step } = Route.useSearch()
-  const isKiosk = kiosk !== undefined
+function RootDispatcher() {
+  const db = useDb()
   const navigate = useNavigate()
+  const { picc, cmac, kiosk } = Route.useSearch()
+  const {
+    user,
+    userDoc,
+    loading: authLoading,
+    userDocLoading,
+    sessionKind,
+  } = useAuth()
+  const { tokenUser, loading: tokenLoading } = useTokenAuth(
+    picc ?? null,
+    cmac ?? null,
+  )
 
-  // Track the "accepted" params that the wizard is actually using
-  const [activeParams, setActiveParams] = useState<{
-    picc?: string
-    cmac?: string
-  }>({ picc, cmac })
+  // Classify the principal by sessionKind so a still-loading userDoc on
+  // a real login doesn't get misread as anonymous. Without this the
+  // dispatcher would briefly query as "anonymous" with anonUid=null,
+  // see no checkout, and bounce to /checkin — even though the user has
+  // an open checkout under their real userId.
+  const identifiedUserRef =
+    sessionKind === "real" && userDoc
+      ? userRef(db, userDoc.id)
+      : sessionKind === "tag" && tokenUser
+        ? userRef(db, tokenUser.userId)
+        : null
+  const anonUid =
+    sessionKind === "anonymous" && user?.isAnonymous ? user.uid : null
 
-  // Pending params waiting for confirmation
-  const [pendingParams, setPendingParams] = useState<{
-    picc: string
-    cmac: string
-  } | null>(null)
+  const { data: openCheckouts, loading: loadingCheckout } = useCollection(
+    identifiedUserRef
+      ? checkoutsCollection(db)
+      : anonUid
+        ? checkoutsCollection(db)
+        : null,
+    ...(identifiedUserRef
+      ? [
+          where("userId", "==", identifiedUserRef),
+          where("status", "==", "open"),
+        ]
+      : anonUid
+        ? [
+            where("userId", "==", null),
+            // Key on `firebaseUid` (stable, write-once creator id), not the
+            // `modifiedBy` audit field — see wizard-context.tsx for the full
+            // rationale. `modifiedBy` is stamped from lagging React auth
+            // state and is null when a create races an auth transition, so
+            // the dispatcher would miss the freshly-created anon checkout and
+            // bounce a returning visitor back to /checkin.
+            where("firebaseUid", "==", anonUid),
+            where("status", "==", "open"),
+          ]
+        : []),
+  )
 
-  // Track whether checkout is in progress (step > 0 or pre-filled)
-  const checkoutActiveRef = useRef(false)
+  // Wait for everything that materially changes the principal-scoping
+  // before deciding. In particular `userDocLoading` matters for real
+  // logins — without gating on it the dispatcher reads a still-null
+  // userDoc and forwards to /checkin even though the open checkout for
+  // that user already exists.
+  const principalLoading =
+    authLoading ||
+    tokenLoading ||
+    (sessionKind === "real" && userDocLoading) ||
+    (sessionKind === "tag" && !tokenUser && !!(picc && cmac))
 
-  // Detect URL param changes after initial load
-  const prevPiccRef = useRef(picc)
-  const prevCmacRef = useRef(cmac)
+  // Latch so a navigate() racing against the next React tick doesn't
+  // re-fire after the redirector mounted on the destination route.
+  const dispatchedRef = useRef(false)
 
-  // Clear any stale Firebase Auth session on mount (e.g. kiosk chrome
-  // "neuer checkout" navigates here without picc/cmac — the previous
-  // tag session persists in IndexedDB and must be wiped)
   useEffect(() => {
-    if (isKiosk && !picc && !cmac) {
-      signOut(auth)
+    if (dispatchedRef.current) return
+    if (principalLoading) return
+
+    const search: { picc?: string; cmac?: string; kiosk?: string } = {}
+    if (picc) search.picc = picc
+    if (cmac) search.cmac = cmac
+    if (kiosk !== undefined) search.kiosk = ""
+
+    // No principal at all → send the visitor to /checkin so the wizard
+    // can collect their persons + create an anon principal on advance.
+    if (sessionKind === null || !user) {
+      dispatchedRef.current = true
+      navigate({ to: "/checkin", search })
+      return
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Redirect logged-in users with incomplete profiles to complete-profile.
-  // Tag-auth sessions always have picc/cmac in the URL — skip those.
-  // Anonymous Firebase Auth sessions (sessionKind === "anonymous") look like
-  // a logged-in user but have no userDoc; treating them as account-logged-in
-  // would flip `profileLoading` true→false on submit and unmount the wizard.
-  const isAccountLoggedIn = sessionKind === "real" && !picc
-  const profileLoading = loading || userDocLoading
-  const needsProfileCompletion =
-    isAccountLoggedIn && !profileLoading && userDoc && !isProfileComplete(userDoc)
+    // Principal exists — wait for the open-checkout subscription to
+    // resolve before deciding.
+    if (loadingCheckout) return
 
-  useEffect(() => {
-    if (needsProfileCompletion) {
-      navigate({ to: "/complete-profile", search: { redirect: "/" } })
+    dispatchedRef.current = true
+    const openCheckout = openCheckouts[0] ?? null
+
+    if (!openCheckout) {
+      navigate({ to: "/checkin", search })
+      return
     }
-  }, [needsProfileCompletion, navigate])
 
-  useEffect(() => {
-    const paramsChanged =
-      picc !== prevPiccRef.current || cmac !== prevCmacRef.current
-    prevPiccRef.current = picc
-    prevCmacRef.current = cmac
-
-    if (!paramsChanged || !picc || !cmac) return
-
-    if (checkoutActiveRef.current) {
-      // Checkout in progress — ask for confirmation
-      setPendingParams({ picc, cmac })
-    } else {
-      // No active checkout — accept directly
-      setActiveParams({ picc, cmac })
+    const created = (openCheckout.created as { toDate(): Date } | undefined)
+      ?.toDate()
+    if (created && isCheckoutStale(created)) {
+      navigate({ to: "/checkout", search })
+      return
     }
-  }, [picc, cmac])
-
-  // Early returns — all hooks are above this point
-  if (isAccountLoggedIn && profileLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin" />
-      </div>
-    )
-  }
-
-  if (needsProfileCompletion) return null
-
-  const handleConfirmNewTag = () => {
-    if (pendingParams) {
-      setActiveParams(pendingParams)
-      setPendingParams(null)
-    }
-  }
-
-  const handleCancelNewTag = () => {
-    setPendingParams(null)
-    // Revert URL to previous params
-    navigate({
-      to: "/",
-      search: activeParams.picc
-        ? { picc: activeParams.picc, cmac: activeParams.cmac }
-        : {},
-      replace: true,
-    })
-  }
-
-  // Anonymous and tag flows fill the form inside the wizard, so the
-  // header simply hides the avatar until the user has signed in (the
-  // wizard's local form state is intentionally not lifted here — see
-  // the wizard's persons[] for the in-flight name).
-  const headerName = userDoc?.name || null
+    navigate({ to: "/visit", search })
+  }, [
+    principalLoading,
+    loadingCheckout,
+    openCheckouts,
+    sessionKind,
+    user,
+    picc,
+    cmac,
+    kiosk,
+    navigate,
+  ])
 
   return (
-    <div className="min-h-screen flex flex-col items-center bg-background">
-      <header className="w-full bg-background border-b border-border">
-        <div className="w-full max-w-[1000px] mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
-          <img
-            src="/logo_oww.png"
-            alt="Offene Werkstatt Wädenswil"
-            className="h-12 shrink-0"
-          />
-          {headerName && (
-            <Link
-              to="/profile"
-              className="flex items-center gap-3 min-w-0 rounded-full -m-1 p-1 hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-cog-teal/40 focus-visible:outline-offset-2 transition-colors"
-              aria-label="Profil öffnen"
-            >
-              <span className="text-sm text-foreground truncate">
-                {headerName}
-              </span>
-              <Avatar name={headerName} seed={userDoc?.id} />
-            </Link>
-          )}
-        </div>
-      </header>
-      <div className="w-full max-w-[1000px] px-4 sm:px-6 py-6 flex-1 flex flex-col">
-        <h1 className="text-2xl sm:text-[37px] font-bold mb-6">
-          Self-Checkout
-        </h1>
-        <CheckoutWizard
-          key={`${activeParams.picc ?? ""}-${activeParams.cmac ?? ""}`}
-          picc={activeParams.picc}
-          cmac={activeParams.cmac}
-          kiosk={isKiosk}
-          initialStep={step === "summary" ? 2 : undefined}
-          onActiveChange={(active) => {
-            checkoutActiveRef.current = active
-          }}
-        />
-        <ConfirmDialog
-          open={!!pendingParams}
-          onOpenChange={(open) => {
-            if (!open) handleCancelNewTag()
-          }}
-          title="Neuer Badge erkannt"
-          description="Ein Checkout ist bereits in Bearbeitung. Neuen Checkout starten?"
-          confirmLabel="Neuer Checkout"
-          onConfirm={handleConfirmNewTag}
-          destructive
-        />
-      </div>
+    <div className="min-h-screen flex items-center justify-center">
+      <Loader2 className="h-6 w-6 animate-spin" />
     </div>
   )
 }

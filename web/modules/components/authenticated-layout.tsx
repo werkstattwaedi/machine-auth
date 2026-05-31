@@ -45,12 +45,29 @@ export interface AuthenticatedLayoutProps {
    * mount LookupProvider above the content tree.
    */
   wrapper?: (props: { children: ReactNode }) => ReactNode
+  /**
+   * Optional ReactNode rendered prominently above the sidebar nav items
+   * — used by the checkout app for the state-aware "Mein Besuch" /
+   * "Neuer Besuch" CTA. Pass null to hide.
+   */
+  headerAction?: ReactNode
+  /**
+   * Where to send the user after an explicit "Abmelden". When set, the
+   * logout button navigates here (a public page) instead of letting the
+   * unauth gate bounce to `/login?redirect=<member-path>` — which would
+   * strand a just-logged-out user on the login screen with no way out.
+   * The checkout app passes `/checkin`; the admin app omits it (login is
+   * the right place for a logged-out admin).
+   */
+  signOutRedirect?: string
 }
 
 export function AuthenticatedLayout({
   navItems,
   gate,
   wrapper: Wrapper,
+  headerAction,
+  signOutRedirect,
 }: AuthenticatedLayoutProps) {
   const { user, userDoc, isAdmin, loading, userDocLoading, signOut, sessionKind } = useAuth()
   const navigate = useNavigate()
@@ -153,6 +170,11 @@ export function AuthenticatedLayout({
 
   const navContent = (
     <>
+      {headerAction && (
+        <div className="mb-3" onClick={() => setSheetOpen(false)}>
+          {headerAction}
+        </div>
+      )}
       {navItems.map(({ to, label, icon: Icon }) => (
         <Link
           key={to}
@@ -195,7 +217,18 @@ export function AuthenticatedLayout({
                   size="icon-sm"
                   aria-label="Abmelden"
                   className="text-muted-foreground hover:text-foreground hover:bg-cog-teal-light"
-                  onClick={() => signOut()}
+                  onClick={() => {
+                    // Navigate to the public landing FIRST (before signOut
+                    // flips `user` to null) so leaving the _authenticated
+                    // subtree unmounts the unauth gate — otherwise it bounces
+                    // to /login?redirect=<member-path> and strands the user.
+                    if (signOutRedirect) {
+                      ;(navigate as (opts: { to: string }) => void)({
+                        to: signOutRedirect,
+                      })
+                    }
+                    void signOut()
+                  }}
                 >
                   <LogOut className="h-4 w-4" />
                 </Button>

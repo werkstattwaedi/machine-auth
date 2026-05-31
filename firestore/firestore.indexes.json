@@ -81,7 +81,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "modifiedBy",
+          "fieldPath": "firebaseUid",
           "order": "ASCENDING"
         },
         {

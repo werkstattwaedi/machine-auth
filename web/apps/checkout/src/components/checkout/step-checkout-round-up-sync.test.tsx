@@ -5,29 +5,19 @@
  * Regression for issue #236: when the user enables "Aufrunden" on a
  * billable subtotal, then switches `usageType` to "intern" (which zeroes
  * personFees + machineCost + materialCost), the previously-dispatched
- * round-up tip MUST NOT linger in global state. The displayed
- * Spende/Aufrunden card already hides itself when there are no round-up
- * options for a base of 0, but the dispatched `tip` in CheckoutState
- * was stale — so the Bezahlen step still showed CHF 0.60 to pay even
- * though the user had selected the always-free internal usage.
- *
- * This test renders the real `StepCheckout` with a thin reducer-backed
- * harness so it observes both the render path and the global-state
- * dispatch path.
+ * round-up tip MUST NOT linger in state. The displayed Spende/Aufrunden
+ * card already hides itself when there are no round-up options for a
+ * base of 0, but the `tip` value driving the Bezahlen step was stale.
  */
 
 import { describe, it, expect, afterEach, vi } from "vitest"
-import { useReducer } from "react"
+import { useState } from "react"
 import { render, screen, cleanup, act } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { StepCheckout } from "./step-checkout"
-import {
-  checkoutReducer,
-  initialState,
-  type CheckoutState,
-  type CheckoutAction,
-} from "./use-checkout-state"
+import type { CheckoutPerson } from "./use-checkout-state"
 import type { PricingConfig } from "@modules/lib/workshop-config"
+import type { UsageType } from "@modules/lib/pricing"
 
 afterEach(cleanup)
 
@@ -66,36 +56,42 @@ const config: PricingConfig = {
   },
 }
 
+const PERSONS: CheckoutPerson[] = [
+  {
+    id: "p1",
+    firstName: "Max",
+    lastName: "Muster",
+    email: "max@example.com",
+    userType: "erwachsen",
+    termsAccepted: true,
+    isPreFilled: false,
+  },
+]
+
 function Harness({
-  onState,
+  onTipChange,
+  onUsageChange,
 }: {
-  onState?: (s: CheckoutState) => void
+  onTipChange?: (n: number) => void
+  onUsageChange?: (t: UsageType) => void
 }) {
-  const [state, dispatch] = useReducer(checkoutReducer, {
-    ...initialState,
-    step: 2,
-    persons: [
-      {
-        id: "p1",
-        firstName: "Max",
-        lastName: "Muster",
-        email: "max@example.com",
-        userType: "erwachsen",
-        termsAccepted: true,
-        isPreFilled: false,
-      },
-    ],
-  })
-  onState?.(state)
-  // Wrap dispatch to also stream out every state for assertions.
-  const tracked: React.Dispatch<CheckoutAction> = (action) => {
-    dispatch(action)
-  }
+  const [usageType, setUsageType] = useState<UsageType>("regular")
+  const [tip, setTip] = useState(0)
   return (
     <StepCheckout
-      state={state}
-      dispatch={tracked}
+      persons={PERSONS}
+      usageType={usageType}
+      setUsageType={(t) => {
+        onUsageChange?.(t)
+        setUsageType(t)
+      }}
+      tip={tip}
+      setTip={(n) => {
+        onTipChange?.(n)
+        setTip(n)
+      }}
       onSubmit={async () => {}}
+      onBack={() => {}}
       submitting={false}
       submitError={null}
       items={[]}
@@ -105,27 +101,30 @@ function Harness({
 }
 
 describe("StepCheckout — round-up tip stays in sync with the billed subtotal (#236)", () => {
-  it("clears the dispatched round-up when usageType changes to 'intern'", async () => {
-    const states: CheckoutState[] = []
+  it("clears the tip when usageType changes to 'intern'", async () => {
+    let lastTip = 0
+    let lastUsage: UsageType = "regular"
     const user = userEvent.setup()
-    render(<Harness onState={(s) => states.push(s)} />)
-
-    // Initial state: regular usage, 15 CHF subtotal (one adult, stubbed),
-    // no tip yet.
-    expect(states.at(-1)!.usageType).toBe("regular")
-    expect(states.at(-1)!.tip).toBe(0)
+    render(
+      <Harness
+        onTipChange={(t) => {
+          lastTip = t
+        }}
+        onUsageChange={(t) => {
+          lastUsage = t
+        }}
+      />,
+    )
 
     // Enable Aufrunden — the smallest auto-target for a 15 CHF base is
-    // 16 CHF (next franc), so the dispatched tip becomes 1.00.
+    // 16 CHF (next franc), so the tip becomes 1.00.
     const aufrunden = screen.getByRole("checkbox", { name: /aufrunden/i })
     await act(async () => {
       await user.click(aufrunden)
     })
-    const tipAfterRoundUp = states.at(-1)!.tip
-    expect(tipAfterRoundUp).toBeGreaterThan(0)
+    expect(lastTip).toBeGreaterThan(0)
 
-    // Open the Nutzungsgebühren section so the usage-type select is in the DOM,
-    // then switch to "intern".
+    // Open the Nutzungsgebühren section and switch to "intern".
     await act(async () => {
       await user.click(screen.getByRole("button", { name: /Nutzungsgebühren/ }))
     })
@@ -134,30 +133,23 @@ describe("StepCheckout — round-up tip stays in sync with the billed subtotal (
       await user.selectOptions(usageSelect, "intern")
     })
 
-    // After the effect runs, the dispatched tip MUST be 0 — there is
-    // nothing to round up against a 0 CHF subtotal.
-    expect(states.at(-1)!.usageType).toBe("intern")
-    expect(states.at(-1)!.tip).toBe(0)
+    // After the effect runs, the tip is back to 0 — nothing to round up
+    // against a 0 CHF subtotal.
+    expect(lastUsage).toBe("intern")
+    expect(lastTip).toBe(0)
   })
 
   it("preserves the manual tip when usageType changes to 'intern'", async () => {
-    // The fix must only drop the *round-up* portion. A free-form
-    // donation the user typed into the Spende input is intentional and
-    // should survive the switch.
-    const states: CheckoutState[] = []
+    let lastTip = 0
     const user = userEvent.setup()
-    render(<Harness onState={(s) => states.push(s)} />)
+    render(<Harness onTipChange={(t) => (lastTip = t)} />)
 
     // Type a manual tip of 5 CHF.
     const spendeInput = screen.getByLabelText("Trinkgeld/Spende") as HTMLInputElement
     await act(async () => {
       await user.type(spendeInput, "5")
     })
-    expect(states.at(-1)!.tip).toBe(5)
-
-    // Now enable Aufrunden — base is 15 + 5 = 20 CHF, which is whole,
-    // so no round-up options appear. Manual tip stays at 5.
-    expect(states.at(-1)!.tip).toBe(5)
+    expect(lastTip).toBe(5)
 
     // Switch to intern.
     await act(async () => {
@@ -169,8 +161,7 @@ describe("StepCheckout — round-up tip stays in sync with the billed subtotal (
     })
 
     // Manual tip survives.
-    expect(states.at(-1)!.tip).toBe(5)
-    expect(states.at(-1)!.usageType).toBe("intern")
+    expect(lastTip).toBe(5)
   })
 
   it("auto-unchecks the round-up checkbox when no options remain", async () => {
@@ -183,8 +174,6 @@ describe("StepCheckout — round-up tip stays in sync with the billed subtotal (
     })
     expect(aufrunden.checked).toBe(true)
 
-    // Switch to intern — the entire round-up row disappears (no
-    // options), so the checkbox should also be unchecked under the hood.
     await act(async () => {
       await user.click(screen.getByRole("button", { name: /Nutzungsgebühren/ }))
     })
@@ -193,8 +182,6 @@ describe("StepCheckout — round-up tip stays in sync with the billed subtotal (
       await user.selectOptions(usageSelect, "intern")
     })
 
-    // The row is gone; switching back to regular MUST NOT auto-restore
-    // an enabled round-up (the user might have wanted it off all along).
     await act(async () => {
       await user.selectOptions(usageSelect, "regular")
     })
@@ -204,14 +191,11 @@ describe("StepCheckout — round-up tip stays in sync with the billed subtotal (
 
   // Issue #249 — the dominance filter previously stripped the literal
   // next franc and left the user with a single multi-franc bump that
-  // was still labelled "nächsten Franken". The user reported base
-  // CHF 66.32 → only option +CHF 3.68 (target 70). After the fix the
-  // smallest option is 67 (+CHF 0.68) and the dispatched tip reflects
-  // that.
+  // was still labelled "nächsten Franken".
   it("dispatches the literal-next-franc round-up for base 66.32 (#249)", async () => {
-    const states: CheckoutState[] = []
+    let lastTip = 0
     const user = userEvent.setup()
-    render(<Harness onState={(s) => states.push(s)} />)
+    render(<Harness onTipChange={(t) => (lastTip = t)} />)
 
     // Type a manual tip of 51.92 — subtotal is 14.4 (one stubbed adult),
     // so roundBase = 14.4 + 51.92 = 66.32, matching the issue scenario.
@@ -219,14 +203,13 @@ describe("StepCheckout — round-up tip stays in sync with the billed subtotal (
     await act(async () => {
       await user.type(spendeInput, "51.92")
     })
-    expect(states.at(-1)!.tip).toBeCloseTo(51.92, 2)
+    expect(lastTip).toBeCloseTo(51.92, 2)
 
-    // Enable Aufrunden — the smallest target must be 67 (not 70), so
-    // the dispatched tip becomes manualTip + 0.68 = 52.60.
+    // Enable Aufrunden — smallest target is 67 (not 70), so tip = 51.92 + 0.68 = 52.60.
     const aufrunden = screen.getByRole("checkbox", { name: /aufrunden/i })
     await act(async () => {
       await user.click(aufrunden)
     })
-    expect(states.at(-1)!.tip).toBeCloseTo(52.6, 2)
+    expect(lastTip).toBeCloseTo(52.6, 2)
   })
 })

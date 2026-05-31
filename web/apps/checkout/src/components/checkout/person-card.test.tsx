@@ -34,7 +34,6 @@ describe("PersonCard billing address", () => {
       <PersonCard
         person={person}
         index={0}
-        isOnly={true}
         showTerms={false}
         dispatch={noop}
       />,
@@ -56,7 +55,6 @@ describe("PersonCard billing address", () => {
       <PersonCard
         person={person}
         index={0}
-        isOnly={true}
         showTerms={false}
         dispatch={noop}
       />,

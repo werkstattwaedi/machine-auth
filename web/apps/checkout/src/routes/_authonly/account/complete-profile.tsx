@@ -26,7 +26,7 @@ const completeProfileSearchSchema = z.object({
   redirect: z.optional(z.string()),
 })
 
-export const Route = createFileRoute("/_authonly/complete-profile")({
+export const Route = createFileRoute("/_authonly/account/complete-profile")({
   validateSearch: completeProfileSearchSchema,
   component: CompleteProfilePage,
 })
@@ -94,7 +94,12 @@ function CompleteProfilePage() {
 
   useEffect(() => {
     if (profileComplete) {
-      navigate({ to: redirectTo || "/visit" })
+      // Fall back to the root dispatcher (not /visit): a freshly signed-up
+      // account has no open checkout, so the dispatcher sends them to
+      // /checkin to start one instead of stranding them on the /visit
+      // "Kein offener Besuch" gate. Users who do have a checkout still
+      // resume on the right step.
+      navigate({ to: redirectTo || "/" })
     }
   }, [profileComplete, navigate, redirectTo])
 
@@ -131,7 +136,9 @@ function CompleteProfilePage() {
       },
       { successMessage: "Profil gespeichert" },
     )
-    navigate({ to: redirectTo || "/visit" })
+    // See the redirect note above: dispatcher, not /visit, so a new account
+    // lands on /checkin to start a checkout.
+    navigate({ to: redirectTo || "/" })
   }
 
   return (

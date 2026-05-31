@@ -55,11 +55,11 @@ test.describe("Self-registration", () => {
     // before the client-side redirect check runs, skipping the profile page.
     // Accept both paths: /complete-profile or direct to /visit.
     await page.waitForURL(
-      (url) => url.pathname.includes("/complete-profile") || url.pathname.includes("/visit"),
+      (url) => url.pathname.includes("/account/complete-profile") || url.pathname.includes("/visit"),
       { timeout: 10_000 },
     )
 
-    if (page.url().includes("/complete-profile")) {
+    if (page.url().includes("/account/complete-profile")) {
       await expect(
         page.getByRole("button", { name: "Profil speichern" }),
       ).toBeVisible()
@@ -130,7 +130,7 @@ test.describe("Self-registration", () => {
 
     // ── Should land on /complete-profile (signup mode forces this) ──
     await page.waitForURL(
-      (url) => url.pathname.includes("/complete-profile"),
+      (url) => url.pathname.includes("/account/complete-profile"),
       { timeout: 10_000 },
     )
 

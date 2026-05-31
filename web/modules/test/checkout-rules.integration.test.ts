@@ -7,7 +7,7 @@
  * Run with: npm run test:web:integration (from repo root)
  */
 
-import { describe, it, beforeAll, afterAll, afterEach } from "vitest"
+import { describe, it, beforeAll, afterAll, afterEach, expect } from "vitest"
 import {
   setupEmulator,
   clearFirestore,
@@ -19,6 +19,9 @@ import {
   addDoc,
   doc,
   getDoc,
+  getDocs,
+  query,
+  where,
   serverTimestamp,
   setDoc,
 } from "firebase/firestore"
@@ -590,6 +593,59 @@ describe("Checkout read rules (R1: cross-user leak fix)", () => {
 
     const tagDb = tagSessionDb("u2")
     await assertFails(getDoc(doc(tagDb, "checkouts", "co1")))
+  })
+})
+
+describe("Anonymous open-checkout lookup keys on firebaseUid, not modifiedBy", () => {
+  // Regression for the anon-checkout-after-logout bug. The open-checkout
+  // query (wizard-context.tsx + routes/index.tsx) must scope on
+  // `firebaseUid` — the stable, rules-enforced creator id — NOT the
+  // `modifiedBy` audit field. In production `modifiedBy` is stamped from the
+  // AuthProvider's React `user` state, which lags the SDK: a checkout
+  // created right after a logout → eager-anon transition lands with
+  // `modifiedBy: null` even though `firebaseUid` holds the anon UID. A query
+  // on `modifiedBy` then never matches its own freshly-created doc — the
+  // checkout exists in Firestore but the UI shows "Kein offener Besuch"
+  // after a reload.
+  it("finds the anon's own open checkout via firebaseUid even when modifiedBy is null", async () => {
+    const anonUid = "anon-1"
+    const db = anonAuthDb(anonUid)
+    // Mirror production: modifiedBy clobbered to null by the lagging audit
+    // stamp; firebaseUid carries the real creator UID.
+    await addDoc(collection(db, "checkouts"), {
+      userId: null,
+      status: "open",
+      usageType: "regular",
+      created: serverTimestamp(),
+      workshopsVisited: [],
+      persons: [{ name: "a s", email: "a@b.c", userType: "erwachsen" }],
+      modifiedBy: null,
+      modifiedAt: serverTimestamp(),
+      firebaseUid: anonUid,
+    })
+
+    // The fixed query: keyed on firebaseUid → finds the doc.
+    const found = await getDocs(
+      query(
+        collection(db, "checkouts"),
+        where("userId", "==", null),
+        where("firebaseUid", "==", anonUid),
+        where("status", "==", "open"),
+      ),
+    )
+    expect(found.size).toBe(1)
+
+    // The pre-fix query keyed on modifiedBy → misses the very doc this
+    // session just created. Encodes the regression so a revert fails loudly.
+    const missed = await getDocs(
+      query(
+        collection(db, "checkouts"),
+        where("userId", "==", null),
+        where("modifiedBy", "==", anonUid),
+        where("status", "==", "open"),
+      ),
+    )
+    expect(missed.size).toBe(0)
   })
 })
 

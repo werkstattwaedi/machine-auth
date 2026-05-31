@@ -27,7 +27,7 @@ async function signIn(page: Page) {
 }
 
 async function gotoMembership(page: Page) {
-  await page.goto("/membership")
+  await page.goto("/account/membership")
   await expect(
     page.getByRole("heading", { name: "Mitgliedschaft" }),
   ).toBeVisible({ timeout: 10_000 })
