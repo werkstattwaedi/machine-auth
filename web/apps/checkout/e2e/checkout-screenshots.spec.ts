@@ -30,7 +30,7 @@ async function goToWorkshops(page: Page) {
 /** Navigate to checkout summary (step 3) with no items */
 async function goToSummary(page: Page) {
   await goToWorkshops(page)
-  const checkoutBtn = page.getByRole("button", { name: "Check-Out" })
+  const checkoutBtn = page.getByRole("button", { name: "Zum Checkout" })
   await checkoutBtn.scrollIntoViewIfNeeded()
   await checkoutBtn.click()
   await expect(page.getByText("Dein Besuch")).toBeVisible()
@@ -57,7 +57,7 @@ async function goToSummaryWithItems(page: Page) {
   await page.getByRole("button", { name: "Schliessen" }).click()
   await expect(page.locator(`[data-slot="sheet-overlay"]`)).toBeHidden()
 
-  const checkoutBtn = page.getByRole("button", { name: "Check-Out" })
+  const checkoutBtn = page.getByRole("button", { name: "Zum Checkout" })
   await checkoutBtn.scrollIntoViewIfNeeded()
   await checkoutBtn.click()
   await expect(page.getByText("Dein Besuch")).toBeVisible()
@@ -102,7 +102,7 @@ async function submitAndWaitForPaymentResult(page: Page) {
   await expect(page.getByText("Werkstätten wählen")).toBeVisible()
 
   // Go to summary
-  const checkoutBtn = page.getByRole("button", { name: "Check-Out" })
+  const checkoutBtn = page.getByRole("button", { name: "Zum Checkout" })
   await checkoutBtn.scrollIntoViewIfNeeded()
   await checkoutBtn.click()
   await expect(page.getByText("Dein Besuch")).toBeVisible()
@@ -120,6 +120,17 @@ async function submitAndWaitForPaymentResult(page: Page) {
 }
 
 test.describe("Checkout step screenshots", () => {
+  // Start every test from a clean cart. The other checkout specs all clear
+  // checkouts in a beforeEach; this one didn't. Without it, a membership
+  // test that fails before its trailing clearCheckoutsDeep() leaks an open
+  // membership-only checkout for the shared auth user, which the next
+  // signed-in test (notably the Step 4 payment shots on the *second* browser
+  // project) then rehydrates — hiding "Werkstätten wählen" and cascading
+  // failures across viewports.
+  test.beforeEach(async () => {
+    await clearCheckoutsDeep()
+  })
+
   // The Sammelrechnung-member test below stamps an active-single
   // membership on the shared auth user doc. Reset after *every* test so
   // the stamp can't leak forward into a later test that expects a
@@ -384,7 +395,7 @@ test.describe("Checkout step screenshots", () => {
     await expect(page.getByText("Werkstätten wählen")).toBeVisible()
 
     // Go to summary (no items — keeps the total small if intern toggle ever fails)
-    const checkoutBtn = page.getByRole("button", { name: "Check-Out" })
+    const checkoutBtn = page.getByRole("button", { name: "Zum Checkout" })
     await checkoutBtn.scrollIntoViewIfNeeded()
     await checkoutBtn.click()
     await expect(page.getByText("Dein Besuch")).toBeVisible()
@@ -555,7 +566,7 @@ test.describe("Checkout step screenshots", () => {
     await expect(page.locator(`[data-slot="sheet-overlay"]`)).toBeHidden()
 
     // Go to summary
-    const checkoutBtn = page.getByRole("button", { name: "Check-Out" })
+    const checkoutBtn = page.getByRole("button", { name: "Zum Checkout" })
     await checkoutBtn.scrollIntoViewIfNeeded()
     await checkoutBtn.click()
     await expect(page.getByText("Dein Besuch")).toBeVisible()
@@ -595,7 +606,7 @@ test.describe("Checkout step screenshots", () => {
     // Advance check-in → workshops → summary.
     await page.getByRole("button", { name: "Weiter" }).click()
     await expect(page.getByText("Werkstätten wählen")).toBeHidden()
-    const checkoutBtn = page.getByRole("button", { name: "Check-Out" })
+    const checkoutBtn = page.getByRole("button", { name: "Zum Checkout" })
     await checkoutBtn.scrollIntoViewIfNeeded()
     await checkoutBtn.click()
     await expect(page.getByText("Dein Besuch")).toBeVisible()
@@ -628,7 +639,7 @@ test.describe("Checkout step screenshots", () => {
 
     await page.getByRole("button", { name: "Weiter" }).click()
     await expect(page.getByText("Werkstätten wählen")).toBeVisible()
-    const checkoutBtn = page.getByRole("button", { name: "Check-Out" })
+    const checkoutBtn = page.getByRole("button", { name: "Zum Checkout" })
     await checkoutBtn.scrollIntoViewIfNeeded()
     await checkoutBtn.click()
     await expect(page.getByText("Dein Besuch")).toBeVisible()

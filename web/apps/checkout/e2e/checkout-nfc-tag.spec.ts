@@ -34,8 +34,12 @@ test.describe("NFC tag checkout", () => {
   }) => {
     const { picc, cmac } = readE2eData()
 
-    // Navigate with picc+cmac params — hits real Functions emulator
-    await page.goto(`/?picc=${picc}&cmac=${cmac}`)
+    // Navigate to the wizard's canonical tag entry, /checkin?picc=…&cmac=…
+    // (the refactor reserves "/" for typed entries; the kiosk lands on
+    // /checkin directly). Going via the "/" dispatcher would verify the tag
+    // there AND again in the wizard — the second tap of the same SDM counter
+    // trips the replay defense (verify_tag.ts) and falls back to anon check-in.
+    await page.goto(`/checkin?picc=${picc}&cmac=${cmac}`)
 
     // ── No landing page — tag identifies the user directly ──
     // Wait for tag verification to complete and person to be pre-filled
@@ -56,7 +60,7 @@ test.describe("NFC tag checkout", () => {
     await page.getByRole("button", { name: "Weiter" }).click()
     await expect(page.getByText("Werkstätten wählen")).toBeVisible()
 
-    await page.getByRole("button", { name: "Check-Out" }).click()
+    await page.getByRole("button", { name: "Zum Checkout" }).click()
     await expect(page.getByText("Dein Besuch")).toBeVisible()
 
     // Submit
