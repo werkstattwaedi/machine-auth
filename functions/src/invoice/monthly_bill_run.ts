@@ -231,7 +231,6 @@ export const monthlyBillRun = onSchedule(
   {
     schedule: "0 6 * * *",
     timeZone: "Europe/Zurich",
-    region: "europe-west6",
     memory: "512MiB",
     timeoutSeconds: 540,
     secrets: [resendApiKey],

@@ -324,7 +324,6 @@ export const autoAcknowledgeBills = onSchedule(
   {
     schedule: "0 3 * * *",
     timeZone: "Europe/Zurich",
-    region: "europe-west6",
     timeoutSeconds: 540,
   },
   async () => {

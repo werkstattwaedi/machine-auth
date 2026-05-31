@@ -134,7 +134,7 @@ const GATEWAY: VarMapping[] = [
 const TEST_FIXTURE_CONFIG: Record<string, unknown> = {
   firebase: {
     projectId: "oww-maco",
-    region: "us-central1",
+    region: "europe-west6",
     apiKey: "fake-api-key",
     authDomain: "checkout.werkstattwaedi.ch",
     storageBucket: "oww-maco.firebasestorage.app",
@@ -177,7 +177,7 @@ const TEST_FIXTURE_CONFIG: Record<string, unknown> = {
     host: "0.0.0.0",
     port: 5000,
     masterKey: "000102030405060708090a0b0c0d0e0f",
-    firebaseUrl: "http://127.0.0.1:5101/oww-maco/us-central1",
+    firebaseUrl: "http://127.0.0.1:5101/oww-maco/europe-west6",
     gatewayApiKey: "ci-test-gateway-key",
     deviceHost: "maco-gateway.internal",
     devicePort: 5000,

@@ -217,7 +217,7 @@ Beyond Firebase config, the following deployment-specific variables are used:
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `VITE_CHECKOUT_DOMAIN` | Checkout subdomain | `checkout.example.com` |
-| `VITE_FUNCTIONS_REGION` | Cloud Functions region | `us-central1` |
+| `VITE_FUNCTIONS_REGION` | Cloud Functions region | `europe-west6` |
 | `VITE_LOCALE` | Locale for formatting | `de-CH` |
 | `VITE_CURRENCY` | Currency code | `CHF` |
 | `VITE_ORGANIZATION_NAME` | Organization name | `My Workshop` |

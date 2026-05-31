@@ -29,7 +29,9 @@ export const db = initializeFirestore(app, {
     ? { experimentalForceLongPolling: true }
     : { experimentalAutoDetectLongPolling: true }),
 })
-export const functions = getFunctions(app)
+// Functions deploy to europe-west6 (#211); callables must target the same
+// region. The emulator path is derived from this region by connectFunctionsEmulator.
+export const functions = getFunctions(app, "europe-west6")
 
 if (import.meta.env.DEV) {
   const authPort = import.meta.env.VITE_EMULATOR_AUTH_PORT || "9099"

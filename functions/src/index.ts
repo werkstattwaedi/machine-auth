@@ -1,3 +1,6 @@
+// Sets the global europe-west6 region (#211). MUST stay first — see options.ts
+// for why import order matters.
+import "./options";
 import express from "express";
 import { onRequest } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";

@@ -393,7 +393,7 @@ def parse_args() -> argparse.Namespace:
         "--firebase-url",
         default=os.environ.get(
             "FIREBASE_URL",
-            "https://us-central1-oww-maco.cloudfunctions.net/api",
+            "https://europe-west6-oww-maco.cloudfunctions.net/api",
         ),
         help="Firebase Cloud Functions URL",
     )
