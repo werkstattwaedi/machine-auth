@@ -50,6 +50,11 @@ interface PersonCardProps {
   /** Parent-controlled remove. Omitted when this person can't be removed
    *  (e.g. the only person, or the last account-linked member). */
   onRemove?: () => void
+  /** When true, render editable inputs even for a pre-filled person.
+   *  Anonymous walk-ins pass this so their rehydrated roster stays
+   *  correctable; identity-linked pre-fills (signed-in user, family
+   *  member) leave it false and render read-only. */
+  editable?: boolean
 }
 
 function showError(
@@ -88,11 +93,15 @@ export function PersonCard({
   title,
   onSignOut,
   onRemove,
+  editable,
 }: PersonCardProps) {
   const update = (updates: Partial<CheckoutPerson>) =>
     dispatch({ type: "UPDATE_PERSON", id: person.id, updates })
 
   const showBillingAddress = person.userType === "firma"
+  // Identity-linked pre-fills render read-only; anonymous walk-ins pass
+  // `editable` so a rehydrated person can still be corrected in place.
+  const readOnly = person.isPreFilled && !editable
 
   const err = (field: string) => showError(field, errors, touched, submitted)
   const fieldCls = (field: string) => (err(field) ? INPUT_ERR : INPUT_OK)
@@ -121,7 +130,7 @@ export function PersonCard({
         </div>
       )}
 
-      {person.isPreFilled ? (
+      {readOnly ? (
         <div className="space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-1">
@@ -191,7 +200,7 @@ export function PersonCard({
         </div>
       )}
 
-      {!person.isPreFilled && (
+      {!readOnly && (
         <div className="space-y-1">
           <Label className="text-sm font-bold">Nutzer:in</Label>
           <div className="flex gap-3 pt-1">
@@ -228,7 +237,7 @@ export function PersonCard({
       {showBillingAddress && (
         <div className="space-y-3 border-t pt-4">
           <Label className="text-sm font-bold">Rechnungsadresse</Label>
-          {person.isPreFilled ? (
+          {readOnly ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1">
                 <Label className="text-sm">Firma</Label>

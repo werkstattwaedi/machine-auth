@@ -37,11 +37,9 @@ function CheckinRoute() {
       signedInEmail={ctx.identifiedUserDoc?.email ?? null}
       isMember={!!ctx.identifiedUserDoc?.activeMembership}
       familyCandidates={ctx.familyCandidates}
-      onSignOut={async () => {
-        await ctx.signOut()
-        // Full reload clears the wizard state — match the old wizard behavior.
-        window.location.replace(ctx.kiosk ? "/checkin?kiosk" : "/checkin")
-      }}
+      // Signed-in "Abmelden" and the anon "Von vorne beginnen" share one
+      // primitive: drop the session + hard-reload to a fresh /checkin.
+      onSignOut={ctx.startOver}
       onAdvance={async () => {
         // Issue #151: eager anonymous sign-in so /visit can write items.
         if (ctx.isAnonymous) await ctx.signInAnonymouslyIfNeeded()

@@ -21,7 +21,11 @@ export function validatePerson(
   isAnonymous: boolean,
   isPrimary: boolean = true,
 ): Record<string, string> {
-  if (person.isPreFilled) return {}
+  // Identity-linked pre-fills (signed-in user, family, tag-tap) are trusted
+  // and skipped. Anonymous walk-ins render editable even when pre-filled
+  // (rehydrated from the open checkout), so they must still be validated —
+  // otherwise a cleared name/email could pass through on Weiter.
+  if (person.isPreFilled && !isAnonymous) return {}
 
   const errors: Record<string, string> = {}
 

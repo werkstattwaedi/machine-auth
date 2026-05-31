@@ -62,10 +62,22 @@ describe("validatePerson", () => {
     expect(validatePerson(makePerson(), true)).toEqual({})
   })
 
-  it("returns empty for pre-filled person regardless of fields", () => {
+  it("returns empty for a pre-filled NON-anonymous person regardless of fields", () => {
+    // Identity-linked pre-fills (signed-in, family, tag-tap) are trusted.
     expect(
-      validatePerson(makePerson({ isPreFilled: true, firstName: "", email: "" }), true),
+      validatePerson(makePerson({ isPreFilled: true, firstName: "", email: "" }), false),
     ).toEqual({})
+  })
+
+  it("still validates a pre-filled ANONYMOUS person (editable walk-in)", () => {
+    // Anon walk-ins render editable even when rehydrated from the open
+    // checkout, so a cleared field must be caught — not skipped.
+    const errors = validatePerson(
+      makePerson({ isPreFilled: true, firstName: "", email: "" }),
+      true,
+    )
+    expect(errors.firstName).toBe("Vorname ist erforderlich.")
+    expect(errors.email).toBe("E-Mail ist erforderlich.")
   })
 
   it("requires firstName", () => {

@@ -21,6 +21,7 @@ import { AlertTriangle, Loader2 } from "lucide-react"
 import { WizardProvider, useWizardContext } from "@/components/checkout/wizard-context"
 import { CheckoutProgress } from "@/components/checkout/checkout-progress"
 import { StaleCheckoutBanner } from "@/components/checkout/stale-checkout-banner"
+import { StartOverButton } from "@/components/checkout/start-over-button"
 import { KioskInactivityWatcher } from "@/components/checkout/kiosk-inactivity-watcher"
 import { NoCheckoutGate } from "@/components/checkout/no-checkout-gate"
 
@@ -187,6 +188,10 @@ function WizardChrome({
               <Avatar name={headerName} seed={userId} />
             </Link>
           )}
+          {/* Anon escape hatch — self-gates to anon + open checkout, so it's
+              mutually exclusive with the signed-in identity above and absent
+              on a fresh /checkin and on /payment (closed checkout). */}
+          <StartOverButton />
         </div>
       </header>
       {showGate ? (

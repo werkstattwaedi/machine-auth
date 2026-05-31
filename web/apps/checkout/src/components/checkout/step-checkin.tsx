@@ -194,6 +194,10 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
             person={person}
             index={i}
             showTerms={false}
+            // Anonymous walk-ins stay editable even when rehydrated from the
+            // open checkout (isPreFilled) — they have no account profile to
+            // manage, so /checkin is the only place to correct their data.
+            editable={isAnonymous}
             dispatch={personsDispatch}
             errors={allErrors[person.id]}
             touched={touched[person.id]}
@@ -252,6 +256,12 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
               }
             >
               <div className="flex items-start gap-3">
+                {/* Terms gate on `isPreFilled` even though anon walk-ins now
+                    render editable: a rehydrated person is always
+                    `termsAccepted: true` (personDocToLocal), and editing
+                    fields never flips that — so "pre-filled ⇒ already
+                    accepted" holds. A fresh guest (isPreFilled false) still
+                    must tick the box. */}
                 <Checkbox
                   id="terms-accept"
                   className="bg-white"

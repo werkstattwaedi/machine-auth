@@ -105,6 +105,17 @@ export interface WizardContextValue {
   signOut: () => Promise<void>
   resetWizard: () => Promise<void>
   /**
+   * Drop the current Firebase session and hard-reload to a fresh /checkin.
+   * For an anonymous visitor this abandons the open checkout — orphaned for
+   * the #318 cleanup job (clients can't delete checkouts) — and the next
+   * /checkin mints a new anon principal. Shared primitive behind the
+   * signed-in "Abmelden" and the anon "Von vorne beginnen" affordances.
+   * A hard reload (not a soft navigate) is required: a soft nav would let
+   * the rehydrate effect immediately re-populate the roster from the
+   * still-open checkout.
+   */
+  startOver: () => Promise<void>
+  /**
    * Sign in anonymously if not already signed in. Used by /checkin's
    * onAdvance so subsequent Firestore writes have a stable Firebase UID.
    */
@@ -555,6 +566,22 @@ export function WizardProvider({
     navigate({ to: "/checkin", search: kiosk ? { kiosk: "" } : {} })
   }, [personsDispatch, tagSignOut, bridge, navigate, kiosk])
 
+  // Drop the session + hard-reload to a fresh /checkin (see WizardContextValue
+  // docs). window.location.replace — NOT navigate — so the rehydrate effect
+  // can't immediately re-seed the roster from the still-open checkout.
+  const startOver = useCallback(async () => {
+    try {
+      await signOut()
+    } catch (err) {
+      // signOut is a local op and rarely rejects; if it does, fall through
+      // to the reload rather than swallowing the rejection on a closed
+      // dialog (the reload re-runs the wizard bootstrap). Mirrors how
+      // resetWizard tolerates a failed bridge.resetSession.
+      console.error("startOver: signOut failed", err)
+    }
+    window.location.replace(kiosk ? "/checkin?kiosk" : "/checkin")
+  }, [signOut, kiosk])
+
   // Submit: close checkout, get payment data. Used by /checkout's commit.
   const totalPriceRef = useRef(0)
   const submitCheckout = useCallback(async (): Promise<PaymentData | null> => {
@@ -730,6 +757,7 @@ export function WizardProvider({
       await signOut()
     },
     resetWizard,
+    startOver,
     signInAnonymouslyIfNeeded,
     persistPersons,
     submitCheckout,
