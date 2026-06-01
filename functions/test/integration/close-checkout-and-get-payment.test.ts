@@ -46,7 +46,7 @@ import {
   teardownEmulator,
   getFirestore,
 } from "../emulator-helper";
-import { closeCheckoutAndGetPayment } from "../../src/invoice/close_checkout_and_get_payment";
+import { closeCheckoutAndGetPaymentHandler } from "../../src/invoice/close_checkout_and_get_payment";
 import type {
   CheckoutEntity,
   CheckoutItemEntity,
@@ -266,12 +266,16 @@ function buildRequest(opts: CallOptions): CallableRequest<unknown> {
   } as unknown as CallableRequest<unknown>;
 }
 
-async function call(opts: CallOptions): ReturnType<typeof closeCheckoutAndGetPayment.run> {
-  return closeCheckoutAndGetPayment.run(
-    // The callable's run() is typed against the request schema, but for tests
-    // we want to also exercise invalid shapes (missing persons / usageType /
-    // both checkoutId+newCheckout). Cast to any to bypass the narrowed type.
-    buildRequest(opts) as unknown as Parameters<typeof closeCheckoutAndGetPayment.run>[0],
+async function call(
+  opts: CallOptions
+): ReturnType<typeof closeCheckoutAndGetPaymentHandler> {
+  return closeCheckoutAndGetPaymentHandler(
+    // The handler is typed against the request schema, but for tests we want
+    // to also exercise invalid shapes (missing persons / usageType / both
+    // checkoutId+newCheckout). Cast to any to bypass the narrowed type.
+    buildRequest(opts) as unknown as Parameters<
+      typeof closeCheckoutAndGetPaymentHandler
+    >[0],
   );
 }
 

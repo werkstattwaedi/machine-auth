@@ -13,7 +13,7 @@
  */
 
 import * as logger from "firebase-functions/logger";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import {
   FieldValue,
   Timestamp,
@@ -33,10 +33,7 @@ interface AcceptFamilyInviteRequest {
   inviteId: string;
 }
 
-export const acceptFamilyInvite = onCall<
-  AcceptFamilyInviteRequest,
-  Promise<{ ok: true }>
->(async (request) => {
+export const acceptFamilyInviteHandler = async (request: CallableRequest<AcceptFamilyInviteRequest>) => {
   const { membershipId, inviteId } = request.data ?? ({} as AcceptFamilyInviteRequest);
   if (!membershipId || !inviteId) {
     throw new HttpsError(
@@ -127,4 +124,4 @@ export const acceptFamilyInvite = onCall<
   });
 
   return { ok: true };
-});
+};

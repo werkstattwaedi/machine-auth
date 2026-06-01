@@ -14,7 +14,7 @@
  */
 
 import * as logger from "firebase-functions/logger";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import { FieldValue } from "firebase-admin/firestore";
 import {
   assertOwnerOrAdmin,
@@ -28,10 +28,7 @@ interface CancelMembershipRequest {
   membershipId: string;
 }
 
-export const cancelMembership = onCall<
-  CancelMembershipRequest,
-  Promise<{ ok: true }>
->(async (request) => {
+export const cancelMembershipHandler = async (request: CallableRequest<CancelMembershipRequest>) => {
   const { membershipId } = request.data ?? ({} as CancelMembershipRequest);
   if (!membershipId) {
     throw new HttpsError("invalid-argument", "membershipId is required");
@@ -69,4 +66,4 @@ export const cancelMembership = onCall<
   });
 
   return { ok: true };
-});
+};

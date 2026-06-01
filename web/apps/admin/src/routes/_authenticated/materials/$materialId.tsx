@@ -13,7 +13,7 @@ import { Button } from "@modules/components/ui/button"
 import { useForm } from "react-hook-form"
 import { Loader2, Printer, Save } from "lucide-react"
 import { useEffect } from "react"
-import { httpsCallable } from "firebase/functions"
+import { rpcCallable } from "@modules/lib/rpc"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { useBridge } from "@modules/lib/use-bridge"
 import { buildRasterJob } from "@oww/shared"
@@ -129,7 +129,7 @@ function CatalogDetailPage() {
     const nextVariants = [updatedPrimary, ...existingVariants.slice(1)]
     try {
       await save.mutate(async () => {
-        const fn = httpsCallable<
+        const fn = rpcCallable<
           {
             id: string
             code: string
@@ -141,7 +141,7 @@ function CatalogDetailPage() {
             userCanAdd: boolean
           },
           { id: string }
-        >(functions, "upsertCatalogItem")
+        >(functions, "catalogCall", "upsertCatalogItem")
         await fn({
           id: materialId,
           code: values.code,

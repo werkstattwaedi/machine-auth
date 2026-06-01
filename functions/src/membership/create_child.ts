@@ -17,7 +17,7 @@
  */
 
 import * as logger from "firebase-functions/logger";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import { getAuth } from "firebase-admin/auth";
 import {
   FieldValue,
@@ -44,10 +44,7 @@ interface CreateChildAccountResponse {
   uid: string;
 }
 
-export const createChildAccount = onCall<
-  CreateChildAccountRequest,
-  Promise<CreateChildAccountResponse>
->(async (request) => {
+export const createChildAccountHandler = async (request: CallableRequest<CreateChildAccountRequest>) => {
   const { membershipId, firstName, lastName } =
     request.data ?? ({} as CreateChildAccountRequest);
   if (!membershipId) {
@@ -181,4 +178,4 @@ export const createChildAccount = onCall<
   });
 
   return { uid: authUser.uid };
-});
+};

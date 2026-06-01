@@ -5,7 +5,7 @@ import { createFileRoute } from "@tanstack/react-router"
 import { useAuth, type UserDoc } from "@modules/lib/auth"
 import { useCollection } from "@modules/lib/firestore"
 import { where, orderBy } from "firebase/firestore"
-import { httpsCallable } from "firebase/functions"
+import { rpcCallable } from "@modules/lib/rpc"
 import {
   userRef,
   billsCollection,
@@ -561,8 +561,9 @@ function DownloadButton({ billId }: { billId: string }) {
     // advance after a failed download.
     void download
       .mutate(async () => {
-        const getUrl = httpsCallable<{ billId: string }, { url: string }>(
+        const getUrl = rpcCallable<{ billId: string }, { url: string }>(
           functions,
+          "billingCall",
           "getInvoiceDownloadUrl",
         )
         const result = await getUrl({ billId })

@@ -8,7 +8,6 @@
 
 import {
   HttpsError,
-  onCall,
   type CallableRequest,
 } from "firebase-functions/v2/https";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
@@ -60,8 +59,6 @@ export async function handleVerifyMagicLink(
   return { customToken };
 }
 
-export const verifyMagicLink = onCall(
-  { memory: "512MiB" },
-  async (request: CallableRequest<VerifyMagicLinkInput>) =>
-    handleVerifyMagicLink(request.data)
-);
+export const verifyMagicLinkHandler = async (
+  request: CallableRequest<VerifyMagicLinkInput>
+) => handleVerifyMagicLink(request.data);

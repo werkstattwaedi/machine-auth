@@ -10,7 +10,7 @@
  */
 
 import * as logger from "firebase-functions/logger";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { formatFullName } from "../util/username-utils";
@@ -21,7 +21,7 @@ interface CreateUserData {
   lastName?: string;
 }
 
-export const createUser = onCall(async (request) => {
+export const createUserHandler = async (request: CallableRequest<unknown>) => {
   // Require admin custom claim
   if (!request.auth?.token?.admin) {
     throw new HttpsError("permission-denied", "Admin access required");
@@ -82,4 +82,4 @@ export const createUser = onCall(async (request) => {
   logger.info(`Created user ${authUser.uid} (${email})`);
 
   return { uid: authUser.uid };
-});
+};

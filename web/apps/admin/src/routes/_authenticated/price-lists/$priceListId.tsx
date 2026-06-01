@@ -5,7 +5,7 @@ import { createFileRoute } from "@tanstack/react-router"
 import { useDocument, useCollection } from "@modules/lib/firestore"
 import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
 import { useDb, useFunctions } from "@modules/lib/firebase-context"
-import { httpsCallable } from "firebase/functions"
+import { rpcCallable } from "@modules/lib/rpc"
 import {
   catalogCollection,
   priceListRef,
@@ -92,8 +92,9 @@ function PriceListDetailPage() {
     if (!priceList) return
     setDownloading(true)
     try {
-      const fn = httpsCallable<{ priceListId: string }, { url: string }>(
+      const fn = rpcCallable<{ priceListId: string }, { url: string }>(
         functions,
+        "catalogCall",
         "getPriceListPdfUrl",
       )
       const result = await fn({ priceListId })

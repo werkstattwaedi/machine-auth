@@ -19,7 +19,7 @@ const TEST_ENV_DEFAULTS: Record<string, string> = {
   VITE_LOCALE: "de-CH",
   VITE_CURRENCY: "CHF",
   VITE_CHECKOUT_DOMAIN: "localhost:5173",
-  VITE_FUNCTIONS_REGION: "us-central1",
+  VITE_FUNCTIONS_REGION: "europe-west6",
   VITE_FIREBASE_API_KEY: "fake-api-key",
   VITE_FIREBASE_AUTH_DOMAIN: "test.firebaseapp.com",
   VITE_FIREBASE_PROJECT_ID: "oww-maco",

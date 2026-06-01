@@ -1,7 +1,7 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { HttpsError, onCall, CallableRequest } from "firebase-functions/v2/https";
+import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import { getFirestore } from "firebase-admin/firestore";
 
 /**
@@ -188,8 +188,7 @@ export async function handleUpsertCatalogItem(
   return { id: targetRef.id };
 }
 
-export const upsertCatalogItem = onCall(
-  async (request: CallableRequest<unknown>) => {
+export const upsertCatalogItemHandler = async (request: CallableRequest<unknown>) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentication required");
     }
@@ -197,5 +196,4 @@ export const upsertCatalogItem = onCall(
       throw new HttpsError("permission-denied", "Admin role required");
     }
     return handleUpsertCatalogItem(request.data, request.auth.uid);
-  }
-);
+  };

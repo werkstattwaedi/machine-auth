@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import * as logger from "firebase-functions/logger";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import { defineString } from "firebase-functions/params";
 import { getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
@@ -150,7 +150,7 @@ async function loadCatalogItems(
   return result;
 }
 
-export const getPriceListPdfUrl = onCall({ memory: "512MiB" }, async (request) => {
+export const getPriceListPdfUrlHandler = async (request: CallableRequest<unknown>) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Authentication required");
   }
@@ -252,4 +252,4 @@ export const getPriceListPdfUrl = onCall({ memory: "512MiB" }, async (request) =
   });
 
   return { url };
-});
+};

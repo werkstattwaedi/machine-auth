@@ -24,7 +24,6 @@
 import * as logger from "firebase-functions/logger";
 import {
   HttpsError,
-  onCall,
   type CallableRequest,
 } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
@@ -85,10 +84,9 @@ function isAnonymousCaller(
   return provider === "anonymous";
 }
 
-export const acknowledgeBill = onCall<
-  AcknowledgeBillRequest,
-  Promise<{ ok: true }>
->(async (request) => {
+export const acknowledgeBillHandler = async (
+  request: CallableRequest<AcknowledgeBillRequest>
+) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Authentication required");
   }
@@ -202,7 +200,7 @@ export const acknowledgeBill = onCall<
   });
 
   return { ok: true };
-});
+};
 
 interface AutoAckSummary {
   /** Bills where the auto-ack stamp landed (will email + activate membership). */
@@ -324,7 +322,6 @@ export const autoAcknowledgeBills = onSchedule(
   {
     schedule: "0 3 * * *",
     timeZone: "Europe/Zurich",
-    region: "europe-west6",
     timeoutSeconds: 540,
   },
   async () => {

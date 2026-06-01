@@ -7,7 +7,7 @@
  * QR code and links to the PayLink for TWINT payments.
  */
 
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import { defineString } from "firebase-functions/params";
 import { getFirestore } from "firebase-admin/firestore";
 import { generateScorReference } from "./scor_reference";
@@ -179,7 +179,9 @@ export function buildPaymentData(
   };
 }
 
-export const getPaymentQrData = onCall({ memory: "512MiB" }, async (request) => {
+export const getPaymentQrDataHandler = async (
+  request: CallableRequest<GetPaymentQrDataRequest>
+) => {
   const { billId } = request.data as GetPaymentQrDataRequest;
   if (!billId || typeof billId !== "string") {
     throw new HttpsError("invalid-argument", "billId is required");
@@ -212,4 +214,4 @@ export const getPaymentQrData = onCall({ memory: "512MiB" }, async (request) => 
     billId,
     bill.checkouts[0]?.id ?? null,
   );
-});
+};

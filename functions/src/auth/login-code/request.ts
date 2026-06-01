@@ -11,7 +11,6 @@
 import * as logger from "firebase-functions/logger";
 import {
   HttpsError,
-  onCall,
   type CallableRequest,
 } from "firebase-functions/v2/https";
 import { defineString } from "firebase-functions/params";
@@ -29,7 +28,6 @@ import {
 } from "./helpers";
 import {
   assertTemplateConfigured,
-  resendApiKey,
   sendTemplate,
 } from "../../util/resend_template";
 
@@ -194,11 +192,10 @@ async function sendLoginEmail(
   });
 }
 
-export const requestLoginCode = onCall(
-  { secrets: [resendApiKey], memory: "512MiB" },
-  async (request: CallableRequest<RequestLoginCodeInput>) => {
+export const requestLoginCodeHandler = async (
+  request: CallableRequest<RequestLoginCodeInput>
+) => {
     const origin =
       (request.rawRequest.headers.origin as string | undefined) ?? null;
     return handleRequestLoginCode(request.data, origin);
-  }
-);
+};

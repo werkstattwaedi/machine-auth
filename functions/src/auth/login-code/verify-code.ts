@@ -8,7 +8,6 @@
 
 import {
   HttpsError,
-  onCall,
   type CallableRequest,
 } from "firebase-functions/v2/https";
 import { defineString } from "firebase-functions/params";
@@ -158,8 +157,6 @@ export async function handleVerifyLoginCode(
   }
 }
 
-export const verifyLoginCode = onCall(
-  { memory: "512MiB" },
-  async (request: CallableRequest<VerifyLoginCodeInput>) =>
-    handleVerifyLoginCode(request.data)
-);
+export const verifyLoginCodeHandler = async (
+  request: CallableRequest<VerifyLoginCodeInput>
+) => handleVerifyLoginCode(request.data);

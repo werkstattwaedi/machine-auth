@@ -15,7 +15,7 @@ import { Badge } from "@modules/components/ui/badge"
 import { Button } from "@modules/components/ui/button"
 import { formatDate, formatDateTime } from "@modules/lib/format"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
-import { httpsCallable } from "firebase/functions"
+import { rpcCallable } from "@modules/lib/rpc"
 import { useFunctions } from "@modules/lib/firebase-context"
 
 export const Route = createFileRoute(
@@ -58,8 +58,9 @@ function MembershipDetailPage() {
   const handleCancel = async () => {
     if (!confirm("Mitgliedschaft wirklich kündigen?")) return
     await cancelMutation.mutate(async () => {
-      const fn = httpsCallable<{ membershipId: string }, { ok: true }>(
+      const fn = rpcCallable<{ membershipId: string }, { ok: true }>(
         functions,
+        "membershipCall",
         "cancelMembership",
       )
       await fn({ membershipId })
@@ -68,10 +69,10 @@ function MembershipDetailPage() {
 
   const handleExtendOneYear = async () => {
     await extendMutation.mutate(async () => {
-      const fn = httpsCallable<
+      const fn = rpcCallable<
         { membershipId: string; days?: number },
         { validUntilMs: number }
-      >(functions, "adminExtendMembership")
+      >(functions, "membershipCall", "adminExtendMembership")
       await fn({ membershipId, days: 365 })
     })
   }
@@ -81,8 +82,9 @@ function MembershipDetailPage() {
       return
     try {
       await cancelAutoRenewMutation.mutate(async () => {
-        const fn = httpsCallable<{ membershipId: string }, { ok: true }>(
+        const fn = rpcCallable<{ membershipId: string }, { ok: true }>(
           functions,
+          "membershipCall",
           "cancelMembershipAutoRenew",
         )
         await fn({ membershipId })

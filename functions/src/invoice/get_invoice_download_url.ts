@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import * as logger from "firebase-functions/logger";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import { getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { formatInvoiceNumber, type BillEntity } from "./types";
@@ -25,7 +25,9 @@ export function buildDownloadOptions(bill: BillEntity): {
   };
 }
 
-export const getInvoiceDownloadUrl = onCall(async (request) => {
+export const getInvoiceDownloadUrlHandler = async (
+  request: CallableRequest<unknown>
+) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Authentication required");
   }
@@ -66,4 +68,4 @@ export const getInvoiceDownloadUrl = onCall(async (request) => {
   logger.info(`Generated download URL for bill ${billId}`);
 
   return { url };
-});
+};

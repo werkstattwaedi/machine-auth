@@ -24,7 +24,7 @@ import {
   arrayUnion,
   type DocumentReference,
 } from "firebase/firestore"
-import { httpsCallable } from "firebase/functions"
+import { rpcCallable } from "@modules/lib/rpc"
 import {
   userRef,
   catalogRef,
@@ -646,7 +646,7 @@ export function WizardProvider({
       discountAmount: Math.round((rawTotal - total) * 100) / 100,
     }
 
-    const closeCheckoutAndGetPayment = httpsCallable<
+    const closeCheckoutAndGetPayment = rpcCallable<
       {
         checkoutId?: string
         newCheckout?: {
@@ -669,7 +669,7 @@ export function WizardProvider({
         summary: typeof summary
       },
       PaymentData
-    >(functions, "closeCheckoutAndGetPayment")
+    >(functions, "billingCall", "closeCheckoutAndGetPayment")
 
     try {
       let data: PaymentData

@@ -312,7 +312,6 @@ export async function runRenewalInvoicer(
 export const issueMembershipRenewalBills = onSchedule(
   {
     schedule: "every 24 hours",
-    region: "europe-west6",
     timeoutSeconds: 540,
   },
   async () => {

@@ -26,7 +26,8 @@ import {
   serverTimestamp,
   type Firestore,
 } from "firebase/firestore"
-import { httpsCallable, type Functions } from "firebase/functions"
+import { type Functions } from "firebase/functions"
+import { rpcCallable } from "./rpc"
 import { useDb, useFirebaseAuth, useFunctions } from "./firebase-context"
 import { userRef } from "./firestore-helpers"
 import { formatFullName } from "./username-utils"
@@ -267,8 +268,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const requestLoginEmail = async (email: string) => {
-    const fn = httpsCallable<{ email: string }, { ok: true }>(
+    const fn = rpcCallable<{ email: string }, { ok: true }>(
       functions,
+      "authCall",
       "requestLoginCode"
     )
     await fn({ email })
@@ -343,8 +345,9 @@ async function redeemCustomToken(
   auth: Auth,
   db: Firestore
 ): Promise<void> {
-  const fn = httpsCallable<Record<string, string>, { customToken: string }>(
+  const fn = rpcCallable<Record<string, string>, { customToken: string }>(
     functions,
+    "authCall",
     name
   )
   const { data } = await fn(payload)

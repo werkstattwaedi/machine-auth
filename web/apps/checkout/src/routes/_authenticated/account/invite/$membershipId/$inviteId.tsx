@@ -25,7 +25,7 @@ import { PageLoading } from "@modules/components/page-loading"
 import { Card, CardContent } from "@modules/components/ui/card"
 import { Button } from "@modules/components/ui/button"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
-import { httpsCallable } from "firebase/functions"
+import { rpcCallable } from "@modules/lib/rpc"
 
 export const Route = createFileRoute(
   "/_authenticated/account/invite/$membershipId/$inviteId",
@@ -71,14 +71,14 @@ function InviteAcceptPage() {
 
   const handleAccept = async () => {
     await acceptMutation.mutate(async () => {
-      const fn = httpsCallable(functions, "acceptFamilyInvite")
+      const fn = rpcCallable(functions, "membershipCall", "acceptFamilyInvite")
       await fn({ membershipId, inviteId })
       navigate({ to: "/account/membership" as never } as never)
     })
   }
   const handleReject = async () => {
     await rejectMutation.mutate(async () => {
-      const fn = httpsCallable(functions, "rejectFamilyInvite")
+      const fn = rpcCallable(functions, "membershipCall", "rejectFamilyInvite")
       await fn({ membershipId, inviteId })
       navigate({ to: "/account/membership" as never } as never)
     })

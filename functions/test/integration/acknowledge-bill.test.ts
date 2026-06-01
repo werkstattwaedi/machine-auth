@@ -6,7 +6,7 @@
  * `runAutoAcknowledgeBills` cron loop in
  * `functions/src/invoice/acknowledge_bill.ts` (issues #251, #302).
  *
- * The callable is invoked directly via `acknowledgeBill.run()`. We assert
+ * The handler is invoked directly via `acknowledgeBillHandler()`. We assert
  * the field writes on the bill + linked checkout. The onBillUpdate side-
  * effect chain (email send, membership activation) is covered by the
  * existing bill-processing and process-membership tests.
@@ -24,7 +24,7 @@ import {
   getFirestore,
 } from "../emulator-helper";
 import {
-  acknowledgeBill,
+  acknowledgeBillHandler,
   runAutoAcknowledgeBills,
 } from "../../src/invoice/acknowledge_bill";
 import type { BillEntity } from "../../src/invoice/types";
@@ -118,10 +118,10 @@ async function call(
   uid: string | null,
   data: Record<string, unknown>,
   opts: { actsAs?: string; anonymous?: boolean; admin?: boolean } = {},
-): ReturnType<typeof acknowledgeBill.run> {
-  return acknowledgeBill.run(
+): ReturnType<typeof acknowledgeBillHandler> {
+  return acknowledgeBillHandler(
     buildRequest(uid, data, opts) as unknown as Parameters<
-      typeof acknowledgeBill.run
+      typeof acknowledgeBillHandler
     >[0],
   );
 }

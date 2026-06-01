@@ -31,7 +31,7 @@ interface UseTokenAuthResult {
   tagSignOut: () => Promise<void>
 }
 
-const FUNCTIONS_REGION = import.meta.env.VITE_FUNCTIONS_REGION ?? "us-central1"
+const FUNCTIONS_REGION = import.meta.env.VITE_FUNCTIONS_REGION ?? "europe-west6"
 
 /** Build the base URL for the Functions endpoint. */
 function functionsBaseUrl(projectId: string | undefined): string {

@@ -18,7 +18,7 @@ import { useDb, useFunctions } from "@modules/lib/firebase-context"
 import { checkoutRef } from "@modules/lib/firestore-helpers"
 import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
-import { httpsCallable } from "firebase/functions"
+import { rpcCallable } from "@modules/lib/rpc"
 import { CheckCircle2, Download, FileText, Loader2 } from "lucide-react"
 import { QRCodeSVG } from "qrcode.react"
 import { cn } from "@modules/lib/utils"
@@ -132,8 +132,9 @@ export function PaymentResult({
   useEffect(() => {
     if (skipFallback || !billIdFromCheckout) return
 
-    const getPaymentData = httpsCallable<{ billId: string }, PaymentData>(
+    const getPaymentData = rpcCallable<{ billId: string }, PaymentData>(
       functions,
+      "billingCall",
       "getPaymentQrData",
     )
 
@@ -218,8 +219,9 @@ export function PaymentResult({
 
   const handleDownloadPdf = async () => {
     try {
-      const callable = httpsCallable<{ billId: string }, { url: string }>(
+      const callable = rpcCallable<{ billId: string }, { url: string }>(
         functions,
+        "billingCall",
         "getInvoiceDownloadUrl",
       )
       const data = await downloadMutation.mutate(async () => {
@@ -239,10 +241,10 @@ export function PaymentResult({
     // trigger then keys the invoice email + membership activation off
     // (issues #251, #302).
     try {
-      const callable = httpsCallable<
+      const callable = rpcCallable<
         { billId: string; paymentMethod: PaymentMethod },
         { ok: true }
-      >(functions, "acknowledgeBill")
+      >(functions, "billingCall", "acknowledgeBill")
       await ackMutation.mutate(async () => {
         const res = await callable({
           billId: paymentData.billId,

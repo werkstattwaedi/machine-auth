@@ -302,6 +302,18 @@ after `await mutate(...)`. On failure the hook re-throws, so callers
 short-circuit and MUST NOT advance UI state. Failures fire telemetry
 to `logClientError`. See [ADR-0025](docs/adr/0025-async-mutation-error-handling.md).
 
+**Calling Cloud Functions:** Web callables are grouped into four domain
+dispatchers (`authCall`, `membershipCall`, `billingCall`, `catalogCall`) to
+share warm instances and cut cold starts (#277). Call them through
+`rpcCallable(functions, group, method)` from `@modules/lib/rpc` — it mirrors
+`httpsCallable` (you still `await fn(payload)` and read `.data`). Do NOT call
+`httpsCallable` directly for these; the individual function names no longer
+deploy. The method string must match a key in that dispatcher's `HANDLERS` map
+(`functions/src/*/dispatcher.ts`). The one exception is `logClientError`, which
+stays a standalone `httpsCallable`. All functions run in `europe-west6`
+(`getFunctions(app, "europe-west6")`). See
+[ADR-0028](docs/adr/0028-grouped-callable-dispatchers.md).
+
 **Deploy:**
 ```bash
 firebase deploy --only hosting           # Both sites
