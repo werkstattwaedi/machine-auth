@@ -78,8 +78,9 @@ test.describe("Authenticated checkout", () => {
     await expect(page.getByText("Dein Besuch")).toBeVisible()
 
     // Expand the collapsible Nutzungsgebühren section to verify person is listed.
-    // The display name also renders in the page header ("Profil öffnen" link),
-    // so scope the assertion to the section detail to avoid strict-mode dupes.
+    // The display name also renders in the page header ("Nutzungsverlauf öffnen"
+    // link), so scope the assertion to the section detail to avoid strict-mode
+    // dupes.
     await page.getByRole("button", { name: /Nutzungsgebühren/ }).click()
     await expect(
       page.locator("#nutzung-detail").getByText("E2E Testuser", { exact: true }),
@@ -129,5 +130,39 @@ test.describe("Authenticated checkout", () => {
     // userId should be a DocumentReference (has path property)
     const userIdRef = checkout.userId as { path: string }
     expect(userIdRef.path).toContain("users/")
+  })
+
+  // Regression for #361: the wizard header avatar/name used to deep-link to
+  // /account/profile; it should land on the more useful past-usage page.
+  test("wizard header avatar navigates to past usage, not profile", async ({
+    page,
+  }) => {
+    // ── Sign in via email + code ──
+    await page.goto("/login")
+    await page.getByTestId("login-email-input").fill(AUTH_USER_EMAIL)
+    await page.getByTestId("login-email-submit").click()
+    await expect(page.getByTestId("login-code-stage")).toBeVisible({
+      timeout: 5000,
+    })
+    const entry = await waitForLoginCode(AUTH_USER_EMAIL)
+    expect(entry).toBeTruthy()
+    await page.getByTestId("login-code-input").fill(entry!.code)
+    await page.getByTestId("login-code-submit").click()
+    await page.waitForURL((url) => !url.pathname.startsWith("/login"), {
+      timeout: 10_000,
+    })
+
+    // ── Land on the wizard header (checkin) where the identity link renders ──
+    await page.goto("/checkin")
+    const headerLink = page.getByRole("link", { name: "Nutzungsverlauf öffnen" })
+    await expect(headerLink).toBeVisible({ timeout: 10_000 })
+
+    // The link must target the past-usage route, not the profile page.
+    await expect(headerLink).toHaveAttribute("href", "/account/usage")
+
+    // Clicking it lands on the usage page.
+    await headerLink.click()
+    await page.waitForURL("**/account/usage", { timeout: 10_000 })
+    expect(new URL(page.url()).pathname).toBe("/account/usage")
   })
 })

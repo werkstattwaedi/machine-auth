@@ -178,9 +178,9 @@ function WizardChrome({
           />
           {headerName && (
             <Link
-              to="/account/profile"
+              to="/account/usage"
               className="flex items-center gap-3 min-w-0 rounded-full -m-1 p-1 hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-cog-teal/40 focus-visible:outline-offset-2 transition-colors"
-              aria-label="Profil öffnen"
+              aria-label="Nutzungsverlauf öffnen"
             >
               <span className="text-sm text-foreground truncate">
                 {headerName}
