@@ -124,6 +124,63 @@ describe("handleVerifyTagCheckout (Integration)", () => {
     });
   });
 
+  // Regression for issue #358: tag-auth members were charged non-member item
+  // prices because the verify_tag response never carried membership status.
+  // The response must expose a boolean `activeMembership` so the kiosk client
+  // can apply member pricing.
+  describe("Membership status", () => {
+    it("returns activeMembership=true when the user holds an active membership", async () => {
+      await seedTestData({
+        tokens: {
+          [TEST_TOKEN_UID]: {
+            userId: `/users/${TEST_USER_ID}`,
+            label: "Test Token",
+          },
+        },
+        users: {
+          [TEST_USER_ID]: {
+            firstName: "Test", lastName: "User",
+            name: "Test User Full Name",
+            permissions: [],
+            roles: [],
+            // Stored as a DocumentReference; collapsed to a boolean in the response.
+            activeMembership: "/membership/m_2026",
+          },
+        },
+      });
+
+      const { picc, cmac } = generateTestData(TEST_TOKEN_UID);
+      const response = await handleVerifyTagCheckout({ picc, cmac }, mockConfig);
+
+      expect(response.activeMembership).to.equal(true);
+    });
+
+    it("returns activeMembership=false when the user has no membership", async () => {
+      await seedTestData({
+        tokens: {
+          [TEST_TOKEN_UID]: {
+            userId: `/users/${TEST_USER_ID}`,
+            label: "Test Token",
+          },
+        },
+        users: {
+          [TEST_USER_ID]: {
+            firstName: "Test", lastName: "User",
+            name: "Test User Full Name",
+            permissions: [],
+            roles: [],
+            activeMembership: null,
+          },
+        },
+      });
+
+      const { picc, cmac } = generateTestData(TEST_TOKEN_UID);
+      const response = await handleVerifyTagCheckout({ picc, cmac }, mockConfig);
+
+      expect(response.activeMembership).to.equal(false);
+    });
+  });
+
   describe("PICC decryption", () => {
     it("should decrypt PICC data correctly", async () => {
       await seedTestData({

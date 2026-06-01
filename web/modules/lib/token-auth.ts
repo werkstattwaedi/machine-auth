@@ -11,13 +11,19 @@ import {
 import { useFunctions, useFirebaseAuth } from "./firebase-context"
 import { resolveBridgeBearer } from "./use-bridge"
 
-interface TokenUser {
+export interface TokenUser {
   tokenId: string
   userId: string
   firstName?: string
   lastName?: string
   email?: string
   userType?: string
+  /**
+   * Whether the tag user holds an active membership. Server-derived from the
+   * CMAC-verified verify_tag response; drives member pricing for tag-tap
+   * checkout (issue #358).
+   */
+  activeMembership?: boolean
 }
 
 interface UseTokenAuthResult {
@@ -50,6 +56,7 @@ interface VerifyTagResponse {
   lastName?: string
   email?: string
   userType?: string
+  activeMembership?: boolean
 }
 
 // Module-level dedup of in-flight verify_tag calls. The verifyTagCheckout
@@ -155,6 +162,7 @@ export function useTokenAuth(
           lastName: data.lastName,
           email: data.email,
           userType: data.userType,
+          activeMembership: data.activeMembership,
         })
       } catch (err) {
         if (cancelled) return
