@@ -53,9 +53,11 @@ test.describe("Self-registration", () => {
     // ── Should be redirected to /complete-profile ──
     // On fast environments the createUser Cloud Function may set termsAcceptedAt
     // before the client-side redirect check runs, skipping the profile page.
-    // Accept both paths: /complete-profile or direct to /visit.
+    // Accept both paths: /complete-profile or direct to /checkin (a fresh
+    // signup has no open checkout, so RootDispatcher routes it to /checkin —
+    // not /visit, post wizard-URL refactor #360).
     await page.waitForURL(
-      (url) => url.pathname.includes("/account/complete-profile") || url.pathname.includes("/visit"),
+      (url) => url.pathname.includes("/account/complete-profile") || url.pathname.includes("/checkin"),
       { timeout: 10_000 },
     )
 
