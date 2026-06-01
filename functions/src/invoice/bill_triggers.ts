@@ -78,6 +78,23 @@ const kasseEmail = defineString("KASSE_EMAIL", { default: "" });
 const STALE_LOCK_MS = 5 * 60 * 1000; // 5 minutes
 
 /**
+ * Thrown by `assembleInvoiceData` when none of a bill's referenced
+ * checkouts still exist (issue #364). This is an expected lifecycle
+ * outcome — the only realistic way a bill loses *all* its checkouts is
+ * the documented cleanup/delete path (e2e `clearCollections`,
+ * `cleanupAbandonedCheckouts` #318, admin delete). `tryGeneratePdf`
+ * catches this specific type, skips the PDF, and does NOT write an
+ * `operations_log` entry, so it doesn't masquerade as a genuine PDF
+ * failure. Any other error keeps the existing error + operations_log path.
+ */
+export class MissingCheckoutsError extends Error {
+  constructor(billId: string) {
+    super(`Bill ${billId}: all referenced checkouts are missing`);
+    this.name = "MissingCheckoutsError";
+  }
+}
+
+/**
  * Standard (regular) per-person entry fee from
  * `config/pricing.entryFees.{userType}.regular`. The usage-type discount
  * is applied separately by the renderer (issue #284) so the invoice can
@@ -146,10 +163,32 @@ async function assembleInvoiceData(
   // configured — the renderer then groups items exactly as before.
   const membershipCatalogId = await loadMembershipCatalogId(db);
 
-  // Load all checkouts + items
-  const checkoutDocs = await Promise.all(
+  // Load all checkouts. A referenced checkout may no longer exist
+  // (issue #364): e2e `clearCollections`, `cleanupAbandonedCheckouts`
+  // (#318), or an admin delete can remove a checkout while a bill still
+  // references it. `doc.data()` would be `undefined` and reading
+  // `.persons` throws — so partition into present/missing and only work
+  // with the survivors. Keep the present docs in their original order so
+  // the index-based zip with `checkoutItems` stays aligned.
+  const allCheckoutDocs = await Promise.all(
     bill.checkouts.map((ref) => ref.get()),
   );
+
+  const checkoutDocs = allCheckoutDocs.filter((doc) => doc.exists);
+  for (const doc of allCheckoutDocs) {
+    if (!doc.exists) {
+      logger.warn(
+        `assembleInvoiceData: bill ${billId} references missing checkout ${doc.ref.path}, skipping it`,
+      );
+    }
+  }
+
+  // No surviving checkouts — nothing to render. Signal the expected
+  // missing-checkouts lifecycle so the caller skips the PDF without
+  // logging a spurious operations_log error.
+  if (checkoutDocs.length === 0) {
+    throw new MissingCheckoutsError(billId);
+  }
 
   const checkoutItems = await Promise.all(
     checkoutDocs.map(async (doc) => {
@@ -341,6 +380,17 @@ export async function tryGeneratePdf(
   } catch (error) {
     // Release lock on failure
     await billRef.update({ pdfGeneratedAt: null });
+
+    // Expected lifecycle: the bill's checkouts were all deleted
+    // (issue #364). Skip the PDF quietly — do NOT write operations_log,
+    // so this doesn't masquerade as a genuine PDF failure / page anyone.
+    if (error instanceof MissingCheckoutsError) {
+      logger.info(
+        `PDF generation skipped for bill ${billId}: ${error.message}`,
+      );
+      return false;
+    }
+
     const message = error instanceof Error ? error.message : String(error);
     logger.error(`PDF generation failed for bill ${billId}`, { error: message });
     await logOperationError("bills", billId, "pdf_generate", message);

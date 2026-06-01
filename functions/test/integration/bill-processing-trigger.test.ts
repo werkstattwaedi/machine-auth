@@ -415,6 +415,76 @@ describe("bill processing triggers (Integration)", () => {
       expect(text).to.not.include("Bahnhofstrasse");
     });
 
+    // Issue #364: a bill may reference a checkout that no longer exists
+    // (e2e clearCollections / cleanupAbandonedCheckouts #318 / admin
+    // delete). Previously `doc.data().persons` threw, masquerading as a
+    // real PDF failure. The surviving checkouts must still render.
+    it("renders surviving checkouts when one referenced checkout is missing (#364)", async function () {
+      this.timeout(15000);
+      const billId = "bill-364-partial-missing";
+      // Seed only one of the two referenced checkouts.
+      await seedCheckout("co-present-364", {
+        persons: [
+          { name: "Present Person", email: "present@example.com", userType: "erwachsen" },
+        ],
+        summary: { totalPrice: 15, entryFees: 15, machineCost: 0, materialCost: 0, tip: 0 },
+      });
+      // "co-missing-364" is referenced but never seeded.
+      await seedBill(billId, { checkoutIds: ["co-present-364", "co-missing-364"] });
+
+      const ok = await tryGeneratePdf(billId);
+      expect(ok).to.be.true;
+
+      const file = fakeBucket.__files.get(`invoices/${billId}.pdf`)!;
+      expect(file.save.calledOnce).to.be.true;
+      const [buffer] = file.save.firstCall.args as [Buffer];
+      expect(buffer.subarray(0, 4).toString("utf8")).to.equal("%PDF");
+
+      // The surviving checkout's person renders in the PDF text.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const pdfParse = require("pdf-parse") as (b: Buffer) => Promise<{ text: string }>;
+      const { text } = await pdfParse(buffer);
+      expect(text).to.include("Present Person");
+
+      const updated = await getBill(billId);
+      expect(updated.storagePath).to.equal(`invoices/${billId}.pdf`);
+
+      // No operations_log error — this is an expected lifecycle skip.
+      const log = await getOperationsLog();
+      const pdfErrors = log.filter((e) => e.operation === "pdf_generate");
+      expect(pdfErrors, "partial-missing must not log a PDF error").to.have.length(0);
+    });
+
+    // Issue #364: when NONE of the referenced checkouts remain, the PDF is
+    // skipped (not errored). Critically: no operations_log entry, so this
+    // doesn't mask genuine PDF failures.
+    it("skips PDF without operations_log when all referenced checkouts are missing (#364)", async function () {
+      this.timeout(15000);
+      const billId = "bill-364-all-missing";
+      // Reference a checkout that is never seeded.
+      await seedBill(billId, { checkoutIds: ["co-never-seeded-364"] });
+
+      const ok = await tryGeneratePdf(billId);
+      expect(ok).to.be.false;
+
+      // No PDF saved.
+      const file = fakeBucket.__files.get(`invoices/${billId}.pdf`);
+      expect(file?.save.called ?? false, "no PDF save when all checkouts missing").to.be.false;
+
+      // Lock released so retries can pick it up if a checkout reappears.
+      const updated = await getBill(billId);
+      expect(updated.pdfGeneratedAt).to.be.null;
+      expect(updated.storagePath).to.be.null;
+
+      // The regression lock: NO operations_log entry for pdf_generate.
+      const log = await getOperationsLog();
+      const pdfErrors = log.filter((e) => e.operation === "pdf_generate");
+      expect(
+        pdfErrors,
+        "all-missing must not write an operations_log error",
+      ).to.have.length(0);
+    });
+
     it("releases the lock on PDF save failure and writes operations_log", async function () {
       this.timeout(15000);
       const billId = "bill-pdf-fail";
