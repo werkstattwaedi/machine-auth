@@ -408,7 +408,13 @@ export async function seedOpenCheckoutWithMembership(
     status: "open",
     usageType: withWorkshopItem ? "regular" : "materialbezug",
     created: now,
-    workshopsVisited: withWorkshopItem ? ["diverses", "holz"] : ["diverses"],
+    // Mirror production: `purchaseMembership` creates the open checkout with
+    // an empty `workshopsVisited` (the membership SKU lives in `diverses` but
+    // is classified out of the workshop sections). A genuine membership-only
+    // cart therefore has no visited workshop, so the issue-#362 gate keeps the
+    // picker hidden. The mixed case adds the real `holz` workshop the item
+    // belongs to.
+    workshopsVisited: withWorkshopItem ? ["holz"] : [],
     persons: [
       {
         name: "E2E Testuser",

@@ -6,19 +6,25 @@ import { PositionTable, rowFromItem } from "./position-table"
 import type { CheckoutItemLocal } from "./inline-rows"
 
 /**
- * Read-only Vereinsmitgliedschaft block for the workshops step (issue
- * #262/#263). Mirrors {@link WorkshopInlineSection}'s heading + card +
- * Zwischentotal rhythm so it reads as a peer of the other workshop
- * sessions (the human asked for it "inline with the other workshop
- * sessions"), but deliberately has no "Material hinzufügen" affordance —
- * a membership is purchased on /membership and you can't add material to
- * it. Items are not removable here either; the escape hatch is the
- * /membership page.
+ * Vereinsmitgliedschaft block for the workshops step (issue #262/#263).
+ * Mirrors {@link WorkshopInlineSection}'s heading + card + Zwischentotal
+ * rhythm so it reads as a peer of the other workshop sessions (the human
+ * asked for it "inline with the other workshop sessions"), and has no
+ * "Material hinzufügen" affordance — a membership is purchased on
+ * /membership and you can't add material to it.
+ *
+ * When an `onRemove` callback is supplied (issue #362), each membership
+ * line gets a (×) remove affordance so a membership accidentally added
+ * mid-visit can be dropped straight from the wizard instead of forcing
+ * the user back to the /membership escape hatch.
  */
 export function MembershipInlineSection({
   items,
+  onRemove,
 }: {
   items: CheckoutItemLocal[]
+  /** Remove a membership line item by its checkout-item id (issue #362). */
+  onRemove?: (itemId: string) => void
 }) {
   const total = items.reduce((s, i) => s + i.totalPrice, 0)
 
@@ -33,6 +39,7 @@ export function MembershipInlineSection({
           <PositionTable
             firstColLabel="Mitgliedschaft"
             rows={items.map(rowFromItem)}
+            onRemove={onRemove}
           />
         </div>
       </div>
