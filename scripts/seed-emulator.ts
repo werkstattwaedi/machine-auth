@@ -11,9 +11,11 @@
  *   - Otherwise, fall back to scripts/seed-data/seed-public/ —
  *     placeholder values safe to check into the public repo.
  *
- * Catalog (~150 items) always loads from scripts/seed-data/catalog/*.json
- * regardless of fixture set; the catalog is public-safe and shared
- * between both repos.
+ * Catalog (~150 items) loads from the SAME fixture set as everything else:
+ * the ops repo's catalog when ops fixtures are present, otherwise the public
+ * example catalog under scripts/seed-data/catalog/*.json. The two catalogs
+ * are independent — prod (ops) is the source of truth; the public set is
+ * example/test data and may diverge.
  *
  * Modes:
  *   --mode=full        (default) seeds everything including auth users.
@@ -38,7 +40,6 @@ import { getFirestore, Timestamp } from "firebase-admin/firestore";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, "..");
 const publicSeedDir = join(__dirname, "seed-data", "seed-public");
-const catalogDir = join(__dirname, "seed-data", "catalog");
 
 const opsDir =
   process.env.OPERATIONS_CONFIG_DIR ||
@@ -48,6 +49,13 @@ const fixturesDir = existsSync(join(opsSeedDir, "permissions.json"))
   ? opsSeedDir
   : publicSeedDir;
 const usingOpsFixtures = fixturesDir === opsSeedDir;
+
+// Catalog follows the active fixture set so each dataset is self-consistent:
+// the ops catalog (prod source of truth) when ops fixtures are present, else
+// the public example catalog. The two are independent and may diverge.
+const catalogDir = usingOpsFixtures
+  ? join(opsSeedDir, "catalog")
+  : join(__dirname, "seed-data", "catalog");
 
 process.env.FIRESTORE_EMULATOR_HOST ??= "127.0.0.1:8080";
 process.env.FIREBASE_AUTH_EMULATOR_HOST ??= "127.0.0.1:9099";
@@ -85,6 +93,71 @@ function resolveValue(value: unknown): unknown {
 
 function loadFixture<T>(filename: string): T {
   return JSON.parse(readFileSync(join(fixturesDir, filename), "utf-8")) as T;
+}
+
+// Collect every "$ref:collection/docId" string in a fixture value tree.
+function collectRefs(value: unknown, out: string[]): void {
+  if (typeof value === "string" && value.startsWith("$ref:")) out.push(value.slice(5));
+  else if (Array.isArray(value)) for (const v of value) collectRefs(v, out);
+  else if (value !== null && typeof value === "object")
+    for (const v of Object.values(value as Record<string, unknown>)) collectRefs(v, out);
+}
+
+/**
+ * Fail fast if any `$ref` points at a doc this run won't create. The resolver
+ * (`resolveValue`) turns a `$ref` into a live `DocumentReference` without
+ * checking existence, so a typo'd or stale ref silently seeds a pointer to a
+ * phantom doc — exactly the dangling catalog ref behind issue #377. Validating
+ * only refs into collections this run seeds (others can't be checked here).
+ */
+function assertNoDanglingRefs(mode: "full" | "structural"): void {
+  const ids: Record<string, Set<string>> = {};
+  const add = (coll: string, id: string) => (ids[coll] ??= new Set<string>()).add(id);
+  const sources: Array<{ src: string; data: unknown }> = [];
+
+  for (const file of readdirSync(catalogDir).filter((f) => f.endsWith(".json")).sort()) {
+    const arr = JSON.parse(readFileSync(join(catalogDir, file), "utf-8")) as Array<{ id: string }>;
+    for (const item of arr) add("catalog", item.id);
+    sources.push({ src: `catalog/${file}`, data: arr });
+  }
+
+  const keyed: Array<[string, string]> = [
+    ["permission", "permissions.json"],
+    ["maco", "maco.json"],
+    ["machine", "machines.json"],
+    ["price_lists", "price-lists.json"],
+  ];
+  if (mode === "full") keyed.push(["users", "users.json"], ["tokens", "tokens.json"]);
+  for (const [coll, file] of keyed) {
+    const data = loadFixture<Record<string, unknown>>(file);
+    for (const id of Object.keys(data)) add(coll, id);
+    sources.push({ src: file, data });
+  }
+
+  for (const file of ["config-pricing.json", "config-catalog-references.json"]) {
+    sources.push({ src: file, data: loadFixture(file) });
+  }
+  for (const id of ["pricing", "catalog-references", "billing"]) add("config", id);
+
+  const dangling: string[] = [];
+  for (const { src, data } of sources) {
+    const refs: string[] = [];
+    collectRefs(data, refs);
+    for (const ref of refs) {
+      const slash = ref.indexOf("/");
+      const coll = ref.slice(0, slash);
+      const id = ref.slice(slash + 1);
+      if (ids[coll] && !ids[coll].has(id)) dangling.push(`${src}: $ref:${ref}`);
+    }
+  }
+
+  if (dangling.length > 0) {
+    throw new Error(
+      `Seed aborted: ${dangling.length} dangling $ref(s) point at docs not in the seed set:\n  ` +
+        dangling.join("\n  ") +
+        "\nFix the fixture, or the referenced doc id, before seeding.",
+    );
+  }
 }
 
 async function seedCollection(
@@ -175,6 +248,8 @@ async function seed() {
   console.log(
     `Seeding emulator (mode=${mode}, fixtures=${usingOpsFixtures ? "operations repo" : "public placeholders"})...`,
   );
+
+  assertNoDanglingRefs(mode);
 
   // Structural — always written.
   await seedCollection("permission", loadFixture("permissions.json"));
