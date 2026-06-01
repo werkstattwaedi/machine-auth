@@ -13,7 +13,7 @@ import {
 import type { ReactNode } from "react"
 import { useNavigate } from "@tanstack/react-router"
 import { useAuth, type UserDoc } from "@modules/lib/auth"
-import { useTokenAuth } from "@modules/lib/token-auth"
+import { useTokenAuth, type TokenUser } from "@modules/lib/token-auth"
 import { useBridge } from "@modules/lib/use-bridge"
 import { useCollection, useDocument } from "@modules/lib/firestore"
 import {
@@ -295,9 +295,14 @@ export function WizardProvider({
   const { data: catalogRefs } = useDocument(catalogReferencesRef(db))
   const membershipCatalogId = catalogRefs?.membership?.id ?? null
 
-  const discountLevel: DiscountLevel = identifiedUserDoc?.activeMembership
-    ? "member"
-    : "none"
+  // For tag-tap checkout `identifiedUserDoc` is null (the kiosk session is a
+  // synthetic principal), so member pricing must also honour the tag user's
+  // server-derived `activeMembership` flag — otherwise members tapping their
+  // tag are charged non-member item prices (issue #358).
+  const discountLevel: DiscountLevel = deriveDiscountLevel(
+    identifiedUserDoc,
+    tokenUser,
+  )
 
   // Sync usageType from open checkout
   useEffect(() => {
@@ -770,6 +775,29 @@ export function WizardProvider({
   }
 
   return <WizardContext.Provider value={value}>{children}</WizardContext.Provider>
+}
+
+/**
+ * Resolve the item-pricing tier for the wizard from whichever principal is
+ * identified. A member is charged the "member" tier; everyone else "none".
+ *
+ * Both inputs are honoured because the two identification modes surface
+ * membership differently: an account login exposes it on the Firestore user
+ * doc (`identifiedUserDoc.activeMembership`), while a tag tap carries only the
+ * server-derived boolean on `tokenUser.activeMembership` (the kiosk session is
+ * a synthetic principal whose user doc is never loaded client-side). Missing
+ * the tag path here is what charged tag-auth members non-member prices —
+ * issue #358.
+ *
+ * Exported for unit testing (see wizard-discount-level.test.ts).
+ */
+export function deriveDiscountLevel(
+  identifiedUserDoc: UserDoc | null,
+  tokenUser: TokenUser | null,
+): DiscountLevel {
+  return identifiedUserDoc?.activeMembership || tokenUser?.activeMembership
+    ? "member"
+    : "none"
 }
 
 /**

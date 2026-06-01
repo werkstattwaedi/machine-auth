@@ -41,6 +41,13 @@ export interface VerifyTagResponse {
   lastName?: string;
   email?: string;
   userType?: string;
+  /**
+   * Whether the resolved user holds an active membership. Collapsed to a
+   * boolean (the stored field is a `DocumentReference | null`) so nothing
+   * membership-internal leaks to the kiosk client. Drives member pricing for
+   * tag-tap checkout — see issue #358.
+   */
+  activeMembership: boolean;
 }
 
 /**
@@ -189,5 +196,6 @@ export async function handleVerifyTagCheckout(
     lastName: userData?.lastName,
     email: userData?.email,
     userType: userData?.userType,
+    activeMembership: !!userData?.activeMembership,
   };
 }
