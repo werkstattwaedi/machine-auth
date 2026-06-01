@@ -600,11 +600,17 @@ test.describe("Checkout step screenshots", () => {
     await signIn(page)
     await seedOpenCheckoutWithMembership(uid!)
 
-    await page.goto("/")
-    await expect(page.getByText("Abmelden")).toBeVisible({ timeout: 10_000 })
-
-    // Advance check-in → workshops → summary.
-    await page.getByRole("button", { name: "Weiter" }).click()
+    // Post-refactor (#360), the seeded open-checkout-from-today is owned by
+    // the signed-in user, so the wizard step lives at /visit. Navigate there
+    // directly rather than bouncing through the `/` dispatcher — the
+    // dispatcher's open-checkout subscription can momentarily read the
+    // pre-seed empty state and route to /checkin, starting a fresh cart that
+    // drops the seeded membership item (flaky). Gate on the membership block
+    // to confirm the seeded checkout rehydrated before advancing.
+    await page.goto("/visit")
+    await expect(page.getByTestId("membership-block")).toBeVisible({
+      timeout: 10_000,
+    })
     await expect(page.getByText("Werkstätten wählen")).toBeHidden()
     const checkoutBtn = page.getByRole("button", { name: "Zum Checkout" })
     await checkoutBtn.scrollIntoViewIfNeeded()
@@ -634,10 +640,13 @@ test.describe("Checkout step screenshots", () => {
     await signIn(page)
     await seedOpenCheckoutWithMembership(uid!, { withWorkshopItem: true })
 
-    await page.goto("/")
-    await expect(page.getByText("Abmelden")).toBeVisible({ timeout: 10_000 })
-
-    await page.getByRole("button", { name: "Weiter" }).click()
+    // Go straight to the wizard step for the seeded open checkout (see the
+    // membership-only test above for why `/` is avoided). Gate on the
+    // membership block so the mixed cart is fully rehydrated before advancing.
+    await page.goto("/visit")
+    await expect(page.getByTestId("membership-block")).toBeVisible({
+      timeout: 10_000,
+    })
     await expect(page.getByText("Werkstätten wählen")).toBeVisible()
     const checkoutBtn = page.getByRole("button", { name: "Zum Checkout" })
     await checkoutBtn.scrollIntoViewIfNeeded()
@@ -669,16 +678,17 @@ test.describe("Checkout step screenshots", () => {
     await signIn(page)
     await seedOpenCheckoutWithMembership(uid!)
 
-    await page.goto("/")
-    await expect(page.getByText("Abmelden")).toBeVisible({ timeout: 10_000 })
-
-    // Advance to the workshops step (step 1).
-    await page.getByRole("button", { name: "Weiter" }).click()
+    // The seeded open-checkout-from-today's wizard step is /visit (the
+    // workshops step). Navigate there directly rather than via the `/`
+    // dispatcher (see the membership-only summary test above).
+    await page.goto("/visit")
 
     // The inline Vereinsmitgliedschaft block renders, but the workshop
     // picker grid, the "Material hinzufügen" affordance, and any Diverses
     // heading are all absent for a membership-only cart.
-    await expect(page.getByTestId("membership-block")).toBeVisible()
+    await expect(page.getByTestId("membership-block")).toBeVisible({
+      timeout: 10_000,
+    })
     await expect(page.getByText("Werkstätten wählen")).toBeHidden()
     await expect(
       page.getByRole("button", { name: "Material hinzufügen" }),
