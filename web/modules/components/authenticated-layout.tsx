@@ -31,6 +31,14 @@ export interface AuthenticatedLayoutNavItem {
   to: string
   label: string
   icon: LucideIcon
+  /**
+   * When true this item renders as the solid-teal primary call-to-action
+   * (the "start/go to visit" idiom) rather than a regular nav row. The
+   * solid fill is reserved exclusively for the primary action so it can't
+   * be confused with the subtle "current page" active style (issue #363).
+   * The admin sidebar has no primary action and leaves this unset.
+   */
+  primary?: boolean
 }
 
 export type AuthenticatedLayoutGate =
@@ -162,11 +170,24 @@ export function AuthenticatedLayout({
   if (gate.kind === "admin" && !isAdmin) return null
   if (gate.kind === "member" && (sessionKind === "tag" || sessionKind === "anonymous")) return null
 
+  // A left accent border is reserved for the active item; inactive items
+  // carry a transparent border of the same width so the row geometry stays
+  // identical and the label doesn't shift on activation.
   const navLink =
-    "flex items-center gap-2.5 px-3 py-2 rounded-[3px] text-sm transition-colors"
+    "flex items-center gap-2.5 border-l-2 border-transparent px-3 py-2 rounded-[3px] text-sm transition-colors"
+  // Active = "you are here": a SUBTLE pale tint, dark-teal text and a left
+  // accent border — deliberately NOT the solid teal fill, which is reserved
+  // for the primary visit CTA (the `headerAction`). Solid-on-solid made the
+  // current page and the call-to-action indistinguishable (issue #363).
   const navLinkActive =
-    "[&.active]:bg-cog-teal [&.active]:text-white [&.active]:font-semibold"
-  const navLinkHover = "hover:bg-cog-teal-light"
+    "[&.active]:bg-cog-teal-light [&.active]:text-cog-teal-dark [&.active]:font-semibold [&.active]:border-cog-teal"
+  // Hover only tints inactive rows; the active row keeps its pale tint so a
+  // hover doesn't wash out the "current page" signal.
+  const navLinkHover = "hover:bg-cog-teal-light/60 [&.active]:hover:bg-cog-teal-light"
+  // Primary item = solid-teal CTA. Overrides the subtle active style so the
+  // call-to-action always reads as a button, never as the current page.
+  const navLinkPrimary =
+    "bg-cog-teal text-white font-bold hover:bg-cog-teal-dark [&.active]:bg-cog-teal [&.active]:text-white [&.active]:hover:bg-cog-teal-dark"
 
   const navContent = (
     <>
@@ -175,11 +196,15 @@ export function AuthenticatedLayout({
           {headerAction}
         </div>
       )}
-      {navItems.map(({ to, label, icon: Icon }) => (
+      {navItems.map(({ to, label, icon: Icon, primary }) => (
         <Link
           key={to}
           to={to}
-          className={`${navLink} ${navLinkActive} ${navLinkHover}`}
+          className={
+            primary
+              ? `${navLink} ${navLinkPrimary}`
+              : `${navLink} ${navLinkActive} ${navLinkHover}`
+          }
           onClick={() => setSheetOpen(false)}
         >
           <Icon className="h-4 w-4" />
