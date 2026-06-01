@@ -13,6 +13,9 @@ import {
 } from "@modules/components/ui/alert-dialog"
 import { Clock } from "lucide-react"
 import { useWizardContext } from "./wizard-context"
+import type { CheckoutPerson } from "./use-checkout-state"
+import type { CheckoutItemLocal } from "@/components/usage/inline-rows"
+import type { CheckoutDoc } from "@modules/lib/firestore-entities"
 
 const IDLE_MS = 5 * 60 * 1000
 const POPUP_AUTO_CLOSE_SECONDS = 30
@@ -21,6 +24,52 @@ const ACTIVITY_EVENTS: (keyof WindowEventMap)[] = [
   "keydown",
   "scroll",
 ]
+
+/**
+ * Whether a single person has typed-in content worth preserving. A pristine
+ * pre-filled identity (logged-in / tag-tap seed — `isPreFilled: true` with
+ * populated name/email and `termsAccepted: true`) must NOT count as dirty:
+ * the user did not type anything, so resetting it loses nothing. Only a
+ * person the user actually edited (`!isPreFilled`) with non-empty trimmed
+ * name/email, or who accepted terms, is considered dirty.
+ */
+function isPersonDirty(p: CheckoutPerson): boolean {
+  if (p.isPreFilled) return false
+  return (
+    p.firstName.trim() !== "" ||
+    p.lastName.trim() !== "" ||
+    p.email.trim() !== "" ||
+    p.termsAccepted === true
+  )
+}
+
+/**
+ * Pure, unit-testable predicate: does the current wizard state hold anything
+ * worth protecting from an idle reset? True when there's a checkout (open,
+ * persisted, or pending), any items in the cart, more than one person, or any
+ * person with typed-in content (see {@link isPersonDirty}). A fresh
+ * `/checkin?kiosk` with a single empty (or single pristine pre-filled) person
+ * and no checkout returns false — the idle watcher should not arm.
+ */
+export function hasPreservableState({
+  openCheckout,
+  checkoutId,
+  pendingCheckout,
+  items,
+  persons,
+}: {
+  openCheckout: CheckoutDoc | null
+  checkoutId: string | null
+  pendingCheckout: boolean
+  items: CheckoutItemLocal[]
+  persons: CheckoutPerson[]
+}): boolean {
+  const hasCheckout =
+    openCheckout != null || checkoutId != null || pendingCheckout
+  const isDirty =
+    items.length > 0 || persons.length > 1 || persons.some(isPersonDirty)
+  return hasCheckout || isDirty
+}
 
 /**
  * Kiosk-only idle watcher. Renders nothing for browser/anonymous/logged-in
@@ -35,7 +84,27 @@ const ACTIVITY_EVENTS: (keyof WindowEventMap)[] = [
  * non-kiosk anonymous browser users.
  */
 export function KioskInactivityWatcher() {
-  const { kiosk, resetWizard } = useWizardContext()
+  const {
+    kiosk,
+    resetWizard,
+    openCheckout,
+    checkoutId,
+    pendingCheckout,
+    items,
+    persons,
+  } = useWizardContext()
+  // Only arm the idle watcher when there is session state worth protecting.
+  // A fresh /checkin?kiosk with an empty form and no checkout should not pop
+  // the "Bist du noch da?" dialog (issue #378).
+  const shouldWatch =
+    kiosk &&
+    hasPreservableState({
+      openCheckout,
+      checkoutId,
+      pendingCheckout,
+      items,
+      persons,
+    })
   const [open, setOpen] = useState(false)
   const [secondsLeft, setSecondsLeft] = useState(POPUP_AUTO_CLOSE_SECONDS)
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -46,16 +115,16 @@ export function KioskInactivityWatcher() {
   openRef.current = open
 
   const armIdle = useCallback(() => {
-    if (!kiosk) return
+    if (!shouldWatch) return
     if (idleTimer.current) clearTimeout(idleTimer.current)
     idleTimer.current = setTimeout(() => setOpen(true), IDLE_MS)
-  }, [kiosk])
+  }, [shouldWatch])
 
   // Activity listeners — attached once per kiosk session (no churn on
   // open/close). Each activity re-arms the idle timer only while the dialog
   // is closed.
   useEffect(() => {
-    if (!kiosk) return
+    if (!shouldWatch) return
     const handler = () => {
       if (!openRef.current) armIdle()
     }
@@ -67,12 +136,12 @@ export function KioskInactivityWatcher() {
         window.removeEventListener(evt, handler)
       }
     }
-  }, [kiosk, armIdle])
+  }, [shouldWatch, armIdle])
 
   // Arm the idle countdown while the dialog is closed; clear it while open
   // (the auto-close effect below owns the timing once the dialog is up).
   useEffect(() => {
-    if (!kiosk) return
+    if (!shouldWatch) return
     if (open) {
       if (idleTimer.current) clearTimeout(idleTimer.current)
       return
@@ -81,7 +150,7 @@ export function KioskInactivityWatcher() {
     return () => {
       if (idleTimer.current) clearTimeout(idleTimer.current)
     }
-  }, [kiosk, open, armIdle])
+  }, [shouldWatch, open, armIdle])
 
   // 30-second auto-close once the dialog is open.
   useEffect(() => {
@@ -103,7 +172,7 @@ export function KioskInactivityWatcher() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
-  if (!kiosk) return null
+  if (!shouldWatch) return null
 
   return (
     <AlertDialog open={open}>
