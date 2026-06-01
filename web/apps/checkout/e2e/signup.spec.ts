@@ -72,6 +72,13 @@ test.describe("Self-registration", () => {
       await lastName.click()
       await lastName.fill("Neuer")
 
+      // billingAddress (Strasse / PLZ / Ort) is required since the Profile
+      // redesign — `isProfileComplete` won't flip true otherwise and the
+      // post-save dispatch short-circuits, leaving the form on screen.
+      await page.getByPlaceholder("Seestrasse 12").fill("Seestrasse 12")
+      await page.getByPlaceholder("8820").fill("8820")
+      await page.getByPlaceholder("Wädenswil").fill("Wädenswil")
+
       await page.locator("#termsAccepted").click()
       await page.getByRole("button", { name: "Profil speichern" }).click()
 
@@ -96,7 +103,7 @@ test.describe("Self-registration", () => {
     expect(userDoc.email).toBe(SIGNUP_EMAIL)
   })
 
-  test("new user creates account from checkout page, completes profile, lands on visit", async ({ page }) => {
+  test("new user creates account from checkout page, completes profile, lands on checkin", async ({ page }) => {
     // ── Start at checkout page ──
     await page.goto("/")
     await expect(page.getByText("Deine Angaben")).toBeVisible({ timeout: 10_000 })
@@ -171,7 +178,7 @@ test.describe("Self-registration", () => {
     // ── Complete the profile ──
     // billingAddress (Strasse / PLZ / Ort) is required since the Profile
     // redesign — `isProfileComplete` won't flip true otherwise and the
-    // navigate-to-/visit guard short-circuits.
+    // post-save dispatch short-circuits.
     await page.locator("#firstName").fill("Checkout")
     await page.locator("#lastName").fill("Tester")
     await page.getByPlaceholder("Seestrasse 12").fill("Seestrasse 12")
@@ -180,9 +187,13 @@ test.describe("Self-registration", () => {
     await page.locator("#termsAccepted").click()
     await page.getByRole("button", { name: "Profil speichern" }).click()
 
-    // ── Should arrive at /visit (signup mode default target) ──
+    // ── Should arrive at /checkin ──
+    // Post-refactor (#360), completing the profile routes through the root
+    // RootDispatcher. A freshly-signed-up account has no open checkout, so
+    // the dispatcher forwards to /checkin (to start one) rather than /visit
+    // (which would strand the user on the "Kein offener Besuch" gate).
     await page.waitForURL(
-      (url) => url.pathname.includes("/visit"),
+      (url) => url.pathname.includes("/checkin"),
       { timeout: 10_000 },
     )
 
