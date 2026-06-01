@@ -72,11 +72,6 @@ function VisitRoute() {
     () => partitionMembership(items, { membershipCatalogId }),
     [items, membershipCatalogId],
   )
-  // A membership-only cart hides the "Werkstätten wählen" picker grid and the
-  // per-workshop sections so the page is just the membership block + nav.
-  const membershipOnly =
-    membershipItems.length > 0 && workshopItems.length === 0
-
   const toggleVisitedMutation = useAsyncMutation({
     context: "visit.toggleWorkshopVisited",
     errorMessage: "Werkstattauswahl konnte nicht gespeichert werden",
@@ -124,6 +119,24 @@ function VisitRoute() {
     for (const w of visitedWorkshops) combined.add(w)
     return combined
   }, [manuallySelectedWorkshops, workshopsWithItems, visitedWorkshops])
+
+  // A genuine membership-only context hides the "Werkstätten wählen" picker
+  // grid and the per-workshop sections so the page is just the membership
+  // block + nav (issue #263).
+  //
+  // Issue #362: this must NOT trigger when the visitor is actively mid-visit.
+  // Buying a membership during an open checkout appends the membership SKU to
+  // that same checkout; with `workshopItems.length === 0` (a selected but
+  // item-less workshop, or a visit with persons only) the old gate flipped
+  // `membershipOnly` true and the workshop selectors vanished — leaving no way
+  // to continue the visit. Gate on the *effective* workshop selection (which
+  // unions manually-selected + item-backed + visited workshops) so any active
+  // workshop keeps the full picker + sections; the membership simply becomes
+  // one more position in the bill.
+  const membershipOnly =
+    membershipItems.length > 0 &&
+    workshopItems.length === 0 &&
+    effectiveWorkshops.size === 0
 
   const toggleWorkshop = (wsId: WorkshopId) => {
     const hasExistingItems = workshopsWithItems.has(wsId)
@@ -272,10 +285,15 @@ function VisitRoute() {
         )}
 
         {/* Vereinsmitgliedschaft — rendered inline with the other workshop
-            sessions (issue #262/#263). Read-only: a membership is purchased on
-            /membership, and you can't add material to it. */}
+            sessions (issue #262/#263). A membership is purchased on /membership
+            and you can't add material to it, but it carries a (×) remove
+            affordance (issue #362) so a membership accidentally added during an
+            open visit can be dropped without leaving the wizard. */}
         {membershipItems.length > 0 && (
-          <MembershipInlineSection items={membershipItems} />
+          <MembershipInlineSection
+            items={membershipItems}
+            onRemove={removeItem}
+          />
         )}
 
         {/* Per-workshop sections — suppressed for a membership-only cart, same
