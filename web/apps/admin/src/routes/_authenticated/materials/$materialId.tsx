@@ -18,6 +18,7 @@ import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { useBridge } from "@modules/lib/use-bridge"
 import { buildRasterJob } from "@oww/shared"
 import { useLabelBitmap } from "@/printer/use-label-bitmap"
+import { buildItemLabelQrUrl } from "@/printer/item-label-qr-url"
 import { LabelPreview } from "@/printer/label-preview"
 import { CatalogFormFields, type CatalogFormValues } from "@/components/admin/catalog-form-fields"
 
@@ -81,7 +82,7 @@ function CatalogDetailPage() {
   const labelInput =
     canPrint && catalog && checkoutDomain
       ? {
-          url: `${checkoutDomain}/visit/add/item/${catalog.code}`,
+          url: buildItemLabelQrUrl(checkoutDomain, catalog.code),
           title: catalog.name,
           code: `#${catalog.code}`,
           tape: "18mm" as const,
