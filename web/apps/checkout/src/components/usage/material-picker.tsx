@@ -745,6 +745,9 @@ function PickerRowBody({
       ? `${catalog.name} · ${variant.label}`
       : catalog.name,
     origin: "manual",
+    // Billing classification from the catalog item (issue #105); absent
+    // catalog `type` falls back to material.
+    type: catalog.type ?? "material",
     catalogId: catalog.id,
     variantId: variant?.id ?? null,
     pricingModel: variant?.pricingModel ?? null,

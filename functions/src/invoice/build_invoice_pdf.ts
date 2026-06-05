@@ -12,6 +12,7 @@ import { generateScorReference } from "./scor_reference";
 import {
   partitionMembership,
   usageDiscount,
+  isMachineItem,
   USAGE_DISCOUNT_LABELS,
   type UsageType,
 } from "@oww/shared";
@@ -598,9 +599,9 @@ function renderCheckoutSection(
         y = renderItemRow(doc, y, item.description, unit, item.quantity, item.unitPrice, item.totalPrice);
       }
       workshopTotal += item.totalPrice;
-      // Split by section so the right discount multiplier applies: nfc =
-      // machine usage, everything else = material.
-      if (item.origin === "nfc") machineRaw += item.totalPrice;
+      // Split by section so the right discount multiplier applies:
+      // type "machine" = machine usage, everything else = material.
+      if (isMachineItem(item)) machineRaw += item.totalPrice;
       else materialRaw += item.totalPrice;
     }
     y = renderSubtotalRow(doc, y, workshopTotal);

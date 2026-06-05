@@ -8,6 +8,7 @@ import {
   useNavigate,
 } from "@tanstack/react-router"
 import { useDb } from "@modules/lib/firebase-context"
+import { useCollection } from "@modules/lib/firestore"
 import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { useIsMobile } from "@modules/hooks/use-mobile"
@@ -24,13 +25,15 @@ import {
   AlertDialogTitle,
 } from "@modules/components/ui/alert-dialog"
 import { ArrowLeft, ArrowRight, ShoppingCart } from "lucide-react"
-import { arrayRemove, arrayUnion } from "firebase/firestore"
+import { arrayRemove, arrayUnion, documentId, where } from "firebase/firestore"
 import {
+  catalogCollection,
   checkoutItemRef,
   checkoutRef,
 } from "@modules/lib/firestore-helpers"
 import {
   getSortedWorkshops,
+  type CatalogItem,
   type WorkshopId,
 } from "@modules/lib/workshop-config"
 import { partitionMembership } from "@oww/shared"
@@ -85,6 +88,40 @@ function VisitRoute() {
     () => getSortedWorkshops(pricingConfig),
     [pricingConfig],
   )
+
+  // Pinned machines (issue #105): each workshop's `config/pricing
+  // .pinnedMachines` lists catalog IDs to show with an always-visible hours
+  // input. Resolve their catalog docs with one batched `documentId() in`
+  // query so the catalog stays the source of truth for price/label/type.
+  const pinnedIdsByWorkshop = useMemo(() => {
+    const m = new Map<WorkshopId, string[]>()
+    for (const [wsId, ws] of sortedWorkshops) {
+      if (ws.pinnedMachines && ws.pinnedMachines.length > 0) {
+        m.set(wsId, ws.pinnedMachines)
+      }
+    }
+    return m
+  }, [sortedWorkshops])
+  const allPinnedIds = useMemo(
+    () =>
+      [...new Set([...pinnedIdsByWorkshop.values()].flat())].slice(0, 30),
+    [pinnedIdsByWorkshop],
+  )
+  const { data: pinnedCatalogDocs } = useCollection(
+    allPinnedIds.length > 0 ? catalogCollection(db) : null,
+    ...(allPinnedIds.length > 0 ? [where(documentId(), "in", allPinnedIds)] : []),
+  )
+  const pinnedCatalogByWorkshop = useMemo(() => {
+    const byId = new Map(pinnedCatalogDocs.map((d) => [d.id, d as CatalogItem]))
+    const m = new Map<WorkshopId, CatalogItem[]>()
+    for (const [wsId, ids] of pinnedIdsByWorkshop) {
+      m.set(
+        wsId,
+        ids.map((id) => byId.get(id)).filter((c): c is CatalogItem => !!c),
+      )
+    }
+    return m
+  }, [pinnedCatalogDocs, pinnedIdsByWorkshop])
 
   // Membership items are excluded (issue #262/#263) so a membership purchase
   // doesn't force-select the legacy `diverses` workshop checkbox.
@@ -311,6 +348,7 @@ function VisitRoute() {
               items={workshopItems.filter((i) => i.workshop === wsId)}
               callbacks={callbacks}
               discountLevel={discountLevel}
+              pinnedCatalog={pinnedCatalogByWorkshop.get(wsId) ?? []}
               checkoutId={checkoutId}
               sectionRef={registerSectionRef(wsId)}
               onAddMaterial={() =>

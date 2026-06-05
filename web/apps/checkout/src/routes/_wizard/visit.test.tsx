@@ -31,7 +31,14 @@ vi.mock("@tanstack/react-router", () => ({
 }))
 
 // ── Light leaf-component / hook mocks ────────────────────────────────────
-vi.mock("@modules/lib/firebase-context", () => ({ useDb: () => ({}) }))
+// `useDb` must return a STABLE reference: `useCollection` (used by VisitRoute
+// for the pinned-machine catalog query, issue #105) keys its subscribe effect
+// on the db identity, so a fresh `{}` per call would re-fire the effect every
+// render and loop. Production's context db is stable; mirror that here.
+vi.mock("@modules/lib/firebase-context", () => {
+  const db = {}
+  return { useDb: () => db }
+})
 vi.mock("@modules/hooks/use-firestore-mutation", () => ({
   useFirestoreMutation: () => ({ update: vi.fn(), remove: vi.fn() }),
 }))

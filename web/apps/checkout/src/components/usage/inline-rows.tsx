@@ -1,8 +1,9 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { useState, Fragment } from "react"
+import { useState, useEffect, useRef, Fragment } from "react"
 import { formatCHF } from "@modules/lib/format"
+import { primaryVariant } from "@modules/lib/pricing"
 import { Plus } from "lucide-react"
 import { useCollection } from "@modules/lib/firestore"
 import { where } from "firebase/firestore"
@@ -22,6 +23,7 @@ import type {
   DiscountLevel,
   PricingModel,
 } from "@modules/lib/workshop-config"
+import { isMachineItem, priceForTier, type ItemType } from "@oww/shared"
 import { PositionTable, type PositionRow, rowFromItem } from "./position-table"
 
 /** Shape of a checkout item used by the workshop block. */
@@ -30,6 +32,8 @@ export interface CheckoutItemLocal {
   workshop: string
   description: string
   origin: "nfc" | "manual" | "qr"
+  /** Billing classification (issue #105); absent = material. */
+  type?: ItemType | null
   catalogId: string | null
   /** Matches catalog.variants[i].id when catalogId is set. Null for ad-hoc fallback rows. */
   variantId?: string | null
@@ -257,6 +261,8 @@ export function WorkshopInlineSection({
   checkoutId,
   sectionRef,
   onAddMaterial,
+  pinnedCatalog = [],
+  discountLevel = "none",
 }: {
   workshopId: WorkshopId
   workshop: WorkshopConfig
@@ -266,8 +272,17 @@ export function WorkshopInlineSection({
   config?: PricingConfig
   /** Unused since the picker moved to a separate component (issue #213). */
   catalogItems?: CatalogItem[]
-  /** Unused since the picker moved to a separate component (issue #213). */
+  /**
+   * Member/default pricing tier for the identified principal — used to
+   * resolve pinned-machine hourly rates (issue #105).
+   */
   discountLevel?: DiscountLevel
+  /**
+   * Catalog docs for this workshop's `config/pricing.pinnedMachines` — each
+   * renders an always-visible hours input in the machine section while no
+   * MaCo is deployed (issue #105).
+   */
+  pinnedCatalog?: CatalogItem[]
   /** Legacy no-op kept for callers that still set it. */
   onBlurSave?: boolean
   checkoutId?: string | null
@@ -284,12 +299,21 @@ export function WorkshopInlineSection({
 }) {
   const [expandedNfc, setExpandedNfc] = useState<Record<string, boolean>>({})
 
+  // Machine usage (NFC-tracked or manually-entered hours) bills as
+  // "Maschinennutzung"; everything else is material (issue #105). The
+  // material box also excludes NFC items defensively — production NFC usage
+  // always carries type "machine", but this keeps a type-less NFC row out of
+  // the material box rather than double-rendering it.
   const nfcItems = items.filter((i) => i.origin === "nfc")
-  const materialItems = items.filter((i) => i.origin !== "nfc")
+  const machineItems = items.filter((i) => isMachineItem(i))
+  const materialItems = items.filter(
+    (i) => !isMachineItem(i) && i.origin !== "nfc",
+  )
 
-  const machineTotal = nfcItems.reduce((s, i) => s + i.totalPrice, 0)
+  const machineTotal = machineItems.reduce((s, i) => s + i.totalPrice, 0)
   const materialTotal = materialItems.reduce((s, i) => s + i.totalPrice, 0)
   const wsTotal = machineTotal + materialTotal
+  const showMachineBox = nfcItems.length > 0 || pinnedCatalog.length > 0
 
   const nfcRows: PositionRow[] = nfcItems.map((item) => {
     const isExpanded = !!expandedNfc[item.id]
@@ -317,15 +341,41 @@ export function WorkshopInlineSection({
         {workshop.label}
       </h2>
 
-      {nfcItems.length > 0 && (
+      {showMachineBox && (
         <div className="rounded-md border border-border bg-card shadow-sm">
-          <div className="px-3 py-3 sm:px-4">
-            <PositionTable
-              firstColLabel="Maschinen / Werkzeuge"
-              rows={nfcRows}
-              onToggle={checkoutId ? toggleNfc : undefined}
-            />
-          </div>
+          {nfcItems.length > 0 && (
+            <div className="px-3 py-3 sm:px-4">
+              <PositionTable
+                firstColLabel="Maschinen / Werkzeuge"
+                rows={nfcRows}
+                onToggle={checkoutId ? toggleNfc : undefined}
+              />
+            </div>
+          )}
+          {pinnedCatalog.length > 0 && (
+            <div
+              className={
+                "px-3 py-3 sm:px-4" +
+                (nfcItems.length > 0 ? " border-t border-border/60" : "")
+              }
+            >
+              <PinnedMachineLabelRow />
+              <ul className="mt-1">
+                {pinnedCatalog.map((cat) => (
+                  <PinnedMachineRow
+                    key={cat.id}
+                    workshopId={workshopId}
+                    catalog={cat}
+                    discountLevel={discountLevel}
+                    existing={machineItems.find(
+                      (i) => i.catalogId === cat.id,
+                    )}
+                    callbacks={callbacks}
+                  />
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
 
@@ -376,5 +426,129 @@ export function WorkshopInlineSection({
         </span>
       </div>
     </section>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Pinned machine rows (issue #105). For machines without a MaCo, the cost
+// step shows an always-visible hours input so visitors can record usage
+// manually. Each pinned machine is a catalog item referenced from
+// `config/pricing.workshops[ws].pinnedMachines`; the row IS the
+// representation of its checkout item — entering hours upserts it, clearing
+// removes it.
+// ---------------------------------------------------------------------------
+
+function PinnedMachineLabelRow() {
+  return (
+    <div className="grid grid-cols-[1fr_auto_auto] items-center gap-3 px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground sm:gap-4">
+      <span>Maschinennutzung</span>
+      <span className="text-right">Stunden</span>
+      <span className="min-w-[70px] text-right">Preis</span>
+    </div>
+  )
+}
+
+function PinnedMachineRow({
+  workshopId,
+  catalog,
+  discountLevel,
+  existing,
+  callbacks,
+}: {
+  workshopId: WorkshopId
+  catalog: CatalogItem
+  discountLevel: DiscountLevel
+  existing?: CheckoutItemLocal
+  callbacks: ItemCallbacks
+}) {
+  const variant = primaryVariant(catalog)
+  const unitPrice = variant ? priceForTier(variant.unitPrice, discountLevel) : 0
+  const pricingModel = variant?.pricingModel ?? "time"
+
+  // Local text decoupled from the stored item so typing survives the
+  // snapshot round-trip; synced from the stored quantity while unfocused
+  // (mirrors the SpendeCard pattern in step-checkout).
+  const [text, setText] = useState(() =>
+    existing && existing.quantity > 0 ? String(existing.quantity) : "",
+  )
+  const focusedRef = useRef(false)
+  const storedHours = existing?.quantity ?? 0
+  useEffect(() => {
+    if (focusedRef.current) return
+    const canonical = storedHours > 0 ? String(storedHours) : ""
+    const parsed = parseFloat(text.replace(",", ".")) || 0
+    if (parsed !== storedHours) setText(canonical)
+  }, [storedHours, text])
+
+  const hours = Math.max(0, parseFloat(text.replace(",", ".")) || 0)
+  const total = Math.round(hours * unitPrice * 100) / 100
+
+  const commit = () => {
+    focusedRef.current = false
+    if (hours <= 0) {
+      if (existing) callbacks.removeItem(existing.id)
+      setText("")
+      return
+    }
+    if (existing) {
+      if (existing.quantity === hours) return
+      callbacks.updateItem(existing.id, {
+        ...existing,
+        quantity: hours,
+        unitPrice,
+        totalPrice: total,
+        formInputs: [{ quantity: hours, unit: "h" }],
+      })
+    } else {
+      callbacks.addItem({
+        id: crypto.randomUUID(),
+        workshop: workshopId,
+        description: catalog.name,
+        origin: "manual",
+        type: "machine",
+        catalogId: catalog.id,
+        variantId: variant?.id ?? "default",
+        pricingModel,
+        quantity: hours,
+        unitPrice,
+        totalPrice: total,
+        formInputs: [{ quantity: hours, unit: "h" }],
+      })
+    }
+  }
+
+  return (
+    <li className="grid grid-cols-[1fr_auto_auto] items-center gap-3 border-b border-dotted border-border py-2 last:border-b-0 sm:gap-4">
+      <div className="min-w-0">
+        <div className="truncate font-heading text-sm font-semibold">
+          {catalog.name}
+        </div>
+        <div className="text-xs text-muted-foreground tabular-nums">
+          {formatCHF(unitPrice)}/Std.
+        </div>
+      </div>
+      <input
+        type="number"
+        min="0"
+        step="any"
+        inputMode="decimal"
+        value={text}
+        aria-label={`Stunden ${catalog.name}`}
+        onFocus={() => {
+          focusedRef.current = true
+        }}
+        onChange={(e) => {
+          const raw = e.target.value
+          if (parseFloat(raw) < 0) return
+          setText(raw)
+        }}
+        onBlur={commit}
+        placeholder="0"
+        className="h-9 w-20 rounded-none border border-[#ccc] bg-background px-2 py-1 text-right text-sm tabular-nums outline-none focus:border-cog-teal"
+      />
+      <span className="min-w-[70px] text-right text-sm font-semibold tabular-nums">
+        {total > 0 ? total.toFixed(2) : ""}
+      </span>
+    </li>
   )
 }

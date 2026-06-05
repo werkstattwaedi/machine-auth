@@ -30,7 +30,7 @@ describe("computeCheckoutCosts", () => {
       persons: [{ userType: "erwachsen" }, { userType: "kind" }],
       usageType: "intern",
       items: [
-        { origin: "nfc", totalPrice: 25 },
+        { origin: "nfc", type: "machine", totalPrice: 25 },
         { origin: "manual", totalPrice: 12 },
         { origin: "qr", totalPrice: 7 },
       ],
@@ -53,7 +53,7 @@ describe("computeCheckoutCosts", () => {
       persons: [{ userType: "erwachsen" }],
       usageType: "volunteering",
       items: [
-        { origin: "nfc", totalPrice: 25 },
+        { origin: "nfc", type: "machine", totalPrice: 25 },
         { origin: "qr", totalPrice: 12 },
       ],
       config,
@@ -71,7 +71,7 @@ describe("computeCheckoutCosts", () => {
     const result = computeCheckoutCosts({
       persons: [{ userType: "erwachsen" }],
       usageType: "ermaessigt",
-      items: [{ origin: "nfc", totalPrice: 20 }],
+      items: [{ origin: "nfc", type: "machine", totalPrice: 20 }],
       config,
     })
     expect(result.personFees).toBe(15)
@@ -84,7 +84,7 @@ describe("computeCheckoutCosts", () => {
       persons: [{ userType: "erwachsen" }],
       usageType: "regular",
       items: [
-        { origin: "nfc", totalPrice: 25 },
+        { origin: "nfc", type: "machine", totalPrice: 25 },
         { origin: "qr", totalPrice: 12 },
       ],
       config,
@@ -108,7 +108,7 @@ describe("computeCheckoutCosts", () => {
       persons: [{ userType: "erwachsen" }],
       usageType: "regular",
       items: [
-        { origin: "nfc", totalPrice: 25 },
+        { origin: "nfc", type: "machine", totalPrice: 25 },
         { origin: "manual", totalPrice: 80, catalogId: MEMBERSHIP_ID },
         { origin: "manual", totalPrice: 12, catalogId: "wood-1" },
       ],

@@ -357,6 +357,8 @@ async function accumulateForUser(
       workshop,
       description: catalogData.name,
       origin: "nfc",
+      // NFC usage is always machine usage (issue #105).
+      type: "machine",
       catalogId: catalogRef,
       variantId,
       pricingModel,

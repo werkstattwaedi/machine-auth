@@ -30,9 +30,10 @@ import type {
   CheckoutPersonEntity,
   CheckoutSummaryEntity,
   ItemOrigin,
+  ItemType,
   UsageType,
 } from "../types/firestore_entities";
-import { usageDiscount } from "@oww/shared";
+import { usageDiscount, isMachineItem } from "@oww/shared";
 import type { BillEntity } from "./types";
 import { buildPaymentData, type PaymentData } from "./get_payment_qr_data";
 import { allocateBill } from "./create_bill";
@@ -55,9 +56,9 @@ function hasMembershipItem(
   return detectMembershipKindForItems(items, membershipCatalogId) !== null;
 }
 
-/** True iff any item is machine usage (origin "nfc"). */
-function hasMachineUsage(items: { origin: ItemOrigin }[]): boolean {
-  return items.some((i) => i.origin === "nfc");
+/** True iff any item is machine usage (`type === "machine"`). */
+function hasMachineUsage(items: { type?: string | null }[]): boolean {
+  return items.some((i) => isMachineItem(i));
 }
 
 /**
@@ -177,7 +178,7 @@ export function assertUsageTypeAllowed(
 export function recomputeSummary(
   persons: CheckoutPersonEntity[],
   usageType: UsageType,
-  items: { origin: ItemOrigin; totalPrice: number }[],
+  items: { type?: string | null; totalPrice: number }[],
   configFees: Record<string, Record<string, number>> | null,
   clientTip: number,
 ): CheckoutSummaryEntity {
@@ -194,10 +195,10 @@ export function recomputeSummary(
     0,
   );
   const machineRaw = items
-    .filter((i) => i.origin === "nfc")
+    .filter((i) => isMachineItem(i))
     .reduce((sum, i) => sum + (i.totalPrice ?? 0), 0);
   const materialRaw = items
-    .filter((i) => i.origin !== "nfc")
+    .filter((i) => !isMachineItem(i))
     .reduce((sum, i) => sum + (i.totalPrice ?? 0), 0);
   const tipRaw = Math.max(0, clientTip ?? 0);
 
@@ -321,6 +322,7 @@ interface NewCheckoutItemInput {
   workshop: string;
   description: string;
   origin: ItemOrigin;
+  type?: ItemType | null;
   catalogId: string | null;
   quantity: number;
   unitPrice: number;
@@ -677,6 +679,7 @@ async function createAnonymousCheckout(
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         totalPrice: item.totalPrice,
+        ...(item.type ? { type: item.type } : {}),
         ...(item.formInputs ? { formInputs: item.formInputs } : {}),
         ...(item.pricingModel
           ? { pricingModel: item.pricingModel as CheckoutItemEntity["pricingModel"] }

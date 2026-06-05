@@ -63,6 +63,7 @@ interface NewItem {
   workshop?: string;
   description?: string;
   origin?: ItemOrigin;
+  type?: "machine" | "material";
   catalogId?: string | null;
   quantity: number;
   unitPrice: number;
@@ -173,6 +174,7 @@ async function seedCheckout(
       workshop: item.workshop ?? "holz",
       description: item.description ?? `Item ${i}`,
       origin: item.origin ?? "manual",
+      ...(item.type ? { type: item.type } : {}),
       catalogId: item.catalogId
         ? db.collection("catalog").doc(item.catalogId)
         : null,
@@ -365,6 +367,7 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
             workshop: "holz",
             description: "Bandsäge",
             origin: "nfc",
+            type: "machine",
             quantity: 1,
             unitPrice: 20,
             totalPrice: 20,
@@ -436,6 +439,7 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
                 workshop: "holz",
                 description: "Bandsäge",
                 origin: "nfc",
+                type: "machine",
                 catalogId: null,
                 quantity: 1,
                 unitPrice: 25,
@@ -1132,6 +1136,7 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
             workshop: "holz",
             description: "Bandsäge",
             origin: "nfc",
+            type: "machine",
             quantity: 1,
             unitPrice: 20,
             totalPrice: 20,
@@ -1294,6 +1299,7 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
             workshop: "holz",
             description: "Bandsäge",
             origin: "nfc",
+            type: "machine",
             quantity: 1,
             unitPrice: 20,
             totalPrice: 20,

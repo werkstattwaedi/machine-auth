@@ -2,6 +2,7 @@ import { DocumentReference, Timestamp } from "firebase-admin/firestore";
 
 import type {
   DiscountLevel,
+  ItemType,
   PricingModel,
   UsageType,
   VariantPrice,
@@ -9,6 +10,7 @@ import type {
 export {
   priceForTier,
   type DiscountLevel,
+  type ItemType,
   type PricingModel,
   type UsageType,
   type VariantPrice,
@@ -144,6 +146,12 @@ export interface CatalogEntity {
   category: string[];
   active: boolean;
   userCanAdd: boolean;
+  /**
+   * What this item is, for billing-section bucketing (issue #105). Absent
+   * means `material`. Machine catalog items (manual-hour entry / NFC usage)
+   * carry `machine`.
+   */
+  type?: ItemType;
   description?: string | null;
   /**
    * 1..n purchase options. `variants[0]` is canonical: the picker uses it
@@ -235,6 +243,11 @@ export interface CheckoutItemEntity {
   workshop: string;
   description: string;
   origin: ItemOrigin;
+  /**
+   * Billing-section classification (issue #105). Absent means `material`.
+   * Authoritative for machine-vs-material bucketing — see `isMachineItem`.
+   */
+  type?: ItemType;
   catalogId: DocumentReference | null; // Reference to /catalog/{itemId}, null for free-form
   /** Matches catalog.variants[i].id when catalogId is set; null for ad-hoc origin="manual" / "qr". */
   variantId?: string | null;

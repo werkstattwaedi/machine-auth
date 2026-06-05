@@ -33,8 +33,14 @@ const childPerson: CheckoutPersonEntity = {
   userType: "kind",
 };
 
+// Mirror production: NFC usage carries type "machine"; manual/qr default
+// to material. Bucketing is by `type`, not `origin` (issue #105).
 function item(origin: ItemOrigin, totalPrice: number) {
-  return { origin, totalPrice };
+  return {
+    origin,
+    type: origin === "nfc" ? "machine" : "material",
+    totalPrice,
+  };
 }
 
 describe("entryFeeFor", () => {
@@ -237,6 +243,24 @@ describe("recomputeSummary", () => {
     expect(summary.machineCost).to.equal(30);
     expect(summary.materialCost).to.equal(12);
     expect(summary.totalPrice).to.equal(42);
+  });
+
+  // Issue #105: a manually-entered machine-hour item (origin "manual",
+  // type "machine") buckets as machine cost, not material — bucketing keys
+  // on `type`, independent of how the item was entered.
+  it("buckets a manual type:machine item as machine cost (issue #105)", () => {
+    const summary = recomputeSummary(
+      [adultPerson],
+      "regular",
+      [
+        { type: "machine", totalPrice: 40 },
+        { type: "material", totalPrice: 8 },
+      ],
+      { erwachsen: { regular: 0 } },
+      0,
+    );
+    expect(summary.machineCost).to.equal(40);
+    expect(summary.materialCost).to.equal(8);
   });
 
   // Regression for issue #284: usageType "intern" stores the RAW section

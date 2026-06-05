@@ -275,6 +275,7 @@ export function WizardProvider({
         workshop: item.workshop,
         description: item.description,
         origin: item.origin,
+        type: item.type ?? null,
         catalogId: item.catalogId?.id ?? null,
         variantId: item.variantId ?? null,
         pricingModel: (item.pricingModel as PricingModel) ?? null,
@@ -506,6 +507,7 @@ export function WizardProvider({
             workshop: item.workshop,
             description: item.description,
             origin: item.origin,
+            ...(item.type ? { type: item.type } : {}),
             catalogId: item.catalogId ? catalogRef(db, item.catalogId) : null,
             pricingModel: item.pricingModel ?? null,
             created: serverTimestamp(),
@@ -661,6 +663,7 @@ export function WizardProvider({
             workshop: string
             description: string
             origin: string
+            type?: string | null
             catalogId: string | null
             quantity: number
             unitPrice: number
@@ -696,6 +699,7 @@ export function WizardProvider({
             workshop: item.workshop,
             description: item.description,
             origin: item.origin,
+            ...(item.type ? { type: item.type } : {}),
             catalogId: item.catalogId,
             quantity: item.quantity,
             unitPrice: item.unitPrice,
