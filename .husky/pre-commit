@@ -4,4 +4,17 @@ if grep -q '"@oww/shared": "file:' functions/package.json 2>/dev/null; then
   exit 1
 fi
 
-npm run test:precommit
+# Run only the suite(s) whose inputs actually changed (issue #368). The
+# selector buckets the staged files; docs/meta-only commits run nothing.
+suites=$(npx tsx scripts/precommit-select.ts)
+
+if [ -z "$suites" ]; then
+  echo "pre-commit: no web/functions inputs changed — skipping tests."
+  exit 0
+fi
+
+# The selector logic itself is fast and emulator-free; always verify it.
+npm run test:scripts || exit 1
+
+echo "$suites" | grep -q '^web$' && { npm run test:precommit:web || exit 1; }
+echo "$suites" | grep -q '^functions$' && { npm run test:precommit:functions || exit 1; }
