@@ -296,9 +296,6 @@ export { issueMembershipRenewalBills } from "./membership/renewal_invoicer";
 // Export scheduled cleanup
 export { cleanupAbandonedCheckouts } from "./checkout/cleanup_abandoned_checkouts";
 
-// Export CognitoForms importer — daily schedule.
-export { scheduledCognitoformsImport } from "./import/cognitoforms";
-
 // Export Firestore triggers
 export { syncCustomClaims } from "./auth/set-custom-claims";
 

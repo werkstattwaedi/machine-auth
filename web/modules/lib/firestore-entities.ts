@@ -249,8 +249,7 @@ export interface CheckoutDoc extends AuditFields {
    * signed-in Firebase Auth). Stable across the doc's lifetime (unlike
    * `modifiedBy`, which tracks the last writer) so the cleanup job can
    * pair an expired anon auth user with the checkouts they created.
-   * Null only for system / admin-SDK writes such as CognitoForms
-   * imports. Issue #318.
+   * Null only for system / admin-SDK writes. Issue #318.
    */
   firebaseUid?: string | null
   billRef?: DocumentReference<BillDoc> | null
@@ -399,9 +398,7 @@ export interface PricingConfigDoc extends AuditFields {
  * a code deploy. Mirrors how `config/pricing` decouples fee values from
  * code today.
  *
- * Only `membership` is populated today. The 12 CognitoForms-importer
- * references are added in PR D as a server-only field — the web app
- * doesn't read them, so they can stay outside this doc until needed.
+ * Only `membership` is populated today.
  */
 export interface CatalogReferencesDoc extends AuditFields {
   /** The Mitgliedschaft catalog item (variants: "single", "family"). */

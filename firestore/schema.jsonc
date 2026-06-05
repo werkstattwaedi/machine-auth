@@ -109,14 +109,10 @@
     }
   },
   "checkouts": {
-    // {checkoutId} doc IDs are Firestore auto-IDs (20-char) for native
-    // checkouts. CognitoForms imports use deterministic IDs of the form
-    // `zzCognitoFormsNNNNNN`, where NNNNNN is `Entry.Number` zero-padded
-    // to 6 digits. The prefix sorts these to the end of any listing and
-    // makes the import provenance obvious without a separate field.
+    // {checkoutId} doc IDs are Firestore auto-IDs (20-char).
     "{checkoutId}": {
       // --- Always present ---
-      "userId": "DocumentReference", // DocumentReference to /users/{userId}; null for anonymous / CognitoForms imports
+      "userId": "DocumentReference", // DocumentReference to /users/{userId}; null for anonymous
       "status": "open | closed",
       "usageType": "regular | ermaessigt | materialbezug | intern | hangenmoos",
       "created": "timestamp",
@@ -142,7 +138,7 @@
       // Firebase Auth UID of the user who created this checkout. Set to
       // `request.auth.uid` for every client-side create (anonymous OR
       // signed-in Firebase Auth). Null only for system / admin-SDK
-      // writes such as CognitoForms imports. Stable across the
+      // writes. Stable across the
       // checkout's lifetime (unlike `modifiedBy`, which tracks the last
       // writer); the abandoned-checkout cleanup pairs an expired anon
       // auth user with the checkouts they created via this field. See
@@ -225,23 +221,9 @@
     // Production-code lookup table for catalog items the runtime needs to
     // find by purpose rather than by doc ID. Lets ops rebind a reference
     // (e.g. roll a new membership SKU with a price change) without a code
-    // deploy. The CognitoForms importer's 12 catalog refs (issue #253) get
-    // their own server-only file inside functions/ when the importer wires
-    // up in PR D — they aren't read by the web app, so they don't belong here.
+    // deploy.
     "catalog-references": {
       "membership": "DocumentReference" // DocumentReference to the Mitgliedschaft catalog item (variants: "single", "family")
-    }
-  },
-  "import_state": {
-    // Server-only cursor docs used by import jobs. Client read/write is
-    // denied by firestore.rules so this collection cannot leak operational
-    // state to public clients.
-    "cognitoforms": {
-      "lastEntryDateSubmitted": "timestamp | null", // Exclusive lower bound for next $filter
-      "lastRunAt": "timestamp | null",
-      "lastRunStatus": "ok | partial | error",
-      "lastRunError": "string | null",
-      "importedCount": "number" // Lifetime tally
     }
   },
   "audit_log": {

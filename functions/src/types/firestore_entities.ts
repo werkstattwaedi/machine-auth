@@ -209,7 +209,7 @@ export interface CheckoutEntity {
   // unlike `modifiedBy`, which tracks the last writer — so the
   // abandoned-checkout cleanup job can pair an expired anon auth user
   // with the checkouts they created. Null only for system / admin-SDK
-  // writes such as CognitoForms imports. Issue #318.
+  // writes. Issue #318.
   firebaseUid?: string | null;
 
   // Set when a bill is created for this checkout

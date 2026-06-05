@@ -206,8 +206,7 @@ service cloud.firestore {
       // signed-in). This gives the abandoned-checkout cleanup a single,
       // generally-applicable join key — and forge protection drops out:
       // a session cannot tag a checkout with anyone else's UID. Admin
-      // SDK writes (e.g. CognitoForms imports) bypass rules and may
-      // leave `firebaseUid` null.
+      // SDK writes bypass rules and may leave `firebaseUid` null.
       allow create: if (request.resource.data.status == 'open' || request.resource.data.status == 'closed')
         && request.resource.data.keys().hasOnly([
              'userId', 'status', 'usageType', 'created',
@@ -310,9 +309,9 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Import state — server-side only (CognitoForms importer cursor, etc.)
+    // Import state — server-side only (import-job cursors, etc.)
     // Clients have no business reading or writing these operational
-    // markers; the importer runs as Cloud Functions with admin SDK access.
+    // markers; import jobs run as Cloud Functions with admin SDK access.
     match /import_state/{docId} {
       allow read: if false;
       allow write: if false;
