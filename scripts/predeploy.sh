@@ -42,22 +42,21 @@ firebase use
 step "Generating env files from operations config"
 npm run generate-env
 
-# A prior deploy rewrites functions/package.json's @oww/shared to a packed
-# `file:` tarball (see scripts/deploy-functions.ts) and deploy:functions:cleanup
-# normally reverts it. An interrupted/failed deploy can leave that state
-# behind; the next `npm install` then resolves @oww/shared to the *stale*
-# tarball, so `tsc` can't see exports added since (mirrors the husky
-# pre-commit guard). Self-heal here so predeploy never builds against a
-# stale shared package.
-if grep -q '"@oww/shared": "file:' functions/package.json 2>/dev/null; then
-  warn "functions/package.json is in deploy state (@oww/shared → packed tarball, leftover from an interrupted deploy). Restoring the workspace ref."
-  git restore functions/package.json
+# Self-heal leftover functions deploy state. A deploy points @oww/shared at a
+# packed `file:` tarball (scripts/{prepare,deploy}-functions-deploy.ts).
+# An interrupted deploy — or an `npm install` run while in that state —
+# leaves package.json AND/OR package-lock.json pinning the tarball. The lock
+# is the sticky one: even after package.json is restored, npm keeps
+# re-extracting a stale functions/node_modules/@oww/shared (missing exports
+# added since), so tsc fails. Restore BOTH files before install.
+if grep -q '"@oww/shared": "file:' functions/package.json 2>/dev/null \
+  || grep -q 'oww-shared-[0-9].*\.tgz' package-lock.json 2>/dev/null; then
+  warn "Leftover functions deploy state detected (package.json/lockfile pin @oww/shared at a packed tarball). Restoring."
+  git restore functions/package.json package-lock.json
   rm -f functions/oww-shared-*.tgz
 fi
-# The `file:` install extracts a real `functions/node_modules/@oww/shared`
-# that shadows the hoisted workspace symlink. `npm install` does NOT prune
-# it, so tsc keeps resolving the stale copy even after the ref is restored —
-# always clear it before installing.
+# Even when the refs are clean, a prior `file:` install can leave the
+# extracted copy behind, shadowing the workspace symlink. Always clear it.
 rm -rf functions/node_modules/@oww/shared
 
 step "Install all workspace dependencies (root)"
