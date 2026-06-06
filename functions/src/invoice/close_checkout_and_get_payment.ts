@@ -33,7 +33,7 @@ import type {
   ItemType,
   UsageType,
 } from "../types/firestore_entities";
-import { usageDiscount, isMachineItem } from "@oww/shared";
+import { usageDiscount, isMachineItem, isSameBusinessDay } from "@oww/shared";
 import type { BillEntity } from "./types";
 import { buildPaymentData, type PaymentData } from "./get_payment_qr_data";
 import { allocateBill } from "./create_bill";
@@ -190,8 +190,18 @@ export function recomputeSummary(
   // recover the raw entry fee we divide it back out (the only section whose
   // discount lives in the per-person fee). For waived entry fees (multiplier
   // 0) the raw is the un-waived standard fee.
+  //
+  // Daily-fee dedup (issue #268): a person flagged `entryFeeWaivedToday`
+  // already paid the daily usage fee earlier today (same Zurich business
+  // day), so they contribute nothing to the entry-fee section — neither raw
+  // nor net. The flag is set authoritatively at close-time
+  // (markEntryFeeWaivedToday) from prior bills.
   const standardEntryFees = persons.reduce(
-    (sum, p) => sum + standardEntryFeeFor(p.userType, configFees),
+    (sum, p) =>
+      sum +
+      (p.entryFeeWaivedToday
+        ? 0
+        : standardEntryFeeFor(p.userType, configFees)),
     0,
   );
   const machineRaw = items
@@ -316,6 +326,102 @@ async function enforcePrimaryUserType(
   const corrected = [...persons];
   corrected[0] = { ...primary, userType: stored };
   return corrected;
+}
+
+/**
+ * Daily usage-fee dedup (issue #268).
+ *
+ * The entry ("Nutzungs-") fee is billed at most once per Zurich business
+ * day (boundary 03:00) per *named* person. A named person is one carrying a
+ * `userRef` — they map to a real account. Anonymous / guest persons (no
+ * `userRef`) are always charged.
+ *
+ * For each named person we ask: did an *earlier* closed checkout on the same
+ * business day already bill them the entry fee? "Earlier closed checkout"
+ * means a `checkouts` doc with `status == "closed"`, owned by — or listing —
+ * that person, whose close instant falls on the same business day and which
+ * billed a non-zero entry fee for them.
+ *
+ * Query strategy: rather than a per-person Firestore query (persons can be
+ * arbitrary family members), we read the closed checkouts the *current
+ * checkout's owner* already closed today and collect the set of person
+ * userRef ids that were charged an entry fee in any of them. Family members
+ * are billed inside the account holder's checkout (persons[] carries their
+ * userRef), so the owner's same-day history is the authoritative record of
+ * "who already paid today" for this account. The owner falls out naturally:
+ * they appear as persons[0] with their own userRef.
+ *
+ * Returns a copy of `persons` with `entryFeeWaivedToday: true` set on each
+ * person already charged today. Pure read; performs no writes.
+ */
+export async function markEntryFeeWaivedToday(
+  db: FirebaseFirestore.Firestore,
+  persons: CheckoutPersonEntity[],
+  ownerRef: DocumentReference | null,
+  closeAt: Date,
+  currentCheckoutId: string | null,
+  configFees: Record<string, Record<string, number>> | null,
+): Promise<CheckoutPersonEntity[]> {
+  // Truly anonymous checkout (no owner) — nobody to dedup against.
+  if (!ownerRef) return persons;
+  // No named persons → nothing to waive.
+  if (!persons.some((p) => p.userRef)) return persons;
+
+  // All closed checkouts this account owns. Filtered to the same business
+  // day in memory (Firestore can't express the 03:00 boundary in a range
+  // query without a precomputed key, and the per-account volume is tiny).
+  const priorSnap = await db
+    .collection("checkouts")
+    .where("userId", "==", ownerRef)
+    .where("status", "==", "closed")
+    .get();
+
+  // Collect userRef ids that were billed a NON-ZERO entry fee on the same
+  // business day in any *other* closed checkout.
+  const chargedTodayUserIds = new Set<string>();
+  for (const doc of priorSnap.docs) {
+    if (currentCheckoutId && doc.id === currentCheckoutId) continue;
+    const prior = doc.data() as CheckoutEntity;
+    // Use the close instant; fall back to created for older docs.
+    const priorInstant = (prior.closedAt ?? prior.created)?.toDate?.();
+    if (!priorInstant) continue;
+    if (!isSameBusinessDay(priorInstant, closeAt)) continue;
+
+    const priorDiscount = usageDiscount(prior.usageType);
+    for (const person of prior.persons ?? []) {
+      if (!person.userRef) continue;
+      // The person was actually charged iff their fee was neither
+      // dedup-waived nor usage-type-waived (entryFee multiplier 0).
+      if (person.entryFeeWaivedToday) continue;
+      if (priorDiscount.entryFee === 0) continue;
+      const standard = safeStandardEntryFee(person.userType, configFees);
+      if (standard <= 0) continue;
+      chargedTodayUserIds.add(person.userRef.id);
+    }
+  }
+
+  if (chargedTodayUserIds.size === 0) return persons;
+
+  return persons.map((p) =>
+    p.userRef && chargedTodayUserIds.has(p.userRef.id)
+      ? { ...p, entryFeeWaivedToday: true }
+      : p,
+  );
+}
+
+/**
+ * Standard entry fee that never throws — returns 0 when the config row is
+ * missing. Used only by the dedup scan, where a missing row means "no fee
+ * was charged" and must not abort the close. The authoritative billing path
+ * (`standardEntryFeeFor` / `entryFeeFor`) still fails loud (issue #149).
+ */
+function safeStandardEntryFee(
+  userType: string,
+  configFees: Record<string, Record<string, number>> | null,
+): number {
+  const row = configFees?.[userType];
+  const standard = row && "regular" in row ? row["regular"] : undefined;
+  return typeof standard === "number" ? standard : 0;
 }
 
 interface NewCheckoutItemInput {
@@ -451,6 +557,20 @@ async function closeExistingCheckout(
     `closeExistingCheckout ${args.checkoutId}`,
   );
 
+  // Daily usage-fee dedup (issue #268): waive the entry fee for any named
+  // person who already paid it earlier on the same Zurich business day.
+  // The owner is the checkout's userId; for the truly-anon path userRef is
+  // null and the dedup is a no-op. Read outside the transaction — it's a
+  // historical scan that doesn't participate in the close's atomicity.
+  const dedupedPersons = await markEntryFeeWaivedToday(
+    db,
+    enforcedPersons,
+    userRef,
+    new Date(),
+    args.checkoutId,
+    configFees,
+  );
+
   const result = await db.runTransaction(async (tx) => {
     const checkoutDoc = await tx.get(checkoutRef);
     if (!checkoutDoc.exists) {
@@ -522,7 +642,7 @@ async function closeExistingCheckout(
     });
 
     const summary = recomputeSummary(
-      enforcedPersons,
+      dedupedPersons,
       args.usageType,
       items,
       configFees,
@@ -540,7 +660,7 @@ async function closeExistingCheckout(
     tx.update(checkoutRef, {
       status: "closed",
       usageType: args.usageType,
-      persons: enforcedPersons,
+      persons: dedupedPersons,
       closedAt: FieldValue.serverTimestamp(),
       notes: null,
       summary,
@@ -549,7 +669,7 @@ async function closeExistingCheckout(
       billRef,
     });
 
-    return { bill, billId: billRef.id, payer: payerFromPersons(enforcedPersons) };
+    return { bill, billId: billRef.id, payer: payerFromPersons(dedupedPersons) };
   });
 
   return buildPaymentData(result.bill, result.payer, result.billId, args.checkoutId);
@@ -624,8 +744,22 @@ async function createAnonymousCheckout(
     "createAnonymousCheckout",
   );
 
-  const summary = recomputeSummary(
+  // Daily usage-fee dedup (issue #268): a registered user / tag-tap session
+  // landing here (no open checkout existed) may already have closed a
+  // checkout earlier the same Zurich business day. Waive the entry fee for
+  // any named person already charged today. Truly-anon (userIdRef === null)
+  // is a no-op.
+  const dedupedPersons = await markEntryFeeWaivedToday(
+    db,
     enforcedPersons,
+    userIdRef,
+    new Date(),
+    null,
+    configFees,
+  );
+
+  const summary = recomputeSummary(
+    dedupedPersons,
     args.usageType,
     validItems,
     configFees,
@@ -657,7 +791,7 @@ async function createAnonymousCheckout(
       usageType: args.usageType,
       created: now,
       workshopsVisited: args.newCheckout.workshopsVisited,
-      persons: enforcedPersons,
+      persons: dedupedPersons,
       modifiedBy: callerUid,
       modifiedAt: FieldValue.serverTimestamp(),
       firebaseUid: firebaseAuthUid,
@@ -688,7 +822,7 @@ async function createAnonymousCheckout(
       tx.set(itemRefs[idx], itemDoc);
     });
 
-    return { bill, billId: billRef.id, payer: payerFromPersons(enforcedPersons) };
+    return { bill, billId: billRef.id, payer: payerFromPersons(dedupedPersons) };
   });
 
   return buildPaymentData(result.bill, result.payer, result.billId, checkoutRef.id);

@@ -1366,4 +1366,304 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
       expect(bill.paidAt).to.equal(null);
     });
   });
+
+  // -----------------------------------------------------------------------
+  // Issue #268: the daily usage fee is billed at most once per Zurich
+  // business day (boundary 03:00) per named person. These tests exercise
+  // the full server close path (markEntryFeeWaivedToday + recomputeSummary)
+  // against prior closed checkouts seeded with controlled close instants.
+  //
+  // They must FAIL on the pre-fix code (which always recharged the fee).
+  // -----------------------------------------------------------------------
+  describe("issue #268: daily usage-fee dedup", () => {
+    // A person carrying a userRef is "named" (maps to a real account); only
+    // named persons are deduped. Build one for a given uid.
+    function namedPerson(
+      uid: string,
+      base: CheckoutPersonEntity,
+    ): CheckoutPersonEntity {
+      const db = getFirestore();
+      return { ...base, userRef: db.collection("users").doc(uid) };
+    }
+
+    /**
+     * Seed a CLOSED checkout that already billed `persons` an entry fee on a
+     * given instant. Used as the "prior visit today" the dedup checks
+     * against.
+     */
+    async function seedPriorClosedCheckout(args: {
+      checkoutId: string;
+      ownerUid: string;
+      persons: CheckoutPersonEntity[];
+      closedAt: Date;
+      usageType?: UsageType;
+      entryFees?: number;
+    }): Promise<void> {
+      const db = getFirestore();
+      const ts = Timestamp.fromDate(args.closedAt);
+      const checkout: CheckoutEntity = {
+        userId: db.collection("users").doc(args.ownerUid),
+        status: "closed",
+        usageType: args.usageType ?? "regular",
+        created: ts,
+        workshopsVisited: ["holz"],
+        persons: args.persons,
+        modifiedBy: args.ownerUid,
+        modifiedAt: ts,
+        closedAt: ts,
+        summary: {
+          totalPrice: args.entryFees ?? 15,
+          entryFees: args.entryFees ?? 15,
+          machineCost: 0,
+          materialCost: 0,
+          tip: 0,
+          discountAmount: 0,
+        },
+      };
+      await db.collection("checkouts").doc(args.checkoutId).set(checkout);
+    }
+
+    it("(a) waives the fee on a second same-day checkout for the same user", async () => {
+      const uid = "dedup-same-day";
+      await seedUser(uid, "erwachsen");
+      const person = namedPerson(uid, ADULT);
+
+      // Prior visit closed a few hours ago today.
+      await seedPriorClosedCheckout({
+        checkoutId: "co-prior-sameday",
+        ownerUid: uid,
+        persons: [person],
+        closedAt: new Date(Date.now() - 4 * 3600 * 1000),
+      });
+
+      // New open checkout, no items — just the entry fee in play.
+      await seedCheckout("co-second-sameday", {
+        ownerUid: uid,
+        persons: [person],
+      });
+
+      const result = await call({
+        uid,
+        data: {
+          checkoutId: "co-second-sameday",
+          usageType: "regular" as UsageType,
+          persons: [person],
+          summary: { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 },
+        },
+      });
+
+      // Entry fee already paid today -> 0, not 15.
+      expect(result.amount).to.equal("0.00");
+      const checkout = await getCheckout("co-second-sameday");
+      expect(checkout.summary?.entryFees).to.equal(0);
+      expect(checkout.summary?.totalPrice).to.equal(0);
+      expect(checkout.persons[0].entryFeeWaivedToday).to.equal(true);
+    });
+
+    it("(b) charges the fee again the next business day (after 03:00)", async () => {
+      const uid = "dedup-next-day";
+      await seedUser(uid, "erwachsen");
+      const person = namedPerson(uid, ADULT);
+
+      // Prior visit closed ~28h ago — clearly a previous business day.
+      await seedPriorClosedCheckout({
+        checkoutId: "co-prior-yesterday",
+        ownerUid: uid,
+        persons: [person],
+        closedAt: new Date(Date.now() - 28 * 3600 * 1000),
+      });
+
+      await seedCheckout("co-today", { ownerUid: uid, persons: [person] });
+
+      const result = await call({
+        uid,
+        data: {
+          checkoutId: "co-today",
+          usageType: "regular" as UsageType,
+          persons: [person],
+          summary: { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 },
+        },
+      });
+
+      // Different business day -> fee charged again.
+      expect(result.amount).to.equal("15.00");
+      const checkout = await getCheckout("co-today");
+      expect(checkout.summary?.entryFees).to.equal(15);
+      expect(checkout.persons[0].entryFeeWaivedToday).to.not.equal(true);
+    });
+
+    it("(c) respects the 03:00 boundary: a 02:00 prior close is the previous day", async () => {
+      const uid = "dedup-boundary";
+      await seedUser(uid, "erwachsen");
+      const person = namedPerson(uid, ADULT);
+
+      // Pick a prior close at 02:00 Zurich. The current close (now) is the
+      // same calendar date but a different *business* day, so the fee must
+      // be charged again. To make this deterministic regardless of when the
+      // suite runs, place the prior close at 02:00 Zurich on *today's*
+      // calendar date and assert: if now is also before 03:00 Zurich they'd
+      // share a business day — so we instead anchor both via fixed instants
+      // by checking the helper's contract through a prior close that is
+      // unambiguously the prior business night (02:00 Zurich, ~today) only
+      // when "now" is past 03:00.
+      //
+      // Construct 02:00 Zurich for the current calendar day. CET/CEST aside,
+      // 00:00..01:00 UTC maps to 01:00..03:00 Zurich; 00:30 UTC is reliably
+      // before the 03:00 boundary. We seed the prior close at "today 00:30
+      // UTC" which is 02:30 Zurich (winter) / 02:30 Zurich is < 03:00, so it
+      // belongs to the previous business day relative to a daytime "now".
+      const now = new Date();
+      const priorClose = new Date(
+        Date.UTC(
+          now.getUTCFullYear(),
+          now.getUTCMonth(),
+          now.getUTCDate(),
+          0,
+          30,
+          0,
+        ),
+      );
+
+      await seedPriorClosedCheckout({
+        checkoutId: "co-prior-0200",
+        ownerUid: uid,
+        persons: [person],
+        closedAt: priorClose,
+      });
+
+      await seedCheckout("co-after-boundary", {
+        ownerUid: uid,
+        persons: [person],
+      });
+
+      const result = await call({
+        uid,
+        data: {
+          checkoutId: "co-after-boundary",
+          usageType: "regular" as UsageType,
+          persons: [person],
+          summary: { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 },
+        },
+      });
+
+      // The prior close (02:30 Zurich) belongs to the previous business
+      // day, so a daytime "now" close must re-charge the fee. This test is
+      // only meaningful when the suite runs after 03:00 Zurich; in the rare
+      // pre-03:00 run "now" shares the business day and the fee is waived.
+      const nowZurichHour = Number(
+        new Intl.DateTimeFormat("en-US", {
+          timeZone: "Europe/Zurich",
+          hour: "2-digit",
+          hour12: false,
+        }).format(now),
+      );
+      if (nowZurichHour >= 3) {
+        expect(result.amount).to.equal("15.00");
+      } else {
+        expect(result.amount).to.equal("0.00");
+      }
+    });
+
+    it("(d) always charges an anonymous person without a userRef", async () => {
+      const uid = "dedup-anon-person";
+      await seedUser(uid, "erwachsen");
+      // The owner is a real account, but the PERSON on the checkout has no
+      // userRef (a guest the account holder vouches for). Even with a prior
+      // same-day close for an anonymous person, the guest is always charged.
+      await seedPriorClosedCheckout({
+        checkoutId: "co-prior-anon",
+        ownerUid: uid,
+        persons: [ADULT], // no userRef
+        closedAt: new Date(Date.now() - 4 * 3600 * 1000),
+      });
+
+      await seedCheckout("co-guest", { ownerUid: uid, persons: [ADULT] });
+
+      const result = await call({
+        uid,
+        data: {
+          checkoutId: "co-guest",
+          usageType: "regular" as UsageType,
+          persons: [ADULT], // no userRef -> never deduped
+          summary: { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 },
+        },
+      });
+
+      expect(result.amount).to.equal("15.00");
+      const checkout = await getCheckout("co-guest");
+      expect(checkout.summary?.entryFees).to.equal(15);
+      expect(checkout.persons[0].entryFeeWaivedToday).to.not.equal(true);
+    });
+
+    it("(e) mixed group: waives the already-charged member, charges the new one", async () => {
+      const adultUid = "dedup-mixed-adult";
+      const kidUid = "dedup-mixed-kid";
+      await seedUser(adultUid, "erwachsen");
+      await seedUser(kidUid, "kind");
+      const adult = namedPerson(adultUid, ADULT);
+      const kid = namedPerson(kidUid, CHILD);
+
+      // Earlier today the adult visited alone and paid.
+      await seedPriorClosedCheckout({
+        checkoutId: "co-prior-adult-only",
+        ownerUid: adultUid,
+        persons: [adult],
+        closedAt: new Date(Date.now() - 4 * 3600 * 1000),
+      });
+
+      // Now the adult returns WITH the kid (kid's first visit today).
+      await seedCheckout("co-mixed", {
+        ownerUid: adultUid,
+        persons: [adult, kid],
+      });
+
+      const result = await call({
+        uid: adultUid,
+        data: {
+          checkoutId: "co-mixed",
+          usageType: "regular" as UsageType,
+          persons: [adult, kid],
+          summary: { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 },
+        },
+      });
+
+      // Adult waived (already paid 15 today), kid charged 7.5.
+      expect(result.amount).to.equal("7.50");
+      const checkout = await getCheckout("co-mixed");
+      expect(checkout.summary?.entryFees).to.equal(7.5);
+      expect(checkout.persons[0].entryFeeWaivedToday).to.equal(true); // adult
+      expect(checkout.persons[1].entryFeeWaivedToday).to.not.equal(true); // kid
+    });
+
+    it("does not waive when the prior same-day checkout itself waived the fee (no double-count chain)", async () => {
+      const uid = "dedup-chain";
+      await seedUser(uid, "erwachsen");
+      const person = namedPerson(uid, ADULT);
+
+      // A prior same-day checkout where the person was ALREADY waived
+      // (entryFeeWaivedToday) and billed 0 must not count as "paid today".
+      await seedPriorClosedCheckout({
+        checkoutId: "co-prior-waived",
+        ownerUid: uid,
+        persons: [{ ...person, entryFeeWaivedToday: true }],
+        closedAt: new Date(Date.now() - 4 * 3600 * 1000),
+        entryFees: 0,
+      });
+
+      await seedCheckout("co-after-waived", { ownerUid: uid, persons: [person] });
+
+      const result = await call({
+        uid,
+        data: {
+          checkoutId: "co-after-waived",
+          usageType: "regular" as UsageType,
+          persons: [person],
+          summary: { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 },
+        },
+      });
+
+      // No genuine payment happened earlier, so the fee is charged now.
+      expect(result.amount).to.equal("15.00");
+    });
+  });
 });

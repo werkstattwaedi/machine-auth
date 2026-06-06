@@ -49,6 +49,12 @@ export interface PersonEntryFee {
   name: string;
   userType: string;
   fee: number;
+  /**
+   * True when the entry fee was waived because the person already paid the
+   * daily usage fee earlier the same Zurich business day (issue #268). The
+   * renderer annotates the row instead of charging again.
+   */
+  waivedToday?: boolean;
 }
 
 /** Assembled data for a single checkout within an invoice */
