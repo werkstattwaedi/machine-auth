@@ -35,6 +35,7 @@ type CatalogSeed = Pick<
   | "active"
   | "userCanAdd"
   | "variants"
+  | "type"
 > & { description?: string | null }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -75,7 +76,15 @@ export default async function globalSetup() {
     slaLayerPrice: { none: 0.01, member: 0.008 },
     workshops: {
       holz: { label: "Holz", order: 1 },
-      metall: { label: "Metall", order: 2 },
+      // metall pins a MaCo-less machine (issue #105) so the cost step shows
+      // an always-visible hours input — exercised by
+      // visit-pinned-machines.spec.ts. Kept off `holz` so the existing
+      // visit-machine screenshots stay unaffected.
+      metall: {
+        label: "Metall",
+        order: 2,
+        pinnedMachines: ["e2e-machine-metall"],
+      },
       textil: { label: "Textil", order: 3 },
       keramik: { label: "Keramik", order: 4 },
       schmuck: { label: "Schmuck", order: 5 },
@@ -120,6 +129,27 @@ export default async function globalSetup() {
         id: "default",
         pricingModel: "area",
         unitPrice: { default: 10, member: 8 },
+      },
+    ],
+  })
+
+  // Pinned MaCo-less machine for the metall workshop (issue #105). Referenced
+  // by `config/pricing.workshops.metall.pinnedMachines`; renders an
+  // always-visible hours input on the cost step.
+  await seedCatalog("e2e-machine-metall", {
+    code: "9100",
+    name: "Standbohrmaschine",
+    workshops: ["metall"],
+    category: ["Maschinen"],
+    active: true,
+    userCanAdd: false,
+    type: "machine",
+    description: "Manuelle Stundenerfassung (kein MaCo)",
+    variants: [
+      {
+        id: "default",
+        pricingModel: "time",
+        unitPrice: { default: 30, member: 15 },
       },
     ],
   })

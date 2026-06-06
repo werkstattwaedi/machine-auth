@@ -25,7 +25,7 @@
     "test:web": "cd web && npm test",
     "test:web:integration": "npx tsx scripts/port-block.ts -- bash -c 'scripts/emulator-exec.sh --config \"$FIREBASE_E2E_CONFIG\" --only firestore \"cd web && npm run test:integration\"'",
     "test:web:e2e": "npx tsx scripts/port-block.ts -- bash -c 'scripts/emulator-exec.sh --config \"$FIREBASE_E2E_CONFIG\" --only firestore,auth,functions,storage \"cd web && npm run test:e2e\"'",
-    "test:web:e2e:update-snapshots": "npx tsx scripts/port-block.ts -- bash -c 'scripts/emulator-exec.sh --config \"$FIREBASE_E2E_CONFIG\" --only firestore,auth,functions,storage \"cd web/apps/checkout && npx playwright test --update-snapshots && cd ../admin && npx playwright test --update-snapshots\"'",
+    "test:web:e2e:update-snapshots": "npx tsx scripts/port-block.ts -- bash -c 'scripts/emulator-exec.sh --config \"$FIREBASE_E2E_CONFIG\" --only firestore,auth,functions,storage \"cd web/apps/checkout && ../../node_modules/.bin/playwright test --update-snapshots && cd ../admin && ../../node_modules/.bin/playwright test --update-snapshots\"'",
     "test:all": "npm run test:web && cd functions && npm test",
     "test:scripts": "npx tsx --test scripts/*.test.ts",
     "test:precommit:web": "npm run build:shared && cd web && npm run build && npm test && cd .. && npm run test:web:integration",
