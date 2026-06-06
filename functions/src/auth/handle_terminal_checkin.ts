@@ -8,11 +8,13 @@ import {
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import {
+  CheckoutEntity,
   MachineEntity,
   TokenEntity,
   UserEntity,
 } from "../types/firestore_entities";
 import { formatFullName } from "../util/username-utils";
+import { isSameBusinessDay } from "@oww/shared";
 
 // Auth reuse window in milliseconds (5 minutes)
 const AUTH_REUSE_WINDOW_MS = 5 * 60 * 1000;
@@ -134,6 +136,50 @@ export async function handleTerminalCheckin(
           },
         };
       }
+    }
+
+    // Prior-business-day open-checkout gate (issue #393).
+    //
+    // The web checkout UI shows a red "Offener Besuch vom …" banner when a
+    // user has an open checkout left over from a previous business day, but
+    // that banner is purely cosmetic — it never blocked the machine token-auth
+    // path. So a badge-in was authorized even with a stale open checkout. Add
+    // the server-side gate here: deny badge-in if any of the user's open
+    // checkouts was created on an earlier business day than now.
+    //
+    // "Business day" uses the shared 03:00 Europe/Zurich boundary helper
+    // (`isSameBusinessDay` from @oww/shared, issue #268) so the terminal and
+    // the web banner agree on what counts as "yesterday's" visit. Same-day
+    // open checkouts and users without any open checkout are unaffected.
+    const now = new Date();
+    const openCheckoutsQuery = await admin
+      .firestore()
+      .collection("checkouts")
+      .where("userId", "==", userDoc.ref)
+      .where("status", "==", "open")
+      .get();
+
+    const hasStaleOpenCheckout = openCheckoutsQuery.docs.some((doc) => {
+      const checkout = doc.data() as CheckoutEntity;
+      const created = checkout.created?.toDate();
+      // Missing `created` is treated as stale to fail safe: an open checkout
+      // we cannot date should not silently authorize a new badge-in.
+      return !created || !isSameBusinessDay(created, now);
+    });
+
+    if (hasStaleOpenCheckout) {
+      logger.warn("User has a stale open checkout from a prior business day", {
+        userId: userDoc.id,
+        machineId,
+      });
+      return {
+        result: {
+          $case: "rejected",
+          rejected: {
+            message: "Bitte schliesse zuerst deinen offenen Besuch ab.",
+          },
+        },
+      };
     }
 
     // Check for recent completed authentication that can be reused
