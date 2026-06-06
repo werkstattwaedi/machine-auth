@@ -38,6 +38,7 @@ process.env.RAISENOW_PAYLINK_SOLUTION_ID =
   process.env.RAISENOW_PAYLINK_SOLUTION_ID ?? "test-solution";
 
 import { expect } from "chai";
+import { isSameBusinessDay } from "@oww/shared";
 import { Timestamp } from "firebase-admin/firestore";
 import type { CallableRequest } from "firebase-functions/v2/https";
 import {
@@ -1546,21 +1547,19 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
         },
       });
 
-      // The prior close (02:30 Zurich) belongs to the previous business
-      // day, so a daytime "now" close must re-charge the fee. This test is
-      // only meaningful when the suite runs after 03:00 Zurich; in the rare
-      // pre-03:00 run "now" shares the business day and the fee is waived.
-      const nowZurichHour = Number(
-        new Intl.DateTimeFormat("en-US", {
-          timeZone: "Europe/Zurich",
-          hour: "2-digit",
-          hour12: false,
-        }).format(now),
-      );
-      if (nowZurichHour >= 3) {
-        expect(result.amount).to.equal("15.00");
-      } else {
+      // The fee is waived iff the prior close shares a business day with the
+      // actual close instant ("now"). Compute the expectation from the same
+      // `@oww/shared` helper the production code uses so the assertion is
+      // deterministic in every wall-clock window. The previous hand-rolled
+      // `nowZurichHour >= 3` heuristic was wrong whenever "now"'s Zurich
+      // calendar date differs from its UTC date (late-evening UTC =
+      // early-morning Zurich): the prior close, anchored to now's *UTC* date
+      // at 00:30 UTC, then lands on a different business day than the hour
+      // check predicted, making the test flaky overnight (issue #393 follow-up).
+      if (isSameBusinessDay(priorClose, now)) {
         expect(result.amount).to.equal("0.00");
+      } else {
+        expect(result.amount).to.equal("15.00");
       }
     });
 
