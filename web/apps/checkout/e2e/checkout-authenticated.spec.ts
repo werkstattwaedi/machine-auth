@@ -3,12 +3,14 @@
 
 import { test, expect } from "@playwright/test"
 import {
+  clearCheckoutsDeep,
   clearCollections,
   getBillDocs,
   getCheckoutDocs,
+  seedOpenCheckoutWithMembership,
   waitForLoginCode,
 } from "./helpers"
-import { AUTH_USER_EMAIL } from "./global-setup"
+import { AUTH_USER_EMAIL, AUTH_USER_ID } from "./global-setup"
 
 test.beforeEach(async () => {
   // loginCodes clearing resets the per-email 60 s rate limit between runs.
@@ -164,5 +166,39 @@ test.describe("Authenticated checkout", () => {
     await headerLink.click()
     await page.waitForURL("**/account/usage", { timeout: 10_000 })
     expect(new URL(page.url()).pathname).toBe("/account/usage")
+  })
+
+  // Regression for #387: visiting the root dispatcher while the signed-in
+  // user already has an open (today) checkout must land on /visit — never
+  // /checkin. The bug was a one-render stale-loading race in useCollection:
+  // the open-checkout query read as "loaded, empty" on the render where the
+  // user ref first became non-null, so the dispatcher bounced to /checkin.
+  test("root dispatcher routes to /visit when an open checkout exists", async ({
+    page,
+  }) => {
+    // ── Sign in via email + code ──
+    await page.goto("/login")
+    await page.getByTestId("login-email-input").fill(AUTH_USER_EMAIL)
+    await page.getByTestId("login-email-submit").click()
+    await expect(page.getByTestId("login-code-stage")).toBeVisible({
+      timeout: 5000,
+    })
+    const entry = await waitForLoginCode(AUTH_USER_EMAIL)
+    expect(entry).toBeTruthy()
+    await page.getByTestId("login-code-input").fill(entry!.code)
+    await page.getByTestId("login-code-submit").click()
+    await page.waitForURL((url) => !url.pathname.startsWith("/login"), {
+      timeout: 10_000,
+    })
+
+    // Seed an open, same-day checkout owned by the signed-in user.
+    await seedOpenCheckoutWithMembership(AUTH_USER_ID)
+
+    // Hit the root dispatcher. It must settle on /visit, not /checkin.
+    await page.goto("/")
+    await page.waitForURL("**/visit", { timeout: 10_000 })
+    expect(new URL(page.url()).pathname).toBe("/visit")
+
+    await clearCheckoutsDeep()
   })
 })
