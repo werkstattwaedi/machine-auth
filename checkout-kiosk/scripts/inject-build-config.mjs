@@ -14,9 +14,9 @@
 // chance of forgetting to set an env var after a restart.
 //
 // `--prod` profile fills in production defaults from two sources:
-//   * URLs + printer host come from the operations repo's
-//     `config.jsonc` (the same file `scripts/generate-env.ts` reads,
-//     so admin/checkout web + Electron + functions stay in sync).
+//   * URLs come from the operations repo's `config.jsonc` (the same
+//     file `scripts/generate-env.ts` reads, so admin/checkout web +
+//     Electron + functions stay in sync).
 //   * Bearer comes from Google Secret Manager (`KIOSK_BEARER_KEY`,
 //     same secret Cloud Functions reads server-side).
 // Explicit env vars always win, so a staging URL + prod bearer combo
@@ -69,12 +69,6 @@ if (!bearer && !isDev) {
   )
 }
 
-// ── Printer host (optional; admin-only in practice) ─────────────────
-//   "" / unset → no printer → admin's "print" feature stays hidden.
-//   "host"     → port 9100.
-//   "host:N"   → explicit port.
-const printerHost = process.env.BRIDGE_PRINTER_HOST || opsDefaults?.printerHost || ""
-
 const content = `// Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
@@ -88,15 +82,13 @@ import type { BridgeMode } from "./types"
 export const BRIDGE_MODE: BridgeMode = ${JSON.stringify(mode)}
 export const BRIDGE_URL: string = ${JSON.stringify(url)}
 export const BRIDGE_BEARER_KEY: string = ${JSON.stringify(bearer)}
-export const BRIDGE_PRINTER_HOST: string = ${JSON.stringify(printerHost)}
 `
 
 writeFileSync(target, content)
 const redactedBearer = bearer ? `(set, ${bearer.length} chars)` : "(empty)"
-const printerLabel = printerHost ? printerHost : "(unset)"
 console.log(
   `inject-build-config: profile=${profile} mode=${mode} url=${url} ` +
-    `bearer=${redactedBearer} printer=${printerLabel}`,
+    `bearer=${redactedBearer}`,
 )
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -110,7 +102,7 @@ function loadProdDefaults(mode) {
   if (!existsSync(configPath)) {
     fail(
       `Operations config not found at ${configPath}. The --prod profile ` +
-        `reads URLs + printer host from the operations repo. Clone it as ` +
+        `reads URLs from the operations repo. Clone it as ` +
         `a sibling of machine-auth/, or set OPERATIONS_CONFIG_DIR.`,
     )
   }
@@ -122,10 +114,8 @@ function loadProdDefaults(mode) {
   }
   // admin
   const adminDomain = readPath(cfg, "web.adminDomain", configPath)
-  const printerHost = readPath(cfg, "electron.printerHost", configPath)
   return {
     url: `https://${adminDomain}/`,
-    printerHost,
   }
 }
 

@@ -35,6 +35,7 @@ import type {
   MembershipInviteDoc,
   OperationsLogDoc,
   PermissionDoc,
+  PrintJobDoc,
   PriceListDoc,
   PricingConfigDoc,
   TokenDoc,
@@ -297,6 +298,21 @@ export function operationsLogCollection(
   db: Firestore,
 ): CollectionReference<OperationsLogDoc> {
   return collection(db, "operations_log") as CollectionReference<OperationsLogDoc>
+}
+
+// ── printJobs ────────────────────────────────────────────────────────────
+
+export function printJobsCollection(
+  db: Firestore,
+): CollectionReference<PrintJobDoc> {
+  return collection(db, "printJobs") as CollectionReference<PrintJobDoc>
+}
+
+export function printJobRef(
+  db: Firestore,
+  id: string,
+): DocumentReference<PrintJobDoc> {
+  return doc(db, "printJobs", id) as DocumentReference<PrintJobDoc>
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────

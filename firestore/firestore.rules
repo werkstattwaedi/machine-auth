@@ -381,6 +381,20 @@ service cloud.firestore {
       }
     }
 
+    // Label print jobs. Admins enqueue jobs from the browser; the on-LAN
+    // gateway (maco_gateway) picks them up via a Firestore service account
+    // (which bypasses these rules) and writes the terminal status back.
+    // Clients may only create `queued` jobs and read status — never update
+    // or delete (status writes are the gateway's; cleanup is via TTL).
+    match /printJobs/{jobId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin()
+        && request.resource.data.status == 'queued'
+        && request.resource.data.bytesB64 is string
+        && request.resource.data.createdBy == request.auth.uid;
+      allow update, delete: if false;
+    }
+
     // Server-only collections (Cloud Functions writes via Admin SDK bypass
     // these rules; explicit deny for any client attempt).
     match /authentications/{authId} {

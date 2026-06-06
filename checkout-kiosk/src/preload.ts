@@ -50,7 +50,6 @@ const bridge: Bridge = {
       nfcCallbacks.delete(cb)
     }
   },
-  print: (bytes) => ipcRenderer.invoke("bridge:print", bytes),
 }
 
 contextBridge.exposeInMainWorld("bridge", bridge)

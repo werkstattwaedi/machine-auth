@@ -8,8 +8,14 @@
  * matching section of the P-touch Template Command Reference.
  *
  * The printer pushes one of these unbidden when an error occurs during
- * a print job — that's the reply path our bridge exploits to translate
- * "label didn't print" into a structured German toast.
+ * a print job — that's the reply path exploited to translate "label
+ * didn't print" into a structured German error.
+ *
+ * NOTE: the runtime consumer is now the gateway's Python port
+ * (`maco_gateway/maco_gateway/printer_status.py`), which drives the printer
+ * after the Electron bridge's TCP path was removed. This TS module is kept
+ * as the canonical spec (and any future TS-side reuse); the German strings
+ * here and in the Python port must stay in sync.
  */
 
 export type PrinterStatusType =

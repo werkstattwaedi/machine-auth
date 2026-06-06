@@ -242,6 +242,7 @@ The MaCo gateway uses a secret stored in **Google Cloud Secret Manager** (separa
 | GCP Secret | Description | How to Generate |
 |------------|-------------|-----------------|
 | `GATEWAY_ASCON_MASTER_KEY` | ASCON encryption key between terminal and gateway | `openssl rand -hex 16` |
+| `GATEWAY_FIRESTORE_SA` | Service-account JSON key for the label print worker (Firestore listener). Only needed when a printer host is configured. | See "Label printing" below |
 
 This is distinct from the Firebase Functions secrets:
 - `GATEWAY_ASCON_MASTER_KEY` — shared secret for ASCON-encrypted communication between the terminal firmware and the gateway
@@ -258,6 +259,38 @@ echo -n "YOUR_HEX_KEY" | gcloud secrets create GATEWAY_ASCON_MASTER_KEY --data-f
 
 # Or update an existing secret
 echo -n "YOUR_HEX_KEY" | gcloud secrets versions add GATEWAY_ASCON_MASTER_KEY --data-file=-
+```
+
+### Label printing (Firestore print worker)
+
+The admin web app enqueues label print jobs to the `printJobs` Firestore
+collection; the gateway picks them up via a Firestore listener and drives the
+Brother label printer. This needs two things, **only when a printer is
+configured**:
+
+1. **Printer host** in the operations config — `gateway.printerHost`
+   (falls back to the legacy `electron.printerHost`), e.g.
+   `labeler.internal:9100`. When unset, `deploy-gateway.ts` skips the print
+   worker entirely.
+2. **A service-account key** with Firestore access, stored in Secret Manager
+   as `GATEWAY_FIRESTORE_SA`. The deploy writes it to the Pi as
+   `service-account.json` and points `GOOGLE_APPLICATION_CREDENTIALS` at it.
+
+```bash
+# One-time: create a dedicated service account with Firestore (datastore)
+# access. Firestore has no per-collection IAM, so this grants full-DB
+# read/write — use a dedicated, revocable account.
+gcloud iam service-accounts create maco-gateway-printer \
+  --display-name="MaCo Gateway print worker"
+gcloud projects add-iam-policy-binding <your-project-id> \
+  --member="serviceAccount:maco-gateway-printer@<your-project-id>.iam.gserviceaccount.com" \
+  --role="roles/datastore.user"
+
+# Mint a key and store the JSON in Secret Manager.
+gcloud iam service-accounts keys create /tmp/maco-gateway-printer.json \
+  --iam-account=maco-gateway-printer@<your-project-id>.iam.gserviceaccount.com
+gcloud secrets create GATEWAY_FIRESTORE_SA --data-file=/tmp/maco-gateway-printer.json
+rm /tmp/maco-gateway-printer.json   # the key now lives only in Secret Manager
 ```
 
 ### Local Development

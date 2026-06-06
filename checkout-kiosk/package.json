@@ -1,7 +1,7 @@
 {
   "name": "checkout-kiosk",
   "version": "1.0.0",
-  "description": "Electron hardware bridge for OWW kiosk + admin (NFC, future printer). Same codebase produces two named binaries via build-time mode injection.",
+  "description": "Electron hardware bridge for OWW kiosk + admin (NFC). Same codebase produces two named binaries via build-time mode injection.",
   "main": "dist/main.js",
   "scripts": {
     "inject-build-config": "node scripts/inject-build-config.mjs",

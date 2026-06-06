@@ -22,6 +22,12 @@ py_library(
         "maco_gateway/firebase_client.py",
         "maco_gateway/gateway_service.py",
         "maco_gateway/key_store.py",
+        # Label printing (#313 follow-up). The google-cloud-firestore import
+        # is deferred to PrintWorker.run, so the Bazel target needs no extra
+        # pip dep unless a printer is actually configured at runtime.
+        "maco_gateway/print_worker.py",
+        "maco_gateway/printer.py",
+        "maco_gateway/printer_status.py",
     ],
     imports = ["."],  # Makes maco_gateway package importable
     deps = [

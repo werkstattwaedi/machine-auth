@@ -11,7 +11,6 @@ import {
 import path from "node:path"
 import { resolveConfig } from "./config"
 import { startNfc } from "./bridge/nfc"
-import { sendToPrinter } from "./bridge/printer"
 import type { NfcTagEvent } from "./types"
 
 const config = resolveConfig()
@@ -130,7 +129,7 @@ function dispatchNfc(event: NfcTagEvent): void {
 // structured clone.
 const bridgeBootstrap = {
   mode: config.mode,
-  features: ["nfc", ...(config.printer ? ["print"] : [])] as readonly string[],
+  features: ["nfc"] as readonly string[],
 }
 
 // IPC handles backing the `window.bridge.*` preload API
@@ -143,19 +142,6 @@ ipcMain.handle("bridge:reset-session", async () => {
   if (config.mode !== "kiosk") return
   await clearSession()
 })
-ipcMain.handle(
-  "bridge:print",
-  async (_event, bytes: Uint8Array | ArrayBuffer) => {
-    if (!config.printer) {
-      throw new Error(
-        "Printer not configured (BRIDGE_PRINTER_HOST is unset)"
-      )
-    }
-    const buf =
-      bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)
-    return sendToPrinter(config.printer, buf)
-  }
-)
 
 app.whenReady().then(async () => {
   // Always start kiosk from a clean session — any leftover IndexedDB /
