@@ -11,7 +11,9 @@ export interface PositionRow {
   title: string
   /** Optional sub-line under the title (e.g. raw form input "60×40 cm"). */
   subtitle: string | null
-  menge: string
+  /** Usually a formatted string; a ReactNode lets a row put an editable
+   *  control here (e.g. the pinned machine-hours input, issue #105). */
+  menge: ReactNode
   kosten: string
   preis: string
   /**

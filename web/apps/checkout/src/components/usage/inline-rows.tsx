@@ -1,7 +1,7 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { useState, useEffect, useRef, Fragment } from "react"
+import { useState, useEffect, useRef, useMemo, Fragment } from "react"
 import { formatCHF } from "@modules/lib/format"
 import { primaryVariant } from "@modules/lib/pricing"
 import { Plus } from "lucide-react"
@@ -331,6 +331,104 @@ export function WorkshopInlineSection({
     setExpandedNfc((m) => ({ ...m, [id]: !m[id] }))
   }
 
+  // Pinned machines (issue #105): an always-visible hours input per MaCo-less
+  // machine, rendered as ordinary rows in the shared "Maschinen / Werkzeuge"
+  // table (Menge holds the input, Kosten the /Std. rate, Preis the live
+  // total). Hours text lives here (keyed by catalogId) so Preis updates as
+  // the user types; it's synced from the committed item while the field is
+  // unfocused (SpendeCard pattern) and committed on blur.
+  const pinnedItemByCatalog = useMemo(() => {
+    const m = new Map<string, CheckoutItemLocal>()
+    for (const i of machineItems) if (i.catalogId) m.set(i.catalogId, i)
+    return m
+  }, [machineItems])
+  const [pinnedHours, setPinnedHours] = useState<Record<string, string>>({})
+  const pinnedFocusRef = useRef<string | null>(null)
+  useEffect(() => {
+    setPinnedHours((prev) => {
+      let changed = false
+      const next = { ...prev }
+      for (const cat of pinnedCatalog) {
+        if (pinnedFocusRef.current === cat.id) continue
+        const q = pinnedItemByCatalog.get(cat.id)?.quantity ?? 0
+        const canonical = q > 0 ? String(q) : ""
+        const parsed = parseFloat((prev[cat.id] ?? "").replace(",", ".")) || 0
+        if (parsed !== q) {
+          next[cat.id] = canonical
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [pinnedItemByCatalog, pinnedCatalog])
+
+  const commitPinned = (cat: CatalogItem, unitPrice: number) => {
+    pinnedFocusRef.current = null
+    const variant = primaryVariant(cat)
+    const hours = Math.max(
+      0,
+      parseFloat((pinnedHours[cat.id] ?? "").replace(",", ".")) || 0,
+    )
+    const total = Math.round(hours * unitPrice * 100) / 100
+    const existing = pinnedItemByCatalog.get(cat.id)
+    if (hours <= 0) {
+      if (existing) callbacks.removeItem(existing.id)
+      setPinnedHours((p) => ({ ...p, [cat.id]: "" }))
+      return
+    }
+    if (existing) {
+      if (existing.quantity === hours) return
+      callbacks.updateItem(existing.id, {
+        ...existing,
+        quantity: hours,
+        unitPrice,
+        totalPrice: total,
+        formInputs: [{ quantity: hours, unit: "h" }],
+      })
+    } else {
+      callbacks.addItem({
+        id: crypto.randomUUID(),
+        workshop: workshopId,
+        description: cat.name,
+        origin: "manual",
+        type: "machine",
+        catalogId: cat.id,
+        variantId: variant?.id ?? "default",
+        pricingModel: variant?.pricingModel ?? "time",
+        quantity: hours,
+        unitPrice,
+        totalPrice: total,
+        formInputs: [{ quantity: hours, unit: "h" }],
+      })
+    }
+  }
+
+  const pinnedRows: PositionRow[] = pinnedCatalog.map((cat) => {
+    const variant = primaryVariant(cat)
+    const unitPrice = variant ? priceForTier(variant.unitPrice, discountLevel) : 0
+    const text = pinnedHours[cat.id] ?? ""
+    const hours = Math.max(0, parseFloat(text.replace(",", ".")) || 0)
+    const total = Math.round(hours * unitPrice * 100) / 100
+    return {
+      key: cat.id,
+      title: cat.name,
+      subtitle: null,
+      menge: (
+        <PinnedHoursField
+          value={text}
+          label={cat.name}
+          onFocus={() => {
+            pinnedFocusRef.current = cat.id
+          }}
+          onChange={(v) => setPinnedHours((p) => ({ ...p, [cat.id]: v }))}
+          onBlur={() => commitPinned(cat, unitPrice)}
+        />
+      ),
+      kosten: `${unitPrice.toFixed(2)}/Std.`,
+      preis: total.toFixed(2),
+    }
+  })
+
   return (
     <section
       ref={sectionRef}
@@ -343,39 +441,16 @@ export function WorkshopInlineSection({
 
       {showMachineBox && (
         <div className="rounded-md border border-border bg-card shadow-sm">
-          {nfcItems.length > 0 && (
-            <div className="px-3 py-3 sm:px-4">
-              <PositionTable
-                firstColLabel="Maschinen / Werkzeuge"
-                rows={nfcRows}
-                onToggle={checkoutId ? toggleNfc : undefined}
-              />
-            </div>
-          )}
-          {pinnedCatalog.length > 0 && (
-            <div
-              className={
-                "px-3 py-3 sm:px-4" +
-                (nfcItems.length > 0 ? " border-t border-border/60" : "")
-              }
-            >
-              <PinnedMachineLabelRow />
-              <ul className="mt-1">
-                {pinnedCatalog.map((cat) => (
-                  <PinnedMachineRow
-                    key={cat.id}
-                    workshopId={workshopId}
-                    catalog={cat}
-                    discountLevel={discountLevel}
-                    existing={machineItems.find(
-                      (i) => i.catalogId === cat.id,
-                    )}
-                    callbacks={callbacks}
-                  />
-                ))}
-              </ul>
-            </div>
-          )}
+          <div className="px-3 py-3 sm:px-4">
+            {/* NFC (session-expandable) + pinned manual-hour rows share one
+                table so machine usage reads consistently regardless of how
+                it was captured (issue #105). */}
+            <PositionTable
+              firstColLabel="Maschinen / Werkzeuge"
+              rows={[...nfcRows, ...pinnedRows]}
+              onToggle={nfcItems.length > 0 && checkoutId ? toggleNfc : undefined}
+            />
+          </div>
         </div>
       )}
 
@@ -438,117 +513,50 @@ export function WorkshopInlineSection({
 // removes it.
 // ---------------------------------------------------------------------------
 
-function PinnedMachineLabelRow() {
-  return (
-    <div className="grid grid-cols-[1fr_auto_auto] items-center gap-3 px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground sm:gap-4">
-      <span>Maschinennutzung</span>
-      <span className="text-right">Stunden</span>
-      <span className="min-w-[70px] text-right">Preis</span>
-    </div>
-  )
-}
+/** Digits with at most one `.`/`,` separator and decimals; empty allowed so
+ *  the field can be cleared. A `type="text"` input is used deliberately:
+ *  `type="number"` returns "" from `e.target.value` mid-decimal (e.g. "1."),
+ *  which silently swallowed fractional hours (issue #105). */
+const HOURS_TYPING_PATTERN = /^(?:|\d*(?:[.,]\d*)?)$/
 
-function PinnedMachineRow({
-  workshopId,
-  catalog,
-  discountLevel,
-  existing,
-  callbacks,
+/**
+ * Editable hours cell for a pinned machine (issue #105), rendered in the
+ * shared PositionTable's Menge column so it lines up with NFC machine rows
+ * (which show "X Min") and material rows. Controlled by WorkshopInlineSection
+ * — the Preis column reflects the live value — and commits on blur. Accepts
+ * fractional hours (e.g. 1.5).
+ */
+function PinnedHoursField({
+  value,
+  label,
+  onFocus,
+  onChange,
+  onBlur,
 }: {
-  workshopId: WorkshopId
-  catalog: CatalogItem
-  discountLevel: DiscountLevel
-  existing?: CheckoutItemLocal
-  callbacks: ItemCallbacks
+  value: string
+  label: string
+  onFocus: () => void
+  onChange: (v: string) => void
+  onBlur: () => void
 }) {
-  const variant = primaryVariant(catalog)
-  const unitPrice = variant ? priceForTier(variant.unitPrice, discountLevel) : 0
-  const pricingModel = variant?.pricingModel ?? "time"
-
-  // Local text decoupled from the stored item so typing survives the
-  // snapshot round-trip; synced from the stored quantity while unfocused
-  // (mirrors the SpendeCard pattern in step-checkout).
-  const [text, setText] = useState(() =>
-    existing && existing.quantity > 0 ? String(existing.quantity) : "",
-  )
-  const focusedRef = useRef(false)
-  const storedHours = existing?.quantity ?? 0
-  useEffect(() => {
-    if (focusedRef.current) return
-    const canonical = storedHours > 0 ? String(storedHours) : ""
-    const parsed = parseFloat(text.replace(",", ".")) || 0
-    if (parsed !== storedHours) setText(canonical)
-  }, [storedHours, text])
-
-  const hours = Math.max(0, parseFloat(text.replace(",", ".")) || 0)
-  const total = Math.round(hours * unitPrice * 100) / 100
-
-  const commit = () => {
-    focusedRef.current = false
-    if (hours <= 0) {
-      if (existing) callbacks.removeItem(existing.id)
-      setText("")
-      return
-    }
-    if (existing) {
-      if (existing.quantity === hours) return
-      callbacks.updateItem(existing.id, {
-        ...existing,
-        quantity: hours,
-        unitPrice,
-        totalPrice: total,
-        formInputs: [{ quantity: hours, unit: "h" }],
-      })
-    } else {
-      callbacks.addItem({
-        id: crypto.randomUUID(),
-        workshop: workshopId,
-        description: catalog.name,
-        origin: "manual",
-        type: "machine",
-        catalogId: catalog.id,
-        variantId: variant?.id ?? "default",
-        pricingModel,
-        quantity: hours,
-        unitPrice,
-        totalPrice: total,
-        formInputs: [{ quantity: hours, unit: "h" }],
-      })
-    }
-  }
-
   return (
-    <li className="grid grid-cols-[1fr_auto_auto] items-center gap-3 border-b border-dotted border-border py-2 last:border-b-0 sm:gap-4">
-      <div className="min-w-0">
-        <div className="truncate font-heading text-sm font-semibold">
-          {catalog.name}
-        </div>
-        <div className="text-xs text-muted-foreground tabular-nums">
-          {formatCHF(unitPrice)}/Std.
-        </div>
-      </div>
+    <span className="inline-flex items-center justify-end gap-1">
       <input
-        type="number"
-        min="0"
-        step="any"
+        type="text"
         inputMode="decimal"
-        value={text}
-        aria-label={`Stunden ${catalog.name}`}
-        onFocus={() => {
-          focusedRef.current = true
-        }}
+        value={value}
+        aria-label={`Stunden ${label}`}
+        placeholder="0"
+        onFocus={onFocus}
         onChange={(e) => {
           const raw = e.target.value
-          if (parseFloat(raw) < 0) return
-          setText(raw)
+          if (!HOURS_TYPING_PATTERN.test(raw)) return
+          onChange(raw)
         }}
-        onBlur={commit}
-        placeholder="0"
-        className="h-9 w-20 rounded-none border border-[#ccc] bg-background px-2 py-1 text-right text-sm tabular-nums outline-none focus:border-cog-teal"
+        onBlur={onBlur}
+        className="h-8 w-16 rounded-[3px] border border-[#ccc] bg-background px-2 text-right text-sm tabular-nums text-foreground outline-none focus:border-cog-teal"
       />
-      <span className="min-w-[70px] text-right text-sm font-semibold tabular-nums">
-        {total > 0 ? total.toFixed(2) : ""}
-      </span>
-    </li>
+      <span className="text-xs text-muted-foreground">Std.</span>
+    </span>
   )
 }
