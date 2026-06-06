@@ -202,10 +202,19 @@ async function assembleInvoiceData(
     const data = doc.data() as CheckoutEntity;
     const items = checkoutItems[i];
 
+    // Daily-fee dedup (issue #268): a person flagged `entryFeeWaivedToday`
+    // already paid the daily usage fee earlier the same Zurich business
+    // day, so the close path zeroed their contribution to the bill total.
+    // Re-derive their fee as 0 here too so the PDF's per-person breakdown
+    // stays consistent with the billed amount; `waivedToday` lets the
+    // renderer annotate the row ("heute bereits abgerechnet").
     const personEntryFees: PersonEntryFee[] = data.persons.map((person) => ({
       name: person.name,
       userType: person.userType,
-      fee: calculateEntryFee(person.userType, data.usageType, configFees),
+      fee: person.entryFeeWaivedToday
+        ? 0
+        : calculateEntryFee(person.userType, data.usageType, configFees),
+      waivedToday: person.entryFeeWaivedToday === true,
     }));
     const entryFees = personEntryFees.reduce((sum, pf) => sum + pf.fee, 0);
 

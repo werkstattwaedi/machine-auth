@@ -342,6 +342,52 @@ describe("recomputeSummary", () => {
     expect(summary.totalPrice).to.equal(34);
     expect(summary.discountAmount).to.equal(0);
   });
+
+  // Issue #268: a person flagged `entryFeeWaivedToday` already paid the
+  // daily usage fee earlier the same business day, so they contribute
+  // nothing to the entry-fee section (neither raw nor net).
+  describe("issue #268: daily-fee dedup (entryFeeWaivedToday)", () => {
+    it("contributes zero entry fee for a waived person", () => {
+      const summary = recomputeSummary(
+        [{ ...adultPerson, entryFeeWaivedToday: true }],
+        "regular",
+        [item("manual", 4.5)],
+        { erwachsen: { regular: 15 } },
+        0,
+      );
+      // Entry fee zeroed; only the material item remains.
+      expect(summary.entryFees).to.equal(0);
+      expect(summary.totalPrice).to.equal(4.5);
+    });
+
+    it("charges only the non-waived persons in a mixed group", () => {
+      const summary = recomputeSummary(
+        [
+          { ...adultPerson, entryFeeWaivedToday: true }, // already paid today
+          childPerson, // first visit today
+        ],
+        "regular",
+        [],
+        { erwachsen: { regular: 15 }, kind: { regular: 7.5 } },
+        0,
+      );
+      // Adult waived (0), child charged (7.5).
+      expect(summary.entryFees).to.equal(7.5);
+      expect(summary.totalPrice).to.equal(7.5);
+    });
+
+    it("charges everyone when nobody is waived", () => {
+      const summary = recomputeSummary(
+        [adultPerson, childPerson],
+        "regular",
+        [],
+        { erwachsen: { regular: 15 }, kind: { regular: 7.5 } },
+        0,
+      );
+      expect(summary.entryFees).to.equal(22.5);
+      expect(summary.totalPrice).to.equal(22.5);
+    });
+  });
 });
 
 describe("assertUsageTypeAllowed (issue #284 loophole guards)", () => {

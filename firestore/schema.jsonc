@@ -130,7 +130,14 @@
         // Optional link to a known user account. Set when the person was
         // picked from the signed-in user's family roster (so the visit is
         // attributed to a real account — including child accounts).
-        "userRef": "DocumentReference | null"
+        "userRef": "DocumentReference | null",
+        // Optional. True when this named person already paid the daily usage
+        // fee on the same Zurich business day (boundary 03:00) via an earlier
+        // closed checkout, so their entry fee is waived for this one
+        // (issue #268). Derived at close-time from prior bills; only ever set
+        // for persons carrying a userRef (anonymous/guest persons are always
+        // charged).
+        "entryFeeWaivedToday": "boolean (optional)"
       }],
       "modifiedBy": "string | null", // Firebase Auth UID
       "modifiedAt": "timestamp",

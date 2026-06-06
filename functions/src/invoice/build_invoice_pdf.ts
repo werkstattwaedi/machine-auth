@@ -538,7 +538,13 @@ function renderCheckoutSection(
     y = renderTableHeader(doc, y);
 
     for (const pf of checkout.personEntryFees) {
-      const label = `${pf.name} (${USER_TYPE_LABELS[pf.userType] ?? pf.userType})`;
+      // Issue #268: a person who already paid the daily usage fee earlier
+      // the same business day is billed 0 here — spell out *why* so the
+      // zero doesn't read as an error.
+      const baseLabel = `${pf.name} (${USER_TYPE_LABELS[pf.userType] ?? pf.userType})`;
+      const label = pf.waivedToday
+        ? `${baseLabel} — heute bereits abgerechnet`
+        : baseLabel;
       y = renderItemRow(doc, y, label, "", 1, pf.fee, pf.fee);
     }
     y = renderSubtotalRow(doc, y, checkout.entryFees);

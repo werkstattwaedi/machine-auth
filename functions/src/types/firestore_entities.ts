@@ -178,6 +178,16 @@ export interface CheckoutPersonEntity {
   // Set when picked from the signed-in user's family roster — links the
   // visit to a real account (incl. child accounts).
   userRef?: DocumentReference | null;
+
+  // True when this (named) person already paid the daily usage fee on the
+  // same Zurich business day (boundary 03:00) via an earlier closed
+  // checkout, so their entry fee is waived for this one (issue #268). Only
+  // ever set for persons that carry a `userRef` (anonymous/guest persons
+  // are always charged). Derived authoritatively at checkout-close time
+  // from prior bills — there is no separate denormalized "charged today"
+  // record. The invoice PDF reads this flag so the per-person fee it
+  // re-derives stays consistent with the billed total.
+  entryFeeWaivedToday?: boolean;
 }
 
 export interface CheckoutSummaryEntity {
