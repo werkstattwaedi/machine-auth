@@ -30,11 +30,19 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
 const FUNCTIONS = join(ROOT, "functions");
 const PKG_JSON_PATH = join(FUNCTIONS, "package.json");
+const LOCK_PATH = join(ROOT, "package-lock.json");
 
 const originalPkgJson = readFileSync(PKG_JSON_PATH, "utf-8");
+// Snapshot the lockfile too: any `npm install` while package.json points
+// @oww/shared at the `file:` tarball rewrites the lock to pin
+// functions/node_modules/@oww/shared at that tarball. Restoring only
+// package.json leaves that pin, so later installs keep re-extracting the
+// stale copy (the deploy-state bug). Restore both.
+const originalLock = readFileSync(LOCK_PATH, "utf-8");
 
 function cleanup(): void {
   writeFileSync(PKG_JSON_PATH, originalPkgJson);
+  writeFileSync(LOCK_PATH, originalLock);
   for (const entry of readdirSync(FUNCTIONS)) {
     if (entry.startsWith("oww-shared-") && entry.endsWith(".tgz")) {
       try {
