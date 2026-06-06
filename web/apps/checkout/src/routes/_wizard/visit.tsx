@@ -41,6 +41,7 @@ import { WorkshopSectionWithCatalog } from "@/components/usage/workshop-section-
 import { MembershipInlineSection } from "@/components/usage/membership-inline-section"
 import { ScanFab } from "@/components/qr-scanner/scan-fab"
 import { useWizardContext } from "@/components/checkout/wizard-context"
+import { capturePickerScrollAnchor } from "@/components/usage/picker-scroll-anchor"
 
 export const Route = createFileRoute("/_wizard/visit")({
   component: VisitRoute,
@@ -363,13 +364,17 @@ function VisitRoute() {
               pinnedCatalog={pinnedCatalogByWorkshop.get(wsId) ?? []}
               checkoutId={checkoutId}
               sectionRef={registerSectionRef(wsId)}
-              onAddMaterial={() =>
+              onAddMaterial={() => {
+                // Snapshot the page scroll before navigating so the picker
+                // can restore it — the Sheet's scroll-lock otherwise jumps
+                // /visit back to the top behind the sheet (issue #394).
+                capturePickerScrollAnchor()
                 navigate({
                   to: "/visit/add/workshop/$workshopId",
                   params: { workshopId: wsId },
                   search: kiosk ? { kiosk: "" } : {},
                 })
-              }
+              }}
             />
           ))}
 
