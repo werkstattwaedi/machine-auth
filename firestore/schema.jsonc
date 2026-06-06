@@ -318,6 +318,24 @@
       "debugCode?": "string"        // EMULATOR ONLY — plaintext code for E2E tests; absent in production docs
     }
   },
+  "printJobs": {
+    // Label print jobs. The admin web app renders the label and builds the
+    // Brother raster bytes client-side, then writes a `queued` job here. The
+    // on-LAN gateway (maco_gateway) watches for queued jobs via a Firestore
+    // service account, sends the bytes to the printer, and writes the
+    // terminal status (+ German error) back, which the admin UI awaits.
+    // Rules: admins create `queued` + read status; the gateway SA bypasses
+    // rules for status writes. Auto-deleted via the `ttlAt` TTL policy.
+    "{id}": {
+      "bytesB64": "string",          // base64 Brother raster job (buildRasterJob output)
+      "tape": "string",              // tape width used, e.g. "18mm" (informational)
+      "status": "queued | printing | done | error",
+      "error": "string | null",      // German printer error (parseStatus) when status == error
+      "createdBy": "string",         // Firebase Auth UID of the enqueuing admin
+      "createdAt": "timestamp",
+      "ttlAt": "timestamp"           // created + ~1h; Firestore TTL field (auto-delete)
+    }
+  },
   "users": {
     "{userId}": { // Doc ID = Firebase Auth UID. For child accounts (userType == "kind"),
                    // the auth user has no sign-in credentials and email is null.

@@ -361,6 +361,34 @@ export interface AuditLogDoc {
   timestamp: Timestamp
 }
 
+// ── printJobs ────────────────────────────────────────────────────────────
+
+export type PrintJobStatus = "queued" | "printing" | "done" | "error"
+
+/**
+ * Label print job. The admin web app renders the label and builds the
+ * Brother raster bytes client-side, then writes one of these as `queued`.
+ * The on-LAN gateway (maco_gateway) watches for queued jobs via a Firestore
+ * listener, sends the bytes to the printer, and writes the terminal
+ * `status` (+ German `error` on failure) back, which the admin UI awaits.
+ * See ADR / the printing-via-gateway plan. Auto-deleted via the `ttlAt`
+ * TTL policy declared in firestore.indexes.json.
+ */
+export interface PrintJobDoc {
+  /** base64-encoded Brother raster job (`buildRasterJob` output). */
+  bytesB64: string
+  /** Tape width used to build the job, e.g. "18mm". Informational. */
+  tape: string
+  status: PrintJobStatus
+  /** German printer error (ported `parseStatus`) when status == "error". */
+  error?: string | null
+  /** Firebase Auth UID of the admin who enqueued the job. */
+  createdBy: string
+  createdAt: Timestamp
+  /** Firestore TTL field — auto-delete ~1h after creation. */
+  ttlAt: Timestamp
+}
+
 // ── operations_log ───────────────────────────────────────────────────────
 
 export interface OperationsLogDoc {

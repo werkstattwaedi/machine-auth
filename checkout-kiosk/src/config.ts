@@ -4,10 +4,8 @@
 import {
   BRIDGE_BEARER_KEY,
   BRIDGE_MODE,
-  BRIDGE_PRINTER_HOST,
   BRIDGE_URL,
 } from "./build-config.generated"
-import { parsePrinterEndpoint, type PrinterEndpoint } from "./bridge/printer"
 import type { BridgeMode } from "./types"
 
 export interface BridgeConfig {
@@ -23,10 +21,6 @@ export interface BridgeConfig {
     autoHideMenuBar: boolean
     showResetButton: boolean
   }
-  /** Resolved from the baked `BRIDGE_PRINTER_HOST` build constant
-   *  (e.g. `labeler.internal:9100`). `null` when empty → bridge does
-   *  not advertise the `"print"` feature. */
-  printer: PrinterEndpoint | null
 }
 
 export function resolveConfig(): BridgeConfig {
@@ -50,6 +44,5 @@ export function resolveConfig(): BridgeConfig {
       autoHideMenuBar: mode === "kiosk",
       showResetButton: mode === "kiosk",
     },
-    printer: parsePrinterEndpoint(BRIDGE_PRINTER_HOST),
   }
 }

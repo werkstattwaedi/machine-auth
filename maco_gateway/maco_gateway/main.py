@@ -47,6 +47,8 @@ from maco_gateway.ascon_transport import AsconTransport, NonceTracker
 from maco_gateway.firebase_client import FirebaseClient
 from maco_gateway.gateway_service import GatewayServiceImpl
 from maco_gateway.key_store import KeyStore
+from maco_gateway.print_worker import PrintWorker
+from maco_gateway.printer import parse_printer_endpoint
 
 # Configure logging
 logging.basicConfig(
@@ -403,6 +405,24 @@ def parse_args() -> argparse.Namespace:
         help="API key for authenticating with Firebase (GATEWAY_API_KEY)",
     )
     parser.add_argument(
+        "--printer-host",
+        default=os.environ.get("PRINTER_HOST", ""),
+        help=(
+            "host[:port] of the Brother label printer (e.g. "
+            "labeler.internal:9100). When set, the gateway runs the "
+            "Firestore-driven print worker. Unset → no printing."
+        ),
+    )
+    parser.add_argument(
+        "--gcp-project",
+        default=os.environ.get("GOOGLE_CLOUD_PROJECT")
+        or os.environ.get("GCP_PROJECT"),
+        help=(
+            "GCP project id for the Firestore print-job listener. Defaults "
+            "to the project in the service-account credentials."
+        ),
+    )
+    parser.add_argument(
         "--verbose",
         "-v",
         action="store_true",
@@ -456,8 +476,22 @@ def main() -> int:
         firebase_client=firebase_client,
     )
 
+    # Optional label print worker: only started when a printer is configured.
+    printer = parse_printer_endpoint(args.printer_host)
+    worker = None
+    if printer is not None:
+        printer_host, printer_port = printer
+        worker = PrintWorker(printer_host, printer_port, project=args.gcp_project)
+        logger.info("  Printer: %s:%d", printer_host, printer_port)
+
+    async def serve() -> None:
+        tasks = [server.run()]
+        if worker is not None:
+            tasks.append(worker.run())
+        await asyncio.gather(*tasks)
+
     try:
-        asyncio.run(server.run())
+        asyncio.run(serve())
     except KeyboardInterrupt:
         logger.info("Shutting down")
     except Exception as e:

@@ -324,6 +324,21 @@ async function seedToken(tokenId: string, ownerUid: string) {
     })
 }
 
+async function seedPrintJob(jobId: string) {
+  const db = getAdminFirestore()
+  await db
+    .collection("printJobs")
+    .doc(jobId)
+    .set({
+      bytesB64: "AAAA",
+      tape: "18mm",
+      status: "queued",
+      createdBy: "admin-test",
+      createdAt: FieldValue.serverTimestamp(),
+      ttlAt: FieldValue.serverTimestamp(),
+    })
+}
+
 // --- Tests ---------------------------------------------------------------
 
 describe("cross-user: users", () => {
@@ -1084,6 +1099,110 @@ describe("cross-user: membership invites", () => {
           },
         ),
     )
+  })
+})
+
+describe("cross-user: printJobs (admin-only)", () => {
+  // printJobs has no owner-scoped path — only admins enqueue/read, and the
+  // gateway service account (which bypasses rules) writes status. These
+  // assertions lock that down so any future loosening forces an explicit
+  // test update.
+  const validJob = (uid: string) => ({
+    bytesB64: "AAAA",
+    tape: "18mm",
+    status: "queued",
+    createdBy: uid,
+    createdAt: serverTimestamp(),
+    ttlAt: serverTimestamp(),
+  })
+
+  it("denies a signed-in non-admin reading a print job", async () => {
+    await seedPrintJob("j1")
+    await assertCrossUserDenied(
+      "printJobs/{id} read leaked to non-admin",
+      "firestore.rules: printJobs read",
+      () => getDoc(doc(authedDb("alice"), "printJobs", "j1")),
+    )
+  })
+
+  it("denies a signed-in non-admin creating a print job", async () => {
+    await assertCrossUserDenied(
+      "printJobs/{id} create leaked to non-admin",
+      "firestore.rules: printJobs create",
+      () => setDoc(doc(authedDb("alice"), "printJobs", "j-bad"), validJob("alice")),
+    )
+  })
+
+  it("denies a tag-tap session creating a print job", async () => {
+    await assertCrossUserDenied(
+      "printJobs/{id} create leaked to tag-tap session",
+      "firestore.rules: printJobs create",
+      () =>
+        setDoc(doc(tagSessionDb("alice"), "printJobs", "j-bad"), validJob("tag:alice:s1")),
+    )
+  })
+
+  it("denies an anonymous-auth session creating a print job", async () => {
+    await assertCrossUserDenied(
+      "printJobs/{id} create leaked to anonymous-auth session",
+      "firestore.rules: printJobs create",
+      () =>
+        setDoc(doc(anonAuthDb("anon-x"), "printJobs", "j-bad"), validJob("anon-x")),
+    )
+  })
+
+  it("denies a fully unauthenticated client reading a print job", async () => {
+    await seedPrintJob("j1")
+    await assertCrossUserDenied(
+      "printJobs/{id} read leaked to unauthenticated session",
+      "firestore.rules: printJobs read",
+      () => getDoc(doc(unauthDb(), "printJobs", "j1")),
+    )
+  })
+
+  it("denies an admin updating a job (status writes are gateway-only)", async () => {
+    await seedPrintJob("j1")
+    await assertCrossUserDenied(
+      "printJobs/{id} update reachable from client (must be gateway/SA-only)",
+      "firestore.rules: printJobs update deny",
+      () => updateDoc(doc(adminDb(), "printJobs", "j1"), { status: "done" }),
+    )
+  })
+
+  it("denies an admin deleting a job (cleanup is via TTL)", async () => {
+    await seedPrintJob("j1")
+    await assertCrossUserDenied(
+      "printJobs/{id} delete reachable from client (must be TTL-only)",
+      "firestore.rules: printJobs delete deny",
+      () => deleteDoc(doc(adminDb(), "printJobs", "j1")),
+    )
+  })
+
+  it("denies an admin creating a job with status != queued", async () => {
+    await assertFails(
+      setDoc(doc(adminDb(), "printJobs", "j-bad"), {
+        ...validJob("admin-test"),
+        status: "done",
+      }),
+    )
+  })
+
+  it("denies an admin forging createdBy as another uid", async () => {
+    await assertFails(
+      setDoc(doc(adminDb(), "printJobs", "j-bad"), validJob("someone-else")),
+    )
+  })
+
+  // Positive carve-outs
+  it("allows an admin enqueuing a queued job", async () => {
+    await assertSucceeds(
+      setDoc(doc(adminDb(), "printJobs", "j-ok"), validJob("admin-test")),
+    )
+  })
+
+  it("allows an admin reading a print job", async () => {
+    await seedPrintJob("j1")
+    await assertSucceeds(getDoc(doc(adminDb(), "printJobs", "j1")))
   })
 })
 

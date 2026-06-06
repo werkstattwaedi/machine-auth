@@ -237,6 +237,12 @@
       "fieldPath": "ttlAt",
       "ttl": true,
       "indexes": []
+    },
+    {
+      "collectionGroup": "printJobs",
+      "fieldPath": "ttlAt",
+      "ttl": true,
+      "indexes": []
     }
   ]
 }

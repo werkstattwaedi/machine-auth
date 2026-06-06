@@ -8,9 +8,11 @@ Single Electron codebase that produces **two** named binaries:
   persistent session (admins stay signed in).
 
 Both binaries expose the same `window.bridge.*` IPC API to the loaded
-web app — NFC + label printer (issue #313). The mode, target URL,
-bearer secret, and printer host are all **baked at build time** by
-`scripts/inject-build-config.mjs`; there are no runtime flags or env
+web app — NFC tag reads. (Label printing no longer goes through Electron:
+the admin web app enqueues a `printJobs` Firestore doc and the on-LAN
+`maco_gateway` drives the printer — see the printing-via-gateway plan.)
+The mode, target URL, and bearer secret are all **baked at build time**
+by `scripts/inject-build-config.mjs`; there are no runtime flags or env
 vars on the installed host.
 
 **Tested readers:** ACS ACR1252 (recommended). The Identiv uTrust 3700 F
@@ -75,7 +77,10 @@ as plain constants.
 | `BRIDGE_KIOSK_URL` | `https://localhost:5173/?kiosk` | kiosk builds | Base URL for the checkout web app. |
 | `BRIDGE_ADMIN_URL` | `https://localhost:5174/` | admin builds | Base URL for the admin web app. |
 | `BRIDGE_BEARER_KEY` | `""` | both | Per-build Bearer secret. **The build fails** when the URL points at a non-localhost host and this is empty. Web app sends it as `Authorization: Bearer …` to backend endpoints that decode the tag (`/api/verifyTagCheckout` today). The dev/emulator path bypasses the check, so empty is fine on localhost. |
-| `BRIDGE_PRINTER_HOST` | _(unset)_ | admin builds (today) | `host[:port]` of a Brother PT-P950NW on the LAN (e.g. `labeler.internal:9100`). When set, the bridge advertises the `"print"` feature and forwards `window.bridge.print(bytes)` over TCP. Unset → admin "Etikett drucken" buttons stay hidden. Defaults to port 9100 when no port given. |
+
+Label printing is handled by the `maco_gateway` (printer host configured
+there), not this bridge — see the printing-via-gateway plan and
+`scripts/deploy-gateway.ts`.
 
 The Bearer is a soft revocation/audit knob, not real attestation — anyone
 with local admin on this machine can extract it. The actual security
@@ -100,7 +105,7 @@ smoke-test locally.
 
 The `:prod` scripts pass `--prod` to `inject-build-config.mjs`, which:
 
-* Reads URLs + printer host from the operations repo
+* Reads URLs from the operations repo
   (`../machine-auth-operations/config.jsonc`, same file
   `scripts/generate-env.ts` reads — keeps Electron + web apps +
   Cloud Functions in sync). Override the location with
@@ -125,17 +130,15 @@ BRIDGE_KIOSK_URL=https://checkout.staging.werkstattwaedi.ch/?kiosk \
 {
   "web": {
     "checkoutDomain": "checkout.werkstattwaedi.ch",   // already present
-    "adminDomain":    "admin.werkstattwaedi.ch"       // NEW for --prod admin builds
-  },
-  "electron": {
-    "printerHost":    "labeler.internal:9100"         // NEW for --prod admin builds
+    "adminDomain":    "admin.werkstattwaedi.ch"       // for --prod admin builds
   }
 }
 ```
 
 Kiosk builds only need `web.checkoutDomain`; admin builds also need
-`web.adminDomain` + `electron.printerHost`. The script fails the build
-with a clear error if any required key is missing.
+`web.adminDomain`. The script fails the build with a clear error if any
+required key is missing. (The label printer host now lives in the
+gateway config, not here.)
 
 The bearer secret is baked into the JavaScript bundle, so the
 `.AppImage` / installer is itself confidential. Build on a trusted
@@ -166,10 +169,9 @@ src/
 ├── main.ts                       Main process entry (Electron lifecycle, IPC)
 ├── preload.ts                    Exposes window.bridge to renderer + webview
 ├── config.ts                     Mode/URL/window resolver (pure function)
-├── build-config.generated.ts     Build-injected constants (mode + URL + bearer + printer)
+├── build-config.generated.ts     Build-injected constants (mode + URL + bearer)
 ├── bridge/
-│   ├── nfc.ts                    nfc-pcsc wrapper, APDU + NDEF parsing
-│   └── printer.ts                TCP forwarder to Brother PT-P950NW
+│   └── nfc.ts                    nfc-pcsc wrapper, APDU + NDEF parsing
 ├── types.ts                      Shared Bridge / NfcTagEvent types
 └── renderer/
     ├── renderer.ts               Chrome script (creates webview, wires reset)

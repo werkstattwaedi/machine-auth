@@ -15,9 +15,10 @@ import { Loader2, Printer, Save } from "lucide-react"
 import { useEffect } from "react"
 import { rpcCallable } from "@modules/lib/rpc"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
-import { useBridge } from "@modules/lib/use-bridge"
+import { useAuth } from "@modules/lib/auth"
 import { buildRasterJob } from "@oww/shared"
 import { useLabelBitmap } from "@/printer/use-label-bitmap"
+import { enqueuePrintJob } from "@/printer/enqueue-print-job"
 import { buildItemLabelQrUrl } from "@/printer/item-label-qr-url"
 import { LabelPreview } from "@/printer/label-preview"
 import { CatalogFormFields, type CatalogFormValues } from "@/components/admin/catalog-form-fields"
@@ -43,12 +44,14 @@ function CatalogDetailPage() {
   })
   const saving = save.loading
 
-  const bridge = useBridge()
-  const canPrint = bridge.features.includes("print")
+  const { user } = useAuth()
+  // No static errorMessage: the gateway returns user-ready German printer
+  // errors ("Deckel offen", "Kein Band eingelegt", connect timeout …) as the
+  // thrown message, so we let useAsyncMutation surface those (it falls back to
+  // `Fehler: <message>` for the "unknown" code) instead of a generic string.
   const print = useAsyncMutation({
     context: "admin.printLabel",
     successMessage: "Etikett gedruckt",
-    errorMessage: "Etikett konnte nicht gedruckt werden",
   })
 
   const { register, handleSubmit, reset, control } = useForm<CatalogFormValues>()
@@ -79,8 +82,13 @@ function CatalogDetailPage() {
   }, [catalog, reset])
 
   const checkoutDomain = import.meta.env.VITE_CHECKOUT_DOMAIN
+  // Printing is now always available to admins from any browser — the label
+  // is rendered client-side and the job is dispatched to the on-LAN gateway
+  // via Firestore. The only requirement is a configured checkout domain for
+  // the QR deep link.
+  const canPrint = Boolean(checkoutDomain)
   const labelInput =
-    canPrint && catalog && checkoutDomain
+    canPrint && catalog
       ? {
           url: buildItemLabelQrUrl(checkoutDomain, catalog.code),
           title: catalog.name,
@@ -97,11 +105,11 @@ function CatalogDetailPage() {
   if (!catalog) return <div>Katalogeintrag nicht gefunden.</div>
 
   const onPrint = async () => {
-    if (!previewBitmap) return
+    if (!previewBitmap || !user) return
     try {
       await print.mutate(async () => {
         const bytes = buildRasterJob(previewBitmap, { tape: "18mm" })
-        await bridge.print(bytes)
+        await enqueuePrintJob(db, { bytes, tape: "18mm", uid: user.uid })
       })
     } catch {
       // useAsyncMutation already toasted + logged.
