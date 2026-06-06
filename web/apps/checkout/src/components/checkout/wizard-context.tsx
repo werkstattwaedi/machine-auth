@@ -536,6 +536,10 @@ export function WizardProvider({
             unitPrice: item.unitPrice,
             totalPrice: item.totalPrice,
             formInputs: item.formInputs ?? null,
+            // Keep the billing classification authoritative on edit (issue
+            // #105). A partial update otherwise leaves a missing `type`
+            // missing; spread-omit when absent so we never write a bare null.
+            ...(item.type ? { type: item.type } : {}),
           }),
         )
         .catch(() => {})

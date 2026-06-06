@@ -32,8 +32,11 @@ export const TEST_PAYMENT_CONFIG: PaymentConfig = {
 function makeItem(overrides: Partial<CheckoutItemEntity> & { description: string; workshop: string; totalPrice: number }): CheckoutItemEntity {
   return {
     origin: "manual",
-    // Mirror production seed: machine catalog items (time-priced) carry
-    // type "machine"; everything else is material (issue #105).
+    // Convenience DEFAULT only: these fixtures' machine items are all
+    // time-priced, so default type from pricingModel. Production does NOT
+    // derive type from pricingModel — pass `type` explicitly in overrides
+    // for any non-time machine (e.g. count-priced sandblasting). `...overrides`
+    // is last, so an explicit `type` always wins (issue #105).
     type: overrides.pricingModel === "time" ? "machine" : "material",
     catalogId: null,
     created: Timestamp.now(),

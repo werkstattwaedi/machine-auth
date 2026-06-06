@@ -91,8 +91,11 @@ export function validatePricingConfig(value: unknown): string | null {
   )) {
     const pinned = (ws as Record<string, unknown> | null)?.pinnedMachines
     if (pinned === undefined) continue
-    if (!Array.isArray(pinned) || pinned.some((id) => typeof id !== "string")) {
-      return `config/pricing.workshops.${wsId}.pinnedMachines must be an array of catalog id strings`
+    if (
+      !Array.isArray(pinned) ||
+      pinned.some((id) => typeof id !== "string" || id.length === 0)
+    ) {
+      return `config/pricing.workshops.${wsId}.pinnedMachines must be an array of non-empty catalog id strings`
     }
   }
 

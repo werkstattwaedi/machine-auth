@@ -102,11 +102,19 @@ function VisitRoute() {
     }
     return m
   }, [sortedWorkshops])
-  const allPinnedIds = useMemo(
-    () =>
-      [...new Set([...pinnedIdsByWorkshop.values()].flat())].slice(0, 30),
-    [pinnedIdsByWorkshop],
-  )
+  const allPinnedIds = useMemo(() => {
+    const unique = [...new Set([...pinnedIdsByWorkshop.values()].flat())]
+    // Firestore `in` caps at 30 operands. Today there are <10 pinned
+    // machines, but warn loudly if a future config exceeds the cap so the
+    // dropped machines don't silently lose their hours input.
+    if (unique.length > 30) {
+      console.warn(
+        `config/pricing pins ${unique.length} machines; only the first 30 ` +
+          `render an hours input (Firestore "in" limit).`,
+      )
+    }
+    return unique.slice(0, 30)
+  }, [pinnedIdsByWorkshop])
   const { data: pinnedCatalogDocs } = useCollection(
     allPinnedIds.length > 0 ? catalogCollection(db) : null,
     ...(allPinnedIds.length > 0 ? [where(documentId(), "in", allPinnedIds)] : []),
@@ -215,6 +223,10 @@ function VisitRoute() {
   const confirmUncheckWorkshop = async () => {
     if (!uncheckConfirm || !checkoutId) return
     const wsId = uncheckConfirm
+    // Delete everything in the workshop EXCEPT NFC items (those are
+    // server-owned MaCo sessions). Pinned manual-hour items have
+    // origin "manual", so they're intentionally included — keep this as an
+    // `origin` check, not `!isMachineItem`, or NFC usage would be orphaned.
     const itemsToDelete = items.filter(
       (i) => i.workshop === wsId && i.origin !== "nfc",
     )

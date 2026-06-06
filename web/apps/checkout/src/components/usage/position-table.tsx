@@ -26,6 +26,13 @@ export interface PositionRow {
   expandedContent?: ReactNode
   /** Whether `expandedContent` is currently visible. */
   expanded?: boolean
+  /**
+   * When `false`, suppresses the (×) remove control for this row even if the
+   * table is given an `onRemove`. Lets a mixed machine table keep × on
+   * picker-added rows while pinned-machine and NFC rows stay non-removable
+   * (issue #105). Defaults to removable.
+   */
+  removable?: boolean
 }
 
 /**
@@ -122,7 +129,7 @@ export function PositionTable({
                       <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.8} />
                     )}
                   </button>
-                ) : onRemove ? (
+                ) : onRemove && row.removable !== false ? (
                   <button
                     type="button"
                     onClick={() => onRemove(row.key)}
