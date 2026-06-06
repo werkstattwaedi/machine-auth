@@ -64,6 +64,7 @@ class PrintWorker:
 
         # Deferred import: only printer-equipped gateways need the SDK.
         from google.cloud import firestore  # type: ignore
+        from google.cloud.firestore_v1.base_query import FieldFilter
 
         # The client honours FIRESTORE_EMULATOR_HOST (dev, anonymous creds)
         # and GOOGLE_APPLICATION_CREDENTIALS (prod service account)
@@ -77,7 +78,7 @@ class PrintWorker:
         self._recover_orphaned_jobs()
 
         query = self._db.collection(PRINT_JOBS_COLLECTION).where(
-            "status", "==", "queued"
+            filter=FieldFilter("status", "==", "queued")
         )
         logger.info(
             "Print worker: listening for queued jobs → printer %s:%d",
@@ -102,10 +103,12 @@ class PrintWorker:
         TTL — the admin UI just times out with a misleading "printer
         unreachable". Reset them so the operator gets a clear signal instead.
         """
+        from google.cloud.firestore_v1.base_query import FieldFilter
+
         try:
             stuck = (
                 self._db.collection(PRINT_JOBS_COLLECTION)
-                .where("status", "==", "printing")
+                .where(filter=FieldFilter("status", "==", "printing"))
                 .stream()
             )
             for doc in stuck:
