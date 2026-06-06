@@ -1,7 +1,7 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import React, { useMemo, useState } from "react"
+import React, { useEffect, useMemo, useState } from "react"
 import {
   Sheet,
   SheetContent,
@@ -32,6 +32,10 @@ import {
   nextLevelValues,
 } from "@modules/lib/categories"
 import type { CheckoutItemLocal } from "./inline-rows"
+import {
+  readPickerScrollAnchor,
+  clearPickerScrollAnchor,
+} from "./picker-scroll-anchor"
 
 const INPUT_CLS =
   "flex h-9 w-full rounded-none border border-[#ccc] bg-background px-3 py-1 text-sm outline-none focus:border-cog-teal"
@@ -111,6 +115,7 @@ export function MaterialPicker({
 }: MaterialPickerProps) {
   const isMobile = useIsMobile()
   const description = describeScope(scope)
+  usePreserveBodyScroll(open)
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
@@ -149,6 +154,54 @@ export function MaterialPicker({
       </SheetContent>
     </Sheet>
   )
+}
+
+/**
+ * Preserve the page's vertical scroll position across the picker's open
+ * lifecycle (issue #394).
+ *
+ * The picker renders a Radix Dialog (Sheet) whose scroll-lock
+ * (`react-remove-scroll`) applies `overflow: hidden` to `<body>`. In the
+ * wizard layout the body itself is the scroll container, so locking it
+ * collapses `window.scrollY` to 0 — the /visit page behind the sheet jumps
+ * to the top and the member can't see items being added.
+ *
+ * We can't read the live scroll here: React runs the dialog's (descendant)
+ * scroll-lock effect *before* this component's effect, so by the time we
+ * mount the page is already at the top. Instead the click site on /visit
+ * snapshots the offset *before* navigating (`capturePickerScrollAnchor`),
+ * and we restore from that anchor. The reflow that zeroes scroll can land a
+ * frame or two after mount, so we re-assert the offset across a short
+ * window to outlast it.
+ */
+function usePreserveBodyScroll(open: boolean) {
+  useEffect(() => {
+    if (!open) return
+    // Read but DON'T clear here: React StrictMode double-invokes effects in
+    // dev, and clearing in the first invoke would leave the second invoke
+    // (the one that survives) reading 0. The anchor is overwritten on the
+    // next capture and cleared once the loop has consumed it below.
+    const target = readPickerScrollAnchor()
+    if (target === 0) return
+
+    let rafId = 0
+    const start = performance.now()
+    const reassert = () => {
+      if (window.scrollY !== target) window.scrollTo(0, target)
+      if (performance.now() - start < 600) {
+        rafId = requestAnimationFrame(reassert)
+      } else {
+        // Consumed: drop the anchor so a later unrelated picker open (e.g.
+        // a QR deep-link) doesn't reuse a stale offset.
+        clearPickerScrollAnchor()
+      }
+    }
+    rafId = requestAnimationFrame(reassert)
+
+    return () => {
+      cancelAnimationFrame(rafId)
+    }
+  }, [open])
 }
 
 function describeScope(scope: PickerScope): string {
