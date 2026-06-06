@@ -3,7 +3,10 @@
 
 import type { VariantPrice } from "@oww/shared"
 
-export type BridgeMode = "kiosk" | "admin"
+// Single mode today (the admin Electron build was retired in favour of Web NFC
+// in the admin web app). Kept as a named type so the bridge still advertises
+// its identity and a future mode could be added without a wide refactor.
+export type BridgeMode = "kiosk"
 
 // Payload pushed to the renderer/webview when an NTAG 424 DNA tag is tapped.
 // `physicalUid` is the raw chip UID exposed by PC/SC — useful for low-level

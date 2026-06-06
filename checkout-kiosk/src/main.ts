@@ -20,9 +20,8 @@ if (config.isDev) {
   app.commandLine.appendSwitch("ignore-certificate-errors")
 }
 
-// Per-mode session. Kiosk uses a volatile, wipeable partition so a closed
-// kiosk window equals a closed session; admin uses a persistent partition so
-// admins stay signed in across restarts.
+// Kiosk uses a volatile, wipeable partition so a closed kiosk window equals a
+// closed session.
 async function clearSession(): Promise<void> {
   try {
     const sess = session.fromPartition(config.partition)
@@ -139,17 +138,14 @@ ipcMain.on("bridge:bootstrap", (event) => {
 ipcMain.handle("bridge:get-url", () => config.url)
 ipcMain.handle("bridge:bearer", () => config.bearer || null)
 ipcMain.handle("bridge:reset-session", async () => {
-  if (config.mode !== "kiosk") return
   await clearSession()
 })
 
 app.whenReady().then(async () => {
-  // Always start kiosk from a clean session — any leftover IndexedDB /
-  // cookies / Firebase Auth state from a previous run is wiped before the
-  // renderer attaches its webview. Admin keeps its session across restarts.
-  if (config.mode === "kiosk") {
-    await clearSession()
-  }
+  // Always start from a clean session — any leftover IndexedDB / cookies /
+  // Firebase Auth state from a previous run is wiped before the renderer
+  // attaches its webview.
+  await clearSession()
   createWindow()
   startNfc({ onTag: dispatchNfc })
 })

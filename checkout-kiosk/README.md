@@ -1,19 +1,17 @@
-# OWW Hardware Bridge (Electron)
+# OWW Checkout Kiosk (Electron)
 
-Single Electron codebase that produces **two** named binaries:
+Electron hardware bridge that runs the **OWW Kiosk** binary: a
+fullscreen-ish kiosk app that loads the checkout web app with a volatile
+session (every restart starts clean).
 
-- **OWW Kiosk** — fullscreen-ish kiosk app, loads the checkout web app,
-  volatile session (every restart starts clean).
-- **OWW Admin** — normal admin desktop app, loads the admin web app,
-  persistent session (admins stay signed in).
-
-Both binaries expose the same `window.bridge.*` IPC API to the loaded
-web app — NFC tag reads. (Label printing no longer goes through Electron:
-the admin web app enqueues a `printJobs` Firestore doc and the on-LAN
-`maco_gateway` drives the printer — see the printing-via-gateway plan.)
-The mode, target URL, and bearer secret are all **baked at build time**
-by `scripts/inject-build-config.mjs`; there are no runtime flags or env
-vars on the installed host.
+It exposes a `window.bridge.*` IPC API to the loaded web app for NFC tag
+reads. (Label printing does not go through Electron: the admin web app
+enqueues a `printJobs` Firestore doc and the on-LAN `maco_gateway` drives
+the printer — see the printing-via-gateway plan. Admin tag association
+likewise runs in the browser now via Web NFC — the admin Electron build
+was retired.) The target URL and bearer secret are **baked at build
+time** by `scripts/inject-build-config.mjs`; there are no runtime flags
+or env vars on the installed host.
 
 **Tested readers:** ACS ACR1252 (recommended). The Identiv uTrust 3700 F
 has reliability issues with READ BINARY on NTAG424 DNA tags.
@@ -38,25 +36,20 @@ npm install          # installs deps + runs electron-rebuild for nfc-pcsc
 ## Dev
 
 ```bash
-npm run start:kiosk     # injects BRIDGE_MODE=kiosk, compiles, launches
-npm run start:admin     # injects BRIDGE_MODE=admin, compiles, launches
+npm run start:kiosk     # compiles, launches
 ```
 
-`start:kiosk` defaults to `https://localhost:5173/?kiosk`,
-`start:admin` to `https://localhost:5174/`. Override per-env via
-`BRIDGE_KIOSK_URL` / `BRIDGE_ADMIN_URL`. See [Build-time
-Configuration](#build-time-configuration) for the full env-var list.
+Defaults to `https://localhost:5173/?kiosk`. Override via
+`BRIDGE_KIOSK_URL`. See [Build-time Configuration](#build-time-configuration)
+for the full env-var list.
 
 ## Packaging
 
 ```bash
 npm run build:kiosk     # → release/kiosk/oww-kiosk-<ver>-setup.exe (et al.)
-npm run build:admin     # → release/admin/oww-admin-<ver>-setup.exe (et al.)
 ```
 
-Per-mode electron-builder configs:
-- `electron-builder.kiosk.yml`
-- `electron-builder.admin.yml`
+electron-builder config: `electron-builder.kiosk.yml`.
 
 Cross-compiling for Windows from Linux works through Wine (see the
 electron-builder docs); the recommended path is to run the Windows build
@@ -65,18 +58,16 @@ on a Windows machine or Windows CI runner.
 ## Build-time Configuration
 
 All settings are **baked into the binary at build time** by
-`scripts/inject-build-config.mjs` (one kiosk and one admin host in
-production; managing per-host env vars is more painful than reshipping
-a self-contained binary). The script reads env vars on the build host
-and writes `src/build-config.generated.ts`, which the runtime imports
-as plain constants.
+`scripts/inject-build-config.mjs` (one kiosk host in production; managing
+per-host env vars is more painful than reshipping a self-contained
+binary). The script reads env vars on the build host and writes
+`src/build-config.generated.ts`, which the runtime imports as plain
+constants.
 
-| Variable | Default | Used by | Description |
-|----------|---------|---------|-------------|
-| `BRIDGE_MODE` | _(required)_ | inject script | `kiosk` or `admin`. Set automatically by `npm run build:kiosk` / `build:admin` / `dev:kiosk` / `dev:admin`. |
-| `BRIDGE_KIOSK_URL` | `https://localhost:5173/?kiosk` | kiosk builds | Base URL for the checkout web app. |
-| `BRIDGE_ADMIN_URL` | `https://localhost:5174/` | admin builds | Base URL for the admin web app. |
-| `BRIDGE_BEARER_KEY` | `""` | both | Per-build Bearer secret. **The build fails** when the URL points at a non-localhost host and this is empty. Web app sends it as `Authorization: Bearer …` to backend endpoints that decode the tag (`/api/verifyTagCheckout` today). The dev/emulator path bypasses the check, so empty is fine on localhost. |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BRIDGE_KIOSK_URL` | `https://localhost:5173/?kiosk` | Base URL for the checkout web app. |
+| `BRIDGE_BEARER_KEY` | `""` | Per-build Bearer secret. **The build fails** when the URL points at a non-localhost host and this is empty. Web app sends it as `Authorization: Bearer …` to backend endpoints that decode the tag (`/api/verifyTagCheckout` today). The dev/emulator path bypasses the check, so empty is fine on localhost. |
 
 Label printing is handled by the `maco_gateway` (printer host configured
 there), not this bridge — see the printing-via-gateway plan and
@@ -92,20 +83,18 @@ threat model.
 
 ```bash
 npm run build:kiosk:prod    # → release/kiosk/oww-kiosk-<ver>-setup.exe
-npm run build:admin:prod    # → release/admin/oww-admin-<ver>-setup.exe
 ```
 
-The `:prod` scripts always target **Windows x64 NSIS installers**
-(`--win` flag to electron-builder) because both OWW hosts run Windows.
-Cross-compiling from Linux requires Wine
-(`sudo apt install wine64` on WSL2 / Debian); the dev scripts
-(`build:kiosk` / `build:admin` without `:prod`) build for the host
-platform (AppImage on Linux, .dmg on macOS) if you just want to
-smoke-test locally.
+The `:prod` script always targets a **Windows x64 NSIS installer**
+(`--win` flag to electron-builder) because the OWW kiosk host runs
+Windows. Cross-compiling from Linux requires Wine
+(`sudo apt install wine64` on WSL2 / Debian); the dev script
+(`build:kiosk` without `:prod`) builds for the host platform (AppImage on
+Linux, .dmg on macOS) if you just want to smoke-test locally.
 
-The `:prod` scripts pass `--prod` to `inject-build-config.mjs`, which:
+The `:prod` script passes `--prod` to `inject-build-config.mjs`, which:
 
-* Reads URLs from the operations repo
+* Reads the URL from the operations repo
   (`../machine-auth-operations/config.jsonc`, same file
   `scripts/generate-env.ts` reads — keeps Electron + web apps +
   Cloud Functions in sync). Override the location with
@@ -129,28 +118,26 @@ BRIDGE_KIOSK_URL=https://checkout.staging.werkstattwaedi.ch/?kiosk \
 ```jsonc
 {
   "web": {
-    "checkoutDomain": "checkout.werkstattwaedi.ch",   // already present
-    "adminDomain":    "admin.werkstattwaedi.ch"       // for --prod admin builds
+    "checkoutDomain": "checkout.werkstattwaedi.ch"   // already present
   }
 }
 ```
 
-Kiosk builds only need `web.checkoutDomain`; admin builds also need
-`web.adminDomain`. The script fails the build with a clear error if any
-required key is missing. (The label printer host now lives in the
-gateway config, not here.)
+The script fails the build with a clear error if `web.checkoutDomain` is
+missing. (The label printer host now lives in the gateway config, not
+here.)
 
 The bearer secret is baked into the JavaScript bundle, so the
 `.AppImage` / installer is itself confidential. Build on a trusted
-host (e.g. your laptop) and hand-carry the installer to the kiosk /
-admin workstation. **Rotating the bearer = rebuild + reinstall.**
-Server-side rotation lives at `firebase functions:secrets:set
-KIOSK_BEARER_KEY` (same secret name on both sides).
+host (e.g. your laptop) and hand-carry the installer to the kiosk.
+**Rotating the bearer = rebuild + reinstall.** Server-side rotation lives
+at `firebase functions:secrets:set KIOSK_BEARER_KEY` (same secret name on
+both sides).
 
 ## How It Works
 
 1. Electron creates a `BrowserWindow` with a `<webview>` that loads the
-   configured URL (`BRIDGE_KIOSK_URL` or `BRIDGE_ADMIN_URL`).
+   configured URL (`BRIDGE_KIOSK_URL`).
 2. Both the chrome window and the webview load `dist/preload.js`, which
    exposes `window.bridge.*` (mode, features, bearer, resetSession,
    getUrl, onUrlChange, onNfcTag).
@@ -159,8 +146,6 @@ KIOSK_BEARER_KEY` (same secret name on both sides).
    every subscribed webContents.
 4. The loaded **web app** (inside the webview) handles tag navigation —
    it parses `picc`/`cmac` from the NDEF URL and routes accordingly.
-   This issue refactors away the renderer's old `webview.src = …`
-   navigation path; navigation is now client-side and React-aware.
 
 ## File Layout
 
@@ -168,8 +153,8 @@ KIOSK_BEARER_KEY` (same secret name on both sides).
 src/
 ├── main.ts                       Main process entry (Electron lifecycle, IPC)
 ├── preload.ts                    Exposes window.bridge to renderer + webview
-├── config.ts                     Mode/URL/window resolver (pure function)
-├── build-config.generated.ts     Build-injected constants (mode + URL + bearer)
+├── config.ts                     URL/window resolver (pure function)
+├── build-config.generated.ts     Build-injected constants (URL + bearer)
 ├── bridge/
 │   └── nfc.ts                    nfc-pcsc wrapper, APDU + NDEF parsing
 ├── types.ts                      Shared Bridge / NfcTagEvent types
@@ -195,3 +180,4 @@ scripts/
   bindings to Electron's Node ABI.
 - Webview is used (not `<iframe>`) so we can bypass CSP/X-Frame-Options
   and attach a preload script with `window.bridge`.
+```
