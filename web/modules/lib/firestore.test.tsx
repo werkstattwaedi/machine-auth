@@ -196,6 +196,61 @@ describe("useCollection", () => {
     expect(result.current.data[0]).toMatchObject({ name: "Max" })
   })
 
+  // Regression for issue #387: when a caller swaps a `null` ref for a real
+  // query (e.g. once a user id resolves), the requested path changes
+  // immediately but the re-subscription effect runs on the next tick. The
+  // hook must report `loading: true` in that one-render window instead of
+  // exposing the stale `loading:false` / empty `data` from the null ref —
+  // otherwise the root dispatcher misreads "no open checkout" and bounces
+  // to /checkin.
+  it("reports loading while a freshly-swapped ref re-subscribes", async () => {
+    fakeDb.setDoc(fakeDb.doc("checkouts", "c1"), { status: "open" })
+
+    // Record every render's result. The race we guard against is a
+    // *consumer* (the root dispatcher) reading the hook's return value on
+    // the render where the ref just became non-null — before any effect
+    // (including the hook's own setLoading(true)) has run. A post-effect
+    // assertion via `result.current` would miss it because effects flush
+    // inside act(). So we inspect the render-by-render snapshots instead.
+    const renders: { loading: boolean; data: unknown[] }[] = []
+
+    const { rerender } = renderHook(
+      ({ ref }: { ref: ReturnType<typeof colRef> | null }) => {
+        const r = useCollection(ref)
+        renders.push({ loading: r.loading, data: r.data })
+        return r
+      },
+      {
+        wrapper: createWrapper(),
+        initialProps: { ref: null as ReturnType<typeof colRef> | null },
+      },
+    )
+
+    // Last render with the null ref: not loading, empty data.
+    expect(renders.at(-1)).toEqual({ loading: false, data: [] })
+
+    const before = renders.length
+
+    // Swap in a real ref.
+    act(() => {
+      rerender({ ref: colRef("checkouts") })
+    })
+
+    // The render produced *immediately* by the ref swap — index `before`,
+    // before the subscription effect committed setLoading(true) — must not
+    // expose loading:false with empty data. That stale "loaded, nothing
+    // here" reading is exactly what bounced users to /checkin (issue #387).
+    const swapRender = renders[before]
+    expect(swapRender).toBeDefined()
+    expect(
+      swapRender.loading === false && swapRender.data.length === 0,
+    ).toBe(false)
+
+    // Once the snapshot resolves, loading clears and data is present.
+    await waitFor(() => expect(renders.at(-1)?.loading).toBe(false))
+    expect(renders.at(-1)?.data).toHaveLength(1)
+  })
+
   it("logs and reports snapshot errors via console.error + logClientError", async () => {
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {})
     const err = Object.assign(new Error("Missing or insufficient permissions."), {

@@ -133,6 +133,14 @@ export function useCollection<T = DocumentData>(
   const [data, setData] = useState<(T & { id: string })[]>([])
   const [loading, setLoading] = useState(!!refOrQuery)
   const [error, setError] = useState<Error | null>(null)
+  // The path the currently-held `data`/`error` were last reported for.
+  // Distinct from the requested `path` below: when a caller swaps the ref
+  // (e.g. null → a real query once an id resolves) the requested path
+  // changes immediately, but the re-subscription effect — and the
+  // `setLoading(true)` inside it — only runs on the *next* tick. Reading
+  // `loading` in that one-render window would otherwise see the stale
+  // `false` from the previous subscription. See issue #387.
+  const [reportedPath, setReportedPath] = useState("")
 
   // Re-subscribe when the ref's path changes; constraints are assumed
   // stable per call site (each component always passes the same set of
@@ -144,6 +152,7 @@ export function useCollection<T = DocumentData>(
     if (!refOrQuery) {
       setData([])
       setLoading(false)
+      setReportedPath("")
       return
     }
 
@@ -166,6 +175,7 @@ export function useCollection<T = DocumentData>(
           )
           setLoading(false)
           setError(null)
+          setReportedPath(path)
         },
         (err) => {
           reportQueryError(
@@ -175,6 +185,7 @@ export function useCollection<T = DocumentData>(
           )
           setError(err)
           setLoading(false)
+          setReportedPath(path)
         },
       )
     }, LISTENER_DELAY_MS)
@@ -188,7 +199,12 @@ export function useCollection<T = DocumentData>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path, db])
 
-  return { data, loading, error }
+  // Report loading while the held snapshot belongs to a different path than
+  // the one currently requested (a re-subscription is pending). Closes the
+  // one-render window where a freshly-supplied ref reads as "loaded with
+  // empty data" before its effect runs. See issue #387.
+  const stale = path !== reportedPath
+  return { data, loading: loading || stale, error }
 }
 
 /**
@@ -202,6 +218,10 @@ export function useDocument<T = DocumentData>(
   const [data, setData] = useState<(T & { id: string }) | null>(null)
   const [loading, setLoading] = useState(!!ref)
   const [error, setError] = useState<Error | null>(null)
+  // See the matching comment in useCollection: tracks which path the held
+  // `data`/`error` belong to so a freshly-swapped ref reports loading on
+  // the render before its re-subscription effect runs. See issue #387.
+  const [reportedPath, setReportedPath] = useState("")
 
   const path = ref ? pathOf(ref) : ""
 
@@ -209,9 +229,11 @@ export function useDocument<T = DocumentData>(
     if (!ref) {
       setData(null)
       setLoading(false)
+      setReportedPath("")
       return
     }
 
+    setLoading(true)
     let unsub: Unsubscribe | undefined
 
     const timer = setTimeout(() => {
@@ -228,6 +250,7 @@ export function useDocument<T = DocumentData>(
           }
           setLoading(false)
           setError(null)
+          setReportedPath(path)
         },
         (err) => {
           reportQueryError(
@@ -237,6 +260,7 @@ export function useDocument<T = DocumentData>(
           )
           setError(err)
           setLoading(false)
+          setReportedPath(path)
         },
       )
     }, LISTENER_DELAY_MS)
@@ -248,6 +272,9 @@ export function useDocument<T = DocumentData>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path, db])
 
-  return { data, loading, error }
+  // See useCollection: report loading while the held snapshot belongs to a
+  // different path than the one requested (re-subscription pending).
+  const stale = path !== reportedPath
+  return { data, loading: loading || stale, error }
 }
 
