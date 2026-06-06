@@ -39,6 +39,7 @@ const items: CheckoutItemLocal[] = [
     workshop: "holz",
     description: "Bandsäge",
     origin: "nfc",
+    type: "machine",
     catalogId: null,
     quantity: 1,
     unitPrice: 25,

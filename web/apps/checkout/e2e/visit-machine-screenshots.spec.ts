@@ -63,6 +63,7 @@ async function seedVisitMachineFixture() {
     workshop: "holz",
     description: "CO₂ Laser",
     origin: "nfc",
+    type: "machine",
     catalogId: null,
     pricingModel: "time",
     created: FieldValue.serverTimestamp(),

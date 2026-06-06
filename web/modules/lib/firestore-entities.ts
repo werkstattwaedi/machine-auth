@@ -20,10 +20,11 @@ import type {
 
 import type {
   DiscountLevel,
+  ItemType,
   PricingModel,
   VariantPrice,
 } from "@oww/shared"
-export type { DiscountLevel, PricingModel, VariantPrice } from "@oww/shared"
+export type { DiscountLevel, ItemType, PricingModel, VariantPrice } from "@oww/shared"
 
 // ── Cross-cutting ────────────────────────────────────────────────────────
 
@@ -161,6 +162,12 @@ export interface CatalogItemDoc extends AuditFields {
   category: string[]
   active: boolean
   userCanAdd: boolean
+  /**
+   * What this item is, for billing-section bucketing (issue #105). Absent
+   * means `material`. Machine catalog items (manual-hour entry / NFC usage)
+   * carry `machine`.
+   */
+  type?: ItemType
   description?: string | null
   /**
    * 1..n purchase options. `variants[0]` is canonical: the picker uses it
@@ -263,6 +270,11 @@ export interface CheckoutItemDoc extends AuditFields {
   workshop: string
   description: string
   origin: "nfc" | "manual" | "qr"
+  /**
+   * Billing-section classification (issue #105). Absent means `material`.
+   * Authoritative for machine-vs-material bucketing — see `isMachineItem`.
+   */
+  type?: ItemType
   catalogId: DocumentReference<CatalogItemDoc> | null
   /** Matches catalog.variants[i].id when catalogId is set; null for ad-hoc origin="manual" / "qr". */
   variantId?: string | null
@@ -371,6 +383,13 @@ export interface PricingEntryFees {
 export interface WorkshopConfigEntry {
   label: string
   order: number
+  /**
+   * Catalog IDs shown with an always-visible hours input in this
+   * workshop's machine section on the cost step, while no MaCo is deployed
+   * (issue #105). References, not embedded prices — the catalog stays the
+   * source of truth for label/price/type.
+   */
+  pinnedMachines?: string[]
 }
 
 export interface PricingLabels {

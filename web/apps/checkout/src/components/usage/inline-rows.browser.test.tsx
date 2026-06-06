@@ -75,6 +75,8 @@ function makeItem(overrides: Partial<CheckoutItemLocal> = {}): CheckoutItemLocal
     workshop: "holz",
     description: "Test Article",
     origin: "manual",
+    // Mirror production: NFC usage carries type "machine" (issue #105).
+    type: overrides.origin === "nfc" ? "machine" : "material",
     catalogId: "cat-1",
     pricingModel: "count",
     quantity: 0,

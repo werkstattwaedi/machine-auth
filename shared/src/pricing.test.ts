@@ -7,6 +7,7 @@ import {
   USAGE_TYPE_LABELS,
   USAGE_DISCOUNT_LABELS,
   usageDiscount,
+  isMachineItem,
   type UsageType,
 } from "./pricing"
 
@@ -35,6 +36,18 @@ describe("USAGE_TYPE_DISCOUNTS (issue #284)", () => {
     expect(usageDiscount("nonsense" as UsageType)).toEqual(
       USAGE_TYPE_DISCOUNTS.regular,
     )
+  })
+})
+
+describe("isMachineItem (issue #105)", () => {
+  it("classifies items by explicit type, ignoring origin", () => {
+    expect(isMachineItem({ type: "machine" })).toBe(true)
+    expect(isMachineItem({ type: "material" })).toBe(false)
+  })
+
+  it("treats a missing type as material", () => {
+    expect(isMachineItem({})).toBe(false)
+    expect(isMachineItem({ type: null })).toBe(false)
   })
 })
 

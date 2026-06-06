@@ -11,7 +11,9 @@ export interface PositionRow {
   title: string
   /** Optional sub-line under the title (e.g. raw form input "60×40 cm"). */
   subtitle: string | null
-  menge: string
+  /** Usually a formatted string; a ReactNode lets a row put an editable
+   *  control here (e.g. the pinned machine-hours input, issue #105). */
+  menge: ReactNode
   kosten: string
   preis: string
   /**
@@ -24,6 +26,13 @@ export interface PositionRow {
   expandedContent?: ReactNode
   /** Whether `expandedContent` is currently visible. */
   expanded?: boolean
+  /**
+   * When `false`, suppresses the (×) remove control for this row even if the
+   * table is given an `onRemove`. Lets a mixed machine table keep × on
+   * picker-added rows while pinned-machine and NFC rows stay non-removable
+   * (issue #105). Defaults to removable.
+   */
+  removable?: boolean
 }
 
 /**
@@ -120,7 +129,7 @@ export function PositionTable({
                       <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.8} />
                     )}
                   </button>
-                ) : onRemove ? (
+                ) : onRemove && row.removable !== false ? (
                   <button
                     type="button"
                     onClick={() => onRemove(row.key)}

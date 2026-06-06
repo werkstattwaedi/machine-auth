@@ -18,3 +18,8 @@ npm run test:scripts || exit 1
 
 echo "$suites" | grep -q '^web$' && { npm run test:precommit:web || exit 1; }
 echo "$suites" | grep -q '^functions$' && { npm run test:precommit:functions || exit 1; }
+
+# Explicit success: without this, a web-only commit (suites="web") leaves the
+# final `grep '^functions$'` as the last command — it exits 1 (no match) and
+# fails the hook even though every selected suite passed.
+exit 0

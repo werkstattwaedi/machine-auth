@@ -27,7 +27,7 @@ import type { CheckoutPerson } from "./use-checkout-state"
 import type { CheckoutItemLocal } from "@/components/usage/inline-rows"
 import { PositionTable, rowFromItem } from "@/components/usage/position-table"
 import type { UsageType } from "@modules/lib/pricing"
-import { partitionMembership } from "@oww/shared"
+import { partitionMembership, isMachineItem } from "@oww/shared"
 import { BadgeCheck } from "lucide-react"
 
 /**
@@ -225,6 +225,7 @@ export function computeCheckoutCosts({
   usageType: UsageType
   items: {
     origin: string
+    type?: string | null
     totalPrice: number
     catalogId?: string | null
   }[]
@@ -249,9 +250,9 @@ export function computeCheckoutCosts({
     0,
   )
   const machineCost = items
-    .filter((i) => i.origin === "nfc")
+    .filter((i) => isMachineItem(i))
     .reduce((s, i) => s + i.totalPrice, 0)
-  const nonMachine = items.filter((i) => i.origin !== "nfc")
+  const nonMachine = items.filter((i) => !isMachineItem(i))
   const { membershipItems, otherItems } = partitionMembership(nonMachine, {
     membershipCatalogId,
   })
@@ -299,14 +300,15 @@ export function StepCheckout({
   })
   const discount = usageDiscount(usageType)
   const discountLabel = USAGE_DISCOUNT_LABELS[usageType]
-  const nfcItems = useMemo(() => items.filter((i) => i.origin === "nfc"), [items])
+  // Machine usage = NFC-tracked or manually-entered hours (issue #105).
+  const nfcItems = useMemo(() => items.filter((i) => isMachineItem(i)), [items])
   // Issue #262/#263: split the non-machine items into the Vereinsmitgliedschaft
   // bucket and everything else, so membership renders as its own first-position
   // section instead of being lumped under Materialbezug.
   const { membershipItems, otherItems: materialItems } = useMemo(
     () =>
       partitionMembership(
-        items.filter((i) => i.origin !== "nfc"),
+        items.filter((i) => !isMachineItem(i)),
         { membershipCatalogId },
       ),
     [items, membershipCatalogId],

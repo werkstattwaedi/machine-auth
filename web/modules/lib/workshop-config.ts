@@ -83,6 +83,21 @@ export function validatePricingConfig(value: unknown): string | null {
   if (!cfg.workshops || typeof cfg.workshops !== "object") {
     return "config/pricing.workshops is missing"
   }
+  // Issue #105: per-workshop `pinnedMachines`, when present, is a list of
+  // catalog IDs (string refs). Validate the shape so a malformed config
+  // fails loud rather than silently dropping the pinned hours inputs.
+  for (const [wsId, ws] of Object.entries(
+    cfg.workshops as Record<string, unknown>,
+  )) {
+    const pinned = (ws as Record<string, unknown> | null)?.pinnedMachines
+    if (pinned === undefined) continue
+    if (
+      !Array.isArray(pinned) ||
+      pinned.some((id) => typeof id !== "string" || id.length === 0)
+    ) {
+      return `config/pricing.workshops.${wsId}.pinnedMachines must be an array of non-empty catalog id strings`
+    }
+  }
 
   if (!cfg.labels || typeof cfg.labels !== "object") {
     return "config/pricing.labels is missing"

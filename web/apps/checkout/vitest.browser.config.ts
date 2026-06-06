@@ -38,7 +38,11 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    include: ["@testing-library/jest-dom/vitest"],
+    // `@oww/shared` is a CJS workspace package (ADR-0027) whose re-exports
+    // (`export *` via tslib `__exportStar`) Vite's browser ESM transform
+    // can't statically resolve. Pre-bundle it to ESM so named imports work
+    // — mirrors the app `vite.config.ts` include.
+    include: ["@testing-library/jest-dom/vitest", "@oww/shared"],
   },
   test: {
     include: ["src/**/*.browser.test.{ts,tsx}", "../../modules/**/*.browser.test.{ts,tsx}"],

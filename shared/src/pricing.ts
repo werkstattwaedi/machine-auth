@@ -79,6 +79,24 @@ export type PricingModel =
 export type DiscountLevel = "none" | "member"
 
 /**
+ * What a line item *is*, for billing-section bucketing — independent of how
+ * it was entered (`origin`). `machine` bills as "Maschinennutzung" and
+ * follows the usage-type machine discount; `material` as "Materialbezug".
+ * Stamped explicitly on every catalog and checkout item (issue #105); we
+ * no longer infer machine-ness from `origin === "nfc"` or `pricingModel`.
+ */
+export type ItemType = "machine" | "material"
+
+/**
+ * True iff a line item is billed as machine usage. The explicit `type` is
+ * authoritative — set on NFC sync, the material picker, and pinned
+ * manual-hour rows. Items without it bill as material.
+ */
+export function isMachineItem(item: { type?: string | null }): boolean {
+  return item.type === "machine"
+}
+
+/**
  * Per-variant price. `default` is mandatory and is what an un-discounted
  * customer pays. Additional tiers (today only `member`) are optional
  * overrides; if absent, the default applies. Schema-extensible to future

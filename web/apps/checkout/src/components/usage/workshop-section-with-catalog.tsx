@@ -12,6 +12,7 @@ import {
   type CheckoutItemLocal,
   type ItemCallbacks,
 } from "@/components/usage/inline-rows"
+import type { CatalogItem } from "@modules/lib/workshop-config"
 import type { ItemErrors } from "@/components/checkout/validation"
 
 /**
@@ -29,6 +30,8 @@ export function WorkshopSectionWithCatalog({
   checkoutId,
   sectionRef,
   onAddMaterial,
+  pinnedCatalog,
+  discountLevel,
 }: {
   workshopId: WorkshopId
   workshop: WorkshopConfig
@@ -36,8 +39,10 @@ export function WorkshopSectionWithCatalog({
   config?: PricingConfig
   items: CheckoutItemLocal[]
   callbacks: ItemCallbacks
-  /** Unused; kept for backwards-compat with existing call sites. */
+  /** Member/default tier for pinned-machine pricing (issue #105). */
   discountLevel?: DiscountLevel
+  /** Catalog docs for this workshop's pinned machines (issue #105). */
+  pinnedCatalog?: CatalogItem[]
   /** Legacy; kept for backwards-compat. */
   onBlurSave?: boolean
   checkoutId?: string | null
@@ -55,6 +60,8 @@ export function WorkshopSectionWithCatalog({
       checkoutId={checkoutId}
       sectionRef={sectionRef}
       onAddMaterial={onAddMaterial}
+      pinnedCatalog={pinnedCatalog}
+      discountLevel={discountLevel}
     />
   )
 }

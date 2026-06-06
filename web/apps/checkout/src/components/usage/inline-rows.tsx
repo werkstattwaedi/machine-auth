@@ -1,8 +1,9 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { useState, Fragment } from "react"
+import { useState, useEffect, useRef, useMemo, Fragment } from "react"
 import { formatCHF } from "@modules/lib/format"
+import { primaryVariant } from "@modules/lib/pricing"
 import { Plus } from "lucide-react"
 import { useCollection } from "@modules/lib/firestore"
 import { where } from "firebase/firestore"
@@ -22,6 +23,7 @@ import type {
   DiscountLevel,
   PricingModel,
 } from "@modules/lib/workshop-config"
+import { isMachineItem, priceForTier, type ItemType } from "@oww/shared"
 import { PositionTable, type PositionRow, rowFromItem } from "./position-table"
 
 /** Shape of a checkout item used by the workshop block. */
@@ -30,6 +32,8 @@ export interface CheckoutItemLocal {
   workshop: string
   description: string
   origin: "nfc" | "manual" | "qr"
+  /** Billing classification (issue #105); absent = material. */
+  type?: ItemType | null
   catalogId: string | null
   /** Matches catalog.variants[i].id when catalogId is set. Null for ad-hoc fallback rows. */
   variantId?: string | null
@@ -215,6 +219,8 @@ function nfcMachineRow(
     preis: item.totalPrice.toFixed(2),
     expanded,
     expandedContent,
+    // NFC usage is server-owned (MaCo sessions) — never client-removable.
+    removable: false,
   }
 }
 
@@ -257,6 +263,8 @@ export function WorkshopInlineSection({
   checkoutId,
   sectionRef,
   onAddMaterial,
+  pinnedCatalog = [],
+  discountLevel = "none",
 }: {
   workshopId: WorkshopId
   workshop: WorkshopConfig
@@ -266,8 +274,17 @@ export function WorkshopInlineSection({
   config?: PricingConfig
   /** Unused since the picker moved to a separate component (issue #213). */
   catalogItems?: CatalogItem[]
-  /** Unused since the picker moved to a separate component (issue #213). */
+  /**
+   * Member/default pricing tier for the identified principal — used to
+   * resolve pinned-machine hourly rates (issue #105).
+   */
   discountLevel?: DiscountLevel
+  /**
+   * Catalog docs for this workshop's `config/pricing.pinnedMachines` — each
+   * renders an always-visible hours input in the machine section while no
+   * MaCo is deployed (issue #105).
+   */
+  pinnedCatalog?: CatalogItem[]
   /** Legacy no-op kept for callers that still set it. */
   onBlurSave?: boolean
   checkoutId?: string | null
@@ -284,12 +301,27 @@ export function WorkshopInlineSection({
 }) {
   const [expandedNfc, setExpandedNfc] = useState<Record<string, boolean>>({})
 
+  // Machine usage (NFC-tracked or manually-entered hours) bills as
+  // "Maschinennutzung"; everything else is material (issue #105). The
+  // material box also excludes NFC items defensively — production NFC usage
+  // always carries type "machine", but this keeps a type-less NFC row out of
+  // the material box rather than double-rendering it.
   const nfcItems = items.filter((i) => i.origin === "nfc")
-  const materialItems = items.filter((i) => i.origin !== "nfc")
-
-  const machineTotal = nfcItems.reduce((s, i) => s + i.totalPrice, 0)
+  const machineItems = items.filter((i) => isMachineItem(i))
+  const materialItems = items.filter(
+    (i) => !isMachineItem(i) && i.origin !== "nfc",
+  )
   const materialTotal = materialItems.reduce((s, i) => s + i.totalPrice, 0)
-  const wsTotal = machineTotal + materialTotal
+
+  const pinnedIds = new Set(pinnedCatalog.map((c) => c.id))
+  // Machine items that are neither NFC nor pinned — e.g. a user-addable
+  // machine catalog item picked via the material picker (Sandstrahlen). They
+  // bill as machine, so without rendering them here they'd vanish from the
+  // workshop view; surface them as ordinary removable rows in the machine
+  // table (issue #105 review).
+  const otherMachineRows: PositionRow[] = machineItems
+    .filter((i) => i.origin !== "nfc" && !(i.catalogId && pinnedIds.has(i.catalogId)))
+    .map(rowFromItem)
 
   const nfcRows: PositionRow[] = nfcItems.map((item) => {
     const isExpanded = !!expandedNfc[item.id]
@@ -307,6 +339,122 @@ export function WorkshopInlineSection({
     setExpandedNfc((m) => ({ ...m, [id]: !m[id] }))
   }
 
+  // Pinned machines (issue #105): an always-visible hours input per MaCo-less
+  // machine, rendered as ordinary rows in the shared "Maschinen / Werkzeuge"
+  // table (Menge holds the input, Kosten the /Std. rate, Preis the live
+  // total). Hours text lives here (keyed by catalogId) so Preis updates as
+  // the user types; it's synced from the committed item while the field is
+  // unfocused (SpendeCard pattern) and committed on blur.
+  const pinnedItemByCatalog = useMemo(() => {
+    const m = new Map<string, CheckoutItemLocal>()
+    for (const i of machineItems) if (i.catalogId) m.set(i.catalogId, i)
+    return m
+  }, [machineItems])
+  const [pinnedHours, setPinnedHours] = useState<Record<string, string>>({})
+  const pinnedFocusRef = useRef<string | null>(null)
+  useEffect(() => {
+    setPinnedHours((prev) => {
+      let changed = false
+      const next = { ...prev }
+      for (const cat of pinnedCatalog) {
+        if (pinnedFocusRef.current === cat.id) continue
+        const q = pinnedItemByCatalog.get(cat.id)?.quantity ?? 0
+        const canonical = q > 0 ? String(q) : ""
+        const parsed = parseFloat((prev[cat.id] ?? "").replace(",", ".")) || 0
+        if (parsed !== q) {
+          next[cat.id] = canonical
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [pinnedItemByCatalog, pinnedCatalog])
+
+  const commitPinned = (cat: CatalogItem, unitPrice: number) => {
+    pinnedFocusRef.current = null
+    const variant = primaryVariant(cat)
+    const hours = Math.max(
+      0,
+      parseFloat((pinnedHours[cat.id] ?? "").replace(",", ".")) || 0,
+    )
+    const total = Math.round(hours * unitPrice * 100) / 100
+    const existing = pinnedItemByCatalog.get(cat.id)
+    if (hours <= 0) {
+      if (existing) callbacks.removeItem(existing.id)
+      setPinnedHours((p) => ({ ...p, [cat.id]: "" }))
+      return
+    }
+    if (existing) {
+      if (existing.quantity === hours) return
+      callbacks.updateItem(existing.id, {
+        ...existing,
+        quantity: hours,
+        unitPrice,
+        totalPrice: total,
+        formInputs: [{ quantity: hours, unit: "h" }],
+      })
+    } else {
+      callbacks.addItem({
+        id: crypto.randomUUID(),
+        workshop: workshopId,
+        description: cat.name,
+        origin: "manual",
+        type: "machine",
+        catalogId: cat.id,
+        variantId: variant?.id ?? "default",
+        pricingModel: variant?.pricingModel ?? "time",
+        quantity: hours,
+        unitPrice,
+        totalPrice: total,
+        formInputs: [{ quantity: hours, unit: "h" }],
+      })
+    }
+  }
+
+  const pinnedRows: PositionRow[] = pinnedCatalog.map((cat) => {
+    const variant = primaryVariant(cat)
+    const unitPrice = variant ? priceForTier(variant.unitPrice, discountLevel) : 0
+    const text = pinnedHours[cat.id] ?? ""
+    const hours = Math.max(0, parseFloat(text.replace(",", ".")) || 0)
+    const total = Math.round(hours * unitPrice * 100) / 100
+    return {
+      key: cat.id,
+      title: cat.name,
+      subtitle: null,
+      menge: (
+        <PinnedHoursField
+          value={text}
+          label={cat.name}
+          onFocus={() => {
+            pinnedFocusRef.current = cat.id
+          }}
+          onChange={(v) => setPinnedHours((p) => ({ ...p, [cat.id]: v }))}
+          onBlur={() => commitPinned(cat, unitPrice)}
+        />
+      ),
+      kosten: `${unitPrice.toFixed(2)}/Std.`,
+      preis: total.toFixed(2),
+      // Always-shown input rows aren't removable via the (×); clearing the
+      // hours to 0 removes the underlying item instead.
+      removable: false,
+    }
+  })
+
+  // Subtotal tracks pinned hours live (before blur/commit) so it never lags
+  // the per-row Preis. Committed pinned items are excluded from the
+  // machineItems sum to avoid double-counting with `livePinnedTotal`.
+  const livePinnedTotal = pinnedRows.reduce(
+    (s, r) => s + (parseFloat(r.preis) || 0),
+    0,
+  )
+  const machineTotal =
+    machineItems
+      .filter((i) => !(i.catalogId && pinnedIds.has(i.catalogId)))
+      .reduce((s, i) => s + i.totalPrice, 0) + livePinnedTotal
+  const wsTotal = machineTotal + materialTotal
+  const showMachineBox =
+    nfcItems.length > 0 || otherMachineRows.length > 0 || pinnedCatalog.length > 0
+
   return (
     <section
       ref={sectionRef}
@@ -317,13 +465,26 @@ export function WorkshopInlineSection({
         {workshop.label}
       </h2>
 
-      {nfcItems.length > 0 && (
+      {showMachineBox && (
         <div className="rounded-md border border-border bg-card shadow-sm">
           <div className="px-3 py-3 sm:px-4">
+            {/* NFC (session-expandable), picker-added, and pinned manual-hour
+                rows share one table so machine usage reads consistently
+                regardless of how it was captured (issue #105). NFC + pinned
+                rows opt out of the (×) via `removable: false`; only
+                picker-added machine rows are removable. */}
             <PositionTable
               firstColLabel="Maschinen / Werkzeuge"
-              rows={nfcRows}
-              onToggle={checkoutId ? toggleNfc : undefined}
+              rows={[...nfcRows, ...otherMachineRows, ...pinnedRows]}
+              onToggle={nfcItems.length > 0 && checkoutId ? toggleNfc : undefined}
+              // Only picker-added machine rows are removable; pinned/NFC rows
+              // set removable:false. Omit onRemove entirely when there are
+              // none so a pinned-only workshop keeps the no-gutter layout.
+              onRemove={
+                otherMachineRows.length > 0
+                  ? (id) => callbacks.removeItem(id)
+                  : undefined
+              }
             />
           </div>
         </div>
@@ -376,5 +537,62 @@ export function WorkshopInlineSection({
         </span>
       </div>
     </section>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Pinned machine rows (issue #105). For machines without a MaCo, the cost
+// step shows an always-visible hours input so visitors can record usage
+// manually. Each pinned machine is a catalog item referenced from
+// `config/pricing.workshops[ws].pinnedMachines`; the row IS the
+// representation of its checkout item — entering hours upserts it, clearing
+// removes it.
+// ---------------------------------------------------------------------------
+
+/** Digits with at most one `.`/`,` separator and decimals; empty allowed so
+ *  the field can be cleared. A `type="text"` input is used deliberately:
+ *  `type="number"` returns "" from `e.target.value` mid-decimal (e.g. "1."),
+ *  which silently swallowed fractional hours (issue #105). */
+const HOURS_TYPING_PATTERN = /^(?:|\d*(?:[.,]\d*)?)$/
+
+/**
+ * Editable hours cell for a pinned machine (issue #105), rendered in the
+ * shared PositionTable's Menge column so it lines up with NFC machine rows
+ * (which show "X Min") and material rows. Controlled by WorkshopInlineSection
+ * — the Preis column reflects the live value — and commits on blur. Accepts
+ * fractional hours (e.g. 1.5).
+ */
+function PinnedHoursField({
+  value,
+  label,
+  onFocus,
+  onChange,
+  onBlur,
+}: {
+  value: string
+  label: string
+  onFocus: () => void
+  onChange: (v: string) => void
+  onBlur: () => void
+}) {
+  return (
+    <span className="inline-flex items-center justify-end gap-1">
+      <input
+        type="text"
+        inputMode="decimal"
+        value={value}
+        aria-label={`Stunden ${label}`}
+        placeholder="0"
+        onFocus={onFocus}
+        onChange={(e) => {
+          const raw = e.target.value
+          if (!HOURS_TYPING_PATTERN.test(raw)) return
+          onChange(raw)
+        }}
+        onBlur={onBlur}
+        className="h-8 w-16 rounded-[3px] border border-[#ccc] bg-background px-2 text-right text-sm tabular-nums text-foreground outline-none focus:border-cog-teal"
+      />
+      <span className="text-xs text-muted-foreground">Std.</span>
+    </span>
   )
 }

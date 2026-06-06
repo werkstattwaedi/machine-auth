@@ -26,7 +26,7 @@ import type {
   CheckoutItemEntity,
 } from "../types/firestore_entities";
 import type { BillEntity, BillKind, BillSource } from "./types";
-import { usageDiscount, type UsageType } from "@oww/shared";
+import { usageDiscount, isMachineItem, type UsageType } from "@oww/shared";
 
 /**
  * Allocate a sequential reference number from `config/billing` and write a
@@ -178,11 +178,11 @@ export async function createBillForCheckout(
     );
     const machineCost =
       items
-        .filter((i) => i.origin === "nfc")
+        .filter((i) => isMachineItem(i))
         .reduce((sum, i) => sum + i.totalPrice, 0) * discount.machine;
     const materialCost =
       items
-        .filter((i) => i.origin !== "nfc")
+        .filter((i) => !isMachineItem(i))
         .reduce((sum, i) => sum + i.totalPrice, 0) * discount.material;
     grandTotal = Math.round((entryFees + machineCost + materialCost) * 100) / 100;
   }
