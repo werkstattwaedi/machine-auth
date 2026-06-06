@@ -368,7 +368,7 @@ function PickerBody({
       <div className="flex-1 overflow-y-auto">
       {filtered.length === 0 && !showFallbacks ? (
         <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-          Keine Treffer. Such-Begriff anpassen oder einen anderen Filter wählen.
+          Keine Treffer. Suchbegriff anpassen oder einen anderen Filter wählen.
         </div>
       ) : (
         filtered.map((cat) => {

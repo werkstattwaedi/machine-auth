@@ -318,7 +318,7 @@ describe("MaterialPicker", () => {
     renderPicker({ catalogItems: [] })
     expect(
       screen.getByText(
-        /Keine Treffer\. Such-Begriff anpassen oder einen anderen Filter wählen\./,
+        /Keine Treffer\. Suchbegriff anpassen oder einen anderen Filter wählen\./,
       ),
     ).toBeTruthy()
   })
