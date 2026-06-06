@@ -6,6 +6,7 @@ import {
   BrowserWindow,
   ipcMain,
   session,
+  shell,
   type WebContents,
 } from "electron"
 import path from "node:path"
@@ -39,6 +40,23 @@ async function clearSession(): Promise<void> {
 }
 
 let mainWindow: BrowserWindow | null = null
+
+// Hand a URL off to the OS default browser/PDF viewer. Gated to `https:`
+// only: `shell.openExternal` can launch arbitrary OS handlers, so a
+// compromised page must not be able to pop `file:`/custom-scheme URLs.
+// Signed Cloud Storage URLs (and any legitimate off-origin link) are always
+// https.
+function openExternalIfSafe(url: string): void {
+  try {
+    if (new URL(url).protocol === "https:") {
+      void shell.openExternal(url)
+    } else {
+      console.warn(`Refused to open non-https external URL: ${url}`)
+    }
+  } catch {
+    console.warn(`Refused to open malformed external URL: ${url}`)
+  }
+}
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -75,6 +93,17 @@ function createWindow(): void {
     "did-attach-webview",
     (_event, webviewWebContents) => {
       webviewWebContents.setWindowOpenHandler(() => ({ action: "deny" }))
+
+      // PDF downloads (signed Storage URLs served with
+      // `Content-Disposition: attachment`) fire `will-download` rather than
+      // `will-navigate`. Inside the menu-less kiosk webview these surface no
+      // save UI and silently go nowhere (issue #376). Cancel the in-webview
+      // download and hand the URL to the OS default browser/PDF viewer.
+      webviewWebContents.session.on("will-download", (event, item) => {
+        event.preventDefault()
+        openExternalIfSafe(item.getURL())
+      })
+
       webviewWebContents.on("will-navigate", (event, navUrl) => {
         try {
           const allowed = new URL(config.url).origin
@@ -83,7 +112,12 @@ function createWindow(): void {
             console.warn(
               `Blocked webview navigation to off-origin URL: ${navUrl}`
             )
+            // Keep the kiosk page itself put, but if the off-origin target is
+            // a real https resource (e.g. Chromium routed a download here
+            // instead of `will-download`), open it externally rather than
+            // dropping it silently.
             event.preventDefault()
+            openExternalIfSafe(navUrl)
           }
         } catch {
           event.preventDefault()
