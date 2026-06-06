@@ -42,6 +42,24 @@ firebase use
 step "Generating env files from operations config"
 npm run generate-env
 
+# A prior deploy rewrites functions/package.json's @oww/shared to a packed
+# `file:` tarball (see scripts/deploy-functions.ts) and deploy:functions:cleanup
+# normally reverts it. An interrupted/failed deploy can leave that state
+# behind; the next `npm install` then resolves @oww/shared to the *stale*
+# tarball, so `tsc` can't see exports added since (mirrors the husky
+# pre-commit guard). Self-heal here so predeploy never builds against a
+# stale shared package.
+if grep -q '"@oww/shared": "file:' functions/package.json 2>/dev/null; then
+  warn "functions/package.json is in deploy state (@oww/shared → packed tarball, leftover from an interrupted deploy). Restoring the workspace ref."
+  git restore functions/package.json
+  rm -f functions/oww-shared-*.tgz
+fi
+# The `file:` install extracts a real `functions/node_modules/@oww/shared`
+# that shadows the hoisted workspace symlink. `npm install` does NOT prune
+# it, so tsc keeps resolving the stale copy even after the ref is restored —
+# always clear it before installing.
+rm -rf functions/node_modules/@oww/shared
+
 step "Install all workspace dependencies (root)"
 npm install
 
