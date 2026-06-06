@@ -44,6 +44,19 @@ function cleanup(): void {
       }
     }
   }
+  // The `file:` install extracts a real `functions/node_modules/@oww/shared`
+  // that shadows the hoisted workspace symlink. Restoring package.json isn't
+  // enough — a later build/install resolves this stale copy and fails on
+  // exports added since (the deploy-state bug). Remove it so the workspace
+  // symlink takes over again.
+  try {
+    rmSync(join(FUNCTIONS, "node_modules", "@oww", "shared"), {
+      recursive: true,
+      force: true,
+    });
+  } catch {
+    // ignore — pre-commit hook + predeploy guard also clear it
+  }
 }
 
 function cleanupAndExit(signal: NodeJS.Signals): void {

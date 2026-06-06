@@ -54,6 +54,11 @@ if grep -q '"@oww/shared": "file:' functions/package.json 2>/dev/null; then
   git restore functions/package.json
   rm -f functions/oww-shared-*.tgz
 fi
+# The `file:` install extracts a real `functions/node_modules/@oww/shared`
+# that shadows the hoisted workspace symlink. `npm install` does NOT prune
+# it, so tsc keeps resolving the stale copy even after the ref is restored —
+# always clear it before installing.
+rm -rf functions/node_modules/@oww/shared
 
 step "Install all workspace dependencies (root)"
 npm install
