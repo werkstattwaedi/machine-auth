@@ -152,6 +152,25 @@ function renderUsagePage() {
   return render(<Component />, { wrapper: Wrapper })
 }
 
+// Radix Tooltip (used by the "Letzter Besuch" stat card) positions its
+// content with Floating UI, which needs a few browser APIs jsdom omits.
+// Stub the minimum so the tooltip can open under test.
+beforeEach(() => {
+  if (!("ResizeObserver" in globalThis)) {
+    ;(globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver =
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      }
+  }
+  if (!Element.prototype.hasPointerCapture) {
+    Element.prototype.hasPointerCapture = () => false
+    Element.prototype.setPointerCapture = () => {}
+    Element.prototype.releasePointerCapture = () => {}
+  }
+})
+
 // ── Tests ──────────────────────────────────────────────────────────────
 
 describe("Usage page", () => {
@@ -288,6 +307,75 @@ describe("Usage page", () => {
     expect(screen.getAllByText("Holz").length).toBeGreaterThan(0)
     expect(screen.getByText(/CHF\s*45\.00/)).toBeInTheDocument()
     expect(screen.getByText("1 h 30 min")).toBeInTheDocument()
+  })
+
+  it("shows all visited workshops as chips in the wide table row (no +N collapse)", async () => {
+    const user = userEvent.setup()
+    fakeDb.setDoc(fakeDb.doc("checkouts", "co-multi"), {
+      userId: fakeDb.doc("users", "user1"),
+      status: "closed",
+      created: new Date("2025-06-10T14:00:00"),
+      closedAt: new Date("2025-06-10T15:30:00"),
+      summary: { totalPrice: 45 },
+      billRef: null,
+      workshopsVisited: ["holz", "laser", "metall"],
+    })
+
+    renderUsagePage()
+
+    await waitFor(() => {
+      expect(screen.getByText("Nutzungsverlauf")).toBeInTheDocument()
+    })
+    await user.click(
+      screen.getByRole("button", { name: /Werkstatt-Besuche/ }),
+    )
+
+    // The table row uses the available horizontal space and shows every
+    // workshop name as its own chip — Laser and Metall must not be hidden
+    // behind a "+2" collapse (issue #395).
+    const sessionsTable = screen
+      .getByText("Werkstatt-Besuche", { selector: "h2" })
+      .closest("div.rounded-2xl") as HTMLElement
+    expect(sessionsTable).not.toBeNull()
+    const within = (text: string) =>
+      Array.from(sessionsTable.querySelectorAll("span")).filter(
+        (el) => el.textContent === text,
+      )
+    expect(within("Holz").length).toBeGreaterThan(0)
+    expect(within("Laser").length).toBeGreaterThan(0)
+    expect(within("Metall").length).toBeGreaterThan(0)
+    // No collapsed "+N" indicator inside the sessions table row.
+    expect(sessionsTable.textContent).not.toMatch(/\+\d/)
+  })
+
+  it("collapses the stat card to '+N' but reveals all workshops via tooltip", async () => {
+    const user = userEvent.setup()
+    fakeDb.setDoc(fakeDb.doc("checkouts", "co-multi2"), {
+      userId: fakeDb.doc("users", "user1"),
+      status: "closed",
+      created: new Date("2025-06-10T14:00:00"),
+      closedAt: new Date("2025-06-10T15:30:00"),
+      summary: { totalPrice: 45 },
+      billRef: null,
+      workshopsVisited: ["holz", "laser", "metall"],
+    })
+
+    renderUsagePage()
+
+    await waitFor(() => {
+      expect(screen.getByText("Nutzungsverlauf")).toBeInTheDocument()
+    })
+
+    // The narrow "Letzter Besuch" stat card keeps the compact "Holz +2" form.
+    const trigger = screen.getByText("Holz +2")
+    expect(trigger).toBeInTheDocument()
+
+    // Focusing the collapsed label opens the Radix tooltip (keyboard-
+    // accessible affordance) and reveals the full workshop list. The content
+    // is rendered into a portal; assert it appears anywhere in the document.
+    await user.hover(trigger)
+    const tip = await screen.findByRole("tooltip")
+    expect(tip).toHaveTextContent("Holz, Laser, Metall")
   })
 
   it("download button calls getInvoiceDownloadUrl and triggers anchor click", async () => {

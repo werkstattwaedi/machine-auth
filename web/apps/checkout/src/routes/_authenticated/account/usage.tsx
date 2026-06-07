@@ -19,6 +19,12 @@ import { EmptyState } from "@modules/components/empty-state"
 import { QueryError } from "@modules/components/query-error"
 import { Badge } from "@modules/components/ui/badge"
 import { Button } from "@modules/components/ui/button"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@modules/components/ui/tooltip"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { cn } from "@modules/lib/utils"
 import {
@@ -141,9 +147,11 @@ function UsageContent({ userDoc }: { userDoc: UserDoc }) {
         <StatCard
           label="Letzter Besuch"
           value={
-            stats.lastSession
-              ? lastSessionTitle(stats.lastSession)
-              : "—"
+            stats.lastSession ? (
+              <LastSessionValue session={stats.lastSession} />
+            ) : (
+              "—"
+            )
           }
           valueClassName="text-[20px]"
           foot={
@@ -196,7 +204,7 @@ function StatCard({
   valueClassName,
 }: {
   label: string
-  value: string
+  value: React.ReactNode
   foot: string
   valueClassName?: string
 }) {
@@ -463,20 +471,8 @@ function SessionsPanel({
                   {formatTime(date)}
                 </span>
               </div>
-              <div className="flex items-center gap-2.5 min-w-0">
-                {workshops.length === 0 ? (
-                  <span className="text-muted-foreground">—</span>
-                ) : (
-                  <>
-                    <span
-                      className="h-2.5 w-2.5 rounded-full shrink-0"
-                      style={{ background: workshopColor(workshops[0]) }}
-                    />
-                    <span className="font-semibold truncate">
-                      {workshopLabel(workshops)}
-                    </span>
-                  </>
-                )}
+              <div className="min-w-0">
+                <WorkshopChips workshops={workshops} />
               </div>
               <div className="text-muted-foreground tabular-nums whitespace-nowrap">
                 {formatDuration(minutes)}
@@ -488,6 +484,31 @@ function SessionsPanel({
           )
         })}
       </ul>
+    </div>
+  )
+}
+
+/** Full, wrapping list of workshop chips for the wide table row. The
+ *  "Werkstatt-Besuche" column has ample horizontal space, so we show every
+ *  workshop visited instead of collapsing to "+N" (issue #395). */
+function WorkshopChips({ workshops }: { workshops: string[] }) {
+  if (workshops.length === 0) {
+    return <span className="text-muted-foreground">—</span>
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+      {workshops.map((w, i) => (
+        <span
+          key={`${w}-${i}`}
+          className="inline-flex items-center gap-2 min-w-0"
+        >
+          <span
+            className="h-2.5 w-2.5 rounded-full shrink-0"
+            style={{ background: workshopColor(w) }}
+          />
+          <span className="font-semibold truncate">{capitalize(w)}</span>
+        </span>
+      ))}
     </div>
   )
 }
@@ -528,10 +549,36 @@ function capitalize(s: string): string {
   return s[0].toUpperCase() + s.slice(1)
 }
 
-function lastSessionTitle(co: CheckoutDoc & { id: string }): string {
-  const w = co.workshopsVisited ?? []
-  if (w.length === 0) return "Besuch"
-  return workshopLabel(w)
+/** Compact "Holz +2" label for the narrow "Letzter Besuch" stat card. When
+ *  workshops are collapsed, a tooltip reveals the full list on hover/focus so
+ *  the hidden workshops remain discoverable (issue #395). */
+function LastSessionValue({
+  session,
+}: {
+  session: CheckoutDoc & { id: string }
+}) {
+  const workshops = session.workshopsVisited ?? []
+  if (workshops.length === 0) return <>Besuch</>
+
+  const label = workshopLabel(workshops)
+  // Only the collapsed form (>1 workshop) hides information; show the tooltip
+  // affordance only when there is something to reveal.
+  if (workshops.length <= 1) return <>{label}</>
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="cursor-default underline decoration-dotted decoration-from-font underline-offset-4">
+            {label}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>
+          {workshops.map((w) => capitalize(w)).join(", ")}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
 }
 
 function formatTime(d: Date): string {
