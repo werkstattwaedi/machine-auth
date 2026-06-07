@@ -39,6 +39,7 @@ export const RpcMethod = {
     "verifyLoginCode",
     "verifyMagicLink",
     "resolveTag",
+    "verifyTagCheckout",
   ],
   membershipCall: [
     "purchaseMembership",

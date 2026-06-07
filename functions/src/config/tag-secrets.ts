@@ -20,3 +20,9 @@ export const diversificationMasterKey = defineSecret("DIVERSIFICATION_MASTER_KEY
 export const diversificationSystemName = defineString(
   "DIVERSIFICATION_SYSTEM_NAME"
 );
+
+// Soft revocation/audit knob for the kiosk's verifyTagCheckout call. NOT real
+// kiosk attestation — extracting this from a public Windows machine is trivial.
+// The actual security is the synthetic-UID custom token returned by
+// verifyTagCheckout (see checkout/verify_tag.ts).
+export const kioskBearerKey = defineSecret("KIOSK_BEARER_KEY");

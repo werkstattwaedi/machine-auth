@@ -38,9 +38,8 @@ function modules, and ES modules evaluate those dependencies *before* the
 `import "./options"` as the first line guarantees that.
 
 Client side targets the same region: `getFunctions(app, "europe-west6")`, the
-`verifyTagCheckout` raw-fetch `VITE_FUNCTIONS_REGION` default, the gateway
-`firebaseUrl`, and the test/env fixtures. The production region lives in the
-operations repo config (`firebase.region`, `gateway.firebaseUrl`).
+gateway `firebaseUrl`, and the test/env fixtures. The production region lives in
+the operations repo config (`firebase.region`, `gateway.firebaseUrl`).
 
 ### Grouping — four domain dispatchers
 
@@ -49,7 +48,7 @@ functions, one per domain:
 
 | Dispatcher | Methods |
 |---|---|
-| `authCall` | createUser, requestLoginCode, verifyLoginCode, verifyMagicLink |
+| `authCall` | createUser, requestLoginCode, verifyLoginCode, verifyMagicLink, resolveTag, verifyTagCheckout |
 | `membershipCall` | purchase/invite/accept/reject/revoke/remove/createChild/cancel/cancelAutoRenew + the two admin ops |
 | `billingCall` | getInvoiceDownloadUrl, getPaymentQrData, closeCheckoutAndGetPayment, acknowledgeBill |
 | `catalogCall` | upsertCatalogItem, getPriceListPdfUrl |
