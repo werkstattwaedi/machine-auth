@@ -15,8 +15,12 @@ pw::Result<NdefTemplate> BuildNdefTemplate(std::string_view base_url) {
   const size_t url_total = base_url.size() + kUrlSuffixLength;
   // Payload = URI prefix code (1) + url_total
   const size_t payload_length = 1 + url_total;
-  // NDEF message = header(3) + payload_length(1) + type(1) + payload
-  const size_t ndef_message_length = 3 + payload_length;
+  // NDEF SR record = 4-byte header [flags(1) + type-length(1) +
+  // payload-length(1) + type(1)] + payload. (A previous off-by-one used 3
+  // here, so NLEN under-reported by one byte and the record's declared
+  // payload overran the message — every spec-compliant NDEF reader, incl.
+  // Android tap-to-open and Web NFC, then rejected the tag as malformed.)
+  const size_t ndef_message_length = 4 + payload_length;
   // Total file = NLEN(2) + NDEF message
   const size_t total_size = 2 + ndef_message_length;
 
