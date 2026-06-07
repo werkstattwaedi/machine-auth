@@ -9,8 +9,15 @@ import * as crypto from "crypto";
 import { getFirestore } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
 import * as logger from "firebase-functions/logger";
+import { CallableRequest, HttpsError } from "firebase-functions/v2/https";
 import { decryptPICCData, verifyCMAC, PICCData } from "../ntag/sdm_crypto";
 import { diversifyKey } from "../ntag/key_diversification";
+import {
+  terminalKey,
+  diversificationMasterKey,
+  diversificationSystemName,
+  kioskBearerKey,
+} from "../config/tag-secrets";
 
 /**
  * Configuration passed from middleware
@@ -229,3 +236,42 @@ export async function handleVerifyTagCheckout(
     activeMembership: !!userData?.activeMembership,
   };
 }
+
+/**
+ * Callable wrapper for the kiosk tag-tap checkout. Routed via the `authCall`
+ * dispatcher so it shares CORS handling with every other web callable (no raw
+ * Express endpoint, no hand-rolled preflight). The `bearer` is a soft
+ * revocation/audit gate carried in the payload (the kiosk Electron bridge
+ * supplies it); the real security is the SDM tag crypto + the synthetic-UID
+ * custom token. Skipped in the emulator so E2E needs no secret in seed data.
+ */
+export const verifyTagCheckoutHandler = async (
+  request: CallableRequest<VerifyTagRequest & { bearer?: string }>
+): Promise<VerifyTagResponse> => {
+  const { picc, cmac, bearer } = request.data ?? ({} as VerifyTagRequest);
+
+  if (
+    process.env.FUNCTIONS_EMULATOR !== "true" &&
+    bearer !== kioskBearerKey.value()
+  ) {
+    logger.warn("verifyTagCheckout rejected: missing/invalid kiosk bearer.");
+    throw new HttpsError("permission-denied", "Forbidden");
+  }
+
+  try {
+    return await handleVerifyTagCheckout(
+      { picc, cmac },
+      {
+        terminalKey: terminalKey.value(),
+        masterKey: diversificationMasterKey.value(),
+        systemName: diversificationSystemName.value(),
+      }
+    );
+  } catch (error: any) {
+    logger.error("Tag verification failed", { error: error?.message });
+    throw new HttpsError(
+      "invalid-argument",
+      error?.message || "Tag verification failed"
+    );
+  }
+};

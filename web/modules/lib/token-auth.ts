@@ -10,6 +10,7 @@ import {
 } from "firebase/auth"
 import { useFunctions, useFirebaseAuth } from "./firebase-context"
 import { resolveBridgeBearer } from "./use-bridge"
+import { rpcCallable } from "./rpc"
 
 export interface TokenUser {
   tokenId: string
@@ -35,17 +36,6 @@ interface UseTokenAuthResult {
   isTagAuth: boolean
   /** Sign out of the tag-created Firebase Auth session */
   tagSignOut: () => Promise<void>
-}
-
-const FUNCTIONS_REGION = import.meta.env.VITE_FUNCTIONS_REGION ?? "europe-west6"
-
-/** Build the base URL for the Functions endpoint. */
-function functionsBaseUrl(projectId: string | undefined): string {
-  if (import.meta.env.DEV) {
-    const port = import.meta.env.VITE_EMULATOR_FUNCTIONS_PORT || "5001"
-    return `http://127.0.0.1:${port}/${import.meta.env.VITE_FIREBASE_PROJECT_ID}/${FUNCTIONS_REGION}`
-  }
-  return `https://${FUNCTIONS_REGION}-${projectId}.cloudfunctions.net`
 }
 
 interface VerifyTagResponse {
@@ -99,7 +89,6 @@ export function useTokenAuth(
     setLoading(true)
     setError(null)
 
-    const url = `${functionsBaseUrl(functions.app.options.projectId)}/api/verifyTagCheckout`
     let cancelled = false
 
     ;(async () => {
@@ -108,24 +97,21 @@ export function useTokenAuth(
         let pending = inflightVerifyByKey.get(cacheKey)
         if (!pending) {
           pending = (async () => {
-            const headers: Record<string, string> = {
-              "Content-Type": "application/json",
-            }
+            // Goes through the authCall dispatcher like every other web
+            // callable, so CORS is handled by the Firebase SDK. The kiosk
+            // bearer (soft revocation/audit gate) rides in the payload — the
+            // Electron bridge supplies it; a normal browser sends none.
             const bearer = await resolveBridgeBearer()
-            if (bearer) headers["Authorization"] = `Bearer ${bearer}`
-
-            const res = await fetch(url, {
-              method: "POST",
-              headers,
-              body: JSON.stringify({ picc, cmac }),
+            const verifyTagCheckout = rpcCallable<
+              { picc: string; cmac: string; bearer?: string },
+              VerifyTagResponse
+            >(functions, "authCall", "verifyTagCheckout")
+            const res = await verifyTagCheckout({
+              picc,
+              cmac,
+              bearer: bearer ?? undefined,
             })
-            const responseBody = await res.json()
-            if (!res.ok) {
-              throw new Error(
-                responseBody.error ?? "Tag-Verifizierung fehlgeschlagen"
-              )
-            }
-            return responseBody as VerifyTagResponse
+            return res.data
           })()
           inflightVerifyByKey.set(cacheKey, pending)
           // Drop the cache entry once settled so a fresh tap (after tagSignOut)

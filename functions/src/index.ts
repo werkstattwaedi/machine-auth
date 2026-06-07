@@ -22,7 +22,6 @@ import { handleTerminalCheckin } from "./auth/handle_terminal_checkin";
 import { handleAuthenticateTag } from "./auth/handle_authenticate_tag";
 import { handleCompleteTagAuth } from "./auth/handle_complete_tag_auth";
 import { handleUploadUsage } from "./session/handle_upload_usage";
-import { handleVerifyTagCheckout } from "./checkout/verify_tag";
 import {
   terminalKey,
   diversificationMasterKey,
@@ -33,69 +32,9 @@ import { BinaryWriter } from "@bufbuild/protobuf/wire";
 initializeApp();
 
 const gatewayApiKey = defineSecret("GATEWAY_API_KEY");
-// Soft revocation/audit knob for the kiosk's verifyTagCheckout call. NOT real
-// kiosk attestation — extracting this from a public Windows machine is
-// trivial. The actual security is the synthetic-UID custom token returned by
-// verifyTagCheckout (see checkout/verify_tag.ts).
-const kioskBearerKey = defineSecret("KIOSK_BEARER_KEY");
 
 export const app = express();
 app.use(express.json());
-
-// Per-route middleware for the public verifyTagCheckout endpoint. Bearer is
-// required in production; emulator mode skips it so E2E doesn't need the
-// secret baked into seed data.
-const kioskAuthMiddleware = (
-  req: express.Request,
-  res: express.Response,
-  next: express.NextFunction
-) => {
-  if (process.env.FUNCTIONS_EMULATOR === "true") {
-    next();
-    return;
-  }
-
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    logger.warn("Kiosk request missing Authorization header.");
-    res.status(401).send({ error: "Unauthorized" });
-    return;
-  }
-
-  const token = authHeader.split(" ")[1];
-  if (token !== kioskBearerKey.value()) {
-    logger.warn("Kiosk request with invalid Bearer.");
-    res.status(403).send({ error: "Forbidden" });
-    return;
-  }
-
-  // Tag the request with kiosk identity for audit-friendly logging downstream.
-  // Single-kiosk deployment for now; revisit when more kiosks are provisioned.
-  (req as { kioskId?: string }).kioskId = "kiosk-1";
-  next();
-};
-
-export const verifyTagCheckoutHandler = async (
-  req: express.Request,
-  res: express.Response
-) => {
-  try {
-    const result = await handleVerifyTagCheckout(req.body, {
-      terminalKey: terminalKey.value(),
-      masterKey: diversificationMasterKey.value(),
-      systemName: diversificationSystemName.value(),
-    });
-
-    res.status(200).contentType("application/json").send(result);
-  } catch (error: any) {
-    logger.error("Tag verification failed", { error: error.message });
-    res.status(400).contentType("application/json").send({
-      error: error.message || "Tag verification failed",
-    });
-  }
-};
-
-app.post("/verifyTagCheckout", kioskAuthMiddleware, verifyTagCheckoutHandler);
 
 // Authentication middleware - accepts Particle webhook key or gateway key.
 const authMiddleware = (
@@ -251,12 +190,7 @@ function sendProtoResponse<T>(
 
 export const api = onRequest(
   {
-    secrets: [
-      diversificationMasterKey,
-      gatewayApiKey,
-      terminalKey,
-      kioskBearerKey,
-    ],
+    secrets: [diversificationMasterKey, gatewayApiKey, terminalKey],
     memory: "512MiB",
   },
   app
