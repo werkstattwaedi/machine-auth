@@ -302,6 +302,16 @@ export interface BillDoc extends AuditFields {
   emailSentAt?: Timestamp | null
   paymentMethodConfirmationTime?: Timestamp | null
   paymentMethodConfirmationSource?: "user" | "auto" | null
+  // "invoice" = real, payable QR-bill. "beleg" = per-visit record for a
+  // member who picked Sammelrechnung — the payable QR-bill is emitted as
+  // the aggregated monthly Sammelrechnung (`aggregatedIntoBillRef`) on the
+  // 1st. Missing `kind` is treated as "invoice" so legacy docs
+  // migrate-free. Mirrors `BillEntity.kind` in
+  // functions/src/invoice/types.ts. Issue #245/#405.
+  kind?: "invoice" | "beleg"
+  // Set on a `kind: "beleg"` once monthlyBillRun has folded it into a
+  // monthly `kind: "invoice"`. Mirrors `BillEntity.aggregatedIntoBillRef`.
+  aggregatedIntoBillRef?: DocumentReference<BillDoc> | null
   // Origin discriminator (issue #323). Missing value is treated as
   // "checkout" so legacy docs migrate-free.
   source?: "checkout" | "membership-renewal"

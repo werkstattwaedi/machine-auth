@@ -425,22 +425,24 @@ function pickTemplate(
   method: PaymentMethod | null | undefined,
   bill: BillEntity,
 ): TemplateChoice {
-  // Aggregated Sammelrechnung (issue #245): kind "invoice" + the linked
-  // checkout still records paymentMethod "monthly" (each visit was
-  // monthly-acked). Reuses RESEND_MONTHLY_TEMPLATE_ID — per-visit Belege
-  // no longer email, so the ops team owns shifting the template copy
-  // from per-visit "queued for monthly" to "your Sammelrechnung is ready".
-  if ((bill.kind ?? "invoice") === "invoice" && method === "monthly") {
+  // Sammelrechnung family (issue #245/#405) uses the self-checkout/monthly
+  // template (RESEND_MONTHLY_TEMPLATE_ID). Two documents share it:
+  //   - the per-visit Beleg emailed when a member picks "monthly" — a
+  //     receipt for the visit, NOT a payable invoice (issue #405);
+  //   - the aggregated monthly Sammelrechnung (kind "invoice" whose linked
+  //     checkout still records paymentMethod "monthly"), emitted by
+  //     monthlyBillRun.
+  // Ops owns the template copy (the existing "self-checkout-monthly"
+  // template). Falls back to the generic QR-bill template when unset
+  // (emulator / not-yet-configured).
+  if ((bill.kind ?? "invoice") === "beleg" || method === "monthly") {
     const id = resendSammelrechnungTemplateId.value();
     return {
       id: id || resendQrBillTemplateId.value(),
       paramName: id ? "RESEND_MONTHLY_TEMPLATE_ID" : "RESEND_QRBILL_TEMPLATE_ID",
     };
   }
-  // Per-visit monthly bills never reach this function — trySendEmail
-  // short-circuits on `kind === "beleg"` before calling pickTemplate.
-  // So the only paths remaining are TWINT, rechnung, and the null
-  // pre-ack default.
+  // Remaining paths are TWINT, rechnung, and the null pre-ack default.
   switch (method) {
     case "twint":
       return {
@@ -469,15 +471,17 @@ export async function trySendEmail(billId: string): Promise<boolean> {
   if (!billDoc.exists) return false;
   const bill = billDoc.data() as BillEntity;
 
-  // Email is gated on the customer's payment-method ack (issue #251).
-  // retryBillProcessing also checks this, but the helper is exported and
-  // can be called directly from tests / one-off scripts — keep the guard.
-  if (!bill.paymentMethodConfirmationTime) return false;
+  const isBeleg = (bill.kind ?? "invoice") === "beleg";
 
-  // Belege are per-visit records for a Sammelrechnung member (issue #245).
-  // They never email — the monthly aggregated invoice that supersedes
-  // them does. Defensive: the ack stamp shouldn't land on a Beleg anyway.
-  if ((bill.kind ?? "invoice") === "beleg") return false;
+  // A Beleg (per-visit Sammelrechnung record, issue #245) is committed by
+  // its kind transition (acknowledgeBill / autoAcknowledgeBills flip it to
+  // "beleg") and never carries a payment-method ack stamp. The member still
+  // wants an emailed receipt for the visit — just not a payable invoice
+  // (issue #405). So Belege bypass the ack gate; real invoices stay gated
+  // on the customer's payment-method ack (issue #251). retryBillProcessing
+  // also checks this, but the helper is exported and can be called directly
+  // from tests / one-off scripts — keep the guard.
+  if (!isBeleg && !bill.paymentMethodConfirmationTime) return false;
 
   // Free bills are auto-acked at creation to keep the cron out, but we
   // don't email a "here's your zero-amount invoice" PDF.
@@ -620,11 +624,13 @@ export const onBillUpdate = onDocumentUpdated(
     const after = event.data?.after.data() as BillEntity | undefined;
     if (!before || !after) return;
 
-    // Sammelrechnung path (issue #245): when acknowledgeBill /
+    // Sammelrechnung path (issue #245/#405): when acknowledgeBill /
     // autoAcknowledgeBills flip a bill to kind "beleg", regenerate the
     // PDF so the title reads "Beleg" / "Belegnummer:" instead of
-    // "Rechnung". No email, no membership activation — Belege wait for
-    // the monthly aggregation cron.
+    // "Rechnung", then email the Beleg to the member as a receipt for the
+    // visit (issue #405 — a receipt, not a payable invoice). Membership
+    // activation still waits for the monthly aggregation cron. trySendEmail
+    // is idempotent (emailSentAt lock).
     const beforeKind = before.kind ?? "invoice";
     const afterKind = after.kind ?? "invoice";
     if (beforeKind !== "beleg" && afterKind === "beleg") {
@@ -634,6 +640,15 @@ export const onBillUpdate = onDocumentUpdated(
         const message = err instanceof Error ? err.message : String(err);
         logger.error(
           `onBillUpdate: Beleg PDF regen threw for bill ${billId}`,
+          { error: message },
+        );
+      }
+      try {
+        await trySendEmail(billId);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.error(
+          `onBillUpdate: Beleg trySendEmail threw for bill ${billId}`,
           { error: message },
         );
       }
@@ -712,6 +727,15 @@ export const retryBillProcessing = onSchedule(
       const bill = doc.data() as BillEntity;
       const billId = doc.id;
 
+      // An email is due once the bill is committed: a real invoice carries
+      // a payment-method ack stamp (#251); a Beleg is committed by its kind
+      // transition and never gets that stamp, but still emails a visit
+      // receipt (#405). trySendEmail re-checks both, so this is just the
+      // retry gate. Free bills / missing recipients are handled there.
+      const emailDue =
+        (bill.kind ?? "invoice") === "beleg" ||
+        !!bill.paymentMethodConfirmationTime;
+
       // Needs PDF: no storagePath, no active lock (or stale lock)
       if (!bill.storagePath) {
         const isLocked = bill.pdfGeneratedAt &&
@@ -719,10 +743,9 @@ export const retryBillProcessing = onSchedule(
         if (!isLocked) {
           pdfRetries++;
           const pdfOk = await tryGeneratePdf(billId);
-          // Email retry is gated on the user's ack; if the user hasn't
-          // committed yet, the cron / next ack click will trigger the
-          // send via onBillUpdate.
-          if (pdfOk && bill.paymentMethodConfirmationTime) {
+          // Email retry is gated on commit; if not yet committed, the
+          // cron / next ack click triggers the send via onBillUpdate.
+          if (pdfOk && emailDue) {
             emailRetries++;
             await trySendEmail(billId);
           }
@@ -730,8 +753,8 @@ export const retryBillProcessing = onSchedule(
         continue;
       }
 
-      // PDF exists but email not sent — same ack gate.
-      if (!bill.emailSentAt && bill.paymentMethodConfirmationTime) {
+      // PDF exists but email not sent — same commit gate.
+      if (!bill.emailSentAt && emailDue) {
         emailRetries++;
         await trySendEmail(billId);
       }

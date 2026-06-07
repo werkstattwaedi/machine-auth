@@ -728,9 +728,9 @@ describe("bill processing triggers (Integration)", () => {
       it("picks Sammelrechnung template for monthly-acked invoice (aggregated bill, #245)", async () => {
         // Post-#245 a `kind: "invoice"` bill whose linked checkout has
         // paymentMethod "monthly" is the aggregated Sammelrechnung
-        // emitted by monthlyBillRun. Reuses RESEND_MONTHLY_TEMPLATE_ID —
-        // the per-visit Belege never reach trySendEmail (kind === "beleg"
-        // short-circuits earlier).
+        // emitted by monthlyBillRun. Reuses RESEND_MONTHLY_TEMPLATE_ID.
+        // Per-visit Belege share this template but are covered separately
+        // below (#405).
         const billId = "bill-sammelrechnung";
         await seedCheckout("co-default", {
           paymentMethod: "monthly",
@@ -767,6 +767,48 @@ describe("bill processing triggers (Integration)", () => {
           { template: { id: string } },
         ];
         expect(entity.template.id).to.equal("test-qrbill-template");
+      });
+
+      // Issue #405: a per-visit Beleg (member picked Sammelrechnung) must
+      // email a *receipt* — the self-checkout/monthly template, a BL-…
+      // reference, and a Beleg-named attachment — even though it carries
+      // no payment-method ack stamp (the kind transition is its commit).
+      it("emails a per-visit Beleg as a receipt with the Sammelrechnung template (#405)", async () => {
+        const billId = "bill-beleg-email";
+        await seedCheckout("co-default", {
+          paymentMethod: "monthly",
+          persons: [
+            { name: "Bea Beleg", email: "bea@example.com", userType: "erwachsen" },
+          ],
+        });
+        await seedBill(billId, {
+          storagePath: "invoices/bill-beleg-email.pdf",
+          referenceNumber: 14,
+          amount: 18,
+          kind: "beleg",
+          // No paymentMethodConfirmationTime — a Beleg never gets one.
+          paymentMethodConfirmationTime: null,
+        });
+
+        const ok = await trySendEmail(billId);
+        expect(ok).to.be.true;
+        expect(resendSendStub.calledOnce).to.be.true;
+
+        const [, entity] = resendSendStub.firstCall.args as [
+          string,
+          {
+            to: string;
+            template: { id: string; variables: Record<string, string> };
+            attachments: Array<{ filename: string }>;
+          },
+        ];
+        expect(entity.to).to.equal("bea@example.com");
+        expect(entity.template.id).to.equal("test-monthly-template");
+        expect(entity.template.variables.INVOICE_NUMBER).to.equal("BL-000014");
+        expect(entity.attachments[0].filename).to.equal("Beleg-BL-000014.pdf");
+
+        const updated = await getBill(billId);
+        expect(updated.emailSentAt).to.be.instanceOf(Timestamp);
       });
     });
   });

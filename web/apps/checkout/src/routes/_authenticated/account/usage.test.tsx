@@ -282,6 +282,45 @@ describe("Usage page", () => {
     expect(screen.getAllByText("Offen").length).toBeGreaterThan(0)
   })
 
+  it("renders a Beleg with a BL-… reference and a 'Beleg' badge, not 'Offen' (#405)", async () => {
+    // A Sammelrechnung per-visit Beleg has kind: "beleg" and paidAt: null
+    // permanently. It must render as "BL-…" with a neutral "Beleg" badge —
+    // not "RE-…" / "Offen", which would imply a payable invoice.
+    fakeDb.setDoc(fakeDb.doc("bills", "bill-beleg"), {
+      userId: fakeDb.doc("users", "user1"),
+      checkouts: [],
+      referenceNumber: 23,
+      amount: 18,
+      currency: "CHF",
+      storagePath: "invoices/bill-beleg.pdf",
+      created: new Date("2025-07-05"),
+      paidAt: null,
+      paidVia: null,
+      kind: "beleg",
+    })
+
+    renderUsagePage()
+
+    await waitFor(() => {
+      expect(screen.getAllByText("BL-000023").length).toBeGreaterThan(0)
+    })
+    // Reference uses the Beleg prefix, never the invoice prefix.
+    expect(screen.queryByText("RE-000023")).not.toBeInTheDocument()
+    // Neutral "Beleg" badge instead of the payable "Offen" status.
+    expect(screen.getAllByText("Beleg").length).toBeGreaterThan(0)
+    // A Beleg is not payable: the "Offen" stat shows CHF 0.00 (the only
+    // bill is a Beleg, which must not be counted). Note "Offen" the word
+    // still appears as the stat-card label and the filter pill, so we
+    // assert on the excluded amount rather than the label text.
+    const offenCard = screen
+      .getByText("Offen", { selector: "span" })
+      .closest("div") as HTMLElement
+    expect(offenCard.textContent).toMatch(/CHF\s*0\.00/)
+    // The bill amount (CHF 18) appears in its row but must NOT have been
+    // summed into the "Offen" total.
+    expect(offenCard.textContent).not.toMatch(/18/)
+  })
+
   it("renders closed checkouts under the Werkstatt-Besuche tab", async () => {
     const user = userEvent.setup()
     fakeDb.setDoc(fakeDb.doc("checkouts", "co1"), {
