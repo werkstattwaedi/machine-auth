@@ -95,6 +95,7 @@ void AppInit() {
   // Start coordinator — keys come from console over RPC, no cloud needed
   static maco::personalize::PersonalizeCoordinator coordinator(
       nfc_reader,
+      maco::system::GetDeviceSecrets(),
       maco::system::GetRandomGenerator(),
       pw::System().allocator());
   g_coordinator = &coordinator;

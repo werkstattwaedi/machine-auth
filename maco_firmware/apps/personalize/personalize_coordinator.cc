@@ -17,9 +17,11 @@ namespace maco::personalize {
 
 PersonalizeCoordinator::PersonalizeCoordinator(
     nfc::NfcReader& reader,
+    secrets::DeviceSecrets& device_secrets,
     pw::random::RandomGenerator& rng,
     pw::allocator::Allocator& allocator)
     : reader_(reader),
+      device_secrets_(device_secrets),
       rng_(rng),
       coro_cx_(allocator) {}
 
@@ -140,64 +142,51 @@ pw::async2::Coro<pw::Status> PersonalizeCoordinator::Run(
 pw::async2::Coro<pw::Status> PersonalizeCoordinator::HandleTag(
     pw::async2::CoroContext cx,
     nfc::NfcTag& tag) {
-  // IdentifyTag still needs device_secrets for the terminal key probe.
-  // With the new architecture, the tag identifier uses the reader's
-  // factory-default key probe only (no terminal key check needed for
-  // classification — factory tags have default keys, MaCo tags don't).
-  // However, the existing IdentifyTag requires DeviceSecrets. Since we
-  // no longer have it, we do a simplified identification: try default key 0.
-  // If auth succeeds → factory tag. If fails → already personalized (MaCo)
-  // or unknown.
+  // Identify the tag and read its REAL 7-byte UID via GetCardUid. Factory
+  // tags authenticate with the default key 0; already-personalized (MaCo)
+  // tags authenticate with the provisioned terminal key (key 1, read from
+  // device secrets). This is critical: with Random-ID enabled, the
+  // anti-collision UID is a random 4-byte value, NOT the real UID — using it
+  // would diversify the per-UID keys against the wrong UID. If neither key
+  // authenticates, the tag is unknown and we abort rather than guess.
+  auto ident_result =
+      co_await IdentifyTag(cx, tag, reader_, device_secrets_, rng_);
+  if (!ident_result.ok()) {
+    SetError("Tag-Identifikation fehlgeschlagen");
+    StreamTagEvent(maco_TagEvent_EventType_PERSONALIZATION_FAILED,
+                   maco_TagEvent_TagType_TAG_UNKNOWN, tag.uid(),
+                   "Identification error");
+    co_return ident_result.status();
+  }
+  const TagIdentification& ident = *ident_result;
 
-  auto tag_info = TagInfoFromNfcTag(tag);
-  nfc::Ntag424Tag ntag(reader_, tag_info);
-
-  // Try to select the NTAG424 application
-  auto select_status = co_await ntag.SelectApplication(cx);
-  if (!select_status.ok()) {
+  if (ident.type == TagType::kUnknown) {
+    // Neither the default nor the terminal key authenticated.
     SetState(PersonalizeStateId::kUnknownTag);
     StreamTagEvent(maco_TagEvent_EventType_TAG_ARRIVED,
-                   maco_TagEvent_TagType_TAG_UNKNOWN,
-                   tag.uid(), "Not an NTAG424 tag");
+                   maco_TagEvent_TagType_TAG_UNKNOWN, tag.uid(),
+                   "Unbekannter Tag (Schlüssel passen nicht)");
     co_return pw::OkStatus();
   }
 
-  // Try authenticating with default key 0
-  constexpr std::array<std::byte, 16> kDefaultKey = {};
-  nfc::LocalKeyProvider default_provider(0, kDefaultKey, rng_);
-  auto auth_result = co_await ntag.Authenticate(cx, default_provider);
-
-  TagType tag_type;
-  std::array<std::byte, 7> uid_buffer{};
-  size_t uid_size = 0;
-
-  if (auth_result.ok()) {
-    // Default key works → factory tag
-    tag_type = TagType::kFactory;
-
-    // Get authenticated UID
-    auto uid_result = co_await ntag.GetCardUid(
-        cx, *auth_result, pw::ByteSpan(uid_buffer));
-    if (uid_result.ok()) {
-      uid_size = *uid_result;
-    } else {
-      // Fall back to anti-collision UID
-      auto ac_uid = tag.uid();
-      uid_size = std::min(ac_uid.size(), uid_buffer.size());
-      std::copy_n(ac_uid.begin(), uid_size, uid_buffer.begin());
-    }
-  } else {
-    // Default key failed → assume already personalized (MaCo tag)
-    tag_type = TagType::kMaCo;
-    auto ac_uid = tag.uid();
-    uid_size = std::min(ac_uid.size(), uid_buffer.size());
-    std::copy_n(ac_uid.begin(), uid_size, uid_buffer.begin());
+  if (ident.uid_size != maco::TagUid::kSize) {
+    // Authenticated, but GetCardUid did not return the real 7-byte UID.
+    // Never proceed with a partial UID — it would mis-diversify the keys.
+    SetError("Echte UID konnte nicht gelesen werden");
+    StreamTagEvent(maco_TagEvent_EventType_PERSONALIZATION_FAILED,
+                   ident.type == TagType::kFactory
+                       ? maco_TagEvent_TagType_TAG_FACTORY
+                       : maco_TagEvent_TagType_TAG_MACO,
+                   tag.uid(), "GetCardUid failed");
+    co_return pw::OkStatus();
   }
 
-  auto stream_tag_type = tag_type == TagType::kFactory
+  const std::array<std::byte, 7>& uid_buffer = ident.uid;
+  const size_t uid_size = ident.uid_size;
+  auto stream_tag_type = ident.type == TagType::kFactory
                              ? maco_TagEvent_TagType_TAG_FACTORY
                              : maco_TagEvent_TagType_TAG_MACO;
-  auto screen_state = tag_type == TagType::kFactory
+  auto screen_state = ident.type == TagType::kFactory
                           ? PersonalizeStateId::kFactoryTag
                           : PersonalizeStateId::kMacoTag;
 
