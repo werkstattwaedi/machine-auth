@@ -22,6 +22,10 @@
 #include "pw_sync/interrupt_spin_lock.h"
 #include "pw_sync/lock_annotations.h"
 
+namespace maco::secrets {
+class DeviceSecrets;
+}
+
 namespace maco::personalize {
 
 /// Orchestrates NFC tag identification, key provisioning, and SDM
@@ -29,6 +33,7 @@ namespace maco::personalize {
 class PersonalizeCoordinator {
  public:
   PersonalizeCoordinator(nfc::NfcReader& reader,
+                         secrets::DeviceSecrets& device_secrets,
                          pw::random::RandomGenerator& rng,
                          pw::allocator::Allocator& allocator);
 
@@ -72,6 +77,7 @@ class PersonalizeCoordinator {
                       std::string_view message) PW_LOCKS_EXCLUDED(lock_);
 
   nfc::NfcReader& reader_;
+  secrets::DeviceSecrets& device_secrets_;
   pw::random::RandomGenerator& rng_;
 
   pw::async2::CoroContext coro_cx_;
