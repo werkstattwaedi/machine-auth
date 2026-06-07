@@ -35,10 +35,16 @@ export function startNfc({ onTag }: NfcOptions): void {
 
       reader.on("card", async (card) => {
         try {
+          // Read the UID via the PC/SC get-data pseudo-APDU first. This both
+          // populates physicalUid (nfc-pcsc leaves card.uid undefined when
+          // autoProcessing is off) and reliably finishes activating the card's
+          // ISO-DEP layer — without it the first READ BINARY below
+          // intermittently fails with SW=6985 on the ACR1252.
+          const uid = (await readUid(reader)) ?? card.uid ?? ""
           const url = await readNdefUrl(reader)
-          const event: NfcTagEvent = { physicalUid: card.uid }
+          const event: NfcTagEvent = { physicalUid: uid }
           if (url) event.url = url
-          console.log(`Tag read: uid=${card.uid}${url ? ` url=${url}` : ""}`)
+          console.log(`Tag read: uid=${uid || "?"}${url ? ` url=${url}` : ""}`)
           onTag(event)
         } catch (err) {
           console.error(
@@ -68,6 +74,23 @@ export function startNfc({ onTag }: NfcOptions): void {
   }
 }
 
+// Read the card UID via the PC/SC GET DATA pseudo-APDU (FF CA 00 00 00).
+// Returns lowercase hex, or undefined if the reader/card doesn't answer.
+async function readUid(reader: NfcReader): Promise<string | undefined> {
+  try {
+    const resp = await reader.transmit(
+      Buffer.from([0xff, 0xca, 0x00, 0x00, 0x00]),
+      16
+    )
+    if (resp.length < 2) return undefined
+    const sw = resp.subarray(-2).readUInt16BE(0)
+    if (sw !== 0x9000) return undefined
+    return resp.subarray(0, -2).toString("hex")
+  } catch {
+    return undefined
+  }
+}
+
 // Read NDEF URI record from an NTAG424 DNA tag via ISO 7816-4 APDUs.
 async function readNdefUrl(reader: NfcReader): Promise<string | null> {
   const delay = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -90,32 +113,44 @@ async function readNdefUrl(reader: NfcReader): Promise<string | null> {
   // 2. SELECT NDEF file (E104)
   await send([0x00, 0xa4, 0x00, 0x0c, 0x02, 0xe1, 0x04])
 
-  // 3. READ BINARY — first 2 bytes = NLEN
-  const nlenResp = await send([0x00, 0xb0, 0x00, 0x00, 0x02])
-  const nlen = nlenResp.readUInt16BE(0)
+  // READ BINARY helper — reads `length` bytes from `offset`, chunked to stay
+  // within contactless frame limits.
+  const chunkSize = 48
+  async function readBytes(offset: number, length: number): Promise<Buffer> {
+    const chunks: Buffer[] = []
+    let remaining = length
+    let off = offset
+    while (remaining > 0) {
+      const len = Math.min(remaining, chunkSize)
+      chunks.push(
+        await send([0x00, 0xb0, (off >> 8) & 0xff, off & 0xff, len], len + 2)
+      )
+      off += len
+      remaining -= len
+    }
+    return Buffer.concat(chunks)
+  }
+
+  // 3. READ NLEN (first 2 bytes) — a sanity bound on the message size.
+  const nlen = (await readBytes(0, 2)).readUInt16BE(0)
   if (nlen === 0 || nlen > 1024) {
     throw new Error(`Invalid NLEN: ${nlen}`)
   }
 
-  // 4. READ BINARY — NDEF message, chunked to stay within contactless frame
-  // limits
-  const chunkSize = 48
-  const chunks: Buffer[] = []
-  let remaining = nlen
-  let offset = 2
+  // 4. Read by the record's own declared length rather than trusting NLEN.
+  // The personalize off-by-one fixed in #410 means freshly written tags now
+  // have a correct NLEN, but deriving the length from the short-record header
+  // keeps this robust for any tag written before that fix — whose NLEN is one
+  // byte short and would otherwise truncate the final CMAC character.
+  const hdr = await readBytes(2, 4)
+  const typeLen = hdr[1]
+  const payloadLen = hdr[2]
+  const recordLen = 3 + typeLen + payloadLen
+  const total = Math.min(Math.max(nlen, recordLen), 1024)
 
-  while (remaining > 0) {
-    const len = Math.min(remaining, chunkSize)
-    const chunk = await send(
-      [0x00, 0xb0, (offset >> 8) & 0xff, offset & 0xff, len],
-      len + 2
-    )
-    chunks.push(chunk)
-    offset += len
-    remaining -= len
-  }
-
-  return parseNdefUri(Buffer.concat(chunks))
+  // 5. Read the full NDEF message.
+  const message = await readBytes(2, total)
+  return parseNdefUri(message)
 }
 
 // Parse an NDEF message containing a single URI record. Returns the full URL
