@@ -91,8 +91,21 @@ export function scanTagUrl(): Promise<{ picc: string; cmac: string }> {
       else resolve(value!)
     }
 
+    // NTAG424/SDM tags intermittently throw `readingerror` on the first tap.
+    // We keep the scan active instead of settling, so the operator can simply
+    // re-tap; only the timeout gives up. `readErrors` lets the timeout message
+    // distinguish "nothing tapped" from "tapped but every read failed".
+    let readErrors = 0
+
     const timer = setTimeout(
-      () => finish(new Error("Kein Tag erkannt (Zeitüberschreitung).")),
+      () =>
+        finish(
+          new Error(
+            readErrors > 0
+              ? `NDEF-Lesefehler – Tag konnte nicht gelesen werden (${readErrors}× versucht).`
+              : "Kein Tag erkannt (Zeitüberschreitung).",
+          ),
+        ),
       SCAN_TIMEOUT_MS,
     )
 
@@ -132,7 +145,10 @@ export function scanTagUrl(): Promise<{ picc: string; cmac: string }> {
     })
 
     reader.addEventListener("readingerror", () => {
-      finish(new Error("NDEF-Lesefehler – Tag erneut auflegen."))
+      // Do NOT settle — leave the scan armed so the operator can re-tap.
+      readErrors += 1
+      // eslint-disable-next-line no-console
+      console.warn(`Web NFC readingerror #${readErrors} — re-tap to retry`)
     })
 
     reader.scan({ signal: controller.signal }).catch((err: unknown) => {
