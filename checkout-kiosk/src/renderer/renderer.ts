@@ -17,7 +17,7 @@ interface NfcTagEvent {
   url?: string
 }
 interface Bridge {
-  mode: "kiosk" | "admin"
+  mode: "kiosk"
   features: readonly string[]
   bearer: () => Promise<string | null>
   resetSession: () => Promise<void>
@@ -44,24 +44,15 @@ const { mode } = window.bridge
 
 document.body.dataset.mode = mode
 
-const topBar = document.getElementById("top-bar") as HTMLDivElement
 const container = document.getElementById("webview-container") as HTMLDivElement
-
-if (mode !== "kiosk") {
-  // Admin: hide the kiosk reset button entirely. The web app has its own
-  // header chrome.
-  topBar.style.display = "none"
-}
 
 // Build absolute file:// URL for the preload script so the webview can
 // load it (relative paths don't resolve in webview preload).
 const preloadUrl = new URL("../dist/preload.js", window.location.href).href
 
-// Partition is mode-specific: kiosk uses a volatile (wipeable) partition,
-// admin uses a persistent one so the Firebase Auth session survives
-// restarts.
-const partition =
-  mode === "kiosk" ? "persist:kiosk:volatile" : "persist:admin"
+// Volatile (wipeable) partition so a closed kiosk window equals a closed
+// session.
+const partition = "persist:kiosk:volatile"
 
 const webview = document.createElement("webview") as WebviewElement
 webview.id = "checkout-view"
@@ -78,18 +69,16 @@ webview.addEventListener("dom-ready", () => {
 
 container.appendChild(webview)
 
-// "Neuer Checkout" — kiosk only. Wipes session storage and reloads the base
-// URL. Wiping storage is what guarantees the previous user's Firebase Auth
-// session is gone — navigation alone wouldn't clear IndexedDB.
-if (mode === "kiosk") {
-  const btnReset = document.getElementById("btn-reset") as HTMLButtonElement
-  btnReset.addEventListener("click", async () => {
-    try {
-      await window.bridge.resetSession()
-    } catch (err) {
-      console.error("Failed to reset session:", err)
-    }
-    const url = await window.bridge.getUrl()
-    webview.src = url
-  })
-}
+// "Neuer Checkout" — wipes session storage and reloads the base URL. Wiping
+// storage is what guarantees the previous user's Firebase Auth session is
+// gone — navigation alone wouldn't clear IndexedDB.
+const btnReset = document.getElementById("btn-reset") as HTMLButtonElement
+btnReset.addEventListener("click", async () => {
+  try {
+    await window.bridge.resetSession()
+  } catch (err) {
+    console.error("Failed to reset session:", err)
+  }
+  const url = await window.bridge.getUrl()
+  webview.src = url
+})

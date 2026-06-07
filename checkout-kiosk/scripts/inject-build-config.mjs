@@ -4,18 +4,17 @@
 
 // Writes src/build-config.generated.ts with the constants baked into
 // the current Electron binary. Called from `npm run build:kiosk`,
-// `build:admin`, `dev:kiosk`, `dev:admin`, and `typecheck` — the npm
-// scripts set BRIDGE_MODE in the env, the operator sets the rest.
+// `dev:kiosk`, and `typecheck` — the operator sets the env vars.
 //
 // Why build-time (not runtime env vars)? OWW runs exactly one kiosk
-// and one admin host. Shipping a self-contained binary is simpler than
-// managing a separate systemd EnvironmentFile per machine, and
-// rotation is just "replace the .AppImage on the trusted host" — no
-// chance of forgetting to set an env var after a restart.
+// host. Shipping a self-contained binary is simpler than managing a
+// systemd EnvironmentFile per machine, and rotation is just "replace
+// the .AppImage on the trusted host" — no chance of forgetting to set
+// an env var after a restart.
 //
 // `--prod` profile fills in production defaults from two sources:
-//   * URLs come from the operations repo's `config.jsonc` (the same
-//     file `scripts/generate-env.ts` reads, so admin/checkout web +
+//   * URL comes from the operations repo's `config.jsonc` (the same
+//     file `scripts/generate-env.ts` reads, so checkout web +
 //     Electron + functions stay in sync).
 //   * Bearer comes from Google Secret Manager (`KIOSK_BEARER_KEY`,
 //     same secret Cloud Functions reads server-side).
@@ -32,23 +31,12 @@ const target = join(__dirname, "..", "src", "build-config.generated.ts")
 
 const profile = process.argv.includes("--prod") ? "prod" : "dev"
 
-// ── Required: mode ──────────────────────────────────────────────────
-const mode = process.env.BRIDGE_MODE
-if (mode !== "kiosk" && mode !== "admin") {
-  fail(
-    `BRIDGE_MODE must be "kiosk" or "admin" (got ${JSON.stringify(mode)})`,
-  )
-}
-
 // ── Production defaults sourced from ops config ─────────────────────
-const opsDefaults = profile === "prod" ? loadProdDefaults(mode) : null
+const opsDefaults = profile === "prod" ? loadProdDefaults() : null
 
-// ── URL (per-mode env var, defaults to localhost or ops config) ─────
-const urlEnvVar = mode === "kiosk" ? "BRIDGE_KIOSK_URL" : "BRIDGE_ADMIN_URL"
-const devDefaultUrl =
-  mode === "kiosk"
-    ? "https://localhost:5173/?kiosk"
-    : "https://localhost:5174/"
+// ── URL (defaults to localhost or ops config) ───────────────────────
+const urlEnvVar = "BRIDGE_KIOSK_URL"
+const devDefaultUrl = "https://localhost:5173/?kiosk"
 const defaultUrl = opsDefaults?.url ?? devDefaultUrl
 const url = process.env[urlEnvVar] || defaultUrl
 const isDev = url.includes("localhost")
@@ -77,9 +65,6 @@ const content = `// Copyright Offene Werkstatt Wädenswil
 // file before tsc runs; values come from env vars (and --prod defaults
 // sourced from the operations repo) on the build host.
 
-import type { BridgeMode } from "./types"
-
-export const BRIDGE_MODE: BridgeMode = ${JSON.stringify(mode)}
 export const BRIDGE_URL: string = ${JSON.stringify(url)}
 export const BRIDGE_BEARER_KEY: string = ${JSON.stringify(bearer)}
 `
@@ -87,13 +72,13 @@ export const BRIDGE_BEARER_KEY: string = ${JSON.stringify(bearer)}
 writeFileSync(target, content)
 const redactedBearer = bearer ? `(set, ${bearer.length} chars)` : "(empty)"
 console.log(
-  `inject-build-config: profile=${profile} mode=${mode} url=${url} ` +
+  `inject-build-config: profile=${profile} url=${url} ` +
     `bearer=${redactedBearer}`,
 )
 
 // ── Helpers ────────────────────────────────────────────────────────
 
-function loadProdDefaults(mode) {
+function loadProdDefaults() {
   const projectRoot = resolve(__dirname, "..", "..")
   const configDir =
     process.env.OPERATIONS_CONFIG_DIR ||
@@ -108,15 +93,8 @@ function loadProdDefaults(mode) {
   }
   const cfg = parseJsonc(readFileSync(configPath, "utf-8"))
 
-  if (mode === "kiosk") {
-    const domain = readPath(cfg, "web.checkoutDomain", configPath)
-    return { url: `https://${domain}/?kiosk` }
-  }
-  // admin
-  const adminDomain = readPath(cfg, "web.adminDomain", configPath)
-  return {
-    url: `https://${adminDomain}/`,
-  }
+  const domain = readPath(cfg, "web.checkoutDomain", configPath)
+  return { url: `https://${domain}/?kiosk` }
 }
 
 function readPath(cfg, jsonPath, configPath) {

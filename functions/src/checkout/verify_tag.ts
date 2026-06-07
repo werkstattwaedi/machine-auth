@@ -9,7 +9,7 @@ import * as crypto from "crypto";
 import { getFirestore } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
 import * as logger from "firebase-functions/logger";
-import { decryptPICCData, verifyCMAC } from "../ntag/sdm_crypto";
+import { decryptPICCData, verifyCMAC, PICCData } from "../ntag/sdm_crypto";
 import { diversifyKey } from "../ntag/key_diversification";
 
 /**
@@ -51,23 +51,29 @@ export interface VerifyTagResponse {
 }
 
 /**
- * Verifies tag-based checkout request
- *
- * Flow:
- * 1. Decrypt PICC data using terminal key (static Key 1) → extract UID + counter
- * 2. Look up token in Firestore by UID
- * 3. Derive SDM MAC key (diversified Key 3) from UID, verify CMAC
- * 4. Return token and user information
- *
- * @param request - Request containing encrypted PICC and CMAC
- * @param config - Configuration with keys
- * @returns Token and user IDs if verification succeeds
- * @throws Error if verification fails
+ * Result of decrypting + authenticating a tapped tag.
  */
-export async function handleVerifyTagCheckout(
+export interface VerifiedTag {
+  tokenId: string;  // = UID hex; the canonical tokens/{id} document id
+  uid: string;      // hex-encoded UID (same value, named for clarity)
+  piccData: PICCData;
+}
+
+/**
+ * Decrypts the PICC ciphertext and verifies the SDM CMAC — the trusted core
+ * shared by the kiosk checkout endpoint and the admin `resolveTag` callable.
+ *
+ * Crucially this does NOT require a `tokens/{id}` doc to exist: the SDM MAC key
+ * is diversified from `masterKey + UID`, so CMAC verification proves the tag is
+ * a genuine OWW tag even before it is registered to a user. Callers decide what
+ * to do with an unregistered-but-authentic tag.
+ *
+ * @throws Error if picc/cmac are missing, decryption fails, or the CMAC is invalid.
+ */
+export function decryptAndVerifyTag(
   request: VerifyTagRequest,
   config: Config
-): Promise<VerifyTagResponse> {
+): VerifiedTag {
   const { picc, cmac } = request;
   const { terminalKey, masterKey, systemName } = config;
 
@@ -79,7 +85,7 @@ export async function handleVerifyTagCheckout(
     throw new Error("Missing or invalid 'cmac' parameter");
   }
 
-  // Step 1: Decrypt PICC data to get UID and counter
+  // Decrypt PICC data to get UID and counter
   let piccData;
   try {
     piccData = decryptPICCData(picc, terminalKey);
@@ -90,9 +96,48 @@ export async function handleVerifyTagCheckout(
 
   const uidHex = piccData.uid.toString("hex");
 
+  // Derive SDM MAC key (diversified Key 3) and verify CMAC. Independent of any
+  // token doc, so this authenticates unregistered tags too.
+  let isValid;
+  try {
+    const sdmMacKey = diversifyKey(masterKey, systemName, piccData.uid, "sdm_mac");
+    isValid = verifyCMAC(cmac, piccData, picc, sdmMacKey);
+  } catch (error: any) {
+    logger.error("CMAC verification failed", { error: error.message });
+    throw new Error(`CMAC verification failed: ${error.message}`);
+  }
+
+  if (!isValid) {
+    logger.warn("CMAC signature mismatch", { tokenId: uidHex });
+    throw new Error("Invalid CMAC signature");
+  }
+
+  return { tokenId: uidHex, uid: uidHex, piccData };
+}
+
+/**
+ * Verifies tag-based checkout request
+ *
+ * Flow:
+ * 1. Decrypt PICC + verify CMAC (shared core) → UID + counter
+ * 2. Look up token in Firestore by UID (must exist, not deactivated)
+ * 3. Enforce SDM counter monotonicity (replay defense)
+ * 4. Mint a synthetic-UID custom token + return user information
+ *
+ * @param request - Request containing encrypted PICC and CMAC
+ * @param config - Configuration with keys
+ * @returns Token and user IDs if verification succeeds
+ * @throws Error if verification fails
+ */
+export async function handleVerifyTagCheckout(
+  request: VerifyTagRequest,
+  config: Config
+): Promise<VerifyTagResponse> {
+  // Step 1: Decrypt + authenticate the tag (shared core).
+  const { tokenId, uid: uidHex, piccData } = decryptAndVerifyTag(request, config);
+
   // Step 2: Look up token in Firestore by UID
   const db = getFirestore();
-  const tokenId = uidHex;  // Token ID is the UID
   const tokenRef = db.collection("tokens").doc(tokenId);
   const tokenDoc = await tokenRef.get();
 
@@ -118,22 +163,7 @@ export async function handleVerifyTagCheckout(
 
   const realUserId = userRef.id;
 
-  // Step 3: Derive SDM MAC key (diversified Key 3) and verify CMAC
-  let isValid;
-  try {
-    const sdmMacKey = diversifyKey(masterKey, systemName, piccData.uid, "sdm_mac");
-    isValid = verifyCMAC(cmac, piccData, picc, sdmMacKey);
-  } catch (error: any) {
-    logger.error("CMAC verification failed", { error: error.message });
-    throw new Error(`CMAC verification failed: ${error.message}`);
-  }
-
-  if (!isValid) {
-    logger.warn("CMAC signature mismatch", { tokenId, userId: realUserId });
-    throw new Error("Invalid CMAC signature");
-  }
-
-  // Step 4: Verify SDM read counter is monotonically increasing (replay defense).
+  // Step 3: Verify SDM read counter is monotonically increasing (replay defense).
   // The 3-byte counter is little-endian on the wire (per NTAG SDM spec).
   // We read+write atomically so two concurrent requests with the same counter
   // can't both succeed.
@@ -161,11 +191,11 @@ export async function handleVerifyTagCheckout(
     tx.update(tokenRef, { lastSdmCounter: incomingCounter });
   });
 
-  // Step 5: Fetch user details for pre-fill
+  // Step 4: Fetch user details for pre-fill
   const userDoc = await userRef.get();
   const userData = userDoc.exists ? userDoc.data() : undefined;
 
-  // Step 6: Create Firebase custom token with a SYNTHETIC UID so the kiosk
+  // Step 5: Create Firebase custom token with a SYNTHETIC UID so the kiosk
   // session is a different Firebase principal than the real user. This is
   // the actual security defense:
   //  - createCustomToken merges developer claims with the auth user's
@@ -184,7 +214,7 @@ export async function handleVerifyTagCheckout(
     kioskId: "kiosk-1",
   });
 
-  // Step 7: Return token and user information.
+  // Step 6: Return token and user information.
   // `userId` in the response is the REAL user, so the client can pre-fill
   // the form. The synthetic session UID is opaque to the client.
   return {

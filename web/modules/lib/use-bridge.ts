@@ -4,18 +4,17 @@
 import { useEffect, useMemo } from "react"
 
 // Mirrors checkout-kiosk/src/types.ts. The bridge is only exposed when the
-// page is loaded inside the OWW Electron build (kiosk or admin). In a
-// regular browser tab, `window.bridge` is undefined and the hook returns
-// `available: false` with no-op fallbacks — callers feature-detect via
-// `available` / `features` rather than checking the window object
-// themselves.
+// page is loaded inside the OWW kiosk Electron build. In a regular browser
+// tab, `window.bridge` is undefined and the hook returns `available: false`
+// with no-op fallbacks — callers feature-detect via `available` / `features`
+// rather than checking the window object themselves.
 
 export interface NfcTagEvent {
   physicalUid: string
   url?: string
 }
 
-export type BridgeMode = "kiosk" | "admin"
+export type BridgeMode = "kiosk"
 
 interface BridgeApi {
   mode: BridgeMode

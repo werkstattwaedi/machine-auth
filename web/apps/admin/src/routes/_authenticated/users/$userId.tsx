@@ -35,8 +35,10 @@ import {
 import { formatDateTime } from "@modules/lib/format"
 import { formatFullName } from "@modules/lib/username-utils"
 import { useForm } from "react-hook-form"
-import { Loader2, Save, Plus, Ban, RotateCcw } from "lucide-react"
+import { Loader2, Save, Plus, Ban, RotateCcw, ScanLine } from "lucide-react"
 import { useEffect, useState } from "react"
+import { toast } from "sonner"
+import { useTagScan, type ResolveTagResult } from "@/nfc/use-tag-scan"
 
 export const Route = createFileRoute("/_authenticated/users/$userId")({
   component: UserDetailPage,
@@ -77,6 +79,14 @@ function UserDetailPage() {
     context: "admin.userToggleTag",
     successMessage: "Tag-Status aktualisiert",
     errorMessage: "Tag-Status konnte nicht geändert werden",
+  })
+  // Web NFC scan (Chrome/Android). The hook reads the tag's SUN URL and
+  // resolves the real UID server-side (tags use Random-ID). Error toast is
+  // owned by the mutation hook (ADR-0025); success-path info toasts below.
+  const { supported: nfcSupported, scanTag } = useTagScan()
+  const scanTagMutation = useAsyncMutation<ResolveTagResult>({
+    context: "admin.userScanTag",
+    errorMessage: "Tag konnte nicht gelesen werden",
   })
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([])
   const [newTagId, setNewTagId] = useState("")
@@ -161,6 +171,34 @@ function UserDetailPage() {
       // Hook already toasted + reported telemetry. Keep `newTagId` so
       // the admin can edit + retry without re-typing.
     }
+  }
+
+  const handleScanTag = async () => {
+    let result
+    try {
+      result = await scanTagMutation.mutate(() => scanTag())
+    } catch {
+      // Hook already toasted + reported telemetry (e.g. NFC denied, no tag).
+      return
+    }
+
+    // Already registered → don't silently reassign; tell the admin where it
+    // lives. If it's this user's own tag, just confirm.
+    if (result.registered && result.userId) {
+      const deact = result.deactivated ? " (deaktiviert)" : ""
+      if (result.userId === userId) {
+        toast.info(`Dieser Tag ist bereits diesem Benutzer zugeordnet${deact}.`)
+      } else {
+        toast.warning(
+          `Tag ist bereits ${result.userName ?? "einem anderen Benutzer"} zugeordnet${deact}.`,
+        )
+      }
+      return
+    }
+
+    // Fresh tag → prefill the UID so the admin confirms with the add button.
+    setNewTagId(result.tokenId)
+    toast.success("Tag gelesen — UID übernommen. Bitte „Tag hinzufügen“ wählen.")
   }
 
   const handleToggleTag = async (tokenId: string, isDeactivated: boolean) => {
@@ -315,6 +353,20 @@ function UserDetailPage() {
             <CardContent>
               <div className="space-y-4">
                 <div className="flex gap-2">
+                  {nfcSupported && (
+                    <Button
+                      variant="secondary"
+                      onClick={handleScanTag}
+                      disabled={scanTagMutation.loading}
+                    >
+                      {scanTagMutation.loading ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <ScanLine className="h-4 w-4 mr-2" />
+                      )}
+                      Tag scannen
+                    </Button>
+                  )}
                   <Input
                     placeholder="Tag UID (hex, z.B. 04c339aa1e1890)"
                     value={newTagId}

@@ -4,7 +4,7 @@ import "./options";
 import express from "express";
 import { onRequest } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
-import { defineSecret, defineString } from "firebase-functions/params";
+import { defineSecret } from "firebase-functions/params";
 import { initializeApp } from "firebase-admin/app";
 import {
   TerminalCheckinRequest,
@@ -23,14 +23,16 @@ import { handleAuthenticateTag } from "./auth/handle_authenticate_tag";
 import { handleCompleteTagAuth } from "./auth/handle_complete_tag_auth";
 import { handleUploadUsage } from "./session/handle_upload_usage";
 import { handleVerifyTagCheckout } from "./checkout/verify_tag";
+import {
+  terminalKey,
+  diversificationMasterKey,
+  diversificationSystemName,
+} from "./config/tag-secrets";
 import { BinaryWriter } from "@bufbuild/protobuf/wire";
 
 initializeApp();
 
-const diversificationMasterKey = defineSecret("DIVERSIFICATION_MASTER_KEY");
-const diversificationSystemName = defineString("DIVERSIFICATION_SYSTEM_NAME");
 const gatewayApiKey = defineSecret("GATEWAY_API_KEY");
-const terminalKey = defineSecret("TERMINAL_KEY");
 // Soft revocation/audit knob for the kiosk's verifyTagCheckout call. NOT real
 // kiosk attestation — extracting this from a public Windows machine is
 // trivial. The actual security is the synthetic-UID custom token returned by
