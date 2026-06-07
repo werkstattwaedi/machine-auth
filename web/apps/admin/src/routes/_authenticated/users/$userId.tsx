@@ -84,9 +84,11 @@ function UserDetailPage() {
   // resolves the real UID server-side (tags use Random-ID). Error toast is
   // owned by the mutation hook (ADR-0025); success-path info toasts below.
   const { supported: nfcSupported, scanTag } = useTagScan()
+  // No static errorMessage: let the hook surface the specific German
+  // message (NFC permission, NDEF read error + record types, or the
+  // backend's "Ungültiger Tag") so failures are diagnosable on-device.
   const scanTagMutation = useAsyncMutation<ResolveTagResult>({
     context: "admin.userScanTag",
-    errorMessage: "Tag konnte nicht gelesen werden",
   })
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([])
   const [newTagId, setNewTagId] = useState("")

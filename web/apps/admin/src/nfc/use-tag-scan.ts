@@ -53,6 +53,15 @@ export function parseSunUrl(raw: string): { picc: string; cmac: string } {
   return { picc, cmac }
 }
 
+/** Non-throwing variant for scanning multiple records. */
+function tryParseSunUrl(raw: string): { picc: string; cmac: string } | null {
+  try {
+    return parseSunUrl(raw)
+  } catch {
+    return null
+  }
+}
+
 /** Time to wait for a tap before giving up. */
 const SCAN_TIMEOUT_MS = 30_000
 
@@ -89,13 +98,13 @@ export function scanTagUrl(): Promise<{ picc: string; cmac: string }> {
 
     reader.addEventListener("reading", (event) => {
       try {
+        // Record types that can carry a URL. Decoding a binary record
+        // (smart poster, raw MIME, …) as UTF-8 risks a spurious match.
+        const URL_TYPES = ["url", "absolute-url", "text"]
+        const seen: string[] = []
         for (const record of event.message.records) {
-          // Only URL/text records can carry a SUN URL. Decoding a binary
-          // record (smart poster, raw MIME, …) as UTF-8 risks a spurious
-          // "picc=" match on arbitrary bytes.
-          if (record.recordType !== "url" && record.recordType !== "text") {
-            continue
-          }
+          seen.push(record.recordType)
+          if (!URL_TYPES.includes(record.recordType)) continue
           if (!record.data) continue
           // `encoding` is only meaningful for text records; url records are
           // always UTF-8.
@@ -104,19 +113,26 @@ export function scanTagUrl(): Promise<{ picc: string; cmac: string }> {
               ? record.encoding || "utf-8"
               : "utf-8"
           const text = new TextDecoder(encoding).decode(record.data)
-          if (text.includes("picc=") || text.includes("PICC=")) {
-            finish(null, parseSunUrl(text))
+          const sun = tryParseSunUrl(text)
+          if (sun) {
+            finish(null, sun)
             return
           }
         }
-        finish(new Error("Kein OWW-Tag erkannt."))
+        // Include the NDEF record types we actually saw — on a phone with no
+        // dev console this is the only window into why a tap was rejected.
+        finish(
+          new Error(
+            `Kein OWW-Tag erkannt (NDEF: ${seen.join(", ") || "leer"}).`,
+          ),
+        )
       } catch (err) {
         finish(err instanceof Error ? err : new Error(String(err)))
       }
     })
 
     reader.addEventListener("readingerror", () => {
-      finish(new Error("Tag konnte nicht gelesen werden."))
+      finish(new Error("NDEF-Lesefehler – Tag erneut auflegen."))
     })
 
     reader.scan({ signal: controller.signal }).catch((err: unknown) => {

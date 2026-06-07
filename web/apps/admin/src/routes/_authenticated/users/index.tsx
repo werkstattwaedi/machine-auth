@@ -36,9 +36,10 @@ function UsersPage() {
 
   // Web NFC: scan a tag and jump to its owner (Chrome/Android only).
   const { supported: nfcSupported, scanTag } = useTagScan()
+  // No static errorMessage: surface the specific German failure reason
+  // (NFC permission / NDEF read error + record types / backend error).
   const scanMutation = useAsyncMutation<ResolveTagResult>({
     context: "admin.usersScanTag",
-    errorMessage: "Tag konnte nicht gelesen werden",
   })
 
   const handleScanTag = async () => {
