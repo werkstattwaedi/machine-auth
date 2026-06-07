@@ -45,7 +45,7 @@ export const resolveTagHandler = async (
   request: CallableRequest<unknown>
 ): Promise<ResolveTagResponse> => {
   // Require admin custom claim (kept in sync from users/{uid}.roles).
-  if (!request.auth?.token?.admin) {
+  if (request.auth?.token?.admin !== true) {
     throw new HttpsError("permission-denied", "Admin access required");
   }
 

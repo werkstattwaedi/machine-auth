@@ -14,11 +14,6 @@ import { useBridge } from "@modules/lib/use-bridge"
  * `webview.src = …` which forced a full page reload on every tap. The
  * client-side `navigate(...)` here preserves React state and is
  * router-aware, matching how the rest of the app handles navigation.
- *
- * Admin-mode builds intentionally skip the global listener — taps in
- * admin should be handled by whichever page is currently scanning a tag
- * (e.g., the user-detail page when registering a new token), not by a
- * global "always navigate to /" handler. That wiring is follow-up work.
  */
 export function BridgeNfcRouter(): null {
   const bridge = useBridge()
@@ -26,7 +21,6 @@ export function BridgeNfcRouter(): null {
 
   useEffect(() => {
     if (!bridge.available) return
-    if (bridge.mode !== "kiosk") return
     if (!bridge.features.includes("nfc")) return
 
     return bridge.onNfcTag(({ url }) => {
@@ -50,13 +44,7 @@ export function BridgeNfcRouter(): null {
         console.error("Failed to parse NFC URL:", err)
       }
     })
-  }, [
-    bridge.available,
-    bridge.features,
-    bridge.mode,
-    bridge.onNfcTag,
-    navigate,
-  ])
+  }, [bridge.available, bridge.features, bridge.onNfcTag, navigate])
 
   return null
 }

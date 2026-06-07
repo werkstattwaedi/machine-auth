@@ -64,8 +64,13 @@ class FakeNDEFReader extends EventTarget {
   }
 
   emitReading(urls: string[]): void {
-    const records = urls.map((u) => ({
-      data: new DataView(new TextEncoder().encode(u).buffer),
+    this.emitRecords(urls.map((u) => ({ recordType: "url", text: u })))
+  }
+
+  emitRecords(specs: Array<{ recordType: string; text: string }>): void {
+    const records = specs.map((s) => ({
+      recordType: s.recordType,
+      data: new DataView(new TextEncoder().encode(s.text).buffer),
     }))
     this.readingListeners.forEach((cb) => cb({ message: { records } }))
   }
@@ -113,6 +118,19 @@ describe("scanTagUrl", () => {
     // Wait a tick for scan() to be called + listeners attached.
     await Promise.resolve()
     FakeNDEFReader.last!.emitReading(["https://example.com/foo", SUN_URL])
+    await expect(p).resolves.toEqual({
+      picc: "AABBCCDDEEFF00112233445566778899",
+      cmac: "1122334455667788",
+    })
+  })
+
+  it("skips non-url/text records even if their bytes contain 'picc='", async () => {
+    const p = scanTagUrl()
+    await Promise.resolve()
+    FakeNDEFReader.last!.emitRecords([
+      { recordType: "mime", text: "junk picc=deadbeef cmac=00 junk" },
+      { recordType: "url", text: SUN_URL },
+    ])
     await expect(p).resolves.toEqual({
       picc: "AABBCCDDEEFF00112233445566778899",
       cmac: "1122334455667788",

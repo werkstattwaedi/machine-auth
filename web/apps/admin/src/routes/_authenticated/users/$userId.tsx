@@ -185,11 +185,12 @@ function UserDetailPage() {
     // Already registered → don't silently reassign; tell the admin where it
     // lives. If it's this user's own tag, just confirm.
     if (result.registered && result.userId) {
+      const deact = result.deactivated ? " (deaktiviert)" : ""
       if (result.userId === userId) {
-        toast.info("Dieser Tag ist bereits diesem Benutzer zugeordnet.")
+        toast.info(`Dieser Tag ist bereits diesem Benutzer zugeordnet${deact}.`)
       } else {
         toast.warning(
-          `Tag ist bereits ${result.userName ?? "einem anderen Benutzer"} zugeordnet.`,
+          `Tag ist bereits ${result.userName ?? "einem anderen Benutzer"} zugeordnet${deact}.`,
         )
       }
       return

@@ -14,7 +14,7 @@
  * `supported` is false and admins fall back to manual UID entry.
  */
 
-import { useCallback, useMemo } from "react"
+import { useCallback } from "react"
 import { useFunctions } from "@modules/lib/firebase-context"
 import { rpcCallable } from "@modules/lib/rpc"
 
@@ -90,10 +90,20 @@ export function scanTagUrl(): Promise<{ picc: string; cmac: string }> {
     reader.addEventListener("reading", (event) => {
       try {
         for (const record of event.message.records) {
+          // Only URL/text records can carry a SUN URL. Decoding a binary
+          // record (smart poster, raw MIME, …) as UTF-8 risks a spurious
+          // "picc=" match on arbitrary bytes.
+          if (record.recordType !== "url" && record.recordType !== "text") {
+            continue
+          }
           if (!record.data) continue
-          const text = new TextDecoder(record.encoding || "utf-8").decode(
-            record.data,
-          )
+          // `encoding` is only meaningful for text records; url records are
+          // always UTF-8.
+          const encoding =
+            record.recordType === "text"
+              ? record.encoding || "utf-8"
+              : "utf-8"
+          const text = new TextDecoder(encoding).decode(record.data)
           if (text.includes("picc=") || text.includes("PICC=")) {
             finish(null, parseSunUrl(text))
             return
@@ -128,7 +138,7 @@ export function scanTagUrl(): Promise<{ picc: string; cmac: string }> {
  */
 export function useTagScan() {
   const functions = useFunctions()
-  const supported = useMemo(() => isNfcSupported(), [])
+  const supported = isNfcSupported()
 
   const scanTag = useCallback(async (): Promise<ResolveTagResult> => {
     const { picc, cmac } = await scanTagUrl()

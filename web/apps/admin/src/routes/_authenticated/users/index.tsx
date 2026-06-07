@@ -50,9 +50,12 @@ function UsersPage() {
       return
     }
     if (result.registered && result.userId) {
+      if (result.deactivated) toast.info("Tag ist deaktiviert.")
       navigate({ to: "/users/$userId", params: { userId: result.userId } })
     } else {
-      toast.warning("Tag ist keinem Benutzer zugeordnet.")
+      toast.info(
+        "Tag ist keinem Benutzer zugeordnet — auf der Benutzerseite zuordnen.",
+      )
     }
   }
 
