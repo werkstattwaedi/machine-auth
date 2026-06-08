@@ -171,6 +171,15 @@ test.describe("Checkout step screenshots", () => {
       page.getByRole("button", { name: "Material hinzufügen" }),
     ).toBeVisible()
 
+    // Pin the background scroll to the top before opening the picker. The
+    // material Sheet preserves the page scroll position when it opens
+    // (issue #401) via a short rAF loop seeded from the scroll offset at
+    // click time. Opening from a non-zero offset left the background wizard
+    // at an environment-dependent scroll in this screenshot (CI rendered at
+    // the top, local ~90px down), so the baseline was unstable. Opening from
+    // the top keeps it deterministic.
+    await page.evaluate(() => window.scrollTo(0, 0))
+
     // Open the add article search
     await page.getByRole("button", { name: "Material hinzufügen" }).click()
 
@@ -179,6 +188,11 @@ test.describe("Checkout step screenshots", () => {
 
     // Press Tab to highlight the first item instead of blinking cursor
     await page.keyboard.press("Tab")
+
+    // Let issue #401's post-open scroll-restore rAF window (~600ms) settle,
+    // then re-pin to the top so the background is stable before the snapshot.
+    await page.waitForTimeout(700)
+    await page.evaluate(() => window.scrollTo(0, 0))
 
     await expect(page).toHaveScreenshot("checkout-add-article-dropdown.png")
   })
