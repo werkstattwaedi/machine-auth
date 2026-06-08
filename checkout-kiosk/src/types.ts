@@ -26,6 +26,10 @@ export interface Bridge {
   getUrl: () => Promise<string>
   onUrlChange: (cb: (url: string) => void) => () => void
   onNfcTag: (cb: (payload: NfcTagEvent) => void) => () => void
+  // Fired when the checkout webview requests opening an allowlisted
+  // off-origin link (e.g. the Nutzungsbestimmungen page) — the renderer
+  // mounts an in-kiosk overlay webview at `url`. Returns an unsubscribe fn.
+  onOpenOverlay: (cb: (url: string) => void) => () => void
 }
 
 // Compile-time proof that the kiosk can resolve @oww/shared.

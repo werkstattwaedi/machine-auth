@@ -24,6 +24,7 @@ interface Bridge {
   getUrl: () => Promise<string>
   onUrlChange: (cb: (url: string) => void) => () => void
   onNfcTag: (cb: (p: NfcTagEvent) => void) => () => void
+  onOpenOverlay: (cb: (url: string) => void) => () => void
 }
 
 declare global {
@@ -74,6 +75,7 @@ container.appendChild(webview)
 // gone — navigation alone wouldn't clear IndexedDB.
 const btnReset = document.getElementById("btn-reset") as HTMLButtonElement
 btnReset.addEventListener("click", async () => {
+  closeOverlay()
   try {
     await window.bridge.resetSession()
   } catch (err) {
@@ -81,4 +83,44 @@ btnReset.addEventListener("click", async () => {
   }
   const url = await window.bridge.getUrl()
   webview.src = url
+})
+
+// In-kiosk overlay: when the checkout webview asks to open an allowlisted
+// off-origin link (e.g. the Nutzungsbestimmungen page), main sends
+// "bridge:open-overlay" and we mount a dedicated overlay webview on top of
+// the checkout. Closing it destroys the webview so nothing lingers.
+const overlay = document.getElementById("overlay") as HTMLDivElement
+const overlayViewContainer = document.getElementById(
+  "overlay-view-container"
+) as HTMLDivElement
+const overlayClose = document.getElementById(
+  "overlay-close"
+) as HTMLButtonElement
+
+let overlayWebview: WebviewElement | null = null
+
+function closeOverlay(): void {
+  if (overlayWebview) {
+    overlayViewContainer.removeChild(overlayWebview)
+    overlayWebview = null
+  }
+  overlay.hidden = true
+}
+
+function openOverlay(url: string): void {
+  // Replace any existing overlay so we never stack views.
+  closeOverlay()
+  const view = document.createElement("webview") as WebviewElement
+  view.id = "overlay-view"
+  view.setAttribute("partition", partition)
+  view.src = url
+  overlayWebview = view
+  overlayViewContainer.appendChild(view)
+  overlay.hidden = false
+}
+
+overlayClose.addEventListener("click", closeOverlay)
+
+window.bridge.onOpenOverlay((url) => {
+  openOverlay(url)
 })
