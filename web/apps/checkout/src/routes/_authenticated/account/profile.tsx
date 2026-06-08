@@ -103,6 +103,14 @@ function ProfilePage() {
 
   const onSubmit = async (values: ProfileFormValues) => {
     if (!userDoc) return
+    const address = {
+      company: values.userType === "firma" ? values.company.trim() : "",
+      street: values.street.trim(),
+      zip: values.zip.trim(),
+      city: values.city.trim(),
+    }
+    const hasAddress =
+      address.company || address.street || address.zip || address.city
     await update(
       userRef(db, userDoc.id),
       {
@@ -112,12 +120,9 @@ function ProfilePage() {
         // Phone was already parsed + normalised during validation; use the
         // cached E.164 form. Empty input is stored as `null`.
         phone: normalisedPhoneRef.current,
-        billingAddress: {
-          company: values.userType === "firma" ? values.company.trim() : "",
-          street: values.street.trim(),
-          zip: values.zip.trim(),
-          city: values.city.trim(),
-        },
+        // Address is optional for erwachsen/kind — store null when empty so a
+        // half-filled address doesn't linger.
+        billingAddress: hasAddress ? address : null,
       },
       { successMessage: "Profil gespeichert" },
     )
@@ -222,14 +227,20 @@ function ProfilePage() {
 
         <SectionDivider />
         <SectionEyebrow icon={<MapPin className="h-3 w-3" />}>
-          Adresse
+          Adresse{" "}
+          {!isFirma && (
+            <span className="font-normal normal-case tracking-normal text-muted-foreground">
+              (optional)
+            </span>
+          )}
         </SectionEyebrow>
 
         <div className="flex flex-col gap-1">
           <Label className="text-sm font-bold">Strasse und Hausnummer</Label>
           <input
             {...register("street", {
-              validate: (v) => v.trim() !== "" || "Strasse ist erforderlich",
+              validate: (v) =>
+                !isFirma || v.trim() !== "" || "Strasse ist erforderlich",
             })}
             className={fieldCls("street")}
             autoComplete="street-address"
@@ -243,7 +254,9 @@ function ProfilePage() {
             <input
               {...register("zip", {
                 validate: (v) => {
-                  if (v.trim() === "") return "PLZ ist erforderlich"
+                  // Required only for firma; format-checked whenever non-empty.
+                  if (v.trim() === "")
+                    return isFirma ? "PLZ ist erforderlich" : true
                   if (!isValidSwissPlz(v))
                     return "PLZ muss vierstellig sein (z.B. 8820)"
                   return true
@@ -260,7 +273,8 @@ function ProfilePage() {
             <Label className="text-sm font-bold">Ort</Label>
             <input
               {...register("city", {
-                validate: (v) => v.trim() !== "" || "Ort ist erforderlich",
+                validate: (v) =>
+                  !isFirma || v.trim() !== "" || "Ort ist erforderlich",
               })}
               className={fieldCls("city")}
               autoComplete="address-level2"

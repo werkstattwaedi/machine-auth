@@ -23,7 +23,13 @@ import {
   AddressFields,
 } from "@modules/components/profile-form"
 import { USER_TYPE_LABELS, type UserType } from "@modules/lib/pricing"
-import { EMPTY_ADDRESS, type AddressValue, type AddressErrors } from "@modules/lib/address"
+import {
+  EMPTY_ADDRESS,
+  validateAddress,
+  type AddressValue,
+  type AddressErrors,
+} from "@modules/lib/address"
+import { type SignupProfile } from "@modules/lib/auth"
 import { cn } from "@modules/lib/utils"
 
 export interface SignupFieldsValue {
@@ -51,6 +57,46 @@ export const EMPTY_SIGNUP_VALUE: SignupFieldsValue = {
   code: "",
   termsAccepted: false,
   address: EMPTY_ADDRESS,
+}
+
+/** Validate the sign-up form. `requireCode` enforces the inline 6-digit code. */
+export function validateSignupFields(
+  value: SignupFieldsValue,
+  { requireCode }: { requireCode: boolean }
+): SignupFieldsErrors {
+  const errs: SignupFieldsErrors = {}
+  if (value.firstName.trim() === "") errs.firstName = "Vorname ist erforderlich"
+  if (value.lastName.trim() === "") errs.lastName = "Nachname ist erforderlich"
+  if (requireCode && value.code.length !== 6) {
+    errs.code = "Bitte gib den 6-stelligen Code ein"
+  }
+  if (!value.termsAccepted) {
+    errs.termsAccepted = "Du musst die Nutzungsbestimmungen akzeptieren"
+  }
+  if (value.userType === "firma") {
+    const addrErrs = validateAddress(value.address, { requireCompany: true })
+    if (Object.keys(addrErrs).length > 0) errs.address = addrErrs
+  }
+  return errs
+}
+
+/** Build the persisted profile (trimmed; firma address or null) from the form. */
+export function signupProfileFrom(value: SignupFieldsValue): SignupProfile {
+  return {
+    firstName: value.firstName.trim(),
+    lastName: value.lastName.trim(),
+    userType: value.userType,
+    termsAccepted: true,
+    billingAddress:
+      value.userType === "firma"
+        ? {
+            company: value.address.company.trim(),
+            street: value.address.street.trim(),
+            zip: value.address.zip.trim(),
+            city: value.address.city.trim(),
+          }
+        : null,
+  }
 }
 
 export function SignupFields({

@@ -20,18 +20,15 @@ import { useEffect, useState } from "react"
 import { useNavigate } from "@tanstack/react-router"
 import { toast } from "sonner"
 import { Loader2, Mail } from "lucide-react"
-import {
-  useAuth,
-  isProfileComplete,
-  type SignupProfile,
-} from "@modules/lib/auth"
-import { validateAddress } from "@modules/lib/address"
+import { useAuth, isProfileComplete } from "@modules/lib/auth"
 import { Button } from "@modules/components/ui/button"
 import { Input } from "@modules/components/ui/input"
 import { GoogleIcon } from "@modules/components/icons/google"
 import {
   SignupFields,
   EMPTY_SIGNUP_VALUE,
+  validateSignupFields,
+  signupProfileFrom,
   type SignupFieldsValue,
   type SignupFieldsErrors,
 } from "./signup-fields"
@@ -208,48 +205,17 @@ export function LoginPage({
     }
   }
 
-  const validateSignup = (via: "code" | "google" | "link") => {
-    const errs: SignupFieldsErrors = {}
-    if (signupValue.firstName.trim() === "") errs.firstName = "Vorname ist erforderlich"
-    if (signupValue.lastName.trim() === "") errs.lastName = "Nachname ist erforderlich"
-    if (via === "code" && signupValue.code.length !== 6) {
-      errs.code = "Bitte gib den 6-stelligen Code ein"
-    }
-    if (!signupValue.termsAccepted) {
-      errs.termsAccepted = "Du musst die Nutzungsbestimmungen akzeptieren"
-    }
-    if (signupValue.userType === "firma") {
-      const addrErrs = validateAddress(signupValue.address, { requireCompany: true })
-      if (Object.keys(addrErrs).length > 0) errs.address = addrErrs
-    }
-    return errs
-  }
-
   const handleSignupSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (stage.kind !== "signup") return
     const via = stage.via
-    const errs = validateSignup(via)
+    const errs = validateSignupFields(signupValue, { requireCode: via === "code" })
     setSignupErrors(errs)
     if (Object.keys(errs).length > 0) return
 
     setSubmitting(true)
     try {
-      const profile: SignupProfile = {
-        firstName: signupValue.firstName.trim(),
-        lastName: signupValue.lastName.trim(),
-        userType: signupValue.userType,
-        termsAccepted: true,
-        billingAddress:
-          signupValue.userType === "firma"
-            ? {
-                company: signupValue.address.company.trim(),
-                street: signupValue.address.street.trim(),
-                zip: signupValue.address.zip.trim(),
-                city: signupValue.address.city.trim(),
-              }
-            : null,
-      }
+      const profile = signupProfileFrom(signupValue)
       if (via === "code") {
         await verifyLoginCodeAndCreateProfile(email, signupValue.code, profile)
       } else {

@@ -7,7 +7,12 @@ export { LoginPage, type LoginPageProps } from "./login-page"
 export { LoginVerifyPage, type LoginVerifyPageProps } from "./login-verify-page"
 export { LinkAccountPage, type LinkAccountPageProps } from "./link-account-page"
 
-export { SignupFields, EMPTY_SIGNUP_VALUE } from "./signup-fields"
+export {
+  SignupFields,
+  EMPTY_SIGNUP_VALUE,
+  validateSignupFields,
+  signupProfileFrom,
+} from "./signup-fields"
 export type { SignupFieldsValue, SignupFieldsErrors } from "./signup-fields"
 
 /** Search schema for /login when sign-up flow is enabled. */
