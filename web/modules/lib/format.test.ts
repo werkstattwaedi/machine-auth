@@ -2,7 +2,16 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect } from "vitest"
-import { currency, formatCHF, formatDate, formatDateTime, locale } from "./format"
+import {
+  currency,
+  formatBelegNumber,
+  formatBillReference,
+  formatCHF,
+  formatDate,
+  formatDateTime,
+  formatInvoiceNumber,
+  locale,
+} from "./format"
 
 describe("formatCHF", () => {
   it("formats whole numbers", () => {
@@ -16,6 +25,25 @@ describe("formatCHF", () => {
 
   it("formats zero", () => {
     expect(formatCHF(0)).toMatch(/0/)
+  })
+})
+
+describe("bill reference formatting (#405)", () => {
+  it("formatInvoiceNumber pads to RE-XXXXXX", () => {
+    expect(formatInvoiceNumber(5)).toBe("RE-000005")
+    expect(formatInvoiceNumber(123456)).toBe("RE-123456")
+  })
+
+  it("formatBelegNumber pads to BL-XXXXXX", () => {
+    expect(formatBelegNumber(5)).toBe("BL-000005")
+    expect(formatBelegNumber(42)).toBe("BL-000042")
+  })
+
+  it("formatBillReference uses BL- for a Beleg and RE- otherwise", () => {
+    expect(formatBillReference(7, "beleg")).toBe("BL-000007")
+    expect(formatBillReference(7, "invoice")).toBe("RE-000007")
+    // Missing kind (legacy doc) is treated as an invoice.
+    expect(formatBillReference(7, undefined)).toBe("RE-000007")
   })
 })
 

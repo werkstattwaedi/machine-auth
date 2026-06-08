@@ -13,7 +13,7 @@ import {
 } from "@modules/lib/firestore-helpers"
 import type { BillDoc, CheckoutDoc } from "@modules/lib/firestore-entities"
 import { useDb, useFunctions } from "@modules/lib/firebase-context"
-import { formatDate, formatCHF, formatInvoiceNumber } from "@modules/lib/format"
+import { formatDate, formatCHF, formatBillReference } from "@modules/lib/format"
 import { PageLoading } from "@modules/components/page-loading"
 import { EmptyState } from "@modules/components/empty-state"
 import { QueryError } from "@modules/components/query-error"
@@ -95,7 +95,10 @@ function UsageContent({ userDoc }: { userDoc: UserDoc }) {
   const [filter, setFilter] = useState<FilterKey>("all")
 
   const stats = useMemo(() => {
-    const openBills = bills.filter((b) => !b.paidAt)
+    // A Beleg (per-visit Sammelrechnung record) is not payable on its own
+    // — the aggregated monthly invoice carries the QR slip — so it must
+    // never count toward the "Offen" total even though `paidAt` is null.
+    const openBills = bills.filter((b) => isOpenBill(b))
     const totalOpen = openBills.reduce((s, b) => s + b.amount, 0)
     const currentYear = new Date().getFullYear()
     const yearBills = bills.filter(
@@ -117,7 +120,7 @@ function UsageContent({ userDoc }: { userDoc: UserDoc }) {
   if (billsError || checkoutsError) return <QueryError context="usage" />
 
   const filteredBills = bills.filter((b) => {
-    if (filter === "open") return !b.paidAt
+    if (filter === "open") return isOpenBill(b)
     if (filter === "paid") return !!b.paidAt
     return true
   })
@@ -312,7 +315,7 @@ function InvoicesPanel({
               >
                 <div className="flex flex-col min-w-0 flex-1">
                   <span className="font-semibold">
-                    {formatInvoiceNumber(bill.referenceNumber)}
+                    {formatBillReference(bill.referenceNumber, bill.kind)}
                   </span>
                   <span className="text-xs text-muted-foreground tabular-nums">
                     {formatDate(bill.created)}
@@ -322,16 +325,7 @@ function InvoicesPanel({
                   <span className="font-semibold tabular-nums whitespace-nowrap">
                     {formatCHF(bill.amount)}
                   </span>
-                  {bill.paidAt ? (
-                    <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-transparent">
-                      Bezahlt
-                      {bill.paidVia
-                        ? ` (${paidViaLabel[bill.paidVia] ?? bill.paidVia})`
-                        : ""}
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline">Offen</Badge>
-                  )}
+                  <BillStatusBadge bill={bill} />
                 </div>
                 <div className="flex-shrink-0">
                   {bill.storagePath && <DownloadButton billId={bill.id} />}
@@ -365,7 +359,7 @@ function InvoicesPanel({
                   className="border-t border-border hover:bg-muted/30"
                 >
                   <td className="px-6 py-3 font-semibold">
-                    {formatInvoiceNumber(bill.referenceNumber)}
+                    {formatBillReference(bill.referenceNumber, bill.kind)}
                   </td>
                   <td className="px-6 py-3 tabular-nums">
                     {formatDate(bill.created)}
@@ -374,16 +368,7 @@ function InvoicesPanel({
                     {formatCHF(bill.amount)}
                   </td>
                   <td className="px-6 py-3">
-                    {bill.paidAt ? (
-                      <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-transparent">
-                        Bezahlt
-                        {bill.paidVia
-                          ? ` (${paidViaLabel[bill.paidVia] ?? bill.paidVia})`
-                          : ""}
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline">Offen</Badge>
-                    )}
+                    <BillStatusBadge bill={bill} />
                   </td>
                   <td className="px-4 py-3 text-right">
                     {bill.storagePath && <DownloadButton billId={bill.id} />}
@@ -421,6 +406,30 @@ function FilterPill({
       {children}
     </button>
   )
+}
+
+/**
+ * Status pill for a bill row. A `kind: "beleg"` is a per-visit
+ * Sammelrechnung record — it is never payable on its own (the monthly
+ * aggregated invoice carries the QR slip), so it must NOT show the
+ * "Offen"/"Bezahlt" payable-status badge. Render a neutral "Beleg" badge
+ * instead. Issue #405.
+ */
+function BillStatusBadge({ bill }: { bill: BillDoc }) {
+  if (bill.kind === "beleg") {
+    return <Badge variant="secondary">Beleg</Badge>
+  }
+  if (bill.paidAt) {
+    return (
+      <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-transparent">
+        Bezahlt
+        {bill.paidVia
+          ? ` (${paidViaLabel[bill.paidVia] ?? bill.paidVia})`
+          : ""}
+      </Badge>
+    )
+  }
+  return <Badge variant="outline">Offen</Badge>
 }
 
 function SessionsPanel({
@@ -514,6 +523,16 @@ function WorkshopChips({ workshops }: { workshops: string[] }) {
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────
+
+/**
+ * A bill is "Offen" (payable, outstanding) when it's a real invoice that
+ * hasn't been paid. A `kind: "beleg"` (per-visit Sammelrechnung record)
+ * is never payable on its own — it's settled via the aggregated monthly
+ * invoice — so it is neither open nor paid. Issue #405.
+ */
+function isOpenBill(bill: BillDoc): boolean {
+  return bill.kind !== "beleg" && !bill.paidAt
+}
 
 /** Tolerant Timestamp-or-Date converter — fakes used in tests store plain
  *  Date instances, while live Firestore returns Timestamp. */

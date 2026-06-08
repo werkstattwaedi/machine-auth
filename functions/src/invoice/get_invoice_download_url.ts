@@ -5,7 +5,7 @@ import * as logger from "firebase-functions/logger";
 import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import { getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
-import { formatInvoiceNumber, type BillEntity } from "./types";
+import { formatBillReference, type BillEntity } from "./types";
 
 /**
  * Build the options passed to `file.getSignedUrl(...)` for a bill download.
@@ -17,7 +17,13 @@ export function buildDownloadOptions(bill: BillEntity): {
   expires: number;
   responseDisposition: string;
 } {
-  const filename = `Rechnung_${formatInvoiceNumber(bill.referenceNumber)}.pdf`;
+  // A `kind: "beleg"` (per-visit Sammelrechnung record) downloads as
+  // "Beleg_BL-…"; a real invoice downloads as "Rechnung_RE-…". The PDF
+  // *content* renderer already branches on `kind`; this fixes the
+  // filename so it stops lying about the document type. Issue #405.
+  const reference = formatBillReference(bill.referenceNumber, bill.kind);
+  const prefix = (bill.kind ?? "invoice") === "beleg" ? "Beleg" : "Rechnung";
+  const filename = `${prefix}_${reference}.pdf`;
   return {
     action: "read",
     expires: Date.now() + 3600 * 1000,

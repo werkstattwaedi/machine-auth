@@ -49,6 +49,25 @@ export function formatInvoiceNumber(n: number): string {
   return `RE-${String(n).padStart(6, "0")}`
 }
 
+/** Format a Beleg reference number for display, e.g. 1 → "BL-000001". */
+export function formatBelegNumber(n: number): string {
+  return `BL-${String(n).padStart(6, "0")}`
+}
+
+/**
+ * Format a bill's reference number using its `kind`. A `kind: "beleg"`
+ * (per-visit Sammelrechnung record) renders "BL-…"; everything else
+ * (real, payable invoice) renders "RE-…". Mirrors the functions-side
+ * helper in functions/src/invoice/types.ts so web/functions stay in
+ * lockstep. Issue #405.
+ */
+export function formatBillReference(
+  n: number,
+  kind: "invoice" | "beleg" | undefined,
+): string {
+  return kind === "beleg" ? formatBelegNumber(n) : formatInvoiceNumber(n)
+}
+
 export function formatCHF(amount: number): string {
   return currencyFormatter.format(amount)
 }

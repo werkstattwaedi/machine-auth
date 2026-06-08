@@ -57,4 +57,25 @@ describe("getInvoiceDownloadUrl — buildDownloadOptions", () => {
     expect(opts.action).to.equal("read");
     expect(opts.expires).to.be.greaterThan(before);
   });
+
+  it("names a kind: 'beleg' bill Beleg_BL-XXXXXX.pdf (#405)", () => {
+    // Regression test for #405: a Sammelrechnung per-visit Beleg was
+    // downloaded as "Rechnung_RE-…" even though the PDF inside is a Beleg.
+    // The filename must reflect the document type.
+    const opts = buildDownloadOptions(
+      makeBill({ referenceNumber: 11, kind: "beleg" }),
+    );
+    expect(opts.responseDisposition).to.equal(
+      'attachment; filename="Beleg_BL-000011.pdf"',
+    );
+  });
+
+  it("names a kind: 'invoice' bill Rechnung_RE-XXXXXX.pdf (#405)", () => {
+    const opts = buildDownloadOptions(
+      makeBill({ referenceNumber: 12, kind: "invoice" }),
+    );
+    expect(opts.responseDisposition).to.equal(
+      'attachment; filename="Rechnung_RE-000012.pdf"',
+    );
+  });
 });
