@@ -1,105 +1,152 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-// Shared email-code + Google OAuth login page used by both web apps.
-// Admin and checkout differ only in:
-//  - post-login redirect target (defaultRedirect)
-//  - whether sign-up is offered (signupEnabled + signupRedirect)
-//  - branding subtitle (subtitle, e.g. "Administration")
-//  - button order (googleButtonPosition: top vs bottom)
-// The search params (?redirect=&mode=) are parsed by each app's route and
-// passed in as props — admin's route schema simply omits them.
+// Shared Galaxus-style combined sign-in / sign-up page used by both web apps.
+//
+// Flow (checkout, signupEnabled): the user enters their e-mail; we ask the
+// server whether a *completed* account exists, then branch:
+//   - exists  → show only the 6-digit code (sign-in)
+//   - new     → show the inline sign-up form (name + member type + terms,
+//               with the code entered inline where Galaxus puts the password;
+//               firma also fills its address)
+// Google verifies the e-mail up front, so a new Google account skips straight
+// to the sign-up form (name prefilled, no code). A redeemed magic link for a
+// new account lands here already signed-in, in the same sign-up form.
+//
+// Admin (signupEnabled = false) keeps the plain e-mail → code flow: admin
+// accounts are admin-created, so there is no existence check and no sign-up.
 
 import { useEffect, useState } from "react"
 import { useNavigate } from "@tanstack/react-router"
 import { toast } from "sonner"
 import { Loader2, Mail } from "lucide-react"
-import { useAuth } from "@modules/lib/auth"
+import {
+  useAuth,
+  isProfileComplete,
+  type SignupProfile,
+} from "@modules/lib/auth"
+import { validateAddress } from "@modules/lib/address"
 import { Button } from "@modules/components/ui/button"
 import { Input } from "@modules/components/ui/input"
 import { GoogleIcon } from "@modules/components/icons/google"
+import {
+  SignupFields,
+  EMPTY_SIGNUP_VALUE,
+  type SignupFieldsValue,
+  type SignupFieldsErrors,
+} from "./signup-fields"
 
 export interface LoginPageProps {
-  /** Where to send the user after a normal sign-in. */
+  /** Where to send the user after a successful sign-in / sign-up. */
   defaultRedirect: string
-  /** When true, render the "Konto erstellen" link and honour `mode=signup`. */
+  /** When true, run the combined sign-in/sign-up flow (checkout). */
   signupEnabled?: boolean
-  /** Where to send the user after sign-up. Defaults to "/account/complete-profile". */
-  signupRedirect?: string
   /** Optional small caption under the logo (e.g. "Administration"). */
   subtitle?: string
   /** Visual order of the Google vs e-mail buttons. */
   googleButtonPosition?: "top" | "bottom"
   /** Optional ?redirect= search-param value (set by each app's route). */
   redirect?: string
-  /** Optional ?mode= search-param value; "signup" enables sign-up flow. */
-  mode?: string
+  /** When set (magic-link new account), open directly in the sign-up stage. */
+  signup?: boolean
 }
+
+type Stage =
+  | { kind: "email" }
+  | { kind: "signin-code" }
+  | { kind: "signup"; via: "code" | "google" | "link" }
 
 export function LoginPage({
   defaultRedirect,
   signupEnabled = false,
-  signupRedirect = "/account/complete-profile",
   subtitle,
   googleButtonPosition = "bottom",
   redirect: redirectTo,
-  mode,
+  signup: signupFlag,
 }: LoginPageProps) {
-  const { user, loading, requestLoginEmail, verifyLoginCode, signInWithGoogle, pendingGoogleLink } = useAuth()
+  const {
+    user,
+    userDoc,
+    userDocLoading,
+    loading,
+    sessionKind,
+    checkAccountExists,
+    requestLoginEmail,
+    verifyLoginCode,
+    verifyLoginCodeAndCreateProfile,
+    completeSignedInSignup,
+    signInWithGoogle,
+    pendingGoogleLink,
+  } = useAuth()
   const navigate = useNavigate()
-  const isSignup = signupEnabled && mode === "signup"
-  const targetPath = isSignup ? signupRedirect : (redirectTo || defaultRedirect)
+  const targetPath = redirectTo || defaultRedirect
 
+  const [stage, setStage] = useState<Stage>(
+    signupFlag ? { kind: "signup", via: "link" } : { kind: "email" },
+  )
   const [email, setEmail] = useState("")
-  const [code, setCode] = useState("")
+  const [signinCode, setSigninCode] = useState("")
+  const [signupValue, setSignupValue] = useState<SignupFieldsValue>(EMPTY_SIGNUP_VALUE)
+  const [signupErrors, setSignupErrors] = useState<SignupFieldsErrors>({})
   const [sending, setSending] = useState(false)
   const [verifying, setVerifying] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const [signingInWithGoogle, setSigningInWithGoogle] = useState(false)
-  const [codeRequested, setCodeRequested] = useState(false)
   const [codeError, setCodeError] = useState<string | null>(null)
   const [showLinkHint, setShowLinkHint] = useState(false)
 
-  // Redirect if already signed in. When sign-up flow is enabled we also
-  // honour any pending localStorage round-trip from the magic-link path.
+  // Route the signed-in principal. A completed account redirects to the target;
+  // a signed-in-but-incomplete principal (Google-new / magic-link-new / legacy)
+  // is dropped into the inline sign-up form. Anonymous (eager-anon checkout)
+  // and tag sessions are left alone.
   useEffect(() => {
-    if (loading || !user) return
-    // Anonymous principals (eager-anon checkout) land on /login to upgrade
-    // their session — don't bounce them away. Once verifyLoginCode replaces
-    // the anon principal with a real one, this effect re-runs and routes
-    // them to the redirect target.
-    if (user.isAnonymous) return
+    if (loading || !user || user.isAnonymous || sessionKind === "tag") return
+    if (userDocLoading) return
 
-    let target = targetPath
-    if (signupEnabled) {
-      const storedRedirect = window.localStorage.getItem("loginRedirect")
-      const storedMode = window.localStorage.getItem("loginMode")
-      window.localStorage.removeItem("loginRedirect")
-      window.localStorage.removeItem("loginMode")
-      const wasSignup = storedMode === "signup" || isSignup
-      target = wasSignup ? signupRedirect : (storedRedirect || targetPath)
+    if (!signupEnabled) {
+      // Admin: completeness gating is the authenticated layout's job.
+      navigate({ to: pendingGoogleLink ? "/link-account" : targetPath })
+      return
     }
-    navigate({ to: pendingGoogleLink ? "/link-account" : target })
-  }, [user, loading, pendingGoogleLink, navigate, targetPath, isSignup, signupEnabled, signupRedirect])
+    if (userDoc && isProfileComplete(userDoc)) {
+      navigate({ to: pendingGoogleLink ? "/link-account" : targetPath })
+      return
+    }
+    // Signed in without a completed profile → finish sign-up inline. Keep an
+    // already-chosen sign-up stage (e.g. Google prefill) instead of resetting.
+    setStage((prev) => (prev.kind === "signup" ? prev : { kind: "signup", via: "link" }))
+  }, [
+    user,
+    userDoc,
+    userDocLoading,
+    loading,
+    sessionKind,
+    signupEnabled,
+    pendingGoogleLink,
+    navigate,
+    targetPath,
+  ])
 
   const handleGoogleSignIn = async () => {
     setSigningInWithGoogle(true)
     try {
-      await signInWithGoogle()
-      navigate({ to: targetPath })
+      const { isNewAccount, firstName, lastName } = await signInWithGoogle()
+      if (isNewAccount && signupEnabled) {
+        setSignupValue({ ...EMPTY_SIGNUP_VALUE, firstName, lastName })
+        setSignupErrors({})
+        setStage({ kind: "signup", via: "google" })
+      }
+      // Existing account → the redirect effect handles navigation.
     } catch (err: unknown) {
-      if (
-        err instanceof Error &&
-        "code" in err &&
-        (err as { code: string }).code === "auth/account-exists-with-different-credential"
-      ) {
+      const code =
+        err instanceof Error && "code" in err
+          ? (err as { code: string }).code
+          : undefined
+      if (code === "auth/account-exists-with-different-credential") {
         setShowLinkHint(true)
         toast.info("Bitte zuerst per E-Mail-Code anmelden")
-      } else if (
-        err instanceof Error &&
-        "code" in err &&
-        (err as { code: string }).code === "auth/popup-closed-by-user"
-      ) {
-        // User closed the popup — no error needed
+      } else if (code === "auth/popup-closed-by-user") {
+        // User closed the popup — no error needed.
       } else {
         const message = err instanceof Error ? err.message : "Fehler"
         toast.error(`Anmeldung fehlgeschlagen: ${message}`)
@@ -109,22 +156,31 @@ export function LoginPage({
     }
   }
 
-  const handleRequestCode = async (e: React.FormEvent) => {
+  const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!email) return
-
     setSending(true)
     try {
-      if (signupEnabled) {
-        if (isSignup) {
-          window.localStorage.setItem("loginMode", "signup")
-        } else if (redirectTo) {
-          window.localStorage.setItem("loginRedirect", redirectTo)
-        }
+      if (!signupEnabled) {
+        // Admin: no existence check, just email a code.
+        await requestLoginEmail(email)
+        setStage({ kind: "signin-code" })
+        setSigninCode("")
+        setCodeError(null)
+        toast.success("E-Mail gesendet!")
+        return
       }
+      const { exists } = await checkAccountExists(email)
       await requestLoginEmail(email)
-      setCodeRequested(true)
-      setCodeError(null)
+      if (exists) {
+        setStage({ kind: "signin-code" })
+        setSigninCode("")
+        setCodeError(null)
+      } else {
+        setSignupValue(EMPTY_SIGNUP_VALUE)
+        setSignupErrors({})
+        setStage({ kind: "signup", via: "code" })
+      }
       toast.success("E-Mail gesendet!")
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Fehler"
@@ -134,29 +190,90 @@ export function LoginPage({
     }
   }
 
-  const handleVerifyCode = async (e: React.FormEvent) => {
+  const handleSigninCodeSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (code.length !== 6) return
-
+    if (signinCode.length !== 6) return
     setVerifying(true)
     setCodeError(null)
     try {
-      await verifyLoginCode(email, code)
+      await verifyLoginCode(email, signinCode)
       toast.success("Erfolgreich angemeldet")
-      // Redirect handled by useEffect above once user state updates.
+      // Redirect handled by the effect once the user state updates.
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Code falsch."
       setCodeError(message)
-      setCode("")
+      setSigninCode("")
     } finally {
       setVerifying(false)
     }
   }
 
+  const validateSignup = (via: "code" | "google" | "link") => {
+    const errs: SignupFieldsErrors = {}
+    if (signupValue.firstName.trim() === "") errs.firstName = "Vorname ist erforderlich"
+    if (signupValue.lastName.trim() === "") errs.lastName = "Nachname ist erforderlich"
+    if (via === "code" && signupValue.code.length !== 6) {
+      errs.code = "Bitte gib den 6-stelligen Code ein"
+    }
+    if (!signupValue.termsAccepted) {
+      errs.termsAccepted = "Du musst die Nutzungsbestimmungen akzeptieren"
+    }
+    if (signupValue.userType === "firma") {
+      const addrErrs = validateAddress(signupValue.address, { requireCompany: true })
+      if (Object.keys(addrErrs).length > 0) errs.address = addrErrs
+    }
+    return errs
+  }
+
+  const handleSignupSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (stage.kind !== "signup") return
+    const via = stage.via
+    const errs = validateSignup(via)
+    setSignupErrors(errs)
+    if (Object.keys(errs).length > 0) return
+
+    setSubmitting(true)
+    try {
+      const profile: SignupProfile = {
+        firstName: signupValue.firstName.trim(),
+        lastName: signupValue.lastName.trim(),
+        userType: signupValue.userType,
+        termsAccepted: true,
+        billingAddress:
+          signupValue.userType === "firma"
+            ? {
+                company: signupValue.address.company.trim(),
+                street: signupValue.address.street.trim(),
+                zip: signupValue.address.zip.trim(),
+                city: signupValue.address.city.trim(),
+              }
+            : null,
+      }
+      if (via === "code") {
+        await verifyLoginCodeAndCreateProfile(email, signupValue.code, profile)
+      } else {
+        await completeSignedInSignup(profile)
+      }
+      toast.success("Konto erstellt")
+      // Redirect handled by the effect once the user doc updates.
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Fehler"
+      if (via === "code") {
+        setSignupErrors({ code: message })
+      } else {
+        toast.error(`Fehler: ${message}`)
+      }
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   const handleUseDifferentEmail = () => {
-    setCodeRequested(false)
-    setCode("")
+    setStage({ kind: "email" })
+    setSigninCode("")
     setCodeError(null)
+    setSignupErrors({})
   }
 
   if (loading) {
@@ -194,7 +311,7 @@ export function LoginPage({
   )
 
   const emailForm = (
-    <form onSubmit={handleRequestCode} className="space-y-4" data-testid="login-email-stage">
+    <form onSubmit={handleEmailSubmit} className="space-y-4" data-testid="login-email-stage">
       <Input
         type="email"
         placeholder="deine@email.ch"
@@ -210,10 +327,19 @@ export function LoginPage({
         data-testid="login-email-submit"
       >
         {sending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-        Code per E-Mail senden
+        Weiter
       </Button>
     </form>
   )
+
+  const heading =
+    stage.kind === "signup"
+      ? "Konto erstellen"
+      : stage.kind === "signin-code"
+        ? "Anmelden"
+        : signupEnabled
+          ? "Anmelden oder Konto erstellen"
+          : "Anmelden"
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
@@ -224,61 +350,9 @@ export function LoginPage({
         </div>
 
         <div className="border border-border rounded p-6 space-y-4">
-          <h2 className="text-lg font-bold text-center">
-            {isSignup ? "Konto erstellen" : "Anmelden"}
-          </h2>
-          {codeRequested ? (
-            <div className="space-y-4" data-testid="login-code-stage">
-              <div className="text-center space-y-2">
-                <Mail className="h-10 w-10 mx-auto text-cog-teal" />
-                <p className="text-sm">
-                  Wir haben eine E-Mail an <strong>{email}</strong> gesendet.
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Gib den 6-stelligen Code ein oder klicke auf den Link in der E-Mail.
-                </p>
-              </div>
+          <h2 className="text-lg font-bold text-center">{heading}</h2>
 
-              <form onSubmit={handleVerifyCode} className="space-y-3">
-                <Input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="\d{6}"
-                  maxLength={6}
-                  autoFocus
-                  autoComplete="one-time-code"
-                  placeholder="123456"
-                  value={code}
-                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-                  className="text-center text-xl tracking-widest"
-                  data-testid="login-code-input"
-                  aria-label="6-stelliger Code"
-                />
-                {codeError && (
-                  <p className="text-sm text-red-600" data-testid="login-code-error">
-                    {codeError}
-                  </p>
-                )}
-                <Button
-                  type="submit"
-                  className="w-full bg-cog-teal hover:bg-cog-teal-dark text-white font-semibold"
-                  disabled={verifying || code.length !== 6}
-                  data-testid="login-code-submit"
-                >
-                  {verifying ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                  Anmelden
-                </Button>
-              </form>
-
-              <button
-                type="button"
-                onClick={handleUseDifferentEmail}
-                className="w-full text-sm text-muted-foreground hover:text-foreground underline"
-              >
-                Andere E-Mail-Adresse verwenden
-              </button>
-            </div>
-          ) : (
+          {stage.kind === "email" && (
             <>
               {showLinkHint && (
                 <div className="rounded border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-800">
@@ -286,7 +360,6 @@ export function LoginPage({
                   um dein Google-Konto zu verknüpfen.
                 </div>
               )}
-
               {googleButtonPosition === "top" ? (
                 <>
                   {googleButton}
@@ -303,29 +376,95 @@ export function LoginPage({
             </>
           )}
 
-          {signupEnabled && !codeRequested && (
-            <div className="text-center text-sm text-muted-foreground">
-              {isSignup ? (
-                <>
-                  Bereits registriert?{" "}
-                  <a
-                    href={`/login${redirectTo ? `?redirect=${encodeURIComponent(redirectTo)}` : ""}`}
-                    className="text-cog-teal hover:underline"
-                  >
-                    Anmelden
-                  </a>
-                </>
-              ) : (
-                <>
-                  Noch kein Konto?{" "}
-                  <a
-                    href={`/login?mode=signup${redirectTo ? `&redirect=${encodeURIComponent(redirectTo)}` : ""}`}
-                    className="text-cog-teal hover:underline"
-                  >
-                    Konto erstellen
-                  </a>
-                </>
+          {stage.kind === "signin-code" && (
+            <div className="space-y-4" data-testid="login-code-stage">
+              <div className="text-center space-y-2">
+                <Mail className="h-10 w-10 mx-auto text-cog-teal" />
+                <p className="text-sm">
+                  Wir haben eine E-Mail an <strong>{email}</strong> gesendet.
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Gib den 6-stelligen Code ein oder klicke auf den Link in der E-Mail.
+                </p>
+              </div>
+
+              <form onSubmit={handleSigninCodeSubmit} className="space-y-3">
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="\d{6}"
+                  maxLength={6}
+                  autoFocus
+                  autoComplete="one-time-code"
+                  placeholder="123456"
+                  value={signinCode}
+                  onChange={(e) => setSigninCode(e.target.value.replace(/\D/g, ""))}
+                  className="text-center text-xl tracking-widest"
+                  data-testid="login-code-input"
+                  aria-label="6-stelliger Code"
+                />
+                {codeError && (
+                  <p className="text-sm text-red-600" data-testid="login-code-error">
+                    {codeError}
+                  </p>
+                )}
+                <Button
+                  type="submit"
+                  className="w-full bg-cog-teal hover:bg-cog-teal-dark text-white font-semibold"
+                  disabled={verifying || signinCode.length !== 6}
+                  data-testid="login-code-submit"
+                >
+                  {verifying ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  Anmelden
+                </Button>
+              </form>
+
+              <button
+                type="button"
+                onClick={handleUseDifferentEmail}
+                className="w-full text-sm text-muted-foreground hover:text-foreground underline"
+              >
+                Andere E-Mail-Adresse verwenden
+              </button>
+            </div>
+          )}
+
+          {stage.kind === "signup" && (
+            <div className="space-y-4" data-testid="login-signup-stage">
+              {(email || user?.email) && (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground truncate">
+                    {email || user?.email}
+                  </span>
+                  {stage.via === "code" && (
+                    <button
+                      type="button"
+                      onClick={handleUseDifferentEmail}
+                      className="text-cog-teal hover:underline shrink-0 ml-2"
+                    >
+                      Ändern
+                    </button>
+                  )}
+                </div>
               )}
+
+              <form onSubmit={handleSignupSubmit} className="space-y-5">
+                <SignupFields
+                  value={signupValue}
+                  errors={signupErrors}
+                  onChange={(patch) => setSignupValue((v) => ({ ...v, ...patch }))}
+                  showCode={stage.via === "code"}
+                />
+                <Button
+                  type="submit"
+                  className="w-full bg-cog-teal hover:bg-cog-teal-dark text-white font-semibold"
+                  disabled={submitting}
+                  data-testid="signup-submit"
+                >
+                  {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  Konto erstellen
+                </Button>
+              </form>
             </div>
           )}
         </div>

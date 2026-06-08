@@ -16,6 +16,7 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
   linkWithPopup,
+  getAdditionalUserInfo,
   type Auth,
   type User,
 } from "firebase/auth"
@@ -31,12 +32,26 @@ import { rpcCallable } from "./rpc"
 import { useDb, useFirebaseAuth, useFunctions } from "./firebase-context"
 import { userRef } from "./firestore-helpers"
 import { formatFullName } from "./username-utils"
+import { type UserType } from "./pricing"
 
 export interface BillingAddress {
   company: string
   street: string
   zip: string
   city: string
+}
+
+/**
+ * The fields captured during the combined sign-up flow. Account creation is
+ * deliberately light: name + member type + terms. A company (`firma`) also
+ * supplies its billing address inline, because it always invoices.
+ */
+export interface SignupProfile {
+  firstName: string
+  lastName: string
+  userType: UserType
+  termsAccepted: boolean
+  billingAddress?: BillingAddress | null
 }
 
 export interface UserDoc {
@@ -60,19 +75,20 @@ export interface UserDoc {
 }
 
 /**
- * Profile is complete when name, terms, and postal address are filled.
- * Firma additionally requires `company` on the billingAddress.
+ * Profile is complete when name and terms are filled. The postal address is
+ * captured later (membership signup or profile edit) and is only *required*
+ * for companies (`firma`), which always invoice and therefore need an address
+ * + company name up front.
  */
 export function isProfileComplete(userDoc: UserDoc): boolean {
   if (!userDoc.firstName || !userDoc.lastName || !userDoc.termsAcceptedAt) {
     return false
   }
-  const addr = userDoc.billingAddress
-  if (!addr || !addr.street || !addr.zip || !addr.city) {
-    return false
-  }
-  if (userDoc.userType === "firma" && !addr.company) {
-    return false
+  if (userDoc.userType === "firma") {
+    const addr = userDoc.billingAddress
+    if (!addr || !addr.street || !addr.zip || !addr.city || !addr.company) {
+      return false
+    }
   }
   return true
 }
@@ -100,13 +116,30 @@ interface AuthContextValue {
   loading: boolean
   /** True while the Firestore user doc is being fetched (may be slow). */
   userDocLoading: boolean
+  /** Does a *completed* account (name + accepted terms) exist for this email? */
+  checkAccountExists: (
+    email: string
+  ) => Promise<{ exists: boolean; hasAuthUser: boolean }>
   /** Ask the server to email a 6-digit code + magic link. */
   requestLoginEmail: (email: string) => Promise<void>
-  /** Redeem the 6-digit code and sign in. */
+  /** Redeem the 6-digit code and sign in (existing account — no doc write). */
   verifyLoginCode: (email: string, code: string) => Promise<void>
+  /** Redeem the 6-digit code, sign in, and create the user doc (sign-up). */
+  verifyLoginCodeAndCreateProfile: (
+    email: string,
+    code: string,
+    profile: SignupProfile
+  ) => Promise<void>
+  /** Write the user doc for an already-signed-in principal (Google / magic link sign-up). */
+  completeSignedInSignup: (profile: SignupProfile) => Promise<void>
   /** Redeem a magic-link token (read from ?token=…) and sign in. Returns true if redeemed. */
   completeMagicLink: (token: string) => Promise<boolean>
-  signInWithGoogle: () => Promise<void>
+  /** Sign in with Google. Returns whether the account is new + the identity name. */
+  signInWithGoogle: () => Promise<{
+    isNewAccount: boolean
+    firstName: string
+    lastName: string
+  }>
   linkGoogle: () => Promise<void>
   signOut: () => Promise<void>
   /**
@@ -238,10 +271,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => window.localStorage.getItem("pendingGoogleLink") === "true"
   )
 
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = async (): Promise<{
+    isNewAccount: boolean
+    firstName: string
+    lastName: string
+  }> => {
     try {
       const result = await signInWithPopup(auth, new GoogleAuthProvider())
-      await handleSignIn(db, result.user)
+      // Prefer the OAuth identity's structured name claims; fall back to
+      // splitting displayName on the first space when they're absent.
+      const profile = getAdditionalUserInfo(result)?.profile as
+        | { given_name?: string; family_name?: string }
+        | undefined
+      let firstName = profile?.given_name ?? ""
+      let lastName = profile?.family_name ?? ""
+      if (!firstName && !lastName && result.user.displayName) {
+        const parts = result.user.displayName.trim().split(/\s+/)
+        firstName = parts[0] ?? ""
+        lastName = parts.slice(1).join(" ")
+      }
+      // New-vs-existing WITHOUT creating a doc: a completed account has
+      // accepted terms. An existing Auth user with no terms (legacy / abandoned)
+      // is treated as new so they finish sign-up.
+      const snap = await getDoc(userRef(db, result.user.uid))
+      const isNewAccount = !(snap.exists() && snap.data()?.termsAcceptedAt)
+      return { isNewAccount, firstName, lastName }
     } catch (error: unknown) {
       if (
         error instanceof Error &&
@@ -267,6 +321,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setPendingGoogleLink(false)
   }
 
+  const checkAccountExists = async (email: string) => {
+    const fn = rpcCallable<
+      { email: string },
+      { exists: boolean; hasAuthUser: boolean }
+    >(functions, "authCall", "checkAccountExists")
+    const { data } = await fn({ email })
+    return data
+  }
+
   const requestLoginEmail = async (email: string) => {
     const fn = rpcCallable<{ email: string }, { ok: true }>(
       functions,
@@ -277,24 +340,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const verifyLoginCode = async (email: string, code: string) => {
-    await redeemCustomToken(
+    await redeemCustomToken(functions, "verifyLoginCode", { email, code }, auth)
+  }
+
+  const verifyLoginCodeAndCreateProfile = async (
+    email: string,
+    code: string,
+    profile: SignupProfile
+  ) => {
+    const user = await redeemCustomToken(
       functions,
       "verifyLoginCode",
       { email, code },
-      auth,
-      db
+      auth
     )
+    await writeSignupProfile(db, user, profile)
+  }
+
+  const completeSignedInSignup = async (profile: SignupProfile) => {
+    if (!auth.currentUser) throw new Error("Nicht angemeldet")
+    await writeSignupProfile(db, auth.currentUser, profile)
   }
 
   const completeMagicLink = async (token: string): Promise<boolean> => {
     if (!token) return false
-    await redeemCustomToken(
-      functions,
-      "verifyMagicLink",
-      { token },
-      auth,
-      db
-    )
+    await redeemCustomToken(functions, "verifyMagicLink", { token }, auth)
     return true
   }
 
@@ -317,8 +387,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       sessionKind,
       loading,
       userDocLoading,
+      checkAccountExists,
       requestLoginEmail,
       verifyLoginCode,
+      verifyLoginCodeAndCreateProfile,
+      completeSignedInSignup,
       completeMagicLink,
       signInWithGoogle,
       linkGoogle,
@@ -342,9 +415,8 @@ async function redeemCustomToken(
   functions: Functions,
   name: "verifyLoginCode" | "verifyMagicLink",
   payload: Record<string, string>,
-  auth: Auth,
-  db: Firestore
-): Promise<void> {
+  auth: Auth
+): Promise<User> {
   const fn = rpcCallable<Record<string, string>, { customToken: string }>(
     functions,
     "authCall",
@@ -352,30 +424,44 @@ async function redeemCustomToken(
   )
   const { data } = await fn(payload)
   const credential = await signInWithCustomToken(auth, data.customToken)
-  await handleSignIn(db, credential.user)
+  return credential.user
 }
 
 /**
- * Self-registration: if no user doc exists for this Auth UID, create one.
- * Admin-created users already have a doc, so this is a no-op for them.
+ * Create (or finish) the user doc from the sign-up form. New accounts get the
+ * full scaffold; an existing-but-incomplete doc (admin-created / abandoned) is
+ * merged so its roles/permissions/created are preserved.
  */
-async function handleSignIn(db: Firestore, user: User): Promise<void> {
+async function writeSignupProfile(
+  db: Firestore,
+  user: User,
+  profile: SignupProfile
+): Promise<void> {
   if (!user.email) throw new Error("E-Mail-Adresse benötigt")
 
   const userDocRef = userRef(db, user.uid)
   const snapshot = await getDoc(userDocRef)
-  if (snapshot.exists()) return
 
-  // Create new user document with Auth UID as doc ID
-  await setDoc(userDocRef, {
-    email: user.email,
-    firstName: "",
-    lastName: "",
-    created: serverTimestamp(),
-    roles: [],
-    permissions: [],
-    termsAcceptedAt: null,
-    userType: "erwachsen",
-    billingAddress: null,
-  })
+  await setDoc(
+    userDocRef,
+    {
+      email: user.email,
+      firstName: profile.firstName.trim(),
+      lastName: profile.lastName.trim(),
+      userType: profile.userType,
+      termsAcceptedAt: serverTimestamp(),
+      billingAddress: profile.billingAddress ?? null,
+      // New accounts get the full scaffold; an existing doc keeps its
+      // roles/permissions/created/phone (merge omits these fields).
+      ...(snapshot.exists()
+        ? {}
+        : {
+            created: serverTimestamp(),
+            roles: [],
+            permissions: [],
+            phone: null,
+          }),
+    },
+    { merge: true }
+  )
 }

@@ -435,7 +435,7 @@ function IdentityHint({
           </Button>
         </a>
         <span className="text-muted-foreground/40">|</span>
-        <a href="/login?mode=signup&redirect=/">
+        <a href="/login?redirect=/">
           <Button variant="ghost" size="sm" className="text-cog-teal hover:text-cog-teal-dark">
             <UserPlus className="h-4 w-4 mr-1.5" />
             Registrieren
