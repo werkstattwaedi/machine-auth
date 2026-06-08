@@ -315,25 +315,12 @@ export function WizardProvider({
   // Pre-fill primary person for logged-in users
   usePreFillPerson(identifiedUserDoc, personsDispatch, persons, prefillNonce)
 
-  // Pre-fill primary person for tag-identified users
-  useEffect(() => {
-    if (!tokenUser || isAccountLoggedIn) return
-    const primary = persons[0]
-    if (!primary || primary.isPreFilled) return
-    personsDispatch({
-      type: "UPDATE_PERSON",
-      id: primary.id,
-      updates: {
-        firstName: tokenUser.firstName ?? "",
-        lastName: tokenUser.lastName ?? "",
-        email: tokenUser.email ?? "",
-        userType: (tokenUser.userType as UserType) ?? "erwachsen",
-        isPreFilled: true,
-        termsAccepted: true,
-      },
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tokenUser?.userId])
+  // Pre-fill primary person for tag-identified users (incl. badge switch).
+  usePreFillTagPerson(
+    isAccountLoggedIn ? null : tokenUser,
+    personsDispatch,
+    persons,
+  )
 
   // Family-roster quick-add (issue #209).
   const selfUserId = identifiedUserDoc?.id ?? null
@@ -846,6 +833,68 @@ export function usePreFillPerson(
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userDoc?.id, resetNonce])
+}
+
+/**
+ * Pre-fill the primary person card from a tag-identified user, and — for
+ * issue #420 — replace it when a *different* badge is tapped while one is
+ * already pre-filled.
+ *
+ * The effect is keyed on `tokenUser?.userId`, so it re-runs whenever a new
+ * badge is verified. The old inline guard bailed on `primary.isPreFilled`,
+ * which swallowed the switch and left the first badge's name on the card —
+ * combined with the double-verify bug (now fixed in bridge-nfc-router) this
+ * produced the "reading the badge has no effect after switching" symptom.
+ *
+ * Overwrite policy:
+ *   - primary not pre-filled (empty or anon-typed): fill it — the badge tap
+ *     identifies the user and supersedes anonymous input (unchanged behaviour).
+ *   - primary pre-filled by THIS same tag user: idempotent re-run, skip.
+ *   - primary pre-filled by a DIFFERENT tag user (badge switch): overwrite.
+ *   - primary pre-filled but NOT by us (logged-in pre-fill or a roster
+ *     rehydrated from an open checkout — `prefilledTagUserIdRef === null`):
+ *     left intact, never discarded.
+ *
+ * Exported for unit testing (see wizard-prefill-tag.test.tsx).
+ */
+export function usePreFillTagPerson(
+  tokenUser: TokenUser | null,
+  dispatch: React.Dispatch<PersonsAction>,
+  persons: CheckoutPerson[],
+) {
+  // Tracks which tag user the primary card currently reflects, so a re-run
+  // for the same badge is a no-op while a switch to a new badge overwrites.
+  const prefilledTagUserIdRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!tokenUser) return
+    const primary = persons[0]
+    if (!primary) return
+    // Same tag user already on the card — nothing to do.
+    if (
+      primary.isPreFilled &&
+      prefilledTagUserIdRef.current === tokenUser.userId
+    ) {
+      return
+    }
+    // A pre-filled primary we didn't fill from a tag (logged-in pre-fill or
+    // rehydrated open checkout) is left intact — only tag-driven fills are
+    // ours to overwrite.
+    if (primary.isPreFilled && prefilledTagUserIdRef.current === null) return
+    prefilledTagUserIdRef.current = tokenUser.userId
+    dispatch({
+      type: "UPDATE_PERSON",
+      id: primary.id,
+      updates: {
+        firstName: tokenUser.firstName ?? "",
+        lastName: tokenUser.lastName ?? "",
+        email: tokenUser.email ?? "",
+        userType: (tokenUser.userType as UserType) ?? "erwachsen",
+        isPreFilled: true,
+        termsAccepted: true,
+      },
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tokenUser?.userId])
 }
 
 // Person <-> Firestore doc converters (extracted from the old wizard).

@@ -48,6 +48,9 @@ const TERMINAL_KEY = "f5e4b999d5aa629f193a874529c4aa2f"
 const MASTER_KEY = "c025f541727ecd8b6eb92055c88a2a70"
 const SYSTEM_NAME = "Oww8820Maco"
 export const NFC_TAG_UID = "04c339aa1e1890"
+// Second NFC tag (issue #420 — badge-switch regression). Distinct UID so it
+// diversifies to a different SDM key and identifies a different user.
+export const NFC_TAG_UID_2 = "04d448bb2f29a1"
 
 const PROJECT_ID = "oww-maco"
 
@@ -56,6 +59,7 @@ export const AUTH_USER_EMAIL = "e2e-test@werkstattwaedi.ch"
 export const AUTH_USER_PASSWORD = "test-password-123"
 export const AUTH_USER_ID = "e2e-auth-user-001"
 export const NFC_USER_ID = "e2e-nfc-user-001"
+export const NFC_USER_ID_2 = "e2e-nfc-user-002"
 
 export default async function globalSetup() {
   const db = getAdminFirestore()
@@ -352,6 +356,31 @@ export default async function globalSetup() {
     registered: FieldValue.serverTimestamp(),
   })
 
+  // ── Second NFC tag + user (issue #420 badge-switch regression) ──
+  await db.collection("users").doc(NFC_USER_ID_2).set({
+    firstName: "Zweit",
+    lastName: "Badge",
+    email: "badge2@test.com",
+    roles: ["vereinsmitglied"],
+    permissions: [db.doc("permission/laser")],
+    userType: "erwachsen",
+    billingAddress: {
+      company: "",
+      street: "Seestrasse 12",
+      zip: "8820",
+      city: "Wädenswil",
+    },
+    termsAcceptedAt: FieldValue.serverTimestamp(),
+    created: FieldValue.serverTimestamp(),
+  })
+
+  await db.collection("tokens").doc(NFC_TAG_UID_2).set({
+    userId: db.doc(`users/${NFC_USER_ID_2}`),
+    label: "E2E Test Tag 2",
+    deactivated: null,
+    registered: FieldValue.serverTimestamp(),
+  })
+
   // Generate valid picc+cmac
   const { picc, cmac } = generateValidPICCAndCMAC(
     NFC_TAG_UID,
@@ -360,14 +389,25 @@ export default async function globalSetup() {
     MASTER_KEY,
     SYSTEM_NAME,
   )
+  const { picc: picc2, cmac: cmac2 } = generateValidPICCAndCMAC(
+    NFC_TAG_UID_2,
+    0,
+    TERMINAL_KEY,
+    MASTER_KEY,
+    SYSTEM_NAME,
+  )
 
   // Write to a temp file so test specs can read the values
   const e2eDataPath = path.resolve(__dirname, ".e2e-data.json")
-  writeFileSync(e2eDataPath, JSON.stringify({ picc, cmac, authUid: authUid }))
+  writeFileSync(
+    e2eDataPath,
+    JSON.stringify({ picc, cmac, picc2, cmac2, authUid: authUid }),
+  )
 
   console.log("[e2e] Global setup complete")
   console.log(`[e2e]   Auth user: ${authUid} (${AUTH_USER_EMAIL})`)
   console.log(`[e2e]   NFC tag: picc=${picc.slice(0, 8)}... cmac=${cmac.slice(0, 8)}...`)
+  console.log(`[e2e]   NFC tag 2: picc=${picc2.slice(0, 8)}... cmac=${cmac2.slice(0, 8)}...`)
 }
 
 async function clearEmulatorFirestore() {
