@@ -39,6 +39,7 @@ function PaymentRoute() {
         totalPrice={ctx.totalPrice}
         initialPaymentData={ctx.paymentData}
         isMember={!!ctx.identifiedUserDoc?.activeMembership}
+        kiosk={ctx.kiosk}
         onReset={() => setCompleted(true)}
       />
       <CompletionDialog

@@ -163,6 +163,43 @@ describe("PaymentResult", () => {
     })
   })
 
+  // Issue #418: on the shared kiosk machine the "Rechnung als PDF" download
+  // must be hidden so invoices aren't saved to the kiosk's local disk. The
+  // button stays visible in the default (non-kiosk) flow above.
+  describe("issue #418: kiosk hides the PDF download", () => {
+    it("hides the 'Rechnung als PDF' button when kiosk is true", () => {
+      render(
+        <PaymentResult
+          checkoutId="checkout-1"
+          totalPrice={25}
+          isMember={false}
+          kiosk
+          onReset={() => {}}
+          initialPaymentData={PAYMENT_FIXTURE}
+        />,
+      )
+      expect(
+        screen.queryByRole("button", { name: /Rechnung als PDF/ }),
+      ).toBeNull()
+    })
+
+    it("still shows the 'Rechnung als PDF' button when kiosk is false", () => {
+      render(
+        <PaymentResult
+          checkoutId="checkout-1"
+          totalPrice={25}
+          isMember={false}
+          kiosk={false}
+          onReset={() => {}}
+          initialPaymentData={PAYMENT_FIXTURE}
+        />,
+      )
+      expect(
+        screen.getByRole("button", { name: /Rechnung als PDF/ }),
+      ).toBeDefined()
+    })
+  })
+
   describe("Sammelrechnung gating", () => {
     it("hides the Sammelrechnung tab for non-members", () => {
       render(
