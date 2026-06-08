@@ -333,6 +333,10 @@ export default async function globalSetup() {
     lastName: "Tester",
     email: "nfc@test.com",
     roles: ["vereinsmitglied"],
+    // verify_tag derives the TokenUser.activeMembership boolean from this
+    // field. Without it a tag-tapping member would be treated as a non-member
+    // and never offered the Sammelrechnung payment tab (issue #414).
+    activeMembership: db.doc("memberships/e2e-nfc-membership"),
     permissions: [db.doc("permission/laser")],
     userType: "erwachsen",
     billingAddress: {

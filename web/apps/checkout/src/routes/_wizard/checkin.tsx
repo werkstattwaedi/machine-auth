@@ -35,7 +35,7 @@ function CheckinRoute() {
       isAccountLoggedIn={ctx.isAccountLoggedIn}
       signedInUserId={ctx.identifiedUserDoc?.id ?? null}
       signedInEmail={ctx.identifiedUserDoc?.email ?? null}
-      isMember={!!ctx.identifiedUserDoc?.activeMembership}
+      isMember={ctx.isMember}
       familyCandidates={ctx.familyCandidates}
       // Signed-in "Abmelden" and the anon "Von vorne beginnen" share one
       // primitive: drop the session + hard-reload to a fresh /checkin.

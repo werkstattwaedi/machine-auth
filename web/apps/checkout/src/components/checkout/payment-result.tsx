@@ -70,7 +70,11 @@ interface PaymentResultProps {
    */
   initialPaymentData?: PaymentData | null
   /** Gates the monthly-bill (Sammelrechnung) tab — only Vereinsmitglieder
-   *  see it; the Firestore rule also requires activeMembership. */
+   *  see it. Derived from both identification modes upstream
+   *  (`wizard-context` deriveIsMember), so tag-tapping members get it too
+   *  (issue #414). The backend `acknowledgeBill` does not re-check membership
+   *  — it authorizes `monthly` for any bill owner — so this is purely a UI
+   *  affordance over an already-permitted choice. */
   isMember: boolean
   /**
    * Kiosk mode (shared machine). When true the "Rechnung als PDF" download

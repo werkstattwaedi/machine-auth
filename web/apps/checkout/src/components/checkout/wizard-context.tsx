@@ -72,6 +72,15 @@ export interface WizardContextValue {
   isAnonymous: boolean
   identifiedUserDoc: UserDoc | null
   identifiedUserRef: DocumentReference | null
+  /**
+   * True when the identified principal is a Vereinsmitglied, honouring BOTH
+   * identification modes: an account login carries membership on the Firestore
+   * user doc, a tag tap carries only the server-derived boolean on
+   * `tokenUser.activeMembership` (the kiosk session is a synthetic principal
+   * whose user doc is never loaded client-side). Gates the Sammelrechnung
+   * payment tab and the "Vereinsmitglied" check-in badge (issue #414).
+   */
+  isMember: boolean
   // ----- query results -----
   openCheckout: CheckoutDoc | null
   checkoutId: string | null
@@ -304,6 +313,12 @@ export function WizardProvider({
     identifiedUserDoc,
     tokenUser,
   )
+
+  // Same dual-principal membership signal drives the Sammelrechnung payment
+  // tab and the "Vereinsmitglied" check-in badge. For a tag tap
+  // `identifiedUserDoc` is null, so without the tag fallback a tapping member
+  // was offered neither the monthly-bill option nor the badge (issue #414).
+  const isMember = deriveIsMember(identifiedUserDoc, tokenUser)
 
   // Sync usageType from open checkout
   useEffect(() => {
@@ -747,6 +762,7 @@ export function WizardProvider({
     isAnonymous,
     identifiedUserDoc,
     identifiedUserRef,
+    isMember,
     openCheckout: openCheckout ?? null,
     checkoutId,
     pendingCheckout,
@@ -803,9 +819,29 @@ export function deriveDiscountLevel(
   identifiedUserDoc: UserDoc | null,
   tokenUser: TokenUser | null,
 ): DiscountLevel {
-  return identifiedUserDoc?.activeMembership || tokenUser?.activeMembership
-    ? "member"
-    : "none"
+  return deriveIsMember(identifiedUserDoc, tokenUser) ? "member" : "none"
+}
+
+/**
+ * True when either identified principal is a Vereinsmitglied.
+ *
+ * Both inputs are honoured for the same reason as `deriveDiscountLevel`: an
+ * account login exposes membership on the Firestore user doc
+ * (`identifiedUserDoc.activeMembership`), while a tag tap carries only the
+ * server-derived boolean on `tokenUser.activeMembership` (the kiosk session is
+ * a synthetic principal whose user doc is never loaded client-side). Missing
+ * the tag path here is what hid the Sammelrechnung payment tab and the
+ * "Vereinsmitglied" check-in badge from tag-tapping members — issue #414.
+ *
+ * Exported for unit testing (see wizard-discount-level.test.ts).
+ */
+export function deriveIsMember(
+  identifiedUserDoc: UserDoc | null,
+  tokenUser: TokenUser | null,
+): boolean {
+  return !!(
+    identifiedUserDoc?.activeMembership || tokenUser?.activeMembership
+  )
 }
 
 /**
