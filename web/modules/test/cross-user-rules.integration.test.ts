@@ -954,13 +954,53 @@ describe("cross-user: memberships", () => {
     )
   })
 
-  it("denies tag-tap-as-alice reading a membership (tag sessions excluded)", async () => {
+  // Issue #422: a kiosk tag-tap session may now read the membership it
+  // BELONGS to (so the tapped user can resolve their own family roster
+  // for the checkout quick-add). This intentionally inverts the prior
+  // "tag sessions excluded" exclusion — but only for the tag owner's own
+  // membership; the boundary negative immediately below proves an
+  // unrelated membership is still denied.
+  it("allows tag-tap-as-alice reading alice's own membership (issue #422)", async () => {
     await seedUser("alice")
-    await seedMembership("m1", "alice")
+    await seedMembership("m1", "alice", "family", ["alice"])
+    await assertSucceeds(getDoc(doc(tagSessionDb("alice"), "memberships", "m1")))
+  })
+
+  it("allows tag-tap-as-bob (family co-member) reading the shared membership (issue #422)", async () => {
+    await seedUser("alice")
+    await seedUser("bob")
+    await seedMembership("m1", "alice", "family", ["alice", "bob"])
+    await assertSucceeds(getDoc(doc(tagSessionDb("bob"), "memberships", "m1")))
+  })
+
+  it("denies tag-tap-as-bob reading alice's UNRELATED membership (boundary intact, #422)", async () => {
+    await seedUser("alice")
+    await seedUser("bob")
+    // Bob shares no membership with Alice — his synthetic tag session must
+    // not reach a membership he isn't a member of.
+    await seedMembership("m1", "alice", "single", ["alice"])
     await assertCrossUserDenied(
-      "memberships/{id} read leaked across tag-tap actsAs",
-      "firestore.rules: memberships read (tag exclusion)",
-      () => getDoc(doc(tagSessionDb("alice"), "memberships", "m1")),
+      "memberships/{id} read leaked across tag-tap actsAs to unrelated membership",
+      "firestore.rules: memberships read (actsAs in members)",
+      () => getDoc(doc(tagSessionDb("bob"), "memberships", "m1")),
+    )
+  })
+
+  it("denies a tag-tap session writing a membership (mutation boundary intact, #422)", async () => {
+    await seedUser("alice")
+    await assertCrossUserDenied(
+      "memberships/{id} create leaked to tag-tap session (must be callable-only)",
+      "firestore.rules: memberships write deny",
+      () =>
+        setDoc(doc(tagSessionDb("alice"), "memberships", "new"), {
+          type: "single",
+          status: "active",
+          ownerUserId: doc(tagSessionDb("alice"), "users/alice"),
+          members: [doc(tagSessionDb("alice"), "users/alice")],
+          paymentCheckouts: [],
+          validUntil: serverTimestamp(),
+          lastPaidAt: null,
+        }),
     )
   })
 
@@ -1234,6 +1274,44 @@ describe("cross-user: family-roster join on users", () => {
       "users/{id} read denied when no shared membership",
       "firestore.rules: shareActiveMembership join",
       () => getDoc(doc(authedDb("bob"), "users", "alice")),
+    )
+  })
+
+  // Issue #422: the same family-roster join is honoured for a kiosk
+  // tag-tap session via shareActiveMembershipActingAs — so a tapped user
+  // can resolve their co-members' display names for the quick-add chips.
+  it("allows tag-tap-as-bob reading a family co-member's user doc (issue #422)", async () => {
+    await seedUser("alice")
+    await seedUser("bob")
+    await seedMembership("m1", "alice", "family", ["alice", "bob"])
+    await assertSucceeds(getDoc(doc(tagSessionDb("bob"), "users", "alice")))
+  })
+
+  it("denies tag-tap-as-bob reading a non-co-member's user doc (boundary intact, #422)", async () => {
+    await seedUser("alice")
+    await seedUser("bob")
+    // Bob shares no membership with Alice.
+    await seedMembership("m1", "alice", "single", ["alice"])
+    await assertCrossUserDenied(
+      "users/{id} read via family-roster denied for unrelated tag-tap session",
+      "firestore.rules: shareActiveMembershipActingAs join",
+      () => getDoc(doc(tagSessionDb("bob"), "users", "alice")),
+    )
+  })
+
+  it("denies a tag-tap session updating a co-member's user doc (mutation boundary intact, #422)", async () => {
+    await seedUser("alice")
+    await seedUser("bob")
+    await seedMembership("m1", "alice", "family", ["alice", "bob"])
+    // Read is allowed (above), but a synthetic session must never mutate a
+    // co-member's user doc — write stays scoped to userId == request.auth.uid.
+    await assertCrossUserDenied(
+      "users/{id} update leaked to tag-tap co-member session",
+      "firestore.rules: users update",
+      () =>
+        updateDoc(doc(tagSessionDb("bob"), "users", "alice"), {
+          firstName: "pwned",
+        }),
     )
   })
 })

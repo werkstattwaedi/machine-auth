@@ -335,9 +335,15 @@ export function WizardProvider({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tokenUser?.userId])
 
-  // Family-roster quick-add (issue #209).
-  const selfUserId = identifiedUserDoc?.id ?? null
-  const selfRef = selfUserId ? userRef(db, selfUserId) : null
+  // Family-roster quick-add (issue #209, extended for tag-tap in #422).
+  // Source the self principal from `identifiedUserRef`, which is set for
+  // BOTH a logged-in account and a kiosk tag-tap session — the latter
+  // points at `users/${tokenUser.userId}`. The membership/co-member reads
+  // below are now permitted for tag sessions by the matching firestore.rules
+  // `actsAs()` carve-outs, so a tapped family member sees the same roster
+  // chips the logged-in owner does.
+  const selfUserId = identifiedUserRef?.id ?? null
+  const selfRef = identifiedUserRef
   const { data: familyMemberships } = useCollection(
     selfRef ? membershipsCollection(db) : null,
     ...(selfRef
@@ -368,31 +374,23 @@ export function WizardProvider({
     () => new Set(persons.map((p) => p.userId).filter(Boolean) as string[]),
     [persons],
   )
-  const familyCandidates: FamilyCandidate[] = useMemo(() => {
-    const candidates = familyMemberDocs
-      .filter((m) => !claimedUserIds.has(m.id))
-      .map((m) => ({
-        userId: m.id,
-        firstName: m.firstName,
-        lastName: m.lastName,
-        email: m.email ?? "",
-        userType: (m.userType as UserType) ?? "erwachsen",
-      }))
-    if (
-      identifiedUserDoc &&
-      familyMembership &&
-      !claimedUserIds.has(identifiedUserDoc.id)
-    ) {
-      candidates.unshift({
-        userId: identifiedUserDoc.id,
-        firstName: identifiedUserDoc.firstName,
-        lastName: identifiedUserDoc.lastName,
-        email: identifiedUserDoc.email ?? "",
-        userType: (identifiedUserDoc.userType as UserType) ?? "erwachsen",
-      })
-    }
-    return candidates
-  }, [familyMemberDocs, claimedUserIds, identifiedUserDoc, familyMembership])
+  const familyCandidates: FamilyCandidate[] = useMemo(
+    () =>
+      buildFamilyCandidates({
+        familyMemberDocs,
+        claimedUserIds,
+        identifiedUserDoc,
+        tokenUser,
+        hasFamilyMembership: !!familyMembership,
+      }),
+    [
+      familyMemberDocs,
+      claimedUserIds,
+      identifiedUserDoc,
+      tokenUser,
+      familyMembership,
+    ],
+  )
 
   // Rehydrate persons from open Firestore checkout doc (issue #246).
   const rehydratedRef = useRef<string | null>(null)
@@ -806,6 +804,72 @@ export function deriveDiscountLevel(
   return identifiedUserDoc?.activeMembership || tokenUser?.activeMembership
     ? "member"
     : "none"
+}
+
+/**
+ * Build the family quick-add chip list (issue #209, extended for tag-tap in
+ * #422). The roster co-members come from `familyMemberDocs`; the identified
+ * principal is prepended so they can re-add themselves after removing their
+ * own chip.
+ *
+ * The self chip is sourced from the account user doc when logged in, or from
+ * `tokenUser` for a kiosk tag-tap session — in the tag case
+ * `identifiedUserDoc` is null but the synthetic session still identifies a
+ * real family member, and the matching firestore.rules `actsAs()` carve-outs
+ * now let that session read the roster docs (issue #422). Candidates already
+ * on the visit (`claimedUserIds`) are filtered out.
+ *
+ * Exported (pure) for unit testing — see wizard-family-candidates.test.ts.
+ */
+export function buildFamilyCandidates({
+  familyMemberDocs,
+  claimedUserIds,
+  identifiedUserDoc,
+  tokenUser,
+  hasFamilyMembership,
+}: {
+  familyMemberDocs: {
+    id: string
+    firstName: string
+    lastName: string
+    email?: string | null
+    userType?: string | null
+  }[]
+  claimedUserIds: Set<string>
+  identifiedUserDoc: UserDoc | null
+  tokenUser: TokenUser | null
+  hasFamilyMembership: boolean
+}): FamilyCandidate[] {
+  const candidates: FamilyCandidate[] = familyMemberDocs
+    .filter((m) => !claimedUserIds.has(m.id))
+    .map((m) => ({
+      userId: m.id,
+      firstName: m.firstName,
+      lastName: m.lastName,
+      email: m.email ?? "",
+      userType: (m.userType as UserType) ?? "erwachsen",
+    }))
+  const self: FamilyCandidate | null = identifiedUserDoc
+    ? {
+        userId: identifiedUserDoc.id,
+        firstName: identifiedUserDoc.firstName,
+        lastName: identifiedUserDoc.lastName,
+        email: identifiedUserDoc.email ?? "",
+        userType: (identifiedUserDoc.userType as UserType) ?? "erwachsen",
+      }
+    : tokenUser
+      ? {
+          userId: tokenUser.userId,
+          firstName: tokenUser.firstName ?? "",
+          lastName: tokenUser.lastName ?? "",
+          email: tokenUser.email ?? "",
+          userType: (tokenUser.userType as UserType) ?? "erwachsen",
+        }
+      : null
+  if (self && hasFamilyMembership && !claimedUserIds.has(self.userId)) {
+    candidates.unshift(self)
+  }
+  return candidates
 }
 
 /**
