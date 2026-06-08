@@ -22,6 +22,9 @@ ipcRenderer.on("bridge:url-change", (_event, url: string) => {
   urlCallbacks.forEach((cb) => cb(url))
 })
 
+// Chrome renderer subscribes to overlay-open requests (e.g. the
+// Nutzungsbestimmungen page #425 or the TWINT paylink #416) so it can mount
+// the in-kiosk overlay webview.
 const overlayCallbacks = new Set<(url: string) => void>()
 
 ipcRenderer.on("bridge:open-overlay", (_event, url: string) => {
@@ -44,6 +47,18 @@ ipcRenderer.on("bridge:start-over-ack", () => {
   startOverAckCallbacks.forEach((cb) => cb())
 })
 
+// The checkout webview (web app) subscribes to payment-confirmed events:
+// the renderer detects the RaiseNow payment_result URL on the overlay and
+// asks main to broadcast it here so the web app can mark the bill paid.
+const paymentConfirmedCallbacks = new Set<(paymentUuid: string) => void>()
+
+ipcRenderer.on(
+  "bridge:payment-confirmed",
+  (_event, paymentUuid: string) => {
+    paymentConfirmedCallbacks.forEach((cb) => cb(paymentUuid))
+  }
+)
+
 // Bootstrap (mode + features) is delivered synchronously from main so
 // the preload doesn't depend on any sibling module (sandboxed preloads
 // can't reliably resolve relative requires).
@@ -65,6 +80,12 @@ const bridge: Bridge = {
   onOpenOverlay: (cb) => {
     overlayCallbacks.add(cb)
     return () => overlayCallbacks.delete(cb)
+  },
+  notifyPaymentConfirmed: (paymentUuid) =>
+    ipcRenderer.send("bridge:payment-confirmed", paymentUuid),
+  onPaymentConfirmed: (cb) => {
+    paymentConfirmedCallbacks.add(cb)
+    return () => paymentConfirmedCallbacks.delete(cb)
   },
   onNfcTag: (cb) => {
     nfcCallbacks.add(cb)

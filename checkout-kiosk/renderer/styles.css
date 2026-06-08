@@ -46,7 +46,8 @@ body {
 }
 
 /* In-kiosk overlay: a full-bleed webview for allowlisted off-origin links
-   (e.g. the Nutzungsbestimmungen page) mounted on top of the checkout so no
+   (e.g. the Nutzungsbestimmungen page or the RaiseNow TWINT paylink) mounted
+   on top of the checkout so no
    page lingers outside the kiosk. */
 #overlay {
   position: fixed;

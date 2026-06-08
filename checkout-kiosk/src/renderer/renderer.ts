@@ -21,8 +21,10 @@ interface Bridge {
   resetSession: () => Promise<void>
   getUrl: () => Promise<string>
   onUrlChange: (cb: (url: string) => void) => () => void
-  onNfcTag: (cb: (p: NfcTagEvent) => void) => () => void
   onOpenOverlay: (cb: (url: string) => void) => () => void
+  notifyPaymentConfirmed: (paymentUuid: string) => void
+  onPaymentConfirmed: (cb: (paymentUuid: string) => void) => () => void
+  onNfcTag: (cb: (p: NfcTagEvent) => void) => () => void
   requestStartOver: () => void
   ackStartOver: () => void
   onStartOverRequest: (cb: () => void) => () => void
@@ -41,6 +43,13 @@ declare global {
 interface WebviewElement extends HTMLElement {
   src: string
   setAttribute(name: string, value: string): void
+  // Electron <webview> fires did-navigate / did-navigate-in-page with the
+  // resulting URL on its DOM event (`event.url`). We only read that field.
+  addEventListener(
+    type: "did-navigate" | "did-navigate-in-page",
+    listener: (event: Event & { url: string }) => void
+  ): void
+  addEventListener(type: string, listener: EventListenerOrEventListenerObject): void
 }
 
 const { mode } = window.bridge
@@ -105,10 +114,44 @@ wireResetButton({
   performReset,
 })
 
-// In-kiosk overlay: when the checkout webview asks to open an allowlisted
-// off-origin link (e.g. the Nutzungsbestimmungen page), main sends
-// "bridge:open-overlay" and we mount a dedicated overlay webview on top of
-// the checkout. Closing it destroys the webview so nothing lingers.
+// ---------------------------------------------------------------------------
+// In-kiosk overlay (Nutzungsbestimmungen #425 + TWINT paylink #416)
+// ---------------------------------------------------------------------------
+//
+// When the checkout webview asks to open an allowlisted off-origin link (the
+// RaiseNow TWINT paylink), main sends "bridge:open-overlay" and we mount a
+// dedicated overlay webview on top of the checkout. Closing it destroys the
+// webview so nothing lingers. We watch the overlay's URL: once RaiseNow
+// navigates to its payment_result view (the customer paid), we tell the
+// checkout webview to mark the bill paid and auto-close the overlay after a
+// short delay so the customer sees the confirmation.
+
+// Origin of the RaiseNow paylink. Mirrors RAISENOW_PAYLINK_ORIGIN in
+// @oww/shared/kiosk-navigation — re-declared here because this renderer is a
+// self-contained browser script with no package imports (bare specifiers
+// don't resolve at runtime without a bundler).
+const RAISENOW_PAYLINK_ORIGIN = "https://pay.raisenow.io"
+
+// Mirrors detectKioskPaymentConfirmation in @oww/shared (load-bearing logic is
+// unit-tested there). Returns the payment uuid once RaiseNow signals a
+// completed payment via rnw-view=payment_result&epms_payment_uuid=<uuid>.
+function detectPaymentUuid(url: string): string | null {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return null
+  }
+  if (parsed.origin !== RAISENOW_PAYLINK_ORIGIN) return null
+  if (parsed.searchParams.get("rnw-view") !== "payment_result") return null
+  const uuid = parsed.searchParams.get("epms_payment_uuid")
+  return uuid && uuid.length > 0 ? uuid : null
+}
+
+// Delay before the overlay auto-closes after a confirmed payment, so the
+// customer can read the RaiseNow confirmation screen.
+const OVERLAY_AUTOCLOSE_MS = 10_000
+
 const overlay = document.getElementById("overlay") as HTMLDivElement
 const overlayViewContainer = document.getElementById(
   "overlay-view-container"
@@ -118,13 +161,37 @@ const overlayClose = document.getElementById(
 ) as HTMLButtonElement
 
 let overlayWebview: WebviewElement | null = null
+let overlayAutoCloseTimer: ReturnType<typeof setTimeout> | null = null
+// Guard so a single payment is reported once even though RaiseNow may fire
+// several in-page navigations on the result view.
+let overlayPaymentReported = false
 
 function closeOverlay(): void {
+  if (overlayAutoCloseTimer !== null) {
+    clearTimeout(overlayAutoCloseTimer)
+    overlayAutoCloseTimer = null
+  }
   if (overlayWebview) {
     overlayViewContainer.removeChild(overlayWebview)
     overlayWebview = null
   }
+  overlayPaymentReported = false
   overlay.hidden = true
+}
+
+function handleOverlayNavigation(url: string): void {
+  if (overlayPaymentReported) return
+  const uuid = detectPaymentUuid(url)
+  if (!uuid) return
+  overlayPaymentReported = true
+  // Tell the checkout webview (web app) to mark the bill paid immediately.
+  try {
+    window.bridge.notifyPaymentConfirmed(uuid)
+  } catch (err) {
+    console.error("Failed to notify payment confirmed:", err)
+  }
+  // Leave the confirmation on screen briefly, then tear the overlay down.
+  overlayAutoCloseTimer = setTimeout(closeOverlay, OVERLAY_AUTOCLOSE_MS)
 }
 
 function openOverlay(url: string): void {
@@ -133,6 +200,10 @@ function openOverlay(url: string): void {
   const view = document.createElement("webview") as WebviewElement
   view.id = "overlay-view"
   view.setAttribute("partition", partition)
+  view.addEventListener("did-navigate", (e) => handleOverlayNavigation(e.url))
+  view.addEventListener("did-navigate-in-page", (e) =>
+    handleOverlayNavigation(e.url)
+  )
   view.src = url
   overlayWebview = view
   overlayViewContainer.appendChild(view)
