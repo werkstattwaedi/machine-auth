@@ -140,6 +140,42 @@ async function seedCheckout(
   await db.collection("checkouts").doc(checkoutId).set(checkout);
 }
 
+async function seedUser(
+  userId: string,
+  opts: { email?: string | null; firstName?: string } = {},
+): Promise<void> {
+  const db = getFirestore();
+  await db.doc(`users/${userId}`).set({
+    created: Timestamp.now(),
+    firstName: opts.firstName ?? userId,
+    lastName: "Test",
+    email: opts.email ?? null,
+    permissions: [],
+    roles: [],
+  });
+}
+
+/**
+ * Seed an active family membership owned by `ownerUserId` with `members`
+ * including the listed user ids (issue #424 fallback recipient lookup).
+ */
+async function seedFamilyMembership(
+  membershipId: string,
+  ownerUserId: string,
+  memberUserIds: string[],
+): Promise<void> {
+  const db = getFirestore();
+  await db.collection("memberships").doc(membershipId).set({
+    type: "family",
+    status: "active",
+    lastPaidAt: Timestamp.now(),
+    validUntil: Timestamp.fromMillis(Date.now() + 365 * 24 * 3600 * 1000),
+    ownerUserId: db.doc(`users/${ownerUserId}`),
+    members: memberUserIds.map((id) => db.doc(`users/${id}`)),
+    paymentCheckouts: [],
+  });
+}
+
 async function seedBill(
   billId: string,
   opts: SeedBillOptions = {},
@@ -647,6 +683,79 @@ describe("bill processing triggers (Integration)", () => {
         });
         await seedBill(billId, {
           storagePath: "invoices/bill-no-email.pdf",
+          paymentMethodConfirmationTime: Timestamp.now(),
+          paymentMethodConfirmationSource: "user",
+        });
+
+        const ok = await trySendEmail(billId);
+        expect(ok).to.be.true; // Nothing to retry
+        expect(resendSendStub.called, "Resend not called").to.be.false;
+
+        const updated = await getBill(billId);
+        expect(updated.emailSentAt).to.be.null;
+      });
+
+      it("falls back to the family owner's email when the visiting member has none (#424)", async () => {
+        const billId = "bill-family-fallback";
+        // Kiosk child checkout: Lia has no email but is linked via userRef
+        // and is a member of an active family membership owned by Mum.
+        await seedUser("u-mum", { email: "mum@example.com", firstName: "Mum" });
+        await seedUser("u-lia", { email: null, firstName: "Lia" });
+        await seedFamilyMembership("m-family", "u-mum", ["u-mum", "u-lia"]);
+
+        const db = getFirestore();
+        await seedCheckout("co-default", {
+          persons: [
+            {
+              name: "Lia",
+              email: "",
+              userType: "kind",
+              userRef: db.doc("users/u-lia"),
+            },
+          ],
+        });
+        await seedBill(billId, {
+          storagePath: "invoices/bill-family-fallback.pdf",
+          referenceNumber: 9,
+          paymentMethodConfirmationTime: Timestamp.now(),
+          paymentMethodConfirmationSource: "user",
+        });
+
+        const ok = await trySendEmail(billId);
+        expect(ok).to.be.true;
+        expect(resendSendStub.calledOnce, "Resend invoked").to.be.true;
+
+        const [, entity] = resendSendStub.firstCall.args as [
+          string,
+          { to: string; template: { variables: Record<string, string> } },
+        ];
+        // Email goes to the family owner; the visiting child's name stays
+        // on the receipt so the owner sees whose visit it was.
+        expect(entity.to).to.equal("mum@example.com");
+        expect(entity.template.variables.RECIPIENT_NAME).to.equal("Lia");
+
+        const updated = await getBill(billId);
+        expect(updated.emailSentAt).to.be.instanceOf(Timestamp);
+      });
+
+      it("skips when the member has no email and no family owner email (#424)", async () => {
+        const billId = "bill-no-fallback";
+        // Member linked via userRef but with no active family membership.
+        await seedUser("u-orphan", { email: null, firstName: "Orphan" });
+
+        const db = getFirestore();
+        await seedCheckout("co-default", {
+          persons: [
+            {
+              name: "Orphan",
+              email: "",
+              userType: "kind",
+              userRef: db.doc("users/u-orphan"),
+            },
+          ],
+        });
+        await seedBill(billId, {
+          storagePath: "invoices/bill-no-fallback.pdf",
           paymentMethodConfirmationTime: Timestamp.now(),
           paymentMethodConfirmationSource: "user",
         });
