@@ -169,6 +169,26 @@ export function assertUsageTypeAllowed(
 }
 
 /**
+ * A membership generates an invoice, and the invoice PDF silently renders
+ * name-only when no billing address is present. So when the cart contains a
+ * membership SKU the primary person MUST carry a complete postal address —
+ * captured inline in the checkout membership line item. Server-side backstop
+ * (issue: combined-signin refactor) so a client bypassing the inline field
+ * can't mint an addressless membership invoice. Exported for unit tests.
+ */
+export function assertMembershipBillingAddress(
+  primary: CheckoutPersonEntity | undefined,
+): void {
+  const addr = primary?.billingAddress;
+  if (!addr || !addr.street?.trim() || !addr.zip?.trim() || !addr.city?.trim()) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Für eine Mitgliedschaft wird eine Rechnungsadresse benötigt.",
+    );
+  }
+}
+
+/**
  * Authoritative summary computation. The bill always uses what this
  * function returns, never the client-supplied summary. This is the
  * structural defense against a client posting `summary.totalPrice: 0.01`
@@ -636,10 +656,16 @@ async function closeExistingCheckout(
 
     // Loophole guards (issue #284): reject materialbezug-with-machine and
     // intern-with-membership before billing.
+    const membershipPresent = hasMembershipItem(items, membershipCatalogId);
     assertUsageTypeAllowed(args.usageType, {
       hasMachineUsage: hasMachineUsage(items),
-      hasMembershipItem: hasMembershipItem(items, membershipCatalogId),
+      hasMembershipItem: membershipPresent,
     });
+    // A membership invoice needs a postal address (issue: combined-signin
+    // refactor). The primary person carries it from the inline checkout field.
+    if (membershipPresent) {
+      assertMembershipBillingAddress(dedupedPersons[0]);
+    }
 
     const summary = recomputeSummary(
       dedupedPersons,
