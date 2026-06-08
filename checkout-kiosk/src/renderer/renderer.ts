@@ -6,9 +6,7 @@
 // that creates the webview, sets its preload, and wires the kiosk-only
 // "Neuer Checkout" reset button.
 
-// `export {}` makes this file a module so `declare global` below augments
-// the existing global scope instead of re-declaring it.
-export {}
+import { wireResetButton } from "./reset-button"
 
 // Mirrors src/types.ts — kept here so renderer.ts stays a self-contained
 // browser script with no Node imports.
@@ -25,6 +23,10 @@ interface Bridge {
   onUrlChange: (cb: (url: string) => void) => () => void
   onNfcTag: (cb: (p: NfcTagEvent) => void) => () => void
   onOpenOverlay: (cb: (url: string) => void) => () => void
+  requestStartOver: () => void
+  ackStartOver: () => void
+  onStartOverRequest: (cb: () => void) => () => void
+  onStartOverAck: (cb: () => void) => () => void
 }
 
 declare global {
@@ -70,12 +72,17 @@ webview.addEventListener("dom-ready", () => {
 
 container.appendChild(webview)
 
-// "Neuer Checkout" — wipes session storage and reloads the base URL. Wiping
-// storage is what guarantees the previous user's Firebase Auth session is
-// gone — navigation alone wouldn't clear IndexedDB.
+// "Neuer Checkout" — asks the loaded web page to show its confirm dialog
+// (single confirm UI, issue #415) rather than dropping everything on a single
+// tap. The web confirm, when accepted, wipes session storage via the same
+// `resetSession` bridge call. If the page doesn't ack within the timeout (a
+// wedged webview), `performReset` is the hardware escape hatch: direct
+// storage wipe + reload. Wiping storage is what guarantees the previous
+// user's Firebase Auth session is gone — navigation alone wouldn't clear
+// IndexedDB.
 const btnReset = document.getElementById("btn-reset") as HTMLButtonElement
-btnReset.addEventListener("click", async () => {
-  closeOverlay()
+
+async function performReset(): Promise<void> {
   try {
     await window.bridge.resetSession()
   } catch (err) {
@@ -83,6 +90,19 @@ btnReset.addEventListener("click", async () => {
   }
   const url = await window.bridge.getUrl()
   webview.src = url
+}
+
+// Tapping "Neuer Checkout" also dismisses any open in-kiosk overlay (e.g. the
+// Nutzungsbestimmungen page, issue #425) so the page's own confirm dialog
+// underneath is visible. Registered before wireResetButton so it runs first on
+// click; `closeOverlay` is a hoisted function declaration defined below.
+btnReset.addEventListener("click", () => closeOverlay())
+
+wireResetButton({
+  onResetClick: (handler) => btnReset.addEventListener("click", handler),
+  requestStartOver: () => window.bridge.requestStartOver(),
+  onStartOverAck: (cb) => window.bridge.onStartOverAck(cb),
+  performReset,
 })
 
 // In-kiosk overlay: when the checkout webview asks to open an allowlisted

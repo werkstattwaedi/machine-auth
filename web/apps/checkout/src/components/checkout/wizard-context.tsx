@@ -64,6 +64,7 @@ import {
 import type { FamilyCandidate } from "./step-checkin"
 import type { PaymentData } from "./payment-result"
 import { computeCheckoutCosts } from "./step-checkout"
+import { runStartOver } from "./start-over"
 
 export interface WizardContextValue {
   // ----- identification -----
@@ -580,18 +581,21 @@ export function WizardProvider({
   // Drop the session + hard-reload to a fresh /checkin (see WizardContextValue
   // docs). window.location.replace — NOT navigate — so the rehydrate effect
   // can't immediately re-seed the roster from the still-open checkout.
+  //
+  // In the kiosk (issue #415) this is also the target of the chrome "Neuer
+  // Checkout" button, so it must give the *same strong wipe* as the chrome's
+  // direct reset: clear the volatile Electron partition (IndexedDB + the
+  // previous user's Firebase Auth) via `bridge.resetSession()` before the
+  // reload. The flow lives in `runStartOver` so it's unit-testable.
   const startOver = useCallback(async () => {
-    try {
-      await signOut()
-    } catch (err) {
-      // signOut is a local op and rarely rejects; if it does, fall through
-      // to the reload rather than swallowing the rejection on a closed
-      // dialog (the reload re-runs the wizard bootstrap). Mirrors how
-      // resetWizard tolerates a failed bridge.resetSession.
-      console.error("startOver: signOut failed", err)
-    }
-    window.location.replace(kiosk ? "/checkin?kiosk" : "/checkin")
-  }, [signOut, kiosk])
+    await runStartOver({
+      signOut,
+      bridgeAvailable: bridge.available,
+      resetSession: bridge.resetSession,
+      reload: (target) => window.location.replace(target),
+      kiosk,
+    })
+  }, [signOut, bridge, kiosk])
 
   // Submit: close checkout, get payment data. Used by /checkout's commit.
   const totalPriceRef = useRef(0)
