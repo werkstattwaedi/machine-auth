@@ -304,9 +304,9 @@ export default async function globalSetup() {
   // Create Auth user via emulator REST API
   const authUid = await createAuthUser(AUTH_USER_EMAIL, AUTH_USER_PASSWORD)
 
-  // Create matching Firestore user doc.
-  // billingAddress is required for `isProfileComplete` — without it, member
-  // area routes redirect to /complete-profile.
+  // Create matching Firestore user doc. The billingAddress is no longer
+  // required for `isProfileComplete` (only firma needs one) — it's kept so the
+  // membership/invoice specs have a recipient address to render.
   await db.collection("users").doc(authUid).set({
     firstName: "E2E",
     lastName: "Testuser",
