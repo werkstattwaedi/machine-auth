@@ -359,8 +359,19 @@ export async function tryGeneratePdf(
   // when the payment method changes the PDF content (#251).
   if (bill.storagePath && !options.force) return true;
 
-  // Another process is working on it (and the lock isn't stale)
-  if (bill.pdfGeneratedAt) {
+  // Another process is working on it (and the lock isn't stale).
+  //
+  // `force` skips this check (issue #426): the create-path
+  // `tryGeneratePdf` sets `pdfGeneratedAt` and never clears it on
+  // success, so a completed bill still carries a recent timestamp. When
+  // the user acks TWINT within STALE_LOCK_MS of checkout (the common
+  // case), the ack-time force-regen would otherwise see that fresh
+  // timestamp as a held lock and bail BEFORE regenerating — leaving the
+  // create-time QR rechnung PDF attached while the email already
+  // branded itself TWINT. The force callers (onBillUpdate) run
+  // sequentially after the ack commit, so there is no real concurrent
+  // generator to protect against here.
+  if (bill.pdfGeneratedAt && !options.force) {
     const lockAge = Date.now() - bill.pdfGeneratedAt.toMillis();
     if (lockAge < STALE_LOCK_MS) return false;
     // Stale lock — clear it and proceed

@@ -13,6 +13,7 @@ import {
   zeroItemsInvoice,
   longInvoice,
   paidInvoice,
+  twintMethodInvoice,
   freeZeroAmountInvoice,
   registeredUserInvoice,
   membershipOnlyInvoice,
@@ -221,6 +222,29 @@ describe("buildInvoicePdf — content", () => {
   it("unpaid invoice: shows payment terms", async () => {
     const text = await pdfText(singleCheckoutInvoice());
     expect(text).to.include("Zahlbar innert 30 Tagen");
+  });
+
+  // Issue #426: a TWINT-method self-checkout is a payment receipt, not a
+  // payable Rechnung. The PDF must (a) title itself "Quittung Self
+  // Checkout" so the customer sees it's a TWINT receipt (matching the
+  // "Quittung TWINT-Zahlung" email), (b) state the TWINT payment method,
+  // and (c) omit the QR payment slip so nobody pays twice. It must NOT
+  // claim "Bezahlt am …" — we have no bank-side confirmation.
+  it("TWINT-method invoice: 'Quittung' title, TWINT notice, no QR slip (#426)", async () => {
+    const text = await pdfText(twintMethodInvoice());
+    expect(text).to.include("Quittung Self Checkout");
+    expect(text).to.not.include("Rechnung Self Checkout");
+    // The underlying bill is still kind "invoice" → RE- reference kept.
+    expect(text).to.include("Rechnungsnummer: RE-000010");
+    // States the payment method.
+    expect(text).to.include("Zahlweise: TWINT");
+    // No QR payment slip and no "pay within 30 days" terms.
+    expect(text).to.not.include("Empfangsschein");
+    expect(text).to.not.include("Zahlteil");
+    expect(text).to.not.include("Zahlbar innert 30 Tagen");
+    // Must not falsely claim a confirmed payment — no bank confirmation.
+    expect(text).to.not.include("Bezahlt via TWINT am");
+    expect(text).to.not.include("bereits beglichen");
   });
 
   it("QR bill: creditor info present", async () => {

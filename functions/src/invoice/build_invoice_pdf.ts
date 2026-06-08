@@ -184,9 +184,18 @@ export async function buildInvoicePdf(
     // dates; (b) catch-up runs only happen after a cron failure, which
     // is rare enough not to justify a "Mai–Juni 2026" label.
     const isBeleg = data.kind === "beleg";
+    // TWINT self-checkout (issue #426): the customer paid via TWINT in the
+    // app, so the document is a receipt ("Quittung"), not a payable
+    // Rechnung — title it accordingly and (further down) omit the QR slip.
+    // The underlying bill is still kind "invoice" with an "RE-" reference,
+    // so the Rechnungsnummer label stays; we deliberately do NOT claim
+    // "Bezahlt am …" since there is no bank-side confirmation yet.
+    const isTwint = !isBeleg && data.paymentMethod === "twint";
     let title: string;
     if (isBeleg) {
       title = "Beleg Self Checkout";
+    } else if (isTwint) {
+      title = "Quittung Self Checkout";
     } else if (data.checkouts.length > 1) {
       const earliest = data.checkouts.reduce(
         (a, b) => (a.date.getTime() < b.date.getTime() ? a : b),
