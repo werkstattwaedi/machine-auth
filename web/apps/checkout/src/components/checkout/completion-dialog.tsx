@@ -1,7 +1,7 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,7 +13,10 @@ import {
 } from "@modules/components/ui/alert-dialog"
 import { CheckCircle2, History } from "lucide-react"
 
-const AUTO_RESET_SECONDS = 30
+const AUTO_RESET_MS = 30_000
+/** How often the progress fill repaints (ms). Fine enough for a smooth
+ * bar, independent of the auto-reset deadline. */
+const PROGRESS_TICK_MS = 100
 
 interface CompletionDialogProps {
   open: boolean
@@ -22,10 +25,12 @@ interface CompletionDialogProps {
   isLoggedIn: boolean
   /**
    * Kiosk + anonymous flows: the dialog auto-closes after 30 s and
-   * triggers a new visit. Logged-in users have no timeout. */
+   * resets the terminal for the next person. Logged-in users have no
+   * timeout. */
   autoClose: boolean
-  /** Primary CTA — start a fresh visit. Resets the wizard + (if kiosk)
-   * wipes the bridge session. */
+  /** Primary CTA. On the kiosk/anonymous path this just closes the
+   * terminal ("Fertig"); for logged-in users it starts a fresh visit.
+   * Resets the wizard + (if kiosk) wipes the bridge session. */
   onNewVisit: () => void
   /** Secondary CTA shown only for logged-in users — navigate to
    * /account/usage where the new bill appears in the history. */
@@ -39,23 +44,30 @@ export function CompletionDialog({
   onNewVisit,
   onGoToHistory,
 }: CompletionDialogProps) {
-  const [secondsLeft, setSecondsLeft] = useState(AUTO_RESET_SECONDS)
+  // Fraction of the auto-reset window already elapsed (0 → 1). Drives the
+  // progress fill behind the primary button, mirroring the MaCo terminal's
+  // "Beenden?" confirmation where the button fills up as the timer runs.
+  const [progress, setProgress] = useState(0)
+
+  // Keep the latest onNewVisit without re-arming the timer each render.
+  const onNewVisitRef = useRef(onNewVisit)
+  onNewVisitRef.current = onNewVisit
 
   useEffect(() => {
     if (!open || !autoClose) return
-    setSecondsLeft(AUTO_RESET_SECONDS)
+    setProgress(0)
+    const start = Date.now()
     const interval = window.setInterval(() => {
-      setSecondsLeft((s) => {
-        if (s <= 1) {
-          window.clearInterval(interval)
-          onNewVisit()
-          return 0
-        }
-        return s - 1
-      })
-    }, 1000)
+      const elapsed = Date.now() - start
+      if (elapsed >= AUTO_RESET_MS) {
+        window.clearInterval(interval)
+        setProgress(1)
+        onNewVisitRef.current()
+        return
+      }
+      setProgress(elapsed / AUTO_RESET_MS)
+    }, PROGRESS_TICK_MS)
     return () => window.clearInterval(interval)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, autoClose])
 
   return (
@@ -67,14 +79,9 @@ export function CompletionDialog({
             Checkout abgeschlossen
           </AlertDialogTitle>
           <AlertDialogDescription>
-            Vielen Dank! Du kannst jetzt einen neuen Besuch starten
-            {isLoggedIn ? " oder zu deinen vergangenen Besuchen wechseln." : "."}
-            {autoClose && (
-              <span className="block mt-2 text-xs">
-                Neuer Besuch startet automatisch in {secondsLeft}{" "}
-                {secondsLeft === 1 ? "Sekunde" : "Sekunden"}…
-              </span>
-            )}
+            {autoClose
+              ? "Vielen Dank und bis bald."
+              : "Vielen Dank! Du kannst jetzt einen neuen Besuch starten oder zu deinen vergangenen Besuchen wechseln."}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter className="sm:justify-end">
@@ -88,9 +95,27 @@ export function CompletionDialog({
               Vergangene Besuche
             </AlertDialogAction>
           )}
-          <AlertDialogAction onClick={onNewVisit}>
-            Neuer Besuch starten
-          </AlertDialogAction>
+          {autoClose ? (
+            // Kiosk/anonymous: a single "Fertig" button whose background
+            // fills as the auto-reset timer elapses (MaCo "Beenden?" style),
+            // so there is no separate countdown text to confuse the user.
+            <AlertDialogAction
+              onClick={onNewVisit}
+              className="relative overflow-hidden"
+            >
+              <span
+                aria-hidden
+                data-testid="completion-autoreset-progress"
+                className="absolute inset-y-0 left-0 bg-cog-teal-dark transition-[width] duration-100 ease-linear"
+                style={{ width: `${Math.round(progress * 100)}%` }}
+              />
+              <span className="relative z-10">Fertig</span>
+            </AlertDialogAction>
+          ) : (
+            <AlertDialogAction onClick={onNewVisit}>
+              Neuer Besuch starten
+            </AlertDialogAction>
+          )}
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
