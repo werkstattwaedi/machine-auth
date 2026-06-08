@@ -3,35 +3,23 @@
 
 import { expect } from "chai";
 import { assertMembershipBillingAddress } from "../../src/invoice/close_checkout_and_get_payment";
-import type { CheckoutPersonEntity } from "../../src/types/firestore_entities";
-
-function person(
-  billingAddress?: CheckoutPersonEntity["billingAddress"]
-): CheckoutPersonEntity {
-  return {
-    name: "Test Person",
-    email: "test@example.com",
-    userType: "erwachsen",
-    ...(billingAddress ? { billingAddress } : {}),
-  };
-}
 
 describe("assertMembershipBillingAddress (unit)", () => {
-  it("passes when the primary person has a complete address", () => {
+  it("passes for a complete address", () => {
     expect(() =>
-      assertMembershipBillingAddress(
-        person({ company: "", street: "Seestrasse 12", zip: "8820", city: "Wädenswil" })
-      )
+      assertMembershipBillingAddress({
+        street: "Seestrasse 12",
+        zip: "8820",
+        city: "Wädenswil",
+      })
     ).to.not.throw();
   });
 
-  it("throws when there is no address", () => {
-    expect(() => assertMembershipBillingAddress(person())).to.throw(
-      /Rechnungsadresse/
-    );
+  it("throws when the address is null", () => {
+    expect(() => assertMembershipBillingAddress(null)).to.throw(/Rechnungsadresse/);
   });
 
-  it("throws when there is no primary person", () => {
+  it("throws when the address is undefined", () => {
     expect(() => assertMembershipBillingAddress(undefined)).to.throw(
       /Rechnungsadresse/
     );
@@ -39,9 +27,13 @@ describe("assertMembershipBillingAddress (unit)", () => {
 
   for (const missing of ["street", "zip", "city"] as const) {
     it(`throws when ${missing} is blank`, () => {
-      const addr = { company: "", street: "Seestrasse 12", zip: "8820", city: "Wädenswil" };
+      const addr: { street?: string; zip?: string; city?: string } = {
+        street: "Seestrasse 12",
+        zip: "8820",
+        city: "Wädenswil",
+      };
       addr[missing] = "   ";
-      expect(() => assertMembershipBillingAddress(person(addr))).to.throw(
+      expect(() => assertMembershipBillingAddress(addr)).to.throw(
         /Rechnungsadresse/
       );
     });

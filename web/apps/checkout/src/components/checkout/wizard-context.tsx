@@ -646,6 +646,23 @@ export function WizardProvider({
         : {}),
     }))
 
+    // A membership generates an invoice that needs a postal address. The
+    // address was captured inline in the membership line item (StepCheckout)
+    // and validated before submit; persist it to the member's user doc so the
+    // invoice resolves it and it's remembered. The server backstop in
+    // closeCheckoutAndGetPayment reads the same field.
+    if (membershipCost > 0 && identifiedUserRef && persons[0]) {
+      const p = persons[0]
+      await update(userRef(db, identifiedUserRef.id), {
+        billingAddress: {
+          company: p.billingCompany?.trim() ?? "",
+          street: p.billingStreet?.trim() ?? "",
+          zip: p.billingZip?.trim() ?? "",
+          city: p.billingCity?.trim() ?? "",
+        },
+      })
+    }
+
     // Store RAW section amounts (issue #284); the server is authoritative
     // and recomputes both net and discount.
     const summary = {
@@ -739,6 +756,8 @@ export function WizardProvider({
     usageType,
     functions,
     submit,
+    update,
+    db,
   ])
 
   const value: WizardContextValue = {

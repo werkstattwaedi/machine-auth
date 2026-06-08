@@ -23,6 +23,8 @@ import {
   Wrench,
 } from "lucide-react"
 import { cn } from "@modules/lib/utils"
+import { AddressFields } from "@modules/components/profile-form"
+import { validateAddress, type AddressValue, type AddressErrors } from "@modules/lib/address"
 import type { CheckoutPerson } from "./use-checkout-state"
 import type { CheckoutItemLocal } from "@/components/usage/inline-rows"
 import { PositionTable, rowFromItem } from "@/components/usage/position-table"
@@ -180,6 +182,13 @@ interface StepCheckoutProps {
   config: PricingConfig | null
   /** Vereinsmitgliedschaft catalog id (issue #262/#263); null when unset. */
   membershipCatalogId?: string | null
+  /**
+   * Update the primary person's billing fields — used by the mandatory
+   * address sub-form shown in the membership line item (a membership invoice
+   * needs a postal address). The captured address is persisted to the member's
+   * user doc on submit.
+   */
+  onPrimaryBillingChange?: (updates: Partial<CheckoutPerson>) => void
 }
 
 export interface CheckoutCosts {
@@ -282,6 +291,7 @@ export function StepCheckout({
   items,
   config,
   membershipCatalogId,
+  onPrimaryBillingChange,
 }: StepCheckoutProps) {
   // Display NET (billed) section amounts — what the customer actually pays
   // after the usage-type discount (issue #284). `membershipCost` renders the
@@ -422,6 +432,55 @@ export function StepCheckout({
       return next
     })
 
+  // Membership invoice needs the buyer's postal address. Capture it inline in
+  // the membership line item, bound to the primary person's billing fields
+  // (prefilled from their user doc). Validation blocks "Weiter zum Bezahlen".
+  const hasMembership = membershipItems.length > 0
+  const primary = persons[0]
+  const requireCompany = primary?.userType === "firma"
+  const primaryAddress: AddressValue = {
+    company: primary?.billingCompany ?? "",
+    street: primary?.billingStreet ?? "",
+    zip: primary?.billingZip ?? "",
+    city: primary?.billingCity ?? "",
+  }
+  const [membershipAddressErrors, setMembershipAddressErrors] =
+    useState<AddressErrors>({})
+
+  // Open the membership section once when a membership appears so the address
+  // form is visible without an extra tap.
+  const membershipAutoOpened = useRef(false)
+  useEffect(() => {
+    if (hasMembership && !membershipAutoOpened.current) {
+      membershipAutoOpened.current = true
+      setOpenSections((prev) => new Set(prev).add("mitgliedschaft"))
+    }
+  }, [hasMembership])
+
+  const handleMembershipAddressChange = (patch: Partial<AddressValue>) => {
+    if (membershipAddressErrors && Object.keys(membershipAddressErrors).length) {
+      setMembershipAddressErrors({})
+    }
+    onPrimaryBillingChange?.({
+      ...(patch.company !== undefined ? { billingCompany: patch.company } : {}),
+      ...(patch.street !== undefined ? { billingStreet: patch.street } : {}),
+      ...(patch.zip !== undefined ? { billingZip: patch.zip } : {}),
+      ...(patch.city !== undefined ? { billingCity: patch.city } : {}),
+    })
+  }
+
+  const handleSubmitClick = async () => {
+    if (hasMembership) {
+      const errs = validateAddress(primaryAddress, { requireCompany })
+      if (Object.keys(errs).length > 0) {
+        setMembershipAddressErrors(errs)
+        setOpenSections((prev) => new Set(prev).add("mitgliedschaft"))
+        return
+      }
+    }
+    await onSubmit()
+  }
+
   const totalMachineMinutes = nfcItems.reduce(
     (m, i) => m + Math.round(i.quantity * 60),
     0,
@@ -465,6 +524,22 @@ export function StepCheckout({
               firstColLabel="Mitgliedschaft"
               rows={membershipItems.map(rowFromItem)}
             />
+            <div
+              className="mt-4 pt-4 border-t border-border"
+              data-testid="membership-address"
+            >
+              <p className="text-sm text-muted-foreground mb-3">
+                Für die Rechnung deiner Mitgliedschaft brauchen wir deine Adresse.
+              </p>
+              <AddressFields
+                value={primaryAddress}
+                errors={membershipAddressErrors}
+                onChange={handleMembershipAddressChange}
+                includeCompany={requireCompany}
+                showEyebrow={false}
+                idPrefix="membership-addr"
+              />
+            </div>
           </ExpandableSection>
         )}
 
@@ -660,7 +735,7 @@ export function StepCheckout({
         <button
           type="button"
           className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-white bg-cog-teal rounded-[3px] hover:bg-cog-teal-dark transition-colors disabled:opacity-50"
-          onClick={onSubmit}
+          onClick={handleSubmitClick}
           disabled={submitting || total < 0}
         >
           {submitting && <Loader2 className="h-4 w-4 animate-spin" />}

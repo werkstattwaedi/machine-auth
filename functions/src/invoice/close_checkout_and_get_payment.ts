@@ -171,16 +171,24 @@ export function assertUsageTypeAllowed(
 /**
  * A membership generates an invoice, and the invoice PDF silently renders
  * name-only when no billing address is present. So when the cart contains a
- * membership SKU the primary person MUST carry a complete postal address —
- * captured inline in the checkout membership line item. Server-side backstop
- * (issue: combined-signin refactor) so a client bypassing the inline field
- * can't mint an addressless membership invoice. Exported for unit tests.
+ * membership SKU the buyer's user doc MUST carry a complete postal address —
+ * captured inline in the checkout membership line item and persisted to the
+ * user doc before submit. Server-side backstop (combined-signin refactor) so a
+ * client bypassing the inline field can't mint an addressless membership
+ * invoice. The invoice resolver reads this same field. Exported for unit tests.
  */
 export function assertMembershipBillingAddress(
-  primary: CheckoutPersonEntity | undefined,
+  address:
+    | { street?: string; zip?: string; city?: string }
+    | null
+    | undefined,
 ): void {
-  const addr = primary?.billingAddress;
-  if (!addr || !addr.street?.trim() || !addr.zip?.trim() || !addr.city?.trim()) {
+  if (
+    !address ||
+    !address.street?.trim() ||
+    !address.zip?.trim() ||
+    !address.city?.trim()
+  ) {
     throw new HttpsError(
       "failed-precondition",
       "Für eine Mitgliedschaft wird eine Rechnungsadresse benötigt.",
@@ -577,6 +585,15 @@ async function closeExistingCheckout(
     `closeExistingCheckout ${args.checkoutId}`,
   );
 
+  // The buyer's billing address (used to backstop membership invoices below).
+  // Read outside the transaction — it's the same field the invoice resolver
+  // reads, written by the client before submit.
+  const memberBillingAddress = userRef
+    ? ((await userRef.get()).data()?.billingAddress as
+        | { street?: string; zip?: string; city?: string }
+        | undefined) ?? null
+    : null;
+
   // Daily usage-fee dedup (issue #268): waive the entry fee for any named
   // person who already paid it earlier on the same Zurich business day.
   // The owner is the checkout's userId; for the truly-anon path userRef is
@@ -661,10 +678,10 @@ async function closeExistingCheckout(
       hasMachineUsage: hasMachineUsage(items),
       hasMembershipItem: membershipPresent,
     });
-    // A membership invoice needs a postal address (issue: combined-signin
-    // refactor). The primary person carries it from the inline checkout field.
+    // A membership invoice needs a postal address (combined-signin refactor).
+    // The buyer's user doc carries it (written from the inline checkout field).
     if (membershipPresent) {
-      assertMembershipBillingAddress(dedupedPersons[0]);
+      assertMembershipBillingAddress(memberBillingAddress);
     }
 
     const summary = recomputeSummary(
