@@ -33,7 +33,7 @@ export function resolveConfig(): BridgeConfig {
     isDev,
     // Volatile partition: a closed kiosk window equals a closed session.
     partition: "persist:kiosk:volatile",
-    productName: "OWW Kiosk",
+    productName: "OWW Self Checkout",
     windowOpts: {
       width: 1280,
       height: 900,
