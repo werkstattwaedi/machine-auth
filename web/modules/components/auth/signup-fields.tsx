@@ -121,6 +121,7 @@ export function SignupFields({
         <div className="flex flex-col gap-1">
           <Label htmlFor="signup-firstname" className="text-sm font-bold">
             Vorname
+            <span className="text-destructive -ml-1">*</span>
           </Label>
           <input
             id="signup-firstname"
@@ -135,6 +136,7 @@ export function SignupFields({
         <div className="flex flex-col gap-1">
           <Label htmlFor="signup-lastname" className="text-sm font-bold">
             Nachname
+            <span className="text-destructive -ml-1">*</span>
           </Label>
           <input
             id="signup-lastname"
@@ -148,27 +150,26 @@ export function SignupFields({
         </div>
       </div>
 
+      {/* Member type as a light segmented control (the round radios read
+          heavy here). The helper line explains why we ask at all. */}
       <div className="flex flex-col gap-1">
         <Label className="text-sm font-bold">Nutzer:in</Label>
-        <div className="flex gap-6 flex-wrap pt-1.5">
+        <div
+          role="radiogroup"
+          aria-label="Nutzer:in"
+          className="grid grid-cols-3 rounded-md border border-[#ccc] overflow-hidden shadow-xs"
+        >
           {(Object.entries(USER_TYPE_LABELS) as [UserType, string][]).map(
             ([type, label]) => (
               <label
                 key={type}
-                className="inline-flex items-center gap-2 text-sm cursor-pointer select-none"
+                className={cn(
+                  "flex items-center justify-center h-10 px-1 text-[13px] sm:text-sm text-center leading-tight cursor-pointer select-none transition-colors border-l border-[#ccc] first:border-l-0",
+                  value.userType === type
+                    ? "bg-cog-teal text-white font-semibold"
+                    : "bg-background hover:bg-cog-teal-light",
+                )}
               >
-                <span
-                  className={cn(
-                    "inline-flex items-center justify-center h-[18px] w-[18px] rounded-full border-[1.5px] transition-colors",
-                    value.userType === type
-                      ? "border-cog-teal bg-cog-teal"
-                      : "border-[#c1c1c1] bg-background",
-                  )}
-                >
-                  {value.userType === type && (
-                    <span className="h-2 w-2 rounded-full bg-white" />
-                  )}
-                </span>
                 <input
                   type="radio"
                   name="signup-membertype"
@@ -183,6 +184,9 @@ export function SignupFields({
             ),
           )}
         </div>
+        <p className="text-xs text-muted-foreground">
+          Bestimmt die Eintritts- und Mitgliederpreise.
+        </p>
       </div>
 
       {isFirma && (
@@ -201,13 +205,11 @@ export function SignupFields({
       )}
 
       {showCode && (
-        <div className="flex flex-col gap-1.5 rounded-md border border-border bg-muted/40 p-3.5">
+        <div className="flex flex-col gap-1">
           <Label htmlFor="signup-code" className="text-sm font-bold">
             Code aus der E-Mail
+            <span className="text-destructive -ml-1">*</span>
           </Label>
-          <p className="text-[13px] text-muted-foreground">
-            Wir haben dir soeben einen 6-stelligen Code per E-Mail geschickt.
-          </p>
           <input
             id="signup-code"
             data-testid="signup-code-input"

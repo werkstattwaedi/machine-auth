@@ -286,7 +286,7 @@ export function LoginPage({
   const googleButton = (
     <Button
       onClick={handleGoogleSignIn}
-      className="w-full bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 font-semibold"
+      className="w-full h-11 text-[15px] bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 font-semibold shadow-xs"
       disabled={signingInWithGoogle}
     >
       {signingInWithGoogle ? (
@@ -299,24 +299,26 @@ export function LoginPage({
   )
 
   const divider = (
-    <div className="relative">
-      <div className="absolute inset-0 flex items-center">
-        <span className="w-full border-t" />
-      </div>
-      <div className="relative flex justify-center text-xs uppercase">
-        <span className="bg-background px-2 text-muted-foreground">oder</span>
-      </div>
+    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+      <span className="flex-1 border-t border-border" />
+      oder
+      <span className="flex-1 border-t border-border" />
     </div>
   )
 
   const emailForm = (
-    <form onSubmit={handleEmailSubmit} className="space-y-4" data-testid="login-email-stage">
-      <div className="space-y-1.5">
+    <form
+      onSubmit={handleEmailSubmit}
+      className="flex flex-col gap-4"
+      data-testid="login-email-stage"
+    >
+      <div>
         <label
           htmlFor="login-email"
-          className="block text-sm font-bold text-left"
+          className="block text-sm font-bold mb-1 text-left"
         >
-          E-Mail-Adresse
+          E-Mail
+          <span className="text-destructive ml-0.5">*</span>
         </label>
         <Input
           id="login-email"
@@ -326,12 +328,13 @@ export function LoginPage({
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
+          className="h-10"
           data-testid="login-email-input"
         />
       </div>
       <Button
         type="submit"
-        className="w-full bg-cog-teal hover:bg-cog-teal-dark text-white font-semibold"
+        className="w-full h-11 text-[15px] bg-cog-teal hover:bg-cog-teal-dark text-white font-semibold"
         disabled={sending}
         data-testid="login-email-submit"
       >
@@ -358,36 +361,40 @@ export function LoginPage({
       ? stage.via === "code"
         ? "Für diese E-Mail-Adresse gibt es noch kein Konto."
         : "Noch ein paar Angaben, dann ist dein Konto bereit."
-      : null
+      : stage.kind === "email" && signupEnabled
+        ? "Melde dich mit deiner E-Mail-Adresse an oder erstelle ein neues Konto."
+        : null
 
+  // Layout follows the design-system LoginScreen: a top-aligned 440px column
+  // (no card box, no vertical centering), logo on top, slab heading, muted
+  // intro line. Text is left-aligned like every other page heading in the
+  // product; only the column itself is centered.
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <div
-        className={
-          stage.kind === "signup"
-            ? "w-full max-w-md space-y-8"
-            : "w-full max-w-sm space-y-8"
-        }
-      >
-        <div className="flex flex-col items-center gap-4">
-          <img src="/logo_oww.png" alt="Offene Werkstatt Wädenswil" className="h-14" />
-          {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
-        </div>
+    <div className="min-h-screen bg-background">
+      <div className="max-w-[440px] mx-auto px-6 pt-10 pb-16">
+        <img
+          src="/logo_oww.png"
+          alt="Offene Werkstatt Wädenswil"
+          className="h-[72px] sm:h-[93px] mb-2"
+        />
+        {subtitle && (
+          <p className="text-sm text-muted-foreground">{subtitle}</p>
+        )}
 
-        <div className="border border-border rounded p-6 space-y-4">
-          <div className="space-y-1">
-            <h2 className="text-lg font-bold text-center">{heading}</h2>
-            {headingHint && (
-              <p className="text-sm text-muted-foreground text-center">
-                {headingHint}
-              </p>
-            )}
-          </div>
+        <h1 className="font-heading font-bold text-[28px] leading-tight mt-6 mb-2">
+          {heading}
+        </h1>
+        {headingHint && (
+          <p className="text-sm text-muted-foreground">
+            {headingHint}
+          </p>
+        )}
 
+        <div className="w-full mt-8">
           {stage.kind === "email" && (
-            <>
+            <div className="flex flex-col gap-4">
               {showLinkHint && (
-                <div className="rounded border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-800">
+                <div className="rounded-md border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-800">
                   Ein Konto mit dieser E-Mail existiert bereits. Melde dich per E-Mail-Code an,
                   um dein Google-Konto zu verknüpfen.
                 </div>
@@ -405,22 +412,21 @@ export function LoginPage({
                   {googleButton}
                 </>
               )}
-            </>
+            </div>
           )}
 
           {stage.kind === "signin-code" && (
-            <div className="space-y-4" data-testid="login-code-stage">
-              <div className="text-center space-y-2">
-                <Mail className="h-10 w-10 mx-auto text-cog-teal" />
-                <p className="text-sm">
-                  Wir haben eine E-Mail an <strong>{email}</strong> gesendet.
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Gib den 6-stelligen Code ein oder klicke auf den Link in der E-Mail.
-                </p>
+            <div className="flex flex-col gap-4" data-testid="login-code-stage">
+              <div className="flex items-start gap-3 rounded-lg bg-cog-teal-light p-4 text-sm text-cog-teal-dark">
+                <Mail className="h-5 w-5 shrink-0 mt-0.5" />
+                <span>
+                  Code an <strong className="break-all">{email}</strong> gesendet.
+                  Gib den 6-stelligen Code ein oder klicke auf den Link in der
+                  E-Mail.
+                </span>
               </div>
 
-              <form onSubmit={handleSigninCodeSubmit} className="space-y-3">
+              <form onSubmit={handleSigninCodeSubmit} className="flex flex-col gap-3">
                 <Input
                   type="text"
                   inputMode="numeric"
@@ -431,18 +437,18 @@ export function LoginPage({
                   placeholder="123456"
                   value={signinCode}
                   onChange={(e) => setSigninCode(e.target.value.replace(/\D/g, ""))}
-                  className="text-center text-xl tracking-widest"
+                  className="h-11 text-center !text-xl tracking-[0.3em]"
                   data-testid="login-code-input"
                   aria-label="6-stelliger Code"
                 />
                 {codeError && (
-                  <p className="text-sm text-red-600" data-testid="login-code-error">
+                  <p className="text-sm text-destructive" data-testid="login-code-error">
                     {codeError}
                   </p>
                 )}
                 <Button
                   type="submit"
-                  className="w-full bg-cog-teal hover:bg-cog-teal-dark text-white font-semibold"
+                  className="w-full h-11 text-[15px] bg-cog-teal hover:bg-cog-teal-dark text-white font-semibold"
                   disabled={verifying || signinCode.length !== 6}
                   data-testid="login-code-submit"
                 >
@@ -454,7 +460,7 @@ export function LoginPage({
               <button
                 type="button"
                 onClick={handleUseDifferentEmail}
-                className="w-full text-sm text-muted-foreground hover:text-foreground underline"
+                className="self-start text-sm font-medium text-cog-teal-dark underline hover:no-underline"
               >
                 Andere E-Mail-Adresse verwenden
               </button>
@@ -462,28 +468,34 @@ export function LoginPage({
           )}
 
           {stage.kind === "signup" && (
-            <div className="space-y-4" data-testid="login-signup-stage">
-              {(email || user?.email) && (
-                <div className="flex items-center justify-between gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
-                  <span className="flex items-center gap-2 min-w-0">
-                    <Mail className="h-4 w-4 text-cog-teal shrink-0" />
-                    <span className="font-medium truncate">
-                      {email || user?.email}
-                    </span>
-                  </span>
-                  {stage.via === "code" && (
+            <div className="flex flex-col gap-5" data-testid="login-signup-stage">
+              {stage.via === "code" ? (
+                <div className="flex items-start gap-3 rounded-lg bg-cog-teal-light p-4 text-sm text-cog-teal-dark">
+                  <Mail className="h-5 w-5 shrink-0 mt-0.5" />
+                  <span className="min-w-0">
+                    Code an <strong className="break-all">{email}</strong> gesendet.
+                    Prüfe dein Postfach.{" "}
                     <button
                       type="button"
                       onClick={handleUseDifferentEmail}
-                      className="text-cog-teal hover:underline shrink-0"
+                      className="font-medium underline hover:no-underline"
                     >
                       Ändern
                     </button>
-                  )}
+                  </span>
                 </div>
+              ) : (
+                (email || user?.email) && (
+                  <p className="text-sm text-muted-foreground">
+                    Angemeldet als{" "}
+                    <strong className="text-foreground break-all">
+                      {email || user?.email}
+                    </strong>
+                  </p>
+                )
               )}
 
-              <form onSubmit={handleSignupSubmit} className="space-y-5">
+              <form onSubmit={handleSignupSubmit} className="flex flex-col gap-5">
                 <SignupFields
                   value={signupValue}
                   errors={signupErrors}
@@ -492,7 +504,7 @@ export function LoginPage({
                 />
                 <Button
                   type="submit"
-                  className="w-full bg-cog-teal hover:bg-cog-teal-dark text-white font-semibold"
+                  className="w-full h-11 text-[15px] bg-cog-teal hover:bg-cog-teal-dark text-white font-semibold"
                   disabled={submitting}
                   data-testid="signup-submit"
                 >
