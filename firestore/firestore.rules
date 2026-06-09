@@ -95,6 +95,21 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.activeMembership;
     }
 
+    // Same family-roster join as `shareActiveMembership`, but for a
+    // kiosk tag-tap session: it reads the membership of the `actsAs()`
+    // user (the real principal the synthetic UID acts on) instead of
+    // `request.auth.uid` (which has no user doc). Lets a tag-tapped
+    // user resolve their own family co-members' docs for the checkout
+    // roster picker (issue #422) — exactly the same docs the logged-in
+    // owner already sees. The synthetic session still cannot reach any
+    // doc outside the tag owner's own active membership.
+    function shareActiveMembershipActingAs(targetUserId) {
+      return actsAs() != '' &&
+        get(/databases/$(database)/documents/users/$(targetUserId)).data.activeMembership != null &&
+        get(/databases/$(database)/documents/users/$(targetUserId)).data.activeMembership ==
+        get(/databases/$(database)/documents/users/$(actsAs())).data.activeMembership;
+    }
+
     // True when the user pointed to by `userIdRef` has a non-null
     // `activeMembership`. Used to gate the `paymentMethod: "monthly"`
     // write on a closed checkout — only Vereinsmitglieder may roll an
@@ -108,11 +123,15 @@ service cloud.firestore {
     match /users/{userId} {
       // Read: admin, the user themselves, a kiosk session acting on their
       // behalf (so the kiosk can pre-fill the form), or a family co-member
-      // (so the checkout roster can show display names).
+      // (so the checkout roster can show display names). The co-member
+      // branch is honoured for both a real login (shareActiveMembership)
+      // and a tag-tap session acting on the owner's behalf
+      // (shareActiveMembershipActingAs) — issue #422.
       allow read: if isAdmin() ||
                      (isSignedIn() && userId == request.auth.uid) ||
                      (actsAs() != '' && actsAs() == userId) ||
-                     shareActiveMembership(userId);
+                     shareActiveMembership(userId) ||
+                     shareActiveMembershipActingAs(userId);
 
       // Allow creating own user doc during self-registration
       allow create: if isSignedIn() && userId == request.auth.uid &&
@@ -349,12 +368,18 @@ service cloud.firestore {
     // direct client writes are denied. Reads are scoped to current members and
     // the owner so the family roster UI can populate.
     match /memberships/{membershipId} {
-      // Read: admin, or any user listed in `members[]`. Tag-tap sessions
-      // (synthetic UIDs) are intentionally excluded — kiosk badge auth has
-      // no business browsing membership rosters.
+      // Read: admin, any user listed in `members[]`, or a kiosk tag-tap
+      // session whose `actsAs()` principal is listed in `members[]`
+      // (issue #422 — so a tapped family member can resolve their own
+      // roster for the checkout quick-add). The tag branch is scoped to
+      // the tag owner's own membership; a synthetic session still cannot
+      // read a membership it doesn't belong to, and writes stay
+      // callable-only for everyone.
       allow read: if isAdmin() ||
         (isSignedIn() &&
-         /databases/$(database)/documents/users/$(request.auth.uid) in resource.data.members);
+         /databases/$(database)/documents/users/$(request.auth.uid) in resource.data.members) ||
+        (actsAs() != '' &&
+         /databases/$(database)/documents/users/$(actsAs()) in resource.data.members);
 
       // No client writes — callables only.
       allow write: if false;
