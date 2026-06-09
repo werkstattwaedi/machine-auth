@@ -306,6 +306,49 @@ describe("bill processing triggers (Integration)", () => {
       expect(fakeBucket.__files.size, "no file upload attempted").to.equal(0);
     });
 
+    // Issue #426: the create-path tryGeneratePdf sets `pdfGeneratedAt` and
+    // never clears it on success, so a finished bill carries a recent
+    // timestamp AND a storagePath. When the user acks TWINT within
+    // STALE_LOCK_MS (the common case), onBillUpdate's force-regen used to
+    // see that fresh timestamp as a held lock and bail BEFORE regenerating
+    // — leaving the create-time QR rechnung PDF attached while the email
+    // already branded itself TWINT. force:true must bypass BOTH the
+    // storagePath short-circuit AND the fresh-lock check and regenerate.
+    it("force:true regenerates past a fresh lock + existing storagePath, producing the TWINT PDF (#426)", async function () {
+      this.timeout(15000);
+      const billId = "bill-426-twint-regen";
+      // Checkout records the TWINT selection (as acknowledgeBill writes it).
+      await seedCheckout("co-default", {
+        paymentMethod: "twint",
+        summary: { totalPrice: 25.5, entryFees: 15, machineCost: 10.5, materialCost: 0, tip: 0 },
+      });
+      // Mimic a just-created bill: storagePath set (create-time QR PDF) and
+      // a fresh (1-minute-old) pdfGeneratedAt lock that was never cleared.
+      await seedBill(billId, {
+        storagePath: `invoices/${billId}.pdf`,
+        pdfGeneratedAt: Timestamp.fromMillis(Date.now() - 60 * 1000),
+      });
+
+      const ok = await tryGeneratePdf(billId, { force: true });
+      expect(ok).to.be.true;
+
+      // The PDF must have been re-rendered and re-uploaded.
+      const file = fakeBucket.__files.get(`invoices/${billId}.pdf`)!;
+      expect(file.save.called, "force-regen must re-save the PDF").to.be.true;
+      const [buffer] = file.save.lastCall.args as [Buffer];
+      expect(buffer.subarray(0, 4).toString("utf8")).to.equal("%PDF");
+
+      // The regenerated PDF reflects TWINT: Quittung title, no QR slip.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const pdfParse = require("pdf-parse") as (b: Buffer) => Promise<{ text: string }>;
+      const { text } = await pdfParse(buffer);
+      expect(text).to.include("Quittung Self Checkout");
+      expect(text).to.include("Zahlweise: TWINT");
+      expect(text).to.not.include("Empfangsschein");
+      expect(text).to.not.include("Zahlteil");
+      expect(text).to.not.include("Zahlbar innert 30 Tagen");
+    });
+
     it("clears stale lock (> 5 min old) and re-runs PDF generation", async function () {
       this.timeout(15000);
       const billId = "bill-pdf-stale";
