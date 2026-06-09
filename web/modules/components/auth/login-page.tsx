@@ -16,7 +16,7 @@
 // Admin (signupEnabled = false) keeps the plain e-mail → code flow: admin
 // accounts are admin-created, so there is no existence check and no sign-up.
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useNavigate } from "@tanstack/react-router"
 import { toast } from "sonner"
 import { Loader2 } from "lucide-react"
@@ -106,12 +106,17 @@ export function LoginPage({
   const [signingInWithGoogle, setSigningInWithGoogle] = useState(false)
   const [codeError, setCodeError] = useState<string | null>(null)
   const [showLinkHint, setShowLinkHint] = useState(false)
+  // Suppresses the redirect effect while handleSignOutAndRestart is mid-flight:
+  // the local stage is already reset to "email" but `user` is still non-null
+  // until onAuthStateChanged fires, so the effect would re-pin the sign-up stage.
+  const signingOutRef = useRef(false)
 
   // Route the signed-in principal. A completed account redirects to the target;
   // a signed-in-but-incomplete principal (Google-new / magic-link-new / legacy)
   // is dropped into the inline sign-up form. Anonymous (eager-anon checkout)
   // and tag sessions are left alone.
   useEffect(() => {
+    if (signingOutRef.current) return
     if (loading || !user || user.isAnonymous || sessionKind === "tag") return
     if (userDocLoading) return
 
@@ -281,6 +286,7 @@ export function LoginPage({
     setStage({ kind: "email" })
     setSigninCode("")
     setCodeError(null)
+    setEmailError(null)
     setSignupErrors({})
   }
 
@@ -320,12 +326,16 @@ export function LoginPage({
   // stage for such a principal, so without this the user can neither
   // switch accounts nor log out.
   const handleSignOutAndRestart = async () => {
+    signingOutRef.current = true
     try {
       await signOut()
     } catch (err) {
       console.error("signOut failed", err)
+    } finally {
+      signingOutRef.current = false
     }
     setEmail("")
+    setEmailError(null)
     setSignupValue(EMPTY_SIGNUP_VALUE)
     setSignupErrors({})
     setStage({ kind: "email" })

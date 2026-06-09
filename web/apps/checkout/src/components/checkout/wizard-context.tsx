@@ -653,14 +653,22 @@ export function WizardProvider({
     // closeCheckoutAndGetPayment reads the same field.
     if (membershipCost > 0 && identifiedUserRef && persons[0]) {
       const p = persons[0]
-      await update(userRef(db, identifiedUserRef.id), {
-        billingAddress: {
-          company: p.billingCompany?.trim() ?? "",
-          street: p.billingStreet?.trim() ?? "",
-          zip: p.billingZip?.trim() ?? "",
-          city: p.billingCity?.trim() ?? "",
-        },
-      })
+      try {
+        await update(userRef(db, identifiedUserRef.id), {
+          billingAddress: {
+            company: p.billingCompany?.trim() ?? "",
+            street: p.billingStreet?.trim() ?? "",
+            zip: p.billingZip?.trim() ?? "",
+            city: p.billingCity?.trim() ?? "",
+          },
+        })
+      } catch {
+        // Hook already toasted + telemetered (ADR-0025). Abort the submit
+        // like a failed RPC — without this the rejection would escape
+        // submitCheckout's null-on-failure contract and surface as an
+        // unhandled rejection in the route's onSubmit.
+        return null
+      }
     }
 
     // Store RAW section amounts (issue #284); the server is authoritative

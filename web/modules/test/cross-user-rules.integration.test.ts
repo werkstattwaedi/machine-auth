@@ -426,6 +426,56 @@ describe("cross-user: users", () => {
     await seedUser("alice")
     await assertSucceeds(getDoc(doc(adminDb(), "users", "alice")))
   })
+
+  // Self-registration create invariants (combined sign-in/sign-up): the
+  // create path enforces the same firma billing-address rule as update.
+  function signupDoc(overrides: Record<string, unknown> = {}) {
+    return {
+      firstName: "Carol",
+      lastName: "Muster",
+      email: "carol@example.com",
+      userType: "erwachsen",
+      termsAcceptedAt: serverTimestamp(),
+      roles: [],
+      permissions: [],
+      phone: null,
+      billingAddress: null,
+      created: serverTimestamp(),
+      ...overrides,
+    }
+  }
+
+  it("allows erwachsen self-registration without a billing address", async () => {
+    await assertSucceeds(
+      setDoc(doc(authedDb("carol"), "users", "carol"), signupDoc()),
+    )
+  })
+
+  it("denies firma self-registration without a billing address", async () => {
+    await assertFails(
+      setDoc(
+        doc(authedDb("carol"), "users", "carol"),
+        signupDoc({ userType: "firma" }),
+      ),
+    )
+  })
+
+  it("allows firma self-registration with a complete billing address", async () => {
+    await assertSucceeds(
+      setDoc(
+        doc(authedDb("carol"), "users", "carol"),
+        signupDoc({
+          userType: "firma",
+          billingAddress: {
+            company: "Holzbau Müller AG",
+            street: "Seestrasse 12",
+            zip: "8820",
+            city: "Wädenswil",
+          },
+        }),
+      ),
+    )
+  })
 })
 
 describe("cross-user: checkouts", () => {

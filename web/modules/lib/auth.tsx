@@ -292,9 +292,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       // New-vs-existing WITHOUT creating a doc: a completed account has
       // accepted terms. An existing Auth user with no terms (legacy / abandoned)
-      // is treated as new so they finish sign-up.
-      const snap = await getDoc(userRef(db, result.user.uid))
-      const isNewAccount = !(snap.exists() && snap.data()?.termsAcceptedAt)
+      // is treated as new so they finish sign-up. The read is best-effort:
+      // sign-in itself already succeeded, so a failed lookup must not reject
+      // the whole call — default to "not new" and let the login page's
+      // redirect effect drop an incomplete account into sign-up anyway.
+      let isNewAccount = false
+      try {
+        const snap = await getDoc(userRef(db, result.user.uid))
+        isNewAccount = !(snap.exists() && snap.data()?.termsAcceptedAt)
+      } catch (err) {
+        console.error("signInWithGoogle: user-doc lookup failed", err)
+      }
       return { isNewAccount, firstName, lastName }
     } catch (error: unknown) {
       if (
