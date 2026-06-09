@@ -5,7 +5,7 @@
 # scripts/inject-build-config.mjs before this config is read.
 
 appId: ch.werkstattwaedi.checkout-kiosk
-productName: OWW Kiosk
+productName: OWW Self Checkout
 directories:
   output: release/kiosk
 files:

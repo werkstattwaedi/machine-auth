@@ -57,6 +57,16 @@ function createWindow(): void {
     },
   })
 
+  // Keep the OS window title pinned to the product name. The constructor
+  // `title` is only a hint: once a document loads, its <title> takes over —
+  // which is how the window previously ended up reading the renderer's
+  // hardcoded title (issue #421). Re-assert it and block the page from
+  // overriding it.
+  mainWindow.on("page-title-updated", (event) => {
+    event.preventDefault()
+  })
+  mainWindow.setTitle(config.productName)
+
   mainWindow.loadFile(path.join(__dirname, "..", "renderer", "index.html"))
 
   // Lock down the chrome window: no new windows, no navigation away from the
