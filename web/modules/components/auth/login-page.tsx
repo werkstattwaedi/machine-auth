@@ -23,7 +23,7 @@ import { Loader2 } from "lucide-react"
 import { useAuth, isProfileComplete } from "@modules/lib/auth"
 import { Button } from "@modules/components/ui/button"
 import { Input } from "@modules/components/ui/input"
-import { INPUT_OK } from "@modules/components/profile-form"
+import { INPUT_OK, ErrorBadge } from "@modules/components/profile-form"
 import { GoogleIcon } from "@modules/components/icons/google"
 import {
   SignupFields,
@@ -96,6 +96,7 @@ export function LoginPage({
     signupFlag ? { kind: "signup", via: "link" } : { kind: "email" },
   )
   const [email, setEmail] = useState("")
+  const [emailError, setEmailError] = useState<string | null>(null)
   const [signinCode, setSigninCode] = useState("")
   const [signupValue, setSignupValue] = useState<SignupFieldsValue>(EMPTY_SIGNUP_VALUE)
   const [signupErrors, setSignupErrors] = useState<SignupFieldsErrors>({})
@@ -176,7 +177,13 @@ export function LoginPage({
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!email) return
+    // Own validation (form is noValidate): the native bubble is styled by
+    // the browser and speaks the browser's language, not the product's.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setEmailError("Bitte gib eine gültige E-Mail-Adresse ein.")
+      return
+    }
+    setEmailError(null)
     setSending(true)
     try {
       if (!signupEnabled) {
@@ -358,6 +365,7 @@ export function LoginPage({
   const emailForm = (
     <form
       onSubmit={handleEmailSubmit}
+      noValidate
       className="flex flex-col gap-4"
       data-testid="login-email-stage"
     >
@@ -375,11 +383,19 @@ export function LoginPage({
           placeholder="deine@email.ch"
           autoComplete="email"
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          className="h-10"
+          onChange={(e) => {
+            setEmail(e.target.value)
+            if (emailError) setEmailError(null)
+          }}
+          aria-invalid={!!emailError}
+          className={
+            emailError
+              ? "h-10 border-destructive focus-visible:border-destructive focus-visible:ring-destructive/30"
+              : "h-10"
+          }
           data-testid="login-email-input"
         />
+        {emailError && <ErrorBadge message={emailError} />}
       </div>
       <Button
         type="submit"
