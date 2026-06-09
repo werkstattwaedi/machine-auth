@@ -36,7 +36,7 @@ test.describe("Login flow (combined sign-in/sign-up)", () => {
     await expect(page.getByTestId("login-code-stage")).toBeVisible()
     await expect(page.getByTestId("signup-firstname")).not.toBeVisible()
     await expect(page).toHaveScreenshot("login-code-stage.png", {
-      mask: [page.locator("strong").filter({ hasText: EXISTING_EMAIL })],
+      mask: [page.getByTestId("login-code-email")],
     })
 
     const entry = await waitForLoginCode(EXISTING_EMAIL)
@@ -77,7 +77,7 @@ test.describe("Login flow (combined sign-in/sign-up)", () => {
     await page.getByTestId("login-code-submit").click()
     await expect(page.getByTestId("login-code-error")).toBeVisible()
     await expect(page).toHaveScreenshot("login-code-error.png", {
-      mask: [page.locator("strong").filter({ hasText: EXISTING_EMAIL })],
+      mask: [page.getByTestId("login-code-email")],
     })
   })
 

@@ -19,10 +19,11 @@
 import { useEffect, useState } from "react"
 import { useNavigate } from "@tanstack/react-router"
 import { toast } from "sonner"
-import { Loader2, Mail } from "lucide-react"
+import { Loader2 } from "lucide-react"
 import { useAuth, isProfileComplete } from "@modules/lib/auth"
 import { Button } from "@modules/components/ui/button"
 import { Input } from "@modules/components/ui/input"
+import { INPUT_OK } from "@modules/components/profile-form"
 import { GoogleIcon } from "@modules/components/icons/google"
 import {
   SignupFields,
@@ -469,18 +470,45 @@ export function LoginPage({
           )}
 
           {stage.kind === "signin-code" && (
-            <div className="flex flex-col gap-4" data-testid="login-code-stage">
-              <div className="flex items-start gap-3 rounded-lg bg-cog-teal-light p-4 text-sm text-cog-teal-dark">
-                <Mail className="h-5 w-5 shrink-0 mt-0.5" />
-                <span>
-                  Code an <strong className="break-all">{email}</strong> gesendet.
-                  Gib den 6-stelligen Code ein oder klicke auf den Link in der
-                  E-Mail.
-                </span>
+            <div className="flex flex-col gap-5" data-testid="login-code-stage">
+              {/* Same field pattern as the sign-up form: read-only e-mail
+                  with an Ändern escape, then the code with a plain helper
+                  line explaining where it came from. */}
+              <div className="flex flex-col gap-1">
+                <div className="flex items-baseline justify-between">
+                  <label htmlFor="login-code-email" className="text-sm font-bold">
+                    E-Mail
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleUseDifferentEmail}
+                    className="text-sm font-medium text-cog-teal-dark underline hover:no-underline"
+                  >
+                    Ändern
+                  </button>
+                </div>
+                <input
+                  id="login-code-email"
+                  data-testid="login-code-email"
+                  value={email}
+                  readOnly
+                  tabIndex={-1}
+                  className={`${INPUT_OK} bg-muted/50 text-muted-foreground focus:border-[#ccc] focus:ring-0`}
+                />
               </div>
 
-              <form onSubmit={handleSigninCodeSubmit} className="flex flex-col gap-3">
+              <form onSubmit={handleSigninCodeSubmit} className="flex flex-col gap-1">
+                <label htmlFor="login-code" className="text-sm font-bold">
+                  Code aus der E-Mail
+                  <span className="text-destructive ml-0.5">*</span>
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  Wir haben dir einen 6-stelligen Code an diese Adresse
+                  geschickt — gib ihn ein oder klicke auf den Link in der
+                  E-Mail.
+                </p>
                 <Input
+                  id="login-code"
                   type="text"
                   inputMode="numeric"
                   pattern="\d{6}"
@@ -499,9 +527,17 @@ export function LoginPage({
                     {codeError}
                   </p>
                 )}
+                <button
+                  type="button"
+                  onClick={handleResendCode}
+                  data-testid="login-resend-code"
+                  className="self-start mt-1 text-sm font-medium text-cog-teal-dark underline hover:no-underline"
+                >
+                  Code erneut senden
+                </button>
                 <Button
                   type="submit"
-                  className="w-full h-11 text-[15px] bg-cog-teal hover:bg-cog-teal-dark text-white font-semibold"
+                  className="w-full h-11 mt-3 text-[15px] bg-cog-teal hover:bg-cog-teal-dark text-white font-semibold"
                   disabled={verifying || signinCode.length !== 6}
                   data-testid="login-code-submit"
                 >
@@ -509,24 +545,6 @@ export function LoginPage({
                   Anmelden
                 </Button>
               </form>
-
-              <div className="flex flex-col items-start gap-2">
-                <button
-                  type="button"
-                  onClick={handleResendCode}
-                  data-testid="login-resend-code"
-                  className="text-sm font-medium text-cog-teal-dark underline hover:no-underline"
-                >
-                  Code erneut senden
-                </button>
-                <button
-                  type="button"
-                  onClick={handleUseDifferentEmail}
-                  className="text-sm font-medium text-cog-teal-dark underline hover:no-underline"
-                >
-                  Andere E-Mail-Adresse verwenden
-                </button>
-              </div>
             </div>
           )}
 
