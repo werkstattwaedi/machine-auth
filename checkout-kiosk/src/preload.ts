@@ -22,6 +22,12 @@ ipcRenderer.on("bridge:url-change", (_event, url: string) => {
   urlCallbacks.forEach((cb) => cb(url))
 })
 
+const overlayCallbacks = new Set<(url: string) => void>()
+
+ipcRenderer.on("bridge:open-overlay", (_event, url: string) => {
+  overlayCallbacks.forEach((cb) => cb(url))
+})
+
 // Bootstrap (mode + features) is delivered synchronously from main so
 // the preload doesn't depend on any sibling module (sandboxed preloads
 // can't reliably resolve relative requires).
@@ -39,6 +45,10 @@ const bridge: Bridge = {
   onUrlChange: (cb) => {
     urlCallbacks.add(cb)
     return () => urlCallbacks.delete(cb)
+  },
+  onOpenOverlay: (cb) => {
+    overlayCallbacks.add(cb)
+    return () => overlayCallbacks.delete(cb)
   },
   onNfcTag: (cb) => {
     nfcCallbacks.add(cb)

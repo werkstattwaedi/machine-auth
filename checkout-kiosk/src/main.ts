@@ -9,11 +9,18 @@ import {
   type WebContents,
 } from "electron"
 import path from "node:path"
+import { decideKioskOverlay } from "@oww/shared"
 import { resolveConfig } from "./config"
 import { startNfc } from "./bridge/nfc"
 import type { NfcTagEvent } from "./types"
 
 const config = resolveConfig()
+
+// Off-origin URLs the checkout app links to via target="_blank" that should
+// open inside the in-kiosk overlay webview (with a close button) instead of
+// being denied. The webview's default deny-all stays in place for everything
+// else. werkstattwaedi.ch hosts the Nutzungsbestimmungen page (#425).
+const OVERLAY_ALLOWLIST = ["https://werkstattwaedi.ch"] as const
 
 // Accept self-signed certs in dev (Vite basicSsl plugin)
 if (config.isDev) {
@@ -82,12 +89,32 @@ function createWindow(): void {
   mainWindow.webContents.on(
     "did-attach-webview",
     (_event, webviewWebContents) => {
-      webviewWebContents.setWindowOpenHandler(() => ({ action: "deny" }))
+      // Window-opens (target="_blank") stay denied so no native window
+      // spawns. For allowlisted off-origin links (e.g. the
+      // Nutzungsbestimmungen page) we instead ask the chrome renderer to
+      // mount an in-kiosk overlay webview pointing at the URL — the overlay
+      // is torn down on close, so nothing lingers outside the kiosk.
+      webviewWebContents.setWindowOpenHandler(({ url }) => {
+        if (
+          decideKioskOverlay(url, { allowedOverlayOrigins: OVERLAY_ALLOWLIST })
+            .open
+        ) {
+          mainWindow?.webContents.send("bridge:open-overlay", url)
+        }
+        return { action: "deny" }
+      })
       webviewWebContents.on("will-navigate", (event, navUrl) => {
         try {
           const allowed = new URL(config.url).origin
           const target = new URL(navUrl).origin
-          if (target !== allowed) {
+          // The checkout origin is always allowed. Overlay webviews navigate
+          // within an allowlisted off-origin (e.g. werkstattwaedi.ch for the
+          // Nutzungsbestimmungen page), so permit those origins too — the
+          // overlay is created and torn down by the renderer.
+          if (
+            target !== allowed &&
+            !OVERLAY_ALLOWLIST.includes(target as (typeof OVERLAY_ALLOWLIST)[number])
+          ) {
             console.warn(
               `Blocked webview navigation to off-origin URL: ${navUrl}`
             )
