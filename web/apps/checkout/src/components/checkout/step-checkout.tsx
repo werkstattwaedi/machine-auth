@@ -24,7 +24,12 @@ import {
 } from "lucide-react"
 import { cn } from "@modules/lib/utils"
 import { AddressFields } from "@modules/components/profile-form"
-import { validateAddress, type AddressValue, type AddressErrors } from "@modules/lib/address"
+import {
+  validateAddress,
+  isAddressComplete,
+  type AddressValue,
+  type AddressErrors,
+} from "@modules/lib/address"
 import type { CheckoutPerson } from "./use-checkout-state"
 import type { CheckoutItemLocal } from "@/components/usage/inline-rows"
 import { PositionTable, rowFromItem } from "@/components/usage/position-table"
@@ -184,11 +189,23 @@ interface StepCheckoutProps {
   membershipCatalogId?: string | null
   /**
    * Update the primary person's billing fields — used by the mandatory
-   * address sub-form shown in the membership line item (a membership invoice
-   * needs a postal address). The captured address is persisted to the member's
-   * user doc on submit.
+   * address sub-form shown in the membership line item (the club's member
+   * roster needs a postal address). The captured address is persisted to the
+   * member's user doc on submit.
    */
   onPrimaryBillingChange?: (updates: Partial<CheckoutPerson>) => void
+  /**
+   * The identified user's profile `billingAddress`, if any. Used to pre-fill
+   * the membership address when the primary person carries no billing fields —
+   * e.g. a server-created checkout (purchaseMembership) whose rehydrated
+   * persons have no address even though the profile does.
+   */
+  profileBillingAddress?: {
+    company?: string
+    street?: string
+    zip?: string
+    city?: string
+  } | null
 }
 
 export interface CheckoutCosts {
@@ -292,6 +309,7 @@ export function StepCheckout({
   config,
   membershipCatalogId,
   onPrimaryBillingChange,
+  profileBillingAddress,
 }: StepCheckoutProps) {
   // Display NET (billed) section amounts — what the customer actually pays
   // after the usage-type discount (issue #284). `membershipCost` renders the
@@ -447,15 +465,43 @@ export function StepCheckout({
   const [membershipAddressErrors, setMembershipAddressErrors] =
     useState<AddressErrors>({})
 
-  // Open the membership section once when a membership appears so the address
-  // form is visible without an extra tap.
+  // One-shot init when a membership appears: pre-fill the address from the
+  // profile when the primary person carries no billing fields (server-created
+  // checkouts rehydrate without one), then auto-open the section only when the
+  // address still needs input — members with a complete profile address see it
+  // pre-filled and collapsed. Waits for the primary person so the async
+  // pre-fill/rehydrate doesn't race; by the time items exist the user doc is
+  // loaded (the open-checkout query derives from it).
   const membershipAutoOpened = useRef(false)
   useEffect(() => {
-    if (hasMembership && !membershipAutoOpened.current) {
-      membershipAutoOpened.current = true
+    if (!hasMembership || !primary || membershipAutoOpened.current) return
+    membershipAutoOpened.current = true
+    const hasOwnBilling = !!(
+      primary.billingCompany ||
+      primary.billingStreet ||
+      primary.billingZip ||
+      primary.billingCity
+    )
+    let effective = primaryAddress
+    if (!hasOwnBilling && profileBillingAddress) {
+      effective = {
+        company: profileBillingAddress.company ?? "",
+        street: profileBillingAddress.street ?? "",
+        zip: profileBillingAddress.zip ?? "",
+        city: profileBillingAddress.city ?? "",
+      }
+      onPrimaryBillingChange?.({
+        billingCompany: effective.company,
+        billingStreet: effective.street,
+        billingZip: effective.zip,
+        billingCity: effective.city,
+      })
+    }
+    if (!isAddressComplete(effective, { requireCompany })) {
       setOpenSections((prev) => new Set(prev).add("mitgliedschaft"))
     }
-  }, [hasMembership])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasMembership, primary])
 
   const handleMembershipAddressChange = (patch: Partial<AddressValue>) => {
     if (membershipAddressErrors && Object.keys(membershipAddressErrors).length) {
@@ -529,7 +575,8 @@ export function StepCheckout({
               data-testid="membership-address"
             >
               <p className="text-sm text-muted-foreground mb-3">
-                Für die Rechnung deiner Mitgliedschaft brauchen wir deine Adresse.
+                Als Verein führen wir ein Mitgliederverzeichnis — dafür
+                brauchen wir deine Postadresse.
               </p>
               <AddressFields
                 value={primaryAddress}

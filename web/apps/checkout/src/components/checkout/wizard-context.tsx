@@ -634,10 +634,10 @@ export function WizardProvider({
       name: `${p.firstName} ${p.lastName}`,
       email: p.email,
       userType: p.userType,
-      ...(p.billingCompany
+      ...(hasBillingFields(p)
         ? {
             billingAddress: {
-              company: p.billingCompany,
+              company: p.billingCompany ?? "",
               street: p.billingStreet ?? "",
               zip: p.billingZip ?? "",
               city: p.billingCity ?? "",
@@ -869,6 +869,16 @@ export function usePreFillPerson(
 
 // Person <-> Firestore doc converters (extracted from the old wizard).
 
+/**
+ * A person carries a billing address worth persisting when ANY billing field
+ * is set — not just the company. Gating on `billingCompany` alone dropped a
+ * regular member's street/zip/city on the persist→rehydrate round-trip, so
+ * the membership address pre-filled from the profile never survived.
+ */
+export function hasBillingFields(p: CheckoutPerson): boolean {
+  return !!(p.billingCompany || p.billingStreet || p.billingZip || p.billingCity)
+}
+
 export function personLocalToDoc(
   p: CheckoutPerson,
   db: ReturnType<typeof useDb>,
@@ -881,9 +891,9 @@ export function personLocalToDoc(
   if (p.userId) {
     doc.userRef = userRef(db, p.userId)
   }
-  if (p.billingCompany) {
+  if (hasBillingFields(p)) {
     doc.billingAddress = {
-      company: p.billingCompany,
+      company: p.billingCompany ?? "",
       street: p.billingStreet ?? "",
       zip: p.billingZip ?? "",
       city: p.billingCity ?? "",

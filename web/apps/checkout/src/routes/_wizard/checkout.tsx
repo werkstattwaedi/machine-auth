@@ -30,6 +30,7 @@ function CheckoutRoute() {
           ctx.personsDispatch({ type: "UPDATE_PERSON", id: primary.id, updates })
         }
       }}
+      profileBillingAddress={ctx.identifiedUserDoc?.billingAddress ?? null}
       submitting={ctx.submitting}
       submitError={ctx.submitError}
       onBack={() =>
