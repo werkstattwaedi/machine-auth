@@ -28,6 +28,22 @@ ipcRenderer.on("bridge:open-overlay", (_event, url: string) => {
   overlayCallbacks.forEach((cb) => cb(url))
 })
 
+// "Neuer Checkout" reset request/ack channel (issue #415). The chrome button
+// broadcasts `bridge:request-start-over`; the loaded web page listens for it,
+// shows the shared confirm dialog, and broadcasts `bridge:start-over-ack` so
+// the chrome can cancel its timeout fallback.
+const startOverRequestCallbacks = new Set<() => void>()
+
+ipcRenderer.on("bridge:request-start-over", () => {
+  startOverRequestCallbacks.forEach((cb) => cb())
+})
+
+const startOverAckCallbacks = new Set<() => void>()
+
+ipcRenderer.on("bridge:start-over-ack", () => {
+  startOverAckCallbacks.forEach((cb) => cb())
+})
+
 // Bootstrap (mode + features) is delivered synchronously from main so
 // the preload doesn't depend on any sibling module (sandboxed preloads
 // can't reliably resolve relative requires).
@@ -58,6 +74,20 @@ const bridge: Bridge = {
     }
     return () => {
       nfcCallbacks.delete(cb)
+    }
+  },
+  requestStartOver: () => ipcRenderer.send("bridge:request-start-over"),
+  ackStartOver: () => ipcRenderer.send("bridge:start-over-ack"),
+  onStartOverRequest: (cb) => {
+    startOverRequestCallbacks.add(cb)
+    return () => {
+      startOverRequestCallbacks.delete(cb)
+    }
+  },
+  onStartOverAck: (cb) => {
+    startOverAckCallbacks.add(cb)
+    return () => {
+      startOverAckCallbacks.delete(cb)
     }
   },
 }

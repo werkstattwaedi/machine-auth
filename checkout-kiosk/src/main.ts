@@ -6,6 +6,7 @@ import {
   BrowserWindow,
   ipcMain,
   session,
+  webContents,
   type WebContents,
 } from "electron"
 import path from "node:path"
@@ -172,6 +173,31 @@ const bridgeBootstrap = {
 ipcMain.on("bridge:bootstrap", (event) => {
   event.returnValue = bridgeBootstrap
 })
+// "Neuer Checkout" reset request/ack (issue #415). The chrome renderer asks
+// the loaded web page to show its confirm dialog; the page acks once it has
+// the request. Both are broadcast to every webContents (chrome renderer +
+// webview) — the originating sender simply ignores the echo since it doesn't
+// subscribe to the opposite channel.
+function broadcastToAll(channel: string): void {
+  for (const wc of webContents.getAllWebContents()) {
+    try {
+      wc.send(channel)
+    } catch (err) {
+      console.warn(
+        `Failed to broadcast ${channel}:`,
+        err instanceof Error ? err.message : err
+      )
+    }
+  }
+}
+
+ipcMain.on("bridge:request-start-over", () => {
+  broadcastToAll("bridge:request-start-over")
+})
+ipcMain.on("bridge:start-over-ack", () => {
+  broadcastToAll("bridge:start-over-ack")
+})
+
 ipcMain.handle("bridge:get-url", () => config.url)
 ipcMain.handle("bridge:bearer", () => config.bearer || null)
 ipcMain.handle("bridge:reset-session", async () => {

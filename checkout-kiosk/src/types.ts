@@ -30,6 +30,14 @@ export interface Bridge {
   // off-origin link (e.g. the Nutzungsbestimmungen page) — the renderer
   // mounts an in-kiosk overlay webview at `url`. Returns an unsubscribe fn.
   onOpenOverlay: (cb: (url: string) => void) => () => void
+  // "Neuer Checkout" reset flow (issue #415). The chrome button asks the
+  // loaded web page to show its own confirm dialog (single confirm UI) via
+  // `requestStartOver`; the page replies with `ackStartOver` once it has the
+  // request, which lets the chrome cancel its hardware-escape-hatch fallback.
+  requestStartOver: () => void
+  ackStartOver: () => void
+  onStartOverRequest: (cb: () => void) => () => void
+  onStartOverAck: (cb: () => void) => () => void
 }
 
 // Compile-time proof that the kiosk can resolve @oww/shared.
