@@ -25,11 +25,18 @@ export interface Bridge {
   resetSession: () => Promise<void>
   getUrl: () => Promise<string>
   onUrlChange: (cb: (url: string) => void) => () => void
-  onNfcTag: (cb: (payload: NfcTagEvent) => void) => () => void
-  // Fired when the checkout webview requests opening an allowlisted
-  // off-origin link (e.g. the Nutzungsbestimmungen page) — the renderer
-  // mounts an in-kiosk overlay webview at `url`. Returns an unsubscribe fn.
+  // Fired (in the chrome renderer) when the checkout webview requests opening
+  // an allowlisted off-origin link (e.g. the Nutzungsbestimmungen page #425 or
+  // the RaiseNow TWINT paylink #416) — the renderer mounts an in-kiosk overlay
+  // webview at `url`. Returns an unsubscribe fn.
   onOpenOverlay: (cb: (url: string) => void) => () => void
+  // Sent by the chrome renderer once it detects the RaiseNow payment_result
+  // URL on the overlay webview; main re-broadcasts to the checkout webview.
+  notifyPaymentConfirmed: (paymentUuid: string) => void
+  // Subscribed by the checkout webview (web app) to auto-mark the bill paid
+  // when the TWINT payment completes in the overlay. Returns an unsubscribe fn.
+  onPaymentConfirmed: (cb: (paymentUuid: string) => void) => () => void
+  onNfcTag: (cb: (payload: NfcTagEvent) => void) => () => void
   // "Neuer Checkout" reset flow (issue #415). The chrome button asks the
   // loaded web page to show its own confirm dialog (single confirm UI) via
   // `requestStartOver`; the page replies with `ackStartOver` once it has the

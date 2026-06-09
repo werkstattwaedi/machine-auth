@@ -10,7 +10,7 @@ import {
   type WebContents,
 } from "electron"
 import path from "node:path"
-import { decideKioskOverlay } from "@oww/shared"
+import { decideKioskOverlay, RAISENOW_PAYLINK_ORIGIN } from "@oww/shared"
 import { resolveConfig } from "./config"
 import { startNfc } from "./bridge/nfc"
 import type { NfcTagEvent } from "./types"
@@ -20,8 +20,12 @@ const config = resolveConfig()
 // Off-origin URLs the checkout app links to via target="_blank" that should
 // open inside the in-kiosk overlay webview (with a close button) instead of
 // being denied. The webview's default deny-all stays in place for everything
-// else. werkstattwaedi.ch hosts the Nutzungsbestimmungen page (#425).
-const OVERLAY_ALLOWLIST = ["https://werkstattwaedi.ch"] as const
+// else. werkstattwaedi.ch hosts the Nutzungsbestimmungen page (#425); the
+// RaiseNow paylink origin hosts the TWINT payment page (#416).
+const OVERLAY_ALLOWLIST = [
+  "https://werkstattwaedi.ch",
+  RAISENOW_PAYLINK_ORIGIN,
+] as const
 
 // Accept self-signed certs in dev (Vite basicSsl plugin)
 if (config.isDev) {
@@ -91,10 +95,10 @@ function createWindow(): void {
     "did-attach-webview",
     (_event, webviewWebContents) => {
       // Window-opens (target="_blank") stay denied so no native window
-      // spawns. For allowlisted off-origin links (e.g. the
-      // Nutzungsbestimmungen page) we instead ask the chrome renderer to
-      // mount an in-kiosk overlay webview pointing at the URL — the overlay
-      // is torn down on close, so nothing lingers outside the kiosk.
+      // spawns. For allowlisted off-origin links (e.g. the Nutzungsbestimmungen
+      // page #425 or the RaiseNow TWINT paylink #416) we instead ask the chrome
+      // renderer to mount an in-kiosk overlay webview pointing at the URL — the
+      // overlay is torn down on close, so nothing lingers outside the kiosk.
       webviewWebContents.setWindowOpenHandler(({ url }) => {
         if (
           decideKioskOverlay(url, { allowedOverlayOrigins: OVERLAY_ALLOWLIST })
@@ -110,11 +114,14 @@ function createWindow(): void {
           const target = new URL(navUrl).origin
           // The checkout origin is always allowed. Overlay webviews navigate
           // within an allowlisted off-origin (e.g. werkstattwaedi.ch for the
-          // Nutzungsbestimmungen page), so permit those origins too — the
-          // overlay is created and torn down by the renderer.
+          // Nutzungsbestimmungen page, or pay.raisenow.io for the TWINT
+          // paylink), so permit those origins too — the overlay is created and
+          // torn down by the renderer.
           if (
             target !== allowed &&
-            !OVERLAY_ALLOWLIST.includes(target as (typeof OVERLAY_ALLOWLIST)[number])
+            !OVERLAY_ALLOWLIST.includes(
+              target as (typeof OVERLAY_ALLOWLIST)[number]
+            )
           ) {
             console.warn(
               `Blocked webview navigation to off-origin URL: ${navUrl}`
@@ -144,6 +151,23 @@ ipcMain.on("bridge:nfc-subscribe", (event) => {
   if (nfcSubscribers.has(wc)) return
   nfcSubscribers.add(wc)
   wc.once("destroyed", () => nfcSubscribers.delete(wc))
+})
+
+// The chrome renderer detects the RaiseNow payment_result URL on the overlay
+// webview and forwards it here; re-broadcast to every subscribed webContents
+// so the checkout webview (web app) can mark the bill paid (#416). The
+// overlay webview itself is not a subscriber, so it never echoes back.
+ipcMain.on("bridge:payment-confirmed", (_event, paymentUuid: string) => {
+  for (const wc of nfcSubscribers) {
+    try {
+      wc.send("bridge:payment-confirmed", paymentUuid)
+    } catch (err) {
+      console.warn(
+        "Failed to dispatch payment-confirmed event:",
+        err instanceof Error ? err.message : err
+      )
+    }
+  }
 })
 
 function dispatchNfc(event: NfcTagEvent): void {

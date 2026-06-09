@@ -29,6 +29,10 @@ interface BridgeApi {
   requestStartOver?: () => void
   ackStartOver?: () => void
   onStartOverRequest?: (cb: () => void) => () => void
+  // Fired in the checkout webview when the kiosk's overlay detects the
+  // RaiseNow TWINT payment completed (#416). Optional so the web app keeps
+  // working against older kiosk builds without this channel.
+  onPaymentConfirmed?: (cb: (paymentUuid: string) => void) => () => void
 }
 
 interface UseBridgeResult {
@@ -43,6 +47,7 @@ interface UseBridgeResult {
   ackStartOver: () => void
   // Subscribe to the chrome "Neuer Checkout" button. No-op outside the bridge.
   onStartOverRequest: (cb: () => void) => () => void
+  onPaymentConfirmed: (cb: (paymentUuid: string) => void) => () => void
 }
 
 function getBridge(): BridgeApi | undefined {
@@ -77,6 +82,7 @@ export function useBridge(): UseBridgeResult {
         onNfcTag: () => NO_OP_UNSUBSCRIBE,
         ackStartOver: () => {},
         onStartOverRequest: () => NO_OP_UNSUBSCRIBE,
+        onPaymentConfirmed: () => NO_OP_UNSUBSCRIBE,
       }
     }
     return {
@@ -90,6 +96,8 @@ export function useBridge(): UseBridgeResult {
       // gracefully rather than crashing on an undefined call.
       ackStartOver: bridge.ackStartOver ?? (() => {}),
       onStartOverRequest: bridge.onStartOverRequest ?? (() => NO_OP_UNSUBSCRIBE),
+      onPaymentConfirmed:
+        bridge.onPaymentConfirmed ?? (() => NO_OP_UNSUBSCRIBE),
     }
   }, [])
 }
