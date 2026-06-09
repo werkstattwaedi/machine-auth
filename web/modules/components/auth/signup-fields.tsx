@@ -163,7 +163,17 @@ export function SignupFields({
           </Label>
           <p className="text-xs text-muted-foreground">
             Wir haben dir einen 6-stelligen Code an diese Adresse geschickt —
-            so bestätigst du, dass die E-Mail-Adresse dir gehört.
+            so bestätigst du, dass die E-Mail-Adresse dir gehört.{" "}
+            {onResendCode && (
+              <button
+                type="button"
+                onClick={onResendCode}
+                data-testid="signup-resend-code"
+                className="font-medium text-cog-teal-dark underline hover:no-underline"
+              >
+                Code erneut senden
+              </button>
+            )}
           </p>
           <input
             id="signup-code"
@@ -182,16 +192,6 @@ export function SignupFields({
             aria-label="6-stelliger Code"
           />
           {errors?.code && <ErrorBadge message={errors.code} />}
-          {onResendCode && (
-            <button
-              type="button"
-              onClick={onResendCode}
-              data-testid="signup-resend-code"
-              className="self-start mt-1 text-sm font-medium text-cog-teal-dark underline hover:no-underline"
-            >
-              Code erneut senden
-            </button>
-          )}
         </div>
       )}
 

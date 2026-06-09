@@ -505,7 +505,15 @@ export function LoginPage({
                 <p className="text-xs text-muted-foreground">
                   Wir haben dir einen 6-stelligen Code an diese Adresse
                   geschickt — gib ihn ein oder klicke auf den Link in der
-                  E-Mail.
+                  E-Mail.{" "}
+                  <button
+                    type="button"
+                    onClick={handleResendCode}
+                    data-testid="login-resend-code"
+                    className="font-medium text-cog-teal-dark underline hover:no-underline"
+                  >
+                    Code erneut senden
+                  </button>
                 </p>
                 <Input
                   id="login-code"
@@ -527,14 +535,6 @@ export function LoginPage({
                     {codeError}
                   </p>
                 )}
-                <button
-                  type="button"
-                  onClick={handleResendCode}
-                  data-testid="login-resend-code"
-                  className="self-start mt-1 text-sm font-medium text-cog-teal-dark underline hover:no-underline"
-                >
-                  Code erneut senden
-                </button>
                 <Button
                   type="submit"
                   className="w-full h-11 mt-3 text-[15px] bg-cog-teal hover:bg-cog-teal-dark text-white font-semibold"
