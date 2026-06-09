@@ -201,10 +201,13 @@ export function SignupFields({
       )}
 
       {showCode && (
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1.5 rounded-md border border-border bg-muted/40 p-3.5">
           <Label htmlFor="signup-code" className="text-sm font-bold">
             Code aus der E-Mail
           </Label>
+          <p className="text-[13px] text-muted-foreground">
+            Wir haben dir soeben einen 6-stelligen Code per E-Mail geschickt.
+          </p>
           <input
             id="signup-code"
             data-testid="signup-code-input"

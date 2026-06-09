@@ -53,6 +53,18 @@ type Stage =
   | { kind: "signin-code" }
   | { kind: "signup"; via: "code" | "google" | "link" }
 
+/** The 60s per-email resend throttle (`resource-exhausted`). The previously
+ *  sent code is still valid in that case, so callers advance instead of
+ *  dead-ending on an error toast. */
+function isResendThrottleError(err: unknown): boolean {
+  return (
+    !!err &&
+    typeof err === "object" &&
+    "code" in err &&
+    (err as { code: string }).code === "functions/resource-exhausted"
+  )
+}
+
 export function LoginPage({
   defaultRedirect,
   signupEnabled = false,
@@ -110,8 +122,15 @@ export function LoginPage({
       return
     }
     // Signed in without a completed profile → finish sign-up inline. Keep an
-    // already-chosen sign-up stage (e.g. Google prefill) instead of resetting.
-    setStage((prev) => (prev.kind === "signup" ? prev : { kind: "signup", via: "link" }))
+    // already-chosen sign-up stage (e.g. Google prefill) instead of resetting —
+    // EXCEPT the via:"code" stage: the user is signed in now (e.g. they clicked
+    // the magic link in another tab), so the inline code is consumed/moot and
+    // the form must submit via completeSignedInSignup instead.
+    setStage((prev) =>
+      prev.kind === "signup" && prev.via !== "code"
+        ? prev
+        : { kind: "signup", via: "link" },
+    )
   }, [
     user,
     userDoc,
@@ -168,7 +187,17 @@ export function LoginPage({
         return
       }
       const { exists } = await checkAccountExists(email)
-      await requestLoginEmail(email)
+      // The 60s per-email throttle is not a dead end: a prior unconsumed code
+      // stays valid (only a successful re-request invalidates it). Typical
+      // trigger is "Ändern" → same e-mail again — advance to the stage and
+      // tell the user the earlier code still works.
+      let throttled = false
+      try {
+        await requestLoginEmail(email)
+      } catch (err: unknown) {
+        if (isResendThrottleError(err)) throttled = true
+        else throw err
+      }
       if (exists) {
         setStage({ kind: "signin-code" })
         setSigninCode("")
@@ -178,7 +207,11 @@ export function LoginPage({
         setSignupErrors({})
         setStage({ kind: "signup", via: "code" })
       }
-      toast.success("E-Mail gesendet!")
+      if (throttled) {
+        toast.info("Wir haben dir bereits eine E-Mail geschickt — der Code ist noch gültig.")
+      } else {
+        toast.success("E-Mail gesendet!")
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Fehler"
       toast.error(`Fehler: ${message}`)
@@ -278,14 +311,24 @@ export function LoginPage({
 
   const emailForm = (
     <form onSubmit={handleEmailSubmit} className="space-y-4" data-testid="login-email-stage">
-      <Input
-        type="email"
-        placeholder="deine@email.ch"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        required
-        data-testid="login-email-input"
-      />
+      <div className="space-y-1.5">
+        <label
+          htmlFor="login-email"
+          className="block text-sm font-bold text-left"
+        >
+          E-Mail-Adresse
+        </label>
+        <Input
+          id="login-email"
+          type="email"
+          placeholder="deine@email.ch"
+          autoComplete="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          data-testid="login-email-input"
+        />
+      </div>
       <Button
         type="submit"
         className="w-full bg-cog-teal hover:bg-cog-teal-dark text-white font-semibold"
@@ -307,16 +350,39 @@ export function LoginPage({
           ? "Anmelden oder Konto erstellen"
           : "Anmelden"
 
+  // One line of context under the heading so the user knows why they're
+  // looking at this stage (a typo'd e-mail on the sign-up branch would
+  // otherwise be invisible — the e-mail is shown with an Ändern escape).
+  const headingHint =
+    stage.kind === "signup"
+      ? stage.via === "code"
+        ? "Für diese E-Mail-Adresse gibt es noch kein Konto."
+        : "Noch ein paar Angaben, dann ist dein Konto bereit."
+      : null
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <div className="w-full max-w-sm space-y-8">
+      <div
+        className={
+          stage.kind === "signup"
+            ? "w-full max-w-md space-y-8"
+            : "w-full max-w-sm space-y-8"
+        }
+      >
         <div className="flex flex-col items-center gap-4">
           <img src="/logo_oww.png" alt="Offene Werkstatt Wädenswil" className="h-14" />
           {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
         </div>
 
         <div className="border border-border rounded p-6 space-y-4">
-          <h2 className="text-lg font-bold text-center">{heading}</h2>
+          <div className="space-y-1">
+            <h2 className="text-lg font-bold text-center">{heading}</h2>
+            {headingHint && (
+              <p className="text-sm text-muted-foreground text-center">
+                {headingHint}
+              </p>
+            )}
+          </div>
 
           {stage.kind === "email" && (
             <>
@@ -398,15 +464,18 @@ export function LoginPage({
           {stage.kind === "signup" && (
             <div className="space-y-4" data-testid="login-signup-stage">
               {(email || user?.email) && (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground truncate">
-                    {email || user?.email}
+                <div className="flex items-center justify-between gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
+                  <span className="flex items-center gap-2 min-w-0">
+                    <Mail className="h-4 w-4 text-cog-teal shrink-0" />
+                    <span className="font-medium truncate">
+                      {email || user?.email}
+                    </span>
                   </span>
                   {stage.via === "code" && (
                     <button
                       type="button"
                       onClick={handleUseDifferentEmail}
-                      className="text-cog-teal hover:underline shrink-0 ml-2"
+                      className="text-cog-teal hover:underline shrink-0"
                     >
                       Ändern
                     </button>
