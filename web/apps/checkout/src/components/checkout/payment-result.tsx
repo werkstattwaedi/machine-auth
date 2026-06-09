@@ -72,6 +72,12 @@ interface PaymentResultProps {
   /** Gates the monthly-bill (Sammelrechnung) tab — only Vereinsmitglieder
    *  see it; the Firestore rule also requires activeMembership. */
   isMember: boolean
+  /**
+   * Kiosk mode (shared machine). When true the "Rechnung als PDF" download
+   * is hidden — we don't want invoices downloaded to the shared kiosk's
+   * local disk (issue #418). The customer still gets the invoice by email.
+   */
+  kiosk?: boolean
 }
 
 const COMMIT_LABELS: Record<PaymentMethod, string> = {
@@ -86,6 +92,7 @@ export function PaymentResult({
   onReset,
   initialPaymentData,
   isMember,
+  kiosk = false,
 }: PaymentResultProps) {
   const db = useDb()
   const functions = useFunctions()
@@ -276,19 +283,23 @@ export function PaymentResult({
             {totalPrice.toFixed(2)}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={handleDownloadPdf}
-          disabled={downloadMutation.loading}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-md transition-colors disabled:opacity-50"
-        >
-          {downloadMutation.loading ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Download className="h-3.5 w-3.5" />
-          )}
-          Rechnung als PDF
-        </button>
+        {/* Hidden on the kiosk (issue #418): the shared machine must not
+            download invoice PDFs to its local disk. */}
+        {!kiosk && (
+          <button
+            type="button"
+            onClick={handleDownloadPdf}
+            disabled={downloadMutation.loading}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-md transition-colors disabled:opacity-50"
+          >
+            {downloadMutation.loading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Download className="h-3.5 w-3.5" />
+            )}
+            Rechnung als PDF
+          </button>
+        )}
       </div>
 
       {/* Vertical tabs — teal left rail on the active option */}
