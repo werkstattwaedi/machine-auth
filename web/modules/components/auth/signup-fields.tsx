@@ -104,12 +104,19 @@ export function SignupFields({
   errors,
   onChange,
   showCode,
+  email,
+  emailAction,
 }: {
   value: SignupFieldsValue
   errors?: SignupFieldsErrors
   onChange: (patch: Partial<SignupFieldsValue>) => void
   /** Show the inline 6-digit code field (e-mail-code sign-up). */
   showCode: boolean
+  /** The account's e-mail, shown as a read-only field at the top. */
+  email?: string
+  /** Escape next to the e-mail field — "Ändern" (back to the e-mail stage)
+   *  or "Abmelden" (drop a half-signed-in Google/magic-link session). */
+  emailAction?: { label: string; onClick: () => void }
 }) {
   const isFirma = value.userType === "firma"
   const cls = (field: "firstName" | "lastName") =>
@@ -117,37 +124,92 @@ export function SignupFields({
 
   return (
     <div className="flex flex-col gap-5 text-left">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {email && (
         <div className="flex flex-col gap-1">
-          <Label htmlFor="signup-firstname" className="text-sm font-bold">
-            Vorname
+          <div className="flex items-baseline justify-between">
+            <Label htmlFor="signup-email" className="text-sm font-bold">
+              E-Mail
+            </Label>
+            {emailAction && (
+              <button
+                type="button"
+                onClick={emailAction.onClick}
+                className="text-sm font-medium text-cog-teal-dark underline hover:no-underline"
+              >
+                {emailAction.label}
+              </button>
+            )}
+          </div>
+          <input
+            id="signup-email"
+            data-testid="signup-email"
+            value={email}
+            readOnly
+            tabIndex={-1}
+            className={`${INPUT_OK} bg-muted/50 text-muted-foreground focus:border-[#ccc] focus:ring-0`}
+          />
+        </div>
+      )}
+
+      {showCode && (
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="signup-code" className="text-sm font-bold">
+            Bestätigungscode
             <span className="text-destructive -ml-1">*</span>
           </Label>
+          <p className="text-xs text-muted-foreground">
+            Wir haben dir einen 6-stelligen Code an diese Adresse geschickt —
+            so bestätigen wir, dass die E-Mail-Adresse dir gehört.
+          </p>
           <input
-            id="signup-firstname"
-            data-testid="signup-firstname"
-            value={value.firstName}
-            onChange={(e) => onChange({ firstName: e.target.value })}
-            className={cls("firstName")}
-            autoComplete="given-name"
+            id="signup-code"
+            data-testid="signup-code-input"
+            type="text"
+            inputMode="numeric"
+            pattern="\d{6}"
+            maxLength={6}
+            autoComplete="one-time-code"
+            placeholder="123456"
+            value={value.code}
+            onChange={(e) =>
+              onChange({ code: e.target.value.replace(/\D/g, "") })
+            }
+            className={`${errors?.code ? INPUT_ERR : INPUT_OK} text-center text-xl tracking-widest`}
+            aria-label="6-stelliger Code"
           />
-          {errors?.firstName && <ErrorBadge message={errors.firstName} />}
+          {errors?.code && <ErrorBadge message={errors.code} />}
         </div>
-        <div className="flex flex-col gap-1">
-          <Label htmlFor="signup-lastname" className="text-sm font-bold">
-            Nachname
-            <span className="text-destructive -ml-1">*</span>
-          </Label>
-          <input
-            id="signup-lastname"
-            data-testid="signup-lastname"
-            value={value.lastName}
-            onChange={(e) => onChange({ lastName: e.target.value })}
-            className={cls("lastName")}
-            autoComplete="family-name"
-          />
-          {errors?.lastName && <ErrorBadge message={errors.lastName} />}
-        </div>
+      )}
+
+      <div className="flex flex-col gap-1">
+        <Label htmlFor="signup-firstname" className="text-sm font-bold">
+          Vorname
+          <span className="text-destructive -ml-1">*</span>
+        </Label>
+        <input
+          id="signup-firstname"
+          data-testid="signup-firstname"
+          value={value.firstName}
+          onChange={(e) => onChange({ firstName: e.target.value })}
+          className={cls("firstName")}
+          autoComplete="given-name"
+        />
+        {errors?.firstName && <ErrorBadge message={errors.firstName} />}
+      </div>
+      <div className="flex flex-col gap-1">
+        <Label htmlFor="signup-lastname" className="text-sm font-bold">
+          Nachname
+          <span className="text-destructive -ml-1">*</span>
+        </Label>
+        <input
+          id="signup-lastname"
+          data-testid="signup-lastname"
+          value={value.lastName}
+          onChange={(e) => onChange({ lastName: e.target.value })}
+          className={cls("lastName")}
+          autoComplete="family-name"
+        />
+        {errors?.lastName && <ErrorBadge message={errors.lastName} />}
       </div>
 
       {/* Member type as a light segmented control (the round radios read
@@ -202,32 +264,6 @@ export function SignupFields({
             idPrefix="signup-addr"
           />
         </>
-      )}
-
-      {showCode && (
-        <div className="flex flex-col gap-1">
-          <Label htmlFor="signup-code" className="text-sm font-bold">
-            Code aus der E-Mail
-            <span className="text-destructive -ml-1">*</span>
-          </Label>
-          <input
-            id="signup-code"
-            data-testid="signup-code-input"
-            type="text"
-            inputMode="numeric"
-            pattern="\d{6}"
-            maxLength={6}
-            autoComplete="one-time-code"
-            placeholder="123456"
-            value={value.code}
-            onChange={(e) =>
-              onChange({ code: e.target.value.replace(/\D/g, "") })
-            }
-            className={`${errors?.code ? INPUT_ERR : INPUT_OK} text-center text-xl tracking-widest`}
-            aria-label="6-stelliger Code"
-          />
-          {errors?.code && <ErrorBadge message={errors.code} />}
-        </div>
       )}
 
       <div className="flex flex-col gap-2">

@@ -85,6 +85,7 @@ export function LoginPage({
     verifyLoginCodeAndCreateProfile,
     completeSignedInSignup,
     signInWithGoogle,
+    signOut,
     pendingGoogleLink,
   } = useAuth()
   const navigate = useNavigate()
@@ -275,6 +276,22 @@ export function LoginPage({
     setSignupErrors({})
   }
 
+  // Escape for a half-signed-in session (Google / magic link without a
+  // completed profile): the redirect effect pins /login to the sign-up
+  // stage for such a principal, so without this the user can neither
+  // switch accounts nor log out.
+  const handleSignOutAndRestart = async () => {
+    try {
+      await signOut()
+    } catch (err) {
+      console.error("signOut failed", err)
+    }
+    setEmail("")
+    setSignupValue(EMPTY_SIGNUP_VALUE)
+    setSignupErrors({})
+    setStage({ kind: "email" })
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -365,23 +382,26 @@ export function LoginPage({
         ? "Melde dich mit deiner E-Mail-Adresse an oder erstelle ein neues Konto."
         : null
 
-  // Layout follows the design-system LoginScreen: a top-aligned 440px column
-  // (no card box, no vertical centering), logo on top, slab heading, muted
-  // intro line. Text is left-aligned like every other page heading in the
-  // product; only the column itself is centered.
+  // Same shell as the rest of the product: a slim header bar with the logo
+  // (mirrors the wizard layout), then a top-aligned 440px column with a
+  // left-aligned slab heading. Only the column itself is centered.
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-[440px] mx-auto px-6 pt-10 pb-16">
-        <img
-          src="/logo_oww.png"
-          alt="Offene Werkstatt Wädenswil"
-          className="h-[72px] sm:h-[93px] mb-2"
-        />
-        {subtitle && (
-          <p className="text-sm text-muted-foreground">{subtitle}</p>
-        )}
+      <header className="w-full bg-background border-b border-border">
+        <div className="w-full max-w-[1000px] mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
+          <img
+            src="/logo_oww.png"
+            alt="Offene Werkstatt Wädenswil"
+            className="h-12 shrink-0"
+          />
+          {subtitle && (
+            <span className="text-sm text-muted-foreground">{subtitle}</span>
+          )}
+        </div>
+      </header>
 
-        <h1 className="font-heading font-bold text-[28px] leading-tight mt-6 mb-2">
+      <div className="max-w-[440px] mx-auto px-6 pt-10 pb-16">
+        <h1 className="font-heading font-bold text-[28px] leading-tight mb-2">
           {heading}
         </h1>
         {headingHint && (
@@ -469,38 +489,18 @@ export function LoginPage({
 
           {stage.kind === "signup" && (
             <div className="flex flex-col gap-5" data-testid="login-signup-stage">
-              {stage.via === "code" ? (
-                <div className="flex items-start gap-3 rounded-lg bg-cog-teal-light p-4 text-sm text-cog-teal-dark">
-                  <Mail className="h-5 w-5 shrink-0 mt-0.5" />
-                  <span className="min-w-0">
-                    Code an <strong className="break-all">{email}</strong> gesendet.
-                    Prüfe dein Postfach.{" "}
-                    <button
-                      type="button"
-                      onClick={handleUseDifferentEmail}
-                      className="font-medium underline hover:no-underline"
-                    >
-                      Ändern
-                    </button>
-                  </span>
-                </div>
-              ) : (
-                (email || user?.email) && (
-                  <p className="text-sm text-muted-foreground">
-                    Angemeldet als{" "}
-                    <strong className="text-foreground break-all">
-                      {email || user?.email}
-                    </strong>
-                  </p>
-                )
-              )}
-
               <form onSubmit={handleSignupSubmit} className="flex flex-col gap-5">
                 <SignupFields
                   value={signupValue}
                   errors={signupErrors}
                   onChange={(patch) => setSignupValue((v) => ({ ...v, ...patch }))}
                   showCode={stage.via === "code"}
+                  email={email || user?.email || undefined}
+                  emailAction={
+                    stage.via === "code"
+                      ? { label: "Ändern", onClick: handleUseDifferentEmail }
+                      : { label: "Abmelden", onClick: handleSignOutAndRestart }
+                  }
                 />
                 <Button
                   type="submit"
