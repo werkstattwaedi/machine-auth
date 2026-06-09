@@ -276,6 +276,37 @@ export function LoginPage({
     setSignupErrors({})
   }
 
+  // Re-send the code without leaving the stage — an expired code (5 min TTL)
+  // must not be a dead end. The server only throttles while a code is still
+  // active, so an expired/consumed code gets a fresh one immediately.
+  const handleResendCode = async () => {
+    if (sending) return
+    setSending(true)
+    try {
+      let throttled = false
+      try {
+        await requestLoginEmail(email)
+      } catch (err: unknown) {
+        if (isResendThrottleError(err)) throttled = true
+        else throw err
+      }
+      setSigninCode("")
+      setCodeError(null)
+      setSignupValue((v) => ({ ...v, code: "" }))
+      setSignupErrors((e) => ({ ...e, code: undefined }))
+      if (throttled) {
+        toast.info("Wir haben dir bereits eine E-Mail geschickt — der Code ist noch gültig.")
+      } else {
+        toast.success("Neuer Code gesendet!")
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Fehler"
+      toast.error(`Fehler: ${message}`)
+    } finally {
+      setSending(false)
+    }
+  }
+
   // Escape for a half-signed-in session (Google / magic link without a
   // completed profile): the redirect effect pins /login to the sign-up
   // stage for such a principal, so without this the user can neither
@@ -388,7 +419,9 @@ export function LoginPage({
   return (
     <div className="min-h-screen bg-background">
       <header className="w-full bg-background border-b border-border">
-        <div className="w-full max-w-[1000px] mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
+        {/* Header inner width matches the 440px content column so the logo
+            sits flush with the heading below. */}
+        <div className="w-full max-w-[440px] mx-auto px-6 py-3 flex items-center justify-between gap-4">
           <img
             src="/logo_oww.png"
             alt="Offene Werkstatt Wädenswil"
@@ -477,13 +510,23 @@ export function LoginPage({
                 </Button>
               </form>
 
-              <button
-                type="button"
-                onClick={handleUseDifferentEmail}
-                className="self-start text-sm font-medium text-cog-teal-dark underline hover:no-underline"
-              >
-                Andere E-Mail-Adresse verwenden
-              </button>
+              <div className="flex flex-col items-start gap-2">
+                <button
+                  type="button"
+                  onClick={handleResendCode}
+                  data-testid="login-resend-code"
+                  className="text-sm font-medium text-cog-teal-dark underline hover:no-underline"
+                >
+                  Code erneut senden
+                </button>
+                <button
+                  type="button"
+                  onClick={handleUseDifferentEmail}
+                  className="text-sm font-medium text-cog-teal-dark underline hover:no-underline"
+                >
+                  Andere E-Mail-Adresse verwenden
+                </button>
+              </div>
             </div>
           )}
 
@@ -501,6 +544,7 @@ export function LoginPage({
                       ? { label: "Ändern", onClick: handleUseDifferentEmail }
                       : { label: "Abmelden", onClick: handleSignOutAndRestart }
                   }
+                  onResendCode={stage.via === "code" ? handleResendCode : undefined}
                 />
                 <Button
                   type="submit"

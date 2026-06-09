@@ -106,6 +106,7 @@ export function SignupFields({
   showCode,
   email,
   emailAction,
+  onResendCode,
 }: {
   value: SignupFieldsValue
   errors?: SignupFieldsErrors
@@ -117,6 +118,9 @@ export function SignupFields({
   /** Escape next to the e-mail field — "Ändern" (back to the e-mail stage)
    *  or "Abmelden" (drop a half-signed-in Google/magic-link session). */
   emailAction?: { label: string; onClick: () => void }
+  /** Request a fresh code — shown under the code field so an expired code
+   *  (5 min TTL) isn't a dead end. */
+  onResendCode?: () => void
 }) {
   const isFirma = value.userType === "firma"
   const cls = (field: "firstName" | "lastName") =>
@@ -159,7 +163,7 @@ export function SignupFields({
           </Label>
           <p className="text-xs text-muted-foreground">
             Wir haben dir einen 6-stelligen Code an diese Adresse geschickt —
-            so bestätigen wir, dass die E-Mail-Adresse dir gehört.
+            so bestätigst du, dass die E-Mail-Adresse dir gehört.
           </p>
           <input
             id="signup-code"
@@ -178,44 +182,28 @@ export function SignupFields({
             aria-label="6-stelliger Code"
           />
           {errors?.code && <ErrorBadge message={errors.code} />}
+          {onResendCode && (
+            <button
+              type="button"
+              onClick={onResendCode}
+              data-testid="signup-resend-code"
+              className="self-start mt-1 text-sm font-medium text-cog-teal-dark underline hover:no-underline"
+            >
+              Code erneut senden
+            </button>
+          )}
         </div>
       )}
 
-      <div className="flex flex-col gap-1">
-        <Label htmlFor="signup-firstname" className="text-sm font-bold">
-          Vorname
-          <span className="text-destructive -ml-1">*</span>
-        </Label>
-        <input
-          id="signup-firstname"
-          data-testid="signup-firstname"
-          value={value.firstName}
-          onChange={(e) => onChange({ firstName: e.target.value })}
-          className={cls("firstName")}
-          autoComplete="given-name"
-        />
-        {errors?.firstName && <ErrorBadge message={errors.firstName} />}
-      </div>
-      <div className="flex flex-col gap-1">
-        <Label htmlFor="signup-lastname" className="text-sm font-bold">
-          Nachname
-          <span className="text-destructive -ml-1">*</span>
-        </Label>
-        <input
-          id="signup-lastname"
-          data-testid="signup-lastname"
-          value={value.lastName}
-          onChange={(e) => onChange({ lastName: e.target.value })}
-          className={cls("lastName")}
-          autoComplete="family-name"
-        />
-        {errors?.lastName && <ErrorBadge message={errors.lastName} />}
-      </div>
-
       {/* Member type as a light segmented control (the round radios read
-          heavy here). The helper line explains why we ask at all. */}
+          heavy here). Placed before the name so a Firma flows naturally
+          into its contact person + address. Hint above the control,
+          matching the Bestätigungscode pattern. */}
       <div className="flex flex-col gap-1">
         <Label className="text-sm font-bold">Nutzer:in</Label>
+        <p className="text-xs text-muted-foreground">
+          Bestimmt den Eintrittspreis in der Werkstatt.
+        </p>
         <div
           role="radiogroup"
           aria-label="Nutzer:in"
@@ -246,9 +234,37 @@ export function SignupFields({
             ),
           )}
         </div>
-        <p className="text-xs text-muted-foreground">
-          Bestimmt die Eintritts- und Mitgliederpreise.
-        </p>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <Label htmlFor="signup-firstname" className="text-sm font-bold">
+          Vorname
+          <span className="text-destructive -ml-1">*</span>
+        </Label>
+        <input
+          id="signup-firstname"
+          data-testid="signup-firstname"
+          value={value.firstName}
+          onChange={(e) => onChange({ firstName: e.target.value })}
+          className={cls("firstName")}
+          autoComplete="given-name"
+        />
+        {errors?.firstName && <ErrorBadge message={errors.firstName} />}
+      </div>
+      <div className="flex flex-col gap-1">
+        <Label htmlFor="signup-lastname" className="text-sm font-bold">
+          Nachname
+          <span className="text-destructive -ml-1">*</span>
+        </Label>
+        <input
+          id="signup-lastname"
+          data-testid="signup-lastname"
+          value={value.lastName}
+          onChange={(e) => onChange({ lastName: e.target.value })}
+          className={cls("lastName")}
+          autoComplete="family-name"
+        />
+        {errors?.lastName && <ErrorBadge message={errors.lastName} />}
       </div>
 
       {isFirma && (
