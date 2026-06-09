@@ -11,7 +11,7 @@
 import { describe, expect, it } from "vitest"
 import type { UserDoc } from "@modules/lib/auth"
 import type { TokenUser } from "@modules/lib/token-auth"
-import { deriveDiscountLevel } from "./wizard-context"
+import { deriveDiscountLevel, deriveIsMember } from "./wizard-context"
 
 const baseUserDoc: UserDoc = {
   id: "u-self",
@@ -64,5 +64,43 @@ describe("deriveDiscountLevel", () => {
 
   it("charges no discount for a fully anonymous checkout", () => {
     expect(deriveDiscountLevel(null, null)).toBe("none")
+  })
+})
+
+/**
+ * Regression cover for issue #414: the Sammelrechnung payment tab and the
+ * "Vereinsmitglied" check-in badge are gated on a membership flag. The
+ * pre-fix call sites read `!!identifiedUserDoc?.activeMembership`, which is
+ * always false for a tag tap (`identifiedUserDoc === null`), so a tag-tapping
+ * member was offered neither. `deriveIsMember` ORs both principals so the
+ * tag user's server-derived membership boolean is honoured.
+ */
+describe("deriveIsMember", () => {
+  it("is a member for a logged-in member", () => {
+    const member: UserDoc = { ...baseUserDoc, activeMembership: MEMBERSHIP_REF }
+    expect(deriveIsMember(member, null)).toBe(true)
+  })
+
+  it("is a member for a tag-auth member (issue #414)", () => {
+    // The failing case today: identifiedUserDoc is null for a tag tap, so the
+    // old `!!identifiedUserDoc?.activeMembership` expression returned false and
+    // hid the monthly-bill tab. The tag user's membership boolean must win.
+    expect(deriveIsMember(null, tagUser(true))).toBe(true)
+  })
+
+  it("is not a member for a tag-auth non-member", () => {
+    expect(deriveIsMember(null, tagUser(false))).toBe(false)
+  })
+
+  it("is not a member for a tag user with undefined membership", () => {
+    expect(deriveIsMember(null, tagUser(undefined))).toBe(false)
+  })
+
+  it("is not a member when neither principal is a member", () => {
+    expect(deriveIsMember(baseUserDoc, null)).toBe(false)
+  })
+
+  it("is not a member for a fully anonymous checkout", () => {
+    expect(deriveIsMember(null, null)).toBe(false)
   })
 })

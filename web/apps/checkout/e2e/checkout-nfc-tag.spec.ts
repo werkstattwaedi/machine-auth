@@ -71,6 +71,15 @@ test.describe("NFC tag checkout", () => {
       timeout: 10_000,
     })
 
+    // Issue #414: the seeded NFC user is a Vereinsmitglied, so the
+    // Sammelrechnung (monthly-bill) payment tab must be offered even though
+    // the tag-tap principal has no client-side user doc. Before the fix the
+    // tab was gated on `identifiedUserDoc?.activeMembership` (null for a tag
+    // tap) and the member only ever saw QR-Rechnung + TWINT.
+    await expect(
+      page.getByRole("tab", { name: "Sammelrechnung" }),
+    ).toBeVisible()
+
     // ── Verify Firestore ──
     const checkouts = await getCheckoutDocs()
     expect(checkouts.length).toBeGreaterThanOrEqual(1)

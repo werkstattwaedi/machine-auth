@@ -38,7 +38,7 @@ function PaymentRoute() {
         checkoutId={ctx.paymentData.checkoutId}
         totalPrice={ctx.totalPrice}
         initialPaymentData={ctx.paymentData}
-        isMember={!!ctx.identifiedUserDoc?.activeMembership}
+        isMember={ctx.isMember}
         kiosk={ctx.kiosk}
         onReset={() => setCompleted(true)}
       />
