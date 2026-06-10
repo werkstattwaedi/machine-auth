@@ -171,6 +171,12 @@ ipcMain.on("bridge:payment-confirmed", (_event, paymentUuid: string) => {
 })
 
 function dispatchNfc(event: NfcTagEvent): void {
+  // Subscriber count matters while chasing silent taps: 0 means nobody is
+  // listening (webview not loaded / preload not run), 1 is usually only the
+  // chrome renderer — the checkout web app expects to be the 2nd.
+  console.log(
+    `[nfc] dispatching tag event to ${nfcSubscribers.size} subscriber(s)`
+  )
   for (const wc of nfcSubscribers) {
     try {
       wc.send("bridge:nfc-tag", event)
