@@ -76,8 +76,12 @@ export function hasPreservableState({
  * users — the screensaver/refresh dance is only meaningful at the
  * Werkstatt's kiosk terminal. After 5 minutes of inactivity we surface a
  * "Bist du noch da?" dialog with a 30-second auto-close countdown; if the
- * countdown runs out the wizard resets to /checkin (bridge session wiped
- * inside `resetWizard`).
+ * countdown runs out the terminal is handed to the next person via
+ * `startOver` — the same strong wipe as the Electron chrome's "Neuer
+ * Checkout" (signOut + bridge partition wipe + hard reload). A soft
+ * `resetWizard` is not enough here: it keeps the in-memory Firebase
+ * session alive, so the previous visitor's open checkout would rehydrate
+ * straight back onto the fresh /checkin.
  *
  * Phase 5 of the wizard-routes refactor — previously this logic lived in
  * the giant CheckoutWizard component and (incorrectly) also fired for
@@ -86,7 +90,7 @@ export function hasPreservableState({
 export function KioskInactivityWatcher() {
   const {
     kiosk,
-    resetWizard,
+    startOver,
     openCheckout,
     checkoutId,
     pendingCheckout,
@@ -160,8 +164,9 @@ export function KioskInactivityWatcher() {
       setSecondsLeft((s) => {
         if (s <= 1) {
           window.clearInterval(interval)
-          // Fire-and-forget; resetWizard handles the navigate + signOut.
-          void resetWizard()
+          // Fire-and-forget; startOver handles signOut + bridge wipe +
+          // hard reload to a fresh /checkin?kiosk.
+          void startOver()
           setOpen(false)
           return 0
         }
