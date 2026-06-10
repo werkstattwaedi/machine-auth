@@ -89,8 +89,8 @@ test.describe("Self-registration (combined sign-in/sign-up)", () => {
     await page.goto("/")
     await expect(page.getByText("Deine Angaben")).toBeVisible({ timeout: 10_000 })
 
-    // ── Click "Registrieren" in the identity hint → combined login ──
-    await page.getByRole("button", { name: "Registrieren" }).click()
+    // ── Click the combined login link in the identity hint ──
+    await page.getByRole("button", { name: "Anmelden oder registrieren" }).click()
     await page.waitForURL((url) => url.pathname === "/login", { timeout: 5_000 })
     await expect(page.getByText("Anmelden oder Konto erstellen")).toBeVisible()
 
