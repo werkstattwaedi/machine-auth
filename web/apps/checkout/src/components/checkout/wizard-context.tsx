@@ -82,6 +82,15 @@ export interface WizardContextValue {
    * payment tab and the "Vereinsmitglied" check-in badge (issue #414).
    */
   isMember: boolean
+  /**
+   * True while a tapped badge is being verified against the backend and the
+   * Firebase session is established. The verify RPC + custom-token sign-in
+   * take noticeably longer than the physical NFC read, so the wizard shows a
+   * blocking overlay (TagAuthOverlay) for immediate tap feedback.
+   */
+  tagAuthLoading: boolean
+  /** Error message when badge verification failed; null otherwise. */
+  tagAuthError: string | null
   // ----- query results -----
   openCheckout: CheckoutDoc | null
   checkoutId: string | null
@@ -188,10 +197,13 @@ export function WizardProvider({
   const navigate = useNavigate()
   const auth = useFirebaseAuth()
   const { user, userDoc, signOut, signInAnonymouslyIfNeeded } = useAuth()
-  const { tokenUser, isTagAuth, tagSignOut } = useTokenAuth(
-    picc ?? null,
-    cmac ?? null,
-  )
+  const {
+    tokenUser,
+    isTagAuth,
+    tagSignOut,
+    loading: tagAuthLoading,
+    error: tagAuthError,
+  } = useTokenAuth(picc ?? null, cmac ?? null)
   const bridge = useBridge()
   const fsMutation = useFirestoreMutation()
   const { add, update, remove } = fsMutation
@@ -779,6 +791,8 @@ export function WizardProvider({
     identifiedUserDoc,
     identifiedUserRef,
     isMember,
+    tagAuthLoading,
+    tagAuthError,
     openCheckout: openCheckout ?? null,
     checkoutId,
     pendingCheckout,

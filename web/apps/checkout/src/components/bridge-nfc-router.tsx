@@ -3,7 +3,15 @@
 
 import { useEffect } from "react"
 import { useNavigate } from "@tanstack/react-router"
+import { toast } from "sonner"
 import { useBridge } from "@modules/lib/use-bridge"
+
+// A tap that can't even be routed (NDEF read failed, or the URL lacks the
+// SDM params) used to be silently swallowed — the kiosk gave zero feedback
+// and users assumed the reader was broken. Surface it as a toast; the
+// verify-in-progress feedback lives in TagAuthOverlay.
+const UNREADABLE_TAG_MESSAGE =
+  "Badge konnte nicht gelesen werden. Bitte nochmals auflegen."
 
 /**
  * Kiosk-mode bridge listener. When an NFC tag is read by the Electron
@@ -36,14 +44,20 @@ export function BridgeNfcRouter(): null {
     if (!bridge.features.includes("nfc")) return
 
     return bridge.onNfcTag(({ url }) => {
-      if (!url) return
+      if (!url) {
+        toast.error(UNREADABLE_TAG_MESSAGE)
+        return
+      }
       try {
         const parsed = new URL(url)
         const picc =
           parsed.searchParams.get("picc") ?? parsed.searchParams.get("e")
         const cmac =
           parsed.searchParams.get("cmac") ?? parsed.searchParams.get("m")
-        if (!picc || !cmac) return
+        if (!picc || !cmac) {
+          toast.error(UNREADABLE_TAG_MESSAGE)
+          return
+        }
         // TanStack Router types the `search` shape per route. We're forcing
         // navigation to `/checkin` regardless of the current route, so cast
         // to the permissive shape the checkin route validates against.
@@ -54,6 +68,7 @@ export function BridgeNfcRouter(): null {
         })
       } catch (err) {
         console.error("Failed to parse NFC URL:", err)
+        toast.error(UNREADABLE_TAG_MESSAGE)
       }
     })
   }, [bridge.available, bridge.features, bridge.onNfcTag, navigate])
