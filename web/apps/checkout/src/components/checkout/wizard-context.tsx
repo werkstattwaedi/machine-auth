@@ -61,6 +61,8 @@ import {
   type CheckoutPerson,
   type PersonsAction,
 } from "./use-checkout-state"
+import { hasPreservableState } from "./kiosk-inactivity-watcher"
+import { registerKioskSessionGuard } from "./kiosk-session-guard"
 import type { FamilyCandidate } from "./step-checkin"
 import type { PaymentData } from "./payment-result"
 import { computeCheckoutCosts } from "./step-checkout"
@@ -93,6 +95,13 @@ export interface WizardContextValue {
   tagAuthError: string | null
   // ----- query results -----
   openCheckout: CheckoutDoc | null
+  /**
+   * True until the open-checkout subscription for the current principal has
+   * resolved its first snapshot. TagVisitRedirect waits on this so it can
+   * make a one-shot routing decision (open checkout at identification time
+   * → /visit) without misreading "query still loading" as "no checkout".
+   */
+  openCheckoutLoading: boolean
   checkoutId: string | null
   /**
    * True while `persistPersons` has written a new checkout doc but the
@@ -252,7 +261,7 @@ export function WizardProvider({
 
   // Find open checkout for the current principal.
   const anonUid = isAnonymous && user?.isAnonymous ? user.uid : null
-  const { data: openCheckouts } = useCollection(
+  const { data: openCheckouts, loading: openCheckoutLoading } = useCollection(
     identifiedUserRef
       ? checkoutsCollection(db)
       : anonUid
@@ -424,6 +433,19 @@ export function WizardProvider({
     rehydratedRef.current = openCheckout.id
   }, [openCheckout, personsDispatch])
 
+  // Publish "does this session hold anything worth protecting?" to the
+  // module-level kiosk session guard so BridgeNfcRouter (mounted at the
+  // root, outside the wizard) can ask before discarding the session on a
+  // badge tap. Read through a ref so the registered getter is always
+  // current without re-registering on every render.
+  const guardStateRef = useRef({
+    openCheckout: openCheckout as CheckoutDoc | null,
+    checkoutId,
+    pendingCheckout: false,
+    items,
+    persons,
+  })
+
   // Bridge the "we just wrote a checkout, listener hasn't surfaced it
   // yet" gap. /checkin's onAdvance navigates to /visit synchronously
   // after persistPersons resolves, but the onSnapshot callback only
@@ -433,6 +455,20 @@ export function WizardProvider({
   useEffect(() => {
     if (openCheckout && pendingCheckout) setPendingCheckout(false)
   }, [openCheckout, pendingCheckout])
+
+  // Keep the guard snapshot current on every render; register the getter
+  // once per provider mount.
+  guardStateRef.current = {
+    openCheckout: openCheckout ?? null,
+    checkoutId,
+    pendingCheckout,
+    items,
+    persons,
+  }
+  useEffect(
+    () => registerKioskSessionGuard(() => hasPreservableState(guardStateRef.current)),
+    [],
+  )
 
   // Persist the current persons array to the open checkout doc.
   const persistPersons = useCallback(async () => {
@@ -794,6 +830,7 @@ export function WizardProvider({
     tagAuthLoading,
     tagAuthError,
     openCheckout: openCheckout ?? null,
+    openCheckoutLoading,
     checkoutId,
     pendingCheckout,
     items,
