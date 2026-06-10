@@ -484,6 +484,16 @@ test.describe("Checkout step screenshots", () => {
     testInfo.setTimeout(60_000)
     await submitAndWaitForPaymentResult(page)
 
+    // The Sammelrechnung tab is gated by `activeMembership`. The preceding
+    // member test seeds it and the describe-level afterEach resets it server-
+    // side, but the client reflects that reset through an async user-doc
+    // listener (and the onMembershipWritten trigger). Wait for the non-member
+    // picker to settle before interacting/screenshotting, so a stale
+    // membership can't leak the Sammelrechnung tab into this shot (#448).
+    await expect(
+      page.getByRole("tab", { name: /Sammelrechnung/ }),
+    ).toBeHidden()
+
     // Switch to the TWINT tab — the picker is on step 4 now.
     await page.getByRole("tab", { name: /TWINT/ }).click()
 
