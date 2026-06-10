@@ -871,7 +871,11 @@ function ExpandableSection({
         <span className="min-w-0">
           <div className="flex items-center gap-2 min-w-0 font-heading font-bold text-[15px] text-foreground leading-tight">
             <span className="flex-shrink-0">{icon}</span>
-            <span className="min-w-0 break-words">{title}</span>
+            {/* truncate (not break-words): long compound titles like
+                "Maschinen-/Werkzeugnutzung" must collapse to a single line with
+                an ellipsis on narrow mobile widths rather than breaking
+                mid-word (issue #446). */}
+            <span className="min-w-0 truncate">{title}</span>
           </div>
           <span className="block mt-1 text-[13px] text-muted-foreground truncate">
             {summary}
