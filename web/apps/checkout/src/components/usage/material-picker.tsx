@@ -31,6 +31,7 @@ import {
   filterByCategoryPrefix,
   nextLevelValues,
 } from "@modules/lib/categories"
+import { matchesCatalogQuery } from "@modules/lib/text-search"
 import type { CheckoutItemLocal } from "./inline-rows"
 import {
   readPickerScrollAnchor,
@@ -356,14 +357,9 @@ function PickerBody({
 
   const filtered = useMemo(() => {
     const byCategory = filterByCategoryPrefix(catalogItems, categoryPrefix)
-    const q = query.trim().toLowerCase()
-    const matches = q
-      ? byCategory.filter(
-          (c) =>
-            c.name.toLowerCase().includes(q) ||
-            c.code?.toLowerCase().includes(q),
-        )
-      : byCategory
+    // Search across name, code, category path, description and variant
+    // labels with diacritic folding (#452) — not just name + code.
+    const matches = byCategory.filter((c) => matchesCatalogQuery(c, query))
     return [...matches].sort((a, b) => a.name.localeCompare(b.name, "de"))
   }, [catalogItems, categoryPrefix, query])
 
