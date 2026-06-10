@@ -6,7 +6,11 @@
 // that creates the webview, sets its preload, and wires the kiosk-only
 // "Neuer Checkout" reset button.
 
-import { wireResetButton } from "./reset-button"
+// Explicit .js extension: this file is emitted as a native ES module and
+// loaded directly via <script type="module"> (no bundler), so the browser
+// needs the real runtime path — an extensionless specifier fails to resolve
+// and silently kills the whole renderer (blank webview).
+import { wireResetButton } from "./reset-button.js"
 
 // Mirrors src/types.ts — kept here so renderer.ts stays a self-contained
 // browser script with no Node imports.
