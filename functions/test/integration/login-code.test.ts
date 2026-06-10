@@ -143,6 +143,25 @@ describe("Login code flow (Integration)", () => {
       );
     });
 
+    it("issues a fresh code immediately after the previous one was consumed", async () => {
+      // login → logout → login-again within 60s: a consumed code must not
+      // hold the 60s throttle, or the user dead-ends — and the client
+      // treats the throttle as "your earlier code still works", which
+      // would be false here.
+      await handleRequestLoginCode({ email: "alice@example.com" }, ORIGIN);
+      const first = await findLatestCodeDoc("alice@example.com");
+      await handleVerifyLoginCode({
+        email: "alice@example.com",
+        code: first!.data().debugCode as string,
+      });
+
+      await handleRequestLoginCode({ email: "alice@example.com" }, ORIGIN);
+      const second = await findLatestCodeDoc("alice@example.com");
+      expect(second!.id).to.not.equal(first!.id);
+      expect(second!.data().consumedAt).to.equal(null);
+      expect(second!.data().debugCode).to.match(/^\d{6}$/);
+    });
+
     it("rejects the 21st code request within a 24h window", async () => {
       // Seed 20 docs directly so we sidestep the 60s throttle and don't
       // bake 20 minutes of waiting into the test. Each `created` is far

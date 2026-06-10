@@ -638,10 +638,10 @@ export function WizardProvider({
       name: `${p.firstName} ${p.lastName}`,
       email: p.email,
       userType: p.userType,
-      ...(p.billingCompany
+      ...(hasBillingFields(p)
         ? {
             billingAddress: {
-              company: p.billingCompany,
+              company: p.billingCompany ?? "",
               street: p.billingStreet ?? "",
               zip: p.billingZip ?? "",
               city: p.billingCity ?? "",
@@ -649,6 +649,31 @@ export function WizardProvider({
           }
         : {}),
     }))
+
+    // A membership generates an invoice that needs a postal address. The
+    // address was captured inline in the membership line item (StepCheckout)
+    // and validated before submit; persist it to the member's user doc so the
+    // invoice resolves it and it's remembered. The server backstop in
+    // closeCheckoutAndGetPayment reads the same field.
+    if (membershipCost > 0 && identifiedUserRef && persons[0]) {
+      const p = persons[0]
+      try {
+        await update(userRef(db, identifiedUserRef.id), {
+          billingAddress: {
+            company: p.billingCompany?.trim() ?? "",
+            street: p.billingStreet?.trim() ?? "",
+            zip: p.billingZip?.trim() ?? "",
+            city: p.billingCity?.trim() ?? "",
+          },
+        })
+      } catch {
+        // Hook already toasted + telemetered (ADR-0025). Abort the submit
+        // like a failed RPC — without this the rejection would escape
+        // submitCheckout's null-on-failure contract and surface as an
+        // unhandled rejection in the route's onSubmit.
+        return null
+      }
+    }
 
     // Store RAW section amounts (issue #284); the server is authoritative
     // and recomputes both net and discount.
@@ -743,6 +768,8 @@ export function WizardProvider({
     usageType,
     functions,
     submit,
+    update,
+    db,
   ])
 
   const value: WizardContextValue = {
@@ -1003,6 +1030,16 @@ export function usePreFillTagPerson(
 
 // Person <-> Firestore doc converters (extracted from the old wizard).
 
+/**
+ * A person carries a billing address worth persisting when ANY billing field
+ * is set — not just the company. Gating on `billingCompany` alone dropped a
+ * regular member's street/zip/city on the persist→rehydrate round-trip, so
+ * the membership address pre-filled from the profile never survived.
+ */
+export function hasBillingFields(p: CheckoutPerson): boolean {
+  return !!(p.billingCompany || p.billingStreet || p.billingZip || p.billingCity)
+}
+
 export function personLocalToDoc(
   p: CheckoutPerson,
   db: ReturnType<typeof useDb>,
@@ -1015,9 +1052,9 @@ export function personLocalToDoc(
   if (p.userId) {
     doc.userRef = userRef(db, p.userId)
   }
-  if (p.billingCompany) {
+  if (hasBillingFields(p)) {
     doc.billingAddress = {
-      company: p.billingCompany,
+      company: p.billingCompany ?? "",
       street: p.billingStreet ?? "",
       zip: p.billingZip ?? "",
       city: p.billingCity ?? "",

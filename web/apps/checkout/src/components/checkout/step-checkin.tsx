@@ -5,7 +5,7 @@ import { useState, useMemo, useCallback } from "react"
 import { Checkbox } from "@modules/components/ui/checkbox"
 import { Button } from "@modules/components/ui/button"
 import { PersonCard, RemovePersonButton } from "./person-card"
-import { Plus, ArrowRight, LogIn, UserPlus } from "lucide-react"
+import { Plus, ArrowRight, LogIn } from "lucide-react"
 import type { CheckoutPerson, PersonsAction } from "./use-checkout-state"
 import type { UserType } from "@modules/lib/pricing"
 import { validatePerson } from "./validation"
@@ -426,22 +426,15 @@ function IdentityHint({
       <span className="text-sm text-muted-foreground">
         Bereits registriert oder Konto erstellen?
       </span>
-      {/* Plain <a> instead of router <Link> — intentional full reload clears checkout state */}
-      <div className="flex items-center gap-1">
-        <a href="/login?redirect=/">
-          <Button variant="ghost" size="sm" className="text-cog-teal hover:text-cog-teal-dark">
-            <LogIn className="h-4 w-4 mr-1.5" />
-            Anmelden
-          </Button>
-        </a>
-        <span className="text-muted-foreground/40">|</span>
-        <a href="/login?mode=signup&redirect=/">
-          <Button variant="ghost" size="sm" className="text-cog-teal hover:text-cog-teal-dark">
-            <UserPlus className="h-4 w-4 mr-1.5" />
-            Registrieren
-          </Button>
-        </a>
-      </div>
+      {/* Plain <a> instead of router <Link> — intentional full reload clears
+          checkout state. One link only: the combined login page handles both
+          sign-in and sign-up from the same entry point. */}
+      <a href="/login?redirect=/">
+        <Button variant="ghost" size="sm" className="text-cog-teal hover:text-cog-teal-dark">
+          <LogIn className="h-4 w-4 mr-1.5" />
+          Anmelden oder registrieren
+        </Button>
+      </a>
     </div>
   )
 }

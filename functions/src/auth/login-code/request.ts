@@ -103,8 +103,25 @@ export async function handleRequestLoginCode(
       | Timestamp
       | null
       | undefined;
+    const expiresAt = latest.get("expiresAt") as Timestamp | undefined;
 
-    if (created && Date.now() - created.toMillis() < RATE_LIMIT_WINDOW_MS) {
+    // Throttle only while the latest code is still usable (unconsumed and
+    // unexpired). A consumed code — successful login or burned by the
+    // per-doc attempt cap — must not block a re-request: login → logout →
+    // login-again within 60s would otherwise dead-end, and the client
+    // (which treats this error as "your earlier code still works") would
+    // lie to the user. The brute-force posture is unchanged: rotating
+    // codes is still bounded by the 24h per-email caps below, and a
+    // consumed code can't be replayed.
+    const stillActive =
+      consumedAt == null &&
+      expiresAt != null &&
+      expiresAt.toMillis() > Date.now();
+    if (
+      stillActive &&
+      created &&
+      Date.now() - created.toMillis() < RATE_LIMIT_WINDOW_MS
+    ) {
       throw new HttpsError(
         "resource-exhausted",
         "Bitte warte kurz, bevor du einen neuen Code anforderst."

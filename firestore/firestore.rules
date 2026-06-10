@@ -133,10 +133,14 @@ service cloud.firestore {
                      shareActiveMembership(userId) ||
                      shareActiveMembershipActingAs(userId);
 
-      // Allow creating own user doc during self-registration
+      // Allow creating own user doc during self-registration. Same firma
+      // billing-address invariant as the update path — without it a firma
+      // account could mint its initial doc address-less and only the
+      // invoice-time backstop would catch it.
       allow create: if isSignedIn() && userId == request.auth.uid &&
                        request.resource.data.permissions is list &&
-                       isDocumentReferenceArray(request.resource.data.permissions, 'permission');
+                       isDocumentReferenceArray(request.resource.data.permissions, 'permission') &&
+                       isValidUserProfile(request.resource.data);
 
       // Users can update their own doc but cannot change roles/permissions.
       // Tag-tap sessions cannot update users at all (their request.auth.uid

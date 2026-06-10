@@ -10,14 +10,14 @@ export const Route = createFileRoute("/login")({
 })
 
 function CheckoutLoginPage() {
-  const { redirect, mode } = Route.useSearch()
+  const { redirect, signup } = Route.useSearch()
   return (
     <LoginPage
       defaultRedirect="/"
       signupEnabled
       googleButtonPosition="bottom"
       redirect={redirect}
-      mode={mode}
+      signup={signup !== undefined}
     />
   )
 }

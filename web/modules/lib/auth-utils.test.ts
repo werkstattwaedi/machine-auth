@@ -16,15 +16,9 @@ function makeUserDoc(overrides: Partial<UserDoc> = {}): UserDoc {
     permissions: [],
     termsAcceptedAt: { toDate: () => new Date("2025-01-01") },
     userType: "erwachsen",
-    // Postal address is now required for every registered user (see
-    // ProfilePage). Tests that target the no-address branch override
-    // billingAddress explicitly.
-    billingAddress: {
-      company: "",
-      street: "Seestrasse 12",
-      zip: "8820",
-      city: "Wädenswil",
-    },
+    // Postal address is captured later (membership / profile) and is only
+    // *required* for firma. erwachsen/kind are complete with just name + terms.
+    billingAddress: null,
     activeMembership: null,
     ...overrides,
   }
@@ -153,39 +147,23 @@ describe("isProfileComplete", () => {
     ).toBe(false)
   })
 
-  it("returns false for erwachsen user without billing address", () => {
+  it("returns true for erwachsen user without billing address", () => {
     expect(
       isProfileComplete(
         makeUserDoc({ userType: "erwachsen", billingAddress: null }),
       ),
-    ).toBe(false)
+    ).toBe(true)
   })
 
-  it("returns false for kind user without billing address", () => {
+  it("returns true for kind user without billing address", () => {
     expect(
       isProfileComplete(
         makeUserDoc({ userType: "kind", billingAddress: null }),
       ),
-    ).toBe(false)
-  })
-
-  it("returns true for erwachsen user with billing address (no company)", () => {
-    expect(
-      isProfileComplete(
-        makeUserDoc({
-          userType: "erwachsen",
-          billingAddress: {
-            company: "",
-            street: "Seestrasse 12",
-            zip: "8820",
-            city: "Wädenswil",
-          },
-        }),
-      ),
     ).toBe(true)
   })
 
-  it("returns false for erwachsen missing street", () => {
+  it("returns true for erwachsen even with an empty/partial address (not required)", () => {
     expect(
       isProfileComplete(
         makeUserDoc({
@@ -193,11 +171,11 @@ describe("isProfileComplete", () => {
           billingAddress: {
             company: "",
             street: "",
-            zip: "8820",
-            city: "Wädenswil",
+            zip: "",
+            city: "",
           },
         }),
       ),
-    ).toBe(false)
+    ).toBe(true)
   })
 })
