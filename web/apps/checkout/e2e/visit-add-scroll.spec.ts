@@ -120,4 +120,51 @@ test.describe("Visit page — scroll preserved when opening picker (issue #394)"
       `scroll position must be preserved when the picker opens (was ${scrollBefore}, became ${scrollAfter})`,
     ).toBeLessThanOrEqual(5)
   })
+
+  // Issue #451: dismissing the sheet must NOT reset the /visit scroll either.
+  // The open path is fixed by #394; this covers the close path, where
+  // react-remove-scroll restores <body> overflow and would otherwise
+  // collapse the page back to the top.
+  test("closing the material picker does not reset page scroll", async ({
+    page,
+  }) => {
+    await signIn(page)
+    await page.goto("/visit")
+
+    const block = page.getByTestId("workshop-block-makerspace")
+    await expect(block).toBeVisible({ timeout: 10_000 })
+
+    const addButton = block.getByRole("button", { name: "Material hinzufügen" })
+    await addButton.scrollIntoViewIfNeeded()
+
+    const scrollBefore = await page.evaluate(() => window.scrollY)
+    expect(
+      scrollBefore,
+      "page must be scrolled down before opening the picker",
+    ).toBeGreaterThan(50)
+
+    await addButton.click()
+
+    // Picker opened.
+    const search = page.getByPlaceholder("Material suchen…")
+    await expect(search).toBeVisible({ timeout: 10_000 })
+
+    // Close the sheet via its close button (navigates back to /visit).
+    await page.getByRole("button", { name: "Schliessen" }).click()
+
+    // Sheet dismissed — wait for the search field to disappear.
+    await expect(search).toBeHidden({ timeout: 10_000 })
+
+    // Give the close-path re-assert loop time to outlast both the
+    // scroll-lock overflow-restore reflow and the router's later
+    // scroll-to-top of the navigated-to /visit page before sampling.
+    await page.waitForTimeout(2000)
+
+    // The /visit page must not have jumped back to the top on close.
+    const scrollAfter = await page.evaluate(() => window.scrollY)
+    expect(
+      Math.abs(scrollAfter - scrollBefore),
+      `scroll position must be preserved when the picker closes (was ${scrollBefore}, became ${scrollAfter})`,
+    ).toBeLessThanOrEqual(5)
+  })
 })
