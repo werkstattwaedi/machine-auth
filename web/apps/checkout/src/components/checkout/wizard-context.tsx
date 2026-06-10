@@ -1073,6 +1073,11 @@ export function usePreFillTagPerson(
         userType: (tokenUser.userType as UserType) ?? "erwachsen",
         isPreFilled: true,
         termsAccepted: true,
+        // Identity link (issue #457): without userId the check-in page
+        // renders the editable "Person 1" card (the IdentityStrip requires
+        // `isPreFilled && userId`), and the persisted checkout person lacks
+        // its userRef — so the tag user's identity appeared lost.
+        userId: tokenUser.userId,
       },
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps

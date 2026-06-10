@@ -74,6 +74,13 @@ const webview = document.createElement("webview") as WebviewElement
 webview.id = "checkout-view"
 webview.setAttribute("preload", preloadUrl)
 webview.setAttribute("partition", partition)
+// Without `allowpopups`, Electron blocks every window.open / target=_blank
+// from the guest BEFORE the embedder is consulted — main.ts's
+// setWindowOpenHandler (which routes allowlisted URLs into the in-kiosk
+// overlay, issue #416) never fires, so the TWINT paylink appeared to do
+// nothing (issue #459). With the attribute set, the handler still denies
+// all native popups; it only enables the interception path.
+webview.setAttribute("allowpopups", "")
 
 window.bridge.getUrl().then((url) => {
   webview.src = url
@@ -204,6 +211,10 @@ function openOverlay(url: string): void {
   const view = document.createElement("webview") as WebviewElement
   view.id = "overlay-view"
   view.setAttribute("partition", partition)
+  // Same rationale as the checkout webview: popups inside the overlay (the
+  // payment page may window.open) must reach main.ts's setWindowOpenHandler
+  // instead of being silently dropped. Native popups stay denied there.
+  view.setAttribute("allowpopups", "")
   view.addEventListener("did-navigate", (e) => handleOverlayNavigation(e.url))
   view.addEventListener("did-navigate-in-page", (e) =>
     handleOverlayNavigation(e.url)
