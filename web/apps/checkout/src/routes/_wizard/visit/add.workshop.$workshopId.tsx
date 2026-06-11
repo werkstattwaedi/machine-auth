@@ -5,6 +5,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { useCatalogForWorkshop } from "@modules/lib/workshop-config"
 import type { WorkshopId } from "@modules/lib/workshop-config"
 import { MaterialPicker } from "@/components/usage/material-picker"
+import { restorePickerScrollAnchor } from "@/components/usage/picker-scroll-anchor"
 import { useWizardContext } from "@/components/checkout/wizard-context"
 import { useBounceIfNoCheckout } from "@/components/checkout/use-bounce-if-no-checkout"
 import { EmptyState } from "@modules/components/empty-state"
@@ -42,6 +43,9 @@ function AddWorkshopRoute() {
       open
       onOpenChange={(open) => {
         if (!open) {
+          // Re-assert the page scroll through the dismissal reflow + the
+          // router's scroll-to-top so /visit doesn't jump to the top (#451).
+          restorePickerScrollAnchor()
           navigate({
             to: "/visit",
             search: ctx.kiosk ? { kiosk: "" } : {},
