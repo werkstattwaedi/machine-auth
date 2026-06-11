@@ -79,6 +79,12 @@ function createWindow(): void {
   })
   mainWindow.setTitle(config.productName)
 
+  // Start maximized: the configured width/height are only a fallback for an
+  // un-maximized window. At the fixed 1280×900 default the payment page's
+  // QR code and the overlay close button fell below the fold on the kiosk's
+  // screen (issue #458).
+  mainWindow.maximize()
+
   mainWindow.loadFile(path.join(__dirname, "..", "renderer", "index.html"))
 
   // Lock down the chrome window: no new windows, no navigation away from the

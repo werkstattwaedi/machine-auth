@@ -60,6 +60,10 @@ describe("usePreFillTagPerson", () => {
       email: "alice@test.com",
       isPreFilled: true,
       termsAccepted: true,
+      // Issue #457: the identity link must be set — without it the check-in
+      // page renders the editable "Person 1" card instead of the identity
+      // strip, and the persisted checkout person loses its userRef.
+      userId: "u-a",
     })
   })
 
@@ -77,6 +81,7 @@ describe("usePreFillTagPerson", () => {
       firstName: "Bob",
       lastName: "Berger",
       email: "bob@test.com",
+      userId: "u-b",
       isPreFilled: true,
     })
   })

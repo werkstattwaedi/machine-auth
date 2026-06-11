@@ -4,9 +4,11 @@
 /**
  * KioskInactivityWatcher — only fires on kiosk sessions *with state worth
  * preserving* (issue #378). After 5 min of idle it opens a "Bist du noch da?"
- * dialog with a 30 s auto-close. The auto-close calls startOver — the same
- * strong wipe as the Electron chrome's "Neuer Checkout" (signOut + bridge
- * partition wipe + hard reload). Activity events reset the idle countdown while
+ * dialog whose "Neuen Besuch starten" button auto-accepts after 30 s
+ * (AutoActionButton fill, no countdown text). The auto-accept calls startOver
+ * — the same strong wipe as the Electron chrome's "Neuer Checkout" (signOut +
+ * bridge partition wipe + hard reload). "Besuch fortsetzen" aborts.
+ * Activity events reset the idle countdown while
  * the dialog is closed. A fresh /checkin?kiosk with an empty form and no
  * checkout must NOT arm the watcher.
  */
@@ -19,7 +21,7 @@ import {
   it,
   vi,
 } from "vitest"
-import { render, screen, cleanup, act } from "@testing-library/react"
+import { render, screen, cleanup, act, fireEvent } from "@testing-library/react"
 import {
   KioskInactivityWatcher,
   hasPreservableState,
@@ -228,6 +230,42 @@ describe("KioskInactivityWatcher", () => {
       vi.advanceTimersByTime(5 * 60 * 1000)
     })
     expect(screen.getByText(/Bist du noch da/)).toBeTruthy()
+  })
+
+  it("shows abort + auto-accept buttons and no countdown text", () => {
+    const startOver = vi.fn()
+    mockUseWizardContext.mockReturnValue(
+      baseContext({ startOver, openCheckout: { id: "c1" } }),
+    )
+    render(<KioskInactivityWatcher />)
+
+    act(() => {
+      vi.advanceTimersByTime(5 * 60 * 1000)
+    })
+    expect(
+      screen.getByRole("button", { name: "Besuch fortsetzen" }),
+    ).toBeTruthy()
+    expect(
+      screen.getByRole("button", { name: "Neuen Besuch starten" }),
+    ).toBeTruthy()
+    // The filling button replaced the textual countdown (issue: two
+    // competing time displays).
+    expect(screen.queryByText(/Sekunden/)).toBeNull()
+  })
+
+  it("'Besuch fortsetzen' closes the dialog without resetting", () => {
+    const startOver = vi.fn()
+    mockUseWizardContext.mockReturnValue(
+      baseContext({ startOver, openCheckout: { id: "c1" } }),
+    )
+    render(<KioskInactivityWatcher />)
+
+    act(() => {
+      vi.advanceTimersByTime(5 * 60 * 1000)
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Besuch fortsetzen" }))
+    expect(screen.queryByText(/Bist du noch da/)).toBeNull()
+    expect(startOver).not.toHaveBeenCalled()
   })
 
   it("calls startOver 30 s after the dialog opens (auto-close)", () => {

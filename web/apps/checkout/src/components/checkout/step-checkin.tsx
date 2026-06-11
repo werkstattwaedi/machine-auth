@@ -5,7 +5,7 @@ import { useState, useMemo, useCallback } from "react"
 import { Checkbox } from "@modules/components/ui/checkbox"
 import { Button } from "@modules/components/ui/button"
 import { PersonCard, RemovePersonButton } from "./person-card"
-import { Plus, ArrowRight, LogIn } from "lucide-react"
+import { Plus, ArrowRight, Check, LogIn } from "lucide-react"
 import type { CheckoutPerson, PersonsAction } from "./use-checkout-state"
 import type { UserType } from "@modules/lib/pricing"
 import { validatePerson } from "./validation"
@@ -52,6 +52,15 @@ interface StepCheckinProps {
    */
   onAdvance?: () => Promise<void>
   /**
+   * Kiosk-only primary action: check the visitor in (create the checkout)
+   * and hand the terminal back to the next person. When provided, the
+   * footer renders "Besuch starten" as the filled primary button and
+   * demotes the /visit navigation ("Material erfassen") to an outline
+   * secondary — checking in IS the main job of the kiosk; browsing costs
+   * is the exception. Runs through the same form validation as onAdvance.
+   */
+  onStartVisit?: () => Promise<void>
+  /**
    * Family roster members of the signed-in user that aren't on the visit
    * yet (issue #209). Empty / omitted for anonymous, tag-tap, single-
    * membership, or non-owner users.
@@ -59,7 +68,7 @@ interface StepCheckinProps {
   familyCandidates?: FamilyCandidate[]
 }
 
-export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAccountLoggedIn, signedInUserId, signedInEmail, isMember, onSignOut, onAdvance, familyCandidates }: StepCheckinProps) {
+export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAccountLoggedIn, signedInUserId, signedInEmail, isMember, onSignOut, onAdvance, onStartVisit, familyCandidates }: StepCheckinProps) {
   // touched: personId → field → true
   const [touched, setTouched] = useState<Record<string, Record<string, boolean>>>({})
   const [submitted, setSubmitted] = useState(false)
@@ -112,16 +121,17 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
     [persons.length, memberCount],
   )
 
-  const handleWeiter = async () => {
+  // Shared validate-then-act path for both footer actions. "Weiter" /
+  // "Material erfassen" run `onAdvance` (anon sign-in #151, persist #246,
+  // nav to /visit); the kiosk "Besuch starten" runs `onStartVisit`
+  // (check-in + terminal reset) behind the exact same form validation.
+  const handleAction = async (action?: () => Promise<void>) => {
     setSubmitted(true)
     if (!allValid) return
     if (advancing) return
     setAdvancing(true)
     try {
-      // Eagerly sign in anonymously here (issue #151) so /visit can write
-      // checkout items straight to Firestore — same code path as the
-      // authenticated flow. `onAdvance` also handles the nav to /visit.
-      if (onAdvance) await onAdvance()
+      if (action) await action()
     } finally {
       setAdvancing(false)
     }
@@ -304,17 +314,41 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
 
       <div className="flex-1" />
 
-      {/* Sticky bottom navigation */}
+      {/* Sticky bottom navigation. With onStartVisit (kiosk) the primary
+          action is checking in; the /visit detour is the outline secondary. */}
       <div className="sticky bottom-0 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 bg-background border-t border-border flex gap-3 justify-end">
-        <button
-          type="button"
-          className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-white bg-cog-teal rounded-[3px] hover:bg-cog-teal-dark transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-          onClick={handleWeiter}
-          disabled={advancing}
-        >
-          Weiter
-          <ArrowRight className="h-4 w-4" />
-        </button>
+        {onStartVisit ? (
+          <>
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-cog-teal border border-cog-teal rounded-[3px] bg-white hover:bg-cog-teal-light transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              onClick={() => handleAction(onAdvance)}
+              disabled={advancing}
+            >
+              Material erfassen
+              <ArrowRight className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 px-4 py-1.5 text-sm font-bold text-white bg-cog-teal rounded-[3px] hover:bg-cog-teal-dark transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              onClick={() => handleAction(onStartVisit)}
+              disabled={advancing}
+            >
+              <Check className="h-4 w-4" />
+              Besuch starten
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-white bg-cog-teal rounded-[3px] hover:bg-cog-teal-dark transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            onClick={() => handleAction(onAdvance)}
+            disabled={advancing}
+          >
+            Weiter
+            <ArrowRight className="h-4 w-4" />
+          </button>
+        )}
       </div>
     </div>
   )

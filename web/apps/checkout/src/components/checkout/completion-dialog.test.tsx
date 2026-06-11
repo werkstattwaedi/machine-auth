@@ -7,7 +7,8 @@
  * Behavioral contract:
  *   - Kiosk + anonymous flows show a single "Fertig" button (the person
  *     who just paid is leaving — they do NOT start a new visit), with a
- *     progress fill behind it that drains the 30 s auto-reset timer.
+ *     progress fill behind it that drains the 8 s auto-reset timer
+ *     (AutoActionButton).
  *   - Logged-in users see "Neuer Besuch starten" (+ "Vergangene Besuche")
  *     and have no timeout (they're at their own laptop).
  *
@@ -130,12 +131,7 @@ describe("CompletionDialog", () => {
       vi.useRealTimers()
     })
 
-    function progressWidth() {
-      const fill = screen.getByTestId("completion-autoreset-progress")
-      return (fill as HTMLElement).style.width
-    }
-
-    it("renders a progress fill on the kiosk button that grows over time", () => {
+    it("renders the auto-fill on the kiosk button spanning the 8 s window", () => {
       render(
         <CompletionDialog
           open
@@ -144,14 +140,11 @@ describe("CompletionDialog", () => {
           onNewVisit={() => {}}
         />,
       )
-      // Starts empty.
-      expect(progressWidth()).toBe("0%")
-
-      // Halfway through the 30 s window the fill is ~50%.
-      act(() => {
-        vi.advanceTimersByTime(15_000)
-      })
-      expect(progressWidth()).toBe("50%")
+      const fill = screen.getByTestId(
+        "auto-action-progress",
+      ) as HTMLElement
+      // One CSS transition over the full duration — the smoothness contract.
+      expect(fill.style.transitionDuration).toBe("8000ms")
     })
 
     it("does not render a progress fill when autoClose is false", () => {
@@ -163,14 +156,12 @@ describe("CompletionDialog", () => {
           onNewVisit={() => {}}
         />,
       )
-      expect(
-        screen.queryByTestId("completion-autoreset-progress"),
-      ).toBeNull()
+      expect(screen.queryByTestId("auto-action-progress")).toBeNull()
       // And never the old countdown text either.
       expect(screen.queryByText(/Sekunden/)).toBeNull()
     })
 
-    it("fires onNewVisit once after 30 seconds", () => {
+    it("fires onNewVisit once after 8 seconds", () => {
       const onNewVisit = vi.fn()
       render(
         <CompletionDialog
@@ -181,18 +172,17 @@ describe("CompletionDialog", () => {
         />,
       )
 
-      // Advance 29 s — not fired yet.
+      // Just short of the 8 s mark — not fired yet.
       act(() => {
-        vi.advanceTimersByTime(29_000)
+        vi.advanceTimersByTime(7_900)
       })
       expect(onNewVisit).not.toHaveBeenCalled()
 
-      // Cross the 30 s mark — fired exactly once, fill is full.
+      // Cross the 8 s mark — fired exactly once.
       act(() => {
-        vi.advanceTimersByTime(1_000)
+        vi.advanceTimersByTime(100)
       })
       expect(onNewVisit).toHaveBeenCalledOnce()
-      expect(progressWidth()).toBe("100%")
     })
 
     it("never fires onNewVisit when autoClose is false", () => {

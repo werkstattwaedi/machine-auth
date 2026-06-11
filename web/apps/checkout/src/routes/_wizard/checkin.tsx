@@ -1,9 +1,11 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
+import { useState } from "react"
 import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router"
 import { QrCode } from "lucide-react"
 import { StepCheckin } from "@/components/checkout/step-checkin"
+import { VisitStartedDialog } from "@/components/checkout/visit-started-dialog"
 import { useWizardContext } from "@/components/checkout/wizard-context"
 
 export const Route = createFileRoute("/_wizard/checkin")({
@@ -15,6 +17,9 @@ function CheckinRoute() {
   const ctx = useWizardContext()
   const search = useSearch({ from: "/_wizard" })
   const rescan = search.rescan === "1"
+  // Kiosk "Besuch starten": the checkout doc is written, the confirmation
+  // dialog shows and then resets the terminal for the next person.
+  const [visitStarted, setVisitStarted] = useState(false)
 
   return (
     <>
@@ -57,6 +62,28 @@ function CheckinRoute() {
           search: ctx.kiosk ? { kiosk: "" } : {},
         })
       }}
+      // Kiosk primary action: check in (create the checkout) WITHOUT
+      // navigating to /visit — the visitor is done at the terminal. The
+      // confirmation dialog below then frees the kiosk via startOver.
+      onStartVisit={
+        ctx.kiosk
+          ? async () => {
+              if (ctx.isAnonymous) await ctx.signInAnonymouslyIfNeeded()
+              try {
+                await ctx.persistPersons()
+              } catch {
+                // persistPersons already toasted (ADR-0025); stay on
+                // /checkin so the user can retry.
+                return
+              }
+              setVisitStarted(true)
+            }
+          : undefined
+      }
+    />
+    <VisitStartedDialog
+      open={visitStarted}
+      onDone={() => void ctx.startOver()}
     />
     </>
   )
