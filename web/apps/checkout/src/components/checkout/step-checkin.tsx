@@ -62,6 +62,16 @@ interface StepCheckinProps {
    */
   onStartVisit?: () => Promise<void>
   /**
+   * Issue #465: true when an open checkout already exists for this principal
+   * (e.g. the visitor tapped their badge with a checkout still running, then
+   * navigated back to /checkin). The kiosk footer then drops "Besuch starten"
+   * — the visit is already started — and promotes "Material erfassen" to the
+   * filled primary, since adding material is the natural next action. No
+   * effect outside the kiosk (`onStartVisit` undefined) where the single
+   * "Weiter" already advances to /visit.
+   */
+  hasOpenCheckout?: boolean
+  /**
    * Family roster members of the signed-in user that aren't on the visit
    * yet (issue #209). Empty / omitted for anonymous, tag-tap, single-
    * membership, or non-owner users.
@@ -77,7 +87,7 @@ interface StepCheckinProps {
   picc?: string
 }
 
-export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAccountLoggedIn, signedInUserId, signedInEmail, isMember, onSignOut, onAdvance, onStartVisit, familyCandidates, tagAuthLoading, tagAuthError, picc }: StepCheckinProps) {
+export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAccountLoggedIn, signedInUserId, signedInEmail, isMember, onSignOut, onAdvance, onStartVisit, hasOpenCheckout, familyCandidates, tagAuthLoading, tagAuthError, picc }: StepCheckinProps) {
   // touched: personId → field → true
   const [touched, setTouched] = useState<Record<string, Record<string, boolean>>>({})
   const [submitted, setSubmitted] = useState(false)
@@ -365,29 +375,44 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
       <div className="flex-1" />
 
       {/* Sticky bottom navigation. With onStartVisit (kiosk) the primary
-          action is checking in; the /visit detour is the outline secondary. */}
+          action is checking in; the /visit detour is the outline secondary.
+          Issue #465: once a checkout is already open (hasOpenCheckout) the
+          visit is started, so "Besuch starten" is dropped and "Material
+          erfassen" becomes the filled primary. */}
       <div className="sticky bottom-0 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 bg-background border-t border-border flex gap-3 justify-end">
         {onStartVisit ? (
-          <>
+          hasOpenCheckout ? (
             <button
               type="button"
-              className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-cog-teal border border-cog-teal rounded-[3px] bg-white hover:bg-cog-teal-light transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              className="inline-flex items-center gap-2 px-4 py-1.5 text-sm font-bold text-white bg-cog-teal rounded-[3px] hover:bg-cog-teal-dark transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               onClick={() => handleAction(onAdvance)}
               disabled={advancing}
             >
               Material erfassen
               <ArrowRight className="h-4 w-4" />
             </button>
-            <button
-              type="button"
-              className="inline-flex items-center gap-2 px-4 py-1.5 text-sm font-bold text-white bg-cog-teal rounded-[3px] hover:bg-cog-teal-dark transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-              onClick={() => handleAction(onStartVisit)}
-              disabled={advancing}
-            >
-              <Check className="h-4 w-4" />
-              Besuch starten
-            </button>
-          </>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-cog-teal border border-cog-teal rounded-[3px] bg-white hover:bg-cog-teal-light transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                onClick={() => handleAction(onAdvance)}
+                disabled={advancing}
+              >
+                Material erfassen
+                <ArrowRight className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 px-4 py-1.5 text-sm font-bold text-white bg-cog-teal rounded-[3px] hover:bg-cog-teal-dark transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                onClick={() => handleAction(onStartVisit)}
+                disabled={advancing}
+              >
+                <Check className="h-4 w-4" />
+                Besuch starten
+              </button>
+            </>
+          )
         ) : (
           <button
             type="button"
