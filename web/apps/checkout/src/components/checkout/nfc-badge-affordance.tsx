@@ -3,6 +3,7 @@
 
 import { useState } from "react"
 import { AlertTriangle, Loader2 } from "lucide-react"
+import { QRCodeSVG } from "qrcode.react"
 import { Button } from "@modules/components/ui/button"
 import "./nfc-badge-affordance.css"
 
@@ -12,7 +13,9 @@ import "./nfc-badge-affordance.css"
  *
  * One box, four states:
  *   - hero: large animated scene (OWW fob gliding onto the ACS reader)
- *     while the form is untouched — the main invitation to tap.
+ *     while the form is untouched, plus a QR to the checkout app for the
+ *     own-device path. Rendered below the typed form behind an "ODER"
+ *     divider — the badge is the alternative, not the gate.
  *   - compact: slim one-line bar once the visitor focuses or types into
  *     the form, so anonymous check-in is undisturbed. Re-expands when
  *     the form goes back to empty.
@@ -46,7 +49,7 @@ export interface NfcBadgeAffordanceProps {
 type AffordanceMode = "hero" | "compact" | "verifying" | "error"
 
 const CONTAINER_CLASSES: Record<AffordanceMode, string> = {
-  hero: "h-32 rounded-md bg-cog-teal-light",
+  hero: "h-auto rounded-md bg-cog-teal-light",
   compact: "h-[46px] rounded-[3px] border border-cog-teal/30 bg-cog-teal/5",
   verifying: "h-32 rounded-md bg-cog-teal",
   error: "h-auto rounded-[3px] border border-[#cc2a24]/40 bg-[#fce4e4]/60",
@@ -96,18 +99,35 @@ export function NfcBadgeAffordance({
   )
 }
 
+/** Self-checkout-on-your-own-device target encoded in the hero QR. */
+const CHECKOUT_URL = `https://${
+  import.meta.env.VITE_CHECKOUT_DOMAIN ?? "localhost:5173"
+}`
+
 function HeroLayer() {
   return (
-    <div className="flex h-full items-center gap-5 px-5 sm:gap-7 sm:px-7">
+    <div className="flex items-center gap-5 px-5 py-5 sm:gap-7 sm:px-7">
       <ReaderScene />
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <div className="nfx-headline text-[19px] font-bold leading-tight">
           <span className="nfx-swash">Badge</span> an den Leser halten
         </div>
-        <p className="mt-1 hidden max-w-[52ch] text-[13.5px] text-muted-foreground sm:block">
-          Deine Angaben werden automatisch ausgefüllt — ohne Badge einfach
-          unten eintippen.
+        <p className="mt-1 max-w-[52ch] text-[13.5px] text-muted-foreground">
+          Um einen neuen Besuch zu starten oder den jetzigen abzuschliessen
         </p>
+        <p className="mt-3 hidden max-w-[52ch] text-[13.5px] text-muted-foreground sm:block">
+          Bist du Mitglied? Logge dich mit dem Badge ein oder mach den
+          Self-Checkout auf deinem eigenen Handy oder Computer — nur so
+          gelten die Mitglieder-Preise.
+        </p>
+      </div>
+      {/* QR to the checkout app for the own-device path. Hidden on phone
+          viewports — there you're already on the device it points to. */}
+      <div
+        data-testid="nfc-affordance-qr"
+        className="hidden shrink-0 self-center rounded-md bg-white p-2.5 sm:block"
+      >
+        <QRCodeSVG value={CHECKOUT_URL} size={104} level="M" />
       </div>
     </div>
   )
