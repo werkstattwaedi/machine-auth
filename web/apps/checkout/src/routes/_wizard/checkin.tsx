@@ -73,8 +73,14 @@ function CheckinRoute() {
       // Kiosk primary action: check in (create the checkout) WITHOUT
       // navigating to /visit — the visitor is done at the terminal. The
       // confirmation dialog below then frees the kiosk via startOver.
+      //
+      // Issue #467: only offer "Besuch starten" when the kiosk visitor is
+      // already identified (tag-tap or signed in). For a truly anonymous
+      // kiosk guest the checkout is bound to a throwaway anon session that
+      // they can't return to, so "starting a visit" they'd immediately lose
+      // is pointless — they keep the plain "Weiter" flow instead.
       onStartVisit={
-        ctx.kiosk
+        ctx.kiosk && !ctx.isAnonymous
           ? async () => {
               if (ctx.isAnonymous) await ctx.signInAnonymouslyIfNeeded()
               try {
