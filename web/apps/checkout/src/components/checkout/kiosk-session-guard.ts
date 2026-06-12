@@ -27,9 +27,20 @@
 export interface KioskSessionState {
   preservable: boolean
   identified: boolean
+  /**
+   * Display name of the current (identified) visitor, when known — so the
+   * badge-switch confirmation can name whose visit is being parked
+   * ("Der Besuch von … ist zwischengespeichert"). `null` for anonymous
+   * sessions or when no name is on record.
+   */
+  holderName: string | null
 }
 
-const NO_SESSION: KioskSessionState = { preservable: false, identified: false }
+const NO_SESSION: KioskSessionState = {
+  preservable: false,
+  identified: false,
+  holderName: null,
+}
 
 let activeGuard: (() => KioskSessionState) | null = null
 

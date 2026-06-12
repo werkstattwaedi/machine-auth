@@ -194,6 +194,19 @@ interface WizardProviderProps {
   pricingConfig: PricingConfig
 }
 
+/** Join a first/last name into a display string, or null when both are
+ * empty/absent (so callers can fall back to a name-less phrasing). */
+function joinName(
+  first?: string | null,
+  last?: string | null,
+): string | null {
+  const name = [first, last]
+    .map((s) => s?.trim())
+    .filter(Boolean)
+    .join(" ")
+  return name || null
+}
+
 export function WizardProvider({
   picc,
   cmac,
@@ -445,6 +458,7 @@ export function WizardProvider({
     items,
     persons,
     identified: false,
+    holderName: null as string | null,
   })
 
   // Bridge the "we just wrote a checkout, listener hasn't surfaced it
@@ -459,6 +473,15 @@ export function WizardProvider({
 
   // Keep the guard snapshot current on every render; register the getter
   // once per provider mount.
+  // Name of whoever currently holds the session — the signed-in account or
+  // the tapped-in badge user — so the badge-switch dialog can say whose visit
+  // is being parked. Null for anonymous sessions (which use the discard copy
+  // and never show a name) or when no name is on record.
+  const holderName = isAccountLoggedIn
+    ? joinName(identifiedUserDoc?.firstName, identifiedUserDoc?.lastName)
+    : isTagIdentified
+      ? joinName(tokenUser?.firstName, tokenUser?.lastName)
+      : null
   guardStateRef.current = {
     openCheckout: openCheckout ?? null,
     checkoutId,
@@ -470,12 +493,14 @@ export function WizardProvider({
     // discarded loses unrecoverable work (no badge to re-tap), so it needs
     // the honest, destructive dialog (issue #468).
     identified: isAccountLoggedIn || isTagIdentified,
+    holderName,
   }
   useEffect(
     () =>
       registerKioskSessionGuard(() => ({
         preservable: hasPreservableState(guardStateRef.current),
         identified: guardStateRef.current.identified,
+        holderName: guardStateRef.current.holderName,
       })),
     [],
   )
