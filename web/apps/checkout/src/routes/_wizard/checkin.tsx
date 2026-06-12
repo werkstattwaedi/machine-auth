@@ -1,9 +1,11 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
+import { useState } from "react"
 import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router"
 import { QrCode } from "lucide-react"
 import { StepCheckin } from "@/components/checkout/step-checkin"
+import { VisitStartedDialog } from "@/components/checkout/visit-started-dialog"
 import { useWizardContext } from "@/components/checkout/wizard-context"
 
 export const Route = createFileRoute("/_wizard/checkin")({
@@ -15,6 +17,9 @@ function CheckinRoute() {
   const ctx = useWizardContext()
   const search = useSearch({ from: "/_wizard" })
   const rescan = search.rescan === "1"
+  // Kiosk "Besuch starten": the checkout doc is written, the confirmation
+  // dialog shows and then resets the terminal for the next person.
+  const [visitStarted, setVisitStarted] = useState(false)
 
   return (
     <>
@@ -35,8 +40,16 @@ function CheckinRoute() {
       isAccountLoggedIn={ctx.isAccountLoggedIn}
       signedInUserId={ctx.identifiedUserDoc?.id ?? null}
       signedInEmail={ctx.identifiedUserDoc?.email ?? null}
-      isMember={!!ctx.identifiedUserDoc?.activeMembership}
+      isMember={ctx.isMember}
+      // Issue #465: a checkout already running flips the kiosk footer primary
+      // from "Besuch starten" to "Material erfassen".
+      hasOpenCheckout={!!ctx.openCheckout}
       familyCandidates={ctx.familyCandidates}
+      // Kiosk: badge-tap progress/errors render inside the NFC affordance
+      // box on this page (TagAuthOverlay stays home for browser tag taps).
+      tagAuthLoading={ctx.tagAuthLoading}
+      tagAuthError={ctx.tagAuthError}
+      picc={ctx.picc}
       // Signed-in "Abmelden" and the anon "Von vorne beginnen" share one
       // primitive: drop the session + hard-reload to a fresh /checkin.
       onSignOut={ctx.startOver}
@@ -57,6 +70,34 @@ function CheckinRoute() {
           search: ctx.kiosk ? { kiosk: "" } : {},
         })
       }}
+      // Kiosk primary action: check in (create the checkout) WITHOUT
+      // navigating to /visit — the visitor is done at the terminal. The
+      // confirmation dialog below then frees the kiosk via startOver.
+      //
+      // Issue #467: only offer "Besuch starten" when the kiosk visitor is
+      // already identified (tag-tap or signed in). For a truly anonymous
+      // kiosk guest the checkout is bound to a throwaway anon session that
+      // they can't return to, so "starting a visit" they'd immediately lose
+      // is pointless — they keep the plain "Weiter" flow instead.
+      onStartVisit={
+        ctx.kiosk && !ctx.isAnonymous
+          ? async () => {
+              if (ctx.isAnonymous) await ctx.signInAnonymouslyIfNeeded()
+              try {
+                await ctx.persistPersons()
+              } catch {
+                // persistPersons already toasted (ADR-0025); stay on
+                // /checkin so the user can retry.
+                return
+              }
+              setVisitStarted(true)
+            }
+          : undefined
+      }
+    />
+    <VisitStartedDialog
+      open={visitStarted}
+      onDone={() => void ctx.startOver()}
     />
     </>
   )

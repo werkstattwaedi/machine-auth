@@ -1,21 +1,21 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-// SDK-agnostic decision helper for the Electron kiosk's locked-down webview.
+// SDK-agnostic decision helpers for the Electron kiosk's locked-down webview.
 //
 // The kiosk runs the checkout web app inside an Electron `<webview>` whose
 // `webContents` denies every window-open and blocks all off-origin
 // navigation (checkout-kiosk/src/main.ts). That lockdown also kills the
 // legitimate `target="_blank"` links the app uses for off-origin content
-// (e.g. the "Nutzungsbestimmungen" page on werkstattwaedi.ch). Instead of a
-// generic external-link launcher — which would re-open the whole kiosk to
-// arbitrary navigation — we mount the allowlisted URL in a dedicated overlay
-// `<webview>` inside the kiosk chrome, with a close button, so nothing
-// lingers outside the app.
+// (e.g. the "Nutzungsbestimmungen" page on werkstattwaedi.ch, or the RaiseNow
+// TWINT paylink on pay.raisenow.io). Instead of a generic external-link
+// launcher — which would re-open the whole kiosk to arbitrary navigation — we
+// mount the allowlisted URL in a dedicated overlay `<webview>` inside the
+// kiosk chrome, with a close button, so nothing lingers outside the app.
 //
 // This module is pure (no Electron import) so it stays unit-testable; the
 // Electron wiring in main.ts/renderer.ts is a thin adapter around the
-// decision returned here.
+// decisions returned here.
 
 export interface KioskOverlayOptions {
   /**
@@ -56,4 +56,116 @@ export function decideKioskOverlay(
     return { open: false }
   }
   return { open: allowedOverlayOrigins.includes(origin) }
+}
+
+// Origin of the RaiseNow TWINT paylink the checkout app links to. Both the
+// kiosk overlay allowlist (so the paylink opens in the overlay) and the
+// payment-confirmation detection below key off this.
+export const RAISENOW_PAYLINK_ORIGIN = "https://pay.raisenow.io"
+
+// RaiseNow's registrable domain. The TWINT flow opens on `pay.raisenow.io`
+// but, on "Bezahlen", navigates the overlay to `twint.raisenow.io` (a
+// *different* origin). Allowing the whole RaiseNow domain family for *in-overlay
+// navigation* keeps the flow working across RaiseNow's internal hops without
+// re-opening the kiosk to arbitrary origins (#470).
+export const RAISENOW_BASE_DOMAIN = "raisenow.io"
+
+export interface KioskOverlayNavigationOptions {
+  /**
+   * The checkout app's own origin (scheme + host + port). Navigations back to
+   * the checkout app are always permitted.
+   */
+  checkoutOrigin: string
+  /**
+   * Origins explicitly allowed to open in the overlay (the same list used by
+   * `decideKioskOverlay`). In-overlay navigation to any of these is permitted.
+   */
+  allowedOverlayOrigins: readonly string[]
+}
+
+/**
+ * Decide whether the kiosk overlay webview may navigate to `url`.
+ *
+ * The overlay starts at an allowlisted origin (e.g. `pay.raisenow.io`) but
+ * RaiseNow drives the TWINT payment across its own subdomains
+ * (`pay.raisenow.io` → `twint.raisenow.io`). A strict origin-equality guard
+ * blocks the second hop and the overlay hangs on a spinner (#470).
+ *
+ * Returns `true` when the URL is `https:` AND one of:
+ *   - its origin equals `checkoutOrigin`, or
+ *   - its origin is in `allowedOverlayOrigins`, or
+ *   - its host is `raisenow.io` or a subdomain of it (label-boundary match:
+ *     `pay.raisenow.io` and `twint.raisenow.io` pass; `evilraisenow.io` and
+ *     `raisenow.io.attacker.com` do NOT).
+ *
+ * Malformed URLs and non-https URLs return `false` without throwing, so an
+ * unexpected navigation defaults to blocked.
+ */
+export function isAllowedKioskOverlayNavigation(
+  url: string,
+  { checkoutOrigin, allowedOverlayOrigins }: KioskOverlayNavigationOptions
+): boolean {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return false
+  }
+  if (parsed.protocol !== "https:") return false
+  if (parsed.origin === checkoutOrigin) return true
+  if (allowedOverlayOrigins.includes(parsed.origin)) return true
+  const host = parsed.hostname
+  return (
+    host === RAISENOW_BASE_DOMAIN || host.endsWith(`.${RAISENOW_BASE_DOMAIN}`)
+  )
+}
+
+export interface KioskPaymentConfirmation {
+  /**
+   * `true` once the RaiseNow paylink, shown in the kiosk overlay, has
+   * navigated to its payment-result view — i.e. the customer completed the
+   * TWINT payment. RaiseNow signals this by appending
+   * `rnw-view=payment_result` together with an `epms_payment_uuid` to the
+   * paylink URL.
+   */
+  paid: boolean
+  /**
+   * The RaiseNow payment UUID (`epms_payment_uuid`) when `paid` is `true`,
+   * otherwise `null`. Carried so callers can log / correlate the payment.
+   */
+  paymentUuid: string | null
+}
+
+const NOT_PAID: KioskPaymentConfirmation = { paid: false, paymentUuid: null }
+
+/**
+ * Detect whether a RaiseNow paylink URL (as observed on the kiosk overlay
+ * webview after a navigation) indicates a completed TWINT payment.
+ *
+ * RaiseNow drives the paylink to its result view by appending
+ * `rnw-view=payment_result&epms_payment_uuid=<uuid>` to the URL, e.g.:
+ *
+ *   https://pay.raisenow.io/hxnqv?amount.values=0.50&…&rnw-view=payment_result
+ *     &epms_payment_uuid=ef247e5e-6325-4a43-8791-f4a94fbc7e90
+ *
+ * Returns `{ paid: true, paymentUuid }` only when the URL's origin is the
+ * RaiseNow paylink origin AND both markers are present and non-empty;
+ * otherwise `{ paid: false, paymentUuid: null }`. Malformed URLs and
+ * off-origin URLs are treated as not-paid so an unrelated navigation never
+ * marks a checkout paid.
+ */
+export function detectKioskPaymentConfirmation(
+  url: string
+): KioskPaymentConfirmation {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return NOT_PAID
+  }
+  if (parsed.origin !== RAISENOW_PAYLINK_ORIGIN) return NOT_PAID
+  if (parsed.searchParams.get("rnw-view") !== "payment_result") return NOT_PAID
+  const paymentUuid = parsed.searchParams.get("epms_payment_uuid")
+  if (!paymentUuid) return NOT_PAID
+  return { paid: true, paymentUuid }
 }

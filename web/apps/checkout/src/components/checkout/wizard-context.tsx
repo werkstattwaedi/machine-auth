@@ -61,9 +61,12 @@ import {
   type CheckoutPerson,
   type PersonsAction,
 } from "./use-checkout-state"
+import { hasPreservableState } from "./kiosk-inactivity-watcher"
+import { registerKioskSessionGuard } from "./kiosk-session-guard"
 import type { FamilyCandidate } from "./step-checkin"
 import type { PaymentData } from "./payment-result"
 import { computeCheckoutCosts } from "./step-checkout"
+import { runStartOver } from "./start-over"
 
 export interface WizardContextValue {
   // ----- identification -----
@@ -72,8 +75,33 @@ export interface WizardContextValue {
   isAnonymous: boolean
   identifiedUserDoc: UserDoc | null
   identifiedUserRef: DocumentReference | null
+  /**
+   * True when the identified principal is a Vereinsmitglied, honouring BOTH
+   * identification modes: an account login carries membership on the Firestore
+   * user doc, a tag tap carries only the server-derived boolean on
+   * `tokenUser.activeMembership` (the kiosk session is a synthetic principal
+   * whose user doc is never loaded client-side). Gates the Sammelrechnung
+   * payment tab and the "Vereinsmitglied" check-in badge (issue #414).
+   */
+  isMember: boolean
+  /**
+   * True while a tapped badge is being verified against the backend and the
+   * Firebase session is established. The verify RPC + custom-token sign-in
+   * take noticeably longer than the physical NFC read, so the wizard shows a
+   * blocking overlay (TagAuthOverlay) for immediate tap feedback.
+   */
+  tagAuthLoading: boolean
+  /** Error message when badge verification failed; null otherwise. */
+  tagAuthError: string | null
   // ----- query results -----
   openCheckout: CheckoutDoc | null
+  /**
+   * True until the open-checkout subscription for the current principal has
+   * resolved its first snapshot. TagVisitRedirect waits on this so it can
+   * make a one-shot routing decision (open checkout at identification time
+   * → /visit) without misreading "query still loading" as "no checkout".
+   */
+  openCheckoutLoading: boolean
   checkoutId: string | null
   /**
    * True while `persistPersons` has written a new checkout doc but the
@@ -166,6 +194,19 @@ interface WizardProviderProps {
   pricingConfig: PricingConfig
 }
 
+/** Join a first/last name into a display string, or null when both are
+ * empty/absent (so callers can fall back to a name-less phrasing). */
+function joinName(
+  first?: string | null,
+  last?: string | null,
+): string | null {
+  const name = [first, last]
+    .map((s) => s?.trim())
+    .filter(Boolean)
+    .join(" ")
+  return name || null
+}
+
 export function WizardProvider({
   picc,
   cmac,
@@ -178,10 +219,13 @@ export function WizardProvider({
   const navigate = useNavigate()
   const auth = useFirebaseAuth()
   const { user, userDoc, signOut, signInAnonymouslyIfNeeded } = useAuth()
-  const { tokenUser, isTagAuth, tagSignOut } = useTokenAuth(
-    picc ?? null,
-    cmac ?? null,
-  )
+  const {
+    tokenUser,
+    isTagAuth,
+    tagSignOut,
+    loading: tagAuthLoading,
+    error: tagAuthError,
+  } = useTokenAuth(picc ?? null, cmac ?? null)
   const bridge = useBridge()
   const fsMutation = useFirestoreMutation()
   const { add, update, remove } = fsMutation
@@ -230,7 +274,7 @@ export function WizardProvider({
 
   // Find open checkout for the current principal.
   const anonUid = isAnonymous && user?.isAnonymous ? user.uid : null
-  const { data: openCheckouts } = useCollection(
+  const { data: openCheckouts, loading: openCheckoutLoading } = useCollection(
     identifiedUserRef
       ? checkoutsCollection(db)
       : anonUid
@@ -305,6 +349,12 @@ export function WizardProvider({
     tokenUser,
   )
 
+  // Same dual-principal membership signal drives the Sammelrechnung payment
+  // tab and the "Vereinsmitglied" check-in badge. For a tag tap
+  // `identifiedUserDoc` is null, so without the tag fallback a tapping member
+  // was offered neither the monthly-bill option nor the badge (issue #414).
+  const isMember = deriveIsMember(identifiedUserDoc, tokenUser)
+
   // Sync usageType from open checkout
   useEffect(() => {
     if (openCheckout?.usageType) {
@@ -315,29 +365,22 @@ export function WizardProvider({
   // Pre-fill primary person for logged-in users
   usePreFillPerson(identifiedUserDoc, personsDispatch, persons, prefillNonce)
 
-  // Pre-fill primary person for tag-identified users
-  useEffect(() => {
-    if (!tokenUser || isAccountLoggedIn) return
-    const primary = persons[0]
-    if (!primary || primary.isPreFilled) return
-    personsDispatch({
-      type: "UPDATE_PERSON",
-      id: primary.id,
-      updates: {
-        firstName: tokenUser.firstName ?? "",
-        lastName: tokenUser.lastName ?? "",
-        email: tokenUser.email ?? "",
-        userType: (tokenUser.userType as UserType) ?? "erwachsen",
-        isPreFilled: true,
-        termsAccepted: true,
-      },
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tokenUser?.userId])
+  // Pre-fill primary person for tag-identified users (incl. badge switch).
+  usePreFillTagPerson(
+    isAccountLoggedIn ? null : tokenUser,
+    personsDispatch,
+    persons,
+  )
 
-  // Family-roster quick-add (issue #209).
-  const selfUserId = identifiedUserDoc?.id ?? null
-  const selfRef = selfUserId ? userRef(db, selfUserId) : null
+  // Family-roster quick-add (issue #209, extended for tag-tap in #422).
+  // Source the self principal from `identifiedUserRef`, which is set for
+  // BOTH a logged-in account and a kiosk tag-tap session — the latter
+  // points at `users/${tokenUser.userId}`. The membership/co-member reads
+  // below are now permitted for tag sessions by the matching firestore.rules
+  // `actsAs()` carve-outs, so a tapped family member sees the same roster
+  // chips the logged-in owner does.
+  const selfUserId = identifiedUserRef?.id ?? null
+  const selfRef = identifiedUserRef
   const { data: familyMemberships } = useCollection(
     selfRef ? membershipsCollection(db) : null,
     ...(selfRef
@@ -368,31 +411,23 @@ export function WizardProvider({
     () => new Set(persons.map((p) => p.userId).filter(Boolean) as string[]),
     [persons],
   )
-  const familyCandidates: FamilyCandidate[] = useMemo(() => {
-    const candidates = familyMemberDocs
-      .filter((m) => !claimedUserIds.has(m.id))
-      .map((m) => ({
-        userId: m.id,
-        firstName: m.firstName,
-        lastName: m.lastName,
-        email: m.email ?? "",
-        userType: (m.userType as UserType) ?? "erwachsen",
-      }))
-    if (
-      identifiedUserDoc &&
-      familyMembership &&
-      !claimedUserIds.has(identifiedUserDoc.id)
-    ) {
-      candidates.unshift({
-        userId: identifiedUserDoc.id,
-        firstName: identifiedUserDoc.firstName,
-        lastName: identifiedUserDoc.lastName,
-        email: identifiedUserDoc.email ?? "",
-        userType: (identifiedUserDoc.userType as UserType) ?? "erwachsen",
-      })
-    }
-    return candidates
-  }, [familyMemberDocs, claimedUserIds, identifiedUserDoc, familyMembership])
+  const familyCandidates: FamilyCandidate[] = useMemo(
+    () =>
+      buildFamilyCandidates({
+        familyMemberDocs,
+        claimedUserIds,
+        identifiedUserDoc,
+        tokenUser,
+        hasFamilyMembership: !!familyMembership,
+      }),
+    [
+      familyMemberDocs,
+      claimedUserIds,
+      identifiedUserDoc,
+      tokenUser,
+      familyMembership,
+    ],
+  )
 
   // Rehydrate persons from open Firestore checkout doc (issue #246).
   const rehydratedRef = useRef<string | null>(null)
@@ -411,6 +446,21 @@ export function WizardProvider({
     rehydratedRef.current = openCheckout.id
   }, [openCheckout, personsDispatch])
 
+  // Publish "does this session hold anything worth protecting?" to the
+  // module-level kiosk session guard so BridgeNfcRouter (mounted at the
+  // root, outside the wizard) can ask before discarding the session on a
+  // badge tap. Read through a ref so the registered getter is always
+  // current without re-registering on every render.
+  const guardStateRef = useRef({
+    openCheckout: openCheckout as CheckoutDoc | null,
+    checkoutId,
+    pendingCheckout: false,
+    items,
+    persons,
+    identified: false,
+    holderName: null as string | null,
+  })
+
   // Bridge the "we just wrote a checkout, listener hasn't surfaced it
   // yet" gap. /checkin's onAdvance navigates to /visit synchronously
   // after persistPersons resolves, but the onSnapshot callback only
@@ -420,6 +470,40 @@ export function WizardProvider({
   useEffect(() => {
     if (openCheckout && pendingCheckout) setPendingCheckout(false)
   }, [openCheckout, pendingCheckout])
+
+  // Keep the guard snapshot current on every render; register the getter
+  // once per provider mount.
+  // Name of whoever currently holds the session — the signed-in account or
+  // the tapped-in badge user — so the badge-switch dialog can say whose visit
+  // is being parked. Null for anonymous sessions (which use the discard copy
+  // and never show a name) or when no name is on record.
+  const holderName = isAccountLoggedIn
+    ? joinName(identifiedUserDoc?.firstName, identifiedUserDoc?.lastName)
+    : isTagIdentified
+      ? joinName(tokenUser?.firstName, tokenUser?.lastName)
+      : null
+  guardStateRef.current = {
+    openCheckout: openCheckout ?? null,
+    checkoutId,
+    pendingCheckout,
+    items,
+    persons,
+    // Identified = signed-in account OR authenticated badge. Drives the
+    // tap-time confirmation copy/variant: an anonymous session that gets
+    // discarded loses unrecoverable work (no badge to re-tap), so it needs
+    // the honest, destructive dialog (issue #468).
+    identified: isAccountLoggedIn || isTagIdentified,
+    holderName,
+  }
+  useEffect(
+    () =>
+      registerKioskSessionGuard(() => ({
+        preservable: hasPreservableState(guardStateRef.current),
+        identified: guardStateRef.current.identified,
+        holderName: guardStateRef.current.holderName,
+      })),
+    [],
+  )
 
   // Persist the current persons array to the open checkout doc.
   const persistPersons = useCallback(async () => {
@@ -580,18 +664,21 @@ export function WizardProvider({
   // Drop the session + hard-reload to a fresh /checkin (see WizardContextValue
   // docs). window.location.replace — NOT navigate — so the rehydrate effect
   // can't immediately re-seed the roster from the still-open checkout.
+  //
+  // In the kiosk (issue #415) this is also the target of the chrome "Neuer
+  // Checkout" button, so it must give the *same strong wipe* as the chrome's
+  // direct reset: clear the volatile Electron partition (IndexedDB + the
+  // previous user's Firebase Auth) via `bridge.resetSession()` before the
+  // reload. The flow lives in `runStartOver` so it's unit-testable.
   const startOver = useCallback(async () => {
-    try {
-      await signOut()
-    } catch (err) {
-      // signOut is a local op and rarely rejects; if it does, fall through
-      // to the reload rather than swallowing the rejection on a closed
-      // dialog (the reload re-runs the wizard bootstrap). Mirrors how
-      // resetWizard tolerates a failed bridge.resetSession.
-      console.error("startOver: signOut failed", err)
-    }
-    window.location.replace(kiosk ? "/checkin?kiosk" : "/checkin")
-  }, [signOut, kiosk])
+    await runStartOver({
+      signOut,
+      bridgeAvailable: bridge.available,
+      resetSession: bridge.resetSession,
+      reload: (target) => window.location.replace(target),
+      kiosk,
+    })
+  }, [signOut, bridge, kiosk])
 
   // Submit: close checkout, get payment data. Used by /checkout's commit.
   const totalPriceRef = useRef(0)
@@ -634,10 +721,10 @@ export function WizardProvider({
       name: `${p.firstName} ${p.lastName}`,
       email: p.email,
       userType: p.userType,
-      ...(p.billingCompany
+      ...(hasBillingFields(p)
         ? {
             billingAddress: {
-              company: p.billingCompany,
+              company: p.billingCompany ?? "",
               street: p.billingStreet ?? "",
               zip: p.billingZip ?? "",
               city: p.billingCity ?? "",
@@ -645,6 +732,31 @@ export function WizardProvider({
           }
         : {}),
     }))
+
+    // A membership generates an invoice that needs a postal address. The
+    // address was captured inline in the membership line item (StepCheckout)
+    // and validated before submit; persist it to the member's user doc so the
+    // invoice resolves it and it's remembered. The server backstop in
+    // closeCheckoutAndGetPayment reads the same field.
+    if (membershipCost > 0 && identifiedUserRef && persons[0]) {
+      const p = persons[0]
+      try {
+        await update(userRef(db, identifiedUserRef.id), {
+          billingAddress: {
+            company: p.billingCompany?.trim() ?? "",
+            street: p.billingStreet?.trim() ?? "",
+            zip: p.billingZip?.trim() ?? "",
+            city: p.billingCity?.trim() ?? "",
+          },
+        })
+      } catch {
+        // Hook already toasted + telemetered (ADR-0025). Abort the submit
+        // like a failed RPC — without this the rejection would escape
+        // submitCheckout's null-on-failure contract and surface as an
+        // unhandled rejection in the route's onSubmit.
+        return null
+      }
+    }
 
     // Store RAW section amounts (issue #284); the server is authoritative
     // and recomputes both net and discount.
@@ -739,6 +851,8 @@ export function WizardProvider({
     usageType,
     functions,
     submit,
+    update,
+    db,
   ])
 
   const value: WizardContextValue = {
@@ -747,7 +861,11 @@ export function WizardProvider({
     isAnonymous,
     identifiedUserDoc,
     identifiedUserRef,
+    isMember,
+    tagAuthLoading,
+    tagAuthError,
     openCheckout: openCheckout ?? null,
+    openCheckoutLoading,
     checkoutId,
     pendingCheckout,
     items,
@@ -803,9 +921,95 @@ export function deriveDiscountLevel(
   identifiedUserDoc: UserDoc | null,
   tokenUser: TokenUser | null,
 ): DiscountLevel {
-  return identifiedUserDoc?.activeMembership || tokenUser?.activeMembership
-    ? "member"
-    : "none"
+  return deriveIsMember(identifiedUserDoc, tokenUser) ? "member" : "none"
+}
+
+/**
+ * True when either identified principal is a Vereinsmitglied.
+ *
+ * Both inputs are honoured for the same reason as `deriveDiscountLevel`: an
+ * account login exposes membership on the Firestore user doc
+ * (`identifiedUserDoc.activeMembership`), while a tag tap carries only the
+ * server-derived boolean on `tokenUser.activeMembership` (the kiosk session is
+ * a synthetic principal whose user doc is never loaded client-side). Missing
+ * the tag path here is what hid the Sammelrechnung payment tab and the
+ * "Vereinsmitglied" check-in badge from tag-tapping members — issue #414.
+ *
+ * Exported for unit testing (see wizard-discount-level.test.ts).
+ */
+export function deriveIsMember(
+  identifiedUserDoc: UserDoc | null,
+  tokenUser: TokenUser | null,
+): boolean {
+  return !!(
+    identifiedUserDoc?.activeMembership || tokenUser?.activeMembership
+  )
+}
+
+/**
+ * Build the family quick-add chip list (issue #209, extended for tag-tap in
+ * #422). The roster co-members come from `familyMemberDocs`; the identified
+ * principal is prepended so they can re-add themselves after removing their
+ * own chip.
+ *
+ * The self chip is sourced from the account user doc when logged in, or from
+ * `tokenUser` for a kiosk tag-tap session — in the tag case
+ * `identifiedUserDoc` is null but the synthetic session still identifies a
+ * real family member, and the matching firestore.rules `actsAs()` carve-outs
+ * now let that session read the roster docs (issue #422). Candidates already
+ * on the visit (`claimedUserIds`) are filtered out.
+ *
+ * Exported (pure) for unit testing — see wizard-family-candidates.test.ts.
+ */
+export function buildFamilyCandidates({
+  familyMemberDocs,
+  claimedUserIds,
+  identifiedUserDoc,
+  tokenUser,
+  hasFamilyMembership,
+}: {
+  familyMemberDocs: {
+    id: string
+    firstName: string
+    lastName: string
+    email?: string | null
+    userType?: string | null
+  }[]
+  claimedUserIds: Set<string>
+  identifiedUserDoc: UserDoc | null
+  tokenUser: TokenUser | null
+  hasFamilyMembership: boolean
+}): FamilyCandidate[] {
+  const candidates: FamilyCandidate[] = familyMemberDocs
+    .filter((m) => !claimedUserIds.has(m.id))
+    .map((m) => ({
+      userId: m.id,
+      firstName: m.firstName,
+      lastName: m.lastName,
+      email: m.email ?? "",
+      userType: (m.userType as UserType) ?? "erwachsen",
+    }))
+  const self: FamilyCandidate | null = identifiedUserDoc
+    ? {
+        userId: identifiedUserDoc.id,
+        firstName: identifiedUserDoc.firstName,
+        lastName: identifiedUserDoc.lastName,
+        email: identifiedUserDoc.email ?? "",
+        userType: (identifiedUserDoc.userType as UserType) ?? "erwachsen",
+      }
+    : tokenUser
+      ? {
+          userId: tokenUser.userId,
+          firstName: tokenUser.firstName ?? "",
+          lastName: tokenUser.lastName ?? "",
+          email: tokenUser.email ?? "",
+          userType: (tokenUser.userType as UserType) ?? "erwachsen",
+        }
+      : null
+  if (self && hasFamilyMembership && !claimedUserIds.has(self.userId)) {
+    candidates.unshift(self)
+  }
+  return candidates
 }
 
 /**
@@ -848,7 +1052,84 @@ export function usePreFillPerson(
   }, [userDoc?.id, resetNonce])
 }
 
+/**
+ * Pre-fill the primary person card from a tag-identified user, and — for
+ * issue #420 — replace it when a *different* badge is tapped while one is
+ * already pre-filled.
+ *
+ * The effect is keyed on `tokenUser?.userId`, so it re-runs whenever a new
+ * badge is verified. The old inline guard bailed on `primary.isPreFilled`,
+ * which swallowed the switch and left the first badge's name on the card —
+ * combined with the double-verify bug (now fixed in bridge-nfc-router) this
+ * produced the "reading the badge has no effect after switching" symptom.
+ *
+ * Overwrite policy:
+ *   - primary not pre-filled (empty or anon-typed): fill it — the badge tap
+ *     identifies the user and supersedes anonymous input (unchanged behaviour).
+ *   - primary pre-filled by THIS same tag user: idempotent re-run, skip.
+ *   - primary pre-filled by a DIFFERENT tag user (badge switch): overwrite.
+ *   - primary pre-filled but NOT by us (logged-in pre-fill or a roster
+ *     rehydrated from an open checkout — `prefilledTagUserIdRef === null`):
+ *     left intact, never discarded.
+ *
+ * Exported for unit testing (see wizard-prefill-tag.test.tsx).
+ */
+export function usePreFillTagPerson(
+  tokenUser: TokenUser | null,
+  dispatch: React.Dispatch<PersonsAction>,
+  persons: CheckoutPerson[],
+) {
+  // Tracks which tag user the primary card currently reflects, so a re-run
+  // for the same badge is a no-op while a switch to a new badge overwrites.
+  const prefilledTagUserIdRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!tokenUser) return
+    const primary = persons[0]
+    if (!primary) return
+    // Same tag user already on the card — nothing to do.
+    if (
+      primary.isPreFilled &&
+      prefilledTagUserIdRef.current === tokenUser.userId
+    ) {
+      return
+    }
+    // A pre-filled primary we didn't fill from a tag (logged-in pre-fill or
+    // rehydrated open checkout) is left intact — only tag-driven fills are
+    // ours to overwrite.
+    if (primary.isPreFilled && prefilledTagUserIdRef.current === null) return
+    prefilledTagUserIdRef.current = tokenUser.userId
+    dispatch({
+      type: "UPDATE_PERSON",
+      id: primary.id,
+      updates: {
+        firstName: tokenUser.firstName ?? "",
+        lastName: tokenUser.lastName ?? "",
+        email: tokenUser.email ?? "",
+        userType: (tokenUser.userType as UserType) ?? "erwachsen",
+        isPreFilled: true,
+        termsAccepted: true,
+        // Identity link (issue #457): without userId the check-in page
+        // renders the editable "Person 1" card (the IdentityStrip requires
+        // `isPreFilled && userId`), and the persisted checkout person lacks
+        // its userRef — so the tag user's identity appeared lost.
+        userId: tokenUser.userId,
+      },
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tokenUser?.userId])
+}
+
 // Person <-> Firestore doc converters (extracted from the old wizard).
+
+/**
+ * A person carries a billing address worth persisting when ANY billing field
+ * is set — not just the company. Gating on `billingCompany` alone dropped a
+ * regular member's street/zip/city on the persist→rehydrate round-trip, so
+ * the membership address pre-filled from the profile never survived.
+ */
+export function hasBillingFields(p: CheckoutPerson): boolean {
+  return !!(p.billingCompany || p.billingStreet || p.billingZip || p.billingCity)
+}
 
 export function personLocalToDoc(
   p: CheckoutPerson,
@@ -862,9 +1143,9 @@ export function personLocalToDoc(
   if (p.userId) {
     doc.userRef = userRef(db, p.userId)
   }
-  if (p.billingCompany) {
+  if (hasBillingFields(p)) {
     doc.billingAddress = {
-      company: p.billingCompany,
+      company: p.billingCompany ?? "",
       street: p.billingStreet ?? "",
       zip: p.billingZip ?? "",
       city: p.billingCity ?? "",

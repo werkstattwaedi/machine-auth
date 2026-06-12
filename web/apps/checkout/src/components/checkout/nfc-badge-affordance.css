@@ -1,0 +1,88 @@
+/* Copyright Offene Werkstatt Wädenswil
+   SPDX-License-Identifier: MIT */
+
+/* Animated NFC badge affordance for the kiosk check-in page (design
+   handoff "NFC Badge Affordance", variant A "Karte & Leser"): the white
+   OWW teardrop fob glides onto the black ACS reader, teal ripples mark
+   the tap point and the reader's LED slit blinks gold on contact. */
+
+.nfx-headline {
+  font-family: "Bitter", Georgia, serif;
+}
+
+/* Gold marker swash behind the word "Badge" in the headline. */
+.nfx-swash {
+  position: relative;
+  z-index: 0;
+  white-space: nowrap;
+}
+.nfx-swash::before {
+  content: "";
+  position: absolute;
+  left: -3px;
+  right: -5px;
+  top: 52%;
+  height: 0.55em;
+  background: var(--color-oww-gold);
+  transform: rotate(-1.5deg);
+  z-index: -1;
+}
+
+/* — hero scene: fob glides to the reader, dwells, returns — */
+.nfx-card {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: nfx-card-move 3.6s ease-in-out infinite;
+}
+@keyframes nfx-card-move {
+  0% { transform: translateX(0) rotate(0deg); }
+  32% { transform: translateX(126px) rotate(-5deg); }
+  58% { transform: translateX(126px) rotate(-5deg); }
+  86%, 100% { transform: translateX(0) rotate(0deg); }
+}
+
+/* Ripples expand from the tap point while the fob dwells on the reader. */
+.nfx-rip {
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+}
+.nfx-rip-1 { animation: nfx-rip-a 3.6s ease-out infinite; }
+.nfx-rip-2 { animation: nfx-rip-b 3.6s ease-out infinite; }
+@keyframes nfx-rip-a {
+  0%, 33% { transform: scale(0.4); opacity: 0; }
+  38% { transform: scale(0.6); opacity: 0.85; }
+  60% { transform: scale(1.8); opacity: 0; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+@keyframes nfx-rip-b {
+  0%, 40% { transform: scale(0.4); opacity: 0; }
+  45% { transform: scale(0.55); opacity: 0.7; }
+  68% { transform: scale(1.9); opacity: 0; }
+  100% { transform: scale(1.9); opacity: 0; }
+}
+
+/* The reader's LED slit blinks gold while the fob is on the reader. */
+.nfx-led { animation: nfx-led 3.6s linear infinite; }
+@keyframes nfx-led {
+  0%, 31% { fill: #3a3a3a; }
+  36%, 58% { fill: var(--color-oww-gold); }
+  64%, 100% { fill: #3a3a3a; }
+}
+
+/* — compact bar: contactless arcs pulse in sequence next to the mini fob — */
+.nfx-arc { animation: nfx-arc-wave 1.8s ease-in-out infinite; }
+.nfx-arc-2 { animation-delay: 0.18s; }
+@keyframes nfx-arc-wave {
+  0%, 55%, 100% { opacity: 0.18; }
+  18% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nfx-card,
+  .nfx-rip,
+  .nfx-led,
+  .nfx-arc {
+    animation: none !important;
+  }
+}

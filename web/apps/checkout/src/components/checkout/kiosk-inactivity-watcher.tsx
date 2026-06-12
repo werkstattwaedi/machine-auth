@@ -12,6 +12,7 @@ import {
   AlertDialogTitle,
 } from "@modules/components/ui/alert-dialog"
 import { Clock } from "lucide-react"
+import { AutoActionButton } from "./auto-action-button"
 import { useWizardContext } from "./wizard-context"
 import type { CheckoutPerson } from "./use-checkout-state"
 import type { CheckoutItemLocal } from "@/components/usage/inline-rows"
@@ -75,9 +76,14 @@ export function hasPreservableState({
  * Kiosk-only idle watcher. Renders nothing for browser/anonymous/logged-in
  * users — the screensaver/refresh dance is only meaningful at the
  * Werkstatt's kiosk terminal. After 5 minutes of inactivity we surface a
- * "Bist du noch da?" dialog with a 30-second auto-close countdown; if the
- * countdown runs out the wizard resets to /checkin (bridge session wiped
- * inside `resetWizard`).
+ * "Bist du noch da?" dialog whose "Neuen Besuch starten" button auto-accepts
+ * after 30 s (filling background, no countdown text); when it fires the
+ * terminal is handed to the next person via
+ * `startOver` — the same strong wipe as the Electron chrome's "Neuer
+ * Checkout" (signOut + bridge partition wipe + hard reload). A soft
+ * `resetWizard` is not enough here: it keeps the in-memory Firebase
+ * session alive, so the previous visitor's open checkout would rehydrate
+ * straight back onto the fresh /checkin.
  *
  * Phase 5 of the wizard-routes refactor — previously this logic lived in
  * the giant CheckoutWizard component and (incorrectly) also fired for
@@ -86,7 +92,7 @@ export function hasPreservableState({
 export function KioskInactivityWatcher() {
   const {
     kiosk,
-    resetWizard,
+    startOver,
     openCheckout,
     checkoutId,
     pendingCheckout,
@@ -106,7 +112,6 @@ export function KioskInactivityWatcher() {
       persons,
     })
   const [open, setOpen] = useState(false)
-  const [secondsLeft, setSecondsLeft] = useState(POPUP_AUTO_CLOSE_SECONDS)
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Read the dialog's open state from inside the activity handler without
   // putting `open` in the listener effect's deps (which would tear down and
@@ -152,28 +157,11 @@ export function KioskInactivityWatcher() {
     }
   }, [shouldWatch, open, armIdle])
 
-  // 30-second auto-close once the dialog is open.
-  useEffect(() => {
-    if (!open) return
-    setSecondsLeft(POPUP_AUTO_CLOSE_SECONDS)
-    const interval = window.setInterval(() => {
-      setSecondsLeft((s) => {
-        if (s <= 1) {
-          window.clearInterval(interval)
-          // Fire-and-forget; resetWizard handles the navigate + signOut.
-          void resetWizard()
-          setOpen(false)
-          return 0
-        }
-        return s - 1
-      })
-    }, 1000)
-    return () => window.clearInterval(interval)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
-
   if (!shouldWatch) return null
 
+  // The auto-accepting "Neuen Besuch starten" button owns the 30 s timing —
+  // its filling background replaces the old countdown text (same pattern as
+  // the completion dialog). "Besuch fortsetzen" aborts back to the visit.
   return (
     <AlertDialog open={open}>
       <AlertDialogContent>
@@ -184,16 +172,23 @@ export function KioskInactivityWatcher() {
           </AlertDialogTitle>
           <AlertDialogDescription>
             Es war eine Weile ruhig. Möchtest du deinen Besuch fortsetzen?
-            <span className="block mt-2 text-xs">
-              Sonst startet automatisch ein neuer Besuch in {secondsLeft}{" "}
-              {secondsLeft === 1 ? "Sekunde" : "Sekunden"}…
-            </span>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogAction onClick={() => setOpen(false)}>
+          <AlertDialogAction variant="outline" onClick={() => setOpen(false)}>
             Besuch fortsetzen
           </AlertDialogAction>
+          <AutoActionButton
+            durationMs={POPUP_AUTO_CLOSE_SECONDS * 1000}
+            onAction={() => {
+              setOpen(false)
+              // Fire-and-forget; startOver handles signOut + bridge wipe +
+              // hard reload to a fresh /checkin?kiosk.
+              void startOver()
+            }}
+          >
+            Neuen Besuch starten
+          </AutoActionButton>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

@@ -14,6 +14,7 @@
     "build:kiosk:prod": "node scripts/inject-build-config.mjs --prod && npm run tsc:main && npm run tsc:renderer && electron-builder --config electron-builder.kiosk.yml --win",
     "test": "tsx --test src/**/*.test.ts",
     "rebuild": "electron-rebuild",
+    "test": "npx tsx --test src/renderer/*.test.ts",
     "postinstall": "electron-rebuild",
     "typecheck": "npm run inject-build-config && tsc --noEmit -p tsconfig.json && tsc --noEmit -p src/renderer/tsconfig.json"
   },

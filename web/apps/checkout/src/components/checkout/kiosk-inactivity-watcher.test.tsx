@@ -4,8 +4,11 @@
 /**
  * KioskInactivityWatcher — only fires on kiosk sessions *with state worth
  * preserving* (issue #378). After 5 min of idle it opens a "Bist du noch da?"
- * dialog with a 30 s auto-close. The auto-close calls resetWizard (which
- * navigates back to /checkin). Activity events reset the idle countdown while
+ * dialog whose "Neuen Besuch starten" button auto-accepts after 30 s
+ * (AutoActionButton fill, no countdown text). The auto-accept calls startOver
+ * — the same strong wipe as the Electron chrome's "Neuer Checkout" (signOut +
+ * bridge partition wipe + hard reload). "Besuch fortsetzen" aborts.
+ * Activity events reset the idle countdown while
  * the dialog is closed. A fresh /checkin?kiosk with an empty form and no
  * checkout must NOT arm the watcher.
  */
@@ -18,7 +21,7 @@ import {
   it,
   vi,
 } from "vitest"
-import { render, screen, cleanup, act } from "@testing-library/react"
+import { render, screen, cleanup, act, fireEvent } from "@testing-library/react"
 import {
   KioskInactivityWatcher,
   hasPreservableState,
@@ -67,7 +70,7 @@ function preFilledPerson(
 function baseContext(overrides: Record<string, unknown> = {}) {
   return {
     kiosk: true,
-    resetWizard: vi.fn(),
+    startOver: vi.fn(),
     openCheckout: null,
     checkoutId: null,
     pendingCheckout: false,
@@ -91,38 +94,38 @@ describe("KioskInactivityWatcher", () => {
   })
 
   it("renders nothing for non-kiosk sessions", () => {
-    const resetWizard = vi.fn()
+    const startOver = vi.fn()
     mockUseWizardContext.mockReturnValue(
-      baseContext({ kiosk: false, resetWizard }),
+      baseContext({ kiosk: false, startOver }),
     )
     const { container } = render(<KioskInactivityWatcher />)
     expect(container.textContent).toBe("")
 
-    // 10 min of "idle" — must not fire resetWizard.
+    // 10 min of "idle" — must not fire startOver.
     act(() => {
       vi.advanceTimersByTime(10 * 60 * 1000)
     })
-    expect(resetWizard).not.toHaveBeenCalled()
+    expect(startOver).not.toHaveBeenCalled()
   })
 
   it("does not arm when kiosk + no checkout + pristine empty form", () => {
-    const resetWizard = vi.fn()
-    mockUseWizardContext.mockReturnValue(baseContext({ resetWizard }))
+    const startOver = vi.fn()
+    mockUseWizardContext.mockReturnValue(baseContext({ startOver }))
     const { container } = render(<KioskInactivityWatcher />)
     expect(container.textContent).toBe("")
 
-    // 10 min of idle — dialog must never show and resetWizard never fire.
+    // 10 min of idle — dialog must never show and startOver never fire.
     act(() => {
       vi.advanceTimersByTime(10 * 60 * 1000)
     })
     expect(screen.queryByText(/Bist du noch da/)).toBeNull()
-    expect(resetWizard).not.toHaveBeenCalled()
+    expect(startOver).not.toHaveBeenCalled()
   })
 
   it("does not arm for a single pristine pre-filled identity person", () => {
-    const resetWizard = vi.fn()
+    const startOver = vi.fn()
     mockUseWizardContext.mockReturnValue(
-      baseContext({ resetWizard, persons: [preFilledPerson()] }),
+      baseContext({ startOver, persons: [preFilledPerson()] }),
     )
     render(<KioskInactivityWatcher />)
 
@@ -130,13 +133,13 @@ describe("KioskInactivityWatcher", () => {
       vi.advanceTimersByTime(10 * 60 * 1000)
     })
     expect(screen.queryByText(/Bist du noch da/)).toBeNull()
-    expect(resetWizard).not.toHaveBeenCalled()
+    expect(startOver).not.toHaveBeenCalled()
   })
 
   it("does not fire before the 5-minute idle threshold (open checkout)", () => {
-    const resetWizard = vi.fn()
+    const startOver = vi.fn()
     mockUseWizardContext.mockReturnValue(
-      baseContext({ resetWizard, openCheckout: { id: "c1" } }),
+      baseContext({ startOver, openCheckout: { id: "c1" } }),
     )
     render(<KioskInactivityWatcher />)
 
@@ -145,13 +148,13 @@ describe("KioskInactivityWatcher", () => {
       vi.advanceTimersByTime(4 * 60 * 1000 + 30 * 1000)
     })
     expect(screen.queryByText(/Bist du noch da/)).toBeNull()
-    expect(resetWizard).not.toHaveBeenCalled()
+    expect(startOver).not.toHaveBeenCalled()
   })
 
   it("arms when openCheckout exists (pristine persons)", () => {
-    const resetWizard = vi.fn()
+    const startOver = vi.fn()
     mockUseWizardContext.mockReturnValue(
-      baseContext({ resetWizard, openCheckout: { id: "c1" } }),
+      baseContext({ startOver, openCheckout: { id: "c1" } }),
     )
     render(<KioskInactivityWatcher />)
 
@@ -159,20 +162,20 @@ describe("KioskInactivityWatcher", () => {
       vi.advanceTimersByTime(5 * 60 * 1000)
     })
     expect(screen.getByText(/Bist du noch da/)).toBeTruthy()
-    expect(resetWizard).not.toHaveBeenCalled()
+    expect(startOver).not.toHaveBeenCalled()
 
-    // Auto-close fires resetWizard 30 s later.
+    // Auto-close fires startOver 30 s later.
     act(() => {
       vi.advanceTimersByTime(30 * 1000)
     })
-    expect(resetWizard).toHaveBeenCalledOnce()
+    expect(startOver).toHaveBeenCalledOnce()
   })
 
   it("arms when a person has a typed-in firstName (not pre-filled)", () => {
-    const resetWizard = vi.fn()
+    const startOver = vi.fn()
     mockUseWizardContext.mockReturnValue(
       baseContext({
-        resetWizard,
+        startOver,
         persons: [emptyPerson({ firstName: "Anna" })],
       }),
     )
@@ -185,10 +188,10 @@ describe("KioskInactivityWatcher", () => {
   })
 
   it("arms when a non-pre-filled person accepted terms", () => {
-    const resetWizard = vi.fn()
+    const startOver = vi.fn()
     mockUseWizardContext.mockReturnValue(
       baseContext({
-        resetWizard,
+        startOver,
         persons: [emptyPerson({ termsAccepted: true })],
       }),
     )
@@ -201,9 +204,9 @@ describe("KioskInactivityWatcher", () => {
   })
 
   it("arms when the cart has items", () => {
-    const resetWizard = vi.fn()
+    const startOver = vi.fn()
     mockUseWizardContext.mockReturnValue(
-      baseContext({ resetWizard, items: [{ id: "i1" }] }),
+      baseContext({ startOver, items: [{ id: "i1" }] }),
     )
     render(<KioskInactivityWatcher />)
 
@@ -214,10 +217,10 @@ describe("KioskInactivityWatcher", () => {
   })
 
   it("arms when there is more than one person", () => {
-    const resetWizard = vi.fn()
+    const startOver = vi.fn()
     mockUseWizardContext.mockReturnValue(
       baseContext({
-        resetWizard,
+        startOver,
         persons: [emptyPerson(), emptyPerson({ id: "p2" })],
       }),
     )
@@ -229,10 +232,46 @@ describe("KioskInactivityWatcher", () => {
     expect(screen.getByText(/Bist du noch da/)).toBeTruthy()
   })
 
-  it("calls resetWizard 30 s after the dialog opens (auto-close)", () => {
-    const resetWizard = vi.fn()
+  it("shows abort + auto-accept buttons and no countdown text", () => {
+    const startOver = vi.fn()
     mockUseWizardContext.mockReturnValue(
-      baseContext({ resetWizard, openCheckout: { id: "c1" } }),
+      baseContext({ startOver, openCheckout: { id: "c1" } }),
+    )
+    render(<KioskInactivityWatcher />)
+
+    act(() => {
+      vi.advanceTimersByTime(5 * 60 * 1000)
+    })
+    expect(
+      screen.getByRole("button", { name: "Besuch fortsetzen" }),
+    ).toBeTruthy()
+    expect(
+      screen.getByRole("button", { name: "Neuen Besuch starten" }),
+    ).toBeTruthy()
+    // The filling button replaced the textual countdown (issue: two
+    // competing time displays).
+    expect(screen.queryByText(/Sekunden/)).toBeNull()
+  })
+
+  it("'Besuch fortsetzen' closes the dialog without resetting", () => {
+    const startOver = vi.fn()
+    mockUseWizardContext.mockReturnValue(
+      baseContext({ startOver, openCheckout: { id: "c1" } }),
+    )
+    render(<KioskInactivityWatcher />)
+
+    act(() => {
+      vi.advanceTimersByTime(5 * 60 * 1000)
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Besuch fortsetzen" }))
+    expect(screen.queryByText(/Bist du noch da/)).toBeNull()
+    expect(startOver).not.toHaveBeenCalled()
+  })
+
+  it("calls startOver 30 s after the dialog opens (auto-close)", () => {
+    const startOver = vi.fn()
+    mockUseWizardContext.mockReturnValue(
+      baseContext({ startOver, openCheckout: { id: "c1" } }),
     )
     render(<KioskInactivityWatcher />)
 
@@ -245,13 +284,13 @@ describe("KioskInactivityWatcher", () => {
     act(() => {
       vi.advanceTimersByTime(29 * 1000)
     })
-    expect(resetWizard).not.toHaveBeenCalled()
+    expect(startOver).not.toHaveBeenCalled()
 
     // Cross the 30 s mark.
     act(() => {
       vi.advanceTimersByTime(1000)
     })
-    expect(resetWizard).toHaveBeenCalledOnce()
+    expect(startOver).toHaveBeenCalledOnce()
   })
 })
 

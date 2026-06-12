@@ -23,6 +23,13 @@ import {
   Wrench,
 } from "lucide-react"
 import { cn } from "@modules/lib/utils"
+import { AddressFields } from "@modules/components/profile-form"
+import {
+  validateAddress,
+  isAddressComplete,
+  type AddressValue,
+  type AddressErrors,
+} from "@modules/lib/address"
 import type { CheckoutPerson } from "./use-checkout-state"
 import type { CheckoutItemLocal } from "@/components/usage/inline-rows"
 import { PositionTable, rowFromItem } from "@/components/usage/position-table"
@@ -180,6 +187,25 @@ interface StepCheckoutProps {
   config: PricingConfig | null
   /** Vereinsmitgliedschaft catalog id (issue #262/#263); null when unset. */
   membershipCatalogId?: string | null
+  /**
+   * Update the primary person's billing fields — used by the mandatory
+   * address sub-form shown in the membership line item (the club's member
+   * roster needs a postal address). The captured address is persisted to the
+   * member's user doc on submit.
+   */
+  onPrimaryBillingChange?: (updates: Partial<CheckoutPerson>) => void
+  /**
+   * The identified user's profile `billingAddress`, if any. Used to pre-fill
+   * the membership address when the primary person carries no billing fields —
+   * e.g. a server-created checkout (purchaseMembership) whose rehydrated
+   * persons have no address even though the profile does.
+   */
+  profileBillingAddress?: {
+    company?: string
+    street?: string
+    zip?: string
+    city?: string
+  } | null
 }
 
 export interface CheckoutCosts {
@@ -282,6 +308,8 @@ export function StepCheckout({
   items,
   config,
   membershipCatalogId,
+  onPrimaryBillingChange,
+  profileBillingAddress,
 }: StepCheckoutProps) {
   // Display NET (billed) section amounts — what the customer actually pays
   // after the usage-type discount (issue #284). `membershipCost` renders the
@@ -422,6 +450,83 @@ export function StepCheckout({
       return next
     })
 
+  // Membership invoice needs the buyer's postal address. Capture it inline in
+  // the membership line item, bound to the primary person's billing fields
+  // (prefilled from their user doc). Validation blocks "Weiter zum Bezahlen".
+  const hasMembership = membershipItems.length > 0
+  const primary = persons[0]
+  const requireCompany = primary?.userType === "firma"
+  const primaryAddress: AddressValue = {
+    company: primary?.billingCompany ?? "",
+    street: primary?.billingStreet ?? "",
+    zip: primary?.billingZip ?? "",
+    city: primary?.billingCity ?? "",
+  }
+  const [membershipAddressErrors, setMembershipAddressErrors] =
+    useState<AddressErrors>({})
+
+  // One-shot init when a membership appears: pre-fill the address from the
+  // profile when the primary person carries no billing fields (server-created
+  // checkouts rehydrate without one), then auto-open the section only when the
+  // address still needs input — members with a complete profile address see it
+  // pre-filled and collapsed. Waits for the primary person so the async
+  // pre-fill/rehydrate doesn't race; by the time items exist the user doc is
+  // loaded (the open-checkout query derives from it).
+  const membershipAutoOpened = useRef(false)
+  useEffect(() => {
+    if (!hasMembership || !primary || membershipAutoOpened.current) return
+    membershipAutoOpened.current = true
+    const hasOwnBilling = !!(
+      primary.billingCompany ||
+      primary.billingStreet ||
+      primary.billingZip ||
+      primary.billingCity
+    )
+    let effective = primaryAddress
+    if (!hasOwnBilling && profileBillingAddress) {
+      effective = {
+        company: profileBillingAddress.company ?? "",
+        street: profileBillingAddress.street ?? "",
+        zip: profileBillingAddress.zip ?? "",
+        city: profileBillingAddress.city ?? "",
+      }
+      onPrimaryBillingChange?.({
+        billingCompany: effective.company,
+        billingStreet: effective.street,
+        billingZip: effective.zip,
+        billingCity: effective.city,
+      })
+    }
+    if (!isAddressComplete(effective, { requireCompany })) {
+      setOpenSections((prev) => new Set(prev).add("mitgliedschaft"))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasMembership, primary])
+
+  const handleMembershipAddressChange = (patch: Partial<AddressValue>) => {
+    if (membershipAddressErrors && Object.keys(membershipAddressErrors).length) {
+      setMembershipAddressErrors({})
+    }
+    onPrimaryBillingChange?.({
+      ...(patch.company !== undefined ? { billingCompany: patch.company } : {}),
+      ...(patch.street !== undefined ? { billingStreet: patch.street } : {}),
+      ...(patch.zip !== undefined ? { billingZip: patch.zip } : {}),
+      ...(patch.city !== undefined ? { billingCity: patch.city } : {}),
+    })
+  }
+
+  const handleSubmitClick = async () => {
+    if (hasMembership) {
+      const errs = validateAddress(primaryAddress, { requireCompany })
+      if (Object.keys(errs).length > 0) {
+        setMembershipAddressErrors(errs)
+        setOpenSections((prev) => new Set(prev).add("mitgliedschaft"))
+        return
+      }
+    }
+    await onSubmit()
+  }
+
   const totalMachineMinutes = nfcItems.reduce(
     (m, i) => m + Math.round(i.quantity * 60),
     0,
@@ -465,6 +570,23 @@ export function StepCheckout({
               firstColLabel="Mitgliedschaft"
               rows={membershipItems.map(rowFromItem)}
             />
+            <div
+              className="mt-4 pt-4 border-t border-border"
+              data-testid="membership-address"
+            >
+              <p className="text-sm text-muted-foreground mb-3">
+                Als Verein führen wir ein Mitgliederverzeichnis — dafür
+                brauchen wir deine Postadresse.
+              </p>
+              <AddressFields
+                value={primaryAddress}
+                errors={membershipAddressErrors}
+                onChange={handleMembershipAddressChange}
+                includeCompany={requireCompany}
+                showEyebrow={false}
+                idPrefix="membership-addr"
+              />
+            </div>
           </ExpandableSection>
         )}
 
@@ -660,7 +782,7 @@ export function StepCheckout({
         <button
           type="button"
           className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-white bg-cog-teal rounded-[3px] hover:bg-cog-teal-dark transition-colors disabled:opacity-50"
-          onClick={onSubmit}
+          onClick={handleSubmitClick}
           disabled={submitting || total < 0}
         >
           {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -749,7 +871,11 @@ function ExpandableSection({
         <span className="min-w-0">
           <div className="flex items-center gap-2 min-w-0 font-heading font-bold text-[15px] text-foreground leading-tight">
             <span className="flex-shrink-0">{icon}</span>
-            <span className="min-w-0 break-words">{title}</span>
+            {/* truncate (not break-words): long compound titles like
+                "Maschinen-/Werkzeugnutzung" must collapse to a single line with
+                an ellipsis on narrow mobile widths rather than breaking
+                mid-word (issue #446). */}
+            <span className="min-w-0 truncate">{title}</span>
           </div>
           <span className="block mt-1 text-[13px] text-muted-foreground truncate">
             {summary}

@@ -11,7 +11,8 @@
  * No back button — once the checkout is closed the user cannot rewind.
  */
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
+import { useBridge } from "@modules/lib/use-bridge"
 import { formatCHF } from "@modules/lib/format"
 import { useDocument } from "@modules/lib/firestore"
 import { useDb, useFunctions } from "@modules/lib/firebase-context"
@@ -70,7 +71,11 @@ interface PaymentResultProps {
    */
   initialPaymentData?: PaymentData | null
   /** Gates the monthly-bill (Sammelrechnung) tab — only Vereinsmitglieder
-   *  see it; the Firestore rule also requires activeMembership. */
+   *  see it. Derived from both identification modes upstream
+   *  (`wizard-context` deriveIsMember), so tag-tapping members get it too
+   *  (issue #414). The backend `acknowledgeBill` does not re-check membership
+   *  — it authorizes `monthly` for any bill owner — so this is purely a UI
+   *  affordance over an already-permitted choice. */
   isMember: boolean
   /**
    * Kiosk mode (shared machine). When true the "Rechnung als PDF" download
@@ -172,6 +177,51 @@ export function PaymentResult({
     // would re-write the same value with no observable benefit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [persistedCheckoutId, tab])
+
+  // Kiosk TWINT auto-confirm (#416): when the customer completes the TWINT
+  // payment in the kiosk overlay, the Electron bridge fires
+  // onPaymentConfirmed. We then stamp the same paymentMethodConfirmationTime
+  // the manual "Ich habe via TWINT bezahlt" button would — marking the bill
+  // paid immediately — and advance the wizard. No-op in a normal browser
+  // (the bridge is absent so onPaymentConfirmed is a no-op subscribe).
+  const bridge = useBridge()
+  const billIdForConfirm = paymentData?.billId ?? null
+  // Stash the latest commit logic in a ref so the subscribe effect stays
+  // keyed on the bridge + billId only and doesn't re-subscribe per render.
+  const confirmRef = useRef<((paymentUuid: string) => void) | null>(null)
+  const handlePaymentConfirmed = useCallback(
+    (paymentUuid: string) => {
+      if (!billIdForConfirm) return
+      const callable = rpcCallable<
+        { billId: string; paymentMethod: PaymentMethod },
+        { ok: true }
+      >(functions, "billingCall", "acknowledgeBill")
+      ackMutation
+        .mutate(async () => {
+          const res = await callable({
+            billId: billIdForConfirm,
+            paymentMethod: "twint",
+          })
+          return res.data
+        })
+        .then(() => onReset())
+        .catch(() => {
+          // Hook already toasted + telemetered. The overlay confirmation page
+          // stays visible; the user can still use the manual commit button.
+          console.error("TWINT auto-confirm failed", paymentUuid)
+        })
+    },
+    // ackMutation / functions / onReset are stable for the component's life.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [billIdForConfirm],
+  )
+  confirmRef.current = handlePaymentConfirmed
+  useEffect(() => {
+    if (!bridge.available) return
+    return bridge.onPaymentConfirmed((paymentUuid) => {
+      confirmRef.current?.(paymentUuid)
+    })
+  }, [bridge.available, bridge.onPaymentConfirmed])
 
   if (isFree) {
     return (

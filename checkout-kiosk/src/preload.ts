@@ -22,11 +22,42 @@ ipcRenderer.on("bridge:url-change", (_event, url: string) => {
   urlCallbacks.forEach((cb) => cb(url))
 })
 
+// Chrome renderer subscribes to overlay-open requests (e.g. the
+// Nutzungsbestimmungen page #425 or the TWINT paylink #416) so it can mount
+// the in-kiosk overlay webview.
 const overlayCallbacks = new Set<(url: string) => void>()
 
 ipcRenderer.on("bridge:open-overlay", (_event, url: string) => {
   overlayCallbacks.forEach((cb) => cb(url))
 })
+
+// "Neuer Checkout" reset request/ack channel (issue #415). The chrome button
+// broadcasts `bridge:request-start-over`; the loaded web page listens for it,
+// shows the shared confirm dialog, and broadcasts `bridge:start-over-ack` so
+// the chrome can cancel its timeout fallback.
+const startOverRequestCallbacks = new Set<() => void>()
+
+ipcRenderer.on("bridge:request-start-over", () => {
+  startOverRequestCallbacks.forEach((cb) => cb())
+})
+
+const startOverAckCallbacks = new Set<() => void>()
+
+ipcRenderer.on("bridge:start-over-ack", () => {
+  startOverAckCallbacks.forEach((cb) => cb())
+})
+
+// The checkout webview (web app) subscribes to payment-confirmed events:
+// the renderer detects the RaiseNow payment_result URL on the overlay and
+// asks main to broadcast it here so the web app can mark the bill paid.
+const paymentConfirmedCallbacks = new Set<(paymentUuid: string) => void>()
+
+ipcRenderer.on(
+  "bridge:payment-confirmed",
+  (_event, paymentUuid: string) => {
+    paymentConfirmedCallbacks.forEach((cb) => cb(paymentUuid))
+  }
+)
 
 // Bootstrap (mode + features) is delivered synchronously from main so
 // the preload doesn't depend on any sibling module (sandboxed preloads
@@ -50,6 +81,12 @@ const bridge: Bridge = {
     overlayCallbacks.add(cb)
     return () => overlayCallbacks.delete(cb)
   },
+  notifyPaymentConfirmed: (paymentUuid) =>
+    ipcRenderer.send("bridge:payment-confirmed", paymentUuid),
+  onPaymentConfirmed: (cb) => {
+    paymentConfirmedCallbacks.add(cb)
+    return () => paymentConfirmedCallbacks.delete(cb)
+  },
   onNfcTag: (cb) => {
     nfcCallbacks.add(cb)
     if (!nfcSubscribed) {
@@ -58,6 +95,20 @@ const bridge: Bridge = {
     }
     return () => {
       nfcCallbacks.delete(cb)
+    }
+  },
+  requestStartOver: () => ipcRenderer.send("bridge:request-start-over"),
+  ackStartOver: () => ipcRenderer.send("bridge:start-over-ack"),
+  onStartOverRequest: (cb) => {
+    startOverRequestCallbacks.add(cb)
+    return () => {
+      startOverRequestCallbacks.delete(cb)
+    }
+  },
+  onStartOverAck: (cb) => {
+    startOverAckCallbacks.add(cb)
+    return () => {
+      startOverAckCallbacks.delete(cb)
     }
   },
 }

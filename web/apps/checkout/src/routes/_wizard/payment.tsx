@@ -34,14 +34,21 @@ function PaymentRoute() {
 
   return (
     <>
-      <PaymentResult
-        checkoutId={ctx.paymentData.checkoutId}
-        totalPrice={ctx.totalPrice}
-        initialPaymentData={ctx.paymentData}
-        isMember={!!ctx.identifiedUserDoc?.activeMembership}
-        kiosk={ctx.kiosk}
-        onReset={() => setCompleted(true)}
-      />
+      {/* Unmount the payment-method picker once the completion dialog
+          opens. The CompletionDialog's overlay only dims the background,
+          so a still-mounted PaymentResult leaks through behind it (#449).
+          `completed` is terminal: the dialog's primary CTA resets or
+          navigates away, so the picker never needs to return. */}
+      {!completed && (
+        <PaymentResult
+          checkoutId={ctx.paymentData.checkoutId}
+          totalPrice={ctx.totalPrice}
+          initialPaymentData={ctx.paymentData}
+          isMember={ctx.isMember}
+          kiosk={ctx.kiosk}
+          onReset={() => setCompleted(true)}
+        />
+      )}
       <CompletionDialog
         open={completed}
         isLoggedIn={ctx.isAccountLoggedIn}
@@ -50,7 +57,18 @@ function PaymentRoute() {
         // their time before deciding where to go next.
         autoClose={!ctx.isAccountLoggedIn}
         onNewVisit={async () => {
-          await ctx.resetWizard()
+          // Logged-in users stay signed in: soft reset, roster re-seeds.
+          // Kiosk/anonymous "Fertig" hands the terminal to the next person,
+          // so it must give the same strong wipe as the Electron chrome's
+          // "Neuer Checkout" (signOut + bridge partition wipe + hard
+          // reload). The soft resetWizard left the in-memory Firebase
+          // session and residual wizard state alive after the partition
+          // wipe — leftovers surfaced on the next visit.
+          if (ctx.isAccountLoggedIn) {
+            await ctx.resetWizard()
+          } else {
+            await ctx.startOver()
+          }
         }}
         onGoToHistory={
           ctx.isAccountLoggedIn

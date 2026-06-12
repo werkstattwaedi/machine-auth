@@ -31,10 +31,11 @@ import {
   filterByCategoryPrefix,
   nextLevelValues,
 } from "@modules/lib/categories"
+import { matchesCatalogQuery } from "@modules/lib/text-search"
 import type { CheckoutItemLocal } from "./inline-rows"
 import {
   readPickerScrollAnchor,
-  clearPickerScrollAnchor,
+  reassertPageScroll,
 } from "./picker-scroll-anchor"
 
 const INPUT_CLS =
@@ -157,8 +158,8 @@ export function MaterialPicker({
 }
 
 /**
- * Preserve the page's vertical scroll position across the picker's open
- * lifecycle (issue #394).
+ * Preserve the page's vertical scroll position while the picker is open
+ * (issue #394).
  *
  * The picker renders a Radix Dialog (Sheet) whose scroll-lock
  * (`react-remove-scroll`) applies `overflow: hidden` to `<body>`. In the
@@ -173,34 +174,20 @@ export function MaterialPicker({
  * and we restore from that anchor. The reflow that zeroes scroll can land a
  * frame or two after mount, so we re-assert the offset across a short
  * window to outlast it.
+ *
+ * The matching *close* restore (issue #451) lives in the host's
+ * `onOpenChange(false)` handler (`restorePickerScrollAnchor`), not here:
+ * the effect-cleanup also fires on transient remounts (catalog load, media
+ * query settle) where the sheet is still open, so it is not a reliable
+ * "dismissed" signal. The anchor is intentionally left live through the
+ * open window so the close handler can consume it.
  */
 function usePreserveBodyScroll(open: boolean) {
   useEffect(() => {
     if (!open) return
-    // Read but DON'T clear here: React StrictMode double-invokes effects in
-    // dev, and clearing in the first invoke would leave the second invoke
-    // (the one that survives) reading 0. The anchor is overwritten on the
-    // next capture and cleared once the loop has consumed it below.
     const target = readPickerScrollAnchor()
     if (target === 0) return
-
-    let rafId = 0
-    const start = performance.now()
-    const reassert = () => {
-      if (window.scrollY !== target) window.scrollTo(0, target)
-      if (performance.now() - start < 600) {
-        rafId = requestAnimationFrame(reassert)
-      } else {
-        // Consumed: drop the anchor so a later unrelated picker open (e.g.
-        // a QR deep-link) doesn't reuse a stale offset.
-        clearPickerScrollAnchor()
-      }
-    }
-    rafId = requestAnimationFrame(reassert)
-
-    return () => {
-      cancelAnimationFrame(rafId)
-    }
+    return reassertPageScroll(target)
   }, [open])
 }
 
@@ -356,14 +343,9 @@ function PickerBody({
 
   const filtered = useMemo(() => {
     const byCategory = filterByCategoryPrefix(catalogItems, categoryPrefix)
-    const q = query.trim().toLowerCase()
-    const matches = q
-      ? byCategory.filter(
-          (c) =>
-            c.name.toLowerCase().includes(q) ||
-            c.code?.toLowerCase().includes(q),
-        )
-      : byCategory
+    // Search across name, code, category path, description and variant
+    // labels with diacritic folding (#452) — not just name + code.
+    const matches = byCategory.filter((c) => matchesCatalogQuery(c, query))
     return [...matches].sort((a, b) => a.name.localeCompare(b.name, "de"))
   }, [catalogItems, categoryPrefix, query])
 

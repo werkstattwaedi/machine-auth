@@ -15,6 +15,7 @@ import {
   kioskBearerKey,
 } from "../config/tag-secrets";
 import { createUserHandler } from "./create-user";
+import { checkAccountExistsHandler } from "./check-account-exists";
 import { requestLoginCodeHandler } from "./login-code/request";
 import { verifyLoginCodeHandler } from "./login-code/verify-code";
 import { verifyMagicLinkHandler } from "./login-code/verify-link";
@@ -23,6 +24,7 @@ import { verifyTagCheckoutHandler } from "../checkout/verify_tag";
 
 const HANDLERS: Record<string, RpcHandler> = {
   createUser: createUserHandler,
+  checkAccountExists: checkAccountExistsHandler,
   requestLoginCode: requestLoginCodeHandler,
   verifyLoginCode: verifyLoginCodeHandler,
   verifyMagicLink: verifyMagicLinkHandler,

@@ -2,16 +2,22 @@
 // SPDX-License-Identifier: MIT
 
 import { test, expect } from "@playwright/test"
-import { getAdminFirestore, waitForLoginCode } from "./helpers"
+import { clearCollections, getAdminFirestore, waitForLoginCode } from "./helpers"
 
 const SIGNUP_EMAIL = "new-signup@werkstattwaedi.ch"
 const CHECKOUT_SIGNUP_EMAIL = "checkout-signup@werkstattwaedi.ch"
+// Distinct email — reusing SIGNUP_EMAIL here would trip the 60s per-email
+// code-request rate limit set by the first test.
+const FIRMA_SIGNUP_EMAIL = "firma-signup@werkstattwaedi.ch"
 
 // Only wipe the docs for the signup-specific emails — the seeded `e2e-test`
 // and `NFC` users are required by sibling spec files that run after signup.
 test.beforeEach(async () => {
+  // Clear prior codes so the 60s per-email rate limit doesn't flake across the
+  // chromium → mobile-chrome project boundary (same emails are reused).
+  await clearCollections("loginCodes")
   const db = getAdminFirestore()
-  const emails = [SIGNUP_EMAIL, CHECKOUT_SIGNUP_EMAIL]
+  const emails = [SIGNUP_EMAIL, CHECKOUT_SIGNUP_EMAIL, FIRMA_SIGNUP_EMAIL]
   for (const email of emails) {
     const snap = await db.collection("users").where("email", "==", email).get()
     if (snap.empty) continue
@@ -21,195 +27,156 @@ test.beforeEach(async () => {
   }
 })
 
-test.describe("Self-registration", () => {
-  test("new user signs up, completes profile, and has no roles", async ({ page }) => {
-    // ── Sign in via /login with a fresh email ──
+test.describe("Self-registration (combined sign-in/sign-up)", () => {
+  test("new user signs up inline and has no roles", async ({ page }) => {
+    // ── Combined login: enter a fresh email ──
     await page.goto("/login")
-
-    // On the signup page (or login page), the switch link is visible while the
-    // form is shown.
-    await expect(page.getByText("Noch kein Konto?")).toBeVisible()
+    await expect(page.getByText("Anmelden oder Konto erstellen")).toBeVisible()
 
     await page.getByTestId("login-email-input").fill(SIGNUP_EMAIL)
     await page.getByTestId("login-email-submit").click()
 
-    await expect(page.getByTestId("login-code-stage")).toBeVisible({
+    // A new email branches straight to the inline sign-up form (not the
+    // code-only sign-in stage).
+    await expect(page.getByTestId("login-signup-stage")).toBeVisible({
       timeout: 5000,
     })
+    await expect(page.getByTestId("login-code-stage")).not.toBeVisible()
 
-    // Regression (#103): the account-switch link must disappear once the
-    // code stage is shown — it's confusing to offer "Bereits registriert?
-    // Anmelden" on the confirmation screen.
-    await expect(page.getByText("Bereits registriert?")).not.toBeVisible()
-    await expect(page.getByText("Noch kein Konto?")).not.toBeVisible()
-
-    // Read the 6-digit code from the emulator Firestore and submit it —
-    // handleSignIn() creates the user doc on first sign-in.
+    // Fill name + the inline 6-digit code (read from the emulator) + terms.
     const entry = await waitForLoginCode(SIGNUP_EMAIL)
     expect(entry).toBeTruthy()
-    await page.getByTestId("login-code-input").fill(entry!.code)
-    await page.getByTestId("login-code-submit").click()
+    await page.getByTestId("signup-firstname").fill("Test")
+    await page.getByTestId("signup-lastname").fill("Neuer")
+    await page.getByTestId("signup-code-input").fill(entry!.code)
+    await page.getByTestId("signup-terms").click()
 
-    // ── Should be redirected to /complete-profile ──
-    // On fast environments the createUser Cloud Function may set termsAcceptedAt
-    // before the client-side redirect check runs, skipping the profile page.
-    // Accept both paths: /complete-profile or direct to /checkin (a fresh
-    // signup has no open checkout, so RootDispatcher routes it to /checkin —
-    // not /visit, post wizard-URL refactor #360).
-    await page.waitForURL(
-      (url) => url.pathname.includes("/account/complete-profile") || url.pathname.includes("/checkin"),
-      { timeout: 10_000 },
-    )
-
-    if (page.url().includes("/account/complete-profile")) {
-      await expect(
-        page.getByRole("button", { name: "Profil speichern" }),
-      ).toBeVisible()
-
-      const firstName = page.locator("#firstName")
-      await firstName.click()
-      await firstName.fill("Test")
-
-      const lastName = page.locator("#lastName")
-      await lastName.click()
-      await lastName.fill("Neuer")
-
-      // billingAddress (Strasse / PLZ / Ort) is required since the Profile
-      // redesign — `isProfileComplete` won't flip true otherwise and the
-      // post-save dispatch short-circuits, leaving the form on screen.
-      await page.getByPlaceholder("Seestrasse 12").fill("Seestrasse 12")
-      await page.getByPlaceholder("8820").fill("8820")
-      await page.getByPlaceholder("Wädenswil").fill("Wädenswil")
-
-      await page.locator("#termsAccepted").click()
-      await page.getByRole("button", { name: "Profil speichern" }).click()
-
-      await page.waitForURL((url) => !url.pathname.includes("complete-profile"), {
-        timeout: 10_000,
-      })
-    }
-
-    // ── Verify Firestore: user exists with no roles ──
-    // Wait briefly for the createUser Cloud Function to write the doc
-    const db = getAdminFirestore()
-    let snap = await db.collection("users").where("email", "==", SIGNUP_EMAIL).get()
-    for (let i = 0; i < 10 && snap.empty; i++) {
-      await new Promise((r) => setTimeout(r, 300))
-      snap = await db.collection("users").where("email", "==", SIGNUP_EMAIL).get()
-    }
-
-    expect(snap.size).toBe(1)
-    const userDoc = snap.docs[0].data()
-
-    expect(userDoc.roles).toEqual([])
-    expect(userDoc.email).toBe(SIGNUP_EMAIL)
-  })
-
-  test("new user creates account from checkout page, completes profile, lands on checkin", async ({ page }) => {
-    // ── Start at checkout page ──
-    await page.goto("/")
-    await expect(page.getByText("Deine Angaben")).toBeVisible({ timeout: 10_000 })
-
-    // ── Click "Registrieren" in the identity hint ──
-    await page.getByRole("button", { name: "Registrieren" }).click()
-
-    // ── Should be on /login with mode=signup ──
-    await page.waitForURL((url) => url.pathname === "/login", { timeout: 5_000 })
-    await expect(page.getByText("Konto erstellen")).toBeVisible()
-
-    // In signup mode, the "already registered" switch link is visible.
-    await expect(page.getByText("Bereits registriert?")).toBeVisible()
-
-    // ── Request login code ──
-    await page.getByTestId("login-email-input").fill(CHECKOUT_SIGNUP_EMAIL)
-    await page.getByTestId("login-email-submit").click()
-    await expect(page.getByTestId("login-code-stage")).toBeVisible({
-      timeout: 5_000,
-    })
-
-    // Regression (#103): once the code stage is shown, the "Bereits
-    // registriert? Anmelden" switch link must no longer be shown.
-    await expect(page.getByText("Bereits registriert?")).not.toBeVisible()
-
-    // ── Complete sign-in with 6-digit code ──
-    const entry = await waitForLoginCode(CHECKOUT_SIGNUP_EMAIL)
-    expect(entry).toBeTruthy()
-    await page.getByTestId("login-code-input").fill(entry!.code)
-    await page.getByTestId("login-code-submit").click()
-
-    // ── Should land on /complete-profile (signup mode forces this) ──
-    await page.waitForURL(
-      (url) => url.pathname.includes("/account/complete-profile"),
-      { timeout: 10_000 },
-    )
-
-    // ── Profile page should NOT have a sidebar ──
-    await expect(page.getByRole("button", { name: "Profil speichern" })).toBeVisible()
-    await expect(page.getByText("Aktueller Besuch")).not.toBeVisible()
-    await expect(page.getByText("Nutzungsverlauf")).not.toBeVisible()
-
-    // ── Screenshot: empty complete-profile form ──
-    await expect(page).toHaveScreenshot("complete-profile-empty.png")
-
-    // ── Regression (#111): labels should not show required-field asterisks.
-    // All fields on the complete-profile form are required, so marking them
-    // individually with "*" is redundant and visually noisy.
-    const formText = await page.locator("form").innerText()
-    expect(formText).not.toContain("*")
-
-    // ── Regression (#110): the Nutzungsbestimmungen link is inlined in the
-    // checkbox label (not a separate header row). Clicking the link must
-    // open the terms in a new tab without toggling the checkbox.
+    // The Nutzungsbestimmungen link opens in a new tab (regression #110).
     const termsLink = page.getByRole("link", { name: "Nutzungsbestimmungen" })
     await expect(termsLink).toHaveAttribute(
       "href",
       "https://werkstattwaedi.ch/nutzungsbestimmungen",
     )
     await expect(termsLink).toHaveAttribute("target", "_blank")
-    const termsCheckbox = page.locator("#termsAccepted")
-    await expect(termsCheckbox).not.toBeChecked()
-    // Intercept the link click to prevent actual navigation, verify the
-    // checkbox state is unaffected by the click (stopPropagation keeps the
-    // label-click-forwarding from toggling the checkbox).
-    await termsLink.evaluate((a) =>
-      a.addEventListener("click", (e) => e.preventDefault()),
-    )
-    await termsLink.click()
-    await expect(termsCheckbox).not.toBeChecked()
 
-    // ── Complete the profile ──
-    // billingAddress (Strasse / PLZ / Ort) is required since the Profile
-    // redesign — `isProfileComplete` won't flip true otherwise and the
-    // post-save dispatch short-circuits.
-    await page.locator("#firstName").fill("Checkout")
-    await page.locator("#lastName").fill("Tester")
-    await page.getByPlaceholder("Seestrasse 12").fill("Seestrasse 12")
-    await page.getByPlaceholder("8820").fill("8820")
-    await page.getByPlaceholder("Wädenswil").fill("Wädenswil")
-    await page.locator("#termsAccepted").click()
-    await page.getByRole("button", { name: "Profil speichern" }).click()
+    await page.getByTestId("signup-submit").click()
 
-    // ── Should arrive at /checkin ──
-    // Post-refactor (#360), completing the profile routes through the root
-    // RootDispatcher. A freshly-signed-up account has no open checkout, so
-    // the dispatcher forwards to /checkin (to start one) rather than /visit
-    // (which would strand the user on the "Kein offener Besuch" gate).
-    await page.waitForURL(
-      (url) => url.pathname.includes("/checkin"),
-      { timeout: 10_000 },
-    )
+    // Lands away from /login (root dispatcher → /checkin for a fresh account).
+    await page.waitForURL((url) => !url.pathname.includes("/login"), {
+      timeout: 10_000,
+    })
+
+    // ── Verify Firestore: completed account, no roles ──
+    const db = getAdminFirestore()
+    let snap = await db.collection("users").where("email", "==", SIGNUP_EMAIL).get()
+    for (let i = 0; i < 10 && snap.empty; i++) {
+      await new Promise((r) => setTimeout(r, 300))
+      snap = await db.collection("users").where("email", "==", SIGNUP_EMAIL).get()
+    }
+    expect(snap.size).toBe(1)
+    const userDoc = snap.docs[0].data()
+    expect(userDoc.email).toBe(SIGNUP_EMAIL)
+    expect(userDoc.firstName).toBe("Test")
+    expect(userDoc.lastName).toBe("Neuer")
+    expect(userDoc.roles).toEqual([])
+    expect(userDoc.termsAcceptedAt).toBeTruthy()
+    // erwachsen sign-up carries no billing address.
+    expect(userDoc.billingAddress ?? null).toBeNull()
+  })
+
+  test("new user creates an account from the checkout identity hint", async ({ page }) => {
+    // ── Start at the checkout/check-in page ──
+    await page.goto("/")
+    await expect(page.getByText("Deine Angaben")).toBeVisible({ timeout: 10_000 })
+
+    // ── Click the combined login link in the identity hint ──
+    await page.getByRole("button", { name: "Anmelden oder registrieren" }).click()
+    await page.waitForURL((url) => url.pathname === "/login", { timeout: 5_000 })
+    await expect(page.getByText("Anmelden oder Konto erstellen")).toBeVisible()
+
+    await page.getByTestId("login-email-input").fill(CHECKOUT_SIGNUP_EMAIL)
+    await page.getByTestId("login-email-submit").click()
+
+    await expect(page.getByTestId("login-signup-stage")).toBeVisible({
+      timeout: 5_000,
+    })
+
+    const entry = await waitForLoginCode(CHECKOUT_SIGNUP_EMAIL)
+    expect(entry).toBeTruthy()
+    await page.getByTestId("signup-firstname").fill("Checkout")
+    await page.getByTestId("signup-lastname").fill("Tester")
+    await page.getByTestId("signup-code-input").fill(entry!.code)
+    await page.getByTestId("signup-terms").click()
+    await page.getByTestId("signup-submit").click()
+
+    // ── Lands on /checkin (redirect=/ → dispatcher → start a checkout) ──
+    await page.waitForURL((url) => url.pathname.includes("/checkin"), {
+      timeout: 10_000,
+    })
 
     // ── Verify Firestore ──
     const db = getAdminFirestore()
-    let snap = await db.collection("users").where("email", "==", CHECKOUT_SIGNUP_EMAIL).get()
+    let snap = await db
+      .collection("users")
+      .where("email", "==", CHECKOUT_SIGNUP_EMAIL)
+      .get()
     for (let i = 0; i < 10 && snap.empty; i++) {
       await new Promise((r) => setTimeout(r, 300))
-      snap = await db.collection("users").where("email", "==", CHECKOUT_SIGNUP_EMAIL).get()
+      snap = await db
+        .collection("users")
+        .where("email", "==", CHECKOUT_SIGNUP_EMAIL)
+        .get()
     }
     expect(snap.size).toBe(1)
     const userDoc = snap.docs[0].data()
     expect(userDoc.firstName).toBe("Checkout")
     expect(userDoc.lastName).toBe("Tester")
     expect(userDoc.roles).toEqual([])
+  })
+
+  test("firma sign-up requires the inline billing address", async ({ page }) => {
+    await page.goto("/login")
+    await page.getByTestId("login-email-input").fill(FIRMA_SIGNUP_EMAIL)
+    await page.getByTestId("login-email-submit").click()
+    await expect(page.getByTestId("login-signup-stage")).toBeVisible({
+      timeout: 5_000,
+    })
+
+    const entry = await waitForLoginCode(FIRMA_SIGNUP_EMAIL)
+    await page.getByTestId("signup-firstname").fill("Firma")
+    await page.getByTestId("signup-lastname").fill("Inhaber")
+    await page.getByTestId("signup-code-input").fill(entry!.code)
+    // The radio is visually hidden (sr-only) behind a styled label.
+    await page.getByTestId("signup-membertype-firma").check({ force: true })
+
+    // Address fields appear for firma.
+    await expect(page.getByLabel("Strasse und Hausnummer")).toBeVisible()
+    await page.getByLabel("Firmenname").fill("Holzbau Müller AG")
+    await page.getByLabel("Strasse und Hausnummer").fill("Seestrasse 12")
+    await page.getByLabel("PLZ").fill("8820")
+    await page.getByLabel("Ort").fill("Wädenswil")
+    await page.getByTestId("signup-terms").click()
+    await page.getByTestId("signup-submit").click()
+
+    await page.waitForURL((url) => !url.pathname.includes("/login"), {
+      timeout: 10_000,
+    })
+
+    const db = getAdminFirestore()
+    let snap = await db
+      .collection("users")
+      .where("email", "==", FIRMA_SIGNUP_EMAIL)
+      .get()
+    for (let i = 0; i < 10 && snap.empty; i++) {
+      await new Promise((r) => setTimeout(r, 300))
+      snap = await db
+        .collection("users")
+        .where("email", "==", FIRMA_SIGNUP_EMAIL)
+        .get()
+    }
+    const userDoc = snap.docs[0].data()
+    expect(userDoc.userType).toBe("firma")
+    expect(userDoc.billingAddress?.company).toBe("Holzbau Müller AG")
+    expect(userDoc.billingAddress?.city).toBe("Wädenswil")
   })
 })

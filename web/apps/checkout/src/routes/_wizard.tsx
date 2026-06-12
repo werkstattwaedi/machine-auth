@@ -24,6 +24,8 @@ import { StaleCheckoutBanner } from "@/components/checkout/stale-checkout-banner
 import { StartOverButton } from "@/components/checkout/start-over-button"
 import { KioskInactivityWatcher } from "@/components/checkout/kiosk-inactivity-watcher"
 import { NoCheckoutGate } from "@/components/checkout/no-checkout-gate"
+import { TagAuthOverlay } from "@/components/checkout/tag-auth-overlay"
+import { TagVisitRedirect } from "@/components/checkout/tag-visit-redirect"
 
 const wizardSearchSchema = z.object({
   picc: z.optional(z.string()),
@@ -127,6 +129,8 @@ function WizardLayout() {
     >
       <WizardChrome headerName={headerName} userId={userDoc?.id} />
       <KioskInactivityWatcher />
+      <TagAuthOverlay />
+      <TagVisitRedirect />
     </WizardProvider>
   )
 }

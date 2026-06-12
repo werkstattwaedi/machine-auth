@@ -6,10 +6,15 @@ import {
   BrowserWindow,
   ipcMain,
   session,
+  webContents,
   type WebContents,
 } from "electron"
 import path from "node:path"
-import { decideKioskOverlay } from "@oww/shared"
+import {
+  decideKioskOverlay,
+  isAllowedKioskOverlayNavigation,
+  RAISENOW_PAYLINK_ORIGIN,
+} from "@oww/shared"
 import { resolveConfig } from "./config"
 import { startNfc } from "./bridge/nfc"
 import type { NfcTagEvent } from "./types"
@@ -19,8 +24,12 @@ const config = resolveConfig()
 // Off-origin URLs the checkout app links to via target="_blank" that should
 // open inside the in-kiosk overlay webview (with a close button) instead of
 // being denied. The webview's default deny-all stays in place for everything
-// else. werkstattwaedi.ch hosts the Nutzungsbestimmungen page (#425).
-const OVERLAY_ALLOWLIST = ["https://werkstattwaedi.ch"] as const
+// else. werkstattwaedi.ch hosts the Nutzungsbestimmungen page (#425); the
+// RaiseNow paylink origin hosts the TWINT payment page (#416).
+const OVERLAY_ALLOWLIST = [
+  "https://werkstattwaedi.ch",
+  RAISENOW_PAYLINK_ORIGIN,
+] as const
 
 // Accept self-signed certs in dev (Vite basicSsl plugin)
 if (config.isDev) {
@@ -74,6 +83,12 @@ function createWindow(): void {
   })
   mainWindow.setTitle(config.productName)
 
+  // Start maximized: the configured width/height are only a fallback for an
+  // un-maximized window. At the fixed 1280×900 default the payment page's
+  // QR code and the overlay close button fell below the fold on the kiosk's
+  // screen (issue #458).
+  mainWindow.maximize()
+
   mainWindow.loadFile(path.join(__dirname, "..", "renderer", "index.html"))
 
   // Lock down the chrome window: no new windows, no navigation away from the
@@ -90,10 +105,10 @@ function createWindow(): void {
     "did-attach-webview",
     (_event, webviewWebContents) => {
       // Window-opens (target="_blank") stay denied so no native window
-      // spawns. For allowlisted off-origin links (e.g. the
-      // Nutzungsbestimmungen page) we instead ask the chrome renderer to
-      // mount an in-kiosk overlay webview pointing at the URL — the overlay
-      // is torn down on close, so nothing lingers outside the kiosk.
+      // spawns. For allowlisted off-origin links (e.g. the Nutzungsbestimmungen
+      // page #425 or the RaiseNow TWINT paylink #416) we instead ask the chrome
+      // renderer to mount an in-kiosk overlay webview pointing at the URL — the
+      // overlay is torn down on close, so nothing lingers outside the kiosk.
       webviewWebContents.setWindowOpenHandler(({ url }) => {
         if (
           decideKioskOverlay(url, { allowedOverlayOrigins: OVERLAY_ALLOWLIST })
@@ -104,23 +119,19 @@ function createWindow(): void {
         return { action: "deny" }
       })
       webviewWebContents.on("will-navigate", (event, navUrl) => {
-        try {
-          const allowed = new URL(config.url).origin
-          const target = new URL(navUrl).origin
-          // The checkout origin is always allowed. Overlay webviews navigate
-          // within an allowlisted off-origin (e.g. werkstattwaedi.ch for the
-          // Nutzungsbestimmungen page), so permit those origins too — the
-          // overlay is created and torn down by the renderer.
-          if (
-            target !== allowed &&
-            !OVERLAY_ALLOWLIST.includes(target as (typeof OVERLAY_ALLOWLIST)[number])
-          ) {
-            console.warn(
-              `Blocked webview navigation to off-origin URL: ${navUrl}`
-            )
-            event.preventDefault()
-          }
-        } catch {
+        // The checkout origin is always allowed. Overlay webviews navigate
+        // within an allowlisted off-origin (e.g. werkstattwaedi.ch for the
+        // Nutzungsbestimmungen page) and across RaiseNow's own domain family
+        // for the TWINT payment (pay.raisenow.io → twint.raisenow.io, #470),
+        // so permit those too — the overlay is created and torn down by the
+        // renderer.
+        if (
+          !isAllowedKioskOverlayNavigation(navUrl, {
+            checkoutOrigin: new URL(config.url).origin,
+            allowedOverlayOrigins: OVERLAY_ALLOWLIST,
+          })
+        ) {
+          console.warn(`Blocked webview navigation to off-origin URL: ${navUrl}`)
           event.preventDefault()
         }
       })
@@ -145,7 +156,30 @@ ipcMain.on("bridge:nfc-subscribe", (event) => {
   wc.once("destroyed", () => nfcSubscribers.delete(wc))
 })
 
+// The chrome renderer detects the RaiseNow payment_result URL on the overlay
+// webview and forwards it here; re-broadcast to every subscribed webContents
+// so the checkout webview (web app) can mark the bill paid (#416). The
+// overlay webview itself is not a subscriber, so it never echoes back.
+ipcMain.on("bridge:payment-confirmed", (_event, paymentUuid: string) => {
+  for (const wc of nfcSubscribers) {
+    try {
+      wc.send("bridge:payment-confirmed", paymentUuid)
+    } catch (err) {
+      console.warn(
+        "Failed to dispatch payment-confirmed event:",
+        err instanceof Error ? err.message : err
+      )
+    }
+  }
+})
+
 function dispatchNfc(event: NfcTagEvent): void {
+  // Subscriber count matters while chasing silent taps: 0 means nobody is
+  // listening (webview not loaded / preload not run), 1 is usually only the
+  // chrome renderer — the checkout web app expects to be the 2nd.
+  console.log(
+    `[nfc] dispatching tag event to ${nfcSubscribers.size} subscriber(s)`
+  )
   for (const wc of nfcSubscribers) {
     try {
       wc.send("bridge:nfc-tag", event)
@@ -172,6 +206,31 @@ const bridgeBootstrap = {
 ipcMain.on("bridge:bootstrap", (event) => {
   event.returnValue = bridgeBootstrap
 })
+// "Neuer Checkout" reset request/ack (issue #415). The chrome renderer asks
+// the loaded web page to show its confirm dialog; the page acks once it has
+// the request. Both are broadcast to every webContents (chrome renderer +
+// webview) — the originating sender simply ignores the echo since it doesn't
+// subscribe to the opposite channel.
+function broadcastToAll(channel: string): void {
+  for (const wc of webContents.getAllWebContents()) {
+    try {
+      wc.send(channel)
+    } catch (err) {
+      console.warn(
+        `Failed to broadcast ${channel}:`,
+        err instanceof Error ? err.message : err
+      )
+    }
+  }
+}
+
+ipcMain.on("bridge:request-start-over", () => {
+  broadcastToAll("bridge:request-start-over")
+})
+ipcMain.on("bridge:start-over-ack", () => {
+  broadcastToAll("bridge:start-over-ack")
+})
+
 ipcMain.handle("bridge:get-url", () => config.url)
 ipcMain.handle("bridge:bearer", () => config.bearer || null)
 ipcMain.handle("bridge:reset-session", async () => {

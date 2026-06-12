@@ -13,6 +13,7 @@ import {
   zeroItemsInvoice,
   longInvoice,
   paidInvoice,
+  twintMethodInvoice,
   freeZeroAmountInvoice,
   registeredUserInvoice,
   membershipOnlyInvoice,
@@ -25,7 +26,9 @@ if (getApps().length === 0) {
 }
 
 const pdfParse = require("pdf-parse");
-const parsePdf = pdfParse as (buffer: Buffer) => Promise<{ text: string }>;
+const parsePdf = pdfParse as (
+  buffer: Buffer,
+) => Promise<{ text: string; numpages: number }>;
 
 async function pdfText(data: Parameters<typeof buildInvoicePdf>[0]): Promise<string> {
   const buf = await buildInvoicePdf(data, TEST_PAYMENT_CONFIG);
@@ -33,6 +36,18 @@ async function pdfText(data: Parameters<typeof buildInvoicePdf>[0]): Promise<str
   expect(buf.length).to.be.greaterThan(0);
   const result = await parsePdf(buf);
   return result.text;
+}
+
+async function pdfParsed(
+  data: Parameters<typeof buildInvoicePdf>[0],
+): Promise<{ text: string; numpages: number }> {
+  const buf = await buildInvoicePdf(data, TEST_PAYMENT_CONFIG);
+  return parsePdf(buf);
+}
+
+/** All "Seite N / M" footer strings in render order. */
+function footerLabels(text: string): string[] {
+  return text.match(/Seite \d+ \/ \d+/g) ?? [];
 }
 
 describe("buildInvoicePdf — content", () => {
@@ -223,6 +238,29 @@ describe("buildInvoicePdf — content", () => {
     expect(text).to.include("Zahlbar innert 30 Tagen");
   });
 
+  // Issue #426: a TWINT-method self-checkout is a payment receipt, not a
+  // payable Rechnung. The PDF must (a) title itself "Quittung Self
+  // Checkout" so the customer sees it's a TWINT receipt (matching the
+  // "Quittung TWINT-Zahlung" email), (b) state the TWINT payment method,
+  // and (c) omit the QR payment slip so nobody pays twice. It must NOT
+  // claim "Bezahlt am …" — we have no bank-side confirmation.
+  it("TWINT-method invoice: 'Quittung' title, TWINT notice, no QR slip (#426)", async () => {
+    const text = await pdfText(twintMethodInvoice());
+    expect(text).to.include("Quittung Self Checkout");
+    expect(text).to.not.include("Rechnung Self Checkout");
+    // The underlying bill is still kind "invoice" → RE- reference kept.
+    expect(text).to.include("Rechnungsnummer: RE-000010");
+    // States the payment method.
+    expect(text).to.include("Zahlweise: TWINT");
+    // No QR payment slip and no "pay within 30 days" terms.
+    expect(text).to.not.include("Empfangsschein");
+    expect(text).to.not.include("Zahlteil");
+    expect(text).to.not.include("Zahlbar innert 30 Tagen");
+    // Must not falsely claim a confirmed payment — no bank confirmation.
+    expect(text).to.not.include("Bezahlt via TWINT am");
+    expect(text).to.not.include("bereits beglichen");
+  });
+
   it("QR bill: creditor info present", async () => {
     const text = await pdfText(singleCheckoutInvoice());
     expect(text).to.include("Offene Werkstatt Wädenswil");
@@ -278,6 +316,57 @@ describe("buildInvoicePdf — content", () => {
     expect(text).to.include("Sperrholz Birke 4mm");
     expect(text).to.not.include("Diverses");
     expect(text).to.not.include("diverses");
+  });
+});
+
+// Issue #464: two coupled layout bugs, both rooted in the page-break math.
+//
+//   1. `ensureSpace` used to reserve the full Swiss QR-bill height (297.6pt)
+//      at the bottom of EVERY content page, so content broke to a new page
+//      with three quarters of the first page still blank — and on no-QR
+//      invoices (paid / TWINT) the trailing notice was bumped to a blank
+//      page 2 it never needed.
+//   2. swissqrbill's attachTo dropped the slip onto the LAST content page
+//      when it fit, so the QR bill inherited that page's `Seite N/N` footer.
+//
+// The fix: drop the QR reservation from the page-break math (content uses the
+// full page) and force `doc.addPage()` before `qrBill.attachTo()` so the slip
+// always gets its own footer-less final page. These assertions fail on the
+// unfixed code (single = 1 page with QR sharing it; paid = 2 pages).
+describe("buildInvoicePdf — page breaks & QR-bill placement (#464)", () => {
+  it("unpaid invoice: content on its own page, QR bill alone on a footer-less last page", async () => {
+    const { text, numpages } = await pdfParsed(singleCheckoutInvoice());
+    // One content page + one dedicated QR page. On the unfixed code this was
+    // a single page with the QR slip crammed onto the content page.
+    expect(numpages).to.equal(2);
+    // The QR payment slip is rendered (markers from swissqrbill).
+    expect(text).to.include("Empfangsschein");
+    expect(text).to.include("Zahlteil");
+    // Exactly one footer, on the single content page — the QR page carries no
+    // `Seite N/N`. Total page count in the footer is the CONTENT count (1),
+    // not content+QR (2): the QR page is excluded from numbering.
+    expect(footerLabels(text)).to.deep.equal(["Seite 1 / 1"]);
+    expect(text).to.not.include("Seite 2");
+  });
+
+  it("paid invoice (no QR): trailing notice stays on page 1, no premature break", async () => {
+    const { text, numpages } = await pdfParsed(paidInvoice());
+    // Regression for the blank `paid-twint` page 2: the "Bezahlt via TWINT"
+    // notice used to be bumped onto its own otherwise-empty page.
+    expect(numpages).to.equal(1);
+    expect(text).to.include("Bezahlt via TWINT");
+    expect(footerLabels(text)).to.deep.equal(["Seite 1 / 1"]);
+  });
+
+  it("long invoice: content paginates naturally, QR bill alone on the final footer-less page", async () => {
+    const { text, numpages } = await pdfParsed(longInvoice());
+    // Two content pages + one dedicated QR page.
+    expect(numpages).to.equal(3);
+    expect(text).to.include("Empfangsschein");
+    // Footers number only the two content pages; the QR page (page 3) has no
+    // footer, so there is no "Seite 3" and the total reads "/ 2".
+    expect(footerLabels(text)).to.deep.equal(["Seite 1 / 2", "Seite 2 / 2"]);
+    expect(text).to.not.include("Seite 3");
   });
 });
 

@@ -35,6 +35,7 @@ export type RpcGroup =
 export const RpcMethod = {
   authCall: [
     "createUser",
+    "checkAccountExists",
     "requestLoginCode",
     "verifyLoginCode",
     "verifyMagicLink",

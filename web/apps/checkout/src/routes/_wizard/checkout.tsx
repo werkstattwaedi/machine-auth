@@ -24,6 +24,13 @@ function CheckoutRoute() {
       items={ctx.items}
       config={ctx.pricingConfig}
       membershipCatalogId={ctx.membershipCatalogId}
+      onPrimaryBillingChange={(updates) => {
+        const primary = ctx.persons[0]
+        if (primary) {
+          ctx.personsDispatch({ type: "UPDATE_PERSON", id: primary.id, updates })
+        }
+      }}
+      profileBillingAddress={ctx.identifiedUserDoc?.billingAddress ?? null}
       submitting={ctx.submitting}
       submitError={ctx.submitError}
       onBack={() =>

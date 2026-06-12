@@ -37,6 +37,7 @@ import type {
 import type {
   CheckoutEntity,
   CheckoutItemEntity,
+  MembershipEntity,
   PaymentMethod,
   UserEntity,
 } from "../types/firestore_entities";
@@ -359,8 +360,19 @@ export async function tryGeneratePdf(
   // when the payment method changes the PDF content (#251).
   if (bill.storagePath && !options.force) return true;
 
-  // Another process is working on it (and the lock isn't stale)
-  if (bill.pdfGeneratedAt) {
+  // Another process is working on it (and the lock isn't stale).
+  //
+  // `force` skips this check (issue #426): the create-path
+  // `tryGeneratePdf` sets `pdfGeneratedAt` and never clears it on
+  // success, so a completed bill still carries a recent timestamp. When
+  // the user acks TWINT within STALE_LOCK_MS of checkout (the common
+  // case), the ack-time force-regen would otherwise see that fresh
+  // timestamp as a held lock and bail BEFORE regenerating — leaving the
+  // create-time QR rechnung PDF attached while the email already
+  // branded itself TWINT. The force callers (onBillUpdate) run
+  // sequentially after the ack commit, so there is no real concurrent
+  // generator to protect against here.
+  if (bill.pdfGeneratedAt && !options.force) {
     const lockAge = Date.now() - bill.pdfGeneratedAt.toMillis();
     if (lockAge < STALE_LOCK_MS) return false;
     // Stale lock — clear it and proceed
@@ -458,6 +470,65 @@ function pickTemplate(
   }
 }
 
+/**
+ * Resolve the invoice-email recipient for a checkout (issue #424).
+ *
+ * Kiosk tag-tap checkouts can name a family member who is a child account
+ * with no email (e.g. "Lia"). `persons[0].email` is then `""` and the
+ * receipt previously went nowhere. Fall back to the family-membership
+ * owner's email so the responsible adult still gets the Beleg:
+ *
+ *   1. `persons[0].email` if non-empty (the usual path).
+ *   2. else, for the first person carrying a `userRef`, find their active
+ *      `family` membership (`members` array-contains the user) and use the
+ *      membership owner's `email` from `users/{ownerId}`.
+ *   3. else `null` — caller logs + skips.
+ *
+ * Exported for unit testing.
+ */
+export async function resolveRecipientEmail(
+  checkout: CheckoutEntity,
+): Promise<string | null> {
+  const directEmail = checkout.persons[0]?.email;
+  if (directEmail) return directEmail;
+
+  const db = getFirestore();
+
+  // Walk persons for the first one linked to a real account, then resolve
+  // their active family membership's owner email.
+  for (const person of checkout.persons) {
+    const userRef = person.userRef;
+    if (!userRef) continue;
+
+    try {
+      const membershipsSnap = await db
+        .collection("memberships")
+        .where("members", "array-contains", userRef)
+        .where("type", "==", "family")
+        .where("status", "==", "active")
+        .limit(1)
+        .get();
+      if (membershipsSnap.empty) continue;
+
+      const membership = membershipsSnap.docs[0].data() as MembershipEntity;
+      const ownerSnap = await membership.ownerUserId.get();
+      if (!ownerSnap.exists) continue;
+      const ownerEmail = (ownerSnap.data() as UserEntity | undefined)?.email;
+      if (ownerEmail) return ownerEmail;
+    } catch (error) {
+      // Fail soft: an index/permission hiccup shouldn't crash the send
+      // path — fall through to the next person / the null skip.
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn(
+        `resolveRecipientEmail: family-owner lookup failed for ${userRef.path}`,
+        { error: message },
+      );
+    }
+  }
+
+  return null;
+}
+
 export async function trySendEmail(billId: string): Promise<boolean> {
   if (process.env.FUNCTIONS_EMULATOR === "true") {
     logger.info(`Emulator: skipping email for bill ${billId}`);
@@ -500,7 +571,10 @@ export async function trySendEmail(billId: string): Promise<boolean> {
   const checkoutDoc = await bill.checkouts[0].get();
   if (!checkoutDoc.exists) return false;
   const checkout = checkoutDoc.data() as CheckoutEntity;
-  const recipientEmail = checkout.persons[0]?.email;
+  // Resolve recipient: the person's own email, or — for a family member
+  // without one (e.g. a kiosk child checkout) — the family owner's email
+  // (issue #424).
+  const recipientEmail = await resolveRecipientEmail(checkout);
   if (!recipientEmail) {
     logger.warn(`Bill ${billId}: no recipient email, skipping`);
     return true; // Nothing to retry

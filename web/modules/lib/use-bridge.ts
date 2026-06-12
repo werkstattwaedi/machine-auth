@@ -24,6 +24,15 @@ interface BridgeApi {
   getUrl: () => Promise<string>
   onUrlChange: (cb: (url: string) => void) => () => void
   onNfcTag: (cb: (payload: NfcTagEvent) => void) => () => void
+  // "Neuer Checkout" reset flow (issue #415). The chrome button asks the page
+  // to show its confirm; the page acks so the chrome cancels its fallback.
+  requestStartOver?: () => void
+  ackStartOver?: () => void
+  onStartOverRequest?: (cb: () => void) => () => void
+  // Fired in the checkout webview when the kiosk's overlay detects the
+  // RaiseNow TWINT payment completed (#416). Optional so the web app keeps
+  // working against older kiosk builds without this channel.
+  onPaymentConfirmed?: (cb: (paymentUuid: string) => void) => () => void
 }
 
 interface UseBridgeResult {
@@ -33,6 +42,12 @@ interface UseBridgeResult {
   bearer: () => Promise<string | null>
   resetSession: () => Promise<void>
   onNfcTag: (cb: (payload: NfcTagEvent) => void) => () => void
+  // Tell the chrome the page has the start-over request in hand so it cancels
+  // its hardware-escape-hatch fallback. No-op outside the kiosk bridge.
+  ackStartOver: () => void
+  // Subscribe to the chrome "Neuer Checkout" button. No-op outside the bridge.
+  onStartOverRequest: (cb: () => void) => () => void
+  onPaymentConfirmed: (cb: (paymentUuid: string) => void) => () => void
 }
 
 function getBridge(): BridgeApi | undefined {
@@ -65,6 +80,9 @@ export function useBridge(): UseBridgeResult {
         bearer: async () => null,
         resetSession: async () => {},
         onNfcTag: () => NO_OP_UNSUBSCRIBE,
+        ackStartOver: () => {},
+        onStartOverRequest: () => NO_OP_UNSUBSCRIBE,
+        onPaymentConfirmed: () => NO_OP_UNSUBSCRIBE,
       }
     }
     return {
@@ -74,6 +92,12 @@ export function useBridge(): UseBridgeResult {
       bearer: bridge.bearer,
       resetSession: bridge.resetSession,
       onNfcTag: bridge.onNfcTag,
+      // Older kiosk builds may not expose these — guard so the page degrades
+      // gracefully rather than crashing on an undefined call.
+      ackStartOver: bridge.ackStartOver ?? (() => {}),
+      onStartOverRequest: bridge.onStartOverRequest ?? (() => NO_OP_UNSUBSCRIBE),
+      onPaymentConfirmed:
+        bridge.onPaymentConfirmed ?? (() => NO_OP_UNSUBSCRIBE),
     }
   }, [])
 }

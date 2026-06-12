@@ -2,7 +2,14 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import { render, screen, cleanup } from "@testing-library/react"
+import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react"
+
+// jsdom lacks ResizeObserver, which the radix Checkbox in the sign-up form uses.
+globalThis.ResizeObserver ??= class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+} as unknown as typeof ResizeObserver
 
 const navigateMock = vi.fn()
 
@@ -10,15 +17,25 @@ vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => navigateMock,
 }))
 
+// Mutable auth surface so each test can tune the mocked methods.
+const auth = {
+  user: null as unknown,
+  userDoc: null as unknown,
+  userDocLoading: false,
+  loading: false,
+  sessionKind: null as unknown,
+  checkAccountExists: vi.fn(),
+  requestLoginEmail: vi.fn(),
+  verifyLoginCode: vi.fn(),
+  verifyLoginCodeAndCreateProfile: vi.fn(),
+  completeSignedInSignup: vi.fn(),
+  signInWithGoogle: vi.fn(),
+  pendingGoogleLink: false,
+}
+
 vi.mock("@modules/lib/auth", () => ({
-  useAuth: () => ({
-    user: null,
-    loading: false,
-    requestLoginEmail: vi.fn(),
-    verifyLoginCode: vi.fn(),
-    signInWithGoogle: vi.fn(),
-    pendingGoogleLink: false,
-  }),
+  useAuth: () => auth,
+  isProfileComplete: () => false,
 }))
 
 vi.mock("sonner", () => ({
@@ -27,9 +44,19 @@ vi.mock("sonner", () => ({
 
 const { LoginPage } = await import("./login-page")
 
+function enterEmail(value = "new@example.com") {
+  fireEvent.change(screen.getByTestId("login-email-input"), {
+    target: { value },
+  })
+  fireEvent.click(screen.getByTestId("login-email-submit"))
+}
+
 describe("LoginPage", () => {
   beforeEach(() => {
     navigateMock.mockClear()
+    auth.checkAccountExists = vi.fn()
+    auth.requestLoginEmail = vi.fn().mockResolvedValue(undefined)
+    auth.signInWithGoogle = vi.fn()
     window.localStorage.clear()
   })
 
@@ -37,32 +64,23 @@ describe("LoginPage", () => {
     cleanup()
   })
 
-  it("hides the sign-up link when signupEnabled is false", () => {
+  it("shows the plain sign-in heading for admin (signupEnabled false)", () => {
     render(<LoginPage defaultRedirect="/users" />)
-
-    expect(screen.queryByText("Konto erstellen")).toBeNull()
+    expect(screen.getByText("Anmelden")).toBeTruthy()
   })
 
-  it("shows the sign-up link when signupEnabled is true", () => {
+  it("shows the combined heading when signupEnabled is true", () => {
     render(<LoginPage defaultRedirect="/visit" signupEnabled />)
-
-    expect(screen.getByText("Konto erstellen")).toBeTruthy()
+    expect(screen.getByText("Anmelden oder Konto erstellen")).toBeTruthy()
   })
 
   it("renders the subtitle when provided", () => {
     render(<LoginPage defaultRedirect="/users" subtitle="Administration" />)
-
     expect(screen.getByText("Administration")).toBeTruthy()
   })
 
   it("places the Google button before the email form when googleButtonPosition='top'", () => {
-    render(
-      <LoginPage
-        defaultRedirect="/users"
-        googleButtonPosition="top"
-      />,
-    )
-
+    render(<LoginPage defaultRedirect="/users" googleButtonPosition="top" />)
     const googleBtn = screen.getByText("Mit Google anmelden")
     const emailForm = screen.getByTestId("login-email-stage")
     expect(googleBtn.compareDocumentPosition(emailForm)).toBe(
@@ -71,14 +89,7 @@ describe("LoginPage", () => {
   })
 
   it("places the Google button after the email form when googleButtonPosition='bottom'", () => {
-    render(
-      <LoginPage
-        defaultRedirect="/visit"
-        signupEnabled
-        googleButtonPosition="bottom"
-      />,
-    )
-
+    render(<LoginPage defaultRedirect="/visit" signupEnabled googleButtonPosition="bottom" />)
     const googleBtn = screen.getByText("Mit Google anmelden")
     const emailForm = screen.getByTestId("login-email-stage")
     expect(emailForm.compareDocumentPosition(googleBtn)).toBe(
@@ -86,18 +97,46 @@ describe("LoginPage", () => {
     )
   })
 
-  it("uses 'Konto erstellen' heading when mode=signup and signup is enabled", () => {
-    render(
-      <LoginPage
-        defaultRedirect="/visit"
-        signupEnabled
-        mode="signup"
-      />,
-    )
+  it("shows only the code field for an existing account after email submit", async () => {
+    auth.checkAccountExists = vi.fn().mockResolvedValue({ exists: true, hasAuthUser: true })
+    render(<LoginPage defaultRedirect="/visit" signupEnabled />)
 
-    // Heading shows "Konto erstellen"; the alternative-link reads "Anmelden"
-    // (offering to switch back to login). Just verify both appear in signup mode.
-    expect(screen.getAllByText("Konto erstellen").length).toBeGreaterThan(0)
-    expect(screen.getByText("Bereits registriert?")).toBeTruthy()
+    enterEmail("known@example.com")
+
+    await waitFor(() => expect(screen.getByTestId("login-code-stage")).toBeTruthy())
+    expect(auth.requestLoginEmail).toHaveBeenCalledWith("known@example.com")
+    expect(screen.queryByTestId("signup-firstname")).toBeNull()
+  })
+
+  it("shows the inline sign-up form for a new account after email submit", async () => {
+    auth.checkAccountExists = vi.fn().mockResolvedValue({ exists: false, hasAuthUser: false })
+    render(<LoginPage defaultRedirect="/visit" signupEnabled />)
+
+    enterEmail("new@example.com")
+
+    await waitFor(() => expect(screen.getByTestId("login-signup-stage")).toBeTruthy())
+    expect(screen.getByTestId("signup-firstname")).toBeTruthy()
+    expect(screen.getByTestId("signup-code-input")).toBeTruthy()
+    expect(screen.getByTestId("signup-membertype-firma")).toBeTruthy()
+  })
+
+  it("skips the existence check for admin and goes straight to the code field", async () => {
+    render(<LoginPage defaultRedirect="/users" />)
+    enterEmail("admin@example.com")
+
+    await waitFor(() => expect(screen.getByTestId("login-code-stage")).toBeTruthy())
+    expect(auth.checkAccountExists).not.toHaveBeenCalled()
+    expect(auth.requestLoginEmail).toHaveBeenCalledWith("admin@example.com")
+  })
+
+  it("reveals the firma address fields when Firma is selected in sign-up", async () => {
+    auth.checkAccountExists = vi.fn().mockResolvedValue({ exists: false, hasAuthUser: false })
+    render(<LoginPage defaultRedirect="/visit" signupEnabled />)
+    enterEmail("firma@example.com")
+
+    await waitFor(() => expect(screen.getByTestId("login-signup-stage")).toBeTruthy())
+    expect(screen.queryByLabelText("Strasse und Hausnummer")).toBeNull()
+    fireEvent.click(screen.getByTestId("signup-membertype-firma"))
+    expect(screen.getByLabelText("Strasse und Hausnummer")).toBeTruthy()
   })
 })

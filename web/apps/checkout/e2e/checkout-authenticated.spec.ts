@@ -30,8 +30,7 @@ test.describe("Authenticated checkout", () => {
       timeout: 10_000,
     })
 
-    // Click "Anmelden" (the login hint now renders both Anmelden + Registrieren
-    // links, so pin by href).
+    // Click the single combined login link in the identity hint.
     await page.locator('a[href="/login?redirect=/"]').click()
     await page.waitForURL("**/login**")
 
