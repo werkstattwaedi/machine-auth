@@ -4,12 +4,17 @@
 /**
  * BridgeNfcRouter — kiosk tap routing + session protection:
  *   - pristine session: tap navigates straight to /checkin with the params
- *   - preservable session (open checkout / dirty form): tap opens the
- *     "Neuer Badge erkannt" confirmation instead of navigating
+ *   - preservable session (open checkout / dirty form): tap opens a
+ *     confirmation instead of navigating
  *   - Abbrechen keeps the current session, no navigation
  *   - confirmTagSwitch wipes the bridge partition and hard-reloads into
  *     /checkin carrying the NEW tag's params
  *   - unreadable taps (no url / missing params) toast
+ *   - anonymous (un-identified) preservable session: title frames the
+ *     discard, the confirm is the red destructive "Verwerfen" variant (#468)
+ *   - identified preservable session: title frames the badge switch, the
+ *     confirm keeps the benign default "Benutzer wechseln" variant, and the body
+ *     names whose visit is parked when the holder name is known (#468)
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -43,9 +48,10 @@ vi.mock("@modules/lib/use-bridge", () => ({
   }),
 }))
 
-const mockPreservable = vi.fn().mockReturnValue(false)
+const PRISTINE = { preservable: false, identified: false, holderName: null }
+const mockSessionState = vi.fn().mockReturnValue(PRISTINE)
 vi.mock("./checkout/kiosk-session-guard", () => ({
-  isKioskSessionPreservable: () => mockPreservable(),
+  getKioskSessionState: () => mockSessionState(),
 }))
 
 afterEach(() => {
@@ -53,8 +59,8 @@ afterEach(() => {
   mockNavigate.mockReset()
   mockToastError.mockReset()
   mockResetSession.mockClear()
-  mockPreservable.mockReset()
-  mockPreservable.mockReturnValue(false)
+  mockSessionState.mockReset()
+  mockSessionState.mockReturnValue(PRISTINE)
   tagCallback = null
 })
 
@@ -75,23 +81,83 @@ describe("BridgeNfcRouter", () => {
       search: { picc: "PICC1", cmac: "CMAC1", kiosk: "" },
       replace: true,
     })
-    expect(screen.queryByText("Neuer Badge erkannt")).toBeNull()
+    expect(screen.queryByRole("alertdialog")).toBeNull()
   })
 
   it("asks for confirmation instead of navigating when a session is active", () => {
-    mockPreservable.mockReturnValue(true)
+    mockSessionState.mockReturnValue({
+      preservable: true,
+      identified: false,
+      holderName: null,
+    })
     render(<BridgeNfcRouter />)
     tap(TAG_URL)
     expect(mockNavigate).not.toHaveBeenCalled()
-    expect(screen.getByText("Neuer Badge erkannt")).toBeTruthy()
+    expect(screen.getByText("Laufenden Checkout verwerfen?")).toBeTruthy()
+  })
+
+  it("anonymous session: discard title + red destructive Verwerfen confirm", () => {
+    mockSessionState.mockReturnValue({
+      preservable: true,
+      identified: false,
+      holderName: null,
+    })
+    render(<BridgeNfcRouter />)
+    tap(TAG_URL)
+    expect(screen.getByText("Laufenden Checkout verwerfen?")).toBeTruthy()
+    // Honest discard copy, not the reassuring handoff.
+    expect(screen.getByText(/wird verworfen/)).toBeTruthy()
+    expect(screen.queryByText(/zwischengespeichert/)).toBeNull()
+    // The confirm carries the destructive fill (matches Neuer Checkout). The
+    // base class always references `destructive` for focus/aria rings, so
+    // assert on the variant-specific `bg-destructive` fill.
+    const confirm = screen.getByRole("button", { name: "Verwerfen" })
+    expect(confirm.className).toContain("bg-destructive")
+  })
+
+  it("identified session: switch title + default Benutzer wechseln confirm + names the parked visit", () => {
+    mockSessionState.mockReturnValue({
+      preservable: true,
+      identified: true,
+      holderName: "Michael Schneider",
+    })
+    render(<BridgeNfcRouter />)
+    tap(TAG_URL)
+    expect(screen.getByText("Benutzer wechseln?")).toBeTruthy()
+    // Reassuring handoff copy naming the current visitor, no discard warning.
+    expect(
+      screen.getByText(/Der Besuch von Michael Schneider ist zwischengespeichert/),
+    ).toBeTruthy()
+    expect(screen.queryByText(/wird verworfen/)).toBeNull()
+    const confirm = screen.getByRole("button", { name: "Benutzer wechseln" })
+    expect(confirm.className).not.toContain("bg-destructive")
+    expect(confirm.className).toContain("bg-primary")
+  })
+
+  it("identified session with no holder name: falls back to the name-less handoff copy", () => {
+    mockSessionState.mockReturnValue({
+      preservable: true,
+      identified: true,
+      holderName: null,
+    })
+    render(<BridgeNfcRouter />)
+    tap(TAG_URL)
+    expect(
+      screen.getByText(/Der offene Besuch ist zwischengespeichert/),
+    ).toBeTruthy()
+    expect(screen.queryByText(/Der Besuch von/)).toBeNull()
   })
 
   it("Abbrechen dismisses the dialog and keeps the session", () => {
-    mockPreservable.mockReturnValue(true)
+    mockSessionState.mockReturnValue({
+      preservable: true,
+      identified: false,
+      holderName: null,
+    })
     render(<BridgeNfcRouter />)
     tap(TAG_URL)
     fireEvent.click(screen.getByRole("button", { name: "Abbrechen" }))
-    expect(screen.queryByText("Neuer Badge erkannt")).toBeNull()
+    expect(screen.queryByRole("alertdialog")).toBeNull()
     expect(mockNavigate).not.toHaveBeenCalled()
     expect(mockResetSession).not.toHaveBeenCalled()
   })
