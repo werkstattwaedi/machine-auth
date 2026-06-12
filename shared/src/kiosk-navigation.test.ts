@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest"
 import {
   decideKioskOverlay,
   detectKioskPaymentConfirmation,
+  isAllowedKioskOverlayNavigation,
   RAISENOW_PAYLINK_ORIGIN,
 } from "./kiosk-navigation"
 
@@ -78,6 +79,90 @@ describe("decideKioskOverlay", () => {
         allowedOverlayOrigins: [],
       })
     ).toEqual({ open: false })
+  })
+})
+
+describe("isAllowedKioskOverlayNavigation", () => {
+  const CHECKOUT_ORIGIN = "https://checkout.werkstattwaedi.ch"
+  const opts = {
+    checkoutOrigin: CHECKOUT_ORIGIN,
+    allowedOverlayOrigins: OVERLAY_ALLOWLIST,
+  }
+
+  it("allows navigation back to the checkout origin", () => {
+    expect(
+      isAllowedKioskOverlayNavigation(
+        `${CHECKOUT_ORIGIN}/payment?kiosk=`,
+        opts
+      )
+    ).toBe(true)
+  })
+
+  it("allows an explicitly allowlisted overlay origin (pay.raisenow.io)", () => {
+    expect(
+      isAllowedKioskOverlayNavigation(
+        "https://pay.raisenow.io/hxnqv?amount.values=5.00&lng=de",
+        opts
+      )
+    ).toBe(true)
+  })
+
+  it("allows the TWINT hop to twint.raisenow.io (the stuck case, #470)", () => {
+    // pay.raisenow.io → twint.raisenow.io is a *different origin* and is NOT
+    // in OVERLAY_ALLOWLIST. The old inline guard blocked it, hanging the
+    // spinner. The *.raisenow.io subdomain allowance unblocks it.
+    expect(
+      isAllowedKioskOverlayNavigation(
+        "https://twint.raisenow.io/checkout/?lng=de&foo=bar",
+        opts
+      )
+    ).toBe(true)
+  })
+
+  it("allows a deeper *.raisenow.io subdomain hop", () => {
+    expect(
+      isAllowedKioskOverlayNavigation(
+        "https://app.pay.raisenow.io/x",
+        opts
+      )
+    ).toBe(true)
+  })
+
+  it("allows the bare raisenow.io apex", () => {
+    expect(
+      isAllowedKioskOverlayNavigation("https://raisenow.io/x", opts)
+    ).toBe(true)
+  })
+
+  it("blocks a label-boundary spoof (raisenow.io.attacker.com)", () => {
+    expect(
+      isAllowedKioskOverlayNavigation(
+        "https://raisenow.io.attacker.com/x",
+        opts
+      )
+    ).toBe(false)
+  })
+
+  it("blocks a prefix spoof (evilraisenow.io)", () => {
+    expect(
+      isAllowedKioskOverlayNavigation("https://evilraisenow.io/x", opts)
+    ).toBe(false)
+  })
+
+  it("blocks an unrelated off-origin URL", () => {
+    expect(
+      isAllowedKioskOverlayNavigation("https://evil.example/x", opts)
+    ).toBe(false)
+  })
+
+  it("blocks a non-https RaiseNow URL", () => {
+    expect(
+      isAllowedKioskOverlayNavigation("http://twint.raisenow.io/x", opts)
+    ).toBe(false)
+  })
+
+  it("blocks a malformed URL without throwing", () => {
+    expect(isAllowedKioskOverlayNavigation("not a url", opts)).toBe(false)
   })
 })
 

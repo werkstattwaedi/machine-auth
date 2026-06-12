@@ -10,7 +10,11 @@ import {
   type WebContents,
 } from "electron"
 import path from "node:path"
-import { decideKioskOverlay, RAISENOW_PAYLINK_ORIGIN } from "@oww/shared"
+import {
+  decideKioskOverlay,
+  isAllowedKioskOverlayNavigation,
+  RAISENOW_PAYLINK_ORIGIN,
+} from "@oww/shared"
 import { resolveConfig } from "./config"
 import { startNfc } from "./bridge/nfc"
 import type { NfcTagEvent } from "./types"
@@ -115,26 +119,19 @@ function createWindow(): void {
         return { action: "deny" }
       })
       webviewWebContents.on("will-navigate", (event, navUrl) => {
-        try {
-          const allowed = new URL(config.url).origin
-          const target = new URL(navUrl).origin
-          // The checkout origin is always allowed. Overlay webviews navigate
-          // within an allowlisted off-origin (e.g. werkstattwaedi.ch for the
-          // Nutzungsbestimmungen page, or pay.raisenow.io for the TWINT
-          // paylink), so permit those origins too — the overlay is created and
-          // torn down by the renderer.
-          if (
-            target !== allowed &&
-            !OVERLAY_ALLOWLIST.includes(
-              target as (typeof OVERLAY_ALLOWLIST)[number]
-            )
-          ) {
-            console.warn(
-              `Blocked webview navigation to off-origin URL: ${navUrl}`
-            )
-            event.preventDefault()
-          }
-        } catch {
+        // The checkout origin is always allowed. Overlay webviews navigate
+        // within an allowlisted off-origin (e.g. werkstattwaedi.ch for the
+        // Nutzungsbestimmungen page) and across RaiseNow's own domain family
+        // for the TWINT payment (pay.raisenow.io → twint.raisenow.io, #470),
+        // so permit those too — the overlay is created and torn down by the
+        // renderer.
+        if (
+          !isAllowedKioskOverlayNavigation(navUrl, {
+            checkoutOrigin: new URL(config.url).origin,
+            allowedOverlayOrigins: OVERLAY_ALLOWLIST,
+          })
+        ) {
+          console.warn(`Blocked webview navigation to off-origin URL: ${navUrl}`)
           event.preventDefault()
         }
       })
