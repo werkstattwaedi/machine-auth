@@ -41,6 +41,9 @@ function CheckinRoute() {
       signedInUserId={ctx.identifiedUserDoc?.id ?? null}
       signedInEmail={ctx.identifiedUserDoc?.email ?? null}
       isMember={ctx.isMember}
+      // Issue #465: a checkout already running flips the kiosk footer primary
+      // from "Besuch starten" to "Material erfassen".
+      hasOpenCheckout={!!ctx.openCheckout}
       familyCandidates={ctx.familyCandidates}
       // Kiosk: badge-tap progress/errors render inside the NFC affordance
       // box on this page (TagAuthOverlay stays home for browser tag taps).

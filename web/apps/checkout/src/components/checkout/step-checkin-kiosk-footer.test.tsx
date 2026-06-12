@@ -30,6 +30,7 @@ const tagPerson: CheckoutPerson = {
 function renderCheckin(opts: {
   onStartVisit?: () => Promise<void>
   onAdvance?: () => Promise<void>
+  hasOpenCheckout?: boolean
 }) {
   return render(
     <StepCheckin
@@ -44,6 +45,7 @@ function renderCheckin(opts: {
       onSignOut={vi.fn()}
       onAdvance={opts.onAdvance}
       onStartVisit={opts.onStartVisit}
+      hasOpenCheckout={opts.hasOpenCheckout}
     />,
   )
 }
@@ -80,6 +82,49 @@ describe("StepCheckin kiosk footer", () => {
     renderCheckin({
       onStartVisit: vi.fn().mockResolvedValue(undefined),
       onAdvance,
+    })
+    fireEvent.click(screen.getByRole("button", { name: /Material erfassen/ }))
+    await waitFor(() => expect(onAdvance).toHaveBeenCalledOnce())
+  })
+
+  // Issue #465: once a checkout is already running the visit is started, so
+  // "Besuch starten" must disappear and "Material erfassen" becomes the
+  // primary action.
+  it("drops 'Besuch starten' and keeps only 'Material erfassen' when a checkout is already open", () => {
+    renderCheckin({
+      onStartVisit: vi.fn().mockResolvedValue(undefined),
+      onAdvance: vi.fn().mockResolvedValue(undefined),
+      hasOpenCheckout: true,
+    })
+    expect(
+      screen.getByRole("button", { name: /Material erfassen/ }),
+    ).toBeTruthy()
+    expect(
+      screen.queryByRole("button", { name: /Besuch starten/ }),
+    ).toBeNull()
+    expect(screen.queryByRole("button", { name: /^Weiter$/ })).toBeNull()
+  })
+
+  it("shows 'Besuch starten' as primary when no checkout is open yet", () => {
+    renderCheckin({
+      onStartVisit: vi.fn().mockResolvedValue(undefined),
+      onAdvance: vi.fn().mockResolvedValue(undefined),
+      hasOpenCheckout: false,
+    })
+    expect(
+      screen.getByRole("button", { name: /Besuch starten/ }),
+    ).toBeTruthy()
+    expect(
+      screen.getByRole("button", { name: /Material erfassen/ }),
+    ).toBeTruthy()
+  })
+
+  it("'Material erfassen' runs onAdvance when a checkout is already open", async () => {
+    const onAdvance = vi.fn().mockResolvedValue(undefined)
+    renderCheckin({
+      onStartVisit: vi.fn().mockResolvedValue(undefined),
+      onAdvance,
+      hasOpenCheckout: true,
     })
     fireEvent.click(screen.getByRole("button", { name: /Material erfassen/ }))
     await waitFor(() => expect(onAdvance).toHaveBeenCalledOnce())
