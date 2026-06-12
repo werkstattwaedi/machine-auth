@@ -1,8 +1,8 @@
-# ADR-0029: Concurrent family-member checkouts — single active participation
+# ADR-0029: Concurrent family-member checkouts — account-less family members
 
 **Status:** Proposed
 
-**Date:** 2026-06-09
+**Date:** 2026-06-09 (revised 2026-06-12)
 
 ## Context
 
@@ -10,7 +10,9 @@ A checkout can be started for a group: a `CheckoutEntity`
 (`functions/src/types/firestore_entities.ts`) carries a
 `persons: CheckoutPersonEntity[]` roster, and each roster entry may carry a
 `userRef` linking the visit to a real `/users/{userId}` account — including
-child accounts picked from the signed-in user's family roster.
+family members picked from the signed-in user's family roster
+(the `familyCandidates` quick-add in
+`web/apps/checkout/src/components/checkout/wizard-context.tsx`, issue #209).
 
 This creates a class of "multi-family-member" failure modes (issue #432).
 The same person can be represented twice at the same time:
@@ -50,146 +52,170 @@ The interaction matters: a person legitimately *returning* the same day
 blocked. The thing we want to block is **two simultaneously open** checkouts
 that both involve the same person.
 
-### Why detection has to be server-side
+### Accounts, account-less users, and tokens
 
-Detecting "is this `userRef` already active elsewhere?" requires reading
-checkouts owned by *other* users. Owner-scoped Firestore rules deliberately
-forbid that (the B2 launch-readiness incident — cross-user `checkouts` read
-leak — is guarded by `web/modules/test/cross-user-rules.integration.test.ts`).
-Therefore the authoritative guard cannot be a client Firestore query; it must
-be a Cloud Function callable that runs with admin privileges. Any client-side
-check is UX-only (fast feedback) and is not the source of truth.
+Two existing data-model facts turn out to be load-bearing:
 
-This ADR records the **decision framework and proposed rules** for issue #432.
-It is design-only: the enforcement code is deliberately deferred to follow-up
-issues (see *Consequences → Phasing*), because the merge-vs-attribute policy
-(use case 1 below) is a genuine product decision that should be confirmed
-before code is written.
+- `UserEntity.email` is `string | null` — **null for accounts without Firebase
+  Auth credentials** (`functions/src/types/firestore_entities.ts`). A user with
+  `email === null` has no login and cannot sign in to the checkout app at all.
+- `TokenEntity.userId` is a **non-optional** `DocumentReference` to
+  `/users/{userId}`, and tokens are **admin-created only** (`/tokens/{tokenId}`
+  in `firestore/firestore.rules` is admin read/write). Combined with the
+  product rule confirmed in review — **users with tokens MUST have an
+  account** — every badge holder is an account-holder.
+
+### Why the originally-proposed detection had to be server-side
+
+The first draft of this ADR proposed detecting "is this `userRef` already
+active on another open checkout?" That requires reading checkouts owned by
+*other* users. Owner-scoped Firestore rules deliberately forbid that (the B2
+launch-readiness incident — cross-user `checkouts` read leak — is guarded by
+`web/modules/test/cross-user-rules.integration.test.ts`), so the guard would
+have had to be an admin-privileged Cloud Function callable plus a
+denormalized index. During review a simpler alternative was proposed and
+adopted; the original design is recorded under *Tradeoffs* below.
+
+This ADR records the **decision and rules** for issue #432. It is design-only:
+the enforcement code is deferred to follow-up issues (see *Consequences →
+Phasing*).
 
 ## Decision
 
-### Core concept: "active participation"
+### Core rule: only account-less family members are rostered
 
-Define a `userRef` as **actively participating** if it is *either*:
+A family member can be included in another person's checkout roster **as long
+as they don't have an account. Once they have one, they can't be rostered** —
+they check in and out on their own account instead.
 
-- the **owner** (`CheckoutEntity.userId`) of any checkout with
-  `status == "open"`, **or**
-- a **roster person** (`persons[].userRef`) on any checkout with
-  `status == "open"`.
+- **"Account-less" means account absence, not age.** Eligibility is defined by
+  `email === null` (no login credentials), explicitly **not** by
+  `userType == "kind"`. An account-less adult is rosterable; a child who has
+  been given an account is not. `userType` plays no role in the rule.
+- **Account-holders always act on their own behalf.** Two account-holding
+  family members visiting together each start their own checkout and check out
+  separately. There is no value in batching them onto one roster, and allowing
+  it is what created the concurrency problem in the first place.
+- **Guests-by-name are unaffected.** A walk-in guest added by typing a name has
+  no `userRef` at all (`personLocalToDoc` in `wizard-context.tsx` only sets
+  `userRef` when a `userId` is present) and is outside this rule. "Add a person
+  who doesn't have an account" remains fully supported — that is the common
+  case.
 
-A user may participate in **at most one open checkout at a time** — as owner
-*or* roster member, not both, and not in two of either. A *closed* checkout
-never counts as active participation, so same-day return (a new checkout after
-the prior one closed) remains allowed and continues to flow through the
-existing `entryFeeWaivedToday` logic unchanged.
+### Why this dissolves the hard problem
 
-### Use cases enumerated
+The original failure modes 2 and 3 ("rostered user starts their own checkout"
+and "owner adds an already-active user") both reduce to "a rostered person can
+independently act elsewhere." Under the adopted rule they become **impossible
+by construction** rather than detected-and-blocked:
 
-1. **Independent usage by a rostered user.** Person P is rostered (via
-   `userRef`) on owner O's open checkout; later P taps *their own* badge at a
-   machine. The usage is logged against P's user, not O's checkout. **Open
-   product decision** — see proposed rule below.
-2. **Rostered user starts their own checkout.** P is rostered on O's open
-   checkout and then tries to start *their own* checkout (P has an account).
-   **Hard-blocked.**
-3. **Owner adds an already-active user.** P already owns (or is rostered on)
-   their own open checkout; O tries to add P to O's roster. **Hard-blocked.**
-4. **Same-day / next-day boundary.** P has a *closed* checkout from a prior
-   business day (or earlier the same day) still owing payment, vs. an *open*
-   checkout now. Only the **open** checkout counts toward active
-   participation; the closed one feeds `entryFeeWaivedToday` and does **not**
-   block.
-5. **Child vs. adult family members.** A child account
-   (`userType == "kind"`, no independent badge/login) cannot start or own a
-   checkout, so use cases 2–3 only meaningfully bind for `userType ==
-   "erwachsen"`/`"firma"` accounts that have their own badge and login. The
-   single-active-participation rule still applies to children for roster
-   purposes (a child cannot be rostered onto two open checkouts at once).
+- An account-less person has no login → cannot start or own a checkout → can
+  never be active on a second checkout as owner.
+- An account-holder can never appear as a roster `userRef` → can never be
+  "rostered here and active there."
 
-### Proposed rules (to be confirmed before phase 2)
+No cross-user query is ever needed to validate a roster.
 
-- **R1 — Single active participation (hard block, server-authoritative).**
-  A callable guard rejects any write that would make a `userRef` active on a
-  second open checkout. This covers both use case 2 (P starts their own) and
-  use case 3 (O adds P), since both reduce to "make `userRef` active while it
-  is already active elsewhere."
+### Rules
 
-- **R2 — Independent usage attribution (recommended default; needs sign-off).**
-  When a user who is currently a roster person on someone else's open checkout
-  logs independent machine usage via their own badge, **attribute that usage to
-  the open checkout they participate in**, and surface it for review at close
-  rather than silently creating a second billable record. Rationale: the group
-  owner already declared intent to cover that person; splitting their usage
-  across two bills is surprising and re-introduces the same double-billing the
-  entry-fee waiver was built to prevent. The alternative (hard-block the badge
-  tap) is worse UX at the machine. This is the one rule that is a genuine
-  product call and is explicitly **not** decided by this ADR.
+- **R1 — Rostered `userRef`s must be account-less (server-authoritative,
+  local check).** At checkout create/close
+  (`functions/src/invoice/close_checkout_and_get_payment.ts` path), reject any
+  `persons[].userRef` that resolves to a user with an account
+  (`email !== null`). This is a single-document lookup per rostered user — no
+  cross-user query, no new callable, no index — and stays entirely inside the
+  owner-scoped-rules invariant.
 
-- **R3 — Closed checkouts never block.** Active participation is scoped to
-  `status == "open"`. Same-day return remains fully supported and continues to
-  rely on `entryFeeWaivedToday` for fee correctness.
+- **R2 — Independent badge usage by a rostered person: resolved by
+  construction.** Badge/token holders MUST have an account
+  (`TokenEntity.userId` non-optional; tokens admin-created only), and rostered
+  members are account-less. Therefore a rostered member can never tap their own
+  badge and produce independently-attributed usage — the attribution question
+  the first draft left open does not arise. The invariant **"token holders are
+  account-holders"** is load-bearing for this and must be preserved by any
+  future token-issuance change.
+
+- **R3 — Closed checkouts never block (unchanged).** Same-day return (a new
+  checkout after the prior one closed) remains fully supported and continues to
+  rely on `entryFeeWaivedToday` for fee correctness. R1 is about *who may be
+  rostered*, not about prior visits.
 
 ### Enforcement placement
 
-- **Authoritative guard:** a Cloud Function callable (under
-  `functions/src/`, dispatched through the appropriate grouped dispatcher per
-  ADR-0028) that, given a `userRef` and the target checkout, queries for any
-  *other* open checkout where that user is owner or roster person and rejects
-  the mutation if found. Runs with admin privileges so it can read across
-  owners without violating the owner-scoped Firestore rules.
-- **Client UX guard:** `web/apps/checkout/src/components/checkout/validation.ts`
-  + `use-checkout-state.ts` give immediate feedback when adding a roster person
-  the client already knows is active, but are advisory only.
-- **Indexes:** R1 needs an efficient "open checkouts containing `userRef`"
-  query. A roster `userRef` lives in an array of objects, which Firestore
-  cannot index for membership directly; phase 2 must either denormalize a
-  flat `activeParticipantRefs: DocumentReference[]` array on the checkout (for
-  `array-contains`) or maintain a per-user "current open checkout" pointer.
-  The denormalization choice is left to phase 2.
+- **Authoritative guard (server):** the local account-less validation (R1) in
+  the checkout create/close path under `functions/src/invoice/`. Single-doc
+  reads of `/users/{userId}` for each rostered `userRef`.
+- **Client UX (advisory):**
+  - Filter the family quick-add candidates (`familyCandidates` in
+    `web/apps/checkout/src/components/checkout/wizard-context.tsx`) to
+    account-less members; show account-holding members **disabled** with a
+    hint that they check in on their own account, so the restriction is
+    discoverable rather than surprising.
+  - An advisory guard in
+    `web/apps/checkout/src/components/checkout/validation.ts` rejecting a
+    roster person whose `userRef` points at an account-holder — fast feedback
+    only, not the source of truth.
 
 ## Consequences
 
 **Pros:**
-- Names the previously-implicit invariant ("a user is in at most one open
-  checkout") so future checkout/usage code can rely on it.
-- Separates the two *settled* hard-block rules (R1) from the one *unsettled*
-  product decision (R2), so phase-2 work can start on R1 without waiting.
-- Keeps the same-day-return flow (`entryFeeWaivedToday`) explicitly out of
-  scope, avoiding a regression where a legitimate same-day return is blocked.
-- Reaffirms that cross-user "active elsewhere" detection must be server-side,
-  protecting the B2 cross-user-read regression net.
+- Failure modes 2–3 are impossible by construction instead of
+  detected-and-blocked — no cross-user state to query, denormalize, or keep
+  consistent.
+- No new admin-privileged read surface: everything stays inside owner-scoped
+  rules, so the B2 cross-user-read regression net
+  (`web/modules/test/cross-user-rules.integration.test.ts`) needs no changes.
+- R2 is *resolved*, not deferred: the open product decision from the first
+  draft (usage attribution for rostered badge-holders) evaporates.
+- The same-day-return flow (`entryFeeWaivedToday`) is explicitly untouched.
+- Names two load-bearing invariants for future code: "rostered `userRef`s are
+  account-less" and "token holders are account-holders."
 
-**Cons:**
-- Introduces a new server round-trip (callable guard) on the
-  add-person / start-checkout paths, adding latency and a cold-start surface.
-- Requires denormalization (a flat participant-refs array or a per-user
-  pointer) to query efficiently, which adds write-time bookkeeping and a
-  consistency burden whenever a roster changes.
-- R2 (usage attribution) remains undecided, so independent-usage reconciliation
-  is not closed by this ADR.
+**Cons / accepted cost:**
+- Account-holding family members visiting together each run their own checkout
+  and receive their own bill — group billing across account-holders is given
+  up. Entry-fee dedup for such visits is already handled independently by
+  `entryFeeWaivedToday`, so the practical loss is "two adults, one bill," which
+  review judged to have no practical value.
+- Promoting an account-less family member to a full account (giving them an
+  email/login) silently changes their roster eligibility; the disabled-with-hint
+  UI mitigates the surprise.
 
 **Tradeoffs:**
-- **Hard-block vs. auto-merge for a second checkout (use cases 2–3).** We chose
-  hard-block because merging two independently-started checkouts after the fact
-  (reconciling rosters, usage, payment state) is error-prone and the issue body
-  explicitly asks to *prevent* the situation, not merge it. Block-at-creation
-  is the simpler, more predictable rule.
-- **Attribute vs. hard-block for independent machine usage (R2).** We *propose*
-  attribute-to-the-open-checkout rather than blocking the badge at the machine,
-  because blocking a member's badge mid-visit is poor UX and the owner already
-  signalled intent to cover them. Recorded as a recommendation pending product
-  sign-off rather than a decision.
-- **Denormalized participant array vs. per-user current-checkout pointer.**
-  Deferred to phase 2; both satisfy R1's query, with different write-amplification
-  and staleness characteristics.
+- **Adopted: restrict rostering vs. rejected: detect-and-block active
+  participation.** The first draft defined "active participation" (owner or
+  roster member of any open checkout) and enforced it with a cross-user,
+  server-authoritative callable guard, a denormalization
+  (`activeParticipantRefs: DocumentReference[]` or a per-user open-checkout
+  pointer), and a new Firestore index for "open checkouts containing
+  `userRef`." That design was rejected because it added a new cross-user
+  admin-read surface that must be kept consistent with the B2 regression net,
+  write amplification and staleness bookkeeping on every roster change, a new
+  index, and an extra round-trip / cold-start on the add-person and
+  start-checkout paths — all to guard a situation the adopted rule makes
+  impossible with one local single-document check.
+- **Account absence vs. `userType == "kind"` as the eligibility criterion.**
+  Keying on `email === null` rather than the child user type keeps the rule
+  honest: an account-less adult is rosterable, and a child with an account is
+  not. `userType` describes pricing/fee category, not authentication
+  capability.
+- **Hard-block vs. auto-merge (retained from the first draft).** Even in the
+  rejected design, merging two independently-started checkouts after the fact
+  was ruled out as error-prone; the issue body asks to *prevent* the
+  situation, not merge it. The adopted rule prevents it earlier still — at
+  roster-eligibility time.
 
 ### Phasing
 
-This ADR (phase 1) is design-only and ships on its own. Phase 2 — the callable
-guard (R1), the client UX guard, the chosen denormalization/index, and their
-mandatory regression tests (Mocha integration tests under
-`functions/test/integration/` for the cross-checkout guard; Vitest unit tests
-beside `validation.ts`; cross-user negative cases in
-`web/modules/test/cross-user-rules.integration.test.ts` if owner-scoped rules
-change) — is tracked as follow-up issues and is **not** part of this PR. R2's
-product decision must be confirmed before any usage-attribution code lands.
+This ADR (phase 1) is design-only and ships on its own. Phase 2 — tracked as
+follow-up issues, **not** part of this PR — consists of:
+
+- Candidate filtering in `wizard-context.tsx` (account-less only;
+  account-holders shown disabled with a "checks in on their own account" hint).
+- The advisory client guard in `validation.ts`, with Vitest unit tests beside
+  it.
+- The local server-side R1 check at checkout create/close, with a Mocha
+  integration test under `functions/test/integration/`.
+
+No changes to owner-scoped Firestore rules are needed, so no additions to
+`web/modules/test/cross-user-rules.integration.test.ts` are required.
