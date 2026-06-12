@@ -71,13 +71,37 @@ test.describe("Check-in step screenshots", () => {
 
   test("kiosk mode — NFC hint visible", async ({ page }) => {
     await page.goto("/?kiosk")
-    await expect(page.getByText("Deine Angaben")).toBeVisible({ timeout: 10_000 })
+    // Heading role: the affordance hero subline also contains the words
+    // "Deine Angaben", so a plain text locator would be ambiguous.
+    await expect(
+      page.getByRole("heading", { name: "Deine Angaben" }),
+    ).toBeVisible({ timeout: 10_000 })
 
+    // Untouched form → the animated hero affordance (fob + reader scene).
+    const affordance = page.getByTestId("nfc-affordance")
+    await expect(affordance).toHaveAttribute("data-mode", "hero")
+    await expect(
+      affordance.getByText("an den Leser halten", { exact: false }),
+    ).toBeVisible()
+
+    await expect(page).toHaveScreenshot("checkin-kiosk-nfc-hint.png")
+  })
+
+  test("kiosk mode — NFC affordance collapses while typing", async ({ page }) => {
+    await page.goto("/?kiosk")
+    await expect(
+      page.getByRole("heading", { name: "Deine Angaben" }),
+    ).toBeVisible({ timeout: 10_000 })
+
+    await page.getByTestId("person-card").first().getByRole("textbox").first().fill("Max")
+
+    const affordance = page.getByTestId("nfc-affordance")
+    await expect(affordance).toHaveAttribute("data-mode", "compact")
     await expect(
       page.getByText("Badge an den Leser halten, um deine Daten zu laden"),
     ).toBeVisible()
 
-    await expect(page).toHaveScreenshot("checkin-kiosk-nfc-hint.png")
+    await expect(page).toHaveScreenshot("checkin-kiosk-nfc-hint-collapsed.png")
   })
 
   test("logged-in user — sign-out in person card", async ({ page }) => {

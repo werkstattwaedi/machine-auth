@@ -137,11 +137,16 @@ test.describe("NFC tag checkout", () => {
   test("kiosk mode — shows NFC hint inline with checkout form", async ({ page }) => {
     await page.goto("/?kiosk")
 
-    // Check-in form visible immediately with inline NFC hint
-    await expect(page.getByText("Deine Angaben")).toBeVisible()
+    // Check-in form visible immediately with the animated badge affordance
+    // in its hero state (untouched form). Heading role: the affordance's
+    // subline also contains the words "Deine Angaben".
     await expect(
-      page.getByText("Badge an den Leser halten, um deine Daten zu laden"),
+      page.getByRole("heading", { name: "Deine Angaben" }),
     ).toBeVisible()
+    await expect(page.getByTestId("nfc-affordance")).toHaveAttribute(
+      "data-mode",
+      "hero",
+    )
 
     // No login hint in kiosk mode
     await expect(page.getByText("Bereits registriert?")).not.toBeVisible()

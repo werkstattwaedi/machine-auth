@@ -1,10 +1,11 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { useState, useMemo, useCallback } from "react"
+import { useState, useMemo, useCallback, useEffect, useRef } from "react"
 import { Checkbox } from "@modules/components/ui/checkbox"
 import { Button } from "@modules/components/ui/button"
 import { PersonCard, RemovePersonButton } from "./person-card"
+import { NfcBadgeAffordance } from "./nfc-badge-affordance"
 import { Plus, ArrowRight, Check, LogIn } from "lucide-react"
 import type { CheckoutPerson, PersonsAction } from "./use-checkout-state"
 import type { UserType } from "@modules/lib/pricing"
@@ -66,15 +67,48 @@ interface StepCheckinProps {
    * membership, or non-owner users.
    */
   familyCandidates?: FamilyCandidate[]
+  /** True while a tapped badge is verified — the kiosk NFC affordance
+   *  box shows the progress state instead of a blocking overlay. */
+  tagAuthLoading?: boolean
+  /** Badge verification failure, folded into the kiosk NFC affordance
+   *  box; null/omitted otherwise. */
+  tagAuthError?: string | null
+  /** Tap nonce the affordance keys error dismissal on. */
+  picc?: string
 }
 
-export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAccountLoggedIn, signedInUserId, signedInEmail, isMember, onSignOut, onAdvance, onStartVisit, familyCandidates }: StepCheckinProps) {
+export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAccountLoggedIn, signedInUserId, signedInEmail, isMember, onSignOut, onAdvance, onStartVisit, familyCandidates, tagAuthLoading, tagAuthError, picc }: StepCheckinProps) {
   // touched: personId → field → true
   const [touched, setTouched] = useState<Record<string, Record<string, boolean>>>({})
   const [submitted, setSubmitted] = useState(false)
   // Disables the Weiter button while signing in anonymously so a double-tap
   // can't enqueue two anon sessions.
   const [advancing, setAdvancing] = useState(false)
+
+  // The kiosk NFC affordance collapses to its slim bar while the visitor
+  // interacts with the form — focus anywhere inside the person cards, or
+  // typed content in any editable card. The blur timeout bridges focus
+  // moving between fields so the box doesn't flicker hero↔compact.
+  const [formFocused, setFormFocused] = useState(false)
+  const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => clearTimeout(blurTimer.current ?? undefined), [])
+  const onFormFocus = useCallback(() => {
+    clearTimeout(blurTimer.current ?? undefined)
+    setFormFocused(true)
+  }, [])
+  const onFormBlur = useCallback(() => {
+    clearTimeout(blurTimer.current ?? undefined)
+    blurTimer.current = setTimeout(() => setFormFocused(false), 120)
+  }, [])
+  const formDirty = useMemo(
+    () =>
+      persons.some(
+        (p) =>
+          !p.isPreFilled &&
+          (p.firstName.trim() || p.lastName.trim() || p.email.trim()),
+      ),
+    [persons],
+  )
 
   const handleBlur = useCallback((personId: string, field: string) => {
     setTouched((prev) => ({
@@ -162,12 +196,27 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
         Deine Angaben
       </h2>
 
-      <IdentityHint
-        kiosk={kiosk}
-        isAccountLoggedIn={isAccountLoggedIn}
-        isTagIdentified={!isAnonymous && !isAccountLoggedIn}
-      />
+      {/* Kiosk + still-anonymous: the animated badge affordance. It owns
+          the whole tap lifecycle (invite → collapse → verifying → error)
+          and unmounts once the tag identifies the visitor — the pre-filled
+          identity strip below takes over. All other access modes keep the
+          static IdentityHint. */}
+      {kiosk && isAnonymous ? (
+        <NfcBadgeAffordance
+          collapsed={formFocused || formDirty}
+          verifying={tagAuthLoading ?? false}
+          error={tagAuthError ?? null}
+          picc={picc}
+        />
+      ) : (
+        <IdentityHint
+          kiosk={kiosk}
+          isAccountLoggedIn={isAccountLoggedIn}
+          isTagIdentified={!isAnonymous && !isAccountLoggedIn}
+        />
+      )}
 
+      <div className="contents" onFocus={onFormFocus} onBlur={onFormBlur}>
       {persons.map((person, i) => {
         // The signed-in user is identified by userId match, NOT array
         // index — a parent can remove themselves and re-add via a
@@ -222,6 +271,7 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
           />
         )
       })}
+      </div>
 
       <div className="flex flex-col items-start gap-3">
         {/*
@@ -426,33 +476,10 @@ function IdentityHint({
   isAccountLoggedIn: boolean
   isTagIdentified: boolean
 }) {
-  // Already identified — no hint needed
-  if (isTagIdentified || isAccountLoggedIn) return null
-
-  // Kiosk — NFC hint
-  if (kiosk) {
-    return (
-      <div className="flex items-center gap-3 rounded-[3px] border border-cog-teal/30 bg-cog-teal/5 px-4 py-2.5">
-        <svg
-          viewBox="0 0 64 64"
-          className="h-8 w-8 shrink-0 text-cog-teal animate-pulse"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <rect x="10" y="14" width="44" height="36" rx="4" />
-          <path d="M30 38a4 4 0 0 1 0-8" />
-          <path d="M26 42a10 10 0 0 1 0-20" />
-          <path d="M22 46a16 16 0 0 1 0-28" />
-        </svg>
-        <span className="text-sm text-muted-foreground">
-          Badge an den Leser halten, um deine Daten zu laden
-        </span>
-      </div>
-    )
-  }
+  // Already identified — no hint needed. Kiosk never reaches this
+  // component while anonymous (the NfcBadgeAffordance renders instead),
+  // so there's nothing to show for it here either.
+  if (isTagIdentified || isAccountLoggedIn || kiosk) return null
 
   // Browser — login / signup hint
   return (

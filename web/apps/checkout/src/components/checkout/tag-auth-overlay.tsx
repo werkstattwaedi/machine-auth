@@ -19,11 +19,17 @@ import { useWizardContext } from "./wizard-context"
  *     is keyed on `picc` — each physical tap mints a fresh picc, so a new
  *     tap after dismissing surfaces a new failure again, while re-renders
  *     of the same failed tap stay dismissed.
+ *
+ * Kiosk mode renders nothing: kiosk taps always land on /checkin (the
+ * BridgeNfcRouter navigates there with picc/cmac), where the NFC badge
+ * affordance box folds the verifying/error feedback in. The overlay
+ * stays for browser tag taps (phone on the tag's NDEF URL).
  */
 export function TagAuthOverlay() {
-  const { tagAuthLoading, tagAuthError, picc } = useWizardContext()
+  const { tagAuthLoading, tagAuthError, picc, kiosk } = useWizardContext()
   const [dismissedPicc, setDismissedPicc] = useState<string | null>(null)
 
+  if (kiosk) return null
   const showError = !!tagAuthError && !!picc && picc !== dismissedPicc
   if (!tagAuthLoading && !showError) return null
 

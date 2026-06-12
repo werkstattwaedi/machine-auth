@@ -8,6 +8,8 @@
  *   - Error card with raw error detail + "Schliessen" on `tagAuthError`
  *   - Dismissal is keyed on `picc`: same tap stays dismissed across
  *     re-renders, a new tap (fresh picc) surfaces a new failure again
+ *   - Kiosk mode renders nothing — the check-in NFC affordance box owns
+ *     the verifying/error feedback there
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -33,6 +35,26 @@ describe("TagAuthOverlay", () => {
       picc: undefined,
     })
     const { container } = render(<TagAuthOverlay />)
+    expect(container.firstChild).toBeNull()
+  })
+
+  it("renders nothing in kiosk mode even while verifying or failed", () => {
+    mockUseWizardContext.mockReturnValue({
+      tagAuthLoading: true,
+      tagAuthError: null,
+      picc: "PICC1",
+      kiosk: true,
+    })
+    const { container, rerender } = render(<TagAuthOverlay />)
+    expect(container.firstChild).toBeNull()
+
+    mockUseWizardContext.mockReturnValue({
+      tagAuthLoading: false,
+      tagAuthError: "verify failed",
+      picc: "PICC1",
+      kiosk: true,
+    })
+    rerender(<TagAuthOverlay />)
     expect(container.firstChild).toBeNull()
   })
 
