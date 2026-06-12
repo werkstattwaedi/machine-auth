@@ -63,6 +63,63 @@ export function decideKioskOverlay(
 // payment-confirmation detection below key off this.
 export const RAISENOW_PAYLINK_ORIGIN = "https://pay.raisenow.io"
 
+// RaiseNow's registrable domain. The TWINT flow opens on `pay.raisenow.io`
+// but, on "Bezahlen", navigates the overlay to `twint.raisenow.io` (a
+// *different* origin). Allowing the whole RaiseNow domain family for *in-overlay
+// navigation* keeps the flow working across RaiseNow's internal hops without
+// re-opening the kiosk to arbitrary origins (#470).
+export const RAISENOW_BASE_DOMAIN = "raisenow.io"
+
+export interface KioskOverlayNavigationOptions {
+  /**
+   * The checkout app's own origin (scheme + host + port). Navigations back to
+   * the checkout app are always permitted.
+   */
+  checkoutOrigin: string
+  /**
+   * Origins explicitly allowed to open in the overlay (the same list used by
+   * `decideKioskOverlay`). In-overlay navigation to any of these is permitted.
+   */
+  allowedOverlayOrigins: readonly string[]
+}
+
+/**
+ * Decide whether the kiosk overlay webview may navigate to `url`.
+ *
+ * The overlay starts at an allowlisted origin (e.g. `pay.raisenow.io`) but
+ * RaiseNow drives the TWINT payment across its own subdomains
+ * (`pay.raisenow.io` → `twint.raisenow.io`). A strict origin-equality guard
+ * blocks the second hop and the overlay hangs on a spinner (#470).
+ *
+ * Returns `true` when the URL is `https:` AND one of:
+ *   - its origin equals `checkoutOrigin`, or
+ *   - its origin is in `allowedOverlayOrigins`, or
+ *   - its host is `raisenow.io` or a subdomain of it (label-boundary match:
+ *     `pay.raisenow.io` and `twint.raisenow.io` pass; `evilraisenow.io` and
+ *     `raisenow.io.attacker.com` do NOT).
+ *
+ * Malformed URLs and non-https URLs return `false` without throwing, so an
+ * unexpected navigation defaults to blocked.
+ */
+export function isAllowedKioskOverlayNavigation(
+  url: string,
+  { checkoutOrigin, allowedOverlayOrigins }: KioskOverlayNavigationOptions
+): boolean {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return false
+  }
+  if (parsed.protocol !== "https:") return false
+  if (parsed.origin === checkoutOrigin) return true
+  if (allowedOverlayOrigins.includes(parsed.origin)) return true
+  const host = parsed.hostname
+  return (
+    host === RAISENOW_BASE_DOMAIN || host.endsWith(`.${RAISENOW_BASE_DOMAIN}`)
+  )
+}
+
 export interface KioskPaymentConfirmation {
   /**
    * `true` once the RaiseNow paylink, shown in the kiosk overlay, has
