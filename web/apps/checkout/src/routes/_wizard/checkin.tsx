@@ -40,6 +40,9 @@ function CheckinRoute() {
       isAccountLoggedIn={ctx.isAccountLoggedIn}
       signedInUserId={ctx.identifiedUserDoc?.id ?? null}
       signedInEmail={ctx.identifiedUserDoc?.email ?? null}
+      // ADR-0029: the identified principal (account OR tag-tap badge user)
+      // is exempt from the advisory account-holder roster check.
+      ownerUserId={ctx.identifiedUserRef?.id ?? null}
       isMember={ctx.isMember}
       // Issue #465: a checkout already running flips the kiosk footer primary
       // from "Besuch starten" to "Material erfassen".

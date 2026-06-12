@@ -112,4 +112,51 @@ describe("buildFamilyCandidates", () => {
     })
     expect(result).toHaveLength(0)
   })
+
+  // ADR-0029: only account-less family members are rosterable. Co-members
+  // with their own login (non-empty email) surface as disabled chips
+  // (hasAccount: true); the identified principal is the allowed exception.
+  describe("hasAccount flag (ADR-0029)", () => {
+    const accountlessChild = {
+      id: "kim",
+      firstName: "Kim",
+      lastName: "K",
+      email: null,
+      userType: "kind",
+    }
+    const adultWithAccount = {
+      id: "dora",
+      firstName: "Dora",
+      lastName: "D",
+      email: "dora@example.com",
+      userType: "erwachsen",
+    }
+
+    it("marks co-members with an email as account-holders", () => {
+      const result = buildFamilyCandidates({
+        familyMemberDocs: [accountlessChild, adultWithAccount],
+        claimedUserIds: new Set(),
+        identifiedUserDoc: aliceDoc,
+        tokenUser: null,
+        hasFamilyMembership: true,
+      })
+      expect(result.map((c) => [c.userId, c.hasAccount])).toEqual([
+        ["alice", false], // self — owner exception, despite having an email
+        ["kim", false], // account-less child — rosterable
+        ["dora", true], // own login — disabled chip
+      ])
+    })
+
+    it("never marks the tag-tap self chip even though badge holders have accounts", () => {
+      const result = buildFamilyCandidates({
+        familyMemberDocs: [],
+        claimedUserIds: new Set(),
+        identifiedUserDoc: null,
+        tokenUser: aliceToken,
+        hasFamilyMembership: true,
+      })
+      expect(result).toHaveLength(1)
+      expect(result[0]).toMatchObject({ userId: "alice", hasAccount: false })
+    })
+  })
 })

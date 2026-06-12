@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect } from "vitest"
-import { isValidEmail, validatePerson, validateCheckoutItem, hasItemErrors } from "./validation"
+import { isValidEmail, validatePerson, validateCheckoutItem, hasItemErrors, rosterAccountError } from "./validation"
 import type { CheckoutPerson } from "./use-checkout-state"
 import type { CheckoutItemLocal } from "@/components/usage/inline-rows"
 
@@ -178,6 +178,47 @@ describe("validatePerson", () => {
   it("accepts empty email for additional person", () => {
     const errors = validatePerson(makePerson({ email: "" }), true, false)
     expect(errors.email).toBeUndefined()
+  })
+})
+
+// ADR-0029: only account-less family members may be rostered. A person
+// linked to another account (userId + email) blocks the visit unless they
+// ARE the identified principal.
+describe("rosterAccountError", () => {
+  const owner = makePerson({ id: "p1", userId: "u-owner" })
+  const accountlessChild = makePerson({
+    id: "p2",
+    firstName: "Lia",
+    lastName: "Pfeffer",
+    email: "",
+    userType: "kind",
+    userId: "u-lia",
+  })
+  const adultWithAccount = makePerson({
+    id: "p3",
+    firstName: "Yvonne",
+    lastName: "Pfeiffer",
+    email: "yvonne@test.com",
+    userId: "u-yvonne",
+  })
+
+  it("passes the owner's own line plus account-less members", () => {
+    expect(rosterAccountError([owner, accountlessChild], "u-owner")).toBeNull()
+  })
+
+  it("names a rostered account-holder", () => {
+    expect(rosterAccountError([owner, adultWithAccount], "u-owner")).toContain(
+      "Yvonne Pfeiffer",
+    )
+  })
+
+  it("ignores guests typed by name (no userId), regardless of email", () => {
+    const guest = makePerson({ id: "p4", userId: undefined })
+    expect(rosterAccountError([guest], null)).toBeNull()
+  })
+
+  it("flags the account-holder line when there is no identified principal", () => {
+    expect(rosterAccountError([adultWithAccount], null)).not.toBeNull()
   })
 })
 

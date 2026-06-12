@@ -9,7 +9,7 @@ import { NfcBadgeAffordance } from "./nfc-badge-affordance"
 import { Plus, ArrowRight, Check, LogIn } from "lucide-react"
 import type { CheckoutPerson, PersonsAction } from "./use-checkout-state"
 import type { UserType } from "@modules/lib/pricing"
-import { validatePerson } from "./validation"
+import { validatePerson, rosterAccountError } from "./validation"
 
 /**
  * Issue #209: a roster member of the signed-in family owner who is not
@@ -22,6 +22,14 @@ export interface FamilyCandidate {
   lastName: string
   email: string
   userType: UserType
+  /**
+   * ADR-0029: the member has their own login account (non-empty email on
+   * their user doc). Rendered as a disabled chip — account-holders check
+   * in and out on their own account and are never rostered onto someone
+   * else's checkout. Always false for the identified principal themselves
+   * (the checkout owner is the allowed exception).
+   */
+  hasAccount: boolean
 }
 
 interface StepCheckinProps {
@@ -85,9 +93,16 @@ interface StepCheckinProps {
   tagAuthError?: string | null
   /** Tap nonce the affordance keys error dismissal on. */
   picc?: string
+  /**
+   * User-doc id of the identified principal — the signed-in account OR the
+   * tag-tapped badge user (unlike `signedInUserId`, which is account-login
+   * only). ADR-0029's advisory roster check exempts this id: the owner's
+   * own line legitimately carries their userId.
+   */
+  ownerUserId?: string | null
 }
 
-export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAccountLoggedIn, signedInUserId, signedInEmail, isMember, onSignOut, onAdvance, onStartVisit, hasOpenCheckout, familyCandidates, tagAuthLoading, tagAuthError, picc }: StepCheckinProps) {
+export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAccountLoggedIn, signedInUserId, signedInEmail, isMember, onSignOut, onAdvance, onStartVisit, hasOpenCheckout, familyCandidates, tagAuthLoading, tagAuthError, picc, ownerUserId }: StepCheckinProps) {
   // touched: personId → field → true
   const [touched, setTouched] = useState<Record<string, Record<string, boolean>>>({})
   const [submitted, setSubmitted] = useState(false)
@@ -135,9 +150,19 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
     [persons, isAnonymous],
   )
 
+  // ADR-0029 advisory roster check: an account-holding family member on the
+  // roster can't be fixed by editing fields — they must be removed — so the
+  // error renders as a standalone notice instead of a per-field message.
+  const rosterError = useMemo(
+    () => rosterAccountError(persons, ownerUserId ?? signedInUserId ?? null),
+    [persons, ownerUserId, signedInUserId],
+  )
+
   const allValid = useMemo(
-    () => persons.every((p) => Object.keys(allErrors[p.id] ?? {}).length === 0),
-    [persons, allErrors],
+    () =>
+      persons.every((p) => Object.keys(allErrors[p.id] ?? {}).length === 0) &&
+      !rosterError,
+    [persons, allErrors, rosterError],
   )
 
   const termsError = useMemo(() => {
@@ -300,21 +325,48 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
           </button>
 
           {familyCandidates &&
-            familyCandidates.map((candidate) => (
-              <button
-                key={candidate.userId}
-                type="button"
-                // Issue #246: chips animate in when they appear (e.g. when
-                // the signed-in user is re-added to the picker after
-                // removing themselves from the visit).
-                className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-cog-teal border border-cog-teal rounded-[3px] bg-white hover:bg-cog-teal-light transition-colors animate-in fade-in slide-in-from-top-2 duration-200"
-                onClick={() => handleAddFamilyPerson(candidate)}
-              >
-                <Plus className="h-4 w-4" />
-                {candidate.firstName} {candidate.lastName}
-              </button>
-            ))}
+            familyCandidates.map((candidate) =>
+              candidate.hasAccount ? (
+                // ADR-0029: account-holding family members check in on their
+                // own account. The chip stays visible but disabled so the
+                // rule is discoverable instead of the member silently
+                // missing from the picker.
+                <button
+                  key={candidate.userId}
+                  type="button"
+                  disabled
+                  title="Checkt mit dem eigenen Konto ein"
+                  className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-muted-foreground border border-border rounded-[3px] bg-white opacity-60 cursor-not-allowed"
+                >
+                  <Plus className="h-4 w-4" />
+                  {candidate.firstName} {candidate.lastName}
+                </button>
+              ) : (
+                <button
+                  key={candidate.userId}
+                  type="button"
+                  // Issue #246: chips animate in when they appear (e.g. when
+                  // the signed-in user is re-added to the picker after
+                  // removing themselves from the visit).
+                  className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-cog-teal border border-cog-teal rounded-[3px] bg-white hover:bg-cog-teal-light transition-colors animate-in fade-in slide-in-from-top-2 duration-200"
+                  onClick={() => handleAddFamilyPerson(candidate)}
+                >
+                  <Plus className="h-4 w-4" />
+                  {candidate.firstName} {candidate.lastName}
+                </button>
+              ),
+            )}
         </div>
+
+        {familyCandidates?.some((c) => c.hasAccount) && (
+          <p className="text-xs text-muted-foreground">
+            Familienmitglieder mit eigenem Konto checken separat ein.
+          </p>
+        )}
+
+        {rosterError && (
+          <p className="text-sm text-[#cc2a24]">{rosterError}</p>
+        )}
 
         {isAnonymous && (
           <div className="space-y-3 pt-2">

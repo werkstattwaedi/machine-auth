@@ -68,6 +68,33 @@ export function validatePerson(
   return errors
 }
 
+/**
+ * ADR-0029 advisory roster check: only account-less family members may be
+ * rostered onto someone else's checkout. A person linked to another account
+ * (userId set, non-empty email ⇒ they have their own login) checks in on
+ * their own account instead. The identified principal (`ownerUserId`) is the
+ * allowed exception — the owner's own line naturally carries their userId.
+ *
+ * The quick-add chips already refuse to add such persons; this catches a
+ * roster rehydrated from an open checkout created before the rule (or on
+ * another device) so the visit fails here with a clear message instead of
+ * at submit. The server guard in closeCheckoutAndGetPayment stays
+ * authoritative.
+ *
+ * Returns a German error message naming the first offender, or null.
+ */
+export function rosterAccountError(
+  persons: Pick<CheckoutPerson, "userId" | "email" | "firstName" | "lastName">[],
+  ownerUserId: string | null,
+): string | null {
+  const offender = persons.find(
+    (p) => p.userId && p.userId !== ownerUserId && p.email.trim(),
+  )
+  if (!offender) return null
+  const name = `${offender.firstName} ${offender.lastName}`.trim()
+  return `«${name}» hat ein eigenes Konto und muss den Besuch separat erfassen. Bitte Person entfernen.`
+}
+
 export interface ItemErrors {
   quantity?: string
   price?: string
