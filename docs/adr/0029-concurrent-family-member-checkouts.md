@@ -56,9 +56,12 @@ that both involve the same person.
 
 Two existing data-model facts turn out to be load-bearing:
 
-- `UserEntity.email` is `string | null` — **null for accounts without Firebase
-  Auth credentials** (`functions/src/types/firestore_entities.ts`). A user with
-  `email === null` has no login and cannot sign in to the checkout app at all.
+- `UserEntity.email` is `email?: string | null` — optional on the server-side
+  type, **null (or absent) for accounts without Firebase Auth credentials**
+  (`functions/src/types/firestore_entities.ts`; the web-side `UserDoc` declares
+  it non-optional `string | null`). A user without an email has no login and
+  cannot sign in to the checkout app at all. Server-side checks must treat
+  `undefined` the same as `null` (`email == null`, not `=== null`).
 - `TokenEntity.userId` is a **non-optional** `DocumentReference` to
   `/users/{userId}`, and tokens are **admin-created only** (`/tokens/{tokenId}`
   in `firestore/firestore.rules` is admin read/write). Combined with the
@@ -104,7 +107,7 @@ they check in and out on their own account instead.
 
 ### Why this dissolves the hard problem
 
-The original failure modes 2 and 3 ("rostered user starts their own checkout"
+The two hard-block scenarios ("rostered user starts their own checkout"
 and "owner adds an already-active user") both reduce to "a rostered person can
 independently act elsewhere." Under the adopted rule they become **impossible
 by construction** rather than detected-and-blocked:
@@ -159,7 +162,7 @@ No cross-user query is ever needed to validate a roster.
 ## Consequences
 
 **Pros:**
-- Failure modes 2–3 are impossible by construction instead of
+- The hard-block scenarios are impossible by construction instead of
   detected-and-blocked — no cross-user state to query, denormalize, or keep
   consistent.
 - No new admin-privileged read surface: everything stays inside owner-scoped
