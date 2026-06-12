@@ -42,6 +42,11 @@ function CheckinRoute() {
       signedInEmail={ctx.identifiedUserDoc?.email ?? null}
       isMember={ctx.isMember}
       familyCandidates={ctx.familyCandidates}
+      // Kiosk: badge-tap progress/errors render inside the NFC affordance
+      // box on this page (TagAuthOverlay stays home for browser tag taps).
+      tagAuthLoading={ctx.tagAuthLoading}
+      tagAuthError={ctx.tagAuthError}
+      picc={ctx.picc}
       // Signed-in "Abmelden" and the anon "Von vorne beginnen" share one
       // primitive: drop the session + hard-reload to a fresh /checkin.
       onSignOut={ctx.startOver}

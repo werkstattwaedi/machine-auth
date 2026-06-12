@@ -1,7 +1,7 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { render, screen, cleanup } from "@testing-library/react"
+import { render, screen, cleanup, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, it, expect, afterEach, vi } from "vitest"
 import { useReducer } from "react"
@@ -29,6 +29,9 @@ function renderCheckin({
   personsOverride,
   onAdvance,
   familyCandidates,
+  tagAuthLoading,
+  tagAuthError,
+  picc,
 }: {
   isAnonymous?: boolean
   kiosk?: boolean
@@ -39,6 +42,9 @@ function renderCheckin({
   personsOverride?: CheckoutPerson[]
   onAdvance?: () => Promise<void>
   familyCandidates?: FamilyCandidate[]
+  tagAuthLoading?: boolean
+  tagAuthError?: string | null
+  picc?: string
 } = {}) {
   const dispatched: PersonsAction[] = []
   const onSignOut = vi.fn()
@@ -72,6 +78,9 @@ function renderCheckin({
         onSignOut={onSignOut}
         onAdvance={onAdvance}
         familyCandidates={familyCandidates}
+        tagAuthLoading={tagAuthLoading}
+        tagAuthError={tagAuthError}
+        picc={picc}
       />
     )
   }
@@ -225,16 +234,99 @@ describe("Identity hint", () => {
     renderCheckin({ isAnonymous: true, kiosk: false })
 
     expect(screen.getByText("Bereits registriert oder Konto erstellen?")).toBeTruthy()
-    expect(screen.getByText("Anmelden")).toBeTruthy()
+    expect(screen.getByText("Anmelden oder registrieren")).toBeTruthy()
   })
 
-  it("shows NFC hint for kiosk mode", () => {
+  it("shows the NFC badge affordance hero for kiosk mode", () => {
     renderCheckin({ isAnonymous: true, kiosk: true })
 
+    const affordance = screen.getByTestId("nfc-affordance")
+    expect(affordance.getAttribute("data-mode")).toBe("hero")
+    expect(affordance.textContent).toContain("Badge an den Leser halten")
+    expect(screen.queryByText("Bereits registriert oder Konto erstellen?")).toBeNull()
+  })
+
+  it("collapses the kiosk NFC affordance to the compact bar while typing", async () => {
+    const user = userEvent.setup()
+    renderCheckin({ isAnonymous: true, kiosk: true })
+
+    await user.type(screen.getAllByRole("textbox")[0], "Max")
+
+    const affordance = screen.getByTestId("nfc-affordance")
+    expect(affordance.getAttribute("data-mode")).toBe("compact")
     expect(
       screen.getByText("Badge an den Leser halten, um deine Daten zu laden"),
     ).toBeTruthy()
-    expect(screen.queryByText("Bereits registriert oder Konto erstellen?")).toBeNull()
+  })
+
+  it("re-expands the kiosk NFC affordance when the form goes back to empty", async () => {
+    const user = userEvent.setup()
+    renderCheckin({ isAnonymous: true, kiosk: true })
+
+    const input = screen.getAllByRole("textbox")[0]
+    await user.type(input, "Max")
+    expect(
+      screen.getByTestId("nfc-affordance").getAttribute("data-mode"),
+    ).toBe("compact")
+
+    // Clear the typed content and move focus out of the form — after the
+    // 120 ms blur bridge the hero returns.
+    await user.clear(input)
+    ;(document.activeElement as HTMLElement | null)?.blur()
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("nfc-affordance").getAttribute("data-mode"),
+      ).toBe("hero"),
+    )
+  })
+
+  it("folds badge verification progress into the kiosk affordance box", () => {
+    renderCheckin({
+      isAnonymous: true,
+      kiosk: true,
+      tagAuthLoading: true,
+      picc: "PICC1",
+    })
+
+    const affordance = screen.getByTestId("nfc-affordance")
+    expect(affordance.getAttribute("data-mode")).toBe("verifying")
+    expect(screen.getByText("Badge erkannt")).toBeTruthy()
+  })
+
+  it("folds badge errors into the kiosk affordance box", () => {
+    renderCheckin({
+      isAnonymous: true,
+      kiosk: true,
+      tagAuthError: "replay detected",
+      picc: "PICC1",
+    })
+
+    const affordance = screen.getByTestId("nfc-affordance")
+    expect(affordance.getAttribute("data-mode")).toBe("error")
+    expect(screen.getByText("Badge konnte nicht gelesen werden")).toBeTruthy()
+  })
+
+  it("renders no affordance once the tag identified the visitor", () => {
+    // Tag-identified: isAnonymous=false, not account-logged-in. The box
+    // disappears entirely — no fill/re-tap state.
+    renderCheckin({
+      isAnonymous: false,
+      kiosk: true,
+      personsOverride: [
+        {
+          id: "p1",
+          firstName: "Anna",
+          lastName: "Müller",
+          email: "anna@example.com",
+          userType: "erwachsen",
+          termsAccepted: true,
+          isPreFilled: true,
+          userId: null,
+        },
+      ],
+    })
+
+    expect(screen.queryByTestId("nfc-affordance")).toBeNull()
   })
 
   it("renders the identity strip with name + Abmelden for logged-in users", () => {
