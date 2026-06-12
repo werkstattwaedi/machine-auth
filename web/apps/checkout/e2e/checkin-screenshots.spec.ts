@@ -77,13 +77,18 @@ test.describe("Check-in step screenshots", () => {
       page.getByRole("heading", { name: "Deine Angaben" }),
     ).toBeVisible({ timeout: 10_000 })
 
-    // Untouched form → the animated hero affordance (fob + reader scene).
+    // Untouched form → the animated hero affordance (fob + reader scene +
+    // own-device QR) below the form behind the ODER divider.
     const affordance = page.getByTestId("nfc-affordance")
     await expect(affordance).toHaveAttribute("data-mode", "hero")
     await expect(
       affordance.getByText("an den Leser halten", { exact: false }),
     ).toBeVisible()
+    await expect(page.getByText("ODER", { exact: true })).toBeVisible()
 
+    // Scroll to the page end so the baseline captures the whole hero box
+    // (it sits below the form and exceeds the remaining viewport).
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
     await expect(page).toHaveScreenshot("checkin-kiosk-nfc-hint.png")
   })
 
@@ -101,6 +106,7 @@ test.describe("Check-in step screenshots", () => {
       page.getByText("Badge an den Leser halten, um deine Daten zu laden"),
     ).toBeVisible()
 
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
     await expect(page).toHaveScreenshot("checkin-kiosk-nfc-hint-collapsed.png")
   })
 

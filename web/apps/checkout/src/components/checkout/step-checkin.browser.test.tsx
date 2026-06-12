@@ -246,6 +246,23 @@ describe("Identity hint", () => {
     expect(screen.queryByText("Bereits registriert oder Konto erstellen?")).toBeNull()
   })
 
+  it("renders the badge affordance below the form behind an ODER divider", () => {
+    renderCheckin({ isAnonymous: true, kiosk: true })
+
+    const divider = screen.getByText("ODER")
+    const affordance = screen.getByTestId("nfc-affordance")
+    const personCard = screen.getByTestId("person-card")
+    // Document order: person form first, then ODER, then the badge box.
+    expect(
+      personCard.compareDocumentPosition(divider) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    expect(
+      divider.compareDocumentPosition(affordance) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+
   it("collapses the kiosk NFC affordance to the compact bar while typing", async () => {
     const user = userEvent.setup()
     renderCheckin({ isAnonymous: true, kiosk: true })
