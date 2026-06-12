@@ -1,7 +1,7 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { render, screen, cleanup } from "@testing-library/react"
+import { render, screen, cleanup, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, it, expect, afterEach, vi } from "vitest"
 import { useReducer } from "react"
@@ -257,6 +257,27 @@ describe("Identity hint", () => {
     expect(
       screen.getByText("Badge an den Leser halten, um deine Daten zu laden"),
     ).toBeTruthy()
+  })
+
+  it("re-expands the kiosk NFC affordance when the form goes back to empty", async () => {
+    const user = userEvent.setup()
+    renderCheckin({ isAnonymous: true, kiosk: true })
+
+    const input = screen.getAllByRole("textbox")[0]
+    await user.type(input, "Max")
+    expect(
+      screen.getByTestId("nfc-affordance").getAttribute("data-mode"),
+    ).toBe("compact")
+
+    // Clear the typed content and move focus out of the form — after the
+    // 120 ms blur bridge the hero returns.
+    await user.clear(input)
+    ;(document.activeElement as HTMLElement | null)?.blur()
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("nfc-affordance").getAttribute("data-mode"),
+      ).toBe("hero"),
+    )
   })
 
   it("folds badge verification progress into the kiosk affordance box", () => {

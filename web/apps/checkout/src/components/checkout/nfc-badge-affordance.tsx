@@ -73,8 +73,10 @@ export function NfcBadgeAffordance({
     <div
       data-testid="nfc-affordance"
       data-mode={mode}
+      // role="status" already implies polite announcements; only the
+      // error interrupts (role="alert" + assertive).
       role={mode === "verifying" ? "status" : mode === "error" ? "alert" : undefined}
-      aria-live={mode === "verifying" || mode === "error" ? "assertive" : undefined}
+      aria-live={mode === "error" ? "assertive" : undefined}
       className={`overflow-hidden transition-all duration-450 ${CONTAINER_CLASSES[mode]}`}
     >
       {/* key={mode} remounts the layer so tw-animate's fade-in plays on
