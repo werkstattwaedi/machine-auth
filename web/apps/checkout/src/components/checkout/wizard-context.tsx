@@ -444,6 +444,7 @@ export function WizardProvider({
     pendingCheckout: false,
     items,
     persons,
+    identified: false,
   })
 
   // Bridge the "we just wrote a checkout, listener hasn't surfaced it
@@ -464,9 +465,18 @@ export function WizardProvider({
     pendingCheckout,
     items,
     persons,
+    // Identified = signed-in account OR authenticated badge. Drives the
+    // tap-time confirmation copy/variant: an anonymous session that gets
+    // discarded loses unrecoverable work (no badge to re-tap), so it needs
+    // the honest, destructive dialog (issue #468).
+    identified: isAccountLoggedIn || isTagIdentified,
   }
   useEffect(
-    () => registerKioskSessionGuard(() => hasPreservableState(guardStateRef.current)),
+    () =>
+      registerKioskSessionGuard(() => ({
+        preservable: hasPreservableState(guardStateRef.current),
+        identified: guardStateRef.current.identified,
+      })),
     [],
   )
 

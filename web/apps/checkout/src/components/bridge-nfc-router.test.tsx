@@ -10,6 +10,10 @@
  *   - confirmTagSwitch wipes the bridge partition and hard-reloads into
  *     /checkin carrying the NEW tag's params
  *   - unreadable taps (no url / missing params) toast
+ *   - anonymous (un-identified) preservable session: the confirm is the red
+ *     destructive variant with honest "gehen verloren" loss copy (#468)
+ *   - identified preservable session: the confirm keeps the benign default
+ *     variant and the reassuring "erscheint wieder" handoff copy (#468)
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -43,9 +47,11 @@ vi.mock("@modules/lib/use-bridge", () => ({
   }),
 }))
 
-const mockPreservable = vi.fn().mockReturnValue(false)
+const mockSessionState = vi
+  .fn()
+  .mockReturnValue({ preservable: false, identified: false })
 vi.mock("./checkout/kiosk-session-guard", () => ({
-  isKioskSessionPreservable: () => mockPreservable(),
+  getKioskSessionState: () => mockSessionState(),
 }))
 
 afterEach(() => {
@@ -53,8 +59,8 @@ afterEach(() => {
   mockNavigate.mockReset()
   mockToastError.mockReset()
   mockResetSession.mockClear()
-  mockPreservable.mockReset()
-  mockPreservable.mockReturnValue(false)
+  mockSessionState.mockReset()
+  mockSessionState.mockReturnValue({ preservable: false, identified: false })
   tagCallback = null
 })
 
@@ -79,15 +85,46 @@ describe("BridgeNfcRouter", () => {
   })
 
   it("asks for confirmation instead of navigating when a session is active", () => {
-    mockPreservable.mockReturnValue(true)
+    mockSessionState.mockReturnValue({ preservable: true, identified: false })
     render(<BridgeNfcRouter />)
     tap(TAG_URL)
     expect(mockNavigate).not.toHaveBeenCalled()
     expect(screen.getByText("Neuer Badge erkannt")).toBeTruthy()
   })
 
+  it("anonymous session: confirm is destructive (red) with honest loss copy", () => {
+    mockSessionState.mockReturnValue({ preservable: true, identified: false })
+    render(<BridgeNfcRouter />)
+    tap(TAG_URL)
+    // Honest copy: the in-progress work is lost, NOT the reassuring handoff.
+    expect(screen.getByText(/gehen dabei verloren/)).toBeTruthy()
+    expect(screen.queryByText(/erscheint wieder/)).toBeNull()
+    // The confirm carries the destructive button styling (matches Neuer
+    // Checkout), not the benign default. The base class always references
+    // `destructive` (focus/aria rings), so assert on the variant-specific
+    // `bg-destructive` fill instead.
+    const confirm = screen.getByRole("button", {
+      name: "Mit neuem Badge fortfahren",
+    })
+    expect(confirm.className).toContain("bg-destructive")
+  })
+
+  it("identified session: confirm keeps the default variant + handoff copy", () => {
+    mockSessionState.mockReturnValue({ preservable: true, identified: true })
+    render(<BridgeNfcRouter />)
+    tap(TAG_URL)
+    // Reassuring handoff copy, no loss warning.
+    expect(screen.getByText(/erscheint wieder/)).toBeTruthy()
+    expect(screen.queryByText(/gehen dabei verloren/)).toBeNull()
+    const confirm = screen.getByRole("button", {
+      name: "Mit neuem Badge fortfahren",
+    })
+    expect(confirm.className).not.toContain("bg-destructive")
+    expect(confirm.className).toContain("bg-primary")
+  })
+
   it("Abbrechen dismisses the dialog and keeps the session", () => {
-    mockPreservable.mockReturnValue(true)
+    mockSessionState.mockReturnValue({ preservable: true, identified: false })
     render(<BridgeNfcRouter />)
     tap(TAG_URL)
     fireEvent.click(screen.getByRole("button", { name: "Abbrechen" }))

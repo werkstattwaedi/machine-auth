@@ -14,7 +14,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@modules/components/ui/alert-dialog"
-import { isKioskSessionPreservable } from "./checkout/kiosk-session-guard"
+import { getKioskSessionState } from "./checkout/kiosk-session-guard"
 
 // A tap that can't even be routed (NDEF read failed, or the URL lacks the
 // SDM params) used to be silently swallowed — the kiosk gave zero feedback
@@ -26,6 +26,16 @@ const UNREADABLE_TAG_MESSAGE =
 interface PendingTag {
   picc: string
   cmac: string
+  // Was the session being interrupted already identified (signed-in account
+  // or authenticated badge)? Decides which confirmation to show:
+  //   - identified: a real badge→badge handoff — the open visit survives and
+  //     reappears when its badge is tapped, so the benign black confirm is
+  //     honest.
+  //   - anonymous: a first badge tap upgrading an anon visit — confirming
+  //     discards the in-progress checkout for good (no badge ties to it), so
+  //     the dialog must be honest about the loss and use the red destructive
+  //     confirm, matching "Neuer Checkout" (issue #468).
+  identified: boolean
 }
 
 /**
@@ -38,7 +48,9 @@ interface PendingTag {
  * Dependency-injected (same pattern as start-over.ts) for unit testing.
  */
 export async function confirmTagSwitch(deps: {
-  tag: PendingTag
+  // Only the verified-later SDM params matter to the reload — the dialog's
+  // identified/anonymous framing is consumed before we get here.
+  tag: Pick<PendingTag, "picc" | "cmac">
   resetSession: () => Promise<void>
   reload: (target: string) => void
 }): Promise<void> {
@@ -109,11 +121,15 @@ export function BridgeNfcRouter() {
           toast.error(UNREADABLE_TAG_MESSAGE)
           return
         }
-        // Another visitor's session is still in progress — confirm before
+        // A session worth protecting is still in progress — confirm before
         // discarding it. A later tap while the dialog is up replaces the
-        // pending tag (the newest badge wins the confirmation).
-        if (isKioskSessionPreservable()) {
-          setPendingTag({ picc, cmac })
+        // pending tag (the newest badge wins the confirmation). Capture
+        // whether that session was already identified so the dialog can be
+        // honest about whether the open visit survives (identified handoff)
+        // or is lost for good (anonymous upgrade — issue #468).
+        const session = getKioskSessionState()
+        if (session.preservable) {
+          setPendingTag({ picc, cmac, identified: session.identified })
           return
         }
         // TanStack Router types the `search` shape per route. We're forcing
@@ -133,16 +149,33 @@ export function BridgeNfcRouter() {
 
   if (!pendingTag) return null
 
+  // Anonymous upgrade: confirming discards the in-progress visit for good —
+  // be honest about the loss and make the confirm red/destructive, matching
+  // the "Neuer Checkout" flow (start-over-button.tsx). Identified handoff:
+  // the open visit survives and reappears when its own badge is tapped, so
+  // the benign black confirm and reassuring copy are correct.
+  const anonymous = !pendingTag.identified
+
   return (
     <AlertDialog open>
       <AlertDialogContent onEscapeKeyDown={(e) => e.preventDefault()}>
         <AlertDialogHeader>
           <AlertDialogTitle>Neuer Badge erkannt</AlertDialogTitle>
           <AlertDialogDescription>
-            Auf diesem Terminal ist noch ein Besuch aktiv. Mit dem neuen
-            Badge fortfahren? Die aktuelle Sitzung wird beendet — ein
-            offener Besuch bleibt bestehen und erscheint wieder, wenn der
-            zugehörige Badge aufgelegt wird.
+            {anonymous ? (
+              <>
+                Auf diesem Terminal ist eine Eingabe im Gang. Mit dem neuen
+                Badge fortzufahren beendet die aktuelle Sitzung — die bisherige
+                Eingabe und der Warenkorb gehen dabei verloren.
+              </>
+            ) : (
+              <>
+                Auf diesem Terminal ist noch ein Besuch aktiv. Mit dem neuen
+                Badge fortfahren? Die aktuelle Sitzung wird beendet — ein
+                offener Besuch bleibt bestehen und erscheint wieder, wenn der
+                zugehörige Badge aufgelegt wird.
+              </>
+            )}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -153,6 +186,7 @@ export function BridgeNfcRouter() {
             Abbrechen
           </AlertDialogAction>
           <AlertDialogAction
+            variant={anonymous ? "destructive" : "default"}
             onClick={() =>
               void confirmTagSwitch({
                 tag: pendingTag,
