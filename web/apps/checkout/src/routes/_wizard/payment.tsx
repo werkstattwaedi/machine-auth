@@ -34,14 +34,21 @@ function PaymentRoute() {
 
   return (
     <>
-      <PaymentResult
-        checkoutId={ctx.paymentData.checkoutId}
-        totalPrice={ctx.totalPrice}
-        initialPaymentData={ctx.paymentData}
-        isMember={ctx.isMember}
-        kiosk={ctx.kiosk}
-        onReset={() => setCompleted(true)}
-      />
+      {/* Unmount the payment-method picker once the completion dialog
+          opens. The CompletionDialog's overlay only dims the background,
+          so a still-mounted PaymentResult leaks through behind it (#449).
+          `completed` is terminal: the dialog's primary CTA resets or
+          navigates away, so the picker never needs to return. */}
+      {!completed && (
+        <PaymentResult
+          checkoutId={ctx.paymentData.checkoutId}
+          totalPrice={ctx.totalPrice}
+          initialPaymentData={ctx.paymentData}
+          isMember={ctx.isMember}
+          kiosk={ctx.kiosk}
+          onReset={() => setCompleted(true)}
+        />
+      )}
       <CompletionDialog
         open={completed}
         isLoggedIn={ctx.isAccountLoggedIn}

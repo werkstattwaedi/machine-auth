@@ -30,9 +30,16 @@ vi.mock("@/components/checkout/wizard-context", () => ({
   useWizardContext: () => mockUseWizardContext(),
 }))
 
-// The payment widget itself is irrelevant here — stub it out.
+// Stub the payment widget with an identifiable marker (stands in for the
+// QR-Rechnung / Sammelrechnung / TWINT picker) plus a button that drives
+// its onReset callback, so tests can assert the picker unmounts (#449).
 vi.mock("@/components/checkout/payment-result", () => ({
-  PaymentResult: () => null,
+  PaymentResult: ({ onReset }: { onReset: () => void }) => (
+    <div>
+      <div data-testid="payment-picker" />
+      <button onClick={onReset}>complete-payment</button>
+    </div>
+  ),
 }))
 
 // Surface the dialog's primary CTA as a plain button so the test can
@@ -90,5 +97,25 @@ describe("PaymentRoute reset dispatch", () => {
     await user.click(screen.getByRole("button", { name: "new-visit" }))
     expect(ctx.resetWizard).toHaveBeenCalledOnce()
     expect(ctx.startOver).not.toHaveBeenCalled()
+  })
+
+  // #449: the CompletionDialog overlay only dims the background, so a
+  // still-mounted PaymentResult leaked through behind it (the Sammelrechnung
+  // tab showed in the screenshot). Once completed, the picker must unmount.
+  it("unmounts the payment picker once the completion dialog opens", async () => {
+    const ctx = baseContext()
+    mockUseWizardContext.mockReturnValue(ctx)
+    const user = userEvent.setup()
+    const PaymentRoute = CapturedComponent!
+    render(<PaymentRoute />)
+
+    // Picker is rendered before completion (getByTestId throws if absent).
+    expect(screen.getByTestId("payment-picker")).not.toBeNull()
+
+    // Drive onReset → completed=true, which opens the completion dialog.
+    await user.click(screen.getByRole("button", { name: "complete-payment" }))
+
+    // The picker must no longer be in the DOM behind the dialog.
+    expect(screen.queryByTestId("payment-picker")).toBeNull()
   })
 })
