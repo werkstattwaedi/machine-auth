@@ -987,8 +987,23 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
     });
   });
 
-  describe("primary userType cross-check", () => {
-    it("silently overrides a client-supplied userType that differs from the stored profile", async () => {
+  describe("account-holder userType cross-check (issue #466)", () => {
+    // A person line carrying the caller's own userRef. The override only
+    // targets the person matched by identity, never by array position.
+    function holderPerson(
+      uid: string,
+      userType: "erwachsen" | "kind" | "firma",
+    ): CheckoutPersonEntity {
+      const db = getFirestore();
+      return {
+        name: "Alice Adult",
+        email: "alice@example.com",
+        userType,
+        userRef: db.collection("users").doc(uid),
+      };
+    }
+
+    it("overrides the account-holder's own spoofed userType (matched by userRef)", async () => {
       const uid = "user-type-mismatch";
       const checkoutId = "co-type-mismatch";
       // User is stored as adult.
@@ -1001,8 +1016,10 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
           data: {
             checkoutId,
             usageType: "regular" as UsageType,
-            // Caller posts kid pricing, attempting to pay child entry fee.
-            persons: [{ ...CHILD, name: "Alice Adult", email: "alice@example.com" }],
+            // Account holder posts kid pricing for their OWN line, attempting
+            // to pay the child entry fee. They carry their own userRef, so the
+            // override fires.
+            persons: [holderPerson(uid, "kind")],
             summary: {
               totalPrice: 0,
               entryFees: 0,
@@ -1026,7 +1043,85 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
       expect(
         output,
         "override should be logged",
-      ).to.contain("Overriding client-supplied primary userType");
+      ).to.contain("Overriding client-supplied account-holder userType");
+    });
+
+    it("does NOT mis-bill the first child as adult after the payer removes themselves", async () => {
+      // Reproduces issue #466: a family payer (stored adult) bills only their
+      // two kids — neither child carries the payer's userRef. The position-based
+      // code force-stamped persons[0] (a child) with the adult userType, billing
+      // 15 (adult) + 7.5 (kid) = 22.5 instead of 7.5 + 7.5 = 15.
+      const uid = "family-payer-self-removed";
+      const checkoutId = "co-self-removed";
+      await seedUser(uid, "erwachsen");
+      await seedCheckout(checkoutId, { ownerUid: uid });
+
+      await call({
+        uid,
+        data: {
+          checkoutId,
+          usageType: "regular" as UsageType,
+          // Two children, neither matching the caller's userRef.
+          persons: [
+            { ...CHILD, name: "Kid A", email: "kida@example.com" },
+            { ...CHILD, name: "Kid B", email: "kidb@example.com" },
+          ],
+          summary: {
+            totalPrice: 0,
+            entryFees: 0,
+            machineCost: 0,
+            materialCost: 0,
+            tip: 0,
+          },
+        },
+      });
+
+      const checkout = await getCheckout(checkoutId);
+      // Both persons keep their child userType — no position-based override.
+      expect(checkout.persons[0].userType).to.equal("kind");
+      expect(checkout.persons[1].userType).to.equal("kind");
+
+      const bills = await listBills();
+      expect(bills).to.have.length(1);
+      // 2 × child fee (7.5) = 15, NOT 15 (adult) + 7.5 (kid) = 22.5.
+      expect(bills[0].data.amount).to.equal(15);
+    });
+
+    it("overrides only the account holder, leaving co-billed children untouched", async () => {
+      // Holder present (matched by userRef) AND spoofing kid pricing, alongside
+      // a real child. Only the holder's line is corrected; the child stays kid.
+      const uid = "family-payer-present";
+      const checkoutId = "co-payer-present";
+      await seedUser(uid, "erwachsen");
+      await seedCheckout(checkoutId, { ownerUid: uid });
+
+      await call({
+        uid,
+        data: {
+          checkoutId,
+          usageType: "regular" as UsageType,
+          persons: [
+            holderPerson(uid, "kind"), // spoofed to kid; will be corrected
+            { ...CHILD, name: "Kid A", email: "kida@example.com" },
+          ],
+          summary: {
+            totalPrice: 0,
+            entryFees: 0,
+            machineCost: 0,
+            materialCost: 0,
+            tip: 0,
+          },
+        },
+      });
+
+      const checkout = await getCheckout(checkoutId);
+      expect(checkout.persons[0].userType).to.equal("erwachsen");
+      expect(checkout.persons[1].userType).to.equal("kind");
+
+      const bills = await listBills();
+      expect(bills).to.have.length(1);
+      // adult (15) + child (7.5) = 22.5.
+      expect(bills[0].data.amount).to.equal(22.5);
     });
   });
 

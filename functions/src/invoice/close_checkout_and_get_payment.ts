@@ -311,21 +311,30 @@ const ALLOWED_USER_TYPES = ["erwachsen", "kind", "firma"] as const;
 type CanonicalUserType = (typeof ALLOWED_USER_TYPES)[number];
 
 /**
- * For a registered user (real login or tag-tap session), the primary
- * person's userType must match the user's stored profile — otherwise an
- * adult member could post `userType: "kind"` and pay the child entry
- * fee. We override silently rather than reject so legitimate stale
- * client-side state (e.g., a userType change since the form was
- * rendered) doesn't fail the checkout.
+ * For a registered user (real login or tag-tap session), the
+ * account-holder person's userType must match the user's stored profile
+ * — otherwise an adult member could post `userType: "kind"` for their own
+ * line and pay the child entry fee. We override silently rather than
+ * reject so legitimate stale client-side state (e.g., a userType change
+ * since the form was rendered) doesn't fail the checkout.
  *
- * Additional persons[1..] are guests and have no canonical record to
- * cross-check against; they remain trusted as the primary user vouches
- * for them.
+ * The account holder is identified by *identity* — the person whose
+ * `userRef.id` equals the caller's user id — not by array position. When
+ * the holder removes themselves from the visit (e.g. a family payer
+ * billing only their kids) no person matches and we override nothing, so
+ * each remaining person keeps their own userType. Matching by position
+ * (`persons[0]`) instead force-stamped whoever sat first — a child after
+ * self-removal — with the adult userType and over-billed them (issue
+ * #466).
+ *
+ * Persons that don't carry the caller's `userRef` (guests, family
+ * members) have no canonical record to cross-check against; they remain
+ * trusted as the account holder vouches for them.
  *
  * Returns a (possibly mutated) copy of the persons array. Logs a warning
- * if any override happened.
+ * if an override happened.
  */
-async function enforcePrimaryUserType(
+async function enforceAccountHolderUserType(
   db: FirebaseFirestore.Firestore,
   persons: CheckoutPersonEntity[],
   userIdRef: DocumentReference | null,
@@ -340,19 +349,26 @@ async function enforcePrimaryUserType(
   const stored = userSnap.data()?.userType as CanonicalUserType | undefined;
   if (!stored || !ALLOWED_USER_TYPES.includes(stored)) return persons;
 
-  const primary = persons[0];
-  if (primary.userType === stored) return persons;
+  // Identify the account holder by identity, not position. If they aren't
+  // on the roster (self-removal), there is nothing to override.
+  const holderIndex = persons.findIndex(
+    (p) => p.userRef?.id === userIdRef.id,
+  );
+  if (holderIndex === -1) return persons;
 
-  logger.warn("Overriding client-supplied primary userType", {
+  const holder = persons[holderIndex];
+  if (holder.userType === stored) return persons;
+
+  logger.warn("Overriding client-supplied account-holder userType", {
     context,
     userId: userIdRef.id,
-    clientUserType: primary.userType,
+    clientUserType: holder.userType,
     storedUserType: stored,
   });
 
-  // Replace just the primary person; preserve the rest.
+  // Replace just the account-holder person; preserve the rest.
   const corrected = [...persons];
-  corrected[0] = { ...primary, userType: stored };
+  corrected[holderIndex] = { ...holder, userType: stored };
   return corrected;
 }
 
@@ -578,7 +594,7 @@ async function closeExistingCheckout(
   // against and the wider system already trusts whoever is in front of
   // the screen for the truly-anonymous flow.
   const userRef = isAnonymous ? null : db.collection("users").doc(callerUid);
-  const enforcedPersons = await enforcePrimaryUserType(
+  const enforcedPersons = await enforceAccountHolderUserType(
     db,
     args.persons,
     userRef,
@@ -780,7 +796,7 @@ async function createAnonymousCheckout(
   // the stored profile so they can't claim child pricing they aren't
   // entitled to. The truly-anonymous path (userIdRef === null) has no
   // record to compare against.
-  const enforcedPersons = await enforcePrimaryUserType(
+  const enforcedPersons = await enforceAccountHolderUserType(
     db,
     args.persons,
     userIdRef,
