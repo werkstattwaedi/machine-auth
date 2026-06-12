@@ -55,7 +55,7 @@ screen right before the bill was generated.
 ---
 
 ### Port-block broker: offset the Playwright e2e vite port
-**Status:** 💡 Idea
+**Status:** 📋 Planned — tracked in [#485](https://github.com/werkstattwaedi/machine-auth/issues/485)
 
 **Context:** Concurrent e2e runs (parallel CI, multiple agent worktrees)
 get distinct emulator port blocks from `scripts/port-block.ts`, but the
