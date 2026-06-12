@@ -48,7 +48,7 @@
     "firebase-admin": "^13.6.1",
     "husky": "^9.1.7",
     "oxipng": "^1.0.1",
-    "tsx": "^4.19.0"
+    "tsx": "^4.22.4"
   },
   "overrides": {
     "serialize-javascript": "^7.0.5",
