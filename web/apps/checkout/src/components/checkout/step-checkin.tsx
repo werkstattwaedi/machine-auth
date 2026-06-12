@@ -269,32 +269,6 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
       })}
       </div>
 
-      {/* Kiosk + still-anonymous: the typed form is the primary path, the
-          badge is the alternative below an "ODER" divider (updated design).
-          The affordance owns the whole tap lifecycle (invite → collapse →
-          verifying → error) and unmounts once the tag identifies the
-          visitor — the pre-filled identity strip above takes over. */}
-      {kiosk && isAnonymous && (
-        <>
-          <div
-            className="flex items-center gap-4 text-muted-foreground"
-            aria-hidden
-          >
-            <span className="h-px flex-1 bg-border" />
-            <span className="text-sm font-semibold tracking-[0.25em]">
-              ODER
-            </span>
-            <span className="h-px flex-1 bg-border" />
-          </div>
-          <NfcBadgeAffordance
-            collapsed={formFocused || formDirty}
-            verifying={tagAuthLoading ?? false}
-            error={tagAuthError ?? null}
-            picc={picc}
-          />
-        </>
-      )}
-
       <div className="flex flex-col items-start gap-3">
         {/*
           Issue #209: family-roster quick-adds render inline with the
@@ -383,6 +357,33 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
         )}
 
       </div>
+
+      {/* Kiosk + still-anonymous: the typed form (including add-person and
+          terms) is the primary path; the badge is the alternative below an
+          "ODER" divider (updated design). The affordance owns the whole tap
+          lifecycle (invite → collapse → verifying → error) and unmounts
+          once the tag identifies the visitor — the pre-filled identity
+          strip above takes over. */}
+      {kiosk && isAnonymous && (
+        <>
+          <div
+            className="flex items-center gap-4 text-muted-foreground"
+            aria-hidden
+          >
+            <span className="h-px flex-1 bg-border" />
+            <span className="text-sm font-semibold tracking-[0.25em]">
+              ODER
+            </span>
+            <span className="h-px flex-1 bg-border" />
+          </div>
+          <NfcBadgeAffordance
+            collapsed={formFocused || formDirty}
+            verifying={tagAuthLoading ?? false}
+            error={tagAuthError ?? null}
+            picc={picc}
+          />
+        </>
+      )}
 
       <div className="flex-1" />
 

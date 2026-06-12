@@ -246,21 +246,21 @@ describe("Identity hint", () => {
     expect(screen.queryByText("Bereits registriert oder Konto erstellen?")).toBeNull()
   })
 
-  it("renders the badge affordance below the form behind an ODER divider", () => {
+  it("renders the badge affordance below the whole form behind an ODER divider", () => {
     renderCheckin({ isAnonymous: true, kiosk: true })
 
     const divider = screen.getByText("ODER")
     const affordance = screen.getByTestId("nfc-affordance")
-    const personCard = screen.getByTestId("person-card")
-    // Document order: person form first, then ODER, then the badge box.
-    expect(
-      personCard.compareDocumentPosition(divider) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy()
-    expect(
-      divider.compareDocumentPosition(affordance) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy()
+    const addPerson = screen.getByRole("button", { name: /Person hinzufügen/ })
+    const terms = screen.getByText(/Ich akzeptiere die/)
+    // Document order: person form, add-person CTA and terms first, then
+    // ODER, then the badge box.
+    const before = (a: Node, b: Node) =>
+      !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(before(screen.getByTestId("person-card"), divider)).toBe(true)
+    expect(before(addPerson, divider)).toBe(true)
+    expect(before(terms, divider)).toBe(true)
+    expect(before(divider, affordance)).toBe(true)
   })
 
   it("collapses the kiosk NFC affordance to the compact bar while typing", async () => {

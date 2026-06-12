@@ -106,6 +106,12 @@ test.describe("Check-in step screenshots", () => {
       page.getByText("Badge an den Leser halten, um deine Daten zu laden"),
     ).toBeVisible()
 
+    // The hero→compact height tween (450 ms) changes the page height;
+    // scrolling mid-transition lands on a run-dependent offset and the
+    // screenshot ghosts by a few pixels. Wait for the box to settle first.
+    await expect
+      .poll(async () => (await affordance.boundingBox())?.height ?? 0)
+      .toBeLessThan(50)
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
     await expect(page).toHaveScreenshot("checkin-kiosk-nfc-hint-collapsed.png")
   })
