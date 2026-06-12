@@ -37,10 +37,13 @@ const COL_QTY_X = COL_UNIT_X + COL_UNIT_W;
 const COL_PRICE_X = COL_QTY_X + COL_QTY_W;
 const COL_TOTAL_X = COL_PRICE_X + COL_PRICE_W;
 
-// Swiss QR bill is 105mm = ~297.6pt tall; leave that space at bottom
-const QR_BILL_HEIGHT = 297.6;
 const PAGE_HEIGHT = 841.89; // A4
-const USABLE_HEIGHT = PAGE_HEIGHT - QR_BILL_HEIGHT - 20; // 20pt safety margin
+// Content flows down the full page; only the footer band at the bottom is
+// reserved (the footer sits at PAGE_HEIGHT - 40, see addPageFooters). We do
+// NOT reserve the Swiss QR-bill height here — the QR slip always gets its own
+// dedicated final page (see qrBill.attachTo below), so reserving its 297.6pt
+// on every content page only caused premature page breaks (issue #464).
+const USABLE_HEIGHT = PAGE_HEIGHT - 50; // footer band reserve
 
 const LOGO_WIDTH = 160;
 
@@ -356,6 +359,12 @@ export async function buildInvoicePdf(
         ...(debtor && { debtor }),
         reference: generateScorReference(String(data.referenceNumber).padStart(9, "0")),
       }, { language: "DE" });
+      // Issue #464: force the QR slip onto its own dedicated last page rather
+      // than letting swissqrbill drop it at the bottom of the last content
+      // page (where it would inherit that page's footer). `contentPages` was
+      // captured before this addPage(), so the footer pass below excludes the
+      // QR page — it carries no Seite N/N, no reference line, no Übertrag.
+      doc.addPage();
       qrBill.attachTo(doc);
 
       // Number only content pages, not the QR bill page
