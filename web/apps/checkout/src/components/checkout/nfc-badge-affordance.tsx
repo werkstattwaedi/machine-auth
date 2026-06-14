@@ -80,11 +80,16 @@ export function NfcBadgeAffordance({
       // error interrupts (role="alert" + assertive).
       role={mode === "verifying" ? "status" : mode === "error" ? "alert" : undefined}
       aria-live={mode === "error" ? "assertive" : undefined}
-      className={`overflow-hidden transition-all duration-450 ${CONTAINER_CLASSES[mode]}`}
+      // flex/justify-center vertically centres the layer against the
+      // container's *live* animated height every frame. An inner h-full
+      // percentage chain did not track the height tween — the content pinned
+      // to the top while the box grew, then snapped to centre the instant the
+      // animation finished.
+      className={`flex flex-col justify-center overflow-hidden transition-all duration-450 ${CONTAINER_CLASSES[mode]}`}
     >
       {/* key={mode} remounts the layer so tw-animate's fade-in plays on
           every state switch while the container height/color tweens. */}
-      <div key={mode} className="h-full animate-in fade-in duration-300">
+      <div key={mode} className="w-full animate-in fade-in duration-300">
         {mode === "hero" && <HeroLayer />}
         {mode === "compact" && <CompactLayer />}
         {mode === "verifying" && <VerifyingLayer />}
@@ -135,7 +140,7 @@ function HeroLayer() {
 
 function CompactLayer() {
   return (
-    <div className="flex h-full items-center gap-3 px-4 text-cog-teal">
+    <div className="flex items-center gap-3 px-4 text-cog-teal">
       <MiniFobIcon />
       <span className="text-[13.5px] text-muted-foreground">
         Badge an den Leser halten, um deine Daten zu laden
@@ -146,7 +151,7 @@ function CompactLayer() {
 
 function VerifyingLayer() {
   return (
-    <div className="flex h-full items-center gap-4 px-6 text-white">
+    <div className="flex items-center gap-4 px-6 text-white">
       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/25">
         <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
       </span>
