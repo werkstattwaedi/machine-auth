@@ -988,6 +988,9 @@ export function buildFamilyCandidates({
       lastName: m.lastName,
       email: m.email ?? "",
       userType: (m.userType as UserType) ?? "erwachsen",
+      // ADR-0029: a co-member with their own login (non-empty email) can't
+      // be rostered — the chip renders disabled with a hint instead.
+      hasAccount: !!m.email?.trim(),
     }))
   const self: FamilyCandidate | null = identifiedUserDoc
     ? {
@@ -996,6 +999,9 @@ export function buildFamilyCandidates({
         lastName: identifiedUserDoc.lastName,
         email: identifiedUserDoc.email ?? "",
         userType: (identifiedUserDoc.userType as UserType) ?? "erwachsen",
+        // The identified principal is the checkout owner — ADR-0029's
+        // allowed exception — so their chip is always addable.
+        hasAccount: false,
       }
     : tokenUser
       ? {
@@ -1004,6 +1010,7 @@ export function buildFamilyCandidates({
           lastName: tokenUser.lastName ?? "",
           email: tokenUser.email ?? "",
           userType: (tokenUser.userType as UserType) ?? "erwachsen",
+          hasAccount: false,
         }
       : null
   if (self && hasFamilyMembership && !claimedUserIds.has(self.userId)) {

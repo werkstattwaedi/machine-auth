@@ -420,19 +420,23 @@ describe("Family-roster quick-add (#209)", () => {
     userId: "u-self",
   }
   const candidates: FamilyCandidate[] = [
+    // Account-less child (ADR-0029): no email / login — rosterable.
     {
       userId: "u-lia",
       firstName: "Lia",
       lastName: "Pfeffer",
-      email: "lia@example.com",
+      email: "",
       userType: "kind",
+      hasAccount: false,
     },
+    // Adult co-member with their own account — chip renders disabled.
     {
       userId: "u-yvonne",
       firstName: "Yvonne",
       lastName: "Pfeiffer",
       email: "yvonne@example.com",
       userType: "erwachsen",
+      hasAccount: true,
     },
   ]
 
@@ -478,10 +482,30 @@ describe("Family-roster quick-add (#209)", () => {
         userId: "u-lia",
         firstName: "Lia",
         lastName: "Pfeffer",
-        email: "lia@example.com",
+        email: "",
         userType: "kind",
       },
     })
+  })
+
+  it("renders an account-holding candidate disabled and never dispatches (ADR-0029)", async () => {
+    const user = userEvent.setup()
+    const { dispatched } = renderCheckin({
+      isAnonymous: false,
+      isAccountLoggedIn: true,
+      personsOverride: [ownerPrimary],
+      familyCandidates: candidates,
+    })
+
+    const yvonne = screen.getByRole("button", { name: /Yvonne Pfeiffer/ })
+    expect((yvonne as HTMLButtonElement).disabled).toBe(true)
+    // The hint explains why the chip can't be added.
+    expect(
+      screen.getByText("Familienmitglieder mit eigenem Konto checken separat ein."),
+    ).toBeTruthy()
+
+    await user.click(yvonne)
+    expect(dispatched.find((a) => a.type === "ADD_FAMILY_PERSON")).toBeUndefined()
   })
 
   it("only shows candidates not already on the visit (caller-side filter)", () => {

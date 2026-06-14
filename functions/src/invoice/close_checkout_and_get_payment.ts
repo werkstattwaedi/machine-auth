@@ -373,6 +373,55 @@ async function enforceAccountHolderUserType(
 }
 
 /**
+ * Roster guard (ADR-0029, issue #432): only account-less family members may
+ * be rostered onto someone else's checkout. A roster entry carrying a
+ * `userRef` must resolve to a user without an account (`email == null` — no
+ * Firebase Auth sign-in credentials). Account-holders check in and out on
+ * their own account; the one exception is the checkout owner themselves,
+ * whose own roster line naturally carries their `userRef`.
+ *
+ * This is deliberately a *local* check — one `getAll` over the referenced
+ * user docs. No cross-user checkout query, no denormalized participant
+ * index (see the ADR's rejected first draft). Missing user docs are skipped:
+ * a dangling `userRef` cannot belong to an account-holder.
+ *
+ * Exported for unit tests.
+ */
+export async function assertRosterAccountless(
+  db: FirebaseFirestore.Firestore,
+  persons: CheckoutPersonEntity[],
+  ownerId: string | null,
+): Promise<void> {
+  // userId → display name of the first roster entry referencing it.
+  const rostered = new Map<string, string>();
+  for (const p of persons ?? []) {
+    const id = p?.userRef?.id;
+    if (typeof id !== "string" || id.length === 0) continue;
+    if (id === ownerId) continue;
+    if (!rostered.has(id)) rostered.set(id, p.name ?? id);
+  }
+  if (rostered.size === 0) return;
+
+  // Rebuild admin refs from the ids — wire-supplied `userRef`s are plain
+  // objects, not DocumentReferences, so they can't be passed to getAll.
+  const refs = [...rostered.keys()].map((id) =>
+    db.collection("users").doc(id),
+  );
+  const snaps = await db.getAll(...refs);
+  for (const snap of snaps) {
+    if (!snap.exists) continue;
+    const email = snap.data()?.email;
+    if (typeof email === "string" && email.trim().length > 0) {
+      throw new HttpsError(
+        "failed-precondition",
+        `«${rostered.get(snap.id)}» hat ein eigenes Konto und muss den ` +
+          "Besuch separat erfassen.",
+      );
+    }
+  }
+}
+
+/**
  * Daily usage-fee dedup (issue #268).
  *
  * The entry ("Nutzungs-") fee is billed at most once per Zurich business
@@ -601,6 +650,31 @@ async function closeExistingCheckout(
     `closeExistingCheckout ${args.checkoutId}`,
   );
 
+  // Roster guard (ADR-0029): reject account-holder roster entries before
+  // billing. The wire payload carries no userRefs, so the stored checkout
+  // doc (written client-side by persistPersons) is the authoritative
+  // carrier of roster identity; the wire persons are included too so a
+  // crafted payload can't smuggle one past the guard. Read outside the
+  // transaction like the other guards — the same principal is submitting,
+  // so the roster can't legitimately change underneath us.
+  const preSnap = await checkoutRef.get();
+  const stored = preSnap.exists ? (preSnap.data() as CheckoutEntity) : null;
+  // Owner exemption: the owner's own line legitimately carries their userRef.
+  // For the eager-anon shape (`userId: null`, issue #151) there is no owner
+  // doc, so `ownerId` must be null — NOT the anon Firebase UID. Falling back
+  // to `callerUid` there would wrongly exempt a roster entry crafted to match
+  // the anon UID. The authenticated fallback (`callerUid` when the doc isn't
+  // stored yet) only matters for a not-yet-existing checkout, which the
+  // transaction below rejects as not-found anyway.
+  const ownerId = stored
+    ? (stored.userId?.id ?? null)
+    : (isAnonymous ? null : callerUid);
+  await assertRosterAccountless(
+    db,
+    [...(stored?.persons ?? []), ...args.persons],
+    ownerId,
+  );
+
   // The buyer's billing address (used to backstop membership invoices below).
   // Read outside the transaction — it's the same field the invoice resolver
   // reads, written by the client before submit.
@@ -790,6 +864,11 @@ async function createAnonymousCheckout(
   const userIdRef = effectiveUserId
     ? db.collection("users").doc(effectiveUserId)
     : null;
+
+  // Roster guard (ADR-0029): the create-and-close path never has a stored
+  // roster, so only the wire persons can carry (crafted) userRefs. The web
+  // client doesn't send any — this is the backstop.
+  await assertRosterAccountless(db, args.persons, effectiveUserId);
 
   // For registered users (tag-tap path falls through here when no open
   // checkout exists), cross-check the primary person's userType against
