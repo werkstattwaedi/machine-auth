@@ -547,9 +547,9 @@ export async function trySendEmail(billId: string): Promise<boolean> {
   const checkoutDoc = await bill.checkouts[0].get();
   if (!checkoutDoc.exists) return false;
   const checkout = checkoutDoc.data() as CheckoutEntity;
-  // Resolve recipient: the person's own email, or — for a family member
-  // without one (e.g. a kiosk child checkout) — the family owner's email
-  // (issue #424).
+  // Resolve recipient from the account holder (checkout.userId). Per
+  // ADR-0029, account-less roster members have no email; the account
+  // holder is always the correct recipient (issue #471).
   const recipientEmail = await resolveRecipientEmail(checkout);
   if (!recipientEmail) {
     logger.warn(`Bill ${billId}: no recipient email, skipping`);
