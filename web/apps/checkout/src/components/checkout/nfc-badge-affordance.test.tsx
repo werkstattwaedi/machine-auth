@@ -29,6 +29,10 @@ describe("NfcBadgeAffordance", () => {
     expect(mode()).toBe("hero")
     expect(screen.getByText("Badge")).toBeTruthy()
     expect(screen.getByText(/an den Leser halten/)).toBeTruthy()
+    expect(screen.getByText(/Um einen neuen Besuch zu starten/)).toBeTruthy()
+    expect(screen.getByText(/nur so gelten die Mitglieder-Preise/)).toBeTruthy()
+    // Own-device QR alternative renders alongside the scene.
+    expect(screen.getByTestId("nfc-affordance-qr")).toBeTruthy()
   })
 
   it("collapses to the compact bar when the form is in use", () => {

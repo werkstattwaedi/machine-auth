@@ -234,25 +234,11 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
         Deine Angaben
       </h2>
 
-      {/* Kiosk + still-anonymous: the animated badge affordance. It owns
-          the whole tap lifecycle (invite → collapse → verifying → error)
-          and unmounts once the tag identifies the visitor — the pre-filled
-          identity strip below takes over. All other access modes keep the
-          static IdentityHint. */}
-      {kiosk && isAnonymous ? (
-        <NfcBadgeAffordance
-          collapsed={formFocused || formDirty}
-          verifying={tagAuthLoading ?? false}
-          error={tagAuthError ?? null}
-          picc={picc}
-        />
-      ) : (
-        <IdentityHint
-          kiosk={kiosk}
-          isAccountLoggedIn={isAccountLoggedIn}
-          isTagIdentified={!isAnonymous && !isAccountLoggedIn}
-        />
-      )}
+      <IdentityHint
+        kiosk={kiosk}
+        isAccountLoggedIn={isAccountLoggedIn}
+        isTagIdentified={!isAnonymous && !isAccountLoggedIn}
+      />
 
       <div className="contents" onFocus={onFormFocus} onBlur={onFormBlur}>
       {persons.map((person, i) => {
@@ -426,6 +412,33 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
         )}
 
       </div>
+
+      {/* Kiosk + still-anonymous: the typed form (including add-person and
+          terms) is the primary path; the badge is the alternative below an
+          "ODER" divider (updated design). The affordance owns the whole tap
+          lifecycle (invite → collapse → verifying → error) and unmounts
+          once the tag identifies the visitor — the pre-filled identity
+          strip above takes over. */}
+      {kiosk && isAnonymous && (
+        <>
+          <div
+            className="flex items-center gap-4 text-muted-foreground"
+            aria-hidden
+          >
+            <span className="h-px flex-1 bg-border" />
+            <span className="text-sm font-semibold tracking-[0.25em]">
+              ODER
+            </span>
+            <span className="h-px flex-1 bg-border" />
+          </div>
+          <NfcBadgeAffordance
+            collapsed={formFocused || formDirty}
+            verifying={tagAuthLoading ?? false}
+            error={tagAuthError ?? null}
+            picc={picc}
+          />
+        </>
+      )}
 
       <div className="flex-1" />
 

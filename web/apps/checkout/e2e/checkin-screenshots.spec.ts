@@ -77,13 +77,18 @@ test.describe("Check-in step screenshots", () => {
       page.getByRole("heading", { name: "Deine Angaben" }),
     ).toBeVisible({ timeout: 10_000 })
 
-    // Untouched form → the animated hero affordance (fob + reader scene).
+    // Untouched form → the animated hero affordance (fob + reader scene +
+    // own-device QR) below the form behind the ODER divider.
     const affordance = page.getByTestId("nfc-affordance")
     await expect(affordance).toHaveAttribute("data-mode", "hero")
     await expect(
       affordance.getByText("an den Leser halten", { exact: false }),
     ).toBeVisible()
+    await expect(page.getByText("ODER", { exact: true })).toBeVisible()
 
+    // Scroll to the page end so the baseline captures the whole hero box
+    // (it sits below the form and exceeds the remaining viewport).
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
     await expect(page).toHaveScreenshot("checkin-kiosk-nfc-hint.png")
   })
 
@@ -101,6 +106,22 @@ test.describe("Check-in step screenshots", () => {
       page.getByText("Badge an den Leser halten, um deine Daten zu laden"),
     ).toBeVisible()
 
+    // The hero→compact height tween (450 ms) changes the page height. A bare
+    // "height < 50" check fires the instant the ease-out curve dips under 50px
+    // while it's still shrinking toward its 46px resting height, so the
+    // subsequent scroll lands on a run-dependent offset and every line ghosts
+    // a few pixels (flaky pass/fail across CI runs). Wait for the height to
+    // stop changing — two equal consecutive reads at rest — before scrolling.
+    let prevHeight = -1
+    await expect
+      .poll(async () => {
+        const height = Math.round((await affordance.boundingBox())?.height ?? 0)
+        const settled = height === prevHeight && height < 50
+        prevHeight = height
+        return settled
+      })
+      .toBe(true)
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
     await expect(page).toHaveScreenshot("checkin-kiosk-nfc-hint-collapsed.png")
   })
 
