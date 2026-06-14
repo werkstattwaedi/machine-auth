@@ -1921,5 +1921,45 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
 
       expect(await listBills()).to.have.length(0);
     });
+
+    it("rejects a crafted wire userRef on the create-and-close path for a signed-in caller", async () => {
+      const callerUid = "roster-wire-caller";
+      const memberUid = "roster-wire-acct-2";
+      await seedUser(callerUid, "erwachsen");
+      await seedUser(memberUid, "erwachsen");
+
+      // Same smuggle attempt as above but via the authenticated newCheckout
+      // path (caller stamps their own userId). The guard must still fire,
+      // and the caller's own line stays exempt.
+      const craftedPerson = {
+        ...ADULT,
+        name: "Bea Buddy",
+        userRef: { id: memberUid },
+      } as unknown as CheckoutPersonEntity;
+      const selfPerson = {
+        ...ADULT,
+        userRef: { id: callerUid },
+      } as unknown as CheckoutPersonEntity;
+
+      await expectHttpsError(
+        () =>
+          call({
+            uid: callerUid,
+            data: {
+              newCheckout: {
+                userId: callerUid,
+                workshopsVisited: ["holz"],
+                items: [],
+              },
+              usageType: "regular" as UsageType,
+              persons: [selfPerson, craftedPerson],
+              summary: { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 },
+            },
+          }),
+        "failed-precondition",
+      );
+
+      expect(await listBills()).to.have.length(0);
+    });
   });
 });

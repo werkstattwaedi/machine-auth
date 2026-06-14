@@ -659,10 +659,20 @@ async function closeExistingCheckout(
   // so the roster can't legitimately change underneath us.
   const preSnap = await checkoutRef.get();
   const stored = preSnap.exists ? (preSnap.data() as CheckoutEntity) : null;
+  // Owner exemption: the owner's own line legitimately carries their userRef.
+  // For the eager-anon shape (`userId: null`, issue #151) there is no owner
+  // doc, so `ownerId` must be null — NOT the anon Firebase UID. Falling back
+  // to `callerUid` there would wrongly exempt a roster entry crafted to match
+  // the anon UID. The authenticated fallback (`callerUid` when the doc isn't
+  // stored yet) only matters for a not-yet-existing checkout, which the
+  // transaction below rejects as not-found anyway.
+  const ownerId = stored
+    ? (stored.userId?.id ?? null)
+    : (isAnonymous ? null : callerUid);
   await assertRosterAccountless(
     db,
     [...(stored?.persons ?? []), ...args.persons],
-    stored?.userId?.id ?? callerUid,
+    ownerId,
   );
 
   // The buyer's billing address (used to backstop membership invoices below).

@@ -151,8 +151,10 @@ No cross-user query is ever needed to validate a roster.
   `userRef`s; the stored open-checkout doc (written client-side by
   `persistPersons`) is the authoritative carrier of roster identity, so the
   close-existing path validates the stored roster, with the wire persons
-  included as a backstop against a crafted payload. Implemented as a single
-  `getAll` over the referenced `/users/{userId}` docs.
+  included as a backstop against a crafted payload. The create-and-close path
+  has no stored roster yet, so it validates the wire persons alone — the same
+  backstop, with nothing else to union. Implemented as a single `getAll` over
+  the referenced `/users/{userId}` docs.
 - **Client UX (advisory):**
   - `buildFamilyCandidates`
     (`web/apps/checkout/src/components/checkout/wizard-context.tsx`) marks

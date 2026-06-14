@@ -153,6 +153,9 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
   // ADR-0029 advisory roster check: an account-holding family member on the
   // roster can't be fixed by editing fields — they must be removed — so the
   // error renders as a standalone notice instead of a per-field message.
+  // The identified principal (the owner) is exempt; prefer `ownerUserId`
+  // (set for both account-login and tag-tap) and fall back to
+  // `signedInUserId` for callers that only supply the account-login id.
   const rosterError = useMemo(
     () => rosterAccountError(persons, ownerUserId ?? signedInUserId ?? null),
     [persons, ownerUserId, signedInUserId],
