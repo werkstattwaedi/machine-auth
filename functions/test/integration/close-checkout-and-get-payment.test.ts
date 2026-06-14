@@ -101,13 +101,16 @@ async function seedPricingConfig(): Promise<void> {
 async function seedUser(
   uid: string,
   userType: "erwachsen" | "kind" | "firma" = "erwachsen",
+  // `null` seeds an account-less user (no login) — the only kind that may
+  // be rostered onto someone else's checkout per ADR-0029.
+  email: string | null = "alice@example.com",
 ): Promise<void> {
   const db = getFirestore();
   await db.collection("users").doc(uid).set({
     created: Timestamp.now(),
     firstName: "Alice",
     lastName: "Adult",
-    email: "alice@example.com",
+    email,
     permissions: [],
     roles: [],
     userType,
@@ -1693,7 +1696,9 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
       const adultUid = "dedup-mixed-adult";
       const kidUid = "dedup-mixed-kid";
       await seedUser(adultUid, "erwachsen");
-      await seedUser(kidUid, "kind");
+      // Account-less kid (ADR-0029): only account-less members may ride on
+      // the adult's roster.
+      await seedUser(kidUid, "kind", null);
       const adult = namedPerson(adultUid, ADULT);
       const kid = namedPerson(kidUid, CHILD);
 
@@ -1758,6 +1763,203 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
 
       // No genuine payment happened earlier, so the fee is charged now.
       expect(result.amount).to.equal("15.00");
+    });
+  });
+
+  describe("roster guard (ADR-0029): only account-less members rosterable", () => {
+    function linkedPerson(
+      uid: string,
+      name: string,
+      userType: "erwachsen" | "kind" | "firma",
+      email = "",
+    ): CheckoutPersonEntity {
+      const db = getFirestore();
+      return {
+        name,
+        email,
+        userType,
+        userRef: db.collection("users").doc(uid),
+      };
+    }
+
+    /** Account-less family member: user doc with `email: null` (no login). */
+    async function seedAccountlessUser(uid: string): Promise<void> {
+      const db = getFirestore();
+      await db.collection("users").doc(uid).set({
+        created: Timestamp.now(),
+        firstName: "Charlie",
+        lastName: "Kid",
+        email: null,
+        permissions: [],
+        roles: [],
+        userType: "kind",
+      });
+    }
+
+    it("rejects close when the stored roster carries an account-holding member", async () => {
+      const uid = "roster-owner-1";
+      const memberUid = "roster-member-acct";
+      const checkoutId = "co-roster-acct";
+      await seedUser(uid, "erwachsen");
+      // The rostered family member has their own account (email set).
+      await seedUser(memberUid, "erwachsen");
+      await seedCheckout(checkoutId, {
+        ownerUid: uid,
+        persons: [
+          linkedPerson(uid, "Alice Adult", "erwachsen", "alice@example.com"),
+          linkedPerson(memberUid, "Bea Buddy", "erwachsen"),
+        ],
+      });
+
+      // The wire persons carry no userRefs (production shape) — the guard
+      // must trip on the STORED roster alone.
+      await expectHttpsError(
+        () =>
+          call({
+            uid,
+            data: {
+              checkoutId,
+              usageType: "regular" as UsageType,
+              persons: [ADULT, { ...CHILD, name: "Bea Buddy" }],
+              summary: { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 },
+            },
+          }),
+        "failed-precondition",
+      );
+
+      // The checkout stays open and unbilled.
+      const checkout = await getCheckout(checkoutId);
+      expect(checkout.status).to.equal("open");
+      expect(checkout.billRef).to.not.exist;
+      expect(await listBills()).to.have.length(0);
+    });
+
+    it("closes when the roster carries the owner plus account-less members", async () => {
+      const uid = "roster-owner-2";
+      const childUid = "roster-child";
+      const checkoutId = "co-roster-child";
+      // The owner has an account — their own userRef on the roster is the
+      // allowed exception.
+      await seedUser(uid, "erwachsen");
+      await seedAccountlessUser(childUid);
+      await seedCheckout(checkoutId, {
+        ownerUid: uid,
+        persons: [
+          linkedPerson(uid, "Alice Adult", "erwachsen", "alice@example.com"),
+          linkedPerson(childUid, "Charlie Kid", "kind"),
+        ],
+      });
+
+      const result = await call({
+        uid,
+        data: {
+          checkoutId,
+          usageType: "regular" as UsageType,
+          persons: [ADULT, CHILD],
+          summary: { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 },
+        },
+      });
+
+      // 15 (adult entry) + 7.50 (child entry) — the guard let it through.
+      expect(result.amount).to.equal("22.50");
+      const checkout = await getCheckout(checkoutId);
+      expect(checkout.status).to.equal("closed");
+    });
+
+    it("ignores dangling userRefs (referenced user doc missing)", async () => {
+      const uid = "roster-owner-3";
+      const checkoutId = "co-roster-dangling";
+      await seedUser(uid, "erwachsen");
+      await seedCheckout(checkoutId, {
+        ownerUid: uid,
+        persons: [
+          linkedPerson(uid, "Alice Adult", "erwachsen", "alice@example.com"),
+          linkedPerson("no-such-user", "Ghost Guest", "erwachsen"),
+        ],
+      });
+
+      const result = await call({
+        uid,
+        data: {
+          checkoutId,
+          usageType: "regular" as UsageType,
+          persons: [ADULT],
+          summary: { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 },
+        },
+      });
+
+      expect(result.amount).to.equal("15.00");
+    });
+
+    it("rejects a crafted wire userRef on the create-and-close path", async () => {
+      const memberUid = "roster-wire-acct";
+      await seedUser(memberUid, "erwachsen");
+
+      // A malicious client could smuggle a plain-object userRef into the
+      // wire persons (the JSON shape a serialized ref would take). The
+      // create path has no stored roster, so the guard must catch it here.
+      const craftedPerson = {
+        ...ADULT,
+        name: "Bea Buddy",
+        userRef: { id: memberUid },
+      } as unknown as CheckoutPersonEntity;
+
+      await expectHttpsError(
+        () =>
+          call({
+            uid: "anon-roster-1",
+            anonymous: true,
+            data: {
+              newCheckout: { userId: null, workshopsVisited: ["holz"], items: [] },
+              usageType: "regular" as UsageType,
+              persons: [craftedPerson],
+              summary: { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 },
+            },
+          }),
+        "failed-precondition",
+      );
+
+      expect(await listBills()).to.have.length(0);
+    });
+
+    it("rejects a crafted wire userRef on the create-and-close path for a signed-in caller", async () => {
+      const callerUid = "roster-wire-caller";
+      const memberUid = "roster-wire-acct-2";
+      await seedUser(callerUid, "erwachsen");
+      await seedUser(memberUid, "erwachsen");
+
+      // Same smuggle attempt as above but via the authenticated newCheckout
+      // path (caller stamps their own userId). The guard must still fire,
+      // and the caller's own line stays exempt.
+      const craftedPerson = {
+        ...ADULT,
+        name: "Bea Buddy",
+        userRef: { id: memberUid },
+      } as unknown as CheckoutPersonEntity;
+      const selfPerson = {
+        ...ADULT,
+        userRef: { id: callerUid },
+      } as unknown as CheckoutPersonEntity;
+
+      await expectHttpsError(
+        () =>
+          call({
+            uid: callerUid,
+            data: {
+              newCheckout: {
+                userId: callerUid,
+                workshopsVisited: ["holz"],
+                items: [],
+              },
+              usageType: "regular" as UsageType,
+              persons: [selfPerson, craftedPerson],
+              summary: { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 },
+            },
+          }),
+        "failed-precondition",
+      );
+
+      expect(await listBills()).to.have.length(0);
     });
   });
 });
