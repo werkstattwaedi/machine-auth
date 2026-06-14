@@ -5,11 +5,13 @@ import {
   AlertTriangle,
   ArrowRight,
   Check,
+  ChevronLeft,
   Crown,
   Info,
-  Mail,
+  LogIn,
   Plus,
   RefreshCw,
+  Send,
   User,
   Users,
   X,
@@ -32,9 +34,10 @@ import {
 } from "@modules/lib/firestore-helpers"
 import type { CatalogItemDoc } from "@modules/lib/firestore-entities"
 import type { DocumentReference } from "firebase/firestore"
-import { priceForTier } from "@modules/lib/pricing"
-import { formatDate } from "@modules/lib/format"
+import { priceForTier, USER_TYPE_LABELS } from "@modules/lib/pricing"
+import { formatDate, formatRelativeTime } from "@modules/lib/format"
 import { formatFullName } from "@modules/lib/username-utils"
+import { cn } from "@modules/lib/utils"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { Avatar } from "@modules/components/ui/avatar"
 import { Badge } from "@modules/components/ui/badge"
@@ -542,6 +545,11 @@ function BuyCard({
 /* Inline family section (only for owner of an active family)         */
 /* ------------------------------------------------------------------ */
 
+/** Login-less managed members are only ever adults or kids — never firma. */
+type ManagedMemberType = "erwachsen" | "kind"
+
+type AddMode = "closed" | "chooser" | "invite" | "no-login"
+
 function FamilySection({
   membershipId,
   memberIds,
@@ -559,10 +567,12 @@ function FamilySection({
   )
   const pending = invites.filter((i) => i.status === "pending")
 
+  const [addMode, setAddMode] = React.useState<AddMode>("closed")
   const [inviteEmail, setInviteEmail] = React.useState("")
-  const [showAddKid, setShowAddKid] = React.useState(false)
-  const [kidFirst, setKidFirst] = React.useState("")
-  const [kidLast, setKidLast] = React.useState("")
+  const [noLoginFirst, setNoLoginFirst] = React.useState("")
+  const [noLoginLast, setNoLoginLast] = React.useState("")
+  const [noLoginType, setNoLoginType] =
+    React.useState<ManagedMemberType>("kind")
 
   const inviteMutation = useAsyncMutation({
     context: "checkout.inviteFamily",
@@ -579,13 +589,22 @@ function FamilySection({
     successMessage: "Mitglied entfernt",
     errorMessage: "Mitglied konnte nicht entfernt werden",
   })
-  const createChildMutation = useAsyncMutation({
-    context: "checkout.createChildAccount",
-    successMessage: "Kindkonto erstellt",
-    errorMessage: "Kindkonto konnte nicht erstellt werden",
+  const createMemberMutation = useAsyncMutation({
+    context: "checkout.createManagedMember",
+    successMessage: "Mitglied hinzugefügt",
+    errorMessage: "Mitglied konnte nicht hinzugefügt werden",
   })
 
   const totalCount = memberIds.length
+  const pendingCount = pending.length
+
+  const resetAdd = () => {
+    setAddMode("closed")
+    setInviteEmail("")
+    setNoLoginFirst("")
+    setNoLoginLast("")
+    setNoLoginType("kind")
+  }
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -596,7 +615,7 @@ function FamilySection({
         { inviteId: string }
       >(functions, "membershipCall", "inviteFamilyMember")
       await fn({ membershipId, email: inviteEmail.trim() })
-      setInviteEmail("")
+      resetAdd()
     })
   }
 
@@ -615,19 +634,18 @@ function FamilySection({
     })
   }
 
-  const handleCreateKid = async (e: React.FormEvent) => {
+  const handleCreateNoLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!kidFirst.trim() || !kidLast.trim()) return
-    await createChildMutation.mutate(async () => {
-      const fn = rpcCallable(functions, "membershipCall", "createChildAccount")
+    if (!noLoginFirst.trim() || !noLoginLast.trim()) return
+    await createMemberMutation.mutate(async () => {
+      const fn = rpcCallable(functions, "membershipCall", "createManagedMember")
       await fn({
         membershipId,
-        firstName: kidFirst.trim(),
-        lastName: kidLast.trim(),
+        firstName: noLoginFirst.trim(),
+        lastName: noLoginLast.trim(),
+        userType: noLoginType,
       })
-      setKidFirst("")
-      setKidLast("")
-      setShowAddKid(false)
+      resetAdd()
     })
   }
 
@@ -638,6 +656,7 @@ function FamilySection({
           <h2 className="font-heading text-xl font-bold">Familie</h2>
           <span className="text-sm text-muted-foreground">
             {totalCount} {totalCount === 1 ? "Person" : "Personen"}
+            {pendingCount > 0 && ` · ${pendingCount} ausstehend`}
           </span>
         </div>
 
@@ -647,9 +666,7 @@ function FamilySection({
               key={uid}
               userId={uid}
               isOwner={uid === ownerId}
-              onRemove={
-                uid === ownerId ? null : () => handleRemove(uid)
-              }
+              onRemove={uid === ownerId ? null : () => handleRemove(uid)}
               removing={removeMutation.loading}
             />
           ))}
@@ -659,14 +676,15 @@ function FamilySection({
               className="grid grid-cols-[36px_1fr_auto_auto] items-center gap-3 border-b py-3 opacity-90 last:border-0"
             >
               <span className="inline-flex size-9 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                <Mail className="size-4" />
+                <Send className="size-4" />
               </span>
               <div className="min-w-0">
                 <div className="truncate text-sm font-semibold">
                   {inv.email}
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  Eingeladen · läuft in 30 Tagen ab
+                  Eingeladen {formatRelativeTime(inv.invitedAt)} · läuft in 30
+                  Tagen ab
                 </div>
               </div>
               <Badge variant="outline">Ausstehend</Badge>
@@ -683,94 +701,169 @@ function FamilySection({
         </ul>
 
         <div className="mt-4 border-t pt-4">
-          <form onSubmit={handleInvite} className="flex items-end gap-2">
-            <div className="flex-1">
-              <Label htmlFor="invite-email" className="text-sm font-bold">
-                Erwachsene Person einladen
-              </Label>
-              <Input
-                id="invite-email"
-                type="email"
-                placeholder="name@beispiel.ch"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                className="mt-1"
-              />
-            </div>
-            <Button
-              type="submit"
-              disabled={
-                !inviteEmail.includes("@") || inviteMutation.loading
-              }
-            >
-              <Mail />
-              Einladen
-            </Button>
-          </form>
-
-          {!showAddKid ? (
+          {addMode === "closed" && (
             <button
               type="button"
-              onClick={() => setShowAddKid(true)}
-              className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-cog-teal-dark hover:underline"
+              onClick={() => setAddMode("chooser")}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-cog-teal/60 py-3 text-sm font-semibold text-cog-teal-dark transition hover:border-cog-teal hover:bg-cog-teal-light"
             >
-              <Plus className="size-3.5" />
-              Kindkonto hinzufügen
+              <span className="inline-flex size-6 items-center justify-center rounded-full bg-cog-teal text-white">
+                <Plus className="size-4" />
+              </span>
+              Mitglied hinzufügen
             </button>
-          ) : (
-            <form onSubmit={handleCreateKid} className="mt-4">
-              <div className="text-sm font-bold">
-                Kindkonto erstellen{" "}
-                <span className="font-normal text-muted-foreground">
-                  · kein eigenes Login
-                </span>
+          )}
+
+          {addMode === "chooser" && (
+            <div>
+              <h3 className="font-heading text-lg font-bold">
+                Wie möchtest du hinzufügen?
+              </h3>
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <AddChoiceCard
+                  icon={<Send className="size-5" />}
+                  iconClassName="bg-cog-teal text-white"
+                  title="Konto einladen"
+                  description="Person mit eigenem Login. Bestehendes Konto wird verknüpft, oder ein neues per E-Mail erstellt."
+                  onClick={() => setAddMode("invite")}
+                />
+                <AddChoiceCard
+                  icon={<User className="size-5" />}
+                  iconClassName="bg-muted-foreground text-white"
+                  title="Ohne Login"
+                  description="Konto ohne eigenes Login, von dir verwaltet — für Kinder oder Erwachsene ohne E-Mail."
+                  onClick={() => setAddMode("no-login")}
+                />
               </div>
-              <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto_auto] sm:items-end">
-                <div>
-                  <Label htmlFor="kid-first" className="sr-only">
-                    Vorname
+              <button
+                type="button"
+                onClick={resetAdd}
+                className="mt-4 text-sm font-semibold text-muted-foreground hover:text-foreground"
+              >
+                Abbrechen
+              </button>
+            </div>
+          )}
+
+          {addMode === "invite" && (
+            <div>
+              <BackLink onClick={() => setAddMode("chooser")} />
+              <h3 className="mt-3 font-heading text-lg font-bold">
+                Konto einladen
+              </h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Die Person erhält einen Link per E-Mail und meldet sich mit
+                eigenem Konto an.
+              </p>
+              <form onSubmit={handleInvite} className="mt-4 flex items-end gap-2">
+                <div className="flex-1">
+                  <Label htmlFor="invite-email" className="text-sm font-bold">
+                    E-Mail-Adresse
                   </Label>
                   <Input
-                    id="kid-first"
+                    id="invite-email"
+                    type="email"
                     autoFocus
-                    placeholder="Vorname"
-                    value={kidFirst}
-                    onChange={(e) => setKidFirst(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="kid-last" className="sr-only">
-                    Nachname
-                  </Label>
-                  <Input
-                    id="kid-last"
-                    placeholder="Nachname"
-                    value={kidLast}
-                    onChange={(e) => setKidLast(e.target.value)}
+                    placeholder="name@beispiel.ch"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    className="mt-1"
                   />
                 </div>
                 <Button
                   type="submit"
-                  variant="outline"
+                  disabled={!inviteEmail.includes("@") || inviteMutation.loading}
+                >
+                  <Send />
+                  Einladen
+                </Button>
+              </form>
+            </div>
+          )}
+
+          {addMode === "no-login" && (
+            <form onSubmit={handleCreateNoLogin}>
+              <BackLink onClick={() => setAddMode("chooser")} />
+              <h3 className="mt-3 font-heading text-lg font-bold">
+                Mitglied ohne Login
+              </h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Du verwaltest dieses Konto. Eine E-Mail kannst du später
+                nachtragen, um ein Login zu aktivieren.
+              </p>
+              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <Label htmlFor="nologin-first" className="text-sm font-bold">
+                    Vorname <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="nologin-first"
+                    autoFocus
+                    placeholder="Mia"
+                    value={noLoginFirst}
+                    onChange={(e) => setNoLoginFirst(e.target.value)}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="nologin-last" className="text-sm font-bold">
+                    Nachname <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="nologin-last"
+                    placeholder="Müller"
+                    value={noLoginLast}
+                    onChange={(e) => setNoLoginLast(e.target.value)}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+              <div className="mt-4">
+                <Label className="text-sm font-bold">Typ</Label>
+                <div className="flex flex-wrap gap-6 pt-2">
+                  {(["erwachsen", "kind"] as ManagedMemberType[]).map(
+                    (value) => (
+                      <label
+                        key={value}
+                        className="inline-flex cursor-pointer select-none items-center gap-2 text-sm"
+                      >
+                        <span
+                          className={cn(
+                            "inline-flex h-[18px] w-[18px] items-center justify-center rounded-full border-[1.5px] transition-colors",
+                            noLoginType === value
+                              ? "border-cog-teal bg-cog-teal"
+                              : "border-[#c1c1c1] bg-background",
+                          )}
+                        >
+                          {noLoginType === value && (
+                            <span className="h-2 w-2 rounded-full bg-white" />
+                          )}
+                        </span>
+                        <input
+                          type="radio"
+                          name="nologin-type"
+                          value={value}
+                          checked={noLoginType === value}
+                          onChange={() => setNoLoginType(value)}
+                          className="sr-only"
+                        />
+                        {USER_TYPE_LABELS[value]}
+                      </label>
+                    ),
+                  )}
+                </div>
+              </div>
+              <div className="mt-5 flex justify-end">
+                <Button
+                  type="submit"
                   disabled={
-                    !kidFirst.trim() ||
-                    !kidLast.trim() ||
-                    createChildMutation.loading
+                    !noLoginFirst.trim() ||
+                    !noLoginLast.trim() ||
+                    createMemberMutation.loading
                   }
                 >
                   <Plus />
-                  Erstellen
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => {
-                    setShowAddKid(false)
-                    setKidFirst("")
-                    setKidLast("")
-                  }}
-                >
-                  Abbrechen
+                  Hinzufügen
                 </Button>
               </div>
             </form>
@@ -778,6 +871,59 @@ function FamilySection({
         </div>
       </CardContent>
     </Card>
+  )
+}
+
+function BackLink({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-1 text-sm font-semibold text-muted-foreground hover:text-foreground"
+    >
+      <ChevronLeft className="size-4" />
+      Zurück
+    </button>
+  )
+}
+
+function AddChoiceCard({
+  icon,
+  iconClassName,
+  title,
+  description,
+  onClick,
+}: {
+  icon: React.ReactNode
+  iconClassName: string
+  title: string
+  description: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex flex-col gap-2 rounded-xl border bg-card p-5 text-left transition hover:border-cog-teal hover:bg-cog-teal-light"
+    >
+      <span
+        className={cn(
+          "inline-flex size-10 items-center justify-center rounded-lg",
+          iconClassName,
+        )}
+      >
+        {icon}
+      </span>
+      <span className="font-heading text-lg font-bold leading-tight">
+        {title}
+      </span>
+      <span className="text-sm leading-snug text-muted-foreground">
+        {description}
+      </span>
+      <span className="mt-1 inline-flex items-center gap-1 text-sm font-semibold text-cog-teal-dark">
+        Weiter <ArrowRight className="size-4" />
+      </span>
+    </button>
   )
 }
 
@@ -796,6 +942,10 @@ function MemberRow({
   // Family-roster join rule allows reading co-members' user docs.
   const { data: user } = useDocument(userRef(db, userId))
   const name = formatFullName(user ?? {}, userId)
+  // ADR-0029: a login email (not userType) is what makes a member an
+  // account-holder who checks in on their own. Login-less members are the
+  // ones the owner manages and can roster.
+  const hasAccount = !!user?.email?.trim()
   const isChild = user?.userType === "kind"
 
   return (
@@ -804,7 +954,7 @@ function MemberRow({
       <div className="min-w-0">
         <div className="truncate text-sm font-semibold">{name}</div>
         <div className="text-xs text-muted-foreground">
-          {user?.email ?? <span>(kein Login)</span>}
+          {hasAccount ? user?.email : "Kein Login · von dir verwaltet"}
         </div>
       </div>
       <div className="flex flex-wrap gap-1.5">
@@ -814,16 +964,19 @@ function MemberRow({
             Inhaber:in
           </Badge>
         )}
-        {isChild && !isOwner && <Badge variant="secondary">Kind</Badge>}
+        {!isOwner && hasAccount && (
+          <Badge variant="outline">
+            <LogIn />
+            Login
+          </Badge>
+        )}
+        {!isOwner && !hasAccount && isChild && (
+          <Badge variant="secondary">Kind</Badge>
+        )}
       </div>
       <div>
         {onRemove && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onRemove}
-            disabled={removing}
-          >
+          <Button variant="ghost" size="sm" onClick={onRemove} disabled={removing}>
             <X />
             Entfernen
           </Button>

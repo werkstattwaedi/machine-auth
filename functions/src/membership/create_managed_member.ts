@@ -2,18 +2,21 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Callable: family owner creates a child account.
+ * Callable: family owner creates a managed (login-less) member.
  *
- * A child account is a Firebase Auth user with NO sign-in credentials
+ * A managed member is a Firebase Auth user with NO sign-in credentials
  * (no email, no password) plus a Firestore `users/{uid}` doc with
- * `userType: "kind"` and `email: null`. The child is added to the family
- * `members[]` so they get the member discount on their own visits when a
+ * `email: null` and the chosen `userType` ("erwachsen" or "kind"). They are
+ * added to the family `members[]` so they get the member discount when a
  * parent picks them in the checkout roster.
+ *
+ * Per ADR-0029 these login-less accounts are exactly the members that can be
+ * rostered onto someone else's checkout — kids, or adults who can't check in
+ * on their own. The owner can later promote the account by adding an email.
  *
  * Why a real Auth UID rather than a synthetic ID: keeps the system-wide
  * invariant that `users.{uid}.id == auth.uid`, and lets us promote the
- * account later (set an email when the kid is old enough) without
- * remapping references everywhere.
+ * account later (set an email) without remapping references everywhere.
  */
 
 import * as logger from "firebase-functions/logger";
@@ -34,19 +37,25 @@ import {
 } from "./shared";
 import { formatFullName } from "../util/username-utils";
 
-interface CreateChildAccountRequest {
+/** Managed members are login-less; firma always needs a real account/login. */
+type ManagedMemberType = "erwachsen" | "kind";
+
+interface CreateManagedMemberRequest {
   membershipId: string;
   firstName: string;
   lastName: string;
+  userType: ManagedMemberType;
 }
 
-interface CreateChildAccountResponse {
+interface CreateManagedMemberResponse {
   uid: string;
 }
 
-export const createChildAccountHandler = async (request: CallableRequest<CreateChildAccountRequest>) => {
-  const { membershipId, firstName, lastName } =
-    request.data ?? ({} as CreateChildAccountRequest);
+export const createManagedMemberHandler = async (
+  request: CallableRequest<CreateManagedMemberRequest>,
+): Promise<CreateManagedMemberResponse> => {
+  const { membershipId, firstName, lastName, userType } =
+    request.data ?? ({} as CreateManagedMemberRequest);
   if (!membershipId) {
     throw new HttpsError("invalid-argument", "membershipId is required");
   }
@@ -54,6 +63,12 @@ export const createChildAccountHandler = async (request: CallableRequest<CreateC
     throw new HttpsError(
       "invalid-argument",
       "firstName and lastName are required",
+    );
+  }
+  if (userType !== "erwachsen" && userType !== "kind") {
+    throw new HttpsError(
+      "invalid-argument",
+      "userType must be 'erwachsen' or 'kind'",
     );
   }
 
@@ -87,30 +102,28 @@ export const createChildAccountHandler = async (request: CallableRequest<CreateC
   if (preMembership?.type !== "family") {
     throw new HttpsError(
       "failed-precondition",
-      "Child accounts can only be added to family memberships",
+      "Managed members can only be added to family memberships",
     );
   }
 
   const auth = getAuth();
-  // Pass `firstName lastName` as the Firebase Auth displayName so the
-  // Auth Console shows a recognizable name.
-  const fullName = formatFullName(
-    { firstName, lastName },
-    `${firstName} (Kind)`,
-  );
+  // Pass the full name as the Firebase Auth displayName so the Auth Console
+  // shows a recognizable name. Kids get a " (Kind)" suffix to disambiguate.
+  const fallback = userType === "kind" ? `${firstName} (Kind)` : firstName;
+  const displayName = formatFullName({ firstName, lastName }, fallback);
 
   // Auth user with no credentials. Firebase Auth allows this — the user
   // simply has no sign-in method until someone sets an email later.
   let authUser: Awaited<ReturnType<typeof auth.createUser>>;
   try {
     authUser = await auth.createUser({
-      displayName: fullName,
-      // Disable until adult/email is set — defense-in-depth in case any
-      // sign-in path is ever wired up before email is provided.
+      displayName,
+      // Disable until an email is set — defense-in-depth in case any sign-in
+      // path is ever wired up before an email is provided.
       disabled: true,
     });
   } catch (err: unknown) {
-    logger.error("Failed to create Auth user for child account", err);
+    logger.error("Failed to create Auth user for managed member", err);
     throw new HttpsError(
       "internal",
       `Auth user creation failed: ${(err as Error).message}`,
@@ -118,14 +131,14 @@ export const createChildAccountHandler = async (request: CallableRequest<CreateC
   }
 
   try {
-    const childRef = database.collection("users").doc(authUser.uid);
+    const memberRef = database.collection("users").doc(authUser.uid);
     await database.runTransaction(async (tx) => {
       const membership = await getMembershipInTx(tx, memRef);
       assertOwnerOrAdmin(membership, callerRef, isAdmin);
       if (membership.type !== "family") {
         throw new HttpsError(
           "failed-precondition",
-          "Child accounts can only be added to family memberships",
+          "Managed members can only be added to family memberships",
         );
       }
       if (membership.status !== "active") {
@@ -136,7 +149,7 @@ export const createChildAccountHandler = async (request: CallableRequest<CreateC
       }
 
       const now = Timestamp.now();
-      const childDoc: UserEntity = {
+      const memberDoc: UserEntity = {
         created: now,
         firstName,
         lastName,
@@ -144,21 +157,21 @@ export const createChildAccountHandler = async (request: CallableRequest<CreateC
         permissions: [],
         roles: [],
         termsAcceptedAt: null,
-        userType: "kind",
+        userType,
         billingAddress: null,
         // The membership trigger will write this; eager-set is fine too.
         activeMembership: memRef,
       };
-      tx.set(childRef, childDoc);
+      tx.set(memberRef, memberDoc);
       tx.update(memRef, {
-        members: FieldValue.arrayUnion(childRef),
+        members: FieldValue.arrayUnion(memberRef),
         modifiedAt: FieldValue.serverTimestamp(),
       });
     });
   } catch (err) {
     // Rollback the Auth user if the Firestore write failed.
     logger.error(
-      "Firestore write failed for child account; rolling back Auth user",
+      "Firestore write failed for managed member; rolling back Auth user",
       err,
     );
     await auth.deleteUser(authUser.uid).catch((rollbackErr) => {
@@ -167,13 +180,14 @@ export const createChildAccountHandler = async (request: CallableRequest<CreateC
     if (err instanceof HttpsError) throw err;
     throw new HttpsError(
       "internal",
-      `Child account creation failed: ${(err as Error).message}`,
+      `Managed member creation failed: ${(err as Error).message}`,
     );
   }
 
-  logger.info("Created child account", {
+  logger.info("Created managed member", {
     membershipId,
-    childUid: authUser.uid,
+    memberUid: authUser.uid,
+    userType,
     callerId: callerRef.id,
   });
 

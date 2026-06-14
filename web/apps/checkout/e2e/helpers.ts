@@ -186,14 +186,19 @@ export async function seedMembershipState(
     await userRef.set({ activeMembership: membershipRef }, { merge: true })
 
     if (kind.pendingInviteEmail) {
+      // Seed `invitedAt` exactly 2 days before the real clock so the page's
+      // relative-time rendering is a stable "vor 2 Tagen" without freezing the
+      // browser clock (which would future-date the auth token and break the
+      // invites listener). The 2-day delta rounds stably across a test run.
+      const invitedAt = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000)
       await membershipRef.collection("invites").doc("e2e-invite-001").set({
         email: kind.pendingInviteEmail,
         status: "pending",
-        invitedAt: Timestamp.fromDate(STABLE_INVITE_DATE),
+        invitedAt: Timestamp.fromDate(invitedAt),
         invitedBy: userRef,
         resolvedAt: null,
         ttlAt: Timestamp.fromDate(
-          new Date(STABLE_INVITE_DATE.getTime() + 30 * 24 * 60 * 60 * 1000),
+          new Date(invitedAt.getTime() + 30 * 24 * 60 * 60 * 1000),
         ),
       })
     }

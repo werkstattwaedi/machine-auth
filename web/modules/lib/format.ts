@@ -87,3 +87,31 @@ export function formatDateTime(
   const date = value instanceof Date ? value : value.toDate()
   return dateTimeFormatter.format(date)
 }
+
+// `numeric: "always"` so 2 days ago reads "vor 2 Tagen" rather than the
+// calendar-relative "vorgestern" — the design draft uses the counted form.
+const relativeTimeFormatter = new Intl.RelativeTimeFormat(locale, {
+  numeric: "always",
+})
+
+/**
+ * Human relative time for a past (or future) instant, e.g. "gerade eben",
+ * "vor 2 Tagen", "vor 3 Stunden". Picks the largest sensible unit.
+ * `now` is injectable so the output is deterministic in tests.
+ */
+export function formatRelativeTime(
+  value: Date | Timestamp | { toDate(): Date } | null | undefined,
+  now: Date = new Date()
+): string {
+  if (!value) return "–"
+  const date = value instanceof Date ? value : value.toDate()
+  const diffMs = date.getTime() - now.getTime()
+  if (Math.abs(diffMs) < 60_000) return "gerade eben"
+  const minutes = Math.round(diffMs / 60_000)
+  if (Math.abs(minutes) < 60)
+    return relativeTimeFormatter.format(minutes, "minute")
+  const hours = Math.round(diffMs / 3_600_000)
+  if (Math.abs(hours) < 24) return relativeTimeFormatter.format(hours, "hour")
+  const days = Math.round(diffMs / 86_400_000)
+  return relativeTimeFormatter.format(days, "day")
+}

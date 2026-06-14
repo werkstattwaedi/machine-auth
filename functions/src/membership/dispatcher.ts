@@ -3,8 +3,8 @@
 
 /**
  * `membershipCall` — grouped callable for the membership domain (#277).
- * Routes purchase / invite / accept / reject / revoke / remove / createChild /
- * cancel / cancelAutoRenew and the two admin operations.
+ * Routes purchase / invite / accept / reject / revoke / remove /
+ * createManagedMember / cancel / cancelAutoRenew and the two admin operations.
  */
 
 import { onCall } from "firebase-functions/v2/https";
@@ -16,7 +16,7 @@ import { acceptFamilyInviteHandler } from "./accept_invite";
 import { rejectFamilyInviteHandler } from "./reject_invite";
 import { revokeFamilyInviteHandler } from "./revoke_invite";
 import { removeFamilyMemberHandler } from "./remove";
-import { createChildAccountHandler } from "./create_child";
+import { createManagedMemberHandler } from "./create_managed_member";
 import { cancelMembershipHandler } from "./cancel";
 import { cancelMembershipAutoRenewHandler } from "./cancel_auto_renew";
 import {
@@ -31,7 +31,7 @@ const HANDLERS: Record<string, RpcHandler> = {
   rejectFamilyInvite: rejectFamilyInviteHandler,
   revokeFamilyInvite: revokeFamilyInviteHandler,
   removeFamilyMember: removeFamilyMemberHandler,
-  createChildAccount: createChildAccountHandler,
+  createManagedMember: createManagedMemberHandler,
   cancelMembership: cancelMembershipHandler,
   cancelMembershipAutoRenew: cancelMembershipAutoRenewHandler,
   adminCreateMembership: adminCreateMembershipHandler,

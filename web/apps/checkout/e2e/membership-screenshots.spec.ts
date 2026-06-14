@@ -59,7 +59,9 @@ test.describe("Membership page screenshots", () => {
     await seedMembershipState(uid, {
       kind: "active-family-owner",
       coMembers: [
+        // Adult co-member with a login → "Login" badge.
         { firstName: "Lukas", lastName: "Müller" },
+        // Login-less child → "Kein Login · von dir verwaltet" + "Kind" badge.
         { firstName: "Mia", lastName: "Müller", userType: "kind" },
       ],
       pendingInviteEmail: "oma.maier@beispiel.ch",
@@ -71,11 +73,17 @@ test.describe("Membership page screenshots", () => {
     await expect(
       page.getByRole("list").getByText("Inhaber:in"),
     ).toBeVisible()
-    await expect(page.getByText("Ausstehend")).toBeVisible()
+    await expect(page.getByText("Login", { exact: true })).toBeVisible()
+    await expect(page.getByText("Kein Login · von dir verwaltet")).toBeVisible()
+    // "ausstehend" also appears in the "… · 1 ausstehend" count; pin to the badge.
+    await expect(page.getByText("Ausstehend", { exact: true })).toBeVisible()
+    await expect(
+      page.getByRole("button", { name: "Mitglied hinzufügen" }),
+    ).toBeVisible()
     await expect(page).toHaveScreenshot("membership-active-family-owner.png")
   })
 
-  test("active family — owner with kid form expanded", async ({ page }) => {
+  test("active family — add member: no-login form", async ({ page }) => {
     await signIn(page)
     const uid = process.env.E2E_AUTH_USER_UID!
     await seedMembershipState(uid, {
@@ -83,17 +91,21 @@ test.describe("Membership page screenshots", () => {
       coMembers: [{ firstName: "Lukas", lastName: "Müller" }],
     })
     await gotoMembership(page)
-    await page
-      .getByRole("button", { name: "Kindkonto hinzufügen" })
-      .click()
-    await expect(page.getByText("Kindkonto erstellen")).toBeVisible()
-    // The kid-first input is autoFocus'd, which scrolls it into view. On the
+    await page.getByRole("button", { name: "Mitglied hinzufügen" }).click()
+    await expect(
+      page.getByRole("heading", { name: "Wie möchtest du hinzufügen?" }),
+    ).toBeVisible()
+    await page.getByRole("button", { name: /Ohne Login/ }).click()
+    await expect(
+      page.getByRole("heading", { name: "Mitglied ohne Login" }),
+    ).toBeVisible()
+    // The Vorname input is autoFocus'd, which scrolls it into view. On the
     // taller owner view (issue #323 added the auto-renewal block) that scroll
     // races the viewport screenshot; anchor at the top so the captured frame
     // is deterministic.
     await page.evaluate(() => window.scrollTo(0, 0))
     await expect(page).toHaveScreenshot(
-      "membership-active-family-owner-kid-form.png",
+      "membership-active-family-owner-no-login-form.png",
     )
   })
 
