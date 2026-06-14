@@ -106,12 +106,21 @@ test.describe("Check-in step screenshots", () => {
       page.getByText("Badge an den Leser halten, um deine Daten zu laden"),
     ).toBeVisible()
 
-    // The hero→compact height tween (450 ms) changes the page height;
-    // scrolling mid-transition lands on a run-dependent offset and the
-    // screenshot ghosts by a few pixels. Wait for the box to settle first.
+    // The hero→compact height tween (450 ms) changes the page height. A bare
+    // "height < 50" check fires the instant the ease-out curve dips under 50px
+    // while it's still shrinking toward its 46px resting height, so the
+    // subsequent scroll lands on a run-dependent offset and every line ghosts
+    // a few pixels (flaky pass/fail across CI runs). Wait for the height to
+    // stop changing — two equal consecutive reads at rest — before scrolling.
+    let prevHeight = -1
     await expect
-      .poll(async () => (await affordance.boundingBox())?.height ?? 0)
-      .toBeLessThan(50)
+      .poll(async () => {
+        const height = Math.round((await affordance.boundingBox())?.height ?? 0)
+        const settled = height === prevHeight && height < 50
+        prevHeight = height
+        return settled
+      })
+      .toBe(true)
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
     await expect(page).toHaveScreenshot("checkin-kiosk-nfc-hint-collapsed.png")
   })
