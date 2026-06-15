@@ -255,6 +255,7 @@ function InviteLogin({
   info: InviteInfo
 }) {
   const functions = useFunctions()
+  const firebaseAuth = useFirebaseAuth()
   const { requestLoginEmail, verifyLoginCode, signInWithGoogle } = useAuth()
   const navigate = useNavigate()
   const email = info.email ?? ""
@@ -294,7 +295,17 @@ function InviteLogin({
   const handleGoogle = () =>
     googleLogin.mutate(async () => {
       await signInWithGoogle()
-      await accept()
+      // The chosen Google account may not be the invited address. Only accept
+      // when it matches; otherwise route to the membership wrong-account notice
+      // (clear "Abmelden & annehmen" escape) instead of a cryptic accept error.
+      if (sameEmail(firebaseAuth.currentUser?.email, email)) {
+        await accept()
+      } else {
+        navigate({
+          to: "/account/membership",
+          search: { invite: `${membershipId}~${inviteId}` },
+        })
+      }
     })
 
   const busy = codeLogin.loading || googleLogin.loading

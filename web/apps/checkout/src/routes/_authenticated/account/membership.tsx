@@ -301,15 +301,21 @@ function WrongAccountInviteNotice() {
     }
   }, [functions, membershipId, inviteId])
 
+  const switchMutation = useAsyncMutation({
+    context: "checkout.switchInviteAccount",
+    errorMessage: "Abmelden fehlgeschlagen",
+  })
+
   if (!email) return null
 
-  const handleSwitch = async () => {
-    await signOut()
-    navigate({
-      to: "/account/invite/$membershipId/$inviteId",
-      params: { membershipId, inviteId },
+  const handleSwitch = () =>
+    switchMutation.mutate(async () => {
+      await signOut()
+      navigate({
+        to: "/account/invite/$membershipId/$inviteId",
+        params: { membershipId, inviteId },
+      })
     })
-  }
 
   return (
     <Card className="border-destructive">
@@ -326,7 +332,11 @@ function WrongAccountInviteNotice() {
           beizutreten.
         </p>
         <div className="mt-4">
-          <Button variant="destructive" onClick={handleSwitch}>
+          <Button
+            variant="destructive"
+            onClick={handleSwitch}
+            disabled={switchMutation.loading}
+          >
             Abmelden &amp; Einladung annehmen
           </Button>
         </div>

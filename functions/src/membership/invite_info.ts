@@ -27,7 +27,7 @@ import type {
   MembershipInviteEntity,
 } from "../types/firestore_entities";
 import { db, membershipRef } from "./shared";
-import { resolveInviterName } from "./invite";
+import { resolveInviter } from "./invite";
 import { isAllowedOrigin } from "../auth/login-code/helpers";
 
 export interface GetFamilyInviteInfoRequest {
@@ -81,10 +81,11 @@ export async function handleGetFamilyInviteInfo(
   }
   const invite = inviteSnap.data() as MembershipInviteEntity;
 
-  const inviterName = await resolveInviterName(invite.invitedBy);
-  // Inviter email for the "Du wurdest von X (email) eingeladen" copy. Best-effort.
-  const inviterEmail =
-    ((await invite.invitedBy.get()).data()?.email as string | undefined) ?? null;
+  // Single read resolves both the display name and email for the
+  // "Du wurdest von X (email) eingeladen" copy.
+  const { name: inviterName, email: inviterEmail } = await resolveInviter(
+    invite.invitedBy,
+  );
 
   // Pending invites past their TTL are functionally expired even if the TTL
   // reaper hasn't deleted them yet.

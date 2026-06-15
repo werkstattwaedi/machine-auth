@@ -98,6 +98,14 @@ test.describe("Family invite acceptance landings", () => {
     await expect(page).toHaveScreenshot("invite-new-account.png")
   })
 
+  test("missing invite → not-found message", async ({ page }) => {
+    const { membershipId } = await seedFamilyInvite("any@beispiel.ch")
+    await page.goto(`/account/invite/${membershipId}/does-not-exist`)
+    await expect(
+      page.getByText(/nicht gefunden|abgelaufen/),
+    ).toBeVisible({ timeout: 10_000 })
+  })
+
   test("invite new (no account) → sign-up joins (functional)", async ({
     page,
   }) => {
