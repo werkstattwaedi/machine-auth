@@ -60,9 +60,9 @@ test.describe("Membership page screenshots", () => {
     await seedMembershipState(uid, {
       kind: "active-family-owner",
       coMembers: [
-        // Adult co-member with a login → "Login" badge.
+        // Adult co-member with a login → subtitle shows their email.
         { firstName: "Lukas", lastName: "Müller" },
-        // Login-less child → "Kein Login · von dir verwaltet" + "Kind" badge.
+        // Login-less child → subtitle "Kind · Kein Login".
         { firstName: "Mia", lastName: "Müller", userType: "kind" },
       ],
       pendingInviteEmail: "oma.maier@beispiel.ch",
@@ -74,8 +74,8 @@ test.describe("Membership page screenshots", () => {
     await expect(
       page.getByRole("list").getByText("Inhaber:in"),
     ).toBeVisible()
-    await expect(page.getByText("Login", { exact: true })).toBeVisible()
-    await expect(page.getByText("Kein Login · von dir verwaltet")).toBeVisible()
+    await expect(page.getByText("lukas.müller@beispiel.ch")).toBeVisible()
+    await expect(page.getByText("Kind · Kein Login")).toBeVisible()
     // "ausstehend" also appears in the "… · 1 ausstehend" count; pin to the badge.
     await expect(page.getByText("Ausstehend", { exact: true })).toBeVisible()
     await expect(

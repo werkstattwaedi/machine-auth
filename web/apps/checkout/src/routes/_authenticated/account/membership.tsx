@@ -8,7 +8,6 @@ import {
   ChevronLeft,
   Crown,
   Info,
-  LogIn,
   Plus,
   RefreshCw,
   Send,
@@ -45,6 +44,7 @@ import { Button } from "@modules/components/ui/button"
 import { Card, CardContent } from "@modules/components/ui/card"
 import { ConfirmDialog } from "@modules/components/confirm-dialog"
 import { Input } from "@modules/components/ui/input"
+import { Skeleton } from "@modules/components/ui/skeleton"
 import { Label } from "@modules/components/ui/label"
 import { PageLoading } from "@modules/components/page-loading"
 
@@ -819,11 +819,6 @@ function FamilySection({
                     : null
               }
               removeLabel={!isOwner && uid === currentUserId ? "Verlassen" : "Entfernen"}
-              noLoginLabel={
-                isOwner
-                  ? "Kein Login · von dir verwaltet"
-                  : "Kein Login · von der Familie verwaltet"
-              }
               removing={removeMutation.loading || leaveMutation.loading}
             />
           ))}
@@ -1103,40 +1098,57 @@ function AddChoiceCard({
   )
 }
 
+/** Short type label for the roster subtitle (vs. USER_TYPE_LABELS' "Kind (u. 18)"). */
+const MEMBER_TYPE_LABEL: Record<string, string> = {
+  erwachsen: "Erwachsen",
+  kind: "Kind",
+  firma: "Firma",
+}
+
 function MemberRow({
   userId,
   isOwner,
   onRemove,
   removeLabel = "Entfernen",
-  noLoginLabel,
   removing,
 }: {
   userId: string
   isOwner: boolean
   onRemove: (() => void) | null
   removeLabel?: string
-  /** Subtitle for a login-less member (managed phrasing differs by viewer). */
-  noLoginLabel: string
   removing: boolean
 }) {
   const db = useDb()
   // Family-roster join rule allows reading co-members' user docs.
-  const { data: user } = useDocument(userRef(db, userId))
-  const name = formatFullName(user ?? {}, userId)
+  const { data: user, loading } = useDocument(userRef(db, userId))
+
+  // Until the co-member's user doc resolves, show a placeholder rather than
+  // the raw document id (which `formatFullName` would otherwise fall back to).
+  if (loading || !user) {
+    return (
+      <li className="grid grid-cols-[36px_1fr] items-center gap-3 border-b py-3 last:border-0">
+        <Skeleton className="size-9 rounded-full" />
+        <div className="space-y-1.5">
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-3 w-44" />
+        </div>
+      </li>
+    )
+  }
+
+  const name = formatFullName(user, userId)
   // ADR-0029: a login email (not userType) is what makes a member an
-  // account-holder who checks in on their own. Login-less members are the
-  // ones the owner manages and can roster.
-  const hasAccount = !!user?.email?.trim()
-  const isChild = user?.userType === "kind"
+  // account-holder who checks in on their own.
+  const hasAccount = !!user.email?.trim()
+  const typeLabel = MEMBER_TYPE_LABEL[user.userType ?? "erwachsen"] ?? "Erwachsen"
+  const subtitle = `${typeLabel} · ${hasAccount ? user.email : "Kein Login"}`
 
   return (
     <li className="grid grid-cols-[36px_1fr_auto_auto] items-center gap-3 border-b py-3 last:border-0">
       <Avatar name={name} />
       <div className="min-w-0">
         <div className="truncate text-sm font-semibold">{name}</div>
-        <div className="text-xs text-muted-foreground">
-          {hasAccount ? user?.email : noLoginLabel}
-        </div>
+        <div className="truncate text-xs text-muted-foreground">{subtitle}</div>
       </div>
       <div className="flex flex-wrap gap-1.5">
         {isOwner && (
@@ -1144,15 +1156,6 @@ function MemberRow({
             <Crown />
             Inhaber:in
           </Badge>
-        )}
-        {!isOwner && hasAccount && (
-          <Badge variant="outline">
-            <LogIn />
-            Login
-          </Badge>
-        )}
-        {!isOwner && !hasAccount && isChild && (
-          <Badge variant="secondary">Kind</Badge>
         )}
       </div>
       <div>
