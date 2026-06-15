@@ -37,7 +37,6 @@ import type {
 import type {
   CheckoutEntity,
   CheckoutItemEntity,
-  MembershipEntity,
   PaymentMethod,
   UserEntity,
 } from "../types/firestore_entities";
@@ -471,62 +470,39 @@ function pickTemplate(
 }
 
 /**
- * Resolve the invoice-email recipient for a checkout (issue #424).
+ * Resolve the invoice-email recipient for a checkout (issue #471).
  *
- * Kiosk tag-tap checkouts can name a family member who is a child account
- * with no email (e.g. "Lia"). `persons[0].email` is then `""` and the
- * receipt previously went nowhere. Fall back to the family-membership
- * owner's email so the responsible adult still gets the Beleg:
+ * The receipt always goes to the checkout's account holder
+ * (`checkout.userId`) — the payer — and to no one else, regardless of who
+ * appears on the roster (`persons`). Per ADR-0029 (#439), account-less
+ * family members exist only as roster members of a family whose owner is the
+ * payer; they never have an email of their own. So even when the owner has
+ * removed themselves from `persons` and only an account-less child remains,
+ * the recipient is unambiguous: the account holder's email.
  *
- *   1. `persons[0].email` if non-empty (the usual path).
- *   2. else, for the first person carrying a `userRef`, find their active
- *      `family` membership (`members` array-contains the user) and use the
- *      membership owner's `email` from `users/{ownerId}`.
- *   3. else `null` — caller logs + skips.
+ * The receipt body still shows the visiting person's name (`persons[0].name`)
+ * via RECIPIENT_NAME — only the `to:` address is the account holder.
+ *
+ * Returns `null` (caller logs + skips) when the account holder has no email.
  *
  * Exported for unit testing.
  */
 export async function resolveRecipientEmail(
   checkout: CheckoutEntity,
 ): Promise<string | null> {
-  const directEmail = checkout.persons[0]?.email;
-  if (directEmail) return directEmail;
-
-  const db = getFirestore();
-
-  // Walk persons for the first one linked to a real account, then resolve
-  // their active family membership's owner email.
-  for (const person of checkout.persons) {
-    const userRef = person.userRef;
-    if (!userRef) continue;
-
-    try {
-      const membershipsSnap = await db
-        .collection("memberships")
-        .where("members", "array-contains", userRef)
-        .where("type", "==", "family")
-        .where("status", "==", "active")
-        .limit(1)
-        .get();
-      if (membershipsSnap.empty) continue;
-
-      const membership = membershipsSnap.docs[0].data() as MembershipEntity;
-      const ownerSnap = await membership.ownerUserId.get();
-      if (!ownerSnap.exists) continue;
-      const ownerEmail = (ownerSnap.data() as UserEntity | undefined)?.email;
-      if (ownerEmail) return ownerEmail;
-    } catch (error) {
-      // Fail soft: an index/permission hiccup shouldn't crash the send
-      // path — fall through to the next person / the null skip.
-      const message = error instanceof Error ? error.message : String(error);
-      logger.warn(
-        `resolveRecipientEmail: family-owner lookup failed for ${userRef.path}`,
-        { error: message },
-      );
-    }
+  try {
+    const ownerSnap = await checkout.userId.get();
+    return (ownerSnap.data() as UserEntity | undefined)?.email || null;
+  } catch (error) {
+    // Fail soft: an account-holder lookup hiccup shouldn't crash the send
+    // path — skip rather than throw.
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn(
+      `resolveRecipientEmail: account-holder lookup failed for ${checkout.userId.path}`,
+      { error: message },
+    );
+    return null;
   }
-
-  return null;
 }
 
 export async function trySendEmail(billId: string): Promise<boolean> {
@@ -571,9 +547,9 @@ export async function trySendEmail(billId: string): Promise<boolean> {
   const checkoutDoc = await bill.checkouts[0].get();
   if (!checkoutDoc.exists) return false;
   const checkout = checkoutDoc.data() as CheckoutEntity;
-  // Resolve recipient: the person's own email, or — for a family member
-  // without one (e.g. a kiosk child checkout) — the family owner's email
-  // (issue #424).
+  // Resolve recipient from the account holder (checkout.userId). Per
+  // ADR-0029, account-less roster members have no email; the account
+  // holder is always the correct recipient (issue #471).
   const recipientEmail = await resolveRecipientEmail(checkout);
   if (!recipientEmail) {
     logger.warn(`Bill ${billId}: no recipient email, skipping`);

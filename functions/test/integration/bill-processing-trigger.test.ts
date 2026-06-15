@@ -155,27 +155,6 @@ async function seedUser(
   });
 }
 
-/**
- * Seed an active family membership owned by `ownerUserId` with `members`
- * including the listed user ids (issue #424 fallback recipient lookup).
- */
-async function seedFamilyMembership(
-  membershipId: string,
-  ownerUserId: string,
-  memberUserIds: string[],
-): Promise<void> {
-  const db = getFirestore();
-  await db.collection("memberships").doc(membershipId).set({
-    type: "family",
-    status: "active",
-    lastPaidAt: Timestamp.now(),
-    validUntil: Timestamp.fromMillis(Date.now() + 365 * 24 * 3600 * 1000),
-    ownerUserId: db.doc(`users/${ownerUserId}`),
-    members: memberUserIds.map((id) => db.doc(`users/${id}`)),
-    paymentCheckouts: [],
-  });
-}
-
 async function seedBill(
   billId: string,
   opts: SeedBillOptions = {},
@@ -630,7 +609,11 @@ describe("bill processing triggers (Integration)", () => {
 
       it("sends email via Resend with correct payload shape", async () => {
         const billId = "bill-email-ok";
+        // Recipient is resolved from the checkout's account holder
+        // (checkout.userId), so seed that user with the email.
+        await seedUser("u-alice", { email: "alice@example.com", firstName: "Alice" });
         await seedCheckout("co-default", {
+          userId: "u-alice",
           persons: [
             { name: "Alice Adult", email: "alice@example.com", userType: "erwachsen" },
           ],
@@ -677,8 +660,9 @@ describe("bill processing triggers (Integration)", () => {
 
       it("does NOT send and returns true when recipient email is missing", async () => {
         const billId = "bill-no-email";
+        // Recipient is the account holder (checkout.userId defaults to
+        // u-bill-proc, which has no seeded user doc) → no email → skip.
         await seedCheckout("co-default", {
-          // Person with no email
           persons: [{ name: "Anon", email: "", userType: "kind" }],
         });
         await seedBill(billId, {
@@ -695,16 +679,18 @@ describe("bill processing triggers (Integration)", () => {
         expect(updated.emailSentAt).to.be.null;
       });
 
-      it("falls back to the family owner's email when the visiting member has none (#424)", async () => {
-        const billId = "bill-family-fallback";
-        // Kiosk child checkout: Lia has no email but is linked via userRef
-        // and is a member of an active family membership owned by Mum.
+      it("sends to the account holder when an account-less member remains on the roster (#471)", async () => {
+        const billId = "bill-account-holder";
+        // Reported scenario: an account-less child (Lia, no email) was
+        // rostered via the kiosk, and the owner (Mum) removed themselves
+        // from `persons` — only the child remains. checkout.userId still
+        // points at the family owner. Per ADR-0029 the receipt must always
+        // go to the account holder, never the roster member.
         await seedUser("u-mum", { email: "mum@example.com", firstName: "Mum" });
-        await seedUser("u-lia", { email: null, firstName: "Lia" });
-        await seedFamilyMembership("m-family", "u-mum", ["u-mum", "u-lia"]);
 
         const db = getFirestore();
         await seedCheckout("co-default", {
+          userId: "u-mum",
           persons: [
             {
               name: "Lia",
@@ -715,7 +701,7 @@ describe("bill processing triggers (Integration)", () => {
           ],
         });
         await seedBill(billId, {
-          storagePath: "invoices/bill-family-fallback.pdf",
+          storagePath: "invoices/bill-account-holder.pdf",
           referenceNumber: 9,
           paymentMethodConfirmationTime: Timestamp.now(),
           paymentMethodConfirmationSource: "user",
@@ -729,7 +715,7 @@ describe("bill processing triggers (Integration)", () => {
           string,
           { to: string; template: { variables: Record<string, string> } },
         ];
-        // Email goes to the family owner; the visiting child's name stays
+        // Email goes to the account holder; the visiting child's name stays
         // on the receipt so the owner sees whose visit it was.
         expect(entity.to).to.equal("mum@example.com");
         expect(entity.template.variables.RECIPIENT_NAME).to.equal("Lia");
@@ -738,13 +724,15 @@ describe("bill processing triggers (Integration)", () => {
         expect(updated.emailSentAt).to.be.instanceOf(Timestamp);
       });
 
-      it("skips when the member has no email and no family owner email (#424)", async () => {
-        const billId = "bill-no-fallback";
-        // Member linked via userRef but with no active family membership.
-        await seedUser("u-orphan", { email: null, firstName: "Orphan" });
+      it("skips when the account holder has no email and the roster member has none (#471)", async () => {
+        const billId = "bill-no-recipient";
+        // Account holder has no email and the rostered member has none
+        // either → resolver returns null → skip, nothing to retry.
+        await seedUser("u-noemail", { email: null, firstName: "NoEmail" });
 
         const db = getFirestore();
         await seedCheckout("co-default", {
+          userId: "u-noemail",
           persons: [
             {
               name: "Orphan",
@@ -755,7 +743,7 @@ describe("bill processing triggers (Integration)", () => {
           ],
         });
         await seedBill(billId, {
-          storagePath: "invoices/bill-no-fallback.pdf",
+          storagePath: "invoices/bill-no-recipient.pdf",
           paymentMethodConfirmationTime: Timestamp.now(),
           paymentMethodConfirmationSource: "user",
         });
@@ -770,6 +758,8 @@ describe("bill processing triggers (Integration)", () => {
 
       it("releases lock and writes operations_log on Resend failure", async () => {
         const billId = "bill-email-fail";
+        // Recipient resolves from the account holder (checkout.userId).
+        await seedUser("u-bill-proc", { email: "payer@example.com" });
         await seedCheckout("co-default", {});
         await seedBill(billId, {
           storagePath: "invoices/bill-email-fail.pdf",
@@ -859,6 +849,7 @@ describe("bill processing triggers (Integration)", () => {
 
       it("picks twint template when checkout.paymentMethod is 'twint'", async () => {
         const billId = "bill-twint";
+        await seedUser("u-bill-proc", { email: "payer@example.com" });
         await seedCheckout("co-default", {
           paymentMethod: "twint",
         });
@@ -884,6 +875,7 @@ describe("bill processing triggers (Integration)", () => {
         // Per-visit Belege share this template but are covered separately
         // below (#405).
         const billId = "bill-sammelrechnung";
+        await seedUser("u-bill-proc", { email: "payer@example.com" });
         await seedCheckout("co-default", {
           paymentMethod: "monthly",
         });
@@ -905,6 +897,7 @@ describe("bill processing triggers (Integration)", () => {
 
       it("defaults to QR-Rechnung template when paymentMethod is null (auto-ack with no last selection)", async () => {
         const billId = "bill-default-template";
+        await seedUser("u-bill-proc", { email: "payer@example.com" });
         await seedCheckout("co-default", {});
         await seedBill(billId, {
           storagePath: "invoices/bill-default-template.pdf",
@@ -927,7 +920,11 @@ describe("bill processing triggers (Integration)", () => {
       // no payment-method ack stamp (the kind transition is its commit).
       it("emails a per-visit Beleg as a receipt with the Sammelrechnung template (#405)", async () => {
         const billId = "bill-beleg-email";
+        // Recipient is the account holder; the visiting person's name still
+        // drives RECIPIENT_NAME from persons[0].
+        await seedUser("u-bea", { email: "bea@example.com", firstName: "Bea" });
         await seedCheckout("co-default", {
+          userId: "u-bea",
           paymentMethod: "monthly",
           persons: [
             { name: "Bea Beleg", email: "bea@example.com", userType: "erwachsen" },
