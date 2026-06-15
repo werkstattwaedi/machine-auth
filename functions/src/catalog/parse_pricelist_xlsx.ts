@@ -63,6 +63,11 @@ function asPrice(v: string | number | null): number | null {
 
 const PRICE_HEADER = "preis einheit verkauf";
 
+// The header row sits a handful of rows below a banner + margin notes
+// (~row 6–8 in Mario's sheets). Search generously so a taller preamble
+// doesn't silently classify a sheet as unconfigured.
+const HEADER_SEARCH_ROWS = 50;
+
 interface SheetColumns {
   code: number;
   name: number;
@@ -75,7 +80,7 @@ interface SheetColumns {
 
 /** Locate the header row (the one containing "Code") and map the columns we read. */
 function locateColumns(ws: ExcelJS.Worksheet): SheetColumns | null {
-  for (let r = 1; r <= Math.min(ws.rowCount, 30); r++) {
+  for (let r = 1; r <= Math.min(ws.rowCount, HEADER_SEARCH_ROWS); r++) {
     const row = ws.getRow(r);
     const byHeader = new Map<string, number>();
     row.eachCell({ includeEmpty: false }, (cell, col) => {

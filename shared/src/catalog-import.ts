@@ -228,8 +228,16 @@ export interface ImportPreview {
   summary: ImportSummary
 }
 
+/** Ordered equality — for the hierarchical `category` path where order matters. */
 function categoriesEqual(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((v, i) => v === b[i])
+}
+
+/** Unordered (set) equality — for `workshops`, where order is not meaningful. */
+function sameSet(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false
+  const set = new Set(a)
+  return b.every((v) => set.has(v))
 }
 
 /**
@@ -267,7 +275,7 @@ export function diffCatalog(entries: ImportEntry[], current: CurrentCatalogItem[
       changes.push({ field: "category", from: cur.category, to: entry.category })
     if (cur.pricingModel !== entry.pricingModel)
       changes.push({ field: "pricingModel", from: cur.pricingModel, to: entry.pricingModel })
-    if (!categoriesEqual(cur.workshops, entry.workshops))
+    if (!sameSet(cur.workshops, entry.workshops))
       changes.push({ field: "workshops", from: cur.workshops, to: entry.workshops })
     if (!cur.active) changes.push({ field: "active", from: false, to: true })
     diff.push({

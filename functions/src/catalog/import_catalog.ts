@@ -31,6 +31,7 @@ import {
   type ImportPreview,
   type ImportEntry,
 } from "@oww/shared";
+import { handleUpsertCatalogItem } from "./upsert_catalog_item";
 
 const MAX_BATCH_OPS = 450; // Firestore caps a WriteBatch at 500; leave headroom.
 
@@ -139,18 +140,21 @@ export async function applyCatalogImport(
   const collection = db.collection("catalog");
   const now = new Date();
 
-  // Collect write ops, then flush in <=MAX_BATCH_OPS chunks.
-  const ops: Array<(batch: FirebaseFirestore.WriteBatch) => void> = [];
   let created = 0;
   let updated = 0;
   let retired = 0;
 
+  // Creates introduce a *new* code, so they must go through the same
+  // transactional uniqueness guard the rules rely on (ADR-0026); the diff's
+  // byCode map is a stale snapshot and can't protect against a concurrent
+  // write. handleUpsertCatalogItem runs that check per code. Updates/retires
+  // target a known doc id and never change the code, so they carry no
+  // collision risk and stay on the fast batched-write path.
   for (const d of preview.diff) {
     if (d.kind === "create" && d.entry) {
-      const ref = collection.doc();
       const entry = d.entry;
-      ops.push((batch) =>
-        batch.set(ref, {
+      await handleUpsertCatalogItem(
+        {
           code: entry.code,
           name: entry.name,
           description: null,
@@ -161,12 +165,17 @@ export async function applyCatalogImport(
           variants: [
             { id: "default", pricingModel: entry.pricingModel, unitPrice: { default: entry.unitPrice.default } },
           ],
-          modifiedBy: actorUid,
-          modifiedAt: now,
-        })
+        },
+        actorUid
       );
       created++;
-    } else if (d.kind === "update" && d.entry && d.id) {
+    }
+  }
+
+  // Collect update/retire ops, then flush in <=MAX_BATCH_OPS chunks.
+  const ops: Array<(batch: FirebaseFirestore.WriteBatch) => void> = [];
+  for (const d of preview.diff) {
+    if (d.kind === "update" && d.entry && d.id) {
       const ref = collection.doc(d.id);
       const entry = d.entry;
       const existing = data.get(d.id) ?? {};
@@ -229,11 +238,10 @@ function decodeFile(payload: unknown): Buffer {
   if (!data || typeof data.fileBase64 !== "string" || data.fileBase64.length === 0) {
     throw new HttpsError("invalid-argument", "fileBase64 (xlsx) is required");
   }
-  try {
-    return Buffer.from(data.fileBase64, "base64");
-  } catch {
-    throw new HttpsError("invalid-argument", "fileBase64 is not valid base64");
-  }
+  // Buffer.from(..., "base64") never throws — it silently drops non-base64
+  // chars — so a malformed upload surfaces as an ExcelJS parse error
+  // downstream rather than here.
+  return Buffer.from(data.fileBase64, "base64");
 }
 
 export const previewCatalogImportHandler = async (request: CallableRequest<unknown>) => {

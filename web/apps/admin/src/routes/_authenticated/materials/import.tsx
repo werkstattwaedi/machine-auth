@@ -49,6 +49,8 @@ interface ApplyResult {
   updated: number
   unchanged: number
   retired: number
+  errors: number
+  warnings: number
 }
 
 function fileToBase64(file: File): Promise<string> {
@@ -134,8 +136,9 @@ function CatalogImportPage() {
 
   async function handleApply() {
     if (!fileBase64) return
+    let res: ApplyResult
     try {
-      const res = await apply.mutate(async () => {
+      res = await apply.mutate(async () => {
         const fn = rpcCallable<{ fileBase64: string; applyRetire: boolean }, ApplyResult>(
           functions,
           "catalogCall",
@@ -144,7 +147,17 @@ function CatalogImportPage() {
         const out = await fn({ fileBase64, applyRetire })
         return out.data
       })
-      // Re-preview so the table reflects the now-applied state.
+    } catch {
+      // useAsyncMutation surfaced the toast + telemetry for the apply itself.
+      return
+    }
+    // The apply succeeded — confirm it before anything else can fail.
+    const { created, updated, retired, errors } = res
+    const skipped = errors ? ` · ${errors} Zeilen übersprungen` : ""
+    toast.success(`Import übernommen: ${created} neu, ${updated} geändert, ${retired} stillgelegt${skipped}.`)
+    // Best-effort re-preview so the table reflects the applied state. A
+    // failure here must not look like the apply failed (it didn't).
+    try {
       const fn = rpcCallable<{ fileBase64: string }, PreviewResult>(
         functions,
         "catalogCall",
@@ -152,11 +165,8 @@ function CatalogImportPage() {
       )
       const refreshed = await fn({ fileBase64 })
       setPreview(refreshed.data)
-      const { created, updated, retired } = res
-      // sonner toast for success (the hook only toasts on error).
-      toast.success(`Import übernommen: ${created} neu, ${updated} geändert, ${retired} stillgelegt.`)
     } catch {
-      // useAsyncMutation surfaced the toast + telemetry.
+      toast.warning("Vorschau konnte nicht aktualisiert werden — Datei bei Bedarf erneut hochladen.")
     }
   }
 
@@ -168,7 +178,7 @@ function CatalogImportPage() {
     <div className="space-y-6">
       <PageHeader title="Katalog-Import" backTo="/materials" backLabel="Zum Katalog" />
       <p className="-mt-4 text-sm text-muted-foreground">
-        Mario's Preislisten-Excel hochladen, Änderungen prüfen (Trockenlauf), dann übernehmen.
+        Marios Preislisten-Excel hochladen, Änderungen prüfen (Trockenlauf), dann übernehmen.
       </p>
 
       <Card className="p-4">
