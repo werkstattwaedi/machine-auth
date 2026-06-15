@@ -1038,7 +1038,7 @@ function FamilySection({
       title={pendingRemoval?.self ? "Familie verlassen?" : "Mitglied entfernen?"}
       description={
         pendingRemoval?.self
-          ? "Du verlierst den vergünstigten Mitglieder-Tarif."
+          ? "Du verlierst den vergünstigten Mitglieder-Tarif. Um wieder beizutreten, musst du erneut von der Familie eingeladen werden."
           : "Diese Person wird aus der Familie entfernt und verliert den Mitglieder-Tarif."
       }
       confirmLabel={pendingRemoval?.self ? "Verlassen" : "Entfernen"}
