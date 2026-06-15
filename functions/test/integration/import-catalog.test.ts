@@ -1,0 +1,193 @@
+// Copyright Offene Werkstatt Wädenswil
+// SPDX-License-Identifier: MIT
+
+process.env.FUNCTIONS_EMULATOR = "true";
+
+import { expect } from "chai";
+import ExcelJS from "exceljs";
+import {
+  setupEmulator,
+  clearFirestore,
+  teardownEmulator,
+  getFirestore,
+} from "../emulator-helper";
+import {
+  previewCatalogImport,
+  applyCatalogImport,
+} from "../../src/catalog/import_catalog";
+
+const ADMIN_UID = "admin-test";
+
+interface FixtureRow {
+  code?: string | number;
+  name?: string;
+  kategorie?: string;
+  unter?: string;
+  einheit?: string;
+  price?: number | null;
+  heading?: string; // emits a heading row (only col A) instead of a data row
+}
+
+/**
+ * Build a minimal pricelist workbook in memory. Header layout mirrors the
+ * bootstrap output: Code/Name/Kategorie/Unterkategorie/Einheit + the
+ * "Preis Einheit Verkauf" sale-price column, with a banner + heading row
+ * above the header to exercise the header-locating logic.
+ */
+async function buildFixture(sheets: Record<string, FixtureRow[]>): Promise<Buffer> {
+  const wb = new ExcelJS.Workbook();
+  for (const [name, rows] of Object.entries(sheets)) {
+    const ws = wb.addWorksheet(name);
+    ws.addRow([`${name} – Bestellliste`]); // banner
+    // Leading "Pos" column mirrors the real file, where Code sits to the right
+    // of Mario's calc columns and section headings live in column A.
+    ws.addRow(["Pos", "Code", "Name", "Kategorie", "Unterkategorie", "Einheit", "Preis Einheit\nVerkauf"]);
+    for (const r of rows) {
+      if (r.heading != null) {
+        ws.addRow([r.heading]); // heading text in column A; Code column empty
+        continue;
+      }
+      ws.addRow(["", r.code ?? "", r.name ?? "", r.kategorie ?? "", r.unter ?? "", r.einheit ?? "", r.price ?? null]);
+    }
+  }
+  return (await wb.xlsx.writeBuffer()) as unknown as Buffer;
+}
+
+async function seedItem(over: Record<string, unknown>): Promise<string> {
+  const ref = getFirestore().collection("catalog").doc();
+  await ref.set({
+    code: "0",
+    name: "x",
+    workshops: ["holz"],
+    category: ["Massivholz"],
+    active: true,
+    userCanAdd: true,
+    variants: [{ id: "default", pricingModel: "area", unitPrice: { default: 1 } }],
+    ...over,
+  });
+  return ref.id;
+}
+
+describe("catalog import (Integration)", () => {
+  before(async function () {
+    this.timeout(10000);
+    await setupEmulator();
+  });
+  after(async () => {
+    await teardownEmulator();
+  });
+  beforeEach(async () => {
+    await clearFirestore();
+  });
+
+  it("parses all four sheets, skipping headings / blank-code / zero-price rows", async () => {
+    const buffer = await buildFixture({
+      "Holz BL": [
+        { heading: "Massivholz" },
+        { code: "3001", name: "Ahorn 24 mm", kategorie: "Massivholz", unter: "Ahorn", einheit: "m²", price: 57.6 },
+        { name: "no code, skipped", einheit: "m²", price: 9 },
+        { code: "3002", name: "Zero price, skipped", kategorie: "Massivholz", einheit: "m²", price: 0 },
+      ],
+      "Metall BL": [
+        { code: "2001", name: "Flachstahl 15×2", kategorie: "Flachstahl", einheit: "lm", price: 1.95 },
+      ],
+      "Keramik BL": [
+        { code: "4204", name: "B128, fein", kategorie: "Tone", einheit: "kg", price: 3.25 },
+      ],
+      "Textil BL": [
+        { code: "7001", name: "Siebdrucksieb A4+", kategorie: "Siebdruck", einheit: "Stk", price: 28.7 },
+      ],
+    });
+
+    const preview = await previewCatalogImport(buffer);
+    expect(preview.summary.create).to.equal(4); // one per sheet
+    expect(preview.summary.errors).to.equal(1); // the zero-price row (no-code is silently skipped)
+    expect(preview.diff.find((d) => d.code === "3001")?.entry?.workshops).to.deep.equal(["holz"]);
+    expect(preview.diff.find((d) => d.code === "2001")?.entry?.pricingModel).to.equal("length");
+  });
+
+  it("classifies create / update / unchanged / retire against the live catalog", async () => {
+    const unchangedId = await seedItem({ code: "3001", name: "Ahorn 24 mm", category: ["Massivholz", "Ahorn"], variants: [{ id: "default", pricingModel: "area", unitPrice: { default: 57.6 } }] });
+    const changedId = await seedItem({ code: "3002", name: "Arve 24 mm", category: ["Massivholz", "Arve"], variants: [{ id: "default", pricingModel: "area", unitPrice: { default: 80 } }] });
+    const retireId = await seedItem({ code: "3099", name: "Discontinued", category: ["Massivholz"] });
+
+    const buffer = await buildFixture({
+      "Holz BL": [
+        { code: "3001", name: "Ahorn 24 mm", kategorie: "Massivholz", unter: "Ahorn", einheit: "m²", price: 57.6 },
+        { code: "3002", name: "Arve 24 mm", kategorie: "Massivholz", unter: "Arve", einheit: "m²", price: 84.5 },
+        { code: "3003", name: "Eiche 24 mm", kategorie: "Massivholz", unter: "Eiche", einheit: "m²", price: 60 },
+      ],
+    });
+
+    const preview = await previewCatalogImport(buffer);
+    expect(preview.diff.find((d) => d.id === unchangedId)?.kind).to.equal("unchanged");
+    const upd = preview.diff.find((d) => d.id === changedId);
+    expect(upd?.kind).to.equal("update");
+    expect(upd?.changes).to.deep.include({ field: "price", from: 80, to: 84.5 });
+    expect(preview.diff.find((d) => d.code === "3003")?.kind).to.equal("create");
+    expect(preview.diff.find((d) => d.id === retireId)?.kind).to.equal("retire");
+  });
+
+  it("applies creates + updates, preserving member price; gates retirement behind the flag", async () => {
+    const memberId = await seedItem({
+      code: "3002",
+      name: "Arve 24 mm",
+      variants: [{ id: "default", pricingModel: "area", unitPrice: { default: 80, member: 70 } }],
+    });
+    const retireId = await seedItem({ code: "3099", name: "Discontinued" });
+
+    const buffer = await buildFixture({
+      "Holz BL": [
+        { code: "3002", name: "Arve 24 mm", kategorie: "Massivholz", unter: "Arve", einheit: "m²", price: 84.5 },
+        { code: "3003", name: "Eiche 24 mm", kategorie: "Massivholz", unter: "Eiche", einheit: "m²", price: 60 },
+      ],
+    });
+
+    // First apply WITHOUT retire — the discontinued item stays active.
+    const r1 = await applyCatalogImport(buffer, false, ADMIN_UID);
+    expect(r1.created).to.equal(1);
+    expect(r1.updated).to.equal(1);
+    expect(r1.retired).to.equal(0);
+
+    const db = getFirestore();
+    const member = (await db.collection("catalog").doc(memberId).get()).data();
+    expect(member?.variants[0].unitPrice.default).to.equal(84.5);
+    expect(member?.variants[0].unitPrice.member).to.equal(70); // preserved
+    expect(member?.modifiedBy).to.equal(ADMIN_UID);
+
+    const created = (await db.collection("catalog").where("code", "==", "3003").get()).docs[0]?.data();
+    expect(created?.name).to.equal("Eiche 24 mm");
+    expect(created?.active).to.be.true;
+
+    expect((await db.collection("catalog").doc(retireId).get()).data()?.active).to.be.true;
+
+    // Re-apply WITH retire — now the discontinued item is deactivated.
+    const r2 = await applyCatalogImport(buffer, true, ADMIN_UID);
+    expect(r2.retired).to.equal(1);
+    expect((await db.collection("catalog").doc(retireId).get()).data()?.active).to.be.false;
+  });
+
+  it("hints to recalculate when most rows have no cached price", async () => {
+    const buffer = await buildFixture({
+      "Holz BL": [
+        { code: "3001", name: "Ahorn 24 mm", kategorie: "Massivholz", einheit: "m²", price: null },
+        { code: "3002", name: "Arve 24 mm", kategorie: "Massivholz", einheit: "m²", price: null },
+      ],
+    });
+    const preview = await previewCatalogImport(buffer);
+    expect(preview.hints[0]).to.match(/Excel/);
+    expect(preview.summary.create).to.equal(0);
+  });
+
+  it("reports missing / unconfigured sheets without throwing", async () => {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Holz BL");
+    ws.addRow(["Anzahl", "Format", "Produkt"]); // no Code column → unconfigured
+    const buffer = (await wb.xlsx.writeBuffer()) as unknown as Buffer;
+
+    const preview = await previewCatalogImport(buffer);
+    expect(preview.unconfiguredSheets).to.include("Holz BL");
+    expect(preview.missingSheets).to.include.members(["Metall BL", "Keramik BL", "Textil BL"]);
+    expect(preview.summary.create).to.equal(0);
+  });
+});
