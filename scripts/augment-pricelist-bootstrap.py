@@ -108,6 +108,11 @@ def parse_holz(ws):
             continue
         staerke = fmt_staerke(ws.cell(r, STAERKE).value)
         name = f"{cur_product} {staerke}" if staerke else cur_product
+        # Schleifmittel repeats the same grit ("Korn 60") under several
+        # sub-headings (Excenter / Rutscher / …) — those are *different*
+        # products, so fold the sub-heading into the name to keep it unique.
+        if top == "Schleifmittel" and sub:
+            name = f"{sub} {name}"
         # Massivholz: species (the product) is the sub-category, matching the
         # existing catalog's ["Massivholz", "<species>"] grouping.
         unter = cur_product if top == "Massivholz" else (sub or "")
@@ -191,15 +196,16 @@ def assign_codes(rows, sheet):
     global holz_max
     if sheet == "Holz BL":
         nxt = holz_max + 1
+        used = set()  # guard against assigning the same code to two rows
         matched = new = 0
         for row in rows:
             code = holz_by_name.get(norm(row["name"]))
-            if code:
+            if code and code not in used:
                 matched += 1
             else:
                 code = str(nxt); nxt += 1; new += 1
                 row["note"] = (row["note"] + " · NEU (kein Match im Katalog)").strip(" ·")
-            row["code"] = code
+            row["code"] = code; used.add(code)
         report_lines.append(f"**Holz**: {len(rows)} Zeilen — {matched} mit bestehendem Code, {new} neu ({holz_max+1}–{nxt-1}).")
     elif sheet == "Keramik BL":
         # match clay by product token appearing in existing catalog name
