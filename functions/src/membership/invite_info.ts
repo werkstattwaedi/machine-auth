@@ -47,6 +47,7 @@ export interface GetFamilyInviteInfoResult {
   status: FamilyInviteStatus;
   email: string | null;
   inviterName: string;
+  inviterEmail: string | null;
   accountExists: boolean;
 }
 
@@ -71,16 +72,19 @@ export async function handleGetFamilyInviteInfo(
   // A missing or non-family membership is indistinguishable from a stale link
   // to the invitee — return the neutral "not_found" rather than leaking which.
   if (!memSnap.exists || (memSnap.data() as MembershipEntity).type !== "family") {
-    return { status: "not_found", email: null, inviterName: "Jemand", accountExists: false };
+    return { status: "not_found", email: null, inviterName: "Jemand", inviterEmail: null, accountExists: false };
   }
 
   const inviteSnap = await memRef.collection("invites").doc(inviteId).get();
   if (!inviteSnap.exists) {
-    return { status: "not_found", email: null, inviterName: "Jemand", accountExists: false };
+    return { status: "not_found", email: null, inviterName: "Jemand", inviterEmail: null, accountExists: false };
   }
   const invite = inviteSnap.data() as MembershipInviteEntity;
 
   const inviterName = await resolveInviterName(invite.invitedBy);
+  // Inviter email for the "Du wurdest von X (email) eingeladen" copy. Best-effort.
+  const inviterEmail =
+    ((await invite.invitedBy.get()).data()?.email as string | undefined) ?? null;
 
   // Pending invites past their TTL are functionally expired even if the TTL
   // reaper hasn't deleted them yet.
@@ -103,7 +107,7 @@ export async function handleGetFamilyInviteInfo(
   const accountExists =
     !userSnap.empty && userSnap.docs[0].get("termsAcceptedAt") != null;
 
-  return { status, email: invite.email, inviterName, accountExists };
+  return { status, email: invite.email, inviterName, inviterEmail, accountExists };
 }
 
 export const getFamilyInviteInfoHandler = async (

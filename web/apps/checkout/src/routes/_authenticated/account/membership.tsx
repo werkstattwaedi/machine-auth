@@ -18,6 +18,7 @@ import {
 import { rpcCallable } from "@modules/lib/rpc"
 import { where } from "firebase/firestore"
 import * as React from "react"
+import { z } from "zod"
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router"
 
 import { useAuth } from "@modules/lib/auth"
@@ -48,7 +49,18 @@ import { Skeleton } from "@modules/components/ui/skeleton"
 import { Label } from "@modules/components/ui/label"
 import { PageLoading } from "@modules/components/page-loading"
 
+/**
+ * `?invite=<membershipId>~<inviteId>` is set only when an invite link is opened
+ * while signed in as a *different* account than the invited address — the page
+ * then shows the wrong-account notice. (Firestore auto-IDs are [A-Za-z0-9], so
+ * the `~` separator never collides.)
+ */
+const membershipSearchSchema = z.object({
+  invite: z.string().optional(),
+})
+
 export const Route = createFileRoute("/_authenticated/account/membership")({
+  validateSearch: membershipSearchSchema,
   component: MembershipPage,
 })
 
@@ -190,6 +202,7 @@ function MembershipPage() {
         Mitgliedschaft
       </h1>
 
+      <WrongAccountInviteNotice />
       <PendingInvitesBanner />
 
       {pendingMembershipType ? (
@@ -243,6 +256,82 @@ function MembershipPage() {
         />
       )}
     </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Wrong-account notice — invite link opened by a different account   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Shown when an invite link is opened while signed in as a different account
+ * than the invited address (the invite page redirects here with `?invite=`).
+ * Offers a sign-out-and-retry escape. The `invite` param is only ever set on a
+ * genuine mismatch, so we render the notice whenever it resolves to a pending
+ * invite for a foreign email.
+ */
+function WrongAccountInviteNotice() {
+  const functions = useFunctions()
+  const { signOut } = useAuth()
+  const navigate = useNavigate()
+  const { invite } = Route.useSearch()
+  const [membershipId, inviteId] = (invite ?? "").split("~")
+
+  const [email, setEmail] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    if (!membershipId || !inviteId) {
+      setEmail(null)
+      return
+    }
+    let cancelled = false
+    const fn = rpcCallable<
+      { membershipId: string; inviteId: string },
+      { status: string; email: string | null }
+    >(functions, "membershipCall", "getFamilyInviteInfo")
+    fn({ membershipId, inviteId })
+      .then(({ data }) => {
+        if (!cancelled) setEmail(data.status === "pending" ? data.email : null)
+      })
+      .catch(() => {
+        if (!cancelled) setEmail(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [functions, membershipId, inviteId])
+
+  if (!email) return null
+
+  const handleSwitch = async () => {
+    await signOut()
+    navigate({
+      to: "/account/invite/$membershipId/$inviteId",
+      params: { membershipId, inviteId },
+    })
+  }
+
+  return (
+    <Card className="border-destructive">
+      <CardContent className="pt-6">
+        <div className="flex items-center gap-2">
+          <Badge variant="destructive">
+            <AlertTriangle />
+            Falsches Konto
+          </Badge>
+        </div>
+        <p className="mt-3 text-sm">
+          Diese Einladung ist für <strong>{email}</strong>, nicht für dein
+          aktuelles Konto. Melde dich mit der eingeladenen Adresse an, um
+          beizutreten.
+        </p>
+        <div className="mt-4">
+          <Button variant="destructive" onClick={handleSwitch}>
+            Abmelden &amp; Einladung annehmen
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 

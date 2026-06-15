@@ -2,36 +2,45 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Family-invite acceptance landing — reachable WITHOUT an account.
+ * Family-invite acceptance landing — reachable WITHOUT an account, styled to
+ * match the auth (login/signup) design.
  *
  * Route shape: /account/invite/$membershipId/$inviteId (public — NOT under the
- * `_authenticated` layout, so a brand-new invitee can land here directly from
- * the email link). Invite details are fetched via the `getFamilyInviteInfo`
- * callable because Firestore rules forbid an unauthenticated read of the invite
- * doc.
+ * `_authenticated` layout). Invite details come from the `getFamilyInviteInfo`
+ * callable because Firestore rules forbid an unauthenticated read of the invite.
  *
- * Three branches once the invite is `pending`:
- *  1. Signed in (real account) with the invited email → Accept / Reject.
- *  2. Not signed in, but a completed account exists for the email → send to
- *     normal login (the link must not pseudo-login an existing account).
- *  3. Not signed in, no account yet → a minimal sign-up (name + terms, no code:
- *     the link already proves email control). Creates the account, accepts the
- *     invite, and signs in via a custom token.
+ * Routing by auth state:
+ *  - Signed in (real), email matches invite → redirect to /account/membership
+ *    (the pending-invite banner handles accept/reject).
+ *  - Signed in, email mismatch → redirect to /account/membership?invite=… (the
+ *    membership page shows a wrong-account notice).
+ *  - Logged out, account exists for the invited email → inline login (code +
+ *    Google), then accept.
+ *  - Logged out, no account → inline sign-up (shared SignupFields, no code —
+ *    the link proves email control), then accept via custom token.
  */
 
 import * as React from "react"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { signInWithCustomToken } from "firebase/auth"
+import { Loader2 } from "lucide-react"
 import { useAuth } from "@modules/lib/auth"
 import { useFirebaseAuth, useFunctions } from "@modules/lib/firebase-context"
 import { rpcCallable } from "@modules/lib/rpc"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
-import { PageLoading } from "@modules/components/page-loading"
-import { Card, CardContent } from "@modules/components/ui/card"
+import {
+  SignupFields,
+  EMPTY_SIGNUP_VALUE,
+  validateSignupFields,
+  signupProfileFrom,
+  type SignupFieldsValue,
+  type SignupFieldsErrors,
+} from "@modules/components/auth"
+import { INPUT_OK } from "@modules/components/profile-form"
+import { GoogleIcon } from "@modules/components/icons/google"
 import { Button } from "@modules/components/ui/button"
-import { Input } from "@modules/components/ui/input"
 import { Label } from "@modules/components/ui/label"
-import { Checkbox } from "@modules/components/ui/checkbox"
+import { PageLoading } from "@modules/components/page-loading"
 
 export const Route = createFileRoute("/account/invite/$membershipId/$inviteId")({
   component: InviteAcceptPage,
@@ -49,13 +58,17 @@ interface InviteInfo {
   status: FamilyInviteStatus
   email: string | null
   inviterName: string
+  inviterEmail: string | null
   accountExists: boolean
+}
+
+function sameEmail(a: string | null | undefined, b: string | null | undefined) {
+  return !!a && !!b && a.toLowerCase() === b.toLowerCase()
 }
 
 function InviteAcceptPage() {
   const { membershipId, inviteId } = Route.useParams()
   const functions = useFunctions()
-  const firebaseAuth = useFirebaseAuth()
   const { user, userDoc, sessionKind, loading, userDocLoading } = useAuth()
   const navigate = useNavigate()
 
@@ -78,6 +91,7 @@ function InviteAcceptPage() {
             status: "not_found",
             email: null,
             inviterName: "Jemand",
+            inviterEmail: null,
             accountExists: false,
           })
       })
@@ -90,324 +104,321 @@ function InviteAcceptPage() {
   }, [functions, membershipId, inviteId])
 
   const isReal = sessionKind === "real" && !!user
+  const ready = !loading && !userDocLoading && !infoLoading && !!info
 
-  if (loading || userDocLoading || infoLoading || !info) {
-    return <PageLoading />
+  // Signed-in users never accept here — they're routed to the membership page.
+  React.useEffect(() => {
+    if (!ready || !info || !isReal || info.status !== "pending") return
+    if (sameEmail(userDoc?.email, info.email)) {
+      navigate({ to: "/account/membership" })
+    } else {
+      navigate({
+        to: "/account/membership",
+        search: { invite: `${membershipId}~${inviteId}` },
+      })
+    }
+  }, [ready, info, isReal, userDoc?.email, navigate, membershipId, inviteId])
+
+  if (!ready || !info) return <PageLoading />
+
+  // Terminal states (also covers a signed-in user whose invite isn't pending).
+  if (info.status !== "pending") {
+    return (
+      <InviteShell title="Familieneinladung">
+        <p className="text-sm text-muted-foreground">
+          {info.status === "not_found"
+            ? "Einladung nicht gefunden oder bereits abgelaufen."
+            : info.status === "expired"
+              ? "Diese Einladung ist abgelaufen."
+              : info.status === "accepted"
+                ? "Diese Einladung wurde bereits angenommen."
+                : info.status === "rejected"
+                  ? "Diese Einladung wurde bereits abgelehnt."
+                  : "Diese Einladung wurde zurückgezogen."}
+        </p>
+      </InviteShell>
+    )
   }
 
-  return (
-    <Shell title="Familieneinladung">
-      {info.status === "not_found" ? (
-        <Terminal>Einladung nicht gefunden oder bereits abgelaufen.</Terminal>
-      ) : info.status === "expired" ? (
-        <Terminal>Diese Einladung ist abgelaufen.</Terminal>
-      ) : info.status !== "pending" ? (
-        <Terminal>
-          Diese Einladung wurde bereits{" "}
-          {info.status === "accepted"
-            ? "angenommen"
-            : info.status === "rejected"
-              ? "abgelehnt"
-              : "zurückgezogen"}
-          .
-        </Terminal>
-      ) : isReal ? (
-        <SignedInAccept
-          membershipId={membershipId}
-          inviteId={inviteId}
-          inviteEmail={info.email}
-          userEmail={userDoc?.email ?? null}
-          inviterName={info.inviterName}
-          onDone={() =>
-            navigate({ to: "/account/membership" as never } as never)
-          }
-        />
-      ) : info.accountExists ? (
-        <ExistingAccountLogin
-          inviterName={info.inviterName}
-          email={info.email}
-          onLogin={() =>
-            navigate({
-              to: "/login",
-              search: {
-                redirect: `/account/invite/${membershipId}/${inviteId}`,
-              },
-            })
-          }
-        />
-      ) : (
-        <NewAccountSignup
-          membershipId={membershipId}
-          inviteId={inviteId}
-          email={info.email}
-          inviterName={info.inviterName}
-          onSignedIn={async (customToken) => {
-            await signInWithCustomToken(firebaseAuth, customToken)
-            navigate({ to: "/account/membership" as never } as never)
-          }}
-        />
-      )}
-    </Shell>
+  if (isReal) return <PageLoading /> // redirecting to /account/membership
+
+  return info.accountExists ? (
+    <InviteLogin
+      membershipId={membershipId}
+      inviteId={inviteId}
+      info={info}
+    />
+  ) : (
+    <InviteSignup
+      membershipId={membershipId}
+      inviteId={inviteId}
+      info={info}
+    />
   )
 }
 
 /* ------------------------------------------------------------------ */
-/* Branch: signed-in real account — accept or reject                  */
+/* Logged out, no account → inline sign-up (shared SignupFields)       */
 /* ------------------------------------------------------------------ */
 
-function SignedInAccept({
+function InviteSignup({
   membershipId,
   inviteId,
-  inviteEmail,
-  userEmail,
-  inviterName,
-  onDone,
+  info,
 }: {
   membershipId: string
   inviteId: string
-  inviteEmail: string | null
-  userEmail: string | null
-  inviterName: string
-  onDone: () => void
+  info: InviteInfo
 }) {
   const functions = useFunctions()
-  const acceptMutation = useAsyncMutation({
-    context: "checkout.acceptFamilyInvite",
-    successMessage: "Du gehörst jetzt zur Familie!",
-    errorMessage: "Einladung konnte nicht angenommen werden",
-  })
-  const rejectMutation = useAsyncMutation({
-    context: "checkout.rejectFamilyInvite",
-    successMessage: "Einladung abgelehnt",
-    errorMessage: "Einladung konnte nicht abgelehnt werden",
-  })
+  const firebaseAuth = useFirebaseAuth()
+  const navigate = useNavigate()
+  const [value, setValue] = React.useState<SignupFieldsValue>(EMPTY_SIGNUP_VALUE)
+  const [errors, setErrors] = React.useState<SignupFieldsErrors>({})
 
-  const wrongEmail =
-    !!userEmail &&
-    !!inviteEmail &&
-    userEmail.toLowerCase() !== inviteEmail.toLowerCase()
-  const busy = acceptMutation.loading || rejectMutation.loading
-
-  const handleAccept = () =>
-    acceptMutation.mutate(async () => {
-      const fn = rpcCallable(functions, "membershipCall", "acceptFamilyInvite")
-      await fn({ membershipId, inviteId })
-      onDone()
-    })
-  const handleReject = () =>
-    rejectMutation.mutate(async () => {
-      const fn = rpcCallable(functions, "membershipCall", "rejectFamilyInvite")
-      await fn({ membershipId, inviteId })
-      onDone()
-    })
-
-  return (
-    <div className="space-y-3">
-      <p>
-        Du wurdest zur <strong>Familie {inviterName}</strong> eingeladen{" "}
-        {inviteEmail && (
-          <>
-            (<span className="font-mono">{inviteEmail}</span>)
-          </>
-        )}
-        .
-      </p>
-      {wrongEmail && (
-        <p className="text-sm text-destructive">
-          Diese Einladung ist für eine andere E-Mail-Adresse als dein Login.
-          Bitte mit der eingeladenen Adresse anmelden.
-        </p>
-      )}
-      <div className="flex gap-2 pt-2">
-        <Button onClick={handleAccept} disabled={wrongEmail || busy}>
-          Annehmen
-        </Button>
-        <Button variant="outline" onClick={handleReject} disabled={busy}>
-          Ablehnen
-        </Button>
-      </div>
-    </div>
-  )
-}
-
-/* ------------------------------------------------------------------ */
-/* Branch: account exists — go log in                                 */
-/* ------------------------------------------------------------------ */
-
-function ExistingAccountLogin({
-  inviterName,
-  email,
-  onLogin,
-}: {
-  inviterName: string
-  email: string | null
-  onLogin: () => void
-}) {
-  return (
-    <div className="space-y-3">
-      <p>
-        Du wurdest zur <strong>Familie {inviterName}</strong> eingeladen.
-      </p>
-      <p className="text-sm text-muted-foreground">
-        Für {email ? <span className="font-mono">{email}</span> : "diese Adresse"}{" "}
-        existiert bereits ein Konto. Melde dich an, um die Einladung anzunehmen.
-      </p>
-      <Button onClick={onLogin}>Anmelden &amp; annehmen</Button>
-    </div>
-  )
-}
-
-/* ------------------------------------------------------------------ */
-/* Branch: no account — minimal sign-up (no code)                     */
-/* ------------------------------------------------------------------ */
-
-function NewAccountSignup({
-  membershipId,
-  inviteId,
-  email,
-  inviterName,
-  onSignedIn,
-}: {
-  membershipId: string
-  inviteId: string
-  email: string | null
-  inviterName: string
-  onSignedIn: (customToken: string) => Promise<void>
-}) {
-  const functions = useFunctions()
-  const [firstName, setFirstName] = React.useState("")
-  const [lastName, setLastName] = React.useState("")
-  const [termsAccepted, setTermsAccepted] = React.useState(false)
-
-  const joinMutation = useAsyncMutation({
+  const join = useAsyncMutation({
     context: "checkout.acceptFamilyInviteNewAccount",
     successMessage: "Willkommen in der Familie!",
     errorMessage: "Konto konnte nicht erstellt werden",
   })
 
-  const canSubmit =
-    !!firstName.trim() && !!lastName.trim() && termsAccepted && !joinMutation.loading
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!canSubmit) return
-    joinMutation.mutate(async () => {
+    const errs = validateSignupFields(value, { requireCode: false })
+    setErrors(errs)
+    if (Object.keys(errs).length > 0) return
+    const profile = signupProfileFrom(value)
+    join.mutate(async () => {
       const fn = rpcCallable<
-        {
-          membershipId: string
-          inviteId: string
-          firstName: string
-          lastName: string
-          termsAccepted: boolean
-        },
+        Record<string, unknown>,
         { customToken: string }
       >(functions, "membershipCall", "acceptFamilyInviteNewAccount")
       const { data } = await fn({
         membershipId,
         inviteId,
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        termsAccepted,
+        firstName: profile.firstName,
+        lastName: profile.lastName,
+        userType: profile.userType,
+        termsAccepted: true,
+        billingAddress: profile.billingAddress ?? null,
       })
-      await onSignedIn(data.customToken)
+      await signInWithCustomToken(firebaseAuth, data.customToken)
+      navigate({ to: "/account/membership" })
     })
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <p>
-        Du wurdest zur <strong>Familie {inviterName}</strong> eingeladen
-        {email && (
-          <>
-            {" "}
-            (<span className="font-mono">{email}</span>)
-          </>
-        )}
-        . Erstelle dein Konto, um beizutreten.
-      </p>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div>
-          <Label htmlFor="invite-first" className="text-sm font-bold">
-            Vorname <span className="text-destructive">*</span>
-          </Label>
-          <Input
-            id="invite-first"
-            autoFocus
-            value={firstName}
-            onChange={(e) => setFirstName(e.target.value)}
-            className="mt-1"
-          />
-        </div>
-        <div>
-          <Label htmlFor="invite-last" className="text-sm font-bold">
-            Nachname <span className="text-destructive">*</span>
-          </Label>
-          <Input
-            id="invite-last"
-            value={lastName}
-            onChange={(e) => setLastName(e.target.value)}
-            className="mt-1"
-          />
-        </div>
-      </div>
-      <div className="flex items-start gap-3">
-        <Checkbox
-          id="invite-terms"
-          className="bg-white"
-          checked={termsAccepted}
-          onCheckedChange={(checked) => setTermsAccepted(checked === true)}
+    <InviteShell
+      title="Konto erstellen"
+      hint={
+        <>
+          Du wurdest von <strong>{info.inviterName}</strong>
+          {info.inviterEmail ? ` (${info.inviterEmail})` : ""} zur
+          Familienmitgliedschaft eingeladen. Damit profitierst du von
+          Vergünstigungen bei der Maschinenbenutzung. Erstelle dein Konto, um
+          beizutreten.
+        </>
+      }
+    >
+      <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+        <SignupFields
+          value={value}
+          errors={errors}
+          onChange={(patch) => setValue((v) => ({ ...v, ...patch }))}
+          showCode={false}
+          email={info.email ?? undefined}
         />
-        <label htmlFor="invite-terms" className="text-sm leading-snug">
-          Ich akzeptiere die{" "}
-          <a
-            href="https://werkstattwaedi.ch/nutzungsbestimmungen"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-bold text-cog-teal underline"
-          >
-            Nutzungsbestimmungen
-          </a>
-        </label>
-      </div>
-      <Button type="submit" disabled={!canSubmit}>
-        Konto erstellen &amp; beitreten
-      </Button>
-    </form>
+        <Button
+          type="submit"
+          className="w-full h-11 text-[15px] bg-cog-teal hover:bg-cog-teal-dark text-white font-semibold"
+          disabled={join.loading}
+        >
+          {join.loading && <Loader2 className="h-4 w-4 animate-spin" />}
+          Konto erstellen &amp; beitreten
+        </Button>
+      </form>
+    </InviteShell>
   )
 }
 
 /* ------------------------------------------------------------------ */
-/* Layout helpers                                                     */
+/* Logged out, account exists → inline login (code + Google)           */
 /* ------------------------------------------------------------------ */
 
-function Shell({
+function InviteLogin({
+  membershipId,
+  inviteId,
+  info,
+}: {
+  membershipId: string
+  inviteId: string
+  info: InviteInfo
+}) {
+  const functions = useFunctions()
+  const { requestLoginEmail, verifyLoginCode, signInWithGoogle } = useAuth()
+  const navigate = useNavigate()
+  const email = info.email ?? ""
+  const [code, setCode] = React.useState("")
+  const sentRef = React.useRef(false)
+
+  // Send the code once on mount. Best-effort — the user can resend.
+  React.useEffect(() => {
+    if (sentRef.current || !email) return
+    sentRef.current = true
+    requestLoginEmail(email).catch(() => undefined)
+  }, [email, requestLoginEmail])
+
+  const accept = async () => {
+    const fn = rpcCallable(functions, "membershipCall", "acceptFamilyInvite")
+    await fn({ membershipId, inviteId })
+    navigate({ to: "/account/membership" })
+  }
+
+  const codeLogin = useAsyncMutation({
+    context: "checkout.inviteCodeLogin",
+    errorMessage: "Anmeldung fehlgeschlagen",
+  })
+  const googleLogin = useAsyncMutation({
+    context: "checkout.inviteGoogleLogin",
+    errorMessage: "Google-Anmeldung fehlgeschlagen",
+  })
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (code.length !== 6) return
+    codeLogin.mutate(async () => {
+      await verifyLoginCode(email, code)
+      await accept()
+    })
+  }
+  const handleGoogle = () =>
+    googleLogin.mutate(async () => {
+      await signInWithGoogle()
+      await accept()
+    })
+
+  const busy = codeLogin.loading || googleLogin.loading
+
+  return (
+    <InviteShell
+      title="Anmelden"
+      hint={
+        <>
+          Du wurdest von <strong>{info.inviterName}</strong> zur
+          Familienmitgliedschaft eingeladen. Melde dich an, um beizutreten.
+        </>
+      }
+    >
+      <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="invite-email" className="text-sm font-bold">
+            E-Mail
+          </Label>
+          <input
+            id="invite-email"
+            value={email}
+            readOnly
+            tabIndex={-1}
+            className={`${INPUT_OK} bg-muted/50 text-muted-foreground focus:border-[#ccc] focus:ring-0`}
+          />
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="invite-login-code" className="text-sm font-bold">
+            Bestätigungscode <span className="text-destructive -ml-1">*</span>
+          </Label>
+          <p className="text-xs text-muted-foreground">
+            Wir haben dir einen 6-stelligen Code an diese Adresse geschickt.{" "}
+            <button
+              type="button"
+              onClick={() => requestLoginEmail(email).catch(() => undefined)}
+              className="font-medium text-cog-teal-dark underline hover:no-underline"
+            >
+              Code erneut senden
+            </button>
+          </p>
+          <input
+            id="invite-login-code"
+            type="text"
+            inputMode="numeric"
+            pattern="\d{6}"
+            maxLength={6}
+            autoFocus
+            autoComplete="one-time-code"
+            placeholder="123456"
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+            className={`${INPUT_OK} text-center !text-xl tracking-[0.3em]`}
+            aria-label="6-stelliger Code"
+          />
+        </div>
+
+        <Button
+          type="submit"
+          className="w-full h-11 text-[15px] bg-cog-teal hover:bg-cog-teal-dark text-white font-semibold"
+          disabled={code.length !== 6 || busy}
+        >
+          {codeLogin.loading && <Loader2 className="h-4 w-4 animate-spin" />}
+          Anmelden &amp; annehmen
+        </Button>
+
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <span className="flex-1 border-t border-border" />
+          oder
+          <span className="flex-1 border-t border-border" />
+        </div>
+
+        <Button
+          type="button"
+          onClick={handleGoogle}
+          disabled={busy}
+          className="w-full h-11 text-[15px] bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 font-semibold shadow-xs"
+        >
+          {googleLogin.loading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <GoogleIcon className="h-4 w-4" />
+          )}
+          Mit Google anmelden
+        </Button>
+      </form>
+    </InviteShell>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Shared auth-styled shell (mirrors LoginPage's header + 440 column)  */
+/* ------------------------------------------------------------------ */
+
+function InviteShell({
   title,
+  hint,
   children,
 }: {
   title: string
+  hint?: React.ReactNode
   children: React.ReactNode
 }) {
   return (
-    <div className="min-h-screen flex flex-col items-center bg-background">
-      <header className="w-full px-4 sm:px-6 pt-6 pb-2">
-        <div className="w-full max-w-lg mx-auto">
+    <div className="min-h-screen bg-background">
+      <header className="w-full bg-background border-b border-border">
+        <div className="w-full max-w-[440px] mx-auto px-6 py-3 flex items-center gap-4">
           <img
             src="/logo_oww.png"
             alt="Offene Werkstatt Wädenswil"
-            className="h-14"
+            className="h-12 shrink-0"
           />
         </div>
       </header>
-      <main className="w-full max-w-lg px-4 sm:px-6 py-4">
-        <h1 className="mb-4 font-heading text-2xl font-bold">{title}</h1>
-        <Card>
-          <CardContent className="pt-6">{children}</CardContent>
-        </Card>
-      </main>
+      <div className="max-w-[440px] mx-auto px-6 pt-10 pb-16">
+        <h1 className="font-heading font-bold text-[28px] leading-tight mb-2">
+          {title}
+        </h1>
+        {hint && (
+          <p className="text-sm text-muted-foreground leading-snug">{hint}</p>
+        )}
+        <div className="w-full mt-8">{children}</div>
+      </div>
     </div>
   )
-}
-
-function Terminal({ children }: { children: React.ReactNode }) {
-  return <p className="text-sm text-muted-foreground">{children}</p>
 }

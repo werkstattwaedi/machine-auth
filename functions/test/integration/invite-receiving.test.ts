@@ -112,6 +112,7 @@ describe("Family invite receiving (Integration)", () => {
       expect(info.email).to.equal("newcomer@example.com");
       expect(info.accountExists).to.equal(false);
       expect(info.inviterName).to.equal("Anna Müller");
+      expect(info.inviterEmail).to.equal("owner@example.com");
     });
 
     it("reports accountExists=true when a completed account exists", async () => {
@@ -185,6 +186,7 @@ describe("Family invite receiving (Integration)", () => {
           inviteId,
           firstName: "Neu",
           lastName: "Mitglied",
+          userType: "erwachsen",
           termsAccepted: true,
         },
         ORIGIN,
@@ -232,6 +234,7 @@ describe("Family invite receiving (Integration)", () => {
               inviteId,
               firstName: "No",
               lastName: "Terms",
+              userType: "erwachsen",
               termsAccepted: false,
             },
             ORIGIN,
@@ -250,6 +253,7 @@ describe("Family invite receiving (Integration)", () => {
               inviteId,
               firstName: "",
               lastName: "",
+              userType: "erwachsen",
               termsAccepted: true,
             },
             ORIGIN,
@@ -277,11 +281,81 @@ describe("Family invite receiving (Integration)", () => {
               inviteId,
               firstName: "Has",
               lastName: "Account",
+              userType: "erwachsen",
               termsAccepted: true,
             },
             ORIGIN,
           ),
         "already-exists",
+      );
+    });
+
+    it("persists userType kind", async () => {
+      const { membershipId, inviteId } = await seed("kid@example.com");
+      await handleAcceptInviteNewAccount(
+        {
+          membershipId,
+          inviteId,
+          firstName: "Klein",
+          lastName: "Kind",
+          userType: "kind",
+          termsAccepted: true,
+        },
+        ORIGIN,
+      );
+      const userSnap = await getFirestore()
+        .collection("users")
+        .where("email", "==", "kid@example.com")
+        .limit(1)
+        .get();
+      expect(userSnap.docs[0].get("userType")).to.equal("kind");
+    });
+
+    it("persists a firma with billing address", async () => {
+      const { membershipId, inviteId } = await seed("firma@example.com");
+      await handleAcceptInviteNewAccount(
+        {
+          membershipId,
+          inviteId,
+          firstName: "Firmen",
+          lastName: "Chef",
+          userType: "firma",
+          termsAccepted: true,
+          billingAddress: {
+            company: "ACME AG",
+            street: "Bahnhofstr. 1",
+            zip: "8820",
+            city: "Wädenswil",
+          },
+        },
+        ORIGIN,
+      );
+      const userSnap = await getFirestore()
+        .collection("users")
+        .where("email", "==", "firma@example.com")
+        .limit(1)
+        .get();
+      const data = userSnap.docs[0].data();
+      expect(data.userType).to.equal("firma");
+      expect(data.billingAddress?.company).to.equal("ACME AG");
+    });
+
+    it("rejects a firma without a complete address", async () => {
+      const { membershipId, inviteId } = await seed("firma2@example.com");
+      await expectHttpsError(
+        () =>
+          handleAcceptInviteNewAccount(
+            {
+              membershipId,
+              inviteId,
+              firstName: "Firmen",
+              lastName: "Chef",
+              userType: "firma",
+              termsAccepted: true,
+            },
+            ORIGIN,
+          ),
+        "invalid-argument",
       );
     });
 
@@ -297,6 +371,7 @@ describe("Family invite receiving (Integration)", () => {
               inviteId,
               firstName: "A",
               lastName: "B",
+              userType: "erwachsen",
               termsAccepted: true,
             },
             ORIGIN,
@@ -315,6 +390,7 @@ describe("Family invite receiving (Integration)", () => {
               inviteId,
               firstName: "A",
               lastName: "B",
+              userType: "erwachsen",
               termsAccepted: true,
             },
             "https://evil.example.com",

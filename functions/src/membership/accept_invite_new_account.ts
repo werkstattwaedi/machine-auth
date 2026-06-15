@@ -26,6 +26,7 @@ import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import type {
+  BillingAddress,
   MembershipInviteEntity,
   UserEntity,
 } from "../types/firestore_entities";
@@ -37,12 +38,36 @@ import {
 } from "./shared";
 import { isAllowedOrigin } from "../auth/login-code/helpers";
 
+type SignupUserType = "erwachsen" | "kind" | "firma";
+
 export interface AcceptInviteNewAccountRequest {
   membershipId: string;
   inviteId: string;
   firstName: string;
   lastName: string;
+  userType: SignupUserType;
   termsAccepted: boolean;
+  /** Required (complete) when userType === "firma"; ignored otherwise. */
+  billingAddress?: BillingAddress | null;
+}
+
+function normalizeBillingAddress(
+  userType: SignupUserType,
+  raw: BillingAddress | null | undefined,
+): BillingAddress | null {
+  if (userType !== "firma") return null;
+  const a = raw ?? ({} as Partial<BillingAddress>);
+  const company = (a.company ?? "").trim();
+  const street = (a.street ?? "").trim();
+  const zip = (a.zip ?? "").trim();
+  const city = (a.city ?? "").trim();
+  if (!company || !street || !zip || !city) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Firma requires a complete billing address",
+    );
+  }
+  return { company, street, zip, city };
 }
 
 export interface AcceptInviteNewAccountResult {
@@ -53,7 +78,7 @@ export async function handleAcceptInviteNewAccount(
   input: AcceptInviteNewAccountRequest,
   requestOrigin: string | undefined | null,
 ): Promise<AcceptInviteNewAccountResult> {
-  const { membershipId, inviteId, firstName, lastName, termsAccepted } =
+  const { membershipId, inviteId, firstName, lastName, userType, termsAccepted } =
     input ?? ({} as AcceptInviteNewAccountRequest);
   if (!membershipId || !inviteId) {
     throw new HttpsError(
@@ -67,6 +92,16 @@ export async function handleAcceptInviteNewAccount(
       "firstName and lastName are required",
     );
   }
+  if (
+    userType !== "erwachsen" &&
+    userType !== "kind" &&
+    userType !== "firma"
+  ) {
+    throw new HttpsError(
+      "invalid-argument",
+      "userType must be 'erwachsen', 'kind' or 'firma'",
+    );
+  }
   if (termsAccepted !== true) {
     throw new HttpsError(
       "failed-precondition",
@@ -76,6 +111,7 @@ export async function handleAcceptInviteNewAccount(
   if (!isAllowedOrigin(requestOrigin)) {
     throw new HttpsError("failed-precondition", "unknown request origin");
   }
+  const billingAddress = normalizeBillingAddress(userType, input.billingAddress);
 
   const database = db();
   const memRef = membershipRef(database, membershipId);
@@ -177,9 +213,9 @@ export async function handleAcceptInviteNewAccount(
           email,
           firstName: firstName.trim(),
           lastName: lastName.trim(),
-          userType: "erwachsen",
+          userType,
           termsAcceptedAt: now,
-          billingAddress: null,
+          billingAddress,
           activeMembership: memRef,
           // New doc gets the full scaffold; an existing (incomplete) doc keeps
           // its created/roles/permissions/phone.
