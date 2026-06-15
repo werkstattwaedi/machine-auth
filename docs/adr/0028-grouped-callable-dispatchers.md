@@ -49,7 +49,7 @@ functions, one per domain:
 | Dispatcher | Methods |
 |---|---|
 | `authCall` | createUser, requestLoginCode, verifyLoginCode, verifyMagicLink, resolveTag, verifyTagCheckout |
-| `membershipCall` | purchase/invite/inviteInfo/accept/acceptNewAccount/reject/revoke/remove/createManagedMember/cancel/cancelAutoRenew + the two admin ops |
+| `membershipCall` | purchase/invite/inviteInfo/listMyInvites/accept/acceptNewAccount/reject/revoke/remove(+self-leave)/createManagedMember/cancel/cancelAutoRenew + the two admin ops |
 | `billingCall` | getInvoiceDownloadUrl, getPaymentQrData, closeCheckoutAndGetPayment, acknowledgeBill |
 | `catalogCall` | upsertCatalogItem, getPriceListPdfUrl |
 

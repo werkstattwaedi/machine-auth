@@ -2,18 +2,18 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Callable: family owner removes a member from their family membership.
+ * Callable: remove a member from a family membership.
  *
- * The owner cannot remove themselves (use cancelMembership instead). The
- * onMembershipWritten trigger clears `activeMembership` on the removed
- * user.
+ * Authorized when the caller is the owner/admin (removing anyone) OR a member
+ * removing themselves ("Familie verlassen"). The owner cannot be removed this
+ * way — they use cancelMembership instead. The onMembershipWritten trigger
+ * clears `activeMembership` on the removed user.
  */
 
 import * as logger from "firebase-functions/logger";
 import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import { FieldValue } from "firebase-admin/firestore";
 import {
-  assertOwnerOrAdmin,
   callerUserRef,
   db,
   getMembershipInTx,
@@ -44,9 +44,17 @@ export const removeFamilyMemberHandler = async (request: CallableRequest<RemoveF
   const memRef = membershipRef(database, membershipId);
   const targetRef = database.collection("users").doc(userId);
 
+  const isSelfRemoval = callerRef.id === userId;
+
   await database.runTransaction(async (tx) => {
     const membership = await getMembershipInTx(tx, memRef);
-    assertOwnerOrAdmin(membership, callerRef, isAdmin);
+    // Owner/admin may remove anyone; a member may remove only themselves.
+    if (!isAdmin && membership.ownerUserId.id !== callerRef.id && !isSelfRemoval) {
+      throw new HttpsError(
+        "permission-denied",
+        "Only the owner, an admin, or the member themselves can remove a member",
+      );
+    }
 
     if (membership.type !== "family") {
       throw new HttpsError(

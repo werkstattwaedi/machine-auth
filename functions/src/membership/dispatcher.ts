@@ -14,6 +14,7 @@ import { purchaseMembershipHandler } from "./purchase";
 import { inviteFamilyMemberHandler } from "./invite";
 import { acceptFamilyInviteHandler } from "./accept_invite";
 import { getFamilyInviteInfoHandler } from "./invite_info";
+import { listMyFamilyInvitesHandler } from "./list_my_invites";
 import { acceptFamilyInviteNewAccountHandler } from "./accept_invite_new_account";
 import { rejectFamilyInviteHandler } from "./reject_invite";
 import { revokeFamilyInviteHandler } from "./revoke_invite";
@@ -30,6 +31,7 @@ const HANDLERS: Record<string, RpcHandler> = {
   purchaseMembership: purchaseMembershipHandler,
   inviteFamilyMember: inviteFamilyMemberHandler,
   getFamilyInviteInfo: getFamilyInviteInfoHandler,
+  listMyFamilyInvites: listMyFamilyInvitesHandler,
   acceptFamilyInvite: acceptFamilyInviteHandler,
   acceptFamilyInviteNewAccount: acceptFamilyInviteNewAccountHandler,
   rejectFamilyInvite: rejectFamilyInviteHandler,

@@ -46,6 +46,7 @@ export const RpcMethod = {
     "purchaseMembership",
     "inviteFamilyMember",
     "getFamilyInviteInfo",
+    "listMyFamilyInvites",
     "acceptFamilyInvite",
     "acceptFamilyInviteNewAccount",
     "rejectFamilyInvite",

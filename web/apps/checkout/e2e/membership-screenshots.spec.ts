@@ -4,6 +4,7 @@
 import { test, expect, type Page } from "@playwright/test"
 import {
   clearCollections,
+  seedFamilyInvite,
   seedMembershipState,
   waitForLoginCode,
 } from "./helpers"
@@ -109,17 +110,40 @@ test.describe("Membership page screenshots", () => {
     )
   })
 
-  test("active family — non-owner sees status only", async ({ page }) => {
+  test("active family — non-owner sees roster and can leave", async ({ page }) => {
     await signIn(page)
     const uid = process.env.E2E_AUTH_USER_UID!
     await seedMembershipState(uid, { kind: "active-family-member" })
     await gotoMembership(page)
-    await expect(page.getByText("Familie", { exact: true })).toBeVisible()
-    // No "Familie verwalten" or roster card for non-owners.
+    // Non-owners now see the roster card …
+    await expect(page.getByRole("heading", { name: "Familie" })).toBeVisible()
+    // … with a self-leave action, but no owner-only add control.
     await expect(
-      page.getByRole("heading", { name: "Familie" }),
+      page.getByRole("button", { name: "Verlassen" }),
+    ).toBeVisible()
+    await expect(
+      page.getByRole("button", { name: "Mitglied hinzufügen" }),
     ).toHaveCount(0)
     await expect(page).toHaveScreenshot("membership-active-family-member.png")
+  })
+
+  test("pending invite — shown on the membership page, can join", async ({
+    page,
+  }) => {
+    await signIn(page)
+    const uid = process.env.E2E_AUTH_USER_UID!
+    // No membership for the auth user; an invite is addressed to their email.
+    await seedMembershipState(uid, { kind: "none" })
+    await seedFamilyInvite(AUTH_USER_EMAIL)
+    await gotoMembership(page)
+    await expect(page.getByText(/Du wurdest zur/)).toBeVisible({
+      timeout: 10_000,
+    })
+    await page.getByRole("button", { name: "Beitreten" }).click()
+    // Joining lands them in an active family membership.
+    await expect(page.getByText("Aktiv", { exact: true })).toBeVisible({
+      timeout: 10_000,
+    })
   })
 
   test("expired — warn note + Erneuern", async ({ page }) => {

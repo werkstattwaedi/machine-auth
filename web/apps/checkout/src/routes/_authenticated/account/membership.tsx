@@ -189,6 +189,8 @@ function MembershipPage() {
         Mitgliedschaft
       </h1>
 
+      <PendingInvitesBanner />
+
       {pendingMembershipType ? (
         <PendingMembershipCheckout type={pendingMembershipType} />
       ) : !membership ? (
@@ -230,14 +232,124 @@ function MembershipPage() {
         </Note>
       )}
 
-      {membership && isActive && membership.type === "family" && isOwner && (
+      {membership && isActive && membership.type === "family" && (
         <FamilySection
           membershipId={membership.id}
           memberIds={membership.members.map((m) => m.id)}
           ownerId={membership.ownerUserId.id}
+          isOwner={isOwner}
+          currentUserId={userDoc?.id ?? ""}
         />
       )}
     </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Pending invites addressed to the signed-in user (join from here)   */
+/* ------------------------------------------------------------------ */
+
+interface PendingInviteCard {
+  membershipId: string
+  inviteId: string
+  inviterName: string
+}
+
+function PendingInvitesBanner() {
+  const functions = useFunctions()
+  const navigate = useNavigate()
+  const { userDoc } = useAuth()
+  const email = userDoc?.email ?? null
+
+  const [cards, setCards] = React.useState<PendingInviteCard[]>([])
+
+  React.useEffect(() => {
+    if (!email) {
+      setCards([])
+      return
+    }
+    let cancelled = false
+    const fn = rpcCallable<unknown, { invites: PendingInviteCard[] }>(
+      functions,
+      "membershipCall",
+      "listMyFamilyInvites",
+    )
+    fn({})
+      .then(({ data }) => {
+        if (!cancelled) setCards(data.invites)
+      })
+      .catch(() => {
+        if (!cancelled) setCards([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [functions, email])
+
+  const acceptMutation = useAsyncMutation({
+    context: "checkout.acceptFamilyInvite",
+    successMessage: "Du gehörst jetzt zur Familie!",
+    errorMessage: "Einladung konnte nicht angenommen werden",
+  })
+  const rejectMutation = useAsyncMutation({
+    context: "checkout.rejectFamilyInvite",
+    successMessage: "Einladung abgelehnt",
+    errorMessage: "Einladung konnte nicht abgelehnt werden",
+  })
+
+  const drop = (inviteId: string) =>
+    setCards((prev) => prev.filter((c) => c.inviteId !== inviteId))
+
+  const handleAccept = (card: PendingInviteCard) =>
+    acceptMutation.mutate(async () => {
+      const fn = rpcCallable(functions, "membershipCall", "acceptFamilyInvite")
+      await fn({ membershipId: card.membershipId, inviteId: card.inviteId })
+      drop(card.inviteId)
+      navigate({ to: "/account/membership" as never } as never)
+    })
+  const handleReject = (card: PendingInviteCard) =>
+    rejectMutation.mutate(async () => {
+      const fn = rpcCallable(functions, "membershipCall", "rejectFamilyInvite")
+      await fn({ membershipId: card.membershipId, inviteId: card.inviteId })
+      drop(card.inviteId)
+    })
+
+  if (cards.length === 0) return null
+  const busy = acceptMutation.loading || rejectMutation.loading
+
+  return (
+    <>
+      {cards.map((card) => (
+        <Card key={card.inviteId} className="border-cog-teal">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2">
+              <Badge variant="default">
+                <Users />
+                Einladung
+              </Badge>
+            </div>
+            <p className="mt-3 text-sm">
+              Du wurdest zur <strong>Familie {card.inviterName}</strong>{" "}
+              eingeladen. Tritt bei, um vergünstigte Preise zu erhalten.
+            </p>
+            <div className="mt-4 flex gap-2">
+              <Button onClick={() => handleAccept(card)} disabled={busy}>
+                <Check />
+                Beitreten
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => handleReject(card)}
+                disabled={busy}
+              >
+                <X />
+                Ablehnen
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+    </>
   )
 }
 
@@ -554,16 +666,22 @@ function FamilySection({
   membershipId,
   memberIds,
   ownerId,
+  isOwner,
+  currentUserId,
 }: {
   membershipId: string
   memberIds: string[]
   ownerId: string
+  isOwner: boolean
+  currentUserId: string
 }) {
   const db = useDb()
   const functions = useFunctions()
 
+  // Only the owner/admin may list the invites sub-collection (Firestore
+  // rules) — a non-owner member skips the subscription entirely.
   const { data: invites } = useCollection(
-    membershipInvitesCollection(db, membershipId),
+    isOwner ? membershipInvitesCollection(db, membershipId) : null,
   )
   const pending = invites.filter((i) => i.status === "pending")
 
@@ -634,6 +752,19 @@ function FamilySection({
     })
   }
 
+  const leaveMutation = useAsyncMutation({
+    context: "checkout.leaveFamily",
+    successMessage: "Du hast die Familie verlassen",
+    errorMessage: "Verlassen fehlgeschlagen",
+  })
+  const handleLeave = async () => {
+    if (!confirm("Familie verlassen? Du verlierst den Mitglieder-Tarif.")) return
+    await leaveMutation.mutate(async () => {
+      const fn = rpcCallable(functions, "membershipCall", "removeFamilyMember")
+      await fn({ membershipId, userId: currentUserId })
+    })
+  }
+
   const handleCreateNoLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!noLoginFirst.trim() || !noLoginLast.trim()) return
@@ -666,8 +797,24 @@ function FamilySection({
               key={uid}
               userId={uid}
               isOwner={uid === ownerId}
-              onRemove={uid === ownerId ? null : () => handleRemove(uid)}
-              removing={removeMutation.loading}
+              // Owner/admin removes any non-owner member; a non-owner member can
+              // only leave themselves ("Familie verlassen").
+              onRemove={
+                isOwner
+                  ? uid === ownerId
+                    ? null
+                    : () => handleRemove(uid)
+                  : uid === currentUserId
+                    ? handleLeave
+                    : null
+              }
+              removeLabel={!isOwner && uid === currentUserId ? "Verlassen" : "Entfernen"}
+              noLoginLabel={
+                isOwner
+                  ? "Kein Login · von dir verwaltet"
+                  : "Kein Login · von der Familie verwaltet"
+              }
+              removing={removeMutation.loading || leaveMutation.loading}
             />
           ))}
           {pending.map((inv) => (
@@ -700,6 +847,7 @@ function FamilySection({
           ))}
         </ul>
 
+        {isOwner && (
         <div className="mt-4 border-t pt-4">
           {addMode === "closed" && (
             <button
@@ -869,6 +1017,7 @@ function FamilySection({
             </form>
           )}
         </div>
+        )}
       </CardContent>
     </Card>
   )
@@ -931,11 +1080,16 @@ function MemberRow({
   userId,
   isOwner,
   onRemove,
+  removeLabel = "Entfernen",
+  noLoginLabel,
   removing,
 }: {
   userId: string
   isOwner: boolean
   onRemove: (() => void) | null
+  removeLabel?: string
+  /** Subtitle for a login-less member (managed phrasing differs by viewer). */
+  noLoginLabel: string
   removing: boolean
 }) {
   const db = useDb()
@@ -954,7 +1108,7 @@ function MemberRow({
       <div className="min-w-0">
         <div className="truncate text-sm font-semibold">{name}</div>
         <div className="text-xs text-muted-foreground">
-          {hasAccount ? user?.email : "Kein Login · von dir verwaltet"}
+          {hasAccount ? user?.email : noLoginLabel}
         </div>
       </div>
       <div className="flex flex-wrap gap-1.5">
@@ -978,7 +1132,7 @@ function MemberRow({
         {onRemove && (
           <Button variant="ghost" size="sm" onClick={onRemove} disabled={removing}>
             <X />
-            Entfernen
+            {removeLabel}
           </Button>
         )}
       </div>
