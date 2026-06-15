@@ -461,6 +461,76 @@ export async function seedOpenCheckoutWithMembership(
   }
 }
 
+const INVITE_OWNER_ID = "e2e-invite-owner-001"
+const INVITE_MEMBERSHIP_ID = "e2e-invite-membership-001"
+const INVITE_ID = "e2e-invite-doc-001"
+
+/**
+ * Seed a family membership owned by *another* user plus a pending invite for
+ * `inviteeEmail`. Used by the invite-acceptance (receiving end) specs, where
+ * the invitee is a different principal than the seeded AUTH user. When
+ * `inviteeHasAccount` is set, a completed user doc is seeded for the email so
+ * the page takes the "log in to accept" branch. Returns the link path params.
+ */
+export async function seedFamilyInvite(
+  inviteeEmail: string,
+  { inviteeHasAccount = false }: { inviteeHasAccount?: boolean } = {},
+): Promise<{ membershipId: string; inviteId: string }> {
+  const db = getAdminFirestore()
+  const ownerRef = db.collection("users").doc(INVITE_OWNER_ID)
+  const memRef = db.collection("memberships").doc(INVITE_MEMBERSHIP_ID)
+
+  await ownerRef.set({
+    firstName: "Owner",
+    lastName: "Family",
+    email: "invite-owner@beispiel.ch",
+    roles: [],
+    permissions: [],
+    userType: "erwachsen",
+    termsAcceptedAt: Timestamp.fromDate(STABLE_INVITE_DATE),
+    activeMembership: memRef,
+    created: Timestamp.fromDate(STABLE_INVITE_DATE),
+  })
+  await memRef.set({
+    type: "family",
+    status: "active",
+    lastPaidAt: Timestamp.fromDate(
+      new Date(STABLE_VALID_UNTIL_ACTIVE.getTime() - 365 * 24 * 60 * 60 * 1000),
+    ),
+    validUntil: Timestamp.fromDate(STABLE_VALID_UNTIL_ACTIVE),
+    ownerUserId: ownerRef,
+    members: [ownerRef],
+    paymentCheckouts: [],
+    created: Timestamp.fromDate(STABLE_INVITE_DATE),
+  })
+
+  if (inviteeHasAccount) {
+    await db.collection("users").doc("e2e-invite-existing-001").set({
+      firstName: "Bestehend",
+      lastName: "Konto",
+      email: inviteeEmail.toLowerCase(),
+      roles: [],
+      permissions: [],
+      userType: "erwachsen",
+      termsAcceptedAt: Timestamp.fromDate(STABLE_INVITE_DATE),
+      created: Timestamp.fromDate(STABLE_INVITE_DATE),
+    })
+  }
+
+  await memRef.collection("invites").doc(INVITE_ID).set({
+    email: inviteeEmail.toLowerCase(),
+    status: "pending",
+    invitedAt: Timestamp.fromDate(STABLE_INVITE_DATE),
+    invitedBy: ownerRef,
+    resolvedAt: null,
+    ttlAt: Timestamp.fromDate(
+      new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    ),
+  })
+
+  return { membershipId: INVITE_MEMBERSHIP_ID, inviteId: INVITE_ID }
+}
+
 export type LoginCodeEntry = {
   docId: string
   code: string

@@ -13,6 +13,8 @@ import { resendApiKey } from "../util/resend_template";
 import { purchaseMembershipHandler } from "./purchase";
 import { inviteFamilyMemberHandler } from "./invite";
 import { acceptFamilyInviteHandler } from "./accept_invite";
+import { getFamilyInviteInfoHandler } from "./invite_info";
+import { acceptFamilyInviteNewAccountHandler } from "./accept_invite_new_account";
 import { rejectFamilyInviteHandler } from "./reject_invite";
 import { revokeFamilyInviteHandler } from "./revoke_invite";
 import { removeFamilyMemberHandler } from "./remove";
@@ -27,7 +29,9 @@ import {
 const HANDLERS: Record<string, RpcHandler> = {
   purchaseMembership: purchaseMembershipHandler,
   inviteFamilyMember: inviteFamilyMemberHandler,
+  getFamilyInviteInfo: getFamilyInviteInfoHandler,
   acceptFamilyInvite: acceptFamilyInviteHandler,
+  acceptFamilyInviteNewAccount: acceptFamilyInviteNewAccountHandler,
   rejectFamilyInvite: rejectFamilyInviteHandler,
   revokeFamilyInvite: revokeFamilyInviteHandler,
   removeFamilyMember: removeFamilyMemberHandler,
