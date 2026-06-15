@@ -38,7 +38,11 @@ test.describe("Family invite acceptance (receiving end)", () => {
     await expect(page.getByText("Aktiv", { exact: true })).toBeVisible({
       timeout: 10_000,
     })
-    await expect(page.getByText("Familie", { exact: true })).toBeVisible()
+    // The joiner is now a (non-owner) member of an active family — the roster
+    // card renders for them too.
+    await expect(
+      page.getByRole("heading", { name: "Familie" }),
+    ).toBeVisible()
   })
 
   test("existing account — page sends the user to login", async ({ page }) => {

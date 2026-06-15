@@ -110,21 +110,17 @@ export async function handleAcceptInviteNewAccount(
     );
   }
 
-  // Resolve-or-create the Auth user for the invited email. The link proved
-  // control of the address, so mark it verified.
+  // Resolve-or-create the Auth user for the invited email. `emailVerified` is
+  // set only AFTER the transaction commits — we don't want to mark an existing
+  // (incomplete) user's email verified if the accept then fails.
   const auth = getAuth();
   let uid: string;
   try {
-    const user = await auth.getUserByEmail(email);
-    uid = user.uid;
-    if (!user.emailVerified) {
-      await auth.updateUser(uid, { emailVerified: true });
-    }
+    uid = (await auth.getUserByEmail(email)).uid;
   } catch (err: unknown) {
     const code = (err as { code?: string } | null)?.code;
     if (code !== "auth/user-not-found") throw err;
-    const created = await auth.createUser({ email, emailVerified: true });
-    uid = created.uid;
+    uid = (await auth.createUser({ email })).uid;
   }
 
   const userDocRef = database.collection("users").doc(uid);
@@ -159,6 +155,16 @@ export async function handleAcceptInviteNewAccount(
       }
 
       const userSnap = await tx.get(userDocRef);
+      // Authoritative completed-account guard (the pre-tx query is only a fast
+      // path): a leaked link must never let the no-code path overwrite/attach
+      // to an account that already finished sign-up. Re-checked here to close
+      // the TOCTOU window against a concurrent normal sign-up.
+      if (userSnap.exists && userSnap.get("termsAcceptedAt") != null) {
+        throw new HttpsError(
+          "already-exists",
+          "An account already exists for this email — sign in instead",
+        );
+      }
       // Single-active-membership invariant (only meaningful if a doc exists).
       if (userSnap.exists) {
         await assertNoOtherActiveMembership(tx, userDocRef, membershipId);
@@ -205,8 +211,9 @@ export async function handleAcceptInviteNewAccount(
   } catch (err) {
     // We may have just created the Auth user. Leave it: re-running the flow
     // resolves the same uid via getUserByEmail, and a credential-less,
-    // doc-less Auth user is inert. (Mirrors mintSessionToken, which also
-    // leaves the created user in place.)
+    // doc-less, email-UNverified Auth user is inert (we set emailVerified only
+    // after a successful commit, below). Mirrors mintSessionToken, which also
+    // leaves its created user in place.
     logger.error("acceptInviteNewAccount transaction failed", {
       err,
       membershipId,
@@ -216,6 +223,10 @@ export async function handleAcceptInviteNewAccount(
       ? err
       : new HttpsError("internal", (err as Error).message);
   }
+
+  // The invite link proved control of the address — mark it verified now that
+  // the account is actually attached to the family.
+  await auth.updateUser(uid, { emailVerified: true });
 
   const customToken = await auth.createCustomToken(uid, {
     loginMethod: "inviteLink",
