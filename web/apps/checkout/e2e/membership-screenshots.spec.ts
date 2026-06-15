@@ -4,6 +4,7 @@
 import { test, expect, type Page } from "@playwright/test"
 import {
   clearCollections,
+  seedFamilyInvite,
   seedMembershipState,
   waitForLoginCode,
 } from "./helpers"
@@ -59,7 +60,9 @@ test.describe("Membership page screenshots", () => {
     await seedMembershipState(uid, {
       kind: "active-family-owner",
       coMembers: [
+        // Adult co-member with a login → subtitle shows their email.
         { firstName: "Lukas", lastName: "Müller" },
+        // Login-less child → subtitle "Kind · Kein Login".
         { firstName: "Mia", lastName: "Müller", userType: "kind" },
       ],
       pendingInviteEmail: "oma.maier@beispiel.ch",
@@ -71,11 +74,17 @@ test.describe("Membership page screenshots", () => {
     await expect(
       page.getByRole("list").getByText("Inhaber:in"),
     ).toBeVisible()
-    await expect(page.getByText("Ausstehend")).toBeVisible()
+    await expect(page.getByText("lukas.müller@beispiel.ch")).toBeVisible()
+    await expect(page.getByText("Kind · Kein Login")).toBeVisible()
+    // "ausstehend" also appears in the "… · 1 ausstehend" count; pin to the badge.
+    await expect(page.getByText("Ausstehend", { exact: true })).toBeVisible()
+    await expect(
+      page.getByRole("button", { name: "Mitglied hinzufügen" }),
+    ).toBeVisible()
     await expect(page).toHaveScreenshot("membership-active-family-owner.png")
   })
 
-  test("active family — owner with kid form expanded", async ({ page }) => {
+  test("active family — add member: no-login form", async ({ page }) => {
     await signIn(page)
     const uid = process.env.E2E_AUTH_USER_UID!
     await seedMembershipState(uid, {
@@ -83,31 +92,68 @@ test.describe("Membership page screenshots", () => {
       coMembers: [{ firstName: "Lukas", lastName: "Müller" }],
     })
     await gotoMembership(page)
-    await page
-      .getByRole("button", { name: "Kindkonto hinzufügen" })
-      .click()
-    await expect(page.getByText("Kindkonto erstellen")).toBeVisible()
-    // The kid-first input is autoFocus'd, which scrolls it into view. On the
+    await page.getByRole("button", { name: "Mitglied hinzufügen" }).click()
+    await expect(
+      page.getByRole("heading", { name: "Wie möchtest du hinzufügen?" }),
+    ).toBeVisible()
+    await page.getByRole("button", { name: /Ohne Login/ }).click()
+    await expect(
+      page.getByRole("heading", { name: "Mitglied ohne Login" }),
+    ).toBeVisible()
+    // The Vorname input is autoFocus'd, which scrolls it into view. On the
     // taller owner view (issue #323 added the auto-renewal block) that scroll
     // races the viewport screenshot; anchor at the top so the captured frame
     // is deterministic.
     await page.evaluate(() => window.scrollTo(0, 0))
     await expect(page).toHaveScreenshot(
-      "membership-active-family-owner-kid-form.png",
+      "membership-active-family-owner-no-login-form.png",
     )
   })
 
-  test("active family — non-owner sees status only", async ({ page }) => {
+  test("active family — non-owner sees roster and can leave", async ({ page }) => {
     await signIn(page)
     const uid = process.env.E2E_AUTH_USER_UID!
     await seedMembershipState(uid, { kind: "active-family-member" })
     await gotoMembership(page)
-    await expect(page.getByText("Familie", { exact: true })).toBeVisible()
-    // No "Familie verwalten" or roster card for non-owners.
+    // Non-owners now see the roster card …
+    await expect(page.getByRole("heading", { name: "Familie" })).toBeVisible()
+    // … with a self-leave action, but no owner-only add control.
     await expect(
-      page.getByRole("heading", { name: "Familie" }),
+      page.getByRole("button", { name: "Verlassen" }),
+    ).toBeVisible()
+    await expect(
+      page.getByRole("button", { name: "Mitglied hinzufügen" }),
     ).toHaveCount(0)
     await expect(page).toHaveScreenshot("membership-active-family-member.png")
+
+    // Leaving goes through the in-app confirm dialog (not a browser confirm).
+    await page.getByRole("button", { name: "Verlassen" }).click()
+    const dialog = page.getByRole("alertdialog")
+    await expect(dialog.getByText("Familie verlassen?")).toBeVisible()
+    await dialog.getByRole("button", { name: "Verlassen" }).click()
+    // Removed from the family → back to the purchase entry.
+    await expect(
+      page.getByRole("heading", { name: "Mitglied werden" }),
+    ).toBeVisible({ timeout: 10_000 })
+  })
+
+  test("pending invite — shown on the membership page, can join", async ({
+    page,
+  }) => {
+    await signIn(page)
+    const uid = process.env.E2E_AUTH_USER_UID!
+    // No membership for the auth user; an invite is addressed to their email.
+    await seedMembershipState(uid, { kind: "none" })
+    await seedFamilyInvite(AUTH_USER_EMAIL)
+    await gotoMembership(page)
+    await expect(page.getByText(/Du wurdest zur/)).toBeVisible({
+      timeout: 10_000,
+    })
+    await page.getByRole("button", { name: "Beitreten" }).click()
+    // Joining lands them in an active family membership.
+    await expect(page.getByText("Aktiv", { exact: true })).toBeVisible({
+      timeout: 10_000,
+    })
   })
 
   test("expired — warn note + Erneuern", async ({ page }) => {

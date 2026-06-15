@@ -3,8 +3,8 @@
 
 /**
  * `membershipCall` — grouped callable for the membership domain (#277).
- * Routes purchase / invite / accept / reject / revoke / remove / createChild /
- * cancel / cancelAutoRenew and the two admin operations.
+ * Routes purchase / invite / accept / reject / revoke / remove /
+ * createManagedMember / cancel / cancelAutoRenew and the two admin operations.
  */
 
 import { onCall } from "firebase-functions/v2/https";
@@ -13,10 +13,13 @@ import { resendApiKey } from "../util/resend_template";
 import { purchaseMembershipHandler } from "./purchase";
 import { inviteFamilyMemberHandler } from "./invite";
 import { acceptFamilyInviteHandler } from "./accept_invite";
+import { getFamilyInviteInfoHandler } from "./invite_info";
+import { listMyFamilyInvitesHandler } from "./list_my_invites";
+import { acceptFamilyInviteNewAccountHandler } from "./accept_invite_new_account";
 import { rejectFamilyInviteHandler } from "./reject_invite";
 import { revokeFamilyInviteHandler } from "./revoke_invite";
 import { removeFamilyMemberHandler } from "./remove";
-import { createChildAccountHandler } from "./create_child";
+import { createManagedMemberHandler } from "./create_managed_member";
 import { cancelMembershipHandler } from "./cancel";
 import { cancelMembershipAutoRenewHandler } from "./cancel_auto_renew";
 import {
@@ -27,11 +30,14 @@ import {
 const HANDLERS: Record<string, RpcHandler> = {
   purchaseMembership: purchaseMembershipHandler,
   inviteFamilyMember: inviteFamilyMemberHandler,
+  getFamilyInviteInfo: getFamilyInviteInfoHandler,
+  listMyFamilyInvites: listMyFamilyInvitesHandler,
   acceptFamilyInvite: acceptFamilyInviteHandler,
+  acceptFamilyInviteNewAccount: acceptFamilyInviteNewAccountHandler,
   rejectFamilyInvite: rejectFamilyInviteHandler,
   revokeFamilyInvite: revokeFamilyInviteHandler,
   removeFamilyMember: removeFamilyMemberHandler,
-  createChildAccount: createChildAccountHandler,
+  createManagedMember: createManagedMemberHandler,
   cancelMembership: cancelMembershipHandler,
   cancelMembershipAutoRenew: cancelMembershipAutoRenewHandler,
   adminCreateMembership: adminCreateMembershipHandler,

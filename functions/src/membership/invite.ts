@@ -205,26 +205,35 @@ export const inviteFamilyMemberHandler = async (request: CallableRequest<InviteF
 };
 
 /**
- * Best-effort display name for the inviter, in priority order:
+ * Best-effort inviter display info from a single read. Name priority:
  *   1. `firstName lastName` (trimmed)
  *   2. `email` local-part
  *   3. literal "Jemand" (German for "someone") as the last resort
+ * `email` is the raw inviter email (or null) for callers that show it.
  */
+export async function resolveInviter(
+  callerRef: DocumentReference,
+): Promise<{ name: string; email: string | null }> {
+  try {
+    const snap = await callerRef.get();
+    if (!snap.exists) return { name: "Jemand", email: null };
+    const user = snap.data() as UserEntity;
+    const email = user.email ?? null;
+    const fullName = formatFullName(user);
+    if (fullName.length > 0) return { name: fullName, email };
+    if (email && email.includes("@")) {
+      return { name: email.split("@")[0], email };
+    }
+    return { name: "Jemand", email };
+  } catch (err) {
+    logger.warn("Failed to resolve inviter; falling back", { err });
+    return { name: "Jemand", email: null };
+  }
+}
+
+/** Name-only convenience wrapper (used where the email isn't needed). */
 export async function resolveInviterName(
   callerRef: DocumentReference,
 ): Promise<string> {
-  try {
-    const snap = await callerRef.get();
-    if (!snap.exists) return "Jemand";
-    const user = snap.data() as UserEntity;
-    const fullName = formatFullName(user);
-    if (fullName.length > 0) return fullName;
-    if (user.email && user.email.includes("@")) {
-      return user.email.split("@")[0];
-    }
-    return "Jemand";
-  } catch (err) {
-    logger.warn("Failed to resolve inviter name; falling back", { err });
-    return "Jemand";
-  }
+  return (await resolveInviter(callerRef)).name;
 }

@@ -28,9 +28,9 @@ import { Route as AuthenticatedAccountUsageRouteImport } from "./routes/_authent
 import { Route as AuthenticatedAccountProfileRouteImport } from "./routes/_authenticated/account/profile"
 import { Route as AuthenticatedAccountMembershipRouteImport } from "./routes/_authenticated/account/membership"
 import { Route as WizardVisitAddIndexRouteImport } from "./routes/_wizard/visit/add.index"
+import { Route as AccountInviteMembershipIdInviteIdRouteImport } from "./routes/account/invite/$membershipId/$inviteId"
 import { Route as WizardVisitAddWorkshopWorkshopIdRouteImport } from "./routes/_wizard/visit/add.workshop.$workshopId"
 import { Route as WizardVisitAddListListIdRouteImport } from "./routes/_wizard/visit/add.list.$listId"
-import { Route as AuthenticatedAccountInviteMembershipIdInviteIdRouteImport } from "./routes/_authenticated/account/invite/$membershipId/$inviteId"
 import { Route as WizardVisitAddItemCodeIndexRouteImport } from "./routes/_wizard/visit/add.item.$code.index"
 import { Route as WizardVisitAddItemCodeVariantIdRouteImport } from "./routes/_wizard/visit/add.item.$code.$variantId"
 
@@ -130,6 +130,12 @@ const WizardVisitAddIndexRoute = WizardVisitAddIndexRouteImport.update({
   path: "/add/",
   getParentRoute: () => WizardVisitRoute,
 } as any)
+const AccountInviteMembershipIdInviteIdRoute =
+  AccountInviteMembershipIdInviteIdRouteImport.update({
+    id: "/account/invite/$membershipId/$inviteId",
+    path: "/account/invite/$membershipId/$inviteId",
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const WizardVisitAddWorkshopWorkshopIdRoute =
   WizardVisitAddWorkshopWorkshopIdRouteImport.update({
     id: "/add/workshop/$workshopId",
@@ -141,12 +147,6 @@ const WizardVisitAddListListIdRoute =
     id: "/add/list/$listId",
     path: "/add/list/$listId",
     getParentRoute: () => WizardVisitRoute,
-  } as any)
-const AuthenticatedAccountInviteMembershipIdInviteIdRoute =
-  AuthenticatedAccountInviteMembershipIdInviteIdRouteImport.update({
-    id: "/account/invite/$membershipId/$inviteId",
-    path: "/account/invite/$membershipId/$inviteId",
-    getParentRoute: () => AuthenticatedRoute,
   } as any)
 const WizardVisitAddItemCodeIndexRoute =
   WizardVisitAddItemCodeIndexRouteImport.update({
@@ -176,8 +176,8 @@ export interface FileRoutesByFullPath {
   "/account/usage": typeof AuthenticatedAccountUsageRoute
   "/account/complete-profile": typeof AuthonlyAccountCompleteProfileRoute
   "/account/": typeof AuthenticatedAccountIndexRoute
+  "/account/invite/$membershipId/$inviteId": typeof AccountInviteMembershipIdInviteIdRoute
   "/visit/add/": typeof WizardVisitAddIndexRoute
-  "/account/invite/$membershipId/$inviteId": typeof AuthenticatedAccountInviteMembershipIdInviteIdRoute
   "/visit/add/list/$listId": typeof WizardVisitAddListListIdRoute
   "/visit/add/workshop/$workshopId": typeof WizardVisitAddWorkshopWorkshopIdRoute
   "/visit/add/item/$code/$variantId": typeof WizardVisitAddItemCodeVariantIdRoute
@@ -198,8 +198,8 @@ export interface FileRoutesByTo {
   "/account/usage": typeof AuthenticatedAccountUsageRoute
   "/account/complete-profile": typeof AuthonlyAccountCompleteProfileRoute
   "/account": typeof AuthenticatedAccountIndexRoute
+  "/account/invite/$membershipId/$inviteId": typeof AccountInviteMembershipIdInviteIdRoute
   "/visit/add": typeof WizardVisitAddIndexRoute
-  "/account/invite/$membershipId/$inviteId": typeof AuthenticatedAccountInviteMembershipIdInviteIdRoute
   "/visit/add/list/$listId": typeof WizardVisitAddListListIdRoute
   "/visit/add/workshop/$workshopId": typeof WizardVisitAddWorkshopWorkshopIdRoute
   "/visit/add/item/$code/$variantId": typeof WizardVisitAddItemCodeVariantIdRoute
@@ -225,8 +225,8 @@ export interface FileRoutesById {
   "/_authenticated/account/usage": typeof AuthenticatedAccountUsageRoute
   "/_authonly/account/complete-profile": typeof AuthonlyAccountCompleteProfileRoute
   "/_authenticated/account/": typeof AuthenticatedAccountIndexRoute
+  "/account/invite/$membershipId/$inviteId": typeof AccountInviteMembershipIdInviteIdRoute
   "/_wizard/visit/add/": typeof WizardVisitAddIndexRoute
-  "/_authenticated/account/invite/$membershipId/$inviteId": typeof AuthenticatedAccountInviteMembershipIdInviteIdRoute
   "/_wizard/visit/add/list/$listId": typeof WizardVisitAddListListIdRoute
   "/_wizard/visit/add/workshop/$workshopId": typeof WizardVisitAddWorkshopWorkshopIdRoute
   "/_wizard/visit/add/item/$code/$variantId": typeof WizardVisitAddItemCodeVariantIdRoute
@@ -249,8 +249,8 @@ export interface FileRouteTypes {
     | "/account/usage"
     | "/account/complete-profile"
     | "/account/"
-    | "/visit/add/"
     | "/account/invite/$membershipId/$inviteId"
+    | "/visit/add/"
     | "/visit/add/list/$listId"
     | "/visit/add/workshop/$workshopId"
     | "/visit/add/item/$code/$variantId"
@@ -271,8 +271,8 @@ export interface FileRouteTypes {
     | "/account/usage"
     | "/account/complete-profile"
     | "/account"
-    | "/visit/add"
     | "/account/invite/$membershipId/$inviteId"
+    | "/visit/add"
     | "/visit/add/list/$listId"
     | "/visit/add/workshop/$workshopId"
     | "/visit/add/item/$code/$variantId"
@@ -297,8 +297,8 @@ export interface FileRouteTypes {
     | "/_authenticated/account/usage"
     | "/_authonly/account/complete-profile"
     | "/_authenticated/account/"
+    | "/account/invite/$membershipId/$inviteId"
     | "/_wizard/visit/add/"
-    | "/_authenticated/account/invite/$membershipId/$inviteId"
     | "/_wizard/visit/add/list/$listId"
     | "/_wizard/visit/add/workshop/$workshopId"
     | "/_wizard/visit/add/item/$code/$variantId"
@@ -314,6 +314,7 @@ export interface RootRouteChildren {
   LinkAccountRoute: typeof LinkAccountRoute
   LoginRoute: typeof LoginRoute
   LoginVerifyRoute: typeof LoginVerifyRoute
+  AccountInviteMembershipIdInviteIdRoute: typeof AccountInviteMembershipIdInviteIdRoute
 }
 
 declare module "@tanstack/react-router" {
@@ -451,6 +452,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof WizardVisitAddIndexRouteImport
       parentRoute: typeof WizardVisitRoute
     }
+    "/account/invite/$membershipId/$inviteId": {
+      id: "/account/invite/$membershipId/$inviteId"
+      path: "/account/invite/$membershipId/$inviteId"
+      fullPath: "/account/invite/$membershipId/$inviteId"
+      preLoaderRoute: typeof AccountInviteMembershipIdInviteIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     "/_wizard/visit/add/workshop/$workshopId": {
       id: "/_wizard/visit/add/workshop/$workshopId"
       path: "/add/workshop/$workshopId"
@@ -464,13 +472,6 @@ declare module "@tanstack/react-router" {
       fullPath: "/visit/add/list/$listId"
       preLoaderRoute: typeof WizardVisitAddListListIdRouteImport
       parentRoute: typeof WizardVisitRoute
-    }
-    "/_authenticated/account/invite/$membershipId/$inviteId": {
-      id: "/_authenticated/account/invite/$membershipId/$inviteId"
-      path: "/account/invite/$membershipId/$inviteId"
-      fullPath: "/account/invite/$membershipId/$inviteId"
-      preLoaderRoute: typeof AuthenticatedAccountInviteMembershipIdInviteIdRouteImport
-      parentRoute: typeof AuthenticatedRoute
     }
     "/_wizard/visit/add/item/$code/": {
       id: "/_wizard/visit/add/item/$code/"
@@ -494,7 +495,6 @@ interface AuthenticatedRouteChildren {
   AuthenticatedAccountProfileRoute: typeof AuthenticatedAccountProfileRoute
   AuthenticatedAccountUsageRoute: typeof AuthenticatedAccountUsageRoute
   AuthenticatedAccountIndexRoute: typeof AuthenticatedAccountIndexRoute
-  AuthenticatedAccountInviteMembershipIdInviteIdRoute: typeof AuthenticatedAccountInviteMembershipIdInviteIdRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
@@ -502,8 +502,6 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedAccountProfileRoute: AuthenticatedAccountProfileRoute,
   AuthenticatedAccountUsageRoute: AuthenticatedAccountUsageRoute,
   AuthenticatedAccountIndexRoute: AuthenticatedAccountIndexRoute,
-  AuthenticatedAccountInviteMembershipIdInviteIdRoute:
-    AuthenticatedAccountInviteMembershipIdInviteIdRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
@@ -579,6 +577,8 @@ const rootRouteChildren: RootRouteChildren = {
   LinkAccountRoute: LinkAccountRoute,
   LoginRoute: LoginRoute,
   LoginVerifyRoute: LoginVerifyRoute,
+  AccountInviteMembershipIdInviteIdRoute:
+    AccountInviteMembershipIdInviteIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

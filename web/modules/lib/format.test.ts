@@ -10,6 +10,7 @@ import {
   formatDate,
   formatDateTime,
   formatInvoiceNumber,
+  formatRelativeTime,
   locale,
 } from "./format"
 
@@ -84,6 +85,42 @@ describe("formatDateTime", () => {
 
   it("returns dash for null", () => {
     expect(formatDateTime(null)).toBe("–")
+  })
+})
+
+describe("formatRelativeTime", () => {
+  const now = new Date(2026, 5, 14, 12, 0, 0)
+
+  it("returns 'gerade eben' for instants under a minute ago", () => {
+    expect(formatRelativeTime(new Date(2026, 5, 14, 11, 59, 30), now)).toBe(
+      "gerade eben",
+    )
+  })
+
+  it("reports minutes", () => {
+    const result = formatRelativeTime(new Date(2026, 5, 14, 11, 35), now)
+    expect(result).toMatch(/25/)
+    expect(result.toLowerCase()).toContain("vor")
+  })
+
+  it("reports hours", () => {
+    const result = formatRelativeTime(new Date(2026, 5, 14, 9, 0), now)
+    expect(result).toMatch(/3/)
+  })
+
+  it("reports days", () => {
+    const result = formatRelativeTime(new Date(2026, 5, 12, 12, 0), now)
+    expect(result).toMatch(/2/)
+    expect(result.toLowerCase()).toContain("tag")
+  })
+
+  it("accepts a Firestore-like Timestamp", () => {
+    const ts = { toDate: () => new Date(2026, 5, 12, 12, 0) }
+    expect(formatRelativeTime(ts, now)).toMatch(/2/)
+  })
+
+  it("returns dash for null", () => {
+    expect(formatRelativeTime(null, now)).toBe("–")
   })
 })
 

@@ -5,11 +5,12 @@ import {
   AlertTriangle,
   ArrowRight,
   Check,
+  ChevronLeft,
   Crown,
   Info,
-  Mail,
   Plus,
   RefreshCw,
+  Send,
   User,
   Users,
   X,
@@ -17,6 +18,7 @@ import {
 import { rpcCallable } from "@modules/lib/rpc"
 import { where } from "firebase/firestore"
 import * as React from "react"
+import { z } from "zod"
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router"
 
 import { useAuth } from "@modules/lib/auth"
@@ -32,19 +34,33 @@ import {
 } from "@modules/lib/firestore-helpers"
 import type { CatalogItemDoc } from "@modules/lib/firestore-entities"
 import type { DocumentReference } from "firebase/firestore"
-import { priceForTier } from "@modules/lib/pricing"
-import { formatDate } from "@modules/lib/format"
+import { priceForTier, USER_TYPE_LABELS } from "@modules/lib/pricing"
+import { formatDate, formatRelativeTime } from "@modules/lib/format"
 import { formatFullName } from "@modules/lib/username-utils"
+import { cn } from "@modules/lib/utils"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { Avatar } from "@modules/components/ui/avatar"
 import { Badge } from "@modules/components/ui/badge"
 import { Button } from "@modules/components/ui/button"
 import { Card, CardContent } from "@modules/components/ui/card"
+import { ConfirmDialog } from "@modules/components/confirm-dialog"
 import { Input } from "@modules/components/ui/input"
+import { Skeleton } from "@modules/components/ui/skeleton"
 import { Label } from "@modules/components/ui/label"
 import { PageLoading } from "@modules/components/page-loading"
 
+/**
+ * `?invite=<membershipId>~<inviteId>` is set only when an invite link is opened
+ * while signed in as a *different* account than the invited address — the page
+ * then shows the wrong-account notice. (Firestore auto-IDs are [A-Za-z0-9], so
+ * the `~` separator never collides.)
+ */
+const membershipSearchSchema = z.object({
+  invite: z.string().optional(),
+})
+
 export const Route = createFileRoute("/_authenticated/account/membership")({
+  validateSearch: membershipSearchSchema,
   component: MembershipPage,
 })
 
@@ -186,6 +202,9 @@ function MembershipPage() {
         Mitgliedschaft
       </h1>
 
+      <WrongAccountInviteNotice />
+      <PendingInvitesBanner />
+
       {pendingMembershipType ? (
         <PendingMembershipCheckout type={pendingMembershipType} />
       ) : !membership ? (
@@ -227,14 +246,210 @@ function MembershipPage() {
         </Note>
       )}
 
-      {membership && isActive && membership.type === "family" && isOwner && (
+      {membership && isActive && membership.type === "family" && (
         <FamilySection
           membershipId={membership.id}
           memberIds={membership.members.map((m) => m.id)}
           ownerId={membership.ownerUserId.id}
+          isOwner={isOwner}
+          currentUserId={userDoc?.id ?? ""}
         />
       )}
     </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Wrong-account notice — invite link opened by a different account   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Shown when an invite link is opened while signed in as a different account
+ * than the invited address (the invite page redirects here with `?invite=`).
+ * Offers a sign-out-and-retry escape. The `invite` param is only ever set on a
+ * genuine mismatch, so we render the notice whenever it resolves to a pending
+ * invite for a foreign email.
+ */
+function WrongAccountInviteNotice() {
+  const functions = useFunctions()
+  const { signOut } = useAuth()
+  const navigate = useNavigate()
+  const { invite } = Route.useSearch()
+  const [membershipId, inviteId] = (invite ?? "").split("~")
+
+  const [email, setEmail] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    if (!membershipId || !inviteId) {
+      setEmail(null)
+      return
+    }
+    let cancelled = false
+    const fn = rpcCallable<
+      { membershipId: string; inviteId: string },
+      { status: string; email: string | null }
+    >(functions, "membershipCall", "getFamilyInviteInfo")
+    fn({ membershipId, inviteId })
+      .then(({ data }) => {
+        if (!cancelled) setEmail(data.status === "pending" ? data.email : null)
+      })
+      .catch(() => {
+        if (!cancelled) setEmail(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [functions, membershipId, inviteId])
+
+  const switchMutation = useAsyncMutation({
+    context: "checkout.switchInviteAccount",
+    errorMessage: "Abmelden fehlgeschlagen",
+  })
+
+  if (!email) return null
+
+  const handleSwitch = () =>
+    switchMutation.mutate(async () => {
+      await signOut()
+      navigate({
+        to: "/account/invite/$membershipId/$inviteId",
+        params: { membershipId, inviteId },
+      })
+    })
+
+  return (
+    <Card className="border-destructive">
+      <CardContent className="pt-6">
+        <div className="flex items-center gap-2">
+          <Badge variant="destructive">
+            <AlertTriangle />
+            Falsches Konto
+          </Badge>
+        </div>
+        <p className="mt-3 text-sm">
+          Diese Einladung ist für <strong>{email}</strong>, nicht für dein
+          aktuelles Konto. Melde dich mit der eingeladenen Adresse an, um
+          beizutreten.
+        </p>
+        <div className="mt-4">
+          <Button
+            variant="destructive"
+            onClick={handleSwitch}
+            disabled={switchMutation.loading}
+          >
+            Abmelden &amp; Einladung annehmen
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Pending invites addressed to the signed-in user (join from here)   */
+/* ------------------------------------------------------------------ */
+
+interface PendingInviteCard {
+  membershipId: string
+  inviteId: string
+  inviterName: string
+}
+
+function PendingInvitesBanner() {
+  const functions = useFunctions()
+  const navigate = useNavigate()
+  const { userDoc } = useAuth()
+  const email = userDoc?.email ?? null
+
+  const [cards, setCards] = React.useState<PendingInviteCard[]>([])
+
+  React.useEffect(() => {
+    if (!email) {
+      setCards([])
+      return
+    }
+    let cancelled = false
+    const fn = rpcCallable<unknown, { invites: PendingInviteCard[] }>(
+      functions,
+      "membershipCall",
+      "listMyFamilyInvites",
+    )
+    fn({})
+      .then(({ data }) => {
+        if (!cancelled) setCards(data.invites)
+      })
+      .catch(() => {
+        if (!cancelled) setCards([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [functions, email])
+
+  const acceptMutation = useAsyncMutation({
+    context: "checkout.acceptFamilyInvite",
+    successMessage: "Du gehörst jetzt zur Familie!",
+    errorMessage: "Einladung konnte nicht angenommen werden",
+  })
+  const rejectMutation = useAsyncMutation({
+    context: "checkout.rejectFamilyInvite",
+    successMessage: "Einladung abgelehnt",
+    errorMessage: "Einladung konnte nicht abgelehnt werden",
+  })
+
+  const drop = (inviteId: string) =>
+    setCards((prev) => prev.filter((c) => c.inviteId !== inviteId))
+
+  const handleAccept = (card: PendingInviteCard) =>
+    acceptMutation.mutate(async () => {
+      const fn = rpcCallable(functions, "membershipCall", "acceptFamilyInvite")
+      await fn({ membershipId: card.membershipId, inviteId: card.inviteId })
+      drop(card.inviteId)
+      navigate({ to: "/account/membership" as never } as never)
+    })
+  const handleReject = (card: PendingInviteCard) =>
+    rejectMutation.mutate(async () => {
+      const fn = rpcCallable(functions, "membershipCall", "rejectFamilyInvite")
+      await fn({ membershipId: card.membershipId, inviteId: card.inviteId })
+      drop(card.inviteId)
+    })
+
+  if (cards.length === 0) return null
+  const busy = acceptMutation.loading || rejectMutation.loading
+
+  return (
+    <>
+      {cards.map((card) => (
+        <Card key={card.inviteId} className="border-cog-teal">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2">
+              <Badge variant="default">
+                <Users />
+                Einladung
+              </Badge>
+            </div>
+            <p className="mt-3 text-sm">
+              Du wurdest zur <strong>Familie {card.inviterName}</strong>{" "}
+              eingeladen. Tritt bei, um vergünstigte Preise zu erhalten.
+            </p>
+            <div className="mt-4 flex gap-2">
+              <Button onClick={() => handleAccept(card)} disabled={busy}>
+                <Check />
+                Beitreten
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => handleReject(card)}
+                disabled={busy}
+              >
+                <X />
+                Ablehnen
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+    </>
   )
 }
 
@@ -542,27 +757,40 @@ function BuyCard({
 /* Inline family section (only for owner of an active family)         */
 /* ------------------------------------------------------------------ */
 
+/** Login-less managed members are only ever adults or kids — never firma. */
+type ManagedMemberType = "erwachsen" | "kind"
+
+type AddMode = "closed" | "chooser" | "invite" | "no-login"
+
 function FamilySection({
   membershipId,
   memberIds,
   ownerId,
+  isOwner,
+  currentUserId,
 }: {
   membershipId: string
   memberIds: string[]
   ownerId: string
+  isOwner: boolean
+  currentUserId: string
 }) {
   const db = useDb()
   const functions = useFunctions()
 
+  // Only the owner/admin may list the invites sub-collection (Firestore
+  // rules) — a non-owner member skips the subscription entirely.
   const { data: invites } = useCollection(
-    membershipInvitesCollection(db, membershipId),
+    isOwner ? membershipInvitesCollection(db, membershipId) : null,
   )
   const pending = invites.filter((i) => i.status === "pending")
 
+  const [addMode, setAddMode] = React.useState<AddMode>("closed")
   const [inviteEmail, setInviteEmail] = React.useState("")
-  const [showAddKid, setShowAddKid] = React.useState(false)
-  const [kidFirst, setKidFirst] = React.useState("")
-  const [kidLast, setKidLast] = React.useState("")
+  const [noLoginFirst, setNoLoginFirst] = React.useState("")
+  const [noLoginLast, setNoLoginLast] = React.useState("")
+  const [noLoginType, setNoLoginType] =
+    React.useState<ManagedMemberType>("kind")
 
   const inviteMutation = useAsyncMutation({
     context: "checkout.inviteFamily",
@@ -579,13 +807,22 @@ function FamilySection({
     successMessage: "Mitglied entfernt",
     errorMessage: "Mitglied konnte nicht entfernt werden",
   })
-  const createChildMutation = useAsyncMutation({
-    context: "checkout.createChildAccount",
-    successMessage: "Kindkonto erstellt",
-    errorMessage: "Kindkonto konnte nicht erstellt werden",
+  const createMemberMutation = useAsyncMutation({
+    context: "checkout.createManagedMember",
+    successMessage: "Mitglied hinzugefügt",
+    errorMessage: "Mitglied konnte nicht hinzugefügt werden",
   })
 
   const totalCount = memberIds.length
+  const pendingCount = pending.length
+
+  const resetAdd = () => {
+    setAddMode("closed")
+    setInviteEmail("")
+    setNoLoginFirst("")
+    setNoLoginLast("")
+    setNoLoginType("kind")
+  }
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -596,7 +833,7 @@ function FamilySection({
         { inviteId: string }
       >(functions, "membershipCall", "inviteFamilyMember")
       await fn({ membershipId, email: inviteEmail.trim() })
-      setInviteEmail("")
+      resetAdd()
     })
   }
 
@@ -607,37 +844,59 @@ function FamilySection({
     })
   }
 
-  const handleRemove = async (uid: string) => {
-    if (!confirm("Diese Person aus der Familie entfernen?")) return
-    await removeMutation.mutate(async () => {
-      const fn = rpcCallable(functions, "membershipCall", "removeFamilyMember")
-      await fn({ membershipId, userId: uid })
-    })
+  const leaveMutation = useAsyncMutation({
+    context: "checkout.leaveFamily",
+    successMessage: "Du hast die Familie verlassen",
+    errorMessage: "Verlassen fehlgeschlagen",
+  })
+
+  // Confirmation is handled by <ConfirmDialog>; `pendingRemoval` holds the
+  // target. `self` distinguishes the owner removing a member from a member
+  // leaving (different copy + success message).
+  const [pendingRemoval, setPendingRemoval] = React.useState<{
+    uid: string
+    self: boolean
+  } | null>(null)
+
+  const confirmRemoval = async () => {
+    if (!pendingRemoval) return
+    const { uid, self } = pendingRemoval
+    const mutation = self ? leaveMutation : removeMutation
+    try {
+      await mutation.mutate(async () => {
+        const fn = rpcCallable(functions, "membershipCall", "removeFamilyMember")
+        await fn({ membershipId, userId: uid })
+      })
+    } catch {
+      // Hook already toasted + reported; keep the dialog state cleared below.
+    }
+    setPendingRemoval(null)
   }
 
-  const handleCreateKid = async (e: React.FormEvent) => {
+  const handleCreateNoLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!kidFirst.trim() || !kidLast.trim()) return
-    await createChildMutation.mutate(async () => {
-      const fn = rpcCallable(functions, "membershipCall", "createChildAccount")
+    if (!noLoginFirst.trim() || !noLoginLast.trim()) return
+    await createMemberMutation.mutate(async () => {
+      const fn = rpcCallable(functions, "membershipCall", "createManagedMember")
       await fn({
         membershipId,
-        firstName: kidFirst.trim(),
-        lastName: kidLast.trim(),
+        firstName: noLoginFirst.trim(),
+        lastName: noLoginLast.trim(),
+        userType: noLoginType,
       })
-      setKidFirst("")
-      setKidLast("")
-      setShowAddKid(false)
+      resetAdd()
     })
   }
 
   return (
+    <>
     <Card>
       <CardContent className="pt-6">
         <div className="flex items-baseline justify-between">
           <h2 className="font-heading text-xl font-bold">Familie</h2>
           <span className="text-sm text-muted-foreground">
             {totalCount} {totalCount === 1 ? "Person" : "Personen"}
+            {pendingCount > 0 && ` · ${pendingCount} ausstehend`}
           </span>
         </div>
 
@@ -647,10 +906,19 @@ function FamilySection({
               key={uid}
               userId={uid}
               isOwner={uid === ownerId}
+              // Owner/admin removes any non-owner member; a non-owner member can
+              // only leave themselves ("Familie verlassen").
               onRemove={
-                uid === ownerId ? null : () => handleRemove(uid)
+                isOwner
+                  ? uid === ownerId
+                    ? null
+                    : () => setPendingRemoval({ uid, self: false })
+                  : uid === currentUserId
+                    ? () => setPendingRemoval({ uid, self: true })
+                    : null
               }
-              removing={removeMutation.loading}
+              removeLabel={!isOwner && uid === currentUserId ? "Verlassen" : "Entfernen"}
+              removing={removeMutation.loading || leaveMutation.loading}
             />
           ))}
           {pending.map((inv) => (
@@ -659,14 +927,15 @@ function FamilySection({
               className="grid grid-cols-[36px_1fr_auto_auto] items-center gap-3 border-b py-3 opacity-90 last:border-0"
             >
               <span className="inline-flex size-9 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                <Mail className="size-4" />
+                <Send className="size-4" />
               </span>
               <div className="min-w-0">
                 <div className="truncate text-sm font-semibold">
                   {inv.email}
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  Eingeladen · läuft in 30 Tagen ab
+                  Eingeladen {formatRelativeTime(inv.invitedAt)} · läuft in 30
+                  Tagen ab
                 </div>
               </div>
               <Badge variant="outline">Ausstehend</Badge>
@@ -682,130 +951,303 @@ function FamilySection({
           ))}
         </ul>
 
+        {isOwner && (
         <div className="mt-4 border-t pt-4">
-          <form onSubmit={handleInvite} className="flex items-end gap-2">
-            <div className="flex-1">
-              <Label htmlFor="invite-email" className="text-sm font-bold">
-                Erwachsene Person einladen
-              </Label>
-              <Input
-                id="invite-email"
-                type="email"
-                placeholder="name@beispiel.ch"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                className="mt-1"
-              />
-            </div>
-            <Button
-              type="submit"
-              disabled={
-                !inviteEmail.includes("@") || inviteMutation.loading
-              }
-            >
-              <Mail />
-              Einladen
-            </Button>
-          </form>
-
-          {!showAddKid ? (
+          {addMode === "closed" && (
             <button
               type="button"
-              onClick={() => setShowAddKid(true)}
-              className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-cog-teal-dark hover:underline"
+              onClick={() => setAddMode("chooser")}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-cog-teal/60 py-3 text-sm font-semibold text-cog-teal-dark transition hover:border-cog-teal hover:bg-cog-teal-light"
             >
-              <Plus className="size-3.5" />
-              Kindkonto hinzufügen
+              <span className="inline-flex size-6 items-center justify-center rounded-full bg-cog-teal text-white">
+                <Plus className="size-4" />
+              </span>
+              Mitglied hinzufügen
             </button>
-          ) : (
-            <form onSubmit={handleCreateKid} className="mt-4">
-              <div className="text-sm font-bold">
-                Kindkonto erstellen{" "}
-                <span className="font-normal text-muted-foreground">
-                  · kein eigenes Login
-                </span>
+          )}
+
+          {addMode === "chooser" && (
+            <div>
+              <h3 className="font-heading text-lg font-bold">
+                Wie möchtest du hinzufügen?
+              </h3>
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <AddChoiceCard
+                  icon={<Send className="size-5" />}
+                  iconClassName="bg-cog-teal text-white"
+                  title="Konto einladen"
+                  description="Person mit eigenem Login. Bestehendes Konto wird verknüpft, oder ein neues per E-Mail erstellt."
+                  onClick={() => setAddMode("invite")}
+                />
+                <AddChoiceCard
+                  icon={<User className="size-5" />}
+                  iconClassName="bg-muted-foreground text-white"
+                  title="Ohne Login"
+                  description="Konto ohne eigenes Login, von dir verwaltet — für Kinder oder Erwachsene ohne E-Mail."
+                  onClick={() => setAddMode("no-login")}
+                />
               </div>
-              <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto_auto] sm:items-end">
-                <div>
-                  <Label htmlFor="kid-first" className="sr-only">
-                    Vorname
+              <button
+                type="button"
+                onClick={resetAdd}
+                className="mt-4 text-sm font-semibold text-muted-foreground hover:text-foreground"
+              >
+                Abbrechen
+              </button>
+            </div>
+          )}
+
+          {addMode === "invite" && (
+            <div>
+              <BackLink onClick={() => setAddMode("chooser")} />
+              <h3 className="mt-3 font-heading text-lg font-bold">
+                Konto einladen
+              </h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Die Person erhält einen Link per E-Mail und meldet sich mit
+                eigenem Konto an.
+              </p>
+              <form onSubmit={handleInvite} className="mt-4 flex items-end gap-2">
+                <div className="flex-1">
+                  <Label htmlFor="invite-email" className="text-sm font-bold">
+                    E-Mail-Adresse
                   </Label>
                   <Input
-                    id="kid-first"
+                    id="invite-email"
+                    type="email"
                     autoFocus
-                    placeholder="Vorname"
-                    value={kidFirst}
-                    onChange={(e) => setKidFirst(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="kid-last" className="sr-only">
-                    Nachname
-                  </Label>
-                  <Input
-                    id="kid-last"
-                    placeholder="Nachname"
-                    value={kidLast}
-                    onChange={(e) => setKidLast(e.target.value)}
+                    placeholder="name@beispiel.ch"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    className="mt-1"
                   />
                 </div>
                 <Button
                   type="submit"
-                  variant="outline"
+                  disabled={!inviteEmail.includes("@") || inviteMutation.loading}
+                >
+                  <Send />
+                  Einladen
+                </Button>
+              </form>
+            </div>
+          )}
+
+          {addMode === "no-login" && (
+            <form onSubmit={handleCreateNoLogin}>
+              <BackLink onClick={() => setAddMode("chooser")} />
+              <h3 className="mt-3 font-heading text-lg font-bold">
+                Mitglied ohne Login
+              </h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Du verwaltest dieses Konto. Eine E-Mail kannst du später
+                nachtragen, um ein Login zu aktivieren.
+              </p>
+              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <Label htmlFor="nologin-first" className="text-sm font-bold">
+                    Vorname <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="nologin-first"
+                    autoFocus
+                    placeholder="Mia"
+                    value={noLoginFirst}
+                    onChange={(e) => setNoLoginFirst(e.target.value)}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="nologin-last" className="text-sm font-bold">
+                    Nachname <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="nologin-last"
+                    placeholder="Müller"
+                    value={noLoginLast}
+                    onChange={(e) => setNoLoginLast(e.target.value)}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+              <div className="mt-4">
+                <Label className="text-sm font-bold">Typ</Label>
+                <div className="flex flex-wrap gap-6 pt-2">
+                  {(["erwachsen", "kind"] as ManagedMemberType[]).map(
+                    (value) => (
+                      <label
+                        key={value}
+                        className="inline-flex cursor-pointer select-none items-center gap-2 text-sm"
+                      >
+                        <span
+                          className={cn(
+                            "inline-flex h-[18px] w-[18px] items-center justify-center rounded-full border-[1.5px] transition-colors",
+                            noLoginType === value
+                              ? "border-cog-teal bg-cog-teal"
+                              : "border-[#c1c1c1] bg-background",
+                          )}
+                        >
+                          {noLoginType === value && (
+                            <span className="h-2 w-2 rounded-full bg-white" />
+                          )}
+                        </span>
+                        <input
+                          type="radio"
+                          name="nologin-type"
+                          value={value}
+                          checked={noLoginType === value}
+                          onChange={() => setNoLoginType(value)}
+                          className="sr-only"
+                        />
+                        {USER_TYPE_LABELS[value]}
+                      </label>
+                    ),
+                  )}
+                </div>
+              </div>
+              <div className="mt-5 flex justify-end">
+                <Button
+                  type="submit"
                   disabled={
-                    !kidFirst.trim() ||
-                    !kidLast.trim() ||
-                    createChildMutation.loading
+                    !noLoginFirst.trim() ||
+                    !noLoginLast.trim() ||
+                    createMemberMutation.loading
                   }
                 >
                   <Plus />
-                  Erstellen
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => {
-                    setShowAddKid(false)
-                    setKidFirst("")
-                    setKidLast("")
-                  }}
-                >
-                  Abbrechen
+                  Hinzufügen
                 </Button>
               </div>
             </form>
           )}
         </div>
+        )}
       </CardContent>
     </Card>
+    <ConfirmDialog
+      open={pendingRemoval !== null}
+      onOpenChange={(open) => {
+        if (!open) setPendingRemoval(null)
+      }}
+      title={pendingRemoval?.self ? "Familie verlassen?" : "Mitglied entfernen?"}
+      description={
+        pendingRemoval?.self
+          ? "Du verlierst den vergünstigten Mitglieder-Tarif. Um wieder beizutreten, musst du erneut von der Familie eingeladen werden."
+          : "Diese Person wird aus der Familie entfernt und verliert den Mitglieder-Tarif."
+      }
+      confirmLabel={pendingRemoval?.self ? "Verlassen" : "Entfernen"}
+      destructive
+      confirmDisabled={removeMutation.loading || leaveMutation.loading}
+      onConfirm={confirmRemoval}
+    />
+    </>
   )
+}
+
+function BackLink({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-1 text-sm font-semibold text-muted-foreground hover:text-foreground"
+    >
+      <ChevronLeft className="size-4" />
+      Zurück
+    </button>
+  )
+}
+
+function AddChoiceCard({
+  icon,
+  iconClassName,
+  title,
+  description,
+  onClick,
+}: {
+  icon: React.ReactNode
+  iconClassName: string
+  title: string
+  description: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex flex-col gap-2 rounded-xl border bg-card p-5 text-left transition hover:border-cog-teal hover:bg-cog-teal-light"
+    >
+      <span
+        className={cn(
+          "inline-flex size-10 items-center justify-center rounded-lg",
+          iconClassName,
+        )}
+      >
+        {icon}
+      </span>
+      <span className="font-heading text-lg font-bold leading-tight">
+        {title}
+      </span>
+      <span className="text-sm leading-snug text-muted-foreground">
+        {description}
+      </span>
+      <span className="mt-1 inline-flex items-center gap-1 text-sm font-semibold text-cog-teal-dark">
+        Weiter <ArrowRight className="size-4" />
+      </span>
+    </button>
+  )
+}
+
+/** Short type label for the roster subtitle (vs. USER_TYPE_LABELS' "Kind (u. 18)"). */
+const MEMBER_TYPE_LABEL: Record<string, string> = {
+  erwachsen: "Erwachsen",
+  kind: "Kind",
+  firma: "Firma",
 }
 
 function MemberRow({
   userId,
   isOwner,
   onRemove,
+  removeLabel = "Entfernen",
   removing,
 }: {
   userId: string
   isOwner: boolean
   onRemove: (() => void) | null
+  removeLabel?: string
   removing: boolean
 }) {
   const db = useDb()
   // Family-roster join rule allows reading co-members' user docs.
-  const { data: user } = useDocument(userRef(db, userId))
-  const name = formatFullName(user ?? {}, userId)
-  const isChild = user?.userType === "kind"
+  const { data: user, loading } = useDocument(userRef(db, userId))
+
+  // Until the co-member's user doc resolves, show a placeholder rather than
+  // the raw document id (which `formatFullName` would otherwise fall back to).
+  if (loading || !user) {
+    return (
+      <li className="grid grid-cols-[36px_1fr] items-center gap-3 border-b py-3 last:border-0">
+        <Skeleton className="size-9 rounded-full" />
+        <div className="space-y-1.5">
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-3 w-44" />
+        </div>
+      </li>
+    )
+  }
+
+  const name = formatFullName(user, userId)
+  // ADR-0029: a login email (not userType) is what makes a member an
+  // account-holder who checks in on their own.
+  const hasAccount = !!user.email?.trim()
+  const typeLabel = MEMBER_TYPE_LABEL[user.userType ?? "erwachsen"] ?? "Erwachsen"
+  const subtitle = `${typeLabel} · ${hasAccount ? user.email : "Kein Login"}`
 
   return (
     <li className="grid grid-cols-[36px_1fr_auto_auto] items-center gap-3 border-b py-3 last:border-0">
       <Avatar name={name} />
       <div className="min-w-0">
         <div className="truncate text-sm font-semibold">{name}</div>
-        <div className="text-xs text-muted-foreground">
-          {user?.email ?? <span>(kein Login)</span>}
-        </div>
+        <div className="truncate text-xs text-muted-foreground">{subtitle}</div>
       </div>
       <div className="flex flex-wrap gap-1.5">
         {isOwner && (
@@ -814,18 +1256,12 @@ function MemberRow({
             Inhaber:in
           </Badge>
         )}
-        {isChild && !isOwner && <Badge variant="secondary">Kind</Badge>}
       </div>
       <div>
         {onRemove && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onRemove}
-            disabled={removing}
-          >
+          <Button variant="ghost" size="sm" onClick={onRemove} disabled={removing}>
             <X />
-            Entfernen
+            {removeLabel}
           </Button>
         )}
       </div>
