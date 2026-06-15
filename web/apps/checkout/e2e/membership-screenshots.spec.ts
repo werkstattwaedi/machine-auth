@@ -125,6 +125,16 @@ test.describe("Membership page screenshots", () => {
       page.getByRole("button", { name: "Mitglied hinzufügen" }),
     ).toHaveCount(0)
     await expect(page).toHaveScreenshot("membership-active-family-member.png")
+
+    // Leaving goes through the in-app confirm dialog (not a browser confirm).
+    await page.getByRole("button", { name: "Verlassen" }).click()
+    const dialog = page.getByRole("alertdialog")
+    await expect(dialog.getByText("Familie verlassen?")).toBeVisible()
+    await dialog.getByRole("button", { name: "Verlassen" }).click()
+    // Removed from the family → back to the purchase entry.
+    await expect(
+      page.getByRole("heading", { name: "Mitglied werden" }),
+    ).toBeVisible({ timeout: 10_000 })
   })
 
   test("pending invite — shown on the membership page, can join", async ({

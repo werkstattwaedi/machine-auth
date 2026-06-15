@@ -43,6 +43,7 @@ import { Avatar } from "@modules/components/ui/avatar"
 import { Badge } from "@modules/components/ui/badge"
 import { Button } from "@modules/components/ui/button"
 import { Card, CardContent } from "@modules/components/ui/card"
+import { ConfirmDialog } from "@modules/components/confirm-dialog"
 import { Input } from "@modules/components/ui/input"
 import { Label } from "@modules/components/ui/label"
 import { PageLoading } from "@modules/components/page-loading"
@@ -744,25 +745,33 @@ function FamilySection({
     })
   }
 
-  const handleRemove = async (uid: string) => {
-    if (!confirm("Diese Person aus der Familie entfernen?")) return
-    await removeMutation.mutate(async () => {
-      const fn = rpcCallable(functions, "membershipCall", "removeFamilyMember")
-      await fn({ membershipId, userId: uid })
-    })
-  }
-
   const leaveMutation = useAsyncMutation({
     context: "checkout.leaveFamily",
     successMessage: "Du hast die Familie verlassen",
     errorMessage: "Verlassen fehlgeschlagen",
   })
-  const handleLeave = async () => {
-    if (!confirm("Familie verlassen? Du verlierst den Mitglieder-Tarif.")) return
-    await leaveMutation.mutate(async () => {
-      const fn = rpcCallable(functions, "membershipCall", "removeFamilyMember")
-      await fn({ membershipId, userId: currentUserId })
-    })
+
+  // Confirmation is handled by <ConfirmDialog>; `pendingRemoval` holds the
+  // target. `self` distinguishes the owner removing a member from a member
+  // leaving (different copy + success message).
+  const [pendingRemoval, setPendingRemoval] = React.useState<{
+    uid: string
+    self: boolean
+  } | null>(null)
+
+  const confirmRemoval = async () => {
+    if (!pendingRemoval) return
+    const { uid, self } = pendingRemoval
+    const mutation = self ? leaveMutation : removeMutation
+    try {
+      await mutation.mutate(async () => {
+        const fn = rpcCallable(functions, "membershipCall", "removeFamilyMember")
+        await fn({ membershipId, userId: uid })
+      })
+    } catch {
+      // Hook already toasted + reported; keep the dialog state cleared below.
+    }
+    setPendingRemoval(null)
   }
 
   const handleCreateNoLogin = async (e: React.FormEvent) => {
@@ -781,6 +790,7 @@ function FamilySection({
   }
 
   return (
+    <>
     <Card>
       <CardContent className="pt-6">
         <div className="flex items-baseline justify-between">
@@ -803,9 +813,9 @@ function FamilySection({
                 isOwner
                   ? uid === ownerId
                     ? null
-                    : () => handleRemove(uid)
+                    : () => setPendingRemoval({ uid, self: false })
                   : uid === currentUserId
-                    ? handleLeave
+                    ? () => setPendingRemoval({ uid, self: true })
                     : null
               }
               removeLabel={!isOwner && uid === currentUserId ? "Verlassen" : "Entfernen"}
@@ -1020,6 +1030,23 @@ function FamilySection({
         )}
       </CardContent>
     </Card>
+    <ConfirmDialog
+      open={pendingRemoval !== null}
+      onOpenChange={(open) => {
+        if (!open) setPendingRemoval(null)
+      }}
+      title={pendingRemoval?.self ? "Familie verlassen?" : "Mitglied entfernen?"}
+      description={
+        pendingRemoval?.self
+          ? "Du verlierst den vergünstigten Mitglieder-Tarif."
+          : "Diese Person wird aus der Familie entfernt und verliert den Mitglieder-Tarif."
+      }
+      confirmLabel={pendingRemoval?.self ? "Verlassen" : "Entfernen"}
+      destructive
+      confirmDisabled={removeMutation.loading || leaveMutation.loading}
+      onConfirm={confirmRemoval}
+    />
+    </>
   )
 }
 
