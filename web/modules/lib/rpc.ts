@@ -71,6 +71,8 @@ export const RpcMethod = {
   catalogCall: [
     "getPriceListPdfUrl",
     "upsertCatalogItem",
+    "previewCatalogImport",
+    "applyCatalogImport",
   ],
 } as const
 

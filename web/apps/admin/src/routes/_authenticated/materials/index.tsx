@@ -18,7 +18,7 @@ import {
   DialogTitle,
 } from "@modules/components/ui/dialog"
 import { type ColumnDef } from "@tanstack/react-table"
-import { Plus, Loader2 } from "lucide-react"
+import { Plus, Loader2, Upload } from "lucide-react"
 import { useState } from "react"
 import { rpcCallable } from "@modules/lib/rpc"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
@@ -102,10 +102,18 @@ function CatalogPage() {
       <PageHeader
         title="Katalog"
         action={
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Eintrag erstellen
-          </Button>
+          <div className="flex gap-2">
+            <Button asChild variant="outline">
+              <Link to="/materials/import">
+                <Upload className="h-4 w-4 mr-2" />
+                Import
+              </Link>
+            </Button>
+            <Button onClick={() => setCreateOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Eintrag erstellen
+            </Button>
+          </div>
         }
       />
       <DataTable

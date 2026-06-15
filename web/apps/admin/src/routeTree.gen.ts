@@ -34,6 +34,7 @@ import { Route as AuthenticatedUsersUserIdRouteImport } from "./routes/_authenti
 import { Route as AuthenticatedPriceListsPriceListIdRouteImport } from "./routes/_authenticated/price-lists/$priceListId"
 import { Route as AuthenticatedPermissionsPermissionIdRouteImport } from "./routes/_authenticated/permissions/$permissionId"
 import { Route as AuthenticatedMembershipsMembershipIdRouteImport } from "./routes/_authenticated/memberships/$membershipId"
+import { Route as AuthenticatedMaterialsImportRouteImport } from "./routes/_authenticated/materials/import"
 import { Route as AuthenticatedMaterialsMaterialIdRouteImport } from "./routes/_authenticated/materials/$materialId"
 import { Route as AuthenticatedMachinesMachineIdRouteImport } from "./routes/_authenticated/machines/$machineId"
 
@@ -171,6 +172,12 @@ const AuthenticatedMembershipsMembershipIdRoute =
     path: "/memberships/$membershipId",
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedMaterialsImportRoute =
+  AuthenticatedMaterialsImportRouteImport.update({
+    id: "/import",
+    path: "/import",
+    getParentRoute: () => AuthenticatedMaterialsRoute,
+  } as any)
 const AuthenticatedMaterialsMaterialIdRoute =
   AuthenticatedMaterialsMaterialIdRouteImport.update({
     id: "/$materialId",
@@ -201,6 +208,7 @@ export interface FileRoutesByFullPath {
   "/login/verify": typeof LoginVerifyRoute
   "/machines/$machineId": typeof AuthenticatedMachinesMachineIdRoute
   "/materials/$materialId": typeof AuthenticatedMaterialsMaterialIdRoute
+  "/materials/import": typeof AuthenticatedMaterialsImportRoute
   "/memberships/$membershipId": typeof AuthenticatedMembershipsMembershipIdRoute
   "/permissions/$permissionId": typeof AuthenticatedPermissionsPermissionIdRoute
   "/price-lists/$priceListId": typeof AuthenticatedPriceListsPriceListIdRoute
@@ -224,6 +232,7 @@ export interface FileRoutesByTo {
   "/login/verify": typeof LoginVerifyRoute
   "/machines/$machineId": typeof AuthenticatedMachinesMachineIdRoute
   "/materials/$materialId": typeof AuthenticatedMaterialsMaterialIdRoute
+  "/materials/import": typeof AuthenticatedMaterialsImportRoute
   "/memberships/$membershipId": typeof AuthenticatedMembershipsMembershipIdRoute
   "/permissions/$permissionId": typeof AuthenticatedPermissionsPermissionIdRoute
   "/price-lists/$priceListId": typeof AuthenticatedPriceListsPriceListIdRoute
@@ -254,6 +263,7 @@ export interface FileRoutesById {
   "/login_/verify": typeof LoginVerifyRoute
   "/_authenticated/machines/$machineId": typeof AuthenticatedMachinesMachineIdRoute
   "/_authenticated/materials/$materialId": typeof AuthenticatedMaterialsMaterialIdRoute
+  "/_authenticated/materials/import": typeof AuthenticatedMaterialsImportRoute
   "/_authenticated/memberships/$membershipId": typeof AuthenticatedMembershipsMembershipIdRoute
   "/_authenticated/permissions/$permissionId": typeof AuthenticatedPermissionsPermissionIdRoute
   "/_authenticated/price-lists/$priceListId": typeof AuthenticatedPriceListsPriceListIdRoute
@@ -284,6 +294,7 @@ export interface FileRouteTypes {
     | "/login/verify"
     | "/machines/$machineId"
     | "/materials/$materialId"
+    | "/materials/import"
     | "/memberships/$membershipId"
     | "/permissions/$permissionId"
     | "/price-lists/$priceListId"
@@ -307,6 +318,7 @@ export interface FileRouteTypes {
     | "/login/verify"
     | "/machines/$machineId"
     | "/materials/$materialId"
+    | "/materials/import"
     | "/memberships/$membershipId"
     | "/permissions/$permissionId"
     | "/price-lists/$priceListId"
@@ -336,6 +348,7 @@ export interface FileRouteTypes {
     | "/login_/verify"
     | "/_authenticated/machines/$machineId"
     | "/_authenticated/materials/$materialId"
+    | "/_authenticated/materials/import"
     | "/_authenticated/memberships/$membershipId"
     | "/_authenticated/permissions/$permissionId"
     | "/_authenticated/price-lists/$priceListId"
@@ -534,6 +547,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthenticatedMembershipsMembershipIdRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    "/_authenticated/materials/import": {
+      id: "/_authenticated/materials/import"
+      path: "/import"
+      fullPath: "/materials/import"
+      preLoaderRoute: typeof AuthenticatedMaterialsImportRouteImport
+      parentRoute: typeof AuthenticatedMaterialsRoute
+    }
     "/_authenticated/materials/$materialId": {
       id: "/_authenticated/materials/$materialId"
       path: "/$materialId"
@@ -568,6 +588,7 @@ const AuthenticatedMachinesRouteWithChildren =
 
 interface AuthenticatedMaterialsRouteChildren {
   AuthenticatedMaterialsMaterialIdRoute: typeof AuthenticatedMaterialsMaterialIdRoute
+  AuthenticatedMaterialsImportRoute: typeof AuthenticatedMaterialsImportRoute
   AuthenticatedMaterialsIndexRoute: typeof AuthenticatedMaterialsIndexRoute
 }
 
@@ -575,6 +596,7 @@ const AuthenticatedMaterialsRouteChildren: AuthenticatedMaterialsRouteChildren =
   {
     AuthenticatedMaterialsMaterialIdRoute:
       AuthenticatedMaterialsMaterialIdRoute,
+    AuthenticatedMaterialsImportRoute: AuthenticatedMaterialsImportRoute,
     AuthenticatedMaterialsIndexRoute: AuthenticatedMaterialsIndexRoute,
   }
 
