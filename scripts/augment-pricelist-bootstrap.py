@@ -5,11 +5,17 @@
 One-time bootstrap: augment Mario's "260604 Preisliste.xlsx" with the columns
 our catalog importer needs, WITHOUT touching his calculation formulas.
 
-For each workshop sheet it appends three columns to the right of the existing
-data (append = no formula-reference shift):
+For each workshop sheet it appends five columns to the right of the existing
+data (append = no formula-reference shift), making every row self-describing
+so the importer needs no per-sheet name/price-column logic:
     Code            stable 4-digit article number (catalog identity)
+    Name            customer-facing catalog name
     Kategorie       top-level category (from the section heading)
     Unterkategorie  sub-category (from the sub-heading; blank if none)
+    Einheit         sale unit (m² / lm / kg / Stk) → pricing model
+
+The sale PRICE is NOT copied — the importer reads Mario's existing
+"Preis Einheit Verkauf" column by header name (single source of truth).
 
 Code reuse: Holz rows are matched to the existing catalog (scripts/seed-data)
 by normalised name so they keep their 3xxx codes; Keramik matches the 4xxx
@@ -27,6 +33,11 @@ OUT = SRC.with_name(SRC.stem + " – mit Codes.xlsx")
 REPORT = Path("/tmp/pricelist_reconciliation.md")
 SEED = Path("/home/michschn/werkstattwaedi/machine-auth-wt-firebase-dev-env/scripts/seed-data/catalog")
 OPS = Path("/home/michschn/werkstattwaedi/machine-auth-wt-firebase-dev-env/../machine-auth-operations/scripts/seed-data/catalog")
+
+# Pricing model → human sale-unit label written into the Einheit column.
+# The importer maps the label back to the model (see shared/pricing import).
+MODEL_TO_EINHEIT = {"area": "m²", "length": "lm", "weight": "kg",
+                    "count": "Stk", "time": "h", "direct": "Stk", "sla": "Stk"}
 
 def col(letter):  # 'A'->1
     return openpyxl.utils.column_index_from_string(letter)
@@ -238,17 +249,19 @@ def main():
         rows = assign_codes(rows, sheet)
         ws = wb[sheet]
         anchor = last_content_col(wb_vals[sheet], header_row) + 2  # gap col between
-        ws.cell(header_row, anchor + 0, "Code")
-        ws.cell(header_row, anchor + 1, "Kategorie")
-        ws.cell(header_row, anchor + 2, "Unterkategorie")
+        headers = ["Code", "Name", "Kategorie", "Unterkategorie", "Einheit"]
+        for i, h in enumerate(headers):
+            ws.cell(header_row, anchor + i, h)
         for row in rows:
             r = row["row"]
             ws.cell(r, anchor + 0, row["code"])
-            ws.cell(r, anchor + 1, row["kategorie"])
-            ws.cell(r, anchor + 2, row["unterkategorie"])
+            ws.cell(r, anchor + 1, row["name"])
+            ws.cell(r, anchor + 2, row["kategorie"])
+            ws.cell(r, anchor + 3, row["unterkategorie"])
+            ws.cell(r, anchor + 4, MODEL_TO_EINHEIT.get(row["model"], "Stk"))
         total += len(rows)
         letter = openpyxl.utils.get_column_letter(anchor)
-        report_lines.append(f"  ↳ Spalten Code/Kategorie/Unterkategorie ab Spalte **{letter}** in *{sheet}*.\n")
+        report_lines.append(f"  ↳ Spalten Code/Name/Kategorie/Unterkategorie/Einheit ab Spalte **{letter}** in *{sheet}*.\n")
     wb.save(OUT)
     # report
     md = ["# Preislisten-Bootstrap — Reconciliation\n",
