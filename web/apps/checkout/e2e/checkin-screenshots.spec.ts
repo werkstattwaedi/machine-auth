@@ -86,6 +86,29 @@ test.describe("Check-in step screenshots", () => {
     ).toBeVisible()
     await expect(page.getByText("ODER", { exact: true })).toBeVisible()
 
+    // Settle before scrolling. The hero box is `h-auto`, so the page height
+    // is content-driven, and the check-in form + hero copy reflow when the
+    // webfont finishes loading. Scrolling to the bottom before that reflow
+    // lands on a stale offset; the late font swap then shifts the whole
+    // capture ~1px, ghosting every glyph edge for a ~2% diff over the 1%
+    // threshold (flaky). Wait for fonts, then for the page height to stop
+    // changing (two equal consecutive reads), before scrolling. Mirrors the
+    // settle guard in the sibling "collapses while typing" test below.
+    await page.evaluate(async () => {
+      await document.fonts.ready
+    })
+    let prevScrollHeight = -1
+    await expect
+      .poll(async () => {
+        const height = await page.evaluate(
+          () => document.documentElement.scrollHeight,
+        )
+        const settled = height === prevScrollHeight
+        prevScrollHeight = height
+        return settled
+      })
+      .toBe(true)
+
     // Scroll to the page end so the baseline captures the whole hero box
     // (it sits below the form and exceeds the remaining viewport).
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
