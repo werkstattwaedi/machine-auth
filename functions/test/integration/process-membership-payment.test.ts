@@ -185,7 +185,11 @@ describe("processMembershipForAckedBill (Integration, #323 renewal source)", () 
   });
 
   it("a source: 'membership-renewal' bill extends validUntil and clears pendingRenewalBill", async () => {
-    const validUntil = new Date("2026-07-01T00:00:00Z");
+    // Anchor relative to the real clock: activation uses `Timestamp.now()`
+    // and applies `max(now, validUntil) + 1y`. A hardcoded absolute date
+    // eventually drifts behind "now", flipping the branch to restart-from-now
+    // and breaking the `before + 365d` assertion (time-bomb). Keep it ahead.
+    const validUntil = new Date(Date.now() + 200 * DAY_MS);
     const { userRef, memRef } = await seedActiveMembership("alice", validUntil);
     const before = validUntil.getTime();
 
@@ -203,7 +207,11 @@ describe("processMembershipForAckedBill (Integration, #323 renewal source)", () 
   });
 
   it("is idempotent — replaying the same renewal bill does not double-extend", async () => {
-    const validUntil = new Date("2026-07-01T00:00:00Z");
+    // Anchor relative to the real clock: activation uses `Timestamp.now()`
+    // and applies `max(now, validUntil) + 1y`. A hardcoded absolute date
+    // eventually drifts behind "now", flipping the branch to restart-from-now
+    // and breaking the `before + 365d` assertion (time-bomb). Keep it ahead.
+    const validUntil = new Date(Date.now() + 200 * DAY_MS);
     const { userRef, memRef } = await seedActiveMembership("bob", validUntil);
     const before = validUntil.getTime();
 

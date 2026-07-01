@@ -145,7 +145,14 @@ async function listRenewalBills(): Promise<BillEntity[]> {
 describe("runRenewalInvoicer (Integration, #323)", () => {
   // Fire the cron "now"; a membership whose validUntil sits 30 days out is
   // in the renewal slice [now+29d, now+30d).
-  const now = new Date("2026-06-01T08:00:00Z");
+  //
+  // Anchor to the real clock rather than a hardcoded date: the cron window
+  // uses this injected `now`, but the downstream `processMembershipForAckedBill`
+  // activation uses the real `Timestamp.now()` and applies
+  // `max(now, validUntil) + 1y`. With an absolute date, once wall-clock time
+  // passes `inWindow` the activation restarts from now instead of extending
+  // from validUntil, breaking the `before + 365d` assertion (time-bomb).
+  const now = new Date();
   const inWindow = new Date(now.getTime() + RENEWAL_WINDOW_DAYS * DAY_MS - DAY_MS / 2);
   const tooFarOut = new Date(now.getTime() + (RENEWAL_WINDOW_DAYS + 10) * DAY_MS);
 
