@@ -62,6 +62,15 @@ After editing `machine-auth-operations/config.jsonc`, run `npm run generate-env`
 
 Verify `config/pricing` exists in Firestore (Admin → Firestore → `config/pricing`). Per issue #149 the checkout UI and the `closeCheckoutAndGetPayment` function refuse to operate when the doc is missing or fails the shape check, so a missing doc breaks all checkouts loudly rather than silently misbilling with hardcoded fallbacks.
 
+Verify `config/catalog-references` carries **both** references (ADR-0030):
+`membership` and `badge`, each pointing at an active catalog doc. The badge
+SKU must have the two variants `standard` (5 CHF) and `gratis` (0 CHF) —
+`addBadgeToCheckout` refuses with `failed-precondition` otherwise, which
+breaks the kiosk self-service badge purchase. The public seed
+(`scripts/seed-data/catalog/badge.json`) is the reference shape; production
+data comes from the operations repo's catalog fixtures, so add the badge
+item there before deploying this feature.
+
 ## 3. Deploy Functions
 
 ```bash
