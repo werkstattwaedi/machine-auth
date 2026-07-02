@@ -307,17 +307,35 @@ service cloud.firestore {
         // validation rejects negative/zero quantities and negative prices
         // (defense-in-depth behind server-side recompute in
         // closeCheckoutAndGetPayment).
+        //
+        // Badge purchase fields (`tokenId`, `badgeSdmCounter`) are SERVER-
+        // written only (addBadgeToCheckout callable, Admin SDK): a client
+        // minting/altering an item with a tokenId would let it associate an
+        // arbitrary badge at checkout close. Non-admin creates must not
+        // carry them; non-admin updates must not touch them. Deletes stay
+        // allowed — removing a badge from the cart is legitimate and
+        // nothing has been associated yet.
         allow create: if (
             isAdmin() ||
-            (isCheckoutPrincipalFor(get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId) &&
-             get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.status == "open") ||
-            (get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId == null && isAnonymousAuth())
+            (
+              (
+                (isCheckoutPrincipalFor(get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId) &&
+                 get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.status == "open") ||
+                (get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId == null && isAnonymousAuth())
+              ) &&
+              !request.resource.data.keys().hasAny(['tokenId', 'badgeSdmCounter'])
+            )
           ) && hasValidItemPricing(request.resource.data);
         allow update: if (
             isAdmin() ||
-            (isCheckoutPrincipalFor(get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId) &&
-             get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.status == "open") ||
-            (get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId == null && isAnonymousAuth())
+            (
+              (
+                (isCheckoutPrincipalFor(get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId) &&
+                 get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.status == "open") ||
+                (get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId == null && isAnonymousAuth())
+              ) &&
+              !request.resource.data.diff(resource.data).affectedKeys().hasAny(['tokenId', 'badgeSdmCounter'])
+            )
           ) && hasValidItemPricing(request.resource.data);
         allow delete: if isAdmin() ||
             (isCheckoutPrincipalFor(get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId) &&

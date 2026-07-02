@@ -106,9 +106,9 @@ describe("verifyTagCheckoutHandler (callable wrapper, Integration)", () => {
     expect(response).to.have.property("customToken").that.is.a("string");
   });
 
-  it("maps handler failures to HttpsError(invalid-argument)", async () => {
-    // No seeded token → handleVerifyTagCheckout throws "Token not found",
-    // which the wrapper must re-throw as an HttpsError.
+  it("returns the unregistered purchase branch for a badge with no tokens doc", async () => {
+    // No seeded token → the self-service badge purchase branch: no throw,
+    // no session, a signed voucher instead.
     const { picc, cmac } = generateValidPICCAndCMAC(
       TEST_TOKEN_UID,
       0,
@@ -117,12 +117,33 @@ describe("verifyTagCheckoutHandler (callable wrapper, Integration)", () => {
       TEST_SYSTEM_NAME
     );
 
+    const response = await verifyTagCheckoutHandler(makeRequest({ picc, cmac }));
+    expect(response.registered).to.equal(false);
+    expect(response.tokenId).to.equal(TEST_TOKEN_UID);
+    if (response.registered === false) {
+      expect(response.badgeVoucher).to.be.a("string");
+    }
+  });
+
+  it("maps handler failures to HttpsError(invalid-argument)", async () => {
+    // A tampered CMAC must fail crypto verification, which the wrapper
+    // re-throws as an HttpsError.
+    const { picc } = generateValidPICCAndCMAC(
+      TEST_TOKEN_UID,
+      0,
+      TEST_TERMINAL_KEY,
+      TEST_MASTER_KEY,
+      TEST_SYSTEM_NAME
+    );
+
     try {
-      await verifyTagCheckoutHandler(makeRequest({ picc, cmac }));
+      await verifyTagCheckoutHandler(
+        makeRequest({ picc, cmac: "0000000000000000" })
+      );
       expect.fail("expected HttpsError");
     } catch (err: any) {
       expect(err.code).to.equal("invalid-argument");
-      expect(err.message).to.include("Token not found");
+      expect(err.message).to.include("CMAC");
     }
   });
 

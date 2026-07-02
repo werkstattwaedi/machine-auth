@@ -12,6 +12,7 @@
 import { expect } from "chai";
 import {
   assertUsageTypeAllowed,
+  assertBadgeItemsBelongToOwner,
   entryFeeFor,
   isValidItem,
   recomputeSummary,
@@ -442,5 +443,45 @@ describe("assertUsageTypeAllowed (issue #284 loophole guards)", () => {
       hasMachineUsage: true,
       hasMembershipItem: true,
     });
+  });
+
+  it("rejects intern when a PAID badge is being bought (zeroing loophole)", () => {
+    expectThrows(() =>
+      assertUsageTypeAllowed("intern", {
+        hasMachineUsage: false,
+        hasMembershipItem: false,
+        hasPaidBadgeItem: true,
+      }),
+    );
+  });
+
+  it("allows intern with a gratis badge (nothing to zero)", () => {
+    assertUsageTypeAllowed("intern", {
+      hasMachineUsage: false,
+      hasMembershipItem: false,
+      hasPaidBadgeItem: false,
+    });
+  });
+});
+
+describe("assertBadgeItemsBelongToOwner (badge needs an identified owner)", () => {
+  const userRef = { id: "u1" } as never;
+
+  it("rejects badge items on a null-userId (anonymous) checkout", () => {
+    try {
+      assertBadgeItemsBelongToOwner(
+        [{ tokenId: "04c339aa1e1890" }],
+        null,
+      );
+      throw new Error("expected throw, got success");
+    } catch (err: any) {
+      expect(err.code ?? "").to.contain("failed-precondition");
+    }
+  });
+
+  it("passes with an identified owner or without badge items", () => {
+    assertBadgeItemsBelongToOwner([{ tokenId: "04c339aa1e1890" }], userRef);
+    assertBadgeItemsBelongToOwner([{}], null);
+    assertBadgeItemsBelongToOwner([], null);
   });
 });

@@ -36,9 +36,10 @@ import {
   type CatalogItem,
   type WorkshopId,
 } from "@modules/lib/workshop-config"
-import { partitionMembership } from "@oww/shared"
+import { partitionMembership, partitionBadge } from "@oww/shared"
 import { WorkshopSectionWithCatalog } from "@/components/usage/workshop-section-with-catalog"
 import { MembershipInlineSection } from "@/components/usage/membership-inline-section"
+import { BadgeInlineSection } from "@/components/usage/badge-inline-section"
 import { ScanFab } from "@/components/qr-scanner/scan-fab"
 import { useWizardContext } from "@/components/checkout/wizard-context"
 import { capturePickerScrollAnchor } from "@/components/usage/picker-scroll-anchor"
@@ -63,6 +64,8 @@ function VisitRoute() {
     pricingConfig,
     discountLevel,
     membershipCatalogId,
+    badgeCatalogId,
+    isAnonymous,
     addItem,
     updateItem,
     removeItem,
@@ -72,9 +75,14 @@ function VisitRoute() {
   // Issue #262/#263: break the Vereinsmitgliedschaft SKU out of the workshop
   // sections. Membership items get their own read-only inline section
   // (rendered first) and must not bleed into the `diverses` workshop block.
-  const { membershipItems, otherItems: workshopItems } = useMemo(
+  // Badge purchases (self-service NFC badge) get the same treatment.
+  const { membershipItems, otherItems: nonMembershipItems } = useMemo(
     () => partitionMembership(items, { membershipCatalogId }),
     [items, membershipCatalogId],
+  )
+  const { badgeItems, otherItems: workshopItems } = useMemo(
+    () => partitionBadge(nonMembershipItems, { badgeCatalogId }),
+    [nonMembershipItems, badgeCatalogId],
   )
   const toggleVisitedMutation = useAsyncMutation({
     context: "visit.toggleWorkshopVisited",
@@ -180,7 +188,7 @@ function VisitRoute() {
   // workshop keeps the full picker + sections; the membership simply becomes
   // one more position in the bill.
   const membershipOnly =
-    membershipItems.length > 0 &&
+    (membershipItems.length > 0 || badgeItems.length > 0) &&
     workshopItems.length === 0 &&
     effectiveWorkshops.size === 0
 
@@ -343,6 +351,19 @@ function VisitRoute() {
           <MembershipInlineSection
             items={membershipItems}
             onRemove={removeItem}
+          />
+        )}
+
+        {/* Selbstbedienungs-Badges: same inline treatment as the
+            membership. Rendered whenever badge items exist, plus a CTA on
+            the kiosk for identified visitors ("tap a new badge on the
+            reader" — the tap opens the purchase dialog, see
+            BridgeNfcRouter / BadgeOfferCoordinator). */}
+        {(badgeItems.length > 0 || (kiosk && !isAnonymous)) && (
+          <BadgeInlineSection
+            items={badgeItems}
+            onRemove={removeItem}
+            showCta={kiosk && !isAnonymous}
           />
         )}
 

@@ -4,7 +4,9 @@
 import { useEffect, useState } from "react"
 import { useNavigate } from "@tanstack/react-router"
 import { toast } from "sonner"
-import { useBridge } from "@modules/lib/use-bridge"
+import { useBridge, resolveBridgeBearer } from "@modules/lib/use-bridge"
+import { useFunctions } from "@modules/lib/firebase-context"
+import { rpcCallable } from "@modules/lib/rpc"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,6 +17,10 @@ import {
   AlertDialogTitle,
 } from "@modules/components/ui/alert-dialog"
 import { getKioskSessionState } from "./checkout/kiosk-session-guard"
+import {
+  BadgePurchaseDialog,
+  type BadgePurchaseOffer,
+} from "./checkout/badge-purchase-dialog"
 
 // A tap that can't even be routed (NDEF read failed, or the URL lacks the
 // SDM params) used to be silently swallowed — the kiosk gave zero feedback
@@ -107,12 +113,65 @@ export async function confirmTagSwitch(deps: {
  */
 export function BridgeNfcRouter() {
   const bridge = useBridge()
+  const functions = useFunctions()
   const navigate = useNavigate()
   const [pendingTag, setPendingTag] = useState<PendingTag | null>(null)
+  const [badgeOffer, setBadgeOffer] = useState<BadgePurchaseOffer | null>(null)
+  const [signInFirstOpen, setSignInFirstOpen] = useState(false)
 
   useEffect(() => {
     if (!bridge.available) return
     if (!bridge.features.includes("nfc")) return
+
+    /**
+     * Mid-session tap: before choosing which confirmation to show, ask the
+     * server whether the badge is registered at all — WITHOUT consuming the
+     * one-shot SDM counter (probeTag does no counter advance, issue #420).
+     * An unregistered self-service badge must NOT trigger the switch/discard
+     * dialog: the session stays untouched and we offer the purchase instead.
+     */
+    const probeMidSessionTap = async (
+      picc: string,
+      cmac: string,
+      session: ReturnType<typeof getKioskSessionState>
+    ) => {
+      try {
+        const bearer = await resolveBridgeBearer()
+        const probeTag = rpcCallable<
+          { picc: string; cmac: string; bearer?: string },
+          { tokenId: string; registered: boolean; badgeVoucher?: string }
+        >(functions, "authCall", "probeTag")
+        const { data } = await probeTag({
+          picc,
+          cmac,
+          bearer: bearer ?? undefined,
+        })
+        if (!data.registered && data.badgeVoucher) {
+          if (session.identified) {
+            setBadgeOffer({
+              tokenId: data.tokenId,
+              badgeVoucher: data.badgeVoucher,
+            })
+          } else {
+            // Anonymous with in-progress work: buying needs a sign-in,
+            // which would discard the anon session — don't offer either,
+            // just explain. The visit in progress stays untouched.
+            setSignInFirstOpen(true)
+          }
+          return
+        }
+        // Registered badge — the existing switch/discard confirmation.
+        setPendingTag({
+          picc,
+          cmac,
+          identified: session.identified,
+          holderName: session.holderName,
+        })
+      } catch (err) {
+        console.error("probeTag failed:", err)
+        toast.error(UNREADABLE_TAG_MESSAGE)
+      }
+    }
 
     return bridge.onNfcTag(({ url }) => {
       if (!url) {
@@ -129,25 +188,23 @@ export function BridgeNfcRouter() {
           toast.error(UNREADABLE_TAG_MESSAGE)
           return
         }
-        // A session worth protecting is still in progress — confirm before
-        // discarding it. A later tap while the dialog is up replaces the
-        // pending tag (the newest badge wins the confirmation). Capture
-        // whether that session was already identified so the dialog can be
-        // honest about whether the open visit survives (identified handoff)
-        // or is lost for good (anonymous upgrade — issue #468).
+        // A session worth protecting is still in progress — probe first
+        // (registered → confirm switch/discard; unregistered → purchase
+        // offer). A later tap while a dialog is up replaces the pending
+        // state (the newest badge wins). Capture whether that session was
+        // already identified so the switch dialog can be honest about
+        // whether the open visit survives (identified handoff) or is lost
+        // for good (anonymous upgrade — issue #468).
         const session = getKioskSessionState()
         if (session.preservable) {
-          setPendingTag({
-            picc,
-            cmac,
-            identified: session.identified,
-            holderName: session.holderName,
-          })
+          void probeMidSessionTap(picc, cmac, session)
           return
         }
         // TanStack Router types the `search` shape per route. We're forcing
         // navigation to `/checkin` regardless of the current route, so cast
         // to the permissive shape the checkin route validates against.
+        // (An unregistered badge surfaces there through the wizard's single
+        // verify → BadgeOfferCoordinator.)
         navigate({
           to: "/checkin",
           search: { picc, cmac, kiosk: "" } as Record<string, string>,
@@ -158,9 +215,34 @@ export function BridgeNfcRouter() {
         toast.error(UNREADABLE_TAG_MESSAGE)
       }
     })
-  }, [bridge.available, bridge.features, bridge.onNfcTag, navigate])
+  }, [bridge.available, bridge.features, bridge.onNfcTag, navigate, functions])
 
-  if (!pendingTag) return null
+  const dialogs = (
+    <>
+      <BadgePurchaseDialog
+        offer={badgeOffer}
+        onClose={() => setBadgeOffer(null)}
+      />
+      <AlertDialog open={signInFirstOpen}>
+        <AlertDialogContent data-testid="badge-signin-first-dialog">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Neuer Badge erkannt</AlertDialogTitle>
+            <AlertDialogDescription>
+              Dieser Badge gehört noch niemandem. Schliesse zuerst den
+              laufenden Checkout ab und melde dich dann an, um ihn zu kaufen.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setSignInFirstOpen(false)}>
+              Verstanden
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+
+  if (!pendingTag) return dialogs
 
   // Anonymous upgrade: confirming discards the in-progress visit for good —
   // be honest about the loss and make the confirm red/destructive, matching
@@ -170,7 +252,9 @@ export function BridgeNfcRouter() {
   const anonymous = !pendingTag.identified
 
   return (
-    <AlertDialog open>
+    <>
+      {dialogs}
+      <AlertDialog open>
       <AlertDialogContent onEscapeKeyDown={(e) => e.preventDefault()}>
         <AlertDialogHeader>
           <AlertDialogTitle>
@@ -219,6 +303,7 @@ export function BridgeNfcRouter() {
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
-    </AlertDialog>
+      </AlertDialog>
+    </>
   )
 }

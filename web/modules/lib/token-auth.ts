@@ -33,6 +33,16 @@ export interface TokenUser {
   activeMembership?: boolean
 }
 
+/**
+ * An authentic-but-unregistered badge from the self-service stack: the tap
+ * verified cryptographically but no `tokens/{id}` doc exists. The signed
+ * voucher is the proof-of-tap the badge purchase callable requires.
+ */
+export interface UnregisteredBadge {
+  tokenId: string
+  badgeVoucher: string
+}
+
 interface UseTokenAuthResult {
   tokenUser: TokenUser | null
   /** True while verifying the tag and signing in */
@@ -40,20 +50,29 @@ interface UseTokenAuthResult {
   error: string | null
   /** True when the current Firebase Auth session is a kiosk actsAs session */
   isTagAuth: boolean
+  /** Set when the tapped badge is genuine but not registered to anyone. */
+  unregisteredBadge: UnregisteredBadge | null
   /** Sign out of the kiosk-created Firebase Auth session */
   tagSignOut: () => Promise<void>
 }
 
-interface VerifyTagResponse {
-  customToken: string
-  tokenId: string
-  userId: string
-  firstName?: string
-  lastName?: string
-  email?: string
-  userType?: string
-  activeMembership?: boolean
-}
+type VerifyTagResponse =
+  | {
+      registered?: true
+      customToken: string
+      tokenId: string
+      userId: string
+      firstName?: string
+      lastName?: string
+      email?: string
+      userType?: string
+      activeMembership?: boolean
+    }
+  | {
+      registered: false
+      tokenId: string
+      badgeVoucher: string
+    }
 
 // Module-level dedup of in-flight verify_tag calls. The verifyTagCheckout
 // endpoint enforces a strict SDM counter increase; a duplicate request with
@@ -118,6 +137,8 @@ export function useTokenAuth(
   const tokenUser = useSyncExternalStore(subscribeKioskSession, getKioskTokenUser)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [unregisteredBadge, setUnregisteredBadge] =
+    useState<UnregisteredBadge | null>(null)
 
   const tagSignOut = useCallback(async () => {
     if (!getKioskTokenUser()) return
@@ -181,6 +202,17 @@ export function useTokenAuth(
         const data = await pending
         if (cancelled) return
 
+        // An authentic pre-personalized badge with no owner: no session to
+        // establish — surface it so the wizard can offer the self-service
+        // purchase (or a sign-in-first prompt).
+        if (data.registered === false) {
+          setUnregisteredBadge({
+            tokenId: data.tokenId,
+            badgeVoucher: data.badgeVoucher,
+          })
+          return
+        }
+
         // Sign into Firebase Auth so Firestore rules allow reads/writes.
         // The custom token uses a synthetic UID with `actsAs` claim — see
         // functions/src/checkout/verify_tag.ts.
@@ -207,5 +239,12 @@ export function useTokenAuth(
     }
   }, [picc, cmac, functions, auth])
 
-  return { tokenUser, loading, error, isTagAuth: tokenUser !== null, tagSignOut }
+  return {
+    tokenUser,
+    loading,
+    error,
+    isTagAuth: tokenUser !== null,
+    unregisteredBadge,
+    tagSignOut,
+  }
 }

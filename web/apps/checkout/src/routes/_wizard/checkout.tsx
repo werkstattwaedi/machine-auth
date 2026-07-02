@@ -24,6 +24,7 @@ function CheckoutRoute() {
       items={ctx.items}
       config={ctx.pricingConfig}
       membershipCatalogId={ctx.membershipCatalogId}
+      badgeCatalogId={ctx.badgeCatalogId}
       onPrimaryBillingChange={(updates) => {
         const primary = ctx.persons[0]
         if (primary) {

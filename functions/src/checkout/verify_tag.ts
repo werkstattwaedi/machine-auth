@@ -21,6 +21,7 @@ import {
   mintKioskSessionToken,
   type KioskUserPayload,
 } from "./kiosk_session";
+import { mintBadgeVoucher } from "../badge/voucher";
 
 /**
  * Configuration passed from middleware
@@ -40,15 +41,32 @@ export interface VerifyTagRequest {
 }
 
 /**
- * Response containing token and user information. The user fields come from
+ * Registered tag: token and user information. The user fields come from
  * {@link KioskUserPayload} (`activeMembership` collapsed to a boolean —
  * issue #358; drives member pricing for tag-tap checkout).
  */
-export interface VerifyTagResponse extends KioskUserPayload {
+export interface VerifyTagRegisteredResponse extends KioskUserPayload {
+  registered: true;
   tokenId: string;
   uid: string;  // Hex-encoded UID for debugging
   customToken: string;  // Firebase custom token for client-side auth
 }
+
+/**
+ * Authentic-but-unregistered tag (a pre-personalized badge from the kiosk
+ * stack, no `tokens/{id}` doc yet). No session is minted; the signed
+ * voucher is the client's proof-of-tap for the self-service badge purchase
+ * (`addBadgeToCheckout`).
+ */
+export interface VerifyTagUnregisteredResponse {
+  registered: false;
+  tokenId: string;
+  badgeVoucher: string;
+}
+
+export type VerifyTagResponse =
+  | VerifyTagRegisteredResponse
+  | VerifyTagUnregisteredResponse;
 
 /**
  * Result of decrypting + authenticating a tapped tag.
@@ -136,14 +154,33 @@ export async function handleVerifyTagCheckout(
   // Step 1: Decrypt + authenticate the tag (shared core).
   const { tokenId, uid: uidHex, piccData } = decryptAndVerifyTag(request, config);
 
+  // The 3-byte counter is little-endian on the wire (per NTAG SDM spec).
+  const incomingCounter =
+    piccData.counter[0] |
+    (piccData.counter[1] << 8) |
+    (piccData.counter[2] << 16);
+
   // Step 2: Look up token in Firestore by UID
   const db = getFirestore();
   const tokenRef = db.collection("tokens").doc(tokenId);
   const tokenDoc = await tokenRef.get();
 
   if (!tokenDoc.exists) {
-    logger.warn("Token not found", { tokenId });
-    throw new Error("Token not found");
+    // Authentic (CMAC verified) but unregistered: a pre-personalized badge
+    // from the self-service stack. No session, no counter transaction
+    // (there is no doc to store the counter on — a replay can only re-open
+    // a purchase offer, and association goes through the signed voucher).
+    // The voucher's counter is stamped into the token doc at association,
+    // which closes the pre-registration-replay window.
+    logger.info("Unregistered badge tapped", { tokenId });
+    return {
+      registered: false,
+      tokenId,
+      badgeVoucher: mintBadgeVoucher(
+        { tokenId, sdmCounter: incomingCounter },
+        config.masterKey
+      ),
+    };
   }
 
   const tokenData = tokenDoc.data()!;
@@ -164,14 +201,8 @@ export async function handleVerifyTagCheckout(
   const realUserId = userRef.id;
 
   // Step 3: Verify SDM read counter is monotonically increasing (replay defense).
-  // The 3-byte counter is little-endian on the wire (per NTAG SDM spec).
   // We read+write atomically so two concurrent requests with the same counter
   // can't both succeed.
-  const incomingCounter =
-    piccData.counter[0] |
-    (piccData.counter[1] << 8) |
-    (piccData.counter[2] << 16);
-
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(tokenRef);
     // Sentinel -1: a token that has never been tapped accepts any counter
@@ -203,6 +234,7 @@ export async function handleVerifyTagCheckout(
   // `userId` in the response is the REAL user, so the client can pre-fill
   // the form. The synthetic session UID is opaque to the client.
   return {
+    registered: true,
     tokenId,
     uid: uidHex,
     customToken,

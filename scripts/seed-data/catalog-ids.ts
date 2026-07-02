@@ -18,3 +18,6 @@
 
 /** Doc ID for the Mitgliedschaft catalog item. Variants: "single", "family". */
 export const MEMBERSHIP_CATALOG_ID = "bWJodoXu3B3kiHMyFd7f";
+
+/** Doc ID for the NFC-Badge catalog item. Variants: "standard", "gratis". */
+export const BADGE_CATALOG_ID = "QmFkZ2VTa3VPd3dLaW9z";

@@ -132,6 +132,8 @@ export interface CatalogVariant {
 export interface CatalogReferencesEntity {
   /** The Mitgliedschaft catalog item (variants: "single", "family"). */
   membership: DocumentReference;
+  /** The NFC-Badge catalog item (variants: "standard", "gratis"). */
+  badge?: DocumentReference;
 }
 
 export interface CatalogEntity {
@@ -267,6 +269,19 @@ export interface CheckoutItemEntity {
   totalPrice: number;
   formInputs?: { quantity: number; unit: string }[];
   pricingModel?: PricingModel | null;
+  /**
+   * Self-service badge purchase (server-written ONLY — firestore.rules deny
+   * these fields on client writes): the tapped badge's token id, carried on
+   * the line item until checkout close associates `tokens/{tokenId}` with
+   * the checkout's user.
+   */
+  tokenId?: string;
+  /**
+   * The SDM read counter of the purchase tap, stamped into the new token
+   * doc at association so a captured pre-registration tap URL can't be
+   * replayed as a sign-in afterwards.
+   */
+  badgeSdmCounter?: number;
 }
 
 // --- Memberships ---
