@@ -56,8 +56,9 @@ type Stage =
 
 /** The 60s per-email resend throttle (`resource-exhausted`). The previously
  *  sent code is still valid in that case, so callers advance instead of
- *  dead-ending on an error toast. */
-function isResendThrottleError(err: unknown): boolean {
+ *  dead-ending on an error toast. Exported for the kiosk sign-in dialog,
+ *  which shares the requestLoginCode flow. */
+export function isResendThrottleError(err: unknown): boolean {
   return (
     !!err &&
     typeof err === "object" &&

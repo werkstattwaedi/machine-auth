@@ -6,6 +6,7 @@ import { Checkbox } from "@modules/components/ui/checkbox"
 import { Button } from "@modules/components/ui/button"
 import { PersonCard, RemovePersonButton } from "./person-card"
 import { NfcBadgeAffordance } from "./nfc-badge-affordance"
+import { KioskEmailSignin } from "./kiosk-email-signin"
 import { Plus, ArrowRight, Check, LogIn } from "lucide-react"
 import type { CheckoutPerson, PersonsAction } from "./use-checkout-state"
 import type { UserType } from "@modules/lib/pricing"
@@ -437,6 +438,7 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
             error={tagAuthError ?? null}
             picc={picc}
           />
+          <KioskEmailSignin />
         </>
       )}
 

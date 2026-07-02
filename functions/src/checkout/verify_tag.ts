@@ -5,9 +5,7 @@
  * for unauthenticated checkout via NFC tag tap.
  */
 
-import * as crypto from "crypto";
 import { getFirestore } from "firebase-admin/firestore";
-import { getAuth } from "firebase-admin/auth";
 import * as logger from "firebase-functions/logger";
 import { CallableRequest, HttpsError } from "firebase-functions/v2/https";
 import { decryptPICCData, verifyCMAC, PICCData } from "../ntag/sdm_crypto";
@@ -16,8 +14,13 @@ import {
   terminalKey,
   diversificationMasterKey,
   diversificationSystemName,
-  kioskBearerKey,
 } from "../config/tag-secrets";
+import {
+  assertKioskBearer,
+  buildKioskUserPayload,
+  mintKioskSessionToken,
+  type KioskUserPayload,
+} from "./kiosk_session";
 
 /**
  * Configuration passed from middleware
@@ -37,24 +40,14 @@ export interface VerifyTagRequest {
 }
 
 /**
- * Response containing token and user information
+ * Response containing token and user information. The user fields come from
+ * {@link KioskUserPayload} (`activeMembership` collapsed to a boolean —
+ * issue #358; drives member pricing for tag-tap checkout).
  */
-export interface VerifyTagResponse {
+export interface VerifyTagResponse extends KioskUserPayload {
   tokenId: string;
-  userId: string;
   uid: string;  // Hex-encoded UID for debugging
   customToken: string;  // Firebase custom token for client-side auth
-  firstName?: string;
-  lastName?: string;
-  email?: string;
-  userType?: string;
-  /**
-   * Whether the resolved user holds an active membership. Collapsed to a
-   * boolean (the stored field is a `DocumentReference | null`) so nothing
-   * membership-internal leaks to the kiosk client. Drives member pricing for
-   * tag-tap checkout — see issue #358.
-   */
-  activeMembership: boolean;
 }
 
 /**
@@ -202,38 +195,18 @@ export async function handleVerifyTagCheckout(
   const userDoc = await userRef.get();
   const userData = userDoc.exists ? userDoc.data() : undefined;
 
-  // Step 5: Create Firebase custom token with a SYNTHETIC UID so the kiosk
-  // session is a different Firebase principal than the real user. This is
-  // the actual security defense:
-  //  - createCustomToken merges developer claims with the auth user's
-  //    persistent custom claims. If we used realUserId, an admin tapping
-  //    their badge would get an `admin: true` session.
-  //  - With a synthetic UID, no persistent claims exist, so the kiosk
-  //    session has only the claims we explicitly set here.
-  // The `actsAs` claim names the real user; rules and callables use it for
-  // owner checks instead of `request.auth.uid`.
-  const sessionUid = `tag:${realUserId}:${crypto
-    .randomBytes(12)
-    .toString("base64url")}`;
-  const customToken = await getAuth().createCustomToken(sessionUid, {
-    tagCheckout: true,
-    actsAs: realUserId,
-    kioskId: "kiosk-1",
-  });
+  // Step 5: Mint the synthetic-uid kiosk session (see kiosk_session.ts for
+  // why the uid must NOT be the real user's).
+  const customToken = await mintKioskSessionToken(realUserId, "tag");
 
   // Step 6: Return token and user information.
   // `userId` in the response is the REAL user, so the client can pre-fill
   // the form. The synthetic session UID is opaque to the client.
   return {
     tokenId,
-    userId: realUserId,
     uid: uidHex,
     customToken,
-    firstName: userData?.firstName,
-    lastName: userData?.lastName,
-    email: userData?.email,
-    userType: userData?.userType,
-    activeMembership: !!userData?.activeMembership,
+    ...buildKioskUserPayload(realUserId, userData),
   };
 }
 
@@ -250,13 +223,7 @@ export const verifyTagCheckoutHandler = async (
 ): Promise<VerifyTagResponse> => {
   const { picc, cmac, bearer } = request.data ?? ({} as VerifyTagRequest);
 
-  if (
-    process.env.FUNCTIONS_EMULATOR !== "true" &&
-    bearer !== kioskBearerKey.value()
-  ) {
-    logger.warn("verifyTagCheckout rejected: missing/invalid kiosk bearer.");
-    throw new HttpsError("permission-denied", "Forbidden");
-  }
+  assertKioskBearer(bearer, "verifyTagCheckout");
 
   try {
     return await handleVerifyTagCheckout(

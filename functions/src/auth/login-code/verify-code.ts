@@ -43,9 +43,16 @@ export interface VerifyLoginCodeResult {
   customToken: string;
 }
 
-export async function handleVerifyLoginCode(
+/**
+ * Validates and atomically consumes a login code. Shared core between the
+ * regular sign-in (`handleVerifyLoginCode`, mints a real session) and the
+ * kiosk sign-in (`verify_login_code_kiosk.ts`, mints a lightweight actsAs
+ * session). Returns the canonical email stored on the consumed code doc;
+ * throws the user-facing German HttpsErrors on any failure.
+ */
+export async function consumeLoginCode(
   input: VerifyLoginCodeInput
-): Promise<VerifyLoginCodeResult> {
+): Promise<{ email: string }> {
   if (!input?.email || !input?.code) {
     throw new HttpsError("invalid-argument", "email and code are required");
   }
@@ -150,11 +157,17 @@ export async function handleVerifyLoginCode(
       throw new HttpsError("failed-precondition", "Zu viele Versuche.");
     case "wrong":
       throw new HttpsError("failed-precondition", "Code falsch.");
-    case "ok": {
-      const customToken = await mintSessionToken(outcome.email, "emailCode");
-      return { customToken };
-    }
+    case "ok":
+      return { email: outcome.email };
   }
+}
+
+export async function handleVerifyLoginCode(
+  input: VerifyLoginCodeInput
+): Promise<VerifyLoginCodeResult> {
+  const { email } = await consumeLoginCode(input);
+  const customToken = await mintSessionToken(email, "emailCode");
+  return { customToken };
 }
 
 export const verifyLoginCodeHandler = async (
