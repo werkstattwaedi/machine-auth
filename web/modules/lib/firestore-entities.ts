@@ -284,6 +284,15 @@ export interface CheckoutItemDoc extends AuditFields {
   totalPrice: number
   formInputs?: { quantity: number; unit: string }[] | null
   pricingModel?: PricingModel | string | null
+  /**
+   * Self-service badge purchase (server-written ONLY — firestore.rules deny
+   * these fields on client writes): the tapped badge's token id, carried on
+   * the line item until checkout close associates `tokens/{tokenId}` with
+   * the checkout's user.
+   */
+  tokenId?: string
+  /** SDM counter of the purchase tap; stamped into the token doc at association. */
+  badgeSdmCounter?: number
 }
 
 // ── bills ────────────────────────────────────────────────────────────────
@@ -455,11 +464,12 @@ export interface PricingConfigDoc extends AuditFields {
  * a code deploy. Mirrors how `config/pricing` decouples fee values from
  * code today.
  *
- * Only `membership` is populated today.
  */
 export interface CatalogReferencesDoc extends AuditFields {
   /** The Mitgliedschaft catalog item (variants: "single", "family"). */
   membership: DocumentReference<CatalogItemDoc>
+  /** The NFC-Badge catalog item (variants: "standard", "gratis"). */
+  badge?: DocumentReference<CatalogItemDoc>
 }
 
 export type ConfigDoc =

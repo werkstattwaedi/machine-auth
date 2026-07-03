@@ -56,20 +56,32 @@ const resendFromEmail = defineString("RESEND_FROM_EMAIL");
 const resendQrBillTemplateId = defineString("RESEND_QRBILL_TEMPLATE_ID");
 // Issue #251: method-aware invoice emails. Ops repo populates the values;
 // emulator runs send fine with empty defaults via assertTemplateConfigured.
-const resendMonthlyTemplateId = defineString(
+//
+// Two easily-confused, DIFFERENT templates cover the "Sammelrechnung"
+// (collective-billing) payment method — see issue #502, which happened
+// because they used to share one template and its copy:
+//   - resendBelegForMonthlyInvoiceTemplateId (env RESEND_MONTHLY_TEMPLATE_ID,
+//     Resend alias "self-checkout-monthly"): the per-visit Beleg, a
+//     "this charge is queued for next month's invoice" receipt. NOT
+//     payable, NO QR-bill slip.
+//   - resendSammelrechnungInvoiceTemplateId (env
+//     RESEND_SAMMELRECHNUNG_TEMPLATE_ID, Resend alias
+//     "self-checkout-sammelrechnung"): the aggregated invoice itself,
+//     emitted once a month by monthlyBillRun. IS payable, HAS a QR-bill
+//     slip attached. Falls back to the generic QR-bill template when
+//     unset (emulator mode / not yet configured in the ops repo).
+const resendBelegForMonthlyInvoiceTemplateId = defineString(
   "RESEND_MONTHLY_TEMPLATE_ID",
+  { default: "" },
+);
+const resendSammelrechnungInvoiceTemplateId = defineString(
+  "RESEND_SAMMELRECHNUNG_TEMPLATE_ID",
   { default: "" },
 );
 const resendTwintTemplateId = defineString(
   "RESEND_TWINT_TEMPLATE_ID",
   { default: "" },
 );
-// Aggregated Sammelrechnung email (issue #245). Repurposes the existing
-// `RESEND_MONTHLY_TEMPLATE_ID` ops param — per-visit Belege no longer
-// email, so the template content shifts from "queued for monthly" to
-// "your Sammelrechnung is ready" via an ops template-copy update. Falls
-// back to the generic QR-bill template when unset (emulator mode).
-const resendSammelrechnungTemplateId = resendMonthlyTemplateId;
 // Contact address surfaced on the TWINT email ("contact kasse@... if in
 // error"). Set in the operations repo per env.
 const kasseEmail = defineString("KASSE_EMAIL", { default: "" });
@@ -436,23 +448,38 @@ function pickTemplate(
   method: PaymentMethod | null | undefined,
   bill: BillEntity,
 ): TemplateChoice {
-  // Sammelrechnung family (issue #245/#405) uses the self-checkout/monthly
-  // template (RESEND_MONTHLY_TEMPLATE_ID). Two documents share it:
-  //   - the per-visit Beleg emailed when a member picks "monthly" — a
-  //     receipt for the visit, NOT a payable invoice (issue #405);
-  //   - the aggregated monthly Sammelrechnung (kind "invoice" whose linked
-  //     checkout still records paymentMethod "monthly"), emitted by
-  //     monthlyBillRun.
-  // Ops owns the template copy (the existing "self-checkout-monthly"
-  // template). Falls back to the generic QR-bill template when unset
-  // (emulator / not-yet-configured).
-  if ((bill.kind ?? "invoice") === "beleg" || method === "monthly") {
-    const id = resendSammelrechnungTemplateId.value();
+  const kind = bill.kind ?? "invoice";
+
+  // Per-visit Beleg (issue #245/#405): a "charge queued for next month's
+  // Sammelrechnung" receipt, emailed when a member picks "monthly" at
+  // checkout. NOT a payable invoice. Ops owns the template copy (the
+  // "self-checkout-monthly" template). Falls back to the generic QR-bill
+  // template when unset (emulator / not-yet-configured).
+  if (kind === "beleg") {
+    const id = resendBelegForMonthlyInvoiceTemplateId.value();
     return {
       id: id || resendQrBillTemplateId.value(),
       paramName: id ? "RESEND_MONTHLY_TEMPLATE_ID" : "RESEND_QRBILL_TEMPLATE_ID",
     };
   }
+
+  // Aggregated monthly Sammelrechnung (issue #245), emitted by
+  // monthlyBillRun: kind "invoice" whose linked checkout still records
+  // paymentMethod "monthly" (inherited from the Belege it aggregates).
+  // This IS the payable invoice — a QR-bill PDF is attached — so it needs
+  // its own "ready to pay" copy, distinct from the Beleg "queued" notice
+  // above (they must not share a template — see issue #502). Falls back
+  // to the generic QR-bill template when unset.
+  if (kind === "invoice" && method === "monthly") {
+    const id = resendSammelrechnungInvoiceTemplateId.value();
+    return {
+      id: id || resendQrBillTemplateId.value(),
+      paramName: id
+        ? "RESEND_SAMMELRECHNUNG_TEMPLATE_ID"
+        : "RESEND_QRBILL_TEMPLATE_ID",
+    };
+  }
+
   // Remaining paths are TWINT, rechnung, and the null pre-ack default.
   switch (method) {
     case "twint":

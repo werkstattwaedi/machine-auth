@@ -52,6 +52,14 @@ export const NFC_TAG_UID = "04c339aa1e1890"
 // diversifies to a different SDM key and identifies a different user.
 export const NFC_TAG_UID_2 = "04d448bb2f29a1"
 
+/**
+ * A pre-personalized self-service badge: cryptographically valid SDM params
+ * but NO tokens doc — the badge-purchase flow's raw material. Specs that
+ * close a purchase must delete `tokens/{UNASSIGNED_TAG_UID}` in beforeEach
+ * so re-runs start unassigned again.
+ */
+export const UNASSIGNED_TAG_UID = "04e557cc3a3bb2"
+
 const PROJECT_ID = "oww-maco"
 
 // Test user constants
@@ -295,8 +303,38 @@ export default async function globalSetup() {
     ],
   })
 
+  // ── Seed badge catalog (self-service badge purchase) ──
+  // addBadgeToCheckout resolves `config/catalog-references.badge` → the two
+  // pinned variants: `standard` (paid) and `gratis` (free first badge).
+  await seedCatalog("e2e-badge", {
+    // NOTE: catalog codes must be unique across the seed — the
+    // /visit/add/item/$code route looks items up by code (9200 is
+    // E2E Sperrholz).
+    code: "9300",
+    name: "Badge",
+    workshops: ["diverses"],
+    category: ["Badge"],
+    active: true,
+    userCanAdd: false,
+    variants: [
+      {
+        id: "standard",
+        label: "Badge",
+        pricingModel: "direct",
+        unitPrice: { default: 5 },
+      },
+      {
+        id: "gratis",
+        label: "Badge (gratis)",
+        pricingModel: "direct",
+        unitPrice: { default: 0 },
+      },
+    ],
+  })
+
   await db.doc("config/catalog-references").set({
     membership: db.doc("catalog/e2e-membership"),
+    badge: db.doc("catalog/e2e-badge"),
   })
 
   // ── Seed permission ──
@@ -400,12 +438,29 @@ export default async function globalSetup() {
     MASTER_KEY,
     SYSTEM_NAME,
   )
+  // The unassigned self-service badge: valid crypto, no tokens doc seeded.
+  const { picc: piccUnassigned, cmac: cmacUnassigned } =
+    generateValidPICCAndCMAC(
+      UNASSIGNED_TAG_UID,
+      0,
+      TERMINAL_KEY,
+      MASTER_KEY,
+      SYSTEM_NAME,
+    )
 
   // Write to a temp file so test specs can read the values
   const e2eDataPath = path.resolve(__dirname, ".e2e-data.json")
   writeFileSync(
     e2eDataPath,
-    JSON.stringify({ picc, cmac, picc2, cmac2, authUid: authUid }),
+    JSON.stringify({
+      picc,
+      cmac,
+      picc2,
+      cmac2,
+      piccUnassigned,
+      cmacUnassigned,
+      authUid: authUid,
+    }),
   )
 
   console.log("[e2e] Global setup complete")

@@ -196,7 +196,15 @@
             "quantity": "number",
             "unit": "string"
           }],
-          "pricingModel": "string | null" // Snapshot from catalog.variants[i].pricingModel
+          "pricingModel": "string | null", // Snapshot from catalog.variants[i].pricingModel
+
+          // Self-service badge purchase (server-written ONLY; rules deny
+          // these fields on client item writes). The tapped badge's token id
+          // rides on the line item until checkout close creates
+          // tokens/{tokenId} for the checkout's user; badgeSdmCounter (the
+          // purchase tap's SDM read counter) seeds lastSdmCounter there.
+          "tokenId": "string?",
+          "badgeSdmCounter": "number?"
         }
       }
     }
@@ -230,7 +238,8 @@
     // (e.g. roll a new membership SKU with a price change) without a code
     // deploy.
     "catalog-references": {
-      "membership": "DocumentReference" // DocumentReference to the Mitgliedschaft catalog item (variants: "single", "family")
+      "membership": "DocumentReference", // DocumentReference to the Mitgliedschaft catalog item (variants: "single", "family")
+      "badge": "DocumentReference" // DocumentReference to the NFC-Badge catalog item (variants: "standard", "gratis")
     }
   },
   "audit_log": {

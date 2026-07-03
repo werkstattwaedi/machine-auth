@@ -34,8 +34,8 @@ import type { CheckoutPerson } from "./use-checkout-state"
 import type { CheckoutItemLocal } from "@/components/usage/inline-rows"
 import { PositionTable, rowFromItem } from "@/components/usage/position-table"
 import type { UsageType } from "@modules/lib/pricing"
-import { partitionMembership, isMachineItem } from "@oww/shared"
-import { BadgeCheck } from "lucide-react"
+import { partitionMembership, partitionBadge, isMachineItem } from "@oww/shared"
+import { BadgeCheck, Nfc } from "lucide-react"
 
 /**
  * Compute up to 4 sensible round-up total targets for the current base.
@@ -187,6 +187,8 @@ interface StepCheckoutProps {
   config: PricingConfig | null
   /** Vereinsmitgliedschaft catalog id (issue #262/#263); null when unset. */
   membershipCatalogId?: string | null
+  /** NFC-Badge catalog id (self-service purchase); null when unset. */
+  badgeCatalogId?: string | null
   /**
    * Update the primary person's billing fields — used by the mandatory
    * address sub-form shown in the membership line item (the club's member
@@ -222,6 +224,13 @@ export interface CheckoutCosts {
    * guarded against coexisting with a membership purchase.
    */
   membershipCost: number
+  /**
+   * RAW self-service badge cost, split out of {@link materialCost} like the
+   * membership. Never discounted in practice: the only material-waiving
+   * usage type (`intern`) is guarded against paid badges server-side, and a
+   * gratis badge is 0 either way.
+   */
+  badgeCost: number
   /** NET (billed) entry fees after the usage-type discount. */
   personFeesNet: number
   /** NET (billed) machine cost after the usage-type discount. */
@@ -246,6 +255,7 @@ export function computeCheckoutCosts({
   items,
   config,
   membershipCatalogId,
+  badgeCatalogId,
 }: {
   persons: { userType: string }[]
   usageType: UsageType
@@ -265,6 +275,8 @@ export function computeCheckoutCosts({
    * four buckets.
    */
   membershipCatalogId?: string | null
+  /** NFC-Badge catalog id; badge items are broken out like membership. */
+  badgeCatalogId?: string | null
 }): CheckoutCosts {
   // No `intern` early-return: the usage-type discount multipliers
   // (issue #284) zero out entry + machine + material for `intern` via the
@@ -279,16 +291,22 @@ export function computeCheckoutCosts({
     .filter((i) => isMachineItem(i))
     .reduce((s, i) => s + i.totalPrice, 0)
   const nonMachine = items.filter((i) => !isMachineItem(i))
-  const { membershipItems, otherItems } = partitionMembership(nonMachine, {
-    membershipCatalogId,
+  const { membershipItems, otherItems: nonMembership } = partitionMembership(
+    nonMachine,
+    { membershipCatalogId },
+  )
+  const { badgeItems, otherItems } = partitionBadge(nonMembership, {
+    badgeCatalogId,
   })
   const membershipCost = membershipItems.reduce((s, i) => s + i.totalPrice, 0)
+  const badgeCost = badgeItems.reduce((s, i) => s + i.totalPrice, 0)
   const materialCost = otherItems.reduce((s, i) => s + i.totalPrice, 0)
   return {
     personFees,
     machineCost,
     materialCost,
     membershipCost,
+    badgeCost,
     personFeesNet: personFees * discount.entryFee,
     machineCostNet: machineCost * discount.machine,
     materialCostNet: materialCost * discount.material,
@@ -308,14 +326,17 @@ export function StepCheckout({
   items,
   config,
   membershipCatalogId,
+  badgeCatalogId,
   onPrimaryBillingChange,
   profileBillingAddress,
 }: StepCheckoutProps) {
   // Display NET (billed) section amounts — what the customer actually pays
   // after the usage-type discount (issue #284). `membershipCost` renders the
-  // never-discounted Vereinsmitgliedschaft section (issue #262/#263).
+  // never-discounted Vereinsmitgliedschaft section (issue #262/#263);
+  // `badgeCost` the self-service badge section.
   const {
     membershipCost,
+    badgeCost,
     personFeesNet,
     machineCostNet,
     materialCostNet,
@@ -325,6 +346,7 @@ export function StepCheckout({
     items,
     config,
     membershipCatalogId,
+    badgeCatalogId,
   })
   const discount = usageDiscount(usageType)
   const discountLabel = USAGE_DISCOUNT_LABELS[usageType]
@@ -333,13 +355,18 @@ export function StepCheckout({
   // Issue #262/#263: split the non-machine items into the Vereinsmitgliedschaft
   // bucket and everything else, so membership renders as its own first-position
   // section instead of being lumped under Materialbezug.
-  const { membershipItems, otherItems: materialItems } = useMemo(
+  const { membershipItems, otherItems: nonMembershipItems } = useMemo(
     () =>
       partitionMembership(
         items.filter((i) => !isMachineItem(i)),
         { membershipCatalogId },
       ),
     [items, membershipCatalogId],
+  )
+  // Self-service badges get the same dedicated-section treatment.
+  const { badgeItems, otherItems: materialItems } = useMemo(
+    () => partitionBadge(nonMembershipItems, { badgeCatalogId }),
+    [nonMembershipItems, badgeCatalogId],
   )
   // Membership-only checkout: the visitor bought just a membership (no entry
   // fee, no machine, no material). Hide the three regular buckets so the
@@ -349,16 +376,16 @@ export function StepCheckout({
   // standard fee, so a waived usage type (e.g. materialbezug) still has a
   // non-zero raw fee. `personFeesNet === 0` is what "no entry fee billed"
   // means under the discount model.
-  const membershipOnly =
-    membershipItems.length > 0 &&
+  const nonWorkshopOnly =
+    (membershipItems.length > 0 || badgeItems.length > 0) &&
     materialItems.length === 0 &&
     nfcItems.length === 0 &&
     personFeesNet === 0
-  // NET section amounts + the (never-discounted) membership fee. Membership
-  // is added at full price: the receipt renders it at full price and the only
-  // material-waiving usage type (`intern`) can't carry a membership.
+  // NET section amounts + the (never-discounted) membership + badge fees.
+  // Both are added at full price: the receipt renders them at full price and
+  // the only material-waiving usage type (`intern`) can't carry either.
   const subtotal =
-    personFeesNet + machineCostNet + materialCostNet + membershipCost
+    personFeesNet + machineCostNet + materialCostNet + membershipCost + badgeCost
 
   // Tip is split: manual entry + optional round-up to a chosen target.
   const [manualTip, setManualTip] = useState(0)
@@ -590,7 +617,31 @@ export function StepCheckout({
           </ExpandableSection>
         )}
 
-        {!membershipOnly && (
+        {badgeItems.length > 0 && (
+          <ExpandableSection
+            id="badge"
+            icon={<Nfc className="h-4 w-4 text-cog-teal-dark" />}
+            title="Badge"
+            summary={
+              badgeItems.length === 1
+                ? badgeItems[0].description
+                : `${badgeItems.length} Positionen`
+            }
+            amount={badgeCost}
+            open={openSections.has("badge")}
+            onToggle={() => toggle("badge")}
+          >
+            <PositionTable
+              firstColLabel="Badge"
+              rows={badgeItems.map(rowFromItem)}
+            />
+            <p className="mt-3 text-sm text-muted-foreground">
+              Der Badge wird beim Abschluss deinem Konto zugewiesen.
+            </p>
+          </ExpandableSection>
+        )}
+
+        {!nonWorkshopOnly && (
         <>
         <ExpandableSection
           id="nutzung"

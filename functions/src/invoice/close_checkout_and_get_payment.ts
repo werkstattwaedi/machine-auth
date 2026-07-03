@@ -41,6 +41,7 @@ import {
   loadMembershipCatalogId,
   detectMembershipKindForItems,
 } from "../membership/shared";
+import { isBadgeItem } from "../badge/shared";
 
 /**
  * True iff any item is a membership-fee SKU. Resolved from the
@@ -146,13 +147,20 @@ export function entryFeeFor(
  *    machine usage: if you ran a machine, it's not a pure material pickup.
  *  - `intern` (everything on the house) cannot coexist with buying a
  *    membership: a paid membership must not be zeroed out.
+ *  - `intern` cannot coexist with a PAID badge either (same zeroing
+ *    loophole); a gratis badge passes — there is nothing to zero.
  *
- * Throws `failed-precondition` on violation. `hasMembershipItem` is
- * resolved by the caller (it needs catalog refs the summary doesn't carry).
+ * Throws `failed-precondition` on violation. `hasMembershipItem` /
+ * `hasPaidBadgeItem` are resolved by the caller (they need item fields the
+ * summary doesn't carry).
  */
 export function assertUsageTypeAllowed(
   usageType: UsageType,
-  opts: { hasMachineUsage: boolean; hasMembershipItem: boolean },
+  opts: {
+    hasMachineUsage: boolean;
+    hasMembershipItem: boolean;
+    hasPaidBadgeItem?: boolean;
+  },
 ): void {
   if (usageType === "materialbezug" && opts.hasMachineUsage) {
     throw new HttpsError(
@@ -164,6 +172,31 @@ export function assertUsageTypeAllowed(
     throw new HttpsError(
       "failed-precondition",
       "Interne Nutzung ist nicht möglich, wenn eine Mitgliedschaft gekauft wird.",
+    );
+  }
+  if (usageType === "intern" && opts.hasPaidBadgeItem) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Interne Nutzung ist nicht möglich, wenn ein Badge gekauft wird.",
+    );
+  }
+}
+
+/**
+ * Badge items must belong to an identified checkout: association at close
+ * writes `tokens/{tokenId} → checkout.userId`, so a null-userId (anonymous)
+ * checkout would orphan the badge. Rules already deny client writes of
+ * `tokenId` and addBadgeToCheckout requires a signed-in principal — this is
+ * the close-time backstop. Exported for unit tests.
+ */
+export function assertBadgeItemsBelongToOwner(
+  items: Pick<CheckoutItemEntity, "tokenId">[],
+  userId: DocumentReference | null | undefined,
+): void {
+  if (!userId && items.some(isBadgeItem)) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Für einen Badge-Kauf ist eine Anmeldung nötig.",
     );
   }
 }
@@ -761,13 +794,18 @@ async function closeExistingCheckout(
       .map((d) => d.data() as CheckoutItemEntity)
       .filter(isValidItem);
 
-    // Loophole guards (issue #284): reject materialbezug-with-machine and
-    // intern-with-membership before billing.
+    // Loophole guards (issue #284): reject materialbezug-with-machine,
+    // intern-with-membership, and intern-with-paid-badge before billing.
     const membershipPresent = hasMembershipItem(items, membershipCatalogId);
     assertUsageTypeAllowed(args.usageType, {
       hasMachineUsage: hasMachineUsage(items),
       hasMembershipItem: membershipPresent,
+      hasPaidBadgeItem: items.some(
+        (i) => isBadgeItem(i) && i.totalPrice > 0,
+      ),
     });
+    // Badge association needs an identified owner (see the guard's doc).
+    assertBadgeItemsBelongToOwner(items, checkout.userId);
     // A membership invoice needs a postal address (combined-signin refactor).
     // The buyer's user doc carries it (written from the inline checkout field).
     if (membershipPresent) {

@@ -26,6 +26,7 @@ import { KioskInactivityWatcher } from "@/components/checkout/kiosk-inactivity-w
 import { NoCheckoutGate } from "@/components/checkout/no-checkout-gate"
 import { TagAuthOverlay } from "@/components/checkout/tag-auth-overlay"
 import { TagVisitRedirect } from "@/components/checkout/tag-visit-redirect"
+import { BadgeOfferCoordinator } from "@/components/checkout/badge-offer-coordinator"
 
 const wizardSearchSchema = z.object({
   picc: z.optional(z.string()),
@@ -131,6 +132,7 @@ function WizardLayout() {
       <KioskInactivityWatcher />
       <TagAuthOverlay />
       <TagVisitRedirect />
+      <BadgeOfferCoordinator />
     </WizardProvider>
   )
 }

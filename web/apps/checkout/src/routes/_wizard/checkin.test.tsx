@@ -37,6 +37,12 @@ vi.mock("@/components/checkout/visit-started-dialog", () => ({
   VisitStartedDialog: () => null,
 }))
 
+// The kiosk email sign-in needs the full Auth/Firebase provider stack
+// (covered by its own kiosk-email-signin.test.tsx); stub it here.
+vi.mock("@/components/checkout/kiosk-email-signin", () => ({
+  KioskEmailSignin: () => null,
+}))
+
 // ── Wizard context harness ───────────────────────────────────────────────
 const mockUseWizardContext = vi.fn()
 vi.mock("@/components/checkout/wizard-context", () => ({

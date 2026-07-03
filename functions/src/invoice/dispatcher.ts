@@ -13,14 +13,23 @@ import { getInvoiceDownloadUrlHandler } from "./get_invoice_download_url";
 import { getPaymentQrDataHandler } from "./get_payment_qr_data";
 import { closeCheckoutAndGetPaymentHandler } from "./close_checkout_and_get_payment";
 import { acknowledgeBillHandler } from "./acknowledge_bill";
+import { addBadgeToCheckoutHandler } from "../badge/purchase";
+import { diversificationMasterKey } from "../config/tag-secrets";
 
 const HANDLERS: Record<string, RpcHandler> = {
   getInvoiceDownloadUrl: getInvoiceDownloadUrlHandler,
   getPaymentQrData: getPaymentQrDataHandler,
   closeCheckoutAndGetPayment: closeCheckoutAndGetPaymentHandler,
   acknowledgeBill: acknowledgeBillHandler,
+  addBadgeToCheckout: addBadgeToCheckoutHandler,
 };
 
-export const billingCall = onCall({ memory: "512MiB" }, (request) =>
-  dispatchRpc("billing", HANDLERS, request)
+export const billingCall = onCall(
+  {
+    // diversificationMasterKey: addBadgeToCheckout verifies the signed
+    // badge voucher (HMAC key derived from it).
+    secrets: [diversificationMasterKey],
+    memory: "512MiB",
+  },
+  (request) => dispatchRpc("billing", HANDLERS, request)
 );

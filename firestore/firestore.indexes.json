@@ -239,6 +239,16 @@
   ],
   "fieldOverrides": [
     {
+      "collectionGroup": "items",
+      "fieldPath": "tokenId",
+      "indexes": [
+        {
+          "queryScope": "COLLECTION_GROUP",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "loginCodes",
       "fieldPath": "expiresAt",
       "ttl": true,

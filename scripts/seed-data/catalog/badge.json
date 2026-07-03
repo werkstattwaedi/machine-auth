@@ -1,0 +1,34 @@
+[
+  {
+    "id": "QmFkZ2VTa3VPd3dLaW9z",
+    "code": "BADGE",
+    "name": "Badge",
+    "workshops": [
+      "diverses"
+    ],
+    "category": [
+      "Badge"
+    ],
+    "active": true,
+    "userCanAdd": false,
+    "description": "NFC-Badge (NTAG424) für den Werkstatt-Zugang. Selbstbedienung am Checkout-Kiosk.",
+    "variants": [
+      {
+        "id": "standard",
+        "label": "Badge",
+        "pricingModel": "direct",
+        "unitPrice": {
+          "default": 5
+        }
+      },
+      {
+        "id": "gratis",
+        "label": "Badge (gratis)",
+        "pricingModel": "direct",
+        "unitPrice": {
+          "default": 0
+        }
+      }
+    ]
+  }
+]

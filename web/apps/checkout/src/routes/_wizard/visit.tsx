@@ -36,9 +36,10 @@ import {
   type CatalogItem,
   type WorkshopId,
 } from "@modules/lib/workshop-config"
-import { partitionMembership } from "@oww/shared"
+import { partitionMembership, partitionBadge } from "@oww/shared"
 import { WorkshopSectionWithCatalog } from "@/components/usage/workshop-section-with-catalog"
 import { MembershipInlineSection } from "@/components/usage/membership-inline-section"
+import { BadgeInlineSection } from "@/components/usage/badge-inline-section"
 import { ScanFab } from "@/components/qr-scanner/scan-fab"
 import { useWizardContext } from "@/components/checkout/wizard-context"
 import { capturePickerScrollAnchor } from "@/components/usage/picker-scroll-anchor"
@@ -63,6 +64,8 @@ function VisitRoute() {
     pricingConfig,
     discountLevel,
     membershipCatalogId,
+    badgeCatalogId,
+    isAnonymous,
     addItem,
     updateItem,
     removeItem,
@@ -72,9 +75,14 @@ function VisitRoute() {
   // Issue #262/#263: break the Vereinsmitgliedschaft SKU out of the workshop
   // sections. Membership items get their own read-only inline section
   // (rendered first) and must not bleed into the `diverses` workshop block.
-  const { membershipItems, otherItems: workshopItems } = useMemo(
+  // Badge purchases (self-service NFC badge) get the same treatment.
+  const { membershipItems, otherItems: nonMembershipItems } = useMemo(
     () => partitionMembership(items, { membershipCatalogId }),
     [items, membershipCatalogId],
+  )
+  const { badgeItems, otherItems: workshopItems } = useMemo(
+    () => partitionBadge(nonMembershipItems, { badgeCatalogId }),
+    [nonMembershipItems, badgeCatalogId],
   )
   const toggleVisitedMutation = useAsyncMutation({
     context: "visit.toggleWorkshopVisited",
@@ -174,13 +182,13 @@ function VisitRoute() {
   // Buying a membership during an open checkout appends the membership SKU to
   // that same checkout; with `workshopItems.length === 0` (a selected but
   // item-less workshop, or a visit with persons only) the old gate flipped
-  // `membershipOnly` true and the workshop selectors vanished — leaving no way
+  // `nonWorkshopOnly` true and the workshop selectors vanished — leaving no way
   // to continue the visit. Gate on the *effective* workshop selection (which
   // unions manually-selected + item-backed + visited workshops) so any active
   // workshop keeps the full picker + sections; the membership simply becomes
   // one more position in the bill.
-  const membershipOnly =
-    membershipItems.length > 0 &&
+  const nonWorkshopOnly =
+    (membershipItems.length > 0 || badgeItems.length > 0) &&
     workshopItems.length === 0 &&
     effectiveWorkshops.size === 0
 
@@ -287,7 +295,7 @@ function VisitRoute() {
       <div className="flex flex-col flex-1 gap-8">
         {/* Workshop checkbox selector. Hidden for a membership-only cart so the
             page is just the Vereinsmitgliedschaft block + nav (issue #263). */}
-        {!membershipOnly && (
+        {!nonWorkshopOnly && (
         <div>
           <h2 className="text-xl font-bold font-body mb-2">
             Werkstätten wählen
@@ -346,12 +354,25 @@ function VisitRoute() {
           />
         )}
 
+        {/* Selbstbedienungs-Badges: same inline treatment as the
+            membership. Rendered whenever badge items exist, plus a CTA on
+            the kiosk for identified visitors ("tap a new badge on the
+            reader" — the tap opens the purchase dialog, see
+            BridgeNfcRouter / BadgeOfferCoordinator). */}
+        {(badgeItems.length > 0 || (kiosk && !isAnonymous)) && (
+          <BadgeInlineSection
+            items={badgeItems}
+            onRemove={removeItem}
+            showCta={kiosk && !isAnonymous}
+          />
+        )}
+
         {/* Per-workshop sections — suppressed for a membership-only cart, same
             as the picker above (issue #262/#263). A membership SKU lives in the
             "diverses" workshop, so its workshopsVisited entry would otherwise
             render an empty Diverses section with a "Material hinzufügen" button. */}
         {sortedWorkshops
-          .filter(([wsId]) => !membershipOnly && effectiveWorkshops.has(wsId))
+          .filter(([wsId]) => !nonWorkshopOnly && effectiveWorkshops.has(wsId))
           .map(([wsId, wsConfig]) => (
             <WorkshopSectionWithCatalog
               key={wsId}

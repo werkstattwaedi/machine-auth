@@ -13,7 +13,11 @@ import {
 import type { ReactNode } from "react"
 import { useNavigate } from "@tanstack/react-router"
 import { useAuth, type UserDoc } from "@modules/lib/auth"
-import { useTokenAuth, type TokenUser } from "@modules/lib/token-auth"
+import {
+  useTokenAuth,
+  type TokenUser,
+  type UnregisteredBadge,
+} from "@modules/lib/token-auth"
 import { useBridge } from "@modules/lib/use-bridge"
 import { useCollection, useDocument } from "@modules/lib/firestore"
 import {
@@ -93,6 +97,13 @@ export interface WizardContextValue {
   tagAuthLoading: boolean
   /** Error message when badge verification failed; null otherwise. */
   tagAuthError: string | null
+  /**
+   * Set when the tapped badge is authentic but registered to nobody (a
+   * pre-personalized self-service badge). Carries the signed purchase
+   * voucher; consumed by BadgeOfferCoordinator to open the purchase dialog
+   * (identified session) or park it for after sign-in (anonymous).
+   */
+  unregisteredBadge: UnregisteredBadge | null
   // ----- query results -----
   openCheckout: CheckoutDoc | null
   /**
@@ -115,6 +126,8 @@ export interface WizardContextValue {
   discountLevel: DiscountLevel
   /** Vereinsmitgliedschaft catalog id (issue #262/#263); null when unset. */
   membershipCatalogId: string | null
+  /** NFC-Badge catalog id (self-service badge purchase); null when unset. */
+  badgeCatalogId: string | null
   familyCandidates: FamilyCandidate[]
   // ----- mutable wizard state -----
   persons: CheckoutPerson[]
@@ -225,6 +238,7 @@ export function WizardProvider({
     tagSignOut,
     loading: tagAuthLoading,
     error: tagAuthError,
+    unregisteredBadge,
   } = useTokenAuth(picc ?? null, cmac ?? null)
   const bridge = useBridge()
   const fsMutation = useFirestoreMutation()
@@ -339,6 +353,7 @@ export function WizardProvider({
   // classifier treats that as "no membership present" and the UI is unchanged.
   const { data: catalogRefs } = useDocument(catalogReferencesRef(db))
   const membershipCatalogId = catalogRefs?.membership?.id ?? null
+  const badgeCatalogId = catalogRefs?.badge?.id ?? null
 
   // For tag-tap checkout `identifiedUserDoc` is null (the kiosk session is a
   // synthetic principal), so member pricing must also honour the tag user's
@@ -694,6 +709,7 @@ export function WizardProvider({
       machineCost,
       materialCost,
       membershipCost,
+      badgeCost,
       personFeesNet,
       machineCostNet,
       materialCostNet,
@@ -703,17 +719,23 @@ export function WizardProvider({
       items,
       config: pricingConfig,
       membershipCatalogId,
+      badgeCatalogId,
     })
-    // The persisted server-side `summary.materialCost` keeps membership
-    // bundled in (recomputeSummary buckets the membership SKU under non-nfc
-    // material). Splitting it out is purely a display concern (#262/#263),
-    // so the submitted estimate folds it back in.
-    const billedMaterialCost = materialCost + membershipCost
+    // The persisted server-side `summary.materialCost` keeps membership and
+    // badge bundled in (recomputeSummary buckets both SKUs under non-nfc
+    // material). Splitting them out is purely a display concern (#262/#263),
+    // so the submitted estimate folds them back in.
+    const billedMaterialCost = materialCost + membershipCost + badgeCost
     // NET total (#284): each section after its usage-type discount, plus the
-    // never-discounted membership fee and the tip. rawTotal is the
+    // never-discounted membership + badge fees and the tip. rawTotal is the
     // pre-discount sum; their difference is the discountAmount stored below.
     const total =
-      personFeesNet + machineCostNet + materialCostNet + membershipCost + tip
+      personFeesNet +
+      machineCostNet +
+      materialCostNet +
+      membershipCost +
+      badgeCost +
+      tip
     const rawTotal = entryFees + machineCost + billedMaterialCost + tip
     totalPriceRef.current = total
 
@@ -847,6 +869,7 @@ export function WizardProvider({
     persons,
     pricingConfig,
     membershipCatalogId,
+    badgeCatalogId,
     tip,
     usageType,
     functions,
@@ -864,6 +887,7 @@ export function WizardProvider({
     isMember,
     tagAuthLoading,
     tagAuthError,
+    unregisteredBadge,
     openCheckout: openCheckout ?? null,
     openCheckoutLoading,
     checkoutId,
@@ -872,6 +896,7 @@ export function WizardProvider({
     pricingConfig,
     discountLevel,
     membershipCatalogId,
+    badgeCatalogId,
     familyCandidates,
     persons,
     personsDispatch,

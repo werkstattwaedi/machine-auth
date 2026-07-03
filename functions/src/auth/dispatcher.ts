@@ -21,15 +21,19 @@ import { verifyLoginCodeHandler } from "./login-code/verify-code";
 import { verifyMagicLinkHandler } from "./login-code/verify-link";
 import { resolveTagHandler } from "./resolve-tag";
 import { verifyTagCheckoutHandler } from "../checkout/verify_tag";
+import { verifyLoginCodeKioskHandler } from "../checkout/verify_login_code_kiosk";
+import { probeTagHandler } from "../checkout/probe_tag";
 
 const HANDLERS: Record<string, RpcHandler> = {
   createUser: createUserHandler,
   checkAccountExists: checkAccountExistsHandler,
   requestLoginCode: requestLoginCodeHandler,
   verifyLoginCode: verifyLoginCodeHandler,
+  verifyLoginCodeKiosk: verifyLoginCodeKioskHandler,
   verifyMagicLink: verifyMagicLinkHandler,
   resolveTag: resolveTagHandler,
   verifyTagCheckout: verifyTagCheckoutHandler,
+  probeTag: probeTagHandler,
 };
 
 export const authCall = onCall(

@@ -1,6 +1,6 @@
 # ADR-0022: Kiosk badge sign-in — synthetic-UID session, not the user's session
 
-**Status:** Accepted
+**Status:** Accepted (amended 2026-07-03: second mint path via email login code)
 
 **Date:** 2026-04-26
 
@@ -64,6 +64,8 @@ function effectiveUid(request: CallableRequest<unknown>): string | null {
 ```
 
 The web client's `useTokenAuth` is unchanged in shape — it receives `customToken` from `verifyTagCheckout` and calls `signInWithCustomToken`. The synthetic UID is opaque to the client; the response payload still carries the real `userId` for form pre-fill.
+
+**Amendment (2026-07-03): a second mint path via email login code.** A registered user without their badge (most importantly: someone about to buy their *first* badge, ADR-0030) can sign in at the kiosk with the existing 6-digit email code. `verifyLoginCodeKiosk` (`functions/src/checkout/verify_login_code_kiosk.ts`, kiosk-bearer-gated like `verifyTagCheckout`) consumes the code via the shared `consumeLoginCode` core and mints the **exact same principal shape** through the shared `mintKioskSessionToken` helper (`functions/src/checkout/kiosk_session.ts`): uid `tag:{userId}:{nonce}`, claims `{ tagCheckout: true, actsAs, kioskId }`. Rules, callables, route gating, and volatility are therefore identical for both paths; a `method: "tag" | "emailCode"` claim distinguishes them for audit only. Unlike the regular `verifyLoginCode`, the kiosk variant never auto-creates Firebase Auth users — a completed account (`users` doc with `termsAcceptedAt`) is required; sign-up stays on personal devices. Client-side, both paths publish into one module-level kiosk-session store in `web/modules/lib/token-auth.ts` (`establishKioskSession`), so the wizard treats a code sign-in identically to a badge tap.
 
 ### 2. SDM counter monotonicity (replay defense)
 

@@ -213,6 +213,10 @@ export { logClientError } from "./util/log_client_error";
 
 // Export bill lifecycle triggers + the daily auto-ack cron (#251).
 export { onCheckoutClosed, onCheckoutCreatedClosed } from "./invoice/create_bill";
+
+// Self-service badge purchase: associate tokens on checkout close. The
+// callable (addBadgeToCheckout) is grouped into billingCall.
+export { onCheckoutClosedAssociateBadges } from "./badge/associate_on_close";
 export {
   onBillCreate,
   onBillUpdate,

@@ -24,6 +24,8 @@ import {
   where,
   serverTimestamp,
   setDoc,
+  updateDoc,
+  deleteDoc,
 } from "firebase/firestore"
 import { assertSucceeds, assertFails } from "@firebase/rules-unit-testing"
 
@@ -668,5 +670,123 @@ describe("Server-only collections deny rules", () => {
   it("denies client write of operations_log", async () => {
     const db = authedDb("u1")
     await assertFails(setDoc(doc(db, "operations_log", "any"), { foo: 1 }))
+  })
+})
+
+describe("Badge item field protection (tokenId / badgeSdmCounter are server-only)", () => {
+  const badgeItemBase = {
+    workshop: "diverses",
+    description: "Badge",
+    origin: "manual",
+    catalogId: null,
+    created: serverTimestamp(),
+    quantity: 1,
+    unitPrice: 5,
+    totalPrice: 5,
+    formInputs: null,
+  }
+
+  /** Seed a SERVER-written badge item (Admin SDK bypasses rules). */
+  async function seedBadgeItem(checkoutId: string, itemId: string) {
+    await getTestEnvironment().withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(
+        doc(ctx.firestore(), "checkouts", checkoutId, "items", itemId),
+        { ...badgeItemBase, tokenId: "04c339aa1e1890", badgeSdmCounter: 7 },
+      )
+    })
+  }
+
+  it("owner cannot create an item carrying tokenId (badge squatting)", async () => {
+    await createOpenCheckout("co-b1", "u1")
+    const db = authedDb("u1")
+    await assertFails(
+      addDoc(collection(db, "checkouts", "co-b1", "items"), {
+        ...badgeItemBase,
+        tokenId: "04c339aa1e1890",
+      }),
+    )
+  })
+
+  it("owner cannot create an item carrying badgeSdmCounter", async () => {
+    await createOpenCheckout("co-b2", "u1")
+    const db = authedDb("u1")
+    await assertFails(
+      addDoc(collection(db, "checkouts", "co-b2", "items"), {
+        ...badgeItemBase,
+        badgeSdmCounter: 7,
+      }),
+    )
+  })
+
+  it("tag session cannot create an item carrying tokenId either", async () => {
+    await createOpenCheckout("co-b3", "u1")
+    const db = tagSessionDb("u1")
+    await assertFails(
+      addDoc(collection(db, "checkouts", "co-b3", "items"), {
+        ...badgeItemBase,
+        tokenId: "04c339aa1e1890",
+      }),
+    )
+  })
+
+  it("anonymous-auth session cannot create an item carrying tokenId on a null-userId checkout", async () => {
+    const anonDb = anonAuthDb("anon-b1")
+    await setDoc(doc(anonDb, "checkouts", "co-b4"), {
+      userId: null,
+      status: "open",
+      usageType: "regular",
+      created: serverTimestamp(),
+      workshopsVisited: [],
+      persons: [],
+      modifiedBy: null,
+      modifiedAt: serverTimestamp(),
+      firebaseUid: "anon-b1",
+    })
+    await assertFails(
+      addDoc(collection(anonDb, "checkouts", "co-b4", "items"), {
+        ...badgeItemBase,
+        tokenId: "04c339aa1e1890",
+      }),
+    )
+  })
+
+  it("owner cannot alter or strip tokenId on a server-written badge item", async () => {
+    await createOpenCheckout("co-b5", "u1")
+    await seedBadgeItem("co-b5", "item-1")
+    const db = authedDb("u1")
+    const ref = doc(db, "checkouts", "co-b5", "items", "item-1")
+    // Re-pointing the association target must fail…
+    await assertFails(updateDoc(ref, { tokenId: "04ffffffffffff" }))
+    // …and so must zeroing the replay-defense counter seed.
+    await assertFails(updateDoc(ref, { badgeSdmCounter: 0 }))
+  })
+
+  it("owner CAN update unrelated fields of a badge item and CAN delete it (cart removal)", async () => {
+    await createOpenCheckout("co-b6", "u1")
+    await seedBadgeItem("co-b6", "item-1")
+    const db = authedDb("u1")
+    const ref = doc(db, "checkouts", "co-b6", "items", "item-1")
+    await assertSucceeds(updateDoc(ref, { description: "Badge (neu)" }))
+    await assertSucceeds(deleteDoc(ref))
+  })
+
+  it("tag session can delete a badge item from the acted-for user's checkout", async () => {
+    await createOpenCheckout("co-b7", "u1")
+    await seedBadgeItem("co-b7", "item-1")
+    const db = tagSessionDb("u1")
+    await assertSucceeds(
+      deleteDoc(doc(db, "checkouts", "co-b7", "items", "item-1")),
+    )
+  })
+
+  it("tokens stay unreadable/unwritable for kiosk tag sessions", async () => {
+    const db = tagSessionDb("u1")
+    await assertFails(getDoc(doc(db, "tokens", "04c339aa1e1890")))
+    await assertFails(
+      setDoc(doc(db, "tokens", "04c339aa1e1890"), {
+        userId: doc(db, "users", "u1"),
+        registered: serverTimestamp(),
+      }),
+    )
   })
 })

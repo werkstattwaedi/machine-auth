@@ -7,8 +7,19 @@ import {
   seedTestData,
 } from "../emulator-helper";
 import { handleVerifyTagCheckout } from "../../src/checkout/verify_tag";
-import { VerifyTagRequest } from "../../src/checkout/verify_tag";
+import {
+  VerifyTagRequest,
+  VerifyTagResponse,
+  VerifyTagRegisteredResponse,
+} from "../../src/checkout/verify_tag";
+import { verifyBadgeVoucher } from "../../src/badge/voucher";
 import { generateValidPICCAndCMAC } from "../test-sdm-helper";
+
+/** Narrow the verify union to the registered shape (throws otherwise). */
+function asRegistered(response: VerifyTagResponse): VerifyTagRegisteredResponse {
+  expect(response.registered).to.equal(true);
+  return response as VerifyTagRegisteredResponse;
+}
 
 describe("handleVerifyTagCheckout (Integration)", () => {
   const TEST_TOKEN_UID = "04c339aa1e1890"; // 7-byte UID
@@ -52,16 +63,23 @@ describe("handleVerifyTagCheckout (Integration)", () => {
   }
 
   describe("Token validation", () => {
-    it("should reject request with unregistered token", async () => {
-      const { picc, cmac } = generateTestData(TEST_TOKEN_UID);
+    it("returns the unregistered branch with a purchase voucher (no session)", async () => {
+      // An authentic pre-personalized badge with no tokens doc: the kiosk
+      // self-service purchase flow (no throw, no custom token, a signed
+      // voucher carrying the tap's SDM counter instead).
+      const { picc, cmac } = generateTestData(TEST_TOKEN_UID, 7);
 
-      const request: VerifyTagRequest = { picc, cmac };
+      const response = await handleVerifyTagCheckout({ picc, cmac }, mockConfig);
 
-      try {
-        await handleVerifyTagCheckout(request, mockConfig);
-        expect.fail("Should have thrown error for unregistered token");
-      } catch (error: any) {
-        expect(error.message).to.include("Token not found");
+      expect(response.registered).to.equal(false);
+      expect(response.tokenId).to.equal(TEST_TOKEN_UID);
+      expect(response).to.not.have.property("customToken");
+      if (response.registered === false) {
+        const payload = verifyBadgeVoucher(response.badgeVoucher, TEST_MASTER_KEY);
+        expect(payload).to.deep.equal({
+          tokenId: TEST_TOKEN_UID,
+          sdmCounter: 7,
+        });
       }
     });
 
@@ -150,7 +168,9 @@ describe("handleVerifyTagCheckout (Integration)", () => {
       });
 
       const { picc, cmac } = generateTestData(TEST_TOKEN_UID);
-      const response = await handleVerifyTagCheckout({ picc, cmac }, mockConfig);
+      const response = asRegistered(
+        await handleVerifyTagCheckout({ picc, cmac }, mockConfig)
+      );
 
       expect(response.activeMembership).to.equal(true);
     });
@@ -175,7 +195,9 @@ describe("handleVerifyTagCheckout (Integration)", () => {
       });
 
       const { picc, cmac } = generateTestData(TEST_TOKEN_UID);
-      const response = await handleVerifyTagCheckout({ picc, cmac }, mockConfig);
+      const response = asRegistered(
+        await handleVerifyTagCheckout({ picc, cmac }, mockConfig)
+      );
 
       expect(response.activeMembership).to.equal(false);
     });
@@ -202,7 +224,9 @@ describe("handleVerifyTagCheckout (Integration)", () => {
       const { picc, cmac } = generateTestData(TEST_TOKEN_UID, 42);
       const request: VerifyTagRequest = { picc, cmac };
 
-      const response = await handleVerifyTagCheckout(request, mockConfig);
+      const response = asRegistered(
+        await handleVerifyTagCheckout(request, mockConfig)
+      );
 
       expect(response.uid).to.equal(TEST_TOKEN_UID);
     });
@@ -320,17 +344,17 @@ describe("handleVerifyTagCheckout (Integration)", () => {
 
       // Test with counter = 0
       const test1 = generateTestData(TEST_TOKEN_UID, 0);
-      const response1 = await handleVerifyTagCheckout(test1, mockConfig);
+      const response1 = asRegistered(await handleVerifyTagCheckout(test1, mockConfig));
       expect(response1.uid).to.equal(TEST_TOKEN_UID);
 
       // Test with counter = 100
       const test2 = generateTestData(TEST_TOKEN_UID, 100);
-      const response2 = await handleVerifyTagCheckout(test2, mockConfig);
+      const response2 = asRegistered(await handleVerifyTagCheckout(test2, mockConfig));
       expect(response2.uid).to.equal(TEST_TOKEN_UID);
 
       // Test with counter = 16777215 (max 24-bit value)
       const test3 = generateTestData(TEST_TOKEN_UID, 16777215);
-      const response3 = await handleVerifyTagCheckout(test3, mockConfig);
+      const response3 = asRegistered(await handleVerifyTagCheckout(test3, mockConfig));
       expect(response3.uid).to.equal(TEST_TOKEN_UID);
     });
 
@@ -352,7 +376,7 @@ describe("handleVerifyTagCheckout (Integration)", () => {
       });
 
       const replay = generateTestData(TEST_TOKEN_UID, 42);
-      const first = await handleVerifyTagCheckout(replay, mockConfig);
+      const first = asRegistered(await handleVerifyTagCheckout(replay, mockConfig));
       expect(first.uid).to.equal(TEST_TOKEN_UID);
 
       // Same picc/cmac sent again — must be rejected as a replay even though
@@ -414,7 +438,9 @@ describe("handleVerifyTagCheckout (Integration)", () => {
       });
 
       const { picc, cmac } = generateTestData(TEST_TOKEN_UID, 7);
-      const response = await handleVerifyTagCheckout({ picc, cmac }, mockConfig);
+      const response = asRegistered(
+        await handleVerifyTagCheckout({ picc, cmac }, mockConfig)
+      );
 
       // The response carries the real userId for client pre-fill, but the
       // custom token must NOT bind to that UID — that would inherit any
@@ -463,18 +489,16 @@ describe("handleVerifyTagCheckout (Integration)", () => {
 
       // Test token 1
       const { picc: picc1, cmac: cmac1 } = generateTestData(token1);
-      const response1 = await handleVerifyTagCheckout(
-        { picc: picc1, cmac: cmac1 },
-        mockConfig
+      const response1 = asRegistered(
+        await handleVerifyTagCheckout({ picc: picc1, cmac: cmac1 }, mockConfig)
       );
       expect(response1.userId).to.equal(userId1);
       expect(response1.tokenId).to.equal(token1);
 
       // Test token 2
       const { picc: picc2, cmac: cmac2 } = generateTestData(token2);
-      const response2 = await handleVerifyTagCheckout(
-        { picc: picc2, cmac: cmac2 },
-        mockConfig
+      const response2 = asRegistered(
+        await handleVerifyTagCheckout({ picc: picc2, cmac: cmac2 }, mockConfig)
       );
       expect(response2.userId).to.equal(userId2);
       expect(response2.tokenId).to.equal(token2);
