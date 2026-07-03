@@ -134,21 +134,20 @@ test.describe("NFC tag checkout", () => {
     ).toBeEnabled()
   })
 
-  test("kiosk mode — shows NFC hint inline with checkout form", async ({ page }) => {
+  test("kiosk mode — shows NFC hint inline in the account section", async ({ page }) => {
     await page.goto("/?kiosk")
 
-    // Check-in form visible immediately with the animated badge affordance
-    // in its hero state (untouched form). Heading role: the affordance's
-    // subline also contains the words "Deine Angaben".
-    await expect(
-      page.getByRole("heading", { name: "Deine Angaben" }),
-    ).toBeVisible()
+    // The account section is the default for an anonymous kiosk visitor:
+    // switcher on top, identifier field, and the animated badge affordance
+    // in its hero state below the "oder" divider.
+    await expect(page.getByTestId("checkin-seg-account")).toBeVisible()
+    await expect(page.getByTestId("checkin-identifier")).toBeVisible()
     await expect(page.getByTestId("nfc-affordance")).toHaveAttribute(
       "data-mode",
       "hero",
     )
 
-    // No login hint in kiosk mode
-    await expect(page.getByText("Bereits registriert?")).not.toBeVisible()
+    // No Google sign-in at the shared terminal.
+    await expect(page.getByText("Mit Google anmelden")).not.toBeVisible()
   })
 })

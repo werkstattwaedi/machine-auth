@@ -564,3 +564,17 @@ export async function waitForLoginCode(
   }
   return undefined
 }
+
+/**
+ * The check-in redesign (kiosk sign-in flow handoff) hides the guest form
+ * behind the "Als Gast" segment while the visitor is anonymous — the
+ * account section is the default on a fresh load. Open the guest section
+ * before filling person fields. Safe to call when the guest section is
+ * already active (rehydrated roster): clicking the active segment is a
+ * no-op.
+ */
+export async function openGuestSection(page: import("@playwright/test").Page) {
+  const guestSeg = page.getByTestId("checkin-seg-guest")
+  await guestSeg.waitFor({ state: "visible", timeout: 10_000 })
+  await guestSeg.click()
+}

@@ -18,7 +18,7 @@ interface CheckoutProgressProps {
 export function CheckoutProgress({ currentStep }: CheckoutProgressProps) {
   return (
     <div className="mb-10">
-      <div className="flex gap-2 sm:gap-4">
+      <div className="flex gap-1.5 sm:gap-2">
         {STEPS.map((step, i) => {
           const done = i < currentStep
           const current = i === currentStep
@@ -31,8 +31,8 @@ export function CheckoutProgress({ currentStep }: CheckoutProgressProps) {
             >
               <div
                 className={cn(
-                  "h-[3px] mb-3 rounded-full transition-colors",
-                  active ? "bg-cog-teal" : "bg-[#dadada]",
+                  "h-[3px] mb-2.5 rounded-full transition-colors",
+                  active ? "bg-cog-teal" : "bg-[#d8d8d8]",
                 )}
               />
               <div className="flex items-start gap-2 sm:gap-2.5">
@@ -40,7 +40,7 @@ export function CheckoutProgress({ currentStep }: CheckoutProgressProps) {
                   aria-hidden
                   className={cn(
                     "mt-0.5 flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-semibold leading-none text-white shrink-0",
-                    active ? "bg-cog-teal" : "bg-[#bdbdbd]",
+                    active ? "bg-cog-teal" : "bg-[#c9c9c9]",
                   )}
                 >
                   {done ? <Check className="h-3 w-3" strokeWidth={3} /> : i + 1}

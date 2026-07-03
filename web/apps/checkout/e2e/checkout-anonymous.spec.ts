@@ -7,6 +7,7 @@ import {
   getBillDocs,
   getCheckoutDocs,
   getCheckoutItems,
+  openGuestSection,
 } from "./helpers"
 
 /** Locate an input field by its preceding label text within a person card */
@@ -29,7 +30,7 @@ test.describe("Anonymous checkout", () => {
     await page.goto("/")
 
     // ── Step 0: Check-in (no landing gate) ──
-    await expect(page.getByText("Deine Angaben")).toBeVisible({ timeout: 10_000 })
+    await openGuestSection(page)
 
     // Fill person card
     await personField(page, "Vorname").fill("Max")
@@ -124,7 +125,7 @@ test.describe("Anonymous checkout", () => {
 
   test("multiple persons with different user types", async ({ page }) => {
     await page.goto("/")
-    await expect(page.getByText("Deine Angaben")).toBeVisible({ timeout: 10_000 })
+    await openGuestSection(page)
 
     // Fill person 1
     await personField(page, "Vorname", 0).fill("Max")
@@ -163,11 +164,9 @@ test.describe("Anonymous checkout", () => {
 
   test("form validation prevents advancing and shows errors", async ({ page }) => {
     await page.goto("/")
-    await expect(page.getByText("Deine Angaben")).toBeVisible({ timeout: 10_000 })
+    await openGuestSection(page)
 
-    await expect(page.getByText("Deine Angaben")).toBeVisible()
-
-    // "Weiter" is always enabled (clickable)
+    // "Weiter" is always enabled on the guest section (clickable)
     await expect(
       page.getByRole("button", { name: "Weiter" }),
     ).toBeEnabled()
@@ -180,7 +179,7 @@ test.describe("Anonymous checkout", () => {
     await expect(page.getByText("Nutzungsbestimmungen ist erforderlich.")).toBeVisible()
 
     // Still on step 0
-    await expect(page.getByText("Deine Angaben")).toBeVisible()
+    await expect(page.getByTestId("person-card").first()).toBeVisible()
 
     // Fill invalid email, blur → format error shown
     await personField(page, "Vorname").fill("Max")
@@ -223,10 +222,7 @@ test.describe("Anonymous checkout", () => {
 
   test("step navigation forward and back", async ({ page }) => {
     await page.goto("/")
-    await expect(page.getByText("Deine Angaben")).toBeVisible({ timeout: 10_000 })
-
-    // Step 0 visible
-    await expect(page.getByText("Deine Angaben")).toBeVisible()
+    await openGuestSection(page)
 
     // Fill and advance to step 1
     await personField(page, "Vorname").fill("Max")
@@ -246,9 +242,10 @@ test.describe("Anonymous checkout", () => {
     await page.getByRole("button", { name: "Zurück" }).click()
     await expect(page.getByText("Werkstätten wählen")).toBeVisible()
 
-    // Go back to step 0
+    // Go back to step 0 — the rehydrated roster keeps the guest section
+    // active (no "Deine Angaben" heading for anonymous visitors anymore).
     await page.getByRole("button", { name: "Zurück" }).click()
-    await expect(page.getByText("Deine Angaben")).toBeVisible()
+    await expect(page.getByTestId("person-card").first()).toBeVisible()
   })
 
   // Regression for issue #151: anonymous users now sign in eagerly after
@@ -260,9 +257,7 @@ test.describe("Anonymous checkout", () => {
     page,
   }) => {
     await page.goto("/")
-    await expect(page.getByText("Deine Angaben")).toBeVisible({
-      timeout: 10_000,
-    })
+    await openGuestSection(page)
 
     // Step 0 — fill the form and advance. This now signs the visitor
     // into Firebase Anonymous Auth.

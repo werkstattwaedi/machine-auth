@@ -180,7 +180,7 @@ function WizardChrome({
           <img
             src="/logo_oww.png"
             alt="Offene Werkstatt Wädenswil"
-            className="h-12 shrink-0"
+            className="h-[30px] shrink-0 sm:h-11"
           />
           {headerName && (
             <Link
@@ -206,7 +206,7 @@ function WizardChrome({
         <NoCheckoutGate />
       ) : (
         <div className="w-full max-w-[1000px] px-4 sm:px-6 py-6 flex-1 flex flex-col">
-          <h1 className="text-2xl sm:text-[37px] font-bold mb-6">
+          <h1 className="text-[26px] sm:text-[37px] font-extrabold tracking-[-0.01em] mb-6">
             Self-Checkout
           </h1>
           {currentStep != null && <CheckoutProgress currentStep={currentStep} />}

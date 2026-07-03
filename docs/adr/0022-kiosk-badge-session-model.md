@@ -1,6 +1,6 @@
 # ADR-0022: Kiosk badge sign-in — synthetic-UID session, not the user's session
 
-**Status:** Accepted (amended 2026-07-03: second mint path via email login code)
+**Status:** Accepted (amended 2026-07-03: second mint path via email login code; its UI moved into the check-in account section by [ADR-0031](0031-embedded-checkin-signin-and-sms-codes.md), which also plans a third mint path — Firebase phone auth token exchange for SMS codes)
 
 **Date:** 2026-04-26
 

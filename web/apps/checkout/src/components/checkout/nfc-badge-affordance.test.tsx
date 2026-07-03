@@ -30,9 +30,11 @@ describe("NfcBadgeAffordance", () => {
     expect(screen.getByText("Badge")).toBeTruthy()
     expect(screen.getByText(/an den Leser halten/)).toBeTruthy()
     expect(screen.getByText(/Um einen neuen Besuch zu starten/)).toBeTruthy()
-    expect(screen.getByText(/nur so gelten die Mitglieder-Preise/)).toBeTruthy()
-    // Own-device QR alternative renders alongside the scene.
-    expect(screen.getByTestId("nfc-affordance-qr")).toBeTruthy()
+    // The member-pricing pitch and the own-device QR moved out of the box
+    // with the check-in sign-in redesign (the account section carries the
+    // pitch; the QR was intentionally dropped).
+    expect(screen.queryByText(/nur so gelten die Mitglieder-Preise/)).toBeNull()
+    expect(screen.queryByTestId("nfc-affordance-qr")).toBeNull()
   })
 
   it("collapses to the compact bar when the form is in use", () => {

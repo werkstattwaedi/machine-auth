@@ -1,16 +1,16 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { useState, useMemo, useCallback, useEffect, useRef } from "react"
+import { useState, useMemo, useCallback, useEffect } from "react"
 import { Checkbox } from "@modules/components/ui/checkbox"
-import { Button } from "@modules/components/ui/button"
 import { PersonCard, RemovePersonButton } from "./person-card"
 import { NfcBadgeAffordance } from "./nfc-badge-affordance"
-import { KioskEmailSignin } from "./kiosk-email-signin"
-import { Plus, ArrowRight, Check, LogIn } from "lucide-react"
+import { CheckinSignin } from "./checkin-signin"
+import { Plus, ArrowRight, Check, User, Users } from "lucide-react"
 import type { CheckoutPerson, PersonsAction } from "./use-checkout-state"
 import type { UserType } from "@modules/lib/pricing"
 import { validatePerson, rosterAccountError } from "./validation"
+import { cn } from "@modules/lib/utils"
 
 /**
  * Issue #209: a roster member of the signed-in family owner who is not
@@ -103,6 +103,13 @@ interface StepCheckinProps {
   ownerUserId?: string | null
 }
 
+// Footer buttons (design handoff): 42px teal primary / outline-teal
+// secondary, 6px radius.
+const FOOTER_PRIMARY =
+  "inline-flex h-[42px] items-center gap-2 rounded-md bg-cog-teal px-5 text-[15px] font-semibold text-white transition-colors hover:bg-cog-teal-dark disabled:opacity-60 disabled:cursor-not-allowed"
+const FOOTER_SECONDARY =
+  "inline-flex h-[42px] items-center gap-2 rounded-md border border-cog-teal bg-white px-5 text-[15px] font-semibold text-cog-teal-dark transition-colors hover:bg-cog-teal-light disabled:opacity-60 disabled:cursor-not-allowed"
+
 export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAccountLoggedIn, signedInUserId, signedInEmail, isMember, onSignOut, onAdvance, onStartVisit, hasOpenCheckout, familyCandidates, tagAuthLoading, tagAuthError, picc, ownerUserId }: StepCheckinProps) {
   // touched: personId → field → true
   const [touched, setTouched] = useState<Record<string, Record<string, boolean>>>({})
@@ -111,30 +118,31 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
   // can't enqueue two anon sessions.
   const [advancing, setAdvancing] = useState(false)
 
-  // The kiosk NFC affordance collapses to its slim bar while the visitor
-  // interacts with the form — focus anywhere inside the person cards, or
-  // typed content in any editable card. The blur timeout bridges focus
-  // moving between fields so the box doesn't flicker hero↔compact.
-  const [formFocused, setFormFocused] = useState(false)
-  const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  useEffect(() => () => clearTimeout(blurTimer.current ?? undefined), [])
-  const onFormFocus = useCallback(() => {
-    clearTimeout(blurTimer.current ?? undefined)
-    setFormFocused(true)
-  }, [])
-  const onFormBlur = useCallback(() => {
-    clearTimeout(blurTimer.current ?? undefined)
-    blurTimer.current = setTimeout(() => setFormFocused(false), 120)
-  }, [])
-  const formDirty = useMemo(
-    () =>
-      persons.some(
-        (p) =>
-          !p.isPreFilled &&
-          (p.firstName.trim() || p.lastName.trim() || p.email.trim()),
-      ),
-    [persons],
+  // Which side of the "Mit Konto anmelden / Als Gast" switcher is active
+  // while the visitor is anonymous. Account is the default (design handoff
+  // "Kiosk sign-in flow redesign") — EXCEPT when the guest form already
+  // carries data (typed earlier, or rehydrated from an open anon checkout):
+  // hiding a half-filled form behind the account tab would look like data
+  // loss.
+  const [section, setSection] = useState<"account" | "guest">(() =>
+    persons.some(
+      (p) =>
+        p.isPreFilled ||
+        p.firstName.trim() ||
+        p.lastName.trim() ||
+        p.email.trim(),
+    )
+      ? "guest"
+      : "account",
   )
+
+  // A badge tap is accepted at any time (the kiosk reader is always
+  // listening), including while the guest form is open — flip to the
+  // account section so the verify progress/error inside the NFC affordance
+  // box is actually visible.
+  useEffect(() => {
+    if (tagAuthLoading) setSection("account")
+  }, [tagAuthLoading])
 
   const handleBlur = useCallback((personId: string, field: string) => {
     setTouched((prev) => ({
@@ -229,19 +237,11 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
     })
   }
 
-  return (
-    <div className="flex flex-col flex-1 gap-6">
-      <h2 className="text-xl font-bold font-body">
-        Deine Angaben
-      </h2>
-
-      <IdentityHint
-        kiosk={kiosk}
-        isAccountLoggedIn={isAccountLoggedIn}
-        isTagIdentified={!isAnonymous && !isAccountLoggedIn}
-      />
-
-      <div className="contents" onFocus={onFormFocus} onBlur={onFormBlur}>
+  // The person list renders in the guest section (anonymous) and in the
+  // signed-in view (identified). Kept as one block: identity strips only
+  // ever appear for identified sessions, editable guest cards for both.
+  const personsBlock = (
+    <>
       {persons.map((person, i) => {
         // The signed-in user is identified by userId match, NOT array
         // index — a parent can remove themselves and re-add via a
@@ -277,6 +277,9 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
             key={person.id}
             person={person}
             index={i}
+            // Guest cards name their path explicitly now that "als Gast" is
+            // a first-class choice on the switcher (design handoff).
+            title={isAnonymous ? `Person ${i + 1} · als Gast` : undefined}
             showTerms={false}
             // Anonymous walk-ins stay editable even when rehydrated from the
             // open checkout (isPreFilled) — they have no account profile to
@@ -296,9 +299,11 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
           />
         )
       })}
-      </div>
+    </>
+  )
 
-      <div className="flex flex-col items-start gap-3">
+  const addPersonBlock = (
+    <div className="flex flex-col items-start gap-3">
         {/*
           Issue #209: family-roster quick-adds render inline with the
           primary "Person hinzufügen" CTA. `flex-wrap` lets the chips
@@ -307,7 +312,7 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
         <div className="flex flex-wrap items-start gap-2">
           <button
             type="button"
-            className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-cog-teal border border-cog-teal rounded-[3px] bg-white hover:bg-cog-teal-light transition-colors"
+            className="inline-flex items-center gap-2 rounded-md border border-cog-teal bg-white px-4 py-2.5 text-sm font-semibold text-cog-teal-dark transition-colors hover:bg-cog-teal-light"
             onClick={handleAddPerson}
           >
             <Plus className="h-4 w-4" />
@@ -326,7 +331,7 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
                   type="button"
                   disabled
                   title="Checkt mit dem eigenen Konto ein"
-                  className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-muted-foreground border border-border rounded-[3px] bg-white opacity-60 cursor-not-allowed"
+                  className="inline-flex cursor-not-allowed items-center gap-2 rounded-md border border-border bg-white px-4 py-2.5 text-sm font-semibold text-muted-foreground opacity-60"
                 >
                   <Plus className="h-4 w-4" />
                   {candidate.firstName} {candidate.lastName}
@@ -338,7 +343,7 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
                   // Issue #246: chips animate in when they appear (e.g. when
                   // the signed-in user is re-added to the picker after
                   // removing themselves from the visit).
-                  className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-cog-teal border border-cog-teal rounded-[3px] bg-white hover:bg-cog-teal-light transition-colors animate-in fade-in slide-in-from-top-2 duration-200"
+                  className="inline-flex items-center gap-2 rounded-md border border-cog-teal bg-white px-4 py-2.5 text-sm font-semibold text-cog-teal-dark transition-colors hover:bg-cog-teal-light animate-in fade-in slide-in-from-top-2 duration-200"
                   onClick={() => handleAddFamilyPerson(candidate)}
                 >
                   <Plus className="h-4 w-4" />
@@ -412,33 +417,68 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
           </div>
         )}
 
-      </div>
+    </div>
+  )
 
-      {/* Kiosk + still-anonymous: the typed form (including add-person and
-          terms) is the primary path; the badge is the alternative below an
-          "ODER" divider (updated design). The affordance owns the whole tap
-          lifecycle (invite → collapse → verifying → error) and unmounts
-          once the tag identifies the visitor — the pre-filled identity
-          strip above takes over. */}
-      {kiosk && isAnonymous && (
+  return (
+    <div className="flex flex-col flex-1 gap-6">
+      {isAnonymous ? (
         <>
+          {/* Explicit first-class choice between the two paths (design
+              handoff): a segmented switcher instead of the old "sign in
+              with your account" sub-link. During code entry the dialog's
+              scrim covers it; once signed in this whole branch unmounts. */}
           <div
-            className="flex items-center gap-4 text-muted-foreground"
-            aria-hidden
+            role="tablist"
+            aria-label="Anmeldeart"
+            className="flex gap-1 rounded-[10px] bg-[#eee] p-1"
           >
-            <span className="h-px flex-1 bg-border" />
-            <span className="text-sm font-semibold tracking-[0.25em]">
-              ODER
-            </span>
-            <span className="h-px flex-1 bg-border" />
+            <SegmentButton
+              active={section === "account"}
+              onClick={() => setSection("account")}
+              testId="checkin-seg-account"
+            >
+              <User className="h-4 w-4 sm:h-[18px] sm:w-[18px]" aria-hidden />
+              <span className="hidden sm:inline">Mit Konto anmelden</span>
+              <span className="sm:hidden">Mit Konto</span>
+            </SegmentButton>
+            <SegmentButton
+              active={section === "guest"}
+              onClick={() => setSection("guest")}
+              testId="checkin-seg-guest"
+            >
+              <Users className="h-4 w-4 sm:h-[18px] sm:w-[18px]" aria-hidden />
+              Als Gast
+            </SegmentButton>
           </div>
-          <NfcBadgeAffordance
-            collapsed={formFocused || formDirty}
-            verifying={tagAuthLoading ?? false}
-            error={tagAuthError ?? null}
-            picc={picc}
-          />
-          <KioskEmailSignin />
+
+          {section === "account" ? (
+            <CheckinSignin kiosk={kiosk}>
+              {/* Kiosk only: the always-listening badge reader, below the
+                  "oder" divider. The affordance owns the tap lifecycle
+                  (invite → verifying → error) and this whole branch
+                  unmounts once the tag identifies the visitor. */}
+              {kiosk ? (
+                <NfcBadgeAffordance
+                  collapsed={false}
+                  verifying={tagAuthLoading ?? false}
+                  error={tagAuthError ?? null}
+                  picc={picc}
+                />
+              ) : undefined}
+            </CheckinSignin>
+          ) : (
+            <>
+              {personsBlock}
+              {addPersonBlock}
+            </>
+          )}
+        </>
+      ) : (
+        <>
+          <h2 className="font-heading text-xl font-bold">Deine Angaben</h2>
+          {personsBlock}
+          {addPersonBlock}
         </>
       )}
 
@@ -449,12 +489,19 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
           Issue #465: once a checkout is already open (hasOpenCheckout) the
           visit is started, so "Besuch starten" is dropped and "Material
           erfassen" becomes the filled primary. */}
-      <div className="sticky bottom-0 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 bg-background border-t border-border flex gap-3 justify-end">
+      <div className="sticky bottom-0 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 bg-background border-t border-border flex items-center gap-3">
+        <span
+          className="hidden flex-1 font-mono text-xs text-muted-foreground sm:block"
+          aria-hidden
+        >
+          {window.location.host}/checkin
+        </span>
+        <span className="flex-1 sm:hidden" />
         {onStartVisit ? (
           hasOpenCheckout ? (
             <button
               type="button"
-              className="inline-flex items-center gap-2 px-4 py-1.5 text-sm font-bold text-white bg-cog-teal rounded-[3px] hover:bg-cog-teal-dark transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              className={FOOTER_PRIMARY}
               onClick={() => handleAction(onAdvance)}
               disabled={advancing}
             >
@@ -465,7 +512,7 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
             <>
               <button
                 type="button"
-                className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-cog-teal border border-cog-teal rounded-[3px] bg-white hover:bg-cog-teal-light transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                className={FOOTER_SECONDARY}
                 onClick={() => handleAction(onAdvance)}
                 disabled={advancing}
               >
@@ -474,7 +521,7 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
               </button>
               <button
                 type="button"
-                className="inline-flex items-center gap-2 px-4 py-1.5 text-sm font-bold text-white bg-cog-teal rounded-[3px] hover:bg-cog-teal-dark transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                className={FOOTER_PRIMARY}
                 onClick={() => handleAction(onStartVisit)}
                 disabled={advancing}
               >
@@ -486,9 +533,14 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
         ) : (
           <button
             type="button"
-            className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-white bg-cog-teal rounded-[3px] hover:bg-cog-teal-dark transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            className={FOOTER_PRIMARY}
             onClick={() => handleAction(onAdvance)}
-            disabled={advancing}
+            // On the account side of the switcher there is nothing to
+            // advance with yet — the visitor signs in (or switches to the
+            // guest form) first. Enabling it would validate the hidden
+            // guest form and surface errors for fields that aren't on
+            // screen.
+            disabled={advancing || (isAnonymous && section === "account")}
           >
             Weiter
             <ArrowRight className="h-4 w-4" />
@@ -538,12 +590,14 @@ function IdentityStrip({
   return (
     <div
       data-testid="identity-strip"
-      className="flex items-center gap-3 rounded-md bg-muted/50 px-4 py-3 sm:px-5 sm:py-4 animate-in fade-in duration-200"
+      className="flex items-center gap-4 rounded-[10px] bg-[#f6f6f5] px-4 py-4 sm:px-6 sm:py-5 animate-in fade-in duration-200"
     >
       <div className="min-w-0 flex-1">
-        <div className="font-bold text-foreground truncate">{name}</div>
+        <div className="truncate font-heading text-lg font-bold text-foreground">
+          {name}
+        </div>
         {subtitleParts.length > 0 && (
-          <div className="text-sm text-muted-foreground truncate">
+          <div className="mt-0.5 truncate text-sm text-muted-foreground">
             {subtitleParts.join(" · ")}
           </div>
         )}
@@ -552,7 +606,7 @@ function IdentityStrip({
         <button
           type="button"
           onClick={onSignOut}
-          className="text-sm text-muted-foreground underline hover:text-foreground transition-colors"
+          className="whitespace-nowrap text-sm text-foreground underline hover:no-underline"
         >
           Abmelden
         </button>
@@ -562,35 +616,36 @@ function IdentityStrip({
   )
 }
 
-function IdentityHint({
-  kiosk,
-  isAccountLoggedIn,
-  isTagIdentified,
+/**
+ * One segment of the account/guest switcher: equal-width, heading typeface,
+ * active = white fill on the grey track.
+ */
+function SegmentButton({
+  active,
+  onClick,
+  testId,
+  children,
 }: {
-  kiosk: boolean
-  isAccountLoggedIn: boolean
-  isTagIdentified: boolean
+  active: boolean
+  onClick: () => void
+  testId: string
+  children: React.ReactNode
 }) {
-  // Already identified — no hint needed. Kiosk never reaches this
-  // component while anonymous (the NfcBadgeAffordance renders instead),
-  // so there's nothing to show for it here either.
-  if (isTagIdentified || isAccountLoggedIn || kiosk) return null
-
-  // Browser — login / signup hint
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 rounded-[3px] border border-border bg-muted/50 px-4 py-2.5">
-      <span className="text-sm text-muted-foreground">
-        Bereits registriert oder Konto erstellen?
-      </span>
-      {/* Plain <a> instead of router <Link> — intentional full reload clears
-          checkout state. One link only: the combined login page handles both
-          sign-in and sign-up from the same entry point. */}
-      <a href="/login?redirect=/">
-        <Button variant="ghost" size="sm" className="text-cog-teal hover:text-cog-teal-dark">
-          <LogIn className="h-4 w-4 mr-1.5" />
-          Anmelden oder registrieren
-        </Button>
-      </a>
-    </div>
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      data-testid={testId}
+      onClick={onClick}
+      className={cn(
+        "flex h-[42px] flex-1 items-center justify-center gap-2 rounded-[7px] font-heading text-sm font-bold transition-all sm:h-[46px] sm:gap-2.5 sm:text-[15px]",
+        active
+          ? "bg-white text-foreground shadow-[0_1px_3px_rgba(0,0,0,0.14)]"
+          : "text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
   )
 }

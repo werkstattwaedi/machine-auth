@@ -11,7 +11,7 @@
 // URL-routes refactor it's part of the public checkout flow.)
 
 import { test, expect, type Page, type Locator } from "@playwright/test"
-import { clearCollections } from "./helpers"
+import { clearCollections, openGuestSection } from "./helpers"
 
 /** Locate an input field by its preceding label text within a person card */
 function personField(page: Page, label: string, nth = 0): Locator {
@@ -29,7 +29,7 @@ function personField(page: Page, label: string, nth = 0): Locator {
  */
 async function signInEagerAnonymous(page: Page) {
   await page.goto("/")
-  await expect(page.getByText("Deine Angaben")).toBeVisible({ timeout: 10_000 })
+  await openGuestSection(page)
 
   await personField(page, "Vorname").fill("Anon")
   await personField(page, "Nachname").fill("Visitor")

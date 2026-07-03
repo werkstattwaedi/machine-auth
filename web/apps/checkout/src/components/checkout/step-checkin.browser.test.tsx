@@ -1,10 +1,20 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { render, screen, cleanup, waitFor } from "@testing-library/react"
+import { render, screen, cleanup } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, it, expect, afterEach, vi } from "vitest"
 import { useReducer } from "react"
+
+// The embedded account sign-in needs the full Auth/Firebase provider stack
+// (covered by checkin-signin.test.tsx). Stub it to a pass-through so the
+// kiosk NFC affordance — passed as children — still renders.
+vi.mock("./checkin-signin", () => ({
+  CheckinSignin: ({ children }: { children?: React.ReactNode }) => (
+    <div data-testid="checkin-signin-stub">{children}</div>
+  ),
+}))
+
 import { StepCheckin, type FamilyCandidate } from "./step-checkin"
 import {
   personsReducer,
@@ -15,24 +25,17 @@ import {
 
 afterEach(cleanup)
 
+/** The guest form hides behind the "Als Gast" segment while anonymous —
+ *  flip to it first (account is the default on an empty roster). */
+async function openGuestTab(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByTestId("checkin-seg-guest"))
+}
+
 /**
  * Wrapper that provides a real persons reducer so dispatch actually
  * updates state. Captures dispatched actions for assertions.
  */
-function renderCheckin({
-  isAnonymous = true,
-  kiosk = false,
-  isAccountLoggedIn = false,
-  signedInUserId,
-  signedInEmail,
-  isMember = false,
-  personsOverride,
-  onAdvance,
-  familyCandidates,
-  tagAuthLoading,
-  tagAuthError,
-  picc,
-}: {
+interface CheckinOpts {
   isAnonymous?: boolean
   kiosk?: boolean
   isAccountLoggedIn?: boolean
@@ -45,11 +48,26 @@ function renderCheckin({
   tagAuthLoading?: boolean
   tagAuthError?: string | null
   picc?: string
-} = {}) {
+}
+
+function renderCheckin(opts: CheckinOpts = {}) {
   const dispatched: PersonsAction[] = []
   const onSignOut = vi.fn()
 
-  function Wrapper() {
+  function Wrapper({
+    isAnonymous = true,
+    kiosk = false,
+    isAccountLoggedIn = false,
+    signedInUserId,
+    signedInEmail,
+    isMember = false,
+    personsOverride,
+    onAdvance,
+    familyCandidates,
+    tagAuthLoading,
+    tagAuthError,
+    picc,
+  }: CheckinOpts) {
     const [persons, dispatch] = useReducer(
       personsReducer,
       personsOverride ?? initialPersons,
@@ -85,8 +103,12 @@ function renderCheckin({
     )
   }
 
-  render(<Wrapper />)
-  return { dispatched, onSignOut }
+  const { rerender } = render(<Wrapper {...opts} />)
+  // Re-render with patched props while keeping the reducer state (same
+  // component instance) — used to simulate e.g. a badge tap mid-flow.
+  const rerenderWith = (patch: Partial<CheckinOpts>) =>
+    rerender(<Wrapper {...opts} {...patch} />)
+  return { dispatched, onSignOut, rerenderWith }
 }
 
 describe("StepCheckin validation", () => {
@@ -94,6 +116,7 @@ describe("StepCheckin validation", () => {
     const user = userEvent.setup()
     const onAdvance = vi.fn(async () => {})
     renderCheckin({ onAdvance })
+    await openGuestTab(user)
 
     await user.click(screen.getByRole("button", { name: /Weiter/ }))
 
@@ -109,6 +132,7 @@ describe("StepCheckin validation", () => {
   it("shows email format error for invalid email", async () => {
     const user = userEvent.setup()
     renderCheckin()
+    await openGuestTab(user)
 
     const inputs = screen.getAllByRole("textbox")
     await user.type(inputs[0], "Max")
@@ -126,6 +150,7 @@ describe("StepCheckin validation", () => {
   it("shows error on blur for touched fields", async () => {
     const user = userEvent.setup()
     renderCheckin()
+    await openGuestTab(user)
 
     const inputs = screen.getAllByRole("textbox")
     await user.click(inputs[0])
@@ -137,6 +162,7 @@ describe("StepCheckin validation", () => {
   it("clears error when field is corrected", async () => {
     const user = userEvent.setup()
     renderCheckin()
+    await openGuestTab(user)
 
     await user.click(screen.getByRole("button", { name: /Weiter/ }))
     expect(screen.getByText("Vorname ist erforderlich.")).toBeTruthy()
@@ -151,6 +177,7 @@ describe("StepCheckin validation", () => {
     const user = userEvent.setup()
     const onAdvance = vi.fn(async () => {})
     renderCheckin({ onAdvance })
+    await openGuestTab(user)
 
     const inputs = screen.getAllByRole("textbox")
     await user.type(inputs[0], "Max")
@@ -164,9 +191,14 @@ describe("StepCheckin validation", () => {
     expect(onAdvance).toHaveBeenCalledOnce()
   })
 
-  it("Weiter button is always enabled (not disabled)", () => {
+  it("Weiter is disabled on the account tab, enabled on the guest tab", async () => {
+    const user = userEvent.setup()
     renderCheckin()
+    // Account tab (default on an empty roster): there's nothing to advance
+    // with — the visitor signs in or switches to the guest form first.
     const btn = screen.getByRole("button", { name: /Weiter/ })
+    expect(btn).toBeDisabled()
+    await openGuestTab(user)
     expect(btn).not.toBeDisabled()
   })
 
@@ -188,6 +220,7 @@ describe("StepCheckin validation", () => {
   it("newly added person does not show errors immediately after prior submit", async () => {
     const user = userEvent.setup()
     renderCheckin()
+    await openGuestTab(user)
 
     await user.click(screen.getByRole("button", { name: /Weiter/ }))
     expect(screen.getByText("Vorname ist erforderlich.")).toBeTruthy()
@@ -205,6 +238,7 @@ describe("StepCheckin validation", () => {
       const user = userEvent.setup()
       const onAdvance = vi.fn(async () => {})
       renderCheckin({ isAnonymous: true, onAdvance })
+      await openGuestTab(user)
 
       await user.click(screen.getByRole("button", { name: /Weiter/ }))
 
@@ -215,6 +249,7 @@ describe("StepCheckin validation", () => {
       const user = userEvent.setup()
       const onAdvance = vi.fn(async () => {})
       renderCheckin({ isAnonymous: true, onAdvance })
+      await openGuestTab(user)
 
       const inputs = screen.getAllByRole("textbox")
       await user.type(inputs[0], "Max")
@@ -229,72 +264,86 @@ describe("StepCheckin validation", () => {
   })
 })
 
-describe("Identity hint", () => {
-  it("shows login hint for anonymous browser users", () => {
+describe("Account/guest switcher", () => {
+  it("shows the switcher with the account section as the default", () => {
     renderCheckin({ isAnonymous: true, kiosk: false })
 
-    expect(screen.getByText("Bereits registriert oder Konto erstellen?")).toBeTruthy()
-    expect(screen.getByText("Anmelden oder registrieren")).toBeTruthy()
+    expect(screen.getByTestId("checkin-seg-account")).toBeTruthy()
+    expect(screen.getByTestId("checkin-seg-guest")).toBeTruthy()
+    expect(
+      screen.getByTestId("checkin-seg-account").getAttribute("aria-selected"),
+    ).toBe("true")
+    // Account section renders instead of the guest form; the old /login
+    // hint link is gone.
+    expect(screen.getByTestId("checkin-signin-stub")).toBeTruthy()
+    expect(screen.queryByTestId("person-card")).toBeNull()
+    expect(screen.queryByText("Bereits registriert oder Konto erstellen?")).toBeNull()
   })
 
-  it("shows the NFC badge affordance hero for kiosk mode", () => {
+  it("defaults to the guest section when the roster already carries data", () => {
+    renderCheckin({
+      isAnonymous: true,
+      personsOverride: [
+        {
+          id: "p1",
+          firstName: "Max",
+          lastName: "",
+          email: "",
+          userType: "erwachsen",
+          termsAccepted: false,
+          isPreFilled: false,
+          userId: null,
+        },
+      ],
+    })
+
+    expect(
+      screen.getByTestId("checkin-seg-guest").getAttribute("aria-selected"),
+    ).toBe("true")
+    expect(screen.getByTestId("person-card")).toBeTruthy()
+  })
+
+  it("keeps typed guest data when switching to account and back", async () => {
+    const user = userEvent.setup()
+    renderCheckin({ isAnonymous: true })
+    await openGuestTab(user)
+
+    await user.type(screen.getAllByRole("textbox")[0], "Max")
+    await user.click(screen.getByTestId("checkin-seg-account"))
+    expect(screen.queryByTestId("person-card")).toBeNull()
+
+    await openGuestTab(user)
+    expect(
+      (screen.getAllByRole("textbox")[0] as HTMLInputElement).value,
+    ).toBe("Max")
+  })
+
+  it("hides the switcher entirely once identified", () => {
+    renderCheckin({ isAnonymous: false, isAccountLoggedIn: true })
+    expect(screen.queryByTestId("checkin-seg-account")).toBeNull()
+    expect(screen.queryByTestId("checkin-seg-guest")).toBeNull()
+  })
+
+  it("shows the NFC badge affordance hero in the kiosk account section", () => {
     renderCheckin({ isAnonymous: true, kiosk: true })
 
     const affordance = screen.getByTestId("nfc-affordance")
     expect(affordance.getAttribute("data-mode")).toBe("hero")
     expect(affordance.textContent).toContain("Badge an den Leser halten")
-    expect(screen.queryByText("Bereits registriert oder Konto erstellen?")).toBeNull()
   })
 
-  it("renders the badge affordance below the whole form behind an ODER divider", () => {
-    renderCheckin({ isAnonymous: true, kiosk: true })
-
-    const divider = screen.getByText("ODER")
-    const affordance = screen.getByTestId("nfc-affordance")
-    const addPerson = screen.getByRole("button", { name: /Person hinzufügen/ })
-    const terms = screen.getByText(/Ich akzeptiere die/)
-    // Document order: person form, add-person CTA and terms first, then
-    // ODER, then the badge box.
-    const before = (a: Node, b: Node) =>
-      !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
-    expect(before(screen.getByTestId("person-card"), divider)).toBe(true)
-    expect(before(addPerson, divider)).toBe(true)
-    expect(before(terms, divider)).toBe(true)
-    expect(before(divider, affordance)).toBe(true)
-  })
-
-  it("collapses the kiosk NFC affordance to the compact bar while typing", async () => {
+  it("hides the affordance on the guest tab, returns to it on a badge tap", async () => {
     const user = userEvent.setup()
-    renderCheckin({ isAnonymous: true, kiosk: true })
+    const { rerenderWith } = renderCheckin({ isAnonymous: true, kiosk: true })
+    await openGuestTab(user)
+    expect(screen.queryByTestId("nfc-affordance")).toBeNull()
 
-    await user.type(screen.getAllByRole("textbox")[0], "Max")
-
-    const affordance = screen.getByTestId("nfc-affordance")
-    expect(affordance.getAttribute("data-mode")).toBe("compact")
-    expect(
-      screen.getByText("Badge an den Leser halten, um deine Daten zu laden"),
-    ).toBeTruthy()
-  })
-
-  it("re-expands the kiosk NFC affordance when the form goes back to empty", async () => {
-    const user = userEvent.setup()
-    renderCheckin({ isAnonymous: true, kiosk: true })
-
-    const input = screen.getAllByRole("textbox")[0]
-    await user.type(input, "Max")
+    // A badge tap while the guest form is open must surface its verify
+    // feedback — the step flips back to the account section.
+    rerenderWith({ tagAuthLoading: true, picc: "PICC1" })
     expect(
       screen.getByTestId("nfc-affordance").getAttribute("data-mode"),
-    ).toBe("compact")
-
-    // Clear the typed content and move focus out of the form — after the
-    // 120 ms blur bridge the hero returns.
-    await user.clear(input)
-    ;(document.activeElement as HTMLElement | null)?.blur()
-    await waitFor(() =>
-      expect(
-        screen.getByTestId("nfc-affordance").getAttribute("data-mode"),
-      ).toBe("hero"),
-    )
+    ).toBe("verifying")
   })
 
   it("folds badge verification progress into the kiosk affordance box", () => {

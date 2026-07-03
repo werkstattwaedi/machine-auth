@@ -84,20 +84,16 @@ test.describe("Self-registration (combined sign-in/sign-up)", () => {
     expect(userDoc.billingAddress ?? null).toBeNull()
   })
 
-  test("new user creates an account from the checkout identity hint", async ({ page }) => {
+  test("new user creates an account inline on the check-in page", async ({ page }) => {
     // ── Start at the checkout/check-in page ──
+    // The account section is the default for a fresh anonymous visitor
+    // (design handoff "Kiosk sign-in flow redesign"); an unknown e-mail
+    // opens the sign-up dialog right there — no /login round-trip.
     await page.goto("/")
-    await expect(page.getByText("Deine Angaben")).toBeVisible({ timeout: 10_000 })
+    await page.getByTestId("checkin-identifier").fill(CHECKOUT_SIGNUP_EMAIL)
+    await page.getByTestId("checkin-identifier-submit").click()
 
-    // ── Click the combined login link in the identity hint ──
-    await page.getByRole("button", { name: "Anmelden oder registrieren" }).click()
-    await page.waitForURL((url) => url.pathname === "/login", { timeout: 5_000 })
-    await expect(page.getByText("Anmelden oder Konto erstellen")).toBeVisible()
-
-    await page.getByTestId("login-email-input").fill(CHECKOUT_SIGNUP_EMAIL)
-    await page.getByTestId("login-email-submit").click()
-
-    await expect(page.getByTestId("login-signup-stage")).toBeVisible({
+    await expect(page.getByTestId("checkin-signup-dialog")).toBeVisible({
       timeout: 5_000,
     })
 
@@ -107,12 +103,15 @@ test.describe("Self-registration (combined sign-in/sign-up)", () => {
     await page.getByTestId("signup-lastname").fill("Tester")
     await page.getByTestId("signup-code-input").fill(entry!.code)
     await page.getByTestId("signup-terms").click()
-    await page.getByTestId("signup-submit").click()
+    await page.getByTestId("checkin-signup-submit").click()
 
-    // ── Lands on /checkin (redirect=/ → dispatcher → start a checkout) ──
-    await page.waitForURL((url) => url.pathname.includes("/checkin"), {
+    // ── Signed in in place: the identity strip replaces the switcher ──
+    await expect(page.getByTestId("identity-strip")).toBeVisible({
       timeout: 10_000,
     })
+    await expect(page.getByTestId("identity-strip")).toContainText(
+      "Checkout Tester",
+    )
 
     // ── Verify Firestore ──
     const db = getAdminFirestore()
