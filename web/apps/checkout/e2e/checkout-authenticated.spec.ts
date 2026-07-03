@@ -21,18 +21,10 @@ test.describe("Authenticated checkout", () => {
   test("email link sign-in and checkout with pre-filled person", async ({
     page,
   }) => {
-    await page.goto("/")
-
-    // ── Checkout page shows login hint ──
-    await expect(
-      page.getByText("Bereits registriert oder Konto erstellen?"),
-    ).toBeVisible({
-      timeout: 10_000,
-    })
-
-    // Click the single combined login link in the identity hint.
-    await page.locator('a[href="/login?redirect=/"]').click()
-    await page.waitForURL("**/login**")
+    // The old identity-hint link on /checkin is gone (the check-in page now
+    // embeds sign-in itself — covered by checkin-screenshots/signup specs);
+    // this test exercises the standalone /login page flow directly.
+    await page.goto("/login?redirect=/")
 
     // ── Login page: email + code flow ──
     await page.getByTestId("login-email-input").fill(AUTH_USER_EMAIL)

@@ -41,8 +41,9 @@ test.describe("shared package loads in Vite dev server (#326)", () => {
     await page.goto("/")
 
     // Give the wizard a moment to render so any deferred module-load
-    // errors have a chance to surface.
-    await expect(page.getByText("Deine Angaben")).toBeVisible({
+    // errors have a chance to surface. (Anonymous /checkin shows the
+    // account/guest switcher since the sign-in redesign.)
+    await expect(page.getByTestId("checkin-seg-account")).toBeVisible({
       timeout: 10_000,
     })
 
