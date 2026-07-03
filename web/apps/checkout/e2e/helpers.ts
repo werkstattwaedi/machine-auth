@@ -578,3 +578,40 @@ export async function openGuestSection(page: import("@playwright/test").Page) {
   await guestSeg.waitFor({ state: "visible", timeout: 10_000 })
   await guestSeg.click()
 }
+
+/**
+ * Admin Auth handle against the emulator (same app as getAdminFirestore —
+ * calling that first wires the emulator env hosts).
+ */
+export async function getAdminAuth() {
+  getAdminFirestore()
+  const { getAuth } = await import("firebase-admin/auth")
+  return getAuth()
+}
+
+/**
+ * Fetch the most recent phone-auth verification code the Auth emulator
+ * "sent" to `phone` (E.164). The emulator never sends real SMS; codes are
+ * exposed on its REST surface for tests (SMS login, ADR-0031).
+ */
+export async function waitForSmsCode(
+  phone: string,
+  timeoutMs = 10_000,
+): Promise<string | null> {
+  const url = `http://127.0.0.1:${E2E_PORTS.auth}/emulator/v1/projects/${PROJECT_ID}/verificationCodes`
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const res = await fetch(url)
+    if (res.ok) {
+      const body = (await res.json()) as {
+        verificationCodes?: { phoneNumber: string; code: string }[]
+      }
+      const entries = (body.verificationCodes ?? []).filter(
+        (c) => c.phoneNumber === phone,
+      )
+      if (entries.length > 0) return entries[entries.length - 1].code
+    }
+    await new Promise((r) => setTimeout(r, 250))
+  }
+  return null
+}

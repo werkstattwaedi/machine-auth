@@ -60,6 +60,9 @@ export default defineConfig({
       VITE_EMULATOR_AUTH_PORT: String(E2E_PORTS.auth),
       VITE_EMULATOR_FIRESTORE_PORT: String(E2E_PORTS.firestore),
       VITE_EMULATOR_FUNCTIONS_PORT: String(E2E_PORTS.functions),
+      // SMS login codes (ADR-0031): E2E always exercises the flag-on flow
+      // against the Auth emulator, regardless of the local .env.development.
+      VITE_SMS_LOGIN_ENABLED: "true",
     },
   },
 })

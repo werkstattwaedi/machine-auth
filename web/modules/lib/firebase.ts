@@ -42,4 +42,8 @@ if (import.meta.env.DEV) {
   })
   connectFirestoreEmulator(db, "127.0.0.1", parseInt(firestorePort))
   connectFunctionsEmulator(functions, "127.0.0.1", parseInt(functionsPort))
+  // Phone auth (SMS login codes, ADR-0031) against the Auth emulator: skip
+  // the reCAPTCHA app verifier so unit/E2E flows need no browser challenge.
+  // The emulator never sends real SMS; codes surface in its REST API/logs.
+  auth.settings.appVerificationDisabledForTesting = true
 }

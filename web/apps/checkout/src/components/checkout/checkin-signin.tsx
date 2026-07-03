@@ -27,11 +27,18 @@
  * signed-in "Deine Angaben" view instead.
  */
 
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { ArrowRight, Loader2 } from "lucide-react"
+import {
+  RecaptchaVerifier,
+  signInWithPhoneNumber,
+  signOut as firebaseSignOut,
+  type ConfirmationResult,
+} from "firebase/auth"
 import { useAuth } from "@modules/lib/auth"
 import { useFunctions, useFirebaseAuth } from "@modules/lib/firebase-context"
+import { parseSwissPhone } from "@modules/lib/phone"
 import { resolveBridgeBearer } from "@modules/lib/use-bridge"
 import { rpcCallable } from "@modules/lib/rpc"
 import { establishKioskSession, type TokenUser } from "@modules/lib/token-auth"
@@ -53,11 +60,7 @@ import {
   DialogTitle,
 } from "@modules/components/ui/dialog"
 import { Button } from "@modules/components/ui/button"
-import {
-  InputOTP,
-  InputOTPGroup,
-  InputOTPSlot,
-} from "@modules/components/ui/input-otp"
+import { CodeEntryDialog, messageFromError } from "./code-entry-dialog"
 
 /** Channel the typed identifier routes to. `sms` needs the smsEnabled flag. */
 export type LoginChannel = "email" | "sms"
@@ -95,22 +98,33 @@ interface VerifyLoginCodeKioskResponse {
   activeMembership?: boolean
 }
 
-function messageFromError(err: unknown, fallback: string): string {
-  if (err && typeof err === "object" && "message" in err) {
-    const msg = (err as { message?: unknown }).message
-    if (typeof msg === "string" && msg.length > 0) return msg
-  }
-  return fallback
-}
-
 type Stage =
   | { kind: "idle" }
-  | { kind: "code"; identifier: string }
+  | { kind: "code"; identifier: string; channel: LoginChannel }
   | { kind: "signup"; via: "code" | "google"; identifier: string }
+
+/**
+ * SMS login rollout flag (ADR-0031). Sourced from the operations config via
+ * scripts/generate-env.ts (`web.smsLoginEnabled`); absent/false keeps the
+ * check-in field e-mail-only. Production additionally needs the phone
+ * sign-in provider enabled on the Firebase project (deployment checklist).
+ */
+const SMS_LOGIN_ENABLED = import.meta.env.VITE_SMS_LOGIN_ENABLED === "true"
+
+interface ExchangeKioskSessionResponse {
+  customToken: string
+  userId: string
+  firstName?: string
+  lastName?: string
+  email?: string
+  userType?: string
+  activeMembership?: boolean
+}
 
 export interface CheckinSigninProps {
   kiosk: boolean
-  /** Step 2 (SMS login codes): enables phone-number detection. Default off. */
+  /** Step 2 (SMS login codes): enables phone-number detection. Defaults to
+   *  the VITE_SMS_LOGIN_ENABLED env flag; overridable for tests. */
   smsEnabled?: boolean
   /** Rendered below the "oder" divider on the kiosk — the NFC affordance. */
   children?: React.ReactNode
@@ -118,7 +132,7 @@ export interface CheckinSigninProps {
 
 export function CheckinSignin({
   kiosk,
-  smsEnabled = false,
+  smsEnabled = SMS_LOGIN_ENABLED,
   children,
 }: CheckinSigninProps) {
   const {
@@ -139,6 +153,21 @@ export function CheckinSignin({
   const [showLinkHint, setShowLinkHint] = useState(false)
   const [busy, setBusy] = useState(false)
 
+  // Firebase phone-auth handles (SMS channel). The ConfirmationResult from
+  // signInWithPhoneNumber is what confirms the typed code; the invisible
+  // reCAPTCHA verifier is single-use, so it's recreated per send inside a
+  // stable container div.
+  const confirmationRef = useRef<ConfirmationResult | null>(null)
+  const recaptchaHostRef = useRef<HTMLDivElement | null>(null)
+  const verifierRef = useRef<RecaptchaVerifier | null>(null)
+  useEffect(
+    () => () => {
+      verifierRef.current?.clear()
+      verifierRef.current = null
+    },
+    [],
+  )
+
   const channel = detectChannel(identifier, smsEnabled)
 
   const reset = () => {
@@ -146,6 +175,50 @@ export function CheckinSignin({
     setIdentifier("")
     setFieldError(null)
     setBusy(false)
+    confirmationRef.current = null
+  }
+
+  /** Fresh invisible reCAPTCHA for each SMS send (a verifier is consumed by
+   *  one signInWithPhoneNumber call). In the emulator the challenge is
+   *  bypassed via appVerificationDisabledForTesting (firebase.ts). */
+  const newRecaptchaVerifier = (): RecaptchaVerifier => {
+    verifierRef.current?.clear()
+    const host = recaptchaHostRef.current
+    if (!host) throw new Error("reCAPTCHA host not mounted")
+    const slot = document.createElement("div")
+    host.replaceChildren(slot)
+    const verifier = new RecaptchaVerifier(auth, slot, { size: "invisible" })
+    verifierRef.current = verifier
+    return verifier
+  }
+
+  /** Look up the (verified, auth-linked) phone account and send the SMS.
+   *  Returns the E.164 identifier, or null after surfacing a field error. */
+  const sendSmsCode = async (id: string): Promise<string | null> => {
+    const parsed = await parseSwissPhone(id)
+    if (!parsed.ok) {
+      setFieldError("Bitte gib eine gültige Handynummer ein.")
+      return null
+    }
+    const checkPhone = rpcCallable<
+      { phone: string },
+      { exists: boolean; hasAuthUser: boolean }
+    >(functions, "authCall", "checkPhoneAccountExists")
+    const { data } = await checkPhone({ phone: parsed.e164 })
+    if (!data.exists) {
+      // SMS sign-in only works for numbers verified on the profile —
+      // there is no phone-based sign-up on either surface.
+      setFieldError(
+        "Für diese Handynummer ist kein Konto hinterlegt. Melde dich mit deiner E-Mail an und bestätige die Nummer in deinem Profil.",
+      )
+      return null
+    }
+    confirmationRef.current = await signInWithPhoneNumber(
+      auth,
+      parsed.e164,
+      newRecaptchaVerifier(),
+    )
+    return parsed.e164
   }
 
   const submitIdentifier = async (e: React.FormEvent) => {
@@ -155,10 +228,9 @@ export function CheckinSignin({
     setBusy(true)
     setFieldError(null)
     try {
-      // SMS lands in step 2 (Firebase phone auth) — the channel detection
-      // is already wired so the field behaves per the design once enabled.
-      if (channel !== "email") {
-        setFieldError("SMS-Anmeldung ist noch nicht verfügbar.")
+      if (channel === "sms") {
+        const e164 = await sendSmsCode(id)
+        if (e164) setStage({ kind: "code", identifier: e164, channel: "sms" })
         return
       }
       const { exists } = await checkAccountExists(id)
@@ -171,7 +243,7 @@ export function CheckinSignin({
           return
         }
         await requestCodeWithThrottle(requestLoginEmail, id)
-        setStage({ kind: "code", identifier: id })
+        setStage({ kind: "code", identifier: id, channel: "email" })
         return
       }
       // Own device: the sign-up form needs the code too, so request it for
@@ -184,7 +256,7 @@ export function CheckinSignin({
       }
       setStage(
         exists
-          ? { kind: "code", identifier: id }
+          ? { kind: "code", identifier: id, channel: "email" }
           : { kind: "signup", via: "code", identifier: id },
       )
     } catch (err) {
@@ -193,6 +265,51 @@ export function CheckinSignin({
       )
     } finally {
       setBusy(false)
+    }
+  }
+
+  /** SMS verify: confirm() signs the browser in as the REAL user. On the
+   *  kiosk that session is immediately exchanged for the ephemeral actsAs
+   *  session (ADR-0022) — and torn down again if the exchange fails. */
+  const verifySmsCode = async (code: string) => {
+    const confirmation = confirmationRef.current
+    if (!confirmation) {
+      throw new Error("Kein Code aktiv — bitte fordere einen neuen Code an.")
+    }
+    try {
+      await confirmation.confirm(code)
+    } catch (err) {
+      const errCode = (err as { code?: string } | null)?.code
+      if (errCode === "auth/invalid-verification-code") {
+        throw new Error("Code falsch.")
+      }
+      if (errCode === "auth/code-expired") {
+        throw new Error("Der Code ist abgelaufen. Bitte fordere einen neuen an.")
+      }
+      throw err
+    }
+    if (!kiosk) return // Own device: the persistent phone session IS the login.
+    try {
+      const bearer = await resolveBridgeBearer()
+      const exchange = rpcCallable<
+        { bearer?: string },
+        ExchangeKioskSessionResponse
+      >(functions, "authCall", "exchangeKioskSession")
+      const { data } = await exchange({ bearer: bearer ?? undefined })
+      const tokenUser: TokenUser = {
+        tokenId: null,
+        userId: data.userId,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        email: data.email,
+        userType: data.userType,
+        activeMembership: data.activeMembership,
+      }
+      await establishKioskSession(auth, data.customToken, tokenUser)
+    } catch (err) {
+      // Never leave the real phone session behind on the shared terminal.
+      await firebaseSignOut(auth).catch(() => {})
+      throw err
     }
   }
 
@@ -237,6 +354,9 @@ export function CheckinSignin({
 
   return (
     <div data-testid="checkin-signin">
+      {/* Invisible reCAPTCHA anchor for Firebase phone auth — a fresh child
+          element is mounted per SMS send (see newRecaptchaVerifier). */}
+      <div ref={recaptchaHostRef} aria-hidden />
       <p className="text-[12.5px] leading-relaxed text-muted-foreground">
         Melde dich mit deinem Konto an —{" "}
         <b className="font-semibold text-foreground">
@@ -268,7 +388,9 @@ export function CheckinSignin({
             type={smsEnabled ? "text" : "email"}
             inputMode={smsEnabled ? "text" : "email"}
             autoComplete="off"
-            placeholder="name@beispiel.ch"
+            placeholder={
+              smsEnabled ? "name@beispiel.ch · +41 79 …" : "name@beispiel.ch"
+            }
             value={identifier}
             onChange={(e) => {
               setIdentifier(e.target.value)
@@ -323,12 +445,21 @@ export function CheckinSignin({
         </div>
       )}
 
-      <CodeDialog
+      <CodeEntryDialog
         open={stage.kind === "code"}
         identifier={stage.kind === "code" ? stage.identifier : ""}
-        kiosk={kiosk}
+        note={kiosk ? "Der Code ist 5 Minuten gültig." : undefined}
         onCancel={reset}
         onResend={async (id) => {
+          if (stage.kind === "code" && stage.channel === "sms") {
+            // Parse + existence re-check are formalities here (both passed
+            // on the way into the dialog); a null means the account vanished
+            // mid-flow — surface it in the dialog instead of a stale toast.
+            const e164 = await sendSmsCode(id)
+            if (!e164) throw new Error("Code konnte nicht gesendet werden.")
+            toast.success("Neuer Code gesendet!")
+            return
+          }
           const { throttled } = await requestCodeWithThrottle(
             requestLoginEmail,
             id,
@@ -340,8 +471,13 @@ export function CheckinSignin({
           )
         }}
         onVerify={async (id, code) => {
-          if (kiosk) await verifyKioskCode(id, code)
-          else await verifyLoginCode(id, code)
+          if (stage.kind === "code" && stage.channel === "sms") {
+            await verifySmsCode(code)
+          } else if (kiosk) {
+            await verifyKioskCode(id, code)
+          } else {
+            await verifyLoginCode(id, code)
+          }
         }}
       />
 
@@ -392,166 +528,6 @@ export function CheckinSignin({
         />
       )}
     </div>
-  )
-}
-
-/**
- * The "Code eingeben" modal (handoff §3): 6-box OTP input, resend link,
- * Anmelden / Abbrechen. Closing (Abbrechen, Esc, scrim click) returns to the
- * idle state via `onCancel`.
- */
-function CodeDialog({
-  open,
-  identifier,
-  kiosk,
-  onCancel,
-  onResend,
-  onVerify,
-}: {
-  open: boolean
-  identifier: string
-  kiosk: boolean
-  onCancel: () => void
-  onResend: (identifier: string) => Promise<void>
-  onVerify: (identifier: string, code: string) => Promise<void>
-}) {
-  const [code, setCode] = useState("")
-  const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-
-  const handleOpenChange = (next: boolean) => {
-    if (busy) return
-    if (!next) {
-      setCode("")
-      setError(null)
-      onCancel()
-    }
-  }
-
-  const submit = async (e?: React.FormEvent) => {
-    e?.preventDefault()
-    if (code.length !== 6 || busy) return
-    setBusy(true)
-    setError(null)
-    try {
-      await onVerify(identifier, code)
-      // Success unmounts the host component — no local cleanup needed.
-    } catch (err) {
-      setError(
-        messageFromError(err, "Anmeldung fehlgeschlagen. Bitte versuche es erneut."),
-      )
-      setCode("")
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const resend = async () => {
-    if (busy) return
-    setBusy(true)
-    setError(null)
-    try {
-      await onResend(identifier)
-      setCode("")
-    } catch (err) {
-      setError(messageFromError(err, "Code konnte nicht gesendet werden."))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-[404px]" data-testid="checkin-code-dialog">
-        <DialogHeader className="text-left">
-          <DialogTitle className="font-heading text-xl">
-            Code eingeben
-          </DialogTitle>
-          <DialogDescription className="text-[13.5px]">
-            <span className="hidden sm:inline">
-              Wir haben einen 6-stelligen Code an{" "}
-              <b className="font-semibold text-foreground">{identifier}</b>{" "}
-              gesendet.
-            </span>
-            <span className="sm:hidden">
-              6-stelliger Code an{" "}
-              <b className="font-semibold text-foreground">{identifier}</b>{" "}
-              gesendet.
-            </span>
-            {kiosk && " Der Code ist 5 Minuten gültig."}
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={submit} className="flex flex-col gap-3">
-          <InputOTP
-            maxLength={6}
-            value={code}
-            onChange={(next) => {
-              setCode(next.replace(/\D/g, ""))
-              if (error) setError(null)
-            }}
-            disabled={busy}
-            autoFocus
-            autoComplete="one-time-code"
-            inputMode="numeric"
-            containerClassName="justify-between"
-            aria-label="6-stelliger Code"
-            data-testid="checkin-code-input"
-          >
-            <InputOTPGroup className="w-full justify-between gap-2">
-              {[0, 1, 2, 3, 4, 5].map((i) => (
-                <InputOTPSlot
-                  key={i}
-                  index={i}
-                  className="h-[54px] w-[46px] rounded-md border border-[#ccc] font-heading text-2xl font-bold data-[active=true]:border-cog-teal data-[active=true]:ring-[3px] data-[active=true]:ring-cog-teal/30"
-                />
-              ))}
-            </InputOTPGroup>
-          </InputOTP>
-          {error && (
-            <p
-              className="text-sm text-destructive"
-              role="alert"
-              data-testid="checkin-code-error"
-            >
-              {error}
-            </p>
-          )}
-          <div>
-            <button
-              type="button"
-              onClick={() => void resend()}
-              disabled={busy}
-              data-testid="checkin-code-resend"
-              className="text-[13px] text-cog-teal-dark underline hover:no-underline disabled:opacity-60"
-            >
-              Code erneut senden
-            </button>
-          </div>
-          <div className="mt-2 flex items-center gap-3">
-            <Button
-              type="submit"
-              disabled={busy || code.length !== 6}
-              data-testid="checkin-code-submit"
-              className="h-[42px] bg-cog-teal px-5 text-[15px] font-semibold text-white hover:bg-cog-teal-dark"
-            >
-              {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
-              Anmelden
-              <ArrowRight className="h-4 w-4" aria-hidden />
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => handleOpenChange(false)}
-              disabled={busy}
-              data-testid="checkin-code-cancel"
-              className="h-[42px] px-5 text-[15px] font-semibold"
-            >
-              Abbrechen
-            </Button>
-          </div>
-        </form>
-      </DialogContent>
-    </Dialog>
   )
 }
 

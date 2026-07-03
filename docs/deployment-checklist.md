@@ -71,6 +71,27 @@ breaks the kiosk self-service badge purchase. The public seed
 data comes from the operations repo's catalog fixtures, so add the badge
 item there before deploying this feature.
 
+### SMS login codes (ADR-0031)
+
+Rolling out SMS login needs three switches, in this order:
+
+1. **Firebase console → Authentication → Sign-in method → Phone: enable.**
+   Also verify the checkout domain is in Authentication → Settings →
+   Authorized domains (reCAPTCHA for phone auth checks it). SMS billing
+   applies (~6¢/SMS, Blaze).
+2. Optionally restrict SMS regions to CH (Authentication → Settings →
+   SMS region policy) to keep abuse costs bounded.
+3. Set `web.smsLoginEnabled: "true"` in the operations config and run
+   `npm run generate-env` — this feeds `VITE_SMS_LOGIN_ENABLED` into the
+   checkout build, turning on the "E-Mail oder Handynummer" field and the
+   profile verification affordance. Without step 1 the flag-on flow fails
+   at `signInWithPhoneNumber`, so flip the flag last.
+
+Smoke test after deploy: verify a phone number on `/account/profile`
+(one SMS), then sign in with it on `/checkin`. On the kiosk, confirm the
+session lands as the ephemeral actsAs principal (the header shows no
+account avatar and "Besuch starten" appears).
+
 ## 3. Deploy Functions
 
 ```bash

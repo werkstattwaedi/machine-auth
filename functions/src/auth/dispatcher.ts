@@ -15,21 +15,27 @@ import {
   kioskBearerKey,
 } from "../config/tag-secrets";
 import { createUserHandler } from "./create-user";
-import { checkAccountExistsHandler } from "./check-account-exists";
+import {
+  checkAccountExistsHandler,
+  checkPhoneAccountExistsHandler,
+} from "./check-account-exists";
 import { requestLoginCodeHandler } from "./login-code/request";
 import { verifyLoginCodeHandler } from "./login-code/verify-code";
 import { verifyMagicLinkHandler } from "./login-code/verify-link";
 import { resolveTagHandler } from "./resolve-tag";
 import { verifyTagCheckoutHandler } from "../checkout/verify_tag";
 import { verifyLoginCodeKioskHandler } from "../checkout/verify_login_code_kiosk";
+import { exchangeKioskSessionHandler } from "../checkout/exchange_kiosk_session";
 import { probeTagHandler } from "../checkout/probe_tag";
 
 const HANDLERS: Record<string, RpcHandler> = {
   createUser: createUserHandler,
   checkAccountExists: checkAccountExistsHandler,
+  checkPhoneAccountExists: checkPhoneAccountExistsHandler,
   requestLoginCode: requestLoginCodeHandler,
   verifyLoginCode: verifyLoginCodeHandler,
   verifyLoginCodeKiosk: verifyLoginCodeKioskHandler,
+  exchangeKioskSession: exchangeKioskSessionHandler,
   verifyMagicLink: verifyMagicLinkHandler,
   resolveTag: resolveTagHandler,
   verifyTagCheckout: verifyTagCheckoutHandler,

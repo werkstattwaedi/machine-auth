@@ -44,14 +44,40 @@ vi.mock("@modules/lib/use-bridge", () => ({
 }))
 
 const verifyKioskCode = vi.fn()
+const checkPhoneAccountExists = vi.fn()
+const exchangeKioskSession = vi.fn()
+const RPC_MOCKS: Record<string, (payload: unknown) => unknown> = {
+  verifyLoginCodeKiosk: verifyKioskCode,
+  checkPhoneAccountExists,
+  exchangeKioskSession,
+}
 vi.mock("@modules/lib/rpc", () => ({
-  rpcCallable: () => verifyKioskCode,
+  rpcCallable:
+    (_functions: unknown, _group: string, method: string) =>
+    (payload: unknown) =>
+      RPC_MOCKS[method](payload),
 }))
 
 const establishKioskSession = vi.fn()
 vi.mock("@modules/lib/token-auth", () => ({
   establishKioskSession: (...args: unknown[]) => establishKioskSession(...args),
 }))
+
+// SMS path: stub the Firebase phone-auth surface (the fake auth object from
+// the firebase-context mock can't drive the real SDK).
+const signInWithPhoneNumber = vi.fn()
+const firebaseSignOut = vi.fn()
+vi.mock("firebase/auth", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("firebase/auth")>()
+  return {
+    ...actual,
+    RecaptchaVerifier: class {
+      clear() {}
+    },
+    signInWithPhoneNumber: (...args: unknown[]) => signInWithPhoneNumber(...args),
+    signOut: (...args: unknown[]) => firebaseSignOut(...args),
+  }
+})
 
 import { CheckinSignin, detectChannel } from "./checkin-signin"
 
@@ -239,5 +265,121 @@ describe("CheckinSignin", () => {
   it("own device renders the Google button", () => {
     render(<CheckinSignin kiosk={false} />)
     expect(screen.getByText("Mit Google anmelden")).toBeInTheDocument()
+  })
+})
+
+describe("CheckinSignin — SMS channel (smsEnabled)", () => {
+  afterEach(cleanup)
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    resolveBridgeBearer.mockResolvedValue("kiosk-bearer")
+    establishKioskSession.mockResolvedValue(undefined)
+  })
+
+  async function typePhoneAndSubmit(kiosk: boolean, phone = "079 123 45 67") {
+    const user = userEvent.setup()
+    render(<CheckinSignin kiosk={kiosk} smsEnabled />)
+    await user.type(screen.getByTestId("checkin-identifier"), phone)
+    await user.click(screen.getByRole("button", { name: "Code senden" }))
+    return user
+  }
+
+  it("shows the profile hint when the number has no verified account, no SMS sent", async () => {
+    checkPhoneAccountExists.mockResolvedValue({
+      data: { exists: false, hasAuthUser: false },
+    })
+
+    await typePhoneAndSubmit(false)
+
+    expect(
+      await screen.findByText(/kein Konto hinterlegt/i),
+    ).toBeInTheDocument()
+    expect(checkPhoneAccountExists).toHaveBeenCalledWith({
+      phone: "+41791234567",
+    })
+    expect(signInWithPhoneNumber).not.toHaveBeenCalled()
+  })
+
+  it("own device: confirms the SMS code in place — no kiosk exchange", async () => {
+    checkPhoneAccountExists.mockResolvedValue({
+      data: { exists: true, hasAuthUser: true },
+    })
+    const confirm = vi.fn().mockResolvedValue({})
+    signInWithPhoneNumber.mockResolvedValue({ confirm })
+
+    const user = await typePhoneAndSubmit(false)
+    await enterCode(user, "123456")
+
+    await waitFor(() => expect(confirm).toHaveBeenCalledWith("123456"))
+    // The E.164 identifier surfaces in the dialog subtitle.
+    expect(signInWithPhoneNumber).toHaveBeenCalledWith(
+      expect.anything(),
+      "+41791234567",
+      expect.anything(),
+    )
+    expect(exchangeKioskSession).not.toHaveBeenCalled()
+    expect(establishKioskSession).not.toHaveBeenCalled()
+  })
+
+  it("kiosk: swaps the confirmed phone session for the ephemeral kiosk session", async () => {
+    checkPhoneAccountExists.mockResolvedValue({
+      data: { exists: true, hasAuthUser: true },
+    })
+    const confirm = vi.fn().mockResolvedValue({})
+    signInWithPhoneNumber.mockResolvedValue({ confirm })
+    exchangeKioskSession.mockResolvedValue({
+      data: {
+        customToken: "ct-sms",
+        userId: "u-1",
+        firstName: "Anna",
+        activeMembership: true,
+      },
+    })
+
+    const user = await typePhoneAndSubmit(true)
+    await enterCode(user, "654321")
+
+    await waitFor(() => expect(establishKioskSession).toHaveBeenCalled())
+    expect(exchangeKioskSession).toHaveBeenCalledWith({ bearer: "kiosk-bearer" })
+    const [, customToken, tokenUser] = establishKioskSession.mock.calls[0]
+    expect(customToken).toBe("ct-sms")
+    expect(tokenUser).toMatchObject({ tokenId: null, userId: "u-1" })
+  })
+
+  it("kiosk: a failed exchange signs the phone session out again", async () => {
+    checkPhoneAccountExists.mockResolvedValue({
+      data: { exists: true, hasAuthUser: true },
+    })
+    const confirm = vi.fn().mockResolvedValue({})
+    signInWithPhoneNumber.mockResolvedValue({ confirm })
+    exchangeKioskSession.mockRejectedValue(new Error("kein vollständiges Konto"))
+    firebaseSignOut.mockResolvedValue(undefined)
+
+    const user = await typePhoneAndSubmit(true)
+    await enterCode(user, "654321")
+
+    expect(
+      await screen.findByText(/kein vollständiges Konto/),
+    ).toBeInTheDocument()
+    expect(firebaseSignOut).toHaveBeenCalled()
+    expect(establishKioskSession).not.toHaveBeenCalled()
+  })
+
+  it("maps a wrong SMS code to the German inline error", async () => {
+    checkPhoneAccountExists.mockResolvedValue({
+      data: { exists: true, hasAuthUser: true },
+    })
+    const confirm = vi
+      .fn()
+      .mockRejectedValue(
+        Object.assign(new Error("bad"), { code: "auth/invalid-verification-code" }),
+      )
+    signInWithPhoneNumber.mockResolvedValue({ confirm })
+
+    const user = await typePhoneAndSubmit(false)
+    await enterCode(user, "000000")
+
+    expect(await screen.findByText("Code falsch.")).toBeInTheDocument()
   })
 })
