@@ -29,9 +29,12 @@ process.env.RESEND_API_KEY = "re_test_fake";
 process.env.RESEND_FROM_EMAIL = "OWW Test <test@localhost>";
 process.env.RESEND_QRBILL_TEMPLATE_ID = "test-qrbill-template";
 process.env.RESEND_TWINT_TEMPLATE_ID = "test-twint-template";
-// Issue #245: RESEND_MONTHLY_TEMPLATE_ID is now the *aggregated*
-// Sammelrechnung template (per-visit Belege no longer email).
+// RESEND_MONTHLY_TEMPLATE_ID is the per-visit Beleg "charge queued" notice.
 process.env.RESEND_MONTHLY_TEMPLATE_ID = "test-monthly-template";
+// Issue #245/#502: RESEND_SAMMELRECHNUNG_TEMPLATE_ID is the aggregated,
+// payable Sammelrechnung invoice emitted by monthlyBillRun — a distinct
+// template from the Beleg notice above (they must not share copy).
+process.env.RESEND_SAMMELRECHNUNG_TEMPLATE_ID = "test-sammelrechnung-template";
 process.env.KASSE_EMAIL = "kasse@test.localhost";
 
 import { expect } from "chai";
@@ -868,12 +871,15 @@ describe("bill processing triggers (Integration)", () => {
         expect(entity.template.id).to.equal("test-twint-template");
       });
 
-      it("picks Sammelrechnung template for monthly-acked invoice (aggregated bill, #245)", async () => {
+      it("picks the dedicated Sammelrechnung invoice template for monthly-acked invoice (aggregated bill, #245/#502)", async () => {
         // Post-#245 a `kind: "invoice"` bill whose linked checkout has
         // paymentMethod "monthly" is the aggregated Sammelrechnung
-        // emitted by monthlyBillRun. Reuses RESEND_MONTHLY_TEMPLATE_ID.
-        // Per-visit Belege share this template but are covered separately
-        // below (#405).
+        // emitted by monthlyBillRun. This is the actual payable invoice,
+        // so (post-#502) it gets its own RESEND_SAMMELRECHNUNG_TEMPLATE_ID
+        // rather than sharing the per-visit Beleg's "charge queued"
+        // template — the copy is wrong for a "this IS your invoice" email.
+        // Per-visit Belege use RESEND_MONTHLY_TEMPLATE_ID, covered
+        // separately below (#405).
         const billId = "bill-sammelrechnung";
         await seedUser("u-bill-proc", { email: "payer@example.com" });
         await seedCheckout("co-default", {
@@ -892,7 +898,7 @@ describe("bill processing triggers (Integration)", () => {
           string,
           { template: { id: string } },
         ];
-        expect(entity.template.id).to.equal("test-monthly-template");
+        expect(entity.template.id).to.equal("test-sammelrechnung-template");
       });
 
       it("defaults to QR-Rechnung template when paymentMethod is null (auto-ack with no last selection)", async () => {
@@ -914,11 +920,16 @@ describe("bill processing triggers (Integration)", () => {
         expect(entity.template.id).to.equal("test-qrbill-template");
       });
 
-      // Issue #405: a per-visit Beleg (member picked Sammelrechnung) must
-      // email a *receipt* — the self-checkout/monthly template, a BL-…
-      // reference, and a Beleg-named attachment — even though it carries
-      // no payment-method ack stamp (the kind transition is its commit).
-      it("emails a per-visit Beleg as a receipt with the Sammelrechnung template (#405)", async () => {
+      // Issue #405: a per-visit Beleg (member picked the "Sammelrechnung"
+      // payment method at checkout) must email a *receipt* — the Beleg
+      // template (RESEND_MONTHLY_TEMPLATE_ID / self-checkout-monthly, the
+      // "charge queued" notice), a BL-… reference, and a Beleg-named
+      // attachment — even though it carries no payment-method ack stamp
+      // (the kind transition is its commit). NOT the Sammelrechnung
+      // invoice template (RESEND_SAMMELRECHNUNG_TEMPLATE_ID /
+      // self-checkout-sammelrechnung) — that's the aggregated, payable
+      // invoice from monthlyBillRun, covered in the test above.
+      it("emails a per-visit Beleg as a receipt with the Beleg template, not the Sammelrechnung invoice template (#405)", async () => {
         const billId = "bill-beleg-email";
         // Recipient is the account holder; the visiting person's name still
         // drives RECIPIENT_NAME from persons[0].
