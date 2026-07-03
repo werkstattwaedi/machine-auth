@@ -376,7 +376,7 @@ export function StepCheckout({
   // standard fee, so a waived usage type (e.g. materialbezug) still has a
   // non-zero raw fee. `personFeesNet === 0` is what "no entry fee billed"
   // means under the discount model.
-  const membershipOnly =
+  const nonWorkshopOnly =
     (membershipItems.length > 0 || badgeItems.length > 0) &&
     materialItems.length === 0 &&
     nfcItems.length === 0 &&
@@ -641,7 +641,7 @@ export function StepCheckout({
           </ExpandableSection>
         )}
 
-        {!membershipOnly && (
+        {!nonWorkshopOnly && (
         <>
         <ExpandableSection
           id="nutzung"

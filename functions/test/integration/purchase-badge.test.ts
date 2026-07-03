@@ -237,6 +237,40 @@ describe("addBadgeToCheckout (Integration)", () => {
     expect(items).to.have.length(2);
   });
 
+  it("concurrent purchases with no open checkout create exactly ONE checkout", async () => {
+    // Race found in code review: with the open-checkout lookup outside the
+    // transaction, two concurrent calls could each create a fresh checkout,
+    // breaking the one-open-checkout-per-user invariant the wizard relies
+    // on. The lookup now lives inside the transaction: the loser retries,
+    // sees the winner's checkout, and appends to it.
+    const db = getFirestore();
+    await seedUser("racer-3", { activeMembership: db.doc("memberships/m1") });
+
+    const [a, b] = await Promise.all([
+      handleAddBadgeToCheckout(
+        { badgeVoucher: voucherFor(TOKEN_ID) },
+        kioskCaller("racer-3"),
+        MASTER_KEY
+      ),
+      handleAddBadgeToCheckout(
+        { badgeVoucher: voucherFor("04dddddddddddd") },
+        kioskCaller("racer-3"),
+        MASTER_KEY
+      ),
+    ]);
+
+    expect(a.checkoutId).to.equal(b.checkoutId);
+    const checkouts = await db
+      .collection("checkouts")
+      .where("status", "==", "open")
+      .get();
+    expect(checkouts.size).to.equal(1);
+    const items = await itemsOf(a.checkoutId!);
+    expect(items).to.have.length(2);
+    // Only ONE of the two racing badges may be gratis.
+    expect(items.filter((i) => i.totalPrice === 0)).to.have.length(1);
+  });
+
   it("dryRun returns the quote without writing anything", async () => {
     const db = getFirestore();
     await seedUser("member-5", { activeMembership: db.doc("memberships/m1") });

@@ -118,36 +118,48 @@ export async function handleAddBadgeToCheckout(
     );
   }
 
-  // Tokens are only written at checkout close / by admins, so this count
-  // can safely live outside the transaction.
-  const tokensSnap = await database
-    .collection("tokens")
-    .where("userId", "==", callerRef as DocumentReference)
-    .get();
-  const activeTokenCount = countActiveTokens(tokensSnap.docs);
   const eligibleFree = isBadgeEligibleFree(user);
-
-  const openCheckoutsSnap = await database
-    .collection("checkouts")
-    .where("userId", "==", callerRef as DocumentReference)
-    .where("status", "==", "open")
-    .limit(1)
-    .get();
-  const existingCheckoutRef = openCheckoutsSnap.empty
-    ? null
-    : openCheckoutsSnap.docs[0].ref;
-
   const now = Timestamp.now();
 
   /**
-   * Reads shared by dryRun and the real write, executed inside the
-   * transaction so a concurrent purchase of the same physical badge (two
-   * kiosk sessions racing over one badge from the stack) forces a retry
-   * and the loser gets a clean rejection.
+   * ALL state reads live inside the transaction, so its read set covers
+   * everything the decision depends on and any concurrent mutation forces
+   * a retry with fresh reads:
+   *  - the caller's open-checkout query — two concurrent purchases with no
+   *    open checkout must not each create one (the retry sees the winner's
+   *    checkout and appends to it);
+   *  - the caller's tokens — a token registered between quote and commit
+   *    must not still yield a gratis badge;
+   *  - `tokens/{tokenId}` + the items collection group — two kiosk
+   *    sessions racing over the same physical badge: the loser gets a
+   *    clean rejection.
    */
   const runChecks = async (
     tx: Transaction
-  ): Promise<{ unitPrice: number; free: boolean; variantId: string }> => {
+  ): Promise<{
+    unitPrice: number;
+    free: boolean;
+    variantId: string;
+    existingCheckoutRef: DocumentReference | null;
+  }> => {
+    const openCheckoutsSnap = await tx.get(
+      database
+        .collection("checkouts")
+        .where("userId", "==", callerRef as DocumentReference)
+        .where("status", "==", "open")
+        .limit(1)
+    );
+    const existingCheckoutRef = openCheckoutsSnap.empty
+      ? null
+      : openCheckoutsSnap.docs[0].ref;
+
+    const tokensSnap = await tx.get(
+      database
+        .collection("tokens")
+        .where("userId", "==", callerRef as DocumentReference)
+    );
+    const activeTokenCount = countActiveTokens(tokensSnap.docs);
+
     // (1) Already associated with someone (or an admin registered it).
     const tokenDoc = await tx.get(database.collection("tokens").doc(tokenId));
     if (tokenDoc.exists) {
@@ -198,24 +210,23 @@ export async function handleAddBadgeToCheckout(
         `Badge variant ${variant.id} has an invalid unitPrice`
       );
     }
-    return { unitPrice, free, variantId: variant.id };
+    return { unitPrice, free, variantId: variant.id, existingCheckoutRef };
   };
 
   if (dryRun) {
     const quote = await database.runTransaction(runChecks);
     return {
-      checkoutId: existingCheckoutRef?.id ?? null,
+      checkoutId: quote.existingCheckoutRef?.id ?? null,
       tokenId,
       unitPrice: quote.unitPrice,
       free: quote.free,
     };
   }
 
-  const checkoutRef =
-    existingCheckoutRef ?? database.collection("checkouts").doc();
-
   const result = await database.runTransaction(async (tx) => {
     const quote = await runChecks(tx);
+    const checkoutRef =
+      quote.existingCheckoutRef ?? database.collection("checkouts").doc();
 
     const item: CheckoutItemEntity = {
       workshop: "diverses",
@@ -234,7 +245,7 @@ export async function handleAddBadgeToCheckout(
       badgeSdmCounter: sdmCounter,
     };
 
-    if (!existingCheckoutRef) {
+    if (!quote.existingCheckoutRef) {
       // No open checkout yet (badge tapped right after sign-in): create
       // one, mirroring purchaseMembership. `materialbezug` waives the
       // entry fee, so the bill is just the badge.
@@ -260,20 +271,20 @@ export async function handleAddBadgeToCheckout(
       tx.update(checkoutRef, { modifiedBy: callerRef.id, modifiedAt: now });
     }
     tx.set(checkoutRef.collection("items").doc(), item);
-    return quote;
+    return { ...quote, checkoutRef };
   });
 
   logger.info("Added self-service badge to checkout", {
     userId: callerRef.id,
     tokenId,
-    checkoutId: checkoutRef.id,
+    checkoutId: result.checkoutRef.id,
     unitPrice: result.unitPrice,
     free: result.free,
-    reusedExistingCheckout: !!existingCheckoutRef,
+    reusedExistingCheckout: !!result.existingCheckoutRef,
   });
 
   return {
-    checkoutId: checkoutRef.id,
+    checkoutId: result.checkoutRef.id,
     tokenId,
     unitPrice: result.unitPrice,
     free: result.free,

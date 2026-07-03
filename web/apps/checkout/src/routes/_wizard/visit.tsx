@@ -182,12 +182,12 @@ function VisitRoute() {
   // Buying a membership during an open checkout appends the membership SKU to
   // that same checkout; with `workshopItems.length === 0` (a selected but
   // item-less workshop, or a visit with persons only) the old gate flipped
-  // `membershipOnly` true and the workshop selectors vanished — leaving no way
+  // `nonWorkshopOnly` true and the workshop selectors vanished — leaving no way
   // to continue the visit. Gate on the *effective* workshop selection (which
   // unions manually-selected + item-backed + visited workshops) so any active
   // workshop keeps the full picker + sections; the membership simply becomes
   // one more position in the bill.
-  const membershipOnly =
+  const nonWorkshopOnly =
     (membershipItems.length > 0 || badgeItems.length > 0) &&
     workshopItems.length === 0 &&
     effectiveWorkshops.size === 0
@@ -295,7 +295,7 @@ function VisitRoute() {
       <div className="flex flex-col flex-1 gap-8">
         {/* Workshop checkbox selector. Hidden for a membership-only cart so the
             page is just the Vereinsmitgliedschaft block + nav (issue #263). */}
-        {!membershipOnly && (
+        {!nonWorkshopOnly && (
         <div>
           <h2 className="text-xl font-bold font-body mb-2">
             Werkstätten wählen
@@ -372,7 +372,7 @@ function VisitRoute() {
             "diverses" workshop, so its workshopsVisited entry would otherwise
             render an empty Diverses section with a "Material hinzufügen" button. */}
         {sortedWorkshops
-          .filter(([wsId]) => !membershipOnly && effectiveWorkshops.has(wsId))
+          .filter(([wsId]) => !nonWorkshopOnly && effectiveWorkshops.has(wsId))
           .map(([wsId, wsConfig]) => (
             <WorkshopSectionWithCatalog
               key={wsId}
