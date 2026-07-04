@@ -57,7 +57,14 @@
           // keys without touching items that don't need them.
           "unitPrice": { "default": "number", "member": "number | undefined" }
         }
-      ]
+      ],
+
+      // Ids of shared variant definitions (VARIANT_DEFINITIONS in @oww/shared)
+      // that apply to this item, e.g. laser cut sizes ["a3", "320-620"].
+      // Each derives an extra purchase option priced base×factor at read time
+      // (resolveVariants); `variants` then holds only the base entry.
+      // Absent/empty = base variant only.
+      "variantIds": ["string"]
     }
   },
   "machine": {

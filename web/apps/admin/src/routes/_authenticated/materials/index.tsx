@@ -166,6 +166,7 @@ function CreateCatalogDialog({ open, onOpenChange }: { open: boolean; onOpenChan
             workshops: string[]
             category: string[]
             variants: typeof variant[]
+            variantIds: string[]
             active: boolean
             userCanAdd: boolean
           },
@@ -179,10 +180,12 @@ function CreateCatalogDialog({ open, onOpenChange }: { open: boolean; onOpenChan
             .split(",")
             .map((w) => w.trim())
             .filter(Boolean),
-          // New entries start as single-variant items in the placeholder
-          // "Sonstiges" category. Multi-variant editing is a follow-up.
+          // New entries start in the placeholder "Sonstiges" category with
+          // just their base variant; extra variants can be added on the
+          // detail page.
           category: ["Sonstiges"],
           variants: [variant],
+          variantIds: Array.isArray(values.variantIds) ? values.variantIds : [],
           active: true,
           userCanAdd: values.userCanAdd,
         })

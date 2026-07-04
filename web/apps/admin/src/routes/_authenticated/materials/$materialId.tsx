@@ -58,10 +58,8 @@ function CatalogDetailPage() {
 
   useEffect(() => {
     if (catalog) {
-      // The form is single-variant-aware only — multi-variant editing is
-      // out of scope for this admin route until the picker/UI work in PR C
-      // lands. Read from variants[0]; saving below overwrites the whole
-      // variants array.
+      // The form edits the base variant (variants[0]); extra purchase
+      // options are referenced by `variantIds` and derived at read time.
       const primary = catalog.variants?.[0]
       reset({
         code: catalog.code,
@@ -75,6 +73,7 @@ function CatalogDetailPage() {
             ? primary.unitPrice.member
             : primary?.unitPrice?.default ?? 0,
         ),
+        variantIds: catalog.variantIds ?? [],
         active: catalog.active,
         userCanAdd: catalog.userCanAdd,
       })
@@ -117,25 +116,23 @@ function CatalogDetailPage() {
   }
 
   const onSubmit = async (values: CatalogFormValues) => {
-    // Preserve any extra variants on the doc (the admin form edits only
-    // variants[0] today). PR C will introduce a multi-variant editor.
-    const existingVariants = catalog?.variants ?? []
+    // The form edits the base variant; extra options live in `variantIds`
+    // (derived at read time), so `variants` is just the base entry.
+    const existingBase = catalog?.variants?.[0]
     const defaultPrice = parseFloat(values.priceNone) || 0
     const memberPrice = parseFloat(values.priceMember) || 0
-    const updatedPrimary = {
-      id: existingVariants[0]?.id ?? "default",
-      // Preserve any meaningful label on the existing primary; admin form
-      // doesn't edit labels yet (multi-variant editor is a PR C followup).
-      ...(existingVariants[0]?.label
-        ? { label: existingVariants[0].label }
-        : {}),
+    const base = {
+      id: existingBase?.id ?? "default",
+      // Preserve any meaningful label on the existing base variant; the form
+      // doesn't edit labels.
+      ...(existingBase?.label ? { label: existingBase.label } : {}),
       pricingModel: values.pricingModel as PricingModel,
       unitPrice:
         memberPrice !== defaultPrice
           ? { default: defaultPrice, member: memberPrice }
           : { default: defaultPrice },
     }
-    const nextVariants = [updatedPrimary, ...existingVariants.slice(1)]
+    const variantIds = Array.isArray(values.variantIds) ? values.variantIds : []
     try {
       await save.mutate(async () => {
         const fn = rpcCallable<
@@ -145,7 +142,8 @@ function CatalogDetailPage() {
             name: string
             description: string | null
             workshops: string[]
-            variants: typeof nextVariants
+            variants: (typeof base)[]
+            variantIds: string[]
             active: boolean
             userCanAdd: boolean
           },
@@ -160,7 +158,8 @@ function CatalogDetailPage() {
             .split(",")
             .map((w) => w.trim())
             .filter(Boolean),
-          variants: nextVariants,
+          variants: [base],
+          variantIds,
           active: values.active,
           userCanAdd: values.userCanAdd,
         })

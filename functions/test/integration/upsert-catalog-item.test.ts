@@ -158,4 +158,44 @@ describe("upsertCatalogItem (Integration)", () => {
       "invalid-argument"
     );
   });
+
+  it("stores known variantIds and defaults to [] on create when omitted", async () => {
+    const withVariants = {
+      ...baseInput,
+      code: "6001",
+      variants: [{ id: "m2", pricingModel: "area", unitPrice: { default: 5.55 } }],
+      variantIds: ["a3", "500-1250"],
+    };
+    const { id } = await handleUpsertCatalogItem(withVariants, ADMIN_UID);
+    const snap = await getFirestore().collection("catalog").doc(id).get();
+    expect(snap.data()?.variantIds).to.deep.equal(["a3", "500-1250"]);
+
+    const { id: id2 } = await handleUpsertCatalogItem(baseInput, ADMIN_UID);
+    const snap2 = await getFirestore().collection("catalog").doc(id2).get();
+    expect(snap2.data()?.variantIds).to.deep.equal([]);
+  });
+
+  it("preserves variantIds on update when caller omits them", async () => {
+    const { id } = await handleUpsertCatalogItem(
+      { ...baseInput, variantIds: ["a3"] },
+      ADMIN_UID
+    );
+    await handleUpsertCatalogItem(
+      { ...baseInput, id, name: "Untouched variants" },
+      ADMIN_UID
+    );
+    const snap = await getFirestore().collection("catalog").doc(id).get();
+    expect(snap.data()?.variantIds).to.deep.equal(["a3"]);
+  });
+
+  it("rejects an unknown variant id", async () => {
+    await expectHttpsError(
+      () =>
+        handleUpsertCatalogItem(
+          { ...baseInput, variantIds: ["a3", "bogus"] },
+          ADMIN_UID
+        ),
+      "invalid-argument"
+    );
+  });
 });

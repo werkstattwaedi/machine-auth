@@ -117,6 +117,77 @@ export function priceForTier(price: VariantPrice, tier: DiscountLevel): number {
   return price.default
 }
 
+/**
+ * A concrete purchase option on a catalog item. SDK-agnostic (no firebase
+ * coupling), so functions, the web apps, and the printer package share one
+ * definition — the web `CatalogItemDoc` re-exports this.
+ */
+export interface CatalogVariant {
+  /** Stable within the item, e.g. "default", "m2", "a3". */
+  id: string
+  /** Display label; only meaningful when an item has >1 variant. */
+  label?: string | null
+  pricingModel: PricingModel
+  unitPrice: VariantPrice
+}
+
+/**
+ * A derived variant: its price is the base item's unit price times `factor`,
+ * billed in `pricingModel`. `factor` is a property of the variant itself
+ * (e.g. a laser cut size = its area in m²), constant across materials — so it
+ * lives here once instead of being duplicated as an explicit price on every
+ * item. Hardcoded (like {@link USAGE_TYPE_DISCOUNTS}) so server, web, and the
+ * printer agree without a Firestore round-trip; changing a factor is a
+ * reviewed code change.
+ */
+export interface VariantDefinition {
+  label: string
+  factor: number
+  pricingModel: PricingModel
+}
+
+/**
+ * The makerspace laser cut-to-size variants. Each factor is the piece area in
+ * m²; applied to a per-m² base price it yields the per-piece price (area →
+ * count). Ids match the seed's existing variant ids.
+ */
+export const VARIANT_DEFINITIONS: Record<string, VariantDefinition> = {
+  a3: { label: "Zuschnitt A3", factor: 0.12474, pricingModel: "count" },
+  "320-620": { label: "Zuschnitt 320×620 mm", factor: 0.1984, pricingModel: "count" },
+  "500-1250": { label: "Zuschnitt 500×1250 mm", factor: 0.625, pricingModel: "count" },
+}
+
+/** Round to the Rappen (2 decimals). */
+function roundRappen(n: number): number {
+  return Math.round(n * 100) / 100
+}
+
+/**
+ * Expand an item's stored base variant (`variants[0]`) plus its referenced
+ * `variantIds` into the full purchase-option list. Each referenced variant's
+ * price is derived `base × factor` for *both* tiers, so member pricing is
+ * preserved. Unknown ids are skipped defensively (upsert validates them on
+ * write); an item with no `variantIds` yields just its base variant.
+ */
+export function resolveVariants(item: {
+  variants: CatalogVariant[]
+  variantIds?: string[] | null
+}): CatalogVariant[] {
+  const base = item.variants[0]
+  if (!base) return []
+  const extras: CatalogVariant[] = []
+  for (const id of item.variantIds ?? []) {
+    const def = VARIANT_DEFINITIONS[id]
+    if (!def) continue
+    const unitPrice: VariantPrice = { default: roundRappen(base.unitPrice.default * def.factor) }
+    if (typeof base.unitPrice.member === "number") {
+      unitPrice.member = roundRappen(base.unitPrice.member * def.factor)
+    }
+    extras.push({ id, label: def.label, pricingModel: def.pricingModel, unitPrice })
+  }
+  return [base, ...extras]
+}
+
 export const USER_TYPE_LABELS: Record<UserType, string> = {
   erwachsen: "Erwachsen",
   kind: "Kind (u. 18)",
