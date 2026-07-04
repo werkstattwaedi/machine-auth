@@ -107,9 +107,27 @@ vi.mock("@modules/components/ui/tabs", () => ({
   TabsTrigger: ({ children }: { children: ReactNode }) => <button>{children}</button>,
   TabsContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }))
+// The real shadcn/Radix Checkbox emits `onCheckedChange(checked)` (not a
+// native `onChange`). Mirror that contract here so the migrated binding
+// (`checked` + `onCheckedChange`, issue #495) is actually exercised: map
+// the native input's `onChange` back to `onCheckedChange`. A dumb
+// prop-spread mock would let a native `onChange` binding pass while the
+// real Radix widget stays broken.
 vi.mock("@modules/components/ui/checkbox", () => ({
-  Checkbox: (props: Record<string, unknown>) => (
-    <input type="checkbox" {...(props as React.InputHTMLAttributes<HTMLInputElement>)} />
+  Checkbox: ({
+    checked,
+    onCheckedChange,
+    ...rest
+  }: {
+    checked?: boolean
+    onCheckedChange?: (checked: boolean) => void
+  } & Record<string, unknown>) => (
+    <input
+      type="checkbox"
+      checked={checked ?? false}
+      onChange={(e) => onCheckedChange?.(e.target.checked)}
+      {...(rest as React.InputHTMLAttributes<HTMLInputElement>)}
+    />
   ),
 }))
 vi.mock("@modules/components/ui/label", () => ({
@@ -262,5 +280,99 @@ describe("UserDetailPage tag operations error envelope (issue #182)", () => {
       "Tag-Status konnte nicht geändert werden",
     )
     expect(mockToastSuccess).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * Regression coverage for issue #495: the "Administrator" checkbox must
+ * drive the `isAdmin` form value so saving persists `roles: ["admin"]`.
+ * Before the fix the Radix Checkbox was bound via `{...register("isAdmin")}`
+ * with `checked={undefined}`, so the toggle never reached form state and
+ * every save wrote `roles: []` — wiping admin both from the UI and any
+ * hand-set Firestore value.
+ */
+describe("UserDetailPage admin role persistence (issue #495)", () => {
+  beforeEach(() => {
+    mockSet.mockReset()
+    mockUpdate.mockReset()
+    mockToastError.mockReset()
+    mockToastSuccess.mockReset()
+    setupDefaults()
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.clearAllMocks()
+  })
+
+  // Override the user document with a specific role set.
+  function setUserRoles(roles: string[]) {
+    const userResult = {
+      data: {
+        id: "u1",
+        firstName: "Test",
+        lastName: "Admin",
+        email: "test@example.com",
+        roles,
+        permissions: [],
+        userType: "erwachsen",
+      },
+      loading: false,
+      error: null,
+    }
+    const emptyResult = { data: null, loading: false, error: null }
+    mockUseDocument.mockImplementation((ref: { path?: string } | null) =>
+      ref?.path?.startsWith("users/") ? userResult : emptyResult,
+    )
+  }
+
+  it("toggling the Administrator checkbox saves roles: ['admin']", async () => {
+    setUserRoles([]) // non-admin to start
+
+    const Component = CapturedComponent!
+    render(<Component />)
+
+    const user = userEvent.setup()
+    await act(async () => {
+      await user.click(screen.getByRole("checkbox", { name: /Administrator/ }))
+      await user.click(screen.getByRole("button", { name: /Speichern/ }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(mockUpdate).toHaveBeenCalledTimes(1)
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ roles: ["admin"] }),
+      expect.anything(),
+    )
+  })
+
+  it("saving an existing admin without touching the checkbox preserves roles: ['admin']", async () => {
+    setUserRoles(["admin"]) // already an admin
+
+    const Component = CapturedComponent!
+    render(<Component />)
+
+    const user = userEvent.setup()
+    // The checkbox should reflect the persisted admin state on load.
+    expect(
+      (screen.getByRole("checkbox", {
+        name: /Administrator/,
+      }) as HTMLInputElement).checked,
+    ).toBe(true)
+
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: /Speichern/ }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(mockUpdate).toHaveBeenCalledTimes(1)
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ roles: ["admin"] }),
+      expect.anything(),
+    )
   })
 })

@@ -91,9 +91,11 @@ function UserDetailPage() {
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([])
   const [newTagId, setNewTagId] = useState("")
 
-  const { register, handleSubmit, reset, watch } = useForm<UserFormValues>()
+  const { register, handleSubmit, reset, watch, setValue } =
+    useForm<UserFormValues>()
   const userType = watch("userType")
   const isFirma = userType === "firma"
+  const isAdmin = watch("isAdmin")
 
   useEffect(() => {
     if (user) {
@@ -308,8 +310,10 @@ function UserDetailPage() {
                 <div className="flex items-center gap-2">
                   <Checkbox
                     id="isAdmin"
-                    checked={undefined}
-                    {...register("isAdmin")}
+                    checked={isAdmin ?? false}
+                    onCheckedChange={(checked) =>
+                      setValue("isAdmin", checked === true)
+                    }
                   />
                   <Label htmlFor="isAdmin">Administrator</Label>
                 </div>
