@@ -3,10 +3,14 @@
 
 /**
  * Embedded account sign-in on /checkin (design handoff "Kiosk sign-in flow
- * redesign", surfaces 3a/3b). Renders the account side of the check-in
- * switcher: a member note, a single identifier field with an inline submit
- * arrow, and — below an "oder" divider — the kiosk NFC affordance (passed
- * as children) or, on a personal device, the Google button.
+ * redesign", surfaces 3a/3b + session refinements). Renders the account side
+ * of the check-in switcher. Each surface offers exactly two ways in:
+ *   - kiosk: a two-column split — identifier field | vertical "oder" | the
+ *     NFC badge affordance (passed as children). No Google.
+ *   - personal device: a stacked column — identifier field, horizontal
+ *     "oder", the Google button. No badge (no reader).
+ * The field carries a hint instead of a label; the member-discount pitch
+ * lives on the guest tab's gold note (step-checkin.tsx).
  *
  * Code entry and sign-up happen in modal dialogs (not inline stages like
  * /login): the switcher and field stay hidden behind the scrim, and
@@ -45,13 +49,16 @@ import { establishKioskSession, type TokenUser } from "@modules/lib/token-auth"
 import {
   GoogleSignInButton,
   requestCodeWithThrottle,
-  SignupFields,
   EMPTY_SIGNUP_VALUE,
   validateSignupFields,
   signupProfileFrom,
   type SignupFieldsValue,
   type SignupFieldsErrors,
 } from "@modules/components/auth"
+import { AddressFields } from "@modules/components/profile-form"
+import { Checkbox } from "@modules/components/ui/checkbox"
+import { USER_TYPE_LABELS, type UserType } from "@modules/lib/pricing"
+import { cn } from "@modules/lib/utils"
 import {
   Dialog,
   DialogContent,
@@ -352,93 +359,116 @@ export function CheckinSignin({
     lastName: string
   } | null>(null)
 
+  const identifierForm = (
+    <form onSubmit={submitIdentifier} noValidate>
+      <div className="relative">
+        <input
+          id="checkin-identifier"
+          type={smsEnabled ? "text" : "email"}
+          inputMode={smsEnabled ? "text" : "email"}
+          autoComplete="off"
+          aria-label={smsEnabled ? "E-Mail oder Handynummer" : "E-Mail"}
+          placeholder={
+            smsEnabled ? "name@beispiel.ch · +41 79 …" : "name@beispiel.ch"
+          }
+          value={identifier}
+          onChange={(e) => {
+            setIdentifier(e.target.value)
+            if (fieldError) setFieldError(null)
+          }}
+          disabled={busy}
+          data-testid="checkin-identifier"
+          className="h-[42px] w-full rounded-md border border-[#ccc] bg-white pl-3 pr-[54px] text-[15px] shadow-xs outline-none transition-[color,box-shadow] focus:border-cog-teal focus:ring-[3px] focus:ring-cog-teal/30 disabled:cursor-not-allowed disabled:opacity-60"
+        />
+        <button
+          type="submit"
+          aria-label="Code senden"
+          disabled={!channel || busy}
+          data-testid="checkin-identifier-submit"
+          className="absolute bottom-[5px] right-[5px] top-[5px] flex w-[42px] items-center justify-center rounded-[5px] bg-cog-teal text-white transition-colors hover:bg-cog-teal-dark disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {busy ? (
+            <Loader2 className="h-[18px] w-[18px] animate-spin" aria-hidden />
+          ) : (
+            <ArrowRight className="h-[18px] w-[18px]" aria-hidden />
+          )}
+        </button>
+      </div>
+      {/* The value proposition moved to the guest tab's gold note (refined
+          handoff §6) — the account tab explains only what to type here. */}
+      <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
+        {smsEnabled
+          ? "Gib die E-Mail oder Handynummer ein, die bei uns hinterlegt ist — du erhältst einen einmaligen Login-Code."
+          : "Gib die E-Mail-Adresse ein, die bei uns hinterlegt ist — du erhältst einen einmaligen Login-Code."}
+      </p>
+      {fieldError && (
+        <p
+          className="mt-2 text-sm text-destructive"
+          role="alert"
+          data-testid="checkin-signin-error"
+        >
+          {fieldError}
+        </p>
+      )}
+    </form>
+  )
+
   return (
     <div data-testid="checkin-signin">
       {/* Invisible reCAPTCHA anchor for Firebase phone auth — a fresh child
           element is mounted per SMS send (see newRecaptchaVerifier). */}
       <div ref={recaptchaHostRef} aria-hidden />
-      <p className="text-[12.5px] leading-relaxed text-muted-foreground">
-        Melde dich mit deinem Konto an —{" "}
-        <b className="font-semibold text-foreground">
-          nur so gelten die Mitglieder-Preise
-        </b>
-        <span className="hidden sm:inline">
-          . Ohne Konto zahlst du den Gast-Tarif.
-        </span>
-        <span className="sm:hidden">.</span>
-      </p>
 
       {showLinkHint && (
-        <div className="mt-3 rounded-md border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-800">
+        <div className="mb-3 rounded-md border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-800">
           Ein Konto mit dieser E-Mail existiert bereits. Melde dich per
           E-Mail-Code an, um dein Google-Konto zu verknüpfen.
         </div>
       )}
 
-      <form className="mt-4" onSubmit={submitIdentifier} noValidate>
-        <label
-          htmlFor="checkin-identifier"
-          className="mb-1.5 block text-sm font-bold"
-        >
-          {smsEnabled ? "E-Mail oder Handynummer" : "E-Mail"}
-        </label>
-        <div className="relative sm:max-w-[440px]">
-          <input
-            id="checkin-identifier"
-            type={smsEnabled ? "text" : "email"}
-            inputMode={smsEnabled ? "text" : "email"}
-            autoComplete="off"
-            placeholder={
-              smsEnabled ? "name@beispiel.ch · +41 79 …" : "name@beispiel.ch"
-            }
-            value={identifier}
-            onChange={(e) => {
-              setIdentifier(e.target.value)
-              if (fieldError) setFieldError(null)
-            }}
-            disabled={busy}
-            data-testid="checkin-identifier"
-            className="h-[42px] w-full rounded-md border border-[#ccc] bg-white pl-3 pr-[54px] text-[15px] shadow-xs outline-none transition-[color,box-shadow] focus:border-cog-teal focus:ring-[3px] focus:ring-cog-teal/30 disabled:cursor-not-allowed disabled:opacity-60"
-          />
-          <button
-            type="submit"
-            aria-label="Code senden"
-            disabled={!channel || busy}
-            data-testid="checkin-identifier-submit"
-            className="absolute bottom-[5px] right-[5px] top-[5px] flex w-[42px] items-center justify-center rounded-[5px] bg-cog-teal text-white transition-colors hover:bg-cog-teal-dark disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {busy ? (
-              <Loader2 className="h-[18px] w-[18px] animate-spin" aria-hidden />
-            ) : (
-              <ArrowRight className="h-[18px] w-[18px]" aria-hidden />
-            )}
-          </button>
-        </div>
-        {fieldError && (
-          <p
-            className="mt-2 text-sm text-destructive"
-            role="alert"
-            data-testid="checkin-signin-error"
-          >
-            {fieldError}
-          </p>
-        )}
-      </form>
-
-      <div
-        className="my-6 flex items-center gap-3.5 text-xs font-semibold tracking-[0.18em] text-muted-foreground"
-        aria-hidden
-      >
-        <span className="h-px flex-1 bg-border" />
-        oder
-        <span className="h-px flex-1 bg-border" />
-      </div>
-
       {kiosk ? (
-        children
+        /* Kiosk (refined handoff §2): two equal columns — code sign-in left,
+           badge affordance right — separated by a vertical "oder", so both
+           ways in read as peers. Stacks with a horizontal divider only if
+           the kiosk window is ever narrow. */
+        <div className="mt-1 flex flex-col gap-5 sm:flex-row sm:items-stretch sm:gap-[26px]">
+          <div className="flex flex-col justify-center sm:flex-1 sm:min-w-0">
+            {identifierForm}
+          </div>
+          <div
+            className="hidden flex-col items-center gap-3.5 text-xs font-semibold tracking-[0.18em] text-muted-foreground sm:flex"
+            aria-hidden
+          >
+            <span className="w-px flex-1 bg-border" />
+            oder
+            <span className="w-px flex-1 bg-border" />
+          </div>
+          <div
+            className="flex items-center gap-3.5 text-xs font-semibold tracking-[0.18em] text-muted-foreground sm:hidden"
+            aria-hidden
+          >
+            <span className="h-px flex-1 bg-border" />
+            oder
+            <span className="h-px flex-1 bg-border" />
+          </div>
+          <div className="flex flex-col justify-center sm:flex-1 sm:min-w-0">
+            {children}
+          </div>
+        </div>
       ) : (
-        <div className="sm:max-w-[440px]">
+        /* Personal device: single stacked column — field, "oder", Google. */
+        <div className="mt-1 sm:max-w-[440px]">
+          {identifierForm}
+          <div
+            className="my-6 flex items-center gap-3.5 text-xs font-semibold tracking-[0.18em] text-muted-foreground"
+            aria-hidden
+          >
+            <span className="h-px flex-1 bg-border" />
+            oder
+            <span className="h-px flex-1 bg-border" />
+          </div>
           <GoogleSignInButton
+            className="h-[46px]"
             onNewAccount={handleGoogleNewAccount}
             onLinkHint={() => setShowLinkHint(true)}
           />
@@ -532,9 +562,12 @@ export function CheckinSignin({
 }
 
 /**
- * Sign-up in a dialog (own device only). Hosts the same SignupFields form as
- * /login: via "code" (unknown e-mail — code entered inline) or via "google"
- * (already signed in, no code).
+ * "Konto erstellen" in a dialog (own device only; refined handoff §4).
+ * Fields top→bottom: read-only e-mail (no "Ändern" — closing the dialog is
+ * the escape), confirmation code with inline resend (via "code" only),
+ * Nutzer:in segmented control, name fields, firma address (validation
+ * requires it), terms, full-width primary. Via "google" the principal is
+ * already signed in, so the code row is omitted.
  */
 function SignupDialog({
   open,
@@ -576,6 +609,9 @@ function SignupDialog({
     if (!next) void onCancel()
   }
 
+  const patch = (p: Partial<SignupFieldsValue>) =>
+    setValue((v) => ({ ...v, ...p }))
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     const errs = validateSignupFields(value, { requireCode: via === "code" })
@@ -594,10 +630,19 @@ function SignupDialog({
     }
   }
 
+  const labelCls = "mb-1.5 block text-sm font-bold"
+  const inputCls = (invalid: boolean) =>
+    cn(
+      "h-11 w-full rounded-md border bg-white px-3 text-[15px] shadow-xs outline-none transition-[color,box-shadow] disabled:cursor-not-allowed disabled:opacity-60",
+      invalid
+        ? "border-destructive focus:border-destructive focus:ring-[3px] focus:ring-destructive/30"
+        : "border-[#ccc] focus:border-cog-teal focus:ring-[3px] focus:ring-cog-teal/30",
+    )
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
-        className="max-h-[90dvh] overflow-y-auto sm:max-w-md"
+        className="max-h-[90dvh] overflow-y-auto rounded-[14px] p-6 sm:max-w-[420px] sm:px-[34px] sm:pb-[30px] sm:pt-8"
         data-testid="checkin-signup-dialog"
       >
         <DialogHeader className="text-left">
@@ -610,26 +655,187 @@ function SignupDialog({
               : "Noch ein paar Angaben, dann ist dein Konto bereit."}
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={submit} className="flex flex-col gap-5">
-          <SignupFields
-            value={value}
-            errors={errors}
-            onChange={(patch) => setValue((v) => ({ ...v, ...patch }))}
-            showCode={via === "code"}
-            email={identifier || undefined}
-            emailAction={{
-              label: via === "code" ? "Ändern" : "Abmelden",
-              onClick: () => handleOpenChange(false),
-            }}
-            onResendCode={
-              via === "code" ? () => void onResend(identifier) : undefined
-            }
-          />
+        <form onSubmit={submit} className="flex flex-col gap-[18px]">
+          <div>
+            <span className={labelCls}>E-Mail</span>
+            {/* Read-only on purpose — a different address means closing the
+                dialog (×) and typing it in the identifier field. */}
+            <div
+              data-testid="signup-email-readonly"
+              className="flex h-11 items-center rounded-md border border-border bg-secondary px-3.5 text-[15px] text-muted-foreground"
+            >
+              {identifier}
+            </div>
+          </div>
+
+          {via === "code" && (
+            <div>
+              <label htmlFor="signup-code" className={labelCls}>
+                Bestätigungscode
+                <span className="ml-0.5 text-destructive">*</span>
+              </label>
+              <p className="mb-2 text-[12.5px] leading-relaxed text-muted-foreground">
+                Wir haben dir einen 6-stelligen Code an diese Adresse
+                geschickt — so bestätigst du, dass sie dir gehört.{" "}
+                <button
+                  type="button"
+                  onClick={() => void onResend(identifier)}
+                  disabled={busy}
+                  className="text-cog-teal-dark underline hover:no-underline disabled:opacity-60"
+                >
+                  Code erneut senden
+                </button>
+              </p>
+              <input
+                id="signup-code"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                placeholder="123456"
+                value={value.code}
+                onChange={(e) =>
+                  patch({ code: e.target.value.replace(/\D/g, "") })
+                }
+                disabled={busy}
+                data-testid="signup-code-input"
+                className={cn(
+                  inputCls(!!errors.code),
+                  "h-[52px] text-center font-heading text-2xl font-bold tracking-[0.42em]",
+                )}
+              />
+              {errors.code && (
+                <p className="mt-1.5 text-sm text-destructive" role="alert">
+                  {errors.code}
+                </p>
+              )}
+            </div>
+          )}
+
+          <div>
+            <span className={labelCls}>Nutzer:in</span>
+            <p className="mb-2 text-[12.5px] leading-relaxed text-muted-foreground">
+              Bestimmt den Eintrittspreis in der Werkstatt.
+            </p>
+            <div
+              role="radiogroup"
+              aria-label="Nutzer:in"
+              className="grid grid-cols-3 overflow-hidden rounded-lg border border-border"
+            >
+              {(Object.entries(USER_TYPE_LABELS) as [UserType, string][]).map(
+                ([type, label]) => (
+                  <button
+                    key={type}
+                    type="button"
+                    role="radio"
+                    aria-checked={value.userType === type}
+                    data-testid={`signup-membertype-${type}`}
+                    onClick={() => patch({ userType: type })}
+                    disabled={busy}
+                    className={cn(
+                      "h-[46px] border-r border-border text-sm font-semibold transition-colors last:border-r-0",
+                      value.userType === type
+                        ? "bg-cog-teal text-white"
+                        : "bg-white text-foreground hover:bg-cog-teal-light",
+                    )}
+                  >
+                    {label}
+                  </button>
+                ),
+              )}
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="signup-firstname" className={labelCls}>
+              Vorname
+              <span className="ml-0.5 text-destructive">*</span>
+            </label>
+            <input
+              id="signup-firstname"
+              autoComplete="given-name"
+              value={value.firstName}
+              onChange={(e) => patch({ firstName: e.target.value })}
+              disabled={busy}
+              data-testid="signup-firstname"
+              className={inputCls(!!errors.firstName)}
+            />
+            {errors.firstName && (
+              <p className="mt-1.5 text-sm text-destructive" role="alert">
+                {errors.firstName}
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label htmlFor="signup-lastname" className={labelCls}>
+              Nachname
+              <span className="ml-0.5 text-destructive">*</span>
+            </label>
+            <input
+              id="signup-lastname"
+              autoComplete="family-name"
+              value={value.lastName}
+              onChange={(e) => patch({ lastName: e.target.value })}
+              disabled={busy}
+              data-testid="signup-lastname"
+              className={inputCls(!!errors.lastName)}
+            />
+            {errors.lastName && (
+              <p className="mt-1.5 text-sm text-destructive" role="alert">
+                {errors.lastName}
+              </p>
+            )}
+          </div>
+
+          {/* Not in the handoff mock, but a firma account can't be created
+              without its billing address (validateSignupFields). */}
+          {value.userType === "firma" && (
+            <AddressFields
+              value={value.address}
+              errors={errors.address}
+              onChange={(p) => patch({ address: { ...value.address, ...p } })}
+              includeCompany
+              showEyebrow={false}
+              idPrefix="signup-addr"
+            />
+          )}
+
+          <label className="flex cursor-pointer items-start gap-2.5 text-sm">
+            <Checkbox
+              id="signup-terms"
+              data-testid="signup-terms"
+              className="mt-0.5 bg-white"
+              checked={value.termsAccepted}
+              onCheckedChange={(checked) =>
+                patch({ termsAccepted: checked === true })
+              }
+              disabled={busy}
+            />
+            <span>
+              Ich akzeptiere die{" "}
+              <a
+                href="https://werkstattwaedi.ch/nutzungsbestimmungen"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="font-bold text-cog-teal-dark underline"
+              >
+                Nutzungsbestimmungen
+              </a>
+            </span>
+          </label>
+          {errors.termsAccepted && (
+            <p className="-mt-3 text-sm text-destructive" role="alert">
+              {errors.termsAccepted}
+            </p>
+          )}
+
           <Button
             type="submit"
             disabled={busy}
             data-testid="checkin-signup-submit"
-            className="h-[42px] bg-cog-teal text-[15px] font-semibold text-white hover:bg-cog-teal-dark"
+            className="h-[46px] w-full bg-cog-teal text-[15px] font-semibold text-white hover:bg-cog-teal-dark"
           >
             {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
             Konto erstellen

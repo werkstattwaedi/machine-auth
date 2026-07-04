@@ -99,7 +99,10 @@ export function CodeEntryDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-[404px]" data-testid="checkin-code-dialog">
+      <DialogContent
+        className="rounded-[14px] p-6 sm:max-w-[420px] sm:px-[34px] sm:pb-[30px] sm:pt-8"
+        data-testid="checkin-code-dialog"
+      >
         <DialogHeader className="text-left">
           <DialogTitle className="font-heading text-xl">
             Code eingeben
@@ -130,16 +133,16 @@ export function CodeEntryDialog({
             autoFocus
             autoComplete="one-time-code"
             inputMode="numeric"
-            containerClassName="justify-between"
+            containerClassName="justify-center"
             aria-label="6-stelliger Code"
             data-testid="checkin-code-input"
           >
-            <InputOTPGroup className="w-full justify-between gap-2">
+            <InputOTPGroup className="justify-center gap-[7px] sm:gap-2.5">
               {[0, 1, 2, 3, 4, 5].map((i) => (
                 <InputOTPSlot
                   key={i}
                   index={i}
-                  className="h-[54px] w-[46px] rounded-md border border-[#ccc] font-heading text-2xl font-bold data-[active=true]:border-cog-teal data-[active=true]:ring-[3px] data-[active=true]:ring-cog-teal/30"
+                  className="h-[50px] w-10 rounded-md border border-[#ccc] font-heading text-[22px] font-bold sm:h-[54px] sm:w-11 sm:text-2xl data-[active=true]:border-cog-teal data-[active=true]:ring-[3px] data-[active=true]:ring-cog-teal/30"
                 />
               ))}
             </InputOTPGroup>
@@ -153,7 +156,7 @@ export function CodeEntryDialog({
               {error}
             </p>
           )}
-          <div>
+          <div className="mt-1 text-center">
             <button
               type="button"
               onClick={() => void resend()}

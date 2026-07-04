@@ -6,7 +6,7 @@ import { Checkbox } from "@modules/components/ui/checkbox"
 import { PersonCard, RemovePersonButton } from "./person-card"
 import { NfcBadgeAffordance } from "./nfc-badge-affordance"
 import { CheckinSignin } from "./checkin-signin"
-import { Plus, ArrowRight, Check, User, Users } from "lucide-react"
+import { Plus, ArrowRight, Check, Info, User, Users } from "lucide-react"
 import type { CheckoutPerson, PersonsAction } from "./use-checkout-state"
 import type { UserType } from "@modules/lib/pricing"
 import { validatePerson, rosterAccountError } from "./validation"
@@ -277,9 +277,6 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
             key={person.id}
             person={person}
             index={i}
-            // Guest cards name their path explicitly now that "als Gast" is
-            // a first-class choice on the switcher (design handoff).
-            title={isAnonymous ? `Person ${i + 1} · als Gast` : undefined}
             showTerms={false}
             // Anonymous walk-ins stay editable even when rehydrated from the
             // open checkout (isPreFilled) — they have no account profile to
@@ -469,6 +466,30 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
             </CheckinSignin>
           ) : (
             <>
+              {/* Refined handoff §6: the member-discount nudge lives on the
+                  guest side (gold info strip); "anmelden" flips back to the
+                  account tab. Plain account holders get convenience, not a
+                  discount — so the account tab carries no benefit pitch. */}
+              <div className="flex items-start gap-2.5 rounded-lg border border-oww-gold-border bg-oww-gold-light px-3.5 py-3 text-[13px] leading-relaxed text-oww-gold-text-muted">
+                <Info
+                  className="mt-0.5 h-[17px] w-[17px] shrink-0 text-oww-gold-dark"
+                  aria-hidden
+                />
+                <span>
+                  Als Gast zahlst du den regulären Tarif.{" "}
+                  <b className="text-oww-gold-text">Vereinsmitglieder</b>{" "}
+                  bekommen ihren Rabatt nur, wenn sie sich mit Konto{" "}
+                  <button
+                    type="button"
+                    onClick={() => setSection("account")}
+                    data-testid="checkin-guestnote-signin"
+                    className="font-bold text-oww-gold-text underline hover:no-underline"
+                  >
+                    anmelden
+                  </button>
+                  .
+                </span>
+              </div>
               {personsBlock}
               {addPersonBlock}
             </>
