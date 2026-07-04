@@ -4,11 +4,13 @@
 /**
  * Embedded account sign-in on /checkin (design handoff "Kiosk sign-in flow
  * redesign", surfaces 3a/3b + session refinements). Renders the account side
- * of the check-in switcher. Each surface offers exactly two ways in:
- *   - kiosk: a two-column split — identifier field | vertical "oder" | the
- *     NFC badge affordance (passed as children). No Google.
- *   - personal device: a stacked column — identifier field, horizontal
- *     "oder", the Google button. No badge (no reader).
+ * of the check-in switcher. Each surface offers exactly two ways in, as a
+ * two-column split on wide viewports (identifier field | vertical "oder" |
+ * second method) that stacks behind a horizontal divider on phones:
+ *   - kiosk: the second column is the NFC badge affordance (passed as
+ *     children). No Google.
+ *   - personal device: the second column is the Google button (with
+ *     "Mit Anmelde-Code" / "Mit Google" eyebrows on desktop). No badge.
  * The field carries a hint instead of a label; the member-discount pitch
  * lives on the guest tab's gold note (step-checkin.tsx).
  *
@@ -93,6 +95,16 @@ export function detectChannel(
     return "sms"
   }
   return null
+}
+
+/** Uppercase column header of the desktop two-column split (`.k-split-h`).
+ *  Hidden on phones — the stacked 3b layout carries no headers. */
+function ColumnEyebrow({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="mb-3 hidden text-xs font-bold uppercase tracking-[0.08em] text-muted-foreground sm:block">
+      {children}
+    </span>
+  )
 }
 
 interface VerifyLoginCodeKioskResponse {
@@ -426,54 +438,61 @@ export function CheckinSignin({
         </div>
       )}
 
-      {kiosk ? (
-        /* Kiosk (refined handoff §2): two equal columns — code sign-in left,
-           badge affordance right — separated by a vertical "oder", so both
-           ways in read as peers. Stacks with a horizontal divider only if
-           the kiosk window is ever narrow. */
-        <div className="mt-1 flex flex-col gap-5 sm:flex-row sm:items-stretch sm:gap-[26px]">
-          <div className="flex flex-col justify-center sm:flex-1 sm:min-w-0">
-            {identifierForm}
-          </div>
-          <div
-            className="hidden flex-col items-center gap-3.5 text-xs font-semibold tracking-[0.18em] text-muted-foreground sm:flex"
-            aria-hidden
-          >
-            <span className="w-px flex-1 bg-border" />
-            oder
-            <span className="w-px flex-1 bg-border" />
-          </div>
-          <div
-            className="flex items-center gap-3.5 text-xs font-semibold tracking-[0.18em] text-muted-foreground sm:hidden"
-            aria-hidden
-          >
-            <span className="h-px flex-1 bg-border" />
-            oder
-            <span className="h-px flex-1 bg-border" />
-          </div>
-          <div className="flex flex-col justify-center sm:flex-1 sm:min-w-0">
-            {children}
-          </div>
-        </div>
-      ) : (
-        /* Personal device: single stacked column — field, "oder", Google. */
-        <div className="mt-1 sm:max-w-[440px]">
+      {/* Two equal columns on wide viewports — code sign-in left, the
+          surface's second way in (badge on the kiosk, Google on personal
+          devices) right — separated by a vertical "oder", so both read as
+          peers. Below `sm` (phones, 3b) the columns stack behind a
+          horizontal divider; the desktop column eyebrows and the Google
+          hint are desktop-only per the mock. */}
+      <div className="mt-1 flex flex-col gap-5 sm:flex-row sm:items-stretch sm:gap-[26px]">
+        <div
+          className={cn(
+            "flex flex-col sm:flex-1 sm:min-w-0",
+            kiosk ? "justify-center" : "sm:justify-start",
+          )}
+        >
+          {!kiosk && <ColumnEyebrow>Mit Anmelde-Code</ColumnEyebrow>}
           {identifierForm}
-          <div
-            className="my-6 flex items-center gap-3.5 text-xs font-semibold tracking-[0.18em] text-muted-foreground"
-            aria-hidden
-          >
-            <span className="h-px flex-1 bg-border" />
-            oder
-            <span className="h-px flex-1 bg-border" />
-          </div>
-          <GoogleSignInButton
-            className="h-[46px]"
-            onNewAccount={handleGoogleNewAccount}
-            onLinkHint={() => setShowLinkHint(true)}
-          />
         </div>
-      )}
+        <div
+          className="hidden flex-col items-center gap-3.5 text-xs font-semibold tracking-[0.18em] text-muted-foreground sm:flex"
+          aria-hidden
+        >
+          <span className="w-px flex-1 bg-border" />
+          oder
+          <span className="w-px flex-1 bg-border" />
+        </div>
+        <div
+          className="flex items-center gap-3.5 text-xs font-semibold tracking-[0.18em] text-muted-foreground sm:hidden"
+          aria-hidden
+        >
+          <span className="h-px flex-1 bg-border" />
+          oder
+          <span className="h-px flex-1 bg-border" />
+        </div>
+        <div
+          className={cn(
+            "flex flex-col sm:flex-1 sm:min-w-0",
+            kiosk ? "justify-center" : "sm:justify-start",
+          )}
+        >
+          {kiosk ? (
+            children
+          ) : (
+            <>
+              <ColumnEyebrow>Mit Google</ColumnEyebrow>
+              <GoogleSignInButton
+                className="h-[46px]"
+                onNewAccount={handleGoogleNewAccount}
+                onLinkHint={() => setShowLinkHint(true)}
+              />
+              <p className="mt-2 hidden text-[13px] leading-relaxed text-muted-foreground sm:block">
+                Nutze dein bestehendes Google-Konto — kein Code nötig.
+              </p>
+            </>
+          )}
+        </div>
+      </div>
 
       <CodeEntryDialog
         open={stage.kind === "code"}

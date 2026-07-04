@@ -511,13 +511,9 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
           visit is started, so "Besuch starten" is dropped and "Material
           erfassen" becomes the filled primary. */}
       <div className="sticky bottom-0 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 bg-background border-t border-border flex items-center gap-3">
-        <span
-          className="hidden flex-1 font-mono text-xs text-muted-foreground sm:block"
-          aria-hidden
-        >
-          {window.location.host}/checkin
-        </span>
-        <span className="flex-1 sm:hidden" />
+        {/* The mock's mono URL in this corner was browser-frame dressing,
+            not UI — just a spacer keeping the actions right-aligned. */}
+        <span className="flex-1" />
         {onStartVisit ? (
           hasOpenCheckout ? (
             <button
