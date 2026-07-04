@@ -231,6 +231,7 @@ Beyond Firebase config, the following deployment-specific variables are used:
 | `VITE_LOCALE` | Locale for formatting | `de-CH` |
 | `VITE_CURRENCY` | Currency code | `CHF` |
 | `VITE_ORGANIZATION_NAME` | Organization name | `My Workshop` |
+| `VITE_SMS_LOGIN_ENABLED` | SMS login codes rollout flag (ADR-0031); requires the phone provider enabled on the Firebase project | `true` |
 
 
 Payment configuration (IBAN, recipient, RaiseNow PayLink) is server-side only — see `PAYMENT_*` and `RAISENOW_PAYLINK_SOLUTION_ID` vars in `functions/.env.*`.

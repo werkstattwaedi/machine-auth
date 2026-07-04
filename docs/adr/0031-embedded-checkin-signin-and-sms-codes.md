@@ -101,6 +101,13 @@ validate the hidden guest form).
   `checkin-signin.tsx` and must stay behind its small controller surface.
 - reCAPTCHA becomes a runtime dependency of phone sign-in (needs a check
   inside the Electron kiosk shell).
+- `checkPhoneAccountExists` reveals whether a number is registered, bounded
+  only by the origin allow-list and reCAPTCHA friction — unlike the e-mail
+  path, whose next step carries the server-side 24h per-identifier caps
+  (issue #152). Accepted at current scale (mirrors the deliberate Galaxus
+  posture of the e-mail check); the SMS region policy and Firebase's own
+  per-number throttling bound the abuse cost. Revisit with per-IP quotas if
+  enumeration or SMS spend ever shows up in the logs.
 - The QR code ("scan to continue on your phone") in the kiosk NFC affordance
   was dropped with the redesign — own-device checkout is now reached via the
   printed price-list QR or the URL note in the footer.

@@ -36,11 +36,15 @@ export const RpcMethod = {
   authCall: [
     "createUser",
     "checkAccountExists",
+    "checkPhoneAccountExists",
     "requestLoginCode",
     "verifyLoginCode",
+    "verifyLoginCodeKiosk",
+    "exchangeKioskSession",
     "verifyMagicLink",
     "resolveTag",
     "verifyTagCheckout",
+    "probeTag",
   ],
   membershipCall: [
     "purchaseMembership",
