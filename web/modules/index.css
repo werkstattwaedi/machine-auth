@@ -61,6 +61,13 @@
   --color-fee-warn: var(--color-oww-gold-dark);
   --font-family-heading: "Bitter", Georgia, serif;
   --font-family-body: "Roboto Slab", "Helvetica Neue", sans-serif;
+  --animate-caret-blink: caret-blink 1.25s ease-out infinite;
+}
+
+/* Fake caret of the segmented OTP input (components/ui/input-otp.tsx). */
+@keyframes caret-blink {
+  0%, 70%, 100% { opacity: 1; }
+  20%, 50% { opacity: 0; }
 }
 
 :root {

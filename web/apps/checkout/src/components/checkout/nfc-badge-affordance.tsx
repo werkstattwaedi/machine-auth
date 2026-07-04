@@ -3,7 +3,6 @@
 
 import { useState } from "react"
 import { AlertTriangle, Loader2 } from "lucide-react"
-import { QRCodeSVG } from "qrcode.react"
 import { Button } from "@modules/components/ui/button"
 import "./nfc-badge-affordance.css"
 
@@ -104,11 +103,6 @@ export function NfcBadgeAffordance({
   )
 }
 
-/** Self-checkout-on-your-own-device target encoded in the hero QR. */
-const CHECKOUT_URL = `https://${
-  import.meta.env.VITE_CHECKOUT_DOMAIN ?? "localhost:5173"
-}`
-
 function HeroLayer() {
   return (
     <div className="flex items-center gap-5 px-5 py-5 sm:gap-7 sm:px-7">
@@ -117,22 +111,13 @@ function HeroLayer() {
         <div className="nfx-headline text-[19px] font-bold leading-tight">
           <span className="nfx-swash">Badge</span> an den Leser halten
         </div>
+        {/* The member-pricing pitch that used to live here moved into the
+            account section's field note; the "scan to continue on your
+            phone" QR was dropped with it (self-checkout no longer requires
+            the badge — design handoff "Kiosk sign-in flow redesign"). */}
         <p className="mt-1 max-w-[52ch] text-[13.5px] text-muted-foreground">
           Um einen neuen Besuch zu starten oder den jetzigen abzuschliessen
         </p>
-        <p className="mt-3 hidden max-w-[52ch] text-[13.5px] text-muted-foreground sm:block">
-          Bist du Mitglied? Logge dich mit dem Badge ein oder mach den
-          Self-Checkout auf deinem eigenen Handy oder Computer — nur so
-          gelten die Mitglieder-Preise.
-        </p>
-      </div>
-      {/* QR to the checkout app for the own-device path. Hidden on phone
-          viewports — there you're already on the device it points to. */}
-      <div
-        data-testid="nfc-affordance-qr"
-        className="hidden shrink-0 self-center rounded-md bg-white p-2.5 sm:block"
-      >
-        <QRCodeSVG value={CHECKOUT_URL} size={104} level="M" />
       </div>
     </div>
   )

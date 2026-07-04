@@ -113,7 +113,7 @@ export function PersonCard({
       data-testid="person-card"
       // Issue #246: enter animation on mount (no exit — would require a
       // <Presence> wrapper which is overkill for this list).
-      className="bg-[rgba(204,204,204,0.2)] rounded-none p-[25px] space-y-4 animate-in fade-in slide-in-from-top-2 duration-200"
+      className="bg-[rgba(204,204,204,0.2)] rounded-[10px] p-5 sm:p-[25px] space-y-4 animate-in fade-in slide-in-from-top-2 duration-200"
     >
       {/*
         Heading row: title on the left, remove (X) on the right — the same
@@ -123,7 +123,7 @@ export function PersonCard({
       */}
       {(title === undefined || title || onRemove) && (
         <div className="flex items-center justify-between gap-2">
-          <h3 className="text-base font-bold font-body">
+          <h3 className="font-heading text-sm font-bold text-cog-teal-dark">
             {title === undefined ? `Person ${index + 1}` : title}
           </h3>
           {onRemove && <RemovePersonButton index={index} onRemove={onRemove} />}

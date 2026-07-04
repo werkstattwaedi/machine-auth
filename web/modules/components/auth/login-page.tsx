@@ -24,7 +24,8 @@ import { useAuth, isProfileComplete } from "@modules/lib/auth"
 import { Button } from "@modules/components/ui/button"
 import { Input } from "@modules/components/ui/input"
 import { INPUT_OK, ErrorBadge } from "@modules/components/profile-form"
-import { GoogleIcon } from "@modules/components/icons/google"
+import { GoogleSignInButton } from "./google-signin-button"
+import { requestCodeWithThrottle } from "./login-code-request"
 import {
   SignupFields,
   EMPTY_SIGNUP_VALUE,
@@ -54,18 +55,10 @@ type Stage =
   | { kind: "signin-code" }
   | { kind: "signup"; via: "code" | "google" | "link" }
 
-/** The 60s per-email resend throttle (`resource-exhausted`). The previously
- *  sent code is still valid in that case, so callers advance instead of
- *  dead-ending on an error toast. Exported for the kiosk sign-in dialog,
- *  which shares the requestLoginCode flow. */
-export function isResendThrottleError(err: unknown): boolean {
-  return (
-    !!err &&
-    typeof err === "object" &&
-    "code" in err &&
-    (err as { code: string }).code === "functions/resource-exhausted"
-  )
-}
+// Historic export location — the helper moved to login-code-request.ts so
+// non-page hosts (embedded check-in sign-in) can share it without pulling
+// in the page component.
+export { isResendThrottleError } from "./login-code-request"
 
 export function LoginPage({
   defaultRedirect,
@@ -86,7 +79,6 @@ export function LoginPage({
     verifyLoginCode,
     verifyLoginCodeAndCreateProfile,
     completeSignedInSignup,
-    signInWithGoogle,
     signOut,
     pendingGoogleLink,
   } = useAuth()
@@ -104,7 +96,6 @@ export function LoginPage({
   const [sending, setSending] = useState(false)
   const [verifying, setVerifying] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [signingInWithGoogle, setSigningInWithGoogle] = useState(false)
   const [codeError, setCodeError] = useState<string | null>(null)
   const [showLinkHint, setShowLinkHint] = useState(false)
   // Suppresses the redirect effect while handleSignOutAndRestart is mid-flight:
@@ -152,33 +143,17 @@ export function LoginPage({
     targetPath,
   ])
 
-  const handleGoogleSignIn = async () => {
-    setSigningInWithGoogle(true)
-    try {
-      const { isNewAccount, firstName, lastName } = await signInWithGoogle()
-      if (isNewAccount && signupEnabled) {
-        setSignupValue({ ...EMPTY_SIGNUP_VALUE, firstName, lastName })
-        setSignupErrors({})
-        setStage({ kind: "signup", via: "google" })
-      }
-      // Existing account → the redirect effect handles navigation.
-    } catch (err: unknown) {
-      const code =
-        err instanceof Error && "code" in err
-          ? (err as { code: string }).code
-          : undefined
-      if (code === "auth/account-exists-with-different-credential") {
-        setShowLinkHint(true)
-        toast.info("Bitte zuerst per E-Mail-Code anmelden")
-      } else if (code === "auth/popup-closed-by-user") {
-        // User closed the popup — no error needed.
-      } else {
-        const message = err instanceof Error ? err.message : "Fehler"
-        toast.error(`Anmeldung fehlgeschlagen: ${message}`)
-      }
-    } finally {
-      setSigningInWithGoogle(false)
-    }
+  const handleGoogleNewAccount = ({
+    firstName,
+    lastName,
+  }: {
+    firstName: string
+    lastName: string
+  }) => {
+    if (!signupEnabled) return
+    setSignupValue({ ...EMPTY_SIGNUP_VALUE, firstName, lastName })
+    setSignupErrors({})
+    setStage({ kind: "signup", via: "google" })
   }
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
@@ -206,13 +181,7 @@ export function LoginPage({
       // stays valid (only a successful re-request invalidates it). Typical
       // trigger is "Ändern" → same e-mail again — advance to the stage and
       // tell the user the earlier code still works.
-      let throttled = false
-      try {
-        await requestLoginEmail(email)
-      } catch (err: unknown) {
-        if (isResendThrottleError(err)) throttled = true
-        else throw err
-      }
+      const { throttled } = await requestCodeWithThrottle(requestLoginEmail, email)
       if (exists) {
         setStage({ kind: "signin-code" })
         setSigninCode("")
@@ -298,13 +267,7 @@ export function LoginPage({
     if (sending) return
     setSending(true)
     try {
-      let throttled = false
-      try {
-        await requestLoginEmail(email)
-      } catch (err: unknown) {
-        if (isResendThrottleError(err)) throttled = true
-        else throw err
-      }
+      const { throttled } = await requestCodeWithThrottle(requestLoginEmail, email)
       setSigninCode("")
       setCodeError(null)
       setSignupValue((v) => ({ ...v, code: "" }))
@@ -351,18 +314,10 @@ export function LoginPage({
   }
 
   const googleButton = (
-    <Button
-      onClick={handleGoogleSignIn}
-      className="w-full h-11 text-[15px] bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 font-semibold shadow-xs"
-      disabled={signingInWithGoogle}
-    >
-      {signingInWithGoogle ? (
-        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-      ) : (
-        <GoogleIcon className="h-4 w-4 mr-2" />
-      )}
-      Mit Google anmelden
-    </Button>
+    <GoogleSignInButton
+      onNewAccount={handleGoogleNewAccount}
+      onLinkHint={() => setShowLinkHint(true)}
+    />
   )
 
   const divider = (

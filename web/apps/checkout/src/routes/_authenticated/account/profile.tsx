@@ -23,6 +23,10 @@ import { Check, KeyRound, Loader2, Mail, MapPin, Save } from "lucide-react"
 import { useEffect, useRef } from "react"
 import { USER_TYPE_LABELS, type UserType } from "@modules/lib/pricing"
 import { cn } from "@modules/lib/utils"
+import { PhoneVerification } from "@/components/account/phone-verification"
+
+/** SMS login rollout flag (ADR-0031) — gates the verification affordance. */
+const SMS_LOGIN_ENABLED = import.meta.env.VITE_SMS_LOGIN_ENABLED === "true"
 
 export const Route = createFileRoute("/_authenticated/account/profile")({
   component: ProfilePage,
@@ -328,6 +332,15 @@ function ProfilePage() {
             autoComplete="tel"
           />
           <ErrorText message={errors.phone?.message} />
+          {/* SMS login needs the SAVED number verified (linked to the Auth
+              account) — one code, then the check-in field accepts it. */}
+          {SMS_LOGIN_ENABLED && (
+            <PhoneVerification
+              user={user}
+              savedPhone={userDoc?.phone ?? null}
+              formDirty={isDirty}
+            />
+          )}
         </div>
 
         <div className="flex items-center gap-3 mt-2 pt-5 border-t border-border">

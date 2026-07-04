@@ -45,6 +45,16 @@ All deployment-specific configuration lives in a separate **operations repo**, n
 
 See the [template repo README](https://github.com/werkstattwaedi/machine-auth-operations-template) for the complete list of config keys.
 
+> **Emulator secrets gotcha:** `TERMINAL_KEY`, `DIVERSIFICATION_MASTER_KEY`
+> etc. are `defineSecret` params. When gcloud credentials are present, the
+> Functions **emulator fetches the real Secret Manager values** and ignores
+> the test values in `functions/.env.local` — the e2e NFC fixtures
+> (encrypted with the test keys) then fail to decrypt with
+> "Unexpected PICC tag byte". Fix: keep a `functions/.secret.local`
+> (gitignored) mirroring the test-secret block of `.env.local`; the emulator
+> prefers it over Secret Manager. CI runners have no gcloud credentials and
+> are unaffected.
+
 ---
 
 ## Table of Contents
@@ -221,6 +231,7 @@ Beyond Firebase config, the following deployment-specific variables are used:
 | `VITE_LOCALE` | Locale for formatting | `de-CH` |
 | `VITE_CURRENCY` | Currency code | `CHF` |
 | `VITE_ORGANIZATION_NAME` | Organization name | `My Workshop` |
+| `VITE_SMS_LOGIN_ENABLED` | SMS login codes rollout flag (ADR-0031); requires the phone provider enabled on the Firebase project | `true` |
 
 
 Payment configuration (IBAN, recipient, RaiseNow PayLink) is server-side only — see `PAYMENT_*` and `RAISENOW_PAYLINK_SOLUTION_ID` vars in `functions/.env.*`.

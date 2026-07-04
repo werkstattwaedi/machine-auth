@@ -86,6 +86,10 @@ const VITE_DEPLOYMENT: VarMapping[] = [
   { envVar: "VITE_LOCALE", jsonPath: "web.locale" },
   { envVar: "VITE_CURRENCY", jsonPath: "web.currency" },
   { envVar: "VITE_ORGANIZATION_NAME", jsonPath: "web.organizationName" },
+  // SMS login codes via Firebase phone auth (ADR-0031). Absent key → empty
+  // → disabled; set web.smsLoginEnabled: "true" in the operations config to
+  // roll out (the Firebase project also needs the phone provider enabled).
+  { envVar: "VITE_SMS_LOGIN_ENABLED", jsonPath: "web.smsLoginEnabled" },
 ];
 
 const FUNCTIONS_PAYMENT: VarMapping[] = [
@@ -164,6 +168,8 @@ const TEST_FIXTURE_CONFIG: Record<string, unknown> = {
     locale: "de-CH",
     currency: "CHF",
     organizationName: "Verein Offene Werkstatt Wädenswil (CI)",
+    // E2E exercises the SMS login flow against the Auth emulator.
+    smsLoginEnabled: "true",
     iban: "CH00 0000 0000 0000 0000 0",
     raisenowPaylinkSolutionId: "test-fake-solution",
     paymentRecipientName: "OWW CI Recipient",

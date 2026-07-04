@@ -18,7 +18,7 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { kioskBearerKey } from "../config/tag-secrets";
 
 /** How the kiosk session was established — audit/telemetry only. */
-export type KioskSessionMethod = "tag" | "emailCode";
+export type KioskSessionMethod = "tag" | "emailCode" | "smsCode";
 
 /**
  * User fields the kiosk client may see for pre-fill. `activeMembership` is

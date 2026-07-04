@@ -8,6 +8,7 @@ import {
   seedMembershipState,
   seedOpenCheckoutWithMembership,
   waitForLoginCode,
+  openGuestSection,
 } from "./helpers"
 
 const AUTH_USER_EMAIL = "e2e-test@werkstattwaedi.ch"
@@ -15,7 +16,7 @@ const AUTH_USER_EMAIL = "e2e-test@werkstattwaedi.ch"
 /** Navigate to checkout → fill check-in → advance to workshops */
 async function goToWorkshops(page: Page) {
   await page.goto("/")
-  await expect(page.getByText("Deine Angaben")).toBeVisible({ timeout: 10_000 })
+  await openGuestSection(page)
 
   // Fill required person fields
   await page.locator('label:has-text("Vorname")').first().locator("..").locator("input").fill("Max")

@@ -83,9 +83,9 @@ type VerifyTagResponse =
 const inflightVerifyByKey = new Map<string, Promise<VerifyTagResponse>>()
 
 // Module-level store of the established kiosk session, shared by every
-// useTokenAuth consumer (RootDispatcher, wizard). Both mint paths — badge
-// tap (this file's verify effect) and email-code sign-in
-// (kiosk-email-signin.tsx) — publish here, so the wizard treats a code
+// useTokenAuth consumer (RootDispatcher, wizard). All mint paths — badge
+// tap (this file's verify effect) and the email/SMS code sign-ins
+// (checkin-signin.tsx) — publish here, so the wizard treats a code
 // sign-in identically to a badge tap.
 let kioskTokenUser: TokenUser | null = null
 const kioskSessionListeners = new Set<() => void>()
