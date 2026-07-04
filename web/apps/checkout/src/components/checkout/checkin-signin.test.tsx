@@ -81,6 +81,20 @@ vi.mock("firebase/auth", async (importOriginal) => {
 
 import { CheckinSignin, detectChannel } from "./checkin-signin"
 
+// input-otp schedules three uncleared setTimeouts (0/10/50ms) that dispatch a
+// React state update, and its effect has no cleanup — so `cleanup()` unmounts
+// the tree but leaves those timers armed. On CI they occasionally fire AFTER
+// vitest tears down jsdom's `window`, and input-otp's callback then reaches
+// into React's `resolveUpdatePriority` (which reads `window`) → an unhandled
+// "window is not defined" that reds the whole run (#507). Unmount first, then
+// let the real timers drain while `window` still exists — the update lands
+// harmlessly on a detached fiber. The 60ms wait is scheduled after the OTP
+// timers, so ordering (not wall-clock speed) guarantees they have all fired.
+async function unmountAndDrainOtpTimers() {
+  cleanup()
+  await new Promise((resolve) => setTimeout(resolve, 60))
+}
+
 function throttleError() {
   return Object.assign(new Error("throttled"), {
     code: "functions/resource-exhausted",
@@ -123,7 +137,7 @@ describe("detectChannel", () => {
 })
 
 describe("CheckinSignin", () => {
-  afterEach(cleanup)
+  afterEach(unmountAndDrainOtpTimers)
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -269,7 +283,7 @@ describe("CheckinSignin", () => {
 })
 
 describe("CheckinSignin — SMS channel (smsEnabled)", () => {
-  afterEach(cleanup)
+  afterEach(unmountAndDrainOtpTimers)
 
   beforeEach(() => {
     vi.clearAllMocks()
