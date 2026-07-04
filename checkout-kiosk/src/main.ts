@@ -5,7 +5,10 @@ import {
   app,
   BrowserWindow,
   ipcMain,
+  Menu,
+  nativeImage,
   session,
+  Tray,
   webContents,
   type WebContents,
 } from "electron"
@@ -53,6 +56,74 @@ async function clearSession(): Promise<void> {
 }
 
 let mainWindow: BrowserWindow | null = null
+let tray: Tray | null = null
+// Distinguishes a real quit (tray "Beenden" / app.quit) from the user closing
+// the window, which we intercept to hide-to-tray instead of tearing down.
+let isQuitting = false
+
+// Tray + window icon. Loaded from the bundled assets dir (packed via the
+// electron-builder `files` glob); `__dirname` is `dist/`, so the assets sit one
+// level up. `.ico` carries the crisp small sizes Windows' tray wants; other
+// platforms use the PNG. nativeImage reads fine from inside the asar.
+function appIcon(): Electron.NativeImage {
+  const file = process.platform === "win32" ? "icon.ico" : "tray-icon.png"
+  return nativeImage.createFromPath(path.join(__dirname, "..", "assets", file))
+}
+
+// Bring the kiosk to the foreground (badge tap / tray click). Idempotent when
+// already visible — a mid-checkout tap just re-focuses.
+function showWindow(): void {
+  if (!mainWindow) return
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  if (!mainWindow.isVisible()) mainWindow.show()
+  mainWindow.focus()
+  // steal:true so we actually surface above the (transition-phase) browser
+  // running the old checkout, instead of merely flashing the taskbar.
+  app.focus({ steal: true })
+}
+
+function hideWindow(): void {
+  mainWindow?.hide()
+}
+
+// Closing the window mid-session must end the session, not just hide it —
+// otherwise the previous user stays authenticated until the idle timeout and
+// their session leaks into the next person's checkout. So a close does the same
+// thing "Neuer Checkout" does: wipe the session, then hide to the tray.
+// `clearSession()` runs here in main (independent of the renderer) so a wedged
+// webview can't skip the security-critical Firebase Auth wipe; the
+// `bridge:reload-checkout` message then drops the still-live in-memory session
+// by reloading the checkout webview.
+async function endSessionAndHide(): Promise<void> {
+  hideWindow()
+  await clearSession()
+  mainWindow?.webContents.send("bridge:reload-checkout")
+}
+
+// System-tray presence so a closed / hidden kiosk stays running and reachable.
+function createTray(): void {
+  tray = new Tray(appIcon())
+  // Tooltip carries the version so the tray/taskbar hover identifies exactly
+  // which build is running — the window itself starts hidden, so this is the
+  // only always-visible place the version shows. `app.getVersion()` reads the
+  // single source of truth: the `version` field in package.json.
+  tray.setToolTip(`${config.productName} v${app.getVersion()}`)
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: "Checkout anzeigen", click: () => showWindow() },
+      { type: "separator" },
+      {
+        label: "Beenden",
+        click: () => {
+          isQuitting = true
+          app.quit()
+        },
+      },
+    ])
+  )
+  tray.on("click", () => showWindow())
+  tray.on("double-click", () => showWindow())
+}
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -60,6 +131,11 @@ function createWindow(): void {
     width: config.windowOpts.width,
     height: config.windowOpts.height,
     frame: true,
+    icon: appIcon(),
+    // Start hidden: during the transition phase the kiosk waits in the tray so
+    // it never covers the browser running the old checkout. A badge tap (or the
+    // tray) brings it forward for users who opt into the new flow.
+    show: false,
     autoHideMenuBar: config.windowOpts.autoHideMenuBar,
     kiosk: false,
     webPreferences: {
@@ -82,6 +158,16 @@ function createWindow(): void {
     event.preventDefault()
   })
   mainWindow.setTitle(config.productName)
+
+  // Closing the window hides it to the tray instead of quitting, so the kiosk
+  // keeps running (NFC reader stays live) and can be re-summoned by a badge tap.
+  // Closing mid-session also ends the session so it can't leak to the next user
+  // (see endSessionAndHide). Only a real quit (tray "Beenden") tears it down.
+  mainWindow.on("close", (event) => {
+    if (isQuitting) return
+    event.preventDefault()
+    void endSessionAndHide()
+  })
 
   // Start maximized: the configured width/height are only a fallback for an
   // un-maximized window. At the fixed 1280×900 default the payment page's
@@ -180,6 +266,9 @@ function dispatchNfc(event: NfcTagEvent): void {
   console.log(
     `[nfc] dispatching tag event to ${nfcSubscribers.size} subscriber(s)`
   )
+  // A badge tap on the terminal brings the kiosk to the front — this is how a
+  // new user surfaces the checkout app from the tray (issue: tray/foreground).
+  showWindow()
   for (const wc of nfcSubscribers) {
     try {
       wc.send("bridge:nfc-tag", event)
@@ -235,6 +324,10 @@ ipcMain.handle("bridge:get-url", () => config.url)
 ipcMain.handle("bridge:bearer", () => config.bearer || null)
 ipcMain.handle("bridge:reset-session", async () => {
   await clearSession()
+  // "Neuer Checkout" resets for the next customer — the single chokepoint for
+  // both the web-confirm and the fallback reset paths. Autohide back to the
+  // tray so the kiosk only reappears when the next user taps a badge.
+  hideWindow()
 })
 
 app.whenReady().then(async () => {
@@ -242,8 +335,15 @@ app.whenReady().then(async () => {
   // Firebase Auth state from a previous run is wiped before the renderer
   // attaches its webview.
   await clearSession()
+  createTray()
   createWindow()
   startNfc({ onTag: dispatchNfc })
+})
+
+// Any quit path (tray "Beenden", OS shutdown) flips the flag so the window's
+// close handler tears down instead of hiding.
+app.on("before-quit", () => {
+  isQuitting = true
 })
 
 app.on("window-all-closed", () => {

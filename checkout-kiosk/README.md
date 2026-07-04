@@ -79,6 +79,16 @@ defense for the kiosk badge flow is the synthetic-UID custom token
 returned by `verifyTagCheckout`. See `docs/Security Analysis.md` for the
 threat model.
 
+### Versioning
+
+Bump the `version` field in `checkout-kiosk/package.json` **once per change you
+ship** (semver — `1.0.1`, `1.0.2`, …). That single field is the source of truth:
+electron-builder names the installer `oww-kiosk-<version>-setup.exe`, stamps the
+NSIS product version, and it's what `app.getVersion()` returns (shown in the
+tray/taskbar tooltip). Forget to bump it and every build overwrites the same
+`oww-kiosk-1.0.0-setup.exe` — impossible to tell apart. Delete stale
+`release/kiosk/oww-kiosk-*-setup.exe` from older versions when they pile up.
+
 ### Production builds (`--prod`)
 
 ```bash

@@ -47,6 +47,15 @@ ipcRenderer.on("bridge:start-over-ack", () => {
   startOverAckCallbacks.forEach((cb) => cb())
 })
 
+// Sent by main when the window is closed mid-session: the session storage is
+// already wiped there; the renderer reloads the checkout webview so the
+// previous user's live in-memory session is dropped too (session-leak fix).
+const reloadCheckoutCallbacks = new Set<() => void>()
+
+ipcRenderer.on("bridge:reload-checkout", () => {
+  reloadCheckoutCallbacks.forEach((cb) => cb())
+})
+
 // The checkout webview (web app) subscribes to payment-confirmed events:
 // the renderer detects the RaiseNow payment_result URL on the overlay and
 // asks main to broadcast it here so the web app can mark the bill paid.
@@ -109,6 +118,12 @@ const bridge: Bridge = {
     startOverAckCallbacks.add(cb)
     return () => {
       startOverAckCallbacks.delete(cb)
+    }
+  },
+  onReloadCheckout: (cb) => {
+    reloadCheckoutCallbacks.add(cb)
+    return () => {
+      reloadCheckoutCallbacks.delete(cb)
     }
   },
 }

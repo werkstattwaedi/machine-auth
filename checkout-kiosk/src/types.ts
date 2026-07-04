@@ -45,6 +45,11 @@ export interface Bridge {
   ackStartOver: () => void
   onStartOverRequest: (cb: () => void) => () => void
   onStartOverAck: (cb: () => void) => () => void
+  // Fired (in the chrome renderer) when the window is closed mid-session: main
+  // has already wiped the session storage and asks the renderer to reload the
+  // checkout webview so the previous user's in-memory session is dropped too.
+  // Returns an unsubscribe fn.
+  onReloadCheckout: (cb: () => void) => () => void
 }
 
 // Compile-time proof that the kiosk can resolve @oww/shared.

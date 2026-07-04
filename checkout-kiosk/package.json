@@ -1,6 +1,6 @@
 {
   "name": "checkout-kiosk",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Electron hardware bridge for the OWW checkout kiosk (NFC).",
   "main": "dist/main.js",
   "scripts": {
