@@ -33,6 +33,7 @@ interface Bridge {
   ackStartOver: () => void
   onStartOverRequest: (cb: () => void) => () => void
   onStartOverAck: (cb: () => void) => () => void
+  onReloadCheckout: (cb: () => void) => () => void
 }
 
 declare global {
@@ -102,15 +103,30 @@ container.appendChild(webview)
 // IndexedDB.
 const btnReset = document.getElementById("btn-reset") as HTMLButtonElement
 
+// Reload the checkout webview to a fresh page. Dropping the live in-memory
+// session is the other half of a reset — a storage wipe alone leaves the
+// running page authenticated.
+async function reloadCheckout(): Promise<void> {
+  const url = await window.bridge.getUrl()
+  webview.src = url
+}
+
 async function performReset(): Promise<void> {
   try {
     await window.bridge.resetSession()
   } catch (err) {
     console.error("Failed to reset session:", err)
   }
-  const url = await window.bridge.getUrl()
-  webview.src = url
+  await reloadCheckout()
 }
+
+// Window closed mid-session (session-leak fix): main has already wiped the
+// session storage; here we tear down any open overlay and reload the checkout
+// webview so nothing of the previous user survives into the next appearance.
+window.bridge.onReloadCheckout(() => {
+  closeOverlay()
+  void reloadCheckout()
+})
 
 // Tapping "Neuer Checkout" also dismisses any open in-kiosk overlay (e.g. the
 // Nutzungsbestimmungen page, issue #425) so the page's own confirm dialog

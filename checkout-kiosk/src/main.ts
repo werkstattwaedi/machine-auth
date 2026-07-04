@@ -86,6 +86,20 @@ function hideWindow(): void {
   mainWindow?.hide()
 }
 
+// Closing the window mid-session must end the session, not just hide it —
+// otherwise the previous user stays authenticated until the idle timeout and
+// their session leaks into the next person's checkout. So a close does the same
+// thing "Neuer Checkout" does: wipe the session, then hide to the tray.
+// `clearSession()` runs here in main (independent of the renderer) so a wedged
+// webview can't skip the security-critical Firebase Auth wipe; the
+// `bridge:reload-checkout` message then drops the still-live in-memory session
+// by reloading the checkout webview.
+async function endSessionAndHide(): Promise<void> {
+  hideWindow()
+  await clearSession()
+  mainWindow?.webContents.send("bridge:reload-checkout")
+}
+
 // System-tray presence so a closed / hidden kiosk stays running and reachable.
 function createTray(): void {
   tray = new Tray(appIcon())
@@ -147,11 +161,12 @@ function createWindow(): void {
 
   // Closing the window hides it to the tray instead of quitting, so the kiosk
   // keeps running (NFC reader stays live) and can be re-summoned by a badge tap.
-  // Only a real quit (tray "Beenden") tears it down.
+  // Closing mid-session also ends the session so it can't leak to the next user
+  // (see endSessionAndHide). Only a real quit (tray "Beenden") tears it down.
   mainWindow.on("close", (event) => {
     if (isQuitting) return
     event.preventDefault()
-    hideWindow()
+    void endSessionAndHide()
   })
 
   // Start maximized: the configured width/height are only a fallback for an
