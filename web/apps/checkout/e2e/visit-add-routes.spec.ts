@@ -151,10 +151,10 @@ test.describe("Visit /add/* sub-routes (issue #213)", () => {
   }) => {
     await signIn(page)
     // 9200 = E2E Sperrholz, 2 variants: "default" (Per m²) and
-    // "zuschnitt-a3" (Zuschnitt A3, count pricing). Targeting the
+    // "a3" (Zuschnitt A3, count pricing, derived from the variant registry). Targeting the
     // count variant means the form should show a Stück input, not the
     // length × width m² inputs of the default variant.
-    await page.goto("/visit/add/item/9200/zuschnitt-a3")
+    await page.goto("/visit/add/item/9200/a3")
 
     await expect(page.getByPlaceholder("Material suchen…")).toBeVisible({
       timeout: 10_000,
