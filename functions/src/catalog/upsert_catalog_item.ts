@@ -29,6 +29,9 @@ interface UpsertCatalogItemRequest {
   id?: string | null;
   code: string;
   name: string;
+  /** Curated label fields for the printer; undefined on update = keep existing. */
+  labelName?: string;
+  labelMass?: string;
   description?: string | null;
   workshops: string[];
   /**
@@ -125,6 +128,8 @@ function parseRequest(raw: unknown): UpsertCatalogItemRequest {
     id,
     code: assertString(data.code, "code"),
     name: assertString(data.name, "name"),
+    labelName: typeof data.labelName === "string" ? data.labelName : undefined,
+    labelMass: typeof data.labelMass === "string" ? data.labelMass : undefined,
     description,
     workshops: assertStringArray(data.workshops, "workshops"),
     category,
@@ -208,6 +213,13 @@ export async function handleUpsertCatalogItem(
     }
     if (resolvedVariantIds !== undefined) {
       docData.variantIds = resolvedVariantIds;
+    }
+    // Label fields: undefined on update means "keep existing" (merge).
+    if (input.labelName !== undefined) {
+      docData.labelName = input.labelName;
+    }
+    if (input.labelMass !== undefined) {
+      docData.labelMass = input.labelMass;
     }
     // Create: full write so the doc has a known shape.
     // Update: merge so callers don't have to round-trip every field

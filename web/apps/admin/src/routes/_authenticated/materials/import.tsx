@@ -70,6 +70,8 @@ const CHF = new Intl.NumberFormat("de-CH", { style: "currency", currency: "CHF" 
 
 const FIELD_LABELS: Record<DiffChange["field"], string> = {
   name: "Name",
+  labelName: "Etikett Name",
+  labelMass: "Etikett Mass",
   price: "Preis",
   category: "Kategorie",
   pricingModel: "Abrechnung",

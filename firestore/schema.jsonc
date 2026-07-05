@@ -22,6 +22,11 @@
     "{itemId}": { // 20-char Firestore-shaped ID. Pre-generated, committed in the seed JSON (scripts/seed-data/catalog.json).
       "code": "string", // Short numeric SKU for kiosk entry (e.g., "3002"); independent of the doc ID.
       "name": "string", // e.g., "Ahorn 30mm", "Sperrholz Pappel 3mm"
+      // Curated label fields from Mario's pricelist (Etikett Name / Etikett Mass),
+      // stored verbatim for the label printer; `name` is composed from them on
+      // import. Absent on non-imported items.
+      "labelName": "string | undefined",
+      "labelMass": "string | undefined",
       "workshops": ["string"], // e.g., ["holz"], ["holz", "metall"]
       // Root-to-leaf category path. Free-form values, not pre-registered.
       // Queryable with `array-contains` at any depth (e.g.

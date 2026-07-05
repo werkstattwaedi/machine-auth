@@ -11,11 +11,13 @@
  *
  * Contract (set by `scripts/augment-pricelist-bootstrap.py`): each workshop
  * sheet listed in `SHEET_TO_WORKSHOP` carries a header row containing the
- * columns `Code`, `Name`, `Kategorie`, `Unterkategorie`, `Einheit` plus
- * Mario's sale-price column ("Preis Einheit Verkauf"). Columns are located
- * by header text (whitespace/case-insensitive), not position, so Mario can
- * rearrange the calc columns freely. A row is a product iff it has a Code;
- * heading rows are skipped.
+ * injected columns `Code`, `Kategorie`, `Unterkategorie`, `Einheit`, Mario's
+ * curated `Etikett Name` / `Etikett Mass` (the label), and his sale-price
+ * column ("Preis Einheit Verkauf"). Columns are located by header text
+ * (whitespace/case-insensitive), not position, so Mario can rearrange the calc
+ * columns freely. A row is a product iff it has a Code; heading rows are
+ * skipped. `Etikett Kategorie` / `Etikett Preis` are ignored (category comes
+ * from the injected columns, price from "Preis Einheit Verkauf").
  */
 
 import ExcelJS from "exceljs";
@@ -70,7 +72,8 @@ const HEADER_SEARCH_ROWS = 50;
 
 interface SheetColumns {
   code: number;
-  name: number;
+  labelName: number;
+  labelMass: number;
   kategorie: number;
   unterkategorie: number;
   einheit: number;
@@ -91,7 +94,10 @@ function locateColumns(ws: ExcelJS.Worksheet): SheetColumns | null {
     return {
       headerRow: r,
       code: byHeader.get("code")!,
-      name: byHeader.get("name") ?? -1,
+      // Exact "etikett name"/"etikett mass" so they don't collide with the
+      // ignored "etikett kategorie"/"etikett preis" columns.
+      labelName: byHeader.get("etikett name") ?? -1,
+      labelMass: byHeader.get("etikett mass") ?? -1,
       kategorie: byHeader.get("kategorie") ?? -1,
       unterkategorie: byHeader.get("unterkategorie") ?? -1,
       einheit: byHeader.get("einheit") ?? -1,
@@ -144,7 +150,8 @@ export async function parsePricelistXlsx(buffer: Buffer): Promise<ParseResult> {
         sheet: sheetName,
         rowNumber: r,
         code,
-        name: cols.name > 0 ? asText(cellValue(row.getCell(cols.name))) : "",
+        labelName: cols.labelName > 0 ? asText(cellValue(row.getCell(cols.labelName))) : "",
+        labelMass: cols.labelMass > 0 ? asText(cellValue(row.getCell(cols.labelMass))) : "",
         kategorie: cols.kategorie > 0 ? asText(cellValue(row.getCell(cols.kategorie))) : "",
         unterkategorie:
           cols.unterkategorie > 0 ? asText(cellValue(row.getCell(cols.unterkategorie))) : "",

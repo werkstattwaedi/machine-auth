@@ -9,20 +9,26 @@
  * pure so the server computes it and the web renders the same types.
  *
  * The row contract is set by the bootstrap (`augment-pricelist-bootstrap.py`):
- * every workshop sheet carries explicit `Code`, `Name`, `Kategorie`,
- * `Unterkategorie`, `Einheit` columns plus Mario's existing sale-price
- * column ("Preis Einheit Verkauf"). A row is a product iff it has a Code;
- * heading rows (no Code) are skipped during extraction.
+ * every workshop sheet carries injected `Code`, `Kategorie`, `Unterkategorie`,
+ * `Einheit` columns plus Mario's curated `Etikett Name` / `Etikett Mass` (the
+ * printed label) and his sale-price column ("Preis Einheit Verkauf"). A row is
+ * a product iff it has a Code; heading rows (no Code) are skipped during
+ * extraction. The catalog `name` is composed from `Etikett Name` +
+ * `Etikett Mass`; those two are also stored verbatim as `labelName`/`labelMass`
+ * for the label printer.
  */
 
 import type { PricingModel } from "./pricing"
 
 /** Worksheet tab name → catalog `workshops` key. */
 export const SHEET_TO_WORKSHOP: Record<string, string> = {
-  "Holz BL": "holz",
-  "Metall BL": "metall",
-  "Keramik BL": "keramik",
-  "Textil BL": "textil",
+  Holz: "holz",
+  Metall: "metall",
+  Keramik: "keramik",
+  Textil: "textil",
+  Glas: "glas",
+  Stein: "stein",
+  Schmuck: "schmuck",
 }
 
 /** One extracted product row, before validation/normalisation. */
@@ -31,7 +37,10 @@ export interface RawImportRow {
   /** 1-based worksheet row, for error messages. */
   rowNumber: number
   code: string
-  name: string
+  /** Curated label text ("Etikett Name") — the source of the display name. */
+  labelName: string
+  /** Curated label size ("Etikett Mass"), e.g. "24 mm"; may be blank. */
+  labelMass: string
   kategorie: string
   unterkategorie?: string | null
   einheit: string
@@ -42,13 +51,22 @@ export interface RawImportRow {
 /** A validated, catalog-shaped entry ready for upsert. */
 export interface ImportEntry {
   code: string
+  /** Display name, composed from `labelName` + `labelMass`. */
   name: string
+  /** Curated label fields, stored verbatim for the label printer. */
+  labelName: string
+  labelMass: string
   workshops: string[]
   category: string[]
   pricingModel: PricingModel
   unitPrice: { default: number }
   active: boolean
   userCanAdd: boolean
+}
+
+/** Compose the display name from the curated label pair. */
+export function composeName(labelName: string, labelMass: string): string {
+  return [labelName.trim(), labelMass.trim()].filter(Boolean).join(" ")
 }
 
 export interface ImportIssue {
@@ -124,7 +142,14 @@ export function normalizeRows(rows: RawImportRow[]): NormalizeResult {
   const seenCodes = new Map<string, RawImportRow>()
 
   for (const row of rows) {
-    const base = { sheet: row.sheet, rowNumber: row.rowNumber, code: row.code, name: row.name }
+    const labelName = row.labelName?.trim() ?? ""
+    const labelMass = row.labelMass?.trim() ?? ""
+    const base = {
+      sheet: row.sheet,
+      rowNumber: row.rowNumber,
+      code: row.code,
+      name: composeName(labelName, labelMass),
+    }
     const workshop = SHEET_TO_WORKSHOP[row.sheet]
     if (!workshop) {
       issues.push({ ...base, severity: "error", message: `Unbekanntes Tabellenblatt "${row.sheet}".` })
@@ -144,9 +169,8 @@ export function normalizeRows(rows: RawImportRow[]): NormalizeResult {
       })
       continue
     }
-    const name = row.name?.trim()
-    if (!name) {
-      issues.push({ ...base, severity: "error", message: `Name fehlt (Code ${code}).` })
+    if (!labelName) {
+      issues.push({ ...base, severity: "error", message: `Etikett Name fehlt (Code ${code}).` })
       continue
     }
     if (row.price == null || !Number.isFinite(row.price) || row.price <= 0) {
@@ -165,7 +189,9 @@ export function normalizeRows(rows: RawImportRow[]): NormalizeResult {
     seenCodes.set(code, row)
     entries.push({
       code,
-      name,
+      name: composeName(labelName, labelMass),
+      labelName,
+      labelMass,
       workshops: [workshop],
       category: kategorie ? buildCategory(kategorie, row.unterkategorie) : ["Sonstiges"],
       pricingModel,
@@ -184,6 +210,8 @@ export interface CurrentCatalogItem {
   id: string
   code: string
   name: string
+  labelName?: string | null
+  labelMass?: string | null
   category: string[]
   workshops: string[]
   active: boolean
@@ -195,7 +223,15 @@ export interface CurrentCatalogItem {
 export type DiffKind = "create" | "update" | "unchanged" | "retire"
 
 export interface DiffChange {
-  field: "name" | "price" | "category" | "pricingModel" | "workshops" | "active"
+  field:
+    | "name"
+    | "labelName"
+    | "labelMass"
+    | "price"
+    | "category"
+    | "pricingModel"
+    | "workshops"
+    | "active"
   from: unknown
   to: unknown
 }
@@ -269,6 +305,10 @@ export function diffCatalog(entries: ImportEntry[], current: CurrentCatalogItem[
     }
     const changes: DiffChange[] = []
     if (cur.name !== entry.name) changes.push({ field: "name", from: cur.name, to: entry.name })
+    if ((cur.labelName ?? "") !== entry.labelName)
+      changes.push({ field: "labelName", from: cur.labelName ?? "", to: entry.labelName })
+    if ((cur.labelMass ?? "") !== entry.labelMass)
+      changes.push({ field: "labelMass", from: cur.labelMass ?? "", to: entry.labelMass })
     if (round2(cur.unitPrice) !== entry.unitPrice.default)
       changes.push({ field: "price", from: round2(cur.unitPrice), to: entry.unitPrice.default })
     if (!categoriesEqual(cur.category, entry.category))

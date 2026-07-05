@@ -51,6 +51,8 @@ async function loadCatalog(): Promise<LoadedCatalog> {
       id: doc.id,
       code: String(d.code ?? ""),
       name: String(d.name ?? ""),
+      labelName: d.labelName ?? null,
+      labelMass: d.labelMass ?? null,
       category: Array.isArray(d.category) ? d.category.map(String) : [],
       workshops: Array.isArray(d.workshops) ? d.workshops.map(String) : [],
       active: d.active !== false,
@@ -157,6 +159,8 @@ export async function applyCatalogImport(
         {
           code: entry.code,
           name: entry.name,
+          labelName: entry.labelName,
+          labelMass: entry.labelMass,
           description: null,
           workshops: entry.workshops,
           category: entry.category,
@@ -185,6 +189,8 @@ export async function applyCatalogImport(
           ref,
           {
             name: entry.name,
+            labelName: entry.labelName,
+            labelMass: entry.labelMass,
             workshops: entry.workshops,
             category: entry.category,
             active: true,

@@ -144,6 +144,14 @@ export interface UsageMachineDoc extends AuditFields {
 export interface CatalogItemDoc extends AuditFields {
   code: string
   name: string
+  /**
+   * Curated label fields from Mario's pricelist (`Etikett Name` /
+   * `Etikett Mass`), stored verbatim for the label printer (#313/#314). The
+   * display `name` is composed from these on import. Absent on items not sourced
+   * from the pricelist import.
+   */
+  labelName?: string
+  labelMass?: string
   workshops: string[]
   /**
    * Root-to-leaf category path. Free-form values, not pre-registered;
