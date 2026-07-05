@@ -80,6 +80,14 @@
       "requiredPermission": ["DocumentReference"], // Array of DocumentReferences to /permission/{permissionId}
       "maco": "DocumentReference", // DocumentReference to /maco/{deviceID}
       "control": { // map with metadata on how to control the machine.
+      },
+      // Admin block. Absent/null = frei. Set/cleared on the admin machine
+      // page ("Sperren" with a reason); terminals deny sessions while set.
+      "blocked": {
+        "kind": "problem | maintenance",
+        "note": "string | null",
+        "byName": "string | null",  // display name of the blocking admin
+        "at": "timestamp"
       }
     }
   },
@@ -317,7 +325,15 @@
   },
   "machine_reports": {
     "{reportId}": {
-      // User-submitted machine issue reports (public create, admin read/update/delete)
+      // User-submitted machine issue reports ("Meldungen"; public create,
+      // admin read/update/delete). Triaged on the admin machine page.
+      "machine": "DocumentReference",   // /machine/{machineId}
+      "message": "string",
+      "userId": "DocumentReference | null",  // /users/{userId} when signed in
+      "reporterName": "string | null",  // free-text fallback for kiosk reports
+      "created": "timestamp",
+      "status": "open | done",
+      "resolvedAt": "timestamp | null"
     }
   },
   "maco": {

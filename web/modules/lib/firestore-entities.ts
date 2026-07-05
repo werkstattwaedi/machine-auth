@@ -95,6 +95,20 @@ export interface PermissionDoc extends AuditFields {
 
 // ── machine ──────────────────────────────────────────────────────────────
 
+/**
+ * Admin block on a machine. Absent/null = frei. `kind` distinguishes a
+ * defect ("problem") from planned "maintenance" so the list can show the
+ * right status. Set/cleared from the admin machine page; the terminal
+ * denies sessions on blocked machines.
+ */
+export interface MachineBlockedDoc {
+  kind: "problem" | "maintenance"
+  note: string | null
+  /** Display name of the admin who blocked — shown as "durch …". */
+  byName: string | null
+  at: Timestamp
+}
+
 export interface MachineDoc extends AuditFields {
   name: string
   workshop?: string
@@ -102,6 +116,25 @@ export interface MachineDoc extends AuditFields {
   requiredPermission: DocumentReference<PermissionDoc>[]
   maco?: DocumentReference<MacoDoc> | null
   control?: Record<string, unknown>
+  blocked?: MachineBlockedDoc | null
+}
+
+// ── machine_reports ──────────────────────────────────────────────────────
+
+/**
+ * User-submitted machine issue report ("Meldung"). Members file these
+ * (rules: public create); admins triage them on the machine page and
+ * mark them done. `userId` is set for signed-in reporters, otherwise the
+ * free-text `reporterName` (or neither, for anonymous kiosk reports).
+ */
+export interface MachineReportDoc {
+  machine: DocumentReference<MachineDoc>
+  message: string
+  userId?: DocumentReference<UserDoc> | null
+  reporterName?: string | null
+  created: Timestamp
+  status: "open" | "done"
+  resolvedAt?: Timestamp | null
 }
 
 // ── maco ─────────────────────────────────────────────────────────────────
