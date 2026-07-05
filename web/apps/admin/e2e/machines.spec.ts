@@ -107,9 +107,13 @@ test.describe("Maschinen workspace", () => {
       .getByRole("button", { name: "Sperren" })
       .click()
 
+    // Wait for the dialog to unmount (Radix keeps it in the DOM through
+    // the close animation) so its "Wartung" segment button can't collide
+    // with the status-badge assertion below.
+    await expect(page.getByRole("dialog")).not.toBeVisible()
     await expect(page.getByText("Wartung", { exact: true })).toBeVisible()
-    // Match the quoted note paragraph, not the (still-mounted) dialog
-    // textarea that holds the same text.
+    // Match the quoted note paragraph, not a dialog textarea holding the
+    // same text.
     await expect(page.getByText(/„Jahreswartung/)).toBeVisible()
 
     // Firestore reflects the block. Poll: the UI renders the web SDK's
