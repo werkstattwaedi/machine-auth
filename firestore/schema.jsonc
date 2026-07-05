@@ -14,6 +14,7 @@
       "items": ["string"],        // Catalog document IDs (plain strings, not DocumentReferences — needed for documentId() queries)
       "footer": "string",         // Footer text (e.g., "Offene Werkstatt Wädenswil – Holzwerkstatt")
       "active": "boolean",
+      "generatedAt": "timestamp | null", // last PDF generation; compared to items' modifiedAt to flag "veraltet"
       "modifiedBy": "string | null",
       "modifiedAt": "timestamp"
     }

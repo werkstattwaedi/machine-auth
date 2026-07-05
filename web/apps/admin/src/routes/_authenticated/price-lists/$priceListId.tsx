@@ -19,10 +19,12 @@ import { Label } from "@modules/components/ui/label"
 import { Checkbox } from "@modules/components/ui/checkbox"
 import { Switch } from "@modules/components/ui/switch"
 import { useForm } from "react-hook-form"
-import { Loader2, Save, Download } from "lucide-react"
+import { serverTimestamp } from "firebase/firestore"
+import { AlertTriangle, Loader2, Save, Download } from "lucide-react"
 import { useEffect, useState, useCallback } from "react"
 import { toast } from "sonner"
-import { formatCHF } from "@modules/lib/format"
+import { formatCHF, formatDate } from "@modules/lib/format"
+import { priceListFreshness } from "@/lib/price-list-stale"
 
 export const Route = createFileRoute(
   "/_authenticated/price-lists/$priceListId",
@@ -108,6 +110,12 @@ function PriceListDetailPage() {
       document.body.appendChild(a)
       a.click()
       a.remove()
+      // Stamp the generation time so the list view can flag the printed
+      // Aushang as veraltet once items drift. Best-effort — a failure
+      // here must not look like the download failed.
+      await update(priceListRef(db, priceListId), {
+        generatedAt: serverTimestamp() as unknown as null,
+      })
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "PDF konnte nicht erstellt werden."
@@ -119,6 +127,11 @@ function PriceListDetailPage() {
 
   if (loading || catalogLoading) return <PageLoading />
   if (!priceList) return <div>Preisliste nicht gefunden.</div>
+
+  const freshness = priceListFreshness(
+    priceList,
+    new Map(allCatalog.map((c) => [c.id, c.modifiedAt])),
+  )
 
   const qrUrl = `https://${import.meta.env.VITE_CHECKOUT_DOMAIN}/visit/add/list/${priceListId}`
 
@@ -134,6 +147,16 @@ function PriceListDetailPage() {
         backTo="/price-lists"
         backLabel="Zurück zu Preislisten"
       />
+
+      {freshness === "stale" && (
+        <div className="flex items-center gap-2.5 rounded-xl border border-destructive/40 border-l-4 border-l-destructive bg-destructive/5 px-4 py-3 text-sm">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" />
+          <span>
+            Veraltet — seit dem Generieren ({formatDate(priceList.generatedAt)})
+            haben sich Artikel dieser Liste geändert. PDF neu generieren.
+          </span>
+        </div>
+      )}
 
       <Card>
         <CardContent className="pt-6">

@@ -231,6 +231,12 @@ export interface PriceListDoc extends AuditFields {
   items: string[]
   footer: string
   active: boolean
+  /**
+   * When the PDF was last generated. Compared against the listed catalog
+   * items' `modifiedAt` to flag the printed Aushang as "veraltet".
+   * Absent on lists never generated.
+   */
+  generatedAt?: Timestamp | null
 }
 
 // ── checkouts ────────────────────────────────────────────────────────────

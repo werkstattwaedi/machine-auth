@@ -18,7 +18,6 @@ import { Route as TestLabelPreviewRouteImport } from "./routes/_test.label-previ
 import { Route as AuthenticatedVisitsRouteImport } from "./routes/_authenticated/visits"
 import { Route as AuthenticatedUsersRouteImport } from "./routes/_authenticated/users"
 import { Route as AuthenticatedUsagesRouteImport } from "./routes/_authenticated/usages"
-import { Route as AuthenticatedTerminalsRouteImport } from "./routes/_authenticated/terminals"
 import { Route as AuthenticatedPriceListsRouteImport } from "./routes/_authenticated/price-lists"
 import { Route as AuthenticatedPermissionsRouteImport } from "./routes/_authenticated/permissions"
 import { Route as AuthenticatedMaterialsRouteImport } from "./routes/_authenticated/materials"
@@ -36,6 +35,7 @@ import { Route as AuthenticatedVisitsCheckoutIdRouteImport } from "./routes/_aut
 import { Route as AuthenticatedUsersUserIdRouteImport } from "./routes/_authenticated/users/$userId"
 import { Route as AuthenticatedPriceListsPriceListIdRouteImport } from "./routes/_authenticated/price-lists/$priceListId"
 import { Route as AuthenticatedPermissionsPermissionIdRouteImport } from "./routes/_authenticated/permissions/$permissionId"
+import { Route as AuthenticatedMaterialsLabelsRouteImport } from "./routes/_authenticated/materials/labels"
 import { Route as AuthenticatedMaterialsImportRouteImport } from "./routes/_authenticated/materials/import"
 import { Route as AuthenticatedMaterialsMaterialIdRouteImport } from "./routes/_authenticated/materials/$materialId"
 import { Route as AuthenticatedMachinesMachineIdRouteImport } from "./routes/_authenticated/machines/$machineId"
@@ -84,11 +84,6 @@ const AuthenticatedUsersRoute = AuthenticatedUsersRouteImport.update({
 const AuthenticatedUsagesRoute = AuthenticatedUsagesRouteImport.update({
   id: "/usages",
   path: "/usages",
-  getParentRoute: () => AuthenticatedRoute,
-} as any)
-const AuthenticatedTerminalsRoute = AuthenticatedTerminalsRouteImport.update({
-  id: "/terminals",
-  path: "/terminals",
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedPriceListsRoute = AuthenticatedPriceListsRouteImport.update({
@@ -187,6 +182,12 @@ const AuthenticatedPermissionsPermissionIdRoute =
     path: "/$permissionId",
     getParentRoute: () => AuthenticatedPermissionsRoute,
   } as any)
+const AuthenticatedMaterialsLabelsRoute =
+  AuthenticatedMaterialsLabelsRouteImport.update({
+    id: "/labels",
+    path: "/labels",
+    getParentRoute: () => AuthenticatedMaterialsRoute,
+  } as any)
 const AuthenticatedMaterialsImportRoute =
   AuthenticatedMaterialsImportRouteImport.update({
     id: "/import",
@@ -228,7 +229,6 @@ export interface FileRoutesByFullPath {
   "/materials": typeof AuthenticatedMaterialsRouteWithChildren
   "/permissions": typeof AuthenticatedPermissionsRouteWithChildren
   "/price-lists": typeof AuthenticatedPriceListsRouteWithChildren
-  "/terminals": typeof AuthenticatedTerminalsRoute
   "/usages": typeof AuthenticatedUsagesRoute
   "/users": typeof AuthenticatedUsersRouteWithChildren
   "/visits": typeof AuthenticatedVisitsRouteWithChildren
@@ -239,6 +239,7 @@ export interface FileRoutesByFullPath {
   "/machines/$machineId": typeof AuthenticatedMachinesMachineIdRoute
   "/materials/$materialId": typeof AuthenticatedMaterialsMaterialIdRoute
   "/materials/import": typeof AuthenticatedMaterialsImportRoute
+  "/materials/labels": typeof AuthenticatedMaterialsLabelsRoute
   "/permissions/$permissionId": typeof AuthenticatedPermissionsPermissionIdRoute
   "/price-lists/$priceListId": typeof AuthenticatedPriceListsPriceListIdRoute
   "/users/$userId": typeof AuthenticatedUsersUserIdRoute
@@ -256,7 +257,6 @@ export interface FileRoutesByTo {
   "/link-account": typeof LinkAccountRoute
   "/login": typeof LoginRoute
   "/audit": typeof AuthenticatedAuditRoute
-  "/terminals": typeof AuthenticatedTerminalsRoute
   "/usages": typeof AuthenticatedUsagesRoute
   "/label-preview": typeof TestLabelPreviewRoute
   "/login/verify": typeof LoginVerifyRoute
@@ -265,6 +265,7 @@ export interface FileRoutesByTo {
   "/machines/$machineId": typeof AuthenticatedMachinesMachineIdRoute
   "/materials/$materialId": typeof AuthenticatedMaterialsMaterialIdRoute
   "/materials/import": typeof AuthenticatedMaterialsImportRoute
+  "/materials/labels": typeof AuthenticatedMaterialsLabelsRoute
   "/permissions/$permissionId": typeof AuthenticatedPermissionsPermissionIdRoute
   "/price-lists/$priceListId": typeof AuthenticatedPriceListsPriceListIdRoute
   "/users/$userId": typeof AuthenticatedUsersUserIdRoute
@@ -289,7 +290,6 @@ export interface FileRoutesById {
   "/_authenticated/materials": typeof AuthenticatedMaterialsRouteWithChildren
   "/_authenticated/permissions": typeof AuthenticatedPermissionsRouteWithChildren
   "/_authenticated/price-lists": typeof AuthenticatedPriceListsRouteWithChildren
-  "/_authenticated/terminals": typeof AuthenticatedTerminalsRoute
   "/_authenticated/usages": typeof AuthenticatedUsagesRoute
   "/_authenticated/users": typeof AuthenticatedUsersRouteWithChildren
   "/_authenticated/visits": typeof AuthenticatedVisitsRouteWithChildren
@@ -300,6 +300,7 @@ export interface FileRoutesById {
   "/_authenticated/machines/$machineId": typeof AuthenticatedMachinesMachineIdRoute
   "/_authenticated/materials/$materialId": typeof AuthenticatedMaterialsMaterialIdRoute
   "/_authenticated/materials/import": typeof AuthenticatedMaterialsImportRoute
+  "/_authenticated/materials/labels": typeof AuthenticatedMaterialsLabelsRoute
   "/_authenticated/permissions/$permissionId": typeof AuthenticatedPermissionsPermissionIdRoute
   "/_authenticated/price-lists/$priceListId": typeof AuthenticatedPriceListsPriceListIdRoute
   "/_authenticated/users/$userId": typeof AuthenticatedUsersUserIdRoute
@@ -324,7 +325,6 @@ export interface FileRouteTypes {
     | "/materials"
     | "/permissions"
     | "/price-lists"
-    | "/terminals"
     | "/usages"
     | "/users"
     | "/visits"
@@ -335,6 +335,7 @@ export interface FileRouteTypes {
     | "/machines/$machineId"
     | "/materials/$materialId"
     | "/materials/import"
+    | "/materials/labels"
     | "/permissions/$permissionId"
     | "/price-lists/$priceListId"
     | "/users/$userId"
@@ -352,7 +353,6 @@ export interface FileRouteTypes {
     | "/link-account"
     | "/login"
     | "/audit"
-    | "/terminals"
     | "/usages"
     | "/label-preview"
     | "/login/verify"
@@ -361,6 +361,7 @@ export interface FileRouteTypes {
     | "/machines/$machineId"
     | "/materials/$materialId"
     | "/materials/import"
+    | "/materials/labels"
     | "/permissions/$permissionId"
     | "/price-lists/$priceListId"
     | "/users/$userId"
@@ -384,7 +385,6 @@ export interface FileRouteTypes {
     | "/_authenticated/materials"
     | "/_authenticated/permissions"
     | "/_authenticated/price-lists"
-    | "/_authenticated/terminals"
     | "/_authenticated/usages"
     | "/_authenticated/users"
     | "/_authenticated/visits"
@@ -395,6 +395,7 @@ export interface FileRouteTypes {
     | "/_authenticated/machines/$machineId"
     | "/_authenticated/materials/$materialId"
     | "/_authenticated/materials/import"
+    | "/_authenticated/materials/labels"
     | "/_authenticated/permissions/$permissionId"
     | "/_authenticated/price-lists/$priceListId"
     | "/_authenticated/users/$userId"
@@ -480,13 +481,6 @@ declare module "@tanstack/react-router" {
       path: "/usages"
       fullPath: "/usages"
       preLoaderRoute: typeof AuthenticatedUsagesRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
-    "/_authenticated/terminals": {
-      id: "/_authenticated/terminals"
-      path: "/terminals"
-      fullPath: "/terminals"
-      preLoaderRoute: typeof AuthenticatedTerminalsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     "/_authenticated/price-lists": {
@@ -608,6 +602,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthenticatedPermissionsPermissionIdRouteImport
       parentRoute: typeof AuthenticatedPermissionsRoute
     }
+    "/_authenticated/materials/labels": {
+      id: "/_authenticated/materials/labels"
+      path: "/labels"
+      fullPath: "/materials/labels"
+      preLoaderRoute: typeof AuthenticatedMaterialsLabelsRouteImport
+      parentRoute: typeof AuthenticatedMaterialsRoute
+    }
     "/_authenticated/materials/import": {
       id: "/_authenticated/materials/import"
       path: "/import"
@@ -681,6 +682,7 @@ const AuthenticatedMachinesRouteWithChildren =
 interface AuthenticatedMaterialsRouteChildren {
   AuthenticatedMaterialsMaterialIdRoute: typeof AuthenticatedMaterialsMaterialIdRoute
   AuthenticatedMaterialsImportRoute: typeof AuthenticatedMaterialsImportRoute
+  AuthenticatedMaterialsLabelsRoute: typeof AuthenticatedMaterialsLabelsRoute
   AuthenticatedMaterialsIndexRoute: typeof AuthenticatedMaterialsIndexRoute
 }
 
@@ -689,6 +691,7 @@ const AuthenticatedMaterialsRouteChildren: AuthenticatedMaterialsRouteChildren =
     AuthenticatedMaterialsMaterialIdRoute:
       AuthenticatedMaterialsMaterialIdRoute,
     AuthenticatedMaterialsImportRoute: AuthenticatedMaterialsImportRoute,
+    AuthenticatedMaterialsLabelsRoute: AuthenticatedMaterialsLabelsRoute,
     AuthenticatedMaterialsIndexRoute: AuthenticatedMaterialsIndexRoute,
   }
 
@@ -764,7 +767,6 @@ interface AuthenticatedRouteChildren {
   AuthenticatedMaterialsRoute: typeof AuthenticatedMaterialsRouteWithChildren
   AuthenticatedPermissionsRoute: typeof AuthenticatedPermissionsRouteWithChildren
   AuthenticatedPriceListsRoute: typeof AuthenticatedPriceListsRouteWithChildren
-  AuthenticatedTerminalsRoute: typeof AuthenticatedTerminalsRoute
   AuthenticatedUsagesRoute: typeof AuthenticatedUsagesRoute
   AuthenticatedUsersRoute: typeof AuthenticatedUsersRouteWithChildren
   AuthenticatedVisitsRoute: typeof AuthenticatedVisitsRouteWithChildren
@@ -777,7 +779,6 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedMaterialsRoute: AuthenticatedMaterialsRouteWithChildren,
   AuthenticatedPermissionsRoute: AuthenticatedPermissionsRouteWithChildren,
   AuthenticatedPriceListsRoute: AuthenticatedPriceListsRouteWithChildren,
-  AuthenticatedTerminalsRoute: AuthenticatedTerminalsRoute,
   AuthenticatedUsagesRoute: AuthenticatedUsagesRoute,
   AuthenticatedUsersRoute: AuthenticatedUsersRouteWithChildren,
   AuthenticatedVisitsRoute: AuthenticatedVisitsRouteWithChildren,

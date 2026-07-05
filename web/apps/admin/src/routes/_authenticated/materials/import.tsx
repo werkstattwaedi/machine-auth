@@ -10,6 +10,7 @@ import { useFunctions } from "@modules/lib/firebase-context"
 import { rpcCallable } from "@modules/lib/rpc"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { PageHeader } from "@/components/admin/page-header"
+import { InventoryTabs } from "@/components/admin/inventory-tabs"
 import { Button } from "@modules/components/ui/button"
 import { Badge } from "@modules/components/ui/badge"
 import { Card } from "@modules/components/ui/card"
@@ -178,8 +179,9 @@ function CatalogImportPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Katalog-Import" backTo="/materials" backLabel="Zum Katalog" />
-      <p className="-mt-4 text-sm text-muted-foreground">
+      <PageHeader title="Inventar" />
+      <InventoryTabs />
+      <p className="text-sm text-muted-foreground">
         Marios Preislisten-Excel hochladen, Änderungen prüfen (Trockenlauf), dann übernehmen.
       </p>
 
