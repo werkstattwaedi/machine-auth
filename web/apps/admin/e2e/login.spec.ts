@@ -19,7 +19,7 @@ test.describe("Admin login flow", () => {
       timeout: 10_000,
     })
     // Page header on the user list.
-    await expect(page.getByRole("heading", { name: "Benutzer" })).toBeVisible()
+    await expect(page.getByRole("heading", { name: "Personen" })).toBeVisible()
   })
 
   test("non-admin signed-in user is bounced away from the admin shell", async ({

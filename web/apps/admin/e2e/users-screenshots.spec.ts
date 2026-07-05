@@ -5,37 +5,48 @@ import { test, expect } from "@playwright/test"
 import { clearCollections, signInWithEmailCode } from "./helpers"
 import { ADMIN_EMAIL, GRANT_TARGET_USER_ID } from "./global-setup"
 
-test.describe("Admin layout visual regression", () => {
+test.describe("Personen visual regression", () => {
   test.beforeEach(async () => {
     await clearCollections("loginCodes")
   })
 
-  test("user list page", async ({ page }) => {
+  test("people list page", async ({ page }) => {
     await signInWithEmailCode(page, ADMIN_EMAIL)
     await page.waitForURL((url) => url.pathname.startsWith("/users"))
     await expect(
-      page.getByRole("link", { name: "Anna Architektin" }),
+      page.getByRole("link", { name: "Anna Architektin", exact: true }),
     ).toBeVisible()
 
-    // Mask timestamps if they ever appear in this view (none today, but the
-    // mask is cheap and prevents surprise drift if a column is added later).
     await expect(page).toHaveScreenshot("users-list.png", {
       fullPage: false,
       maxDiffPixelRatio: 0.01,
     })
   })
 
-  test("user detail page", async ({ page }) => {
+  test("person page Übersicht", async ({ page }) => {
     await signInWithEmailCode(page, ADMIN_EMAIL)
     await page.goto(`/users/${GRANT_TARGET_USER_ID}`)
-    await expect(page.getByRole("tab", { name: "Details" })).toBeVisible()
-    // The "Nutzungsbestimmungen akzeptiert am ..." line carries a serverTimestamp,
-    // so mask it for stable snapshots.
-    const acceptedAt = page.locator("text=/Nutzungsbestimmungen akzeptiert am/")
+    await expect(page.getByText("Aktiver Besuch läuft")).toBeVisible()
+    // Overview cards load from four person-scoped queries; the last-usage
+    // card is the slowest, so anchor on its content.
+    await expect(page.getByText("Lasercutter · 1h 20m")).toBeVisible()
 
-    await expect(page).toHaveScreenshot("user-detail.png", {
+    await expect(page).toHaveScreenshot("person-overview.png", {
       fullPage: false,
-      mask: [acceptedAt],
+      maxDiffPixelRatio: 0.01,
+    })
+  })
+
+  test("person page Mitgliedschaft (active family)", async ({ page }) => {
+    await signInWithEmailCode(page, ADMIN_EMAIL)
+    await page.goto(`/users/${GRANT_TARGET_USER_ID}?tab=membership`)
+    await expect(
+      page.getByRole("heading", { name: "Familienmitgliedschaft" }),
+    ).toBeVisible()
+    await expect(page.getByText("Bruno Bastler")).toBeVisible()
+
+    await expect(page).toHaveScreenshot("person-membership.png", {
+      fullPage: false,
       maxDiffPixelRatio: 0.01,
     })
   })

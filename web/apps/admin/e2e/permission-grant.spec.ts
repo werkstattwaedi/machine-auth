@@ -16,7 +16,6 @@ import {
 
 interface PermissionRefShape {
   id: string
-  // Admin SDK DocumentReference also exposes `path`; we accept either.
   path?: string
 }
 
@@ -28,7 +27,7 @@ async function readUserPermissions(userId: string): Promise<string[]> {
   return refs.map((p) => p.id)
 }
 
-test.describe("Admin grants and revokes a permission", () => {
+test.describe("Berechtigungen tab: grant and revoke", () => {
   test.beforeEach(async () => {
     await clearCollections("loginCodes")
     // Reset the grant target user back to "no `fraese`" so tests are
@@ -40,29 +39,22 @@ test.describe("Admin grants and revokes a permission", () => {
       .set({ permissions: [] }, { merge: true })
   })
 
-  test("admin can grant a permission and Firestore reflects it", async ({
-    page,
-  }) => {
+  test("admin grants a permission via the picker", async ({ page }) => {
     await signInWithEmailCode(page, ADMIN_EMAIL)
-    await page.goto(`/users/${GRANT_TARGET_USER_ID}`)
-    await expect(page.getByRole("tab", { name: "Details" })).toBeVisible()
+    await page.goto(`/users/${GRANT_TARGET_USER_ID}?tab=permissions`)
 
-    // Sanity: target permission badge is present and currently NOT selected
-    // (outline variant). We locate by visible label text.
-    const grantBadge = page.getByText(GRANTABLE_PERMISSION_NAME, {
-      exact: true,
-    })
-    await expect(grantBadge).toBeVisible()
+    // Pick the grantable permission in the select…
+    await page.getByRole("combobox").click()
+    await page
+      .getByRole("option", { name: GRANTABLE_PERMISSION_NAME })
+      .click()
+    // …and grant it.
+    await page.getByRole("button", { name: "Erteilen" }).click()
 
-    // Toggle it on.
-    await grantBadge.click()
+    // A permission card appears with revoke right there.
+    await expect(page.getByText(GRANTABLE_PERMISSION_NAME)).toBeVisible()
+    await expect(page.getByRole("button", { name: "Entziehen" })).toBeVisible()
 
-    // Save.
-    await page.getByRole("button", { name: "Speichern" }).click()
-
-    // Wait for Firestore to reflect the new permission. Polls because the
-    // mutation hook fires asynchronously and we want the assertion not the
-    // mere absence of an error toast.
     await expect
       .poll(() => readUserPermissions(GRANT_TARGET_USER_ID), {
         timeout: 5000,
@@ -71,30 +63,23 @@ test.describe("Admin grants and revokes a permission", () => {
       .toContain(GRANTABLE_PERMISSION_ID)
   })
 
-  test("admin can revoke a previously granted permission", async ({
-    page,
-  }) => {
-    // Pre-grant the permission via the Admin SDK so the revoke flow has
-    // something to remove and we don't depend on the previous spec running.
+  test("admin revokes a permission from its card", async ({ page }) => {
+    // Pre-grant via the Admin SDK so the revoke flow has something to
+    // remove and we don't depend on the previous spec running.
     const db = getAdminFirestore()
     await db
       .collection("users")
       .doc(GRANT_TARGET_USER_ID)
       .set(
-        {
-          permissions: [db.doc(`permission/${GRANTABLE_PERMISSION_ID}`)],
-        },
+        { permissions: [db.doc(`permission/${GRANTABLE_PERMISSION_ID}`)] },
         { merge: true },
       )
 
     await signInWithEmailCode(page, ADMIN_EMAIL)
-    await page.goto(`/users/${GRANT_TARGET_USER_ID}`)
-    await expect(page.getByRole("tab", { name: "Details" })).toBeVisible()
+    await page.goto(`/users/${GRANT_TARGET_USER_ID}?tab=permissions`)
 
-    // Click the same badge — it's currently selected, so this toggles off.
-    await page.getByText(GRANTABLE_PERMISSION_NAME, { exact: true }).click()
-
-    await page.getByRole("button", { name: "Speichern" }).click()
+    await expect(page.getByText(GRANTABLE_PERMISSION_NAME)).toBeVisible()
+    await page.getByRole("button", { name: "Entziehen" }).click()
 
     await expect
       .poll(() => readUserPermissions(GRANT_TARGET_USER_ID), {
