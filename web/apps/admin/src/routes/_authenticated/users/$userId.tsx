@@ -1,460 +1,138 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { createFileRoute, Link } from "@tanstack/react-router"
+// Person workspace — every admin task around one person on one screen.
+// Person-scoped concerns live in tabs (deep-linkable via ?tab=); shared
+// ledgers (Rechnungen, Besuche, Nutzungen) are navigated OUT into with a
+// person filter pre-applied, never duplicated here.
+
+import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { useDocument, useCollection } from "@modules/lib/firestore"
-import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
-import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
-import {
-  permissionRef,
-  permissionsCollection,
-  tokenRef,
-  tokensCollection,
-  userRef,
-} from "@modules/lib/firestore-helpers"
 import { useDb } from "@modules/lib/firebase-context"
-import type { TokenDoc } from "@modules/lib/firestore-entities"
-import { where, serverTimestamp } from "firebase/firestore"
+import { membershipsCollection, userRef } from "@modules/lib/firestore-helpers"
+import { where } from "firebase/firestore"
 import { PageLoading } from "@modules/components/page-loading"
 import { PageHeader } from "@/components/admin/page-header"
-import { Card, CardContent, CardHeader, CardTitle } from "@modules/components/ui/card"
-import { Button } from "@modules/components/ui/button"
-import { Input } from "@modules/components/ui/input"
-import { Label } from "@modules/components/ui/label"
-import { Badge } from "@modules/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@modules/components/ui/tabs"
-import { Checkbox } from "@modules/components/ui/checkbox"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@modules/components/ui/table"
-import { formatDateTime } from "@modules/lib/format"
 import { formatFullName } from "@modules/lib/username-utils"
-import { useForm } from "react-hook-form"
-import { Loader2, Save, Plus, Ban, RotateCcw, ScanLine } from "lucide-react"
-import { useEffect, useState } from "react"
-import { toast } from "sonner"
-import { useTagScan, type ResolveTagResult } from "@/nfc/use-tag-scan"
+import { Avatar } from "@modules/components/ui/avatar"
+import { Badge } from "@modules/components/ui/badge"
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@modules/components/ui/tabs"
+import { PersonOverviewTab } from "@/components/person/overview-tab"
+import { PersonProfileTab } from "@/components/person/profile-tab"
+import { PersonMembershipTab } from "@/components/person/membership-tab"
+import { PersonBadgesTab } from "@/components/person/badges-tab"
+import { PersonPermissionsTab } from "@/components/person/permissions-tab"
 
-export const Route = createFileRoute("/_authenticated/users/$userId")({
-  component: UserDetailPage,
-})
+const TABS = [
+  "overview",
+  "profile",
+  "membership",
+  "badges",
+  "permissions",
+] as const
+export type PersonTab = (typeof TABS)[number]
 
-interface UserFormValues {
-  firstName: string
-  lastName: string
-  email: string
-  isAdmin: boolean
-  userType: string
-  company: string
-  street: string
-  zip: string
-  city: string
+interface PersonSearch {
+  tab?: Exclude<PersonTab, "overview">
 }
 
-function UserDetailPage() {
+export const Route = createFileRoute("/_authenticated/users/$userId")({
+  validateSearch: (search: Record<string, unknown>): PersonSearch => ({
+    tab:
+      typeof search.tab === "string" &&
+      (TABS as readonly string[]).includes(search.tab) &&
+      search.tab !== "overview"
+        ? (search.tab as PersonSearch["tab"])
+        : undefined,
+  }),
+  component: PersonPage,
+})
+
+function PersonPage() {
   const db = useDb()
+  const navigate = useNavigate()
   const { userId } = Route.useParams()
+  const { tab } = Route.useSearch()
   const { data: user, loading } = useDocument(userRef(db, userId))
-  const { data: allPermissions } = useCollection(permissionsCollection(db))
-  const { data: tokens, loading: tokensLoading } = useCollection(
-    tokensCollection(db),
-    where("userId", "==", userRef(db, userId)),
+  // Any membership this person belongs to — including expired/cancelled
+  // ones the `activeMembership` denorm no longer points at.
+  const { data: memberships } = useCollection(
+    membershipsCollection(db),
+    where("members", "array-contains", userRef(db, userId)),
   )
-  const { update, set } = useFirestoreMutation()
-  const { update: updateRaw, loading: saving } = useFirestoreMutation()
-  // ADR-0025: tag operations were silent on failure today. Wrap them so
-  // an admin sees a German confirmation toast on success and an error
-  // toast + telemetry on failure.
-  const addTagMutation = useAsyncMutation({
-    context: "admin.userAddTag",
-    successMessage: "Tag hinzugefügt",
-    errorMessage: "Tag konnte nicht hinzugefügt werden",
-  })
-  const toggleTagMutation = useAsyncMutation({
-    context: "admin.userToggleTag",
-    successMessage: "Tag-Status aktualisiert",
-    errorMessage: "Tag-Status konnte nicht geändert werden",
-  })
-  // Web NFC scan (Chrome/Android). The hook reads the tag's SUN URL and
-  // resolves the real UID server-side (tags use Random-ID). Error toast is
-  // owned by the mutation hook (ADR-0025); success-path info toasts below.
-  const { supported: nfcSupported, scanTag } = useTagScan()
-  const scanTagMutation = useAsyncMutation<ResolveTagResult>({
-    context: "admin.userScanTag",
-    errorMessage: "Tag konnte nicht gelesen werden",
-  })
-  const [selectedPermissions, setSelectedPermissions] = useState<string[]>([])
-  const [newTagId, setNewTagId] = useState("")
-
-  const { register, handleSubmit, reset, watch, setValue } =
-    useForm<UserFormValues>()
-  const userType = watch("userType")
-  const isFirma = userType === "firma"
-  const isAdmin = watch("isAdmin")
-
-  useEffect(() => {
-    if (user) {
-      const perms = (user.permissions ?? []).map((p) =>
-        typeof p === "string" ? p : p.id
-      )
-      setSelectedPermissions(perms)
-      reset({
-        firstName: user.firstName ?? "",
-        lastName: user.lastName ?? "",
-        email: user.email ?? "",
-        isAdmin: user.roles?.includes("admin") ?? false,
-        userType: user.userType ?? "erwachsen",
-        company: user.billingAddress?.company ?? "",
-        street: user.billingAddress?.street ?? "",
-        zip: user.billingAddress?.zip ?? "",
-        city: user.billingAddress?.city ?? "",
-      })
-    }
-  }, [user, reset])
 
   if (loading) return <PageLoading />
-  if (!user) return <div>Benutzer nicht gefunden.</div>
+  if (!user) return <div>Person nicht gefunden.</div>
 
-  const onSubmit = async (values: UserFormValues) => {
-    // Membership is now a separate entity (memberships/{id}); the
-    // "vereinsmitglied" role no longer drives pricing. Roles only carry
-    // authorization flags now (currently just "admin").
-    const roles: string[] = []
-    if (values.isAdmin) roles.push("admin")
+  const membership =
+    memberships.find((m) => m.status === "active") ??
+    [...memberships].sort(
+      (a, b) => (b.created?.toMillis() ?? 0) - (a.created?.toMillis() ?? 0),
+    )[0] ??
+    null
 
-    const data: Record<string, unknown> = {
-      firstName: values.firstName,
-      lastName: values.lastName,
-      email: values.email,
-      roles,
-      userType: values.userType,
-      permissions: selectedPermissions.map((id) => permissionRef(db, id)),
-    }
-
-    if (values.userType === "firma") {
-      data.billingAddress = {
-        company: values.company,
-        street: values.street,
-        zip: values.zip,
-        city: values.city,
-      }
-    } else {
-      data.billingAddress = null
-    }
-
-    await update(userRef(db, userId), data, {
-      successMessage: "Benutzer gespeichert",
-    })
-  }
-
-  const togglePermission = (permId: string) => {
-    setSelectedPermissions((prev) =>
-      prev.includes(permId) ? prev.filter((p) => p !== permId) : [...prev, permId]
-    )
-  }
-
-  const handleAddTag = async () => {
-    if (!newTagId.trim()) return
-    try {
-      await addTagMutation.mutate(() =>
-        set(tokenRef(db, newTagId.trim()), {
-          userId: userRef(db, userId),
-          label: "",
-          registered: serverTimestamp(),
-        } as unknown as TokenDoc),
-      )
-      setNewTagId("")
-    } catch {
-      // Hook already toasted + reported telemetry. Keep `newTagId` so
-      // the admin can edit + retry without re-typing.
-    }
-  }
-
-  const handleScanTag = async () => {
-    let result
-    try {
-      result = await scanTagMutation.mutate(() => scanTag())
-    } catch {
-      // Hook already toasted + reported telemetry (e.g. NFC denied, no tag).
-      return
-    }
-
-    // Already registered → don't silently reassign; tell the admin where it
-    // lives. If it's this user's own tag, just confirm.
-    if (result.registered && result.userId) {
-      const deact = result.deactivated ? " (deaktiviert)" : ""
-      if (result.userId === userId) {
-        toast.info(`Dieser Tag ist bereits diesem Benutzer zugeordnet${deact}.`)
-      } else {
-        toast.warning(
-          `Tag ist bereits ${result.userName ?? "einem anderen Benutzer"} zugeordnet${deact}.`,
-        )
-      }
-      return
-    }
-
-    // Fresh tag → prefill the UID so the admin confirms with the add button.
-    setNewTagId(result.tokenId)
-    toast.success("Tag gelesen — UID übernommen. Bitte „Tag hinzufügen“ wählen.")
-  }
-
-  const handleToggleTag = async (tokenId: string, isDeactivated: boolean) => {
-    try {
-      await toggleTagMutation.mutate(() =>
-        updateRaw(tokenRef(db, tokenId), {
-          deactivated: isDeactivated
-            ? null
-            : (serverTimestamp() as unknown as null),
-        }),
-      )
-    } catch {
-      // Hook already toasted + reported telemetry.
-    }
-  }
+  const activeTab: PersonTab = tab ?? "overview"
+  const name = formatFullName(user, "Person")
 
   return (
-    <div>
-      <PageHeader title={formatFullName(user, "Benutzer")} backTo="/users" backLabel="Zurück zu Benutzer" />
+    <div key={userId} className="space-y-4">
+      <PageHeader title={name} backTo="/users" backLabel="Zurück zu Personen" />
 
-      <Tabs defaultValue="details">
+      <div className="-mt-4 flex flex-wrap items-center gap-2">
+        <Avatar name={name} seed={userId} size="sm" />
+        {membership?.status === "active" ? (
+          <Badge variant="secondary">
+            {membership.type === "family" ? "Familienmitgliedschaft" : "Einzelmitgliedschaft"}
+          </Badge>
+        ) : (
+          <Badge variant="outline">kein Mitglied</Badge>
+        )}
+        {user.roles?.includes("admin") && <Badge>Admin</Badge>}
+        <span className="text-sm text-muted-foreground">
+          {user.email ?? "keine E-Mail"}
+          {user.phone ? ` · ${user.phone}` : ""}
+        </span>
+      </div>
+
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) =>
+          navigate({
+            to: "/users/$userId",
+            params: { userId },
+            search: {
+              tab: value === "overview" ? undefined : (value as PersonSearch["tab"]),
+            },
+          })
+        }
+      >
         <TabsList>
-          <TabsTrigger value="details">Details</TabsTrigger>
-          <TabsTrigger value="tags">Tags</TabsTrigger>
-          <TabsTrigger value="usage">Nutzung</TabsTrigger>
-          <TabsTrigger value="audit">Verlauf</TabsTrigger>
+          <TabsTrigger value="overview">Übersicht</TabsTrigger>
+          <TabsTrigger value="profile">Profil</TabsTrigger>
+          <TabsTrigger value="membership">Mitgliedschaft</TabsTrigger>
+          <TabsTrigger value="badges">Badges</TabsTrigger>
+          <TabsTrigger value="permissions">Berechtigungen</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="details">
-          <Card className="mb-4">
-            <CardContent className="pt-6">
-              <h3 className="text-sm font-semibold mb-2">Mitgliedschaft</h3>
-              {user.activeMembership ? (
-                <div className="text-sm">
-                  <Link
-                    to="/memberships/$membershipId"
-                    params={{ membershipId: user.activeMembership.id }}
-                    className="text-primary hover:underline font-mono"
-                  >
-                    {user.activeMembership.id}
-                  </Link>
-                  <span className="text-muted-foreground ml-2">
-                    (aktiv — pricing tier: member)
-                  </span>
-                </div>
-              ) : (
-                <div className="text-sm text-muted-foreground">
-                  Keine aktive Mitgliedschaft.
-                </div>
-              )}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 max-w-lg">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="firstName">Vorname</Label>
-                    <Input id="firstName" {...register("firstName")} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="lastName">Nachname</Label>
-                    <Input id="lastName" {...register("lastName")} />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">E-Mail</Label>
-                  <Input id="email" type="email" {...register("email")} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="userType">Benutzertyp</Label>
-                  <select
-                    id="userType"
-                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                    {...register("userType")}
-                  >
-                    <option value="erwachsen">Erwachsen</option>
-                    <option value="kind">Kind (u. 18)</option>
-                    <option value="firma">Firma</option>
-                  </select>
-                </div>
-
-                {isFirma && (
-                  <div className="space-y-4 rounded border p-4">
-                    <h4 className="text-sm font-semibold">Rechnungsadresse</h4>
-                    <div className="space-y-2">
-                      <Label htmlFor="company">Firma</Label>
-                      <Input id="company" {...register("company")} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="street">Strasse</Label>
-                      <Input id="street" {...register("street")} />
-                    </div>
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="zip">PLZ</Label>
-                        <Input id="zip" {...register("zip")} />
-                      </div>
-                      <div className="col-span-2 space-y-2">
-                        <Label htmlFor="city">Ort</Label>
-                        <Input id="city" {...register("city")} />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id="isAdmin"
-                    checked={isAdmin ?? false}
-                    onCheckedChange={(checked) =>
-                      setValue("isAdmin", checked === true)
-                    }
-                  />
-                  <Label htmlFor="isAdmin">Administrator</Label>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Berechtigungen</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {allPermissions.map((perm) => (
-                      <Badge
-                        key={perm.id}
-                        variant={selectedPermissions.includes(perm.id) ? "default" : "outline"}
-                        className="cursor-pointer"
-                        onClick={() => togglePermission(perm.id)}
-                      >
-                        {perm.name || perm.id}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-
-                {user.termsAcceptedAt && (
-                  <div className="text-sm text-muted-foreground">
-                    Nutzungsbestimmungen akzeptiert am {formatDateTime(user.termsAcceptedAt)}
-                  </div>
-                )}
-
-                <Button type="submit" disabled={saving}>
-                  {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-                  Speichern
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
+        <TabsContent value="overview">
+          <PersonOverviewTab userId={userId} user={user} membership={membership} />
         </TabsContent>
-
-        <TabsContent value="tags">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">NFC Tags</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex gap-2">
-                  {nfcSupported && (
-                    <Button
-                      variant="secondary"
-                      onClick={handleScanTag}
-                      disabled={scanTagMutation.loading}
-                    >
-                      {scanTagMutation.loading ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <ScanLine className="h-4 w-4 mr-2" />
-                      )}
-                      Tag scannen
-                    </Button>
-                  )}
-                  <Input
-                    placeholder="Tag UID (hex, z.B. 04c339aa1e1890)"
-                    value={newTagId}
-                    onChange={(e) => setNewTagId(e.target.value)}
-                    className="max-w-xs"
-                  />
-                  <Button onClick={handleAddTag} disabled={!newTagId.trim()}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Tag hinzufügen
-                  </Button>
-                </div>
-
-                {tokensLoading ? (
-                  <PageLoading />
-                ) : tokens.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Keine Tags zugewiesen.</p>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Tag UID</TableHead>
-                        <TableHead>Label</TableHead>
-                        <TableHead>Registriert</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Aktionen</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {tokens.map((token) => {
-                        const isDeactivated = !!token.deactivated
-                        return (
-                          <TableRow key={token.id}>
-                            <TableCell className="font-mono text-xs">{token.id}</TableCell>
-                            <TableCell>{token.label || "–"}</TableCell>
-                            <TableCell>{formatDateTime(token.registered)}</TableCell>
-                            <TableCell>
-                              {isDeactivated ? (
-                                <Badge variant="destructive">Deaktiviert</Badge>
-                              ) : (
-                                <Badge variant="secondary">Aktiv</Badge>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleToggleTag(token.id, isDeactivated)}
-                              >
-                                {isDeactivated ? (
-                                  <><RotateCcw className="h-3 w-3 mr-1" />Aktivieren</>
-                                ) : (
-                                  <><Ban className="h-3 w-3 mr-1" />Deaktivieren</>
-                                )}
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        )
-                      })}
-                    </TableBody>
-                  </Table>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+        <TabsContent value="profile">
+          <PersonProfileTab userId={userId} user={user} />
         </TabsContent>
-
-        <TabsContent value="usage">
-          <Card>
-            <CardContent className="pt-6">
-              <p className="text-sm text-muted-foreground">
-                Nutzungsdaten werden in Phase 3 implementiert.
-              </p>
-            </CardContent>
-          </Card>
+        <TabsContent value="membership">
+          <PersonMembershipTab userId={userId} user={user} membership={membership} />
         </TabsContent>
-
-        <TabsContent value="audit">
-          <Card>
-            <CardContent className="pt-6">
-              <p className="text-sm text-muted-foreground">
-                Audit-Log wird in Phase 4 implementiert.
-              </p>
-            </CardContent>
-          </Card>
+        <TabsContent value="badges">
+          <PersonBadgesTab userId={userId} />
+        </TabsContent>
+        <TabsContent value="permissions">
+          <PersonPermissionsTab userId={userId} user={user} />
         </TabsContent>
       </Tabs>
     </div>
