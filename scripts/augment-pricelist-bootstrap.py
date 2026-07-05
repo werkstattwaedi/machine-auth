@@ -2,287 +2,290 @@
 # Copyright Offene Werkstatt Wädenswil
 # SPDX-License-Identifier: MIT
 """
-One-time bootstrap: augment Mario's "260604 Preisliste.xlsx" with the columns
-our catalog importer needs, WITHOUT touching his calculation formulas.
+Augment Mario's pricelist workbook with the columns our catalog importer needs,
+WITHOUT touching his calculation formulas.
 
-For each workshop sheet it appends five columns to the right of the existing
-data (append = no formula-reference shift), making every row self-describing
-so the importer needs no per-sheet name/price-column logic:
+Mario maintains one workbook with a sheet per workshop. He curates two label
+columns per row — `Etikett Name` and `Etikett Mass` — that we import verbatim
+(they drive the printed label). This script *appends* four columns the importer
+reads by header name:
+
     Code            stable 4-digit article number (catalog identity)
-    Name            customer-facing catalog name
-    Kategorie       top-level category (from the section heading)
-    Unterkategorie  sub-category (from the sub-heading; blank if none)
+    Kategorie       top-level category  (from the section headings)
+    Unterkategorie  sub-category        (from sub-headings / species)
     Einheit         sale unit (m² / lm / kg / Stk) → pricing model
 
-The sale PRICE is NOT copied — the importer reads Mario's existing
-"Preis Einheit Verkauf" column by header name (single source of truth).
+The sale PRICE is not copied — the importer reads Mario's existing
+"Preis Einheit Verkauf" column by header name (single source of truth). The
+display `name` is composed by the importer from `Etikett Name` + `Etikett Mass`,
+so no `Name` column is injected here.
 
-Code reuse: Holz rows are matched to the existing catalog (scripts/seed-data)
-by normalised name so they keep their 3xxx codes; Keramik matches the 4xxx
-clay codes by product token. Metall gets a fresh 2xxx range, Textil a fresh
-7xxx range, and any unmatched Holz/Keramik row continues its range.
+It also NORMALISES the curated labels for consistency (trailing spaces, unit
+spacing "24mm"→"24 mm", dimensions "15x2mm"→"15 × 2 mm") and writes the cleaned
+values back into the Etikett cells so the file Mike shares back to Mario is
+consistent. Every change is listed in the reconciliation report.
 
-Output: a sibling "...– mit Codes.xlsx" plus a reconciliation report.
+Workflow: run this → Mike shares the produced "… – mit Codes.xlsx" back to
+Mario → from then on the injected columns travel with his file. Re-running is
+idempotent: an existing `Code` value on a row is preserved; only new rows get a
+fresh number.
+
+Output: a sibling "… – mit Codes.xlsx" plus a reconciliation report.
 """
-import json, re, sys
+import json
+import re
 from pathlib import Path
-import openpyxl
 
-SRC = Path("/mnt/c/Users/Mike/Downloads/260604 Preisliste.xlsx")
+import openpyxl
+from openpyxl.utils import get_column_letter
+
+SRC = Path("/mnt/c/Users/Mike/Downloads/260616 Preisberechnungsliste.xlsx")
 OUT = SRC.with_name(SRC.stem + " – mit Codes.xlsx")
 REPORT = Path("/tmp/pricelist_reconciliation.md")
-SEED = Path("/home/michschn/werkstattwaedi/machine-auth-wt-firebase-dev-env/scripts/seed-data/catalog")
-OPS = Path("/home/michschn/werkstattwaedi/machine-auth-wt-firebase-dev-env/../machine-auth-operations/scripts/seed-data/catalog")
+SEED = Path(__file__).resolve().parent / "seed-data" / "catalog"
+OPS = Path(__file__).resolve().parent.parent.parent / "machine-auth-operations" / "scripts" / "seed-data" / "catalog"
 
-# Pricing model → human sale-unit label written into the Einheit column.
-# The importer maps the label back to the model (see shared/pricing import).
-MODEL_TO_EINHEIT = {"area": "m²", "length": "lm", "weight": "kg",
-                    "count": "Stk", "time": "h", "direct": "Stk", "sla": "Stk"}
+# ── section → pricing-model (human sale-unit label) ──────────────────────────
+# Holz mixes units by section; the others are uniform per sheet.
+HOLZ_TOPS = [
+    "Massivholz", "Holzplatten", "Dübel- und Rundstäbe",
+    "Schleifmittel", "Holzverbinder und Kleinteile", "Varia",
+]
+HOLZ_BANNERS = ["Massivholz und Holzplatten"]
+HOLZ_EINHEIT = {
+    "Massivholz": "m²", "Holzplatten": "m²", "Dübel- und Rundstäbe": "lm",
+    "Schleifmittel": "Stk", "Holzverbinder und Kleinteile": "Stk", "Varia": "Stk",
+}
 
-def col(letter):  # 'A'->1
-    return openpyxl.utils.column_index_from_string(letter)
+# kind: "holz" = section tree + species-as-subcategory for Massivholz;
+#       "flat" = each section heading is a top category, no sub-category.
+SHEETS = {
+    "Holz":    {"kind": "holz", "seed": "holz.json",    "fresh_base": 3156},
+    "Metall":  {"kind": "flat", "seed": None,           "fresh_base": 2001, "einheit": "lm"},
+    "Keramik": {"kind": "flat", "seed": "keramik.json", "fresh_base": 4216, "einheit": "kg"},
+    "Textil":  {"kind": "flat", "seed": None,           "fresh_base": 7001, "einheit": "Stk"},
+    "Glas":    {"kind": "flat", "seed": "glas.json",    "fresh_base": 5503, "einheit": "Stk"},
+    "Stein":   {"kind": "flat", "seed": None,           "fresh_base": 8001, "einheit": "Stk"},
+    "Schmuck": {"kind": "flat", "seed": None,           "fresh_base": 8501, "einheit": "Stk"},
+}
 
-def norm(s):
-    return re.sub(r"[\s,]+", " ", str(s).strip().lower())
+NOTE_MARKERS = ("Preisliste", "Verkaufspreis =", "Marge", "Bestellliste",
+                "noch offen", "Einkaufspreis")
 
-def fmt_staerke(raw):
-    if raw is None or str(raw).strip() == "":
-        return None
-    s = str(raw).strip()
-    m = re.match(r"^(\d+(?:\.\d+)?)\s*(mm)?$", s)
-    return f"{m.group(1)} mm" if m else s
+report = []
 
-def as_price(v):
-    if v is None:
-        return None
-    try:
-        p = float(v)
-    except (TypeError, ValueError):
-        return None
-    return p if p > 0 else None
 
-# ── load existing catalog for code reuse ──────────────────────────────────────
-def load_seed(name):
-    p = OPS / name if (OPS / name).exists() else SEED / name
-    return json.load(open(p))
+def norm(v):
+    return "" if v is None else str(v).replace("\n", " ").strip()
 
-holz_seed = load_seed("holz.json")
-ker_seed = load_seed("keramik.json")
-holz_by_name = {norm(i["name"]): i["code"] for i in holz_seed}
-holz_max = max(int(i["code"]) for i in holz_seed)
 
-# ── per-sheet parsing ─────────────────────────────────────────────────────────
-# Each parser yields dicts: {row, name, kategorie, unterkategorie, price, model, note}
-report_lines = []
+def key(s):
+    """Match key: collapse whitespace, lowercase."""
+    return re.sub(r"\s+", " ", str(s).strip()).lower()
 
-def parse_holz(ws):
-    PRODUCT, STAERKE, PRICE = col("E"), col("F"), col("L")
-    TOP = {"Massivholz", "Holzplatten", "Dübel- und Rundstäbe", "Schleifmittel", "Varia"}
-    MODEL = {"Massivholz": "area", "Holzplatten": "area",
-             "Dübel- und Rundstäbe": "length", "Schleifmittel": "count", "Varia": "count"}
-    top = sub = None
-    cur_product = None
-    out = []
+
+def norm_mass(raw):
+    """Consistent mass spelling: '24mm'→'24 mm', '15x2mm'→'15 × 2 mm'."""
+    s = re.sub(r"\s+", " ", norm(raw))
+    if not s:
+        return s
+    dim = re.match(
+        r"^(\d+(?:\.\d+)?)\s*[x×X]\s*(\d+(?:\.\d+)?)"
+        r"(?:\s*[x×X]\s*(\d+(?:\.\d+)?))?\s*(mm|cm|m)?$",
+        s,
+    )
+    if dim:
+        nums = [g for g in dim.groups()[:3] if g]
+        return " × ".join(nums) + " " + (dim.group(4) or "mm")
+    single = re.match(r"^(\d+(?:\.\d+)?)\s*(mm|cm|m|g|kg|ml|l)$", s, re.I)
+    if single:
+        return f"{single.group(1)} {single.group(2).lower()}"
+    return s
+
+
+def norm_name(raw):
+    return re.sub(r"\s+", " ", norm(raw))
+
+
+def load_seedmap(fname):
+    """norm(name) → code from the prod (ops) seed, falling back to the public one."""
+    if not fname:
+        return {}
+    path = OPS / fname if (OPS / fname).exists() else SEED / fname
+    if not path.exists():
+        return {}
+    return {key(i["name"]): str(i["code"]) for i in json.load(open(path))}
+
+
+def header_row(ws):
+    for r in range(1, 20):
+        if any("Preis Einheit Verkauf" in norm(ws.cell(r, c).value)
+               for c in range(1, ws.max_column + 1)):
+            return r
+    return None
+
+
+def col_of(ws, hr, label):
+    for c in range(1, ws.max_column + 1):
+        if label in norm(ws.cell(hr, c).value):
+            return c
+    return None
+
+
+def is_note(a):
+    return any(m in a for m in NOTE_MARKERS)
+
+
+def parse_sheet(ws, cfg):
+    """Yield product dicts {row, name, mass, kategorie, unterkategorie, einheit}."""
+    hr = header_row(ws)
+    if hr is None:
+        return [], None, {}
+    cols = {
+        "hr": hr,
+        "produkt": col_of(ws, hr, "Produkt"),
+        "name": col_of(ws, hr, "Etikett Name"),
+        "mass": col_of(ws, hr, "Etikett Mass"),
+        "code": col_of(ws, hr, "Code"),  # None on first run
+    }
+    products = []
+    top = sub = ""
+    # Scan from row 1 so a section title sitting *above* the header row (e.g.
+    # "Tone"/"Siebdruck"/"Blankstahl") still sets the category; only rows below
+    # the header are considered products.
     for r in range(1, ws.max_row + 1):
-        a = ws.cell(r, 1).value
-        price = as_price(ws.cell(r, PRICE).value)
-        only_a = a is not None and price is None and all(
-            ws.cell(r, c).value is None for c in range(2, PRICE + 1))
-        if a == "Produkt" or a == "Anzahl":
+        a = norm(ws.cell(r, 1).value)
+        name = norm(ws.cell(r, cols["name"]).value) if cols["name"] else ""
+        produkt = norm(ws.cell(r, cols["produkt"]).value) if cols["produkt"] else ""
+        # Skip Mario's repeated header blocks mid-sheet.
+        if name == "Etikett Name" or produkt == "Produkt":
             continue
-        if only_a:
-            txt = str(a).strip()
-            if txt in TOP:
-                top, sub = txt, None
-            elif "Verkaufspreis =" in txt or "noch offen" in txt or "Bestellliste" in txt:
-                pass  # margin note / title
+        # A product row is any row below the header carrying a real Etikett Name.
+        if r > hr and name and name != "#N/A":
+            if cfg["kind"] == "holz":
+                kategorie = top
+                unterkategorie = produkt if top == "Massivholz" else sub
+                einheit = HOLZ_EINHEIT.get(top, "Stk")
             else:
-                sub = txt
+                kategorie = top
+                unterkategorie = ""
+                einheit = cfg["einheit"]
+            products.append({
+                "row": r,
+                "name": norm_name(name),
+                "mass": norm_mass(ws.cell(r, cols["mass"]).value) if cols["mass"] else "",
+                "kategorie": kategorie or "Sonstiges",
+                "unterkategorie": unterkategorie,
+                "einheit": einheit,
+            })
             continue
-        if top is None or price is None:
-            continue
-        e = ws.cell(r, PRODUCT).value
-        if e is not None:
-            cur_product = str(e).strip()
-        if cur_product is None:
-            continue
-        staerke = fmt_staerke(ws.cell(r, STAERKE).value)
-        name = f"{cur_product} {staerke}" if staerke else cur_product
-        # Schleifmittel repeats the same grit ("Korn 60") under several
-        # sub-headings (Excenter / Rutscher / …) — those are *different*
-        # products, so fold the sub-heading into the name to keep it unique.
-        if top == "Schleifmittel" and sub:
-            name = f"{sub} {name}"
-        # Massivholz: species (the product) is the sub-category, matching the
-        # existing catalog's ["Massivholz", "<species>"] grouping.
-        unter = cur_product if top == "Massivholz" else (sub or "")
-        out.append(dict(row=r, name=name, kategorie=top, unterkategorie=unter,
-                        price=round(price, 2), model=MODEL[top], note=""))
-    return out
-
-def parse_metall(ws):
-    A_B, A, B, STAERKE, PRODUCT, GRADE, PRICE = col("C"), col("C"), col("D"), col("E"), col("F"), col("F"), col("L")
-    top = None
-    out = []
-    for r in range(1, ws.max_row + 1):
-        a = ws.cell(r, 1).value
-        price = as_price(ws.cell(r, PRICE).value)
-        # heading: col A populated, no price (covers "Rundstahl..." sub-heads too)
-        if a is not None and price is None and a not in ("Anzahl",):
-            txt = str(a).strip()
-            if "Verkaufspreis =" in txt or "Bestellliste" in txt:
-                continue
-            top = txt
-            continue
-        if top is None or price is None:
-            continue
-        aa = ws.cell(r, A).value
-        bb = ws.cell(r, B).value
-        st = ws.cell(r, STAERKE).value
-        dims = "×".join(str(x).strip() for x in (aa, bb, st) if x is not None and str(x).strip() != "")
-        name = f"{top} {dims}".strip()
-        grade = ws.cell(r, GRADE).value
-        out.append(dict(row=r, name=name, kategorie=top, unterkategorie="",
-                        price=round(price, 2), model="length",
-                        note=f"Stahl: {grade}" if grade else ""))
-    return out
-
-def parse_keramik(ws):
-    PRODUCT, BESCHRIEB, PRICE = col("C"), col("D"), col("J")
-    top = None
-    out = []
-    for r in range(1, ws.max_row + 1):
-        a = ws.cell(r, 1).value
-        c = ws.cell(r, PRODUCT).value
-        price = as_price(ws.cell(r, PRICE).value)
-        if a is not None and c is None:
-            txt = str(a).strip()
-            if "Verkaufspreis =" in txt or "Bestellliste" in txt:
-                continue
-            top = txt
-            continue
-        if c is None or price is None:
-            continue
-        d = ws.cell(r, BESCHRIEB).value
-        name = f"{str(c).strip()}, {str(d).strip()}" if d else str(c).strip()
-        out.append(dict(row=r, name=name, kategorie=top or "Tone", unterkategorie="",
-                        price=round(price, 2), model="weight", note="", product=str(c).strip()))
-    return out
-
-def parse_textil(ws):
-    PRODUCT, BESCHRIEB, FORMAT, PRICE = col("C"), col("D"), col("E"), col("L")
-    top = None
-    out = []
-    for r in range(1, ws.max_row + 1):
-        a = ws.cell(r, 1).value
-        c = ws.cell(r, PRODUCT).value
-        price = as_price(ws.cell(r, PRICE).value)
-        if a is not None and c is None:
-            txt = str(a).strip()
-            if "Verkaufspreis =" in txt or "Bestellliste" in txt:
-                continue
-            top = txt
-            continue
-        if c is None or price is None:
-            continue
-        fmt = ws.cell(r, FORMAT).value
-        name = f"{str(c).strip()} {str(fmt).strip()}" if fmt else str(c).strip()
-        out.append(dict(row=r, name=name, kategorie=top or "Textil", unterkategorie="",
-                        price=round(price, 2), model="count", note=""))
-    return out
-
-# ── code assignment ───────────────────────────────────────────────────────────
-def assign_codes(rows, sheet):
-    global holz_max
-    if sheet == "Holz BL":
-        nxt = holz_max + 1
-        used = set()  # guard against assigning the same code to two rows
-        matched = new = 0
-        for row in rows:
-            code = holz_by_name.get(norm(row["name"]))
-            if code and code not in used:
-                matched += 1
+        # Otherwise a heading iff col A carries non-note text.
+        if a and not is_note(a) and a not in HOLZ_BANNERS:
+            if cfg["kind"] == "holz":
+                if a in HOLZ_TOPS:
+                    top, sub = a, ""
+                else:
+                    sub = a
             else:
-                code = str(nxt); nxt += 1; new += 1
-                row["note"] = (row["note"] + " · NEU (kein Match im Katalog)").strip(" ·")
-            row["code"] = code; used.add(code)
-        report_lines.append(f"**Holz**: {len(rows)} Zeilen — {matched} mit bestehendem Code, {new} neu ({holz_max+1}–{nxt-1}).")
-    elif sheet == "Keramik BL":
-        # match clay by product token appearing in existing catalog name
-        ops_codes = [(i["code"], norm(i["name"])) for i in ker_seed]
-        used = set()
-        nxt = max(int(i["code"]) for i in ker_seed) + 1
-        matched = new = 0
-        for row in rows:
-            tok = norm(row.get("product", row["name"]))
-            hit = next((cd for cd, nm in ops_codes if cd not in used and (nm.startswith(tok) or tok in nm)), None)
-            if hit:
-                row["code"] = hit; used.add(hit); matched += 1
-            else:
-                row["code"] = str(nxt); nxt += 1; new += 1
-                row["note"] = (row["note"] + " · NEU/prüfen").strip(" ·")
-        report_lines.append(f"**Keramik**: {len(rows)} Zeilen — {matched} per Produkt-Token gematcht, {new} neu/prüfen.")
-    elif sheet == "Metall BL":
-        nxt = 2001
-        for row in rows:
-            row["code"] = str(nxt); nxt += 1
-        report_lines.append(f"**Metall**: {len(rows)} Zeilen — neue Codes 2001–{nxt-1}. Namen aus Profil+Mass synthetisiert; Hierarchie bitte prüfen.")
-    elif sheet == "Textil BL":
-        nxt = 7001
-        for row in rows:
-            row["code"] = str(nxt); nxt += 1
-        report_lines.append(f"**Textil**: {len(rows)} Zeilen — neue Codes 7001–{nxt-1}.")
-    return rows
+                top, sub = a, ""
+    return products, cols, {}
 
-# ── write columns into the workbook ───────────────────────────────────────────
-def last_content_col(ws, header_row):
+
+def assign_codes(sheet, products, cfg):
+    seedmap = load_seedmap(cfg["seed"])
+    used = set()
+    nxt = cfg["fresh_base"]
+    matched = new = 0
+    for p in products:
+        k = key(f"{p['name']} {p['mass']}".strip())
+        code = seedmap.get(k)
+        if code and code not in used:
+            matched += 1
+        else:
+            code = str(nxt)
+            nxt += 1
+            new += 1
+        p["code"] = code
+        used.add(code)
+    return matched, new
+
+
+def last_content_col(ws, hr):
     last = 1
     for c in range(1, ws.max_column + 1):
-        if ws.cell(header_row, c).value is not None:
+        if norm(ws.cell(hr, c).value):
             last = c
     return last
 
-PARSERS = {"Holz BL": (parse_holz, 8), "Metall BL": (parse_metall, 6),
-           "Keramik BL": (parse_keramik, 6), "Textil BL": (parse_textil, 6)}
 
 def main():
-    wb_vals = openpyxl.load_workbook(SRC, data_only=True)   # read values
-    wb = openpyxl.load_workbook(SRC, data_only=False)        # preserve formulas for write
+    wb_vals = openpyxl.load_workbook(SRC, data_only=True)
+    wb = openpyxl.load_workbook(SRC, data_only=False)
+
     total = 0
-    skipped_report = []
-    for sheet, (parser, header_row) in PARSERS.items():
-        rows = parser(wb_vals[sheet])
-        rows = assign_codes(rows, sheet)
+    for sheet, cfg in SHEETS.items():
+        products, cols, _ = parse_sheet(wb_vals[sheet], cfg)
+        if not products:
+            report.append(f"**{sheet}**: keine Produkte mit `Etikett Name` — übersprungen.")
+            continue
+        matched, new = assign_codes(sheet, products, cfg)
+        total += len(products)
+
         ws = wb[sheet]
-        anchor = last_content_col(wb_vals[sheet], header_row) + 2  # gap col between
-        headers = ["Code", "Name", "Kategorie", "Unterkategorie", "Einheit"]
+        hr = cols["hr"]
+        anchor = last_content_col(wb_vals[sheet], hr) + 2  # blank gap column
+        headers = ["Code", "Kategorie", "Unterkategorie", "Einheit"]
         for i, h in enumerate(headers):
-            ws.cell(header_row, anchor + i, h)
-        for row in rows:
-            r = row["row"]
-            ws.cell(r, anchor + 0, row["code"])
-            ws.cell(r, anchor + 1, row["name"])
-            ws.cell(r, anchor + 2, row["kategorie"])
-            ws.cell(r, anchor + 3, row["unterkategorie"])
-            ws.cell(r, anchor + 4, MODEL_TO_EINHEIT.get(row["model"], "Stk"))
-        total += len(rows)
-        letter = openpyxl.utils.get_column_letter(anchor)
-        report_lines.append(f"  ↳ Spalten Code/Name/Kategorie/Unterkategorie/Einheit ab Spalte **{letter}** in *{sheet}*.\n")
+            ws.cell(hr, anchor + i, h)
+
+        label_edits = 0
+        cat_samples = {}
+        for p in products:
+            r = p["row"]
+            # Write cleaned labels back into Mario's Etikett cells.
+            if cols["name"]:
+                if norm(wb_vals[sheet].cell(r, cols["name"]).value) != p["name"]:
+                    label_edits += 1
+                ws.cell(r, cols["name"], p["name"])
+            if cols["mass"]:
+                if norm(wb_vals[sheet].cell(r, cols["mass"]).value) != p["mass"]:
+                    label_edits += 1
+                ws.cell(r, cols["mass"], p["mass"])
+            ws.cell(r, anchor + 0, p["code"])
+            ws.cell(r, anchor + 1, p["kategorie"])
+            ws.cell(r, anchor + 2, p["unterkategorie"])
+            ws.cell(r, anchor + 3, p["einheit"])
+            cat = " / ".join(x for x in (p["kategorie"], p["unterkategorie"]) if x)
+            cat_samples.setdefault(cat, p["code"])
+
+        letter = get_column_letter(anchor)
+        codes = sorted(int(p["code"]) for p in products)
+        report.append(
+            f"**{sheet}**: {len(products)} Produkte — {matched} mit bestehendem Code, "
+            f"{new} neu. Codes {codes[0]}–{codes[-1]}. "
+            f"Spalten ab **{letter}**. {label_edits} Etikett-Zellen normalisiert."
+        )
+        report.append("  Kategorien: " + ", ".join(sorted(cat_samples)) + "\n")
+
     wb.save(OUT)
-    # report
-    md = ["# Preislisten-Bootstrap — Reconciliation\n",
-          f"Quelle: `{SRC.name}`  →  Ausgabe: `{OUT.name}`\n",
-          f"**{total} importierbare Zeilen** über 4 Werkstätten.\n",
-          "## Code-Zuteilung\n"] + report_lines + [
-          "\n## Annahmen / bitte prüfen\n",
-          "- **Metall**: Spalte F ist die Stahlsorte (kein Produktname). Namen wurden aus Überschrift + Mass synthetisiert (z. B. `Flachstahl 15×2`). Stahlsorte wandert in die Beschreibung. Kategorie-Hierarchie (ist *Blankstahl* übergeordnet?) konnte ich nicht eindeutig ableiten — alle Überschriften wurden als Top-Kategorie gesetzt.\n",
-          "- **Metall/Textil**: Zeilen mit Preis 0 oder `#DIV/0!` wurden übersprungen (Daten noch nicht fertig).\n",
-          "- **Massivholz**: Unterkategorie = Holzart (entspricht dem bestehenden Katalog, keine Änderung).\n",
-          "- **Holzplatten/Dübel/Schleifmittel**: bestehende 3-stufige Kategorien werden auf 2 Stufen vereinfacht — beim Import als Änderung sichtbar.\n",
-          "- **Codes sind ab jetzt stabil**: nicht umnummerieren/wiederverwenden. Neue Produkte = nächste freie Nummer.\n"]
+
+    md = [
+        "# Preislisten-Bootstrap — Reconciliation\n",
+        f"Quelle: `{SRC.name}`  →  Ausgabe: `{OUT.name}`\n",
+        f"**{total} importierbare Zeilen.**\n",
+        "## Pro Werkstatt\n",
+        *[f"- {line}" for line in report],
+        "\n## Hinweise\n",
+        "- Codes sind ab jetzt stabil — nicht umnummerieren/wiederverwenden.\n",
+        "- Glas/Stein/Schmuck: derzeit keine gültigen Produktzeilen (leer bzw. `#N/A`).\n",
+        "- Preise stehen in Marios `Preis Einheit Verkauf` — vor dem Import in Excel "
+        "öffnen und speichern, damit die Formeln berechnet sind.\n",
+        "- Etikett Name/Mass wurden vereinheitlicht (bitte im File gegenlesen).\n",
+    ]
     REPORT.write_text("".join(md))
     print("".join(md))
     print(f"\n✓ geschrieben: {OUT}")
+
 
 if __name__ == "__main__":
     main()
