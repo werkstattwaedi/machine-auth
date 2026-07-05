@@ -2,11 +2,16 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Client-side camt.053 (bank statement) parsing + matching for the
- * Rechnungen statement import. Our QR-bills carry SCOR references
- * (ISO 11649, "RF.." — see functions/src/invoice/scor_reference.ts), so a
- * credit entry's creditor reference resolves directly to a bill's
- * `referenceNumber`.
+ * Client-side statement parsing + matching for the Rechnungen statement
+ * import. Two upload formats resolve to the same shape:
+ *
+ *  - camt.053 XML (bank / QR-Rechnung) — payments arrive on the IBAN.
+ *  - RaiseNow TWINT export (CSV) — the "Kreditor-Referenz" column carries
+ *    the same reference.
+ *
+ * Our QR-bills carry SCOR references (ISO 11649, "RF.." — see
+ * functions/src/invoice/scor_reference.ts), so an entry's creditor
+ * reference resolves directly to a bill's `referenceNumber`.
  */
 
 export interface StatementEntry {
@@ -21,8 +26,12 @@ export interface StatementEntry {
   debtorName: string | null
 }
 
+/** Which channel the statement covers — determines the booked `paidVia`. */
+export type StatementKind = "camt" | "twint"
+
 /** Statement-level metadata + credit entries. */
 export interface ParsedStatement {
+  kind: StatementKind
   entries: StatementEntry[]
   /** Statement period end ("abgeglichen bis"), when present. */
   toDateMs: number | null
@@ -87,9 +96,139 @@ export function parseCamt053(xml: string): ParsedStatement {
   const toDateMs = toText ? Date.parse(toText) : NaN
 
   return {
+    kind: "camt",
     entries,
     toDateMs: Number.isFinite(toDateMs) ? toDateMs : null,
   }
+}
+
+/**
+ * Parse a RaiseNow TWINT export (CSV). Columns are matched by header
+ * text, not position — RaiseNow adds/reorders columns between exports.
+ * Only `succeeded` payments are returned; the "Kreditor-Referenz" column
+ * carries our SCOR reference. "Abgeglichen bis" is the newest payment's
+ * creation time (the export has no explicit period).
+ */
+export function parseRaiseNowCsv(csv: string): ParsedStatement {
+  const rows = parseCsv(csv)
+  if (rows.length < 2) {
+    throw new Error("TWINT-Export enthält keine Zahlungen.")
+  }
+  const header = rows[0].map((h) => h.trim())
+  const col = (name: string) => header.indexOf(name)
+  const statusCol = col("Status")
+  const referenceCol = col("Kreditor-Referenz")
+  const amountCol = col("Betrag")
+  if (statusCol < 0 || referenceCol < 0 || amountCol < 0) {
+    throw new Error(
+      "Datei ist kein RaiseNow-TWINT-Export (Spalten Status / Kreditor-Referenz / Betrag fehlen).",
+    )
+  }
+  const createdCol = col("Erstellt")
+  const firstNameCol = col("Vorname")
+  const lastNameCol = col("Nachname")
+  const nameCol = col("Name")
+
+  const entries: StatementEntry[] = []
+  let latestMs: number | null = null
+  for (const row of rows.slice(1)) {
+    if (row.every((cell) => cell.trim() === "")) continue
+    if (row[statusCol]?.trim().toLowerCase() !== "succeeded") continue
+    const amount = parseFloat(row[amountCol]?.replace(/'/g, "") ?? "")
+    if (!Number.isFinite(amount)) continue
+    const reference = row[referenceCol]?.replace(/\s+/g, "") || null
+    const bookingDateMs = createdCol >= 0 ? parseRaiseNowDate(row[createdCol]) : null
+    const debtorName =
+      [row[firstNameCol], row[lastNameCol]]
+        .filter((part) => part && part.trim())
+        .join(" ")
+        .trim() ||
+      (nameCol >= 0 ? row[nameCol]?.trim() : "") ||
+      null
+    if (bookingDateMs != null && (latestMs == null || bookingDateMs > latestMs)) {
+      latestMs = bookingDateMs
+    }
+    entries.push({
+      amount,
+      currency: "CHF",
+      bookingDateMs,
+      reference,
+      debtorName,
+    })
+  }
+  return { kind: "twint", entries, toDateMs: latestMs }
+}
+
+/** RaiseNow "Erstellt" format: `07/05/2026 10:14:26 PM` (MM/DD/YYYY, 12h). */
+function parseRaiseNowDate(raw: string | undefined): number | null {
+  if (!raw) return null
+  const m = raw
+    .trim()
+    .match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?: (\d{1,2}):(\d{2})(?::(\d{2}))? ?(AM|PM)?)?$/i)
+  if (!m) return null
+  const [, month, day, year, hour, minute, second, meridiem] = m
+  let h = Number(hour ?? 0)
+  if (meridiem?.toUpperCase() === "PM" && h < 12) h += 12
+  if (meridiem?.toUpperCase() === "AM" && h === 12) h = 0
+  const ms = new Date(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    h,
+    Number(minute ?? 0),
+    Number(second ?? 0),
+  ).getTime()
+  return Number.isFinite(ms) ? ms : null
+}
+
+/** Minimal RFC-4180 CSV parser (quoted fields, embedded commas/newlines). */
+function parseCsv(text: string): string[][] {
+  const rows: string[][] = []
+  let row: string[] = []
+  let field = ""
+  let inQuotes = false
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') {
+          field += '"'
+          i++
+        } else {
+          inQuotes = false
+        }
+      } else {
+        field += ch
+      }
+    } else if (ch === '"') {
+      inQuotes = true
+    } else if (ch === ",") {
+      row.push(field)
+      field = ""
+    } else if (ch === "\n" || ch === "\r") {
+      if (ch === "\r" && text[i + 1] === "\n") i++
+      row.push(field)
+      field = ""
+      rows.push(row)
+      row = []
+    } else {
+      field += ch
+    }
+  }
+  if (field !== "" || row.length > 0) {
+    row.push(field)
+    rows.push(row)
+  }
+  return rows
+}
+
+/**
+ * Dispatch on file content: XML → camt.053, otherwise a RaiseNow TWINT
+ * CSV. Throws a German message when neither format matches.
+ */
+export function parseStatementFile(text: string): ParsedStatement {
+  if (text.trimStart().startsWith("<")) return parseCamt053(text)
+  return parseRaiseNowCsv(text)
 }
 
 /**

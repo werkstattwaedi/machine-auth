@@ -11,17 +11,21 @@ import {
   ADMIN_EMAIL,
   BILL_OPEN_ID,
   BILL_OPEN_REFERENCE,
+  BILL_OVERDUE_ID,
+  BILL_OVERDUE_REFERENCE,
 } from "./global-setup"
 
 test.describe("Rechnungen workspace", () => {
   test.beforeEach(async () => {
     await clearCollections("loginCodes")
-    // The mark-paid flow mutates the open bill — reset it.
+    // The mark-paid / import flows mutate these bills — reset them.
     const db = getAdminFirestore()
-    await db
-      .collection("bills")
-      .doc(BILL_OPEN_ID)
-      .set({ paidAt: null, paidVia: null }, { merge: true })
+    for (const billId of [BILL_OPEN_ID, BILL_OVERDUE_ID]) {
+      await db
+        .collection("bills")
+        .doc(billId)
+        .set({ paidAt: null, paidVia: null }, { merge: true })
+    }
   })
 
   test("invoice list shows statuses, filters and screenshot", async ({
@@ -142,7 +146,7 @@ test.describe("Rechnungen workspace", () => {
 
     // One matched, one unmatched. (No currency amounts in regex matchers:
     // formatCHF emits a non-breaking space, which regexes see raw.)
-    await expect(page.getByText("2 Gutschriften erkannt")).toBeVisible()
+    await expect(page.getByText(/Bank \(camt\.053\) · 2 Zahlungen erkannt/)).toBeVisible()
     await expect(page.getByText(/1 zugeordnet ·/)).toBeVisible()
     await expect(page.getByText("— fehlt —")).toBeVisible()
 
@@ -154,6 +158,39 @@ test.describe("Rechnungen workspace", () => {
     const snap = await db.collection("bills").doc(BILL_OPEN_ID).get()
     expect(snap.data()?.paidVia).toBe("ebanking")
     expect(snap.data()?.paidAt?.toDate().toISOString()).toContain("2026-07-02")
+  })
+
+  test("statement import books a RaiseNow TWINT export as twint", async ({
+    page,
+  }) => {
+    await signInWithEmailCode(page, ADMIN_EMAIL)
+    await page.goto("/invoices/import")
+
+    // RaiseNow export shape (real columns); the pending row must be
+    // ignored, the succeeded one resolves via Kreditor-Referenz.
+    const reference = validScorFor(BILL_OVERDUE_REFERENCE)
+    const csv = [
+      "Status,Identifikationsnummer,Erstellt,Betrag,Touchpoint-Name,Kreditor-Referenz,Name,Vorname,Nachname,E-Mail-Adresse",
+      `succeeded,19132375-a397-4267-a2ef-04f30e13f96b,07/03/2026 10:14:26 PM,40.00,Self Checkout,${reference},,Anna,Architektin,anna@werkstattwaedi.ch`,
+      `pending,5c1f0000-0000-0000-0000-000000000000,07/04/2026 08:00:00 AM,12.00,Self Checkout,RF18539007547034,,Beat,Widmer,beat@example.ch`,
+    ].join("\n")
+
+    await page.locator('input[type="file"]').setInputFiles({
+      name: "raisenow-twint.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.from(csv),
+    })
+
+    await expect(page.getByText(/TWINT · 1 Zahlungen erkannt/)).toBeVisible()
+    await expect(page.getByText(/1 zugeordnet ·/)).toBeVisible()
+
+    await page.getByRole("button", { name: "Zahlungen buchen" }).click()
+    await expect(page.getByText("1 Zahlungen gebucht.")).toBeVisible()
+
+    const db = getAdminFirestore()
+    const snap = await db.collection("bills").doc(BILL_OVERDUE_ID).get()
+    expect(snap.data()?.paidVia).toBe("twint")
+    expect(snap.data()?.paidAt?.toDate().toISOString()).toContain("2026-07-03")
   })
 })
 

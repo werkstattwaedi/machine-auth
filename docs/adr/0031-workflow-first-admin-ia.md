@@ -64,17 +64,20 @@ query constraints at runtime are keyed by the filter value because
   catalog `modifiedAt` to flag stale Aushänge.
 - `adminMarkBillsPaid` callable (billingCall) — the only payment-booking
   write path; bills stay client-write-denied. Used by manual bulk mark-paid
-  and the camt.053 statement import (client-side XML parse, SCOR reference
-  matching per ISO 11649).
+  and the statement import (client-side parse, SCOR reference matching per
+  ISO 11649). Two upload formats: camt.053 XML (booked as `ebanking`) and
+  the RaiseNow TWINT CSV export, matched by header text on its
+  `Kreditor-Referenz` / `Status` / `Betrag` columns (booked as `twint`;
+  only `succeeded` rows count).
 
 ## Consequences
 
 - Admin flows (question at the counter, machine defect, statement booking,
   price-list refresh) each start from one nav entry and stay in one
   workspace; the raw-table pages are gone.
-- Bills can now be marked paid from the UI; reconciliation is
-  camt.053-only. TWINT exports and a "Zahlung ausstehend" state (needs
-  persistent per-channel reconciliation coverage) are deliberate follow-ups.
+- Bills can now be marked paid from the UI; reconciliation covers bank
+  (camt.053) and TWINT (RaiseNow CSV). A "Zahlung ausstehend" state (needs
+  persistent per-channel reconciliation coverage) is a deliberate follow-up.
 - Overdue is derived (created + 30 d, no stored due date) — mirrors the
   invoice PDF's payment terms.
 - The e2e suite seeds a full workflow dataset (machines, reports, visits,

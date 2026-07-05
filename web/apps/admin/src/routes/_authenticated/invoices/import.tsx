@@ -1,10 +1,11 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-// Kontoauszug abgleichen — upload a camt.053 bank export, match the QR
-// (SCOR) references against open invoices, review, then book all matched
-// payments in one step. Unmatched payments stay listed for manual
-// handling. TWINT exports are not supported yet (no stable format).
+// Kontoauszug abgleichen — upload a camt.053 bank export or a RaiseNow
+// TWINT export (CSV), match the SCOR references against open invoices,
+// review, then book all matched payments in one step (paidVia follows
+// the upload's channel). Unmatched payments stay listed for manual
+// handling.
 
 import { createFileRoute } from "@tanstack/react-router"
 import { useMemo, useState } from "react"
@@ -21,7 +22,7 @@ import { StatCards } from "@/components/admin/stat-cards"
 import type { MarkBillsPaidResult } from "@/components/admin/mark-paid-dialog"
 import {
   matchStatement,
-  parseCamt053,
+  parseStatementFile,
   type MatchResult,
   type ParsedStatement,
 } from "@/lib/camt"
@@ -93,14 +94,17 @@ function StatementImportPage() {
     setBooked(false)
     try {
       const text = await file.text()
-      setParsed(parseCamt053(text))
+      setParsed(parseStatementFile(text))
     } catch (err) {
       setParseError(err instanceof Error ? err.message : String(err))
     }
   }
 
   const handleBook = async () => {
-    if (!result || result.matched.length === 0) return
+    if (!result || !parsed || result.matched.length === 0) return
+    // The upload's channel decides the booked payment method: bank
+    // exports book as e-banking, RaiseNow exports as TWINT.
+    const paidVia = parsed.kind === "twint" ? "twint" : "ebanking"
     let res: MarkBillsPaidResult
     try {
       res = await book.mutate(async () => {
@@ -108,7 +112,7 @@ function StatementImportPage() {
           {
             bills: {
               billId: string
-              paidVia: "ebanking"
+              paidVia: "ebanking" | "twint"
               paidAtMs?: number
             }[]
           },
@@ -117,7 +121,7 @@ function StatementImportPage() {
         const out = await fn({
           bills: result.matched.map((m) => ({
             billId: m.bill.id,
-            paidVia: "ebanking",
+            paidVia,
             paidAtMs: m.entry.bookingDateMs ?? undefined,
           })),
         })
@@ -148,12 +152,12 @@ function StatementImportPage() {
           <Button asChild variant="outline">
             <span>
               <FileUp className="mr-2 h-4 w-4" />
-              camt.053 auswählen
+              Datei auswählen
             </span>
           </Button>
           <input
             type="file"
-            accept=".xml,text/xml,application/xml"
+            accept=".xml,.csv,text/xml,application/xml,text/csv"
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0]
@@ -163,16 +167,17 @@ function StatementImportPage() {
           <span className="text-sm text-muted-foreground">
             {fileName ?? "Keine Datei gewählt"}
             {parsed &&
-              ` · ${parsed.entries.length} Gutschriften erkannt` +
+              ` · ${parsed.kind === "twint" ? "TWINT" : "Bank (camt.053)"}` +
+                ` · ${parsed.entries.length} Zahlungen erkannt` +
                 (parsed.toDateMs
                   ? ` · bis ${formatDate(Timestamp.fromMillis(parsed.toDateMs))}`
                   : "")}
           </span>
         </label>
         <p className="mt-2 text-xs text-muted-foreground">
-          Bank-Export im camt.053-Format (XML). TWINT-Exporte werden noch
-          nicht unterstützt — TWINT-Zahlungen in der Liste manuell als
-          bezahlt markieren.
+          Bank-Export im camt.053-Format (XML) oder RaiseNow-TWINT-Export
+          (CSV). Zugeordnete Zahlungen werden entsprechend als E-Banking
+          bzw. TWINT verbucht.
         </p>
       </Card>
 
