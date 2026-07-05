@@ -8,33 +8,29 @@ import {
 } from "@modules/components/authenticated-layout"
 import { LookupProvider } from "@modules/lib/lookup"
 import {
-  BadgeCheck,
-  Cpu,
   ClipboardList,
+  Cpu,
   FileText,
-  Key,
-  List,
-  Monitor,
+  History,
   Package,
-  Receipt,
-  Shield,
+  Users,
 } from "lucide-react"
 
 export const Route = createFileRoute("/_authenticated")({
   component: AdminAuthenticatedLayout,
 })
 
+// Workflow-first nav: the four workspaces an admin starts a task in,
+// then the shared secondary tables (deep-link targets). The nav does NOT
+// mirror the database — supporting entities (memberships, permissions,
+// terminals, price lists) live inside their workspace.
 const navItems: AuthenticatedLayoutNavItem[] = [
-  { to: "/users", label: "Benutzer", icon: Shield },
-  { to: "/memberships", label: "Mitgliedschaften", icon: BadgeCheck },
+  { to: "/users", label: "Personen", icon: Users },
   { to: "/machines", label: "Maschinen", icon: Cpu },
-  { to: "/permissions", label: "Berechtigungen", icon: Key },
-  { to: "/terminals", label: "Terminals", icon: Monitor },
-  { to: "/sessions", label: "Sitzungen", icon: ClipboardList },
-  { to: "/checkouts", label: "Checkouts", icon: Receipt },
-  { to: "/materials", label: "Materialien", icon: Package },
-  { to: "/price-lists", label: "Preislisten", icon: List },
-  { to: "/audit", label: "Audit Log", icon: FileText },
+  { to: "/materials", label: "Inventar", icon: Package },
+  { to: "/visits", label: "Besuche", icon: ClipboardList },
+  { to: "/usages", label: "Nutzungen", icon: History },
+  { to: "/audit", label: "Audit-Log", icon: FileText },
 ]
 
 function AdminAuthenticatedLayout() {

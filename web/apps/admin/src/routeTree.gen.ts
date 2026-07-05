@@ -15,21 +15,23 @@ import { Route as AuthenticatedRouteImport } from "./routes/_authenticated"
 import { Route as IndexRouteImport } from "./routes/index"
 import { Route as LoginVerifyRouteImport } from "./routes/login_.verify"
 import { Route as TestLabelPreviewRouteImport } from "./routes/_test.label-preview"
+import { Route as AuthenticatedVisitsRouteImport } from "./routes/_authenticated/visits"
 import { Route as AuthenticatedUsersRouteImport } from "./routes/_authenticated/users"
+import { Route as AuthenticatedUsagesRouteImport } from "./routes/_authenticated/usages"
 import { Route as AuthenticatedTerminalsRouteImport } from "./routes/_authenticated/terminals"
-import { Route as AuthenticatedSessionsRouteImport } from "./routes/_authenticated/sessions"
 import { Route as AuthenticatedPriceListsRouteImport } from "./routes/_authenticated/price-lists"
 import { Route as AuthenticatedPermissionsRouteImport } from "./routes/_authenticated/permissions"
 import { Route as AuthenticatedMaterialsRouteImport } from "./routes/_authenticated/materials"
 import { Route as AuthenticatedMachinesRouteImport } from "./routes/_authenticated/machines"
-import { Route as AuthenticatedCheckoutsRouteImport } from "./routes/_authenticated/checkouts"
 import { Route as AuthenticatedAuditRouteImport } from "./routes/_authenticated/audit"
+import { Route as AuthenticatedVisitsIndexRouteImport } from "./routes/_authenticated/visits/index"
 import { Route as AuthenticatedUsersIndexRouteImport } from "./routes/_authenticated/users/index"
 import { Route as AuthenticatedPriceListsIndexRouteImport } from "./routes/_authenticated/price-lists/index"
 import { Route as AuthenticatedPermissionsIndexRouteImport } from "./routes/_authenticated/permissions/index"
 import { Route as AuthenticatedMembershipsIndexRouteImport } from "./routes/_authenticated/memberships/index"
 import { Route as AuthenticatedMaterialsIndexRouteImport } from "./routes/_authenticated/materials/index"
 import { Route as AuthenticatedMachinesIndexRouteImport } from "./routes/_authenticated/machines/index"
+import { Route as AuthenticatedVisitsCheckoutIdRouteImport } from "./routes/_authenticated/visits/$checkoutId"
 import { Route as AuthenticatedUsersUserIdRouteImport } from "./routes/_authenticated/users/$userId"
 import { Route as AuthenticatedPriceListsPriceListIdRouteImport } from "./routes/_authenticated/price-lists/$priceListId"
 import { Route as AuthenticatedPermissionsPermissionIdRouteImport } from "./routes/_authenticated/permissions/$permissionId"
@@ -67,19 +69,24 @@ const TestLabelPreviewRoute = TestLabelPreviewRouteImport.update({
   path: "/label-preview",
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedVisitsRoute = AuthenticatedVisitsRouteImport.update({
+  id: "/visits",
+  path: "/visits",
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedUsersRoute = AuthenticatedUsersRouteImport.update({
   id: "/users",
   path: "/users",
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedUsagesRoute = AuthenticatedUsagesRouteImport.update({
+  id: "/usages",
+  path: "/usages",
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedTerminalsRoute = AuthenticatedTerminalsRouteImport.update({
   id: "/terminals",
   path: "/terminals",
-  getParentRoute: () => AuthenticatedRoute,
-} as any)
-const AuthenticatedSessionsRoute = AuthenticatedSessionsRouteImport.update({
-  id: "/sessions",
-  path: "/sessions",
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedPriceListsRoute = AuthenticatedPriceListsRouteImport.update({
@@ -103,16 +110,17 @@ const AuthenticatedMachinesRoute = AuthenticatedMachinesRouteImport.update({
   path: "/machines",
   getParentRoute: () => AuthenticatedRoute,
 } as any)
-const AuthenticatedCheckoutsRoute = AuthenticatedCheckoutsRouteImport.update({
-  id: "/checkouts",
-  path: "/checkouts",
-  getParentRoute: () => AuthenticatedRoute,
-} as any)
 const AuthenticatedAuditRoute = AuthenticatedAuditRouteImport.update({
   id: "/audit",
   path: "/audit",
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedVisitsIndexRoute =
+  AuthenticatedVisitsIndexRouteImport.update({
+    id: "/",
+    path: "/",
+    getParentRoute: () => AuthenticatedVisitsRoute,
+  } as any)
 const AuthenticatedUsersIndexRoute = AuthenticatedUsersIndexRouteImport.update({
   id: "/",
   path: "/",
@@ -147,6 +155,12 @@ const AuthenticatedMachinesIndexRoute =
     id: "/",
     path: "/",
     getParentRoute: () => AuthenticatedMachinesRoute,
+  } as any)
+const AuthenticatedVisitsCheckoutIdRoute =
+  AuthenticatedVisitsCheckoutIdRouteImport.update({
+    id: "/$checkoutId",
+    path: "/$checkoutId",
+    getParentRoute: () => AuthenticatedVisitsRoute,
   } as any)
 const AuthenticatedUsersUserIdRoute =
   AuthenticatedUsersUserIdRouteImport.update({
@@ -196,14 +210,14 @@ export interface FileRoutesByFullPath {
   "/link-account": typeof LinkAccountRoute
   "/login": typeof LoginRoute
   "/audit": typeof AuthenticatedAuditRoute
-  "/checkouts": typeof AuthenticatedCheckoutsRoute
   "/machines": typeof AuthenticatedMachinesRouteWithChildren
   "/materials": typeof AuthenticatedMaterialsRouteWithChildren
   "/permissions": typeof AuthenticatedPermissionsRouteWithChildren
   "/price-lists": typeof AuthenticatedPriceListsRouteWithChildren
-  "/sessions": typeof AuthenticatedSessionsRoute
   "/terminals": typeof AuthenticatedTerminalsRoute
+  "/usages": typeof AuthenticatedUsagesRoute
   "/users": typeof AuthenticatedUsersRouteWithChildren
+  "/visits": typeof AuthenticatedVisitsRouteWithChildren
   "/label-preview": typeof TestLabelPreviewRoute
   "/login/verify": typeof LoginVerifyRoute
   "/machines/$machineId": typeof AuthenticatedMachinesMachineIdRoute
@@ -213,21 +227,22 @@ export interface FileRoutesByFullPath {
   "/permissions/$permissionId": typeof AuthenticatedPermissionsPermissionIdRoute
   "/price-lists/$priceListId": typeof AuthenticatedPriceListsPriceListIdRoute
   "/users/$userId": typeof AuthenticatedUsersUserIdRoute
+  "/visits/$checkoutId": typeof AuthenticatedVisitsCheckoutIdRoute
   "/machines/": typeof AuthenticatedMachinesIndexRoute
   "/materials/": typeof AuthenticatedMaterialsIndexRoute
   "/memberships/": typeof AuthenticatedMembershipsIndexRoute
   "/permissions/": typeof AuthenticatedPermissionsIndexRoute
   "/price-lists/": typeof AuthenticatedPriceListsIndexRoute
   "/users/": typeof AuthenticatedUsersIndexRoute
+  "/visits/": typeof AuthenticatedVisitsIndexRoute
 }
 export interface FileRoutesByTo {
   "/": typeof IndexRoute
   "/link-account": typeof LinkAccountRoute
   "/login": typeof LoginRoute
   "/audit": typeof AuthenticatedAuditRoute
-  "/checkouts": typeof AuthenticatedCheckoutsRoute
-  "/sessions": typeof AuthenticatedSessionsRoute
   "/terminals": typeof AuthenticatedTerminalsRoute
+  "/usages": typeof AuthenticatedUsagesRoute
   "/label-preview": typeof TestLabelPreviewRoute
   "/login/verify": typeof LoginVerifyRoute
   "/machines/$machineId": typeof AuthenticatedMachinesMachineIdRoute
@@ -237,12 +252,14 @@ export interface FileRoutesByTo {
   "/permissions/$permissionId": typeof AuthenticatedPermissionsPermissionIdRoute
   "/price-lists/$priceListId": typeof AuthenticatedPriceListsPriceListIdRoute
   "/users/$userId": typeof AuthenticatedUsersUserIdRoute
+  "/visits/$checkoutId": typeof AuthenticatedVisitsCheckoutIdRoute
   "/machines": typeof AuthenticatedMachinesIndexRoute
   "/materials": typeof AuthenticatedMaterialsIndexRoute
   "/memberships": typeof AuthenticatedMembershipsIndexRoute
   "/permissions": typeof AuthenticatedPermissionsIndexRoute
   "/price-lists": typeof AuthenticatedPriceListsIndexRoute
   "/users": typeof AuthenticatedUsersIndexRoute
+  "/visits": typeof AuthenticatedVisitsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -251,14 +268,14 @@ export interface FileRoutesById {
   "/link-account": typeof LinkAccountRoute
   "/login": typeof LoginRoute
   "/_authenticated/audit": typeof AuthenticatedAuditRoute
-  "/_authenticated/checkouts": typeof AuthenticatedCheckoutsRoute
   "/_authenticated/machines": typeof AuthenticatedMachinesRouteWithChildren
   "/_authenticated/materials": typeof AuthenticatedMaterialsRouteWithChildren
   "/_authenticated/permissions": typeof AuthenticatedPermissionsRouteWithChildren
   "/_authenticated/price-lists": typeof AuthenticatedPriceListsRouteWithChildren
-  "/_authenticated/sessions": typeof AuthenticatedSessionsRoute
   "/_authenticated/terminals": typeof AuthenticatedTerminalsRoute
+  "/_authenticated/usages": typeof AuthenticatedUsagesRoute
   "/_authenticated/users": typeof AuthenticatedUsersRouteWithChildren
+  "/_authenticated/visits": typeof AuthenticatedVisitsRouteWithChildren
   "/_test/label-preview": typeof TestLabelPreviewRoute
   "/login_/verify": typeof LoginVerifyRoute
   "/_authenticated/machines/$machineId": typeof AuthenticatedMachinesMachineIdRoute
@@ -268,12 +285,14 @@ export interface FileRoutesById {
   "/_authenticated/permissions/$permissionId": typeof AuthenticatedPermissionsPermissionIdRoute
   "/_authenticated/price-lists/$priceListId": typeof AuthenticatedPriceListsPriceListIdRoute
   "/_authenticated/users/$userId": typeof AuthenticatedUsersUserIdRoute
+  "/_authenticated/visits/$checkoutId": typeof AuthenticatedVisitsCheckoutIdRoute
   "/_authenticated/machines/": typeof AuthenticatedMachinesIndexRoute
   "/_authenticated/materials/": typeof AuthenticatedMaterialsIndexRoute
   "/_authenticated/memberships/": typeof AuthenticatedMembershipsIndexRoute
   "/_authenticated/permissions/": typeof AuthenticatedPermissionsIndexRoute
   "/_authenticated/price-lists/": typeof AuthenticatedPriceListsIndexRoute
   "/_authenticated/users/": typeof AuthenticatedUsersIndexRoute
+  "/_authenticated/visits/": typeof AuthenticatedVisitsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -282,14 +301,14 @@ export interface FileRouteTypes {
     | "/link-account"
     | "/login"
     | "/audit"
-    | "/checkouts"
     | "/machines"
     | "/materials"
     | "/permissions"
     | "/price-lists"
-    | "/sessions"
     | "/terminals"
+    | "/usages"
     | "/users"
+    | "/visits"
     | "/label-preview"
     | "/login/verify"
     | "/machines/$machineId"
@@ -299,21 +318,22 @@ export interface FileRouteTypes {
     | "/permissions/$permissionId"
     | "/price-lists/$priceListId"
     | "/users/$userId"
+    | "/visits/$checkoutId"
     | "/machines/"
     | "/materials/"
     | "/memberships/"
     | "/permissions/"
     | "/price-lists/"
     | "/users/"
+    | "/visits/"
   fileRoutesByTo: FileRoutesByTo
   to:
     | "/"
     | "/link-account"
     | "/login"
     | "/audit"
-    | "/checkouts"
-    | "/sessions"
     | "/terminals"
+    | "/usages"
     | "/label-preview"
     | "/login/verify"
     | "/machines/$machineId"
@@ -323,12 +343,14 @@ export interface FileRouteTypes {
     | "/permissions/$permissionId"
     | "/price-lists/$priceListId"
     | "/users/$userId"
+    | "/visits/$checkoutId"
     | "/machines"
     | "/materials"
     | "/memberships"
     | "/permissions"
     | "/price-lists"
     | "/users"
+    | "/visits"
   id:
     | "__root__"
     | "/"
@@ -336,14 +358,14 @@ export interface FileRouteTypes {
     | "/link-account"
     | "/login"
     | "/_authenticated/audit"
-    | "/_authenticated/checkouts"
     | "/_authenticated/machines"
     | "/_authenticated/materials"
     | "/_authenticated/permissions"
     | "/_authenticated/price-lists"
-    | "/_authenticated/sessions"
     | "/_authenticated/terminals"
+    | "/_authenticated/usages"
     | "/_authenticated/users"
+    | "/_authenticated/visits"
     | "/_test/label-preview"
     | "/login_/verify"
     | "/_authenticated/machines/$machineId"
@@ -353,12 +375,14 @@ export interface FileRouteTypes {
     | "/_authenticated/permissions/$permissionId"
     | "/_authenticated/price-lists/$priceListId"
     | "/_authenticated/users/$userId"
+    | "/_authenticated/visits/$checkoutId"
     | "/_authenticated/machines/"
     | "/_authenticated/materials/"
     | "/_authenticated/memberships/"
     | "/_authenticated/permissions/"
     | "/_authenticated/price-lists/"
     | "/_authenticated/users/"
+    | "/_authenticated/visits/"
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -414,6 +438,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof TestLabelPreviewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    "/_authenticated/visits": {
+      id: "/_authenticated/visits"
+      path: "/visits"
+      fullPath: "/visits"
+      preLoaderRoute: typeof AuthenticatedVisitsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     "/_authenticated/users": {
       id: "/_authenticated/users"
       path: "/users"
@@ -421,18 +452,18 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthenticatedUsersRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    "/_authenticated/usages": {
+      id: "/_authenticated/usages"
+      path: "/usages"
+      fullPath: "/usages"
+      preLoaderRoute: typeof AuthenticatedUsagesRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     "/_authenticated/terminals": {
       id: "/_authenticated/terminals"
       path: "/terminals"
       fullPath: "/terminals"
       preLoaderRoute: typeof AuthenticatedTerminalsRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
-    "/_authenticated/sessions": {
-      id: "/_authenticated/sessions"
-      path: "/sessions"
-      fullPath: "/sessions"
-      preLoaderRoute: typeof AuthenticatedSessionsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     "/_authenticated/price-lists": {
@@ -463,19 +494,19 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthenticatedMachinesRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    "/_authenticated/checkouts": {
-      id: "/_authenticated/checkouts"
-      path: "/checkouts"
-      fullPath: "/checkouts"
-      preLoaderRoute: typeof AuthenticatedCheckoutsRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
     "/_authenticated/audit": {
       id: "/_authenticated/audit"
       path: "/audit"
       fullPath: "/audit"
       preLoaderRoute: typeof AuthenticatedAuditRouteImport
       parentRoute: typeof AuthenticatedRoute
+    }
+    "/_authenticated/visits/": {
+      id: "/_authenticated/visits/"
+      path: "/"
+      fullPath: "/visits/"
+      preLoaderRoute: typeof AuthenticatedVisitsIndexRouteImport
+      parentRoute: typeof AuthenticatedVisitsRoute
     }
     "/_authenticated/users/": {
       id: "/_authenticated/users/"
@@ -518,6 +549,13 @@ declare module "@tanstack/react-router" {
       fullPath: "/machines/"
       preLoaderRoute: typeof AuthenticatedMachinesIndexRouteImport
       parentRoute: typeof AuthenticatedMachinesRoute
+    }
+    "/_authenticated/visits/$checkoutId": {
+      id: "/_authenticated/visits/$checkoutId"
+      path: "/$checkoutId"
+      fullPath: "/visits/$checkoutId"
+      preLoaderRoute: typeof AuthenticatedVisitsCheckoutIdRouteImport
+      parentRoute: typeof AuthenticatedVisitsRoute
     }
     "/_authenticated/users/$userId": {
       id: "/_authenticated/users/$userId"
@@ -652,30 +690,43 @@ const AuthenticatedUsersRouteChildren: AuthenticatedUsersRouteChildren = {
 const AuthenticatedUsersRouteWithChildren =
   AuthenticatedUsersRoute._addFileChildren(AuthenticatedUsersRouteChildren)
 
+interface AuthenticatedVisitsRouteChildren {
+  AuthenticatedVisitsCheckoutIdRoute: typeof AuthenticatedVisitsCheckoutIdRoute
+  AuthenticatedVisitsIndexRoute: typeof AuthenticatedVisitsIndexRoute
+}
+
+const AuthenticatedVisitsRouteChildren: AuthenticatedVisitsRouteChildren = {
+  AuthenticatedVisitsCheckoutIdRoute: AuthenticatedVisitsCheckoutIdRoute,
+  AuthenticatedVisitsIndexRoute: AuthenticatedVisitsIndexRoute,
+}
+
+const AuthenticatedVisitsRouteWithChildren =
+  AuthenticatedVisitsRoute._addFileChildren(AuthenticatedVisitsRouteChildren)
+
 interface AuthenticatedRouteChildren {
   AuthenticatedAuditRoute: typeof AuthenticatedAuditRoute
-  AuthenticatedCheckoutsRoute: typeof AuthenticatedCheckoutsRoute
   AuthenticatedMachinesRoute: typeof AuthenticatedMachinesRouteWithChildren
   AuthenticatedMaterialsRoute: typeof AuthenticatedMaterialsRouteWithChildren
   AuthenticatedPermissionsRoute: typeof AuthenticatedPermissionsRouteWithChildren
   AuthenticatedPriceListsRoute: typeof AuthenticatedPriceListsRouteWithChildren
-  AuthenticatedSessionsRoute: typeof AuthenticatedSessionsRoute
   AuthenticatedTerminalsRoute: typeof AuthenticatedTerminalsRoute
+  AuthenticatedUsagesRoute: typeof AuthenticatedUsagesRoute
   AuthenticatedUsersRoute: typeof AuthenticatedUsersRouteWithChildren
+  AuthenticatedVisitsRoute: typeof AuthenticatedVisitsRouteWithChildren
   AuthenticatedMembershipsMembershipIdRoute: typeof AuthenticatedMembershipsMembershipIdRoute
   AuthenticatedMembershipsIndexRoute: typeof AuthenticatedMembershipsIndexRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedAuditRoute: AuthenticatedAuditRoute,
-  AuthenticatedCheckoutsRoute: AuthenticatedCheckoutsRoute,
   AuthenticatedMachinesRoute: AuthenticatedMachinesRouteWithChildren,
   AuthenticatedMaterialsRoute: AuthenticatedMaterialsRouteWithChildren,
   AuthenticatedPermissionsRoute: AuthenticatedPermissionsRouteWithChildren,
   AuthenticatedPriceListsRoute: AuthenticatedPriceListsRouteWithChildren,
-  AuthenticatedSessionsRoute: AuthenticatedSessionsRoute,
   AuthenticatedTerminalsRoute: AuthenticatedTerminalsRoute,
+  AuthenticatedUsagesRoute: AuthenticatedUsagesRoute,
   AuthenticatedUsersRoute: AuthenticatedUsersRouteWithChildren,
+  AuthenticatedVisitsRoute: AuthenticatedVisitsRouteWithChildren,
   AuthenticatedMembershipsMembershipIdRoute:
     AuthenticatedMembershipsMembershipIdRoute,
   AuthenticatedMembershipsIndexRoute: AuthenticatedMembershipsIndexRoute,
