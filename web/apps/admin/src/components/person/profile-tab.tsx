@@ -40,9 +40,11 @@ export function PersonProfileTab({
 }) {
   const db = useDb()
   const { update, loading: saving } = useFirestoreMutation()
-  const { register, handleSubmit, reset, watch } = useForm<ProfileFormValues>()
+  const { register, handleSubmit, reset, watch, setValue } =
+    useForm<ProfileFormValues>()
   const userType = watch("userType")
   const isFirma = userType === "firma"
+  const isAdmin = watch("isAdmin")
 
   useEffect(() => {
     reset({
@@ -147,7 +149,14 @@ export function PersonProfileTab({
           </div>
 
           <div className="flex items-center gap-2">
-            <Checkbox id="isAdmin" checked={undefined} {...register("isAdmin")} />
+            {/* Radix Checkbox emits onCheckedChange, not a native onChange —
+                a register() spread never reaches form state and every save
+                would wipe roles: ["admin"]. Issue #495. */}
+            <Checkbox
+              id="isAdmin"
+              checked={isAdmin ?? false}
+              onCheckedChange={(checked) => setValue("isAdmin", checked === true)}
+            />
             <Label htmlFor="isAdmin">Administrator</Label>
           </div>
 
