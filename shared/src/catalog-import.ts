@@ -76,6 +76,12 @@ export interface ImportIssue {
   name?: string
   severity: "error" | "warning"
   message: string
+  /**
+   * Machine-readable tag for issues callers post-process. "no-price" rows
+   * are collapsed into the single "open in Excel and save" hint when the
+   * whole workbook lacks cached formula results (openpyxl output).
+   */
+  kind?: "no-price"
 }
 
 /**
@@ -174,7 +180,12 @@ export function normalizeRows(rows: RawImportRow[]): NormalizeResult {
       continue
     }
     if (row.price == null || !Number.isFinite(row.price) || row.price <= 0) {
-      issues.push({ ...base, severity: "error", message: `Kein gültiger Verkaufspreis (Code ${code}).` })
+      issues.push({
+        ...base,
+        severity: "error",
+        message: `Kein gültiger Verkaufspreis (Code ${code}).`,
+        kind: "no-price",
+      })
       continue
     }
     const pricingModel = einheitToPricingModel(row.einheit ?? "")

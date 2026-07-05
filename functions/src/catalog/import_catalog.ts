@@ -95,11 +95,21 @@ export async function previewCatalogImport(buffer: Buffer): Promise<PreviewResul
   const parsed: ParseResult = await parsePricelistXlsx(buffer);
   const { current } = await loadCatalog();
   const preview = buildImportPreview(parsed.rows, current);
+  const hints = priceHint(parsed);
+  if (hints.length > 0) {
+    // The workbook as a whole lacks cached formula results — one hint
+    // explains that; ~200 identical per-row price errors would only bury
+    // it (and every other real issue).
+    preview.issues = preview.issues.filter((i) => i.kind !== "no-price");
+    preview.summary.errors = preview.issues.filter(
+      (i) => i.severity === "error"
+    ).length;
+  }
   return {
     ...preview,
     missingSheets: parsed.missingSheets,
     unconfiguredSheets: parsed.unconfiguredSheets,
-    hints: priceHint(parsed),
+    hints,
   };
 }
 
@@ -135,6 +145,14 @@ export async function applyCatalogImport(
   actorUid: string | null
 ): Promise<ApplyResult> {
   const parsed = await parsePricelistXlsx(buffer);
+  // Refuse a workbook without calculated prices outright: nearly every row
+  // would be dropped as an error, which would make the diff read the whole
+  // catalog as "no longer listed" — an apply with retire enabled would
+  // mass-deactivate it.
+  const hints = priceHint(parsed);
+  if (hints.length > 0) {
+    throw new HttpsError("failed-precondition", hints[0]);
+  }
   const { current, data } = await loadCatalog();
   const preview = buildImportPreview(parsed.rows, current);
 

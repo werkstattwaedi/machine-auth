@@ -186,7 +186,9 @@ describe("catalog import (Integration)", () => {
     expect((await db.collection("catalog").doc(retireId).get()).data()?.active).to.be.false;
   });
 
-  it("hints to recalculate when most rows have no cached price", async () => {
+  it("collapses an uncalculated workbook into one hint and refuses to apply it", async () => {
+    // Openpyxl output (e.g. the augment script's "– mit Codes" file):
+    // every price cell is a formula with no cached result.
     const buffer = await buildFixture({
       Holz: [
         { code: "3001", labelName: "Ahorn", labelMass: "24 mm", kategorie: "Massivholz", einheit: "m²", price: null },
@@ -196,6 +198,36 @@ describe("catalog import (Integration)", () => {
     const preview = await previewCatalogImport(buffer);
     expect(preview.hints[0]).to.match(/Excel/);
     expect(preview.summary.create).to.equal(0);
+    // The per-row "Kein gültiger Verkaufspreis" errors are redundant with
+    // the hint and must not drown it out.
+    expect(preview.issues.filter((i) => i.kind === "no-price")).to.have.length(0);
+    expect(preview.summary.errors).to.equal(0);
+
+    // Applying such a workbook is never right — with all rows dropped the
+    // diff would read the whole catalog as retirable.
+    try {
+      await applyCatalogImport(buffer, false, ADMIN_UID);
+      expect.fail("apply should have thrown");
+    } catch (err) {
+      expect(String(err)).to.match(/Excel/);
+    }
+  });
+
+  it("keeps per-row price errors when only a few rows are uncalculated", async () => {
+    // Glas-style breakage: a minority of rows carry #N/A / missing prices.
+    const buffer = await buildFixture({
+      Holz: [
+        { code: "3001", labelName: "Ahorn", labelMass: "24 mm", kategorie: "Massivholz", einheit: "m²", price: 84.5 },
+        { code: "3002", labelName: "Arve", labelMass: "24 mm", kategorie: "Massivholz", einheit: "m²", price: 60 },
+        { code: "3003", labelName: "Eiche", labelMass: "24 mm", kategorie: "Massivholz", einheit: "m²", price: null },
+      ],
+    });
+    const preview = await previewCatalogImport(buffer);
+    expect(preview.hints).to.have.length(0);
+    const priceIssues = preview.issues.filter((i) => i.kind === "no-price");
+    expect(priceIssues).to.have.length(1);
+    expect(priceIssues[0].message).to.contain("3003");
+    expect(preview.summary.errors).to.equal(1);
   });
 
   it("reports missing / unconfigured sheets without throwing", async () => {
