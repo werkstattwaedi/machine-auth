@@ -32,7 +32,7 @@ import {
   TableHeader,
   TableRow,
 } from "@modules/components/ui/table"
-import { Loader2, Trash2, X } from "lucide-react"
+import { Loader2, MoveRight, Trash2, X } from "lucide-react"
 
 export const Route = createFileRoute("/_authenticated/visits/$checkoutId")({
   component: VisitDetailPage,
@@ -134,6 +134,16 @@ function VisitDetailPage() {
           Beginn {formatDateTime(visit.created)}
           {visit.closedAt ? ` · abgeschlossen ${formatDateTime(visit.closedAt)}` : ""}
         </span>
+        {visit.billRef && (
+          <Link
+            to="/invoices/$billId"
+            params={{ billId: visit.billRef.id }}
+            className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+          >
+            Rechnung öffnen
+            <MoveRight className="h-3.5 w-3.5" />
+          </Link>
+        )}
       </div>
 
       {visit.userId && (

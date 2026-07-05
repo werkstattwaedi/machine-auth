@@ -23,6 +23,7 @@ import { Route as AuthenticatedPriceListsRouteImport } from "./routes/_authentic
 import { Route as AuthenticatedPermissionsRouteImport } from "./routes/_authenticated/permissions"
 import { Route as AuthenticatedMaterialsRouteImport } from "./routes/_authenticated/materials"
 import { Route as AuthenticatedMachinesRouteImport } from "./routes/_authenticated/machines"
+import { Route as AuthenticatedInvoicesRouteImport } from "./routes/_authenticated/invoices"
 import { Route as AuthenticatedAuditRouteImport } from "./routes/_authenticated/audit"
 import { Route as AuthenticatedVisitsIndexRouteImport } from "./routes/_authenticated/visits/index"
 import { Route as AuthenticatedUsersIndexRouteImport } from "./routes/_authenticated/users/index"
@@ -31,6 +32,7 @@ import { Route as AuthenticatedPermissionsIndexRouteImport } from "./routes/_aut
 import { Route as AuthenticatedMembershipsIndexRouteImport } from "./routes/_authenticated/memberships/index"
 import { Route as AuthenticatedMaterialsIndexRouteImport } from "./routes/_authenticated/materials/index"
 import { Route as AuthenticatedMachinesIndexRouteImport } from "./routes/_authenticated/machines/index"
+import { Route as AuthenticatedInvoicesIndexRouteImport } from "./routes/_authenticated/invoices/index"
 import { Route as AuthenticatedVisitsCheckoutIdRouteImport } from "./routes/_authenticated/visits/$checkoutId"
 import { Route as AuthenticatedUsersUserIdRouteImport } from "./routes/_authenticated/users/$userId"
 import { Route as AuthenticatedPriceListsPriceListIdRouteImport } from "./routes/_authenticated/price-lists/$priceListId"
@@ -39,6 +41,8 @@ import { Route as AuthenticatedMembershipsMembershipIdRouteImport } from "./rout
 import { Route as AuthenticatedMaterialsImportRouteImport } from "./routes/_authenticated/materials/import"
 import { Route as AuthenticatedMaterialsMaterialIdRouteImport } from "./routes/_authenticated/materials/$materialId"
 import { Route as AuthenticatedMachinesMachineIdRouteImport } from "./routes/_authenticated/machines/$machineId"
+import { Route as AuthenticatedInvoicesImportRouteImport } from "./routes/_authenticated/invoices/import"
+import { Route as AuthenticatedInvoicesBillIdRouteImport } from "./routes/_authenticated/invoices/$billId"
 
 const LoginRoute = LoginRouteImport.update({
   id: "/login",
@@ -110,6 +114,11 @@ const AuthenticatedMachinesRoute = AuthenticatedMachinesRouteImport.update({
   path: "/machines",
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedInvoicesRoute = AuthenticatedInvoicesRouteImport.update({
+  id: "/invoices",
+  path: "/invoices",
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedAuditRoute = AuthenticatedAuditRouteImport.update({
   id: "/audit",
   path: "/audit",
@@ -155,6 +164,12 @@ const AuthenticatedMachinesIndexRoute =
     id: "/",
     path: "/",
     getParentRoute: () => AuthenticatedMachinesRoute,
+  } as any)
+const AuthenticatedInvoicesIndexRoute =
+  AuthenticatedInvoicesIndexRouteImport.update({
+    id: "/",
+    path: "/",
+    getParentRoute: () => AuthenticatedInvoicesRoute,
   } as any)
 const AuthenticatedVisitsCheckoutIdRoute =
   AuthenticatedVisitsCheckoutIdRouteImport.update({
@@ -204,12 +219,25 @@ const AuthenticatedMachinesMachineIdRoute =
     path: "/$machineId",
     getParentRoute: () => AuthenticatedMachinesRoute,
   } as any)
+const AuthenticatedInvoicesImportRoute =
+  AuthenticatedInvoicesImportRouteImport.update({
+    id: "/import",
+    path: "/import",
+    getParentRoute: () => AuthenticatedInvoicesRoute,
+  } as any)
+const AuthenticatedInvoicesBillIdRoute =
+  AuthenticatedInvoicesBillIdRouteImport.update({
+    id: "/$billId",
+    path: "/$billId",
+    getParentRoute: () => AuthenticatedInvoicesRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   "/": typeof IndexRoute
   "/link-account": typeof LinkAccountRoute
   "/login": typeof LoginRoute
   "/audit": typeof AuthenticatedAuditRoute
+  "/invoices": typeof AuthenticatedInvoicesRouteWithChildren
   "/machines": typeof AuthenticatedMachinesRouteWithChildren
   "/materials": typeof AuthenticatedMaterialsRouteWithChildren
   "/permissions": typeof AuthenticatedPermissionsRouteWithChildren
@@ -220,6 +248,8 @@ export interface FileRoutesByFullPath {
   "/visits": typeof AuthenticatedVisitsRouteWithChildren
   "/label-preview": typeof TestLabelPreviewRoute
   "/login/verify": typeof LoginVerifyRoute
+  "/invoices/$billId": typeof AuthenticatedInvoicesBillIdRoute
+  "/invoices/import": typeof AuthenticatedInvoicesImportRoute
   "/machines/$machineId": typeof AuthenticatedMachinesMachineIdRoute
   "/materials/$materialId": typeof AuthenticatedMaterialsMaterialIdRoute
   "/materials/import": typeof AuthenticatedMaterialsImportRoute
@@ -228,6 +258,7 @@ export interface FileRoutesByFullPath {
   "/price-lists/$priceListId": typeof AuthenticatedPriceListsPriceListIdRoute
   "/users/$userId": typeof AuthenticatedUsersUserIdRoute
   "/visits/$checkoutId": typeof AuthenticatedVisitsCheckoutIdRoute
+  "/invoices/": typeof AuthenticatedInvoicesIndexRoute
   "/machines/": typeof AuthenticatedMachinesIndexRoute
   "/materials/": typeof AuthenticatedMaterialsIndexRoute
   "/memberships/": typeof AuthenticatedMembershipsIndexRoute
@@ -245,6 +276,8 @@ export interface FileRoutesByTo {
   "/usages": typeof AuthenticatedUsagesRoute
   "/label-preview": typeof TestLabelPreviewRoute
   "/login/verify": typeof LoginVerifyRoute
+  "/invoices/$billId": typeof AuthenticatedInvoicesBillIdRoute
+  "/invoices/import": typeof AuthenticatedInvoicesImportRoute
   "/machines/$machineId": typeof AuthenticatedMachinesMachineIdRoute
   "/materials/$materialId": typeof AuthenticatedMaterialsMaterialIdRoute
   "/materials/import": typeof AuthenticatedMaterialsImportRoute
@@ -253,6 +286,7 @@ export interface FileRoutesByTo {
   "/price-lists/$priceListId": typeof AuthenticatedPriceListsPriceListIdRoute
   "/users/$userId": typeof AuthenticatedUsersUserIdRoute
   "/visits/$checkoutId": typeof AuthenticatedVisitsCheckoutIdRoute
+  "/invoices": typeof AuthenticatedInvoicesIndexRoute
   "/machines": typeof AuthenticatedMachinesIndexRoute
   "/materials": typeof AuthenticatedMaterialsIndexRoute
   "/memberships": typeof AuthenticatedMembershipsIndexRoute
@@ -268,6 +302,7 @@ export interface FileRoutesById {
   "/link-account": typeof LinkAccountRoute
   "/login": typeof LoginRoute
   "/_authenticated/audit": typeof AuthenticatedAuditRoute
+  "/_authenticated/invoices": typeof AuthenticatedInvoicesRouteWithChildren
   "/_authenticated/machines": typeof AuthenticatedMachinesRouteWithChildren
   "/_authenticated/materials": typeof AuthenticatedMaterialsRouteWithChildren
   "/_authenticated/permissions": typeof AuthenticatedPermissionsRouteWithChildren
@@ -278,6 +313,8 @@ export interface FileRoutesById {
   "/_authenticated/visits": typeof AuthenticatedVisitsRouteWithChildren
   "/_test/label-preview": typeof TestLabelPreviewRoute
   "/login_/verify": typeof LoginVerifyRoute
+  "/_authenticated/invoices/$billId": typeof AuthenticatedInvoicesBillIdRoute
+  "/_authenticated/invoices/import": typeof AuthenticatedInvoicesImportRoute
   "/_authenticated/machines/$machineId": typeof AuthenticatedMachinesMachineIdRoute
   "/_authenticated/materials/$materialId": typeof AuthenticatedMaterialsMaterialIdRoute
   "/_authenticated/materials/import": typeof AuthenticatedMaterialsImportRoute
@@ -286,6 +323,7 @@ export interface FileRoutesById {
   "/_authenticated/price-lists/$priceListId": typeof AuthenticatedPriceListsPriceListIdRoute
   "/_authenticated/users/$userId": typeof AuthenticatedUsersUserIdRoute
   "/_authenticated/visits/$checkoutId": typeof AuthenticatedVisitsCheckoutIdRoute
+  "/_authenticated/invoices/": typeof AuthenticatedInvoicesIndexRoute
   "/_authenticated/machines/": typeof AuthenticatedMachinesIndexRoute
   "/_authenticated/materials/": typeof AuthenticatedMaterialsIndexRoute
   "/_authenticated/memberships/": typeof AuthenticatedMembershipsIndexRoute
@@ -301,6 +339,7 @@ export interface FileRouteTypes {
     | "/link-account"
     | "/login"
     | "/audit"
+    | "/invoices"
     | "/machines"
     | "/materials"
     | "/permissions"
@@ -311,6 +350,8 @@ export interface FileRouteTypes {
     | "/visits"
     | "/label-preview"
     | "/login/verify"
+    | "/invoices/$billId"
+    | "/invoices/import"
     | "/machines/$machineId"
     | "/materials/$materialId"
     | "/materials/import"
@@ -319,6 +360,7 @@ export interface FileRouteTypes {
     | "/price-lists/$priceListId"
     | "/users/$userId"
     | "/visits/$checkoutId"
+    | "/invoices/"
     | "/machines/"
     | "/materials/"
     | "/memberships/"
@@ -336,6 +378,8 @@ export interface FileRouteTypes {
     | "/usages"
     | "/label-preview"
     | "/login/verify"
+    | "/invoices/$billId"
+    | "/invoices/import"
     | "/machines/$machineId"
     | "/materials/$materialId"
     | "/materials/import"
@@ -344,6 +388,7 @@ export interface FileRouteTypes {
     | "/price-lists/$priceListId"
     | "/users/$userId"
     | "/visits/$checkoutId"
+    | "/invoices"
     | "/machines"
     | "/materials"
     | "/memberships"
@@ -358,6 +403,7 @@ export interface FileRouteTypes {
     | "/link-account"
     | "/login"
     | "/_authenticated/audit"
+    | "/_authenticated/invoices"
     | "/_authenticated/machines"
     | "/_authenticated/materials"
     | "/_authenticated/permissions"
@@ -368,6 +414,8 @@ export interface FileRouteTypes {
     | "/_authenticated/visits"
     | "/_test/label-preview"
     | "/login_/verify"
+    | "/_authenticated/invoices/$billId"
+    | "/_authenticated/invoices/import"
     | "/_authenticated/machines/$machineId"
     | "/_authenticated/materials/$materialId"
     | "/_authenticated/materials/import"
@@ -376,6 +424,7 @@ export interface FileRouteTypes {
     | "/_authenticated/price-lists/$priceListId"
     | "/_authenticated/users/$userId"
     | "/_authenticated/visits/$checkoutId"
+    | "/_authenticated/invoices/"
     | "/_authenticated/machines/"
     | "/_authenticated/materials/"
     | "/_authenticated/memberships/"
@@ -494,6 +543,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthenticatedMachinesRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    "/_authenticated/invoices": {
+      id: "/_authenticated/invoices"
+      path: "/invoices"
+      fullPath: "/invoices"
+      preLoaderRoute: typeof AuthenticatedInvoicesRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     "/_authenticated/audit": {
       id: "/_authenticated/audit"
       path: "/audit"
@@ -549,6 +605,13 @@ declare module "@tanstack/react-router" {
       fullPath: "/machines/"
       preLoaderRoute: typeof AuthenticatedMachinesIndexRouteImport
       parentRoute: typeof AuthenticatedMachinesRoute
+    }
+    "/_authenticated/invoices/": {
+      id: "/_authenticated/invoices/"
+      path: "/"
+      fullPath: "/invoices/"
+      preLoaderRoute: typeof AuthenticatedInvoicesIndexRouteImport
+      parentRoute: typeof AuthenticatedInvoicesRoute
     }
     "/_authenticated/visits/$checkoutId": {
       id: "/_authenticated/visits/$checkoutId"
@@ -606,8 +669,39 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthenticatedMachinesMachineIdRouteImport
       parentRoute: typeof AuthenticatedMachinesRoute
     }
+    "/_authenticated/invoices/import": {
+      id: "/_authenticated/invoices/import"
+      path: "/import"
+      fullPath: "/invoices/import"
+      preLoaderRoute: typeof AuthenticatedInvoicesImportRouteImport
+      parentRoute: typeof AuthenticatedInvoicesRoute
+    }
+    "/_authenticated/invoices/$billId": {
+      id: "/_authenticated/invoices/$billId"
+      path: "/$billId"
+      fullPath: "/invoices/$billId"
+      preLoaderRoute: typeof AuthenticatedInvoicesBillIdRouteImport
+      parentRoute: typeof AuthenticatedInvoicesRoute
+    }
   }
 }
+
+interface AuthenticatedInvoicesRouteChildren {
+  AuthenticatedInvoicesBillIdRoute: typeof AuthenticatedInvoicesBillIdRoute
+  AuthenticatedInvoicesImportRoute: typeof AuthenticatedInvoicesImportRoute
+  AuthenticatedInvoicesIndexRoute: typeof AuthenticatedInvoicesIndexRoute
+}
+
+const AuthenticatedInvoicesRouteChildren: AuthenticatedInvoicesRouteChildren = {
+  AuthenticatedInvoicesBillIdRoute: AuthenticatedInvoicesBillIdRoute,
+  AuthenticatedInvoicesImportRoute: AuthenticatedInvoicesImportRoute,
+  AuthenticatedInvoicesIndexRoute: AuthenticatedInvoicesIndexRoute,
+}
+
+const AuthenticatedInvoicesRouteWithChildren =
+  AuthenticatedInvoicesRoute._addFileChildren(
+    AuthenticatedInvoicesRouteChildren,
+  )
 
 interface AuthenticatedMachinesRouteChildren {
   AuthenticatedMachinesMachineIdRoute: typeof AuthenticatedMachinesMachineIdRoute
@@ -705,6 +799,7 @@ const AuthenticatedVisitsRouteWithChildren =
 
 interface AuthenticatedRouteChildren {
   AuthenticatedAuditRoute: typeof AuthenticatedAuditRoute
+  AuthenticatedInvoicesRoute: typeof AuthenticatedInvoicesRouteWithChildren
   AuthenticatedMachinesRoute: typeof AuthenticatedMachinesRouteWithChildren
   AuthenticatedMaterialsRoute: typeof AuthenticatedMaterialsRouteWithChildren
   AuthenticatedPermissionsRoute: typeof AuthenticatedPermissionsRouteWithChildren
@@ -719,6 +814,7 @@ interface AuthenticatedRouteChildren {
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedAuditRoute: AuthenticatedAuditRoute,
+  AuthenticatedInvoicesRoute: AuthenticatedInvoicesRouteWithChildren,
   AuthenticatedMachinesRoute: AuthenticatedMachinesRouteWithChildren,
   AuthenticatedMaterialsRoute: AuthenticatedMaterialsRouteWithChildren,
   AuthenticatedPermissionsRoute: AuthenticatedPermissionsRouteWithChildren,

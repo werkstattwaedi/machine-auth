@@ -13,6 +13,7 @@ import {
   FileText,
   History,
   Package,
+  Receipt,
   Users,
 } from "lucide-react"
 
@@ -28,6 +29,7 @@ const navItems: AuthenticatedLayoutNavItem[] = [
   { to: "/users", label: "Personen", icon: Users },
   { to: "/machines", label: "Maschinen", icon: Cpu },
   { to: "/materials", label: "Inventar", icon: Package },
+  { to: "/invoices", label: "Rechnungen", icon: Receipt },
   { to: "/visits", label: "Besuche", icon: ClipboardList },
   { to: "/usages", label: "Nutzungen", icon: History },
   { to: "/audit", label: "Audit-Log", icon: FileText },
