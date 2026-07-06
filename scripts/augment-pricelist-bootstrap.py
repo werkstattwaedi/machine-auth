@@ -84,11 +84,15 @@ MAKERSPACE_JSON = "makerspace.json"
 # Variant definitions seeded once into the workbook's `Varianten` sheet. From
 # here on that sheet is the editorial source the importer reads (these values
 # previously lived hardcoded in shared/src/pricing.ts). id, label, factor,
-# base pricing model of the derived variant.
+# base pricing model of the derived variant. Factors are the cut area in m²;
+# a3 carries a small handling margin over the exact 0.12474 area (matches the
+# ad-hoc laser pricelist). 100×100 / 500×1000 are the acryl cut formats.
 VARIANT_DEFS = [
-    ("a3", "Zuschnitt A3", 0.12474, "count"),
+    ("a3", "Zuschnitt A3", 0.126, "count"),
     ("320-620", "Zuschnitt 320 × 620 mm", 0.1984, "count"),
     ("500-1250", "Zuschnitt 500 × 1250 mm", 0.625, "count"),
+    ("100-100", "Zuschnitt 100 × 100 mm", 0.01, "count"),
+    ("500-1000", "Zuschnitt 500 × 1000 mm", 0.5, "count"),
 ]
 
 # base pricingModel → human sale unit (Einheit column, importer contract).
@@ -259,10 +263,12 @@ def makerspace_seed_path():
 
 
 def build_varianten_sheet(wb):
-    """(Re)create the global `Varianten` definition sheet the importer reads:
-    id | label | factor | base pricing model of the derived variant."""
+    """Create the global `Varianten` definition sheet the importer reads:
+    id | label | factor | base pricing model of the derived variant. Guarded —
+    once the sheet exists it's the editorial source (Mario/Mike maintain the
+    factors there), so re-runs leave it untouched."""
     if "Varianten" in wb.sheetnames:
-        del wb["Varianten"]
+        return None
     ws = wb.create_sheet("Varianten")
     for c, h in enumerate(["Variante", "Bezeichnung", "Faktor", "Grundmodell"], start=1):
         ws.cell(1, c, h)
@@ -371,10 +377,13 @@ def main():
     # the Makerspace sheet is a one-time seed→sheet migration.
     total += build_makerspace_sheet(wb)
     nvar = build_varianten_sheet(wb)
-    report.append(
-        f"**Varianten**: {nvar} Definitionen (Referenzblatt, das der Import liest — "
-        f"Faktoren leben ab jetzt hier, nicht mehr im Code).\n"
-    )
+    if nvar is None:
+        report.append("**Varianten**: Blatt bereits vorhanden — unverändert gelassen.\n")
+    else:
+        report.append(
+            f"**Varianten**: {nvar} Definitionen (Referenzblatt, das der Import liest — "
+            f"Faktoren leben ab jetzt hier, nicht mehr im Code).\n"
+        )
 
     wb.save(OUT)
 
