@@ -95,6 +95,32 @@ TEST_F(MachineControllerTest, SessionEndDisablesToggle) {
   EXPECT_EQ(toggle_.toggle_count(), 2u);
 }
 
+// P0-4: the controller boots with a fail-safe pending Disable so a latching
+// relay left ON across a power outage / OTA-while-running is de-energized on
+// startup rather than re-energizing the machine unattended and unbilled.
+TEST_F(MachineControllerTest, BootDefaultDisablesLatchedRelay) {
+  // Simulate a relay still latched ON from before an involuntary reset.
+  toggle_.SetEnabled(true);
+
+  StartController();  // processes the fail-safe pending Disable
+
+  EXPECT_FALSE(toggle_.IsEnabled());
+  EXPECT_EQ(toggle_.toggle_count(), 1u);
+}
+
+// A genuinely resumed session must keep the relay energized — the boot
+// default is overridden before Start().
+TEST_F(MachineControllerTest, KeepToggleEnabledForResumeOverridesBootDefault) {
+  toggle_.SetEnabled(true);
+  controller_->KeepToggleEnabledForResume();
+
+  StartController();
+
+  EXPECT_TRUE(toggle_.IsEnabled());
+  // Already ON and asked to stay ON — no toggle should have fired.
+  EXPECT_EQ(toggle_.toggle_count(), 0u);
+}
+
 TEST_F(MachineControllerTest, ToggleErrorDoesNotCrash) {
   StartController();
 

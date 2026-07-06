@@ -66,6 +66,13 @@ class MockMachineToggle : public MachineToggle {
  private:
   pw::async2::Coro<pw::Status> DoSetState(
       [[maybe_unused]] pw::async2::CoroContext cx, bool on) {
+    // Mirror LatchingMachineRelay: a request for the state the toggle is
+    // already in is a no-op — no hardware pulse, no toggle count. This keeps
+    // the fail-safe boot Disable (P0-4) from registering as a spurious
+    // toggle on an already-off relay.
+    if (on == enabled_) {
+      co_return pw::OkStatus();
+    }
     if (next_error_.has_value()) {
       auto err = *next_error_;
       next_error_.reset();

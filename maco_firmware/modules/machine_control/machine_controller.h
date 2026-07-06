@@ -42,6 +42,15 @@ class MachineController : public app_state::SessionObserver,
 
   void Start(pw::async2::Dispatcher& dispatcher);
 
+  /// Keep the toggle energized for a session resumed across an involuntary
+  /// reset. The controller boots with a fail-safe pending Disable (see
+  /// `pending_command_`); when `RecoverOrphanedSession` resumes a session
+  /// whose latching relay is still ON, call this before `Start()` so the
+  /// boot default does not switch it back off.
+  void KeepToggleEnabledForResume() {
+    pending_command_.store(Command::kEnable, std::memory_order_relaxed);
+  }
+
   /// Returns true if the toggle is currently enabled.
   bool IsToggleEnabled() const { return toggle_.IsEnabled(); }
 
@@ -69,7 +78,13 @@ class MachineController : public app_state::SessionObserver,
 
   MachineToggle& toggle_;
   pw::async2::TimeProvider<pw::chrono::SystemClock>& time_provider_;
-  std::atomic<Command> pending_command_{Command::kNone};
+  // Fail-safe boot default: drive the latching relay OFF on the first Run
+  // poll unless a resumed session overrides it (KeepToggleEnabledForResume).
+  // The relay holds its last state with no power, so after a power outage or
+  // an OTA-while-running the machine could otherwise re-energize unattended,
+  // unauthenticated, and unbilled. Disable() is a no-op when already off, so
+  // this costs nothing on a clean boot.
+  std::atomic<Command> pending_command_{Command::kDisable};
   std::atomic<bool> machine_running_{false};
 
   // In-use accumulator. Written from the session-observer callbacks (main
