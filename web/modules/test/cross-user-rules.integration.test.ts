@@ -209,13 +209,17 @@ async function seedOpenCheckout(checkoutId: string, ownerUid: string) {
     })
 }
 
-async function seedAnonCheckout(checkoutId: string) {
+async function seedAnonCheckout(checkoutId: string, firebaseUid = "anon-x") {
   const db = getAdminFirestore()
   await db
     .collection("checkouts")
     .doc(checkoutId)
     .set({
       userId: null,
+      // Stamped by the client on create (issue #318) == the creating
+      // anonymous-auth session's uid. P0-2 scopes anon reads/writes to
+      // this so one anon session can't harvest another's checkout PII.
+      firebaseUid,
       status: "open",
       usageType: "regular",
       created: FieldValue.serverTimestamp(),
@@ -552,11 +556,13 @@ describe("cross-user: checkouts", () => {
     await assertSucceeds(getDoc(doc(adminDb(), "checkouts", "co1")))
   })
 
-  // Intentionally permissive: anonymous-auth can read anonymous checkouts
-  // (random doc IDs, no PII). If we ever tighten this, this assertion
-  // forces an explicit test update rather than a silent break.
-  it("allows any anonymous-auth session to read userId==null checkout (intentional)", async () => {
-    await seedAnonCheckout("co-anon")
+  // P0-2: anon reads are scoped to the CREATING session via `firebaseUid`.
+  // The walk-in flow persists full PII (name, email, billing address) into
+  // null-userId checkouts, so an unscoped anon branch let any
+  // signInAnonymously() session harvest every guest's data. The creating
+  // session (firebaseUid == its uid) still reads its own checkout.
+  it("allows the creating anonymous-auth session to read its own userId==null checkout", async () => {
+    await seedAnonCheckout("co-anon", "anon-x")
     await assertSucceeds(
       getDoc(doc(anonAuthDb("anon-x"), "checkouts", "co-anon")),
     )
@@ -643,9 +649,10 @@ describe("cross-user: checkouts paymentMethod last-selection write", () => {
   })
 
   it("denies an anonymous-auth session from writing paymentMethod=monthly on a null-userId checkout", async () => {
-    await seedClosedCheckout("co-anon", null)
+    await seedClosedCheckout("co-anon", null, { firebaseUid: "anon-x" })
     // No user doc to consult for membership — the anon branch intentionally
-    // restricts the value list to ['rechnung', 'twint'].
+    // restricts the value list to ['rechnung', 'twint']. (firebaseUid
+    // matches the caller so this exercises the value restriction, not P0-2.)
     await assertFails(
       updateDoc(doc(anonAuthDb("anon-x"), "checkouts", "co-anon"), {
         paymentMethod: "monthly",
@@ -668,8 +675,8 @@ describe("cross-user: checkouts paymentMethod last-selection write", () => {
     )
   })
 
-  it("allows an anonymous-auth session to write paymentMethod on a null-userId closed checkout", async () => {
-    await seedClosedCheckout("co-anon", null)
+  it("allows the creating anonymous-auth session to write paymentMethod on a null-userId closed checkout", async () => {
+    await seedClosedCheckout("co-anon", null, { firebaseUid: "anon-x" })
     await assertSucceeds(
       updateDoc(doc(anonAuthDb("anon-x"), "checkouts", "co-anon"), {
         paymentMethod: "twint",

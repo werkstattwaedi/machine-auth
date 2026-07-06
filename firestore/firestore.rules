@@ -217,13 +217,19 @@ service cloud.firestore {
     // Checkouts (shopping cart)
     match /checkouts/{checkoutId} {
       // Read: admin, the owner (real or tag-tap), or — for anonymous
-      // checkouts — the Firebase Anonymous Auth session that created it.
-      // (Anonymous reads are intentionally permissive across all anon
-      // sessions; doc IDs are random Firebase IDs so brute-force is
-      // impractical, and there is no name/billing in pure-anon checkouts.)
+      // checkouts — the Firebase Anonymous Auth session that CREATED it,
+      // scoped per-session via `firebaseUid` (stamped == request.auth.uid
+      // on every create). The walk-in flow persists full PII (name, email,
+      // billing address) into null-userId checkouts, so an unscoped anon
+      // branch let any signInAnonymously() session enumerate every guest's
+      // data. `firebaseUid == request.auth.uid` binds the read to the
+      // creating session. NB: for a `list` query the rule can only be
+      // satisfied when the query itself filters on firebaseUid — which the
+      // open-checkout lookup already does.
       allow read: if isAdmin() ||
                      isCheckoutPrincipalFor(resource.data.userId) ||
-                     (resource.data.userId == null && isAnonymousAuth());
+                     (resource.data.userId == null && isAnonymousAuth() &&
+                      resource.data.get('firebaseUid', null) == request.auth.uid);
 
       // Create:
       //  - Anonymous (signed-in via Firebase Anonymous Auth) with userId == null
@@ -284,6 +290,7 @@ service cloud.firestore {
            'status', 'summary', 'closedAt', 'billRef', 'firebaseUid'
          ])) ||
         (resource.data.userId == null && isAnonymousAuth() &&
+         resource.data.get('firebaseUid', null) == request.auth.uid &&
          resource.data.status == "open" &&
          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
            'status', 'summary', 'closedAt', 'billRef', 'userId', 'firebaseUid'
@@ -299,15 +306,27 @@ service cloud.firestore {
               hasActiveMembership(resource.data.userId))
            )) ||
            (resource.data.userId == null && isAnonymousAuth() &&
+            resource.data.get('firebaseUid', null) == request.auth.uid &&
             request.resource.data.paymentMethod in ['rechnung', 'twint'])
          ));
       allow delete: if isAdmin();
 
       // Checkout items subcollection
       match /items/{itemId} {
+        // True when the caller is the anonymous-auth session that created
+        // the parent null-userId checkout. Scoped per-session via the
+        // parent's `firebaseUid` (== creator's request.auth.uid) so one
+        // anon session can't reach another's items — mirrors the P0-2
+        // parent-checkout read scoping.
+        function isAnonParentCreator() {
+          return get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId == null &&
+                 isAnonymousAuth() &&
+                 get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.get('firebaseUid', null) == request.auth.uid;
+        }
+
         allow read: if isAdmin() ||
                        isCheckoutPrincipalFor(get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId) ||
-                       (get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId == null && isAnonymousAuth());
+                       isAnonParentCreator();
 
         // Create / update / delete: principal of an open checkout, or an
         // anonymous-auth session writing to a null-userId checkout. Field
@@ -328,7 +347,7 @@ service cloud.firestore {
               (
                 (isCheckoutPrincipalFor(get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId) &&
                  get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.status == "open") ||
-                (get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId == null && isAnonymousAuth())
+                isAnonParentCreator()
               ) &&
               !request.resource.data.keys().hasAny(['tokenId', 'badgeSdmCounter'])
             )
@@ -339,7 +358,7 @@ service cloud.firestore {
               (
                 (isCheckoutPrincipalFor(get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId) &&
                  get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.status == "open") ||
-                (get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId == null && isAnonymousAuth())
+                isAnonParentCreator()
               ) &&
               !request.resource.data.diff(resource.data).affectedKeys().hasAny(['tokenId', 'badgeSdmCounter'])
             )
@@ -347,7 +366,7 @@ service cloud.firestore {
         allow delete: if isAdmin() ||
             (isCheckoutPrincipalFor(get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId) &&
              get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.status == "open") ||
-            (get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId == null && isAnonymousAuth());
+            isAnonParentCreator();
       }
     }
 
