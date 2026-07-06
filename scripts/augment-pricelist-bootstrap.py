@@ -30,6 +30,12 @@ Mario → from then on the injected columns travel with his file. Re-running is
 idempotent: an existing `Code` value on a row is preserved; only new rows get a
 fresh number.
 
+It also generates two sheets Mario's file lacks: a `Makerspace` product sheet
+(one-time migration from makerspace.json — literal prices, no formulas) and a
+global `Varianten` sheet that defines the laser cut-to-size factors. From here on
+`Varianten` is the editorial source for those factors (they used to be hardcoded
+in shared/src/pricing.ts); the importer expands each item's variants from it.
+
 Output: a sibling "… – mit Codes.xlsx" plus a reconciliation report.
 """
 import json
@@ -72,6 +78,24 @@ SHEETS = {
 NOTE_MARKERS = ("Preisliste", "Verkaufspreis =", "Marge", "Bestellliste",
                 "noch offen", "Einkaufspreis")
 
+# ── Makerspace + variant definitions (generated once from the seed) ──────────
+MAKERSPACE_JSON = "makerspace.json"
+
+# Variant definitions seeded once into the workbook's `Varianten` sheet. From
+# here on that sheet is the editorial source the importer reads (these values
+# previously lived hardcoded in shared/src/pricing.ts). id, label, factor,
+# base pricing model of the derived variant.
+VARIANT_DEFS = [
+    ("a3", "Zuschnitt A3", 0.12474, "count"),
+    ("320-620", "Zuschnitt 320 × 620 mm", 0.1984, "count"),
+    ("500-1250", "Zuschnitt 500 × 1250 mm", 0.625, "count"),
+]
+
+# base pricingModel → human sale unit (Einheit column, importer contract).
+PRICINGMODEL_TO_EINHEIT = {
+    "area": "m²", "weight": "kg", "sla": "L", "length": "lm", "count": "Stk",
+}
+
 report = []
 
 
@@ -105,6 +129,17 @@ def norm_mass(raw):
 
 def norm_name(raw):
     return re.sub(r"\s+", " ", norm(raw))
+
+
+def split_name_mass(name):
+    """Split a seed `name` into (Etikett Name, Etikett Mass) on a trailing
+    `<n>mm` token: 'Sperrholz Pappel 12mm' → ('Sperrholz Pappel', '12 mm');
+    'Filament Standard' → ('Filament Standard', '')."""
+    n = norm_name(name)
+    m = re.match(r"^(.*?)\s+(\d+(?:\.\d+)?\s*mm)$", n)
+    if m:
+        return norm_name(m.group(1)), norm_mass(m.group(2))
+    return n, ""
 
 
 def load_seedmap(fname):
@@ -218,6 +253,70 @@ def last_content_col(ws, hr):
     return last
 
 
+def makerspace_seed_path():
+    """makerspace.json from the prod (ops) seed, falling back to the public one."""
+    return OPS / MAKERSPACE_JSON if (OPS / MAKERSPACE_JSON).exists() else SEED / MAKERSPACE_JSON
+
+
+def build_varianten_sheet(wb):
+    """(Re)create the global `Varianten` definition sheet the importer reads:
+    id | label | factor | base pricing model of the derived variant."""
+    if "Varianten" in wb.sheetnames:
+        del wb["Varianten"]
+    ws = wb.create_sheet("Varianten")
+    for c, h in enumerate(["Variante", "Bezeichnung", "Faktor", "Grundmodell"], start=1):
+        ws.cell(1, c, h)
+    for r, (vid, label, factor, model) in enumerate(VARIANT_DEFS, start=2):
+        ws.cell(r, 1, vid)
+        ws.cell(r, 2, label)
+        ws.cell(r, 3, factor)
+        ws.cell(r, 4, model)
+    return len(VARIANT_DEFS)
+
+
+def build_makerspace_sheet(wb):
+    """One-time seed→sheet migration: build a flat `Makerspace` product sheet
+    from makerspace.json with the full importer contract. Prices are literal
+    values (no formula), so this sheet needs no Excel recalculation. Skipped
+    once Mario's workbook already carries a Makerspace sheet (he owns it then)."""
+    if "Makerspace" in wb.sheetnames:
+        report.append("**Makerspace**: Blatt bereits vorhanden — unverändert gelassen.\n")
+        return 0
+    path = makerspace_seed_path()
+    if not path.exists():
+        report.append("**Makerspace**: keine `makerspace.json` gefunden — übersprungen.\n")
+        return 0
+    items = sorted(json.load(open(path)), key=lambda i: int(i["code"]))
+    ws = wb.create_sheet("Makerspace")
+    headers = ["Code", "Kategorie", "Unterkategorie", "Einheit",
+               "Etikett Name", "Etikett Mass", "Preis Einheit Verkauf", "Varianten"]
+    for c, h in enumerate(headers, start=1):
+        ws.cell(1, c, h)
+    variant_rows = 0
+    for r, item in enumerate(items, start=2):
+        cat = item.get("category", [])
+        base = item["variants"][0]
+        ename, emass = split_name_mass(item["name"])
+        vids = item.get("variantIds", [])
+        if vids:
+            variant_rows += 1
+        ws.cell(r, 1, item["code"])
+        ws.cell(r, 2, cat[0] if cat else "Sonstiges")
+        ws.cell(r, 3, cat[1] if len(cat) > 1 else "")
+        ws.cell(r, 4, PRICINGMODEL_TO_EINHEIT.get(base["pricingModel"], "Stk"))
+        ws.cell(r, 5, ename)
+        ws.cell(r, 6, emass)
+        ws.cell(r, 7, base["unitPrice"]["default"])
+        ws.cell(r, 8, ",".join(vids))
+    codes = sorted(int(i["code"]) for i in items)
+    report.append(
+        f"**Makerspace**: {len(items)} Produkte aus `{path.name}` erzeugt. "
+        f"Codes {codes[0]}–{codes[-1]}. {variant_rows} Zeilen mit Varianten "
+        f"(Preise als Festwerte, keine Formeln).\n"
+    )
+    return len(items)
+
+
 def main():
     wb_vals = openpyxl.load_workbook(SRC, data_only=True)
     wb = openpyxl.load_workbook(SRC, data_only=False)
@@ -267,6 +366,16 @@ def main():
         )
         report.append("  Kategorien: " + ", ".join(sorted(cat_samples)) + "\n")
 
+    # Makerspace + variant definitions are generated (not augmented from Mario's
+    # sheets): the Varianten sheet is the editorial source for variant factors,
+    # the Makerspace sheet is a one-time seed→sheet migration.
+    total += build_makerspace_sheet(wb)
+    nvar = build_varianten_sheet(wb)
+    report.append(
+        f"**Varianten**: {nvar} Definitionen (Referenzblatt, das der Import liest — "
+        f"Faktoren leben ab jetzt hier, nicht mehr im Code).\n"
+    )
+
     wb.save(OUT)
 
     md = [
@@ -281,6 +390,10 @@ def main():
         "- Preise stehen in Marios `Preis Einheit Verkauf` — vor dem Import in Excel "
         "öffnen und speichern, damit die Formeln berechnet sind.\n",
         "- Etikett Name/Mass wurden vereinheitlicht (bitte im File gegenlesen).\n",
+        "- `Makerspace` + `Varianten` sind neu generiert: Makerspace-Preise sind "
+        "Festwerte (kein Excel-Neuberechnen nötig); `Varianten` definiert die "
+        "Zuschnitt-Faktoren, die der Import auf jede Zeile mit `Varianten`-Spalte "
+        "anwendet.\n",
     ]
     REPORT.write_text("".join(md))
     print("".join(md))
