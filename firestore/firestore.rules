@@ -137,9 +137,16 @@ service cloud.firestore {
       // billing-address invariant as the update path — without it a firma
       // account could mint its initial doc address-less and only the
       // invoice-time backstop would catch it.
+      //
+      // roles/permissions MUST be empty on self-create. Doc ID == Auth UID
+      // and syncCustomClaims stamps `admin` on any write whose roles[]
+      // includes "admin", so an unconstrained create path let any
+      // anonymous/magic-link session self-grant admin (and arbitrary
+      // machine permissions). Mirror the update path, which pins both to
+      // their prior value: grants must only come through the admin path.
       allow create: if isSignedIn() && userId == request.auth.uid &&
-                       request.resource.data.permissions is list &&
-                       isDocumentReferenceArray(request.resource.data.permissions, 'permission') &&
+                       request.resource.data.roles == [] &&
+                       request.resource.data.permissions == [] &&
                        isValidUserProfile(request.resource.data);
 
       // Users can update their own doc but cannot change roles/permissions.
