@@ -36,6 +36,27 @@ interface GetPaymentQrDataRequest {
   billId: string;
 }
 
+/**
+ * The user the caller is authorized to act as. Mirrors the helper in
+ * `acknowledge_bill.ts` / `close_checkout_and_get_payment.ts`: real logins
+ * return `request.auth.uid`; kiosk tag-tap sessions return the `actsAs`
+ * claim.
+ */
+function effectiveUid(request: CallableRequest<unknown>): string | null {
+  const claims = request.auth?.token as { actsAs?: unknown } | undefined;
+  if (typeof claims?.actsAs === "string" && claims.actsAs.length > 0) {
+    return claims.actsAs;
+  }
+  return request.auth?.uid ?? null;
+}
+
+function isAnonymousCaller(request: CallableRequest<unknown>): boolean {
+  const provider = (request.auth?.token as
+    | { firebase?: { sign_in_provider?: string } }
+    | undefined)?.firebase?.sign_in_provider;
+  return provider === "anonymous";
+}
+
 export interface PaymentData {
   // Doc id of the underlying bill — lets the client wire follow-up
   // actions (PDF download, etc.) without fetching the checkout doc.
@@ -182,6 +203,10 @@ export function buildPaymentData(
 export const getPaymentQrDataHandler = async (
   request: CallableRequest<GetPaymentQrDataRequest>
 ) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Authentication required");
+  }
+
   const { billId } = request.data as GetPaymentQrDataRequest;
   if (!billId || typeof billId !== "string") {
     throw new HttpsError("invalid-argument", "billId is required");
@@ -194,6 +219,29 @@ export const getPaymentQrDataHandler = async (
   }
 
   const bill = billDoc.data() as BillEntity;
+
+  // Authorisation: this endpoint returns the payer's name, email, amount and
+  // SCOR reference, so it must enforce the same owner-or-admin check every
+  // sibling bill endpoint does (mirrors acknowledgeBill). Previously it had
+  // none — any leaked billId exposed payer PII to any caller (IDOR).
+  //  - real / tag-tap principal that owns the bill, OR
+  //  - an anonymous session for a null-userId (walk-in) bill, OR
+  //  - admin.
+  const isAdmin = request.auth.token.admin === true;
+  const callerUid = effectiveUid(request);
+  const isOwner =
+    callerUid !== null &&
+    bill.userId !== null &&
+    bill.userId.id === callerUid;
+  const isAnonOwner =
+    !isOwner &&
+    !isAdmin &&
+    bill.userId === null &&
+    isAnonymousCaller(request);
+
+  if (!isAdmin && !isOwner && !isAnonOwner) {
+    throw new HttpsError("permission-denied", "Access denied");
+  }
 
   // Load payer info from the first checkout's primary person
   let payer: PaymentPayer | null = null;
