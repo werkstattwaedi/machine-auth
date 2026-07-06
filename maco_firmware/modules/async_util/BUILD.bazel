@@ -1,0 +1,39 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+# Small async2 utilities shared across firmware modules.
+
+load("@pigweed//pw_unit_test:pw_cc_test.bzl", "pw_cc_test")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//maco_firmware:__subpackages__"])
+
+# Header-only: races a value future against a timeout, resolving to a
+# pw::Result<T> (DeadlineExceeded on timeout). Replaces pw_async2's
+# future_timeout.h, which does not compile under arm-none-eabi GCC.
+cc_library(
+    name = "value_or_timeout",
+    hdrs = ["public/async_util/value_or_timeout.h"],
+    includes = ["public"],
+    deps = [
+        "@pigweed//pw_async2:poll",
+        "@pigweed//pw_async2:pw_async2",
+        "@pigweed//pw_result",
+        "@pigweed//pw_status",
+    ],
+)
+
+pw_cc_test(
+    name = "value_or_timeout_test",
+    srcs = ["value_or_timeout_test.cc"],
+    deps = [
+        ":value_or_timeout",
+        "@pigweed//pw_async2:basic_dispatcher",
+        "@pigweed//pw_async2:coro",
+        "@pigweed//pw_async2:coro_or_else_task",
+        "@pigweed//pw_async2:simulated_time_provider",
+        "@pigweed//pw_async2:value_future",
+        "@pigweed//pw_allocator:testing",
+        "@pigweed//pw_chrono:system_clock",
+    ],
+)
