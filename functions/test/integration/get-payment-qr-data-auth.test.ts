@@ -30,6 +30,9 @@ async function seedBillAndCheckout(
   billId: string,
   ownerUid: string | null,
   checkoutId = "co1",
+  // For anonymous (null-userId) walk-in bills, the linked checkout carries the
+  // creating anon session's uid; access is scoped to it.
+  firebaseUid: string | null = null,
 ): Promise<void> {
   const db = getFirestore();
   const checkoutRef = db.collection("checkouts").doc(checkoutId);
@@ -48,6 +51,7 @@ async function seedBillAndCheckout(
     modifiedBy: ownerUid,
     modifiedAt: now,
     closedAt: now,
+    firebaseUid,
   };
   await checkoutRef.set(checkout);
 
@@ -163,10 +167,18 @@ describe("getPaymentQrData authorisation (Integration, S-1)", () => {
     expect(data.billId).to.equal("b1");
   });
 
-  it("allows an anonymous session for a null-userId (walk-in) bill", async () => {
-    await seedBillAndCheckout("b1", null);
+  it("allows the creating anonymous session for a null-userId (walk-in) bill", async () => {
+    await seedBillAndCheckout("b1", null, "co1", "anon-1");
     const data = await call("anon-1", { billId: "b1" }, { anonymous: true });
     expect(data.payerName).to.equal("Alice Payer");
+  });
+
+  it("rejects a DIFFERENT anonymous session for another walk-in's bill (PII scoping)", async () => {
+    await seedBillAndCheckout("b1", null, "co1", "anon-1");
+    await expectRejects(
+      call("anon-2", { billId: "b1" }, { anonymous: true }),
+      "permission-denied",
+    );
   });
 
   it("rejects an anonymous session for a real-userId bill", async () => {

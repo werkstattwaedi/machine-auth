@@ -220,12 +220,26 @@ export const getPaymentQrDataHandler = async (
 
   const bill = billDoc.data() as BillEntity;
 
+  // Load the linked checkout up front: it carries both the payer info and the
+  // `firebaseUid` used to scope anonymous access to the creating session.
+  let checkoutData: CheckoutEntity | null = null;
+  if (bill.checkouts.length > 0) {
+    const checkoutDoc = await bill.checkouts[0].get();
+    if (checkoutDoc.exists) {
+      checkoutData = checkoutDoc.data() as CheckoutEntity;
+    }
+  }
+
   // Authorisation: this endpoint returns the payer's name, email, amount and
   // SCOR reference, so it must enforce the same owner-or-admin check every
-  // sibling bill endpoint does (mirrors acknowledgeBill). Previously it had
-  // none — any leaked billId exposed payer PII to any caller (IDOR).
+  // sibling bill endpoint does. Previously it had none — any leaked billId
+  // exposed payer PII to any caller (IDOR).
   //  - real / tag-tap principal that owns the bill, OR
-  //  - an anonymous session for a null-userId (walk-in) bill, OR
+  //  - the anonymous session that CREATED a null-userId (walk-in) bill —
+  //    scoped via the linked checkout's `firebaseUid` (stamped == the
+  //    creator's uid, issue #318). Mirrors the P0-2 anon checkout-read
+  //    scoping so one anon session cannot read another walk-in's payer PII,
+  //    OR
   //  - admin.
   const isAdmin = request.auth.token.admin === true;
   const callerUid = effectiveUid(request);
@@ -237,23 +251,19 @@ export const getPaymentQrDataHandler = async (
     !isOwner &&
     !isAdmin &&
     bill.userId === null &&
-    isAnonymousCaller(request);
+    isAnonymousCaller(request) &&
+    callerUid !== null &&
+    checkoutData?.firebaseUid === callerUid;
 
   if (!isAdmin && !isOwner && !isAnonOwner) {
     throw new HttpsError("permission-denied", "Access denied");
   }
 
-  // Load payer info from the first checkout's primary person
+  // Payer info from the linked checkout's primary person.
   let payer: PaymentPayer | null = null;
-  if (bill.checkouts.length > 0) {
-    const checkoutDoc = await bill.checkouts[0].get();
-    if (checkoutDoc.exists) {
-      const checkout = checkoutDoc.data() as CheckoutEntity;
-      const person = checkout.persons[0];
-      if (person) {
-        payer = { name: person.name, email: person.email };
-      }
-    }
+  const person = checkoutData?.persons[0];
+  if (person) {
+    payer = { name: person.name, email: person.email };
   }
 
   return buildPaymentData(
