@@ -41,6 +41,23 @@ describe("parseMarkBillsPaidRequest", () => {
         bills: [{ billId: "b1", paidVia: "cash", paidAtMs: "gestern" }],
       })
     ).to.throw(/paidAtMs/);
+    expect(() =>
+      parseMarkBillsPaidRequest({
+        bills: [{ billId: "b1", paidVia: "cash", paidAtMs: NaN }],
+      })
+    ).to.throw(/paidAtMs/);
+  });
+
+  it("rejects value dates outside the sanity range", () => {
+    // Seconds instead of ms (unit confusion) and far-future garbage both
+    // land on financial PDFs — reject outright.
+    for (const paidAtMs of [0, 1_750_000_000, Date.UTC(2101, 0, 1)]) {
+      expect(() =>
+        parseMarkBillsPaidRequest({
+          bills: [{ billId: "b1", paidVia: "cash", paidAtMs }],
+        })
+      ).to.throw(/paidAtMs/);
+    }
   });
 
   it("caps the batch size", () => {

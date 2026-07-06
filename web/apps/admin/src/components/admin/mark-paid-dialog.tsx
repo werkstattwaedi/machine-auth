@@ -7,9 +7,10 @@
 
 import { useState } from "react"
 import { Loader2 } from "lucide-react"
-import { rpcCallable } from "@modules/lib/rpc"
 import { useFunctions } from "@modules/lib/firebase-context"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
+import { bookBillsPaid, type MarkBillsPaidResult } from "@/lib/book-bills"
+import type { AdminPaidVia } from "@oww/shared"
 import { Button } from "@modules/components/ui/button"
 import {
   Dialog,
@@ -27,13 +28,7 @@ import {
 } from "@modules/components/ui/select"
 import { toast } from "sonner"
 
-export type AdminPaidVia = "ebanking" | "twint" | "cash"
-
-export interface MarkBillsPaidResult {
-  paid: number
-  alreadyPaid: string[]
-  rejected: string[]
-}
+export type { MarkBillsPaidResult }
 
 const PAID_VIA_LABELS: Record<AdminPaidVia, string> = {
   ebanking: "E-Banking / QR-Rechnung",
@@ -65,16 +60,12 @@ export function MarkPaidDialog({
   const handleConfirm = async () => {
     let result: MarkBillsPaidResult
     try {
-      result = await markPaid.mutate(async () => {
-        const fn = rpcCallable<
-          { bills: { billId: string; paidVia: AdminPaidVia }[] },
-          MarkBillsPaidResult
-        >(functions, "billingCall", "adminMarkBillsPaid")
-        const res = await fn({
-          bills: billIds.map((billId) => ({ billId, paidVia })),
-        })
-        return res.data
-      })
+      result = await markPaid.mutate(() =>
+        bookBillsPaid(
+          functions,
+          billIds.map((billId) => ({ billId, paidVia })),
+        ),
+      )
     } catch {
       return
     }

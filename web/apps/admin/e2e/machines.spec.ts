@@ -144,11 +144,17 @@ test.describe("Maschinen workspace", () => {
     await page.getByRole("button", { name: "Erledigt" }).click()
     await expect(page.getByText("erledigt", { exact: true })).toBeVisible()
 
+    // Poll: the UI renders the web SDK's optimistic write immediately,
+    // the server commit lands a beat later.
     const db = getAdminFirestore()
-    const snap = await db
-      .collection("machine_reports")
-      .doc("e2e-report-1")
-      .get()
-    expect(snap.data()?.status).toBe("done")
+    await expect
+      .poll(async () => {
+        const snap = await db
+          .collection("machine_reports")
+          .doc("e2e-report-1")
+          .get()
+        return snap.data()?.status ?? null
+      })
+      .toBe("done")
   })
 })

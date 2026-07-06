@@ -13,13 +13,12 @@ import { orderBy, limit } from "firebase/firestore"
 import { useCollection } from "@modules/lib/firestore"
 import { useDb, useFunctions } from "@modules/lib/firebase-context"
 import { billsCollection } from "@modules/lib/firestore-helpers"
-import { rpcCallable } from "@modules/lib/rpc"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
+import { bookBillsPaid, type MarkBillsPaidResult } from "@/lib/book-bills"
 import { PageLoading } from "@modules/components/page-loading"
 import { PageHeader } from "@/components/admin/page-header"
 import { BulkBar } from "@/components/admin/bulk-bar"
 import { StatCards } from "@/components/admin/stat-cards"
-import type { MarkBillsPaidResult } from "@/components/admin/mark-paid-dialog"
 import {
   matchStatement,
   parseStatementFile,
@@ -58,7 +57,11 @@ function StatementImportPage() {
   const [fileName, setFileName] = useState<string | null>(null)
   const [parsed, setParsed] = useState<ParsedStatement | null>(null)
   const [parseError, setParseError] = useState<string | null>(null)
-  const [booked, setBooked] = useState(false)
+  // After booking, the live bills snapshot would recompute the match and
+  // shift everything to "bereits bezahlt" — freeze the reviewed result so
+  // the admin sees what was just booked.
+  const [bookedResult, setBookedResult] = useState<MatchResult | null>(null)
+  const booked = bookedResult != null
 
   // Match against the full recent bill window. Reference numbers are
   // sequential, so anything older than the last 1000 bills is long paid.
@@ -73,7 +76,7 @@ function StatementImportPage() {
     errorMessage: "Zahlungen konnten nicht gebucht werden",
   })
 
-  const result: MatchResult | null = useMemo(() => {
+  const liveResult: MatchResult | null = useMemo(() => {
     if (!parsed) return null
     return matchStatement(
       parsed.entries,
@@ -86,12 +89,13 @@ function StatementImportPage() {
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [parsed, bills])
+  const result = bookedResult ?? liveResult
 
   const handleFile = async (file: File) => {
     setFileName(file.name)
     setParseError(null)
     setParsed(null)
-    setBooked(false)
+    setBookedResult(null)
     try {
       const text = await file.text()
       setParsed(parseStatementFile(text))
@@ -107,30 +111,22 @@ function StatementImportPage() {
     const paidVia = parsed.kind === "twint" ? "twint" : "ebanking"
     let res: MarkBillsPaidResult
     try {
-      res = await book.mutate(async () => {
-        const fn = rpcCallable<
-          {
-            bills: {
-              billId: string
-              paidVia: "ebanking" | "twint"
-              paidAtMs?: number
-            }[]
-          },
-          MarkBillsPaidResult
-        >(functions, "billingCall", "adminMarkBillsPaid")
-        const out = await fn({
-          bills: result.matched.map((m) => ({
+      // bookBillsPaid chunks past the server's per-call cap — a statement
+      // covering a Sammelrechnung cycle can match 200+ invoices.
+      res = await book.mutate(() =>
+        bookBillsPaid(
+          functions,
+          result.matched.map((m) => ({
             billId: m.bill.id,
             paidVia,
             paidAtMs: m.entry.bookingDateMs ?? undefined,
           })),
-        })
-        return out.data
-      })
+        ),
+      )
     } catch {
       return
     }
-    setBooked(true)
+    setBookedResult(result)
     toast.success(`${res.paid} Zahlungen gebucht.`)
   }
 
@@ -161,6 +157,9 @@ function StatementImportPage() {
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0]
+              // Reset so re-selecting the SAME file (fixed in Excel and
+              // saved) fires onChange again.
+              e.target.value = ""
               if (f) void handleFile(f)
             }}
           />
@@ -271,7 +270,7 @@ function StatementImportPage() {
                             <Badge variant="secondary">gebucht</Badge>
                           ) : (
                             <Badge className="bg-cog-teal-light text-cog-teal-dark border-cog-teal/30">
-                              match
+                              zugeordnet
                             </Badge>
                           )}
                         </TableCell>

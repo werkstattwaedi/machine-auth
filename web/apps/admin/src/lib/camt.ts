@@ -274,7 +274,11 @@ export interface MatchResult {
   matched: StatementMatch[]
   /** Payments whose bill is already marked paid (re-imported statement). */
   alreadyPaid: StatementMatch[]
-  /** Payments with no usable/known reference — left for manual handling. */
+  /**
+   * Payments needing manual handling: no usable/known reference, or a
+   * second payment referencing a bill already matched by an earlier
+   * entry (double payment — booking it would silently vanish).
+   */
   unmatched: StatementEntry[]
 }
 
@@ -283,6 +287,7 @@ export function matchStatement(
   bills: MatchableBill[],
 ): MatchResult {
   const byReference = new Map(bills.map((b) => [b.referenceNumber, b]))
+  const matchedBillIds = new Set<string>()
   const result: MatchResult = { matched: [], alreadyPaid: [], unmatched: [] }
   for (const entry of entries) {
     const refNumber = entry.reference
@@ -298,8 +303,17 @@ export function matchStatement(
       bill,
       amountMismatch: Math.abs(entry.amount - bill.amount) > 0.005,
     }
-    if (bill.paid) result.alreadyPaid.push(match)
-    else result.matched.push(match)
+    if (bill.paid) {
+      result.alreadyPaid.push(match)
+    } else if (matchedBillIds.has(bill.id)) {
+      // Same invoice paid twice within one statement: only the first
+      // payment books; surface the duplicate for the treasurer instead
+      // of letting the server silently skip it as alreadyPaid.
+      result.unmatched.push(entry)
+    } else {
+      matchedBillIds.add(bill.id)
+      result.matched.push(match)
+    }
   }
   return result
 }

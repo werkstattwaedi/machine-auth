@@ -54,10 +54,23 @@ export const Route = createFileRoute("/_authenticated/users/$userId")({
 })
 
 function PersonPage() {
-  const db = useDb()
-  const navigate = useNavigate()
   const { userId } = Route.useParams()
   const { tab } = Route.useSearch()
+  // Keyed so a person→person navigation remounts ALL hooks: useCollection
+  // only re-subscribes on collection-path changes, not on changed where()
+  // constraints (same convention as the keyed ledger tables).
+  return <PersonWorkspace key={userId} userId={userId} tab={tab} />
+}
+
+function PersonWorkspace({
+  userId,
+  tab,
+}: {
+  userId: string
+  tab: PersonSearch["tab"]
+}) {
+  const db = useDb()
+  const navigate = useNavigate()
   const { data: user, loading } = useDocument(userRef(db, userId))
   // Any membership this person belongs to — including expired/cancelled
   // ones the `activeMembership` denorm no longer points at.
@@ -80,7 +93,7 @@ function PersonPage() {
   const name = formatFullName(user, "Person")
 
   return (
-    <div key={userId} className="space-y-4">
+    <div className="space-y-4">
       <PageHeader title={name} backTo="/users" backLabel="Zurück zu Personen" />
 
       <div className="-mt-4 flex flex-wrap items-center gap-2">

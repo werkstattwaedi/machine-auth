@@ -8,7 +8,7 @@
 
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router"
 import { useEffect, useState, type ReactNode } from "react"
-import { where, serverTimestamp } from "firebase/firestore"
+import { limit, orderBy, serverTimestamp, where } from "firebase/firestore"
 import { useDocument, useCollection } from "@modules/lib/firestore"
 import { useDb } from "@modules/lib/firebase-context"
 import {
@@ -87,10 +87,23 @@ export const Route = createFileRoute("/_authenticated/machines/$machineId")({
 })
 
 function MachineDetailPage() {
-  const db = useDb()
-  const navigate = useNavigate()
   const { machineId } = Route.useParams()
   const { tab } = Route.useSearch()
+  // Keyed so a machine→machine navigation remounts ALL hooks: useCollection
+  // only re-subscribes on collection-path changes, not on changed where()
+  // constraints (same convention as the keyed ledger tables).
+  return <MachineDetail key={machineId} machineId={machineId} tab={tab} />
+}
+
+function MachineDetail({
+  machineId,
+  tab,
+}: {
+  machineId: string
+  tab: MachineSearch["tab"]
+}) {
+  const db = useDb()
+  const navigate = useNavigate()
   const { data: machine, loading } = useDocument(machineRef(db, machineId))
   const { data: reports } = useCollection(
     machineReportsCollection(db),
@@ -115,7 +128,7 @@ function MachineDetailPage() {
     )
 
   return (
-    <div key={machineId} className="space-y-4">
+    <div className="space-y-4">
       <PageHeader
         title={machine.name || machineId}
         backTo="/machines"
@@ -216,15 +229,19 @@ function MachineOverview({
 }) {
   const db = useDb()
   const { users: userNames } = useLookup()
-  const { data: usages } = useCollection(
+  // Same bounded recent-usage window as the machines list (an unfiltered
+  // where(machine==…) subscription grows with the machine's full history;
+  // machine+startTime ordering would need a composite index). If this
+  // machine doesn't appear in the last 200 usages, the card shows "–" —
+  // the Nutzungen deep link remains the complete view.
+  const { data: recentUsages } = useCollection(
     usageMachineCollection(db),
-    where("machine", "==", machineRef(db, machineId)),
+    orderBy("startTime", "desc"),
+    limit(200),
   )
   const { data: allUsers } = useCollection(usersCollection(db))
 
-  const lastUsage = [...usages].sort(
-    (a, b) => (b.startTime?.toMillis() ?? 0) - (a.startTime?.toMillis() ?? 0),
-  )[0]
+  const lastUsage = recentUsages.find((u) => u.machine?.id === machineId)
 
   // "Berechtigt" = people holding every required permission.
   const requiredIds = (machine.requiredPermission ?? []).map((p) => p.id)

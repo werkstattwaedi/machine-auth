@@ -151,6 +151,29 @@ describe("matchStatement", () => {
     expect(result.unmatched).toHaveLength(1)
   })
 
+  it("routes a duplicate payment for the same bill to unmatched", () => {
+    const twice = [
+      {
+        amount: 84,
+        currency: "CHF",
+        bookingDateMs: null,
+        reference: "RF29000100042",
+        debtorName: "Mike",
+      },
+      {
+        amount: 84,
+        currency: "CHF",
+        bookingDateMs: null,
+        reference: "RF29000100042",
+        debtorName: "Mike (Doppelzahlung)",
+      },
+    ]
+    const result = matchStatement(twice, bills)
+    expect(result.matched).toHaveLength(1)
+    expect(result.unmatched).toHaveLength(1)
+    expect(result.unmatched[0].debtorName).toContain("Doppelzahlung")
+  })
+
   it("flags amount mismatches and already-paid bills", () => {
     const result = matchStatement(
       [

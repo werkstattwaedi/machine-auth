@@ -62,9 +62,10 @@ export function PersonProfileTab({
   }, [user, reset])
 
   const onSubmit = async (values: ProfileFormValues) => {
-    // Roles only carry authorization flags (currently just "admin");
-    // membership is its own entity and no longer lives in roles.
-    const roles: string[] = []
+    // The form only edits the "admin" flag; preserve any other role
+    // values (e.g. legacy "vereinsmitglied") instead of erasing them on
+    // every profile save.
+    const roles = (user.roles ?? []).filter((r) => r !== "admin")
     if (values.isAdmin) roles.push("admin")
 
     const hasAddress = values.street || values.zip || values.city

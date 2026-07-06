@@ -18,31 +18,18 @@
 import * as logger from "firebase-functions/logger";
 import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
+import {
+  ADMIN_PAID_VIA,
+  MAX_BILLS_PER_CALL,
+  PAID_AT_MAX_MS,
+  PAID_AT_MIN_MS,
+  type MarkBillPaidInput,
+  type MarkBillsPaidRequest,
+  type MarkBillsPaidResult,
+} from "@oww/shared";
 import type { BillEntity } from "./types";
 
-const PAID_VIA = ["twint", "ebanking", "cash"] as const;
-type PaidVia = (typeof PAID_VIA)[number];
-
-export interface MarkBillPaidInput {
-  billId: string;
-  paidVia: PaidVia;
-  /** Value date of the payment (e.g. from the bank statement). Defaults to now. */
-  paidAtMs?: number;
-}
-
-export interface MarkBillsPaidRequest {
-  bills: MarkBillPaidInput[];
-}
-
-export interface MarkBillsPaidResult {
-  paid: number;
-  /** Bill ids skipped because they were already paid. */
-  alreadyPaid: string[];
-  /** Bill ids that don't exist or are Belege (never payable on their own). */
-  rejected: string[];
-}
-
-const MAX_BILLS_PER_CALL = 200;
+export type { MarkBillPaidInput, MarkBillsPaidRequest, MarkBillsPaidResult };
 
 /** Validate the wire payload; throws HttpsError on malformed input. */
 export function parseMarkBillsPaidRequest(data: unknown): MarkBillPaidInput[] {
@@ -60,18 +47,31 @@ export function parseMarkBillsPaidRequest(data: unknown): MarkBillPaidInput[] {
     if (!b || typeof b.billId !== "string" || !b.billId) {
       throw new HttpsError("invalid-argument", "billId is required");
     }
-    if (!PAID_VIA.includes(b.paidVia)) {
+    if (!ADMIN_PAID_VIA.includes(b.paidVia)) {
       throw new HttpsError(
         "invalid-argument",
-        `paidVia must be one of ${PAID_VIA.join(", ")}`
+        `paidVia must be one of ${ADMIN_PAID_VIA.join(", ")}`
       );
     }
-    if (b.paidAtMs != null && typeof b.paidAtMs !== "number") {
-      throw new HttpsError("invalid-argument", "paidAtMs must be a number");
+    if (b.paidAtMs != null) {
+      // Value dates land on financial PDFs — reject garbage (NaN, epoch 0,
+      // far-future timestamps from unit-confused callers) outright.
+      if (
+        !Number.isFinite(b.paidAtMs) ||
+        b.paidAtMs < PAID_AT_MIN_MS ||
+        b.paidAtMs > PAID_AT_MAX_MS
+      ) {
+        throw new HttpsError(
+          "invalid-argument",
+          "paidAtMs must be an epoch-ms timestamp between 2000 and 2100"
+        );
+      }
     }
     return { billId: b.billId, paidVia: b.paidVia, paidAtMs: b.paidAtMs };
   });
 }
+
+type BookOutcome = "paid" | "alreadyPaid" | "rejected";
 
 export const adminMarkBillsPaidHandler = async (
   request: CallableRequest<unknown>
@@ -89,26 +89,22 @@ export const adminMarkBillsPaidHandler = async (
   };
 
   // Per-bill transactions keep the check-then-set race-free while letting
-  // one bad id reject without failing the whole batch.
+  // one bad id reject without failing the whole batch. The outcome is
+  // aggregated OUTSIDE the transaction callback — Firestore retries the
+  // callback on contention, so mutating `result` inside it would count a
+  // retried bill twice.
   for (const input of inputs) {
     const ref = db.doc(`bills/${input.billId}`);
-    await db.runTransaction(async (tx) => {
+    const outcome = await db.runTransaction<BookOutcome>(async (tx) => {
       const snap = await tx.get(ref);
-      if (!snap.exists) {
-        result.rejected.push(input.billId);
-        return;
-      }
+      if (!snap.exists) return "rejected";
       const bill = snap.data() as BillEntity;
       if ((bill.kind ?? "invoice") === "beleg") {
         // Belege are folded into the monthly Sammelrechnung; the payment
         // books against that aggregate invoice, never the Beleg itself.
-        result.rejected.push(input.billId);
-        return;
+        return "rejected";
       }
-      if (bill.paidAt) {
-        result.alreadyPaid.push(input.billId);
-        return;
-      }
+      if (bill.paidAt) return "alreadyPaid";
       tx.update(ref, {
         paidAt: input.paidAtMs
           ? Timestamp.fromMillis(input.paidAtMs)
@@ -117,8 +113,11 @@ export const adminMarkBillsPaidHandler = async (
         modifiedAt: Timestamp.now(),
         modifiedBy: request.auth?.uid ?? null,
       });
-      result.paid += 1;
+      return "paid";
     });
+    if (outcome === "paid") result.paid += 1;
+    else if (outcome === "alreadyPaid") result.alreadyPaid.push(input.billId);
+    else result.rejected.push(input.billId);
   }
 
   logger.info("adminMarkBillsPaid", {

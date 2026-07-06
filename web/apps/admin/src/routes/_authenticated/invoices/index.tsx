@@ -149,6 +149,9 @@ function InvoicesContent({
           b.reference.toLowerCase().includes(needle),
       )
       .sort((a, b) => (b.created?.toMillis() ?? 0) - (a.created?.toMillis() ?? 0))
+    // `nowMs` is intentionally not a dependency: statuses derived from it
+    // only drift at the 30-day overdue boundary, and any snapshot/filter
+    // update recomputes with a fresh clock anyway.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, statusFilter, search, users])
 

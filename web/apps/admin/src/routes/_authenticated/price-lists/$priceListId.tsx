@@ -93,6 +93,7 @@ function PriceListDetailPage() {
   const handleDownloadPdf = async () => {
     if (!priceList) return
     setDownloading(true)
+    let downloaded = false
     try {
       const fn = rpcCallable<{ priceListId: string }, { url: string }>(
         functions,
@@ -110,18 +111,25 @@ function PriceListDetailPage() {
       document.body.appendChild(a)
       a.click()
       a.remove()
-      // Stamp the generation time so the list view can flag the printed
-      // Aushang as veraltet once items drift. Best-effort — a failure
-      // here must not look like the download failed.
-      await update(priceListRef(db, priceListId), {
-        generatedAt: serverTimestamp() as unknown as null,
-      })
+      downloaded = true
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "PDF konnte nicht erstellt werden."
       toast.error(message)
     } finally {
       setDownloading(false)
+    }
+    if (downloaded) {
+      // Stamp the generation time so the list view can flag the printed
+      // Aushang as veraltet once items drift. Best-effort — silently ignore
+      // failures so a Firestore hiccup does not look like a download error.
+      try {
+        await update(priceListRef(db, priceListId), {
+          generatedAt: serverTimestamp() as unknown as null,
+        })
+      } catch {
+        // intentionally silent
+      }
     }
   }
 

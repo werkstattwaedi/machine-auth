@@ -138,6 +138,26 @@ describe("PersonProfileTab admin role persistence (issue #495)", () => {
     )
   })
 
+  it("preserves unknown role values while toggling admin", async () => {
+    render(
+      <PersonProfileTab userId="u1" user={testUser(["vereinsmitglied"])} />,
+    )
+
+    const user = userEvent.setup()
+    await act(async () => {
+      await user.click(screen.getByRole("checkbox", { name: /Administrator/ }))
+      await user.click(screen.getByRole("button", { name: /Speichern/ }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ roles: ["vereinsmitglied", "admin"] }),
+      expect.anything(),
+    )
+  })
+
   it("saving an existing admin without touching the checkbox preserves roles: ['admin']", async () => {
     render(<PersonProfileTab userId="u1" user={testUser(["admin"])} />)
 
