@@ -30,6 +30,7 @@ import type {
   CheckoutItemDoc,
   ConfigDoc,
   MachineDoc,
+  MachineReportDoc,
   MacoDoc,
   MembershipDoc,
   MembershipInviteDoc,
@@ -66,6 +67,24 @@ export function machineRef(
   id: string,
 ): DocumentReference<MachineDoc> {
   return doc(db, "machine", id) as DocumentReference<MachineDoc>
+}
+
+// ── machine_reports ──────────────────────────────────────────────────────
+
+export function machineReportsCollection(
+  db: Firestore,
+): CollectionReference<MachineReportDoc> {
+  return collection(
+    db,
+    "machine_reports",
+  ) as CollectionReference<MachineReportDoc>
+}
+
+export function machineReportRef(
+  db: Firestore,
+  id: string,
+): DocumentReference<MachineReportDoc> {
+  return doc(db, "machine_reports", id) as DocumentReference<MachineReportDoc>
 }
 
 // ── permission ───────────────────────────────────────────────────────────

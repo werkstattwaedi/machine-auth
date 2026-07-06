@@ -13,6 +13,7 @@ import { getInvoiceDownloadUrlHandler } from "./get_invoice_download_url";
 import { getPaymentQrDataHandler } from "./get_payment_qr_data";
 import { closeCheckoutAndGetPaymentHandler } from "./close_checkout_and_get_payment";
 import { acknowledgeBillHandler } from "./acknowledge_bill";
+import { adminMarkBillsPaidHandler } from "./mark_bills_paid";
 import { addBadgeToCheckoutHandler } from "../badge/purchase";
 import { diversificationMasterKey } from "../config/tag-secrets";
 
@@ -21,6 +22,7 @@ const HANDLERS: Record<string, RpcHandler> = {
   getPaymentQrData: getPaymentQrDataHandler,
   closeCheckoutAndGetPayment: closeCheckoutAndGetPaymentHandler,
   acknowledgeBill: acknowledgeBillHandler,
+  adminMarkBillsPaid: adminMarkBillsPaidHandler,
   addBadgeToCheckout: addBadgeToCheckoutHandler,
 };
 

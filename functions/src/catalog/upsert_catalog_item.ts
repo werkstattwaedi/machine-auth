@@ -3,6 +3,7 @@
 
 import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import { getFirestore } from "firebase-admin/firestore";
+import { VARIANT_DEFINITIONS } from "@oww/shared";
 
 /**
  * Catalog `code` uniqueness is enforced here, not by Firestore rules.
@@ -28,6 +29,9 @@ interface UpsertCatalogItemRequest {
   id?: string | null;
   code: string;
   name: string;
+  /** Curated label fields for the printer; undefined on update = keep existing. */
+  labelName?: string;
+  labelMass?: string;
   description?: string | null;
   workshops: string[];
   /**
@@ -39,6 +43,11 @@ interface UpsertCatalogItemRequest {
   active: boolean;
   userCanAdd: boolean;
   variants: CatalogVariantInput[];
+  /**
+   * Ids of shared variant definitions that apply (see `resolveVariants` in
+   * `@oww/shared`). Optional on update — undefined means "keep existing".
+   */
+  variantIds?: string[];
 }
 
 function assertString(value: unknown, field: string): string {
@@ -80,6 +89,18 @@ function assertVariants(value: unknown): CatalogVariantInput[] {
   return value as CatalogVariantInput[];
 }
 
+function assertVariantIds(value: unknown): string[] {
+  if (!Array.isArray(value) || !value.every((v) => typeof v === "string")) {
+    throw new HttpsError("invalid-argument", "variantIds must be an array of strings");
+  }
+  for (const id of value as string[]) {
+    if (!(id in VARIANT_DEFINITIONS)) {
+      throw new HttpsError("invalid-argument", `Unknown variant id "${id}"`);
+    }
+  }
+  return value as string[];
+}
+
 function parseRequest(raw: unknown): UpsertCatalogItemRequest {
   if (typeof raw !== "object" || raw === null) {
     throw new HttpsError("invalid-argument", "request body must be an object");
@@ -99,16 +120,23 @@ function parseRequest(raw: unknown): UpsertCatalogItemRequest {
     data.category === undefined
       ? undefined
       : assertStringArray(data.category, "category");
+  const variantIds =
+    data.variantIds === undefined
+      ? undefined
+      : assertVariantIds(data.variantIds);
   return {
     id,
     code: assertString(data.code, "code"),
     name: assertString(data.name, "name"),
+    labelName: typeof data.labelName === "string" ? data.labelName : undefined,
+    labelMass: typeof data.labelMass === "string" ? data.labelMass : undefined,
     description,
     workshops: assertStringArray(data.workshops, "workshops"),
     category,
     active: data.active,
     userCanAdd: data.userCanAdd,
     variants: assertVariants(data.variants),
+    variantIds,
   };
 }
 
@@ -165,6 +193,10 @@ export async function handleUpsertCatalogItem(
     const isCreate = !input.id;
     const resolvedCategory =
       input.category ?? (isCreate ? ["Sonstiges"] : undefined);
+    // Like category: undefined on update means "keep existing"; on create
+    // default to [] (base variant only).
+    const resolvedVariantIds =
+      input.variantIds ?? (isCreate ? [] : undefined);
     const docData: Record<string, unknown> = {
       code: input.code,
       name: input.name,
@@ -178,6 +210,16 @@ export async function handleUpsertCatalogItem(
     };
     if (resolvedCategory !== undefined) {
       docData.category = resolvedCategory;
+    }
+    if (resolvedVariantIds !== undefined) {
+      docData.variantIds = resolvedVariantIds;
+    }
+    // Label fields: undefined on update means "keep existing" (merge).
+    if (input.labelName !== undefined) {
+      docData.labelName = input.labelName;
+    }
+    if (input.labelMass !== undefined) {
+      docData.labelMass = input.labelMass;
     }
     // Create: full write so the doc has a known shape.
     // Update: merge so callers don't have to round-trip every field

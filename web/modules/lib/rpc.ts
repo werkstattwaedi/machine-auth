@@ -67,10 +67,13 @@ export const RpcMethod = {
     "getPaymentQrData",
     "closeCheckoutAndGetPayment",
     "acknowledgeBill",
+    "adminMarkBillsPaid",
   ],
   catalogCall: [
     "getPriceListPdfUrl",
     "upsertCatalogItem",
+    "previewCatalogImport",
+    "applyCatalogImport",
   ],
 } as const
 

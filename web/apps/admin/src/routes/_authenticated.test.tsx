@@ -84,7 +84,7 @@ describe("AdminAuthenticatedLayout", () => {
 
     const { rerender } = render(<Component />)
 
-    expect(screen.queryByText("Benutzer")).toBeNull()
+    expect(screen.queryByText("Personen")).toBeNull()
 
     mockAuthReturn = {
       user: { uid: "admin1", email: "admin@test.com" },
@@ -99,7 +99,7 @@ describe("AdminAuthenticatedLayout", () => {
       rerender(<Component />)
     })
 
-    expect(screen.getByText("Benutzer")).toBeTruthy()
+    expect(screen.getByText("Personen")).toBeTruthy()
 
     const hookOrderError = errorSpy.mock.calls.find((call) =>
       String(call[0]).includes("Rendered more hooks"),

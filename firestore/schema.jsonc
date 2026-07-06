@@ -14,6 +14,7 @@
       "items": ["string"],        // Catalog document IDs (plain strings, not DocumentReferences — needed for documentId() queries)
       "footer": "string",         // Footer text (e.g., "Offene Werkstatt Wädenswil – Holzwerkstatt")
       "active": "boolean",
+      "generatedAt": "timestamp | null", // last PDF generation; compared to items' modifiedAt to flag "veraltet"
       "modifiedBy": "string | null",
       "modifiedAt": "timestamp"
     }
@@ -22,6 +23,11 @@
     "{itemId}": { // 20-char Firestore-shaped ID. Pre-generated, committed in the seed JSON (scripts/seed-data/catalog.json).
       "code": "string", // Short numeric SKU for kiosk entry (e.g., "3002"); independent of the doc ID.
       "name": "string", // e.g., "Ahorn 30mm", "Sperrholz Pappel 3mm"
+      // Curated label fields from Mario's pricelist (Etikett Name / Etikett Mass),
+      // stored verbatim for the label printer; `name` is composed from them on
+      // import. Absent on non-imported items.
+      "labelName": "string | undefined",
+      "labelMass": "string | undefined",
       "workshops": ["string"], // e.g., ["holz"], ["holz", "metall"]
       // Root-to-leaf category path. Free-form values, not pre-registered.
       // Queryable with `array-contains` at any depth (e.g.
@@ -57,7 +63,14 @@
           // keys without touching items that don't need them.
           "unitPrice": { "default": "number", "member": "number | undefined" }
         }
-      ]
+      ],
+
+      // Ids of shared variant definitions (VARIANT_DEFINITIONS in @oww/shared)
+      // that apply to this item, e.g. laser cut sizes ["a3", "320-620"].
+      // Each derives an extra purchase option priced base×factor at read time
+      // (resolveVariants); `variants` then holds only the base entry.
+      // Absent/empty = base variant only.
+      "variantIds": ["string"]
     }
   },
   "machine": {
@@ -82,6 +95,14 @@
         "idleTimeoutSec": "number | undefined", // default 900 (15 min)
         "idleWarningSec": "number | undefined", // default 60 (1 min)
         "pollIntervalSec": "number | undefined" // default 3
+      },
+      // Admin block. Absent/null = frei. Set/cleared on the admin machine
+      // page ("Sperren" with a reason); terminals deny sessions while set.
+      "blocked": {
+        "kind": "problem | maintenance",
+        "note": "string | null",
+        "byName": "string | null",  // display name of the blocking admin
+        "at": "timestamp"
       }
     }
   },
@@ -321,7 +342,15 @@
   },
   "machine_reports": {
     "{reportId}": {
-      // User-submitted machine issue reports (public create, admin read/update/delete)
+      // User-submitted machine issue reports ("Meldungen"; public create,
+      // admin read/update/delete). Triaged on the admin machine page.
+      "machine": "DocumentReference",   // /machine/{machineId}
+      "message": "string",
+      "userId": "DocumentReference | null",  // /users/{userId} when signed in
+      "reporterName": "string | null",  // free-text fallback for kiosk reports
+      "created": "timestamp",
+      "status": "open | done",
+      "resolvedAt": "timestamp | null"
     }
   },
   "maco": {

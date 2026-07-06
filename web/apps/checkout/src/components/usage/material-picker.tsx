@@ -32,6 +32,7 @@ import {
   nextLevelValues,
 } from "@modules/lib/categories"
 import { matchesCatalogQuery } from "@modules/lib/text-search"
+import { resolveVariants } from "@oww/shared"
 import type { CheckoutItemLocal } from "./inline-rows"
 import {
   readPickerScrollAnchor,
@@ -633,7 +634,8 @@ function PickerRow({
   onToggle: (open: boolean) => void
   onAdd: (item: CheckoutItemLocal) => void
 }) {
-  const variants = catalog.variants ?? []
+  // Base variant(s) plus any derived (base×factor) variants from `variantIds`.
+  const variants = resolveVariants(catalog)
   // Resolve the variant the row should start (and reset to on close)
   // from. The `warn` argument is only `true` for the one-time lazy
   // `useState` initializer — the close-reset path passes `false` so an
@@ -766,7 +768,8 @@ function PickerRowBody({
   onVariantChange: (id: string) => void
   onAdd: (item: CheckoutItemLocal) => void
 }) {
-  const variants = catalog.variants ?? []
+  // Base variant(s) plus any derived (base×factor) variants from `variantIds`.
+  const variants = resolveVariants(catalog)
   const variant =
     variants.find((v) => v.id === selectedVariantId) ?? variants[0]
   const unitPrice = variantUnitPrice(variant, discountLevel)

@@ -19,12 +19,18 @@ import type {
 } from "firebase/firestore"
 
 import type {
+  CatalogVariant,
+  DiscountLevel,
+  ItemType,
+  PricingModel,
+} from "@oww/shared"
+export type {
+  CatalogVariant,
   DiscountLevel,
   ItemType,
   PricingModel,
   VariantPrice,
 } from "@oww/shared"
-export type { DiscountLevel, ItemType, PricingModel, VariantPrice } from "@oww/shared"
 
 // ── Cross-cutting ────────────────────────────────────────────────────────
 
@@ -89,6 +95,20 @@ export interface PermissionDoc extends AuditFields {
 
 // ── machine ──────────────────────────────────────────────────────────────
 
+/**
+ * Admin block on a machine. Absent/null = frei. `kind` distinguishes a
+ * defect ("problem") from planned "maintenance" so the list can show the
+ * right status. Set/cleared from the admin machine page; the terminal
+ * denies sessions on blocked machines.
+ */
+export interface MachineBlockedDoc {
+  kind: "problem" | "maintenance"
+  note: string | null
+  /** Display name of the admin who blocked — shown as "durch …". */
+  byName: string | null
+  at: Timestamp
+}
+
 export interface MachineDoc extends AuditFields {
   name: string
   workshop?: string
@@ -96,6 +116,25 @@ export interface MachineDoc extends AuditFields {
   requiredPermission: DocumentReference<PermissionDoc>[]
   maco?: DocumentReference<MacoDoc> | null
   control?: Record<string, unknown>
+  blocked?: MachineBlockedDoc | null
+}
+
+// ── machine_reports ──────────────────────────────────────────────────────
+
+/**
+ * User-submitted machine issue report ("Meldung"). Members file these
+ * (rules: public create); admins triage them on the machine page and
+ * mark them done. `userId` is set for signed-in reporters, otherwise the
+ * free-text `reporterName` (or neither, for anonymous kiosk reports).
+ */
+export interface MachineReportDoc {
+  machine: DocumentReference<MachineDoc>
+  message: string
+  userId?: DocumentReference<UserDoc> | null
+  reporterName?: string | null
+  created: Timestamp
+  status: "open" | "done"
+  resolvedAt?: Timestamp | null
 }
 
 // ── maco ─────────────────────────────────────────────────────────────────
@@ -130,29 +169,22 @@ export interface UsageMachineDoc extends AuditFields {
 
 // ── catalog ──────────────────────────────────────────────────────────────
 
-// PricingModel, DiscountLevel, and VariantPrice are re-exported from
-// `@oww/shared` at the top of this file — they live there because both
-// functions and the (future) printer-encoder package consume them, and
-// they have no firebase SDK coupling.
-
-export interface CatalogVariant {
-  /** Stable within the item, e.g. "default", "m2", "zuschnitt-a3", "single", "family". */
-  id: string
-  /**
-   * Display label, e.g. "Per m²", "Zuschnitt A3", "Einzel (Jahr)". Only
-   * meaningful when an item has more than one variant; for single-variant
-   * items the catalog `name` already carries everything. Picker UI gates
-   * variant-selector rendering on `variants.length > 1`; inline rows
-   * append the label after the item name only when it's set.
-   */
-  label?: string | null
-  pricingModel: PricingModel
-  unitPrice: VariantPrice
-}
+// PricingModel, DiscountLevel, VariantPrice, and CatalogVariant are
+// re-exported from `@oww/shared` at the top of this file — they live there
+// because both functions and the (future) printer-encoder package consume
+// them, and they have no firebase SDK coupling.
 
 export interface CatalogItemDoc extends AuditFields {
   code: string
   name: string
+  /**
+   * Curated label fields from Mario's pricelist (`Etikett Name` /
+   * `Etikett Mass`), stored verbatim for the label printer (#313/#314). The
+   * display `name` is composed from these on import. Absent on items not sourced
+   * from the pricelist import.
+   */
+  labelName?: string
+  labelMass?: string
   workshops: string[]
   /**
    * Root-to-leaf category path. Free-form values, not pre-registered;
@@ -170,11 +202,20 @@ export interface CatalogItemDoc extends AuditFields {
   type?: ItemType
   description?: string | null
   /**
-   * 1..n purchase options. `variants[0]` is canonical: the picker uses it
-   * silently when length == 1; auto-bill flows resolve through it. Array
-   * order is meaningful — keep the default first.
+   * The stored base variant(s). `variants[0]` is canonical: the picker uses
+   * it silently when there are no derived variants; auto-bill flows resolve
+   * through it. Additional purchase options are *derived* at read time from
+   * {@link variantIds} — call `resolveVariants(item)` (`@oww/shared`) to get
+   * the full list. In practice `variants` holds just the base entry.
    */
   variants: CatalogVariant[]
+  /**
+   * Ids of shared variant definitions (`VARIANT_DEFINITIONS` in `@oww/shared`)
+   * that apply to this item — e.g. laser cut sizes `["a3","320-620"]`. Each
+   * derives a purchase option priced `base × factor`. Absent/empty means the
+   * item has only its base variant.
+   */
+  variantIds?: string[]
 }
 
 // ── price_lists ──────────────────────────────────────────────────────────
@@ -190,6 +231,12 @@ export interface PriceListDoc extends AuditFields {
   items: string[]
   footer: string
   active: boolean
+  /**
+   * When the PDF was last generated. Compared against the listed catalog
+   * items' `modifiedAt` to flag the printed Aushang as "veraltet".
+   * Absent on lists never generated.
+   */
+  generatedAt?: Timestamp | null
 }
 
 // ── checkouts ────────────────────────────────────────────────────────────

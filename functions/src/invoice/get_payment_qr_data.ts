@@ -138,7 +138,7 @@ export function buildPaymentData(
   const paylinkParams = new URLSearchParams();
   paylinkParams.set("amount.values", bill.amount.toFixed(2));
   paylinkParams.set("amount.custom", "false");
-  paylinkParams.set("reference.creditor.value", scorReference);
+  paylinkParams.set("reference.creditor", scorReference);
 
   let payerName = "";
   let payerEmail = "";

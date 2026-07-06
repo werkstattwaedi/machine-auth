@@ -18,8 +18,10 @@ import {
   DialogTitle,
 } from "@modules/components/ui/dialog"
 import { type ColumnDef } from "@tanstack/react-table"
-import { Plus, Loader2 } from "lucide-react"
-import { useState } from "react"
+import { Info, Loader2, MoveRight, Plus } from "lucide-react"
+import { useMemo, useState } from "react"
+import { InventoryTabs } from "@/components/admin/inventory-tabs"
+import { FilterPills } from "@/components/admin/filter-pills"
 import { rpcCallable } from "@modules/lib/rpc"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { useForm } from "react-hook-form"
@@ -94,13 +96,29 @@ function CatalogPage() {
   const db = useDb()
   const { data, loading } = useCollection(catalogCollection(db))
   const [createOpen, setCreateOpen] = useState(false)
+  const [workshop, setWorkshop] = useState("all")
+
+  const workshops = useMemo(
+    () =>
+      [...new Set(data.flatMap((c) => c.workshops ?? []))].sort((a, b) =>
+        a.localeCompare(b, "de-CH"),
+      ),
+    [data],
+  )
+  const rows = useMemo(
+    () =>
+      workshop === "all"
+        ? data
+        : data.filter((c) => (c.workshops ?? []).includes(workshop)),
+    [data, workshop],
+  )
 
   if (loading) return <PageLoading />
 
   return (
-    <div>
+    <div className="space-y-4">
       <PageHeader
-        title="Katalog"
+        title="Inventar"
         action={
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
@@ -108,9 +126,38 @@ function CatalogPage() {
           </Button>
         }
       />
+      <InventoryTabs />
+
+      {/* Workshop materials are maintained via Mario's Excel workbook —
+          the importer is the source of truth for them. Manual edits are
+          for machine/makerspace entries the workbook doesn't carry. */}
+      <div className="flex items-center gap-2.5 rounded-xl border border-l-4 border-l-cog-teal bg-card px-4 py-3 text-sm">
+        <Info className="h-4 w-4 shrink-0 text-cog-teal-dark" />
+        <span className="flex-1">
+          Werkstatt-Material wird über den <b>Excel-Import</b> gepflegt —
+          manuell nur Maschinen- und Spezialeinträge bearbeiten.
+        </span>
+        <Link
+          to="/materials/import"
+          className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+        >
+          Import öffnen
+          <MoveRight className="h-3.5 w-3.5" />
+        </Link>
+      </div>
+
+      <FilterPills
+        options={[
+          { value: "all", label: "Alle" },
+          ...workshops.map((w) => ({ value: w, label: w })),
+        ]}
+        value={workshop}
+        onChange={setWorkshop}
+      />
+
       <DataTable
         columns={columns}
-        data={data}
+        data={rows}
         searchKey="name"
         searchPlaceholder="Katalog durchsuchen..."
       />
@@ -158,6 +205,7 @@ function CreateCatalogDialog({ open, onOpenChange }: { open: boolean; onOpenChan
             workshops: string[]
             category: string[]
             variants: typeof variant[]
+            variantIds: string[]
             active: boolean
             userCanAdd: boolean
           },
@@ -171,10 +219,12 @@ function CreateCatalogDialog({ open, onOpenChange }: { open: boolean; onOpenChan
             .split(",")
             .map((w) => w.trim())
             .filter(Boolean),
-          // New entries start as single-variant items in the placeholder
-          // "Sonstiges" category. Multi-variant editing is a follow-up.
+          // New entries start in the placeholder "Sonstiges" category with
+          // just their base variant; extra variants can be added on the
+          // detail page.
           category: ["Sonstiges"],
           variants: [variant],
+          variantIds: Array.isArray(values.variantIds) ? values.variantIds : [],
           active: true,
           userCanAdd: values.userCanAdd,
         })

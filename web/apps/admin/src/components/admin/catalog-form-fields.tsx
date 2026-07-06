@@ -3,6 +3,7 @@
 
 import { Input } from "@modules/components/ui/input"
 import { Label } from "@modules/components/ui/label"
+import { VARIANT_DEFINITIONS } from "@oww/shared"
 import { useWatch, type Control, type UseFormRegister } from "react-hook-form"
 
 export interface CatalogFormValues {
@@ -13,9 +14,13 @@ export interface CatalogFormValues {
   pricingModel: string
   priceNone: string
   priceMember: string
+  /** Ids of shared variant definitions that apply (checkbox group). */
+  variantIds: string[]
   active: boolean
   userCanAdd: boolean
 }
+
+const VARIANT_OPTIONS = Object.entries(VARIANT_DEFINITIONS)
 
 export function CatalogFormFields({
   register,
@@ -85,6 +90,21 @@ export function CatalogFormFields({
       {priceHelp && (
         <p className="text-xs text-muted-foreground">{priceHelp}</p>
       )}
+      <div className="space-y-2">
+        <Label>Zusätzliche Varianten</Label>
+        <p className="text-xs text-muted-foreground">
+          Abgeleitete Verkaufsoptionen (Preis = Grundpreis × Faktor). Für
+          Laser-Zuschnitte auf einem m²-Grundpreis.
+        </p>
+        <div className="flex flex-wrap gap-3">
+          {VARIANT_OPTIONS.map(([id, def]) => (
+            <label key={id} className="flex items-center gap-2 text-sm">
+              <input type="checkbox" value={id} {...register("variantIds")} />
+              {def.label}
+            </label>
+          ))}
+        </div>
+      </div>
       <div className="flex items-center gap-4">
         {showActive && (
           <div className="flex items-center gap-2">
