@@ -44,7 +44,11 @@ from gateway.gateway_service_pb2 import (
 )
 from pw_rpc import ids as rpc_ids
 
-from maco_gateway.ascon_transport import AsconTransport, NonceTracker
+from maco_gateway.ascon_transport import (
+    AsconTransport,
+    DeviceReplayGuard,
+    NonceTracker,
+)
 from maco_gateway.firebase_client import FirebaseClient
 from maco_gateway.gateway_service import GatewayServiceImpl
 from maco_gateway.key_store import KeyStore
@@ -77,6 +81,7 @@ class ClientConnection:
         writer: asyncio.StreamWriter,
         key_store: KeyStore,
         gateway_service: GatewayServiceImpl,
+        replay_guard: DeviceReplayGuard,
     ) -> None:
         self._reader = reader
         self._writer = writer
@@ -85,7 +90,11 @@ class ClientConnection:
         self._addr = writer.get_extra_info("peername")
 
         self._ascon = AsconTransport()
+        # Per-connection ordering/window guard (reset each connection).
         self._nonce_tracker = NonceTracker()
+        # Shared across connections: catches a captured frame replayed on a
+        # fresh connection, which the per-connection tracker alone cannot.
+        self._replay_guard = replay_guard
         self._hdlc_decoder = hdlc_decode.FrameDecoder()
 
         self._device_id: Optional[bytes] = None
@@ -171,9 +180,14 @@ class ClientConnection:
             logger.warning("Decrypt returned None frame")
             return
 
-        # Check nonce for replay protection
+        # Check nonce for replay protection. The per-connection tracker
+        # enforces ordering within this connection; the shared replay guard
+        # rejects a frame captured on one connection and replayed on another.
         if not self._nonce_tracker.check_and_update(frame.nonce):
             logger.warning("Nonce replay detected, dropping frame")
+            return
+        if not self._replay_guard.check_and_add(self._device_id, frame.nonce):
+            logger.warning("Cross-connection nonce replay detected, dropping frame")
             return
 
         # The decrypted payload is a raw pw_rpc packet
@@ -328,6 +342,10 @@ class GatewayServer:
         self._firebase_client = firebase_client
         self._gateway_service = GatewayServiceImpl(firebase_client)
         self._connections: Dict[str, ClientConnection] = {}
+        # One replay guard for the whole server so per-device nonce history
+        # survives across connections (S-3). Bounded, so it can't grow
+        # without limit even under many devices / long uptime.
+        self._replay_guard = DeviceReplayGuard()
 
     async def run(self) -> None:
         """Run the gateway server."""
@@ -348,7 +366,11 @@ class GatewayServer:
         addr = str(writer.get_extra_info("peername"))
         try:
             conn = ClientConnection(
-                reader, writer, self._key_store, self._gateway_service
+                reader,
+                writer,
+                self._key_store,
+                self._gateway_service,
+                self._replay_guard,
             )
             self._connections[addr] = conn
             await conn.handle()
