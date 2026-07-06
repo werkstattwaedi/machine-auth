@@ -22,6 +22,7 @@ import argparse
 import asyncio
 import logging
 import os
+import secrets
 import sys
 from pathlib import Path
 from typing import Dict, Optional
@@ -89,7 +90,16 @@ class ClientConnection:
 
         self._device_id: Optional[bytes] = None
         self._device_key: Optional[bytes] = None
-        self._response_nonce_counter = 0
+        # Seed the response nonce counter from a CSPRNG instead of 0.
+        # The device key is static across connections, so starting every
+        # connection at counter 1 made response #1 reuse the same
+        # (key, nonce) pair on every connection — leaking the ASCON
+        # keystream to an on-LAN observer. A random 32-bit start mirrors the
+        # firmware request side (p2_gateway_client.cc GetRandomNonceStart)
+        # and makes cross-connection nonce reuse improbable. The device does
+        # not replay-check response nonces, so a random start is transparent
+        # to it (the nonce travels in the frame).
+        self._response_nonce_counter = secrets.randbits(32)
 
     async def handle(self) -> None:
         """Handle the client connection."""
@@ -277,8 +287,11 @@ class ClientConnection:
             logger.error("Cannot send response: device not identified")
             return
 
-        # Generate nonce for response: [device_id: 12] [counter: 4 BE]
-        self._response_nonce_counter += 1
+        # Generate nonce for response: [device_id: 12] [counter: 4 BE].
+        # Wrap in 32 bits so a random seed near 2**32 can't overflow the
+        # 4-byte field; wraparound is harmless (uniqueness within a
+        # connection holds for any realistic response count).
+        self._response_nonce_counter = (self._response_nonce_counter + 1) & 0xFFFFFFFF
         nonce = self._device_id + self._response_nonce_counter.to_bytes(
             4, byteorder="big"
         )
