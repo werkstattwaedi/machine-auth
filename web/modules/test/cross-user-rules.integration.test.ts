@@ -480,6 +480,66 @@ describe("cross-user: users", () => {
       ),
     )
   })
+
+  // P0-1: privilege-escalation guard. The create path must pin roles and
+  // permissions to empty, mirroring the update path. Doc ID == Auth UID
+  // and syncCustomClaims stamps `admin` on any write whose roles[]
+  // includes "admin", so an unconstrained create let any anonymous /
+  // magic-link session self-grant admin (full auth bypass) or arbitrary
+  // machine permissions. These assertions MUST fail against a loosened
+  // create rule — they are the regression net for the most severe write
+  // vector.
+  it("denies self-registration granting roles:['admin'] (P0-1 full auth bypass)", async () => {
+    await assertCrossUserDenied(
+      "users/{id} create self-grants admin role",
+      "firestore.rules:users create (roles == [])",
+      () =>
+        setDoc(
+          doc(authedDb("mallory"), "users", "mallory"),
+          signupDoc({ roles: ["admin"] }),
+        ),
+    )
+  })
+
+  it("denies an anonymous-auth session self-registering as admin (P0-1)", async () => {
+    // The concrete exploit: a fresh anonymous session from the public
+    // checkout app writes users/{ownUid} with an admin role.
+    await assertCrossUserDenied(
+      "users/{id} create self-grants admin from anon session",
+      "firestore.rules:users create (roles == [])",
+      () =>
+        setDoc(
+          doc(anonAuthDb("anon-mallory"), "users", "anon-mallory"),
+          signupDoc({ roles: ["admin"] }),
+        ),
+    )
+  })
+
+  it("denies self-registration granting a non-empty permissions array (P0-1)", async () => {
+    await assertCrossUserDenied(
+      "users/{id} create self-grants machine permissions",
+      "firestore.rules:users create (permissions == [])",
+      () =>
+        setDoc(
+          doc(authedDb("mallory"), "users", "mallory"),
+          signupDoc({
+            permissions: [doc(authedDb("mallory"), "permission", "laser")],
+          }),
+        ),
+    )
+  })
+
+  it("denies self-registration granting a non-admin role (only the admin path may grant roles) (P0-1)", async () => {
+    await assertCrossUserDenied(
+      "users/{id} create self-grants a role",
+      "firestore.rules:users create (roles == [])",
+      () =>
+        setDoc(
+          doc(authedDb("mallory"), "users", "mallory"),
+          signupDoc({ roles: ["vereinsmitglied"] }),
+        ),
+    )
+  })
 })
 
 describe("cross-user: checkouts", () => {
@@ -565,6 +625,37 @@ describe("cross-user: checkouts", () => {
     await seedAnonCheckout("co-anon", "anon-x")
     await assertSucceeds(
       getDoc(doc(anonAuthDb("anon-x"), "checkouts", "co-anon")),
+    )
+  })
+
+  it("denies a DIFFERENT anonymous-auth session from reading another anon session's checkout (P0-2 PII harvest)", async () => {
+    await seedAnonCheckout("co-anon", "anon-x")
+    await assertCrossUserDenied(
+      "checkouts/{id} anon read leaked across anon sessions (P0-2 mass PII leak)",
+      "firestore.rules:checkouts read (firebaseUid == request.auth.uid)",
+      () => getDoc(doc(anonAuthDb("anon-other"), "checkouts", "co-anon")),
+    )
+  })
+
+  it("denies a different anon session from reading items in another anon session's checkout (P0-2)", async () => {
+    await seedAnonCheckout("co-anon", "anon-x")
+    await seedCheckoutItem("co-anon", "i1")
+    await assertCrossUserDenied(
+      "checkouts/{id}/items anon read leaked across anon sessions (P0-2)",
+      "firestore.rules:items read (isAnonParentCreator)",
+      () => getDoc(doc(anonAuthDb("anon-other"), "checkouts/co-anon/items/i1")),
+    )
+  })
+
+  it("denies a different anon session from updating another anon session's open checkout (P0-2)", async () => {
+    await seedAnonCheckout("co-anon", "anon-x")
+    await assertCrossUserDenied(
+      "checkouts/{id} anon update leaked across anon sessions (P0-2)",
+      "firestore.rules:checkouts update (firebaseUid == request.auth.uid)",
+      () =>
+        updateDoc(doc(anonAuthDb("anon-other"), "checkouts", "co-anon"), {
+          notes: "pwned",
+        }),
     )
   })
 })
@@ -681,6 +772,18 @@ describe("cross-user: checkouts paymentMethod last-selection write", () => {
       updateDoc(doc(anonAuthDb("anon-x"), "checkouts", "co-anon"), {
         paymentMethod: "twint",
       }),
+    )
+  })
+
+  it("denies a DIFFERENT anon session from writing paymentMethod on another anon session's closed checkout (P0-2)", async () => {
+    await seedClosedCheckout("co-anon", null, { firebaseUid: "anon-x" })
+    await assertCrossUserDenied(
+      "checkouts paymentMethod write leaked across anon sessions (P0-2)",
+      "firestore.rules:checkouts.update (firebaseUid == request.auth.uid)",
+      () =>
+        updateDoc(doc(anonAuthDb("anon-other"), "checkouts", "co-anon"), {
+          paymentMethod: "twint",
+        }),
     )
   })
 
