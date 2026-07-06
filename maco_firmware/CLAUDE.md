@@ -290,6 +290,17 @@ dispatcher.Post(my_task);
 | `ValueFuture<T>` / `ValueProvider<T>` | One-shot results (RPC responses) | `firebase_client.h` |
 | `ListableFutureWithWaker<Self, T>` | Custom typed futures | `pn532_detect_tag_future.h` |
 | `SingleFutureProvider<F>` | Enforce one operation at a time | `pn532_nfc_reader.h` |
+| `RaceWithDeadline(...)` / `ValueOrTimeout` | Bound an RPC await with a timeout | `modules/async_util/value_or_timeout.h` |
+
+**Gotcha — do not use pw_async2's `future_timeout.h`.** Its `Timeout()` /
+`TimeoutOr()` helpers look like the natural way to add a deadline to a future,
+but the header contains a `static_assert(false)` in an unused
+`TimeoutOr(ValueFuture<void>, ...)` overload that the arm-none-eabi GCC
+toolchain evaluates at parse time — so merely `#include`-ing it fails the P2
+build. Use `maco::async_util::RaceWithDeadline(future, time_provider, delay)`
+instead (returns `pw::Result<T>`, `DeadlineExceeded` on timeout). Every gateway
+RPC await is wrapped this way so a mid-request link drop can't hang the
+coroutine and wedge the terminal (see `firebase_client.cc`).
 
 #### ValueFuture Pattern (for RPC/callbacks)
 
