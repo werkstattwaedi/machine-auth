@@ -25,19 +25,31 @@ interface FixtureRow {
   kategorie?: string;
   unter?: string;
   einheit?: string;
+  /** Comma-separated variant ids for the "Varianten" column. */
+  varianten?: string;
   price?: number | null;
   heading?: string; // emits a heading row (only col A) instead of a data row
+}
+
+interface FixtureVariantDef {
+  label: string;
+  factor: number;
+  pricingModel: string;
 }
 
 /**
  * Build a minimal pricelist workbook in memory. Header layout mirrors the
  * bootstrap output: injected Code/Kategorie/Unterkategorie/Einheit + Mario's
  * curated Etikett Name / Etikett Mass + the "Preis Einheit Verkauf" sale-price
- * column, with a banner + heading row above the header to exercise the
- * header-locating logic. `Etikett Kategorie`/`Etikett Preis` are included but
- * ignored by the parser.
+ * column + the "Varianten" column, with a banner + heading row above the header
+ * to exercise the header-locating logic. `Etikett Kategorie`/`Etikett Preis` are
+ * included but ignored by the parser. `defs` (when passed) emits the global
+ * `Varianten` definition sheet the importer expands cut options from.
  */
-async function buildFixture(sheets: Record<string, FixtureRow[]>): Promise<Buffer> {
+async function buildFixture(
+  sheets: Record<string, FixtureRow[]>,
+  defs?: Record<string, FixtureVariantDef>
+): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   for (const [name, rows] of Object.entries(sheets)) {
     const ws = wb.addWorksheet(name);
@@ -47,7 +59,7 @@ async function buildFixture(sheets: Record<string, FixtureRow[]>): Promise<Buffe
     ws.addRow([
       "Pos", "Code", "Kategorie", "Unterkategorie", "Einheit",
       "Etikett Kategorie", "Etikett Name", "Etikett Mass", "Etikett Preis",
-      "Preis Einheit\nVerkauf",
+      "Preis Einheit\nVerkauf", "Varianten",
     ]);
     for (const r of rows) {
       if (r.heading != null) {
@@ -57,8 +69,15 @@ async function buildFixture(sheets: Record<string, FixtureRow[]>): Promise<Buffe
       ws.addRow([
         "", r.code ?? "", r.kategorie ?? "", r.unter ?? "", r.einheit ?? "",
         "ignored", r.labelName ?? "", r.labelMass ?? "", "ignored",
-        r.price ?? null,
+        r.price ?? null, r.varianten ?? "",
       ]);
+    }
+  }
+  if (defs) {
+    const vs = wb.addWorksheet("Varianten");
+    vs.addRow(["Variante", "Bezeichnung", "Faktor", "Grundmodell"]);
+    for (const [id, def] of Object.entries(defs)) {
+      vs.addRow([id, def.label, def.factor, def.pricingModel]);
     }
   }
   return (await wb.xlsx.writeBuffer()) as unknown as Buffer;
@@ -118,9 +137,34 @@ describe("catalog import (Integration)", () => {
     expect(ahorn?.entry?.name).to.equal("Ahorn 24 mm"); // composed from label pair
     expect(ahorn?.entry?.labelName).to.equal("Ahorn");
     expect(ahorn?.entry?.labelMass).to.equal("24 mm");
-    expect(preview.diff.find((d) => d.code === "2001")?.entry?.pricingModel).to.equal("length");
+    expect(preview.diff.find((d) => d.code === "2001")?.entry?.variants[0].pricingModel).to.equal("length");
     // A blank Etikett Mass composes to just the name.
     expect(preview.diff.find((d) => d.code === "4216")?.entry?.name).to.equal("B128");
+  });
+
+  it("expands makerspace laser variants from the Varianten sheet; SLA maps to sla", async () => {
+    const buffer = await buildFixture(
+      {
+        Makerspace: [
+          { code: "6011", labelName: "MDF roh", labelMass: "3 mm", kategorie: "Laser", unter: "MDF", einheit: "m²", varianten: "a3,500-1250", price: 5.55 },
+          { code: "9101", labelName: "Clear Resin", kategorie: "SLA", einheit: "L", price: 150 },
+        ],
+      },
+      {
+        a3: { label: "Zuschnitt A3", factor: 0.126, pricingModel: "count" },
+        "500-1250": { label: "Zuschnitt 500 × 1250 mm", factor: 0.625, pricingModel: "count" },
+      },
+    );
+    const preview = await previewCatalogImport(buffer);
+    const mdf = preview.diff.find((d) => d.code === "6011")?.entry;
+    expect(mdf?.workshops).to.deep.equal(["makerspace"]);
+    expect(mdf?.variants).to.have.length(3);
+    expect(mdf?.variants[0]).to.include({ id: "default", label: "Per m²", pricingModel: "area" });
+    expect(mdf?.variants[1]).to.include({ id: "a3", pricingModel: "count" });
+    expect(mdf?.variants[1].unitPrice.default).to.equal(0.7); // 5.55 × 0.126 → 0.70
+    expect(mdf?.variants[2].unitPrice.default).to.equal(3.45); // 5.55 × 0.625 → 3.45
+    // SLA resin (Einheit "L") maps to the sla pricing model.
+    expect(preview.diff.find((d) => d.code === "9101")?.entry?.variants[0].pricingModel).to.equal("sla");
   });
 
   it("classifies create / update / unchanged / retire against the live catalog", async () => {

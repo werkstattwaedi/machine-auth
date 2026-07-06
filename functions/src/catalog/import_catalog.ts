@@ -20,33 +20,49 @@
  */
 
 import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
-import { getFirestore, type DocumentData } from "firebase-admin/firestore";
+import { getFirestore } from "firebase-admin/firestore";
 import {
   parsePricelistXlsx,
   type ParseResult,
 } from "./parse_pricelist_xlsx";
 import {
   buildImportPreview,
+  roundTo5,
+  type CatalogVariant,
   type CurrentCatalogItem,
   type ImportPreview,
-  type ImportEntry,
+  type VariantDefs,
 } from "@oww/shared";
 import { handleUpsertCatalogItem } from "./upsert_catalog_item";
 
 const MAX_BATCH_OPS = 450; // Firestore caps a WriteBatch at 500; leave headroom.
 
-interface LoadedCatalog {
-  current: CurrentCatalogItem[];
-  data: Map<string, DocumentData>;
+/**
+ * The sheet only carries the default price, so an admin-set `member` override on
+ * an existing item would be lost when the import overwrites its variants.
+ * Preserve it: keep the base member and re-derive it onto each cut option
+ * (`base member × factor`, matching how defaults are derived).
+ */
+function preserveMemberTier(
+  variants: CatalogVariant[],
+  existingBase: CatalogVariant | undefined,
+  defs: VariantDefs
+): CatalogVariant[] {
+  const member = existingBase?.unitPrice?.member;
+  if (typeof member !== "number") return variants;
+  return variants.map((v, i) => {
+    if (i === 0) return { ...v, unitPrice: { ...v.unitPrice, member } };
+    const factor = defs[v.id]?.factor;
+    if (factor == null) return v;
+    return { ...v, unitPrice: { ...v.unitPrice, member: roundTo5(member * factor) } };
+  });
 }
 
-async function loadCatalog(): Promise<LoadedCatalog> {
+async function loadCatalog(): Promise<CurrentCatalogItem[]> {
   const snap = await getFirestore().collection("catalog").get();
   const current: CurrentCatalogItem[] = [];
-  const data = new Map<string, DocumentData>();
   for (const doc of snap.docs) {
     const d = doc.data();
-    const v0 = Array.isArray(d.variants) ? d.variants[0] : undefined;
     current.push({
       id: doc.id,
       code: String(d.code ?? ""),
@@ -57,12 +73,10 @@ async function loadCatalog(): Promise<LoadedCatalog> {
       workshops: Array.isArray(d.workshops) ? d.workshops.map(String) : [],
       active: d.active !== false,
       type: d.type ?? null,
-      pricingModel: String(v0?.pricingModel ?? ""),
-      unitPrice: Number(v0?.unitPrice?.default ?? NaN),
+      variants: Array.isArray(d.variants) ? (d.variants as CatalogVariant[]) : [],
     });
-    data.set(doc.id, d);
   }
-  return { current, data };
+  return current;
 }
 
 export interface PreviewResult extends ImportPreview {
@@ -93,8 +107,8 @@ function priceHint(parsed: ParseResult): string[] {
 /** Parse + diff the uploaded workbook against the live catalog (no writes). */
 export async function previewCatalogImport(buffer: Buffer): Promise<PreviewResult> {
   const parsed: ParseResult = await parsePricelistXlsx(buffer);
-  const { current } = await loadCatalog();
-  const preview = buildImportPreview(parsed.rows, current);
+  const current = await loadCatalog();
+  const preview = buildImportPreview(parsed.rows, current, parsed.variantDefs);
   const hints = priceHint(parsed);
   if (hints.length > 0) {
     // The workbook as a whole lacks cached formula results — one hint
@@ -122,18 +136,6 @@ export interface ApplyResult {
   warnings: number;
 }
 
-/** Merge a fresh default price + pricing model into an existing item's variants. */
-function patchedVariants(existing: DocumentData, entry: ImportEntry): unknown[] {
-  const variants = Array.isArray(existing.variants) && existing.variants.length
-    ? [...existing.variants]
-    : [{ id: "default", pricingModel: entry.pricingModel, unitPrice: {} }];
-  const v0 = { ...variants[0] };
-  v0.pricingModel = entry.pricingModel;
-  v0.unitPrice = { ...(v0.unitPrice ?? {}), default: entry.unitPrice.default };
-  variants[0] = v0;
-  return variants;
-}
-
 /**
  * Apply the import: create new items, update changed ones, and — when
  * `applyRetire` — deactivate materials absent from the file. Reuses the
@@ -153,8 +155,9 @@ export async function applyCatalogImport(
   if (hints.length > 0) {
     throw new HttpsError("failed-precondition", hints[0]);
   }
-  const { current, data } = await loadCatalog();
-  const preview = buildImportPreview(parsed.rows, current);
+  const current = await loadCatalog();
+  const preview = buildImportPreview(parsed.rows, current, parsed.variantDefs);
+  const byId = new Map(current.map((c) => [c.id, c]));
 
   const db = getFirestore();
   const collection = db.collection("catalog");
@@ -184,9 +187,7 @@ export async function applyCatalogImport(
           category: entry.category,
           active: true,
           userCanAdd: entry.userCanAdd,
-          variants: [
-            { id: "default", pricingModel: entry.pricingModel, unitPrice: { default: entry.unitPrice.default } },
-          ],
+          variants: entry.variants,
         },
         actorUid
       );
@@ -200,8 +201,11 @@ export async function applyCatalogImport(
     if (d.kind === "update" && d.entry && d.id) {
       const ref = collection.doc(d.id);
       const entry = d.entry;
-      const existing = data.get(d.id) ?? {};
-      const variants = patchedVariants(existing, entry);
+      const variants = preserveMemberTier(
+        entry.variants,
+        byId.get(d.id)?.variants?.[0],
+        parsed.variantDefs
+      );
       ops.push((batch) =>
         batch.set(
           ref,

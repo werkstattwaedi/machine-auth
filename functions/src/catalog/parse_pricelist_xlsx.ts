@@ -21,7 +21,12 @@
  */
 
 import ExcelJS from "exceljs";
-import { SHEET_TO_WORKSHOP, type RawImportRow } from "@oww/shared";
+import {
+  SHEET_TO_WORKSHOP,
+  type PricingModel,
+  type RawImportRow,
+  type VariantDefs,
+} from "@oww/shared";
 
 /** Collapse whitespace (incl. newlines) and lowercase for header matching. */
 function normHeader(s: unknown): string {
@@ -77,6 +82,7 @@ interface SheetColumns {
   kategorie: number;
   unterkategorie: number;
   einheit: number;
+  varianten: number;
   price: number;
   headerRow: number;
 }
@@ -101,14 +107,66 @@ function locateColumns(ws: ExcelJS.Worksheet): SheetColumns | null {
       kategorie: byHeader.get("kategorie") ?? -1,
       unterkategorie: byHeader.get("unterkategorie") ?? -1,
       einheit: byHeader.get("einheit") ?? -1,
+      varianten: byHeader.get("varianten") ?? -1,
       price: price ?? -1,
     };
   }
   return null;
 }
 
+/** Split the comma-separated "Varianten" cell into trimmed variant ids. */
+function splitVariantIds(v: string | number | null): string[] {
+  return asText(v)
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Read the workbook `Varianten` sheet into the variant-definition map the
+ * importer expands from: `Variante` (id) / `Bezeichnung` (label) / `Faktor`
+ * (area factor) / `Grundmodell` (pricing model). Absent sheet → empty map
+ * (workshops without cut variants still import fine).
+ */
+function readVariantDefs(wb: ExcelJS.Workbook): VariantDefs {
+  const defs: VariantDefs = {};
+  const ws = wb.getWorksheet("Varianten");
+  if (!ws) return defs;
+  for (let r = 1; r <= Math.min(ws.rowCount, HEADER_SEARCH_ROWS); r++) {
+    const row = ws.getRow(r);
+    const byHeader = new Map<string, number>();
+    row.eachCell({ includeEmpty: false }, (cell, col) => {
+      byHeader.set(normHeader(cell.value), col);
+    });
+    if (!byHeader.has("variante")) continue;
+    const idCol = byHeader.get("variante")!;
+    const labelCol = byHeader.get("bezeichnung") ?? -1;
+    const factorCol = byHeader.get("faktor") ?? -1;
+    const modelCol = byHeader.get("grundmodell") ?? -1;
+    if (factorCol < 0) return defs;
+    for (let rr = r + 1; rr <= ws.rowCount; rr++) {
+      const dataRow = ws.getRow(rr);
+      const id = asText(cellValue(dataRow.getCell(idCol)));
+      if (!id) continue;
+      const factor = asPrice(cellValue(dataRow.getCell(factorCol)));
+      if (factor == null) continue;
+      const model =
+        modelCol > 0 ? asText(cellValue(dataRow.getCell(modelCol))) || "count" : "count";
+      defs[id] = {
+        label: labelCol > 0 ? asText(cellValue(dataRow.getCell(labelCol))) : id,
+        factor,
+        pricingModel: model as PricingModel,
+      };
+    }
+    return defs;
+  }
+  return defs;
+}
+
 export interface ParseResult {
   rows: RawImportRow[];
+  /** Variant definitions from the `Varianten` sheet (id → label/factor/model). */
+  variantDefs: VariantDefs;
   /** Sheets named in the contract but missing from the file. */
   missingSheets: string[];
   /** Sheets present but lacking the Code/import columns (not yet augmented). */
@@ -130,6 +188,7 @@ export async function parsePricelistXlsx(buffer: Buffer): Promise<ParseResult> {
   const rows: RawImportRow[] = [];
   const missingSheets: string[] = [];
   const unconfiguredSheets: string[] = [];
+  const variantDefs = readVariantDefs(wb);
 
   for (const sheetName of Object.keys(SHEET_TO_WORKSHOP)) {
     const ws = wb.getWorksheet(sheetName);
@@ -156,9 +215,11 @@ export async function parsePricelistXlsx(buffer: Buffer): Promise<ParseResult> {
         unterkategorie:
           cols.unterkategorie > 0 ? asText(cellValue(row.getCell(cols.unterkategorie))) : "",
         einheit: cols.einheit > 0 ? asText(cellValue(row.getCell(cols.einheit))) : "",
+        variantIds:
+          cols.varianten > 0 ? splitVariantIds(cellValue(row.getCell(cols.varianten))) : [],
         price: asPrice(cellValue(row.getCell(cols.price))),
       });
     }
   }
-  return { rows, missingSheets, unconfiguredSheets };
+  return { rows, variantDefs, missingSheets, unconfiguredSheets };
 }
