@@ -42,6 +42,11 @@ export interface ParsedStatement {
  * returned — debits can't pay our invoices. Throws on non-XML input.
  */
 export function parseCamt053(xml: string): ParsedStatement {
+  // The parsed document stays detached: DOMParser disables scripting and
+  // resource loading, we never attach it to the page, and only plain
+  // strings (textContent/attributes) leave this function — so uploaded
+  // file content is never reinterpreted as live HTML (CodeQL
+  // js/xss-through-dom flags parseFromString regardless).
   const doc = new DOMParser().parseFromString(xml, "application/xml")
   if (doc.querySelector("parsererror")) {
     throw new Error("Datei ist kein gültiges camt.053-XML.")
