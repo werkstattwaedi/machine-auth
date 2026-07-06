@@ -46,6 +46,23 @@ cc_library(
     ],
 )
 
+# xTool P2S laser sensor (polls the laser HTTP API over TCP on its own thread)
+cc_library(
+    name = "xtool_machine_sensor",
+    srcs = ["xtool_machine_sensor.cc"],
+    hdrs = ["xtool_machine_sensor.h"],
+    deps = [
+        ":machine_sensor",
+        "@particle_bazel//pb_socket:tcp_socket",
+        "@pigweed//pw_async2:dispatcher",
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_chrono:system_clock",
+        "@pigweed//pw_log",
+        "@pigweed//pw_thread:sleep",
+        "@pigweed//pw_thread:thread",
+    ],
+)
+
 # Session-driven machine controller (observer pattern)
 cc_library(
     name = "machine_controller",
@@ -53,6 +70,7 @@ cc_library(
     hdrs = ["machine_controller.h"],
     deps = [
         ":machine_toggle",
+        "//maco_firmware/modules/app_state:session_controller",
         "//maco_firmware/modules/app_state:session_fsm",
         "@pigweed//pw_allocator:pw_allocator",
         "@pigweed//pw_async2:coro",
@@ -61,6 +79,8 @@ cc_library(
         "@pigweed//pw_async2:time_provider",
         "@pigweed//pw_chrono:system_clock",
         "@pigweed//pw_log",
+        "@pigweed//pw_sync:lock_annotations",
+        "@pigweed//pw_sync:mutex",
     ],
 )
 
@@ -94,6 +114,18 @@ pw_cc_test(
         "@pigweed//pw_allocator:testing",
         "@pigweed//pw_async2:basic_dispatcher",
         "@pigweed//pw_async2:simulated_time_provider",
+    ],
+)
+
+# Unit tests for XToolMachineSensor
+pw_cc_test(
+    name = "xtool_machine_sensor_test",
+    srcs = ["xtool_machine_sensor_test.cc"],
+    deps = [
+        ":xtool_machine_sensor",
+        "@particle_bazel//pb_socket:mock_tcp_socket",
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_thread_stl:options",
     ],
 )
 

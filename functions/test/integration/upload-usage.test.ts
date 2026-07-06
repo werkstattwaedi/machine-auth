@@ -52,6 +52,7 @@ interface UsageRecordOpts {
   machineId?: string;
   checkIn?: number;
   checkOut?: number;
+  activeSeconds?: number;
 }
 
 function buildRequest(records: UsageRecordOpts[], machineId = TEST_MACHINE_ID): UploadUsageRequest {
@@ -64,6 +65,7 @@ function buildRequest(records: UsageRecordOpts[], machineId = TEST_MACHINE_ID): 
         checkIn: BigInt(r.checkIn ?? FIXED_CHECK_IN),
         checkOut: BigInt(r.checkOut ?? FIXED_CHECK_IN + ONE_HOUR_SECONDS),
         reason: undefined,
+        activeSeconds: r.activeSeconds ?? 0,
       })),
     },
   };
@@ -207,6 +209,7 @@ describe("handleUploadUsage (Integration)", () => {
               checkIn: BigInt(FIXED_CHECK_IN),
               checkOut: BigInt(FIXED_CHECK_IN + ONE_HOUR_SECONDS),
               reason: undefined,
+              activeSeconds: 0,
             },
             // Missing authenticationId
             {
@@ -215,6 +218,7 @@ describe("handleUploadUsage (Integration)", () => {
               checkIn: BigInt(FIXED_CHECK_IN),
               checkOut: BigInt(FIXED_CHECK_IN + ONE_HOUR_SECONDS),
               reason: undefined,
+              activeSeconds: 0,
             },
           ],
         },
@@ -269,6 +273,81 @@ describe("handleUploadUsage (Integration)", () => {
       expect(itemData.unitPrice).to.equal(10);
       expect(itemData.totalPrice).to.equal(10);
       expect(itemData.origin).to.equal("nfc");
+    });
+  });
+
+  describe("xTool in-use billing", () => {
+    const XTOOL_MACHINE_ID = "machine-laser";
+    const XTOOL_CATALOG_ID = "catalog-holz-laserhour";
+
+    async function seedXToolFixtures(): Promise<void> {
+      await seedCatalog(XTOOL_CATALOG_ID, {
+        name: "Laser",
+        unitPrice: { none: 10 },
+      });
+      await seedTestData({
+        users: {
+          [TEST_USER_ID]: {
+            firstName: "Alice",
+            lastName: "Adult",
+            email: "alice@example.com",
+            permissions: [],
+            roles: [],
+            userType: "erwachsen",
+          },
+        },
+        machines: {
+          [XTOOL_MACHINE_ID]: {
+            name: "Laser",
+            workshop: "holz",
+            checkoutTemplateId: `/catalog/${XTOOL_CATALOG_ID}`,
+            requiredPermission: [],
+            maco: `/maco/maco-${XTOOL_MACHINE_ID}`,
+            control: { type: "xtool_p2s", host: "192.168.1.50" },
+          },
+        },
+      });
+    }
+
+    it("bills only activeSeconds, not wall-clock session length", async () => {
+      await seedXToolFixtures();
+
+      // 1h session, but only 30 min of cutting.
+      const res = await handleUploadUsage(
+        buildRequest(
+          [{ activeSeconds: ONE_HOUR_SECONDS / 2 }],
+          XTOOL_MACHINE_ID,
+        ),
+        config,
+      );
+      expect(res.success).to.be.true;
+
+      const docs = await getUsageMachineDocs();
+      expect(docs).to.have.length(1);
+      expect(docs[0].data().billableSeconds).to.equal(ONE_HOUR_SECONDS / 2);
+      expect(docs[0].data().activeSeconds).to.equal(ONE_HOUR_SECONDS / 2);
+
+      const item = await getCheckoutItem();
+      expect(item, "expected open checkout item").to.not.be.null;
+      expect(item!.data().quantity).to.equal(0.5); // 30 min
+      expect(item!.data().totalPrice).to.equal(5);
+    });
+
+    it("bills zero when the laser never cut (activeSeconds == 0)", async () => {
+      await seedXToolFixtures();
+
+      const res = await handleUploadUsage(
+        buildRequest([{ activeSeconds: 0 }], XTOOL_MACHINE_ID),
+        config,
+      );
+      expect(res.success).to.be.true;
+
+      const docs = await getUsageMachineDocs();
+      expect(docs[0].data().billableSeconds).to.equal(0);
+
+      const item = await getCheckoutItem();
+      expect(item!.data().quantity).to.equal(0);
+      expect(item!.data().totalPrice).to.equal(0);
     });
   });
 

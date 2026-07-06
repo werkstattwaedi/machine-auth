@@ -28,10 +28,35 @@ HwRevision ConvertHwRevision(maco_proto_particle_HwRevision proto) {
 }
 
 MachineControlType ConvertControl(const maco_proto_particle_MachineControl& c) {
-  if (c.which_control == maco_proto_particle_MachineControl_relay_tag) {
-    return MachineControlType::kRelay;
+  switch (c.which_control) {
+    case maco_proto_particle_MachineControl_relay_tag:
+      return MachineControlType::kRelay;
+    case maco_proto_particle_MachineControl_xtool_p2s_tag:
+      return MachineControlType::kXToolP2s;
+    default:
+      return MachineControlType::kUnspecified;
   }
-  return MachineControlType::kUnspecified;
+}
+
+// Resolve xTool parameters, mapping proto zero-values to their defaults.
+XToolConfig ConvertXTool(const maco_proto_particle_XToolP2sControl& x) {
+  XToolConfig cfg;
+  cfg.host = x.host;
+  // Ignore an out-of-range port (keeps the 8080 default) rather than
+  // silently truncating a bad value.
+  if (x.port != 0 && x.port <= 0xFFFF) {
+    cfg.port = static_cast<uint16_t>(x.port);
+  }
+  if (x.idle_timeout_sec != 0) {
+    cfg.idle_timeout_sec = x.idle_timeout_sec;
+  }
+  if (x.idle_warning_sec != 0) {
+    cfg.idle_warning_sec = x.idle_warning_sec;
+  }
+  if (x.poll_interval_sec != 0) {
+    cfg.poll_interval_sec = x.poll_interval_sec;
+  }
+  return cfg;
 }
 
 MachineConfig ConvertMachine(const maco_proto_particle_Machine& m) {
@@ -46,8 +71,14 @@ MachineConfig ConvertMachine(const maco_proto_particle_Machine& m) {
     }
   }
 
+  XToolConfig xtool;
+  if (m.control.which_control ==
+      maco_proto_particle_MachineControl_xtool_p2s_tag) {
+    xtool = ConvertXTool(m.control.control.xtool_p2s);
+  }
+
   return MachineConfig(id.ok() ? *id : FirebaseId::Empty(), label, permissions,
-                       ConvertControl(m.control));
+                       ConvertControl(m.control), xtool);
 }
 
 }  // namespace

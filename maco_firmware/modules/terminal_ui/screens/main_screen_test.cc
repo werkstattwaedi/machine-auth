@@ -110,6 +110,7 @@ TEST_F(MainScreenTest, ActiveState) {
   snapshot.session.state = app_state::SessionStateUi::kRunning;
   snapshot.session.session_user_label = "Simon Flepp";
   snapshot.session.session_started_at = pw::chrono::SystemClock::now();
+  snapshot.machine.machine_running = true;  // actually cutting → green
   snapshot.system.machine_label = "Fräse";
   screen_->OnUpdate(snapshot);
   RenderFrame();
@@ -128,6 +129,7 @@ TEST_F(MainScreenTest, ActiveState) {
 TEST_F(MainScreenTest, ActiveScreenStyle) {
   app_state::AppStateSnapshot snapshot;
   snapshot.session.state = app_state::SessionStateUi::kRunning;
+  snapshot.machine.machine_running = true;
   screen_->OnUpdate(snapshot);
 
   auto style = screen_->GetScreenStyle();
@@ -138,8 +140,9 @@ TEST_F(MainScreenTest, ActiveTimeHours) {
   app_state::AppStateSnapshot snapshot;
   snapshot.session.state = app_state::SessionStateUi::kRunning;
   snapshot.session.session_user_label = "Simon Flepp";
-  snapshot.session.session_started_at =
-      pw::chrono::SystemClock::now() - std::chrono::minutes(125);
+  // Timer shows accumulated in-use time (2h05), not wall-clock.
+  snapshot.machine.machine_running = true;
+  snapshot.machine.in_use_seconds = 125 * 60;
   snapshot.system.machine_label = "Fräse";
   screen_->OnUpdate(snapshot);
   RenderFrame();
@@ -147,6 +150,60 @@ TEST_F(MainScreenTest, ActiveTimeHours) {
   EXPECT_TRUE(harness_.CompareToGolden(
       "maco_firmware/modules/terminal_ui/testdata/main_active_hours.png",
       "/tmp/main_active_hours_diff.png"));
+}
+
+// Session running but machine idle (laser not cutting) → yellow "ready".
+TEST_F(MainScreenTest, ReadyState) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.session.state = app_state::SessionStateUi::kRunning;
+  snapshot.session.session_user_label = "Simon Flepp";
+  snapshot.machine.machine_running = false;
+  snapshot.machine.in_use_seconds = 0;
+  snapshot.system.machine_label = "Laser";
+  screen_->OnUpdate(snapshot);
+  RenderFrame();
+
+  EXPECT_TRUE(harness_.CompareToGolden(
+      "maco_firmware/modules/terminal_ui/testdata/main_ready.png",
+      "/tmp/main_ready_diff.png"));
+}
+
+TEST_F(MainScreenTest, ReadyScreenStyle) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.session.state = app_state::SessionStateUi::kRunning;
+  snapshot.machine.machine_running = false;
+  screen_->OnUpdate(snapshot);
+
+  auto style = screen_->GetScreenStyle();
+  EXPECT_EQ(style.bg_color, theme::kColorYellow);
+}
+
+// Idle after some cutting: yellow "Pausiert" chip with the frozen timer shown.
+TEST_F(MainScreenTest, PausedState) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.session.state = app_state::SessionStateUi::kRunning;
+  snapshot.session.session_user_label = "Simon Flepp";
+  snapshot.machine.machine_running = false;
+  snapshot.machine.in_use_seconds = 12 * 60;  // 12 min already cut
+  snapshot.system.machine_label = "Laser";
+  screen_->OnUpdate(snapshot);
+  RenderFrame();
+
+  EXPECT_TRUE(harness_.CompareToGolden(
+      "maco_firmware/modules/terminal_ui/testdata/main_paused.png",
+      "/tmp/main_paused_diff.png"));
+}
+
+// Stop button works while idle/ready too.
+TEST_F(MainScreenTest, StopSessionActionFromReady) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.session.state = app_state::SessionStateUi::kRunning;
+  snapshot.machine.machine_running = false;
+  screen_->OnUpdate(snapshot);
+
+  bool handled = screen_->OnEscapePressed();
+  EXPECT_TRUE(handled);
+  EXPECT_EQ(last_action, UiAction::kStopSession);
 }
 
 TEST_F(MainScreenTest, DeniedState) {
@@ -195,6 +252,7 @@ TEST_F(MainScreenTest, CheckoutPendingState) {
   snapshot.session.session_user_label = "Simon Flepp";
   snapshot.session.session_started_at =
       pw::chrono::SystemClock::now() - std::chrono::minutes(47);
+  snapshot.machine.in_use_seconds = 47 * 60;  // timer shows in-use time
   snapshot.system.machine_label = "Fräse";
   auto now = pw::chrono::SystemClock::now();
   snapshot.session.pending_since = now;
@@ -243,6 +301,7 @@ TEST_F(MainScreenTest, TakeoverPendingState) {
   snapshot.session.pending_user_label = "Mike";
   snapshot.session.session_started_at =
       pw::chrono::SystemClock::now() - std::chrono::minutes(47);
+  snapshot.machine.in_use_seconds = 47 * 60;  // timer shows in-use time
   snapshot.system.machine_label = "Fräse";
   auto now = pw::chrono::SystemClock::now();
   snapshot.session.pending_since = now;
@@ -307,6 +366,7 @@ TEST_F(MainScreenTest, StopPendingState) {
   snapshot.session.session_user_label = "Simon Flepp";
   snapshot.session.session_started_at =
       pw::chrono::SystemClock::now() - std::chrono::minutes(47);
+  snapshot.machine.in_use_seconds = 47 * 60;  // timer shows in-use time
   snapshot.system.machine_label = "Fräse";
   auto now = pw::chrono::SystemClock::now();
   snapshot.session.pending_since = now;
@@ -365,6 +425,44 @@ TEST_F(MainScreenTest, CancelActionFromCheckoutPending) {
   EXPECT_EQ(last_action, UiAction::kCancel);
 }
 
+// --- Idle-end warning (ending soon) ---
+
+TEST_F(MainScreenTest, EndingSoonState) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.session.state = app_state::SessionStateUi::kEndingSoon;
+  snapshot.session.session_user_label = "Simon Flepp";
+  snapshot.machine.machine_running = false;
+  snapshot.machine.in_use_seconds = 47 * 60;
+  snapshot.system.machine_label = "Laser";
+  auto now = pw::chrono::SystemClock::now();
+  // 20s elapsed of a 60s warning window.
+  snapshot.session.pending_since = now - std::chrono::seconds(20);
+  snapshot.session.pending_deadline = now + std::chrono::seconds(40);
+  screen_->OnUpdate(snapshot);
+  RenderFrame();
+
+  EXPECT_TRUE(harness_.CompareToGolden(
+      "maco_firmware/modules/terminal_ui/testdata/main_ending_soon.png",
+      "/tmp/main_ending_soon_diff.png"));
+
+  auto config = screen_->GetButtonConfig();
+  EXPECT_EQ(config.ok.label, "Weiter");
+  EXPECT_EQ(config.cancel.label, "Beenden");
+  // The countdown fills "Beenden" (auto-end), not "Weiter".
+  EXPECT_GE(config.cancel.fill_progress, 1);
+  EXPECT_EQ(config.ok.fill_progress, 0);
+}
+
+TEST_F(MainScreenTest, EndingSoonScreenStyle) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.session.state = app_state::SessionStateUi::kEndingSoon;
+  screen_->OnUpdate(snapshot);
+
+  // Machine is idle during the warning → yellow.
+  auto style = screen_->GetScreenStyle();
+  EXPECT_EQ(style.bg_color, theme::kColorYellow);
+}
+
 // --- Progress fill screenshot tests ---
 
 TEST_F(MainScreenTest, StopPendingProgress0) {
@@ -373,6 +471,7 @@ TEST_F(MainScreenTest, StopPendingProgress0) {
   snapshot.session.session_user_label = "Simon Flepp";
   snapshot.session.session_started_at =
       pw::chrono::SystemClock::now() - std::chrono::minutes(47);
+  snapshot.machine.in_use_seconds = 47 * 60;  // timer shows in-use time
   snapshot.system.machine_label = "Fräse";
   auto now = pw::chrono::SystemClock::now();
   snapshot.session.pending_since = now;
@@ -391,6 +490,7 @@ TEST_F(MainScreenTest, StopPendingProgress33) {
   snapshot.session.session_user_label = "Simon Flepp";
   snapshot.session.session_started_at =
       pw::chrono::SystemClock::now() - std::chrono::minutes(47);
+  snapshot.machine.in_use_seconds = 47 * 60;  // timer shows in-use time
   snapshot.system.machine_label = "Fräse";
   auto now = pw::chrono::SystemClock::now();
   // 1s elapsed out of 3s = 33%
@@ -410,6 +510,7 @@ TEST_F(MainScreenTest, StopPendingProgress66) {
   snapshot.session.session_user_label = "Simon Flepp";
   snapshot.session.session_started_at =
       pw::chrono::SystemClock::now() - std::chrono::minutes(47);
+  snapshot.machine.in_use_seconds = 47 * 60;  // timer shows in-use time
   snapshot.system.machine_label = "Fräse";
   auto now = pw::chrono::SystemClock::now();
   // 2s elapsed out of 3s = 66%
@@ -429,6 +530,7 @@ TEST_F(MainScreenTest, StopPendingProgress100) {
   snapshot.session.session_user_label = "Simon Flepp";
   snapshot.session.session_started_at =
       pw::chrono::SystemClock::now() - std::chrono::minutes(47);
+  snapshot.machine.in_use_seconds = 47 * 60;  // timer shows in-use time
   snapshot.system.machine_label = "Fräse";
   auto now = pw::chrono::SystemClock::now();
   // 3s elapsed out of 3s = 100%

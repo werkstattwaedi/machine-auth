@@ -4,6 +4,9 @@
 maco.proto.particle.Machine.label                   max_size:64
 maco.proto.particle.Machine.required_permissions    max_count:5
 
+# xTool P2S control
+maco.proto.particle.XToolP2sControl.host            max_size:64
+
 # DeviceConfig
 maco.proto.particle.DeviceConfig.machines           max_count:4
 maco.proto.particle.DeviceConfig.gateway_host       max_size:64

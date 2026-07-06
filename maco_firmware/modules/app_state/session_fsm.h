@@ -28,7 +28,8 @@ struct SessionStateId {
     kCheckoutPending = 3,
     kTakeoverPending = 4,
     kStopPending = 5,
-    kNumberOfStates = 6,
+    kIdleWarning = 6,   // Child of Active: idle auto-end warning countdown
+    kNumberOfStates = 7,
   };
 };
 
@@ -61,6 +62,22 @@ struct MachineUsage {
   pw::chrono::SystemClock::time_point check_in;
   pw::chrono::SystemClock::time_point check_out;
   CheckoutReason reason = CheckoutReason::kNone;
+  // Accumulated in-use time this session, in seconds (0 when the machine
+  // doesn't track activity separately from the session).
+  uint32_t active_seconds = 0;
+};
+
+// --- Billable-duration source ---
+//
+// Supplies the accumulated in-use time for the current session (e.g. the
+// laser's cutting time). Implemented by MachineController; injected into the
+// FSM so the usage record produced on checkout reports in-use time rather
+// than wall-clock session duration. Null for machines that bill on
+// wall-clock duration.
+class BillableDurationSource {
+ public:
+  virtual ~BillableDurationSource() = default;
+  virtual pw::chrono::SystemClock::duration BillableElapsed() const = 0;
 };
 
 // --- Observer interface ---
@@ -126,10 +143,12 @@ class Active
 class Running
     : public etl::fsm_state<SessionFsm, Running, SessionStateId::kRunning,
                             session_event::UserAuthorized,
-                            session_event::StopSession> {
+                            session_event::StopSession,
+                            session_event::IdleWarn> {
  public:
   etl::fsm_state_id_t on_event(const session_event::UserAuthorized&);
   etl::fsm_state_id_t on_event(const session_event::StopSession&);
+  etl::fsm_state_id_t on_event(const session_event::IdleWarn&);
   etl::fsm_state_id_t on_event_unknown(const etl::imessage&) {
     return No_State_Change;
   }
@@ -176,6 +195,29 @@ class TakeoverPending
 
  private:
   etl::fsm_state_id_t ConfirmTakeover();
+};
+
+/// Child of Active: machine idle too long, warning before auto-end.
+///
+/// SessionController sets pending_since/pending_deadline (the warning window)
+/// and drives the countdown. Confirm ("Weiter") snoozes back to Running;
+/// Cancel ("Beenden") or the countdown expiring ends the session with
+/// CheckoutReason::kTimeout.
+class IdleWarning
+    : public etl::fsm_state<SessionFsm, IdleWarning,
+                            SessionStateId::kIdleWarning,
+                            session_event::UiConfirm, session_event::UiCancel,
+                            session_event::Timeout, session_event::StopSession,
+                            session_event::UserAuthorized> {
+ public:
+  etl::fsm_state_id_t on_event(const session_event::UiConfirm&);
+  etl::fsm_state_id_t on_event(const session_event::UiCancel&);
+  etl::fsm_state_id_t on_event(const session_event::Timeout&);
+  etl::fsm_state_id_t on_event(const session_event::StopSession&);
+  etl::fsm_state_id_t on_event(const session_event::UserAuthorized&);
+  etl::fsm_state_id_t on_event_unknown(const etl::imessage&) {
+    return No_State_Change;
+  }
 };
 
 /// Child of Active: UI stop button pressed, awaiting auto-confirm countdown.
@@ -238,6 +280,16 @@ class SessionFsm : public etl::hfsm, public TagVerifierObserver {
     return tag_present_since_;
   }
 
+  // --- Billable duration (main thread only) ---
+  // When set, the usage record reports accumulated in-use time instead of
+  // leaving active_seconds at 0.
+  void SetBillableDurationSource(const BillableDurationSource* source) {
+    billable_source_ = source;
+  }
+  const BillableDurationSource* billable_source() const {
+    return billable_source_;
+  }
+
   // --- Observer management ---
   void AddObserver(SessionObserver* observer);
   void NotifySessionStarted(const SessionInfo& session);
@@ -264,6 +316,9 @@ class SessionFsm : public etl::hfsm, public TagVerifierObserver {
   // Tracks last notified UI state for change detection (main thread only)
   SessionStateUi last_notified_ui_state_ = SessionStateUi::kNoSession;
 
+  // Optional source of accumulated in-use time (main thread only)
+  const BillableDurationSource* billable_source_ = nullptr;
+
   // State instances
   NoSession no_session_;
   Active active_;
@@ -271,12 +326,13 @@ class SessionFsm : public etl::hfsm, public TagVerifierObserver {
   CheckoutPending checkout_pending_;
   TakeoverPending takeover_pending_;
   StopPending stop_pending_;
+  IdleWarning idle_warning_;
 
   // State list for ETL FSM
   etl::ifsm_state* state_list_[SessionStateId::kNumberOfStates];
 
   // Child state list for Active parent
-  etl::ifsm_state* active_children_[4];
+  etl::ifsm_state* active_children_[5];
 
   mutable pw::sync::Mutex snapshot_mutex_;
   SessionSnapshotUi snapshot_ PW_GUARDED_BY(snapshot_mutex_);

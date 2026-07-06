@@ -17,6 +17,7 @@
 #include "maco_firmware/modules/led_animator/nfc_effects.h"
 #include "maco_firmware/modules/machine_control/default_machine_sensor.h"
 #include "maco_firmware/modules/machine_control/machine_controller.h"
+#include "maco_firmware/modules/machine_control/xtool_machine_sensor.h"
 #include "maco_firmware/modules/nfc_reader/nfc_reader.h"
 #include "maco_firmware/modules/stack_monitor/stack_monitor.h"
 #include "maco_firmware/modules/terminal_effects/terminal_effects.h"
@@ -165,18 +166,46 @@ void AppInit() {
       pw::System().allocator()
   );
 
+  // Report accumulated in-use time (cutting time for the laser) on checkout.
+  session_fsm.SetBillableDurationSource(&machine_controller);
+
+  // Select the running-sensor by control type. The laser (xtool_p2s) polls
+  // the machine's HTTP API over the LAN; everything else mirrors the toggle.
+  const bool is_xtool =
+      config.machine_count() > 0 &&
+      config.machine(0).control() ==
+          maco::config::MachineControlType::kXToolP2s;
+
   static maco::machine_control::DefaultMachineSensor default_sensor(
       machine_toggle,
       pw::async2::GetSystemTimeProvider(),
       pw::System().allocator()
   );
-  default_sensor.SetCallback([](bool running) {
+
+  maco::machine_control::MachineSensor* active_sensor = &default_sensor;
+  if (is_xtool) {
+    const auto& xt = config.machine(0).xtool();
+    auto* socket = maco::system::GetMachineSensorSocket(xt.host, xt.port);
+    if (socket != nullptr) {
+      static maco::machine_control::XToolMachineSensor xtool_sensor(
+          *socket,
+          std::chrono::seconds(xt.poll_interval_sec),
+          maco::system::GetMachineSensorThreadOptions()
+      );
+      active_sensor = &xtool_sensor;
+      PW_LOG_INFO("Using xTool sensor: %s:%u", xt.host.c_str(),
+                  static_cast<unsigned>(xt.port));
+    } else {
+      PW_LOG_WARN("xTool control but no socket; mirroring toggle instead");
+    }
+  }
+  active_sensor->SetCallback([](bool running) {
     machine_controller.OnMachineRunning(running);
   });
 
   session_fsm.AddObserver(&machine_controller);
   machine_controller.Start(pw::System().dispatcher());
-  default_sensor.Start(pw::System().dispatcher());
+  active_sensor->Start(pw::System().dispatcher());
   terminal_ui.SetMachineController(&machine_controller);
   session_fsm.AddObserver(&terminal_effects);
 
@@ -239,6 +268,14 @@ void AppInit() {
         pw::async2::GetSystemTimeProvider(),
         pw::System().allocator()
     );
+    // Idle auto-end for activity-tracked machines (the laser): end the session
+    // after it sits idle, warning shortly before.
+    if (is_xtool) {
+      const auto& xt = config.machine(0).xtool();
+      controller.SetIdleTimeout(&machine_controller,
+                                std::chrono::seconds(xt.idle_timeout_sec),
+                                std::chrono::seconds(xt.idle_warning_sec));
+    }
     controller.Start(pw::System().dispatcher());
     terminal_ui.SetController(&controller);
 

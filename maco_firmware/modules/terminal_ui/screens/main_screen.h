@@ -12,13 +12,15 @@
 
 namespace maco::terminal_ui {
 
-/// Primary screen for the terminal with three visual states:
+/// Primary screen for the terminal with these visual states:
 ///   - Idle: white bg, machine name, "Mit Badge anmelden"
-///   - Active: green bg, user name, elapsed timer
+///   - Ready: yellow bg, session active but machine idle (e.g. laser not
+///     cutting); user name + in-use timer
+///   - Active: green bg, machine actually in use; user name + in-use timer
 ///   - Denied: red bg, cancel icon, "Nicht berechtigt"
 ///
 /// Pending confirmations (checkout, takeover, stop) are shown as a
-/// ConfirmationOverlay on top of the Active state.
+/// ConfirmationOverlay on top of the Active/Ready state.
 class MainScreen : public ui::Screen<app_state::AppStateSnapshot> {
  public:
   explicit MainScreen(ActionCallback action_callback);
@@ -33,6 +35,7 @@ class MainScreen : public ui::Screen<app_state::AppStateSnapshot> {
  private:
   enum class VisualState {
     kIdle,
+    kReady,
     kActive,
     kDenied,
   };
@@ -49,7 +52,9 @@ class MainScreen : public ui::Screen<app_state::AppStateSnapshot> {
   lv_obj_t* instruction_label_ = nullptr;
   lv_obj_t* menu_btn_ = nullptr;
 
-  // Active widgets
+  // Active/Ready widgets
+  lv_obj_t* status_chip_ = nullptr;   // "Bereit" / "Pausiert" / "In Betrieb"
+  lv_obj_t* status_label_ = nullptr;  // text inside the chip
   lv_obj_t* user_name_label_ = nullptr;
   lv_obj_t* timer_icon_ = nullptr;
   lv_obj_t* timer_label_ = nullptr;
