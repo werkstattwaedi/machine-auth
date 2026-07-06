@@ -40,15 +40,6 @@ service cloud.firestore {
       );
     }
 
-    // Validation helpers
-    function isDocumentReference(field, collection) {
-      return field is path;
-    }
-
-    function isDocumentReferenceArray(arr, collection) {
-      return arr is list && arr.size() >= 0;
-    }
-
     // Validate billing address has all required fields
     function hasValidBillingAddress(data) {
       return data.billingAddress is map &&
