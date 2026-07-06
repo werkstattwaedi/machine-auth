@@ -94,6 +94,7 @@ cc_library(
     deps = [
         ":gateway_client",
         "//maco_firmware/modules/app_state:system_state",
+        "//maco_firmware/modules/async_util:value_or_timeout",
         "//proto/gateway:gateway_service_nanopb",
         "//proto/gateway:gateway_service_nanopb_rpc",
         "@pigweed//pw_allocator:pw_allocator",

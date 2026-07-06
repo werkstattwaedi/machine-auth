@@ -14,8 +14,9 @@ per-device key. The nonce is counter-based for replay protection.
 """
 
 import logging
+from collections import OrderedDict
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 # Try to import ascon library
 try:
@@ -223,3 +224,60 @@ class NonceTracker:
         """Reset the nonce tracker state."""
         self._highest_nonce = 0
         self._seen_nonces.clear()
+
+
+class DeviceReplayGuard:
+    """Cross-connection replay protection, keyed by device id.
+
+    `NonceTracker` is reset on every new TCP connection, so an on-LAN
+    attacker could replay a captured request frame simply by opening a fresh
+    connection (the per-device key is static, so the frame still decrypts and
+    authenticates). This guard remembers the most recently seen nonces for
+    each device ACROSS connections and rejects any exact repeat.
+
+    A monotonic high-water mark is deliberately NOT used: the firmware seeds
+    its request nonce counter from a hardware RNG on every boot
+    (`p2_gateway_client.cc` `GetRandomNonceStart`), so a persisted high-water
+    would reject roughly half of all post-reboot frames as "too old" and
+    wedge the terminal. A bounded per-device seen-set instead accepts any
+    never-before-seen nonce (including a fresh random post-reboot base) while
+    still catching replays within the retained history. Protection is
+    therefore bounded to the last `history_per_device` frames per device —
+    strictly stronger than the previous per-connection-only guard, and
+    layered under uploadUsage idempotency + challenge-response auth.
+    """
+
+    def __init__(self, history_per_device: int = 4096) -> None:
+        """Initialize the replay guard.
+
+        Args:
+            history_per_device: How many recent nonces to remember per device.
+        """
+        self._history_per_device = history_per_device
+        # device_id -> insertion-ordered set of seen nonce integers (LRU).
+        self._seen: Dict[bytes, "OrderedDict[int, None]"] = {}
+
+    def check_and_add(self, device_id: bytes, nonce: bytes) -> bool:
+        """Return True if `nonce` is fresh for `device_id`, False on replay.
+
+        A fresh nonce is recorded; the oldest entries are evicted once the
+        per-device history bound is exceeded.
+        """
+        nonce_value = int.from_bytes(nonce, byteorder="big")
+        seen = self._seen.get(device_id)
+        if seen is None:
+            seen = OrderedDict()
+            self._seen[device_id] = seen
+
+        if nonce_value in seen:
+            logger.warning(
+                "Cross-connection nonce replay for device %s: %d",
+                device_id.hex(),
+                nonce_value,
+            )
+            return False
+
+        seen[nonce_value] = None
+        while len(seen) > self._history_per_device:
+            seen.popitem(last=False)
+        return True

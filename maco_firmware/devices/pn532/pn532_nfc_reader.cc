@@ -334,6 +334,19 @@ pw::async2::Coro<pw::Result<pw::ConstByteSpan>> Pn532NfcReader::SendCommand(
   // Full frame: start_idx + 2 (len/lcs) + len (data) + 1 (dcs) + 1 (postamble)
   size_t expected_total = start_idx + 2 + len + 2;
 
+  // Reject a frame whose declared size would overrun the fixed rx_buffer_.
+  // LEN is attacker-independent but up to 255, and start_idx grows with any
+  // leading UART-desync/garbage bytes, so expected_total can exceed the
+  // buffer even after the LCS check passes. rx_buffer_ is the last object
+  // member, so the remainder read below (which is sized purely from
+  // expected_total) would otherwise corrupt adjacent memory.
+  if (expected_total > rx_buffer_.size()) {
+    PW_LOG_ERROR(
+        "Response frame too large for rx buffer (%zu > %zu) for cmd 0x%02x",
+        expected_total, rx_buffer_.size(), cmd.command);
+    co_return pw::Status::DataLoss();
+  }
+
   // Read remainder if needed
   if (rx_received < expected_total) {
     size_t remaining = expected_total - rx_received;

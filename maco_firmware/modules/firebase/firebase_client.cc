@@ -7,14 +7,18 @@
 #include "firebase/firebase_client.h"
 
 #include <array>
+#include <chrono>
 #include <cstring>
 
 #include "common.pb.h"
 #include "firebase_rpc/auth.pb.h"
 #include "gateway/gateway_service.pb.h"
 #include "gateway/gateway_service.rpc.pb.h"
+#include "async_util/value_or_timeout.h"
 #include "pb_decode.h"
 #include "pb_encode.h"
+#include "pw_async2/system_time_provider.h"
+#include "pw_chrono/system_clock.h"
 #include "pw_log/log.h"
 #include "pw_status/try.h"
 
@@ -27,6 +31,18 @@ constexpr const char* kTerminalCheckinEndpoint = "/api/terminalCheckin";
 constexpr const char* kAuthenticateTagEndpoint = "/api/authenticateTag";
 constexpr const char* kCompleteTagAuthEndpoint = "/api/completeTagAuth";
 constexpr const char* kUploadUsageEndpoint = "/api/uploadUsage";
+
+// Upper bound on a gateway RPC round-trip. Each call's future is resolved
+// ONLY by the pw_rpc response callback, so if the TCP link drops after the
+// request is sent but before the response arrives, the callback never fires
+// and the awaiting coroutine would hang forever — wedging the terminal, since
+// the per-method `.active()` guard then rejects every later tap with
+// Unavailable until reboot. Racing each await against this deadline
+// guarantees the call completes; on expiry we cancel the in-flight call so
+// the guard clears. Generous enough to tolerate a cold Cloud Function +
+// Firestore round-trip.
+constexpr pw::chrono::SystemClock::duration kGatewayRpcDeadline =
+    std::chrono::seconds(20);
 
 // Maximum payload size for serialization.
 constexpr size_t kMaxPayloadSize = 512;
@@ -325,7 +341,16 @@ pw::async2::Coro<pw::Result<CheckinResult>> FirebaseClient::TerminalCheckin(
         terminal_checkin_provider_.Resolve(st);
       });
 
-  co_return co_await std::move(future);
+  auto timed =
+      co_await maco::async_util::RaceWithDeadline(
+          std::move(future), pw::async2::GetSystemTimeProvider(),
+          kGatewayRpcDeadline);
+  if (!timed.ok()) {
+    PW_LOG_ERROR("TerminalCheckin timed out; cancelling in-flight call");
+    terminal_checkin_call_.Cancel().IgnoreError();
+    co_return timed.status();
+  }
+  co_return std::move(*timed);
 }
 
 pw::async2::Coro<pw::Result<AuthenticateTagResponse>>
@@ -391,7 +416,16 @@ FirebaseClient::AuthenticateTag(pw::async2::CoroContext cx,
         authenticate_tag_provider_.Resolve(st);
       });
 
-  co_return co_await std::move(future);
+  auto timed =
+      co_await maco::async_util::RaceWithDeadline(
+          std::move(future), pw::async2::GetSystemTimeProvider(),
+          kGatewayRpcDeadline);
+  if (!timed.ok()) {
+    PW_LOG_ERROR("AuthenticateTag timed out; cancelling in-flight call");
+    authenticate_tag_call_.Cancel().IgnoreError();
+    co_return timed.status();
+  }
+  co_return std::move(*timed);
 }
 
 pw::async2::Coro<pw::Result<CompleteAuthResult>> FirebaseClient::CompleteTagAuth(
@@ -456,7 +490,16 @@ pw::async2::Coro<pw::Result<CompleteAuthResult>> FirebaseClient::CompleteTagAuth
         complete_tag_auth_provider_.Resolve(st);
       });
 
-  co_return co_await std::move(future);
+  auto timed =
+      co_await maco::async_util::RaceWithDeadline(
+          std::move(future), pw::async2::GetSystemTimeProvider(),
+          kGatewayRpcDeadline);
+  if (!timed.ok()) {
+    PW_LOG_ERROR("CompleteTagAuth timed out; cancelling in-flight call");
+    complete_tag_auth_call_.Cancel().IgnoreError();
+    co_return timed.status();
+  }
+  co_return std::move(*timed);
 }
 
 pw::async2::Coro<pw::Status> FirebaseClient::UploadUsage(
@@ -503,7 +546,16 @@ pw::async2::Coro<pw::Status> FirebaseClient::UploadUsage(
         upload_usage_provider_.Resolve(st);
       });
 
-  co_return co_await std::move(future);
+  auto timed =
+      co_await maco::async_util::RaceWithDeadline(
+          std::move(future), pw::async2::GetSystemTimeProvider(),
+          kGatewayRpcDeadline);
+  if (!timed.ok()) {
+    PW_LOG_ERROR("UploadUsage timed out; cancelling in-flight call");
+    upload_usage_call_.Cancel().IgnoreError();
+    co_return timed.status();
+  }
+  co_return *timed;
 }
 
 }  // namespace maco::firebase

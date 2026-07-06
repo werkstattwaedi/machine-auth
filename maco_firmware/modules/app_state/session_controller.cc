@@ -5,6 +5,8 @@
 
 #include "maco_firmware/modules/app_state/session_controller.h"
 
+#include <algorithm>
+
 #include "pw_log/log.h"
 
 namespace maco::app_state {
@@ -102,10 +104,22 @@ pw::async2::Coro<pw::Status> SessionController::Run(
         (state_id == SessionStateId::kIdleWarning);
 
     if (is_pending) {
-      // Check if tag held long enough for confirmation (not for stop/idle)
+      // Check if tag held long enough for confirmation (not for stop/idle).
       if (state_id != SessionStateId::kStopPending &&
           state_id != SessionStateId::kIdleWarning && fsm_.tag_present()) {
-        auto hold_duration = now - fsm_.tag_present_since();
+        // Measure the hold from when the confirm prompt appeared
+        // (pending_since), not from physical tag arrival. Entry into
+        // Checkout/TakeoverPending happens only after NTAG mutual auth + a
+        // cloud TerminalCheckin, commonly >3 s — and a takeover (a different
+        // user, least likely to be cached) is exactly the slow case. So
+        // tag_present_since_ is already older than kHoldDuration at prompt
+        // entry, and the very next ~100 ms poll would fire HoldConfirmed
+        // instantly, giving no chance to cancel and defeating the takeover
+        // safety gate. Taking the later of the two also enforces a fresh
+        // hold if the tag was removed and re-presented after the prompt.
+        auto hold_reference =
+            std::max(fsm_.tag_present_since(), fsm_.pending_since);
+        auto hold_duration = now - hold_reference;
         if (hold_duration >= kHoldDuration) {
           fsm_.receive(session_event::HoldConfirmed{});
           fsm_.SyncSnapshot();

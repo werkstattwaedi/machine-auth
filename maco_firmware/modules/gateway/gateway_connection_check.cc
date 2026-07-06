@@ -5,6 +5,7 @@
 
 #include "gateway/gateway_connection_check.h"
 
+#include "async_util/value_or_timeout.h"
 #include "pw_log/log.h"
 
 namespace maco::gateway {
@@ -16,6 +17,12 @@ using GatewayServiceClient =
 constexpr auto kPingInterval = 15s;
 constexpr auto kWifiPollInterval = 1s;
 constexpr auto kStartupRetryDelay = 2s;
+// Bound each ping. The future is resolved only by the pw_rpc callback, so a
+// link drop after the request went out would otherwise hang the Ping
+// coroutine forever — freezing the whole periodic-ping loop and the
+// connectivity indicator with it. Shorter than kPingInterval so a timed-out
+// ping simply reports "disconnected" and the next interval retries.
+constexpr auto kPingDeadline = 5s;
 
 GatewayConnectionCheck::GatewayConnectionCheck(
     GatewayClient& gateway,
@@ -51,7 +58,14 @@ pw::async2::Coro<pw::Status> GatewayConnectionCheck::Ping(
       },
       [this](pw::Status st) { ping_provider_.Resolve(st); });
 
-  co_return co_await std::move(future);
+  auto timed = co_await maco::async_util::RaceWithDeadline(
+      std::move(future), time_provider_, kPingDeadline);
+  if (!timed.ok()) {
+    PW_LOG_WARN("Gateway ping timed out; cancelling in-flight call");
+    ping_call_.Cancel().IgnoreError();
+    co_return timed.status();
+  }
+  co_return *timed;
 }
 
 pw::async2::Coro<pw::Status> GatewayConnectionCheck::Run(

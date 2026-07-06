@@ -28,8 +28,11 @@ namespace {
 // Alias for the Gateway service client
 using GatewayService = maco::gateway::pw_rpc::nanopb::GatewayService;
 
-// Test allocator with sufficient space for coroutine frames
-constexpr size_t kAllocatorSize = 4096;
+// Test allocator with sufficient space for coroutine frames. The RPC methods
+// race their response future against a deadline timer (RaceWithDeadline),
+// which stores the timer future inline in the coroutine frame — so the frames
+// are larger than a bare co_await would need.
+constexpr size_t kAllocatorSize = 8192;
 
 // Reusable test machine ID (any non-empty FirebaseId works for these tests).
 const FirebaseId& TestMachineId() {

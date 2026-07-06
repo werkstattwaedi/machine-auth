@@ -22,6 +22,7 @@ import argparse
 import asyncio
 import logging
 import os
+import secrets
 import sys
 from pathlib import Path
 from typing import Dict, Optional
@@ -43,7 +44,11 @@ from gateway.gateway_service_pb2 import (
 )
 from pw_rpc import ids as rpc_ids
 
-from maco_gateway.ascon_transport import AsconTransport, NonceTracker
+from maco_gateway.ascon_transport import (
+    AsconTransport,
+    DeviceReplayGuard,
+    NonceTracker,
+)
 from maco_gateway.firebase_client import FirebaseClient
 from maco_gateway.gateway_service import GatewayServiceImpl
 from maco_gateway.key_store import KeyStore
@@ -76,6 +81,7 @@ class ClientConnection:
         writer: asyncio.StreamWriter,
         key_store: KeyStore,
         gateway_service: GatewayServiceImpl,
+        replay_guard: DeviceReplayGuard,
     ) -> None:
         self._reader = reader
         self._writer = writer
@@ -84,12 +90,25 @@ class ClientConnection:
         self._addr = writer.get_extra_info("peername")
 
         self._ascon = AsconTransport()
+        # Per-connection ordering/window guard (reset each connection).
         self._nonce_tracker = NonceTracker()
+        # Shared across connections: catches a captured frame replayed on a
+        # fresh connection, which the per-connection tracker alone cannot.
+        self._replay_guard = replay_guard
         self._hdlc_decoder = hdlc_decode.FrameDecoder()
 
         self._device_id: Optional[bytes] = None
         self._device_key: Optional[bytes] = None
-        self._response_nonce_counter = 0
+        # Seed the response nonce counter from a CSPRNG instead of 0.
+        # The device key is static across connections, so starting every
+        # connection at counter 1 made response #1 reuse the same
+        # (key, nonce) pair on every connection — leaking the ASCON
+        # keystream to an on-LAN observer. A random 32-bit start mirrors the
+        # firmware request side (p2_gateway_client.cc GetRandomNonceStart)
+        # and makes cross-connection nonce reuse improbable. The device does
+        # not replay-check response nonces, so a random start is transparent
+        # to it (the nonce travels in the frame).
+        self._response_nonce_counter = secrets.randbits(32)
 
     async def handle(self) -> None:
         """Handle the client connection."""
@@ -161,9 +180,14 @@ class ClientConnection:
             logger.warning("Decrypt returned None frame")
             return
 
-        # Check nonce for replay protection
+        # Check nonce for replay protection. The per-connection tracker
+        # enforces ordering within this connection; the shared replay guard
+        # rejects a frame captured on one connection and replayed on another.
         if not self._nonce_tracker.check_and_update(frame.nonce):
             logger.warning("Nonce replay detected, dropping frame")
+            return
+        if not self._replay_guard.check_and_add(self._device_id, frame.nonce):
+            logger.warning("Cross-connection nonce replay detected, dropping frame")
             return
 
         # The decrypted payload is a raw pw_rpc packet
@@ -277,8 +301,11 @@ class ClientConnection:
             logger.error("Cannot send response: device not identified")
             return
 
-        # Generate nonce for response: [device_id: 12] [counter: 4 BE]
-        self._response_nonce_counter += 1
+        # Generate nonce for response: [device_id: 12] [counter: 4 BE].
+        # Wrap in 32 bits so a random seed near 2**32 can't overflow the
+        # 4-byte field; wraparound is harmless (uniqueness within a
+        # connection holds for any realistic response count).
+        self._response_nonce_counter = (self._response_nonce_counter + 1) & 0xFFFFFFFF
         nonce = self._device_id + self._response_nonce_counter.to_bytes(
             4, byteorder="big"
         )
@@ -315,6 +342,10 @@ class GatewayServer:
         self._firebase_client = firebase_client
         self._gateway_service = GatewayServiceImpl(firebase_client)
         self._connections: Dict[str, ClientConnection] = {}
+        # One replay guard for the whole server so per-device nonce history
+        # survives across connections (S-3). Bounded, so it can't grow
+        # without limit even under many devices / long uptime.
+        self._replay_guard = DeviceReplayGuard()
 
     async def run(self) -> None:
         """Run the gateway server."""
@@ -335,7 +366,11 @@ class GatewayServer:
         addr = str(writer.get_extra_info("peername"))
         try:
             conn = ClientConnection(
-                reader, writer, self._key_store, self._gateway_service
+                reader,
+                writer,
+                self._key_store,
+                self._gateway_service,
+                self._replay_guard,
             )
             self._connections[addr] = conn
             await conn.handle()

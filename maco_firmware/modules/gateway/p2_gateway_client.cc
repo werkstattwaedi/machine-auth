@@ -223,10 +223,23 @@ struct P2GatewayClient::Impl {
 
   static void OnReconnect(void* ctx) {
     auto* impl = static_cast<Impl*>(ctx);
-    if (impl->dispatcher_) {
-      PW_LOG_INFO("Re-posting ReadTask after reconnect");
-      impl->dispatcher_->Post(impl->read_task_);
+    if (!impl->dispatcher_) {
+      return;
     }
+    // Only (re-)post the ReadTask when it has actually stopped. A reconnect
+    // triggered from the send path (SendFrame → Disconnect → EnsureConnected)
+    // runs synchronously inside another task's activation, so the ReadTask
+    // has not run in between and is still registered (it re-arms itself with
+    // ReEnqueue every poll). Posting an already-posted task hits
+    // PW_DASSERT(state_ == kUnposted) in debug and corrupts the dispatcher's
+    // task list in release. When still registered, the next poll already sees
+    // the reconnected socket and resumes — no re-post needed.
+    if (impl->read_task_.IsRegistered()) {
+      PW_LOG_DEBUG("ReadTask still registered after reconnect; not re-posting");
+      return;
+    }
+    PW_LOG_INFO("Re-posting ReadTask after reconnect");
+    impl->dispatcher_->Post(impl->read_task_);
   }
 
   /// Decrypt and process an HDLC frame received from the gateway.

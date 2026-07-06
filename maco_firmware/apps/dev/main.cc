@@ -37,12 +37,17 @@ namespace {
 /// Check for an orphaned session from a prior device reset.
 /// If the reset was involuntary (watchdog/panic) and the relay is still on,
 /// resume the session. Otherwise close it and queue the usage for upload.
-void RecoverOrphanedSession(
+///
+/// Returns true iff a session was resumed (so the caller keeps the latching
+/// relay energized). In every other path — including the close branch below,
+/// which used to leave a latched relay ON — the relay must be driven OFF, so
+/// the caller applies the MachineController's fail-safe boot default.
+bool RecoverOrphanedSession(
     maco::session_upload::SessionStore& store,
     maco::app_state::SessionFsm& fsm,
     maco::machine_control::MachineToggle& toggle) {
   if (!store.HasOrphanedSession()) {
-    return;
+    return false;
   }
 
   auto reset_reason = maco::system::GetResetReason();
@@ -60,7 +65,10 @@ void RecoverOrphanedSession(
           session->tag_uid, session->user_id, session->user_label,
           session->auth_id, session->started_at));
       fsm.SyncSnapshot();
+      return true;
     }
+    // Fall through: couldn't load the session to resume, so treat it as a
+    // close and let the relay be de-energized rather than left latched ON.
   } else {
     // Close orphaned session with estimated end time
     auto session = store.LoadOrphanedSession();
@@ -86,6 +94,7 @@ void RecoverOrphanedSession(
     }
     store.ClearActiveSession().IgnoreError();
   }
+  return false;
 }
 
 void AppInit() {
@@ -158,13 +167,22 @@ void AppInit() {
   static maco::session_upload::SessionStore session_store(
       maco::system::GetSessionKvs());
 
-  RecoverOrphanedSession(session_store, session_fsm, machine_toggle);
+  const bool resumed_session =
+      RecoverOrphanedSession(session_store, session_fsm, machine_toggle);
 
   static maco::machine_control::MachineController machine_controller(
       machine_toggle,
       pw::async2::GetSystemTimeProvider(),
       pw::System().allocator()
   );
+
+  // The controller boots with a fail-safe pending Disable that de-energizes
+  // the latching relay on its first poll (P0-4). Only a genuinely resumed
+  // session keeps it energized; every other boot path leaves the machine
+  // powered off until a new tap authorizes it.
+  if (resumed_session) {
+    machine_controller.KeepToggleEnabledForResume();
+  }
 
   // Report accumulated in-use time (cutting time for the laser) on checkout.
   session_fsm.SetBillableDurationSource(&machine_controller);

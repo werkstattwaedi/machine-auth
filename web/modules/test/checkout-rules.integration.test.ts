@@ -637,17 +637,22 @@ describe("Anonymous open-checkout lookup keys on firebaseUid, not modifiedBy", (
     )
     expect(found.size).toBe(1)
 
-    // The pre-fix query keyed on modifiedBy → misses the very doc this
-    // session just created. Encodes the regression so a revert fails loudly.
-    const missed = await getDocs(
-      query(
-        collection(db, "checkouts"),
-        where("userId", "==", null),
-        where("modifiedBy", "==", anonUid),
-        where("status", "==", "open"),
+    // The pre-fix query keyed on modifiedBy is now denied outright by the
+    // rules layer: P0-2 scopes anon checkout reads to the creating session
+    // via `firebaseUid`, so an anon `list` MUST constrain on
+    // `where("firebaseUid","==",uid)`. A query that omits it (like the old
+    // modifiedBy query) can no longer enumerate anon checkouts at all —
+    // which is the whole point of the P0-2 PII-leak fix.
+    await assertFails(
+      getDocs(
+        query(
+          collection(db, "checkouts"),
+          where("userId", "==", null),
+          where("modifiedBy", "==", anonUid),
+          where("status", "==", "open"),
+        ),
       ),
     )
-    expect(missed.size).toBe(0)
   })
 })
 
