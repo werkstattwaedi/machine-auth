@@ -39,9 +39,12 @@
       "userCanAdd": "boolean", // true = users can add to checkout, false = system-only (NFC machine hours, memberships)
       "description": "string | null",
 
-      // 1..n purchase options. `variants[0]` is canonical: picker uses it
-      // silently when length == 1; auto-bill flows resolve through it.
-      // Array order is meaningful — keep the default first. The
+      // 1..n purchase options, each fully priced. `variants[0]` is canonical:
+      // picker uses it silently when length == 1; auto-bill flows resolve
+      // through it. Array order is meaningful — keep the default first. For
+      // makerspace laser stock the extra entries are the cut-to-size options;
+      // the importer expands them from the workbook `Varianten` sheet
+      // (base × factor) at import time — nothing is derived at read time. The
       // Mitgliedschaft item uses variant ids "single" and "family" to
       // discriminate the two membership types (no separate `kind` field).
       "variants": [
@@ -63,14 +66,7 @@
           // keys without touching items that don't need them.
           "unitPrice": { "default": "number", "member": "number | undefined" }
         }
-      ],
-
-      // Ids of shared variant definitions (VARIANT_DEFINITIONS in @oww/shared)
-      // that apply to this item, e.g. laser cut sizes ["a3", "320-620"].
-      // Each derives an extra purchase option priced base×factor at read time
-      // (resolveVariants); `variants` then holds only the base entry.
-      // Absent/empty = base variant only.
-      "variantIds": ["string"]
+      ]
     }
   },
   "machine": {

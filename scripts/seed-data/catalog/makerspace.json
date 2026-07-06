@@ -159,12 +159,31 @@
           "default": 5.55
         },
         "label": "Per m²"
+      },
+      {
+        "id": "320-620",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.1
+        },
+        "label": "Zuschnitt 320 × 620 mm"
+      },
+      {
+        "id": "500-1250",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 3.45
+        },
+        "label": "Zuschnitt 500 × 1250 mm"
+      },
+      {
+        "id": "a3",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 0.7
+        },
+        "label": "Zuschnitt A3"
       }
-    ],
-    "variantIds": [
-      "320-620",
-      "500-1250",
-      "a3"
     ]
   },
   {
@@ -189,12 +208,31 @@
           "default": 7.05
         },
         "label": "Per m²"
+      },
+      {
+        "id": "320-620",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.4
+        },
+        "label": "Zuschnitt 320 × 620 mm"
+      },
+      {
+        "id": "500-1250",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 4.4
+        },
+        "label": "Zuschnitt 500 × 1250 mm"
+      },
+      {
+        "id": "a3",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 0.9
+        },
+        "label": "Zuschnitt A3"
       }
-    ],
-    "variantIds": [
-      "320-620",
-      "500-1250",
-      "a3"
     ]
   },
   {
@@ -219,12 +257,31 @@
           "default": 8.6
         },
         "label": "Per m²"
+      },
+      {
+        "id": "320-620",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.7
+        },
+        "label": "Zuschnitt 320 × 620 mm"
+      },
+      {
+        "id": "500-1250",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 5.4
+        },
+        "label": "Zuschnitt 500 × 1250 mm"
+      },
+      {
+        "id": "a3",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.1
+        },
+        "label": "Zuschnitt A3"
       }
-    ],
-    "variantIds": [
-      "320-620",
-      "500-1250",
-      "a3"
     ]
   },
   {
@@ -249,12 +306,31 @@
           "default": 10.6
         },
         "label": "Per m²"
+      },
+      {
+        "id": "320-620",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 2.1
+        },
+        "label": "Zuschnitt 320 × 620 mm"
+      },
+      {
+        "id": "500-1250",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 6.6
+        },
+        "label": "Zuschnitt 500 × 1250 mm"
+      },
+      {
+        "id": "a3",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 1.35
+        },
+        "label": "Zuschnitt A3"
       }
-    ],
-    "variantIds": [
-      "320-620",
-      "500-1250",
-      "a3"
     ]
   },
   {
@@ -279,10 +355,15 @@
           "default": 36
         },
         "label": "Per m²"
+      },
+      {
+        "id": "a3",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 4.55
+        },
+        "label": "Zuschnitt A3"
       }
-    ],
-    "variantIds": [
-      "a3"
     ]
   },
   {
@@ -307,10 +388,15 @@
           "default": 24
         },
         "label": "Per m²"
+      },
+      {
+        "id": "a3",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 3.0
+        },
+        "label": "Zuschnitt A3"
       }
-    ],
-    "variantIds": [
-      "a3"
     ]
   },
   {
@@ -335,10 +421,15 @@
           "default": 31
         },
         "label": "Per m²"
+      },
+      {
+        "id": "a3",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 3.9
+        },
+        "label": "Zuschnitt A3"
       }
-    ],
-    "variantIds": [
-      "a3"
     ]
   },
   {
@@ -363,12 +454,31 @@
           "default": 42.34
         },
         "label": "Per m²"
+      },
+      {
+        "id": "320-620",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 8.4
+        },
+        "label": "Zuschnitt 320 × 620 mm"
+      },
+      {
+        "id": "500-1250",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 26.45
+        },
+        "label": "Zuschnitt 500 × 1250 mm"
+      },
+      {
+        "id": "a3",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 5.35
+        },
+        "label": "Zuschnitt A3"
       }
-    ],
-    "variantIds": [
-      "320-620",
-      "500-1250",
-      "a3"
     ]
   },
   {
@@ -393,12 +503,31 @@
           "default": 15.9
         },
         "label": "Per m²"
+      },
+      {
+        "id": "320-620",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 3.15
+        },
+        "label": "Zuschnitt 320 × 620 mm"
+      },
+      {
+        "id": "500-1250",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 9.95
+        },
+        "label": "Zuschnitt 500 × 1250 mm"
+      },
+      {
+        "id": "a3",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 2.0
+        },
+        "label": "Zuschnitt A3"
       }
-    ],
-    "variantIds": [
-      "320-620",
-      "500-1250",
-      "a3"
     ]
   },
   {
@@ -423,12 +552,31 @@
           "default": 18.15
         },
         "label": "Per m²"
+      },
+      {
+        "id": "320-620",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 3.6
+        },
+        "label": "Zuschnitt 320 × 620 mm"
+      },
+      {
+        "id": "500-1250",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 11.35
+        },
+        "label": "Zuschnitt 500 × 1250 mm"
+      },
+      {
+        "id": "a3",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 2.3
+        },
+        "label": "Zuschnitt A3"
       }
-    ],
-    "variantIds": [
-      "320-620",
-      "500-1250",
-      "a3"
     ]
   },
   {
@@ -453,12 +601,31 @@
           "default": 25.2
         },
         "label": "Per m²"
+      },
+      {
+        "id": "320-620",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 5.0
+        },
+        "label": "Zuschnitt 320 × 620 mm"
+      },
+      {
+        "id": "500-1250",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 15.75
+        },
+        "label": "Zuschnitt 500 × 1250 mm"
+      },
+      {
+        "id": "a3",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 3.2
+        },
+        "label": "Zuschnitt A3"
       }
-    ],
-    "variantIds": [
-      "320-620",
-      "500-1250",
-      "a3"
     ]
   },
   {
@@ -483,12 +650,31 @@
           "default": 26.45
         },
         "label": "Per m²"
+      },
+      {
+        "id": "320-620",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 5.25
+        },
+        "label": "Zuschnitt 320 × 620 mm"
+      },
+      {
+        "id": "500-1250",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 16.55
+        },
+        "label": "Zuschnitt 500 × 1250 mm"
+      },
+      {
+        "id": "a3",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 3.35
+        },
+        "label": "Zuschnitt A3"
       }
-    ],
-    "variantIds": [
-      "320-620",
-      "500-1250",
-      "a3"
     ]
   },
   {
@@ -513,12 +699,31 @@
           "default": 30.25
         },
         "label": "Per m²"
+      },
+      {
+        "id": "320-620",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 6.0
+        },
+        "label": "Zuschnitt 320 × 620 mm"
+      },
+      {
+        "id": "500-1250",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 18.9
+        },
+        "label": "Zuschnitt 500 × 1250 mm"
+      },
+      {
+        "id": "a3",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 3.8
+        },
+        "label": "Zuschnitt A3"
       }
-    ],
-    "variantIds": [
-      "320-620",
-      "500-1250",
-      "a3"
     ]
   },
   {
@@ -543,12 +748,31 @@
           "default": 26.7
         },
         "label": "Per m²"
+      },
+      {
+        "id": "320-620",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 5.3
+        },
+        "label": "Zuschnitt 320 × 620 mm"
+      },
+      {
+        "id": "500-1250",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 16.7
+        },
+        "label": "Zuschnitt 500 × 1250 mm"
+      },
+      {
+        "id": "a3",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 3.35
+        },
+        "label": "Zuschnitt A3"
       }
-    ],
-    "variantIds": [
-      "320-620",
-      "500-1250",
-      "a3"
     ]
   },
   {
@@ -573,12 +797,31 @@
           "default": 18.65
         },
         "label": "Per m²"
+      },
+      {
+        "id": "320-620",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 3.7
+        },
+        "label": "Zuschnitt 320 × 620 mm"
+      },
+      {
+        "id": "500-1250",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 11.65
+        },
+        "label": "Zuschnitt 500 × 1250 mm"
+      },
+      {
+        "id": "a3",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 2.35
+        },
+        "label": "Zuschnitt A3"
       }
-    ],
-    "variantIds": [
-      "320-620",
-      "500-1250",
-      "a3"
     ]
   },
   {
@@ -603,10 +846,15 @@
           "default": 54
         },
         "label": "Per m²"
+      },
+      {
+        "id": "a3",
+        "pricingModel": "count",
+        "unitPrice": {
+          "default": 6.8
+        },
+        "label": "Zuschnitt A3"
       }
-    ],
-    "variantIds": [
-      "a3"
     ]
   }
 ]

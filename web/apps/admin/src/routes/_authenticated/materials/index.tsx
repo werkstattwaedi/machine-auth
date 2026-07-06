@@ -205,7 +205,6 @@ function CreateCatalogDialog({ open, onOpenChange }: { open: boolean; onOpenChan
             workshops: string[]
             category: string[]
             variants: typeof variant[]
-            variantIds: string[]
             active: boolean
             userCanAdd: boolean
           },
@@ -220,11 +219,9 @@ function CreateCatalogDialog({ open, onOpenChange }: { open: boolean; onOpenChan
             .map((w) => w.trim())
             .filter(Boolean),
           // New entries start in the placeholder "Sonstiges" category with
-          // just their base variant; extra variants can be added on the
-          // detail page.
+          // just their base variant. Cut-to-size options come from the import.
           category: ["Sonstiges"],
           variants: [variant],
-          variantIds: Array.isArray(values.variantIds) ? values.variantIds : [],
           active: true,
           userCanAdd: values.userCanAdd,
         })
