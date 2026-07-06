@@ -306,7 +306,7 @@ def build_makerspace_sheet(wb):
         vids = item.get("variantIds", [])
         if vids:
             variant_rows += 1
-        ws.cell(r, 1, item["code"])
+        ws.cell(r, 1, int(item["code"]))  # numeric — see note in the augment loop
         ws.cell(r, 2, cat[0] if cat else "Sonstiges")
         ws.cell(r, 3, cat[1] if len(cat) > 1 else "")
         ws.cell(r, 4, PRICINGMODEL_TO_EINHEIT.get(base["pricingModel"], "Stk"))
@@ -356,7 +356,9 @@ def main():
                 if norm(wb_vals[sheet].cell(r, cols["mass"]).value) != p["mass"]:
                     label_edits += 1
                 ws.cell(r, cols["mass"], p["mass"])
-            ws.cell(r, anchor + 0, p["code"])
+            # Numeric cell (codes are 4-digit, no leading zero) so Excel doesn't
+            # flag "number stored as text"; the importer coerces to string anyway.
+            ws.cell(r, anchor + 0, int(p["code"]))
             ws.cell(r, anchor + 1, p["kategorie"])
             ws.cell(r, anchor + 2, p["unterkategorie"])
             ws.cell(r, anchor + 3, p["einheit"])
