@@ -53,9 +53,23 @@ interface MacoData {
   hwRevision?: number;
 }
 
+// Machine control config, mirrors the `MachineControl` proto oneof and the
+// `MachineEntity.control` Firestore shape (functions firestore_entities.ts).
+type MachineControlDoc =
+  | { type?: "relay" }
+  | {
+      type: "xtool_p2s";
+      host: string;
+      port?: number;
+      idleTimeoutSec?: number;
+      idleWarningSec?: number;
+      pollIntervalSec?: number;
+    };
+
 interface MachineData {
   name: string;
   requiredPermission?: DocumentReference[];
+  control?: MachineControlDoc;
 }
 
 async function getFirestoreData(deviceId: string) {
@@ -119,6 +133,26 @@ async function getFirestoreData(deviceId: string) {
 
 // -- Config generation --
 
+// Map the Firestore `control` doc to the proto MachineControl oneof.
+// Zero-values are left for the firmware to resolve to its documented defaults.
+function buildControl(control: MachineControlDoc | undefined) {
+  if (control?.type === "xtool_p2s") {
+    return {
+      control: {
+        $case: "xtoolP2s" as const,
+        xtoolP2s: {
+          host: control.host ?? "",
+          port: control.port ?? 0,
+          idleTimeoutSec: control.idleTimeoutSec ?? 0,
+          idleWarningSec: control.idleWarningSec ?? 0,
+          pollIntervalSec: control.pollIntervalSec ?? 0,
+        },
+      },
+    };
+  }
+  return { control: { $case: "relay" as const, relay: {} } };
+}
+
 function createDeviceConfig(
   macoData: MacoData,
   machines: Array<{ id: string; data: MachineData }>,
@@ -133,7 +167,7 @@ function createDeviceConfig(
       requiredPermissions: (machine.data.requiredPermission ?? []).map(
         (ref) => ({ value: ref.id })
       ),
-      control: { control: { $case: "relay" as const, relay: {} } },
+      control: buildControl(machine.data.control),
     })),
     gatewayHost,
     gatewayPort,

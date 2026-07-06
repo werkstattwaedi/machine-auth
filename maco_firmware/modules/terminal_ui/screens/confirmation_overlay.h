@@ -16,6 +16,7 @@ enum class PendingType : uint8_t {
   kCheckout,
   kTakeover,
   kStop,
+  kIdleWarning,  // Idle auto-end countdown: "Weiter" (snooze) / "Beenden"
 };
 
 /// Bottom-sheet overlay for pending confirmation UI.
@@ -42,6 +43,11 @@ class ConfirmationOverlay {
 
   /// Update the takeover user label while already visible.
   void SetTakeoverLabel(std::string_view takeover_user_label);
+
+  /// Recolour the card to the screen's state background at full brightness
+  /// (the scrim dims the rest, so the card stands out). `text_color` should
+  /// match the screen's own text colour for that state.
+  void SetColors(uint32_t screen_bg, uint32_t text_color);
 
   /// Hide the overlay.
   void Hide();

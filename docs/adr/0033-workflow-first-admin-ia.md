@@ -1,4 +1,4 @@
-# ADR-0032: Workflow-first admin information architecture
+# ADR-0033: Workflow-first admin information architecture
 
 **Status:** Accepted
 

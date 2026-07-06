@@ -58,13 +58,32 @@ export interface PermissionEntity {
   name: string;
 }
 
+/**
+ * Machine control mechanism (mirrors the `MachineControl` proto oneof).
+ *
+ * - `relay`: relay follows the session; billed on wall-clock session duration.
+ * - `xtool_p2s`: relay stays on for the session but the terminal polls the
+ *   laser's HTTP API; only cutting time is billed (usage `activeSeconds`) and
+ *   the session auto-ends after `idleTimeoutSec` ready-but-idle.
+ */
+export type MachineControl =
+  | { type: "relay" }
+  | {
+      type: "xtool_p2s";
+      host: string;
+      port?: number;
+      idleTimeoutSec?: number;
+      idleWarningSec?: number;
+      pollIntervalSec?: number;
+    };
+
 export interface MachineEntity {
   name: string;
   workshop: string; // Workshop ID (e.g., "holz", "metall")
   checkoutTemplateId: DocumentReference; // Reference to /catalog/{itemId}
   requiredPermission: DocumentReference[]; // References to /permission/{permissionId}
   maco: DocumentReference; // Reference to /maco/{deviceId}
-  control: Record<string, unknown>;
+  control: MachineControl;
 }
 
 export interface MaCoEntity {

@@ -36,6 +36,8 @@ message PersistedUsage {
   int64 check_out = 4;
   // Maps to CheckoutReason enum value
   int32 reason = 5;
+  // Accumulated in-use (e.g. laser cutting) time this session, in seconds.
+  uint32 active_seconds = 6;
 }
 
 // Queue of completed usage records awaiting upload.

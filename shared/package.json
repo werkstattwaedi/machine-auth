@@ -16,6 +16,6 @@
   "devDependencies": {
     "cjs-module-lexer": "^2.2.0",
     "typescript": "^6.0.0",
-    "vitest": "^4.1.7"
+    "vitest": "^4.1.10"
   }
 }

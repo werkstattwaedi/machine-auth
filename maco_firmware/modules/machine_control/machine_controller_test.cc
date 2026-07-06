@@ -141,5 +141,74 @@ TEST_F(MachineControllerTest, IsToggleEnabledReflectsState) {
   EXPECT_TRUE(controller_->IsToggleEnabled());
 }
 
+// --- In-use accumulation (BillableDurationSource) ---
+
+TEST_F(MachineControllerTest, BillableElapsedAccumulatesRunningIntervals) {
+  app_state::SessionInfo session;
+  controller_->OnSessionStarted(session);
+  EXPECT_EQ(controller_->BillableElapsed(),
+            pw::chrono::SystemClock::duration::zero());
+
+  // Run for 30s.
+  controller_->OnMachineRunning(true);
+  time_provider_.AdvanceTime(std::chrono::seconds(30));
+  controller_->OnMachineRunning(false);
+
+  // Idle for 60s — must not count.
+  time_provider_.AdvanceTime(std::chrono::seconds(60));
+
+  // Run for another 30s.
+  controller_->OnMachineRunning(true);
+  time_provider_.AdvanceTime(std::chrono::seconds(30));
+  controller_->OnMachineRunning(false);
+
+  EXPECT_EQ(
+      std::chrono::duration_cast<std::chrono::seconds>(
+          controller_->BillableElapsed()),
+      std::chrono::seconds(60));
+}
+
+TEST_F(MachineControllerTest, BillableElapsedIncludesInProgressInterval) {
+  app_state::SessionInfo session;
+  controller_->OnSessionStarted(session);
+
+  controller_->OnMachineRunning(true);
+  time_provider_.AdvanceTime(std::chrono::seconds(45));
+
+  // Still running — BillableElapsed includes the open interval.
+  EXPECT_EQ(std::chrono::duration_cast<std::chrono::seconds>(
+                controller_->BillableElapsed()),
+            std::chrono::seconds(45));
+}
+
+TEST_F(MachineControllerTest, BillableElapsedSeedsWhenAlreadyRunningAtStart) {
+  // Machine already reports running before the session begins.
+  controller_->OnMachineRunning(true);
+
+  app_state::SessionInfo session;
+  controller_->OnSessionStarted(session);  // must seed the open interval
+
+  time_provider_.AdvanceTime(std::chrono::seconds(20));
+  EXPECT_EQ(std::chrono::duration_cast<std::chrono::seconds>(
+                controller_->BillableElapsed()),
+            std::chrono::seconds(20));
+}
+
+TEST_F(MachineControllerTest, BillableElapsedResetsOnNewSession) {
+  app_state::SessionInfo session;
+  controller_->OnSessionStarted(session);
+  controller_->OnMachineRunning(true);
+  time_provider_.AdvanceTime(std::chrono::seconds(30));
+  controller_->OnMachineRunning(false);
+
+  app_state::MachineUsage usage;
+  controller_->OnSessionEnded(session, usage);
+
+  // New session resets the accumulator.
+  controller_->OnSessionStarted(session);
+  EXPECT_EQ(controller_->BillableElapsed(),
+            pw::chrono::SystemClock::duration::zero());
+}
+
 }  // namespace
 }  // namespace maco::machine_control

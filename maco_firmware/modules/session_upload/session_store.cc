@@ -276,6 +276,7 @@ pw::Status SessionStore::StoreCompletedUsage(
   record.check_in = ToUnixSeconds(usage.check_in, utc_offset);
   record.check_out = ToUnixSeconds(usage.check_out, utc_offset);
   record.reason = static_cast<int32_t>(usage.reason);
+  record.active_seconds = usage.active_seconds;
 
   queue.records_count++;
 

@@ -599,5 +599,101 @@ TEST(SessionFsmTest, SnapshotDuringStopPending) {
   EXPECT_EQ(std::string_view(snapshot.session_user_label), "Alice");
 }
 
+// --- IdleWarning (idle auto-end) tests ---
+
+TEST(SessionFsmTest, IdleWarnFromRunningEntersIdleWarning) {
+  SessionFsm fsm;
+  MockObserver observer;
+  fsm.AddObserver(&observer);
+  auto tag = MakeTagUid(std::byte{0x01});
+
+  fsm.receive(MakeAuthEvent(tag, "Alice"));
+  fsm.receive(session_event::IdleWarn{});
+
+  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kIdleWarning);
+  EXPECT_EQ(observer.end_count, 0);  // still active during warning
+}
+
+TEST(SessionFsmTest, IdleWarningSnapshotIsEndingSoon) {
+  SessionFsm fsm;
+  auto tag = MakeTagUid(std::byte{0x01});
+
+  fsm.receive(MakeAuthEvent(tag, "Alice"));
+  fsm.receive(session_event::IdleWarn{});
+  fsm.SyncSnapshot();
+
+  SessionSnapshotUi snapshot;
+  fsm.GetSnapshot(snapshot);
+  EXPECT_EQ(snapshot.state, SessionStateUi::kEndingSoon);
+  EXPECT_EQ(std::string_view(snapshot.session_user_label), "Alice");
+}
+
+TEST(SessionFsmTest, IdleWarningTimeoutEndsWithTimeoutReason) {
+  SessionFsm fsm;
+  MockObserver observer;
+  fsm.AddObserver(&observer);
+  auto tag = MakeTagUid(std::byte{0x01});
+
+  fsm.receive(MakeAuthEvent(tag, "Alice"));
+  fsm.receive(session_event::IdleWarn{});
+  fsm.receive(session_event::Timeout{});
+
+  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kNoSession);
+  EXPECT_EQ(observer.end_count, 1);
+  EXPECT_EQ(observer.last_checkout_reason, CheckoutReason::kTimeout);
+}
+
+TEST(SessionFsmTest, IdleWarningConfirmSnoozesToRunning) {
+  SessionFsm fsm;
+  MockObserver observer;
+  fsm.AddObserver(&observer);
+  auto tag = MakeTagUid(std::byte{0x01});
+
+  fsm.receive(MakeAuthEvent(tag, "Alice"));
+  fsm.receive(session_event::IdleWarn{});
+  fsm.receive(session_event::UiConfirm{});  // "Weiter" (snooze)
+
+  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kRunning);
+  EXPECT_EQ(observer.end_count, 0);
+}
+
+TEST(SessionFsmTest, IdleWarningCancelEndsWithTimeoutReason) {
+  SessionFsm fsm;
+  MockObserver observer;
+  fsm.AddObserver(&observer);
+  auto tag = MakeTagUid(std::byte{0x01});
+
+  fsm.receive(MakeAuthEvent(tag, "Alice"));
+  fsm.receive(session_event::IdleWarn{});
+  fsm.receive(session_event::UiCancel{});  // "Beenden" (end now)
+
+  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kNoSession);
+  EXPECT_EQ(observer.end_count, 1);
+  EXPECT_EQ(observer.last_checkout_reason, CheckoutReason::kTimeout);
+}
+
+TEST(SessionFsmTest, IdleWarningStopSessionEntersStopPending) {
+  SessionFsm fsm;
+  auto tag = MakeTagUid(std::byte{0x01});
+
+  fsm.receive(MakeAuthEvent(tag, "Alice"));
+  fsm.receive(session_event::IdleWarn{});
+  fsm.receive(session_event::StopSession{});
+
+  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kStopPending);
+}
+
+TEST(SessionFsmTest, IdleWarningSameTapStartsCheckout) {
+  SessionFsm fsm;
+  auto tag = MakeTagUid(std::byte{0x01});
+
+  fsm.receive(MakeAuthEvent(tag, "Alice"));
+  fsm.receive(session_event::IdleWarn{});
+  // Same tag during the warning bubbles to Active → checkout.
+  fsm.receive(MakeAuthEvent(tag));
+
+  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kCheckoutPending);
+}
+
 }  // namespace
 }  // namespace maco::app_state

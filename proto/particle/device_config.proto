@@ -18,11 +18,32 @@ enum HwRevision {
 message MachineControl {
   oneof control {
     RelayControl relay = 1;
+    XToolP2sControl xtool_p2s = 2;
   }
 }
 
 // Relay-based machine control
 message RelayControl {}
+
+// xTool P2S laser cutter control.
+//
+// The relay stays on for the whole session, but the terminal polls the
+// laser's local HTTP API to track whether a job is actually executing, so
+// only cutting time is billed and idle sessions auto-end.
+message XToolP2sControl {
+  // Laser hostname or IP on the LAN
+  string host = 1;
+  // Laser HTTP port (0 => default 8080)
+  uint32 port = 2;
+  // Auto-end the session after this many seconds ready-but-idle
+  // (0 => default 900 = 15 min)
+  uint32 idle_timeout_sec = 3;
+  // Show the idle warning this many seconds before auto-end
+  // (0 => default 60 = 1 min)
+  uint32 idle_warning_sec = 4;
+  // Interval between laser state polls, in seconds (0 => default 3)
+  uint32 poll_interval_sec = 5;
+}
 
 // Machine definition with permissions
 message Machine {
