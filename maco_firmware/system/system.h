@@ -4,6 +4,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string_view>
 
 #include "pw_function/function.h"
 #include "pw_random/random.h"
@@ -40,6 +41,10 @@ class DeviceSecrets;
 namespace maco::machine_control {
 class MachineToggle;
 }  // namespace maco::machine_control
+
+namespace pb::socket {
+class TcpSocket;
+}  // namespace pb::socket
 
 namespace maco::buzzer {
 class Buzzer;
@@ -107,6 +112,11 @@ const pw::thread::Options& GetDefaultThreadOptions();
 /// Host: pw::thread::stl::Options, P2: 8KB stack
 const pw::thread::Options& GetDisplayRenderThreadOptions();
 
+/// Returns thread options for the machine-sensor poll thread (xTool laser).
+/// Runs blocking TCP I/O off the shared dispatcher.
+/// Host: pw::thread::stl::Options, P2: modest stack
+const pw::thread::Options& GetMachineSensorThreadOptions();
+
 /// Returns the platform-specific NFC reader instance.
 /// Host: MockNfcReader, P2: Pn532NfcReader
 maco::nfc::NfcReader& GetNfcReader();
@@ -151,6 +161,15 @@ maco::secrets::DeviceSecrets& GetDeviceSecrets();
 /// P2: LatchingMachineRelay with HAL GPIO
 /// Host: MockMachineToggle for simulation
 maco::machine_control::MachineToggle& GetMachineToggle();
+
+/// Returns a TCP socket for polling a LAN machine (e.g. the xTool laser) at
+/// host:port, owned statically. Constructed once with the first host/port —
+/// only machine[0] is controlled. Returns nullptr on platforms without
+/// outbound networking.
+/// P2: ParticleTcpSocket (Device OS sockets)
+/// Host: POSIX socket (connects to a real/stub endpoint)
+pb::socket::TcpSocket* GetMachineSensorSocket(std::string_view host,
+                                              uint16_t port);
 
 /// Returns the platform-specific buzzer controller.
 /// P2: ToneBuzzer with HAL PWM tone

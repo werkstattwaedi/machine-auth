@@ -22,13 +22,11 @@ constexpr int kContentPadding = 16;
 constexpr int kUsableWidth = 208;   // 240 - 2*16px padding
 constexpr int kTimerLabelX = 44;    // kContentPadding + 24px icon + 4px gap
 
-// Format elapsed time: "< 1 min", "47 min", "1h05", "2h30"
-void FormatElapsedTime(char* buf, size_t buf_size,
-                       pw::chrono::SystemClock::time_point started_at) {
-  auto now = pw::chrono::SystemClock::now();
-  auto elapsed = now - started_at;
-  auto total_minutes =
-      std::chrono::duration_cast<std::chrono::minutes>(elapsed).count();
+// Format a duration in seconds: "< 1 min", "47 min", "1h05", "2h30".
+// Used for the in-use timer (accumulated cutting time), which is what the
+// user is billed for.
+void FormatDuration(char* buf, size_t buf_size, uint32_t total_seconds) {
+  uint32_t total_minutes = total_seconds / 60;
   if (total_minutes < 1) {
     lv_snprintf(buf, buf_size, "< 1 min");
   } else if (total_minutes < 60) {
@@ -96,7 +94,7 @@ pw::Status MainScreen::OnActivate() {
       &action_callback_);
   AddToGroup(menu_btn_);
 
-  // --- Active widgets (hidden initially) ---
+  // --- Active/Ready widgets (hidden initially) ---
   user_name_label_ = lv_label_create(lv_screen_);
   lv_label_set_text(user_name_label_, "");
   lv_obj_set_style_text_font(user_name_label_, &roboto_36, LV_PART_MAIN);
@@ -107,18 +105,37 @@ pw::Status MainScreen::OnActivate() {
   lv_obj_align(user_name_label_, LV_ALIGN_TOP_LEFT, kContentPadding, 78);
   lv_obj_add_flag(user_name_label_, LV_OBJ_FLAG_HIDDEN);
 
+  // Status chip below the user name, grouped with the timer it describes:
+  // reusable state indicator ("Bereit" / "Pausiert" / "In Betrieb").
+  // Colours are set per state in SetVisualState(); text per frame in OnUpdate().
+  status_chip_ = lv_obj_create(lv_screen_);
+  lv_obj_remove_style_all(status_chip_);
+  lv_obj_set_size(status_chip_, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+  lv_obj_set_style_radius(status_chip_, 12, LV_PART_MAIN);
+  lv_obj_set_style_pad_hor(status_chip_, 10, LV_PART_MAIN);
+  lv_obj_set_style_pad_ver(status_chip_, 4, LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(status_chip_, LV_OPA_COVER, LV_PART_MAIN);
+  lv_obj_clear_flag(status_chip_, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_align(status_chip_, LV_ALIGN_TOP_LEFT, kContentPadding, 126);
+  lv_obj_add_flag(status_chip_, LV_OBJ_FLAG_HIDDEN);
+
+  status_label_ = lv_label_create(status_chip_);
+  lv_label_set_text(status_label_, "");
+  lv_obj_set_style_text_font(status_label_, &roboto_16, LV_PART_MAIN);
+  lv_obj_center(status_label_);
+
   timer_icon_ = lv_label_create(lv_screen_);
   lv_label_set_text(timer_icon_, kIconSchedule);
   lv_obj_set_style_text_font(timer_icon_, &material_symbols_24, LV_PART_MAIN);
   lv_obj_set_style_text_color(timer_icon_, lv_color_white(), LV_PART_MAIN);
-  lv_obj_align(timer_icon_, LV_ALIGN_TOP_LEFT, kContentPadding, 126);
+  lv_obj_align(timer_icon_, LV_ALIGN_TOP_LEFT, kContentPadding, 168);
   lv_obj_add_flag(timer_icon_, LV_OBJ_FLAG_HIDDEN);
 
   timer_label_ = lv_label_create(lv_screen_);
   lv_label_set_text(timer_label_, "< 1 min");
   lv_obj_set_style_text_font(timer_label_, &roboto_16, LV_PART_MAIN);
   lv_obj_set_style_text_color(timer_label_, lv_color_white(), LV_PART_MAIN);
-  lv_obj_align(timer_label_, LV_ALIGN_TOP_LEFT, kTimerLabelX, 126);
+  lv_obj_align(timer_label_, LV_ALIGN_TOP_LEFT, kTimerLabelX, 170);
   lv_obj_add_flag(timer_label_, LV_OBJ_FLAG_HIDDEN);
 
   // --- Denied widgets (hidden initially) ---
@@ -159,6 +176,8 @@ void MainScreen::OnDeactivate() {
   machine_name_label_ = nullptr;
   instruction_label_ = nullptr;
   menu_btn_ = nullptr;
+  status_chip_ = nullptr;
+  status_label_ = nullptr;
   user_name_label_ = nullptr;
   timer_icon_ = nullptr;
   timer_label_ = nullptr;
@@ -168,17 +187,26 @@ void MainScreen::OnDeactivate() {
 }
 
 void MainScreen::OnUpdate(const app_state::AppStateSnapshot& snapshot) {
-  // Determine if a pending state is active
+  // Determine if a pending confirmation is active
   bool is_pending =
       snapshot.session.state == app_state::SessionStateUi::kCheckoutPending ||
       snapshot.session.state == app_state::SessionStateUi::kTakeoverPending ||
       snapshot.session.state == app_state::SessionStateUi::kStopPending;
+  bool is_ending_soon =
+      snapshot.session.state == app_state::SessionStateUi::kEndingSoon;
 
-  // Derive visual state — pending states show as Active + overlay
+  // Derive visual state. A running session is green while the machine is
+  // actually in use and yellow while it's ready-but-idle (e.g. laser powered
+  // but not cutting). Pending confirmations always show green + overlay; the
+  // idle-warning shows yellow (the machine is idle) + overlay.
   VisualState new_state;
-  if (snapshot.session.state == app_state::SessionStateUi::kRunning ||
-      is_pending) {
+  if (is_ending_soon) {
+    new_state = VisualState::kReady;
+  } else if (is_pending) {
     new_state = VisualState::kActive;
+  } else if (snapshot.session.state == app_state::SessionStateUi::kRunning) {
+    new_state = snapshot.machine.machine_running ? VisualState::kActive
+                                                 : VisualState::kReady;
   } else if (snapshot.verification.state ==
              app_state::TagVerificationState::kUnauthorized) {
     new_state = VisualState::kDenied;
@@ -196,19 +224,38 @@ void MainScreen::OnUpdate(const app_state::AppStateSnapshot& snapshot) {
     lv_label_set_text(machine_name_label_, machine_label_.Get().c_str());
   }
 
-  // Update active-state dynamic content (including when overlay is visible)
-  if (visual_state_ == VisualState::kActive) {
+  // Update active/ready dynamic content (including when overlay is visible).
+  if (visual_state_ == VisualState::kActive ||
+      visual_state_ == VisualState::kReady) {
     lv_label_set_text(user_name_label_,
                       snapshot.session.session_user_label.c_str());
 
-    char time_buf[16];
-    FormatElapsedTime(time_buf, sizeof(time_buf),
-                      snapshot.session.session_started_at);
-    lv_label_set_text(timer_label_, time_buf);
+    const bool cutting = visual_state_ == VisualState::kActive;
+    const uint32_t in_use = snapshot.machine.in_use_seconds;
+
+    // Status chip: in use → "In Betrieb"; idle with no accrued time yet →
+    // "Bereit"; idle after some cutting → "Pausiert" (the timer is frozen).
+    const char* status =
+        cutting ? "In Betrieb" : (in_use > 0 ? "Pausiert" : "Bereit");
+    lv_label_set_text(status_label_, status);
+
+    // The timer shows accumulated in-use (billed) time. Hide it until there
+    // is something to show, so a fresh "Bereit" screen stays clean.
+    const bool show_timer = cutting || in_use > 0;
+    if (show_timer) {
+      char time_buf[16];
+      FormatDuration(time_buf, sizeof(time_buf), in_use);
+      lv_label_set_text(timer_label_, time_buf);
+      lv_obj_remove_flag(timer_icon_, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_remove_flag(timer_label_, LV_OBJ_FLAG_HIDDEN);
+    } else {
+      lv_obj_add_flag(timer_icon_, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_add_flag(timer_label_, LV_OBJ_FLAG_HIDDEN);
+    }
   }
 
-  // Manage overlay visibility
-  if (is_pending) {
+  // Manage overlay visibility (pending confirmations + idle-end warning)
+  if (is_pending || is_ending_soon) {
     PendingType type;
     std::string_view takeover_label;
     if (snapshot.session.state == app_state::SessionStateUi::kCheckoutPending) {
@@ -219,6 +266,8 @@ void MainScreen::OnUpdate(const app_state::AppStateSnapshot& snapshot) {
       takeover_label = std::string_view(
           snapshot.session.pending_user_label.data(),
           snapshot.session.pending_user_label.size());
+    } else if (is_ending_soon) {
+      type = PendingType::kIdleWarning;
     } else {
       type = PendingType::kStop;
     }
@@ -232,6 +281,13 @@ void MainScreen::OnUpdate(const app_state::AppStateSnapshot& snapshot) {
       overlay_.SetTakeoverLabel(takeover_label);
     }
 
+    // Card takes the current state background at full brightness (yellow for
+    // the idle-warning, green for the active states); the scrim dims the rest.
+    // Text matches the screen's text colour for that state.
+    uint32_t card_text = visual_state_ == VisualState::kReady
+                             ? theme::kColorDarkText
+                             : 0xFFFFFF;
+    overlay_.SetColors(GetScreenStyle().bg_color, card_text);
     overlay_.UpdateProgress(snapshot.session.pending_since,
                             snapshot.session.pending_deadline,
                             snapshot.session.tag_present);
@@ -254,7 +310,8 @@ bool MainScreen::OnEscapePressed() {
     }
     return true;
   }
-  if (visual_state_ == VisualState::kActive) {
+  if (visual_state_ == VisualState::kActive ||
+      visual_state_ == VisualState::kReady) {
     if (action_callback_) {
       action_callback_(UiAction::kStopSession);
     }
@@ -281,6 +338,7 @@ ui::ButtonConfig MainScreen::GetButtonConfig() const {
                  .text_color = theme::kColorDarkText},
           .cancel = {},
       };
+    case VisualState::kReady:
     case VisualState::kActive:
       return {
           .ok = {.label = "Menü",
@@ -311,6 +369,8 @@ ui::ScreenStyle MainScreen::GetScreenStyle() const {
   switch (visual_state_) {
     case VisualState::kIdle:
       return {.bg_color = theme::kColorWhiteBg};
+    case VisualState::kReady:
+      return {.bg_color = theme::kColorYellow};
     case VisualState::kActive:
       return {.bg_color = theme::kColorGreen};
     case VisualState::kDenied:
@@ -347,24 +407,40 @@ void MainScreen::SetVisualState(VisualState state) {
         lv_group_focus_obj(menu_btn_);
       }
       break;
-    case VisualState::kActive:
-      bg_color = theme::kColorGreen;
+    case VisualState::kReady:
+    case VisualState::kActive: {
+      // Green when actually in use, yellow when ready-but-idle. Yellow uses
+      // dark text for contrast; green uses white.
+      bool cutting = state == VisualState::kActive;
+      bg_color = cutting ? theme::kColorGreen : theme::kColorYellow;
+      lv_color_t text_color =
+          cutting ? lv_color_white() : lv_color_hex(theme::kColorDarkText);
       ConfigureMachineLabel(false);
-      lv_obj_set_style_text_color(machine_name_label_, lv_color_white(),
-                                  LV_PART_MAIN);
-      lv_obj_set_style_text_color(user_name_label_, lv_color_white(),
-                                  LV_PART_MAIN);
-      lv_obj_set_style_text_color(timer_icon_, lv_color_white(), LV_PART_MAIN);
-      lv_obj_set_style_text_color(timer_label_, lv_color_white(), LV_PART_MAIN);
+      lv_obj_set_style_text_color(machine_name_label_, text_color, LV_PART_MAIN);
+      lv_obj_set_style_text_color(user_name_label_, text_color, LV_PART_MAIN);
+      lv_obj_set_style_text_color(timer_icon_, text_color, LV_PART_MAIN);
+      lv_obj_set_style_text_color(timer_label_, text_color, LV_PART_MAIN);
+
+      // Status chip: a darker shade of the state colour, so it reads as a
+      // distinct pill on any background, with a contrasting label.
+      uint32_t chip_bg = theme::DarkenColor(bg_color, 64);
+      lv_color_t chip_text = theme::IsLightColor(chip_bg)
+                                 ? lv_color_hex(theme::kColorDarkText)
+                                 : lv_color_white();
+      lv_obj_set_style_bg_color(status_chip_, lv_color_hex(chip_bg),
+                                LV_PART_MAIN);
+      lv_obj_set_style_text_color(status_label_, chip_text, LV_PART_MAIN);
+
       lv_obj_remove_flag(machine_name_label_, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_remove_flag(status_chip_, LV_OBJ_FLAG_HIDDEN);
       lv_obj_remove_flag(user_name_label_, LV_OBJ_FLAG_HIDDEN);
-      lv_obj_remove_flag(timer_icon_, LV_OBJ_FLAG_HIDDEN);
-      lv_obj_remove_flag(timer_label_, LV_OBJ_FLAG_HIDDEN);
+      // The timer's visibility depends on accrued time — OnUpdate() manages it.
       lv_obj_remove_flag(menu_btn_, LV_OBJ_FLAG_HIDDEN);
       if (lv_group_) {
         lv_group_focus_obj(menu_btn_);
       }
       break;
+    }
     case VisualState::kDenied:
       bg_color = theme::kColorRed;
       lv_obj_remove_flag(denied_icon_, LV_OBJ_FLAG_HIDDEN);
@@ -380,6 +456,7 @@ void MainScreen::HideAllWidgets() {
   lv_obj_add_flag(machine_name_label_, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(instruction_label_, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(menu_btn_, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_add_flag(status_chip_, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(user_name_label_, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(timer_icon_, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(timer_label_, LV_OBJ_FLAG_HIDDEN);

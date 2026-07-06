@@ -67,7 +67,21 @@
       "checkoutTemplateId": "DocumentReference", // DocumentReference to /catalog/{itemId}
       "requiredPermission": ["DocumentReference"], // Array of DocumentReferences to /permission/{permissionId}
       "maco": "DocumentReference", // DocumentReference to /maco/{deviceID}
-      "control": { // map with metadata on how to control the machine.
+      // How the terminal controls the machine (mirrors the MachineControl
+      // proto oneof; synced to the device by scripts/sync-device-config.ts).
+      "control": {
+        // "relay" (default): relay follows the session; billed on wall-clock
+        //   session duration.
+        // "xtool_p2s": relay stays on for the session, but the terminal polls
+        //   the laser's HTTP API — only cutting time (usage.activeSeconds) is
+        //   billed and the session auto-ends when idle too long.
+        "type": "string", // "relay" | "xtool_p2s"
+        // xtool_p2s only:
+        "host": "string", // laser hostname/IP on the LAN
+        "port": "number | undefined", // default 8080
+        "idleTimeoutSec": "number | undefined", // default 900 (15 min)
+        "idleWarningSec": "number | undefined", // default 60 (1 min)
+        "pollIntervalSec": "number | undefined" // default 3
       }
     }
   },
@@ -101,8 +115,10 @@
       "userId": "DocumentReference", // DocumentReference to /users/{userId}
       "authenticationId": "DocumentReference | null", // DocumentReference to /authentications/{authId}
       "machine": "DocumentReference", // DocumentReference to /machine/{machineId}
-      "startTime": "timestamp",
-      "endTime": "timestamp",
+      "startTime": "timestamp", // session check-in (wall clock)
+      "endTime": "timestamp", // session check-out (wall clock)
+      "activeSeconds": "number", // in-use time reported by the terminal (laser cutting time); 0 for relay machines
+      "billableSeconds": "number", // frozen billing basis: activeSeconds for xtool_p2s machines, else endTime-startTime. Summed by accumulation.
       "endReason": "string | null", // JSON representation of CheckOutReason proto
       "checkoutItemRef": "DocumentReference | null", // DocumentReference to /checkouts/{checkoutId}/items/{itemId}
       "workshop": "string" // Workshop ID (e.g., "holz") — denormalized from machine

@@ -20,6 +20,7 @@ struct Id {
     kTimeout = 5,
     kStopSession = 6,
     kSessionResume = 7,
+    kIdleWarn = 8,
   };
 };
 
@@ -62,6 +63,10 @@ class Timeout : public etl::message<Id::kTimeout> {};
 
 /// UI explicitly stopped the active session.
 class StopSession : public etl::message<Id::kStopSession> {};
+
+/// Machine has been idle long enough to warn about an impending auto-end.
+/// Fired by SessionController; transitions Running → IdleWarning.
+class IdleWarn : public etl::message<Id::kIdleWarn> {};
 
 /// Resume a session after device reset (restored from persistent storage).
 class SessionResume : public etl::message<Id::kSessionResume> {

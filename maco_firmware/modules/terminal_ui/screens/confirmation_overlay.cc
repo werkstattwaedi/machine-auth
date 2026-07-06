@@ -133,6 +133,8 @@ void ConfirmationOverlay::Show(PendingType type,
     lv_label_set_text_fmt(question_label_, "%.*s anmelden?",
                           static_cast<int>(takeover_user_label.size()),
                           takeover_user_label.data());
+  } else if (type == PendingType::kIdleWarning) {
+    lv_label_set_text(question_label_, "Noch aktiv?");
   } else {
     lv_label_set_text(question_label_, "Beenden?");
   }
@@ -152,6 +154,18 @@ void ConfirmationOverlay::SetTakeoverLabel(
   lv_label_set_text_fmt(question_label_, "%.*s anmelden?",
                         static_cast<int>(takeover_user_label.size()),
                         takeover_user_label.data());
+}
+
+void ConfirmationOverlay::SetColors(uint32_t screen_bg, uint32_t text_color) {
+  if (!card_ || !question_label_) {
+    return;
+  }
+  // The card is the state colour at full brightness; the scrim dims the rest
+  // of the screen, so the card stands out. (Darkening the card instead would
+  // make it blend into the already-dimmed background.)
+  lv_obj_set_style_bg_color(card_, lv_color_hex(screen_bg), LV_PART_MAIN);
+  lv_obj_set_style_text_color(question_label_, lv_color_hex(text_color),
+                              LV_PART_MAIN);
 }
 
 void ConfirmationOverlay::Hide() {
@@ -196,6 +210,23 @@ uint8_t ConfirmationOverlay::ComputeProgress() const {
 
 ui::ButtonConfig ConfirmationOverlay::GetButtonConfig() const {
   uint8_t progress = ComputeProgress();
+
+  if (pending_type_ == PendingType::kIdleWarning) {
+    // "Beenden" auto-fires when the countdown fills; "Weiter" snoozes.
+    return {
+        .ok = {.label = "Weiter",
+               .led_effect = led_animator::SolidButton(
+                   led::RgbwColor::FromRgb(theme::kColorBtnGreen)),
+               .bg_color = theme::kColorBtnGreen,
+               .text_color = 0xFFFFFF},
+        .cancel = {.label = "Beenden",
+                   .led_effect = led_animator::SolidButton(
+                       led::RgbwColor::FromRgb(theme::kColorBtnRed)),
+                   .bg_color = theme::kColorBtnRed,
+                   .text_color = 0xFFFFFF,
+                   .fill_progress = progress},
+    };
+  }
 
   if (pending_type_ == PendingType::kStop) {
     // Stop always fills "Ja" (no badge-remove cancel)

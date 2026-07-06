@@ -33,6 +33,7 @@ enum class SessionStateUi : uint8_t {
   kCheckoutPending = 2,
   kTakeoverPending = 3,
   kStopPending = 4,
+  kEndingSoon = 5,  // Idle auto-end warning countdown
 };
 
 // Session snapshot for UI - confirmation progress and user labels
@@ -88,6 +89,9 @@ struct SystemStateSnapshot {
 struct MachineControlSnapshot {
   bool toggle_enabled = false;
   bool machine_running = false;
+  // Accumulated in-use (e.g. laser cutting) time this session, in seconds.
+  // This is what gets billed and what the on-screen timer shows.
+  uint32_t in_use_seconds = 0;
 };
 
 // Combined snapshot for the dev app UI thread.

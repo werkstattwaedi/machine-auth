@@ -58,6 +58,10 @@ export async function handleUploadUsage(
   const machineData = machineDoc.exists ? machineDoc.data() as MachineEntity : null;
   const workshop = machineData?.workshop ?? null;
 
+  // Machines whose control tracks actual activity (the xTool laser) bill only
+  // the reported in-use time; everything else bills wall-clock session length.
+  const billsOnActiveTime = machineData?.control?.type === "xtool_p2s";
+
   // Create usage_machine records from device-uploaded history.
   // Use deterministic IDs + .create() so retries are idempotent: a record
   // that already exists is skipped (caught as ALREADY_EXISTS) and does not
@@ -77,6 +81,7 @@ export async function handleUploadUsage(
     }
 
     const checkInUnix = Number(record.checkIn);
+    const checkOutUnix = Number(record.checkOut);
     const usageId = deriveUsageId(
       record.authenticationId.value,
       machineId,
@@ -84,13 +89,35 @@ export async function handleUploadUsage(
     );
     const usageRef = db.collection("usage_machine").doc(usageId);
 
+    // Freeze the billable duration at record-creation time so the machine's
+    // control type (which decides the billing basis) can't retroactively
+    // change an already-billed record. Accumulation sums this field.
+    const activeSeconds = record.activeSeconds ?? 0;
+    const wallClockSeconds = Math.max(0, checkOutUnix - checkInUnix);
+    const billableSeconds = billsOnActiveTime ? activeSeconds : wallClockSeconds;
+
+    // Surface the likely firmware/config-rollout mismatch: an activity-billed
+    // machine reporting zero active time over a non-trivial session usually
+    // means old firmware (no activeSeconds) met a machine flipped to
+    // xtool_p2s. Billing 0 is still correct if the laser genuinely never cut,
+    // but this should be visible rather than silent.
+    if (billsOnActiveTime && activeSeconds === 0 && wallClockSeconds > 60) {
+      logger.warn("xTool machine billed 0 active seconds over a >60s session", {
+        machineId,
+        userId: record.userId.value,
+        wallClockSeconds,
+      });
+    }
+
     try {
       await usageRef.create({
         userId: db.doc(`users/${record.userId.value}`),
         authenticationId: db.doc(`authentications/${record.authenticationId.value}`),
         machine: machineRef,
         startTime: Timestamp.fromMillis(checkInUnix * 1000),
-        endTime: Timestamp.fromMillis(Number(record.checkOut) * 1000),
+        endTime: Timestamp.fromMillis(checkOutUnix * 1000),
+        activeSeconds,
+        billableSeconds,
         endReason: record.reason?.reason
           ? JSON.stringify({ reason: record.reason.reason.$case })
           : null,
@@ -341,9 +368,17 @@ async function accumulateForUser(
     for (const usageDoc of usageQuery.docs) {
       unlinkedDocs.push(usageDoc);
       const data = usageDoc.data();
-      const startTime = (data.startTime as Timestamp).toMillis();
-      const endTime = (data.endTime as Timestamp).toMillis();
-      totalHours += (endTime - startTime) / (1000 * 60 * 60);
+      // Prefer the frozen billableSeconds (in-use time for activity-tracked
+      // machines). Legacy docs predate the field → fall back to wall-clock.
+      let billableSeconds: number;
+      if (typeof data.billableSeconds === "number") {
+        billableSeconds = data.billableSeconds;
+      } else {
+        const startTime = (data.startTime as Timestamp).toMillis();
+        const endTime = (data.endTime as Timestamp).toMillis();
+        billableSeconds = (endTime - startTime) / 1000;
+      }
+      totalHours += billableSeconds / (60 * 60);
     }
   }
 

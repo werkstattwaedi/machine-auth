@@ -81,6 +81,7 @@ pw::Result<size_t> EncodeUploadRequest(
 
     dst.check_in = src.check_in;
     dst.check_out = src.check_out;
+    dst.active_seconds = src.active_seconds;
 
     dst.has_reason = true;
     SetCheckoutReason(dst.reason,

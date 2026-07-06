@@ -70,7 +70,16 @@ export interface MachineUsage {
   /** Check-out timestamp (unix timestamp), 0 if still active */
   checkOut: bigint;
   /** Reason for checkout */
-  reason: CheckOutReason | undefined;
+  reason:
+    | CheckOutReason
+    | undefined;
+  /**
+   * Accumulated in-use time this session, in seconds. For machines whose
+   * control tracks actual activity (e.g. the xTool laser only reports time
+   * while cutting), the cloud bills this instead of check_out - check_in.
+   * Left 0 by machines that bill on wall-clock session duration.
+   */
+  activeSeconds: number;
 }
 
 /** Collection of usage records for a machine */
@@ -491,7 +500,14 @@ export const ReasonDeviceReset: MessageFns<ReasonDeviceReset> = {
 };
 
 function createBaseMachineUsage(): MachineUsage {
-  return { userId: undefined, authenticationId: undefined, checkIn: 0n, checkOut: 0n, reason: undefined };
+  return {
+    userId: undefined,
+    authenticationId: undefined,
+    checkIn: 0n,
+    checkOut: 0n,
+    reason: undefined,
+    activeSeconds: 0,
+  };
 }
 
 export const MachineUsage: MessageFns<MachineUsage> = {
@@ -516,6 +532,9 @@ export const MachineUsage: MessageFns<MachineUsage> = {
     }
     if (message.reason !== undefined) {
       CheckOutReason.encode(message.reason, writer.uint32(42).fork()).join();
+    }
+    if (message.activeSeconds !== 0) {
+      writer.uint32(48).uint32(message.activeSeconds);
     }
     return writer;
   },
@@ -567,6 +586,14 @@ export const MachineUsage: MessageFns<MachineUsage> = {
           message.reason = CheckOutReason.decode(reader, reader.uint32());
           continue;
         }
+        case 6: {
+          if (tag !== 48) {
+            break;
+          }
+
+          message.activeSeconds = reader.uint32();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -592,6 +619,7 @@ export const MachineUsage: MessageFns<MachineUsage> = {
     message.reason = (object.reason !== undefined && object.reason !== null)
       ? CheckOutReason.fromPartial(object.reason)
       : undefined;
+    message.activeSeconds = object.activeSeconds ?? 0;
     return message;
   },
 };

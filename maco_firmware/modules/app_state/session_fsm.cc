@@ -19,14 +19,17 @@ SessionFsm::SessionFsm() : etl::hfsm(kSessionFsmId) {
   state_list_[SessionStateId::kCheckoutPending] = &checkout_pending_;
   state_list_[SessionStateId::kTakeoverPending] = &takeover_pending_;
   state_list_[SessionStateId::kStopPending] = &stop_pending_;
+  state_list_[SessionStateId::kIdleWarning] = &idle_warning_;
 
   // Set up hierarchy: Active is parent of Running, CheckoutPending,
-  // TakeoverPending, StopPending. First child added becomes the default child.
+  // TakeoverPending, StopPending, IdleWarning. First child added becomes the
+  // default child.
   active_children_[0] = &running_;
   active_children_[1] = &checkout_pending_;
   active_children_[2] = &takeover_pending_;
   active_children_[3] = &stop_pending_;
-  active_.set_child_states(active_children_, 4);
+  active_children_[4] = &idle_warning_;
+  active_.set_child_states(active_children_, 5);
 
   set_states(state_list_, SessionStateId::kNumberOfStates);
   start();
@@ -92,6 +95,8 @@ SessionStateUi MapStateId(etl::fsm_state_id_t id) {
       return SessionStateUi::kTakeoverPending;
     case SessionStateId::kStopPending:
       return SessionStateUi::kStopPending;
+    case SessionStateId::kIdleWarning:
+      return SessionStateUi::kEndingSoon;
     default:
       return SessionStateUi::kNoSession;
   }
@@ -188,6 +193,12 @@ void Active::on_exit_state() {
   usage.check_in = ctx.active_session.started_at;
   usage.check_out = pw::chrono::SystemClock::now();
   usage.reason = ctx.checkout_reason;
+  if (ctx.billable_source() != nullptr) {
+    auto elapsed = ctx.billable_source()->BillableElapsed();
+    auto secs =
+        std::chrono::duration_cast<std::chrono::seconds>(elapsed).count();
+    usage.active_seconds = secs > 0 ? static_cast<uint32_t>(secs) : 0;
+  }
   ctx.NotifySessionEnded(ctx.active_session, usage);
   PW_LOG_INFO("Active: relay OFF");
 }
@@ -238,6 +249,47 @@ etl::fsm_state_id_t Running::on_event(
 }
 
 etl::fsm_state_id_t Running::on_event(const session_event::StopSession&) {
+  return Pass_To_Parent;
+}
+
+etl::fsm_state_id_t Running::on_event(const session_event::IdleWarn&) {
+  // SessionController has already set pending_since/pending_deadline to the
+  // warning window before dispatching this event.
+  PW_LOG_INFO("Machine idle: ending-soon warning");
+  return SessionStateId::kIdleWarning;
+}
+
+// --- IdleWarning ---
+
+etl::fsm_state_id_t IdleWarning::on_event(const session_event::UiConfirm&) {
+  // "Weiter" — snooze; SessionController resets the idle timer.
+  PW_LOG_INFO("Idle warning snoozed");
+  return SessionStateId::kRunning;
+}
+
+etl::fsm_state_id_t IdleWarning::on_event(const session_event::UiCancel&) {
+  // "Beenden" — end now, same reason as the auto-end.
+  auto& ctx = get_fsm_context();
+  ctx.checkout_reason = CheckoutReason::kTimeout;
+  PW_LOG_INFO("Idle warning: ended by user");
+  return SessionStateId::kNoSession;
+}
+
+etl::fsm_state_id_t IdleWarning::on_event(const session_event::Timeout&) {
+  auto& ctx = get_fsm_context();
+  ctx.checkout_reason = CheckoutReason::kTimeout;
+  PW_LOG_INFO("Idle timeout: session auto-ended");
+  return SessionStateId::kNoSession;
+}
+
+etl::fsm_state_id_t IdleWarning::on_event(const session_event::StopSession&) {
+  return Pass_To_Parent;
+}
+
+etl::fsm_state_id_t IdleWarning::on_event(
+    const session_event::UserAuthorized&) {
+  // A tap during the warning behaves like a tap during a running session
+  // (self-checkout / takeover).
   return Pass_To_Parent;
 }
 

@@ -23,7 +23,22 @@
 namespace maco::config {
 
 enum class HwRevision { kUnspecified = 0, kBreadboard = 1, kPrototype = 2 };
-enum class MachineControlType { kUnspecified = 0, kRelay = 1 };
+enum class MachineControlType { kUnspecified = 0, kRelay = 1, kXToolP2s = 2 };
+
+/// xTool P2S laser control parameters, with proto zero-values resolved to
+/// their documented defaults (host/idle/warning/poll).
+struct XToolConfig {
+  static constexpr uint16_t kDefaultPort = 8080;
+  static constexpr uint32_t kDefaultIdleTimeoutSec = 900;   // 15 min
+  static constexpr uint32_t kDefaultIdleWarningSec = 60;    // 1 min
+  static constexpr uint32_t kDefaultPollIntervalSec = 3;
+
+  pw::InlineString<64> host;
+  uint16_t port = kDefaultPort;
+  uint32_t idle_timeout_sec = kDefaultIdleTimeoutSec;
+  uint32_t idle_warning_sec = kDefaultIdleWarningSec;
+  uint32_t poll_interval_sec = kDefaultPollIntervalSec;
+};
 
 /// Read-only machine configuration parsed from proto.
 class MachineConfig {
@@ -33,11 +48,13 @@ class MachineConfig {
   MachineConfig(FirebaseId id,
                 pw::InlineString<64> label,
                 pw::Vector<FirebaseId, 5> required_permissions,
-                MachineControlType control)
+                MachineControlType control,
+                XToolConfig xtool = {})
       : id_(id),
         label_(label),
         required_permissions_(required_permissions),
-        control_(control) {}
+        control_(control),
+        xtool_(xtool) {}
 
   const FirebaseId& id() const { return id_; }
   std::string_view label() const { return std::string_view(label_); }
@@ -47,11 +64,15 @@ class MachineConfig {
   }
   MachineControlType control() const { return control_; }
 
+  /// xTool parameters. Only meaningful when control() == kXToolP2s.
+  const XToolConfig& xtool() const { return xtool_; }
+
  private:
   FirebaseId id_ = FirebaseId::Empty();
   pw::InlineString<64> label_;
   pw::Vector<FirebaseId, 5> required_permissions_;
   MachineControlType control_ = MachineControlType::kUnspecified;
+  XToolConfig xtool_;
 };
 
 /// Cloud-configurable device configuration.

@@ -41,6 +41,10 @@ TerminalUi::TerminalUi(display::Display& display,
                          machine_controller_->IsToggleEnabled();
                      snapshot.machine.machine_running =
                          machine_controller_->IsMachineRunning();
+                     snapshot.machine.in_use_seconds = static_cast<uint32_t>(
+                         std::chrono::duration_cast<std::chrono::seconds>(
+                             machine_controller_->BillableElapsed())
+                             .count());
                    }
                  },
                  &animator_) {

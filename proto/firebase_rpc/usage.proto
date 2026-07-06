@@ -54,6 +54,11 @@ message MachineUsage {
   int64 check_out = 4;
   // Reason for checkout
   CheckOutReason reason = 5;
+  // Accumulated in-use time this session, in seconds. For machines whose
+  // control tracks actual activity (e.g. the xTool laser only reports time
+  // while cutting), the cloud bills this instead of check_out - check_in.
+  // Left 0 by machines that bill on wall-clock session duration.
+  uint32 active_seconds = 6;
 }
 
 // Collection of usage records for a machine

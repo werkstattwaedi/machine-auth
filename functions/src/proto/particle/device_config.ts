@@ -20,11 +20,37 @@ export enum HwRevision {
 
 /** Machine control mechanism */
 export interface MachineControl {
-  control: { $case: "relay"; relay: RelayControl } | undefined;
+  control: { $case: "relay"; relay: RelayControl } | { $case: "xtoolP2s"; xtoolP2s: XToolP2sControl } | undefined;
 }
 
 /** Relay-based machine control */
 export interface RelayControl {
+}
+
+/**
+ * xTool P2S laser cutter control.
+ *
+ * The relay stays on for the whole session, but the terminal polls the
+ * laser's local HTTP API to track whether a job is actually executing, so
+ * only cutting time is billed and idle sessions auto-end.
+ */
+export interface XToolP2sControl {
+  /** Laser hostname or IP on the LAN */
+  host: string;
+  /** Laser HTTP port (0 => default 8080) */
+  port: number;
+  /**
+   * Auto-end the session after this many seconds ready-but-idle
+   * (0 => default 900 = 15 min)
+   */
+  idleTimeoutSec: number;
+  /**
+   * Show the idle warning this many seconds before auto-end
+   * (0 => default 60 = 1 min)
+   */
+  idleWarningSec: number;
+  /** Interval between laser state polls, in seconds (0 => default 3) */
+  pollIntervalSec: number;
 }
 
 /** Machine definition with permissions */
@@ -63,6 +89,9 @@ export const MachineControl: MessageFns<MachineControl> = {
       case "relay":
         RelayControl.encode(message.control.relay, writer.uint32(10).fork()).join();
         break;
+      case "xtoolP2s":
+        XToolP2sControl.encode(message.control.xtoolP2s, writer.uint32(18).fork()).join();
+        break;
     }
     return writer;
   },
@@ -80,6 +109,14 @@ export const MachineControl: MessageFns<MachineControl> = {
           }
 
           message.control = { $case: "relay", relay: RelayControl.decode(reader, reader.uint32()) };
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.control = { $case: "xtoolP2s", xtoolP2s: XToolP2sControl.decode(reader, reader.uint32()) };
           continue;
         }
       }
@@ -100,6 +137,12 @@ export const MachineControl: MessageFns<MachineControl> = {
       case "relay": {
         if (object.control?.relay !== undefined && object.control?.relay !== null) {
           message.control = { $case: "relay", relay: RelayControl.fromPartial(object.control.relay) };
+        }
+        break;
+      }
+      case "xtoolP2s": {
+        if (object.control?.xtoolP2s !== undefined && object.control?.xtoolP2s !== null) {
+          message.control = { $case: "xtoolP2s", xtoolP2s: XToolP2sControl.fromPartial(object.control.xtoolP2s) };
         }
         break;
       }
@@ -138,6 +181,100 @@ export const RelayControl: MessageFns<RelayControl> = {
   },
   fromPartial(_: DeepPartial<RelayControl>): RelayControl {
     const message = createBaseRelayControl();
+    return message;
+  },
+};
+
+function createBaseXToolP2sControl(): XToolP2sControl {
+  return { host: "", port: 0, idleTimeoutSec: 0, idleWarningSec: 0, pollIntervalSec: 0 };
+}
+
+export const XToolP2sControl: MessageFns<XToolP2sControl> = {
+  encode(message: XToolP2sControl, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.host !== "") {
+      writer.uint32(10).string(message.host);
+    }
+    if (message.port !== 0) {
+      writer.uint32(16).uint32(message.port);
+    }
+    if (message.idleTimeoutSec !== 0) {
+      writer.uint32(24).uint32(message.idleTimeoutSec);
+    }
+    if (message.idleWarningSec !== 0) {
+      writer.uint32(32).uint32(message.idleWarningSec);
+    }
+    if (message.pollIntervalSec !== 0) {
+      writer.uint32(40).uint32(message.pollIntervalSec);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): XToolP2sControl {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseXToolP2sControl();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.host = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.port = reader.uint32();
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.idleTimeoutSec = reader.uint32();
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.idleWarningSec = reader.uint32();
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.pollIntervalSec = reader.uint32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create(base?: DeepPartial<XToolP2sControl>): XToolP2sControl {
+    return XToolP2sControl.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<XToolP2sControl>): XToolP2sControl {
+    const message = createBaseXToolP2sControl();
+    message.host = object.host ?? "";
+    message.port = object.port ?? 0;
+    message.idleTimeoutSec = object.idleTimeoutSec ?? 0;
+    message.idleWarningSec = object.idleWarningSec ?? 0;
+    message.pollIntervalSec = object.pollIntervalSec ?? 0;
     return message;
   },
 };
