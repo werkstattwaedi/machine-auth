@@ -70,6 +70,17 @@ function asPrice(v: string | number | null): number | null {
 
 const PRICE_HEADER = "preis einheit verkauf";
 
+/** Known pricing models — an unrecognised `Grundmodell` falls back to `count`. */
+const PRICING_MODELS = new Set<PricingModel>([
+  "time",
+  "area",
+  "length",
+  "count",
+  "weight",
+  "direct",
+  "sla",
+]);
+
 // The header row sits a handful of rows below a banner + margin notes
 // (~row 6–8 in Mario's sheets). Search generously so a taller preamble
 // doesn't silently classify a sheet as unconfigured.
@@ -114,12 +125,16 @@ function locateColumns(ws: ExcelJS.Worksheet): SheetColumns | null {
   return null;
 }
 
-/** Split the comma-separated "Varianten" cell into trimmed variant ids. */
+/** Split the comma-separated "Varianten" cell into trimmed, de-duplicated ids. */
 function splitVariantIds(v: string | number | null): string[] {
-  return asText(v)
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
+  return [
+    ...new Set(
+      asText(v)
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    ),
+  ];
 }
 
 /**
@@ -150,12 +165,14 @@ function readVariantDefs(wb: ExcelJS.Workbook): VariantDefs {
       if (!id) continue;
       const factor = asPrice(cellValue(dataRow.getCell(factorCol)));
       if (factor == null) continue;
-      const model =
-        modelCol > 0 ? asText(cellValue(dataRow.getCell(modelCol))) || "count" : "count";
+      const rawModel = modelCol > 0 ? asText(cellValue(dataRow.getCell(modelCol))).toLowerCase() : "";
+      const pricingModel = PRICING_MODELS.has(rawModel as PricingModel)
+        ? (rawModel as PricingModel)
+        : "count";
       defs[id] = {
         label: labelCol > 0 ? asText(cellValue(dataRow.getCell(labelCol))) : id,
         factor,
-        pricingModel: model as PricingModel,
+        pricingModel,
       };
     }
     return defs;

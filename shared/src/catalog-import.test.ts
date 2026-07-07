@@ -258,6 +258,20 @@ describe("diffCatalog", () => {
     expect(upd.changes?.some((c) => c.field === "variants")).toBe(true)
   })
 
+  it("flags a cut-variant label change (Varianten sheet relabel)", () => {
+    const cur = current({
+      variants: [
+        { id: "default", label: "Per m²", pricingModel: "area", unitPrice: { default: 5.55 } },
+        { id: "a3", label: "Old label", pricingModel: "count", unitPrice: { default: 0.7 } },
+      ],
+    })
+    // Same price/model, only the label differs (DEFS.a3.label = "Zuschnitt A3").
+    const entry = normalizeRows([row({ einheit: "m²", price: 5.55, variantIds: ["a3"] })], DEFS).entries[0]
+    const upd = diffCatalog([entry], [cur]).diff[0]
+    expect(upd.kind).toBe("update")
+    expect(upd.changes?.some((c) => c.field === "variants")).toBe(true)
+  })
+
   it("tracks label field changes on update (curated relabel)", () => {
     const { entries } = normalizeRows([row({ labelMass: "30 mm" })], DEFS)
     const preview = diffCatalog(entries, [current()])

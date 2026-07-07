@@ -333,13 +333,16 @@ export interface DiffChange {
 /** Deep-ish equality for the derived (non-base) variant list. */
 function variantsEqual(a: CatalogVariant[], b: CatalogVariant[]): boolean {
   if (a.length !== b.length) return false
+  const roundedMember = (v: CatalogVariant): number | null =>
+    typeof v.unitPrice.member === "number" ? round2(v.unitPrice.member) : null
   return a.every((va, i) => {
     const vb = b[i]
     return (
       va.id === vb.id &&
+      (va.label ?? null) === (vb.label ?? null) &&
       va.pricingModel === vb.pricingModel &&
       round2(va.unitPrice.default) === round2(vb.unitPrice.default) &&
-      (va.unitPrice.member ?? null) === (vb.unitPrice.member ?? null)
+      roundedMember(va) === roundedMember(vb)
     )
   })
 }

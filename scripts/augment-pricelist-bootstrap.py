@@ -301,9 +301,12 @@ def build_makerspace_sheet(wb):
     variant_rows = 0
     for r, item in enumerate(items, start=2):
         cat = item.get("category", [])
-        base = item["variants"][0]
+        variants = item["variants"]
+        base = variants[0]
         ename, emass = split_name_mass(item["name"])
-        vids = item.get("variantIds", [])
+        # Cut options are the non-base variants; their ids feed the Varianten
+        # column (the seed stores fully-expanded variants, not variantIds).
+        vids = [v["id"] for v in variants[1:]]
         if vids:
             variant_rows += 1
         ws.cell(r, 1, int(item["code"]))  # numeric — see note in the augment loop

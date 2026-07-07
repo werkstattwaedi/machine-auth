@@ -230,6 +230,40 @@ describe("catalog import (Integration)", () => {
     expect((await db.collection("catalog").doc(retireId).get()).data()?.active).to.be.false;
   });
 
+  it("preserves an admin-set base member and re-derives it onto the cut variants", async () => {
+    // Existing makerspace item with an admin-set member override on the base
+    // and a cut option. A re-import (base price bumped 5.00 → 5.55) must keep
+    // the base member and re-derive it onto the cut as base_member × factor.
+    const id = await seedItem({
+      code: "6011",
+      name: "MDF roh 3 mm",
+      workshops: ["makerspace"],
+      category: ["Laser", "MDF"],
+      variants: [
+        { id: "default", label: "Per m²", pricingModel: "area", unitPrice: { default: 5.0, member: 4.5 } },
+        { id: "a3", label: "Zuschnitt A3", pricingModel: "count", unitPrice: { default: 0.63, member: 0.5 } },
+      ],
+    });
+    const buffer = await buildFixture(
+      {
+        Makerspace: [
+          { code: "6011", labelName: "MDF roh", labelMass: "3 mm", kategorie: "Laser", unter: "MDF", einheit: "m²", varianten: "a3", price: 5.55 },
+        ],
+      },
+      { a3: { label: "Zuschnitt A3", factor: 0.126, pricingModel: "count" } },
+    );
+    const res = await applyCatalogImport(buffer, false, ADMIN_UID);
+    expect(res.updated).to.equal(1);
+    const doc = (await getFirestore().collection("catalog").doc(id).get()).data();
+    // Base: default refreshed from the sheet, member preserved.
+    expect(doc?.variants[0].unitPrice.default).to.equal(5.55);
+    expect(doc?.variants[0].unitPrice.member).to.equal(4.5);
+    // Cut: default = 5.55×0.126→0.70, member re-derived = 4.5×0.126→0.55 (nearest 0.05).
+    expect(doc?.variants[1].id).to.equal("a3");
+    expect(doc?.variants[1].unitPrice.default).to.equal(0.7);
+    expect(doc?.variants[1].unitPrice.member).to.equal(0.55);
+  });
+
   it("collapses an uncalculated workbook into one hint and refuses to apply it", async () => {
     // Openpyxl output (e.g. the augment script's "– mit Codes" file):
     // every price cell is a formula with no cached result.

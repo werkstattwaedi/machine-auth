@@ -51,7 +51,6 @@ describe("isMachineItem (issue #105)", () => {
   })
 })
 
-
 describe("usage type labels (issue #284)", () => {
   it("labels volunteering as Freiwilligengruppe", () => {
     expect(USAGE_TYPE_LABELS.volunteering).toBe("Freiwilligengruppe")
