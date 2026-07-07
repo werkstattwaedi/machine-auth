@@ -76,6 +76,7 @@ const FIELD_LABELS: Record<DiffChange["field"], string> = {
   price: "Preis",
   category: "Kategorie",
   pricingModel: "Abrechnung",
+  variants: "Varianten",
   workshops: "Werkstatt",
   active: "Status",
 }
@@ -341,7 +342,9 @@ function DiffTable({ rows }: { rows: DiffRow[] }) {
                   </ul>
                 ) : d.kind === "create" && d.entry ? (
                   <span className="text-muted-foreground">
-                    {d.entry.category.join(" › ")} · {CHF.format(d.entry.unitPrice.default)}
+                    {d.entry.category.join(" › ")} ·{" "}
+                    {CHF.format(d.entry.variants[0]?.unitPrice.default ?? 0)}
+                    {d.entry.variants.length > 1 && ` +${d.entry.variants.length - 1} Var.`}
                   </span>
                 ) : (
                   <span className="text-muted-foreground">–</span>

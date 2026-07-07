@@ -32,7 +32,6 @@ import {
   nextLevelValues,
 } from "@modules/lib/categories"
 import { matchesCatalogQuery } from "@modules/lib/text-search"
-import { resolveVariants } from "@oww/shared"
 import type { CheckoutItemLocal } from "./inline-rows"
 import {
   readPickerScrollAnchor,
@@ -73,7 +72,7 @@ const FALLBACK_MODELS: ReadonlyArray<{
  * - `item`: a single catalog item, e.g. from a per-item QR sticker.
  *   The variant chooser auto-expands on open. `variantId` is optional
  *   — when set, that variant is pre-selected (per-variant QR stickers,
- *   e.g. "Zuschnitt A3"). Unknown variantIds fall back to `variants[0]`.
+ *   e.g. "Zuschnitt A3"). An unknown id falls back to `variants[0]`.
  */
 export type PickerScope =
   | { kind: "all" }
@@ -634,8 +633,9 @@ function PickerRow({
   onToggle: (open: boolean) => void
   onAdd: (item: CheckoutItemLocal) => void
 }) {
-  // Base variant(s) plus any derived (base×factor) variants from `variantIds`.
-  const variants = resolveVariants(catalog)
+  // The full purchase-option list (base + any cut-to-size options), stored
+  // fully priced on the item by the importer.
+  const variants = catalog.variants
   // Resolve the variant the row should start (and reset to on close)
   // from. The `warn` argument is only `true` for the one-time lazy
   // `useState` initializer — the close-reset path passes `false` so an
@@ -768,8 +768,9 @@ function PickerRowBody({
   onVariantChange: (id: string) => void
   onAdd: (item: CheckoutItemLocal) => void
 }) {
-  // Base variant(s) plus any derived (base×factor) variants from `variantIds`.
-  const variants = resolveVariants(catalog)
+  // The full purchase-option list (base + any cut-to-size options), stored
+  // fully priced on the item by the importer.
+  const variants = catalog.variants
   const variant =
     variants.find((v) => v.id === selectedVariantId) ?? variants[0]
   const unitPrice = variantUnitPrice(variant, discountLevel)

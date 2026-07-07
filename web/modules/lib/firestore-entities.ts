@@ -202,20 +202,14 @@ export interface CatalogItemDoc extends AuditFields {
   type?: ItemType
   description?: string | null
   /**
-   * The stored base variant(s). `variants[0]` is canonical: the picker uses
-   * it silently when there are no derived variants; auto-bill flows resolve
-   * through it. Additional purchase options are *derived* at read time from
-   * {@link variantIds} — call `resolveVariants(item)` (`@oww/shared`) to get
-   * the full list. In practice `variants` holds just the base entry.
+   * The full list of purchase options. `variants[0]` is the canonical base
+   * (used silently when there's only one, and by auto-bill flows). For
+   * makerspace laser stock the extra entries are the cut-to-size options,
+   * each fully priced. The importer expands these from the workbook's
+   * `Varianten` sheet at import time (`base × factor`) — nothing is derived
+   * at read time, so the picker reads `variants` directly.
    */
   variants: CatalogVariant[]
-  /**
-   * Ids of shared variant definitions (`VARIANT_DEFINITIONS` in `@oww/shared`)
-   * that apply to this item — e.g. laser cut sizes `["a3","320-620"]`. Each
-   * derives a purchase option priced `base × factor`. Absent/empty means the
-   * item has only its base variant.
-   */
-  variantIds?: string[]
 }
 
 // ── price_lists ──────────────────────────────────────────────────────────

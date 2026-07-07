@@ -35,7 +35,6 @@ type CatalogSeed = Pick<
   | "active"
   | "userCanAdd"
   | "variants"
-  | "variantIds"
   | "type"
 > & { description?: string | null }
 
@@ -258,10 +257,10 @@ export default async function globalSetup() {
     category: [],
     active: true,
     userCanAdd: true,
-    // Registry-style variants (b9bf70be): `variants` holds only the base
-    // entry; the "Zuschnitt A3" option derives from the shared variant
-    // registry via `variantIds` (resolveVariants drops any extra embedded
-    // variants, so the old two-entry style no longer renders a chooser).
+    // The item stores its full purchase-option list: the m² base plus the
+    // "Zuschnitt A3" cut option, fully priced (as the importer expands it
+    // from the workbook `Varianten` sheet — base × factor 0.126, rounded to
+    // 0.05). ≥ 2 variants makes the picker render the chooser.
     variants: [
       {
         id: "default",
@@ -269,8 +268,13 @@ export default async function globalSetup() {
         pricingModel: "area",
         unitPrice: { default: 30, member: 25 },
       },
+      {
+        id: "a3",
+        label: "Zuschnitt A3",
+        pricingModel: "count",
+        unitPrice: { default: 3.8, member: 3.15 },
+      },
     ],
-    variantIds: ["a3"],
   })
 
   // ── Seed membership catalog + catalog-references indirection ──

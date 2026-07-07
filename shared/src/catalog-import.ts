@@ -18,7 +18,7 @@
  * for the label printer.
  */
 
-import type { PricingModel } from "./pricing"
+import type { CatalogVariant, PricingModel, VariantPrice } from "./pricing"
 
 /** Worksheet tab name → catalog `workshops` key. */
 export const SHEET_TO_WORKSHOP: Record<string, string> = {
@@ -29,7 +29,20 @@ export const SHEET_TO_WORKSHOP: Record<string, string> = {
   Glas: "glas",
   Stein: "stein",
   Schmuck: "schmuck",
+  Makerspace: "makerspace",
 }
+
+/**
+ * A variant definition parsed from the workbook `Varianten` sheet: the cut
+ * label, the area factor applied to the base unit price, and the pricing model
+ * the derived option is billed in. Keyed by variant id (e.g. "a3").
+ */
+export interface VariantDef {
+  label: string
+  factor: number
+  pricingModel: PricingModel
+}
+export type VariantDefs = Record<string, VariantDef>
 
 /** One extracted product row, before validation/normalisation. */
 export interface RawImportRow {
@@ -44,6 +57,8 @@ export interface RawImportRow {
   kategorie: string
   unterkategorie?: string | null
   einheit: string
+  /** Applicable variant ids from the "Varianten" column (comma-separated). */
+  variantIds: string[]
   /** Sale price ("Preis Einheit Verkauf"); null/NaN when blank or a formula error. */
   price: number | null
 }
@@ -58,8 +73,12 @@ export interface ImportEntry {
   labelMass: string
   workshops: string[]
   category: string[]
-  pricingModel: PricingModel
-  unitPrice: { default: number }
+  /**
+   * Full purchase-option list: the base variant plus one derived option per
+   * applicable variant id, each fully priced (`base × factor`, rounded to
+   * 0.05). The importer writes this verbatim onto the catalog item.
+   */
+  variants: CatalogVariant[]
   active: boolean
   userCanAdd: boolean
 }
@@ -67,6 +86,48 @@ export interface ImportEntry {
 /** Compose the display name from the curated label pair. */
 export function composeName(labelName: string, labelMass: string): string {
   return [labelName.trim(), labelMass.trim()].filter(Boolean).join(" ")
+}
+
+/** Round to the nearest 0.05 CHF (5 Rappen) — for derived cut prices. */
+export function roundTo5(n: number): number {
+  return Math.round(n * 20) / 20
+}
+
+/** Base-variant label by pricing model (shown in the picker's chooser). */
+const PRICING_MODEL_LABELS: Partial<Record<PricingModel, string>> = {
+  area: "Per m²",
+  weight: "Per kg",
+  length: "Per lm",
+  count: "Per Stk",
+  sla: "Per L",
+  time: "Per Std.",
+  direct: "Pauschal",
+}
+
+/**
+ * Expand a base variant plus its applicable variant ids into the full priced
+ * list. Each derived option is `base × factor` (applied to every tier present),
+ * rounded to 0.05. Unknown ids are skipped (the caller raises a warning). An
+ * item with no ids yields just its base.
+ */
+export function expandVariants(
+  base: CatalogVariant,
+  variantIds: string[],
+  defs: VariantDefs
+): CatalogVariant[] {
+  const extras: CatalogVariant[] = []
+  for (const id of variantIds) {
+    const def = defs[id]
+    if (!def) continue
+    const unitPrice: VariantPrice = {
+      default: roundTo5(base.unitPrice.default * def.factor),
+    }
+    if (typeof base.unitPrice.member === "number") {
+      unitPrice.member = roundTo5(base.unitPrice.member * def.factor)
+    }
+    extras.push({ id, label: def.label, pricingModel: def.pricingModel, unitPrice })
+  }
+  return [base, ...extras]
 }
 
 export interface ImportIssue {
@@ -112,6 +173,9 @@ export function einheitToPricingModel(einheit: string): PricingModel | null {
     case "std":
     case "stunde":
       return "time"
+    case "l":
+    case "sla":
+      return "sla"
     default:
       return null
   }
@@ -142,7 +206,7 @@ export interface NormalizeResult {
  * become entries. Duplicate codes within the batch are an error on every
  * offending row (the first occurrence is kept).
  */
-export function normalizeRows(rows: RawImportRow[]): NormalizeResult {
+export function normalizeRows(rows: RawImportRow[], defs: VariantDefs): NormalizeResult {
   const entries: ImportEntry[] = []
   const issues: ImportIssue[] = []
   const seenCodes = new Map<string, RawImportRow>()
@@ -197,6 +261,25 @@ export function normalizeRows(rows: RawImportRow[]): NormalizeResult {
     if (!kategorie) {
       issues.push({ ...base, severity: "warning", message: `Keine Kategorie (Code ${code}) — wird unter "Sonstiges" geführt.` })
     }
+    const variantIds = row.variantIds ?? []
+    const unknownIds = variantIds.filter((id) => !(id in defs))
+    if (unknownIds.length > 0) {
+      issues.push({
+        ...base,
+        severity: "warning",
+        message: `Unbekannte Variante(n) "${unknownIds.join(", ")}" (Code ${code}) — ignoriert.`,
+      })
+    }
+    // Only label the base when there are cut options — a labelled base shows
+    // in the picker's variant chooser; single-variant items stay label-less
+    // (matches items already in the catalog, so re-import doesn't churn them).
+    const hasCuts = variantIds.some((id) => id in defs)
+    const baseVariant: CatalogVariant = {
+      id: "default",
+      ...(hasCuts ? { label: PRICING_MODEL_LABELS[pricingModel] ?? null } : {}),
+      pricingModel,
+      unitPrice: { default: round2(row.price) },
+    }
     seenCodes.set(code, row)
     entries.push({
       code,
@@ -205,8 +288,7 @@ export function normalizeRows(rows: RawImportRow[]): NormalizeResult {
       labelMass,
       workshops: [workshop],
       category: kategorie ? buildCategory(kategorie, row.unterkategorie) : ["Sonstiges"],
-      pricingModel,
-      unitPrice: { default: round2(row.price) },
+      variants: expandVariants(baseVariant, variantIds, defs),
       active: true,
       userCanAdd: true,
     })
@@ -227,8 +309,8 @@ export interface CurrentCatalogItem {
   workshops: string[]
   active: boolean
   type?: string | null
-  pricingModel: string
-  unitPrice: number
+  /** Full stored variants (base + any cut options), for the variant diff. */
+  variants: CatalogVariant[]
 }
 
 export type DiffKind = "create" | "update" | "unchanged" | "retire"
@@ -241,10 +323,28 @@ export interface DiffChange {
     | "price"
     | "category"
     | "pricingModel"
+    | "variants"
     | "workshops"
     | "active"
   from: unknown
   to: unknown
+}
+
+/** Deep-ish equality for the derived (non-base) variant list. */
+function variantsEqual(a: CatalogVariant[], b: CatalogVariant[]): boolean {
+  if (a.length !== b.length) return false
+  const roundedMember = (v: CatalogVariant): number | null =>
+    typeof v.unitPrice.member === "number" ? round2(v.unitPrice.member) : null
+  return a.every((va, i) => {
+    const vb = b[i]
+    return (
+      va.id === vb.id &&
+      (va.label ?? null) === (vb.label ?? null) &&
+      va.pricingModel === vb.pricingModel &&
+      round2(va.unitPrice.default) === round2(vb.unitPrice.default) &&
+      roundedMember(va) === roundedMember(vb)
+    )
+  })
 }
 
 export interface DiffRow {
@@ -315,17 +415,27 @@ export function diffCatalog(entries: ImportEntry[], current: CurrentCatalogItem[
       continue
     }
     const changes: DiffChange[] = []
+    const curBase = cur.variants[0]
+    const entryBase = entry.variants[0]
     if (cur.name !== entry.name) changes.push({ field: "name", from: cur.name, to: entry.name })
     if ((cur.labelName ?? "") !== entry.labelName)
       changes.push({ field: "labelName", from: cur.labelName ?? "", to: entry.labelName })
     if ((cur.labelMass ?? "") !== entry.labelMass)
       changes.push({ field: "labelMass", from: cur.labelMass ?? "", to: entry.labelMass })
-    if (round2(cur.unitPrice) !== entry.unitPrice.default)
-      changes.push({ field: "price", from: round2(cur.unitPrice), to: entry.unitPrice.default })
+    if (round2(curBase?.unitPrice?.default ?? NaN) !== round2(entryBase.unitPrice.default))
+      changes.push({ field: "price", from: curBase?.unitPrice?.default ?? null, to: entryBase.unitPrice.default })
     if (!categoriesEqual(cur.category, entry.category))
       changes.push({ field: "category", from: cur.category, to: entry.category })
-    if (cur.pricingModel !== entry.pricingModel)
-      changes.push({ field: "pricingModel", from: cur.pricingModel, to: entry.pricingModel })
+    if ((curBase?.pricingModel ?? "") !== entryBase.pricingModel)
+      changes.push({ field: "pricingModel", from: curBase?.pricingModel ?? null, to: entryBase.pricingModel })
+    // Derived cut options (variants[1..]): flags added/removed cuts and any
+    // price shift (e.g. a factor change in the Varianten sheet).
+    if (!variantsEqual(cur.variants.slice(1), entry.variants.slice(1)))
+      changes.push({
+        field: "variants",
+        from: cur.variants.slice(1).map((v) => `${v.id}=${v.unitPrice.default}`),
+        to: entry.variants.slice(1).map((v) => `${v.id}=${v.unitPrice.default}`),
+      })
     if (!sameSet(cur.workshops, entry.workshops))
       changes.push({ field: "workshops", from: cur.workshops, to: entry.workshops })
     if (!cur.active) changes.push({ field: "active", from: false, to: true })
@@ -360,8 +470,12 @@ export function diffCatalog(entries: ImportEntry[], current: CurrentCatalogItem[
 }
 
 /** Full preview: normalise rows, then diff, folding issue counts into the summary. */
-export function buildImportPreview(rows: RawImportRow[], current: CurrentCatalogItem[]): ImportPreview {
-  const { entries, issues } = normalizeRows(rows)
+export function buildImportPreview(
+  rows: RawImportRow[],
+  current: CurrentCatalogItem[],
+  defs: VariantDefs
+): ImportPreview {
+  const { entries, issues } = normalizeRows(rows, defs)
   const preview = diffCatalog(entries, current)
   preview.issues = issues
   preview.summary.errors = issues.filter((i) => i.severity === "error").length

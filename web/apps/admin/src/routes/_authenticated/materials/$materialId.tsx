@@ -5,7 +5,7 @@ import { createFileRoute } from "@tanstack/react-router"
 import { useDocument } from "@modules/lib/firestore"
 import { useDb, useFunctions } from "@modules/lib/firebase-context"
 import { catalogRef } from "@modules/lib/firestore-helpers"
-import type { PricingModel } from "@modules/lib/firestore-entities"
+import type { CatalogVariant, PricingModel } from "@modules/lib/firestore-entities"
 import { PageLoading } from "@modules/components/page-loading"
 import { PageHeader } from "@/components/admin/page-header"
 import { Card, CardContent } from "@modules/components/ui/card"
@@ -58,8 +58,8 @@ function CatalogDetailPage() {
 
   useEffect(() => {
     if (catalog) {
-      // The form edits the base variant (variants[0]); extra purchase
-      // options are referenced by `variantIds` and derived at read time.
+      // The form edits only the base variant (variants[0]); any cut-to-size
+      // options (variants[1..]) are import-managed and preserved on save.
       const primary = catalog.variants?.[0]
       reset({
         code: catalog.code,
@@ -73,7 +73,6 @@ function CatalogDetailPage() {
             ? primary.unitPrice.member
             : primary?.unitPrice?.default ?? 0,
         ),
-        variantIds: catalog.variantIds ?? [],
         active: catalog.active,
         userCanAdd: catalog.userCanAdd,
       })
@@ -116,9 +115,10 @@ function CatalogDetailPage() {
   }
 
   const onSubmit = async (values: CatalogFormValues) => {
-    // The form edits the base variant; extra options live in `variantIds`
-    // (derived at read time), so `variants` is just the base entry.
+    // The form edits only the base variant. Any cut-to-size options
+    // (variants[1..]) are import-managed, so preserve them verbatim.
     const existingBase = catalog?.variants?.[0]
+    const extraVariants = catalog?.variants?.slice(1) ?? []
     const defaultPrice = parseFloat(values.priceNone) || 0
     const memberPrice = parseFloat(values.priceMember) || 0
     const base = {
@@ -132,7 +132,6 @@ function CatalogDetailPage() {
           ? { default: defaultPrice, member: memberPrice }
           : { default: defaultPrice },
     }
-    const variantIds = Array.isArray(values.variantIds) ? values.variantIds : []
     try {
       await save.mutate(async () => {
         const fn = rpcCallable<
@@ -142,8 +141,7 @@ function CatalogDetailPage() {
             name: string
             description: string | null
             workshops: string[]
-            variants: (typeof base)[]
-            variantIds: string[]
+            variants: CatalogVariant[]
             active: boolean
             userCanAdd: boolean
           },
@@ -158,8 +156,7 @@ function CatalogDetailPage() {
             .split(",")
             .map((w) => w.trim())
             .filter(Boolean),
-          variants: [base],
-          variantIds,
+          variants: [base, ...extraVariants],
           active: values.active,
           userCanAdd: values.userCanAdd,
         })
