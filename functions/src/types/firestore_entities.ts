@@ -62,19 +62,23 @@ export interface PermissionEntity {
  * Machine control mechanism (mirrors the `MachineControl` proto oneof).
  *
  * - `relay`: relay follows the session; billed on wall-clock session duration.
- * - `xtool_p2s`: relay stays on for the session but the terminal polls the
- *   laser's HTTP API; only cutting time is billed (usage `activeSeconds`) and
- *   the session auto-ends after `idleTimeoutSec` ready-but-idle.
+ * - `gateway_sensing`: relay stays on for the session but the terminal leases a
+ *   sensing session from the gateway, which runs the device-specific protocol
+ *   (e.g. the xTool laser's WebSocket) and reports running/idle. Only active
+ *   ("running") time is billed (usage `activeSeconds`) and the session auto-ends
+ *   after `idleTimeoutSec` ready-but-idle. `kind` picks the gateway backend.
+ *   See ADR-0035.
  */
 export type MachineControl =
   | { type: "relay" }
   | {
-      type: "xtool_p2s";
+      type: "gateway_sensing";
+      kind: "xtool_laser";
       host: string;
       port?: number;
+      pollIntervalSec?: number;
       idleTimeoutSec?: number;
       idleWarningSec?: number;
-      pollIntervalSec?: number;
     };
 
 export interface MachineEntity {

@@ -35,12 +35,15 @@ from pw_rpc.internal.packet_pb2 import PacketType
 from pw_status import Status
 
 from gateway.gateway_service_pb2 import (
+    AcquireSensingLeaseRequest,
     ForwardRequest,
     ForwardResponse,
     LogEntry,
     LogResponse,
     PingRequest,
     PingResponse,
+    RenewSensingLeaseRequest,
+    SensingLeaseResponse,
 )
 from pw_rpc import ids as rpc_ids
 
@@ -54,6 +57,7 @@ from maco_gateway.gateway_service import GatewayServiceImpl
 from maco_gateway.key_store import KeyStore
 from maco_gateway.print_worker import PrintWorker
 from maco_gateway.printer import parse_printer_endpoint
+from maco_gateway.sensing.service import SensingService
 
 # Configure logging
 logging.basicConfig(
@@ -70,6 +74,19 @@ _SERVICE_ID = rpc_ids.calculate("maco.gateway.GatewayService")
 _METHOD_FORWARD = rpc_ids.calculate("Forward")
 _METHOD_PERSIST_LOG = rpc_ids.calculate("PersistLog")
 _METHOD_PING = rpc_ids.calculate("Ping")
+_METHOD_ACQUIRE_SENSING_LEASE = rpc_ids.calculate("AcquireSensingLease")
+_METHOD_RENEW_SENSING_LEASE = rpc_ids.calculate("RenewSensingLease")
+
+
+def _sensing_spec_fields(spec) -> tuple:
+    """(kind, host, port, poll_interval_sec) from a proto SensingSpec oneof."""
+    which = spec.WhichOneof("backend")
+    if which == "xtool_laser":
+        x = spec.xtool_laser
+        return "xtool_laser", x.host, x.port, x.poll_interval_sec
+    if which == "mock":
+        return "mock", "", 0, 0
+    raise ValueError(f"empty or unknown SensingSpec backend: {which!r}")
 
 
 class ClientConnection:
@@ -82,11 +99,13 @@ class ClientConnection:
         key_store: KeyStore,
         gateway_service: GatewayServiceImpl,
         replay_guard: DeviceReplayGuard,
+        sensing: SensingService,
     ) -> None:
         self._reader = reader
         self._writer = writer
         self._key_store = key_store
         self._gateway_service = gateway_service
+        self._sensing = sensing
         self._addr = writer.get_extra_info("peername")
 
         self._ascon = AsconTransport()
@@ -229,6 +248,10 @@ class ClientConnection:
                 return self._handle_persist_log(rpc, packet.payload)
             elif packet.method_id == _METHOD_PING:
                 return self._handle_ping(rpc, packet.payload)
+            elif packet.method_id == _METHOD_ACQUIRE_SENSING_LEASE:
+                return await self._handle_acquire_sensing_lease(rpc, packet.payload)
+            elif packet.method_id == _METHOD_RENEW_SENSING_LEASE:
+                return self._handle_renew_sensing_lease(rpc, packet.payload)
             else:
                 logger.warning("Unknown method: %d", packet.method_id)
                 return packets.encode_server_error(rpc, Status.UNIMPLEMENTED)
@@ -291,6 +314,26 @@ class ClientConnection:
         )
         return packets.encode_response(rpc, resp)
 
+    async def _handle_acquire_sensing_lease(self, rpc: RpcIds, payload: bytes) -> bytes:
+        """Handle AcquireSensingLease: start/reuse a prober, mint a lease."""
+        req = AcquireSensingLeaseRequest()
+        req.MergeFromString(payload)
+        kind, host, port, poll = _sensing_spec_fields(req.spec)
+        lease_id, valid, state = await self._sensing.acquire(
+            kind=kind, host=host, port=port, poll_interval_sec=poll,
+            ttl_sec=req.lease_ttl_sec,
+        )
+        resp = SensingLeaseResponse(lease_id=lease_id, valid=valid, state=int(state))
+        return packets.encode_response(rpc, resp)
+
+    def _handle_renew_sensing_lease(self, rpc: RpcIds, payload: bytes) -> bytes:
+        """Handle RenewSensingLease: extend the lease and read current state."""
+        req = RenewSensingLeaseRequest()
+        req.MergeFromString(payload)
+        lease_id, valid, state = self._sensing.renew(req.lease_id)
+        resp = SensingLeaseResponse(lease_id=lease_id, valid=valid, state=int(state))
+        return packets.encode_response(rpc, resp)
+
     async def _send_response(self, response_data: bytes) -> None:
         """Send an encrypted response to the client.
 
@@ -335,11 +378,13 @@ class GatewayServer:
         port: int,
         key_store: KeyStore,
         firebase_client: FirebaseClient,
+        sensing: SensingService,
     ) -> None:
         self._host = host
         self._port = port
         self._key_store = key_store
         self._firebase_client = firebase_client
+        self._sensing = sensing
         self._gateway_service = GatewayServiceImpl(firebase_client)
         self._connections: Dict[str, ClientConnection] = {}
         # One replay guard for the whole server so per-device nonce history
@@ -371,6 +416,7 @@ class GatewayServer:
                 self._key_store,
                 self._gateway_service,
                 self._replay_guard,
+                self._sensing,
             )
             self._connections[addr] = conn
             await conn.handle()
@@ -504,11 +550,17 @@ def main() -> int:
         api_key=args.gateway_api_key,
     )
 
+    # Machine-activity sensing (ADR-0035): the terminal leases a sensing
+    # session and polls it; the gateway runs the device protocol in the
+    # background. Always available (probers are created lazily on first lease).
+    sensing = SensingService()
+
     server = GatewayServer(
         host=args.host,
         port=args.port,
         key_store=key_store,
         firebase_client=firebase_client,
+        sensing=sensing,
     )
 
     # Optional label print worker: only started when a printer is configured.
@@ -520,7 +572,7 @@ def main() -> int:
         logger.info("  Printer: %s:%d", printer_host, printer_port)
 
     async def serve() -> None:
-        tasks = [server.run()]
+        tasks = [server.run(), sensing.run_reaper()]
         if worker is not None:
             tasks.append(worker.run())
         await asyncio.gather(*tasks)

@@ -195,15 +195,6 @@ const pw::thread::Options& GetDisplayRenderThreadOptions() {
   return options;
 }
 
-const pw::thread::Options& GetMachineSensorThreadOptions() {
-  static const pw::thread::particle::Options options =
-      pw::thread::particle::Options()
-          .set_name("xtool_sensor")
-          .set_priority(2)
-          .set_stack_size(4096);
-  return options;
-}
-
 maco::nfc::NfcReader& GetNfcReader() {
   // UART buffers for PN532 (max normal frame ~262 bytes)
   // Must be 32-byte aligned for DMA on RTL872x
@@ -349,20 +340,6 @@ maco::machine_control::MachineToggle& GetMachineToggle() {
       kPinMachineRelay, pw::async2::GetSystemTimeProvider()
   );
   return relay;
-}
-
-pb::socket::TcpSocket* GetMachineSensorSocket(std::string_view host,
-                                              uint16_t port) {
-  // Owned statically; constructed once with the first machine's endpoint.
-  static pw::InlineString<64> host_str(host);
-  static pb::socket::TcpConfig cfg{
-      .host = host_str.c_str(),
-      .port = port,
-      .connect_timeout_ms = 2000,
-      .read_timeout_ms = 0,
-  };
-  static pb::socket::ParticleTcpSocket socket(cfg);
-  return &socket;
 }
 
 maco::buzzer::Buzzer& GetBuzzer() {

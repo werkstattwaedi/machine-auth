@@ -31,30 +31,45 @@ MachineControlType ConvertControl(const maco_proto_particle_MachineControl& c) {
   switch (c.which_control) {
     case maco_proto_particle_MachineControl_relay_tag:
       return MachineControlType::kRelay;
-    case maco_proto_particle_MachineControl_xtool_p2s_tag:
-      return MachineControlType::kXToolP2s;
+    case maco_proto_particle_MachineControl_gateway_sensing_tag:
+      return MachineControlType::kGatewaySensing;
     default:
       return MachineControlType::kUnspecified;
   }
 }
 
-// Resolve xTool parameters, mapping proto zero-values to their defaults.
-XToolConfig ConvertXTool(const maco_proto_particle_XToolP2sControl& x) {
-  XToolConfig cfg;
-  cfg.host = x.host;
-  // Ignore an out-of-range port (keeps the 8080 default) rather than
-  // silently truncating a bad value.
-  if (x.port != 0 && x.port <= 0xFFFF) {
-    cfg.port = static_cast<uint16_t>(x.port);
+// Resolve gateway-sensing parameters, mapping proto zero-values to defaults.
+GatewaySensingConfig ConvertGatewaySensing(
+    const maco_proto_particle_GatewaySensingControl& g) {
+  GatewaySensingConfig cfg;
+  if (g.idle_timeout_sec != 0) {
+    cfg.idle_timeout_sec = g.idle_timeout_sec;
   }
-  if (x.idle_timeout_sec != 0) {
-    cfg.idle_timeout_sec = x.idle_timeout_sec;
+  if (g.idle_warning_sec != 0) {
+    cfg.idle_warning_sec = g.idle_warning_sec;
   }
-  if (x.idle_warning_sec != 0) {
-    cfg.idle_warning_sec = x.idle_warning_sec;
-  }
-  if (x.poll_interval_sec != 0) {
-    cfg.poll_interval_sec = x.poll_interval_sec;
+  if (g.has_spec) {
+    switch (g.spec.which_backend) {
+      case maco_proto_particle_SensingSpec_xtool_laser_tag: {
+        cfg.kind = SensingKind::kXToolLaser;
+        const auto& x = g.spec.backend.xtool_laser;
+        cfg.host = x.host;
+        // Ignore an out-of-range port (keeps the default) rather than
+        // silently truncating a bad value.
+        if (x.port != 0 && x.port <= 0xFFFF) {
+          cfg.port = static_cast<uint16_t>(x.port);
+        }
+        if (x.poll_interval_sec != 0) {
+          cfg.poll_interval_sec = x.poll_interval_sec;
+        }
+        break;
+      }
+      case maco_proto_particle_SensingSpec_mock_tag:
+        cfg.kind = SensingKind::kMock;
+        break;
+      default:
+        break;
+    }
   }
   return cfg;
 }
@@ -71,14 +86,15 @@ MachineConfig ConvertMachine(const maco_proto_particle_Machine& m) {
     }
   }
 
-  XToolConfig xtool;
+  GatewaySensingConfig gateway_sensing;
   if (m.control.which_control ==
-      maco_proto_particle_MachineControl_xtool_p2s_tag) {
-    xtool = ConvertXTool(m.control.control.xtool_p2s);
+      maco_proto_particle_MachineControl_gateway_sensing_tag) {
+    gateway_sensing =
+        ConvertGatewaySensing(m.control.control.gateway_sensing);
   }
 
   return MachineConfig(id.ok() ? *id : FirebaseId::Empty(), label, permissions,
-                       ConvertControl(m.control), xtool);
+                       ConvertControl(m.control), gateway_sensing);
 }
 
 }  // namespace

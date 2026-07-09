@@ -22,7 +22,6 @@
 #include "maco_firmware/modules/led_animator/led_animator.h"
 #include "maco_firmware/modules/buzzer/mock/mock_buzzer.h"
 #include "maco_firmware/modules/machine_control/mock/mock_machine_toggle.h"
-#include "maco_firmware/targets/host/host_tcp_socket.h"
 #include "maco_firmware/modules/nfc_reader/mock/mock_nfc_reader.h"
 #include "maco_firmware/modules/nfc_reader/mock/nfc_mock_service.h"
 #include "maco_firmware/targets/host/host_random.h"
@@ -160,11 +159,6 @@ const pw::thread::Options& GetDisplayRenderThreadOptions() {
   return options;
 }
 
-const pw::thread::Options& GetMachineSensorThreadOptions() {
-  static const pw::thread::stl::Options options;
-  return options;
-}
-
 maco::nfc::NfcReader& GetNfcReader() {
   static maco::nfc::MockNfcReader reader;
   return reader;
@@ -291,13 +285,6 @@ maco::secrets::DeviceSecrets& GetDeviceSecrets() {
 maco::machine_control::MachineToggle& GetMachineToggle() {
   static maco::machine_control::MockMachineToggle toggle;
   return toggle;
-}
-
-pb::socket::TcpSocket* GetMachineSensorSocket(std::string_view host,
-                                              uint16_t port) {
-  // POSIX socket so the simulator can poll a real/stub xTool endpoint.
-  static maco::host::HostTcpSocket socket(std::string(host), port);
-  return &socket;
 }
 
 maco::buzzer::Buzzer& GetBuzzer() {

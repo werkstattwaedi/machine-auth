@@ -5,7 +5,7 @@
     "checkoutTemplateId": "$ref:catalog/iVppnklahLU3JuA5BMmH",
     "requiredPermission": ["$ref:permission/39ozgRe5iMWF5LccFNir"],
     "maco": "$ref:maco/aaa5427ee1cca38aeea743ae",
-    "control": { "type": "xtool_p2s", "host": "192.168.1.50" }
+    "control": {}
   },
   "kMeIRDWEaDUzIbzGCZzP": {
     "name": "Lampe",

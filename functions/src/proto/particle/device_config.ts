@@ -20,7 +20,10 @@ export enum HwRevision {
 
 /** Machine control mechanism */
 export interface MachineControl {
-  control: { $case: "relay"; relay: RelayControl } | { $case: "xtoolP2s"; xtoolP2s: XToolP2sControl } | undefined;
+  control:
+    | { $case: "relay"; relay: RelayControl }
+    | { $case: "gatewaySensing"; gatewaySensing: GatewaySensingControl }
+    | undefined;
 }
 
 /** Relay-based machine control */
@@ -28,29 +31,54 @@ export interface RelayControl {
 }
 
 /**
- * xTool P2S laser cutter control.
+ * Activity sensing delegated to the maco_gateway (see ADR-0035).
  *
- * The relay stays on for the whole session, but the terminal polls the
- * laser's local HTTP API to track whether a job is actually executing, so
- * only cutting time is billed and idle sessions auto-end.
+ * The relay stays on for the whole session; the terminal leases a sensing
+ * session from the gateway and polls it, so only active ("running") time is
+ * billed and idle sessions auto-end. The device-specific protocol lives in the
+ * gateway — the terminal forwards `spec` verbatim and never interprets it.
  */
-export interface XToolP2sControl {
-  /** Laser hostname or IP on the LAN */
-  host: string;
-  /** Laser HTTP port (0 => default 8080) */
-  port: number;
+export interface GatewaySensingControl {
   /**
    * Auto-end the session after this many seconds ready-but-idle
-   * (0 => default 900 = 15 min)
+   * (0 => default 900 = 15 min). Firmware-side (drives the idle timer).
    */
   idleTimeoutSec: number;
   /**
    * Show the idle warning this many seconds before auto-end
-   * (0 => default 60 = 1 min)
+   * (0 => default 60 = 1 min). Firmware-side.
    */
   idleWarningSec: number;
-  /** Interval between laser state polls, in seconds (0 => default 3) */
+  /** What the gateway should sense; forwarded verbatim to the gateway. */
+  spec: SensingSpec | undefined;
+}
+
+/**
+ * Describes what the gateway should sense. The backend is selected by which
+ * oneof arm is set — no stringly-typed "kind".
+ */
+export interface SensingSpec {
+  backend:
+    | { $case: "xtoolLaser"; xtoolLaser: XToolLaserControl }
+    | { $case: "mock"; mock: MockSensingControl }
+    | undefined;
+}
+
+/**
+ * xTool laser (P2S / current V2-firmware family) sensed over its LAN
+ * WebSocket protocol by the gateway.
+ */
+export interface XToolLaserControl {
+  /** Laser hostname or IP on the LAN */
+  host: string;
+  /** Laser API port (0 => gateway default 28900) */
+  port: number;
+  /** Interval between laser state polls, in seconds (0 => gateway default 3) */
   pollIntervalSec: number;
+}
+
+/** Scriptable sensing backend for the host simulator and tests. */
+export interface MockSensingControl {
 }
 
 /** Machine definition with permissions */
@@ -89,8 +117,8 @@ export const MachineControl: MessageFns<MachineControl> = {
       case "relay":
         RelayControl.encode(message.control.relay, writer.uint32(10).fork()).join();
         break;
-      case "xtoolP2s":
-        XToolP2sControl.encode(message.control.xtoolP2s, writer.uint32(18).fork()).join();
+      case "gatewaySensing":
+        GatewaySensingControl.encode(message.control.gatewaySensing, writer.uint32(26).fork()).join();
         break;
     }
     return writer;
@@ -111,12 +139,15 @@ export const MachineControl: MessageFns<MachineControl> = {
           message.control = { $case: "relay", relay: RelayControl.decode(reader, reader.uint32()) };
           continue;
         }
-        case 2: {
-          if (tag !== 18) {
+        case 3: {
+          if (tag !== 26) {
             break;
           }
 
-          message.control = { $case: "xtoolP2s", xtoolP2s: XToolP2sControl.decode(reader, reader.uint32()) };
+          message.control = {
+            $case: "gatewaySensing",
+            gatewaySensing: GatewaySensingControl.decode(reader, reader.uint32()),
+          };
           continue;
         }
       }
@@ -140,9 +171,12 @@ export const MachineControl: MessageFns<MachineControl> = {
         }
         break;
       }
-      case "xtoolP2s": {
-        if (object.control?.xtoolP2s !== undefined && object.control?.xtoolP2s !== null) {
-          message.control = { $case: "xtoolP2s", xtoolP2s: XToolP2sControl.fromPartial(object.control.xtoolP2s) };
+      case "gatewaySensing": {
+        if (object.control?.gatewaySensing !== undefined && object.control?.gatewaySensing !== null) {
+          message.control = {
+            $case: "gatewaySensing",
+            gatewaySensing: GatewaySensingControl.fromPartial(object.control.gatewaySensing),
+          };
         }
         break;
       }
@@ -185,34 +219,175 @@ export const RelayControl: MessageFns<RelayControl> = {
   },
 };
 
-function createBaseXToolP2sControl(): XToolP2sControl {
-  return { host: "", port: 0, idleTimeoutSec: 0, idleWarningSec: 0, pollIntervalSec: 0 };
+function createBaseGatewaySensingControl(): GatewaySensingControl {
+  return { idleTimeoutSec: 0, idleWarningSec: 0, spec: undefined };
 }
 
-export const XToolP2sControl: MessageFns<XToolP2sControl> = {
-  encode(message: XToolP2sControl, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+export const GatewaySensingControl: MessageFns<GatewaySensingControl> = {
+  encode(message: GatewaySensingControl, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.idleTimeoutSec !== 0) {
+      writer.uint32(8).uint32(message.idleTimeoutSec);
+    }
+    if (message.idleWarningSec !== 0) {
+      writer.uint32(16).uint32(message.idleWarningSec);
+    }
+    if (message.spec !== undefined) {
+      SensingSpec.encode(message.spec, writer.uint32(26).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GatewaySensingControl {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGatewaySensingControl();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.idleTimeoutSec = reader.uint32();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.idleWarningSec = reader.uint32();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.spec = SensingSpec.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create(base?: DeepPartial<GatewaySensingControl>): GatewaySensingControl {
+    return GatewaySensingControl.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GatewaySensingControl>): GatewaySensingControl {
+    const message = createBaseGatewaySensingControl();
+    message.idleTimeoutSec = object.idleTimeoutSec ?? 0;
+    message.idleWarningSec = object.idleWarningSec ?? 0;
+    message.spec = (object.spec !== undefined && object.spec !== null)
+      ? SensingSpec.fromPartial(object.spec)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseSensingSpec(): SensingSpec {
+  return { backend: undefined };
+}
+
+export const SensingSpec: MessageFns<SensingSpec> = {
+  encode(message: SensingSpec, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    switch (message.backend?.$case) {
+      case "xtoolLaser":
+        XToolLaserControl.encode(message.backend.xtoolLaser, writer.uint32(10).fork()).join();
+        break;
+      case "mock":
+        MockSensingControl.encode(message.backend.mock, writer.uint32(18).fork()).join();
+        break;
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SensingSpec {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSensingSpec();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.backend = { $case: "xtoolLaser", xtoolLaser: XToolLaserControl.decode(reader, reader.uint32()) };
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.backend = { $case: "mock", mock: MockSensingControl.decode(reader, reader.uint32()) };
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create(base?: DeepPartial<SensingSpec>): SensingSpec {
+    return SensingSpec.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<SensingSpec>): SensingSpec {
+    const message = createBaseSensingSpec();
+    switch (object.backend?.$case) {
+      case "xtoolLaser": {
+        if (object.backend?.xtoolLaser !== undefined && object.backend?.xtoolLaser !== null) {
+          message.backend = {
+            $case: "xtoolLaser",
+            xtoolLaser: XToolLaserControl.fromPartial(object.backend.xtoolLaser),
+          };
+        }
+        break;
+      }
+      case "mock": {
+        if (object.backend?.mock !== undefined && object.backend?.mock !== null) {
+          message.backend = { $case: "mock", mock: MockSensingControl.fromPartial(object.backend.mock) };
+        }
+        break;
+      }
+    }
+    return message;
+  },
+};
+
+function createBaseXToolLaserControl(): XToolLaserControl {
+  return { host: "", port: 0, pollIntervalSec: 0 };
+}
+
+export const XToolLaserControl: MessageFns<XToolLaserControl> = {
+  encode(message: XToolLaserControl, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.host !== "") {
       writer.uint32(10).string(message.host);
     }
     if (message.port !== 0) {
       writer.uint32(16).uint32(message.port);
     }
-    if (message.idleTimeoutSec !== 0) {
-      writer.uint32(24).uint32(message.idleTimeoutSec);
-    }
-    if (message.idleWarningSec !== 0) {
-      writer.uint32(32).uint32(message.idleWarningSec);
-    }
     if (message.pollIntervalSec !== 0) {
-      writer.uint32(40).uint32(message.pollIntervalSec);
+      writer.uint32(24).uint32(message.pollIntervalSec);
     }
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): XToolP2sControl {
+  decode(input: BinaryReader | Uint8Array, length?: number): XToolLaserControl {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const end = length === undefined ? reader.len : reader.pos + length;
-    const message = createBaseXToolP2sControl();
+    const message = createBaseXToolLaserControl();
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
@@ -237,22 +412,6 @@ export const XToolP2sControl: MessageFns<XToolP2sControl> = {
             break;
           }
 
-          message.idleTimeoutSec = reader.uint32();
-          continue;
-        }
-        case 4: {
-          if (tag !== 32) {
-            break;
-          }
-
-          message.idleWarningSec = reader.uint32();
-          continue;
-        }
-        case 5: {
-          if (tag !== 40) {
-            break;
-          }
-
           message.pollIntervalSec = reader.uint32();
           continue;
         }
@@ -265,16 +424,48 @@ export const XToolP2sControl: MessageFns<XToolP2sControl> = {
     return message;
   },
 
-  create(base?: DeepPartial<XToolP2sControl>): XToolP2sControl {
-    return XToolP2sControl.fromPartial(base ?? {});
+  create(base?: DeepPartial<XToolLaserControl>): XToolLaserControl {
+    return XToolLaserControl.fromPartial(base ?? {});
   },
-  fromPartial(object: DeepPartial<XToolP2sControl>): XToolP2sControl {
-    const message = createBaseXToolP2sControl();
+  fromPartial(object: DeepPartial<XToolLaserControl>): XToolLaserControl {
+    const message = createBaseXToolLaserControl();
     message.host = object.host ?? "";
     message.port = object.port ?? 0;
-    message.idleTimeoutSec = object.idleTimeoutSec ?? 0;
-    message.idleWarningSec = object.idleWarningSec ?? 0;
     message.pollIntervalSec = object.pollIntervalSec ?? 0;
+    return message;
+  },
+};
+
+function createBaseMockSensingControl(): MockSensingControl {
+  return {};
+}
+
+export const MockSensingControl: MessageFns<MockSensingControl> = {
+  encode(_: MockSensingControl, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): MockSensingControl {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseMockSensingControl();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create(base?: DeepPartial<MockSensingControl>): MockSensingControl {
+    return MockSensingControl.fromPartial(base ?? {});
+  },
+  fromPartial(_: DeepPartial<MockSensingControl>): MockSensingControl {
+    const message = createBaseMockSensingControl();
     return message;
   },
 };

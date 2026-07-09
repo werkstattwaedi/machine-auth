@@ -17,7 +17,7 @@
 #include "maco_firmware/modules/led_animator/nfc_effects.h"
 #include "maco_firmware/modules/machine_control/default_machine_sensor.h"
 #include "maco_firmware/modules/machine_control/machine_controller.h"
-#include "maco_firmware/modules/machine_control/xtool_machine_sensor.h"
+#include "maco_firmware/modules/machine_control/gateway_machine_sensor.h"
 #include "maco_firmware/modules/nfc_reader/nfc_reader.h"
 #include "maco_firmware/modules/stack_monitor/stack_monitor.h"
 #include "maco_firmware/modules/terminal_effects/terminal_effects.h"
@@ -187,12 +187,13 @@ void AppInit() {
   // Report accumulated in-use time (cutting time for the laser) on checkout.
   session_fsm.SetBillableDurationSource(&machine_controller);
 
-  // Select the running-sensor by control type. The laser (xtool_p2s) polls
-  // the machine's HTTP API over the LAN; everything else mirrors the toggle.
-  const bool is_xtool =
+  // Select the running-sensor by control type. A gateway-sensed machine (the
+  // laser) leases a sensing session from the gateway, which runs the device
+  // protocol over the LAN; everything else mirrors the toggle. See ADR-0035.
+  const bool is_gateway_sensing =
       config.machine_count() > 0 &&
       config.machine(0).control() ==
-          maco::config::MachineControlType::kXToolP2s;
+          maco::config::MachineControlType::kGatewaySensing;
 
   static maco::machine_control::DefaultMachineSensor default_sensor(
       machine_toggle,
@@ -201,21 +202,19 @@ void AppInit() {
   );
 
   maco::machine_control::MachineSensor* active_sensor = &default_sensor;
-  if (is_xtool) {
-    const auto& xt = config.machine(0).xtool();
-    auto* socket = maco::system::GetMachineSensorSocket(xt.host, xt.port);
-    if (socket != nullptr) {
-      static maco::machine_control::XToolMachineSensor xtool_sensor(
-          *socket,
-          std::chrono::seconds(xt.poll_interval_sec),
-          maco::system::GetMachineSensorThreadOptions()
-      );
-      active_sensor = &xtool_sensor;
-      PW_LOG_INFO("Using xTool sensor: %s:%u", xt.host.c_str(),
-                  static_cast<unsigned>(xt.port));
-    } else {
-      PW_LOG_WARN("xTool control but no socket; mirroring toggle instead");
-    }
+  if (is_gateway_sensing) {
+    const auto& gs = config.machine(0).gateway_sensing();
+    static maco::machine_control::GatewayMachineSensor gateway_sensor(
+        maco::system::GetGatewayClient(),
+        gs,
+        pw::async2::GetSystemTimeProvider(),
+        pw::System().allocator()
+    );
+    active_sensor = &gateway_sensor;
+    // Session-scoped: the sensor leases/polls only while a session is active.
+    session_fsm.AddObserver(&gateway_sensor);
+    PW_LOG_INFO("Using gateway sensor: kind=%d host=%s",
+                static_cast<int>(gs.kind), gs.host.c_str());
   }
   active_sensor->SetCallback([](bool running) {
     machine_controller.OnMachineRunning(running);
@@ -288,11 +287,11 @@ void AppInit() {
     );
     // Idle auto-end for activity-tracked machines (the laser): end the session
     // after it sits idle, warning shortly before.
-    if (is_xtool) {
-      const auto& xt = config.machine(0).xtool();
+    if (is_gateway_sensing) {
+      const auto& gs = config.machine(0).gateway_sensing();
       controller.SetIdleTimeout(&machine_controller,
-                                std::chrono::seconds(xt.idle_timeout_sec),
-                                std::chrono::seconds(xt.idle_warning_sec));
+                                std::chrono::seconds(gs.idle_timeout_sec),
+                                std::chrono::seconds(gs.idle_warning_sec));
     }
     controller.Start(pw::System().dispatcher());
     terminal_ui.SetController(&controller);

@@ -16,34 +16,55 @@ enum HwRevision {
 
 // Machine control mechanism
 message MachineControl {
+  reserved 2;  // was XToolP2sControl xtool_p2s; superseded by gateway_sensing.
   oneof control {
     RelayControl relay = 1;
-    XToolP2sControl xtool_p2s = 2;
+    GatewaySensingControl gateway_sensing = 3;
   }
 }
 
 // Relay-based machine control
 message RelayControl {}
 
-// xTool P2S laser cutter control.
+// Activity sensing delegated to the maco_gateway (see ADR-0035).
 //
-// The relay stays on for the whole session, but the terminal polls the
-// laser's local HTTP API to track whether a job is actually executing, so
-// only cutting time is billed and idle sessions auto-end.
-message XToolP2sControl {
+// The relay stays on for the whole session; the terminal leases a sensing
+// session from the gateway and polls it, so only active ("running") time is
+// billed and idle sessions auto-end. The device-specific protocol lives in the
+// gateway — the terminal forwards `spec` verbatim and never interprets it.
+message GatewaySensingControl {
+  // Auto-end the session after this many seconds ready-but-idle
+  // (0 => default 900 = 15 min). Firmware-side (drives the idle timer).
+  uint32 idle_timeout_sec = 1;
+  // Show the idle warning this many seconds before auto-end
+  // (0 => default 60 = 1 min). Firmware-side.
+  uint32 idle_warning_sec = 2;
+  // What the gateway should sense; forwarded verbatim to the gateway.
+  SensingSpec spec = 3;
+}
+
+// Describes what the gateway should sense. The backend is selected by which
+// oneof arm is set — no stringly-typed "kind".
+message SensingSpec {
+  oneof backend {
+    XToolLaserControl xtool_laser = 1;
+    MockSensingControl mock = 2;
+  }
+}
+
+// xTool laser (P2S / current V2-firmware family) sensed over its LAN
+// WebSocket protocol by the gateway.
+message XToolLaserControl {
   // Laser hostname or IP on the LAN
   string host = 1;
-  // Laser HTTP port (0 => default 8080)
+  // Laser API port (0 => gateway default 28900)
   uint32 port = 2;
-  // Auto-end the session after this many seconds ready-but-idle
-  // (0 => default 900 = 15 min)
-  uint32 idle_timeout_sec = 3;
-  // Show the idle warning this many seconds before auto-end
-  // (0 => default 60 = 1 min)
-  uint32 idle_warning_sec = 4;
-  // Interval between laser state polls, in seconds (0 => default 3)
-  uint32 poll_interval_sec = 5;
+  // Interval between laser state polls, in seconds (0 => gateway default 3)
+  uint32 poll_interval_sec = 3;
 }
+
+// Scriptable sensing backend for the host simulator and tests.
+message MockSensingControl {}
 
 // Machine definition with permissions
 message Machine {

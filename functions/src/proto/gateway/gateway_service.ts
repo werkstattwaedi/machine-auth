@@ -9,6 +9,18 @@ import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
 
 export const protobufPackage = "maco.gateway";
 
+/** Machine activity state as observed by the gateway's prober. */
+export enum SensingState {
+  SENSING_STATE_UNSPECIFIED = 0,
+  /** SENSING_STATE_UNREACHABLE - Gateway can't reach the device — the terminal treats this as idle. */
+  SENSING_STATE_UNREACHABLE = 1,
+  /** SENSING_STATE_IDLE - Reachable, not actively working. */
+  SENSING_STATE_IDLE = 2,
+  /** SENSING_STATE_RUNNING - Reachable and actively working (e.g. laser cutting). */
+  SENSING_STATE_RUNNING = 3,
+  UNRECOGNIZED = -1,
+}
+
 /** Request to forward to Firebase. */
 export interface ForwardRequest {
   /** Firebase endpoint path (e.g., "/api/startSession") */
@@ -77,6 +89,57 @@ export interface PingResponse {
   gatewayTimestampMs: bigint;
   /** Echo of client timestamp */
   clientTimestampMs: bigint;
+}
+
+/**
+ * Describes what the gateway should sense. Mirrors the device_config
+ * SensingSpec; the backend is selected by which oneof arm is set.
+ */
+export interface SensingSpec {
+  backend:
+    | { $case: "xtoolLaser"; xtoolLaser: XToolLaserControl }
+    | { $case: "mock"; mock: MockSensingControl }
+    | undefined;
+}
+
+/** xTool laser sensed over its LAN WebSocket protocol. */
+export interface XToolLaserControl {
+  /** Laser hostname or IP on the LAN */
+  host: string;
+  /** Laser API port (0 => default 28900) */
+  port: number;
+  /** Interval between laser state polls, in seconds (0 => default 3) */
+  pollIntervalSec: number;
+}
+
+/** Scriptable sensing backend for the host simulator and tests. */
+export interface MockSensingControl {
+}
+
+/** Acquire a sensing lease for a machine. */
+export interface AcquireSensingLeaseRequest {
+  /** What to sense. */
+  spec:
+    | SensingSpec
+    | undefined;
+  /** How long the lease survives without renewal, in seconds (0 => default 60). */
+  leaseTtlSec: number;
+}
+
+/** Renew (poll) an existing sensing lease. */
+export interface RenewSensingLeaseRequest {
+  /** Lease id returned by AcquireSensingLease. */
+  leaseId: string;
+}
+
+/** Response to acquire/renew: the lease handle and current state. */
+export interface SensingLeaseResponse {
+  /** Lease id to renew with; empty when valid is false. */
+  leaseId: string;
+  /** False if the lease is unknown/expired — the caller must re-acquire. */
+  valid: boolean;
+  /** Current machine activity state. */
+  state: SensingState;
 }
 
 function createBaseForwardRequest(): ForwardRequest {
@@ -511,6 +574,361 @@ export const PingResponse: MessageFns<PingResponse> = {
   },
 };
 
+function createBaseSensingSpec(): SensingSpec {
+  return { backend: undefined };
+}
+
+export const SensingSpec: MessageFns<SensingSpec> = {
+  encode(message: SensingSpec, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    switch (message.backend?.$case) {
+      case "xtoolLaser":
+        XToolLaserControl.encode(message.backend.xtoolLaser, writer.uint32(10).fork()).join();
+        break;
+      case "mock":
+        MockSensingControl.encode(message.backend.mock, writer.uint32(18).fork()).join();
+        break;
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SensingSpec {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSensingSpec();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.backend = { $case: "xtoolLaser", xtoolLaser: XToolLaserControl.decode(reader, reader.uint32()) };
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.backend = { $case: "mock", mock: MockSensingControl.decode(reader, reader.uint32()) };
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create(base?: DeepPartial<SensingSpec>): SensingSpec {
+    return SensingSpec.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<SensingSpec>): SensingSpec {
+    const message = createBaseSensingSpec();
+    switch (object.backend?.$case) {
+      case "xtoolLaser": {
+        if (object.backend?.xtoolLaser !== undefined && object.backend?.xtoolLaser !== null) {
+          message.backend = {
+            $case: "xtoolLaser",
+            xtoolLaser: XToolLaserControl.fromPartial(object.backend.xtoolLaser),
+          };
+        }
+        break;
+      }
+      case "mock": {
+        if (object.backend?.mock !== undefined && object.backend?.mock !== null) {
+          message.backend = { $case: "mock", mock: MockSensingControl.fromPartial(object.backend.mock) };
+        }
+        break;
+      }
+    }
+    return message;
+  },
+};
+
+function createBaseXToolLaserControl(): XToolLaserControl {
+  return { host: "", port: 0, pollIntervalSec: 0 };
+}
+
+export const XToolLaserControl: MessageFns<XToolLaserControl> = {
+  encode(message: XToolLaserControl, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.host !== "") {
+      writer.uint32(10).string(message.host);
+    }
+    if (message.port !== 0) {
+      writer.uint32(16).uint32(message.port);
+    }
+    if (message.pollIntervalSec !== 0) {
+      writer.uint32(24).uint32(message.pollIntervalSec);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): XToolLaserControl {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseXToolLaserControl();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.host = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.port = reader.uint32();
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.pollIntervalSec = reader.uint32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create(base?: DeepPartial<XToolLaserControl>): XToolLaserControl {
+    return XToolLaserControl.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<XToolLaserControl>): XToolLaserControl {
+    const message = createBaseXToolLaserControl();
+    message.host = object.host ?? "";
+    message.port = object.port ?? 0;
+    message.pollIntervalSec = object.pollIntervalSec ?? 0;
+    return message;
+  },
+};
+
+function createBaseMockSensingControl(): MockSensingControl {
+  return {};
+}
+
+export const MockSensingControl: MessageFns<MockSensingControl> = {
+  encode(_: MockSensingControl, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): MockSensingControl {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseMockSensingControl();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create(base?: DeepPartial<MockSensingControl>): MockSensingControl {
+    return MockSensingControl.fromPartial(base ?? {});
+  },
+  fromPartial(_: DeepPartial<MockSensingControl>): MockSensingControl {
+    const message = createBaseMockSensingControl();
+    return message;
+  },
+};
+
+function createBaseAcquireSensingLeaseRequest(): AcquireSensingLeaseRequest {
+  return { spec: undefined, leaseTtlSec: 0 };
+}
+
+export const AcquireSensingLeaseRequest: MessageFns<AcquireSensingLeaseRequest> = {
+  encode(message: AcquireSensingLeaseRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.spec !== undefined) {
+      SensingSpec.encode(message.spec, writer.uint32(10).fork()).join();
+    }
+    if (message.leaseTtlSec !== 0) {
+      writer.uint32(16).uint32(message.leaseTtlSec);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AcquireSensingLeaseRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseAcquireSensingLeaseRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.spec = SensingSpec.decode(reader, reader.uint32());
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.leaseTtlSec = reader.uint32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create(base?: DeepPartial<AcquireSensingLeaseRequest>): AcquireSensingLeaseRequest {
+    return AcquireSensingLeaseRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<AcquireSensingLeaseRequest>): AcquireSensingLeaseRequest {
+    const message = createBaseAcquireSensingLeaseRequest();
+    message.spec = (object.spec !== undefined && object.spec !== null)
+      ? SensingSpec.fromPartial(object.spec)
+      : undefined;
+    message.leaseTtlSec = object.leaseTtlSec ?? 0;
+    return message;
+  },
+};
+
+function createBaseRenewSensingLeaseRequest(): RenewSensingLeaseRequest {
+  return { leaseId: "" };
+}
+
+export const RenewSensingLeaseRequest: MessageFns<RenewSensingLeaseRequest> = {
+  encode(message: RenewSensingLeaseRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.leaseId !== "") {
+      writer.uint32(10).string(message.leaseId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RenewSensingLeaseRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseRenewSensingLeaseRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.leaseId = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create(base?: DeepPartial<RenewSensingLeaseRequest>): RenewSensingLeaseRequest {
+    return RenewSensingLeaseRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<RenewSensingLeaseRequest>): RenewSensingLeaseRequest {
+    const message = createBaseRenewSensingLeaseRequest();
+    message.leaseId = object.leaseId ?? "";
+    return message;
+  },
+};
+
+function createBaseSensingLeaseResponse(): SensingLeaseResponse {
+  return { leaseId: "", valid: false, state: 0 };
+}
+
+export const SensingLeaseResponse: MessageFns<SensingLeaseResponse> = {
+  encode(message: SensingLeaseResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.leaseId !== "") {
+      writer.uint32(10).string(message.leaseId);
+    }
+    if (message.valid !== false) {
+      writer.uint32(16).bool(message.valid);
+    }
+    if (message.state !== 0) {
+      writer.uint32(24).int32(message.state);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SensingLeaseResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSensingLeaseResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.leaseId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.valid = reader.bool();
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.state = reader.int32() as any;
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create(base?: DeepPartial<SensingLeaseResponse>): SensingLeaseResponse {
+    return SensingLeaseResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<SensingLeaseResponse>): SensingLeaseResponse {
+    const message = createBaseSensingLeaseResponse();
+    message.leaseId = object.leaseId ?? "";
+    message.valid = object.valid ?? false;
+    message.state = object.state ?? 0;
+    return message;
+  },
+};
+
 /**
  * Gateway service for MACO device to MACO Gateway communication.
  *
@@ -551,6 +969,21 @@ export interface GatewayService {
    * health checks and clock synchronization.
    */
   Ping(request: PingRequest): Promise<PingResponse>;
+  /**
+   * Acquire a machine-activity sensing lease (see ADR-0035).
+   *
+   * The gateway lazily starts a background prober for the machine described by
+   * `spec` and returns a lease id plus the current state. The terminal renews
+   * the lease on each poll to keep the prober alive; when the lease lapses the
+   * gateway drops the device connection. This keeps the device-specific
+   * (e.g. xTool WebSocket) protocol entirely in the gateway.
+   */
+  AcquireSensingLease(request: AcquireSensingLeaseRequest): Promise<SensingLeaseResponse>;
+  /**
+   * Renew a sensing lease and read the machine's current state. This is the
+   * poll: it both extends the lease TTL and returns the latest state.
+   */
+  RenewSensingLease(request: RenewSensingLeaseRequest): Promise<SensingLeaseResponse>;
 }
 
 export const GatewayServiceServiceName = "maco.gateway.GatewayService";
@@ -563,6 +996,8 @@ export class GatewayServiceClientImpl implements GatewayService {
     this.Forward = this.Forward.bind(this);
     this.PersistLog = this.PersistLog.bind(this);
     this.Ping = this.Ping.bind(this);
+    this.AcquireSensingLease = this.AcquireSensingLease.bind(this);
+    this.RenewSensingLease = this.RenewSensingLease.bind(this);
   }
   Forward(request: ForwardRequest): Promise<ForwardResponse> {
     const data = ForwardRequest.encode(request).finish();
@@ -580,6 +1015,18 @@ export class GatewayServiceClientImpl implements GatewayService {
     const data = PingRequest.encode(request).finish();
     const promise = this.rpc.request(this.service, "Ping", data);
     return promise.then((data) => PingResponse.decode(new BinaryReader(data)));
+  }
+
+  AcquireSensingLease(request: AcquireSensingLeaseRequest): Promise<SensingLeaseResponse> {
+    const data = AcquireSensingLeaseRequest.encode(request).finish();
+    const promise = this.rpc.request(this.service, "AcquireSensingLease", data);
+    return promise.then((data) => SensingLeaseResponse.decode(new BinaryReader(data)));
+  }
+
+  RenewSensingLease(request: RenewSensingLeaseRequest): Promise<SensingLeaseResponse> {
+    const data = RenewSensingLeaseRequest.encode(request).finish();
+    const promise = this.rpc.request(this.service, "RenewSensingLease", data);
+    return promise.then((data) => SensingLeaseResponse.decode(new BinaryReader(data)));
   }
 }
 
