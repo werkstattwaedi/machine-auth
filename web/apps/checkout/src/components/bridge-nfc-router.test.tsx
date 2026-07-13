@@ -30,8 +30,12 @@ vi.mock("@tanstack/react-router", () => ({
 }))
 
 const mockToastError = vi.fn()
+const mockToastInfo = vi.fn()
 vi.mock("sonner", () => ({
-  toast: { error: (...args: unknown[]) => mockToastError(...args) },
+  toast: {
+    error: (...args: unknown[]) => mockToastError(...args),
+    info: (...args: unknown[]) => mockToastInfo(...args),
+  },
 }))
 
 let tagCallback: ((event: NfcTagEvent) => void) | null = null
@@ -91,7 +95,12 @@ vi.mock("./checkout/badge-purchase-dialog", async () => {
 
 import { BridgeNfcRouter, confirmTagSwitch } from "./bridge-nfc-router"
 
-const PRISTINE = { preservable: false, identified: false, holderName: null }
+const PRISTINE = {
+  preservable: false,
+  identified: false,
+  holderName: null,
+  badgeTokenIds: [] as string[],
+}
 const mockSessionState = vi.fn().mockReturnValue(PRISTINE)
 vi.mock("./checkout/kiosk-session-guard", () => ({
   getKioskSessionState: () => mockSessionState(),
@@ -107,6 +116,7 @@ afterEach(() => {
   cleanup()
   mockNavigate.mockReset()
   mockToastError.mockReset()
+  mockToastInfo.mockReset()
   mockResetSession.mockClear()
   mockSessionState.mockReset()
   mockSessionState.mockReturnValue(PRISTINE)
@@ -140,6 +150,7 @@ describe("BridgeNfcRouter", () => {
       preservable: true,
       identified: false,
       holderName: null,
+      badgeTokenIds: [],
     })
     render(<BridgeNfcRouter />)
     tap(TAG_URL)
@@ -160,6 +171,7 @@ describe("BridgeNfcRouter", () => {
       preservable: true,
       identified: false,
       holderName: null,
+      badgeTokenIds: [],
     })
     render(<BridgeNfcRouter />)
     tap(TAG_URL)
@@ -181,6 +193,7 @@ describe("BridgeNfcRouter", () => {
       preservable: true,
       identified: true,
       holderName: "Michael Schneider",
+      badgeTokenIds: [],
     })
     render(<BridgeNfcRouter />)
     tap(TAG_URL)
@@ -200,6 +213,7 @@ describe("BridgeNfcRouter", () => {
       preservable: true,
       identified: true,
       holderName: null,
+      badgeTokenIds: [],
     })
     render(<BridgeNfcRouter />)
     tap(TAG_URL)
@@ -214,6 +228,7 @@ describe("BridgeNfcRouter", () => {
       preservable: true,
       identified: false,
       holderName: null,
+      badgeTokenIds: [],
     })
     render(<BridgeNfcRouter />)
     tap(TAG_URL)
@@ -229,6 +244,7 @@ describe("BridgeNfcRouter", () => {
       preservable: true,
       identified: true,
       holderName: "Michael Schneider",
+      badgeTokenIds: [],
     })
     mockProbeTag.mockResolvedValue({
       data: {
@@ -251,6 +267,7 @@ describe("BridgeNfcRouter", () => {
       preservable: true,
       identified: true,
       holderName: "Michael Schneider",
+      badgeTokenIds: [],
     })
     mockProbeTag.mockResolvedValueOnce({
       data: { tokenId: "04aa", registered: false, badgeVoucher: "voucher-1" },
@@ -282,6 +299,7 @@ describe("BridgeNfcRouter", () => {
       preservable: true,
       identified: true,
       holderName: "Michael Schneider",
+      badgeTokenIds: [],
     })
     mockProbeTag.mockResolvedValueOnce({
       data: { tokenId: "04aa", registered: false, badgeVoucher: "voucher-1" },
@@ -302,11 +320,38 @@ describe("BridgeNfcRouter", () => {
     expect(quoteEffectVouchers).toEqual(["voucher-1", "voucher-2"])
   })
 
+  it("re-tap of a badge already in the checkout: toast instead of the purchase offer", async () => {
+    mockSessionState.mockReturnValue({
+      preservable: true,
+      identified: true,
+      holderName: "Michael Schneider",
+      // The badge line item is already in the open checkout — a confirmed
+      // purchase parked its tokenId in the session state.
+      badgeTokenIds: ["04aa"],
+    })
+    mockProbeTag.mockResolvedValueOnce({
+      data: { tokenId: "04aa", registered: false, badgeVoucher: "voucher-2" },
+    })
+    render(<BridgeNfcRouter />)
+    tap(TAG_URL)
+    await vi.waitFor(() =>
+      expect(mockToastInfo).toHaveBeenCalledWith(
+        "Dieser Badge ist bereits im Checkout.",
+      ),
+    )
+    // No dialog of any kind and no navigation — the session stays put.
+    expect(screen.queryByTestId("badge-purchase-stub")).toBeNull()
+    expect(screen.queryByRole("alertdialog")).toBeNull()
+    expect(quoteEffectVouchers).toEqual([])
+    expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
   it("unregistered badge mid-anonymous-session: sign-in-first notice, no discard dialog", async () => {
     mockSessionState.mockReturnValue({
       preservable: true,
       identified: false,
       holderName: null,
+      badgeTokenIds: [],
     })
     mockProbeTag.mockResolvedValue({
       data: {
@@ -330,6 +375,7 @@ describe("BridgeNfcRouter", () => {
       preservable: true,
       identified: true,
       holderName: null,
+      badgeTokenIds: [],
     })
     mockProbeTag.mockRejectedValue(new Error("network"))
     render(<BridgeNfcRouter />)

@@ -29,6 +29,11 @@ import {
 const UNREADABLE_TAG_MESSAGE =
   "Badge konnte nicht gelesen werden. Bitte nochmals auflegen."
 
+// Mirrors the server's already-exists rejection in badge/purchase.ts — the
+// tap is acknowledged without opening a doomed purchase dialog (issue #515).
+const BADGE_ALREADY_IN_CHECKOUT_MESSAGE =
+  "Dieser Badge ist bereits im Checkout."
+
 interface PendingTag {
   picc: string
   cmac: string
@@ -147,6 +152,15 @@ export function BridgeNfcRouter() {
           bearer: bearer ?? undefined,
         })
         if (!data.registered && data.badgeVoucher) {
+          // Already a line item in the open checkout (post-purchase re-tap):
+          // re-offering could only end in the server's already-exists
+          // rejection, so tell the user directly instead of opening the
+          // dialog (issue #515). Removing the badge from the cart makes the
+          // offer available again.
+          if (session.badgeTokenIds.includes(data.tokenId)) {
+            toast.info(BADGE_ALREADY_IN_CHECKOUT_MESSAGE)
+            return
+          }
           const badgeVoucher = data.badgeVoucher
           if (session.identified) {
             // Each physical tap mints a FRESH voucher for the same badge,

@@ -345,6 +345,19 @@ export function WizardProvider({
     [checkoutItems],
   )
 
+  // Token ids of self-service badges already in the open checkout — carried
+  // on the raw item docs (server-written `tokenId`, not part of
+  // CheckoutItemLocal). Published through the kiosk session guard so
+  // BridgeNfcRouter can turn a re-tap of an already-added badge into a toast
+  // instead of a fresh purchase offer (issue #515).
+  const badgeTokenIds = useMemo(
+    () =>
+      checkoutItems
+        .map((item) => item.tokenId)
+        .filter((id): id is string => typeof id === "string"),
+    [checkoutItems],
+  )
+
   // Issue #262/#263: resolve the Vereinsmitgliedschaft catalog id so the
   // /visit and /checkout steps can break membership out of the Materialbezug /
   // Diverses buckets into a dedicated section. The `config/catalog-references`
@@ -474,6 +487,7 @@ export function WizardProvider({
     persons,
     identified: false,
     holderName: null as string | null,
+    badgeTokenIds: [] as string[],
   })
 
   // Bridge the "we just wrote a checkout, listener hasn't surfaced it
@@ -509,6 +523,7 @@ export function WizardProvider({
     // the honest, destructive dialog (issue #468).
     identified: isAccountLoggedIn || isTagIdentified,
     holderName,
+    badgeTokenIds,
   }
   useEffect(
     () =>
@@ -516,6 +531,7 @@ export function WizardProvider({
         preservable: hasPreservableState(guardStateRef.current),
         identified: guardStateRef.current.identified,
         holderName: guardStateRef.current.holderName,
+        badgeTokenIds: guardStateRef.current.badgeTokenIds,
       })),
     [],
   )
