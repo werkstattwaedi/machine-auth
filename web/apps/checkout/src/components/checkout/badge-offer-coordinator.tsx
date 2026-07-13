@@ -47,13 +47,20 @@ export function BadgeOfferCoordinator() {
     if (!unregisteredBadge) return
     if (handledVouchers.current.has(unregisteredBadge.badgeVoucher)) return
     handledVouchers.current.add(unregisteredBadge.badgeVoucher)
+    // Re-tap of the badge whose offer is already open: the voucher-keyed
+    // dedupe above deliberately can't catch it (each tap mints a fresh
+    // voucher), and replacing the offer would reset the open dialog's
+    // quote back to the price spinner (issue #515). Mark the fresh voucher
+    // handled and keep the existing offer untouched; a different badge
+    // still replaces it below (newest badge wins).
+    if (offer && offer.tokenId === unregisteredBadge.tokenId) return
     if (isAnonymous) {
       setPendingBadge(unregisteredBadge)
       setSignInFirstOpen(true)
     } else {
       setOffer(unregisteredBadge)
     }
-  }, [unregisteredBadge, isAnonymous])
+  }, [unregisteredBadge, isAnonymous, offer])
 
   // Resume a parked offer once the visitor identifies (kiosk sign-in is
   // SPA-internal, so the store survives; sessionStorage covers reloads
