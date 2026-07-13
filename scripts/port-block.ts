@@ -29,6 +29,8 @@ import {
 } from "node:fs";
 import { dirname, resolve } from "node:path";
 
+import { buildTestSecretFileContent } from "./port-block-secrets.ts";
+
 interface BlockSpec {
   name: string;
   offset: number;
@@ -178,6 +180,56 @@ function installTestFixtureEnvFiles(projectRoot: string): Array<() => void> {
   return restorers;
 }
 
+/**
+ * Materialize a test `functions/.secret.local` for the duration of the
+ * run. Unlike the .env fixtures this must happen on *every* first-level
+ * invocation (not just when the operations repo is absent): the secret
+ * leak to Cloud Secret Manager happens precisely on developer machines,
+ * which do have the operations repo. Backs up any existing file and
+ * returns a restore function, mirroring installTestFixtureEnvFiles.
+ */
+function installTestSecretFile(projectRoot: string): Array<() => void> {
+  const src = resolve(projectRoot, "functions/.env.test");
+  const dst = resolve(projectRoot, "functions/.secret.local");
+  if (!existsSync(src)) {
+    console.error(
+      `[port-block] Missing test fixture ${src} — regenerate via 'npm run generate-env -- --emit-test-files'`
+    );
+    process.exit(78); // EX_CONFIG
+  }
+  const backup = dst + ".port-block-backup";
+  const hadOriginal = existsSync(dst);
+  if (hadOriginal) {
+    try {
+      renameSync(dst, backup);
+    } catch (err) {
+      console.error(
+        `[port-block] Failed to back up ${dst}: ${(err as Error).message}`
+      );
+      process.exit(70);
+    }
+  }
+  writeFileSync(dst, buildTestSecretFileContent(readFileSync(src, "utf-8")));
+  console.error(`[port-block]   test secrets -> ${dst}`);
+
+  return [
+    () => {
+      try {
+        if (existsSync(dst)) unlinkSync(dst);
+      } catch {
+        /* ignore */
+      }
+      if (hadOriginal && existsSync(backup)) {
+        try {
+          renameSync(backup, dst);
+        } catch {
+          /* ignore */
+        }
+      }
+    },
+  ];
+}
+
 async function main(): Promise<never> {
   const sepIdx = process.argv.indexOf("--");
   if (sepIdx === -1 || sepIdx === process.argv.length - 1) {
@@ -222,6 +274,12 @@ async function main(): Promise<never> {
       );
       restoreEnvFiles.push(...installTestFixtureEnvFiles(projectRoot));
     }
+    // Always pin functions secrets for the run — even when the operations
+    // repo is present. Without this the functions emulator resolves any
+    // defineSecret missing from .secret.local against Cloud Secret
+    // Manager, so tag-crypto e2e tests run against production keys on a
+    // developer machine while CI (unauthenticated) uses .env.test values.
+    restoreEnvFiles.push(...installTestSecretFile(projectRoot));
   }
 
   // Nesting guard: if a parent already acquired a block (e.g. test:precommit
