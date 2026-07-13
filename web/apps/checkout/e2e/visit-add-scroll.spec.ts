@@ -119,6 +119,18 @@ test.describe("Visit page — scroll preserved when opening picker (issue #394)"
       Math.abs(scrollAfter - scrollBefore),
       `scroll position must be preserved when the picker opens (was ${scrollBefore}, became ${scrollAfter})`,
     ).toBeLessThanOrEqual(5)
+
+    // Settled-state check (issue #523): sample again well past all historical
+    // re-assert windows. An early sample can pass while a late scroll-to-top
+    // (router default or focus scrollIntoView) still lands afterwards — that
+    // gap let CI's picker test pass while the later-sampling SLA screenshot
+    // caught the background pinned at 0.
+    await page.waitForTimeout(2000)
+    const scrollSettled = await page.evaluate(() => window.scrollY)
+    expect(
+      Math.abs(scrollSettled - scrollBefore),
+      `scroll position must stay preserved while the picker remains open (was ${scrollBefore}, settled at ${scrollSettled})`,
+    ).toBeLessThanOrEqual(5)
   })
 
   // Issue #451: dismissing the sheet must NOT reset the /visit scroll either.

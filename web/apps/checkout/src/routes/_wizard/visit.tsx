@@ -394,6 +394,10 @@ function VisitRoute() {
                   to: "/visit/add/workshop/$workshopId",
                   params: { workshopId: wsId },
                   search: kiosk ? { kiosk: "" } : {},
+                  // Keep /visit's scroll: the router's default scroll-to-top
+                  // races the sheet's scroll-lock and pins the background at
+                  // 0 for the whole open period (issue #523).
+                  resetScroll: false,
                 })
               }}
             />
