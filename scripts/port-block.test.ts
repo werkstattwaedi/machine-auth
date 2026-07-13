@@ -10,9 +10,8 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { resolve, dirname } from "node:path";
+import { readFileSync, readdirSync } from "node:fs";
+import { resolve, dirname, join } from "node:path";
 
 import {
   FUNCTION_SECRET_NAMES,
@@ -35,14 +34,18 @@ test("pin list covers every defineSecret in functions/src", () => {
   // added without extending FUNCTION_SECRET_NAMES, the emulator would
   // fall back to Cloud Secret Manager for it during local test runs.
   const srcDir = resolve(projectRoot, "functions/src");
-  const grep = execSync(
-    `grep -rho 'defineSecret("[A-Z0-9_]*")' ${JSON.stringify(srcDir)} | sort -u`,
-    { encoding: "utf-8" }
-  );
-  const declared = [...grep.matchAll(/defineSecret\("([A-Z0-9_]+)"\)/g)].map(
-    (m) => m[1]
-  );
-  assert.ok(declared.length > 0, "expected at least one defineSecret");
+  const declared = new Set<string>();
+  for (const entry of readdirSync(srcDir, {
+    recursive: true,
+    withFileTypes: true,
+  })) {
+    if (!entry.isFile() || !entry.name.endsWith(".ts")) continue;
+    const content = readFileSync(join(entry.parentPath, entry.name), "utf-8");
+    for (const m of content.matchAll(/defineSecret\("([A-Z0-9_]+)"\)/g)) {
+      declared.add(m[1]);
+    }
+  }
+  assert.ok(declared.size > 0, "expected at least one defineSecret");
   for (const name of declared) {
     assert.ok(
       FUNCTION_SECRET_NAMES.includes(name),
