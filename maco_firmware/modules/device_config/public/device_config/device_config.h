@@ -23,20 +23,30 @@
 namespace maco::config {
 
 enum class HwRevision { kUnspecified = 0, kBreadboard = 1, kPrototype = 2 };
-enum class MachineControlType { kUnspecified = 0, kRelay = 1, kXToolP2s = 2 };
+enum class MachineControlType { kUnspecified = 0, kRelay = 1, kGatewaySensing = 2 };
 
-/// xTool P2S laser control parameters, with proto zero-values resolved to
-/// their documented defaults (host/idle/warning/poll).
-struct XToolConfig {
-  static constexpr uint16_t kDefaultPort = 8080;
+/// Which gateway sensing backend probes the device (mirrors the SensingSpec
+/// proto oneof arm).
+enum class SensingKind { kUnspecified = 0, kXToolLaser = 1, kMock = 2 };
+
+/// Gateway-sensing parameters, with proto zero-values resolved to their
+/// defaults (see ADR-0035). The idle timings are consumed firmware-side (they
+/// drive the SessionController idle timeout); the sensing spec (kind/host/port/
+/// poll) is forwarded to the gateway, which runs the device protocol.
+struct GatewaySensingConfig {
   static constexpr uint32_t kDefaultIdleTimeoutSec = 900;   // 15 min
   static constexpr uint32_t kDefaultIdleWarningSec = 60;    // 1 min
+  static constexpr uint16_t kDefaultXToolPort = 28900;
   static constexpr uint32_t kDefaultPollIntervalSec = 3;
 
-  pw::InlineString<64> host;
-  uint16_t port = kDefaultPort;
+  // Firmware-side (idle auto-end).
   uint32_t idle_timeout_sec = kDefaultIdleTimeoutSec;
   uint32_t idle_warning_sec = kDefaultIdleWarningSec;
+
+  // Sensing spec (forwarded to the gateway).
+  SensingKind kind = SensingKind::kUnspecified;
+  pw::InlineString<64> host;
+  uint16_t port = kDefaultXToolPort;
   uint32_t poll_interval_sec = kDefaultPollIntervalSec;
 };
 
@@ -49,12 +59,12 @@ class MachineConfig {
                 pw::InlineString<64> label,
                 pw::Vector<FirebaseId, 5> required_permissions,
                 MachineControlType control,
-                XToolConfig xtool = {})
+                GatewaySensingConfig gateway_sensing = {})
       : id_(id),
         label_(label),
         required_permissions_(required_permissions),
         control_(control),
-        xtool_(xtool) {}
+        gateway_sensing_(gateway_sensing) {}
 
   const FirebaseId& id() const { return id_; }
   std::string_view label() const { return std::string_view(label_); }
@@ -64,15 +74,17 @@ class MachineConfig {
   }
   MachineControlType control() const { return control_; }
 
-  /// xTool parameters. Only meaningful when control() == kXToolP2s.
-  const XToolConfig& xtool() const { return xtool_; }
+  /// Sensing parameters. Only meaningful when control() == kGatewaySensing.
+  const GatewaySensingConfig& gateway_sensing() const {
+    return gateway_sensing_;
+  }
 
  private:
   FirebaseId id_ = FirebaseId::Empty();
   pw::InlineString<64> label_;
   pw::Vector<FirebaseId, 5> required_permissions_;
   MachineControlType control_ = MachineControlType::kUnspecified;
-  XToolConfig xtool_;
+  GatewaySensingConfig gateway_sensing_;
 };
 
 /// Cloud-configurable device configuration.

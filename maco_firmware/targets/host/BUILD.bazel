@@ -94,23 +94,11 @@ cc_library(
 )
 
 cc_library(
-    name = "host_tcp_socket",
-    srcs = ["host_tcp_socket.cc"],
-    hdrs = ["host_tcp_socket.h"],
-    target_compatible_with = incompatible_with_mcu(),
-    deps = [
-        "@particle_bazel//pb_socket:tcp_socket",
-        "@pigweed//pw_log",
-    ],
-)
-
-cc_library(
     name = "system",
     srcs = ["system.cc"],
     implementation_deps = [
         ":host_random",
         ":host_system_monitor",
-        ":host_tcp_socket",
         ":keyboard_input_driver",
         ":sdl_display_driver",
         ":sdl_led_driver",

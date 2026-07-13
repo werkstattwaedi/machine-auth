@@ -58,12 +58,14 @@ interface MacoData {
 type MachineControlDoc =
   | { type?: "relay" }
   | {
-      type: "xtool_p2s";
+      type: "gateway_sensing";
+      // Which gateway backend probes the device (selects the SensingSpec arm).
+      kind: "xtool_laser";
       host: string;
       port?: number;
+      pollIntervalSec?: number;
       idleTimeoutSec?: number;
       idleWarningSec?: number;
-      pollIntervalSec?: number;
     };
 
 interface MachineData {
@@ -136,21 +138,38 @@ async function getFirestoreData(deviceId: string) {
 // Map the Firestore `control` doc to the proto MachineControl oneof.
 // Zero-values are left for the firmware to resolve to its documented defaults.
 function buildControl(control: MachineControlDoc | undefined) {
-  if (control?.type === "xtool_p2s") {
+  if (control?.type === "gateway_sensing") {
     return {
       control: {
-        $case: "xtoolP2s" as const,
-        xtoolP2s: {
-          host: control.host ?? "",
-          port: control.port ?? 0,
+        $case: "gatewaySensing" as const,
+        gatewaySensing: {
           idleTimeoutSec: control.idleTimeoutSec ?? 0,
           idleWarningSec: control.idleWarningSec ?? 0,
-          pollIntervalSec: control.pollIntervalSec ?? 0,
+          spec: buildSensingSpec(control),
         },
       },
     };
   }
   return { control: { $case: "relay" as const, relay: {} } };
+}
+
+// Map the Firestore `kind` + params to the SensingSpec proto oneof arm.
+function buildSensingSpec(control: { kind: "xtool_laser"; host: string; port?: number; pollIntervalSec?: number }) {
+  switch (control.kind) {
+    case "xtool_laser":
+      return {
+        backend: {
+          $case: "xtoolLaser" as const,
+          xtoolLaser: {
+            host: control.host ?? "",
+            port: control.port ?? 0,
+            pollIntervalSec: control.pollIntervalSec ?? 0,
+          },
+        },
+      };
+    default:
+      throw new Error(`unknown sensing kind: ${(control as { kind: string }).kind}`);
+  }
 }
 
 function createDeviceConfig(

@@ -303,7 +303,7 @@ describe("handleUploadUsage (Integration)", () => {
             checkoutTemplateId: `/catalog/${XTOOL_CATALOG_ID}`,
             requiredPermission: [],
             maco: `/maco/maco-${XTOOL_MACHINE_ID}`,
-            control: { type: "xtool_p2s", host: "192.168.1.50" },
+            control: { type: "gateway_sensing", kind: "xtool_laser", host: "laser.internal" },
           },
         },
       });

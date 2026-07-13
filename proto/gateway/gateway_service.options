@@ -12,3 +12,8 @@ maco.gateway.ForwardResponse.error      max_size:128
 maco.gateway.LogEntry.module            max_size:32
 maco.gateway.LogEntry.message           max_size:256
 maco.gateway.LogEntry.data              max_size:256
+
+# Sensing lease
+maco.gateway.XToolLaserControl.host             max_size:64
+maco.gateway.RenewSensingLeaseRequest.lease_id  max_size:40
+maco.gateway.SensingLeaseResponse.lease_id      max_size:40

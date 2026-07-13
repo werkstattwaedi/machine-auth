@@ -39,6 +39,19 @@ service GatewayService {
   // Returns the gateway's current timestamp. Can be used for connection
   // health checks and clock synchronization.
   rpc Ping(PingRequest) returns (PingResponse);
+
+  // Acquire a machine-activity sensing lease (see ADR-0035).
+  //
+  // The gateway lazily starts a background prober for the machine described by
+  // `spec` and returns a lease id plus the current state. The terminal renews
+  // the lease on each poll to keep the prober alive; when the lease lapses the
+  // gateway drops the device connection. This keeps the device-specific
+  // (e.g. xTool WebSocket) protocol entirely in the gateway.
+  rpc AcquireSensingLease(AcquireSensingLeaseRequest) returns (SensingLeaseResponse);
+
+  // Renew a sensing lease and read the machine's current state. This is the
+  // poll: it both extends the lease TTL and returns the latest state.
+  rpc RenewSensingLease(RenewSensingLeaseRequest) returns (SensingLeaseResponse);
 }
 
 // Request to forward to Firebase.
@@ -120,4 +133,61 @@ message PingResponse {
 
   // Echo of client timestamp
   uint64 client_timestamp_ms = 2;
+}
+
+// Describes what the gateway should sense. Mirrors the device_config
+// SensingSpec; the backend is selected by which oneof arm is set.
+message SensingSpec {
+  oneof backend {
+    XToolLaserControl xtool_laser = 1;
+    MockSensingControl mock = 2;
+  }
+}
+
+// xTool laser sensed over its LAN WebSocket protocol.
+message XToolLaserControl {
+  // Laser hostname or IP on the LAN
+  string host = 1;
+  // Laser API port (0 => default 28900)
+  uint32 port = 2;
+  // Interval between laser state polls, in seconds (0 => default 3)
+  uint32 poll_interval_sec = 3;
+}
+
+// Scriptable sensing backend for the host simulator and tests.
+message MockSensingControl {}
+
+// Machine activity state as observed by the gateway's prober.
+enum SensingState {
+  SENSING_STATE_UNSPECIFIED = 0;
+  // Gateway can't reach the device — the terminal treats this as idle.
+  SENSING_STATE_UNREACHABLE = 1;
+  // Reachable, not actively working.
+  SENSING_STATE_IDLE = 2;
+  // Reachable and actively working (e.g. laser cutting).
+  SENSING_STATE_RUNNING = 3;
+}
+
+// Acquire a sensing lease for a machine.
+message AcquireSensingLeaseRequest {
+  // What to sense.
+  SensingSpec spec = 1;
+  // How long the lease survives without renewal, in seconds (0 => default 60).
+  uint32 lease_ttl_sec = 2;
+}
+
+// Renew (poll) an existing sensing lease.
+message RenewSensingLeaseRequest {
+  // Lease id returned by AcquireSensingLease.
+  string lease_id = 1;
+}
+
+// Response to acquire/renew: the lease handle and current state.
+message SensingLeaseResponse {
+  // Lease id to renew with; empty when valid is false.
+  string lease_id = 1;
+  // False if the lease is unknown/expired — the caller must re-acquire.
+  bool valid = 2;
+  // Current machine activity state.
+  SensingState state = 3;
 }

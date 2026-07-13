@@ -58,9 +58,10 @@ export async function handleUploadUsage(
   const machineData = machineDoc.exists ? machineDoc.data() as MachineEntity : null;
   const workshop = machineData?.workshop ?? null;
 
-  // Machines whose control tracks actual activity (the xTool laser) bill only
-  // the reported in-use time; everything else bills wall-clock session length.
-  const billsOnActiveTime = machineData?.control?.type === "xtool_p2s";
+  // Machines whose control tracks actual activity (via gateway sensing, e.g. the
+  // xTool laser) bill only the reported in-use time; everything else bills
+  // wall-clock session length.
+  const billsOnActiveTime = machineData?.control?.type === "gateway_sensing";
 
   // Create usage_machine records from device-uploaded history.
   // Use deterministic IDs + .create() so retries are idempotent: a record
@@ -99,10 +100,10 @@ export async function handleUploadUsage(
     // Surface the likely firmware/config-rollout mismatch: an activity-billed
     // machine reporting zero active time over a non-trivial session usually
     // means old firmware (no activeSeconds) met a machine flipped to
-    // xtool_p2s. Billing 0 is still correct if the laser genuinely never cut,
-    // but this should be visible rather than silent.
+    // gateway_sensing. Billing 0 is still correct if the laser genuinely never
+    // cut, but this should be visible rather than silent.
     if (billsOnActiveTime && activeSeconds === 0 && wallClockSeconds > 60) {
-      logger.warn("xTool machine billed 0 active seconds over a >60s session", {
+      logger.warn("sensed machine billed 0 active seconds over a >60s session", {
         machineId,
         userId: record.userId.value,
         wallClockSeconds,

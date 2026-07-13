@@ -10,7 +10,7 @@
 # - Returns encrypted responses to devices
 
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
-load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -28,6 +28,12 @@ py_library(
         "maco_gateway/print_worker.py",
         "maco_gateway/printer.py",
         "maco_gateway/printer_status.py",
+        # Machine-activity sensing (ADR-0035). Pure stdlib asyncio (TLS
+        # WebSocket to the device is hand-rolled), so no extra pip dep.
+        "maco_gateway/sensing/__init__.py",
+        "maco_gateway/sensing/backends.py",
+        "maco_gateway/sensing/service.py",
+        "maco_gateway/sensing/wsv2.py",
     ],
     imports = ["."],  # Makes maco_gateway package importable
     deps = [
@@ -37,6 +43,29 @@ py_library(
         "@pigweed//pw_hdlc/py:pw_hdlc",
         "@pigweed//pw_rpc/py:pw_rpc",
     ],
+)
+
+[
+    py_test(
+        name = name,
+        srcs = ["maco_gateway/sensing/%s.py" % name],
+        main = "maco_gateway/sensing/%s.py" % name,
+        deps = [":gateway_lib"],
+    )
+    for name in [
+        "test_wsv2",
+        "test_backends",
+        "test_service",
+    ]
+]
+
+# On-site laser probe: connects the xTool backend directly to a laser and prints
+# its live SensingState. Fastest way to re-validate the protocol at the makerspace.
+py_binary(
+    name = "probe_laser",
+    srcs = ["tools/probe_laser.py"],
+    main = "tools/probe_laser.py",
+    deps = [":gateway_lib"],
 )
 
 # Test fixtures for integration tests

@@ -81,16 +81,19 @@
       "control": {
         // "relay" (default): relay follows the session; billed on wall-clock
         //   session duration.
-        // "xtool_p2s": relay stays on for the session, but the terminal polls
-        //   the laser's HTTP API — only cutting time (usage.activeSeconds) is
-        //   billed and the session auto-ends when idle too long.
-        "type": "string", // "relay" | "xtool_p2s"
-        // xtool_p2s only:
-        "host": "string", // laser hostname/IP on the LAN
-        "port": "number | undefined", // default 8080
+        // "gateway_sensing": relay stays on for the session, but the terminal
+        //   leases a sensing session from the gateway, which runs the device
+        //   protocol (e.g. the xTool laser's WebSocket) and reports running/idle
+        //   — only active time (usage.activeSeconds) is billed and the session
+        //   auto-ends when idle too long. See ADR-0035.
+        "type": "string", // "relay" | "gateway_sensing"
+        // gateway_sensing only:
+        "kind": "string", // gateway backend, e.g. "xtool_laser"
+        "host": "string", // device hostname/IP on the LAN
+        "port": "number | undefined", // default per backend (xtool_laser: 28900)
+        "pollIntervalSec": "number | undefined", // default 3
         "idleTimeoutSec": "number | undefined", // default 900 (15 min)
-        "idleWarningSec": "number | undefined", // default 60 (1 min)
-        "pollIntervalSec": "number | undefined" // default 3
+        "idleWarningSec": "number | undefined" // default 60 (1 min)
       },
       // Admin block. Absent/null = frei. Set/cleared on the admin machine
       // page ("Sperren" with a reason); terminals deny sessions while set.
@@ -135,7 +138,7 @@
       "startTime": "timestamp", // session check-in (wall clock)
       "endTime": "timestamp", // session check-out (wall clock)
       "activeSeconds": "number", // in-use time reported by the terminal (laser cutting time); 0 for relay machines
-      "billableSeconds": "number", // frozen billing basis: activeSeconds for xtool_p2s machines, else endTime-startTime. Summed by accumulation.
+      "billableSeconds": "number", // frozen billing basis: activeSeconds for gateway_sensing machines, else endTime-startTime. Summed by accumulation.
       "endReason": "string | null", // JSON representation of CheckOutReason proto
       "checkoutItemRef": "DocumentReference | null", // DocumentReference to /checkouts/{checkoutId}/items/{itemId}
       "workshop": "string" // Workshop ID (e.g., "holz") — denormalized from machine

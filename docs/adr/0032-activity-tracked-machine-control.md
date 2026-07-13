@@ -1,6 +1,13 @@
 # ADR-0032: Activity-tracked machine control (xTool laser)
 
-**Status:** Accepted
+**Status:** Accepted, but the **on-terminal HTTP-poll transport no longer works on
+the real P2S** — its current firmware removed the port-8080 API and moved control
+behind a TLS/WebSocket protocol on port 28900. The Laser Cutter is reverted to
+`relay` (wall-clock) billing in the meantime. A **proven** software path to the
+cutting signal exists via that new protocol, best implemented gateway-side; see the
+2026-07-07 update at the end. The `xtool_p2s` firmware/cloud code path stays intact
+and still works against any host exposing the port-8080 API (e.g. the host
+simulator stub).
 
 **Date:** 2026-07-05
 
@@ -80,3 +87,63 @@ while cutting.
 - *Reuse `kStopPending` for the idle warning* was rejected: it carries
   `kUiCheckout` semantics and a fixed 3s window; a dedicated state keeps the
   `kTimeout` reason and configurable window clean.
+
+## Update 2026-07-07 — the premise no longer holds on current P2S firmware
+
+When we went to configure the real laser (`laser.internal` → `192.168.50.190`),
+the port-8080 HTTP API this ADR depends on **was not there**. Findings from probing
+the actual machine (it was online, powered, and cutting during the tests):
+
+- **Port 8080 is refused** (nothing listening) — even while a job was actively
+  cutting, so the API is not merely job-gated, it is gone.
+- The laser exposes only **TCP 21 (FTP), 23 (Telnet), and 80** — and port 80
+  accepts the socket but never returns an HTTP response to any request
+  (`get_working_sta`, `/`, GET/POST, HTTP/1.0 and 1.1, with/without Host).
+- No reply to the documented **UDP:20000 discovery** broadcast.
+- A packet capture of xTool Creative Space driving the laser showed the real local
+  channel is **TCP port 28900, TLS 1.2 encrypted** (proprietary app protocol; a
+  small control stream plus a ~3.4 MB camera/preview download). No plaintext status
+  endpoint exists anywhere.
+
+The owner had confirmed the port-8080 API worked before the update, so an **xTool
+firmware update removed the plaintext local API** and moved local control behind
+TLS on 28900. This is **vendor-confirmed and intentional**: xTool's support notice
+of 2026-03-16 (<https://support.xtool.com/article/3078>) announces a "security
+protocol restructuring" and states that *"certain models, such as P2S, F1, F1 Lite,
+and F1 Ultra, will experience restrictions with LightBurn connections after the
+firmware upgrade."* — i.e. third-party local access was deliberately locked down,
+not broken by accident, and will not return on its own. Reading "is cutting" now
+would require a TLS client on the P2 plus reverse-engineering a proprietary,
+encrypted protocol that the vendor is actively restricting — rejected as
+high-effort and fragile.
+
+**Interim decision:** the real `machine/…/control` was reverted to `relay` (seed,
+prod Firestore, and the Particle `terminal-config` ledger for device
+`0a10aced202194944a042eb0`), so the Laser Cutter bills wall-clock like every other
+machine and does not falsely idle-out. The `xtool_p2s` firmware code path remains
+intact and covered by tests/simulator.
+
+**A software signal does still exist (proven on our hardware).** xTool's V2
+transport, though encrypted, is fully reverse-engineered by the MIT-licensed
+`thecodingdad/ha-xtool` Home Assistant integration. The live surface:
+
+- **Transport:** three TLS WebSockets to `wss://<laser>:28900/websocket?id=<ms>&function=instruction|file_stream|media_stream` (self-signed cert, verification off).
+- **Framing:** every payload wrapped in a `0xBABE` + 3-byte-len + type + CRC-16/ARC envelope (`protocol_type` 4 = JSON); raw TEXT frames are dropped.
+- **Auth:** none — a guest `parity` first-message handshake (`/v1/user/parity`, `userID:"mk-guest"`, `userKey` = base64("makeblock-xtool")); 3 s heartbeat (`/v1/user/ping`, txn 65510).
+- **State (P2S dialect):** `GET /v1/device/runningStatus` → `data.curMode`. Verified live: idle → `mode:"P_IDLE"`, job loaded → `{mode:"Work",subMode:"workReady"}`, **actively cutting → `{mode:"Work",subMode:"working"}`**. Push events `/device/status` (`WORK_PREPARED`/`WORK_STARTED`/`WORK_FINISHED`) and `/work/result` (`info.timeUse` = **job seconds**) give the same signal event-driven.
+
+A ~120-line Python PoC (in the scratchpad, cribbed from ha-xtool) did the full
+TLS→WS→envelope→parity→poll and read the laser flipping to `subMode:"working"`
+during a real cut. So activity billing is achievable **without hardware**.
+
+**Recommended path (supersedes the current-sensing idea):** implement the WS-V2
+client **in Python on `maco_gateway`**, not on the P2 terminal. The gateway is
+already Python, on the workshop LAN, and Firebase-connected; TLS/WebSocket/JSON are
+trivial there and ha-xtool's proven code drops in, whereas porting TLS + WebSocket +
+the CRC envelope + a JSON parser into the async2 P2 firmware is heavy and fragile.
+This reverses the original ADR's "proxy the poll through the gateway → rejected"
+tradeoff below, whose reasoning assumed a one-line plaintext HTTP poll. The gateway
+observes `subMode`/`work-result` and feeds cutting-seconds into the usage/billing
+model. **Residual risk:** still vendor-protocol-dependent, but this is xTool
+Studio's *current* stable V2 protocol, far more durable than the removed 8080 API.
+A follow-up ADR should capture the gateway-side design before implementation.
