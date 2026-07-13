@@ -16,11 +16,19 @@ export interface NfcTagEvent {
 
 export type BridgeMode = "kiosk"
 
+// Mirrors ResetSessionOptions in checkout-kiosk/src/types.ts. `keepWindowOpen`
+// skips the kiosk's autohide-to-tray after the wipe — used by the badge
+// takeover so the window stays in front for the user who just tapped (#516).
+// Older kiosk builds ignore the extra argument (bug persists until updated).
+export interface ResetSessionOptions {
+  keepWindowOpen?: boolean
+}
+
 interface BridgeApi {
   mode: BridgeMode
   features: readonly string[]
   bearer: () => Promise<string | null>
-  resetSession: () => Promise<void>
+  resetSession: (opts?: ResetSessionOptions) => Promise<void>
   getUrl: () => Promise<string>
   onUrlChange: (cb: (url: string) => void) => () => void
   onNfcTag: (cb: (payload: NfcTagEvent) => void) => () => void
@@ -40,7 +48,7 @@ interface UseBridgeResult {
   mode: BridgeMode | null
   features: readonly string[]
   bearer: () => Promise<string | null>
-  resetSession: () => Promise<void>
+  resetSession: (opts?: ResetSessionOptions) => Promise<void>
   onNfcTag: (cb: (payload: NfcTagEvent) => void) => () => void
   // Tell the chrome the page has the start-over request in hand so it cancels
   // its hardware-escape-hatch fallback. No-op outside the kiosk bridge.

@@ -2,7 +2,12 @@
 // SPDX-License-Identifier: MIT
 
 import { contextBridge, ipcRenderer } from "electron"
-import type { Bridge, BridgeMode, NfcTagEvent } from "./types"
+import type {
+  Bridge,
+  BridgeMode,
+  NfcTagEvent,
+  ResetSessionOptions,
+} from "./types"
 
 // Per-context subscriber sets. The main process broadcasts NFC events to
 // every webContents that has called `bridge:nfc-subscribe`, so a single
@@ -80,7 +85,8 @@ const bridge: Bridge = {
   mode: bootstrap.mode,
   features: bootstrap.features,
   bearer: () => ipcRenderer.invoke("bridge:bearer"),
-  resetSession: () => ipcRenderer.invoke("bridge:reset-session"),
+  resetSession: (opts?: ResetSessionOptions) =>
+    ipcRenderer.invoke("bridge:reset-session", opts),
   getUrl: () => ipcRenderer.invoke("bridge:get-url"),
   onUrlChange: (cb) => {
     urlCallbacks.add(cb)

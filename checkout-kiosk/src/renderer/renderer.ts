@@ -22,7 +22,7 @@ interface Bridge {
   mode: "kiosk"
   features: readonly string[]
   bearer: () => Promise<string | null>
-  resetSession: () => Promise<void>
+  resetSession: (opts?: { keepWindowOpen?: boolean }) => Promise<void>
   getUrl: () => Promise<string>
   onUrlChange: (cb: (url: string) => void) => () => void
   onOpenOverlay: (cb: (url: string) => void) => () => void

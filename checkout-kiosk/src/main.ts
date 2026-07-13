@@ -20,7 +20,8 @@ import {
 } from "@oww/shared"
 import { resolveConfig } from "./config"
 import { startNfc } from "./bridge/nfc"
-import type { NfcTagEvent } from "./types"
+import { performSessionReset } from "./reset-session"
+import type { NfcTagEvent, ResetSessionOptions } from "./types"
 
 const config = resolveConfig()
 
@@ -322,13 +323,16 @@ ipcMain.on("bridge:start-over-ack", () => {
 
 ipcMain.handle("bridge:get-url", () => config.url)
 ipcMain.handle("bridge:bearer", () => config.bearer || null)
-ipcMain.handle("bridge:reset-session", async () => {
-  await clearSession()
-  // "Neuer Checkout" resets for the next customer — the single chokepoint for
-  // both the web-confirm and the fallback reset paths. Autohide back to the
-  // tray so the kiosk only reappears when the next user taps a badge.
-  hideWindow()
-})
+// The single chokepoint for the web-confirm, badge-takeover, and fallback
+// reset paths. Default: autohide back to the tray so the kiosk only reappears
+// when the next user taps a badge. A badge takeover passes
+// `keepWindowOpen: true` so the window stays in front for the user who just
+// tapped (issue #516) — the decision lives in performSessionReset.
+ipcMain.handle(
+  "bridge:reset-session",
+  (_event, opts?: ResetSessionOptions) =>
+    performSessionReset({ clearSession, hideWindow }, opts)
+)
 
 app.whenReady().then(async () => {
   // Always start from a clean session — any leftover IndexedDB / cookies /
