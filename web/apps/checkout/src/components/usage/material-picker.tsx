@@ -117,6 +117,12 @@ export function MaterialPicker({
   const isMobile = useIsMobile()
   const description = describeScope(scope)
   usePreserveBodyScroll(open)
+  // Element focused before the sheet took focus (the "Material hinzufügen"
+  // trigger on /visit). Radix's default close focus-return calls plain
+  // .focus(), which scrolls the bottom-of-page trigger back into view and
+  // yanks /visit's scroll (issue #523). We prevent that and refocus
+  // manually with preventScroll to keep keyboard flow without the jump.
+  const returnFocusRef = React.useRef<HTMLElement | null>(null)
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
@@ -127,6 +133,18 @@ export function MaterialPicker({
             : "w-full sm:max-w-md md:max-w-[480px] p-0 flex flex-col gap-0"
         }
         showCloseButton={false}
+        onOpenAutoFocus={() => {
+          // Fires before Radix moves focus into the sheet, so activeElement
+          // is still the trigger.
+          returnFocusRef.current =
+            document.activeElement instanceof HTMLElement
+              ? document.activeElement
+              : null
+        }}
+        onCloseAutoFocus={(e) => {
+          e.preventDefault()
+          returnFocusRef.current?.focus({ preventScroll: true })
+        }}
       >
         <VisuallyHidden.Root>
           <SheetTitle>Material hinzufügen</SheetTitle>

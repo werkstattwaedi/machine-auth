@@ -43,12 +43,14 @@ function AddWorkshopRoute() {
       open
       onOpenChange={(open) => {
         if (!open) {
-          // Re-assert the page scroll through the dismissal reflow + the
-          // router's scroll-to-top so /visit doesn't jump to the top (#451).
+          // Re-assert the page scroll through the dismissal reflow so /visit
+          // doesn't jump to the top (#451). resetScroll keeps the router's
+          // delayed scroll-to-top out of the race entirely (#523).
           restorePickerScrollAnchor()
           navigate({
             to: "/visit",
             search: ctx.kiosk ? { kiosk: "" } : {},
+            resetScroll: false,
           })
         }
       }}
