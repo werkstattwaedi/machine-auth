@@ -68,6 +68,16 @@ py_binary(
     deps = [":gateway_lib"],
 )
 
+# WS-V2 diagnostic dump: polls the laser's endpoints during a job and prints
+# every response/push, flagging power/line/speed fields. Used to investigate
+# whether cut-vs-engrave billing is derivable from the protocol.
+py_binary(
+    name = "laser_diag",
+    srcs = ["tools/laser_diag.py"],
+    main = "tools/laser_diag.py",
+    deps = [":gateway_lib"],
+)
+
 # Test fixtures for integration tests
 py_library(
     name = "fixtures",
