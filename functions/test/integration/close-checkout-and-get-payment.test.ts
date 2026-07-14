@@ -1522,6 +1522,20 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
       await db.collection("checkouts").doc(args.checkoutId).set(checkout);
     }
 
+    /**
+     * A close instant `hours` ago, clamped to remain within the CURRENT
+     * business day (03:00 Europe/Zurich rollover). A plain `now - 4h`
+     * fixture straddles the boundary when the suite runs between 03:00
+     * and 07:00 local time, turning the waived-fee assertions red.
+     */
+    function hoursAgoSameBusinessDay(hours: number): Date {
+      const now = new Date();
+      const candidate = new Date(now.getTime() - hours * 3600 * 1000);
+      if (isSameBusinessDay(candidate, now)) return candidate;
+      const oneMinuteAgo = new Date(now.getTime() - 60_000);
+      return isSameBusinessDay(oneMinuteAgo, now) ? oneMinuteAgo : now;
+    }
+
     it("(a) waives the fee on a second same-day checkout for the same user", async () => {
       const uid = "dedup-same-day";
       await seedUser(uid, "erwachsen");
@@ -1532,7 +1546,7 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
         checkoutId: "co-prior-sameday",
         ownerUid: uid,
         persons: [person],
-        closedAt: new Date(Date.now() - 4 * 3600 * 1000),
+        closedAt: hoursAgoSameBusinessDay(4),
       });
 
       // New open checkout, no items — just the entry fee in play.
@@ -1671,7 +1685,7 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
         checkoutId: "co-prior-anon",
         ownerUid: uid,
         persons: [ADULT], // no userRef
-        closedAt: new Date(Date.now() - 4 * 3600 * 1000),
+        closedAt: hoursAgoSameBusinessDay(4),
       });
 
       await seedCheckout("co-guest", { ownerUid: uid, persons: [ADULT] });
@@ -1707,7 +1721,7 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
         checkoutId: "co-prior-adult-only",
         ownerUid: adultUid,
         persons: [adult],
-        closedAt: new Date(Date.now() - 4 * 3600 * 1000),
+        closedAt: hoursAgoSameBusinessDay(4),
       });
 
       // Now the adult returns WITH the kid (kid's first visit today).
@@ -1745,7 +1759,7 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
         checkoutId: "co-prior-waived",
         ownerUid: uid,
         persons: [{ ...person, entryFeeWaivedToday: true }],
-        closedAt: new Date(Date.now() - 4 * 3600 * 1000),
+        closedAt: hoursAgoSameBusinessDay(4),
         entryFees: 0,
       });
 
