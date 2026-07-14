@@ -8,7 +8,7 @@
  * sessions stay on the same day).
  */
 
-import { describe, it, expect } from "vitest"
+import { describe, it, expect, vi } from "vitest"
 import { sessionDayKey, isCheckoutStale } from "./session-day"
 
 // All inputs below are UTC; the function projects them into Europe/Zurich.
@@ -81,8 +81,17 @@ describe("isCheckoutStale", () => {
   })
 
   it("uses the current time when `now` is omitted", () => {
-    // Created an hour from now → not stale (smoke test of the default).
-    const created = new Date(Date.now() + 60 * 60 * 1000)
-    expect(isCheckoutStale(created)).toBe(false)
+    // Pin the wall clock: with a real clock this ran red in the
+    // 02:00–03:00 Europe/Zurich window, where `now + 1h` crosses the
+    // 03:00 rollover and lands on the next session day.
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(utc("2026-05-15T12:00:00"))
+      // Created an hour from now → not stale (smoke test of the default).
+      const created = new Date(Date.now() + 60 * 60 * 1000)
+      expect(isCheckoutStale(created)).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
