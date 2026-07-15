@@ -4,7 +4,11 @@
 import { useEffect, useState } from "react"
 import { useNavigate } from "@tanstack/react-router"
 import { toast } from "sonner"
-import { useBridge, resolveBridgeBearer } from "@modules/lib/use-bridge"
+import {
+  useBridge,
+  resolveBridgeBearer,
+  type ResetSessionOptions,
+} from "@modules/lib/use-bridge"
 import { useFunctions } from "@modules/lib/firebase-context"
 import { rpcCallable } from "@modules/lib/rpc"
 import {
@@ -65,11 +69,14 @@ export async function confirmTagSwitch(deps: {
   // Only the verified-later SDM params matter to the reload — the dialog's
   // identified/anonymous framing is consumed before we get here.
   tag: Pick<PendingTag, "picc" | "cmac">
-  resetSession: () => Promise<void>
+  resetSession: (opts?: ResetSessionOptions) => Promise<void>
   reload: (target: string) => void
 }): Promise<void> {
   try {
-    await deps.resetSession()
+    // keepWindowOpen: the user who just tapped is standing at the kiosk —
+    // skipping the reset's default autohide keeps the window in front while
+    // the reload below lands on /checkin (issue #516).
+    await deps.resetSession({ keepWindowOpen: true })
   } catch (err) {
     console.error("Tag switch: bridge.resetSession failed", err)
   }

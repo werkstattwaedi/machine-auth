@@ -285,6 +285,10 @@ describe("confirmTagSwitch", () => {
       reload,
     })
     expect(resetSession).toHaveBeenCalledOnce()
+    // The takeover reset must opt out of the kiosk's autohide-to-tray — the
+    // next user is standing at the kiosk (#516). Regressing to a bare
+    // resetSession() would hide the window mid-handoff again.
+    expect(resetSession).toHaveBeenCalledWith({ keepWindowOpen: true })
     expect(reload).toHaveBeenCalledWith("/checkin?kiosk=&picc=P2&cmac=C2")
   })
 

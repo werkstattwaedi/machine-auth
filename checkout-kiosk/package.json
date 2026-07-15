@@ -1,6 +1,6 @@
 {
   "name": "checkout-kiosk",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Electron hardware bridge for the OWW checkout kiosk (NFC).",
   "main": "dist/main.js",
   "scripts": {
@@ -12,9 +12,8 @@
     "dev:kiosk": "npm run start:kiosk",
     "build:kiosk": "npm run _compile && electron-builder --config electron-builder.kiosk.yml",
     "build:kiosk:prod": "node scripts/inject-build-config.mjs --prod && npm run tsc:main && npm run tsc:renderer && electron-builder --config electron-builder.kiosk.yml --win",
-    "test": "tsx --test src/**/*.test.ts",
+    "test": "npm run inject-build-config && tsx --test \"src/**/*.test.ts\"",
     "rebuild": "electron-rebuild",
-    "test": "npx tsx --test src/renderer/*.test.ts",
     "postinstall": "electron-rebuild",
     "typecheck": "npm run inject-build-config && tsc --noEmit -p tsconfig.json && tsc --noEmit -p src/renderer/tsconfig.json"
   },

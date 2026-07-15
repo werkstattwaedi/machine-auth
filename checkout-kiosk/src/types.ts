@@ -18,11 +18,18 @@ export interface NfcTagEvent {
   url?: string
 }
 
+// Options for `resetSession`. `keepWindowOpen` skips the autohide-to-tray so
+// a badge takeover keeps the kiosk in front for the next user (issue #516);
+// omitted/false keeps the default hide ("Neuer Checkout" / post-checkout).
+export interface ResetSessionOptions {
+  keepWindowOpen?: boolean
+}
+
 export interface Bridge {
   mode: BridgeMode
   features: readonly string[]
   bearer: () => Promise<string | null>
-  resetSession: () => Promise<void>
+  resetSession: (opts?: ResetSessionOptions) => Promise<void>
   getUrl: () => Promise<string>
   onUrlChange: (cb: (url: string) => void) => () => void
   // Fired (in the chrome renderer) when the checkout webview requests opening
