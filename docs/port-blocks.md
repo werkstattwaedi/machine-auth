@@ -35,6 +35,17 @@ developer machine that happens to lack the operations repo. Nested
 broker invocations skip the regen entirely — the parent already
 handled it.
 
+Independent of the operations-repo check, every first-level invocation
+also materializes a test `functions/.secret.local` (backed up and
+restored the same way). Unlike the env fixtures this is *not* a
+CI-only fallback: the functions emulator resolves any `defineSecret`
+missing from `.secret.local` against Cloud Secret Manager, so an
+authenticated developer machine — precisely the machine that *does*
+have the operations repo — would otherwise run tag-crypto e2e tests
+against production keys while CI (unauthenticated, `.env.test`
+fallback) stays green. The pinned names live in
+`FUNCTION_SECRET_NAMES` in `scripts/port-block-secrets.ts`.
+
 ## Updating test fixtures
 
 The `.env.test` files contain only dummy / public values (test crypto
@@ -53,6 +64,13 @@ things must happen:
    npx tsx scripts/generate-env.ts --emit-test-files
    git add functions/.env.test web/apps/checkout/.env.test web/apps/admin/.env.test
    ```
+
+When functions code gains a new `defineSecret(...)`, its name must
+also be added to `FUNCTION_SECRET_NAMES` in
+[`scripts/port-block-secrets.ts`](../scripts/port-block-secrets.ts) so
+test runs pin it instead of letting the emulator fetch it from Cloud
+Secret Manager — `scripts/port-block.test.ts` fails if the list falls
+behind the `defineSecret` calls in `functions/src`.
 
 CI fails fast if the committed fixtures don't match what
 `--emit-test-files` produces — see the `Verify .env.test fixtures are
