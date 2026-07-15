@@ -37,12 +37,20 @@ describe("StaleCheckoutBanner", () => {
   })
 
   it("renders nothing for a checkout from today", () => {
-    // Use a moment well within today (2 h ago) so the assertion is
-    // stable across time zones / DST.
-    const created = new Date(Date.now() - 2 * 60 * 60 * 1000)
-    withCreated(created)
-    const { container } = render(<StaleCheckoutBanner />)
-    expect(container.textContent).toBe("")
+    // Pin the wall clock: with a real clock, "2 h ago" crosses the 03:00
+    // Europe/Zurich session-day rollover whenever the suite runs between
+    // 03:00 and 05:00 local — the banner then correctly renders and this
+    // assertion goes red (seen in CI at 02:39 UTC and locally at 04:40).
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(new Date("2026-05-15T12:00:00Z"))
+      const created = new Date(Date.now() - 2 * 60 * 60 * 1000)
+      withCreated(created)
+      const { container } = render(<StaleCheckoutBanner />)
+      expect(container.textContent).toBe("")
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it("renders the banner for a checkout from a week ago", () => {
