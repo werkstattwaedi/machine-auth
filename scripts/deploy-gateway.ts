@@ -181,12 +181,28 @@ function buildPayload(): string {
   rmSync(stage, { recursive: true, force: true });
   mkdirSync(stage, { recursive: true });
 
-  // Gateway sources.
+  // Gateway sources: top-level modules plus runtime subpackages (e.g.
+  // sensing/). Test files (test_*.py) and the test-only fixtures/ package are
+  // excluded from the deploy payload.
   const sourceDir = resolve(projectRoot, "maco_gateway/maco_gateway");
+  const RUNTIME_SUBPACKAGES = ["sensing"];
+  const isRuntimePy = (name: string) =>
+    name.endsWith(".py") && !name.startsWith("test_");
+
   mkdirSync(resolve(stage, "maco_gateway"), { recursive: true });
   for (const file of readdirSync(sourceDir)) {
-    if (file.endsWith(".py")) {
+    if (isRuntimePy(file)) {
       copyFileSync(resolve(sourceDir, file), resolve(stage, "maco_gateway", file));
+    }
+  }
+  for (const pkg of RUNTIME_SUBPACKAGES) {
+    const pkgSrc = resolve(sourceDir, pkg);
+    const pkgDest = resolve(stage, "maco_gateway", pkg);
+    mkdirSync(pkgDest, { recursive: true });
+    for (const file of readdirSync(pkgSrc)) {
+      if (isRuntimePy(file)) {
+        copyFileSync(resolve(pkgSrc, file), resolve(pkgDest, file));
+      }
     }
   }
 
