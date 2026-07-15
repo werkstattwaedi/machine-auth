@@ -48,10 +48,26 @@ vi.mock("@modules/hooks/use-async-mutation", () => ({
 vi.mock("@modules/hooks/use-mobile", () => ({ useIsMobile: () => false }))
 
 // The per-workshop section pulls a live catalog from Firestore; stub it so
-// the test stays a pure render check of the gating logic.
+// the test stays a pure render check of the gating logic. The stub renders
+// `items` and `footerSlot` so the badge nesting (issue #505) is observable.
 vi.mock("@/components/usage/workshop-section-with-catalog", () => ({
-  WorkshopSectionWithCatalog: ({ workshopId }: { workshopId: string }) => (
-    <div data-testid={`workshop-section-${workshopId}`} />
+  WorkshopSectionWithCatalog: ({
+    workshopId,
+    items,
+    footerSlot,
+  }: {
+    workshopId: string
+    items: CheckoutItemLocal[]
+    footerSlot?: React.ReactNode
+  }) => (
+    <div data-testid={`workshop-section-${workshopId}`}>
+      {items.map((i) => (
+        <span key={i.id} data-testid={`ws-item-${i.id}`}>
+          {i.description}
+        </span>
+      ))}
+      {footerSlot}
+    </div>
   ),
 }))
 vi.mock("@/components/qr-scanner/scan-fab", () => ({ ScanFab: () => null }))
@@ -71,6 +87,22 @@ vi.mock("@/components/checkout/wizard-context", () => ({
 }))
 
 const MEMBERSHIP_CATALOG_ID = "membership-fee"
+const BADGE_CATALOG_ID = "nfc-badge"
+
+/** The self-service badge SKU, as `addBadgeToCheckout` writes it. */
+function badgeItem(id = "b1"): CheckoutItemLocal {
+  return {
+    id,
+    workshop: "diverses",
+    description: "Badge",
+    origin: "manual",
+    catalogId: BADGE_CATALOG_ID,
+    pricingModel: "direct",
+    quantity: 1,
+    unitPrice: 5,
+    totalPrice: 5,
+  }
+}
 
 function membershipItem(id = "m1"): CheckoutItemLocal {
   return {
@@ -114,12 +146,16 @@ interface CtxOverrides {
   items?: CheckoutItemLocal[]
   workshopsVisited?: string[]
   removeItem?: (id: string) => void
+  kiosk?: boolean
+  isAnonymous?: boolean
 }
 
 function buildCtx({
   items = [],
   workshopsVisited = [],
   removeItem = vi.fn(),
+  kiosk = false,
+  isAnonymous = false,
 }: CtxOverrides) {
   return {
     checkoutId: "co1",
@@ -128,10 +164,12 @@ function buildCtx({
     pricingConfig,
     discountLevel: "standard",
     membershipCatalogId: MEMBERSHIP_CATALOG_ID,
+    badgeCatalogId: BADGE_CATALOG_ID,
+    isAnonymous,
     addItem: vi.fn(),
     updateItem: vi.fn(),
     removeItem,
-    kiosk: false,
+    kiosk,
   }
 }
 
@@ -188,6 +226,57 @@ describe("VisitRoute — membershipOnly gate (issue #362)", () => {
     expect(screen.getByText("Werkstätten wählen")).toBeTruthy()
     expect(screen.getByTestId("workshop-section-makerspace")).toBeTruthy()
     expect(screen.getByTestId("membership-block")).toBeTruthy()
+  })
+})
+
+describe("VisitRoute — badge lives under Diverses (issue #505)", () => {
+  it("does not render a standalone badge block for an identified kiosk visitor", () => {
+    renderVisit({ kiosk: true, isAnonymous: false })
+
+    // The old standalone "Badge" section rendered right under the picker for
+    // every identified kiosk visitor — too intrusive (issue #505).
+    expect(screen.queryByTestId("badge-block")).toBeNull()
+    // No Diverses selected yet → no badge instructions anywhere.
+    expect(screen.queryByTestId("badge-cta")).toBeNull()
+  })
+
+  it("nests the badge hint inside the Diverses section once Diverses is opened", () => {
+    renderVisit({ kiosk: true, isAnonymous: false, workshopsVisited: ["diverses"] })
+
+    const diverses = screen.getByTestId("workshop-section-diverses")
+    expect(within(diverses).getByTestId("badge-cta")).toBeTruthy()
+    expect(screen.queryByTestId("badge-block")).toBeNull()
+  })
+
+  it("hides the badge hint for an anonymous kiosk visitor and off-kiosk", () => {
+    renderVisit({
+      kiosk: true,
+      isAnonymous: true,
+      workshopsVisited: ["diverses"],
+    })
+    expect(screen.queryByTestId("badge-cta")).toBeNull()
+
+    cleanup()
+    renderVisit({
+      kiosk: false,
+      isAnonymous: false,
+      workshopsVisited: ["diverses"],
+    })
+    expect(screen.queryByTestId("badge-cta")).toBeNull()
+  })
+
+  it("renders a purchased badge as a Diverses line item (no standalone block)", () => {
+    // Regression: the badge line item used to render only via the standalone
+    // block, so dropping that block must not make it disappear. The SKU is
+    // bucketed under `diverses` server-side, so it renders there.
+    renderVisit({ items: [badgeItem("b1")], kiosk: true, isAnonymous: false })
+
+    expect(screen.queryByTestId("badge-block")).toBeNull()
+    const diverses = screen.getByTestId("workshop-section-diverses")
+    expect(within(diverses).getByTestId("ws-item-b1").textContent).toBe("Badge")
+    // A badge-only cart still shows the picker (nonWorkshopOnly is
+    // membership-only again) so the visitor can carry on with the visit.
+    expect(screen.getByText("Werkstätten wählen")).toBeTruthy()
   })
 })
 

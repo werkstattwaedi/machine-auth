@@ -265,6 +265,7 @@ export function WorkshopInlineSection({
   onAddMaterial,
   pinnedCatalog = [],
   discountLevel = "none",
+  footerSlot,
 }: {
   workshopId: WorkshopId
   workshop: WorkshopConfig
@@ -298,6 +299,12 @@ export function WorkshopInlineSection({
    * Sheet — so this component stays route-agnostic and works in both.
    */
   onAddMaterial: () => void
+  /**
+   * Extra content rendered at the bottom of the section, between the
+   * material box and the Zwischentotal. Used by /visit to nest the
+   * self-service badge hint inside Diverses (issue #505).
+   */
+  footerSlot?: React.ReactNode
 }) {
   const [expandedNfc, setExpandedNfc] = useState<Record<string, boolean>>({})
 
@@ -527,6 +534,8 @@ export function WorkshopInlineSection({
           </button>
         </div>
       </div>
+
+      {footerSlot}
 
       <div className="flex items-baseline justify-between px-1 pt-1 text-sm">
         <span className="text-muted-foreground">

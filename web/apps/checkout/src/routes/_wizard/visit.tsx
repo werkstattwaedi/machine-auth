@@ -36,10 +36,10 @@ import {
   type CatalogItem,
   type WorkshopId,
 } from "@modules/lib/workshop-config"
-import { partitionMembership, partitionBadge } from "@oww/shared"
+import { partitionMembership } from "@oww/shared"
 import { WorkshopSectionWithCatalog } from "@/components/usage/workshop-section-with-catalog"
 import { MembershipInlineSection } from "@/components/usage/membership-inline-section"
-import { BadgeInlineSection } from "@/components/usage/badge-inline-section"
+import { BadgeCtaHint } from "@/components/usage/badge-cta-hint"
 import { ScanFab } from "@/components/qr-scanner/scan-fab"
 import { useWizardContext } from "@/components/checkout/wizard-context"
 import { capturePickerScrollAnchor } from "@/components/usage/picker-scroll-anchor"
@@ -64,7 +64,6 @@ function VisitRoute() {
     pricingConfig,
     discountLevel,
     membershipCatalogId,
-    badgeCatalogId,
     isAnonymous,
     addItem,
     updateItem,
@@ -75,14 +74,15 @@ function VisitRoute() {
   // Issue #262/#263: break the Vereinsmitgliedschaft SKU out of the workshop
   // sections. Membership items get their own read-only inline section
   // (rendered first) and must not bleed into the `diverses` workshop block.
-  // Badge purchases (self-service NFC badge) get the same treatment.
-  const { membershipItems, otherItems: nonMembershipItems } = useMemo(
+  //
+  // Badge purchases used to get the same standalone treatment, but the block
+  // sat right under the picker and read as too intrusive (issue #505). The
+  // badge SKU is bucketed under `diverses` server-side, so it now stays in
+  // `workshopItems` and simply renders as a Diverses line item — which also
+  // keeps the Diverses Zwischentotal honest.
+  const { membershipItems, otherItems: workshopItems } = useMemo(
     () => partitionMembership(items, { membershipCatalogId }),
     [items, membershipCatalogId],
-  )
-  const { badgeItems, otherItems: workshopItems } = useMemo(
-    () => partitionBadge(nonMembershipItems, { badgeCatalogId }),
-    [nonMembershipItems, badgeCatalogId],
   )
   const toggleVisitedMutation = useAsyncMutation({
     context: "visit.toggleWorkshopVisited",
@@ -188,7 +188,7 @@ function VisitRoute() {
   // workshop keeps the full picker + sections; the membership simply becomes
   // one more position in the bill.
   const nonWorkshopOnly =
-    (membershipItems.length > 0 || badgeItems.length > 0) &&
+    membershipItems.length > 0 &&
     workshopItems.length === 0 &&
     effectiveWorkshops.size === 0
 
@@ -354,19 +354,6 @@ function VisitRoute() {
           />
         )}
 
-        {/* Selbstbedienungs-Badges: same inline treatment as the
-            membership. Rendered whenever badge items exist, plus a CTA on
-            the kiosk for identified visitors ("tap a new badge on the
-            reader" — the tap opens the purchase dialog, see
-            BridgeNfcRouter / BadgeOfferCoordinator). */}
-        {(badgeItems.length > 0 || (kiosk && !isAnonymous)) && (
-          <BadgeInlineSection
-            items={badgeItems}
-            onRemove={removeItem}
-            showCta={kiosk && !isAnonymous}
-          />
-        )}
-
         {/* Per-workshop sections — suppressed for a membership-only cart, same
             as the picker above (issue #262/#263). A membership SKU lives in the
             "diverses" workshop, so its workshopsVisited entry would otherwise
@@ -385,6 +372,18 @@ function VisitRoute() {
               pinnedCatalog={pinnedCatalogByWorkshop.get(wsId) ?? []}
               checkoutId={checkoutId}
               sectionRef={registerSectionRef(wsId)}
+              // Selbstbedienungs-Badge (issue #505): the "tap a new badge on
+              // the reader" hint lives at the bottom of Diverses — the
+              // workshop the badge SKU is bucketed under — instead of in a
+              // standalone block above the sections. Kiosk-only: the tap
+              // needs the kiosk reader, and it must resolve to an identified
+              // buyer (the tap opens the purchase dialog, see
+              // BridgeNfcRouter / BadgeOfferCoordinator).
+              footerSlot={
+                wsId === "diverses" && kiosk && !isAnonymous ? (
+                  <BadgeCtaHint />
+                ) : undefined
+              }
               onAddMaterial={() => {
                 // Snapshot the page scroll before navigating so the picker
                 // can restore it — the Sheet's scroll-lock otherwise jumps

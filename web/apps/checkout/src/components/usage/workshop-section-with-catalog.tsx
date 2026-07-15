@@ -32,6 +32,7 @@ export function WorkshopSectionWithCatalog({
   onAddMaterial,
   pinnedCatalog,
   discountLevel,
+  footerSlot,
 }: {
   workshopId: WorkshopId
   workshop: WorkshopConfig
@@ -50,6 +51,8 @@ export function WorkshopSectionWithCatalog({
   itemErrors?: Record<string, ItemErrors>
   sectionRef?: (el: HTMLDivElement | null) => void
   onAddMaterial: () => void
+  /** Extra content below the material box (issue #505). */
+  footerSlot?: React.ReactNode
 }) {
   return (
     <WorkshopInlineSection
@@ -62,6 +65,7 @@ export function WorkshopSectionWithCatalog({
       onAddMaterial={onAddMaterial}
       pinnedCatalog={pinnedCatalog}
       discountLevel={discountLevel}
+      footerSlot={footerSlot}
     />
   )
 }
