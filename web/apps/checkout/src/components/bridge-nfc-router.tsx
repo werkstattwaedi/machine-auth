@@ -33,6 +33,11 @@ import {
 const UNREADABLE_TAG_MESSAGE =
   "Badge konnte nicht gelesen werden. Bitte nochmals auflegen."
 
+// Mirrors the server's already-exists rejection in badge/purchase.ts — the
+// tap is acknowledged without opening a doomed purchase dialog (issue #515).
+const BADGE_ALREADY_IN_CHECKOUT_MESSAGE =
+  "Dieser Badge ist bereits im Checkout."
+
 interface PendingTag {
   picc: string
   cmac: string
@@ -154,11 +159,29 @@ export function BridgeNfcRouter() {
           bearer: bearer ?? undefined,
         })
         if (!data.registered && data.badgeVoucher) {
+          // Already a line item in the open checkout (post-purchase re-tap):
+          // re-offering could only end in the server's already-exists
+          // rejection, so tell the user directly instead of opening the
+          // dialog (issue #515). Removing the badge from the cart makes the
+          // offer available again.
+          if (session.badgeTokenIds.includes(data.tokenId)) {
+            toast.info(BADGE_ALREADY_IN_CHECKOUT_MESSAGE)
+            return
+          }
+          const badgeVoucher = data.badgeVoucher
           if (session.identified) {
-            setBadgeOffer({
-              tokenId: data.tokenId,
-              badgeVoucher: data.badgeVoucher,
-            })
+            // Each physical tap mints a FRESH voucher for the same badge,
+            // and the purchase dialog keys its dry-run quote on the voucher
+            // — an unconditional set would reset an already-open dialog back
+            // to the price spinner (or reopen a just-closed one) on a
+            // same-badge re-tap (issue #515). Preserve state identity for
+            // the same badge; a different badge replaces the offer (newest
+            // badge wins, matching the pendingTag policy below).
+            setBadgeOffer((prev) =>
+              prev && prev.tokenId === data.tokenId
+                ? prev
+                : { tokenId: data.tokenId, badgeVoucher }
+            )
           } else {
             // Anonymous with in-progress work: buying needs a sign-in,
             // which would discard the anon session — don't offer either,

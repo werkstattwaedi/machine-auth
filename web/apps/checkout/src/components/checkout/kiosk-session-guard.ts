@@ -34,12 +34,22 @@ export interface KioskSessionState {
    * sessions or when no name is on record.
    */
   holderName: string | null
+  /**
+   * Token ids of self-service badges already added as line items to the
+   * open checkout (server-written `tokenId` on the badge items). A re-tap
+   * of one of these must not re-open the purchase offer — the server would
+   * reject the duplicate add anyway (issue #515) — so BridgeNfcRouter shows
+   * a toast instead. Removing the badge from the cart drops its id here and
+   * offering works again.
+   */
+  badgeTokenIds: string[]
 }
 
 const NO_SESSION: KioskSessionState = {
   preservable: false,
   identified: false,
   holderName: null,
+  badgeTokenIds: [],
 }
 
 let activeGuard: (() => KioskSessionState) | null = null

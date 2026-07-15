@@ -4,10 +4,10 @@
 /**
  * Kiosk session guard — module-level bridge between the wizard (state
  * owner) and BridgeNfcRouter (tap-time consumer):
- *   - defaults to "nothing to protect, not identified, no name" when no
- *     wizard is mounted
+ *   - defaults to "nothing to protect, not identified, no name, no badges"
+ *     when no wizard is mounted
  *   - reflects the registered getter live (preservable + identified + holder
- *     name)
+ *     name + badge token ids)
  *   - unregister only clears its own registration (a newer guard wins)
  */
 
@@ -25,33 +25,46 @@ afterEach(() => {
 })
 
 describe("kiosk-session-guard", () => {
-  it("defaults to not-preservable, not-identified, no holder name when no guard is registered", () => {
+  it("defaults to not-preservable, not-identified, no holder name, no badges when no guard is registered", () => {
     expect(getKioskSessionState()).toEqual({
       preservable: false,
       identified: false,
       holderName: null,
+      badgeTokenIds: [],
     })
     expect(isKioskSessionPreservable()).toBe(false)
   })
 
   it("reflects the registered getter live", () => {
-    let state = { preservable: false, identified: false, holderName: null }
+    let state = {
+      preservable: false,
+      identified: false,
+      holderName: null,
+      badgeTokenIds: [] as string[],
+    }
     cleanup = registerKioskSessionGuard(() => state)
     expect(isKioskSessionPreservable()).toBe(false)
-    state = { preservable: true, identified: false, holderName: null }
+    state = {
+      preservable: true,
+      identified: false,
+      holderName: null,
+      badgeTokenIds: [],
+    }
     expect(isKioskSessionPreservable()).toBe(true)
   })
 
-  it("surfaces the identified flag and holder name through getKioskSessionState", () => {
+  it("surfaces the identified flag, holder name and badge token ids through getKioskSessionState", () => {
     cleanup = registerKioskSessionGuard(() => ({
       preservable: true,
       identified: true,
       holderName: "Michael Schneider",
+      badgeTokenIds: ["04aabbccddeeff"],
     }))
     expect(getKioskSessionState()).toEqual({
       preservable: true,
       identified: true,
       holderName: "Michael Schneider",
+      badgeTokenIds: ["04aabbccddeeff"],
     })
   })
 
@@ -60,6 +73,7 @@ describe("kiosk-session-guard", () => {
       preservable: true,
       identified: true,
       holderName: "Fritz Muster",
+      badgeTokenIds: [],
     }))
     expect(isKioskSessionPreservable()).toBe(true)
     unregister()
@@ -67,6 +81,7 @@ describe("kiosk-session-guard", () => {
       preservable: false,
       identified: false,
       holderName: null,
+      badgeTokenIds: [],
     })
   })
 
@@ -75,11 +90,13 @@ describe("kiosk-session-guard", () => {
       preservable: false,
       identified: false,
       holderName: null,
+      badgeTokenIds: [],
     }))
     cleanup = registerKioskSessionGuard(() => ({
       preservable: true,
       identified: false,
       holderName: null,
+      badgeTokenIds: [],
     }))
     unregisterOld()
     expect(isKioskSessionPreservable()).toBe(true)
