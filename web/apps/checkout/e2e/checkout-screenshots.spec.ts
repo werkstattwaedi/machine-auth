@@ -502,12 +502,15 @@ test.describe("Checkout step screenshots", () => {
     await expect(page.getByRole("link", { name: /Mit TWINT bezahlen/ })).toBeVisible({
       timeout: 30_000,
     })
-    // Commit button label changes for TWINT.
+    // Commit button label changes for TWINT, and it starts gated until the
+    // pay-link has been opened (#537) — an accidental commit here would leave
+    // the user unable to ever start the TWINT payment.
     await expect(
       page.getByRole("button", {
         name: /Ich habe via TWINT bezahlt & Werkstatt verlassen/,
       }),
-    ).toBeVisible()
+    ).toBeDisabled()
+    await expect(page.getByText("Starte zuerst die TWINT-Zahlung.")).toBeVisible()
     // PDF download stays in the hero across all tabs.
     await expect(page.getByRole("button", { name: /Rechnung als PDF/ })).toBeVisible()
     await expect(page.getByText("Konto / Zahlbar an")).toBeHidden()

@@ -290,6 +290,120 @@ describe("PaymentResult", () => {
     })
   })
 
+  // Issue #537: committing unmounts the picker, so an accidental click on
+  // "Ich habe via TWINT bezahlt" before opening the paylink leaves the user
+  // unable to ever start the TWINT payment. The commit button is therefore
+  // gated until the paylink has been opened once.
+  describe("issue #537: TWINT commit gated on the pay-link being opened", () => {
+    const twintCommitButton = () =>
+      screen.getByRole("button", {
+        name: /Ich habe via TWINT bezahlt & Werkstatt verlassen/,
+      })
+
+    it("disables the commit button (with a hint) until the pay-link is clicked", async () => {
+      const handleReset = vi.fn()
+      render(
+        <PaymentResult
+          checkoutId="checkout-1"
+          totalPrice={25}
+          isMember={false}
+          onReset={handleReset}
+          initialPaymentData={PAYMENT_FIXTURE}
+        />,
+      )
+
+      await userEvent.click(screen.getByRole("tab", { name: /TWINT/ }))
+
+      const button = twintCommitButton()
+      expect(button).toBeDisabled()
+      // The disabled state is explained rather than mysterious, and the hint
+      // is wired to the button for screen readers.
+      const hint = screen.getByText("Starte zuerst die TWINT-Zahlung.")
+      expect(button.getAttribute("aria-describedby")).toBe(hint.id)
+
+      // A click on the gated button must not commit the bill or advance.
+      await userEvent.click(button)
+      expect(mockAcknowledgeBill).not.toHaveBeenCalled()
+      expect(handleReset).not.toHaveBeenCalled()
+    })
+
+    it("enables the commit button after the pay-link is clicked, and then commits as twint", async () => {
+      const handleReset = vi.fn()
+      render(
+        <PaymentResult
+          checkoutId="checkout-1"
+          totalPrice={25}
+          isMember={false}
+          onReset={handleReset}
+          initialPaymentData={PAYMENT_FIXTURE}
+        />,
+      )
+
+      await userEvent.click(screen.getByRole("tab", { name: /TWINT/ }))
+      await userEvent.click(screen.getByRole("link", { name: /Mit TWINT bezahlen/ }))
+
+      const button = twintCommitButton()
+      expect(button).toBeEnabled()
+      expect(screen.queryByText("Starte zuerst die TWINT-Zahlung.")).toBeNull()
+
+      await userEvent.click(button)
+      expect(mockAcknowledgeBill).toHaveBeenCalledOnce()
+      expect(mockAcknowledgeBill).toHaveBeenCalledWith({
+        billId: "bill-1",
+        paymentMethod: "twint",
+      })
+      expect(handleReset).toHaveBeenCalledOnce()
+    })
+
+    it("does not gate the rechnung or Sammelrechnung commit buttons", async () => {
+      render(
+        <PaymentResult
+          checkoutId="checkout-1"
+          totalPrice={25}
+          isMember
+          onReset={() => {}}
+          initialPaymentData={PAYMENT_FIXTURE}
+        />,
+      )
+
+      // rechnung is the default tab — clickable on first render.
+      expect(
+        screen.getByRole("button", {
+          name: /Ich zahle die QR-Rechnung & Werkstatt verlassen/,
+        }),
+      ).toBeEnabled()
+
+      await userEvent.click(screen.getByRole("tab", { name: /Sammelrechnung/ }))
+      expect(
+        screen.getByRole("button", {
+          name: /Auf Sammelrechnung setzen & Werkstatt verlassen/,
+        }),
+      ).toBeEnabled()
+      expect(screen.queryByText("Starte zuerst die TWINT-Zahlung.")).toBeNull()
+    })
+
+    it("keeps the gate open once the pay-link was clicked, across tab switches", async () => {
+      render(
+        <PaymentResult
+          checkoutId="checkout-1"
+          totalPrice={25}
+          isMember
+          onReset={() => {}}
+          initialPaymentData={PAYMENT_FIXTURE}
+        />,
+      )
+
+      await userEvent.click(screen.getByRole("tab", { name: /TWINT/ }))
+      await userEvent.click(screen.getByRole("link", { name: /Mit TWINT bezahlen/ }))
+
+      // Leave and come back — a user who already paid must not be re-gated.
+      await userEvent.click(screen.getByRole("tab", { name: /QR-Rechnung/ }))
+      await userEvent.click(screen.getByRole("tab", { name: /TWINT/ }))
+
+      expect(twintCommitButton()).toBeEnabled()
+    })
+  })
+
   describe("commit click → acknowledgeBill callable → onReset", () => {
     it("calls acknowledgeBill with the selected method then calls onReset", async () => {
       const handleReset = vi.fn()
