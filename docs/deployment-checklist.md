@@ -30,8 +30,12 @@ firebase deploy --only firestore,storage --project oww-maco-staging
 # prod-configured bundles to the staging sites:
 WEB_BUILD_SCRIPT=build:staging firebase deploy --only hosting --project oww-maco-staging
 
-# Gateway (runs LOCALLY against staging; no Pi deploy):
+# Gateway — local run against staging:
 npm run dev:gateway:staging
+# …or deploy a test Pi against staging (config.staging.jsonc sets
+# printerHost: "" so the print worker stays off — it would otherwise
+# consume PROD print jobs via the prod GATEWAY_FIRESTORE_SA key):
+npx tsx scripts/deploy-gateway.ts --env staging --host maker1@<test-pi>.internal
 
 # Kiosk (local Electron for integration testing / packaged build):
 cd checkout-kiosk && npm run start:kiosk:staging   # or build:kiosk:staging

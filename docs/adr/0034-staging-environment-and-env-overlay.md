@@ -57,7 +57,7 @@ The overlay covers every deployable/runnable component. The full matrix:
 |---|---|---|---|
 | Functions | `npm run serve` (`.env.local`) | `cd functions && npm run deploy -- --project oww-maco-staging` (`.env.oww-maco-staging`) | `cd functions && npm run deploy` |
 | Web apps | `npm run dev:checkout` / `dev:admin` | `WEB_BUILD_SCRIPT=build:staging firebase deploy --only hosting --project oww-maco-staging` | `firebase deploy --only hosting` |
-| Gateway | `npm run dev:gateway` (`.env.local`) | `npm run dev:gateway:staging` — a **local** gateway reading `maco_gateway/.env.staging` | `npx tsx scripts/deploy-gateway.ts` (Pi) |
+| Gateway | `npm run dev:gateway` (`.env.local`) | `npm run dev:gateway:staging` (**local** gateway reading `maco_gateway/.env.staging`), or `deploy-gateway.ts --env staging --host <test-pi>` for a Pi deploy | `npx tsx scripts/deploy-gateway.ts` (Pi) |
 | Kiosk | `npm run dev:kiosk` (localhost URL) | `npm run start:kiosk:staging` (local Electron) or `build:kiosk:staging` (packaged) | `npm run build:kiosk:prod` |
 
 `generate-env.ts --env staging` emits the staging inputs for the first three
