@@ -38,16 +38,26 @@ teach `generate-env.ts` an **environment-overlay mode**: `--env <name>`.
   or `.firebaserc`. Staging deploys target the project explicitly with
   `firebase deploy --project oww-maco-staging` rather than a `.firebaserc`
   alias, so the prod toolchain is completely undisturbed.
+- The hosting predeploy hooks in `firebase.json` run
+  `npm run ${WEB_BUILD_SCRIPT:-build}` — unset (prod) they behave exactly as
+  before; staging hosting deploys must set the override so the bundle is built
+  against the staging env:
+  `WEB_BUILD_SCRIPT=build:staging firebase deploy --only hosting --project
+  oww-maco-staging`. Without it, the predeploy would silently ship a
+  prod-configured bundle to the staging sites.
 
 Emulator-vs-real selection is unaffected: the web app gates emulator wiring on
 `import.meta.env.DEV`, which Vite sets to `false` for any `vite build`
 (including `--mode staging`) — so a staging build talks to the real staging
 project, not emulators.
 
-Staging gets its own Function secrets (test-grade keys, never prod tag keys)
-and its own small set of NFC tags/devices pointed at the staging checkout
-domain. All test/validation happens here; production only ever receives real
-data.
+Staging **shares production's Function secrets** (same Secret Manager values,
+copied into the staging project): both projects sit in the same org with the
+same access controls, so a separate key set adds upkeep without a security
+boundary — and sharing `DIVERSIFICATION_MASTER_KEY`/`TERMINAL_KEY` means
+already-personalized NFC tags authenticate against staging without
+re-personalization, which is precisely the integration we want to test. All
+test/validation happens here; production only ever receives real data.
 
 ## Consequences
 
@@ -60,8 +70,10 @@ data.
 - Zero risk to the prod pipeline — the overlay writes only env-suffixed files.
 
 **Cons:**
-- A second Blaze project to operate (low usage, but real cost + secret upkeep).
-- Staging secrets and tag/device provisioning must be maintained separately.
+- A second Blaze project to operate (low usage, but real cost).
+- Secret rotation must be applied to both projects (values are shared).
+- Device provisioning (maco terminals) must still be pointed at staging
+  explicitly; only tags carry over for free.
 
 **Tradeoffs:**
 - *Separate full config dir* (`OPERATIONS_CONFIG_DIR=…/staging`): no code
