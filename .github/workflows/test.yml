@@ -80,6 +80,90 @@ jobs:
       - name: Build & test (web + functions + integration)
         run: npm run test:precommit
 
+  # Picks which e2e legs this run needs (issue #530, stage 2). ~55% of changes
+  # touch shared surfaces and select everything anyway, so this is not the main
+  # speedup (that's the sharding below) — it buys the two cheap cases: a
+  # docs/firmware/gateway/kiosk-only PR runs no e2e at all, and a
+  # checkout-only PR skips admin's leg.
+  #
+  # Selection applies to `pull_request` only. `push: main` (and manual
+  # dispatch) always runs the full matrix, so `main` is verified end to end
+  # regardless of what the selector thinks — selection only speeds up the PR
+  # inner loop, it never decides what `main` is tested with.
+  select:
+    name: select e2e legs
+    runs-on: ubuntu-latest
+
+    outputs:
+      # JSON array of `{app, shard}` objects — the `e2e-shard` matrix.
+      matrix: ${{ steps.select.outputs.matrix }}
+      # "true"/"false": whether any e2e leg was selected. Gates the matrix job,
+      # because an empty `include:` is a workflow error, not a skipped job.
+      any: ${{ steps.select.outputs.any }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need the base commit to diff against; the default depth-1 checkout
+          # of the PR merge ref doesn't have it.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - id: select
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+
+          # The full matrix. Checkout is ~18 min at `workers: 1`, so it fans
+          # out 4 ways; admin is 26 tests / ~2 min and one leg is plenty for
+          # now. When admin grows, add legs here — the config already reads
+          # PLAYWRIGHT_SHARD, and the selector already knows the `admin` app.
+          all='[
+            {"app":"checkout","shard":"1/4"},
+            {"app":"checkout","shard":"2/4"},
+            {"app":"checkout","shard":"3/4"},
+            {"app":"checkout","shard":"4/4"},
+            {"app":"admin","shard":"1/1"}
+          ]'
+          all=$(jq -c . <<<"$all")
+
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "Not a pull_request (${{ github.event_name }}) — running the full e2e matrix."
+            matrix="$all"
+          # Fail *open*: if the diff can't be computed (shallow clone, force-push
+          # racing the checkout), run everything rather than silently skipping.
+          elif ! changed=$(git diff --name-only "$BASE_SHA"...HEAD); then
+            echo "::warning::Could not diff against $BASE_SHA — running the full e2e matrix."
+            matrix="$all"
+          else
+            echo "Changed files:"
+            echo "$changed" | sed 's/^/  /'
+
+            # `npx --yes tsx@4` rather than `npm ci`: this job is on the
+            # critical path of every e2e run and a full workspace install
+            # (native kiosk deps included) would cost more than it saves.
+            apps=$(echo "$changed" \
+              | npx --yes tsx@4 scripts/precommit-select.ts --e2e --stdin \
+              | jq -R . | jq -sc .)
+            echo "Selected e2e apps: $apps"
+
+            matrix=$(jq -c --argjson apps "$apps" \
+              '[ .[] | select(.app as $a | $apps | index($a) != null) ]' <<<"$all")
+          fi
+
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          if [ "$(jq -r 'length' <<<"$matrix")" -eq 0 ]; then
+            echo "any=false" >> "$GITHUB_OUTPUT"
+            echo "No e2e legs selected — skipping the e2e matrix."
+          else
+            echo "any=true" >> "$GITHUB_OUTPUT"
+            echo "Matrix: $matrix"
+          fi
+
   # The e2e suite is the long pole (~18 min of Playwright, 88% of it the
   # checkout app running 194 tests at `workers: 1`). Two changes cut it to
   # ~5 min (issue #530):
@@ -99,6 +183,11 @@ jobs:
   e2e-shard:
     name: e2e (${{ matrix.app }} ${{ matrix.shard }})
     runs-on: ubuntu-latest
+    needs: select
+    # Guard the matrix, don't just let it be empty: `include: []` is a hard
+    # workflow error ("Matrix vector 'include' does not contain any values"),
+    # and a job-level `if` is evaluated before the matrix expands.
+    if: needs.select.outputs.any == 'true'
 
     strategy:
       # Surface every shard's failures in one run. Cancelling siblings on the
@@ -106,14 +195,8 @@ jobs:
       # re-runs, and the saved minutes are worth nothing on a public repo.
       fail-fast: false
       matrix:
-        include:
-          - { app: checkout, shard: 1/4 }
-          - { app: checkout, shard: 2/4 }
-          - { app: checkout, shard: 3/4 }
-          - { app: checkout, shard: 4/4 }
-          # Admin is 26 tests / ~2 min — one shard is plenty for now. When it
-          # grows, add legs here; the config already reads PLAYWRIGHT_SHARD.
-          - { app: admin, shard: 1/1 }
+        # Legs come from the `select` job; see the full matrix defined there.
+        include: ${{ fromJSON(needs.select.outputs.matrix) }}
 
     steps:
       - uses: actions/checkout@v4
@@ -207,23 +290,50 @@ jobs:
   # Aggregate gate. The matrix legs' check names embed the shard
   # ("e2e (checkout 1/4)"), so they'd churn on every re-shard and can't be
   # pinned in branch protection. This job keeps one stable `e2e` check that
-  # is green only when every leg is.
+  # is green only when every selected leg is — including when *no* leg was
+  # selected, which is a legitimate pass, not a hole.
   e2e:
     name: e2e
     runs-on: ubuntu-latest
-    needs: e2e-shard
+    needs: [select, e2e-shard]
     # `always()` so a failed shard produces a *failed* gate rather than a
     # skipped one — a skipped required check blocks a PR forever.
     if: always()
 
     steps:
-      - name: Verify every e2e shard passed
-        # `needs.e2e-shard.result` collapses the whole matrix: it is
-        # "success" only if every leg succeeded.
+      - name: Verify every selected e2e shard passed
+        # Three distinct outcomes have to be told apart, because
+        # `needs.e2e-shard.result` is "skipped" for two of them:
+        #
+        #   1. select ran, chose nothing, matrix skipped  -> pass
+        #   2. select failed, matrix skipped as a knock-on -> FAIL
+        #   3. matrix ran                                  -> its own result
+        #
+        # Collapsing 1 and 2 into a pass is exactly the hole this gate
+        # exists to prevent, so `select`'s own result is checked first.
+        env:
+          SELECT_RESULT: ${{ needs.select.result }}
+          SELECT_ANY: ${{ needs.select.outputs.any }}
+          SHARD_RESULT: ${{ needs.e2e-shard.result }}
         run: |
-          result="${{ needs.e2e-shard.result }}"
-          if [ "$result" != "success" ]; then
-            echo "::error::e2e shards did not all pass (result: $result)"
+          if [ "$SELECT_RESULT" != "success" ]; then
+            echo "::error::e2e selection did not succeed (result: $SELECT_RESULT)"
             exit 1
           fi
-          echo "All e2e shards passed."
+
+          if [ "$SELECT_ANY" = "false" ]; then
+            if [ "$SHARD_RESULT" != "skipped" ]; then
+              echo "::error::no e2e legs were selected, but the matrix reported '$SHARD_RESULT'"
+              exit 1
+            fi
+            echo "No e2e legs selected for these changes — nothing to run."
+            exit 0
+          fi
+
+          # `needs.e2e-shard.result` collapses the whole matrix: it is
+          # "success" only if every leg succeeded.
+          if [ "$SHARD_RESULT" != "success" ]; then
+            echo "::error::e2e shards did not all pass (result: $SHARD_RESULT)"
+            exit 1
+          fi
+          echo "All selected e2e shards passed."
