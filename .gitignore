@@ -68,6 +68,7 @@ functions/.env*
 functions/.secret.local*
 web/**/.env.development
 web/**/.env.production
+web/**/.env.staging
 scripts/.env
 scripts/.env.local
 maco_gateway/.env.local
