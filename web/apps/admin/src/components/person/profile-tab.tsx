@@ -4,10 +4,11 @@
 // Person · Profil — one focused edit form, one Speichern. Contact data,
 // user type and the admin role flag. Permissions live in their own tab.
 
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 import { useForm } from "react-hook-form"
 import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
 import { userRef } from "@modules/lib/firestore-helpers"
+import { parseSwissPhone } from "@modules/lib/phone"
 import { useDb } from "@modules/lib/firebase-context"
 import type { UserDoc } from "@modules/lib/firestore-entities"
 import { formatDateTime } from "@modules/lib/format"
@@ -40,11 +41,21 @@ export function PersonProfileTab({
 }) {
   const db = useDb()
   const { update, loading: saving } = useFirestoreMutation()
-  const { register, handleSubmit, reset, watch, setValue } =
-    useForm<ProfileFormValues>()
+  const {
+    register,
+    handleSubmit,
+    reset,
+    watch,
+    setValue,
+    formState: { errors },
+  } = useForm<ProfileFormValues>()
   const userType = watch("userType")
   const isFirma = userType === "firma"
   const isAdmin = watch("isAdmin")
+
+  // Cache the parsed E.164 phone result from validation so we don't have to
+  // parse twice (validate → submit). Mirrors the checkout profile form.
+  const normalisedPhoneRef = useRef<string | null>(null)
 
   useEffect(() => {
     reset({
@@ -75,7 +86,11 @@ export function PersonProfileTab({
         firstName: values.firstName,
         lastName: values.lastName,
         email: values.email || null,
-        phone: values.phone || null,
+        // Phone was already parsed + normalised during validation; use the
+        // cached E.164 form. Empty input is stored as `null`. Mirrors the
+        // checkout profile form so admin edits can't reintroduce formatted
+        // variants like "+41 79 248 94 28" (issue #554).
+        phone: normalisedPhoneRef.current,
         roles,
         userType: values.userType as UserDoc["userType"],
         billingAddress: hasAddress
@@ -112,7 +127,32 @@ export function PersonProfileTab({
             </div>
             <div className="space-y-2">
               <Label htmlFor="phone">Telefon</Label>
-              <Input id="phone" {...register("phone")} />
+              <Input
+                id="phone"
+                type="tel"
+                {...register("phone", {
+                  validate: async (v) => {
+                    // Optional field: empty is fine and stored as null.
+                    // Non-empty must parse as a Swiss phone number.
+                    const result = await parseSwissPhone(v)
+                    if (result.ok) {
+                      normalisedPhoneRef.current = result.e164
+                      return true
+                    }
+                    if (result.reason === "empty") {
+                      normalisedPhoneRef.current = null
+                      return true
+                    }
+                    normalisedPhoneRef.current = null
+                    return "Bitte gib eine gültige Schweizer Telefonnummer ein (z.B. +41 79 123 45 67)"
+                  },
+                })}
+              />
+              {errors.phone && (
+                <p className="text-xs text-destructive">
+                  {errors.phone.message}
+                </p>
+              )}
             </div>
           </div>
           <div className="max-w-56 space-y-2">

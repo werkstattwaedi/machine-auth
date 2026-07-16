@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import { render, cleanup, act, screen } from "@testing-library/react"
+import { render, cleanup, act, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { type ReactNode } from "react"
 import type { UserDoc } from "@modules/lib/firestore-entities"
@@ -95,12 +95,12 @@ vi.mock("@modules/components/ui/input", () => ({
 
 const { PersonProfileTab } = await import("./profile-tab")
 
-function testUser(roles: string[]): UserDoc {
+function testUser(roles: string[], phone: string | null = null): UserDoc {
   return {
     firstName: "Test",
     lastName: "Admin",
     email: "test@example.com",
-    phone: null,
+    phone,
     roles,
     permissions: [],
     userType: "erwachsen",
@@ -181,6 +181,84 @@ describe("PersonProfileTab admin role persistence (issue #495)", () => {
     expect(mockUpdate).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ roles: ["admin"] }),
+      expect.anything(),
+    )
+  })
+})
+
+/**
+ * Regression coverage for issue #554: the admin profile tab used to save
+ * the raw free-text phone input (`phone: values.phone || null`), letting an
+ * admin edit reintroduce formatted variants like "+41 79 248 94 28" into
+ * `users.phone` (which is meant to hold E.164). It now mirrors the checkout
+ * profile form: validate through `parseSwissPhone` and store the normalised
+ * `e164` result. Uses the real `parseSwissPhone` helper (no mock) so the
+ * normalisation is genuinely exercised.
+ */
+describe("PersonProfileTab phone normalisation (issue #554)", () => {
+  beforeEach(() => {
+    mockUpdate.mockReset()
+    mockUpdate.mockResolvedValue(undefined)
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.clearAllMocks()
+  })
+
+  it("saves a formatted phone as normalised E.164 (not the raw string)", async () => {
+    render(<PersonProfileTab userId="u1" user={testUser([])} />)
+
+    const user = userEvent.setup()
+    const phone = screen.getByLabelText(/Telefon/) as HTMLInputElement
+    await act(async () => {
+      await user.clear(phone)
+      await user.type(phone, "+41 79 248 94 28")
+      await user.click(screen.getByRole("button", { name: /Speichern/ }))
+    })
+
+    await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(1))
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.anything(),
+      // The raw "+41 79 248 94 28" must NOT survive — this assertion fails
+      // against the old raw-save code.
+      expect.objectContaining({ phone: "+41792489428" }),
+      expect.anything(),
+    )
+  })
+
+  it("rejects an invalid phone: does not save and surfaces the error", async () => {
+    render(<PersonProfileTab userId="u1" user={testUser([])} />)
+
+    const user = userEvent.setup()
+    const phone = screen.getByLabelText(/Telefon/) as HTMLInputElement
+    await act(async () => {
+      await user.clear(phone)
+      await user.type(phone, "not-a-number")
+      await user.click(screen.getByRole("button", { name: /Speichern/ }))
+    })
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(/gültige Schweizer Telefonnummer/),
+      ).toBeTruthy(),
+    )
+    expect(mockUpdate).not.toHaveBeenCalled()
+  })
+
+  it("saves empty phone input as null", async () => {
+    render(<PersonProfileTab userId="u1" user={testUser([])} />)
+
+    const user = userEvent.setup()
+    await act(async () => {
+      // Leave the (empty) phone field untouched and save.
+      await user.click(screen.getByRole("button", { name: /Speichern/ }))
+    })
+
+    await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(1))
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ phone: null }),
       expect.anything(),
     )
   })
