@@ -305,6 +305,12 @@ export interface CheckoutDoc extends AuditFields {
   notes?: string | null
   summary?: CheckoutSummaryDoc
   paymentMethod?: PaymentMethod | null
+  /**
+   * Server-only: one Timestamp per stale-open-checkout reminder email sent
+   * (#531). Written exclusively by the `staleCheckoutReminders` cron; client
+   * writes are denied in firestore.rules so a user can't self-mute reminders.
+   */
+  remindersSent?: Timestamp[]
 }
 
 export interface CheckoutItemDoc extends AuditFields {

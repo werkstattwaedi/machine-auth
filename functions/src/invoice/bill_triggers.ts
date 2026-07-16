@@ -24,6 +24,11 @@ import { formatWorkshopDateTime } from "../util/workshop_timezone";
 import { formatBillReference } from "./types";
 import { logOperationError } from "../operations_log";
 import { assertTemplateConfigured } from "../util/resend_template";
+// The recipient resolver lives in its own module (`util/checkout_recipient`)
+// so the stale-checkout reminder cron can reuse it without importing this
+// module's PDF stack (#531). Re-exported to preserve the existing surface.
+import { resolveRecipientEmail } from "../util/checkout_recipient";
+export { resolveRecipientEmail };
 import { loadMembershipCatalogId } from "../membership/shared";
 import { processMembershipForAckedBill } from "../membership/process_membership_payment";
 import type {
@@ -493,42 +498,6 @@ function pickTemplate(
         id: resendQrBillTemplateId.value(),
         paramName: "RESEND_QRBILL_TEMPLATE_ID",
       };
-  }
-}
-
-/**
- * Resolve the invoice-email recipient for a checkout (issue #471).
- *
- * The receipt always goes to the checkout's account holder
- * (`checkout.userId`) — the payer — and to no one else, regardless of who
- * appears on the roster (`persons`). Per ADR-0029 (#439), account-less
- * family members exist only as roster members of a family whose owner is the
- * payer; they never have an email of their own. So even when the owner has
- * removed themselves from `persons` and only an account-less child remains,
- * the recipient is unambiguous: the account holder's email.
- *
- * The receipt body still shows the visiting person's name (`persons[0].name`)
- * via RECIPIENT_NAME — only the `to:` address is the account holder.
- *
- * Returns `null` (caller logs + skips) when the account holder has no email.
- *
- * Exported for unit testing.
- */
-export async function resolveRecipientEmail(
-  checkout: CheckoutEntity,
-): Promise<string | null> {
-  try {
-    const ownerSnap = await checkout.userId.get();
-    return (ownerSnap.data() as UserEntity | undefined)?.email || null;
-  } catch (error) {
-    // Fail soft: an account-holder lookup hiccup shouldn't crash the send
-    // path — skip rather than throw.
-    const message = error instanceof Error ? error.message : String(error);
-    logger.warn(
-      `resolveRecipientEmail: account-holder lookup failed for ${checkout.userId.path}`,
-      { error: message },
-    );
-    return null;
   }
 }
 
