@@ -33,6 +33,14 @@ class MainScreen : public ui::Screen<app_state::AppStateSnapshot> {
   ui::ButtonConfig GetButtonConfig() const override;
   ui::ScreenStyle GetScreenStyle() const override;
 
+ protected:
+  // Exposed for screenshot/layout tests. LV_LABEL_LONG_MODE_DOTS rewrites the
+  // label's own text buffer with the ellipsized string, so a test can read
+  // these back to assert clamping fired without diffing pixels (issue #532).
+  lv_obj_t* user_name_label_for_test() const { return user_name_label_; }
+  lv_obj_t* machine_name_label_for_test() const { return machine_name_label_; }
+  lv_obj_t* status_chip_for_test() const { return status_chip_; }
+
  private:
   enum class VisualState {
     kIdle,
@@ -58,10 +66,13 @@ class MainScreen : public ui::Screen<app_state::AppStateSnapshot> {
   lv_obj_t* instruction_label_ = nullptr;
   lv_obj_t* menu_btn_ = nullptr;
 
-  // Active/Ready widgets
+  // Active/Ready widgets. session_column_ is a vertical flex container that
+  // reflows the name, chip and timer to the (possibly two-line) name's height.
+  lv_obj_t* session_column_ = nullptr;
   lv_obj_t* status_chip_ = nullptr;   // "Bereit" / "Pausiert" / "In Betrieb"
   lv_obj_t* status_label_ = nullptr;  // text inside the chip
   lv_obj_t* user_name_label_ = nullptr;
+  lv_obj_t* timer_row_ = nullptr;  // clock icon + duration, toggled as a unit
   lv_obj_t* timer_icon_ = nullptr;
   lv_obj_t* timer_label_ = nullptr;
 

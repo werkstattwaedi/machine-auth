@@ -3,6 +3,8 @@
 
 #include "maco_firmware/modules/terminal_ui/screens/main_screen.h"
 
+#include <cstring>
+
 #include "gtest/gtest.h"
 #include "maco_firmware/modules/app_state/system_monitor_backend.h"
 #include "maco_firmware/modules/app_state/system_state.h"
@@ -16,6 +18,17 @@ namespace maco::terminal_ui {
 namespace {
 
 using display::testing::ScreenshotTestHarness;
+
+// Exposes the protected label accessors so layout tests can read a label's
+// clamped height and its (possibly ellipsized) text buffer directly, following
+// the `using`-based testability pattern in maco_firmware/CLAUDE.md.
+class TestableMainScreen : public MainScreen {
+ public:
+  using MainScreen::MainScreen;
+  using MainScreen::machine_name_label_for_test;
+  using MainScreen::status_chip_for_test;
+  using MainScreen::user_name_label_for_test;
+};
 
 // Trivial backend stub — Start() is a no-op.
 class NullSystemMonitorBackend : public app_state::SystemMonitorBackend {
@@ -52,7 +65,7 @@ class MainScreenTest : public ::testing::Test {
     // Set up button bar
     button_bar_ = std::make_unique<ui::ButtonBar>(lv_layer_top());
 
-    screen_ = std::make_unique<MainScreen>(TestActionCallback);
+    screen_ = std::make_unique<TestableMainScreen>(TestActionCallback);
     ASSERT_EQ(harness_.ActivateScreen(*screen_), pw::OkStatus());
   }
 
@@ -65,6 +78,13 @@ class MainScreenTest : public ::testing::Test {
   }
 
   /// Render a frame with status bar and button bar chrome.
+  ///
+  /// harness_.RenderFrame() only redraws if the accumulated tick crosses LVGL's
+  /// refresh period (LV_DEF_REFR_PERIOD = 33ms). The harness resets the per-test
+  /// tick to 0 in Init() while the display refresh timer's last_run carries over
+  /// from the previous test, so a single sub-period 17ms tick can leave the
+  /// frame undrawn depending on test order. lv_refr_now() forces the pending
+  /// draw immediately, making capture deterministic regardless of that state.
   void RenderFrame() {
     auto style = screen_->GetScreenStyle();
     status_bar_->SetBackgroundColor(style.bg_color);
@@ -72,6 +92,7 @@ class MainScreenTest : public ::testing::Test {
     button_bar_->SetConfig(screen_->GetButtonConfig());
     button_bar_->Update();
     harness_.RenderFrame();
+    lv_refr_now(lv_display_get_default());
   }
 
   NullSystemMonitorBackend monitor_backend_;
@@ -79,7 +100,7 @@ class MainScreenTest : public ::testing::Test {
   ScreenshotTestHarness harness_;
   std::unique_ptr<status_bar::StatusBar> status_bar_;
   std::unique_ptr<ui::ButtonBar> button_bar_;
-  std::unique_ptr<MainScreen> screen_;
+  std::unique_ptr<TestableMainScreen> screen_;
 };
 
 TEST_F(MainScreenTest, Idle) {
@@ -242,6 +263,161 @@ TEST_F(MainScreenTest, StopSessionAction) {
   bool handled = screen_->OnEscapePressed();
   EXPECT_TRUE(handled);
   EXPECT_EQ(last_action, UiAction::kStopSession);
+}
+
+// --- Long name clamping / reflow (issue #532) ---
+
+namespace {
+// Height LVGL reports for a label showing exactly `lines` lines of `font`:
+// N*line_h + (N-1)*line_space (the trailing line_space is dropped).
+int32_t ExpectedClampedHeight(lv_obj_t* label, const lv_font_t* font,
+                              int lines) {
+  const int32_t line_h = lv_font_get_line_height(font);
+  const int32_t line_space =
+      lv_obj_get_style_text_line_space(label, LV_PART_MAIN);
+  return lines * line_h + (lines - 1) * line_space;
+}
+}  // namespace
+
+// A name that wraps to two lines must reflow the status chip below both lines
+// instead of colliding with it (the exact bug in the issue screenshot).
+TEST_F(MainScreenTest, ReadyLongUserNameTwoLines) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.session.state = app_state::SessionStateUi::kRunning;
+  // Wraps to "Maximilian" / "Mustermann" — two lines, each fitting, no dots.
+  snapshot.session.session_user_label = "Maximilian Mustermann";
+  snapshot.machine.machine_running = false;
+  snapshot.machine.in_use_seconds = 0;
+  snapshot.system.machine_label = "Laser";
+  screen_->OnUpdate(snapshot);
+  RenderFrame();
+
+  lv_obj_t* name = screen_->user_name_label_for_test();
+  // Full name still shown (fits in two lines, so no ellipsis).
+  EXPECT_STREQ(lv_label_get_text(name), "Maximilian Mustermann");
+  EXPECT_EQ(lv_obj_get_height(name),
+            ExpectedClampedHeight(name, &roboto_36, 2));
+
+  EXPECT_TRUE(harness_.CompareToGolden(
+      "maco_firmware/modules/terminal_ui/testdata/main_ready_long_name.png",
+      "/tmp/main_ready_long_name_diff.png"));
+}
+
+// A name too long for two lines is clamped to two lines with a trailing
+// ellipsis. LV_LABEL_LONG_MODE_DOTS rewrites the label's own buffer, so we can
+// read the dotted string straight back — this is the assertion that proves the
+// clamp fired, independent of any pixel diff.
+TEST_F(MainScreenTest, ReadyOverlongUserNameClampsWithDots) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.session.state = app_state::SessionStateUi::kRunning;
+  snapshot.session.session_user_label =
+      "Maximilian Alexander von Hohenzollern-Sigmaringen";
+  snapshot.machine.machine_running = false;
+  snapshot.machine.in_use_seconds = 0;
+  snapshot.system.machine_label = "Laser";
+  screen_->OnUpdate(snapshot);
+  RenderFrame();
+
+  lv_obj_t* name = screen_->user_name_label_for_test();
+  const char* shown = lv_label_get_text(name);
+  // Buffer was mutated: shorter than the input and ends with "...".
+  EXPECT_STRNE(shown, "Maximilian Alexander von Hohenzollern-Sigmaringen");
+  const size_t len = std::strlen(shown);
+  ASSERT_GE(len, 3u);
+  EXPECT_STREQ(shown + len - 3, "...");
+  // The dots are a truncation of the original prefix, not arbitrary text.
+  EXPECT_EQ(std::strncmp(shown, "Maximilian", 10), 0);
+  // Clamp holds the height at two lines despite the longer text.
+  EXPECT_EQ(lv_obj_get_height(name),
+            ExpectedClampedHeight(name, &roboto_36, 2));
+
+  EXPECT_TRUE(harness_.CompareToGolden(
+      "maco_firmware/modules/terminal_ui/testdata/main_ready_overlong_name.png",
+      "/tmp/main_ready_overlong_name_diff.png"));
+}
+
+// A one-line name keeps the label at a single line's height, so the chip stays
+// snug beneath it — the dynamic-reflow half of the fix.
+TEST_F(MainScreenTest, ReadyShortUserNameStaysOneLine) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.session.state = app_state::SessionStateUi::kRunning;
+  snapshot.session.session_user_label = "Mike";
+  snapshot.machine.machine_running = false;
+  snapshot.system.machine_label = "Laser";
+  screen_->OnUpdate(snapshot);
+  RenderFrame();
+
+  lv_obj_t* name = screen_->user_name_label_for_test();
+  EXPECT_EQ(lv_obj_get_height(name),
+            ExpectedClampedHeight(name, &roboto_36, 1));
+}
+
+// The status chip reflows down by exactly one extra line when the name grows
+// from one line to two — proof that content below tracks the name's real
+// height instead of a hardcoded offset.
+TEST_F(MainScreenTest, StatusChipReflowsWithNameHeight) {
+  app_state::AppStateSnapshot base;
+  base.session.state = app_state::SessionStateUi::kRunning;
+  base.machine.machine_running = false;
+  base.system.machine_label = "Laser";
+
+  // RenderFrame() forces a full layout + draw, so the chip's flex-computed
+  // position is up to date when read back.
+  app_state::AppStateSnapshot one_line = base;
+  one_line.session.session_user_label = "Mike";
+  screen_->OnUpdate(one_line);
+  RenderFrame();
+  const int32_t chip_y_one = lv_obj_get_y(screen_->status_chip_for_test());
+
+  app_state::AppStateSnapshot two_line = base;
+  two_line.session.session_user_label = "Maximilian Mustermann";
+  screen_->OnUpdate(two_line);
+  RenderFrame();
+  const int32_t chip_y_two = lv_obj_get_y(screen_->status_chip_for_test());
+
+  lv_obj_t* name = screen_->user_name_label_for_test();
+  const int32_t line_h = lv_font_get_line_height(&roboto_36);
+  const int32_t line_space =
+      lv_obj_get_style_text_line_space(name, LV_PART_MAIN);
+  EXPECT_EQ(chip_y_two - chip_y_one, line_h + line_space);
+}
+
+// A machine name too long for one line is clamped and ellipsized in idle mode,
+// so it can't collide with the "Mit Badge anmelden" instruction below it.
+TEST_F(MainScreenTest, IdleLongMachineNameClampsToOneLine) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.system.machine_label = "Grosser Lasercutter Werkstatt Süd";
+  screen_->OnUpdate(snapshot);
+  RenderFrame();
+
+  lv_obj_t* machine = screen_->machine_name_label_for_test();
+  const char* shown = lv_label_get_text(machine);
+  const size_t len = std::strlen(shown);
+  ASSERT_GE(len, 3u);
+  EXPECT_STREQ(shown + len - 3, "...");
+  EXPECT_EQ(lv_obj_get_height(machine),
+            ExpectedClampedHeight(machine, &roboto_36, 1));
+
+  EXPECT_TRUE(harness_.CompareToGolden(
+      "maco_firmware/modules/terminal_ui/testdata/main_idle_long_name.png",
+      "/tmp/main_idle_long_name_diff.png"));
+}
+
+// A two-line name plus a running timer: chip and timer row both reflow below
+// the name. Exercises the full stack, not just the chip.
+TEST_F(MainScreenTest, ActiveLongNameWithTimer) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.session.state = app_state::SessionStateUi::kRunning;
+  snapshot.session.session_user_label = "Maximilian Mustermann";
+  snapshot.machine.machine_running = true;
+  snapshot.machine.in_use_seconds = 47 * 60;
+  snapshot.system.machine_label = "Fräse";
+  screen_->OnUpdate(snapshot);
+  RenderFrame();
+
+  EXPECT_TRUE(harness_.CompareToGolden(
+      "maco_firmware/modules/terminal_ui/testdata/main_active_long_name.png",
+      "/tmp/main_active_long_name_diff.png"));
 }
 
 // --- Pending state tests ---
