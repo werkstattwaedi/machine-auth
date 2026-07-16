@@ -94,11 +94,14 @@ test.describe("Self-service badge purchase", () => {
       timeout: 15_000,
     })
 
-    // Proceed: check-in → visit shows the badge block with the item.
+    // Proceed: check-in → visit renders the badge as a Diverses line item
+    // (issue #505 — the standalone "Badge" block above the workshop sections
+    // is gone; the SKU is bucketed under `diverses`, so it shows there).
     await page.getByRole("button", { name: "Weiter" }).click()
-    await expect(page.getByTestId("badge-block")).toBeVisible({
-      timeout: 15_000,
-    })
+    const diverses = page.getByTestId("workshop-block-diverses")
+    await expect(diverses).toBeVisible({ timeout: 15_000 })
+    await expect(diverses.getByText("Badge", { exact: true })).toBeVisible()
+    await expect(page.getByTestId("badge-block")).toHaveCount(0)
 
     // ── 4. Close the checkout → association trigger fires ──
     await page.getByRole("button", { name: "Zum Checkout" }).click()
