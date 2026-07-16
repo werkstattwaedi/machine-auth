@@ -280,6 +280,34 @@ TEST_F(MainScreenTest, HoldLongerScreenStyle) {
   EXPECT_EQ(style.bg_color, theme::kColorYellow);
 }
 
+// A stale-checkout rejection renders the actionable layout: heading + the
+// server message + a QR of the action URL, instead of the generic
+// "Nicht berechtigt" (issue #535).
+TEST_F(MainScreenTest, DeniedStaleCheckout) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.verification.state =
+      app_state::TagVerificationState::kUnauthorized;
+  snapshot.verification.rejection_reason =
+      app_state::RejectionReason::kStaleCheckout;
+  snapshot.verification.rejection_message =
+      "Schliesse deinen letzten Besuch vom 14.07.2026 ab, bevor du die "
+      "Maschinen heute nutzt.";
+  snapshot.verification.rejection_action_url =
+      "https://checkout.werkstattwaedi.ch/denied?cause=stale_checkout&uid=u1"
+      "&checkout=co_abc&since=2026-07-14";
+  screen_->OnUpdate(snapshot);
+  RenderFrame();
+
+  EXPECT_TRUE(harness_.CompareToGolden(
+      "maco_firmware/modules/terminal_ui/testdata/main_denied_stale.png",
+      "/tmp/main_denied_stale_diff.png"));
+
+  // Still the red denied screen with a single "Zurück" affordance.
+  auto config = screen_->GetButtonConfig();
+  EXPECT_EQ(config.ok.label, "Zurück");
+  EXPECT_TRUE(config.cancel.label.empty());
+}
+
 TEST_F(MainScreenTest, StopSessionAction) {
   // Put screen in active state
   app_state::AppStateSnapshot snapshot;

@@ -8,6 +8,7 @@ maco.proto.firebase_rpc.SessionKeys.picc_capabilities       max_size:6 fixed_len
 
 # Rejected message
 maco.proto.firebase_rpc.Rejected.message                    max_size:128
+maco.proto.firebase_rpc.Rejected.action_url                 max_size:128
 
 # Authorized fields
 maco.proto.firebase_rpc.Authorized.user_label               max_size:64

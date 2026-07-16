@@ -90,9 +90,14 @@ pw::Result<size_t> EncodeAuthorizedWithAuth(const char* user_id,
   return stream.bytes_written;
 }
 
-// Helper to encode a Rejected TerminalCheckinResponse
-pw::Result<size_t> EncodeRejectedResponse(const char* message,
-                                          pw::ByteSpan buffer) {
+// Helper to encode a Rejected TerminalCheckinResponse, including the
+// machine-readable reason + QR action URL (issue #535).
+pw::Result<size_t> EncodeRejectedResponse(
+    const char* message,
+    pw::ByteSpan buffer,
+    maco_proto_firebase_rpc_RejectionReason reason =
+        maco_proto_firebase_rpc_RejectionReason_REJECTION_REASON_UNSPECIFIED,
+    const char* action_url = "") {
   maco_proto_firebase_rpc_TerminalCheckinResponse response =
       maco_proto_firebase_rpc_TerminalCheckinResponse_init_zero;
 
@@ -100,6 +105,9 @@ pw::Result<size_t> EncodeRejectedResponse(const char* message,
       maco_proto_firebase_rpc_TerminalCheckinResponse_rejected_tag;
   std::strncpy(response.result.rejected.message, message,
                sizeof(response.result.rejected.message) - 1);
+  response.result.rejected.reason = reason;
+  std::strncpy(response.result.rejected.action_url, action_url,
+               sizeof(response.result.rejected.action_url) - 1);
 
   pb_ostream_t stream = pb_ostream_from_buffer(
       reinterpret_cast<pb_byte_t*>(buffer.data()), buffer.size());
@@ -212,13 +220,28 @@ class TagVerifierTest : public ::testing::Test {
         pw::ConstByteSpan(payload_buffer.data(), *encode_result));
   }
 
+  void SendCheckinRejectedWithReason(
+      const char* message,
+      maco_proto_firebase_rpc_RejectionReason reason,
+      const char* action_url) {
+    std::array<std::byte, 256> payload_buffer;
+    auto encode_result = EncodeRejectedResponse(message, payload_buffer, reason,
+                                                action_url);
+    ASSERT_TRUE(encode_result.ok());
+    SendForwardResponse(
+        pw::ConstByteSpan(payload_buffer.data(), *encode_result));
+  }
+
   void SendRpcError(pw::Status status) {
     rpc_ctx_.server().SendServerError<GatewayService::Forward>(status);
   }
 
   pw::rpc::NanopbClientTestContext<10, 512, 1024> rpc_ctx_;
   pw::async2::BasicDispatcher dispatcher_;
-  pw::allocator::test::AllocatorForTest<4096> test_allocator_;
+  // 8192 (was 4096): the AuthorizeTag coroutine frame holds a CheckinResult
+  // variant across the RPC await, and CheckinRejected grew with the reason +
+  // action_url fields (issue #535), pushing the frame past the old budget.
+  pw::allocator::test::AllocatorForTest<8192> test_allocator_;
   nfc::MockNfcReader reader_;
   secrets::DeviceSecretsMock device_secrets_;
   pw::random::XorShiftStarRng64 rng_{0x12345678};
@@ -373,7 +396,46 @@ TEST_F(TagVerifierTest, CheckinRejected) {
   SendCheckinRejected("User not authorized");
   dispatcher_.RunUntilStalled();
 
-  EXPECT_EQ(GetSnapshot().state, TagVerificationState::kUnauthorized);
+  auto snapshot = GetSnapshot();
+  EXPECT_EQ(snapshot.state, TagVerificationState::kUnauthorized);
+  // A reason-less rejection lands as the generic (unspecified) cause.
+  EXPECT_EQ(snapshot.rejection_reason, RejectionReason::kUnspecified);
+}
+
+// ============================================================================
+// Stale-checkout rejection carries reason + message + action URL to snapshot.
+// Direct regression for the dropped-message bug (issue #535): NotifyUnauthorized
+// used to discard everything, so the screen could not tell a stale checkout
+// apart from a missing permission.
+// ============================================================================
+
+TEST_F(TagVerifierTest, CheckinRejectedStaleCheckoutReachesSnapshot) {
+  auto config = MakeConfig(kRealUid, kTerminalKey);
+
+  pw::random::XorShiftStarRng64 tag_rng{0xABCDEF01};
+  auto tag = std::make_shared<nfc::Ntag424TagMock>(
+      kAntiCollisionUid, kNtag424Sak, config, tag_rng);
+
+  reader_.SimulateTagArrival(std::static_pointer_cast<nfc::MockTag>(tag));
+  dispatcher_.RunUntilStalled();
+  ASSERT_EQ(GetSnapshot().state, TagVerificationState::kAuthorizing);
+
+  const char* kMsg =
+      "Schliesse deinen letzten Besuch vom 14.07.2026 ab, bevor du die "
+      "Maschinen heute nutzt.";
+  const char* kUrl =
+      "https://checkout.werkstattwaedi.ch/denied?cause=stale_checkout&uid=u1";
+  SendCheckinRejectedWithReason(
+      kMsg,
+      maco_proto_firebase_rpc_RejectionReason_REJECTION_REASON_STALE_CHECKOUT,
+      kUrl);
+  dispatcher_.RunUntilStalled();
+
+  auto snapshot = GetSnapshot();
+  EXPECT_EQ(snapshot.state, TagVerificationState::kUnauthorized);
+  EXPECT_EQ(snapshot.rejection_reason, RejectionReason::kStaleCheckout);
+  EXPECT_EQ(std::string_view(snapshot.rejection_message), kMsg);
+  EXPECT_EQ(std::string_view(snapshot.rejection_action_url), kUrl);
 }
 
 // ============================================================================

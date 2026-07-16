@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import {
+  RejectionReason,
   TerminalCheckinRequest,
   TerminalCheckinResponse,
 } from "../proto/firebase_rpc/auth.js";
@@ -14,10 +15,46 @@ import {
   UserEntity,
 } from "../types/firestore_entities";
 import { formatFullName } from "../util/username-utils";
-import { isSameBusinessDay } from "@oww/shared";
+import { isSameBusinessDay, rejectionCause } from "@oww/shared";
+import { resolveCheckoutDomain } from "../util/checkout-domain";
+import { buildDeniedUrl, zurichDateKey } from "./denied_url";
 
 // Auth reuse window in milliseconds (5 minutes)
 const AUTH_REUSE_WINDOW_MS = 5 * 60 * 1000;
+
+/**
+ * Build a rejected response. The `reason` is machine-readable so the terminal
+ * can branch on layout (issue #535); `actionUrl` is the QR deep link to the
+ * `/denied` landing page (empty when there is nothing actionable).
+ */
+function rejected(
+  message: string,
+  reason: RejectionReason = RejectionReason.REJECTION_REASON_UNSPECIFIED,
+  actionUrl = ""
+): TerminalCheckinResponse {
+  return {
+    result: { $case: "rejected", rejected: { message, reason, actionUrl } },
+  };
+}
+
+/**
+ * Build the `/denied` deep link, tolerating a misconfigured CHECKOUT_DOMAIN:
+ * we would rather still deny with a clear reason + message and drop the QR
+ * link than turn the denial into a generic internal error. The domain misconfig
+ * is logged loudly by `resolveCheckoutDomain` for ops.
+ */
+function deniedUrlSafe(
+  cause: ReturnType<typeof rejectionCause>,
+  uid: string,
+  extra: { checkoutId?: string; since?: string } = {}
+): string {
+  try {
+    return buildDeniedUrl(resolveCheckoutDomain(), { cause, uid, ...extra });
+  } catch (error) {
+    logger.error("Could not build /denied action URL", { error });
+    return "";
+  }
+}
 
 /**
  * Terminal check-in. Validates token + user, then enforces
@@ -39,18 +76,11 @@ export async function handleTerminalCheckin(
   });
 
   if (!request.tokenId?.value || request.tokenId.value.length === 0) {
-    return {
-      result: { $case: "rejected", rejected: { message: "Missing token ID" } },
-    };
+    return rejected("Missing token ID");
   }
 
   if (!request.machineId?.value) {
-    return {
-      result: {
-        $case: "rejected",
-        rejected: { message: "Missing machine ID" },
-      },
-    };
+    return rejected("Missing machine ID");
   }
 
   const uid = Buffer.from(request.tokenId.value);
@@ -67,32 +97,30 @@ export async function handleTerminalCheckin(
 
     if (!tokenDoc.exists) {
       logger.warn("Token not found", { tokenId: tokenIdHex });
-      return {
-        result: { $case: "rejected", rejected: { message: "Token not registered" } },
-      };
+      return rejected(
+        "Token not registered",
+        RejectionReason.REJECTION_REASON_TOKEN_UNKNOWN
+      );
     }
 
     const tokenData = tokenDoc.data() as TokenEntity;
     if (!tokenData) {
-      return {
-        result: { $case: "rejected", rejected: { message: "Invalid token data" } },
-      };
+      return rejected("Invalid token data");
     }
 
     // Check if token is deactivated
     if (tokenData.deactivated) {
       logger.warn("Token is deactivated", { tokenId: tokenIdHex });
-      return {
-        result: { $case: "rejected", rejected: { message: "Token deactivated" } },
-      };
+      return rejected(
+        "Token deactivated",
+        RejectionReason.REJECTION_REASON_TOKEN_DEACTIVATED
+      );
     }
 
     // Get user data
     const userDoc = await tokenData.userId.get();
     if (!userDoc.exists) {
-      return {
-        result: { $case: "rejected", rejected: { message: "User not found" } },
-      };
+      return rejected("User not found");
     }
     const userData = userDoc.data() as UserEntity;
 
@@ -105,12 +133,7 @@ export async function handleTerminalCheckin(
       .get();
     if (!machineDoc.exists) {
       logger.warn("Machine not found", { machineId });
-      return {
-        result: {
-          $case: "rejected",
-          rejected: { message: "Maschine nicht gefunden" },
-        },
-      };
+      return rejected("Maschine nicht gefunden");
     }
     const machineData = machineDoc.data() as MachineEntity;
     const requiredPermission = machineData.requiredPermission ?? [];
@@ -127,14 +150,14 @@ export async function handleTerminalCheckin(
           machineId,
           missing,
         });
-        return {
-          result: {
-            $case: "rejected",
-            rejected: {
-              message: "Keine Berechtigung für diese Maschine",
-            },
-          },
-        };
+        return rejected(
+          "Keine Berechtigung für diese Maschine",
+          RejectionReason.REJECTION_REASON_MISSING_PERMISSION,
+          deniedUrlSafe(
+            rejectionCause(RejectionReason.REJECTION_REASON_MISSING_PERMISSION),
+            userDoc.id
+          )
+        );
       }
     }
 
@@ -159,7 +182,7 @@ export async function handleTerminalCheckin(
       .where("status", "==", "open")
       .get();
 
-    const hasStaleOpenCheckout = openCheckoutsQuery.docs.some((doc) => {
+    const staleCheckout = openCheckoutsQuery.docs.find((doc) => {
       const checkout = doc.data() as CheckoutEntity;
       const created = checkout.created?.toDate();
       // Missing `created` is treated as stale to fail safe: an open checkout
@@ -167,19 +190,40 @@ export async function handleTerminalCheckin(
       return !created || !isSameBusinessDay(created, now);
     });
 
-    if (hasStaleOpenCheckout) {
+    if (staleCheckout) {
       logger.warn("User has a stale open checkout from a prior business day", {
         userId: userDoc.id,
         machineId,
       });
-      return {
-        result: {
-          $case: "rejected",
-          rejected: {
-            message: "Bitte schliesse zuerst deinen offenen Besuch ab.",
-          },
-        },
-      };
+      // The offending checkout's created date drives both the human message
+      // (de-CH date) and the /denied deep link (`since` machine token). A
+      // missing `created` (the fail-safe branch above) leaves both date-less.
+      const created = (
+        staleCheckout.data() as CheckoutEntity
+      ).created?.toDate();
+      const dateLabel = created
+        ? new Intl.DateTimeFormat("de-CH", {
+            timeZone: "Europe/Zurich",
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+          }).format(created)
+        : undefined;
+      const message = dateLabel
+        ? `Schliesse deinen letzten Besuch vom ${dateLabel} ab, bevor du die Maschinen heute nutzt.`
+        : "Schliesse deinen letzten Besuch ab, bevor du die Maschinen heute nutzt.";
+      return rejected(
+        message,
+        RejectionReason.REJECTION_REASON_STALE_CHECKOUT,
+        deniedUrlSafe(
+          rejectionCause(RejectionReason.REJECTION_REASON_STALE_CHECKOUT),
+          userDoc.id,
+          {
+            checkoutId: staleCheckout.id,
+            since: created ? zurichDateKey(created) : undefined,
+          }
+        )
+      );
     }
 
     // Check for recent completed authentication that can be reused
@@ -217,13 +261,8 @@ export async function handleTerminalCheckin(
     };
   } catch (error) {
     logger.error("Terminal checkin failed", { error });
-    return {
-      result: {
-        $case: "rejected",
-        rejected: {
-          message: error instanceof Error ? error.message : "Internal error",
-        },
-      },
-    };
+    return rejected(
+      error instanceof Error ? error.message : "Internal error"
+    );
   }
 }

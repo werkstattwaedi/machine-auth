@@ -21,6 +21,11 @@ constexpr const char kIconSchedule[] = "\xEE\xBF\x96";  // U+EFD6
 constexpr int kContentPadding = 16;
 constexpr int kUsableWidth = 208;   // 240 - 2*16px padding
 
+// Stale-checkout denied layout (issue #535): a QR on the right and the server
+// message in a left column narrow enough not to run under it.
+constexpr int kDeniedQrSize = 88;
+constexpr int kDeniedBodyWidth = 108;
+
 constexpr int kSessionColumnTop = 78;  // below the machine name, session modes
 constexpr int kSessionRowGap = 8;      // between name, status chip and timer
 constexpr int kTimerIconGap = 4;       // between the clock icon and its text
@@ -226,6 +231,54 @@ pw::Status MainScreen::OnActivate() {
   lv_obj_align(hold_longer_label_, LV_ALIGN_CENTER, 0, 40);
   lv_obj_add_flag(hold_longer_label_, LV_OBJ_FLAG_HIDDEN);
 
+  // --- Stale-checkout denied widgets (issue #535, hidden initially) ---
+  // A distinct layout from the generic denial. Two columns below a full-width
+  // heading so the (variable-height, long) server message on the left cannot
+  // overlap the QR on the right: heading on top, message left, QR + caption
+  // right. The QR is what the user scans to close the open visit on their
+  // phone; the caption notes it can also be done at the terminal.
+  denied_heading_ = lv_label_create(lv_screen_);
+  lv_label_set_text(denied_heading_, "Letzter Besuch noch offen");
+  lv_obj_set_style_text_font(denied_heading_, &roboto_24, LV_PART_MAIN);
+  lv_obj_set_style_text_color(denied_heading_, lv_color_white(), LV_PART_MAIN);
+  lv_obj_set_width(denied_heading_, kUsableWidth);
+  lv_label_set_long_mode(denied_heading_, LV_LABEL_LONG_MODE_WRAP);
+  lv_obj_align(denied_heading_, LV_ALIGN_TOP_LEFT, kContentPadding, 46);
+  lv_obj_add_flag(denied_heading_, LV_OBJ_FLAG_HIDDEN);
+
+  denied_body_ = lv_label_create(lv_screen_);
+  lv_label_set_text(denied_body_, "");
+  lv_obj_set_style_text_font(denied_body_, &roboto_16, LV_PART_MAIN);
+  lv_obj_set_style_text_color(denied_body_, lv_color_white(), LV_PART_MAIN);
+  lv_obj_set_width(denied_body_, kDeniedBodyWidth);
+  lv_label_set_long_mode(denied_body_, LV_LABEL_LONG_MODE_WRAP);
+  lv_obj_align(denied_body_, LV_ALIGN_TOP_LEFT, kContentPadding, 112);
+  lv_obj_add_flag(denied_body_, LV_OBJ_FLAG_HIDDEN);
+
+  // QR code: black modules on a white quiet zone so it scans against the red
+  // background. Data is filled per-frame from the server action URL.
+  denied_qr_ = lv_qrcode_create(lv_screen_);
+  lv_qrcode_set_size(denied_qr_, kDeniedQrSize);
+  lv_qrcode_set_dark_color(denied_qr_, lv_color_black());
+  lv_qrcode_set_light_color(denied_qr_, lv_color_white());
+  lv_obj_set_style_border_color(denied_qr_, lv_color_white(), LV_PART_MAIN);
+  lv_obj_set_style_border_width(denied_qr_, 4, LV_PART_MAIN);
+  lv_obj_align(denied_qr_, LV_ALIGN_TOP_RIGHT, -kContentPadding, 110);
+  lv_obj_add_flag(denied_qr_, LV_OBJ_FLAG_HIDDEN);
+
+  denied_qr_caption_ = lv_label_create(lv_screen_);
+  lv_label_set_text(denied_qr_caption_, "Scannen oder am\nTerminal");
+  lv_obj_set_style_text_font(denied_qr_caption_, &roboto_16, LV_PART_MAIN);
+  lv_obj_set_style_text_color(denied_qr_caption_, lv_color_white(),
+                              LV_PART_MAIN);
+  lv_obj_set_width(denied_qr_caption_, kDeniedQrSize + 8);
+  lv_label_set_long_mode(denied_qr_caption_, LV_LABEL_LONG_MODE_WRAP);
+  lv_obj_set_style_text_align(denied_qr_caption_, LV_TEXT_ALIGN_CENTER,
+                              LV_PART_MAIN);
+  lv_obj_align(denied_qr_caption_, LV_ALIGN_TOP_RIGHT, -kContentPadding + 4,
+               110 + kDeniedQrSize + 8);
+  lv_obj_add_flag(denied_qr_caption_, LV_OBJ_FLAG_HIDDEN);
+
   // --- Confirmation overlay (created last for z-order) ---
   overlay_.Create(lv_screen_, lv_group_);
 
@@ -260,6 +313,11 @@ void MainScreen::OnDeactivate() {
   denied_label_ = nullptr;
   hold_longer_icon_ = nullptr;
   hold_longer_label_ = nullptr;
+  denied_heading_ = nullptr;
+  denied_body_ = nullptr;
+  denied_qr_ = nullptr;
+  denied_qr_caption_ = nullptr;
+  denied_qr_url_.clear();
   PW_LOG_INFO("MainScreen deactivated");
 }
 
@@ -297,6 +355,13 @@ void MainScreen::OnUpdate(const app_state::AppStateSnapshot& snapshot) {
 
   if (new_state != visual_state_) {
     SetVisualState(new_state);
+  }
+
+  // The denied layout depends on the rejection cause + the server message/URL,
+  // which live on the snapshot — refresh it every frame while denied so a
+  // stale-checkout rejection shows its heading + QR (issue #535).
+  if (visual_state_ == VisualState::kDenied) {
+    UpdateDenied(snapshot.verification);
   }
 
   // Update machine name from snapshot (may change if config reloads)
@@ -554,6 +619,59 @@ void MainScreen::HideAllWidgets() {
   lv_obj_add_flag(denied_label_, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(hold_longer_icon_, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(hold_longer_label_, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_add_flag(denied_heading_, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_add_flag(denied_body_, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_add_flag(denied_qr_, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_add_flag(denied_qr_caption_, LV_OBJ_FLAG_HIDDEN);
+}
+
+// Populate the denied screen from the snapshot's rejection fields. A stale
+// checkout gets the actionable heading + message + QR; every other cause keeps
+// the generic icon + "Nicht berechtigt" (issue #535).
+void MainScreen::UpdateDenied(
+    const app_state::TagVerificationSnapshot& verification) {
+  const bool stale = verification.rejection_reason ==
+                     app_state::RejectionReason::kStaleCheckout;
+
+  if (stale) {
+    lv_obj_add_flag(denied_icon_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(denied_label_, LV_OBJ_FLAG_HIDDEN);
+
+    lv_label_set_text(denied_body_, verification.rejection_message.c_str());
+
+    // Rebuild the QR only when the target URL changes — lv_qrcode_update
+    // re-encodes, which is wasted work every frame otherwise.
+    const std::string_view url(verification.rejection_action_url);
+    if (std::string_view(denied_qr_url_) != url) {
+      denied_qr_url_.assign(url.data(), url.size());
+      if (!url.empty()) {
+        if (lv_qrcode_update(denied_qr_, url.data(), url.size()) !=
+            LV_RESULT_OK) {
+          PW_LOG_WARN("Failed to encode denied-screen QR (url len %zu)",
+                      url.size());
+        }
+      }
+    }
+    const bool has_url = !verification.rejection_action_url.empty();
+
+    lv_obj_remove_flag(denied_heading_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_remove_flag(denied_body_, LV_OBJ_FLAG_HIDDEN);
+    if (has_url) {
+      lv_obj_remove_flag(denied_qr_, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_remove_flag(denied_qr_caption_, LV_OBJ_FLAG_HIDDEN);
+    } else {
+      lv_obj_add_flag(denied_qr_, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_add_flag(denied_qr_caption_, LV_OBJ_FLAG_HIDDEN);
+    }
+  } else {
+    // Generic denial: the classic centered icon + label.
+    lv_obj_add_flag(denied_heading_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(denied_body_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(denied_qr_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(denied_qr_caption_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_remove_flag(denied_icon_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_remove_flag(denied_label_, LV_OBJ_FLAG_HIDDEN);
+  }
 }
 
 }  // namespace maco::terminal_ui

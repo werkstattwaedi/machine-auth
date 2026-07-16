@@ -3,58 +3,24 @@
 
 import * as logger from "firebase-functions/logger";
 import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
-import { defineString } from "firebase-functions/params";
 import { getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { createHash } from "node:crypto";
+import {
+  assertCheckoutDomainConfigured,
+  resolveCheckoutDomain,
+} from "../util/checkout-domain";
 import type {
   PriceListCatalogItem,
   PriceListRenderData,
   PricingModel,
 } from "./types";
 
-/**
- * Domain hosting the public checkout app (e.g. `checkout.werkstattwaedi.ch`).
- *
- * Used to build the QR-code deep link printed on the price list PDF.
- * Set via Firebase Functions params and materialised into
- * `functions/.env.<projectId>` by `scripts/generate-env.ts`. Has no
- * default — an unset param must fail loudly in production (see
- * `assertCheckoutDomainConfigured`) instead of silently shipping
- * `localhost:5173`, which is exactly how this bug regressed in #248.
- *
- * In emulator mode (`FUNCTIONS_EMULATOR === "true"`) we fall back to
- * `localhost:5173` so dev/test flows work without operations config.
- */
-const checkoutDomainParam = defineString("CHECKOUT_DOMAIN", { default: "" });
-
-function isEmulator(): boolean {
-  return process.env.FUNCTIONS_EMULATOR === "true";
-}
-
-/**
- * Throws a distinct `failed-precondition` error when `CHECKOUT_DOMAIN`
- * is empty/whitespace in non-emulator mode. Surfaces the misconfiguration
- * in Cloud Functions logs so ops can detect it quickly — silently falling
- * back to `localhost:5173` is what produced the unusable QR codes that
- * issue #248 reports.
- *
- * Exported separately so unit tests can pass the value directly without
- * stubbing `defineString`.
- */
-export function assertCheckoutDomainConfigured(value: string): void {
-  if (isEmulator()) return;
-  if (value.trim().length > 0) return;
-  logger.error(
-    "CHECKOUT_DOMAIN is empty in production — price-list QR codes would " +
-      "point at localhost. Set the param via firebase functions:config or " +
-      "regenerate functions/.env.<projectId> via `npm run generate-env`."
-  );
-  throw new HttpsError(
-    "failed-precondition",
-    "CHECKOUT_DOMAIN is not configured"
-  );
-}
+// Re-exported so the existing regression test (get_price_list_pdf_url.test.ts)
+// keeps importing it from here. The implementation now lives in the shared
+// `util/checkout-domain` helper (it has two call sites: this PDF path and the
+// stale-checkout /denied deep link — issue #535).
+export { assertCheckoutDomainConfigured };
 
 /**
  * Build the public deep link encoded in the price-list QR code.
@@ -68,21 +34,6 @@ export function buildPriceListQrUrl(
   priceListId: string
 ): string {
   return `https://${domain}/visit/add/list/${priceListId}`;
-}
-
-/**
- * Resolve the checkout domain at request time:
- * - In emulator mode, default to `localhost:5173` when unset so dev flows
- *   work without operations config.
- * - In production, require the param to be set (asserted before use).
- */
-function resolveCheckoutDomain(): string {
-  const value = checkoutDomainParam.value();
-  if (isEmulator() && value.trim().length === 0) {
-    return "localhost:5173";
-  }
-  assertCheckoutDomainConfigured(value);
-  return value;
 }
 
 interface PriceListDoc {
