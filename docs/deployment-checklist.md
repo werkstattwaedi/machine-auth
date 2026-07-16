@@ -9,6 +9,52 @@ Steps to deploy the full system to production.
 - `gcloud` authenticated against the same project (needed for gateway secrets)
 - Operations repo cloned as a sibling of `machine-auth/`
 
+## Staging deploys (ADR-0034)
+
+Staging (`oww-maco-staging`) is deployed with the same steps as production,
+with these deltas — never `firebase use`; always pass `--project` explicitly:
+
+```bash
+# Regenerate staging env files after any operations-config change
+# (config.staging.jsonc overlays config.jsonc; also emits
+# maco_gateway/.env.staging with secrets fetched via gcloud):
+npx tsx scripts/generate-env.ts --env staging
+
+# Functions:
+cd functions && npm run deploy -- --project oww-maco-staging
+
+# Firestore / Storage rules:
+firebase deploy --only firestore,storage --project oww-maco-staging
+
+# Hosting — WEB_BUILD_SCRIPT is required, otherwise the predeploy ships
+# prod-configured bundles to the staging sites:
+WEB_BUILD_SCRIPT=build:staging firebase deploy --only hosting --project oww-maco-staging
+
+# Gateway (runs LOCALLY against staging; no Pi deploy):
+npm run dev:gateway:staging
+
+# Kiosk (local Electron for integration testing / packaged build):
+cd checkout-kiosk && npm run start:kiosk:staging   # or build:kiosk:staging
+```
+
+Secrets are **shared with production** (same Secret Manager values, copied
+into the staging project — see ADR-0034). After rotating any secret in
+prod, re-copy it:
+
+```bash
+gcloud secrets versions access latest --secret=<NAME> --project=oww-maco \
+  | firebase functions:secrets:set <NAME> --project oww-maco-staging --data-file=-
+```
+
+If prod `npm run generate-env` (no `--env`) was run since the last staging
+hosting deploy, it rewrote `.firebaserc` without the staging hosting
+targets — re-apply them once:
+
+```bash
+firebase target:apply hosting checkout oww-maco-staging --project oww-maco-staging
+firebase target:apply hosting admin oww-maco-staging-admin --project oww-maco-staging
+```
+
 ## 0. Predeploy (automation)
 
 Build every deployable artifact in one shot:
@@ -29,13 +75,18 @@ claims, or run smoke tests. Those manual steps still apply.
 
 Set all required secrets:
 
-**Firebase Functions secrets:**
+**Firebase Functions secrets** — the authoritative list is whatever
+`defineSecret(` appears in `functions/src`
+(`grep -rho 'defineSecret("[^"]*")' functions/src | sort -u`); a missing
+one fails the deploy with "no value for the secret". Currently:
 
 ```bash
 firebase functions:secrets:set DIVERSIFICATION_MASTER_KEY
 firebase functions:secrets:set GATEWAY_API_KEY
-firebase functions:secrets:set TERMINAL_KEY
+firebase functions:secrets:set KIOSK_BEARER_KEY
 firebase functions:secrets:set PARTICLE_TOKEN
+firebase functions:secrets:set RESEND_API_KEY
+firebase functions:secrets:set TERMINAL_KEY
 ```
 
 Verify: `firebase functions:secrets:access GATEWAY_API_KEY`
@@ -51,12 +102,9 @@ See [`config.md`](config.md#maco-gateway-configuration) for details.
 
 ## 2. Environment Config
 
-Set string parameters:
-
-```bash
-firebase functions:config:set DIVERSIFICATION_SYSTEM_NAME="oww"
-firebase functions:config:set PARTICLE_PRODUCT_ID="<product-id>"
-```
+String parameters (`DIVERSIFICATION_SYSTEM_NAME`, `PARTICLE_PRODUCT_ID`,
+`LOGIN_*`, …) are `defineString` params read from `functions/.env.<projectId>`
+at deploy time — they are NOT set via the deprecated `functions:config:set`.
 
 After editing `machine-auth-operations/config.jsonc`, run `npm run generate-env` from the repo root to refresh `functions/.env.<projectId>` (and the web/maco_gateway env files) before deploying. Otherwise newly-added Firebase Functions params (e.g. `LOGIN_ALLOWED_ORIGINS`, `RESEND_LOGIN_TEMPLATE_ID`) will be missing from the deployed environment and login will silently break.
 
