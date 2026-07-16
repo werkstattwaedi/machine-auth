@@ -468,8 +468,11 @@ pw::async2::Coro<pw::Status> TagVerifier::AuthorizeTag(
     co_return pw::OkStatus();
   }
 
-  // Final gate: only authorize if the badge is still present. (The auth_id was
-  // minted server-side and self-expires via its TTL if we drop it here.)
+  // Final gate: only authorize if the badge is still present. Note: by this
+  // point cloud_auth_result.ok() is true, so CompleteTagAuth already ran
+  // server-side and cleared the record's ttlAt (see handle_complete_tag_auth.ts)
+  // — dropping the auth_id here does NOT let it self-expire; it orphans an
+  // `authentications` doc with no TTL (see review findings for #536).
   if (!live_tag.is_valid()) {
     PW_LOG_INFO("Tag removed after cloud key auth");
     NotifyRemovedDuringAuth();
