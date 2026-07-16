@@ -368,11 +368,30 @@ function main() {
     console.log(`  ✓ ${file.path}`);
   }
 
-  // Generate .firebaserc
+  // Generate .firebaserc. Hosting-target entries for OTHER projects (e.g.
+  // staging, applied once via `firebase target:apply` per ADR-0034) are
+  // preserved — this runs on every test invocation through the port-block
+  // broker, and clobbering the whole file would silently de-configure
+  // staging hosting deploys until the targets are re-applied.
+  const firebasercPath = resolve(projectRoot, ".firebaserc");
+  let foreignTargets: Record<string, unknown> = {};
+  if (existsSync(firebasercPath)) {
+    try {
+      const existing = JSON.parse(readFileSync(firebasercPath, "utf-8"));
+      foreignTargets = Object.fromEntries(
+        Object.entries(
+          (existing?.targets ?? {}) as Record<string, unknown>
+        ).filter(([project]) => project !== projectId)
+      );
+    } catch {
+      // Malformed .firebaserc — regenerate from scratch.
+    }
+  }
   const firebaserc = JSON.stringify(
     {
       projects: { default: projectId },
       targets: {
+        ...foreignTargets,
         [projectId]: {
           hosting: {
             checkout: [projectId],
@@ -384,7 +403,7 @@ function main() {
     null,
     2
   ) + "\n";
-  writeFileSync(resolve(projectRoot, ".firebaserc"), firebaserc);
+  writeFileSync(firebasercPath, firebaserc);
   console.log("  ✓ .firebaserc");
 
   console.log("\nDone. Generated env files from", configDir);

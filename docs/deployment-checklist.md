@@ -50,9 +50,9 @@ gcloud secrets versions access latest --secret=<NAME> --project=oww-maco \
   | firebase functions:secrets:set <NAME> --project oww-maco-staging --data-file=-
 ```
 
-If prod `npm run generate-env` (no `--env`) was run since the last staging
-hosting deploy, it rewrote `.firebaserc` without the staging hosting
-targets — re-apply them once:
+One-time setup on a fresh clone: apply the staging hosting targets (prod
+`generate-env` preserves foreign-project target entries in `.firebaserc`,
+so this survives regeneration):
 
 ```bash
 firebase target:apply hosting checkout oww-maco-staging --project oww-maco-staging
