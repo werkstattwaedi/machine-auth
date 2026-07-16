@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <array>
 
 #include "etl/hfsm.h"
@@ -97,10 +98,41 @@ class SessionObserver {
 
 inline constexpr etl::message_router_id_t kSessionFsmId = 0;
 
-// --- Confirmation timeout ---
+// --- Confirmation timeouts ---
 
+/// Countdown for prompts the badge does not drive: the UI stop button's
+/// auto-confirm, and the auto-cancel after the badge is pulled off a
+/// checkout/takeover prompt. Long enough to read the prompt and react.
 inline constexpr auto kAutoConfirmDuration = std::chrono::seconds(3);
-inline constexpr auto kHoldDuration = std::chrono::seconds(3);
+
+/// How long the badge must stay on the reader to confirm a checkout or a
+/// takeover. Both paths share one value; #534 reported 3 s as far too long to
+/// stand there holding a badge. This is also the window the confirmation ring
+/// animates over, because entering either prompt with the badge present sets
+/// pending_deadline from this constant — ring fill, the hold check in
+/// SessionController, and the badge-held Timeout confirm therefore all land on
+/// the same instant. Changing only one of them desyncs the ring from the
+/// action it advertises.
+inline constexpr auto kHoldDuration = std::chrono::seconds(1);
+
+/// True once the badge has rested on the reader long enough to confirm a
+/// checkout or takeover.
+///
+/// The hold is measured from the later of badge arrival and prompt appearance.
+/// Entry into Checkout/TakeoverPending happens only after NTAG mutual auth + a
+/// cloud TerminalCheckin, commonly >3 s — and a takeover (a different user,
+/// least likely to be cached) is exactly the slow case. So tag_present_since is
+/// already older than kHoldDuration at prompt entry, and measuring from it
+/// alone would fire on the very next ~100 ms poll, giving no chance to cancel
+/// and defeating the takeover safety gate. Taking the later of the two also
+/// enforces a fresh hold if the badge was removed and re-presented after the
+/// prompt appeared.
+constexpr bool HoldSatisfied(
+    pw::chrono::SystemClock::time_point now,
+    pw::chrono::SystemClock::time_point tag_present_since,
+    pw::chrono::SystemClock::time_point pending_since) {
+  return (now - std::max(tag_present_since, pending_since)) >= kHoldDuration;
+}
 
 // --- Forward declaration of FSM context ---
 
