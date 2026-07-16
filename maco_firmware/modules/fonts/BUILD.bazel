@@ -55,9 +55,10 @@ lvgl_font(
     name = "material_symbols_64",
     ttf = "MaterialSymbolsRounded.ttf",
     size = 64,
-    range = "0x20,0xe5c9",
+    range = "0x20,0xe5c9,0xefd6",
     # 0x20    space
     # 0xe5c9  cancel       (denied screen icon)
+    # 0xefd6  schedule     (hold-badge-longer screen icon)
 )
 
 # Combined fonts library

@@ -73,8 +73,14 @@ class TagVerifier {
   pw::async2::Coro<pw::Status> Run(pw::async2::CoroContext cx);
   pw::async2::Coro<pw::Status> VerifyTag(pw::async2::CoroContext cx,
                                           nfc::NfcTag& tag);
+  // live_tag is the reader-owned tag whose is_valid() flips to false the moment
+  // the badge leaves the field. It is checked at each await boundary so a
+  // departed user never starts a session. (Note: the stack-local Ntag424Tag
+  // built inside VerifyTag is a copy whose validity never changes, so it cannot
+  // be used for this.)
   pw::async2::Coro<pw::Status> AuthorizeTag(pw::async2::CoroContext cx,
                                              nfc::Ntag424Tag& ntag,
+                                             nfc::NfcTag& live_tag,
                                              const maco::TagUid& tag_uid);
 
   void NotifyTagDetected(pw::ConstByteSpan uid);
@@ -88,6 +94,10 @@ class TagVerifier {
                         const maco::FirebaseId& auth_id);
   void NotifyUnauthorized();
   void NotifyTagRemoved();
+  // Fires OnTagRemoved (to correct SessionFsm::tag_present_) and then leaves the
+  // terminal snapshot on kRemovedTooEarly so the UI shows "hold the badge
+  // longer". Call when the badge departs mid-authorization.
+  void NotifyRemovedDuringAuth();
 
   nfc::NfcReader& reader_;
   secrets::DeviceSecrets& device_secrets_;

@@ -14,6 +14,7 @@ enum class TagVerificationState {
   kAuthorizing,  // Cloud authorization in progress
   kAuthorized,   // Cloud authorized, auth_id obtained
   kUnauthorized, // Cloud rejected the user
+  kRemovedTooEarly,  // Badge left the field mid-authorization; ask to hold longer
 };
 
 }  // namespace maco::app_state

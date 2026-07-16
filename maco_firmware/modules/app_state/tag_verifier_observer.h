@@ -27,6 +27,12 @@ class TagVerifierObserver {
                             const maco::FirebaseId& /*auth_id*/) {}
   virtual void OnUnauthorized() {}
   virtual void OnTagRemoved() {}
+
+  /// The badge left the field while the terminal still needed it (during the
+  /// cloud round-trip or a subsequent tag operation). Distinct from
+  /// OnUnauthorized (cloud rejected the user) — here the user simply lifted
+  /// the badge too early and should be asked to hold it on longer.
+  virtual void OnTagRemovedDuringAuth() {}
 };
 
 }  // namespace maco::app_state

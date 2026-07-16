@@ -26,6 +26,18 @@ namespace maco::app_state {
 constexpr uint8_t kTerminalKeyNumber = 1;
 constexpr uint8_t kAuthorizationKeyNumber = 2;
 
+namespace {
+
+// True when a tag operation failed because the badge left the field: the reader
+// marks the tag invalid, and the driver reports FailedPrecondition for any
+// transceive it can no longer service. Distinguishes "user lifted the badge"
+// from a genuine unknown/rejected tag.
+bool DepartedMidAuth(const nfc::NfcTag& live_tag, pw::Status status) {
+  return !live_tag.is_valid() || status.IsFailedPrecondition();
+}
+
+}  // namespace
+
 TagVerifier::TagVerifier(nfc::NfcReader& reader,
                          secrets::DeviceSecrets& device_secrets,
                          firebase::FirebaseClient& firebase_client,
@@ -173,6 +185,27 @@ void TagVerifier::NotifyTagRemoved() {
   }
 }
 
+void TagVerifier::NotifyRemovedDuringAuth() {
+  // First run the normal removal: this resets the snapshot to kIdle, clears the
+  // tag fields, and — crucially — fires OnTagRemoved so SessionFsm clears its
+  // tag_present_ flag (otherwise the session FSM believes the badge is still
+  // on the reader).
+  NotifyTagRemoved();
+
+  // Then override the terminal state so the UI can surface a distinct "hold the
+  // badge longer" screen instead of the plain idle screen. Order matters:
+  // NotifyTagRemoved() set kIdle, so this assignment must come after it. The
+  // next kTagArrived clears kRemovedTooEarly via NotifyTagDetected.
+  {
+    std::lock_guard lock(snapshot_mutex_);
+    snapshot_.state = TagVerificationState::kRemovedTooEarly;
+  }
+
+  for (size_t i = 0; i < observer_count_; ++i) {
+    observers_[i]->OnTagRemovedDuringAuth();
+  }
+}
+
 // --- Main loop ---
 
 pw::async2::Coro<pw::Status> TagVerifier::Run(pw::async2::CoroContext cx) {
@@ -241,6 +274,11 @@ pw::async2::Coro<pw::Status> TagVerifier::VerifyTag(
   // Step 3: Select NTAG424 application
   auto select_status = co_await ntag.SelectApplication(cx);
   if (!select_status.ok()) {
+    if (DepartedMidAuth(tag, select_status)) {
+      PW_LOG_INFO("Tag removed during SelectApplication");
+      NotifyRemovedDuringAuth();
+      co_return pw::OkStatus();
+    }
     PW_LOG_INFO("SelectApplication failed: %d",
                 static_cast<int>(select_status.code()));
     NotifyUnknownTag();
@@ -262,6 +300,11 @@ pw::async2::Coro<pw::Status> TagVerifier::VerifyTag(
 
   auto auth_result = co_await ntag.Authenticate(cx, key_provider);
   if (!auth_result.ok()) {
+    if (DepartedMidAuth(tag, auth_result.status())) {
+      PW_LOG_INFO("Tag removed during terminal authentication");
+      NotifyRemovedDuringAuth();
+      co_return pw::OkStatus();
+    }
     PW_LOG_INFO("Authentication failed: %d",
                 static_cast<int>(auth_result.status().code()));
     NotifyUnknownTag();
@@ -273,6 +316,11 @@ pw::async2::Coro<pw::Status> TagVerifier::VerifyTag(
   auto uid_result = co_await ntag.GetCardUid(
       cx, *auth_result, pw::ByteSpan(uid_buffer));
   if (!uid_result.ok()) {
+    if (DepartedMidAuth(tag, uid_result.status())) {
+      PW_LOG_INFO("Tag removed during GetCardUid");
+      NotifyRemovedDuringAuth();
+      co_return pw::OkStatus();
+    }
     PW_LOG_INFO("GetCardUid failed: %d",
                 static_cast<int>(uid_result.status().code()));
     NotifyUnknownTag();
@@ -292,7 +340,7 @@ pw::async2::Coro<pw::Status> TagVerifier::VerifyTag(
     co_return pw::OkStatus();
   }
 
-  auto auth_status = co_await AuthorizeTag(cx, ntag, *tag_uid_result);
+  auto auth_status = co_await AuthorizeTag(cx, ntag, tag, *tag_uid_result);
   if (!auth_status.ok()) {
     PW_LOG_WARN("Authorization failed: %d",
                 static_cast<int>(auth_status.code()));
@@ -304,11 +352,18 @@ pw::async2::Coro<pw::Status> TagVerifier::VerifyTag(
 pw::async2::Coro<pw::Status> TagVerifier::AuthorizeTag(
     pw::async2::CoroContext cx,
     nfc::Ntag424Tag& ntag,
+    nfc::NfcTag& live_tag,
     const maco::TagUid& tag_uid) {
   // Check cache first
   auto now = pw::chrono::SystemClock::now();
   auto cached = auth_cache_.Lookup(tag_uid, now);
   if (cached) {
+    // Never start a session for a badge that has already left the field.
+    if (!live_tag.is_valid()) {
+      PW_LOG_INFO("Tag removed before cache-hit authorization");
+      NotifyRemovedDuringAuth();
+      co_return pw::OkStatus();
+    }
     PW_LOG_INFO("Cache hit - skipping cloud authorization");
     NotifyAuthorized(tag_uid, cached->user_id,
                      pw::InlineString<64>(cached->user_label),
@@ -321,6 +376,16 @@ pw::async2::Coro<pw::Status> TagVerifier::AuthorizeTag(
 
   auto checkin_result =
       co_await firebase_client_.TerminalCheckin(cx, tag_uid, machine_id_);
+
+  // The user may have pulled the badge during the cloud round-trip. Abort
+  // rather than authorize someone who already walked away. (The cloud call
+  // itself is read-only, so nothing is left behind server-side.)
+  if (!live_tag.is_valid()) {
+    PW_LOG_INFO("Tag removed during TerminalCheckin");
+    NotifyRemovedDuringAuth();
+    co_return pw::OkStatus();
+  }
+
   if (!checkin_result.ok()) {
     // FirebaseClient returns InvalidArgument when machine_id is empty (i.e.,
     // no machine configured on this terminal); fail closed in that case.
@@ -357,9 +422,23 @@ pw::async2::Coro<pw::Status> TagVerifier::AuthorizeTag(
   // No existing auth - do key-2 cloud authentication to get one
   PW_LOG_INFO("No existing auth, performing cloud key auth");
 
+  // The cloud key auth needs the badge on the reader. If it left during the
+  // checkin round-trip, abort with the "hold longer" state rather than driving
+  // a doomed transceive.
+  if (!live_tag.is_valid()) {
+    PW_LOG_INFO("Tag removed before cloud key auth");
+    NotifyRemovedDuringAuth();
+    co_return pw::OkStatus();
+  }
+
   // Re-select application to reset tag state for new authentication
   auto reselect_status = co_await ntag.SelectApplication(cx);
   if (!reselect_status.ok()) {
+    if (DepartedMidAuth(live_tag, reselect_status)) {
+      PW_LOG_INFO("Tag removed during cloud-auth re-select");
+      NotifyRemovedDuringAuth();
+      co_return pw::OkStatus();
+    }
     PW_LOG_ERROR("Re-select failed: %d",
                  static_cast<int>(reselect_status.code()));
     NotifyUnauthorized();
@@ -371,6 +450,11 @@ pw::async2::Coro<pw::Status> TagVerifier::AuthorizeTag(
 
   auto cloud_auth_result = co_await ntag.Authenticate(cx, cloud_key_provider);
   if (!cloud_auth_result.ok()) {
+    if (DepartedMidAuth(live_tag, cloud_auth_result.status())) {
+      PW_LOG_INFO("Tag removed during cloud key auth");
+      NotifyRemovedDuringAuth();
+      co_return pw::OkStatus();
+    }
     PW_LOG_WARN("Cloud key auth failed: %d",
                 static_cast<int>(cloud_auth_result.status().code()));
     NotifyUnauthorized();
@@ -381,6 +465,14 @@ pw::async2::Coro<pw::Status> TagVerifier::AuthorizeTag(
   if (!cloud_key_provider.auth_id()) {
     PW_LOG_ERROR("Cloud auth succeeded but no auth_id");
     NotifyUnauthorized();
+    co_return pw::OkStatus();
+  }
+
+  // Final gate: only authorize if the badge is still present. (The auth_id was
+  // minted server-side and self-expires via its TTL if we drop it here.)
+  if (!live_tag.is_valid()) {
+    PW_LOG_INFO("Tag removed after cloud key auth");
+    NotifyRemovedDuringAuth();
     co_return pw::OkStatus();
   }
 

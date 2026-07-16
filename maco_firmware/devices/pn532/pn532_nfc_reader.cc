@@ -105,11 +105,24 @@ TransceiveFuture Pn532NfcReader::RequestTransceive(
     pw::ConstByteSpan command,
     pw::ByteSpan response_buffer,
     pw::chrono::SystemClock::duration timeout) {
+  // Never park a request we cannot service. Only the tag-present loop drains
+  // pending_request_; once the tag departs, that loop has broken back to the
+  // detection loop, which never looks at the queue. A request parked now would
+  // therefore hang the caller until the *next* tag arrives — and then be
+  // replayed as a stale APDU against that new tag (current_target_number_ is
+  // read at execution time). Fail closed instead. FailedPrecondition (not
+  // DeadlineExceeded) so callers can distinguish "tag gone" from an RF timeout,
+  // matching MockNfcReader's contract so host and hardware agree.
+  if (!current_tag_ || !current_tag_->is_valid()) {
+    return TransceiveFuture::Resolved(pw::Status::FailedPrecondition());
+  }
+
   // Store the request - the main loop will pick it up
   pending_request_.emplace();
   pending_request_->command = command;
   pending_request_->response_buffer = response_buffer;
   pending_request_->timeout = timeout;
+  pending_request_->generation = tag_generation_;
 
   // Return a future that will be resolved when operation completes
   return transceive_result_provider_.Get();
@@ -175,6 +188,7 @@ pw::async2::Coro<pw::Status> Pn532NfcReader::RunLoop(
     // === PROBING ===
     // For now, just create the tag (could add SELECT/RATS here later)
     current_tag_ = std::make_shared<Pn532Tag>(info);
+    ++tag_generation_;
     PW_LOG_INFO("Tag detected: UID=%d bytes, SAK=0x%02x",
                 static_cast<int>(info.uid_length), info.sak);
 
@@ -189,6 +203,18 @@ pw::async2::Coro<pw::Status> Pn532NfcReader::RunLoop(
       // Check if app has a pending transceive request
       if (pending_request_.has_value()) {
         auto& req = *pending_request_;
+
+        // Defense in depth: a request captured against a previous tag must
+        // never bind to this one, even if it slipped past the RequestTransceive
+        // guard through some future re-ordering.
+        if (req.generation != tag_generation_) {
+          PW_LOG_WARN("Dropping stale transceive request (gen %u != %u)",
+                      static_cast<unsigned>(req.generation),
+                      static_cast<unsigned>(tag_generation_));
+          transceive_result_provider_.Resolve(pw::Status::FailedPrecondition());
+          pending_request_.reset();
+          continue;
+        }
 
         PW_LOG_DEBUG("Executing transceive request");
         auto result =
@@ -216,8 +242,14 @@ pw::async2::Coro<pw::Status> Pn532NfcReader::RunLoop(
           if (current_tag_) {
             current_tag_->Invalidate();
           }
+          // Abandon any request that was parked while the tag was present, both
+          // before and after DoReleaseTag — the latter co_awaits, so a request
+          // can also arrive during that suspension. Safe: pending_request_ is a
+          // pure host-side queue, nothing is on the wire.
+          DrainPendingRequest();
           DrainReceiveBuffer();
           (void)co_await DoReleaseTag(cx, current_target_number_);
+          DrainPendingRequest();
 
           event_provider_.Resolve(
               NfcEvent{NfcEventType::kTagDeparted, current_tag_});
@@ -677,6 +709,13 @@ pw::async2::Coro<pw::Status> Pn532NfcReader::RecoverFromDesync(
 
 void Pn532NfcReader::DrainReceiveBuffer() {
   uart_.Drain();
+}
+
+void Pn532NfcReader::DrainPendingRequest() {
+  if (pending_request_.has_value()) {
+    pending_request_.reset();
+    transceive_result_provider_.Resolve(pw::Status::FailedPrecondition());
+  }
 }
 
 }  // namespace maco::nfc

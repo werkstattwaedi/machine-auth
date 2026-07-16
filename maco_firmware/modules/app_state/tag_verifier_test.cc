@@ -135,6 +135,7 @@ class MockTagVerifierObserver : public TagVerifierObserver {
   }
   void OnUnauthorized() override { unauthorized_count++; }
   void OnTagRemoved() override { tag_removed_count++; }
+  void OnTagRemovedDuringAuth() override { removed_during_auth_count++; }
 
   int tag_detected_count = 0;
   int verifying_count = 0;
@@ -144,6 +145,7 @@ class MockTagVerifierObserver : public TagVerifierObserver {
   int authorized_count = 0;
   int unauthorized_count = 0;
   int tag_removed_count = 0;
+  int removed_during_auth_count = 0;
   size_t last_uid_size = 0;
   size_t last_ntag_uid_size = 0;
   pw::InlineString<64> last_user_label;
@@ -441,10 +443,22 @@ TEST_F(TagVerifierTest, CacheHit) {
 }
 
 // ============================================================================
-// Tag departure during kAuthorizing → kIdle
+// Tag departure during kAuthorizing → abort, never authorize the departed user
 // ============================================================================
-
+//
+// Regression for #536. The user pulls the badge while the TerminalCheckin
+// round-trip is in flight. Because no SubscribeOnce is active during the RPC
+// suspend, the departure event itself is dropped — but the reader has already
+// marked the tag invalid. When the (late) checkin response arrives we must
+// re-check the live tag and abort with kRemovedTooEarly instead of starting a
+// session for someone who already walked away.
+//
+// The previous version of this test locked in the bug (asserted the departed
+// user reached kAuthorized).
 TEST_F(TagVerifierTest, TagDepartureDuringAuthorizing) {
+  MockTagVerifierObserver mock_observer;
+  verifier_->AddObserver(&mock_observer);
+
   auto config = MakeConfig(kRealUid, kTerminalKey);
 
   pw::random::XorShiftStarRng64 tag_rng{0xABCDEF01};
@@ -455,21 +469,72 @@ TEST_F(TagVerifierTest, TagDepartureDuringAuthorizing) {
   dispatcher_.RunUntilStalled();
   ASSERT_EQ(GetSnapshot().state, TagVerificationState::kAuthorizing);
 
-  // Tag departs while coroutine is suspended at RPC.
-  // MockNfcReader uses ValueProvider (not a queue), so the departure
-  // event is lost because no SubscribeOnce is active during RPC suspend.
+  // Tag departs while the coroutine is suspended at the checkin RPC. The
+  // departure event is dropped (no active subscription), so the verifier stays
+  // parked at kAuthorizing — a departed user is *not* aborted promptly on the
+  // first checkin (prompt abort is deferred; see #536 follow-up). But the tag
+  // is now invalid.
   reader_.SimulateTagDeparture();
   dispatcher_.RunUntilStalled();
-
-  // State is still kAuthorizing (coroutine blocked on RPC)
   EXPECT_EQ(GetSnapshot().state, TagVerificationState::kAuthorizing);
 
-  // RPC response arrives - authorization completes.
-  // Departure was lost, so state goes to kAuthorized.
+  // The late checkin response arrives. The verifier re-checks the live tag,
+  // finds it gone, and aborts — it must NOT resurrect the auth to kAuthorized.
   SendCheckinAuthorizedWithAuth("user123", "Late", "auth_late");
   dispatcher_.RunUntilStalled();
 
-  EXPECT_EQ(GetSnapshot().state, TagVerificationState::kAuthorized);
+  EXPECT_EQ(GetSnapshot().state, TagVerificationState::kRemovedTooEarly);
+  EXPECT_EQ(mock_observer.authorized_count, 0);
+  // OnTagRemovedDuringAuth surfaces the "hold longer" UI; OnTagRemoved corrects
+  // SessionFsm::tag_present_. Both fire exactly once.
+  EXPECT_EQ(mock_observer.removed_during_auth_count, 1);
+  EXPECT_EQ(mock_observer.tag_removed_count, 1);
+}
+
+// ============================================================================
+// After an abort, the next tag still authorizes normally (no wedged in-flight
+// call, no stale state).
+// ============================================================================
+
+TEST_F(TagVerifierTest, NextTagAfterAbortStillWorks) {
+  auto config = MakeConfig(kRealUid, kTerminalKey);
+
+  // First tap: depart mid-authorization → abort.
+  {
+    pw::random::XorShiftStarRng64 tag_rng{0xABCDEF01};
+    auto tag = std::make_shared<nfc::Ntag424TagMock>(
+        kAntiCollisionUid, kNtag424Sak, config, tag_rng);
+
+    reader_.SimulateTagArrival(std::static_pointer_cast<nfc::MockTag>(tag));
+    dispatcher_.RunUntilStalled();
+    ASSERT_EQ(GetSnapshot().state, TagVerificationState::kAuthorizing);
+
+    reader_.SimulateTagDeparture();
+    dispatcher_.RunUntilStalled();
+    SendCheckinAuthorizedWithAuth("user123", "Gone", "auth_gone");
+    dispatcher_.RunUntilStalled();
+    ASSERT_EQ(GetSnapshot().state, TagVerificationState::kRemovedTooEarly);
+  }
+
+  // Second tap: a fresh badge completes a normal cloud authorization. The abort
+  // did not insert into the cache and did not leave the checkin call wedged.
+  {
+    pw::random::XorShiftStarRng64 tag_rng{0xDEADBEEF};
+    auto tag = std::make_shared<nfc::Ntag424TagMock>(
+        kAntiCollisionUid, kNtag424Sak, config, tag_rng);
+
+    reader_.SimulateTagArrival(std::static_pointer_cast<nfc::MockTag>(tag));
+    dispatcher_.RunUntilStalled();
+    ASSERT_EQ(GetSnapshot().state, TagVerificationState::kAuthorizing);
+
+    SendCheckinAuthorizedWithAuth("user123", "Present User", "auth_ok");
+    dispatcher_.RunUntilStalled();
+
+    auto snapshot = GetSnapshot();
+    EXPECT_EQ(snapshot.state, TagVerificationState::kAuthorized);
+    EXPECT_EQ(std::string_view(snapshot.user_label), "Present User");
+    EXPECT_EQ(snapshot.auth_id.value(), "auth_ok");
+  }
 }
 
 // ============================================================================
