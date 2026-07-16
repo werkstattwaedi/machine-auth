@@ -57,6 +57,10 @@ class MainScreen : public ui::Screen<app_state::AppStateSnapshot> {
 
   void SetVisualState(VisualState state);
   void HideAllWidgets();
+  // Populates the denied widgets from the snapshot's rejection fields: the
+  // actionable stale-checkout layout (heading + message + QR) or the generic
+  // icon + "Nicht berechtigt" (issue #535).
+  void UpdateDenied(const app_state::TagVerificationSnapshot& verification);
 
   ActionCallback action_callback_;
   VisualState visual_state_ = VisualState::kIdle;
@@ -77,9 +81,17 @@ class MainScreen : public ui::Screen<app_state::AppStateSnapshot> {
   lv_obj_t* timer_icon_ = nullptr;
   lv_obj_t* timer_label_ = nullptr;
 
-  // Denied widgets
+  // Denied widgets. The generic denial uses icon_ + label_; the stale-checkout
+  // denial (issue #535) uses heading_ + body_ + a QR of the action URL and its
+  // caption. denied_qr_url_ caches the last-encoded URL so the QR is only
+  // rebuilt when the target changes.
   lv_obj_t* denied_icon_ = nullptr;
   lv_obj_t* denied_label_ = nullptr;
+  lv_obj_t* denied_heading_ = nullptr;
+  lv_obj_t* denied_body_ = nullptr;
+  lv_obj_t* denied_qr_ = nullptr;
+  lv_obj_t* denied_qr_caption_ = nullptr;
+  pw::InlineString<128> denied_qr_url_;
 
   // Hold-longer widgets (badge removed mid-authorization)
   lv_obj_t* hold_longer_icon_ = nullptr;

@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 import {
-  CompleteTagAuthRequest,
   CompleteTagAuthResponse,
+  CompleteTagAuthRequest,
+  RejectionReason,
 } from "../proto/firebase_rpc/auth.js";
 import { Key } from "../proto/common.js";
 import * as logger from "firebase-functions/logger";
@@ -13,6 +14,24 @@ import { authorizeStep2 } from "../ntag/authorize";
 import { toKeyBytes } from "../ntag/bytebuffer_util";
 import { deriveSessionKeys } from "../ntag/session_key_derivation";
 import { AuthenticationEntity } from "../types/firestore_entities";
+
+/**
+ * Build a rejected CompleteTagAuth response. These are crypto/auth-state
+ * failures with no actionable landing page, so `reason` stays UNSPECIFIED and
+ * `actionUrl` empty (the fields exist on the shared `Rejected` message).
+ */
+function rejected(message: string): CompleteTagAuthResponse {
+  return {
+    result: {
+      $case: "rejected",
+      rejected: {
+        message,
+        reason: RejectionReason.REJECTION_REASON_UNSPECIFIED,
+        actionUrl: "",
+      },
+    },
+  };
+}
 
 // Map key slot enum to diversification key name
 function getKeyName(keySlot: Key): KeyName {
@@ -38,30 +57,18 @@ export async function handleCompleteTagAuth(
   logger.info("Completing tag authentication", { authId: request.authId });
 
   if (!request.authId?.value) {
-    return {
-      result: { $case: "rejected", rejected: { message: "Missing auth ID" } },
-    };
+    return rejected("Missing auth ID");
   }
 
   if (
     !request.encryptedTagResponse ||
     request.encryptedTagResponse.length === 0
   ) {
-    return {
-      result: {
-        $case: "rejected",
-        rejected: { message: "Missing encrypted tag response" },
-      },
-    };
+    return rejected("Missing encrypted tag response");
   }
 
   if (request.encryptedTagResponse.length !== 32) {
-    return {
-      result: {
-        $case: "rejected",
-        rejected: { message: "Encrypted tag response must be 32 bytes" },
-      },
-    };
+    return rejected("Encrypted tag response must be 32 bytes");
   }
 
   const authId = request.authId.value;
@@ -75,32 +82,17 @@ export async function handleCompleteTagAuth(
       .get();
 
     if (!authDoc.exists) {
-      return {
-        result: {
-          $case: "rejected",
-          rejected: { message: "Authentication not found" },
-        },
-      };
+      return rejected("Authentication not found");
     }
 
     const authData = authDoc.data() as AuthenticationEntity;
     if (!authData?.inProgressAuth) {
-      return {
-        result: {
-          $case: "rejected",
-          rejected: { message: "Authentication already completed or expired" },
-        },
-      };
+      return rejected("Authentication already completed or expired");
     }
 
     const { rndA, rndB } = authData.inProgressAuth;
     if (!rndA || !rndB) {
-      return {
-        result: {
-          $case: "rejected",
-          rejected: { message: "Invalid authentication state" },
-        },
-      };
+      return rejected("Invalid authentication state");
     }
 
     // Get the token ID for key derivation
@@ -175,14 +167,8 @@ export async function handleCompleteTagAuth(
       logger.warn("Failed to delete authentication record", { authId });
     }
 
-    return {
-      result: {
-        $case: "rejected",
-        rejected: {
-          message:
-            error instanceof Error ? error.message : "Authentication failed",
-        },
-      },
-    };
+    return rejected(
+      error instanceof Error ? error.message : "Authentication failed"
+    );
   }
 }

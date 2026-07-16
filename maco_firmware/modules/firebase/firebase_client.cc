@@ -184,6 +184,10 @@ pw::Result<CheckinResult> DecodeCheckinResponse(pw::ConstByteSpan payload) {
     case maco_proto_firebase_rpc_TerminalCheckinResponse_rejected_tag:
       return CheckinRejected{
           .message = pw::InlineString<128>(response.result.rejected.message),
+          .reason = static_cast<RejectionReason>(
+              response.result.rejected.reason),
+          .action_url =
+              pw::InlineString<128>(response.result.rejected.action_url),
       };
     default:
       PW_LOG_ERROR("TerminalCheckinResponse missing oneof result field");

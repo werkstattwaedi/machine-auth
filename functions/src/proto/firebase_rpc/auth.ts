@@ -10,6 +10,26 @@ import { FirebaseId, Key, TagUid } from "../common";
 
 export const protobufPackage = "maco.proto.firebase_rpc";
 
+/**
+ * Machine-readable cause of a rejection. Lets the terminal branch on layout
+ * (e.g. the stale-checkout screen with its QR) without parsing German prose.
+ *
+ * IMPORTANT: the integer values MUST stay aligned with the `RejectionReason`
+ * enum in shared/src/rejection.ts (@oww/shared, consumed by web + functions)
+ * and with `maco::firebase::RejectionReason` in
+ * maco_firmware/modules/firebase/public/firebase/types.h. Adding a value means
+ * adding it in all three places with the same number.
+ */
+export enum RejectionReason {
+  /** REJECTION_REASON_UNSPECIFIED - generic — render as today */
+  REJECTION_REASON_UNSPECIFIED = 0,
+  REJECTION_REASON_MISSING_PERMISSION = 1,
+  REJECTION_REASON_STALE_CHECKOUT = 2,
+  REJECTION_REASON_TOKEN_UNKNOWN = 3,
+  REJECTION_REASON_TOKEN_DEACTIVATED = 4,
+  UNRECOGNIZED = -1,
+}
+
 /** NTAG424 session keys for secure tag communication */
 export interface SessionKeys {
   /** Derived session encryption key (AES-128) */
@@ -24,8 +44,18 @@ export interface SessionKeys {
 
 /** Request was rejected */
 export interface Rejected {
-  /** User-readable message */
+  /** User-readable message. The terminal renders this verbatim. */
   message: string;
+  /**
+   * Machine-readable cause (see RejectionReason). Field 1 keeps its meaning,
+   * so this is a backwards-compatible addition.
+   */
+  reason: RejectionReason;
+  /**
+   * Deep link to the generic /denied landing page (empty when N/A). The
+   * terminal renders this as a QR code; it never builds the URL itself.
+   */
+  actionUrl: string;
 }
 
 /** TerminalCheckin RPC - checks authorization and returns existing auth if available */
@@ -189,13 +219,19 @@ export const SessionKeys: MessageFns<SessionKeys> = {
 };
 
 function createBaseRejected(): Rejected {
-  return { message: "" };
+  return { message: "", reason: 0, actionUrl: "" };
 }
 
 export const Rejected: MessageFns<Rejected> = {
   encode(message: Rejected, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.message !== "") {
       writer.uint32(10).string(message.message);
+    }
+    if (message.reason !== 0) {
+      writer.uint32(16).int32(message.reason);
+    }
+    if (message.actionUrl !== "") {
+      writer.uint32(26).string(message.actionUrl);
     }
     return writer;
   },
@@ -215,6 +251,22 @@ export const Rejected: MessageFns<Rejected> = {
           message.message = reader.string();
           continue;
         }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.reason = reader.int32() as any;
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.actionUrl = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -230,6 +282,8 @@ export const Rejected: MessageFns<Rejected> = {
   fromPartial(object: DeepPartial<Rejected>): Rejected {
     const message = createBaseRejected();
     message.message = object.message ?? "";
+    message.reason = object.reason ?? 0;
+    message.actionUrl = object.actionUrl ?? "";
     return message;
   },
 };

@@ -159,10 +159,16 @@ void TagVerifier::NotifyAuthorized(const maco::TagUid& tag_uid,
   }
 }
 
-void TagVerifier::NotifyUnauthorized() {
+void TagVerifier::NotifyUnauthorized(RejectionReason reason,
+                                     std::string_view message,
+                                     std::string_view action_url) {
   {
     std::lock_guard lock(snapshot_mutex_);
     snapshot_.state = TagVerificationState::kUnauthorized;
+    snapshot_.rejection_reason = reason;
+    snapshot_.rejection_message.assign(message.data(), message.size());
+    snapshot_.rejection_action_url.assign(action_url.data(),
+                                          action_url.size());
   }
 
   for (size_t i = 0; i < observer_count_; ++i) {
@@ -400,7 +406,14 @@ pw::async2::Coro<pw::Status> TagVerifier::AuthorizeTag(
     const auto& rejected =
         std::get<firebase::CheckinRejected>(*checkin_result);
     PW_LOG_WARN("TerminalCheckin rejected: %s", rejected.message.c_str());
-    NotifyUnauthorized();
+    // Carry the server's cause + message + QR link onto the snapshot so the
+    // screen can show the actionable stale-checkout view instead of a generic
+    // "Nicht berechtigt" (issue #535). The firebase and app_state reason enums
+    // mirror the same proto values, so the cast is value-preserving.
+    NotifyUnauthorized(
+        static_cast<RejectionReason>(static_cast<uint8_t>(rejected.reason)),
+        std::string_view(rejected.message),
+        std::string_view(rejected.action_url));
     co_return pw::OkStatus();
   }
 

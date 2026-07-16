@@ -48,6 +48,21 @@ struct SessionSnapshotUi {
   bool tag_present = false;
 };
 
+// Machine-readable cause of a cloud rejection (kUnauthorized only). Lets the
+// screen branch on layout — e.g. the stale-checkout screen with its QR —
+// without parsing the German message.
+//
+// Mirrors maco::firebase::RejectionReason (firebase/types.h), the proto
+// RejectionReason (proto/firebase_rpc/auth.proto) and the TypeScript enum
+// (shared/src/rejection.ts). Values MUST stay aligned across all four.
+enum class RejectionReason : uint8_t {
+  kUnspecified = 0,
+  kMissingPermission = 1,
+  kStaleCheckout = 2,
+  kTokenUnknown = 3,
+  kTokenDeactivated = 4,
+};
+
 // Tag verification snapshot - the portion owned by TagVerifier.
 struct TagVerificationSnapshot {
   TagVerificationState state = TagVerificationState::kIdle;
@@ -57,6 +72,13 @@ struct TagVerificationSnapshot {
   // Authorization fields (kAuthorized only)
   pw::InlineString<64> user_label;
   maco::FirebaseId auth_id = maco::FirebaseId::Empty();
+
+  // Rejection fields (kUnauthorized only). The server is the source of truth
+  // for the message + cause; the screen renders the message verbatim and shows
+  // a QR of the action URL for the stale-checkout case (issue #535).
+  RejectionReason rejection_reason = RejectionReason::kUnspecified;
+  pw::InlineString<128> rejection_message;
+  pw::InlineString<128> rejection_action_url;
 };
 
 // System-level connectivity and boot state for UI display

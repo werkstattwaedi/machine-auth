@@ -21,10 +21,32 @@ message SessionKeys {
   bytes picc_capabilities = 4;
 }
 
+// Machine-readable cause of a rejection. Lets the terminal branch on layout
+// (e.g. the stale-checkout screen with its QR) without parsing German prose.
+//
+// IMPORTANT: the integer values MUST stay aligned with the `RejectionReason`
+// enum in shared/src/rejection.ts (@oww/shared, consumed by web + functions)
+// and with `maco::firebase::RejectionReason` in
+// maco_firmware/modules/firebase/public/firebase/types.h. Adding a value means
+// adding it in all three places with the same number.
+enum RejectionReason {
+  REJECTION_REASON_UNSPECIFIED = 0;   // generic — render as today
+  REJECTION_REASON_MISSING_PERMISSION = 1;
+  REJECTION_REASON_STALE_CHECKOUT = 2;
+  REJECTION_REASON_TOKEN_UNKNOWN = 3;
+  REJECTION_REASON_TOKEN_DEACTIVATED = 4;
+}
+
 // Request was rejected
 message Rejected {
-  // User-readable message
+  // User-readable message. The terminal renders this verbatim.
   string message = 1;
+  // Machine-readable cause (see RejectionReason). Field 1 keeps its meaning,
+  // so this is a backwards-compatible addition.
+  RejectionReason reason = 2;
+  // Deep link to the generic /denied landing page (empty when N/A). The
+  // terminal renders this as a QR code; it never builds the URL itself.
+  string action_url = 3;
 }
 
 // === Terminal Check-in (Authorization + Auth Reuse) ===

@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from "./routes/__root"
 import { Route as LoginRouteImport } from "./routes/login"
 import { Route as LinkAccountRouteImport } from "./routes/link-account"
+import { Route as DeniedRouteImport } from "./routes/denied"
 import { Route as WizardRouteImport } from "./routes/_wizard"
 import { Route as ReportRouteImport } from "./routes/_report"
 import { Route as AuthonlyRouteImport } from "./routes/_authonly"
@@ -42,6 +43,11 @@ const LoginRoute = LoginRouteImport.update({
 const LinkAccountRoute = LinkAccountRouteImport.update({
   id: "/link-account",
   path: "/link-account",
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DeniedRoute = DeniedRouteImport.update({
+  id: "/denied",
+  path: "/denied",
   getParentRoute: () => rootRouteImport,
 } as any)
 const WizardRoute = WizardRouteImport.update({
@@ -163,6 +169,7 @@ const WizardVisitAddItemCodeVariantIdRoute =
 
 export interface FileRoutesByFullPath {
   "/": typeof IndexRoute
+  "/denied": typeof DeniedRoute
   "/link-account": typeof LinkAccountRoute
   "/login": typeof LoginRoute
   "/report": typeof ReportReportRoute
@@ -185,6 +192,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   "/": typeof IndexRoute
+  "/denied": typeof DeniedRoute
   "/link-account": typeof LinkAccountRoute
   "/login": typeof LoginRoute
   "/report": typeof ReportReportRoute
@@ -212,6 +220,7 @@ export interface FileRoutesById {
   "/_authonly": typeof AuthonlyRouteWithChildren
   "/_report": typeof ReportRouteWithChildren
   "/_wizard": typeof WizardRouteWithChildren
+  "/denied": typeof DeniedRoute
   "/link-account": typeof LinkAccountRoute
   "/login": typeof LoginRoute
   "/_report/report": typeof ReportReportRoute
@@ -236,6 +245,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | "/"
+    | "/denied"
     | "/link-account"
     | "/login"
     | "/report"
@@ -258,6 +268,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | "/"
+    | "/denied"
     | "/link-account"
     | "/login"
     | "/report"
@@ -284,6 +295,7 @@ export interface FileRouteTypes {
     | "/_authonly"
     | "/_report"
     | "/_wizard"
+    | "/denied"
     | "/link-account"
     | "/login"
     | "/_report/report"
@@ -311,6 +323,7 @@ export interface RootRouteChildren {
   AuthonlyRoute: typeof AuthonlyRouteWithChildren
   ReportRoute: typeof ReportRouteWithChildren
   WizardRoute: typeof WizardRouteWithChildren
+  DeniedRoute: typeof DeniedRoute
   LinkAccountRoute: typeof LinkAccountRoute
   LoginRoute: typeof LoginRoute
   LoginVerifyRoute: typeof LoginVerifyRoute
@@ -331,6 +344,13 @@ declare module "@tanstack/react-router" {
       path: "/link-account"
       fullPath: "/link-account"
       preLoaderRoute: typeof LinkAccountRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    "/denied": {
+      id: "/denied"
+      path: "/denied"
+      fullPath: "/denied"
+      preLoaderRoute: typeof DeniedRouteImport
       parentRoute: typeof rootRouteImport
     }
     "/_wizard": {
@@ -574,6 +594,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthonlyRoute: AuthonlyRouteWithChildren,
   ReportRoute: ReportRouteWithChildren,
   WizardRoute: WizardRouteWithChildren,
+  DeniedRoute: DeniedRoute,
   LinkAccountRoute: LinkAccountRoute,
   LoginRoute: LoginRoute,
   LoginVerifyRoute: LoginVerifyRoute,

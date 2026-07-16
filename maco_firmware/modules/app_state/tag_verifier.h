@@ -5,6 +5,7 @@
 
 #include <array>
 #include <optional>
+#include <string_view>
 
 #include "maco_firmware/modules/app_state/auth_cache.h"
 #include "maco_firmware/modules/app_state/system_state.h"
@@ -92,7 +93,13 @@ class TagVerifier {
                         const maco::FirebaseId& user_id,
                         const pw::InlineString<64>& user_label,
                         const maco::FirebaseId& auth_id);
-  void NotifyUnauthorized();
+  // Carries the server's machine-readable cause + human message + QR action URL
+  // onto the snapshot so the screen can branch on layout (issue #535). All
+  // call sites except the cloud-rejection path pass the generic defaults.
+  void NotifyUnauthorized(
+      RejectionReason reason = RejectionReason::kUnspecified,
+      std::string_view message = {},
+      std::string_view action_url = {});
   void NotifyTagRemoved();
   // Fires OnTagRemoved (to correct SessionFsm::tag_present_) and then leaves the
   // terminal snapshot on kRemovedTooEarly so the UI shows "hold the badge

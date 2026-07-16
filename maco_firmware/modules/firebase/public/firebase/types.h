@@ -11,6 +11,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <variant>
 
 #include "maco_firmware/types.h"
@@ -36,10 +37,30 @@ struct CheckinAuthorized {
   bool has_existing_auth() const { return !authentication_id.empty(); }
 };
 
+/// Machine-readable cause of a rejection. Lets the UI branch on layout (e.g.
+/// the stale-checkout screen with its QR) without parsing German prose.
+///
+/// IMPORTANT: the integer values MUST stay aligned with the `RejectionReason`
+/// proto enum in `proto/firebase_rpc/auth.proto` and the TypeScript
+/// `RejectionReason` enum in `shared/src/rejection.ts` (@oww/shared). Adding a
+/// value means adding it in all three places with the same number.
+enum class RejectionReason : uint8_t {
+  kUnspecified = 0,  // generic — render the default denied screen
+  kMissingPermission = 1,
+  kStaleCheckout = 2,
+  kTokenUnknown = 3,
+  kTokenDeactivated = 4,
+};
+
 /// Tag/user was rejected.
 struct CheckinRejected {
-  /// User-readable rejection message
+  /// User-readable rejection message (rendered verbatim by the UI).
   pw::InlineString<128> message;
+  /// Machine-readable cause the UI branches on.
+  RejectionReason reason = RejectionReason::kUnspecified;
+  /// Deep link to the /denied landing page, rendered as a QR code. Empty when
+  /// there is nothing actionable.
+  pw::InlineString<128> action_url;
 };
 
 /// Result of TerminalCheckin - either authorized or rejected.

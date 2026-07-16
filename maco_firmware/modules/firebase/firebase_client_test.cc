@@ -9,6 +9,7 @@
 #include <array>
 #include <cstring>
 #include <optional>
+#include <string_view>
 #include <variant>
 
 #include "firebase_rpc/auth.pb.h"
@@ -66,9 +67,14 @@ pw::Result<size_t> EncodeAuthorizedResponse(const char* user_id,
   return stream.bytes_written;
 }
 
-// Helper to encode a Rejected response
-pw::Result<size_t> EncodeRejectedResponse(const char* message,
-                                          pw::ByteSpan buffer) {
+// Helper to encode a Rejected response, including the machine-readable reason
+// and QR action URL (issue #535).
+pw::Result<size_t> EncodeRejectedResponse(
+    const char* message,
+    pw::ByteSpan buffer,
+    maco_proto_firebase_rpc_RejectionReason reason =
+        maco_proto_firebase_rpc_RejectionReason_REJECTION_REASON_UNSPECIFIED,
+    const char* action_url = "") {
   maco_proto_firebase_rpc_TerminalCheckinResponse response =
       maco_proto_firebase_rpc_TerminalCheckinResponse_init_zero;
 
@@ -76,6 +82,9 @@ pw::Result<size_t> EncodeRejectedResponse(const char* message,
       maco_proto_firebase_rpc_TerminalCheckinResponse_rejected_tag;
   std::strncpy(response.result.rejected.message, message,
                sizeof(response.result.rejected.message) - 1);
+  response.result.rejected.reason = reason;
+  std::strncpy(response.result.rejected.action_url, action_url,
+               sizeof(response.result.rejected.action_url) - 1);
 
   pb_ostream_t stream = pb_ostream_from_buffer(
       reinterpret_cast<pb_byte_t*>(buffer.data()), buffer.size());
@@ -272,9 +281,14 @@ TEST_F(FirebaseClientTest, TerminalCheckin_Rejected) {
   dispatcher_.Post(task);
   dispatcher_.RunUntilStalled();
 
-  // Inject rejected response
+  // Inject rejected response carrying a machine-readable reason + QR action URL.
+  const char* kUrl =
+      "https://checkout.werkstattwaedi.ch/denied?cause=stale_checkout&uid=u1";
   std::array<std::byte, 256> payload_buffer;
-  auto encode_result = EncodeRejectedResponse("Unknown tag", payload_buffer);
+  auto encode_result = EncodeRejectedResponse(
+      "Besuch offen", payload_buffer,
+      maco_proto_firebase_rpc_RejectionReason_REJECTION_REASON_STALE_CHECKOUT,
+      kUrl);
   ASSERT_TRUE(encode_result.ok());
 
   SendForwardResponse(
@@ -284,7 +298,12 @@ TEST_F(FirebaseClientTest, TerminalCheckin_Rejected) {
 
   ASSERT_TRUE(result.has_value());
   EXPECT_TRUE(result->ok());
-  EXPECT_TRUE(std::holds_alternative<CheckinRejected>(result->value()));
+  ASSERT_TRUE(std::holds_alternative<CheckinRejected>(result->value()));
+  // The reason + action_url must survive the decode, not just the message.
+  const auto& rejected = std::get<CheckinRejected>(result->value());
+  EXPECT_EQ(rejected.reason, RejectionReason::kStaleCheckout);
+  EXPECT_EQ(std::string_view(rejected.message), "Besuch offen");
+  EXPECT_EQ(std::string_view(rejected.action_url), kUrl);
 }
 
 TEST_F(FirebaseClientTest, TerminalCheckin_ForwardError) {
