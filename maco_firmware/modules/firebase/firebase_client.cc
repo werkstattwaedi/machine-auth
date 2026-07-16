@@ -145,6 +145,20 @@ pw::Result<size_t> EncodeCompleteTagAuthRequest(
   return stream.bytes_written;
 }
 
+// Guards the value-preserving `static_cast` below against silent drift: the
+// wire enum (nanopb, generated from proto/firebase_rpc/auth.proto) and
+// `firebase::RejectionReason` (firebase/public/firebase/types.h) are
+// maintained independently and must keep matching numeric values (issue
+// #535). A mismatch here fails the build instead of silently mis-decoding.
+static_assert(static_cast<int>(RejectionReason::kMissingPermission) ==
+              maco_proto_firebase_rpc_RejectionReason_REJECTION_REASON_MISSING_PERMISSION);
+static_assert(static_cast<int>(RejectionReason::kStaleCheckout) ==
+              maco_proto_firebase_rpc_RejectionReason_REJECTION_REASON_STALE_CHECKOUT);
+static_assert(static_cast<int>(RejectionReason::kTokenUnknown) ==
+              maco_proto_firebase_rpc_RejectionReason_REJECTION_REASON_TOKEN_UNKNOWN);
+static_assert(static_cast<int>(RejectionReason::kTokenDeactivated) ==
+              maco_proto_firebase_rpc_RejectionReason_REJECTION_REASON_TOKEN_DEACTIVATED);
+
 /// Decode TerminalCheckinResponse with proper oneof handling.
 pw::Result<CheckinResult> DecodeCheckinResponse(pw::ConstByteSpan payload) {
   maco_proto_firebase_rpc_TerminalCheckinResponse response =

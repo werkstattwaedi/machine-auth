@@ -38,6 +38,22 @@ bool DepartedMidAuth(const nfc::NfcTag& live_tag, pw::Status status) {
 
 }  // namespace
 
+// Guards the value-preserving cast in AuthorizeTag() below against silent
+// drift: `firebase::RejectionReason` (firebase/public/firebase/types.h) and
+// `app_state::RejectionReason` (app_state/ui/snapshot.h) are independently
+// maintained mirrors of the same proto enum and must keep matching numeric
+// values (issue #535).
+static_assert(static_cast<uint8_t>(firebase::RejectionReason::kStaleCheckout) ==
+              static_cast<uint8_t>(RejectionReason::kStaleCheckout));
+static_assert(
+    static_cast<uint8_t>(firebase::RejectionReason::kMissingPermission) ==
+    static_cast<uint8_t>(RejectionReason::kMissingPermission));
+static_assert(static_cast<uint8_t>(firebase::RejectionReason::kTokenUnknown) ==
+              static_cast<uint8_t>(RejectionReason::kTokenUnknown));
+static_assert(
+    static_cast<uint8_t>(firebase::RejectionReason::kTokenDeactivated) ==
+    static_cast<uint8_t>(RejectionReason::kTokenDeactivated));
+
 TagVerifier::TagVerifier(nfc::NfcReader& reader,
                          secrets::DeviceSecrets& device_secrets,
                          firebase::FirebaseClient& firebase_client,
@@ -409,11 +425,12 @@ pw::async2::Coro<pw::Status> TagVerifier::AuthorizeTag(
     // Carry the server's cause + message + QR link onto the snapshot so the
     // screen can show the actionable stale-checkout view instead of a generic
     // "Nicht berechtigt" (issue #535). The firebase and app_state reason enums
-    // mirror the same proto values, so the cast is value-preserving.
-    NotifyUnauthorized(
-        static_cast<RejectionReason>(static_cast<uint8_t>(rejected.reason)),
-        std::string_view(rejected.message),
-        std::string_view(rejected.action_url));
+    // mirror the same proto values (see static_asserts above), so the cast is
+    // value-preserving; an unrecognized value degrades to the generic denied
+    // screen since MainScreen only branches on `== kStaleCheckout`.
+    NotifyUnauthorized(static_cast<RejectionReason>(rejected.reason),
+                        std::string_view(rejected.message),
+                        std::string_view(rejected.action_url));
     co_return pw::OkStatus();
   }
 

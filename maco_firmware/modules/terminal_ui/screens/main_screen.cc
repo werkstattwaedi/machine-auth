@@ -645,7 +645,11 @@ void MainScreen::UpdateDenied(
     if (std::string_view(denied_qr_url_) != url) {
       denied_qr_url_.assign(url.data(), url.size());
       if (!url.empty()) {
-        lv_qrcode_update(denied_qr_, url.data(), url.size());
+        if (lv_qrcode_update(denied_qr_, url.data(), url.size()) !=
+            LV_RESULT_OK) {
+          PW_LOG_WARN("Failed to encode denied-screen QR (url len %zu)",
+                      url.size());
+        }
       }
     }
     const bool has_url = !verification.rejection_action_url.empty();
