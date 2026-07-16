@@ -280,5 +280,30 @@
         }
       }
     ]
+  },
+  {
+    "id": "r0Okgv7FkK6Ip0ndMPrB",
+    "code": "0011",
+    "name": "Brennen",
+    "workshops": [
+      "keramik"
+    ],
+    "category": [
+      "Maschinen"
+    ],
+    "description": "Brennofen Keramik-Atelier. Der Preis wird beim Brennen auf dem Zettel beim Objekt notiert; diesen Betrag beim Checkout erfassen.",
+    "active": true,
+    "type": "machine",
+    "userCanAdd": true,
+    "variants": [
+      {
+        "id": "pauschal",
+        "label": "Brand (Pauschalpreis)",
+        "pricingModel": "direct",
+        "unitPrice": {
+          "default": 0
+        }
+      }
+    ]
   }
 ]
