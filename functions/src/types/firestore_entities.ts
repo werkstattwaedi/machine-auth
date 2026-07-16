@@ -268,6 +268,13 @@ export interface CheckoutEntity {
   // paymentMethodConfirmationTime/Source, which mark the commit-time ack
   // and gate the invoice email + membership activation.
   paymentMethod?: PaymentMethod | null;
+
+  // Server-only: one Timestamp appended per stale-open-checkout reminder
+  // sent (#531). The cron derives the next due reminder purely from this
+  // array's length + last entry, so the cadence stays config-only. Denied
+  // to client writes in firestore.rules (open-update denylist) so a user
+  // can't self-mute their reminders.
+  remindersSent?: Timestamp[];
 }
 
 export type PaymentMethod = "rechnung" | "monthly" | "twint";

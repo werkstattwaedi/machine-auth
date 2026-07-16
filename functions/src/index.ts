@@ -236,6 +236,9 @@ export { issueMembershipRenewalBills } from "./membership/renewal_invoicer";
 // Export scheduled cleanup
 export { cleanupAbandonedCheckouts } from "./checkout/cleanup_abandoned_checkouts";
 
+// Daily reminder for open checkouts a visitor walked away from (#531).
+export { staleCheckoutReminders } from "./checkout/stale_checkout_reminders";
+
 // Export Firestore triggers
 export { syncCustomClaims } from "./auth/set-custom-claims";
 

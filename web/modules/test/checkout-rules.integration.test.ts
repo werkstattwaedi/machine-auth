@@ -26,6 +26,7 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
+  Timestamp,
 } from "firebase/firestore"
 import { assertSucceeds, assertFails } from "@firebase/rules-unit-testing"
 
@@ -324,6 +325,53 @@ describe("Checkout create rules", () => {
         modifiedBy: null,
         modifiedAt: serverTimestamp(),
         firebaseUid: "u1",
+      }),
+    )
+  })
+})
+
+describe("Checkout update: remindersSent is server-only (#531)", () => {
+  // The stale-checkout reminder cron stamps `remindersSent` on the checkout.
+  // Because the open-update rule is a denylist, a new server-owned field
+  // would be client-writable unless explicitly denied — letting a user
+  // self-mute their reminders. These lock the denylist entry.
+  it("owner cannot write remindersSent on their own open checkout", async () => {
+    await createOpenCheckout("co-rem1", "u1")
+    const db = authedDb("u1")
+    await assertFails(
+      updateDoc(doc(db, "checkouts", "co-rem1"), {
+        remindersSent: [Timestamp.now()],
+      }),
+    )
+  })
+
+  it("owner CAN still update an allowed metadata field (positive control)", async () => {
+    await createOpenCheckout("co-rem2", "u1")
+    const db = authedDb("u1")
+    await assertSucceeds(
+      updateDoc(doc(db, "checkouts", "co-rem2"), {
+        workshopsVisited: ["metall"],
+        modifiedAt: serverTimestamp(),
+      }),
+    )
+  })
+
+  it("anonymous session cannot write remindersSent on a null-userId open checkout", async () => {
+    const anonDb = anonAuthDb("anon-rem")
+    await setDoc(doc(anonDb, "checkouts", "co-rem3"), {
+      userId: null,
+      status: "open",
+      usageType: "regular",
+      created: serverTimestamp(),
+      workshopsVisited: [],
+      persons: [],
+      modifiedBy: null,
+      modifiedAt: serverTimestamp(),
+      firebaseUid: "anon-rem",
+    })
+    await assertFails(
+      updateDoc(doc(anonDb, "checkouts", "co-rem3"), {
+        remindersSent: [Timestamp.now()],
       }),
     )
   })

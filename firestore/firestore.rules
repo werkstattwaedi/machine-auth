@@ -278,13 +278,13 @@ service cloud.firestore {
         (isCheckoutPrincipalFor(resource.data.userId) &&
          resource.data.status == "open" &&
          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-           'status', 'summary', 'closedAt', 'billRef', 'firebaseUid'
+           'status', 'summary', 'closedAt', 'billRef', 'firebaseUid', 'remindersSent'
          ])) ||
         (resource.data.userId == null && isAnonymousAuth() &&
          resource.data.get('firebaseUid', null) == request.auth.uid &&
          resource.data.status == "open" &&
          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-           'status', 'summary', 'closedAt', 'billRef', 'userId', 'firebaseUid'
+           'status', 'summary', 'closedAt', 'billRef', 'userId', 'firebaseUid', 'remindersSent'
          ])) ||
         (resource.data.status == "closed" &&
          request.resource.data.diff(resource.data).affectedKeys().hasOnly([

@@ -211,6 +211,16 @@
       // when the cash actually arrives.
       "paymentMethod": "rechnung | monthly | twint | null",
 
+      // --- Stale-open-checkout reminder log (#531) ---
+      // One timestamp appended by the daily `staleCheckoutReminders` cron
+      // each time it emails the account holder about a checkout left open
+      // past the workshop business day. Server-only: firestore.rules denies
+      // client writes so a user can't self-mute. The cron derives the next
+      // due reminder purely from this array (length -> which configured
+      // offset is next) + a one-per-business-day guard, so the cadence is
+      // config-only (CHECKOUT_REMINDER_OFFSET_DAYS).
+      "remindersSent": ["timestamp"],
+
       "items": {
         "{itemId}": { // Auto-generated — subcollection of checkouts/{checkoutId}
           "workshop": "string", // e.g., "holz"

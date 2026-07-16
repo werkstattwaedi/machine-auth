@@ -17,6 +17,7 @@ import { Route as AuthonlyRouteImport } from "./routes/_authonly"
 import { Route as AuthenticatedRouteImport } from "./routes/_authenticated"
 import { Route as IndexRouteImport } from "./routes/index"
 import { Route as LoginVerifyRouteImport } from "./routes/login_.verify"
+import { Route as CheckoutCheckoutIdRouteImport } from "./routes/checkout.$checkoutId"
 import { Route as WizardVisitRouteImport } from "./routes/_wizard/visit"
 import { Route as WizardPaymentRouteImport } from "./routes/_wizard/payment"
 import { Route as WizardCheckoutRouteImport } from "./routes/_wizard/checkout"
@@ -68,6 +69,11 @@ const IndexRoute = IndexRouteImport.update({
 const LoginVerifyRoute = LoginVerifyRouteImport.update({
   id: "/login_/verify",
   path: "/login/verify",
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CheckoutCheckoutIdRoute = CheckoutCheckoutIdRouteImport.update({
+  id: "/checkout/$checkoutId",
+  path: "/checkout/$checkoutId",
   getParentRoute: () => rootRouteImport,
 } as any)
 const WizardVisitRoute = WizardVisitRouteImport.update({
@@ -170,6 +176,7 @@ export interface FileRoutesByFullPath {
   "/checkout": typeof WizardCheckoutRoute
   "/payment": typeof WizardPaymentRoute
   "/visit": typeof WizardVisitRouteWithChildren
+  "/checkout/$checkoutId": typeof CheckoutCheckoutIdRoute
   "/login/verify": typeof LoginVerifyRoute
   "/account/membership": typeof AuthenticatedAccountMembershipRoute
   "/account/profile": typeof AuthenticatedAccountProfileRoute
@@ -192,6 +199,7 @@ export interface FileRoutesByTo {
   "/checkout": typeof WizardCheckoutRoute
   "/payment": typeof WizardPaymentRoute
   "/visit": typeof WizardVisitRouteWithChildren
+  "/checkout/$checkoutId": typeof CheckoutCheckoutIdRoute
   "/login/verify": typeof LoginVerifyRoute
   "/account/membership": typeof AuthenticatedAccountMembershipRoute
   "/account/profile": typeof AuthenticatedAccountProfileRoute
@@ -219,6 +227,7 @@ export interface FileRoutesById {
   "/_wizard/checkout": typeof WizardCheckoutRoute
   "/_wizard/payment": typeof WizardPaymentRoute
   "/_wizard/visit": typeof WizardVisitRouteWithChildren
+  "/checkout/$checkoutId": typeof CheckoutCheckoutIdRoute
   "/login_/verify": typeof LoginVerifyRoute
   "/_authenticated/account/membership": typeof AuthenticatedAccountMembershipRoute
   "/_authenticated/account/profile": typeof AuthenticatedAccountProfileRoute
@@ -243,6 +252,7 @@ export interface FileRouteTypes {
     | "/checkout"
     | "/payment"
     | "/visit"
+    | "/checkout/$checkoutId"
     | "/login/verify"
     | "/account/membership"
     | "/account/profile"
@@ -265,6 +275,7 @@ export interface FileRouteTypes {
     | "/checkout"
     | "/payment"
     | "/visit"
+    | "/checkout/$checkoutId"
     | "/login/verify"
     | "/account/membership"
     | "/account/profile"
@@ -291,6 +302,7 @@ export interface FileRouteTypes {
     | "/_wizard/checkout"
     | "/_wizard/payment"
     | "/_wizard/visit"
+    | "/checkout/$checkoutId"
     | "/login_/verify"
     | "/_authenticated/account/membership"
     | "/_authenticated/account/profile"
@@ -313,6 +325,7 @@ export interface RootRouteChildren {
   WizardRoute: typeof WizardRouteWithChildren
   LinkAccountRoute: typeof LinkAccountRoute
   LoginRoute: typeof LoginRoute
+  CheckoutCheckoutIdRoute: typeof CheckoutCheckoutIdRoute
   LoginVerifyRoute: typeof LoginVerifyRoute
   AccountInviteMembershipIdInviteIdRoute: typeof AccountInviteMembershipIdInviteIdRoute
 }
@@ -373,6 +386,13 @@ declare module "@tanstack/react-router" {
       path: "/login/verify"
       fullPath: "/login/verify"
       preLoaderRoute: typeof LoginVerifyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    "/checkout/$checkoutId": {
+      id: "/checkout/$checkoutId"
+      path: "/checkout/$checkoutId"
+      fullPath: "/checkout/$checkoutId"
+      preLoaderRoute: typeof CheckoutCheckoutIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     "/_wizard/visit": {
@@ -576,6 +596,7 @@ const rootRouteChildren: RootRouteChildren = {
   WizardRoute: WizardRouteWithChildren,
   LinkAccountRoute: LinkAccountRoute,
   LoginRoute: LoginRoute,
+  CheckoutCheckoutIdRoute: CheckoutCheckoutIdRoute,
   LoginVerifyRoute: LoginVerifyRoute,
   AccountInviteMembershipIdInviteIdRoute:
     AccountInviteMembershipIdInviteIdRoute,
