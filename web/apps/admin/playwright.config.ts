@@ -3,6 +3,8 @@
 
 import { defineConfig } from "@playwright/test"
 
+import { parseShard } from "../../../scripts/e2e-shard.ts"
+
 // E2E emulator ports — must match firebase.e2e.json. The Vite port is offset
 // from the checkout app (5188) so both apps can run side-by-side under the
 // same emulator session if a future runner ever parallelizes them.
@@ -22,7 +24,14 @@ export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false, // sequential — tests share emulator state
   workers: 1,
-  retries: 0,
+  // Admin runs as a single shard today (26 tests, ~2 min). The plumbing is
+  // here so the CI matrix can fan it out by bumping the shard count alone
+  // once the suite grows — see issue #530.
+  shard: parseShard(process.env.PLAYWRIGHT_SHARD) ?? null,
+  // CI-only retry — see the checkout config for the rationale.
+  retries: process.env.CI ? 1 : 0,
+  updateSnapshots:
+    process.env.PLAYWRIGHT_UPDATE_SNAPSHOTS === "true" ? "all" : undefined,
   timeout: 30_000,
   expect: { timeout: 10_000 },
 

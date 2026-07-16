@@ -3,6 +3,8 @@
 
 import { defineConfig } from "@playwright/test"
 
+import { parseShard } from "../../../scripts/e2e-shard.ts"
+
 // E2E emulator ports (offset from dev ports to avoid conflicts).
 // `scripts/port-block.ts` exports EMULATOR_*_PORT when running under the
 // broker; default to the firebase.e2e.json values otherwise.
@@ -17,7 +19,18 @@ export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false, // sequential — tests share emulator state
   workers: 1,
-  retries: 0,
+  // Sharding happens across CI runners, not workers (issue #530): each shard
+  // is a separate job with its own emulator, so `workers: 1` still holds
+  // within a shard. Unset locally = run the whole suite.
+  shard: parseShard(process.env.PLAYWRIGHT_SHARD) ?? null,
+  // One retry on CI only. Sharding doesn't cause flake, but 5 parallel jobs
+  // give an existing flake 5 chances to surface and redden an unrelated PR.
+  // Locally a flake should stay visible.
+  retries: process.env.CI ? 1 : 0,
+  // Threaded from the `update_snapshots` workflow_dispatch input, which can't
+  // pass `--update-snapshots` through the nested npm run chain.
+  updateSnapshots:
+    process.env.PLAYWRIGHT_UPDATE_SNAPSHOTS === "true" ? "all" : undefined,
   timeout: 30_000,
   // Tolerate sub-percent font/subpixel rendering drift between dev hosts
   // and CI (issue #317). Observed drift is ~50–160 pixels (ratio < 0.001);
