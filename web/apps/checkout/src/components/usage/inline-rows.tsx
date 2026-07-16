@@ -346,26 +346,29 @@ export function WorkshopInlineSection({
     setExpandedNfc((m) => ({ ...m, [id]: !m[id] }))
   }
 
-  // Pinned machines (issue #105): an always-visible hours input per MaCo-less
+  // Pinned machines (issue #105): an always-visible input per MaCo-less
   // machine, rendered as ordinary rows in the shared "Maschinen / Werkzeuge"
-  // table (Menge holds the input, Kosten the /Std. rate, Preis the live
-  // total). Hours text lives here (keyed by catalogId) so Preis updates as
-  // the user types; it's synced from the committed item while the field is
-  // unfocused (SpendeCard pattern) and committed on blur.
+  // table (Menge holds the input, Kosten the rate, Preis the live total).
+  // Hourly machines take hours (× CHF/Std.); direct-model machines (Pauschal
+  // CHF, e.g. Keramik-Brennen, issue #555) take the CHF amount itself. The
+  // field text lives here (keyed by catalogId) so Preis updates as the user
+  // types; it's synced from the committed item while the field is unfocused
+  // (SpendeCard pattern) and committed on blur.
   const pinnedItemByCatalog = useMemo(() => {
     const m = new Map<string, CheckoutItemLocal>()
     for (const i of machineItems) if (i.catalogId) m.set(i.catalogId, i)
     return m
   }, [machineItems])
-  const [pinnedHours, setPinnedHours] = useState<Record<string, string>>({})
+  const [pinnedText, setPinnedText] = useState<Record<string, string>>({})
   const pinnedFocusRef = useRef<string | null>(null)
   useEffect(() => {
-    setPinnedHours((prev) => {
+    setPinnedText((prev) => {
       let changed = false
       const next = { ...prev }
       for (const cat of pinnedCatalog) {
         if (pinnedFocusRef.current === cat.id) continue
-        const q = pinnedItemByCatalog.get(cat.id)?.quantity ?? 0
+        const item = pinnedItemByCatalog.get(cat.id)
+        const q = isDirectPinned(cat) ? (item?.totalPrice ?? 0) : (item?.quantity ?? 0)
         const canonical = q > 0 ? String(q) : ""
         const parsed = parseFloat((prev[cat.id] ?? "").replace(",", ".")) || 0
         if (parsed !== q) {
@@ -380,26 +383,34 @@ export function WorkshopInlineSection({
   const commitPinned = (cat: CatalogItem, unitPrice: number) => {
     pinnedFocusRef.current = null
     const variant = primaryVariant(cat)
-    const hours = Math.max(
+    const direct = isDirectPinned(cat)
+    // Hourly: the field holds hours. Direct: it IS the CHF amount from the
+    // workshop's price note (issue #555) — quantity 1, unitPrice = total,
+    // mirroring the picker's DirectForm item shape.
+    const value = Math.max(
       0,
-      parseFloat((pinnedHours[cat.id] ?? "").replace(",", ".")) || 0,
+      parseFloat((pinnedText[cat.id] ?? "").replace(",", ".")) || 0,
     )
-    const total = Math.round(hours * unitPrice * 100) / 100
+    const total = Math.round((direct ? value : value * unitPrice) * 100) / 100
     const existing = pinnedItemByCatalog.get(cat.id)
-    if (hours <= 0) {
+    if (value <= 0) {
       if (existing) callbacks.removeItem(existing.id)
-      setPinnedHours((p) => ({ ...p, [cat.id]: "" }))
+      setPinnedText((p) => ({ ...p, [cat.id]: "" }))
       return
     }
+    const priced = direct
+      ? { quantity: 1, unitPrice: total, totalPrice: total }
+      : {
+          quantity: value,
+          unitPrice,
+          totalPrice: total,
+          formInputs: [{ quantity: value, unit: "h" }],
+        }
     if (existing) {
-      if (existing.quantity === hours) return
-      callbacks.updateItem(existing.id, {
-        ...existing,
-        quantity: hours,
-        unitPrice,
-        totalPrice: total,
-        formInputs: [{ quantity: hours, unit: "h" }],
-      })
+      if (direct ? existing.totalPrice === total : existing.quantity === value) {
+        return
+      }
+      callbacks.updateItem(existing.id, { ...existing, ...priced })
     } else {
       callbacks.addItem({
         id: crypto.randomUUID(),
@@ -410,39 +421,38 @@ export function WorkshopInlineSection({
         catalogId: cat.id,
         variantId: variant?.id ?? "default",
         pricingModel: variant?.pricingModel ?? "time",
-        quantity: hours,
-        unitPrice,
-        totalPrice: total,
-        formInputs: [{ quantity: hours, unit: "h" }],
+        ...priced,
       })
     }
   }
 
   const pinnedRows: PositionRow[] = pinnedCatalog.map((cat) => {
     const variant = primaryVariant(cat)
+    const direct = isDirectPinned(cat)
     const unitPrice = variant ? priceForTier(variant.unitPrice, discountLevel) : 0
-    const text = pinnedHours[cat.id] ?? ""
-    const hours = Math.max(0, parseFloat(text.replace(",", ".")) || 0)
-    const total = Math.round(hours * unitPrice * 100) / 100
+    const text = pinnedText[cat.id] ?? ""
+    const value = Math.max(0, parseFloat(text.replace(",", ".")) || 0)
+    const total = Math.round((direct ? value : value * unitPrice) * 100) / 100
     return {
       key: cat.id,
       title: cat.name,
       subtitle: null,
       menge: (
-        <PinnedHoursField
+        <PinnedValueField
           value={text}
-          label={cat.name}
+          ariaLabel={`${direct ? "Betrag" : "Stunden"} ${cat.name}`}
+          suffix={direct ? "CHF" : "Std."}
           onFocus={() => {
             pinnedFocusRef.current = cat.id
           }}
-          onChange={(v) => setPinnedHours((p) => ({ ...p, [cat.id]: v }))}
+          onChange={(v) => setPinnedText((p) => ({ ...p, [cat.id]: v }))}
           onBlur={() => commitPinned(cat, unitPrice)}
         />
       ),
-      kosten: `${unitPrice.toFixed(2)}/Std.`,
+      kosten: direct ? "Pauschal" : `${unitPrice.toFixed(2)}/Std.`,
       preis: total.toFixed(2),
       // Always-shown input rows aren't removable via the (×); clearing the
-      // hours to 0 removes the underlying item instead.
+      // field to 0 removes the underlying item instead.
       removable: false,
     }
   })
@@ -551,35 +561,45 @@ export function WorkshopInlineSection({
 
 // ---------------------------------------------------------------------------
 // Pinned machine rows (issue #105). For machines without a MaCo, the cost
-// step shows an always-visible hours input so visitors can record usage
-// manually. Each pinned machine is a catalog item referenced from
+// step shows an always-visible input so visitors can record usage manually.
+// Each pinned machine is a catalog item referenced from
 // `config/pricing.workshops[ws].pinnedMachines`; the row IS the
-// representation of its checkout item — entering hours upserts it, clearing
-// removes it.
+// representation of its checkout item — entering a value upserts it,
+// clearing removes it. Hourly machines take hours; direct-model machines
+// (Pauschal CHF) take the amount itself (issue #555).
 // ---------------------------------------------------------------------------
+
+/** A pinned machine whose primary variant is direct-priced (Pauschal CHF):
+ *  the visitor enters the amount, not hours (issue #555). */
+function isDirectPinned(cat: CatalogItem): boolean {
+  return primaryVariant(cat)?.pricingModel === "direct"
+}
 
 /** Digits with at most one `.`/`,` separator and decimals; empty allowed so
  *  the field can be cleared. A `type="text"` input is used deliberately:
  *  `type="number"` returns "" from `e.target.value` mid-decimal (e.g. "1."),
  *  which silently swallowed fractional hours (issue #105). */
-const HOURS_TYPING_PATTERN = /^(?:|\d*(?:[.,]\d*)?)$/
+const PINNED_TYPING_PATTERN = /^(?:|\d*(?:[.,]\d*)?)$/
 
 /**
- * Editable hours cell for a pinned machine (issue #105), rendered in the
+ * Editable value cell for a pinned machine (issue #105), rendered in the
  * shared PositionTable's Menge column so it lines up with NFC machine rows
  * (which show "X Min") and material rows. Controlled by WorkshopInlineSection
  * — the Preis column reflects the live value — and commits on blur. Accepts
- * fractional hours (e.g. 1.5).
+ * decimals (e.g. 1.5 hours, 12.50 CHF); `suffix` names the unit ("Std." for
+ * hourly machines, "CHF" for direct-priced ones).
  */
-function PinnedHoursField({
+function PinnedValueField({
   value,
-  label,
+  ariaLabel,
+  suffix,
   onFocus,
   onChange,
   onBlur,
 }: {
   value: string
-  label: string
+  ariaLabel: string
+  suffix: string
   onFocus: () => void
   onChange: (v: string) => void
   onBlur: () => void
@@ -590,18 +610,18 @@ function PinnedHoursField({
         type="text"
         inputMode="decimal"
         value={value}
-        aria-label={`Stunden ${label}`}
+        aria-label={ariaLabel}
         placeholder="0"
         onFocus={onFocus}
         onChange={(e) => {
           const raw = e.target.value
-          if (!HOURS_TYPING_PATTERN.test(raw)) return
+          if (!PINNED_TYPING_PATTERN.test(raw)) return
           onChange(raw)
         }}
         onBlur={onBlur}
         className="h-8 w-16 rounded-[3px] border border-[#ccc] bg-background px-2 text-right text-sm tabular-nums text-foreground outline-none focus:border-cog-teal"
       />
-      <span className="text-xs text-muted-foreground">Std.</span>
+      <span className="text-xs text-muted-foreground">{suffix}</span>
     </span>
   )
 }

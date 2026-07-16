@@ -171,6 +171,7 @@ function renderSection(props: {
   discountLevel?: DiscountLevel
   checkoutId?: string | null
   onAddMaterial?: () => void
+  pinnedCatalog?: CatalogItem[]
 }) {
   const callbacks = props.callbacks ?? makeCallbacks()
   const onAddMaterial = props.onAddMaterial ?? (() => {})
@@ -182,10 +183,44 @@ function renderSection(props: {
       callbacks={callbacks}
       checkoutId={props.checkoutId ?? null}
       onAddMaterial={onAddMaterial}
+      discountLevel={props.discountLevel}
+      pinnedCatalog={props.pinnedCatalog}
     />,
     { wrapper: FirebaseWrapper },
   )
   return { callbacks, onAddMaterial }
+}
+
+/** Hourly pinned machine (issue #105): hours × CHF/Std. */
+function makeHourlyMachine(): CatalogItem {
+  return {
+    id: "cat-hourly",
+    code: "0001",
+    name: "Drechselbank",
+    workshops: ["holz"],
+    category: ["Maschinen"],
+    variants: [
+      { id: "default", pricingModel: "time", unitPrice: { default: 10, member: 8 } },
+    ],
+    active: true,
+    userCanAdd: true,
+  }
+}
+
+/** Direct-priced pinned machine (issue #555): user enters the CHF amount. */
+function makeDirectMachine(): CatalogItem {
+  return {
+    id: "cat-brennen",
+    code: "0011",
+    name: "Brennen",
+    workshops: ["holz"],
+    category: ["Maschinen"],
+    variants: [
+      { id: "pauschal", pricingModel: "direct", unitPrice: { default: 0 } },
+    ],
+    active: true,
+    userCanAdd: true,
+  }
 }
 
 /**
@@ -236,6 +271,67 @@ describe("WorkshopInlineSection v5", () => {
     expect(screen.getByText("Zwischentotal Holz")).toBeTruthy()
     // 5 + 10 = 15.00
     expect(screen.getByText(/CHF\s*15\.00/)).toBeTruthy()
+  })
+
+  it("pinned hourly machine multiplies typed hours by the rate", async () => {
+    const user = userEvent.setup()
+    const { callbacks } = renderSection({ pinnedCatalog: [makeHourlyMachine()] })
+    expect(screen.getByText("10.00/Std.")).toBeTruthy()
+    await user.type(screen.getByLabelText("Stunden Drechselbank"), "1.5")
+    await user.tab()
+    expect(callbacks.addItem).toHaveBeenCalledTimes(1)
+    expect(callbacks.addItem.mock.calls[0][0]).toMatchObject({
+      type: "machine",
+      catalogId: "cat-hourly",
+      pricingModel: "time",
+      quantity: 1.5,
+      unitPrice: 10,
+      totalPrice: 15,
+      formInputs: [{ quantity: 1.5, unit: "h" }],
+    })
+  })
+
+  it("pinned direct machine (Pauschal CHF) commits the typed amount (issue #555)", async () => {
+    const user = userEvent.setup()
+    const { callbacks } = renderSection({ pinnedCatalog: [makeDirectMachine()] })
+    // Direct rows show a CHF field and "Pauschal" instead of an hourly rate.
+    expect(screen.getByText("Pauschal")).toBeTruthy()
+    expect(screen.getByText("CHF")).toBeTruthy()
+    await user.type(screen.getByLabelText("Betrag Brennen"), "12.5")
+    await user.tab()
+    expect(callbacks.addItem).toHaveBeenCalledTimes(1)
+    expect(callbacks.addItem.mock.calls[0][0]).toMatchObject({
+      type: "machine",
+      catalogId: "cat-brennen",
+      pricingModel: "direct",
+      quantity: 1,
+      unitPrice: 12.5,
+      totalPrice: 12.5,
+    })
+  })
+
+  it("clearing a pinned direct field removes the committed item", async () => {
+    const user = userEvent.setup()
+    const committed = makeItem({
+      id: "i-brennen",
+      type: "machine",
+      catalogId: "cat-brennen",
+      pricingModel: "direct",
+      quantity: 1,
+      unitPrice: 12.5,
+      totalPrice: 12.5,
+      description: "Brennen",
+    })
+    const { callbacks } = renderSection({
+      items: [committed],
+      pinnedCatalog: [makeDirectMachine()],
+    })
+    // Field syncs from the committed item's amount (not its quantity of 1).
+    const field = screen.getByLabelText("Betrag Brennen")
+    expect((field as HTMLInputElement).value).toBe("12.5")
+    await user.clear(field)
+    await user.tab()
+    expect(callbacks.removeItem).toHaveBeenCalledWith("i-brennen")
   })
 
   it("hides the machine container when no NFC items exist", () => {
