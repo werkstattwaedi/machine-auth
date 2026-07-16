@@ -51,6 +51,24 @@ Emulator-vs-real selection is unaffected: the web app gates emulator wiring on
 (including `--mode staging`) — so a staging build talks to the real staging
 project, not emulators.
 
+The overlay covers every deployable/runnable component. The full matrix:
+
+| Component | dev (emulators) | staging | prod |
+|---|---|---|---|
+| Functions | `npm run serve` (`.env.local`) | `cd functions && npm run deploy -- --project oww-maco-staging` (`.env.oww-maco-staging`) | `cd functions && npm run deploy` |
+| Web apps | `npm run dev:checkout` / `dev:admin` | `WEB_BUILD_SCRIPT=build:staging firebase deploy --only hosting --project oww-maco-staging` | `firebase deploy --only hosting` |
+| Gateway | `npm run dev:gateway` (`.env.local`) | `npm run dev:gateway:staging` — a **local** gateway reading `maco_gateway/.env.staging` | `npx tsx scripts/deploy-gateway.ts` (Pi) |
+| Kiosk | `npm run dev:kiosk` (localhost URL) | `npm run start:kiosk:staging` (local Electron) or `build:kiosk:staging` (packaged) | `npm run build:kiosk:prod` |
+
+`generate-env.ts --env staging` emits the staging inputs for the first three
+rows; `maco_gateway/.env.staging` additionally pulls
+`GATEWAY_ASCON_MASTER_KEY`/`GATEWAY_API_KEY` from Secret Manager via gcloud
+(skipped with a warning when gcloud is unavailable). The gateway selects its
+env file by name via `GATEWAY_ENV` (default `local`). The kiosk's
+`inject-build-config.mjs --env <name>` deep-merges the same overlay file the
+env generator reads, so the kiosk URL follows `web.checkoutDomain`
+automatically; its bearer always comes from Secret Manager.
+
 Staging **shares production's Function secrets** (same Secret Manager values,
 copied into the staging project): both projects sit in the same org with the
 same access controls, so a separate key set adds upkeep without a security

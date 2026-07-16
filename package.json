@@ -20,6 +20,7 @@
     "dev:checkout": "cd web/apps/checkout && npm run dev",
     "dev:admin": "cd web/apps/admin && npm run dev",
     "dev:gateway": "bazel run //maco_gateway:gateway -- --verbose",
+    "dev:gateway:staging": "GATEWAY_ENV=staging bazel run //maco_gateway:gateway -- --verbose",
     "seed": "npx tsx scripts/seed-emulator.ts",
     "sync-config": "npx tsx scripts/sync-device-config.ts",
     "test:web": "cd web && npm test",

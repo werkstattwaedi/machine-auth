@@ -71,7 +71,7 @@ web/**/.env.production
 web/**/.env.staging
 scripts/.env
 scripts/.env.local
-maco_gateway/.env.local
+maco_gateway/.env*
 
 # Test fixtures (committed — see scripts/generate-env.ts --emit-test-files
 # and docs/port-blocks.md). These hold only dummy / public values and are

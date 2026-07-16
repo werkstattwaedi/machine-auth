@@ -12,6 +12,7 @@
 // In this mode an embedded TEST_FIXTURE_CONFIG drives the resolver so the
 // command works even without the operations repo present.
 
+import { execSync } from "node:child_process";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 
@@ -542,6 +543,8 @@ function parseEnvName(args: string[]): string | null {
  *   - functions/.env.<projectId>   (Firebase CLI auto-loads on deploy)
  *   - web/apps/checkout/.env.<name> (built via `vite build --mode <name>`)
  *   - web/apps/admin/.env.<name>
+ *   - maco_gateway/.env.<name>     (run via `GATEWAY_ENV=<name> npm run
+ *     dev:gateway`; secrets fetched from Secret Manager, see below)
  * Deliberately does NOT touch the prod `.env.production` / `.firebaserc`
  * so the default (prod) toolchain is never disturbed. See ADR-0034.
  */
@@ -615,11 +618,74 @@ function generateEnvOverlay(opts: {
     console.log(`  ✓ ${file.path}`);
   }
 
+  emitGatewayEnv({ projectRoot, prodConfig, envConfig, envName, projectId, header });
+
   console.log(
     `\nDone. Generated ${envName} env files for project ${projectId} from ${configDir}.\n` +
       `  Build web:  npx vite build --mode ${envName}   (per app)\n` +
-      `  Deploy:     firebase deploy --project ${projectId}`
+      `  Deploy:     firebase deploy --project ${projectId}\n` +
+      `  Gateway:    GATEWAY_ENV=${envName} npm run dev:gateway`
   );
+}
+
+/**
+ * Emit `maco_gateway/.env.<name>` so a locally started gateway can talk to
+ * the overlay environment (deploys to the Pi still go through
+ * `scripts/deploy-gateway.ts`). FIREBASE_URL comes from the merged config;
+ * MASTER_KEY / GATEWAY_API_KEY come from Secret Manager in the BASE
+ * project — environments share secret values (ADR-0034) and the base
+ * project is their canonical home. A fetch failure skips this file with a
+ * warning (a partial gateway env fails at runtime in confusing ways) but
+ * never fails the web/functions emission above.
+ */
+function emitGatewayEnv(opts: {
+  projectRoot: string;
+  prodConfig: Record<string, unknown>;
+  envConfig: Record<string, unknown>;
+  envName: string;
+  projectId: string;
+  header: string;
+}): void {
+  const { projectRoot, prodConfig, envConfig, envName, projectId, header } = opts;
+  const relPath = `maco_gateway/.env.${envName}`;
+  const baseProjectId = resolveValue(prodConfig, "firebase.projectId");
+  const masterKey = fetchSecret("GATEWAY_ASCON_MASTER_KEY", baseProjectId);
+  const gatewayApiKey = fetchSecret("GATEWAY_API_KEY", baseProjectId);
+  if (masterKey === null || gatewayApiKey === null) {
+    console.warn(
+      `  ⚠ Skipped ${relPath} — could not read gateway secrets from Secret ` +
+        `Manager (project ${baseProjectId}). Check \`gcloud auth list\` and ` +
+        `re-run to emit the gateway env.`
+    );
+    return;
+  }
+  // GATEWAY_HOST/GATEWAY_PORT are deliberately omitted: main.py defaults
+  // them (0.0.0.0:5000), and an empty GATEWAY_PORT= would crash int().
+  const content = [
+    header,
+    `# Run a local gateway against ${projectId}:`,
+    `#   GATEWAY_ENV=${envName} npm run dev:gateway`,
+    "",
+    "# MaCo Gateway",
+    `FIREBASE_URL=${resolveValue(envConfig, "gateway.firebaseUrl")}`,
+    `MASTER_KEY=${masterKey}`,
+    `GATEWAY_API_KEY=${gatewayApiKey}`,
+    "",
+  ].join("\n");
+  writeFileSync(resolve(projectRoot, relPath), content);
+  console.log(`  ✓ ${relPath}`);
+}
+
+/** `gcloud secrets versions access latest`, or null on any failure. */
+function fetchSecret(name: string, projectId: string): string | null {
+  try {
+    return execSync(
+      `gcloud secrets versions access latest --secret=${name} --project=${projectId}`,
+      { encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] }
+    ).trim();
+  } catch {
+    return null;
+  }
 }
 
 function emitTestFixtures(projectRoot: string) {
