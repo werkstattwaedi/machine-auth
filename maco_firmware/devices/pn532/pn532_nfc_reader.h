@@ -140,6 +140,12 @@ class Pn532NfcReader : public NfcReader {
   // -- Utility --
 
   void DrainReceiveBuffer();
+
+  /// Abandon a parked transceive request, resolving its future with
+  /// FailedPrecondition. Called on the tag-departure path so a request that
+  /// was queued while the tag was still present cannot outlive it.
+  void DrainPendingRequest();
+
   pw::Result<TagInfo> ParseDetectResponse(pw::ConstByteSpan payload);
   pw::Result<size_t> ParseTransceiveResponse(pw::ConstByteSpan payload,
                                               pw::ByteSpan response_buffer);
@@ -163,6 +169,10 @@ class Pn532NfcReader : public NfcReader {
   // Tag state
   std::shared_ptr<NfcTag> current_tag_;
   uint8_t current_target_number_ = 0;
+
+  // Bumped on every tag arrival. Stamped into each TransceiveRequest so a
+  // request captured against a departed tag can never bind to its successor.
+  uint32_t tag_generation_ = 0;
 
   // Pending transceive request from application
   std::optional<TransceiveRequest> pending_request_;

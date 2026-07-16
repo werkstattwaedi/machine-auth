@@ -253,6 +253,33 @@ TEST_F(MainScreenTest, DeniedScreenStyle) {
   EXPECT_EQ(style.bg_color, theme::kColorRed);
 }
 
+// Badge removed mid-authorization → "hold the badge longer" screen.
+TEST_F(MainScreenTest, HoldLongerState) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.verification.state =
+      app_state::TagVerificationState::kRemovedTooEarly;
+  screen_->OnUpdate(snapshot);
+  RenderFrame();
+
+  EXPECT_TRUE(harness_.CompareToGolden(
+      "maco_firmware/modules/terminal_ui/testdata/main_hold_longer.png",
+      "/tmp/main_hold_longer_diff.png"));
+
+  auto config = screen_->GetButtonConfig();
+  EXPECT_EQ(config.ok.label, "Zurück");
+  EXPECT_TRUE(config.cancel.label.empty());
+}
+
+TEST_F(MainScreenTest, HoldLongerScreenStyle) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.verification.state =
+      app_state::TagVerificationState::kRemovedTooEarly;
+  screen_->OnUpdate(snapshot);
+
+  auto style = screen_->GetScreenStyle();
+  EXPECT_EQ(style.bg_color, theme::kColorYellow);
+}
+
 TEST_F(MainScreenTest, StopSessionAction) {
   // Put screen in active state
   app_state::AppStateSnapshot snapshot;

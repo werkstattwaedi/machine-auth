@@ -47,6 +47,7 @@ class MainScreen : public ui::Screen<app_state::AppStateSnapshot> {
     kReady,
     kActive,
     kDenied,
+    kHoldLonger,  // Badge removed mid-auth → "hold the badge longer"
   };
 
   /// The single source of truth for a state's colours. Every consumer
@@ -79,6 +80,10 @@ class MainScreen : public ui::Screen<app_state::AppStateSnapshot> {
   // Denied widgets
   lv_obj_t* denied_icon_ = nullptr;
   lv_obj_t* denied_label_ = nullptr;
+
+  // Hold-longer widgets (badge removed mid-authorization)
+  lv_obj_t* hold_longer_icon_ = nullptr;
+  lv_obj_t* hold_longer_label_ = nullptr;
 
   // Pending confirmation overlay
   ConfirmationOverlay overlay_;

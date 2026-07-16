@@ -204,6 +204,28 @@ pw::Status MainScreen::OnActivate() {
   lv_obj_align(denied_label_, LV_ALIGN_CENTER, 0, 30);
   lv_obj_add_flag(denied_label_, LV_OBJ_FLAG_HIDDEN);
 
+  // --- Hold-longer widgets (hidden initially) ---
+  // Shown on a yellow (warning, not error) background with dark text: the badge
+  // was lifted too early, ask the user to hold it on longer.
+  hold_longer_icon_ = lv_label_create(lv_screen_);
+  lv_label_set_text(hold_longer_icon_, kIconSchedule);
+  lv_obj_set_style_text_font(hold_longer_icon_, &material_symbols_64,
+                             LV_PART_MAIN);
+  lv_obj_set_style_text_color(hold_longer_icon_,
+                              lv_color_hex(theme::kColorDarkText), LV_PART_MAIN);
+  lv_obj_align(hold_longer_icon_, LV_ALIGN_CENTER, 0, -20);
+  lv_obj_add_flag(hold_longer_icon_, LV_OBJ_FLAG_HIDDEN);
+
+  hold_longer_label_ = lv_label_create(lv_screen_);
+  lv_label_set_text(hold_longer_label_, "Badge länger\nauflegen");
+  lv_obj_set_style_text_font(hold_longer_label_, &roboto_24, LV_PART_MAIN);
+  lv_obj_set_style_text_align(hold_longer_label_, LV_TEXT_ALIGN_CENTER,
+                              LV_PART_MAIN);
+  lv_obj_set_style_text_color(hold_longer_label_,
+                              lv_color_hex(theme::kColorDarkText), LV_PART_MAIN);
+  lv_obj_align(hold_longer_label_, LV_ALIGN_CENTER, 0, 40);
+  lv_obj_add_flag(hold_longer_label_, LV_OBJ_FLAG_HIDDEN);
+
   // --- Confirmation overlay (created last for z-order) ---
   overlay_.Create(lv_screen_, lv_group_);
 
@@ -236,6 +258,8 @@ void MainScreen::OnDeactivate() {
   timer_label_ = nullptr;
   denied_icon_ = nullptr;
   denied_label_ = nullptr;
+  hold_longer_icon_ = nullptr;
+  hold_longer_label_ = nullptr;
   PW_LOG_INFO("MainScreen deactivated");
 }
 
@@ -264,6 +288,9 @@ void MainScreen::OnUpdate(const app_state::AppStateSnapshot& snapshot) {
   } else if (snapshot.verification.state ==
              app_state::TagVerificationState::kUnauthorized) {
     new_state = VisualState::kDenied;
+  } else if (snapshot.verification.state ==
+             app_state::TagVerificationState::kRemovedTooEarly) {
+    new_state = VisualState::kHoldLonger;
   } else {
     new_state = VisualState::kIdle;
   }
@@ -369,7 +396,8 @@ bool MainScreen::OnEscapePressed() {
     }
     return true;
   }
-  if (visual_state_ == VisualState::kDenied) {
+  if (visual_state_ == VisualState::kDenied ||
+      visual_state_ == VisualState::kHoldLonger) {
     return true;
   }
   return false;
@@ -405,6 +433,7 @@ ui::ButtonConfig MainScreen::GetButtonConfig() const {
                      .text_color = 0xFFFFFF},
       };
     case VisualState::kDenied:
+    case VisualState::kHoldLonger:
       return {
           .ok = {.label = "Zurück",
                  .led_effect = led_animator::SolidButton(
@@ -428,6 +457,9 @@ theme::StateColors MainScreen::ColorsFor(VisualState state) {
       return {.bg = theme::kColorGreen, .text = theme::kColorText};
     case VisualState::kDenied:
       return {.bg = theme::kColorRed, .text = theme::kColorText};
+    case VisualState::kHoldLonger:
+      // Yellow needs dark text for contrast, same rule as kReady.
+      return {.bg = theme::kColorYellow, .text = theme::kColorDarkText};
   }
   return {.bg = theme::kColorWhiteBg, .text = theme::kColorDarkText};
 }
@@ -501,6 +533,11 @@ void MainScreen::SetVisualState(VisualState state) {
       lv_obj_remove_flag(denied_icon_, LV_OBJ_FLAG_HIDDEN);
       lv_obj_remove_flag(denied_label_, LV_OBJ_FLAG_HIDDEN);
       break;
+    case VisualState::kHoldLonger:
+      // Background comes from ColorsFor(kHoldLonger); just reveal the widgets.
+      lv_obj_remove_flag(hold_longer_icon_, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_remove_flag(hold_longer_label_, LV_OBJ_FLAG_HIDDEN);
+      break;
   }
 
   lv_obj_set_style_bg_color(lv_screen_, lv_color_hex(colors.bg), LV_PART_MAIN);
@@ -515,6 +552,8 @@ void MainScreen::HideAllWidgets() {
   lv_obj_add_flag(session_column_, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(denied_icon_, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(denied_label_, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_add_flag(hold_longer_icon_, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_add_flag(hold_longer_label_, LV_OBJ_FLAG_HIDDEN);
 }
 
 }  // namespace maco::terminal_ui
