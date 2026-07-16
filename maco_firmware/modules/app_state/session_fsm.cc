@@ -219,9 +219,11 @@ etl::fsm_state_id_t Active::on_event(
   auto now = pw::chrono::SystemClock::now();
 
   if (e.tag_uid == ctx.active_session.tag_uid) {
-    // Same user re-tapped → checkout flow (auto-confirm countdown)
+    // Same user re-tapped → checkout flow. The badge is on the reader, so the
+    // window is the hold: it is what the ring animates over and what the
+    // badge-held Timeout confirms on.
     ctx.pending_since = now;
-    ctx.pending_deadline = now + kAutoConfirmDuration;
+    ctx.pending_deadline = now + kHoldDuration;
     ctx.checkout_reason = CheckoutReason::kSelfCheckout;
     PW_LOG_INFO("Same tag: checkout pending");
     return SessionStateId::kCheckoutPending;
@@ -234,7 +236,7 @@ etl::fsm_state_id_t Active::on_event(
   ctx.pending_session.auth_id = e.auth_id;
   ctx.pending_session.started_at = now;
   ctx.pending_since = now;
-  ctx.pending_deadline = now + kAutoConfirmDuration;
+  ctx.pending_deadline = now + kHoldDuration;
   PW_LOG_INFO("Different tag: takeover pending (%s)",
               e.user_label.c_str());
   return SessionStateId::kTakeoverPending;
@@ -322,13 +324,15 @@ etl::fsm_state_id_t CheckoutPending::on_event(
   auto& ctx = get_fsm_context();
   auto now = pw::chrono::SystemClock::now();
   ctx.pending_since = now;
-  ctx.pending_deadline = now + kAutoConfirmDuration;
   if (!e.present) {
-    // Badge removed: start cancel countdown (Nein fills)
+    // Badge removed: start cancel countdown (Nein fills). Cancelling is not a
+    // hold, so it keeps the longer read-and-react window.
+    ctx.pending_deadline = now + kAutoConfirmDuration;
     PW_LOG_INFO("Tag removed during checkout: cancel countdown started");
     ctx.SyncSnapshot();
   } else {
-    // Badge (re-)presented: restart confirm countdown (Ja fills)
+    // Badge (re-)presented: restart confirm countdown (Ja fills) over the hold.
+    ctx.pending_deadline = now + kHoldDuration;
     PW_LOG_INFO("Tag presented during checkout: confirm countdown restarted");
   }
   return No_State_Change;
@@ -376,11 +380,13 @@ etl::fsm_state_id_t TakeoverPending::on_event(
   auto& ctx = get_fsm_context();
   auto now = pw::chrono::SystemClock::now();
   ctx.pending_since = now;
-  ctx.pending_deadline = now + kAutoConfirmDuration;
   if (!e.present) {
+    // Cancelling is not a hold, so it keeps the longer read-and-react window.
+    ctx.pending_deadline = now + kAutoConfirmDuration;
     PW_LOG_INFO("Tag removed during takeover: cancel countdown started");
     ctx.SyncSnapshot();
   } else {
+    ctx.pending_deadline = now + kHoldDuration;
     PW_LOG_INFO("Tag presented during takeover: confirm countdown restarted");
   }
   return No_State_Change;

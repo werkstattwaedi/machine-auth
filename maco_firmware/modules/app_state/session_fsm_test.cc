@@ -492,6 +492,114 @@ TEST(SessionFsmTest, StopSessionIgnoredWhenNoSession) {
   EXPECT_EQ(observer.end_count, 0);
 }
 
+// --- Hold / confirm window timing (#534) ---
+//
+// The confirmation ring animates over pending_since → pending_deadline, while
+// the action fires on kHoldDuration. These tests pin both the target value and
+// the fact that they are the same window, so a ring that fills to 33 % and then
+// jumps cannot ship unnoticed.
+
+TEST(SessionFsmTest, HoldDurationIsOneSecond) {
+  EXPECT_EQ(kHoldDuration, std::chrono::seconds(1));
+}
+
+TEST(SessionFsmTest, CheckoutPendingWindowMatchesHoldDuration) {
+  SessionFsm fsm;
+  auto tag = MakeTagUid(std::byte{0x01});
+
+  fsm.receive(MakeAuthEvent(tag, "Alice"));
+  fsm.receive(MakeAuthEvent(tag));
+  ASSERT_EQ(fsm.get_state_id(), SessionStateId::kCheckoutPending);
+
+  EXPECT_EQ(fsm.pending_deadline - fsm.pending_since, std::chrono::seconds(1));
+  EXPECT_EQ(fsm.pending_deadline - fsm.pending_since, kHoldDuration);
+}
+
+TEST(SessionFsmTest, TakeoverPendingWindowMatchesHoldDuration) {
+  SessionFsm fsm;
+  auto tag1 = MakeTagUid(std::byte{0x01});
+  auto tag2 = MakeTagUid(std::byte{0x02});
+
+  fsm.receive(MakeAuthEvent(tag1, "Alice"));
+  fsm.receive(MakeAuthEvent(tag2, "Bob"));
+  ASSERT_EQ(fsm.get_state_id(), SessionStateId::kTakeoverPending);
+
+  EXPECT_EQ(fsm.pending_deadline - fsm.pending_since, std::chrono::seconds(1));
+  EXPECT_EQ(fsm.pending_deadline - fsm.pending_since, kHoldDuration);
+}
+
+TEST(SessionFsmTest, RepresentedBadgeRestartsWindowAtHoldDuration) {
+  SessionFsm fsm;
+  auto tag = MakeTagUid(std::byte{0x01});
+
+  fsm.receive(MakeAuthEvent(tag, "Alice"));
+  fsm.receive(MakeAuthEvent(tag));
+  fsm.SetTagPresent(true);
+  fsm.receive(session_event::TagPresence(true));
+
+  EXPECT_EQ(fsm.pending_deadline - fsm.pending_since, kHoldDuration);
+}
+
+TEST(SessionFsmTest, BadgeRemovedCancelWindowKeepsAutoConfirmDuration) {
+  SessionFsm fsm;
+  auto tag = MakeTagUid(std::byte{0x01});
+
+  fsm.receive(MakeAuthEvent(tag, "Alice"));
+  fsm.receive(MakeAuthEvent(tag));
+  fsm.SetTagPresent(false);
+  fsm.receive(session_event::TagPresence(false));
+
+  // Pulling the badge starts a cancel countdown, not a hold — shortening it to
+  // the hold would give no time to react.
+  EXPECT_EQ(fsm.pending_deadline - fsm.pending_since, kAutoConfirmDuration);
+  EXPECT_EQ(fsm.pending_deadline - fsm.pending_since, std::chrono::seconds(3));
+}
+
+TEST(SessionFsmTest, StopPendingWindowKeepsAutoConfirmDuration) {
+  SessionFsm fsm;
+  auto tag = MakeTagUid(std::byte{0x01});
+
+  fsm.receive(MakeAuthEvent(tag, "Alice"));
+  fsm.receive(session_event::StopSession{});
+  ASSERT_EQ(fsm.get_state_id(), SessionStateId::kStopPending);
+
+  // The UI stop button is not a badge hold; #534 does not shorten it.
+  EXPECT_EQ(fsm.pending_deadline - fsm.pending_since, kAutoConfirmDuration);
+  EXPECT_EQ(fsm.pending_deadline - fsm.pending_since, std::chrono::seconds(3));
+}
+
+// --- Hold threshold (the predicate SessionController polls) ---
+
+TEST(SessionFsmTest, HoldSatisfiedAtOneSecondNotBefore) {
+  auto prompt = pw::chrono::SystemClock::time_point();
+  auto arrival = prompt;  // Badge already present when the prompt appeared.
+
+  EXPECT_FALSE(HoldSatisfied(prompt + std::chrono::milliseconds(900), arrival,
+                             prompt));
+  EXPECT_TRUE(HoldSatisfied(prompt + std::chrono::seconds(1), arrival, prompt));
+}
+
+TEST(SessionFsmTest, HoldSatisfiedMeasuresFromPromptNotBadgeArrival) {
+  auto prompt = pw::chrono::SystemClock::time_point() + std::chrono::seconds(10);
+  // Badge sat on the reader through auth + check-in long before the prompt.
+  auto arrival = prompt - std::chrono::seconds(8);
+
+  // Without the max(), this would confirm instantly and defeat the safety gate.
+  EXPECT_FALSE(HoldSatisfied(prompt, arrival, prompt));
+  EXPECT_TRUE(HoldSatisfied(prompt + std::chrono::seconds(1), arrival, prompt));
+}
+
+TEST(SessionFsmTest, HoldSatisfiedRestartsAfterBadgeRepresented) {
+  auto prompt = pw::chrono::SystemClock::time_point();
+  // Badge removed and re-presented 5 s into the prompt → fresh hold from there.
+  auto arrival = prompt + std::chrono::seconds(5);
+
+  EXPECT_FALSE(HoldSatisfied(arrival + std::chrono::milliseconds(900), arrival,
+                             prompt));
+  EXPECT_TRUE(
+      HoldSatisfied(arrival + std::chrono::seconds(1), arrival, prompt));
+}
+
 // --- Tag presence accessors ---
 
 TEST(SessionFsmTest, SetTagPresent) {
