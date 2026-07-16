@@ -20,7 +20,39 @@ constexpr const char kIconSchedule[] = "\xEE\xBF\x96";  // U+EFD6
 
 constexpr int kContentPadding = 16;
 constexpr int kUsableWidth = 208;   // 240 - 2*16px padding
-constexpr int kTimerLabelX = 44;    // kContentPadding + 24px icon + 4px gap
+
+constexpr int kSessionColumnTop = 78;  // below the machine name, session modes
+constexpr int kSessionRowGap = 8;      // between name, status chip and timer
+constexpr int kTimerIconGap = 4;       // between the clock icon and its text
+
+// A name too long to fit gets clamped and ellipsized rather than pushing into
+// whatever is below it (issue #532). The user name gets two lines ("Vorname
+// Nachname" is the common case); the machine name is a single-line caption.
+constexpr int kUserNameMaxLines = 2;
+constexpr int kMachineNameMaxLines = 1;
+
+// Clamp a label to at most `lines` lines, which also re-enables LVGL's native
+// ellipsis.
+//
+// LV_LABEL_LONG_MODE_DOTS only ellipsizes when the text overflows the label's
+// height (lv_label.c:1297). At LV_SIZE_CONTENT the label simply grows to fit,
+// so that check never trips and long text just wraps. Constraining max_height
+// gives the overflow check something to trip on, while leaving a short label at
+// its natural height so content below can still reflow upward.
+//
+// N lines measure N*line_h + (N-1)*line_space (lv_text_get_size_attributes
+// accumulates line_h + line_space per line, then drops the trailing
+// line_space), so this clamp is exact. It relies on the label's vertical
+// padding being 0 — LVGL compares max_height against the content size in
+// lv_label's self-size handler but against the box height in lv_obj_pos, and
+// those two agree only at zero padding.
+void ClampLabelLines(lv_obj_t* label, const lv_font_t* font, int lines) {
+  const int32_t line_h = lv_font_get_line_height(font);
+  const int32_t line_space =
+      lv_obj_get_style_text_line_space(label, LV_PART_MAIN);
+  lv_obj_set_style_max_height(
+      label, lines * line_h + (lines - 1) * line_space, LV_PART_MAIN);
+}
 
 // Format a duration in seconds: "< 1 min", "47 min", "1h05", "2h30".
 // Used for the in-use timer (accumulated cutting time), which is what the
@@ -67,7 +99,7 @@ pw::Status MainScreen::OnActivate() {
                               lv_color_hex(theme::kColorDarkText),
                               LV_PART_MAIN);
   lv_obj_set_width(machine_name_label_, kUsableWidth);
-  lv_label_set_long_mode(machine_name_label_, LV_LABEL_LONG_DOT);
+  lv_label_set_long_mode(machine_name_label_, LV_LABEL_LONG_MODE_DOTS);
   lv_obj_align(machine_name_label_, LV_ALIGN_TOP_LEFT, kContentPadding, 56);
 
   instruction_label_ = lv_label_create(lv_screen_);
@@ -95,20 +127,32 @@ pw::Status MainScreen::OnActivate() {
   AddToGroup(menu_btn_);
 
   // --- Active/Ready widgets (hidden initially) ---
-  user_name_label_ = lv_label_create(lv_screen_);
+  // A vertical flex column holds the user name, the status chip and the timer
+  // row so they reflow to the name's real height: a one-line name keeps the
+  // chip snug beneath it, a clamped two-line name pushes it down — no hardcoded
+  // y offsets that assume a single line (issue #532).
+  session_column_ = lv_obj_create(lv_screen_);
+  lv_obj_remove_style_all(session_column_);
+  lv_obj_set_size(session_column_, kUsableWidth, LV_SIZE_CONTENT);
+  lv_obj_set_pos(session_column_, kContentPadding, kSessionColumnTop);
+  lv_obj_set_flex_flow(session_column_, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_style_pad_row(session_column_, kSessionRowGap, LV_PART_MAIN);
+  lv_obj_clear_flag(session_column_, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_add_flag(session_column_, LV_OBJ_FLAG_HIDDEN);
+
+  user_name_label_ = lv_label_create(session_column_);
   lv_label_set_text(user_name_label_, "");
   lv_obj_set_style_text_font(user_name_label_, &roboto_36, LV_PART_MAIN);
   lv_obj_set_style_text_color(user_name_label_, lv_color_white(),
                               LV_PART_MAIN);
   lv_obj_set_width(user_name_label_, kUsableWidth);
-  lv_label_set_long_mode(user_name_label_, LV_LABEL_LONG_DOT);
-  lv_obj_align(user_name_label_, LV_ALIGN_TOP_LEFT, kContentPadding, 78);
-  lv_obj_add_flag(user_name_label_, LV_OBJ_FLAG_HIDDEN);
+  lv_label_set_long_mode(user_name_label_, LV_LABEL_LONG_MODE_DOTS);
+  ClampLabelLines(user_name_label_, &roboto_36, kUserNameMaxLines);
 
   // Status chip below the user name, grouped with the timer it describes:
   // reusable state indicator ("Bereit" / "Pausiert" / "In Betrieb").
   // Colours are set per state in SetVisualState(); text per frame in OnUpdate().
-  status_chip_ = lv_obj_create(lv_screen_);
+  status_chip_ = lv_obj_create(session_column_);
   lv_obj_remove_style_all(status_chip_);
   lv_obj_set_size(status_chip_, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
   lv_obj_set_style_radius(status_chip_, 12, LV_PART_MAIN);
@@ -116,27 +160,34 @@ pw::Status MainScreen::OnActivate() {
   lv_obj_set_style_pad_ver(status_chip_, 4, LV_PART_MAIN);
   lv_obj_set_style_bg_opa(status_chip_, LV_OPA_COVER, LV_PART_MAIN);
   lv_obj_clear_flag(status_chip_, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_align(status_chip_, LV_ALIGN_TOP_LEFT, kContentPadding, 126);
-  lv_obj_add_flag(status_chip_, LV_OBJ_FLAG_HIDDEN);
 
   status_label_ = lv_label_create(status_chip_);
   lv_label_set_text(status_label_, "");
   lv_obj_set_style_text_font(status_label_, &roboto_16, LV_PART_MAIN);
   lv_obj_center(status_label_);
 
-  timer_icon_ = lv_label_create(lv_screen_);
+  // The clock icon and its text share a horizontal row so they toggle as one
+  // unit. A hidden flex child collapses (display:none semantics), so hiding the
+  // row leaves no gap in the column above.
+  timer_row_ = lv_obj_create(session_column_);
+  lv_obj_remove_style_all(timer_row_);
+  lv_obj_set_size(timer_row_, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+  lv_obj_set_flex_flow(timer_row_, LV_FLEX_FLOW_ROW);
+  lv_obj_set_flex_align(timer_row_, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER,
+                        LV_FLEX_ALIGN_CENTER);
+  lv_obj_set_style_pad_column(timer_row_, kTimerIconGap, LV_PART_MAIN);
+  lv_obj_clear_flag(timer_row_, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_add_flag(timer_row_, LV_OBJ_FLAG_HIDDEN);
+
+  timer_icon_ = lv_label_create(timer_row_);
   lv_label_set_text(timer_icon_, kIconSchedule);
   lv_obj_set_style_text_font(timer_icon_, &material_symbols_24, LV_PART_MAIN);
   lv_obj_set_style_text_color(timer_icon_, lv_color_white(), LV_PART_MAIN);
-  lv_obj_align(timer_icon_, LV_ALIGN_TOP_LEFT, kContentPadding, 168);
-  lv_obj_add_flag(timer_icon_, LV_OBJ_FLAG_HIDDEN);
 
-  timer_label_ = lv_label_create(lv_screen_);
+  timer_label_ = lv_label_create(timer_row_);
   lv_label_set_text(timer_label_, "< 1 min");
   lv_obj_set_style_text_font(timer_label_, &roboto_16, LV_PART_MAIN);
   lv_obj_set_style_text_color(timer_label_, lv_color_white(), LV_PART_MAIN);
-  lv_obj_align(timer_label_, LV_ALIGN_TOP_LEFT, kTimerLabelX, 170);
-  lv_obj_add_flag(timer_label_, LV_OBJ_FLAG_HIDDEN);
 
   // --- Denied widgets (hidden initially) ---
   denied_icon_ = lv_label_create(lv_screen_);
@@ -176,9 +227,11 @@ void MainScreen::OnDeactivate() {
   machine_name_label_ = nullptr;
   instruction_label_ = nullptr;
   menu_btn_ = nullptr;
+  session_column_ = nullptr;
   status_chip_ = nullptr;
   status_label_ = nullptr;
   user_name_label_ = nullptr;
+  timer_row_ = nullptr;
   timer_icon_ = nullptr;
   timer_label_ = nullptr;
   denied_icon_ = nullptr;
@@ -246,11 +299,9 @@ void MainScreen::OnUpdate(const app_state::AppStateSnapshot& snapshot) {
       char time_buf[16];
       FormatDuration(time_buf, sizeof(time_buf), in_use);
       lv_label_set_text(timer_label_, time_buf);
-      lv_obj_remove_flag(timer_icon_, LV_OBJ_FLAG_HIDDEN);
-      lv_obj_remove_flag(timer_label_, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_remove_flag(timer_row_, LV_OBJ_FLAG_HIDDEN);
     } else {
-      lv_obj_add_flag(timer_icon_, LV_OBJ_FLAG_HIDDEN);
-      lv_obj_add_flag(timer_label_, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_add_flag(timer_row_, LV_OBJ_FLAG_HIDDEN);
     }
   }
 
@@ -380,15 +431,19 @@ ui::ScreenStyle MainScreen::GetScreenStyle() const {
 }
 
 void MainScreen::ConfigureMachineLabel(bool idle_mode) {
+  // The clamp height is font-relative, so it must be recomputed whenever the
+  // font changes between modes.
   if (idle_mode) {
     lv_obj_set_style_text_font(machine_name_label_, &roboto_36, LV_PART_MAIN);
     lv_obj_set_style_text_color(machine_name_label_,
                                 lv_color_hex(theme::kColorDarkText),
                                 LV_PART_MAIN);
     lv_obj_align(machine_name_label_, LV_ALIGN_TOP_LEFT, kContentPadding, 56);
+    ClampLabelLines(machine_name_label_, &roboto_36, kMachineNameMaxLines);
   } else {
     lv_obj_set_style_text_font(machine_name_label_, &roboto_24, LV_PART_MAIN);
     lv_obj_align(machine_name_label_, LV_ALIGN_TOP_LEFT, kContentPadding, 44);
+    ClampLabelLines(machine_name_label_, &roboto_24, kMachineNameMaxLines);
   }
 }
 
@@ -432,9 +487,9 @@ void MainScreen::SetVisualState(VisualState state) {
       lv_obj_set_style_text_color(status_label_, chip_text, LV_PART_MAIN);
 
       lv_obj_remove_flag(machine_name_label_, LV_OBJ_FLAG_HIDDEN);
-      lv_obj_remove_flag(status_chip_, LV_OBJ_FLAG_HIDDEN);
-      lv_obj_remove_flag(user_name_label_, LV_OBJ_FLAG_HIDDEN);
-      // The timer's visibility depends on accrued time — OnUpdate() manages it.
+      lv_obj_remove_flag(session_column_, LV_OBJ_FLAG_HIDDEN);
+      // The timer row's visibility depends on accrued time — OnUpdate() manages
+      // it; the name and status chip come up with the column.
       lv_obj_remove_flag(menu_btn_, LV_OBJ_FLAG_HIDDEN);
       if (lv_group_) {
         lv_group_focus_obj(menu_btn_);
@@ -456,10 +511,8 @@ void MainScreen::HideAllWidgets() {
   lv_obj_add_flag(machine_name_label_, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(instruction_label_, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(menu_btn_, LV_OBJ_FLAG_HIDDEN);
-  lv_obj_add_flag(status_chip_, LV_OBJ_FLAG_HIDDEN);
-  lv_obj_add_flag(user_name_label_, LV_OBJ_FLAG_HIDDEN);
-  lv_obj_add_flag(timer_icon_, LV_OBJ_FLAG_HIDDEN);
-  lv_obj_add_flag(timer_label_, LV_OBJ_FLAG_HIDDEN);
+  // Hiding the column hides the name, chip and timer row it contains.
+  lv_obj_add_flag(session_column_, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(denied_icon_, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(denied_label_, LV_OBJ_FLAG_HIDDEN);
 }
