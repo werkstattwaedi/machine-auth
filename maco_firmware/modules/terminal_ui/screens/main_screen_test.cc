@@ -252,6 +252,7 @@ TEST_F(MainScreenTest, CheckoutPendingState) {
   snapshot.session.session_user_label = "Simon Flepp";
   snapshot.session.session_started_at =
       pw::chrono::SystemClock::now() - std::chrono::minutes(47);
+  snapshot.machine.machine_running = true;  // in use → green sheet
   snapshot.machine.in_use_seconds = 47 * 60;  // timer shows in-use time
   snapshot.system.machine_label = "Fräse";
   auto now = pw::chrono::SystemClock::now();
@@ -285,9 +286,22 @@ TEST_F(MainScreenTest, CheckoutPendingButtonConfig) {
   EXPECT_EQ(config.cancel.fill_progress, 0);
 }
 
+// A pending confirmation must not invent a state: the colour still follows
+// machine_running, exactly as it does without the overlay (issue #533).
 TEST_F(MainScreenTest, CheckoutPendingScreenStyle) {
   app_state::AppStateSnapshot snapshot;
   snapshot.session.state = app_state::SessionStateUi::kCheckoutPending;
+  snapshot.machine.machine_running = false;
+  screen_->OnUpdate(snapshot);
+
+  auto style = screen_->GetScreenStyle();
+  EXPECT_EQ(style.bg_color, theme::kColorYellow);
+}
+
+TEST_F(MainScreenTest, CheckoutPendingScreenStyleWhileRunning) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.session.state = app_state::SessionStateUi::kCheckoutPending;
+  snapshot.machine.machine_running = true;
   screen_->OnUpdate(snapshot);
 
   auto style = screen_->GetScreenStyle();
@@ -301,6 +315,7 @@ TEST_F(MainScreenTest, TakeoverPendingState) {
   snapshot.session.pending_user_label = "Mike";
   snapshot.session.session_started_at =
       pw::chrono::SystemClock::now() - std::chrono::minutes(47);
+  snapshot.machine.machine_running = true;  // in use → green sheet
   snapshot.machine.in_use_seconds = 47 * 60;  // timer shows in-use time
   snapshot.system.machine_label = "Fräse";
   auto now = pw::chrono::SystemClock::now();
@@ -354,6 +369,17 @@ TEST_F(MainScreenTest, TakeoverPendingButtonConfigBadgeRemoved) {
 TEST_F(MainScreenTest, TakeoverPendingScreenStyle) {
   app_state::AppStateSnapshot snapshot;
   snapshot.session.state = app_state::SessionStateUi::kTakeoverPending;
+  snapshot.machine.machine_running = false;
+  screen_->OnUpdate(snapshot);
+
+  auto style = screen_->GetScreenStyle();
+  EXPECT_EQ(style.bg_color, theme::kColorYellow);
+}
+
+TEST_F(MainScreenTest, TakeoverPendingScreenStyleWhileRunning) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.session.state = app_state::SessionStateUi::kTakeoverPending;
+  snapshot.machine.machine_running = true;
   screen_->OnUpdate(snapshot);
 
   auto style = screen_->GetScreenStyle();
@@ -366,6 +392,7 @@ TEST_F(MainScreenTest, StopPendingState) {
   snapshot.session.session_user_label = "Simon Flepp";
   snapshot.session.session_started_at =
       pw::chrono::SystemClock::now() - std::chrono::minutes(47);
+  snapshot.machine.machine_running = true;  // in use → green sheet
   snapshot.machine.in_use_seconds = 47 * 60;  // timer shows in-use time
   snapshot.system.machine_label = "Fräse";
   auto now = pw::chrono::SystemClock::now();
@@ -399,6 +426,17 @@ TEST_F(MainScreenTest, StopPendingButtonConfig) {
 TEST_F(MainScreenTest, StopPendingScreenStyle) {
   app_state::AppStateSnapshot snapshot;
   snapshot.session.state = app_state::SessionStateUi::kStopPending;
+  snapshot.machine.machine_running = false;
+  screen_->OnUpdate(snapshot);
+
+  auto style = screen_->GetScreenStyle();
+  EXPECT_EQ(style.bg_color, theme::kColorYellow);
+}
+
+TEST_F(MainScreenTest, StopPendingScreenStyleWhileRunning) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.session.state = app_state::SessionStateUi::kStopPending;
+  snapshot.machine.machine_running = true;
   screen_->OnUpdate(snapshot);
 
   auto style = screen_->GetScreenStyle();
@@ -423,6 +461,95 @@ TEST_F(MainScreenTest, CancelActionFromCheckoutPending) {
   bool handled = screen_->OnEscapePressed();
   EXPECT_TRUE(handled);
   EXPECT_EQ(last_action, UiAction::kCancel);
+}
+
+// --- Pending confirmations while the machine is idle (issue #533) ---
+//
+// The bottom sheet must wear the machine's *current* colour. Before the fix
+// these all rendered green ("In Betrieb") on a machine that was not running.
+// Note in_use_seconds = 0 → "Bereit" chip and no timer, consistent with the
+// plain Ready screen.
+
+TEST_F(MainScreenTest, StopPendingWhileIdle) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.session.state = app_state::SessionStateUi::kStopPending;
+  snapshot.session.session_user_label = "Simon Flepp";
+  snapshot.machine.machine_running = false;
+  snapshot.machine.in_use_seconds = 0;
+  snapshot.system.machine_label = "Laser";
+  auto now = pw::chrono::SystemClock::now();
+  snapshot.session.pending_since = now;
+  snapshot.session.pending_deadline = now + std::chrono::seconds(3);
+  screen_->OnUpdate(snapshot);
+  RenderFrame();
+
+  EXPECT_TRUE(harness_.CompareToGolden(
+      "maco_firmware/modules/terminal_ui/testdata/main_stop_pending_idle.png",
+      "/tmp/main_stop_pending_idle_diff.png"));
+}
+
+TEST_F(MainScreenTest, CheckoutPendingWhileIdle) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.session.state = app_state::SessionStateUi::kCheckoutPending;
+  snapshot.session.session_user_label = "Simon Flepp";
+  snapshot.machine.machine_running = false;
+  snapshot.machine.in_use_seconds = 0;
+  snapshot.system.machine_label = "Laser";
+  auto now = pw::chrono::SystemClock::now();
+  snapshot.session.pending_since = now;
+  snapshot.session.pending_deadline = now + std::chrono::seconds(3);
+  snapshot.session.tag_present = true;
+  screen_->OnUpdate(snapshot);
+  RenderFrame();
+
+  EXPECT_TRUE(harness_.CompareToGolden(
+      "maco_firmware/modules/terminal_ui/testdata/"
+      "main_checkout_pending_idle.png",
+      "/tmp/main_checkout_pending_idle_diff.png"));
+}
+
+TEST_F(MainScreenTest, TakeoverPendingWhileIdle) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.session.state = app_state::SessionStateUi::kTakeoverPending;
+  snapshot.session.session_user_label = "Simon Flepp";
+  snapshot.session.pending_user_label = "Mike";
+  snapshot.machine.machine_running = false;
+  snapshot.machine.in_use_seconds = 0;
+  snapshot.system.machine_label = "Laser";
+  auto now = pw::chrono::SystemClock::now();
+  snapshot.session.pending_since = now;
+  snapshot.session.pending_deadline = now + std::chrono::seconds(3);
+  snapshot.session.tag_present = true;
+  screen_->OnUpdate(snapshot);
+  RenderFrame();
+
+  EXPECT_TRUE(harness_.CompareToGolden(
+      "maco_firmware/modules/terminal_ui/testdata/"
+      "main_takeover_pending_idle.png",
+      "/tmp/main_takeover_pending_idle_diff.png"));
+}
+
+// The machine can start running while the sheet is already up — the card must
+// follow, not keep the colour it was shown with.
+TEST_F(MainScreenTest, PendingSheetRecoloursWhenMachineStarts) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.session.state = app_state::SessionStateUi::kStopPending;
+  snapshot.session.session_user_label = "Simon Flepp";
+  auto now = pw::chrono::SystemClock::now();
+  snapshot.session.pending_since = now;
+  snapshot.session.pending_deadline = now + std::chrono::seconds(3);
+
+  snapshot.machine.machine_running = false;
+  screen_->OnUpdate(snapshot);
+  EXPECT_EQ(screen_->GetScreenStyle().bg_color, theme::kColorYellow);
+
+  snapshot.machine.machine_running = true;
+  screen_->OnUpdate(snapshot);
+  EXPECT_EQ(screen_->GetScreenStyle().bg_color, theme::kColorGreen);
+
+  snapshot.machine.machine_running = false;
+  screen_->OnUpdate(snapshot);
+  EXPECT_EQ(screen_->GetScreenStyle().bg_color, theme::kColorYellow);
 }
 
 // --- Idle-end warning (ending soon) ---
@@ -471,6 +598,7 @@ TEST_F(MainScreenTest, StopPendingProgress0) {
   snapshot.session.session_user_label = "Simon Flepp";
   snapshot.session.session_started_at =
       pw::chrono::SystemClock::now() - std::chrono::minutes(47);
+  snapshot.machine.machine_running = true;  // in use → green sheet
   snapshot.machine.in_use_seconds = 47 * 60;  // timer shows in-use time
   snapshot.system.machine_label = "Fräse";
   auto now = pw::chrono::SystemClock::now();
@@ -490,6 +618,7 @@ TEST_F(MainScreenTest, StopPendingProgress33) {
   snapshot.session.session_user_label = "Simon Flepp";
   snapshot.session.session_started_at =
       pw::chrono::SystemClock::now() - std::chrono::minutes(47);
+  snapshot.machine.machine_running = true;  // in use → green sheet
   snapshot.machine.in_use_seconds = 47 * 60;  // timer shows in-use time
   snapshot.system.machine_label = "Fräse";
   auto now = pw::chrono::SystemClock::now();
@@ -510,6 +639,7 @@ TEST_F(MainScreenTest, StopPendingProgress66) {
   snapshot.session.session_user_label = "Simon Flepp";
   snapshot.session.session_started_at =
       pw::chrono::SystemClock::now() - std::chrono::minutes(47);
+  snapshot.machine.machine_running = true;  // in use → green sheet
   snapshot.machine.in_use_seconds = 47 * 60;  // timer shows in-use time
   snapshot.system.machine_label = "Fräse";
   auto now = pw::chrono::SystemClock::now();
@@ -530,6 +660,7 @@ TEST_F(MainScreenTest, StopPendingProgress100) {
   snapshot.session.session_user_label = "Simon Flepp";
   snapshot.session.session_started_at =
       pw::chrono::SystemClock::now() - std::chrono::minutes(47);
+  snapshot.machine.machine_running = true;  // in use → green sheet
   snapshot.machine.in_use_seconds = 47 * 60;  // timer shows in-use time
   snapshot.system.machine_label = "Fräse";
   auto now = pw::chrono::SystemClock::now();

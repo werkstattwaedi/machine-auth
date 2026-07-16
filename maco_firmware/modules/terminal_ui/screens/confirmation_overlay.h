@@ -5,6 +5,7 @@
 
 #include "lvgl.h"
 #include "maco_firmware/modules/app_state/ui/snapshot.h"
+#include "maco_firmware/modules/terminal_ui/theme.h"
 #include "maco_firmware/modules/terminal_ui/ui_action.h"
 #include "maco_firmware/modules/ui/button_spec.h"
 #include "pw_chrono/system_clock.h"
@@ -38,16 +39,21 @@ class ConfirmationOverlay {
   /// Destroy all LVGL widgets.
   void Destroy();
 
-  /// Show the overlay for the given pending type.
-  void Show(PendingType type, std::string_view takeover_user_label = {});
+  /// Show the overlay for the given pending type, in the caller's state
+  /// colours. Colour is a property of each showing, not of the widget's
+  /// lifetime — taking it here means the sheet can never render in a stale
+  /// or default colour.
+  void Show(PendingType type,
+            theme::StateColors colors,
+            std::string_view takeover_user_label = {});
 
   /// Update the takeover user label while already visible.
   void SetTakeoverLabel(std::string_view takeover_user_label);
 
-  /// Recolour the card to the screen's state background at full brightness
-  /// (the scrim dims the rest, so the card stands out). `text_color` should
-  /// match the screen's own text colour for that state.
-  void SetColors(uint32_t screen_bg, uint32_t text_color);
+  /// Recolour the card to the screen's state colours: the background at full
+  /// brightness (the scrim dims the rest, so the card stands out) with the
+  /// screen's matching text colour. Call when the state changes while visible.
+  void SetColors(theme::StateColors colors);
 
   /// Hide the overlay.
   void Hide();

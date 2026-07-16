@@ -24,7 +24,6 @@ constexpr int kCardY = 200;
 constexpr int kScreenHeight = 320;
 constexpr int kCardHeight = kScreenHeight - kCardY + kCardRadius;
 
-constexpr uint32_t kCardBgColor = theme::kColorGreen;
 constexpr int kStatusBarHeight = 40;
 
 }  // namespace
@@ -57,7 +56,8 @@ void ConfirmationOverlay::Create(lv_obj_t* parent, lv_group_t* group) {
   lv_obj_remove_style_all(card_);
   lv_obj_set_size(card_, LV_PCT(100), kCardHeight);
   lv_obj_align(card_, LV_ALIGN_TOP_LEFT, 0, kCardY);
-  lv_obj_set_style_bg_color(card_, lv_color_hex(kCardBgColor), LV_PART_MAIN);
+  // No bg/text colour here on purpose: Show() supplies the state's colours.
+  // A hardcoded default would silently mask a caller that forgot them.
   lv_obj_set_style_bg_opa(card_, LV_OPA_COVER, LV_PART_MAIN);
   lv_obj_set_style_radius(card_, kCardRadius, LV_PART_MAIN);
   lv_obj_set_style_pad_all(card_, kContentPadding, LV_PART_MAIN);
@@ -68,7 +68,6 @@ void ConfirmationOverlay::Create(lv_obj_t* parent, lv_group_t* group) {
   question_label_ = lv_label_create(card_);
   lv_label_set_text(question_label_, "");
   lv_obj_set_style_text_font(question_label_, &roboto_24, LV_PART_MAIN);
-  lv_obj_set_style_text_color(question_label_, lv_color_white(), LV_PART_MAIN);
   lv_obj_set_width(question_label_, kUsableWidth);
   lv_label_set_long_mode(question_label_, LV_LABEL_LONG_DOT);
 
@@ -122,11 +121,13 @@ void ConfirmationOverlay::Destroy() {
 }
 
 void ConfirmationOverlay::Show(PendingType type,
+                               theme::StateColors colors,
                                std::string_view takeover_user_label) {
   PW_DCHECK_NOTNULL(scrim_, "Create() must be called before Show()");
 
   pending_type_ = type;
   visible_ = true;
+  SetColors(colors);
 
   // Set question text
   if (type == PendingType::kTakeover) {
@@ -156,15 +157,15 @@ void ConfirmationOverlay::SetTakeoverLabel(
                         takeover_user_label.data());
 }
 
-void ConfirmationOverlay::SetColors(uint32_t screen_bg, uint32_t text_color) {
+void ConfirmationOverlay::SetColors(theme::StateColors colors) {
   if (!card_ || !question_label_) {
     return;
   }
   // The card is the state colour at full brightness; the scrim dims the rest
   // of the screen, so the card stands out. (Darkening the card instead would
   // make it blend into the already-dimmed background.)
-  lv_obj_set_style_bg_color(card_, lv_color_hex(screen_bg), LV_PART_MAIN);
-  lv_obj_set_style_text_color(question_label_, lv_color_hex(text_color),
+  lv_obj_set_style_bg_color(card_, lv_color_hex(colors.bg), LV_PART_MAIN);
+  lv_obj_set_style_text_color(question_label_, lv_color_hex(colors.text),
                               LV_PART_MAIN);
 }
 

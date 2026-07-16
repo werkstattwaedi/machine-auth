@@ -195,16 +195,17 @@ void MainScreen::OnUpdate(const app_state::AppStateSnapshot& snapshot) {
   bool is_ending_soon =
       snapshot.session.state == app_state::SessionStateUi::kEndingSoon;
 
-  // Derive visual state. A running session is green while the machine is
-  // actually in use and yellow while it's ready-but-idle (e.g. laser powered
-  // but not cutting). Pending confirmations always show green + overlay; the
-  // idle-warning shows yellow (the machine is idle) + overlay.
+  // Derive visual state. A session is green while the machine is actually in
+  // use and yellow while it's ready-but-idle (e.g. laser powered but not
+  // cutting). A pending confirmation or the idle-warning only adds the overlay
+  // on top — it must not change the state colour, otherwise the sheet claims
+  // the machine is running when it isn't.
   VisualState new_state;
   if (is_ending_soon) {
+    // The warning only fires while the machine is idle.
     new_state = VisualState::kReady;
-  } else if (is_pending) {
-    new_state = VisualState::kActive;
-  } else if (snapshot.session.state == app_state::SessionStateUi::kRunning) {
+  } else if (is_pending ||
+             snapshot.session.state == app_state::SessionStateUi::kRunning) {
     new_state = snapshot.machine.machine_running ? VisualState::kActive
                                                  : VisualState::kReady;
   } else if (snapshot.verification.state ==
@@ -272,22 +273,22 @@ void MainScreen::OnUpdate(const app_state::AppStateSnapshot& snapshot) {
       type = PendingType::kStop;
     }
 
+    // The card wears the screen's own state colours, so it always agrees with
+    // the background behind it.
+    const theme::StateColors colors = ColorsFor(visual_state_);
+
     if (!overlay_.IsVisible()) {
       // Hide menu button so only confirm_btn_ is focusable — prevents
       // AppShell from lighting up the navigation LEDs.
       lv_obj_add_flag(menu_btn_, LV_OBJ_FLAG_HIDDEN);
-      overlay_.Show(type, takeover_label);
+      overlay_.Show(type, colors, takeover_label);
     } else if (type == PendingType::kTakeover) {
       overlay_.SetTakeoverLabel(takeover_label);
     }
 
-    // Card takes the current state background at full brightness (yellow for
-    // the idle-warning, green for the active states); the scrim dims the rest.
-    // Text matches the screen's text colour for that state.
-    uint32_t card_text = visual_state_ == VisualState::kReady
-                             ? theme::kColorDarkText
-                             : 0xFFFFFF;
-    overlay_.SetColors(GetScreenStyle().bg_color, card_text);
+    // Re-applied every frame: the machine can start or stop while the sheet
+    // is up, and the card must follow the state across that transition.
+    overlay_.SetColors(colors);
     overlay_.UpdateProgress(snapshot.session.pending_since,
                             snapshot.session.pending_deadline,
                             snapshot.session.tag_present);
@@ -365,18 +366,23 @@ ui::ButtonConfig MainScreen::GetButtonConfig() const {
   return {};
 }
 
-ui::ScreenStyle MainScreen::GetScreenStyle() const {
-  switch (visual_state_) {
+theme::StateColors MainScreen::ColorsFor(VisualState state) {
+  switch (state) {
     case VisualState::kIdle:
-      return {.bg_color = theme::kColorWhiteBg};
+      return {.bg = theme::kColorWhiteBg, .text = theme::kColorDarkText};
     case VisualState::kReady:
-      return {.bg_color = theme::kColorYellow};
+      // Yellow needs dark text for contrast; the darker states take white.
+      return {.bg = theme::kColorYellow, .text = theme::kColorDarkText};
     case VisualState::kActive:
-      return {.bg_color = theme::kColorGreen};
+      return {.bg = theme::kColorGreen, .text = theme::kColorText};
     case VisualState::kDenied:
-      return {.bg_color = theme::kColorRed};
+      return {.bg = theme::kColorRed, .text = theme::kColorText};
   }
-  return {};
+  return {.bg = theme::kColorWhiteBg, .text = theme::kColorDarkText};
+}
+
+ui::ScreenStyle MainScreen::GetScreenStyle() const {
+  return {.bg_color = ColorsFor(visual_state_).bg};
 }
 
 void MainScreen::ConfigureMachineLabel(bool idle_mode) {
@@ -396,7 +402,7 @@ void MainScreen::SetVisualState(VisualState state) {
   visual_state_ = state;
   HideAllWidgets();
 
-  uint32_t bg_color = theme::kColorWhiteBg;
+  const theme::StateColors colors = ColorsFor(state);
   switch (state) {
     case VisualState::kIdle:
       ConfigureMachineLabel(true);
@@ -409,12 +415,7 @@ void MainScreen::SetVisualState(VisualState state) {
       break;
     case VisualState::kReady:
     case VisualState::kActive: {
-      // Green when actually in use, yellow when ready-but-idle. Yellow uses
-      // dark text for contrast; green uses white.
-      bool cutting = state == VisualState::kActive;
-      bg_color = cutting ? theme::kColorGreen : theme::kColorYellow;
-      lv_color_t text_color =
-          cutting ? lv_color_white() : lv_color_hex(theme::kColorDarkText);
+      lv_color_t text_color = lv_color_hex(colors.text);
       ConfigureMachineLabel(false);
       lv_obj_set_style_text_color(machine_name_label_, text_color, LV_PART_MAIN);
       lv_obj_set_style_text_color(user_name_label_, text_color, LV_PART_MAIN);
@@ -423,7 +424,7 @@ void MainScreen::SetVisualState(VisualState state) {
 
       // Status chip: a darker shade of the state colour, so it reads as a
       // distinct pill on any background, with a contrasting label.
-      uint32_t chip_bg = theme::DarkenColor(bg_color, 64);
+      uint32_t chip_bg = theme::DarkenColor(colors.bg, 64);
       lv_color_t chip_text = theme::IsLightColor(chip_bg)
                                  ? lv_color_hex(theme::kColorDarkText)
                                  : lv_color_white();
@@ -442,13 +443,12 @@ void MainScreen::SetVisualState(VisualState state) {
       break;
     }
     case VisualState::kDenied:
-      bg_color = theme::kColorRed;
       lv_obj_remove_flag(denied_icon_, LV_OBJ_FLAG_HIDDEN);
       lv_obj_remove_flag(denied_label_, LV_OBJ_FLAG_HIDDEN);
       break;
   }
 
-  lv_obj_set_style_bg_color(lv_screen_, lv_color_hex(bg_color), LV_PART_MAIN);
+  lv_obj_set_style_bg_color(lv_screen_, lv_color_hex(colors.bg), LV_PART_MAIN);
   MarkDirty();
 }
 
