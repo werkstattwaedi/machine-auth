@@ -5,6 +5,7 @@
 
 #include "maco_firmware/modules/app_state/ui/snapshot.h"
 #include "maco_firmware/modules/terminal_ui/screens/confirmation_overlay.h"
+#include "maco_firmware/modules/terminal_ui/theme.h"
 #include "maco_firmware/modules/terminal_ui/ui_action.h"
 #include "maco_firmware/modules/ui/data_binding.h"
 #include "maco_firmware/modules/ui/screen.h"
@@ -39,6 +40,11 @@ class MainScreen : public ui::Screen<app_state::AppStateSnapshot> {
     kActive,
     kDenied,
   };
+
+  /// The single source of truth for a state's colours. Every consumer
+  /// (GetScreenStyle(), SetVisualState(), the overlay) goes through here, so
+  /// the screen and the confirmation sheet cannot drift apart.
+  static theme::StateColors ColorsFor(VisualState state);
 
   void SetVisualState(VisualState state);
   void HideAllWidgets();

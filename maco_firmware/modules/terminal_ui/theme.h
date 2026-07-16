@@ -35,6 +35,15 @@ constexpr uint32_t kColorBtnRed = 0xF44336;     // Stop button bg
 // Text on light backgrounds
 constexpr uint32_t kColorDarkText = 0x212121;   // Dark text on light bg
 
+/// The background/text pair for one visual state. Passed around as a unit so
+/// that every surface tinted for a state (screen, status chip, overlay card)
+/// derives from one computation instead of re-deriving its own — a mismatch
+/// there is what let the confirmation sheet disagree with the screen.
+struct StateColors {
+  uint32_t bg;
+  uint32_t text;
+};
+
 // Layout constants
 constexpr int kPadding = 8;
 constexpr int kPaddingLg = 16;
