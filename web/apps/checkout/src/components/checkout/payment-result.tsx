@@ -124,6 +124,24 @@ export function PaymentResult({
   const [qrError, setQrError] = useState(false)
   const [tab, setTab] = useState<PaymentMethod>("rechnung")
 
+  // Issue #537: the TWINT pay-link and the commit button sit close together,
+  // and committing unmounts the picker — a user who hits "Ich habe via TWINT
+  // bezahlt" first is dropped on the completion screen with no way back to the
+  // paylink, so the payment can never be started. Gate the commit button on
+  // the paylink having been opened at least once.
+  //
+  // This gates on *intent*, not completion: we cannot observe whether the
+  // RaiseNow payment actually succeeded. The paylink opens on pay.raisenow.io,
+  // a foreign origin, so the same-origin policy forbids reading that tab's URL
+  // (the kiosk manages it only because Electron's main process sits outside the
+  // web sandbox — see shared/src/kiosk-navigation.ts + checkout-kiosk/src/main.ts),
+  // and RaiseNow's free plan offers no webhook (ADR-0020). Stopping the
+  // *accidental* first click is what this issue asks for.
+  //
+  // Sticky once set: it survives tab switches so a user who already paid and
+  // is browsing the other methods isn't re-gated on return.
+  const [twintPayStarted, setTwintPayStarted] = useState(false)
+
   // Issue #237: a CHF 0 visit ("Interne Nutzung") has nothing payable —
   // skip the QR/PayLink dance entirely and render a "nichts zu bezahlen"
   // screen below. We never fetch payment data, never render a QR, never
@@ -291,6 +309,9 @@ export function PaymentResult({
     }
   }
 
+  // Only the TWINT tab is gated — rechnung / monthly commit immediately.
+  const twintGated = tab === "twint" && !twintPayStarted
+
   const handleCommit = async () => {
     // paymentData is non-null here (the !paymentData early return above
     // guards this block). The callable stamps
@@ -398,22 +419,33 @@ export function PaymentResult({
           )}
           {tab === "monthly" && <MonthlyPanel totalPrice={totalPrice} />}
           {tab === "twint" && (
-            <TwintPanel paymentData={paymentData} totalPrice={totalPrice} />
+            <TwintPanel
+              paymentData={paymentData}
+              totalPrice={totalPrice}
+              onPayStart={() => setTwintPayStarted(true)}
+            />
           )}
         </div>
       </div>
 
-      {/* Single commit button — no back. Acknowledgement is recorded on click. */}
-      <div className="flex justify-end pt-2">
+      {/* Single commit button — no back. Acknowledgement is recorded on click.
+          On the TWINT tab it stays gated until the paylink is opened (#537). */}
+      <div className="flex flex-col items-end gap-2 pt-2">
         <button
           type="button"
           onClick={handleCommit}
-          disabled={ackMutation.loading}
-          className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-cog-teal rounded-[3px] hover:bg-cog-teal-dark transition-colors disabled:opacity-50"
+          disabled={ackMutation.loading || twintGated}
+          aria-describedby={twintGated ? "twint-commit-hint" : undefined}
+          className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-cog-teal rounded-[3px] hover:bg-cog-teal-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {ackMutation.loading && <Loader2 className="h-4 w-4 animate-spin" />}
           {COMMIT_LABELS[tab]}
         </button>
+        {twintGated && (
+          <p id="twint-commit-hint" className="text-xs text-muted-foreground">
+            Starte zuerst die TWINT-Zahlung.
+          </p>
+        )}
       </div>
     </div>
   )
@@ -564,9 +596,12 @@ function MonthlyPanel({ totalPrice }: { totalPrice: number }) {
 function TwintPanel({
   paymentData,
   totalPrice,
+  onPayStart,
 }: {
   paymentData: PaymentData
   totalPrice: number
+  /** Fired when the paylink is opened — ungates the commit button (#537). */
+  onPayStart: () => void
 }) {
   return (
     <div className="space-y-5">
@@ -579,6 +614,7 @@ function TwintPanel({
         href={paymentData.paylinkUrl}
         target="_blank"
         rel="noopener noreferrer"
+        onClick={onPayStart}
         className="inline-flex items-center justify-center w-[270px] h-[56px] px-[35px] bg-[#262626] rounded-[6px] hover:bg-[#333333] active:bg-[#1a1a1a] transition-colors no-underline"
       >
         <img
