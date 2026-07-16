@@ -1,7 +1,7 @@
 [
   {
     "id": "dfoYVuO3bhRJoRCbgND1",
-    "code": "1001",
+    "code": "0001",
     "name": "Stationäre Maschinen",
     "workshops": [
       "holz"
@@ -26,7 +26,7 @@
   },
   {
     "id": "LZ04lfdfdEieqQOsKhzi",
-    "code": "1002",
+    "code": "0002",
     "name": "Drechselbank",
     "workshops": [
       "holz"
@@ -51,7 +51,7 @@
   },
   {
     "id": "7SlZb0jUKcyE8sMcvyzD",
-    "code": "2001",
+    "code": "0004",
     "name": "Maschinen / Schweissanlage",
     "workshops": [
       "metall"
@@ -76,7 +76,7 @@
   },
   {
     "id": "kcspOmeZ3lsj4hNfHD4V",
-    "code": "2002",
+    "code": "0005",
     "name": "Plasmaschneider / Brenner",
     "workshops": [
       "metall"
@@ -101,7 +101,7 @@
   },
   {
     "id": "3XpXkmq3mGovXJ21h4pw",
-    "code": "8001",
+    "code": "0009",
     "name": "Sandstrahlen Stein",
     "workshops": [
       "stein"
@@ -142,7 +142,7 @@
   },
   {
     "id": "qG7OVbhnFp0vZM6BwCBB",
-    "code": "2003",
+    "code": "0006",
     "name": "Sandstrahlen Metall",
     "workshops": [
       "metall"
@@ -183,7 +183,7 @@
   },
   {
     "id": "tot0yitdBPf2hseDSuFf",
-    "code": "7001",
+    "code": "0008",
     "name": "Lötstation",
     "workshops": [
       "schmuck"
@@ -208,7 +208,7 @@
   },
   {
     "id": "17mC1Qe4xn2dfGNpsdfo",
-    "code": "5001",
+    "code": "0007",
     "name": "Glasperlenstation",
     "workshops": [
       "glas"
@@ -233,7 +233,7 @@
   },
   {
     "id": "ljE5dcV7qDv0Z50BdwHY",
-    "code": "8002",
+    "code": "0010",
     "name": "Schleifmaschinen",
     "workshops": [
       "stein"
@@ -258,7 +258,7 @@
   },
   {
     "id": "iVppnklahLU3JuA5BMmH",
-    "code": "1012",
+    "code": "0003",
     "name": "Laser Cutter",
     "workshops": [
       "makerspace"
