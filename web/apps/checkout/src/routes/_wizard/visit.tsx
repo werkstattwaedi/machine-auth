@@ -449,8 +449,12 @@ function VisitRoute() {
             </h2>
             {remainingWorkshops.length > 0 ? (
               <>
+                {/* Selecting a workshop is also how the visit is tracked
+                    (workshopsVisited), so the copy asks for every workshop
+                    used — not just those with billable material. */}
                 <p className="text-sm text-muted-foreground mb-4">
-                  Tippe eine Werkstatt an — sie erscheint direkt hier oberhalb.
+                  Wähle alle Werkstätten, die du heute benutzt hast — auch
+                  wenn keine Kosten anfallen.
                 </p>
                 <div className="flex flex-wrap gap-2.5">
                   {remainingWorkshops.map(([wsId, ws]) => (
