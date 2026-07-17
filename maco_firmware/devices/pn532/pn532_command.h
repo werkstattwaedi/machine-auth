@@ -77,8 +77,9 @@ enum class PresenceResult {
 /// removal from a link fault:
 ///   0x00 → Present (card answered)
 ///   0x01 → Departed (card did not answer, a genuine removal)
-/// Any other status (e.g. 0x27 = not ISO14443-4 capable) or a wrong-size frame
-/// is malformed/ambiguous → LinkFault, never a confirmed removal.
+/// Any other status (e.g. 0x27 = command not acceptable in the current
+/// context) or a wrong-size frame is malformed/ambiguous → LinkFault, never a
+/// confirmed removal.
 ///
 /// Pure function (lives here, not on the reader, so it is host-unit-testable —
 /// the reader's pb::AsyncUart is Cortex-M33-only and has no host fake, #536).

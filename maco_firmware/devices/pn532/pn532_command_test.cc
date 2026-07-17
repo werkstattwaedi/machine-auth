@@ -375,8 +375,9 @@ TEST(Pn532CheckPresentTest, CleanStatus0x01_IsDeparted) {
 }
 
 TEST(Pn532CheckPresentTest, OtherStatus_IsLinkFault) {
-  // 0x27 = not ISO14443-4 capable, and any other non-{0x00,0x01} status: this
-  // is an unexpected/ambiguous reply, NOT a confirmed removal.
+  // 0x27 = command not acceptable in the current context, and any other
+  // non-{0x00,0x01} status: this is an unexpected/ambiguous reply, NOT a
+  // confirmed removal.
   auto payload_27 = pw::bytes::Array<0x27>();
   EXPECT_EQ(ParseCheckPresentResponse(payload_27), PresenceResult::LinkFault);
 
