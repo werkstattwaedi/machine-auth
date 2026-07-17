@@ -294,7 +294,7 @@
     "description": "Brennofen Keramik-Atelier. Der Preis wird beim Brennen auf dem Zettel beim Objekt notiert; diesen Betrag beim Checkout erfassen.",
     "active": true,
     "type": "machine",
-    "userCanAdd": true,
+    "userCanAdd": false,
     "variants": [
       {
         "id": "pauschal",

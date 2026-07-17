@@ -131,15 +131,19 @@ function deepMerge(
 
 // --- Secret Manager ---
 
-function fetchSecret(secretName: string): string {
+// Secrets always come from the BASE project — environments share secret
+// values (ADR-0034) and the base project is their canonical home. Pinning
+// --project means an operator's gcloud default project can't silently
+// select a stale copy (matches fetchSecret in generate-env.ts).
+function fetchSecret(secretName: string, projectId: string): string {
   console.log(`  Fetching secret: ${secretName}`);
   try {
     return execSync(
-      `gcloud secrets versions access latest --secret=${secretName}`,
+      `gcloud secrets versions access latest --secret=${secretName} --project=${projectId}`,
       { encoding: "utf-8" },
     ).trim();
   } catch {
-    console.error(`Failed to fetch secret "${secretName}". Check: gcloud config get-value project`);
+    console.error(`Failed to fetch secret "${secretName}" from project ${projectId}. Check: gcloud auth list`);
     process.exit(1);
   }
 }
@@ -277,7 +281,8 @@ function generateEnv(envName: string | null): {
   console.log(`\n=== Generating ${envName ?? "production"} .env ===\n`);
 
   const configPath = resolve(configDir, "config.jsonc");
-  let config = parseJsonc(readFileSync(configPath, "utf-8"));
+  const baseConfig = parseJsonc(readFileSync(configPath, "utf-8"));
+  let config = baseConfig;
   if (envName) {
     const overlayPath = resolve(configDir, `config.${envName}.jsonc`);
     if (!existsSync(overlayPath)) {
@@ -287,11 +292,13 @@ function generateEnv(envName: string | null): {
       );
       process.exit(1);
     }
-    config = deepMerge(config, parseJsonc(readFileSync(overlayPath, "utf-8")));
+    config = deepMerge(baseConfig, parseJsonc(readFileSync(overlayPath, "utf-8")));
   }
 
-  const masterKey = fetchSecret("GATEWAY_ASCON_MASTER_KEY");
-  const gatewayApiKey = fetchSecret("GATEWAY_API_KEY");
+  // Deliberately the BASE project id even under --env — see fetchSecret.
+  const secretsProjectId = resolveValue(baseConfig, "firebase.projectId");
+  const masterKey = fetchSecret("GATEWAY_ASCON_MASTER_KEY", secretsProjectId);
+  const gatewayApiKey = fetchSecret("GATEWAY_API_KEY", secretsProjectId);
 
   const firebaseUrl = resolveValue(config, "gateway.firebaseUrl");
   if (!firebaseUrl) {
@@ -323,7 +330,7 @@ function generateEnv(envName: string | null): {
 
   let saPath: string | null = null;
   if (printerHost) {
-    const saJson = fetchSecret("GATEWAY_FIRESTORE_SA");
+    const saJson = fetchSecret("GATEWAY_FIRESTORE_SA", secretsProjectId);
     saPath = resolve(outDir, SA_FILENAME);
     writeFileSync(saPath, saJson.endsWith("\n") ? saJson : `${saJson}\n`);
     console.log(`  Written: ${saPath}`);

@@ -378,11 +378,14 @@ function main() {
   if (existsSync(firebasercPath)) {
     try {
       const existing = JSON.parse(readFileSync(firebasercPath, "utf-8"));
-      foreignTargets = Object.fromEntries(
-        Object.entries(
-          (existing?.targets ?? {}) as Record<string, unknown>
-        ).filter(([project]) => project !== projectId)
-      );
+      const targets = existing?.targets;
+      if (targets && typeof targets === "object" && !Array.isArray(targets)) {
+        foreignTargets = Object.fromEntries(
+          Object.entries(targets as Record<string, unknown>).filter(
+            ([project]) => project !== projectId
+          )
+        );
+      }
     } catch {
       // Malformed .firebaserc — regenerate from scratch.
     }
