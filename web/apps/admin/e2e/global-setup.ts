@@ -388,6 +388,8 @@ async function seedWorkflowData() {
   await db.collection("catalog").doc(CATALOG_AHORN_ID).set({
     code: "3001",
     name: "Ahorn 30 mm",
+    labelName: "Ahorn",
+    labelMass: "30 mm",
     workshops: ["holz"],
     category: ["Holz"],
     active: true,

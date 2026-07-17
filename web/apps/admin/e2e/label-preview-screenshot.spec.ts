@@ -9,44 +9,62 @@ import { test, expect } from "@playwright/test"
 // no scaling, no surrounding chrome — so the snapshot is byte-for-byte
 // the same data we ship to the printer.
 //
+// Fixtures are entries from Mario's pricelist (the design handoff's
+// materials.json), lightly edited for umlaut coverage, chosen to cover
+// the layout's branches: the S/M/L length steps, the no-mass centring
+// case, and the only name that needs the shrink-to-fit path.
+//
 // If layout, fonts, QR sizing, or threshold logic ever drift, this
 // fails loudly with a diff. Update snapshots with:
 //   npm run test:web:e2e:update-snapshots
 test.describe("Label renderer visual regression", () => {
   const fixtures = [
     {
+      // Short name + mass → S step.
       name: "short-name",
       query: {
-        url: "https://checkout.werkstattwaedi.ch/visit/add/item/6011",
-        title: "MDF roh 3mm",
-        code: "#6011",
+        url: "https://checkout.werkstattwaedi.ch/visit/add/item/3160",
+        name: "MDF",
+        mass: "3 mm",
+        code: "#3160",
       },
     },
     {
+      // Long name with umlauts + mass → wider step.
       name: "long-name-with-umlauts",
       query: {
-        url: "https://checkout.werkstattwaedi.ch/visit/add/item/4103",
-        title: "Schraube für Korpusverbinder M6×40",
-        code: "#4103",
+        url: "https://checkout.werkstattwaedi.ch/visit/add/item/3156",
+        name: "3-Schichtplatte, Föhre",
+        mass: "19 mm",
+        code: "#3156",
       },
     },
     {
-      name: "raku-rohling",
+      // No mass → single line, vertically centred name.
+      name: "no-mass",
       query: {
-        url: "https://checkout.werkstattwaedi.ch/visit/add/item/4103",
-        title: "Raku Rohling Schale Ø150mm",
-        code: "#4103",
+        url: "https://checkout.werkstattwaedi.ch/visit/add/item/4216",
+        name: "B128",
+        mass: "",
+        code: "#4216",
+      },
+    },
+    {
+      // The one catalog name that overflows even L at the base font size
+      // and takes the shrink-to-fit path (spec: min 35 spec-px).
+      name: "shrink-to-fit",
+      query: {
+        url: "https://checkout.werkstattwaedi.ch/visit/add/item/7004",
+        name: "Siebreiniger & Siebentschichter",
+        mass: "",
+        code: "#7004",
       },
     },
   ]
 
   for (const fixture of fixtures) {
     test(`renders "${fixture.name}" deterministically`, async ({ page }) => {
-      const search = new URLSearchParams({
-        url: fixture.query.url,
-        title: fixture.query.title,
-        code: fixture.query.code,
-      })
+      const search = new URLSearchParams(fixture.query)
       // `_test` is a TanStack pathless layout group, so the URL is just
       // `/label-preview` (the route file lives at routes/_test.label-preview.tsx
       // to signal "test-only" but doesn't contribute a URL segment).
