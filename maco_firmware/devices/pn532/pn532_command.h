@@ -53,4 +53,35 @@ struct Pn532Command {
   static bool ValidateDataChecksum(pw::ConstByteSpan data, uint8_t dcs);
 };
 
+/// Outcome of a single tag presence check (Diagnose attention request).
+///
+/// Tri-state so the reader loop can tell a *genuine* removal (authoritative,
+/// abort immediately) apart from an *ambiguous* link fault (a transient RF
+/// glitch that must be debounced before declaring departure). Flattening every
+/// failed check to "gone" was aborting otherwise-good auths on a single RF
+/// hiccup (issue #548).
+enum class PresenceResult {
+  /// Diagnose answered cleanly (status 0x00) — the tag is definitely present.
+  Present,
+  /// Diagnose returned a clean, well-formed status 0x01 — a genuine removal.
+  Departed,
+  /// Timeout / malformed frame / unexpected status — ambiguous; could be a
+  /// transient RF glitch rather than a real removal. Caller debounces.
+  LinkFault,
+};
+
+/// Decode the *payload* of a Diagnose (attention request) response — a single
+/// status byte already extracted by ParseResponse — into a tri-state result.
+///
+/// A clean, well-formed single-byte frame is what distinguishes a genuine
+/// removal from a link fault:
+///   0x00 → Present (card answered)
+///   0x01 → Departed (card did not answer, a genuine removal)
+/// Any other status (e.g. 0x27 = not ISO14443-4 capable) or a wrong-size frame
+/// is malformed/ambiguous → LinkFault, never a confirmed removal.
+///
+/// Pure function (lives here, not on the reader, so it is host-unit-testable —
+/// the reader's pb::AsyncUart is Cortex-M33-only and has no host fake, #536).
+PresenceResult ParseCheckPresentResponse(pw::ConstByteSpan payload);
+
 }  // namespace maco::nfc

@@ -61,7 +61,6 @@ class TestablePn532Reader : public maco::nfc::Pn532NfcReader {
 
   // Expose protected methods for testing
   using Pn532NfcReader::DoReleaseTag;
-  using Pn532NfcReader::ParseCheckPresentResponse;
   using Pn532NfcReader::ParseDetectResponse;
   using Pn532NfcReader::ParseTransceiveResponse;
   using Pn532NfcReader::RecoverFromDesync;
@@ -140,7 +139,8 @@ class Pn532HardwareTest : public ::testing::Test {
   }
 
   // Helper to check tag presence
-  pw::Result<bool> CheckTagPresent(pw::chrono::SystemClock::duration timeout) {
+  maco::nfc::PresenceResult CheckTagPresent(
+      pw::chrono::SystemClock::duration timeout) {
     auto& driver = GetDriver();
     return RunCoro(driver.CheckTagPresent(coro_cx_, timeout));
   }
@@ -253,9 +253,7 @@ TEST_F(Pn532HardwareTest, CheckTagPresent_WithCard) {
   PW_LOG_INFO("Card detected, now checking presence...");
 
   auto check_result = CheckTagPresent(kRfOperationTimeout);
-  ASSERT_TRUE(check_result.ok()) << "CheckTagPresent failed";
-
-  bool present = check_result.value();
+  bool present = check_result == maco::nfc::PresenceResult::Present;
   PW_LOG_INFO("Tag present: %s", present ? "yes" : "no");
 
   EXPECT_TRUE(present) << "Card should still be present";
@@ -408,14 +406,14 @@ TEST_F(Pn532HardwareTest, Interactive_CardDetectionCycles) {
     bool removed = false;
     for (int attempt = 0; attempt < 150 && !removed; ++attempt) {
       auto result = CheckTagPresent(kShortTimeout);
-      if (!result.ok()) {
-        // Error (likely card removed mid-transaction) - recover and treat as
-        // removed
-        PW_LOG_INFO("  Error during presence check, recovering...");
+      if (result == maco::nfc::PresenceResult::LinkFault) {
+        // Link fault (likely card removed mid-transaction) - recover and treat
+        // as removed
+        PW_LOG_INFO("  Link fault during presence check, recovering...");
         (void)DoRecoverFromDesync();
         removed = true;
         PW_LOG_INFO("  REMOVED!");
-      } else if (!result.value()) {
+      } else if (result == maco::nfc::PresenceResult::Departed) {
         // Tag explicitly not present
         removed = true;
         PW_LOG_INFO("  REMOVED!");

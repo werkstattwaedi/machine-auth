@@ -199,6 +199,12 @@ pw::async2::Coro<pw::Status> Pn532NfcReader::RunLoop(
     auto next_presence_check =
         pw::chrono::SystemClock::now() + config_.presence_check_interval;
 
+    // Debounce counter for ambiguous link faults (issue #548). Loop-scope
+    // local, NOT a member: the departure `break` leaves this scope, so
+    // re-entering the tag-present loop for the next tag resets it for free —
+    // avoiding the member-leak bug class. Reset to 0 on any clean Present.
+    int consecutive_absent = 0;
+
     while (true) {
       // Check if app has a pending transceive request
       if (pending_request_.has_value()) {
@@ -232,12 +238,52 @@ pw::async2::Coro<pw::Status> Pn532NfcReader::RunLoop(
       // Check if presence check is due
       if (pw::chrono::SystemClock::now() >= next_presence_check) {
         PW_LOG_DEBUG("Checking tag presence");
-        auto present_result =
+        PresenceResult presence =
             co_await CheckTagPresent(cx, config_.presence_check_timeout);
-        bool present = present_result.ok() && *present_result;
 
-        if (!present) {
-          // Tag gone
+        // Tri-state departure decision (issue #548):
+        //  - Present:   clean carrier, tag definitely here → clear debounce.
+        //  - Departed:  clean status 0x01, a genuine removal → abort NOW, no
+        //               debounce (never delay a real removal / the #536 abort).
+        //  - LinkFault: ambiguous (timeout / malformed) → debounce N checks.
+        //               On the first fault, RecoverFromDesync (ACK-abort +
+        //               drain) so the confirming re-check starts from a clean
+        //               RX boundary — a bare re-send after DataLoss would
+        //               re-fault on leftover garbage — then re-check
+        //               immediately instead of waiting a full interval.
+        bool departed = false;
+        switch (presence) {
+          case PresenceResult::Present:
+            consecutive_absent = 0;
+            next_presence_check = pw::chrono::SystemClock::now() +
+                                  config_.presence_check_interval;
+            break;
+
+          case PresenceResult::Departed:
+            departed = true;
+            break;
+
+          case PresenceResult::LinkFault:
+            ++consecutive_absent;
+            if (consecutive_absent >= config_.presence_absent_threshold) {
+              PW_LOG_WARN("Presence check link fault confirmed (%d/%d)",
+                          consecutive_absent,
+                          config_.presence_absent_threshold);
+              departed = true;
+            } else {
+              PW_LOG_WARN("Presence check link fault (%d/%d), recovering",
+                          consecutive_absent,
+                          config_.presence_absent_threshold);
+              (void)co_await RecoverFromDesync(cx);
+              // Re-check immediately: route through the top of the loop (via
+              // the WaitFor below) so an arriving pending_request_ is still
+              // serviced before the confirming check.
+              next_presence_check = pw::chrono::SystemClock::now();
+            }
+            break;
+        }
+
+        if (departed) {
           PW_LOG_INFO("Tag departed");
           if (current_tag_) {
             current_tag_->Invalidate();
@@ -256,10 +302,6 @@ pw::async2::Coro<pw::Status> Pn532NfcReader::RunLoop(
           current_tag_.reset();
           break;  // Back to detection loop
         }
-
-        // Tag still present, schedule next check
-        next_presence_check =
-            pw::chrono::SystemClock::now() + config_.presence_check_interval;
       }
 
       // Short async delay to let other tasks run, then check again.
@@ -544,7 +586,7 @@ pw::Result<size_t> Pn532NfcReader::ParseTransceiveResponse(
 // CheckTagPresent Coroutine
 //=============================================================================
 
-pw::async2::Coro<pw::Result<bool>> Pn532NfcReader::CheckTagPresent(
+pw::async2::Coro<PresenceResult> Pn532NfcReader::CheckTagPresent(
     pw::async2::CoroContext cx,
     pw::chrono::SystemClock::duration timeout) {
   uint32_t timeout_ms = ToTimeoutMs(timeout);
@@ -556,29 +598,14 @@ pw::async2::Coro<pw::Result<bool>> Pn532NfcReader::CheckTagPresent(
   auto result = co_await SendCommand(cx, cmd, timeout_ms);
 
   if (!result.ok()) {
-    DrainReceiveBuffer();
-    co_return pw::Result<bool>(false);  // Assume tag gone on error
+    // Timeout / DataLoss / etc. — ambiguous, NOT a confirmed removal. Let the
+    // caller debounce. RX recovery (ACK-abort + drain) is RecoverFromDesync's
+    // job on the first fault, so don't drain here.
+    co_return PresenceResult::LinkFault;
   }
 
+  // ParseCheckPresentResponse is the pure free function in pn532_command.h.
   co_return ParseCheckPresentResponse(*result);
-}
-
-pw::Result<bool> Pn532NfcReader::ParseCheckPresentResponse(
-    pw::ConstByteSpan payload) {
-  // Diagnose response: [Status]
-  if (payload.size() != 1) {
-    return pw::Status::DataLoss();
-  }
-
-  uint8_t status = static_cast<uint8_t>(payload[0]);
-  if (status == 0x00) {
-    return pw::Result<bool>(true);  // Tag present
-  } else if (status == 0x01) {
-    return pw::Result<bool>(false);  // Tag removed
-  } else {
-    // Error (0x27 = not ISO14443-4 capable, etc.)
-    return pw::Status::Internal();
-  }
 }
 
 //=============================================================================

@@ -16,19 +16,34 @@ cc_library(
     ],
 )
 
+# PN532 wire protocol: frame build/parse + presence decode. Pure logic (no
+# UART), so it builds and unit-tests on the host — unlike the reader, which
+# depends on the Cortex-M33-only pb_uart async UART.
+cc_library(
+    name = "pn532_command",
+    srcs = ["pn532_command.cc"],
+    hdrs = [
+        "pn532_command.h",
+        "pn532_constants.h",
+    ],
+    deps = [
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_result",
+        "@pigweed//pw_status",
+    ],
+)
+
 # PN532 NFC reader (coroutine-based implementation)
 cc_library(
     name = "pn532_nfc_reader",
     srcs = [
-        "pn532_command.cc",
         "pn532_nfc_reader.cc",
     ],
     hdrs = [
-        "pn532_command.h",
-        "pn532_constants.h",
         "pn532_nfc_reader.h",
     ],
     deps = [
+        ":pn532_command",
         ":tag_info",
         "//maco_firmware/modules/nfc_reader",
         "//maco_firmware/modules/nfc_reader:nfc_error",
@@ -57,7 +72,7 @@ pw_cc_test(
     name = "pn532_command_test",
     srcs = ["pn532_command_test.cc"],
     deps = [
-        ":pn532_nfc_reader",
+        ":pn532_command",
         "@pigweed//pw_bytes",
     ],
 )
