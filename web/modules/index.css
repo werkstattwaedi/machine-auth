@@ -70,9 +70,31 @@
   --color-ws-stein: #9ebac0;
   --color-ws-malen: #cb9cdc;
   --color-ws-makerspace: #a44d6e;
+  /* "Diverses" is a catch-all bucket outside the 9-color Farbkonzept; the
+     neutral tone comes from the Werkstatt-Auswahl design handoff. */
+  --color-ws-diverses: #c9c4bc;
   --font-family-heading: "Bitter", Georgia, serif;
   --font-family-body: "Roboto Slab", "Helvetica Neue", sans-serif;
   --animate-caret-blink: caret-blink 1.25s ease-out infinite;
+  /* Workshop selection (Werkstatt-Auswahl handoff): quick 160ms transitions
+     for section mount/unmount and chip/row appearance. `ws-out` keeps its
+     end state (forwards) so a removed section stays invisible until the
+     backing state actually unmounts it. */
+  --animate-ws-in: ws-in 160ms ease;
+  --animate-ws-out: ws-out 160ms ease forwards;
+  --animate-row-in: row-in 160ms ease;
+}
+
+@keyframes ws-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes ws-out {
+  to { opacity: 0; transform: translateY(-8px); }
+}
+@keyframes row-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
 }
 
 /* Fake caret of the segmented OTP input (components/ui/input-otp.tsx). */

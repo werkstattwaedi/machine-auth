@@ -14,8 +14,8 @@
  * Also covers the new (×) remove affordance on the membership block (#362).
  */
 
-import { describe, it, expect, vi, beforeAll, afterEach } from "vitest"
-import { render, screen, cleanup, within } from "@testing-library/react"
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from "vitest"
+import { render, screen, cleanup, within, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import type { CheckoutItemLocal } from "@/components/usage/inline-rows"
 
@@ -42,8 +42,11 @@ vi.mock("@modules/lib/firebase-context", () => {
 vi.mock("@modules/hooks/use-firestore-mutation", () => ({
   useFirestoreMutation: () => ({ update: vi.fn(), remove: vi.fn() }),
 }))
+// Shared across both useAsyncMutation call sites in VisitRoute; individual
+// tests reject it (mockRejectedValueOnce) to exercise failure recovery.
+const mockMutate = vi.fn()
 vi.mock("@modules/hooks/use-async-mutation", () => ({
-  useAsyncMutation: () => ({ mutate: vi.fn().mockResolvedValue(undefined) }),
+  useAsyncMutation: () => ({ mutate: mockMutate }),
 }))
 vi.mock("@modules/hooks/use-mobile", () => ({ useIsMobile: () => false }))
 
@@ -55,12 +58,23 @@ vi.mock("@/components/usage/workshop-section-with-catalog", () => ({
     workshopId,
     items,
     footerSlot,
+    onRemoveWorkshop,
   }: {
     workshopId: string
     items: CheckoutItemLocal[]
     footerSlot?: React.ReactNode
+    onRemoveWorkshop?: () => void
   }) => (
     <div data-testid={`workshop-section-${workshopId}`}>
+      {onRemoveWorkshop && (
+        <button
+          type="button"
+          data-testid={`ws-remove-${workshopId}`}
+          onClick={onRemoveWorkshop}
+        >
+          Werkstatt entfernen
+        </button>
+      )}
       {items.map((i) => (
         <span key={i.id} data-testid={`ws-item-${i.id}`}>
           {i.description}
@@ -187,6 +201,11 @@ beforeAll(async () => {
   await import("./visit")
 })
 
+beforeEach(() => {
+  mockMutate.mockReset()
+  mockMutate.mockResolvedValue(undefined)
+})
+
 afterEach(() => {
   cleanup()
   mockUseWizardContext.mockReset()
@@ -202,8 +221,9 @@ describe("VisitRoute — membershipOnly gate (issue #362)", () => {
       workshopsVisited: ["makerspace"],
     })
 
-    // Picker grid is rendered (regression: it used to vanish).
-    expect(screen.getByText("Werkstätten wählen")).toBeTruthy()
+    // The add-chips row is rendered (regression: it used to vanish). With a
+    // workshop already selected its title is "Weitere Werkstätten".
+    expect(screen.getByText("Weitere Werkstätten")).toBeTruthy()
     // The selected workshop's section is rendered so material can be added.
     expect(screen.getByTestId("workshop-section-makerspace")).toBeTruthy()
     // The membership block is shown alongside it.
@@ -214,6 +234,7 @@ describe("VisitRoute — membershipOnly gate (issue #362)", () => {
     renderVisit({ items: [membershipItem()], workshopsVisited: [] })
 
     expect(screen.queryByText("Werkstätten wählen")).toBeNull()
+    expect(screen.queryByText("Weitere Werkstätten")).toBeNull()
     expect(screen.queryByTestId("workshop-section-makerspace")).toBeNull()
     expect(screen.getByTestId("membership-block")).toBeTruthy()
   })
@@ -223,7 +244,7 @@ describe("VisitRoute — membershipOnly gate (issue #362)", () => {
       items: [membershipItem(), materialItem("i1", "makerspace")],
     })
 
-    expect(screen.getByText("Werkstätten wählen")).toBeTruthy()
+    expect(screen.getByText("Weitere Werkstätten")).toBeTruthy()
     expect(screen.getByTestId("workshop-section-makerspace")).toBeTruthy()
     expect(screen.getByTestId("membership-block")).toBeTruthy()
   })
@@ -276,7 +297,90 @@ describe("VisitRoute — badge lives under Diverses (issue #505)", () => {
     expect(within(diverses).getByTestId("ws-item-b1").textContent).toBe("Badge")
     // A badge-only cart still shows the picker (nonWorkshopOnly is
     // membership-only again) so the visitor can carry on with the visit.
+    expect(screen.getByText("Weitere Werkstätten")).toBeTruthy()
+  })
+})
+
+describe("VisitRoute — chip-based workshop selection (Werkstatt-Auswahl handoff)", () => {
+  it("renders add-chips for unselected workshops and mounts the section on tap", async () => {
+    renderVisit({})
+
+    // Nothing selected yet → empty-state title, chips for every workshop.
     expect(screen.getByText("Werkstätten wählen")).toBeTruthy()
+    const makerChip = screen.getByRole("button", { name: "Maker Space" })
+    await userEvent.click(makerChip)
+
+    // Section mounts; the tapped chip leaves the row; title flips.
+    expect(screen.getByTestId("workshop-section-makerspace")).toBeTruthy()
+    expect(screen.queryByRole("button", { name: "Maker Space" })).toBeNull()
+    expect(screen.getByText("Weitere Werkstätten")).toBeTruthy()
+    // The other workshop's chip is still offered.
+    expect(screen.getByRole("button", { name: "Diverses" })).toBeTruthy()
+  })
+
+  it("shows 'Alle Werkstätten ausgewählt.' when every workshop is selected", () => {
+    renderVisit({ workshopsVisited: ["makerspace", "diverses"] })
+
+    expect(screen.getByText("Alle Werkstätten ausgewählt.")).toBeTruthy()
+    expect(screen.queryByRole("button", { name: "Maker Space" })).toBeNull()
+  })
+
+  it("renders sections in add order, not config order", () => {
+    // Config order is makerspace (0) before diverses (1); the visit added
+    // diverses first, so diverses must render first.
+    renderVisit({ workshopsVisited: ["diverses", "makerspace"] })
+
+    const sections = screen.getAllByTestId(/^workshop-section-/)
+    expect(sections.map((s) => s.getAttribute("data-testid"))).toEqual([
+      "workshop-section-diverses",
+      "workshop-section-makerspace",
+    ])
+  })
+
+  it("removes an empty section immediately (no confirm) after the exit animation", async () => {
+    renderVisit({})
+    await userEvent.click(screen.getByRole("button", { name: "Maker Space" }))
+    expect(screen.getByTestId("workshop-section-makerspace")).toBeTruthy()
+
+    await userEvent.click(screen.getByTestId("ws-remove-makerspace"))
+    // No confirm dialog for an empty section.
+    expect(screen.queryByText("Werkstatt entfernen?")).toBeNull()
+    // The section unmounts once the 160ms exit animation has played.
+    await waitFor(() =>
+      expect(screen.queryByTestId("workshop-section-makerspace")).toBeNull(),
+    )
+    // The chip is back.
+    expect(screen.getByRole("button", { name: "Maker Space" })).toBeTruthy()
+  })
+
+  it("keeps the section when the removal mutation fails (un-hide on error)", async () => {
+    // The arrayRemove mutation rejects (useAsyncMutation re-throws per
+    // ADR-0025); the workshop stays selected, so the section must return
+    // to the visible (enter-animation) state instead of staying stuck at
+    // the exit animation's opacity-0 end state.
+    mockMutate.mockRejectedValueOnce(new Error("offline"))
+    renderVisit({ workshopsVisited: ["makerspace"] })
+
+    await userEvent.click(screen.getByTestId("ws-remove-makerspace"))
+    await waitFor(() => expect(mockMutate).toHaveBeenCalled())
+
+    await waitFor(() => {
+      const wrapper = screen.getByTestId(
+        "workshop-section-makerspace",
+      ).parentElement!
+      expect(wrapper.className).toContain("animate-ws-in")
+    })
+  })
+
+  it("asks for confirmation before removing a section with recorded items", async () => {
+    renderVisit({ items: [materialItem("i1", "makerspace")] })
+
+    await userEvent.click(screen.getByTestId("ws-remove-makerspace"))
+    expect(screen.getByText("Werkstatt entfernen?")).toBeTruthy()
+    // The dialog names the workshop being removed.
+    expect(
+      screen.getByText(/Alle erfassten Einträge für\s+Maker Space\s+werden/),
+    ).toBeTruthy()
   })
 })
 

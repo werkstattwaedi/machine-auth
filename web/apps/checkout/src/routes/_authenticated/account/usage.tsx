@@ -27,6 +27,7 @@ import {
 } from "@modules/components/ui/tooltip"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { cn } from "@modules/lib/utils"
+import { workshopColor } from "@modules/lib/workshop-config"
 import {
   History,
   FileText,
@@ -542,26 +543,6 @@ function toJsDate(
   if (!value) return null
   if (value instanceof Date) return value
   return value.toDate()
-}
-
-// Farbkonzept OWW (2026-01-14) — one color per Werkstatt, see
-// `--color-ws-*` tokens in web/modules/index.css. "diverses" is a
-// catch-all bucket, not a real workshop, so it isn't listed here — it
-// falls through to the default color in workshopColor below.
-const WORKSHOP_PALETTE: Record<string, string> = {
-  holz: "var(--color-ws-holz)",
-  keramik: "var(--color-ws-keramik)",
-  metall: "var(--color-ws-metall)",
-  textil: "var(--color-ws-textil)",
-  schmuck: "var(--color-ws-schmuck)",
-  glas: "var(--color-ws-glas)",
-  stein: "var(--color-ws-stein)",
-  malen: "var(--color-ws-malen)",
-  makerspace: "var(--color-ws-makerspace)",
-}
-
-function workshopColor(id: string): string {
-  return WORKSHOP_PALETTE[id] ?? "var(--color-cog-teal-dark)"
 }
 
 function workshopLabel(workshops: string[]): string {

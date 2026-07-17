@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef, useMemo, Fragment } from "react"
 import { formatCHF } from "@modules/lib/format"
 import { primaryVariant } from "@modules/lib/pricing"
-import { Plus } from "lucide-react"
+import { Plus, X } from "lucide-react"
 import { useCollection } from "@modules/lib/firestore"
 import { where } from "firebase/firestore"
 import { useAuth } from "@modules/lib/auth"
@@ -15,13 +15,14 @@ import {
   userRef as userRefHelper,
 } from "@modules/lib/firestore-helpers"
 import { useDb } from "@modules/lib/firebase-context"
-import type {
-  PricingConfig,
-  WorkshopId,
-  WorkshopConfig,
-  CatalogItem,
-  DiscountLevel,
-  PricingModel,
+import {
+  workshopColor,
+  type PricingConfig,
+  type WorkshopId,
+  type WorkshopConfig,
+  type CatalogItem,
+  type DiscountLevel,
+  type PricingModel,
 } from "@modules/lib/workshop-config"
 import { isMachineItem, priceForTier, type ItemType } from "@oww/shared"
 import { PositionTable, type PositionRow, rowFromItem } from "./position-table"
@@ -261,8 +262,8 @@ export function WorkshopInlineSection({
   items,
   callbacks,
   checkoutId,
-  sectionRef,
   onAddMaterial,
+  onRemoveWorkshop,
   pinnedCatalog = [],
   discountLevel = "none",
   footerSlot,
@@ -291,7 +292,6 @@ export function WorkshopInlineSection({
   checkoutId?: string | null
   /** Legacy no-op kept for callers that still set it. */
   itemErrors?: Record<string, unknown>
-  sectionRef?: (el: HTMLDivElement | null) => void
   /**
    * Open the material picker for this workshop. The host owns how the
    * picker mounts — auth dashboard navigates to a route overlay
@@ -299,6 +299,12 @@ export function WorkshopInlineSection({
    * Sheet — so this component stays route-agnostic and works in both.
    */
   onAddMaterial: () => void
+  /**
+   * Remove this workshop from the visit (Werkstatt-Auswahl handoff): renders
+   * a (×) button in the section header. The host owns the confirm dialog and
+   * the exit animation; omitting the prop hides the button.
+   */
+  onRemoveWorkshop?: () => void
   /**
    * Extra content rendered at the bottom of the section, between the
    * material box and the Zwischentotal. Used by /visit to nest the
@@ -474,13 +480,30 @@ export function WorkshopInlineSection({
 
   return (
     <section
-      ref={sectionRef}
       className="space-y-3"
       data-testid={`workshop-block-${workshopId}`}
     >
-      <h2 className="font-heading text-xl font-bold sm:text-2xl">
-        {workshop.label}
-      </h2>
+      <div className="flex items-center justify-between gap-3">
+        {/* Colored underline = the workshop's Farbkonzept color, matching the
+            dot on its add-chip so section and chip read as the same thing. */}
+        <h2
+          className="min-w-0 font-heading text-xl font-bold underline decoration-[3px] underline-offset-[6px] sm:text-2xl"
+          style={{ textDecorationColor: workshopColor(workshopId) }}
+        >
+          {workshop.label}
+        </h2>
+        {onRemoveWorkshop && (
+          <button
+            type="button"
+            title="Werkstatt entfernen"
+            aria-label={`Werkstatt ${workshop.label} entfernen`}
+            onClick={onRemoveWorkshop}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[3px] border border-border bg-white text-muted-foreground transition-all duration-100 hover:border-destructive hover:text-destructive"
+          >
+            <X className="h-[15px] w-[15px]" />
+          </button>
+        )}
+      </div>
 
       {showMachineBox && (
         <div className="rounded-md border border-border bg-card shadow-sm">

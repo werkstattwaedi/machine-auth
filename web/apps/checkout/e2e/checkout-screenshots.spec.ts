@@ -41,7 +41,7 @@ async function goToSummary(page: Page) {
 async function goToSummaryWithItems(page: Page) {
   await goToWorkshops(page)
 
-  await page.getByLabel("Holz").click()
+  await page.getByRole("button", { name: "Holz", exact: true }).click()
   const holzSection = page.getByTestId("workshop-block-holz")
 
   // Open the MaterialPicker sheet for Holz
@@ -152,8 +152,8 @@ test.describe("Checkout step screenshots", () => {
   test("holz and makerspace selected", async ({ page }) => {
     await goToWorkshops(page)
 
-    await page.getByLabel("Holz").click()
-    await page.getByLabel("Maker Space").click()
+    await page.getByRole("button", { name: "Holz", exact: true }).click()
+    await page.getByRole("button", { name: "Maker Space", exact: true }).click()
 
     // Wait for both workshop sections to appear
     await expect(page.getByText("Holz").first()).toBeVisible()
@@ -167,7 +167,7 @@ test.describe("Checkout step screenshots", () => {
   test("add article dropdown open", async ({ page }) => {
     await goToWorkshops(page)
 
-    await page.getByLabel("Holz").click()
+    await page.getByRole("button", { name: "Holz", exact: true }).click()
     await expect(
       page.getByRole("button", { name: "Material hinzufügen" }),
     ).toBeVisible()
@@ -202,8 +202,8 @@ test.describe("Checkout step screenshots", () => {
     await goToWorkshops(page)
 
     // Select holz + makerspace
-    await page.getByLabel("Holz").click()
-    await page.getByLabel("Maker Space").click()
+    await page.getByRole("button", { name: "Holz", exact: true }).click()
+    await page.getByRole("button", { name: "Maker Space", exact: true }).click()
 
     // Locate workshop sections by their heading
     const holzSection = page.getByTestId("workshop-block-holz")
@@ -249,6 +249,13 @@ test.describe("Checkout step screenshots", () => {
     await page.getByRole("button", { name: "Hinzufügen", exact: true }).click()
     await page.getByRole("button", { name: "Schliessen" }).click()
     await expect(page.locator(`[data-slot="sheet-overlay"]`)).toBeHidden()
+
+    // Let issue #401's post-close scroll-restore rAF window (~600ms) settle,
+    // then pin to the top so the baseline is deterministic (same idiom as
+    // the "add article dropdown open" test — the picker flow otherwise
+    // leaves the page at a race-dependent scroll offset on mobile).
+    await page.waitForTimeout(700)
+    await page.evaluate(() => window.scrollTo(0, 0))
 
     await expect(page).toHaveScreenshot("checkout-materials-added.png")
   })
@@ -521,8 +528,16 @@ test.describe("Checkout step screenshots", () => {
   test("SLA row — resin + layers filled", async ({ page }) => {
     await goToWorkshops(page)
 
-    await page.getByLabel("Maker Space").click()
+    await page.getByRole("button", { name: "Maker Space", exact: true }).click()
     const makerSection = page.getByTestId("workshop-block-makerspace")
+
+    // Pin the background scroll before opening the picker (same idiom as
+    // "add article dropdown open"): the sheet preserves the page scroll via
+    // a rAF window (issue #401), so opening from a non-zero offset leaves
+    // the dimmed background at an environment-dependent scroll in the shot.
+    // The chips row below the sections makes /visit tall enough to scroll,
+    // which is what exposed this.
+    await page.evaluate(() => window.scrollTo(0, 0))
 
     // Add the SLA catalog item from the makerspace section
     await makerSection
@@ -548,6 +563,11 @@ test.describe("Checkout step screenshots", () => {
     // Blur by Tabbing out — clicking outside hits the picker overlay.
     await page.keyboard.press("Tab")
 
+    // Let issue #401's scroll-restore rAF window settle, then re-pin the
+    // background so the shot is deterministic (see comment above).
+    await page.waitForTimeout(700)
+    await page.evaluate(() => window.scrollTo(0, 0))
+
     await expect(page).toHaveScreenshot("checkout-sla-filled.png")
   })
 
@@ -558,14 +578,14 @@ test.describe("Checkout step screenshots", () => {
   // Revisit if/when an item-edit affordance returns post-add.
   test.fixme("SLA row — validation errors (empty inputs)", async ({ page }) => {
     await goToWorkshops(page)
-    await page.getByLabel("Maker Space").click()
+    await page.getByRole("button", { name: "Maker Space", exact: true }).click()
     await expect(page).toHaveScreenshot("checkout-sla-validation-errors.png")
   })
 
   test("summary — with SLA item", async ({ page }) => {
     await goToWorkshops(page)
 
-    await page.getByLabel("Maker Space").click()
+    await page.getByRole("button", { name: "Maker Space", exact: true }).click()
     const makerSection = page.getByTestId("workshop-block-makerspace")
 
     // Add the SLA catalog item
@@ -607,7 +627,7 @@ test.describe("Checkout step screenshots", () => {
   // so this submit-time error state is unreachable from the UI.
   test.fixme("checkout validation errors", async ({ page }) => {
     await goToWorkshops(page)
-    await page.getByLabel("Holz").click()
+    await page.getByRole("button", { name: "Holz", exact: true }).click()
     await expect(page).toHaveScreenshot("checkout-validation-errors.png")
   })
 
@@ -675,7 +695,9 @@ test.describe("Checkout step screenshots", () => {
     await expect(page.getByTestId("membership-block")).toBeVisible({
       timeout: 10_000,
     })
-    await expect(page.getByText("Werkstätten wählen")).toBeVisible()
+    // Mixed cart: the seeded workshop item keeps a section selected, so the
+    // add-chips row titles "Weitere Werkstätten".
+    await expect(page.getByText("Weitere Werkstätten")).toBeVisible()
     const checkoutBtn = page.getByRole("button", { name: "Zum Checkout" })
     await checkoutBtn.scrollIntoViewIfNeeded()
     await checkoutBtn.click()
