@@ -120,20 +120,57 @@ describe("AuthenticatedLayout", () => {
     errorSpy.mockRestore()
   })
 
-  it("admin gate redirects authenticated non-admin users to /login", () => {
+  // Regression for issue #558: a signed-in non-admin used to be bounced to
+  // /login, which redirected right back to the protected route — an endless
+  // loop with no message. The admin gate must now render a terminal
+  // "Kein Admin-Zugriff" state and NOT navigate anywhere (no loop). The
+  // sign-out button is the only escape and must call signOut().
+  it("admin gate shows a terminal no-access state for non-admins instead of looping", () => {
+    const signOutMock = vi.fn()
     mockAuthReturn = {
       user: { uid: "u1", email: "user@test.com" },
       userDoc: { name: "Some User", roles: [] },
       userDocLoading: false,
       loading: false,
       isAdmin: false,
-      sessionKind: null,
+      sessionKind: "real",
+      signOut: signOutMock,
+    }
+
+    render(<AuthenticatedLayout navItems={navItems} gate={{ kind: "admin" }} />)
+
+    // Terminal message shown, protected chrome NOT rendered.
+    expect(screen.getByText("Kein Admin-Zugriff")).toBeTruthy()
+    expect(screen.getByText("user@test.com")).toBeTruthy()
+    expect(screen.queryByText("Benutzer")).toBeNull()
+
+    // Crucially: no redirect fired — this is what broke the /login ↔ guard loop.
+    expect(navigateMock).not.toHaveBeenCalled()
+
+    // The only affordance is sign-out; clicking it signs the user out (after
+    // which `user` flips to null and the unauth effect takes them to /login).
+    const button = screen.getByRole("button", { name: "Abmelden" })
+    fireEvent.click(button)
+    expect(signOutMock).toHaveBeenCalledTimes(1)
+  })
+
+  // While the user doc is still loading, isAdmin is transiently false; the
+  // gate must NOT flash the no-access state for a legitimate admin.
+  it("admin gate waits for the user doc before judging non-admins", () => {
+    mockAuthReturn = {
+      user: { uid: "u1", email: "user@test.com" },
+      userDoc: null,
+      userDocLoading: true,
+      loading: false,
+      isAdmin: false,
+      sessionKind: "real",
       signOut: vi.fn(),
     }
 
     render(<AuthenticatedLayout navItems={navItems} gate={{ kind: "admin" }} />)
 
-    expect(navigateMock).toHaveBeenCalledWith({ to: "/login" })
+    expect(screen.queryByText("Kein Admin-Zugriff")).toBeNull()
+    expect(navigateMock).not.toHaveBeenCalled()
   })
 
   it("member gate redirects tag-tap sessions to /", () => {
