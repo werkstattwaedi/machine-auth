@@ -20,6 +20,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret, defineString } from "firebase-functions/params";
 import { DocumentReference, getFirestore, Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
+import { downloadUrlFor, pdfSaveOptions } from "../util/storage_download";
 import { formatWorkshopDateTime } from "../util/workshop_timezone";
 import { formatBillReference } from "./types";
 import { logOperationError } from "../operations_log";
@@ -409,7 +410,7 @@ export async function tryGeneratePdf(
     const storagePath = `invoices/${billId}.pdf`;
     const bucket = getStorage().bucket();
     const file = bucket.file(storagePath);
-    await file.save(pdfBuffer, { contentType: "application/pdf" });
+    await file.save(pdfBuffer, pdfSaveOptions());
 
     await billRef.update({ storagePath });
     logger.info(`PDF generated for bill ${billId}`);
@@ -570,7 +571,10 @@ export async function trySendEmail(billId: string): Promise<boolean> {
 
     const bucket = getStorage().bucket();
     const file = bucket.file(bill.storagePath);
-    const [signedUrl] = await file.getSignedUrl({
+    // Unreachable in emulator mode today (early return above), but routed
+    // through the emulator-aware helper so removing that skip can't strand
+    // this path on unsignable getSignedUrl.
+    const signedUrl = await downloadUrlFor(file, {
       action: "read",
       expires: Date.now() + 24 * 3600 * 1000,
     });

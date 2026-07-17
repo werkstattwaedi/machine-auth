@@ -34,8 +34,28 @@ export const Route = createFileRoute(
 
 interface FormValues {
   name: string
-  footer: string
   active: boolean
+}
+
+/**
+ * Workshops shared by every selected item (items without tags don't
+ * constrain). Empty result = the selection mixes workshops, which the PDF
+ * generator rejects — surface that before the admin hits "herunterladen".
+ */
+function sharedWorkshops(
+  selected: string[],
+  catalog: Map<string, string[] | undefined>,
+): { shared: string[]; seen: string[] } {
+  const tagged = selected
+    .map((id) => catalog.get(id) ?? [])
+    .filter((ws) => ws.length > 0)
+  const seen = [...new Set(tagged.flat())].sort()
+  if (tagged.length === 0) return { shared: [], seen }
+  let shared = tagged[0]
+  for (const ws of tagged.slice(1)) {
+    shared = shared.filter((w) => ws.includes(w))
+  }
+  return { shared, seen }
 }
 
 function PriceListDetailPage() {
@@ -60,7 +80,6 @@ function PriceListDetailPage() {
     if (priceList) {
       reset({
         name: priceList.name,
-        footer: priceList.footer,
         active: priceList.active,
       })
       setSelectedItems(priceList.items ?? [])
@@ -72,7 +91,6 @@ function PriceListDetailPage() {
       priceListRef(db, priceListId),
       {
         name: values.name,
-        footer: values.footer,
         active: values.active,
         items: selectedItems,
       },
@@ -148,6 +166,12 @@ function PriceListDetailPage() {
     a.code.localeCompare(b.code, undefined, { numeric: true }),
   )
 
+  const { shared, seen } = sharedWorkshops(
+    selectedItems,
+    new Map(allCatalog.map((c) => [c.id, c.workshops])),
+  )
+  const mixesWorkshops = selectedItems.length > 0 && shared.length === 0
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -176,10 +200,6 @@ function PriceListDetailPage() {
               <Label>Name</Label>
               <Input {...register("name", { required: true })} />
             </div>
-            <div className="space-y-1">
-              <Label>Fusszeile</Label>
-              <Input {...register("footer")} />
-            </div>
             <div className="flex items-center gap-2">
               <Switch
                 checked={active}
@@ -205,7 +225,17 @@ function PriceListDetailPage() {
             Katalogeinträge ({selectedItems.length} ausgewählt)
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
+          {mixesWorkshops && (
+            <div className="flex items-center gap-2.5 rounded-xl border border-destructive/40 border-l-4 border-l-destructive bg-destructive/5 px-4 py-3 text-sm">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" />
+              <span>
+                Die Auswahl mischt Werkstätten ({seen.join(", ")}) — eine
+                Preisliste gilt für genau eine Werkstatt. Das PDF kann so
+                nicht generiert werden.
+              </span>
+            </div>
+          )}
           <div className="space-y-1 max-h-96 overflow-y-auto">
             {sortedCatalog.map((item) => (
               <label
@@ -219,6 +249,9 @@ function PriceListDetailPage() {
                 <span className="font-mono text-xs w-12">{item.code}</span>
                 <span className="flex-1 text-sm">{item.name}</span>
                 <span className="text-xs text-muted-foreground">
+                  {item.workshops?.join(", ")}
+                </span>
+                <span className="text-xs text-muted-foreground w-20 text-right">
                   {formatCHF(item.variants?.[0]?.unitPrice.default ?? 0)}
                 </span>
               </label>
@@ -237,7 +270,7 @@ function PriceListDetailPage() {
           </p>
           <Button
             onClick={handleDownloadPdf}
-            disabled={selectedItems.length === 0 || downloading}
+            disabled={selectedItems.length === 0 || mixesWorkshops || downloading}
           >
             {downloading ? (
               <Loader2 className="h-4 w-4 animate-spin mr-2" />

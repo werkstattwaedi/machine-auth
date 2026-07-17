@@ -160,7 +160,6 @@ function PriceListsPage() {
 
 interface CreateFormValues {
   name: string
-  footer: string
 }
 
 function CreatePriceListDialog({
@@ -173,7 +172,7 @@ function CreatePriceListDialog({
   const db = useDb()
   const { add, loading } = useFirestoreMutation()
   const { register, handleSubmit, reset } = useForm<CreateFormValues>({
-    defaultValues: { name: "", footer: "" },
+    defaultValues: { name: "" },
   })
 
   const onSubmit = async (values: CreateFormValues) => {
@@ -182,7 +181,6 @@ function CreatePriceListDialog({
         priceListsCollection(db),
         {
           name: values.name,
-          footer: values.footer,
           items: [],
           active: true,
         },
@@ -207,13 +205,6 @@ function CreatePriceListDialog({
             <Input
               {...register("name", { required: true })}
               placeholder="z.B. Holzwerkstatt Materialien"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label>Fusszeile</Label>
-            <Input
-              {...register("footer")}
-              placeholder="z.B. Offene Werkstatt Wädenswil"
             />
           </div>
           <div className="flex justify-end gap-2">

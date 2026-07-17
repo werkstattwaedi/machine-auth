@@ -7,15 +7,18 @@ import type { PriceListRenderData } from "../../src/price_list/types";
 
 function base(): PriceListRenderData {
   return {
-    name: "Test",
-    footer: "Footer line",
-    qrUrl: "https://example.com/list/abc",
-    items: [
+    title: "Holz",
+    color: "#ffde80",
+    stand: "14.07.2026",
+    qrUrl: "https://example.com/visit/add/list/abc",
+    categories: [
       {
-        code: "A001",
-        name: "Item One",
-        pricingModel: "count",
-        unitPrice: { none: 5, member: 4 },
+        name: "Massivholz",
+        showTitle: true,
+        unit: "m²",
+        rows: [
+          { code: "3001", produkt: "Ahorn", mass: "24 mm", preis: "62.30" },
+        ],
       },
     ],
   };
@@ -24,42 +27,43 @@ function base(): PriceListRenderData {
 describe("buildPriceListContentHash", () => {
   it("returns the same hash for identical input", () => {
     expect(buildPriceListContentHash(base())).to.equal(
-      buildPriceListContentHash(base())
+      buildPriceListContentHash(base()),
     );
   });
 
-  it("changes when the price list name changes", () => {
+  it("changes when the title changes", () => {
     const a = buildPriceListContentHash(base());
     const data = base();
-    data.name = "Different name";
+    data.title = "Metall";
     expect(buildPriceListContentHash(data)).to.not.equal(a);
   });
 
-  it("changes when the footer text changes", () => {
+  it("changes when the stand date changes", () => {
     const a = buildPriceListContentHash(base());
     const data = base();
-    data.footer = "Updated footer";
+    data.stand = "15.07.2026";
     expect(buildPriceListContentHash(data)).to.not.equal(a);
   });
 
-  it("changes when an item's price changes", () => {
+  it("changes when a row's price changes", () => {
     const a = buildPriceListContentHash(base());
     const data = base();
-    data.items[0].unitPrice = { none: 6, member: 4 };
+    data.categories[0].rows[0].preis = "63.00";
     expect(buildPriceListContentHash(data)).to.not.equal(a);
   });
 
-  it("changes when items are reordered (order matters)", () => {
+  it("changes when rows are reordered (order matters)", () => {
     const data = base();
-    data.items.push({
-      code: "B002",
-      name: "Item Two",
-      pricingModel: "count",
-      unitPrice: { none: 3, member: 2 },
+    data.categories[0].rows.push({
+      code: "3002",
+      produkt: "Ahorn",
+      mass: "30 mm",
+      preis: "77.85",
     });
-    const reversed = { ...data, items: [...data.items].reverse() };
+    const reversed = base();
+    reversed.categories[0].rows = [...data.categories[0].rows].reverse();
     expect(buildPriceListContentHash(data)).to.not.equal(
-      buildPriceListContentHash(reversed)
+      buildPriceListContentHash(reversed),
     );
   });
 

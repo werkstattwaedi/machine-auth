@@ -32,7 +32,6 @@ async function seedPriceList() {
   await db.collection("price_lists").doc(PRICE_LIST_ID).set({
     name: "E2E Preisliste",
     items: ["e2e-item-1", "e2e-item-2"],
-    footer: "",
     active: true,
     modifiedAt: FieldValue.serverTimestamp(),
   })
