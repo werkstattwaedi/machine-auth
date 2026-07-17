@@ -102,15 +102,11 @@ export function AuthenticatedLayout({
     }
   }, [user, loading, navigate, location.pathname])
 
-  // Admin gate: kick non-admins back to login once user doc has loaded.
-  // Note: anonymous principals are filtered out implicitly here because
-  // `isAdmin` is false for them, so no separate branch is needed.
-  useEffect(() => {
-    if (gate.kind !== "admin") return
-    if (!loading && !userDocLoading && user && !isAdmin) {
-      navigate({ to: "/login" })
-    }
-  }, [gate, user, isAdmin, loading, userDocLoading, navigate])
+  // Admin gate: an authenticated non-admin is NOT redirected. Bouncing them
+  // to /login created an endless loop (issue #558): /login sees a signed-in
+  // principal and redirects back to the protected route, which bounces to
+  // /login again — forever, with no message. Instead we render a terminal
+  // "Kein Admin-Zugriff" state below so the user learns why and can sign out.
 
   // Member gate: tag-tap (kiosk) sessions are scoped to the checkout flow
   // and must never reach member-area routes; bounce to kiosk root.
@@ -167,7 +163,55 @@ export function AuthenticatedLayout({
   }
 
   if (!user) return null
-  if (gate.kind === "admin" && !isAdmin) return null
+  if (gate.kind === "admin") {
+    // Wait for the user doc before judging admin-ness — isAdmin is false
+    // while the doc loads, and rendering the "no access" state in that
+    // window would flash it for legitimate admins.
+    if (userDocLoading) {
+      return (
+        <div className="min-h-screen flex items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin" />
+        </div>
+      )
+    }
+    if (!isAdmin) {
+      // Terminal state: signed in but not an admin. No redirect — see the
+      // comment on the removed admin-gate effect above (issue #558).
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-background p-6">
+          <div className="w-full max-w-sm text-center flex flex-col items-center gap-4">
+            <img
+              src="/logo_oww.png"
+              alt="Offene Werkstatt Wädenswil"
+              className="h-12 mb-2"
+            />
+            <h1 className="font-heading font-bold text-[24px] leading-tight">
+              Kein Admin-Zugriff
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              {user.email ? (
+                <>
+                  Das Konto <span className="font-medium">{user.email}</span> hat
+                  keine Administratorrechte.
+                </>
+              ) : (
+                <>Dieses Konto hat keine Administratorrechte.</>
+              )}{" "}
+              Melde dich mit einem Administrator-Konto an.
+            </p>
+            <Button
+              variant="outline"
+              className="mt-2"
+              onClick={() => void signOut()}
+            >
+              <LogOut className="h-4 w-4" />
+              Abmelden
+            </Button>
+          </div>
+        </div>
+      )
+    }
+  }
   if (gate.kind === "member" && (sessionKind === "tag" || sessionKind === "anonymous")) return null
 
   // A left accent border is reserved for the active item; inactive items
