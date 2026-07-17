@@ -9,7 +9,7 @@
     "holz":       { "label": "Holz",              "order": 1, "pinnedMachines": ["dfoYVuO3bhRJoRCbgND1", "LZ04lfdfdEieqQOsKhzi"] },
     "metall":     { "label": "Metall",            "order": 2, "pinnedMachines": ["7SlZb0jUKcyE8sMcvyzD", "kcspOmeZ3lsj4hNfHD4V"] },
     "textil":     { "label": "Textil",            "order": 3 },
-    "keramik":    { "label": "Keramik",           "order": 4 },
+    "keramik":    { "label": "Keramik",           "order": 4, "pinnedMachines": ["r0Okgv7FkK6Ip0ndMPrB"] },
     "schmuck":    { "label": "Schmuck",           "order": 5, "pinnedMachines": ["tot0yitdBPf2hseDSuFf"] },
     "glas":       { "label": "Glas",              "order": 6, "pinnedMachines": ["17mC1Qe4xn2dfGNpsdfo"] },
     "stein":      { "label": "Stein",             "order": 7, "pinnedMachines": ["ljE5dcV7qDv0Z50BdwHY"] },
