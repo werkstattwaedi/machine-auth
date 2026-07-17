@@ -28,7 +28,7 @@ import {
   arrayUnion,
   type DocumentReference,
 } from "firebase/firestore"
-import { rpcCallable } from "@modules/lib/rpc"
+import { rpcCallable, prewarm } from "@modules/lib/rpc"
 import {
   userRef,
   catalogRef,
@@ -241,6 +241,14 @@ export function WizardProvider({
     unregisteredBadge,
   } = useTokenAuth(picc ?? null, cmac ?? null)
   const bridge = useBridge()
+
+  // The wizard's exit path hits billingCall (closeCheckoutAndGetPayment /
+  // getPaymentQrData); warm it while the visitor is still adding items
+  // (ADR-0037).
+  useEffect(() => {
+    prewarm(functions, "billingCall")
+  }, [functions])
+
   const fsMutation = useFirestoreMutation()
   const { add, update, remove } = fsMutation
   const { persons, dispatch: personsDispatch } = usePersonsState()

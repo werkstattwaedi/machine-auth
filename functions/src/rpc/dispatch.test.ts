@@ -53,6 +53,17 @@ describe("dispatchRpc", () => {
     expect(seenUid).to.equal("user-1");
   });
 
+  it("answers ping centrally without consulting handlers or auth", () => {
+    // Empty handler map + no auth: the keep-warm ping (ADR-0037) must still
+    // succeed — it exists to boot the container before a real call.
+    const result = dispatchRpc(
+      "test",
+      {},
+      makeRequest({ method: "ping", payload: {} })
+    );
+    expect(result).to.deep.equal({ ok: true });
+  });
+
   it("throws not-found for an unknown method", () => {
     expect(() =>
       dispatchRpc("test", {}, makeRequest({ method: "nope", payload: {} }))

@@ -46,7 +46,7 @@ import { useAuth } from "@modules/lib/auth"
 import { useFunctions, useFirebaseAuth } from "@modules/lib/firebase-context"
 import { parseSwissPhone } from "@modules/lib/phone"
 import { resolveBridgeBearer } from "@modules/lib/use-bridge"
-import { rpcCallable } from "@modules/lib/rpc"
+import { rpcCallable, prewarm } from "@modules/lib/rpc"
 import { establishKioskSession, type TokenUser } from "@modules/lib/token-auth"
 import {
   GoogleSignInButton,
@@ -165,6 +165,12 @@ export function CheckinSignin({
   } = useAuth()
   const functions = useFunctions()
   const auth = useFirebaseAuth()
+
+  // Sign-in submits hit authCall (checkPhoneAccountExists / checkAccountExists
+  // / kiosk session exchange); warm it while the visitor types (ADR-0037).
+  useEffect(() => {
+    prewarm(functions, "authCall")
+  }, [functions])
 
   const [stage, setStage] = useState<Stage>({ kind: "idle" })
   const [identifier, setIdentifier] = useState("")

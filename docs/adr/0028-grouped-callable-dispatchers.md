@@ -121,3 +121,9 @@ then pin what still goes cold.
 - **`minInstances` on the existing functions.** Rejected on cost at ~20
   functions; reconsidered as a cheap, optional follow-up now that there are
   only four dispatchers (see cost note).
+
+## See also
+
+- ADR-0037 — keep-warm pings: the `minInstances` follow-up was instead
+  resolved with free client/gateway `ping` pre-warming on the surfaces
+  that are about to call a dispatcher.

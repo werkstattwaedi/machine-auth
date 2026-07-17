@@ -42,6 +42,15 @@ vi.mock("sonner", () => ({
   toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
 }))
 
+// The page prewarms authCall on mount (ADR-0037); neither the functions
+// context nor a real ping exists in this harness.
+vi.mock("@modules/lib/firebase-context", () => ({
+  useFunctions: () => ({}),
+}))
+vi.mock("@modules/lib/rpc", () => ({
+  prewarm: vi.fn(),
+}))
+
 const { LoginPage } = await import("./login-page")
 
 function enterEmail(value = "new@example.com") {

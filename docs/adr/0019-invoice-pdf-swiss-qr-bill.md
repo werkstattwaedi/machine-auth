@@ -27,7 +27,7 @@ Two Firestore triggers handle bill creation when a checkout is closed:
 
 Both call a shared `createBillForCheckout()` function that allocates a bill number and creates the bill document. A downstream `onBillCreate` trigger attempts PDF generation and email sending as a fast path.
 
-PDF generation and email sending are decoupled from bill creation using optimistic locking (`pdfGeneratedAt`, `emailSentAt` timestamp fields). If either step fails, the timestamp is cleared and the error is logged to the `operations_log` collection. A scheduled `retryBillProcessing` function (every 15 minutes) retries failed bills created within the last 24 hours.
+PDF generation and email sending are decoupled from bill creation using optimistic locking (`pdfGeneratedAt`, `emailSentAt` timestamp fields). If either step fails, the timestamp is cleared and the error is logged to the `operations_log` collection. A scheduled `retryBillProcessing` function (hourly) retries failed bills created within the last 24 hours.
 
 ### Sequential bill numbers with ISO 11649 SCOR references
 

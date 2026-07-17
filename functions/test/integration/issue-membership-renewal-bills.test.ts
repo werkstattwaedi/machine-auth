@@ -144,7 +144,7 @@ async function listRenewalBills(): Promise<BillEntity[]> {
 
 describe("runRenewalInvoicer (Integration, #323)", () => {
   // Fire the cron "now"; a membership whose validUntil sits 30 days out is
-  // in the renewal slice [now+29d, now+30d).
+  // in the renewal slice [now+28d, now+30d).
   //
   // Anchor to the real clock rather than a hardcoded date: the cron window
   // uses this injected `now`, but the downstream `processMembershipForAckedBill`
@@ -240,6 +240,26 @@ describe("runRenewalInvoicer (Integration, #323)", () => {
     const summary = await runRenewalInvoicer(now);
     expect(summary.scannedMemberships).to.equal(0);
     expect(summary.billIds).to.have.length(0);
+  });
+
+  it("picks up the trailing day of the 2-day slice (missed-tick self-heal)", async () => {
+    // validUntil at now+28.5d: outside the old 1-day slice, inside the
+    // widened [now+28d, now+30d) — a tick that fired late still covers it.
+    const trailing = new Date(
+      now.getTime() + (RENEWAL_WINDOW_DAYS - 1.5) * DAY_MS,
+    );
+    await seedMembership({ id: "m-trail", ownerUid: "gina", validUntil: trailing });
+    // Just below the lower bound stays untouched.
+    const below = new Date(
+      now.getTime() + (RENEWAL_WINDOW_DAYS - 2.5) * DAY_MS,
+    );
+    await seedMembership({ id: "m-below", ownerUid: "hugo", validUntil: below });
+
+    const summary = await runRenewalInvoicer(now);
+    expect(summary.scannedMemberships).to.equal(1);
+    expect(summary.billIds).to.have.length(1);
+    expect((await readMembership("m-trail")).pendingRenewalBill).to.not.be.null;
+    expect((await readMembership("m-below")).pendingRenewalBill ?? null).to.be.null;
   });
 
   it("two consecutive ticks produce exactly one bill (idempotency)", async () => {

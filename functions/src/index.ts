@@ -36,7 +36,7 @@ const gatewayApiKey = defineSecret("GATEWAY_API_KEY");
 export const app = express();
 app.use(express.json());
 
-// Authentication middleware - accepts Particle webhook key or gateway key.
+// Authentication middleware - accepts the gateway API key.
 const authMiddleware = (
   req: express.Request,
   res: express.Response,
@@ -61,6 +61,13 @@ const authMiddleware = (
 };
 
 app.use(authMiddleware);
+
+// Keep-warm ping from the gateway during workshop opening hours
+// (ADR-0037). Sits after authMiddleware so it validates the bearer key;
+// touches no Firestore and decodes no payload.
+app.get("/ping", (_req: express.Request, res: express.Response) => {
+  res.status(200).send({ ok: true });
+});
 
 // Middleware to attach config to request
 app.use(
@@ -230,8 +237,7 @@ export { monthlyBillRun } from "./invoice/monthly_bill_run";
 // activation runs from `onBillUpdate` (gated on the customer's payment-method
 // ack), not on checkout close (#251 / #302).
 export { onMembershipWritten } from "./membership/on_membership_written";
-export { hourlyMembershipExpiryCheck } from "./membership/expiry_check";
-export { issueMembershipRenewalBills } from "./membership/renewal_invoicer";
+export { dailyMembershipMaintenance } from "./membership/daily_maintenance";
 
 // Export scheduled cleanup
 export { cleanupAbandonedCheckouts } from "./checkout/cleanup_abandoned_checkouts";

@@ -21,6 +21,8 @@ import { useNavigate } from "@tanstack/react-router"
 import { toast } from "sonner"
 import { Loader2 } from "lucide-react"
 import { useAuth, isProfileComplete } from "@modules/lib/auth"
+import { useFunctions } from "@modules/lib/firebase-context"
+import { prewarm } from "@modules/lib/rpc"
 import { Button } from "@modules/components/ui/button"
 import { Input } from "@modules/components/ui/input"
 import { INPUT_OK, ErrorBadge } from "@modules/components/profile-form"
@@ -84,6 +86,13 @@ export function LoginPage({
   } = useAuth()
   const navigate = useNavigate()
   const targetPath = redirectTo || defaultRedirect
+  const functions = useFunctions()
+
+  // The e-mail submit hits authCall (checkAccountExists / requestLoginCode);
+  // warm it while the user is still typing (ADR-0037).
+  useEffect(() => {
+    prewarm(functions, "authCall")
+  }, [functions])
 
   const [stage, setStage] = useState<Stage>(
     signupFlag ? { kind: "signup", via: "link" } : { kind: "email" },

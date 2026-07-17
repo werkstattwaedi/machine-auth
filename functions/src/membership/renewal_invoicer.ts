@@ -8,12 +8,13 @@
  * Self-Checkout wizard. Instead, ~30 days before a membership's
  * `validUntil`, this daily cron auto-issues a QR-Rechnung — the same
  * kind of bill a checkout produces — and lets the existing gated-ack
- * pipeline mail it and (once paid/acked) extend the membership.
+ * pipeline mail it and (once paid/acked) extend the membership. Scheduled
+ * daily via `dailyMembershipMaintenance` (daily_maintenance.ts).
  *
  * Mechanism (deliberately reuses the established bill machinery so the
  * PDF / email / membership-activation paths are all unchanged):
  *
- *  1. Find memberships with `validUntil` in the 1-day slice at the
+ *  1. Find memberships with `validUntil` in the 2-day slice at the
  *     30-day horizon, `autoRenew != false`, `pendingRenewalBill == null`.
  *  2. For each, write a synthetic *closed* `checkouts` doc carrying the
  *     membership-fee SKU (paymentMethod "rechnung") plus a `bills` doc
@@ -44,7 +45,6 @@
  */
 
 import * as logger from "firebase-functions/logger";
-import { onSchedule } from "firebase-functions/v2/scheduler";
 import {
   getFirestore,
   Timestamp,
@@ -132,13 +132,14 @@ export async function runRenewalInvoicer(
 ): Promise<RenewalInvoicerSummary> {
   const database = getFirestore();
 
-  // The 1-day slice at the 30-day horizon. A membership is invoiced on the
-  // single tick where its `validUntil` lands in [now+29d, now+30d). Keeping
-  // it to one slice (rather than "<= now+30d") bounds the work and means a
-  // missed day's memberships fall to the next tick's slice — combined with
-  // the `pendingRenewalBill` guard this is safe against double-invoicing.
+  // The 2-day slice at the 30-day horizon. A membership is invoiced on the
+  // first tick where its `validUntil` lands in [now+28d, now+30d); the
+  // 2-day width means every membership is covered by ~2 consecutive daily
+  // ticks, so a missed or shifted tick self-heals instead of silently
+  // skipping a slice. Re-processing on the second tick is a no-op via the
+  // `pendingRenewalBill` guard, so this is safe against double-invoicing.
   const lower = Timestamp.fromMillis(
-    now.getTime() + (RENEWAL_WINDOW_DAYS - 1) * DAY_MS,
+    now.getTime() + (RENEWAL_WINDOW_DAYS - 2) * DAY_MS,
   );
   const upper = Timestamp.fromMillis(
     now.getTime() + RENEWAL_WINDOW_DAYS * DAY_MS,
@@ -302,19 +303,3 @@ export async function runRenewalInvoicer(
   logger.info("renewalInvoicer: complete", summary);
   return summary;
 }
-
-/**
- * Scheduled trigger. Daily — region matches the sibling scheduled bill
- * functions (`monthlyBillRun`, `autoAcknowledgeBills`). PDF rendering and
- * email sending happen downstream via `onBillCreate` / `onBillUpdate`, so
- * this function itself only does Firestore writes.
- */
-export const issueMembershipRenewalBills = onSchedule(
-  {
-    schedule: "every 24 hours",
-    timeoutSeconds: 540,
-  },
-  async () => {
-    await runRenewalInvoicer();
-  },
-);

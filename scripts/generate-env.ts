@@ -39,7 +39,6 @@ interface OutputFile {
 
 const FUNCTIONS_PARAMS: VarMapping[] = [
   { envVar: "DIVERSIFICATION_SYSTEM_NAME", jsonPath: "functions.diversificationSystemName" },
-  { envVar: "PARTICLE_PRODUCT_ID", jsonPath: "functions.particleProductId" },
   { envVar: "LOGIN_ALLOWED_ORIGINS", jsonPath: "functions.loginAllowedOrigins" },
   // Login-code rate-limit knobs (issue #152). Operations-tunable so values
   // can be retuned without a code change; CLAUDE.md keeps the docs.
@@ -55,7 +54,6 @@ const FUNCTIONS_PARAMS: VarMapping[] = [
 const FUNCTIONS_SECRETS: VarMapping[] = [
   { envVar: "DIVERSIFICATION_MASTER_KEY", jsonPath: "functions.diversificationMasterKey" },
   { envVar: "TERMINAL_KEY", jsonPath: "functions.terminalKey" },
-  { envVar: "PARTICLE_TOKEN", jsonPath: "functions.particleToken" },
   { envVar: "GATEWAY_API_KEY", jsonPath: "functions.gatewayApiKey" },
   { envVar: "RESEND_API_KEY", jsonPath: "functions.resendApiKey" },
 ];
@@ -114,6 +112,9 @@ const GATEWAY: VarMapping[] = [
   { envVar: "MASTER_KEY", jsonPath: "gateway.masterKey" },
   { envVar: "FIREBASE_URL", jsonPath: "gateway.firebaseUrl" },
   { envVar: "GATEWAY_API_KEY", jsonPath: "gateway.gatewayApiKey" },
+  // Keep-warm ping window for the api function (ADR-0037), e.g.
+  // "Mon-Sun 08-22". Absent key → empty → warming disabled.
+  { envVar: "WARM_SCHEDULE", jsonPath: "gateway.warmSchedule" },
 ];
 
 // --- Test fixtures ---
@@ -130,15 +131,13 @@ const GATEWAY: VarMapping[] = [
 //   2. `TEST_FIXTURE_OVERRIDES` — per-envVar literal overrides applied
 //      after `resolveValue`. Used for anything that doesn't naturally
 //      come from the config tree (test crypto keys hard-coded in
-//      `e2e/global-setup.ts`, dummy Resend / Particle / gateway keys
+//      `e2e/global-setup.ts`, dummy Resend / gateway keys
 //      that must NEVER hold real production values).
 //
 // The values below are public-safe by construction:
 //   - `TERMINAL_KEY`/`MASTER_KEY` match the e2e seed (`global-setup.ts`)
 //     and are inert without an NTAG424 tag personalized with them.
 //   - `RESEND_API_KEY` uses the standard test-key prefix.
-//   - `PARTICLE_TOKEN` is a placeholder; firmware paths are not exercised
-//     by the web e2e suite.
 //   - `RAISENOW_PAYLINK_SOLUTION_ID` uses `test-fake-solution`; the e2e
 //     suite doesn't hit RaiseNow.
 const TEST_FIXTURE_CONFIG: Record<string, unknown> = {
@@ -153,7 +152,6 @@ const TEST_FIXTURE_CONFIG: Record<string, unknown> = {
   },
   functions: {
     diversificationSystemName: "Oww8820Maco",
-    particleProductId: "ci-test-product",
     loginAllowedOrigins: "https://localhost:5188,https://localhost:5189",
     loginPerEmailWindowMs: "86400000",
     loginMaxCodesPerEmail: "20",
@@ -204,7 +202,6 @@ const TEST_FIXTURE_OVERRIDES: Record<string, string> = {
   DIVERSIFICATION_MASTER_KEY: "c025f541727ecd8b6eb92055c88a2a70",
   TERMINAL_KEY: "f5e4b999d5aa629f193a874529c4aa2f",
   // Dummy / standard test prefixes — no real production credentials.
-  PARTICLE_TOKEN: "ci-test-particle-token",
   GATEWAY_API_KEY: "ci-test-gateway-key",
   RESEND_API_KEY: "re_test_fake_ci_key",
 };
@@ -540,6 +537,13 @@ function buildOutputFiles(opts: {
             { envVar: "FIREBASE_PROJECT_ID", jsonPath: "firebase.projectId" },
             { envVar: "GATEWAY_DEVICE_HOST", jsonPath: "gateway.deviceHost" },
             { envVar: "GATEWAY_DEVICE_PORT", jsonPath: "gateway.devicePort" },
+            // Device-provisioning CLI (sync-device-config.ts) — still needed
+            // here even though the functions PARTICLE_TOKEN secret and its
+            // env param were retired.
+            {
+              envVar: "PARTICLE_PRODUCT_ID",
+              jsonPath: "functions.particleProductId",
+            },
           ],
         },
       ],
@@ -692,6 +696,7 @@ function emitGatewayEnv(opts: {
     `FIREBASE_URL=${resolveValue(envConfig, "gateway.firebaseUrl")}`,
     `MASTER_KEY=${masterKey}`,
     `GATEWAY_API_KEY=${gatewayApiKey}`,
+    `WARM_SCHEDULE=${resolveValue(envConfig, "gateway.warmSchedule")}`,
     "",
   ].join("\n");
   writeFileSync(resolve(projectRoot, relPath), content);

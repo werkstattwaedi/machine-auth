@@ -4,7 +4,7 @@
 /**
  * Bill lifecycle triggers and retry:
  * - onBillCreate: fast path — attempt PDF generation + email
- * - retryBillProcessing: scheduled every 15 min — retry failures
+ * - retryBillProcessing: scheduled hourly — retry failures
  *
  * PDF generation and email sending use optimistic locking via timestamp
  * fields (pdfGeneratedAt, emailSentAt) to prevent concurrent processing.
@@ -751,11 +751,14 @@ export const onBillUpdate = onDocumentUpdated(
 
 /**
  * Scheduled retry: pick up bills where PDF generation or email sending
- * failed. Runs every 15 minutes, processes bills created in the last 24h.
+ * failed. This is only the fallback for the trigger-driven path —
+ * `onBillCreate`/`onBillUpdate` do the immediate PDF/email work — so a
+ * ≤1h retry latency for an already-failed send is acceptable. Hourly,
+ * processes bills created in the last 24h.
  */
 export const retryBillProcessing = onSchedule(
   {
-    schedule: "every 15 minutes",
+    schedule: "every 60 minutes",
     secrets: [resendApiKey],
     timeoutSeconds: 120,
     // Same as onBillCreate — runs tryGeneratePdf which loads pdfkit.

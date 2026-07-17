@@ -37,6 +37,13 @@ export function dispatchRpc(
   if (typeof method !== "string" || method.length === 0) {
     throw new HttpsError("invalid-argument", "Missing RPC 'method'");
   }
+  // Keep-warm ping (ADR-0037): handled centrally so every dispatcher group
+  // supports it. Answered before the handler lookup and per-handler auth by
+  // design — an unauthenticated ping still boots the container, which is
+  // the whole point. Placed before the request log to keep pings out of it.
+  if (method === "ping") {
+    return { ok: true };
+  }
   const handler = handlers[method];
   if (!handler) {
     throw new HttpsError("not-found", `Unknown method ${group}/${method}`);
