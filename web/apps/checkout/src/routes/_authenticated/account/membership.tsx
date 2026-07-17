@@ -322,6 +322,12 @@ function WrongAccountInviteNotice() {
       // bounces to /login?redirect=<pathname>, which drops the ?invite=
       // search param and loses the invite context. Same pattern as the
       // sidebar sign-out in authenticated-layout.tsx.
+      //
+      // Ordering caveat: the invite page's own redirect effect would send a
+      // still-signed-in wrong-account user straight back here. It doesn't,
+      // only because its `ready` gate waits on the getFamilyInviteInfo
+      // round-trip while signOut() is a local auth-state flip that wins that
+      // race. If signOut ever grows a network step, revisit this.
       navigate({
         to: "/account/invite/$membershipId/$inviteId",
         params: { membershipId, inviteId },
