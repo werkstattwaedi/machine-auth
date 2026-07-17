@@ -17,6 +17,10 @@
  *
  * `RpcMethod` is the central registry of which method lives in which group —
  * the one place to look when adding or moving a callable.
+ *
+ * `reportRpcError` is the telemetry hook for background RPCs whose failures
+ * are otherwise swallowed (fetch-and-degrade UI); see ADR-0025 for the
+ * client-error telemetry contract.
  */
 
 import {
@@ -107,8 +111,12 @@ export function reportRpcError(
   const sessionId = getClientSessionId()
   const e = (err ?? {}) as { code?: unknown; name?: unknown; message?: unknown }
   const code = String(e.code ?? e.name ?? "unknown")
-  const message =
+  // Same 200-char cap as useAsyncMutation (ADR-0025): app-level errors could
+  // theoretically contain user data; the server caps again as second line of
+  // defence.
+  const message = (
     typeof e.message === "string" ? e.message : String(err)
+  ).slice(0, 200)
   const path = `${group}.${method}`
   // eslint-disable-next-line no-console
   console.error("[rpc] error", { path, context, code, message, sessionId })
