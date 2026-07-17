@@ -24,6 +24,7 @@ import {
   type Functions,
   type HttpsCallableResult,
 } from "firebase/functions"
+import { getClientSessionId } from "./client-session"
 
 export type RpcGroup =
   | "authCall"
@@ -87,6 +88,46 @@ export function rpcCallable<Req = unknown, Res = unknown>(
     group
   )
   return (payload: Req) => fn({ method, payload })
+}
+
+/**
+ * Fire-and-forget telemetry for a failed RPC whose error is otherwise
+ * swallowed by the caller (background fetches that degrade to an empty UI,
+ * like the pending-invites banner). Mirrors `reportQueryError` in
+ * `firestore.ts`: logs to console and to Cloud Logging via `logClientError`.
+ * Never throws. `context` must not contain user-specific values.
+ */
+export function reportRpcError(
+  functions: Functions,
+  context: string,
+  group: RpcGroup,
+  method: string,
+  err: unknown
+): void {
+  const sessionId = getClientSessionId()
+  const e = (err ?? {}) as { code?: unknown; name?: unknown; message?: unknown }
+  const code = String(e.code ?? e.name ?? "unknown")
+  const message =
+    typeof e.message === "string" ? e.message : String(err)
+  const path = `${group}.${method}`
+  // eslint-disable-next-line no-console
+  console.error("[rpc] error", { path, context, code, message, sessionId })
+
+  try {
+    httpsCallable(functions, "logClientError")({
+      sessionId,
+      context,
+      code,
+      message,
+      path,
+      userAgent:
+        typeof navigator !== "undefined" ? (navigator.userAgent ?? "") : "",
+    }).catch(() => {
+      // Swallow: telemetry failure must never surface to the UI.
+    })
+  } catch {
+    // Swallow synchronous init errors for the same reason.
+  }
 }
 
 // Keep-warm pings (ADR-0037). A dispatcher's first call of the day pays the

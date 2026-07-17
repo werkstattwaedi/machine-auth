@@ -15,7 +15,7 @@ import {
   Users,
   X,
 } from "lucide-react"
-import { rpcCallable } from "@modules/lib/rpc"
+import { rpcCallable, reportRpcError } from "@modules/lib/rpc"
 import { where } from "firebase/firestore"
 import * as React from "react"
 import { z } from "zod"
@@ -293,7 +293,14 @@ function WrongAccountInviteNotice() {
       .then(({ data }) => {
         if (!cancelled) setEmail(data.status === "pending" ? data.email : null)
       })
-      .catch(() => {
+      .catch((err) => {
+        reportRpcError(
+          functions,
+          "checkout.wrongAccountInviteNotice",
+          "membershipCall",
+          "getFamilyInviteInfo",
+          err,
+        )
         if (!cancelled) setEmail(null)
       })
     return () => {
@@ -310,11 +317,16 @@ function WrongAccountInviteNotice() {
 
   const handleSwitch = () =>
     switchMutation.mutate(async () => {
-      await signOut()
+      // Navigate to the (public) invite page FIRST — if signOut flips `user`
+      // to null while we're still under _authenticated, the unauth gate
+      // bounces to /login?redirect=<pathname>, which drops the ?invite=
+      // search param and loses the invite context. Same pattern as the
+      // sidebar sign-out in authenticated-layout.tsx.
       navigate({
         to: "/account/invite/$membershipId/$inviteId",
         params: { membershipId, inviteId },
       })
+      await signOut()
     })
 
   return (
@@ -378,7 +390,16 @@ function PendingInvitesBanner() {
       .then(({ data }) => {
         if (!cancelled) setCards(data.invites)
       })
-      .catch(() => {
+      .catch((err) => {
+        // Degrading to "no invites" hides real failures (a missing index
+        // made pending invites silently invisible once) — report them.
+        reportRpcError(
+          functions,
+          "checkout.pendingInvitesBanner",
+          "membershipCall",
+          "listMyFamilyInvites",
+          err,
+        )
         if (!cancelled) setCards([])
       })
     return () => {
