@@ -28,8 +28,8 @@ export function WorkshopSectionWithCatalog({
   items,
   callbacks,
   checkoutId,
-  sectionRef,
   onAddMaterial,
+  onRemoveWorkshop,
   pinnedCatalog,
   discountLevel,
   footerSlot,
@@ -49,8 +49,9 @@ export function WorkshopSectionWithCatalog({
   checkoutId?: string | null
   /** Legacy; kept for backwards-compat. */
   itemErrors?: Record<string, ItemErrors>
-  sectionRef?: (el: HTMLDivElement | null) => void
   onAddMaterial: () => void
+  /** Remove-workshop (×) in the section header (Werkstatt-Auswahl handoff). */
+  onRemoveWorkshop?: () => void
   /** Extra content below the material box (issue #505). */
   footerSlot?: React.ReactNode
 }) {
@@ -61,8 +62,8 @@ export function WorkshopSectionWithCatalog({
       items={items}
       callbacks={callbacks}
       checkoutId={checkoutId}
-      sectionRef={sectionRef}
       onAddMaterial={onAddMaterial}
+      onRemoveWorkshop={onRemoveWorkshop}
       pinnedCatalog={pinnedCatalog}
       discountLevel={discountLevel}
       footerSlot={footerSlot}

@@ -1,7 +1,7 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { useState, useMemo, useRef, useEffect, useCallback } from "react"
+import { useState, useMemo, useEffect } from "react"
 import {
   createFileRoute,
   Outlet,
@@ -11,8 +11,6 @@ import { useDb } from "@modules/lib/firebase-context"
 import { useCollection } from "@modules/lib/firestore"
 import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
-import { useIsMobile } from "@modules/hooks/use-mobile"
-import { Checkbox } from "@modules/components/ui/checkbox"
 import { Button } from "@modules/components/ui/button"
 import {
   AlertDialog,
@@ -24,7 +22,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@modules/components/ui/alert-dialog"
-import { ArrowLeft, ArrowRight, ShoppingCart } from "lucide-react"
+import { ArrowLeft, ArrowRight, Plus, ShoppingCart } from "lucide-react"
 import { arrayRemove, arrayUnion, documentId, where } from "firebase/firestore"
 import {
   catalogCollection,
@@ -33,6 +31,7 @@ import {
 } from "@modules/lib/firestore-helpers"
 import {
   getSortedWorkshops,
+  workshopColor,
   type CatalogItem,
   type WorkshopId,
 } from "@modules/lib/workshop-config"
@@ -48,6 +47,10 @@ export const Route = createFileRoute("/_wizard/visit")({
   component: VisitRoute,
 })
 
+// Must match the `--animate-ws-out` duration in web/modules/index.css: the
+// removal state change is deferred until the exit animation has played.
+const WS_EXIT_ANIMATION_MS = 160
+
 // The wizard layout gates this route — when there's no open checkout
 // it renders <NoCheckoutGate /> against a blank page instead of mounting
 // VisitRoute, so we can safely assume `openCheckout` is set here.
@@ -55,7 +58,6 @@ function VisitRoute() {
   const navigate = useNavigate()
   const db = useDb()
   const { update, remove } = useFirestoreMutation()
-  const isMobile = useIsMobile()
   const ctx = useWizardContext()
   const {
     checkoutId,
@@ -158,21 +160,81 @@ function VisitRoute() {
     return s
   }, [openCheckout?.workshopsVisited])
 
-  // Workshops the user manually selected via the checkbox grid (not yet
-  // backed by a stored visit). Tracked separately from
+  // Workshops the user manually selected via the add-chips (not yet backed
+  // by a stored visit). Tracked separately from
   // workshopsWithItems / visitedWorkshops so the snapshot doesn't drift
   // when items arrive after a re-mount (issue #99).
   const [manuallySelectedWorkshops, setManuallySelectedWorkshops] = useState<
     Set<WorkshopId>
   >(() => new Set())
   const [uncheckConfirm, setUncheckConfirm] = useState<WorkshopId | null>(null)
+  // Workshops currently playing their exit animation (Werkstatt-Auswahl
+  // handoff). A Set, not a scalar: two removals inside one 160ms window are
+  // reachable (rapid taps on two × buttons), and a scalar would flip the
+  // first section back to the enter animation mid-fade. Each section stays
+  // mounted (invisible via `ws-out`'s forwards fill) until the backing
+  // state actually drops it from the selection.
+  const [removingWs, setRemovingWs] = useState<ReadonlySet<WorkshopId>>(
+    () => new Set(),
+  )
+  const unmarkRemoving = (wsId: WorkshopId) =>
+    setRemovingWs((prev) => {
+      if (!prev.has(wsId)) return prev
+      const next = new Set(prev)
+      next.delete(wsId)
+      return next
+    })
 
-  const effectiveWorkshops = useMemo(() => {
-    const combined = new Set<WorkshopId>(manuallySelectedWorkshops)
-    for (const w of workshopsWithItems) combined.add(w)
-    for (const w of visitedWorkshops) combined.add(w)
-    return combined
-  }, [manuallySelectedWorkshops, workshopsWithItems, visitedWorkshops])
+  // Selection in ADD ORDER (Werkstatt-Auswahl handoff): a newly added
+  // workshop mounts directly above the chip row the user just tapped. All
+  // three sources already carry add-order — Firestore's arrayUnion appends,
+  // item docs arrive in creation order, and JS Sets iterate in insertion
+  // order — so an ordered de-duped merge preserves it. Ids without a
+  // pricing-config entry are dropped (nothing to render).
+  const orderedWorkshops = useMemo(() => {
+    const known = new Set(sortedWorkshops.map(([wsId]) => wsId))
+    const out: WorkshopId[] = []
+    const push = (w: WorkshopId) => {
+      if (known.has(w) && !out.includes(w)) out.push(w)
+    }
+    for (const w of openCheckout?.workshopsVisited ?? []) push(w as WorkshopId)
+    for (const item of workshopItems) {
+      if (item.workshop) push(item.workshop as WorkshopId)
+    }
+    for (const w of manuallySelectedWorkshops) push(w)
+    return out
+  }, [
+    sortedWorkshops,
+    openCheckout?.workshopsVisited,
+    workshopItems,
+    manuallySelectedWorkshops,
+  ])
+
+  const effectiveWorkshops = useMemo(
+    () => new Set(orderedWorkshops),
+    [orderedWorkshops],
+  )
+
+  // Chips for the not-yet-selected workshops, in config order. A workshop
+  // mid-exit-animation is still in `effectiveWorkshops`, so its chip only
+  // reappears (with the row-in animation) once the section is really gone.
+  const remainingWorkshops = useMemo(
+    () => sortedWorkshops.filter(([wsId]) => !effectiveWorkshops.has(wsId)),
+    [sortedWorkshops, effectiveWorkshops],
+  )
+
+  // The exit animation is done once a workshop leaves the selection; only
+  // then may its `removingWs` entry reset, otherwise the still-mounted
+  // section would flip back to the enter animation and flash.
+  useEffect(() => {
+    setRemovingWs((prev) => {
+      const stale = [...prev].filter((w) => !effectiveWorkshops.has(w))
+      if (stale.length === 0) return prev
+      const next = new Set(prev)
+      for (const w of stale) next.delete(w)
+      return next
+    })
+  }, [effectiveWorkshops])
 
   // A genuine membership-only context hides the "Werkstätten wählen" picker
   // grid and the per-workshop sections so the page is just the membership
@@ -192,15 +254,39 @@ function VisitRoute() {
     workshopItems.length === 0 &&
     effectiveWorkshops.size === 0
 
-  const toggleWorkshop = (wsId: WorkshopId) => {
-    const hasExistingItems = workshopsWithItems.has(wsId)
-    const isOn = effectiveWorkshops.has(wsId)
+  const addWorkshop = (wsId: WorkshopId) => {
+    setManuallySelectedWorkshops((prev) => new Set(prev).add(wsId))
+    if (checkoutId) {
+      void toggleVisitedMutation
+        .mutate(() =>
+          update(checkoutRef(db, checkoutId), {
+            workshopsVisited: arrayUnion(wsId),
+          }),
+        )
+        .catch(() => {})
+    }
+  }
 
-    if (isOn) {
-      if (hasExistingItems) {
-        setUncheckConfirm(wsId)
-        return
-      }
+  // Play the section's exit animation, then apply the actual removal. The
+  // section unmounts only when `orderedWorkshops` drops the id (local state
+  // and/or Firestore snapshot), so the `forwards` fill bridges any gap
+  // between animation end and snapshot arrival without a flash.
+  const animateOutThen = (wsId: WorkshopId, removeSelection: () => void) => {
+    setRemovingWs((prev) => new Set(prev).add(wsId))
+    window.setTimeout(removeSelection, WS_EXIT_ANIMATION_MS)
+  }
+
+  const requestRemoveWorkshop = (wsId: WorkshopId) => {
+    // The section stays interactive during its exit animation; ignore a
+    // second tap on the same × so no duplicate timer/mutation is scheduled.
+    if (removingWs.has(wsId)) return
+    // Sections with recorded entries confirm first (dialog); empty sections
+    // remove immediately.
+    if (workshopsWithItems.has(wsId)) {
+      setUncheckConfirm(wsId)
+      return
+    }
+    animateOutThen(wsId, () => {
       setManuallySelectedWorkshops((prev) => {
         const next = new Set(prev)
         next.delete(wsId)
@@ -213,77 +299,54 @@ function VisitRoute() {
               workshopsVisited: arrayRemove(wsId),
             }),
           )
-          .catch(() => {})
+          // Failure keeps the workshop selected — un-hide the section.
+          .catch(() => unmarkRemoving(wsId))
       }
-    } else {
-      setManuallySelectedWorkshops((prev) => new Set(prev).add(wsId))
-      if (checkoutId) {
-        void toggleVisitedMutation
-          .mutate(() =>
-            update(checkoutRef(db, checkoutId), {
-              workshopsVisited: arrayUnion(wsId),
-            }),
-          )
-          .catch(() => {})
-      }
-    }
+    })
   }
 
-  const confirmUncheckWorkshop = async () => {
+  const confirmUncheckWorkshop = () => {
     if (!uncheckConfirm || !checkoutId) return
     const wsId = uncheckConfirm
-    // Delete everything in the workshop EXCEPT NFC items (those are
-    // server-owned MaCo sessions). Pinned manual-hour items have
-    // origin "manual", so they're intentionally included — keep this as an
-    // `origin` check, not `!isMachineItem`, or NFC usage would be orphaned.
-    const itemsToDelete = items.filter(
-      (i) => i.workshop === wsId && i.origin !== "nfc",
-    )
-    try {
-      await uncheckWorkshop.mutate(async () => {
-        await Promise.all(
-          itemsToDelete.map((i) => remove(checkoutItemRef(db, checkoutId, i.id))),
-        )
-        await update(checkoutRef(db, checkoutId), {
-          workshopsVisited: arrayRemove(wsId),
-        })
-      })
-    } catch {
-      return
-    }
-    setManuallySelectedWorkshops((prev) => {
-      const next = new Set(prev)
-      next.delete(wsId)
-      return next
-    })
     setUncheckConfirm(null)
+    animateOutThen(wsId, () => {
+      // Delete everything in the workshop EXCEPT NFC items (those are
+      // server-owned MaCo sessions). Pinned manual-hour items have
+      // origin "manual", so they're intentionally included — keep this as an
+      // `origin` check, not `!isMachineItem`, or NFC usage would be orphaned.
+      const itemsToDelete = items.filter(
+        (i) => i.workshop === wsId && i.origin !== "nfc",
+      )
+      void (async () => {
+        try {
+          await uncheckWorkshop.mutate(async () => {
+            await Promise.all(
+              itemsToDelete.map((i) =>
+                remove(checkoutItemRef(db, checkoutId, i.id)),
+              ),
+            )
+            await update(checkoutRef(db, checkoutId), {
+              workshopsVisited: arrayRemove(wsId),
+            })
+          })
+        } catch {
+          // Failure keeps the workshop selected — un-hide the section.
+          unmarkRemoving(wsId)
+          return
+        }
+        setManuallySelectedWorkshops((prev) => {
+          const next = new Set(prev)
+          next.delete(wsId)
+          return next
+        })
+      })()
+    })
   }
 
-  // Scroll the most recently added workshop section into view on mobile.
-  const sectionRefs = useRef<Map<WorkshopId, HTMLDivElement>>(new Map())
-  const registerSectionRef = useCallback(
-    (wsId: WorkshopId) => (el: HTMLDivElement | null) => {
-      if (el) sectionRefs.current.set(wsId, el)
-      else sectionRefs.current.delete(wsId)
-    },
-    [],
-  )
-  const prevSelectedRef = useRef<Set<WorkshopId>>(effectiveWorkshops)
-  useEffect(() => {
-    const prev = prevSelectedRef.current
-    const added: WorkshopId[] = []
-    for (const wsId of effectiveWorkshops) {
-      if (!prev.has(wsId)) added.push(wsId)
-    }
-    prevSelectedRef.current = effectiveWorkshops
-    if (added.length !== 1) return
-    const wsId = added[0]
-    const raf = requestAnimationFrame(() => {
-      const el = sectionRefs.current.get(wsId)
-      el?.scrollIntoView({ behavior: "smooth", block: "start" })
-    })
-    return () => cancelAnimationFrame(raf)
-  }, [effectiveWorkshops])
+  // No scroll-into-view on add: with the chips BELOW the sections
+  // (Werkstatt-Auswahl handoff) a new section mounts exactly where the
+  // tapped chip row was, so the auto-scroll the old top-of-page picker
+  // needed (issue #99 era) would now jump away from the tap point.
 
   const callbacks = useMemo(
     () => ({ addItem, updateItem, removeItem }),
@@ -293,55 +356,6 @@ function VisitRoute() {
   return (
     <>
       <div className="flex flex-col flex-1 gap-8">
-        {/* Workshop checkbox selector. Hidden for a membership-only cart so the
-            page is just the Vereinsmitgliedschaft block + nav (issue #263). */}
-        {!nonWorkshopOnly && (
-        <div>
-          <h2 className="text-xl font-bold font-body mb-2">
-            Werkstätten wählen
-          </h2>
-          <p className="text-sm text-muted-foreground mb-4">
-            Für welche Werkstätten möchtest du Kosten erfassen?
-          </p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {sortedWorkshops.map(([wsId, ws], i) => {
-              const hasItems = workshopsWithItems.has(wsId)
-              // Column-first order: balanced columns
-              const cols = isMobile ? 2 : 3
-              const n = sortedWorkshops.length
-              const rows = Math.ceil(n / cols)
-              const fullCols = n - (rows - 1) * cols
-              let col: number, row: number
-              if (i < fullCols * rows) {
-                col = Math.floor(i / rows)
-                row = i % rows
-              } else {
-                const j = i - fullCols * rows
-                col = fullCols + Math.floor(j / (rows - 1))
-                row = j % (rows - 1)
-              }
-              const order = row * cols + col
-              return (
-                <label
-                  key={wsId}
-                  className={`flex items-center gap-2 ${
-                    hasItems ? "cursor-default" : "cursor-pointer"
-                  }`}
-                  style={{ order }}
-                >
-                  <Checkbox
-                    checked={effectiveWorkshops.has(wsId)}
-                    disabled={false}
-                    onCheckedChange={() => toggleWorkshop(wsId)}
-                  />
-                  <span className="text-sm">{ws.label}</span>
-                </label>
-              )
-            })}
-          </div>
-        </div>
-        )}
-
         {/* Vereinsmitgliedschaft — rendered inline with the other workshop
             sessions (issue #262/#263). A membership is purchased on /membership
             and you can't add material to it, but it carries a (×) remove
@@ -354,53 +368,115 @@ function VisitRoute() {
           />
         )}
 
-        {/* Per-workshop sections — suppressed for a membership-only cart, same
-            as the picker above (issue #262/#263). A membership SKU lives in the
-            "diverses" workshop, so its workshopsVisited entry would otherwise
-            render an empty Diverses section with a "Material hinzufügen" button. */}
-        {sortedWorkshops
-          .filter(([wsId]) => !nonWorkshopOnly && effectiveWorkshops.has(wsId))
-          .map(([wsId, wsConfig]) => (
-            <WorkshopSectionWithCatalog
-              key={wsId}
-              workshopId={wsId}
-              workshop={wsConfig}
-              config={pricingConfig}
-              items={workshopItems.filter((i) => i.workshop === wsId)}
-              callbacks={callbacks}
-              discountLevel={discountLevel}
-              pinnedCatalog={pinnedCatalogByWorkshop.get(wsId) ?? []}
-              checkoutId={checkoutId}
-              sectionRef={registerSectionRef(wsId)}
-              // Selbstbedienungs-Badge (issue #505): the "tap a new badge on
-              // the reader" hint lives at the bottom of Diverses — the
-              // workshop the badge SKU is bucketed under — instead of in a
-              // standalone block above the sections. Kiosk-only: the tap
-              // needs the kiosk reader, and it must resolve to an identified
-              // buyer (the tap opens the purchase dialog, see
-              // BridgeNfcRouter / BadgeOfferCoordinator).
-              footerSlot={
-                wsId === "diverses" && kiosk && !isAnonymous ? (
-                  <BadgeCtaHint />
-                ) : undefined
-              }
-              onAddMaterial={() => {
-                // Snapshot the page scroll before navigating so the picker
-                // can restore it — the Sheet's scroll-lock otherwise jumps
-                // /visit back to the top behind the sheet (issue #394).
-                capturePickerScrollAnchor()
-                navigate({
-                  to: "/visit/add/workshop/$workshopId",
-                  params: { workshopId: wsId },
-                  search: kiosk ? { kiosk: "" } : {},
-                  // Keep /visit's scroll: the router's default scroll-to-top
-                  // races the sheet's scroll-lock and pins the background at
-                  // 0 for the whole open period (issue #523).
-                  resetScroll: false,
-                })
-              }}
-            />
-          ))}
+        {/* Per-workshop sections in ADD ORDER — suppressed for a
+            membership-only cart (issue #262/#263). A membership SKU lives in
+            the "diverses" workshop, so its workshopsVisited entry would
+            otherwise render an empty Diverses section with a "Material
+            hinzufügen" button. Each section animates in on mount and out on
+            removal (Werkstatt-Auswahl handoff). */}
+        {!nonWorkshopOnly &&
+          orderedWorkshops.map((wsId) => {
+            const wsConfig = pricingConfig.workshops[wsId]
+            if (!wsConfig) return null
+            return (
+              <div
+                key={wsId}
+                className={
+                  removingWs.has(wsId)
+                    ? "animate-ws-out motion-reduce:animate-none"
+                    : "animate-ws-in motion-reduce:animate-none"
+                }
+              >
+                <WorkshopSectionWithCatalog
+                  workshopId={wsId}
+                  workshop={wsConfig}
+                  config={pricingConfig}
+                  items={workshopItems.filter((i) => i.workshop === wsId)}
+                  callbacks={callbacks}
+                  discountLevel={discountLevel}
+                  pinnedCatalog={pinnedCatalogByWorkshop.get(wsId) ?? []}
+                  checkoutId={checkoutId}
+                  onRemoveWorkshop={() => requestRemoveWorkshop(wsId)}
+                  // Selbstbedienungs-Badge (issue #505): the "tap a new badge
+                  // on the reader" hint lives at the bottom of Diverses — the
+                  // workshop the badge SKU is bucketed under — instead of in a
+                  // standalone block above the sections. Kiosk-only: the tap
+                  // needs the kiosk reader, and it must resolve to an
+                  // identified buyer (the tap opens the purchase dialog, see
+                  // BridgeNfcRouter / BadgeOfferCoordinator).
+                  footerSlot={
+                    wsId === "diverses" && kiosk && !isAnonymous ? (
+                      <BadgeCtaHint />
+                    ) : undefined
+                  }
+                  onAddMaterial={() => {
+                    // Snapshot the page scroll before navigating so the picker
+                    // can restore it — the Sheet's scroll-lock otherwise jumps
+                    // /visit back to the top behind the sheet (issue #394).
+                    capturePickerScrollAnchor()
+                    navigate({
+                      to: "/visit/add/workshop/$workshopId",
+                      params: { workshopId: wsId },
+                      search: kiosk ? { kiosk: "" } : {},
+                      // Keep /visit's scroll: the router's default
+                      // scroll-to-top races the sheet's scroll-lock and pins
+                      // the background at 0 for the whole open period
+                      // (issue #523).
+                      resetScroll: false,
+                    })
+                  }}
+                />
+              </div>
+            )
+          })}
+
+        {/* Add-chips row BELOW the sections (Werkstatt-Auswahl handoff): a
+            tapped workshop mounts its section directly above this row, so
+            there is no spatial disconnect. Hidden for a membership-only cart
+            like the sections above (issue #262/#263). */}
+        {!nonWorkshopOnly && (
+          <div
+            className={
+              orderedWorkshops.length > 0
+                ? "border-t border-dashed border-border pt-7"
+                : undefined
+            }
+          >
+            <h2 className="font-heading text-xl font-bold mb-1">
+              {orderedWorkshops.length > 0
+                ? "Weitere Werkstätten"
+                : "Werkstätten wählen"}
+            </h2>
+            {remainingWorkshops.length > 0 ? (
+              <>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Tippe eine Werkstatt an — sie erscheint direkt hier oberhalb.
+                </p>
+                <div className="flex flex-wrap gap-2.5">
+                  {remainingWorkshops.map(([wsId, ws]) => (
+                    <button
+                      key={wsId}
+                      type="button"
+                      onClick={() => addWorkshop(wsId)}
+                      className="inline-flex h-[38px] items-center gap-2 whitespace-nowrap rounded-lg border border-border bg-white px-3.5 text-sm font-medium transition-all duration-100 hover:-translate-y-px hover:shadow-[0_2px_8px_rgba(0,0,0,0.10)] animate-row-in motion-reduce:animate-none"
+                    >
+                      <span
+                        className="h-2.5 w-2.5 shrink-0 rounded-full"
+                        style={{ background: workshopColor(wsId) }}
+                      />
+                      {ws.label}
+                      <Plus className="h-[13px] w-[13px] opacity-55" />
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Alle Werkstätten ausgewählt.
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="flex-1" />
 
@@ -444,7 +520,11 @@ function VisitRoute() {
             <AlertDialogHeader>
               <AlertDialogTitle>Werkstatt entfernen?</AlertDialogTitle>
               <AlertDialogDescription>
-                Alle erfassten Einträge für diese Werkstatt werden gelöscht.
+                Alle erfassten Einträge für{" "}
+                {(uncheckConfirm &&
+                  pricingConfig.workshops[uncheckConfirm]?.label) ||
+                  "diese Werkstatt"}{" "}
+                werden gelöscht.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

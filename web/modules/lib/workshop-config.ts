@@ -143,6 +143,28 @@ export function usePricingConfig() {
   return { ...result, configError }
 }
 
+// Farbkonzept OWW (2026-01-14) — one color per Werkstatt, see the
+// `--color-ws-*` tokens in web/modules/index.css. Shared by the checkout
+// workshop selection and the account usage history so the color coding
+// stays consistent across surfaces.
+const WORKSHOP_PALETTE: Record<string, string> = {
+  holz: "var(--color-ws-holz)",
+  keramik: "var(--color-ws-keramik)",
+  metall: "var(--color-ws-metall)",
+  textil: "var(--color-ws-textil)",
+  schmuck: "var(--color-ws-schmuck)",
+  glas: "var(--color-ws-glas)",
+  stein: "var(--color-ws-stein)",
+  malen: "var(--color-ws-malen)",
+  makerspace: "var(--color-ws-makerspace)",
+  diverses: "var(--color-ws-diverses)",
+}
+
+/** CSS color for a workshop id; unknown ids fall back to the Cog teal. */
+export function workshopColor(id: string): string {
+  return WORKSHOP_PALETTE[id] ?? "var(--color-cog-teal-dark)"
+}
+
 /** Get workshops sorted by order field */
 export function getSortedWorkshops(
   config: PricingConfigDoc,

@@ -47,7 +47,7 @@ test.describe("Anonymous checkout", () => {
     await expect(page.getByText("Werkstätten wählen")).toBeVisible()
 
     // Select "Holz" workshop
-    await page.getByLabel("Holz").click()
+    await page.getByRole("button", { name: "Holz", exact: true }).click()
 
     // Workshop section appears with "+ Material hinzufügen" button
     await expect(
@@ -270,7 +270,7 @@ test.describe("Anonymous checkout", () => {
     await expect(page.getByText("Werkstätten wählen")).toBeVisible()
 
     // Add a Holz catalog item via the MaterialPicker.
-    await page.getByLabel("Holz").click()
+    await page.getByRole("button", { name: "Holz", exact: true }).click()
     const holzSection = page.getByTestId("workshop-block-holz")
     await holzSection
       .getByRole("button", { name: "Material hinzufügen" })
