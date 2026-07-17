@@ -59,6 +59,17 @@
   --color-twint-red: #ed1c24;
   --color-fee-good: var(--color-cog-teal-dark);
   --color-fee-warn: var(--color-oww-gold-dark);
+  /* Farbkonzept OWW (2026-01-14) — one color per Werkstatt. Holz reuses
+     OWW Gold; Textil matches Cog Teal. */
+  --color-ws-holz: var(--color-oww-gold);
+  --color-ws-keramik: #f39a83;
+  --color-ws-metall: #8baddc;
+  --color-ws-textil: var(--color-cog-teal);
+  --color-ws-schmuck: #4dc685;
+  --color-ws-glas: #e77676;
+  --color-ws-stein: #9ebac0;
+  --color-ws-malen: #cb9cdc;
+  --color-ws-makerspace: #a44d6e;
   --font-family-heading: "Bitter", Georgia, serif;
   --font-family-body: "Roboto Slab", "Helvetica Neue", sans-serif;
   --animate-caret-blink: caret-blink 1.25s ease-out infinite;
