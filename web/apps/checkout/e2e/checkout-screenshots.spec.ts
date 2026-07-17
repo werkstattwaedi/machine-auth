@@ -531,6 +531,14 @@ test.describe("Checkout step screenshots", () => {
     await page.getByRole("button", { name: "Maker Space", exact: true }).click()
     const makerSection = page.getByTestId("workshop-block-makerspace")
 
+    // Pin the background scroll before opening the picker (same idiom as
+    // "add article dropdown open"): the sheet preserves the page scroll via
+    // a rAF window (issue #401), so opening from a non-zero offset leaves
+    // the dimmed background at an environment-dependent scroll in the shot.
+    // The chips row below the sections makes /visit tall enough to scroll,
+    // which is what exposed this.
+    await page.evaluate(() => window.scrollTo(0, 0))
+
     // Add the SLA catalog item from the makerspace section
     await makerSection
       .getByRole("button", { name: "Material hinzufügen" })
@@ -554,6 +562,11 @@ test.describe("Checkout step screenshots", () => {
     await layerInput.fill("1000")
     // Blur by Tabbing out — clicking outside hits the picker overlay.
     await page.keyboard.press("Tab")
+
+    // Let issue #401's scroll-restore rAF window settle, then re-pin the
+    // background so the shot is deterministic (see comment above).
+    await page.waitForTimeout(700)
+    await page.evaluate(() => window.scrollTo(0, 0))
 
     await expect(page).toHaveScreenshot("checkout-sla-filled.png")
   })
