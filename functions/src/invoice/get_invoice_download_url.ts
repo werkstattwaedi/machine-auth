@@ -5,6 +5,7 @@ import * as logger from "firebase-functions/logger";
 import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import { getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
+import { downloadUrlFor } from "../util/storage_download";
 import { formatBillReference, type BillEntity } from "./types";
 
 /**
@@ -32,7 +33,7 @@ export function buildDownloadOptions(bill: BillEntity): {
 }
 
 export const getInvoiceDownloadUrlHandler = async (
-  request: CallableRequest<unknown>
+  request: CallableRequest<unknown>,
 ) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Authentication required");
@@ -69,7 +70,7 @@ export const getInvoiceDownloadUrlHandler = async (
   }
 
   const file = getStorage().bucket().file(bill.storagePath);
-  const [url] = await file.getSignedUrl(buildDownloadOptions(bill));
+  const url = await downloadUrlFor(file, buildDownloadOptions(bill));
 
   logger.info(`Generated download URL for bill ${billId}`);
 

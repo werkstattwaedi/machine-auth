@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 export * from "./business-day"
+export * from "./workshop"
 export * from "./pricing"
 export * from "./membership-classification"
 export * from "./badge-classification"

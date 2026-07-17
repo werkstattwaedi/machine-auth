@@ -223,7 +223,6 @@ export interface CatalogItemDoc extends AuditFields {
 export interface PriceListDoc extends AuditFields {
   name: string
   items: string[]
-  footer: string
   active: boolean
   /**
    * When the PDF was last generated. Compared against the listed catalog

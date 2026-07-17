@@ -5,6 +5,7 @@ import { useDocument, useCollection } from "./firestore"
 import { catalogCollection, configRef } from "./firestore-helpers"
 import { useDb } from "./firebase-context"
 import { where } from "firebase/firestore"
+import type { WorkshopId } from "@oww/shared"
 import { currency } from "./format"
 import type {
   CatalogItemDoc,
@@ -17,17 +18,7 @@ import type {
   PricingEntryFees,
 } from "./firestore-entities"
 
-export type WorkshopId =
-  | "holz"
-  | "metall"
-  | "textil"
-  | "keramik"
-  | "schmuck"
-  | "glas"
-  | "stein"
-  | "malen"
-  | "makerspace"
-  | "diverses"
+export type { WorkshopId } from "@oww/shared"
 
 export type { DiscountLevel, PricingModel, PricingLabels }
 

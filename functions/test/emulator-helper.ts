@@ -29,9 +29,23 @@ export async function setupEmulator(): Promise<RulesTestEnvironment> {
     },
   });
 
-  // Initialize Firebase Admin SDK to connect to emulator
+  // Point the Admin SDK at the Storage emulator before the app initializes.
+  // emulators:exec sets this when the storage emulator runs; the fallback
+  // derives it from the port-block broker's env (or the dev default) so a
+  // bare `mocha` run against already-running emulators also works.
+  if (!process.env.FIREBASE_STORAGE_EMULATOR_HOST) {
+    const storagePort = process.env.EMULATOR_STORAGE_PORT ?? "9199";
+    process.env.FIREBASE_STORAGE_EMULATOR_HOST = `127.0.0.1:${storagePort}`;
+  }
+
+  // Initialize Firebase Admin SDK to connect to emulator. The bucket name
+  // only has to be *a* name for the Storage emulator (it creates buckets on
+  // first write); production resolves it from FIREBASE_CONFIG instead.
   if (!admin.apps.length) {
-    admin.initializeApp({ projectId });
+    admin.initializeApp({
+      projectId,
+      storageBucket: `${projectId}.firebasestorage.app`,
+    });
   }
 
   // Ensure env vars are set for admin SDK
@@ -41,6 +55,19 @@ export async function setupEmulator(): Promise<RulesTestEnvironment> {
   }
 
   return testEnv;
+}
+
+/** The default bucket on the Storage emulator. */
+export function getBucket() {
+  return admin.storage().bucket();
+}
+
+/**
+ * Delete every object in the default bucket — the storage counterpart of
+ * `clearFirestore()` for test isolation.
+ */
+export async function clearStorage(): Promise<void> {
+  await getBucket().deleteFiles({ force: true });
 }
 
 /**

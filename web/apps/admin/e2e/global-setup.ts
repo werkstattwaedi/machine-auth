@@ -415,7 +415,6 @@ async function seedWorkflowData() {
     .set({
       name: "Holz — Aushang Werkstatt",
       items: [CATALOG_AHORN_ID, CATALOG_EICHE_ID],
-      footer: "Offene Werkstatt Wädenswil",
       active: true,
       generatedAt: ts("2026-06-01T10:00:00Z"),
     })

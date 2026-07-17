@@ -6,15 +6,18 @@ import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import { getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { createHash } from "node:crypto";
+import { formatInTimeZone } from "date-fns-tz";
 import {
   assertCheckoutDomainConfigured,
   resolveCheckoutDomain,
 } from "../util/checkout-domain";
-import type {
-  PriceListCatalogItem,
-  PriceListRenderData,
-  PricingModel,
-} from "./types";
+import { downloadUrlFor, pdfSaveOptions } from "../util/storage_download";
+import type { PriceListRenderData } from "./types";
+import {
+  PriceListDeriveError,
+  derivePriceListRenderData,
+  type PriceListSourceItem,
+} from "./derive_render_data";
 
 // Re-exported so the existing regression test (get_price_list_pdf_url.test.ts)
 // keeps importing it from here. The implementation now lives in the shared
@@ -31,63 +34,40 @@ export { assertCheckoutDomainConfigured };
  */
 export function buildPriceListQrUrl(
   domain: string,
-  priceListId: string
+  priceListId: string,
 ): string {
   return `https://${domain}/visit/add/list/${priceListId}`;
 }
 
+// Only the fields this handler reads; the printed title/filename come from
+// the derived render data (common-prefix rule), not the doc's admin name.
 interface PriceListDoc {
-  name: string;
-  footer?: string | null;
   items?: string[];
   active?: boolean;
 }
 
-interface CatalogVariant {
-  id: string;
-  label: string;
-  pricingModel: PricingModel;
-  unitPrice?: { default?: number; member?: number };
-}
-
-interface CatalogItemDoc {
-  code: string;
-  name: string;
-  variants?: CatalogVariant[];
-}
-
 /**
  * Build the SHA-256 hash that uniquely identifies the rendered output.
- * Includes everything that affects the PDF bytes — name, footer, qr URL,
- * and the per-item code/name/price/pricingModel — so that any meaningful
- * change produces a different storage object (and any unchanged re-click
+ * The render data contains everything that affects the PDF bytes — title,
+ * color, stand date, QR URL, and every category/row — so any meaningful
+ * change produces a different storage object (and an unchanged re-click
  * reuses the cached one).
  */
 export function buildPriceListContentHash(data: PriceListRenderData): string {
-  const h = createHash("sha256");
-  h.update(JSON.stringify({
-    name: data.name,
-    footer: data.footer,
-    qrUrl: data.qrUrl,
-    items: data.items.map((i) => ({
-      code: i.code,
-      name: i.name,
-      pm: i.pricingModel,
-      pn: i.unitPrice?.none ?? 0,
-      pm_: i.unitPrice?.member ?? 0,
-    })),
-  }));
-  return h.digest("hex").slice(0, 16);
+  return createHash("sha256")
+    .update(JSON.stringify(data))
+    .digest("hex")
+    .slice(0, 16);
 }
 
 /**
- * Fetch catalog items by id, in chunks of 10 to satisfy Firestore's `in`
- * query cap. Items that have been deleted are silently skipped.
+ * Fetch catalog items by id. Items that have been deleted are silently
+ * skipped.
  */
 async function loadCatalogItems(
-  itemIds: string[]
-): Promise<Map<string, CatalogItemDoc>> {
-  const result = new Map<string, CatalogItemDoc>();
+  itemIds: string[],
+): Promise<Map<string, PriceListSourceItem>> {
+  const result = new Map<string, PriceListSourceItem>();
   if (itemIds.length === 0) return result;
 
   const db = getFirestore();
@@ -96,12 +76,14 @@ async function loadCatalogItems(
   const docs = await db.getAll(...refs);
   for (const doc of docs) {
     if (!doc.exists) continue;
-    result.set(doc.id, doc.data() as CatalogItemDoc);
+    result.set(doc.id, doc.data() as PriceListSourceItem);
   }
   return result;
 }
 
-export const getPriceListPdfUrlHandler = async (request: CallableRequest<unknown>) => {
+export const getPriceListPdfUrlHandler = async (
+  request: CallableRequest<unknown>,
+) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Authentication required");
   }
@@ -122,56 +104,38 @@ export const getPriceListPdfUrlHandler = async (request: CallableRequest<unknown
   const priceList = snap.data() as PriceListDoc;
 
   const itemIds = (priceList.items ?? []).filter(
-    (id): id is string => typeof id === "string" && id.length > 0
+    (id): id is string => typeof id === "string" && id.length > 0,
   );
   const catalog = await loadCatalogItems(itemIds);
 
-  // Preserve the order from priceList.items but skip deleted ones, then
-  // sort by code (numeric-aware) for a stable, human-friendly listing.
-  // For now we render one row per catalog item, using the canonical variant
-  // (variants[0]). Multi-variant items (e.g. Makerspace plywood with m² +
-  // Zuschnitt options) collapse to their primary in the price-list PDF —
-  // PR C can expand this into a per-variant render when the picker UI
-  // grows variant support.
-  const items: PriceListCatalogItem[] = itemIds
-    .map((id) => catalog.get(id))
-    .filter((doc): doc is CatalogItemDoc => doc != null)
-    .map((doc) => {
-      const primary = doc.variants?.[0];
-      const defaultPrice = primary?.unitPrice?.default ?? 0;
-      const memberPrice =
-        typeof primary?.unitPrice?.member === "number"
-          ? primary.unitPrice.member
-          : defaultPrice;
-      return {
-        code: doc.code,
-        name: doc.name,
-        pricingModel: primary?.pricingModel ?? "direct",
-        unitPrice: { none: defaultPrice, member: memberPrice },
-      };
-    })
-    .sort((a, b) =>
-      a.code.localeCompare(b.code, undefined, { numeric: true })
-    );
-
   const qrUrl = buildPriceListQrUrl(resolveCheckoutDomain(), priceListId);
+  // The "Stand" footer date is the generation date, in the workshop's
+  // timezone (the PDF hangs on a wall in Wädenswil, not in UTC).
+  const stand = formatInTimeZone(new Date(), "Europe/Zurich", "dd.MM.yyyy");
 
-  const renderData: PriceListRenderData = {
-    name: priceList.name,
-    footer: priceList.footer ?? "",
-    qrUrl,
-    items,
-  };
+  let renderData: PriceListRenderData;
+  try {
+    renderData = derivePriceListRenderData(
+      itemIds
+        .map((id) => catalog.get(id))
+        .filter((doc): doc is PriceListSourceItem => doc != null),
+      { qrUrl, stand },
+    );
+  } catch (err) {
+    if (err instanceof PriceListDeriveError) {
+      throw new HttpsError("failed-precondition", err.message);
+    }
+    throw err;
+  }
 
   // Lazy import: pdfkit + qrcode (~7 MB) shouldn't be paid by every
   // other function's cold start. Only this admin-only path needs them.
-  const { buildPriceListPdf, priceListFilename } = await import(
-    "./build_price_list_pdf.js"
-  );
+  const { buildPriceListPdf, priceListFilename } =
+    await import("./build_price_list_pdf.js");
 
   const hash = buildPriceListContentHash(renderData);
   const storagePath = `price-lists/${priceListId}/${hash}.pdf`;
-  const filename = priceListFilename(priceList.name);
+  const filename = priceListFilename(renderData.title);
 
   const bucket = getStorage().bucket();
   const file = bucket.file(storagePath);
@@ -188,15 +152,15 @@ export const getPriceListPdfUrlHandler = async (request: CallableRequest<unknown
 
   if (!exists) {
     const pdfBuffer = await buildPriceListPdf(renderData);
-    await file.save(pdfBuffer, { contentType: "application/pdf" });
+    await file.save(pdfBuffer, pdfSaveOptions());
     logger.info(
-      `Generated price-list PDF ${storagePath} (${pdfBuffer.length} bytes)`
+      `Generated price-list PDF ${storagePath} (${pdfBuffer.length} bytes)`,
     );
   } else {
     logger.info(`Reusing cached price-list PDF ${storagePath}`);
   }
 
-  const [url] = await file.getSignedUrl({
+  const url = await downloadUrlFor(file, {
     action: "read",
     expires: Date.now() + 3600 * 1000,
     responseDisposition: `attachment; filename="${filename}"`,

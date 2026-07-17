@@ -6,10 +6,10 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { buildPriceListPdf } from "../../src/price_list/build_price_list_pdf";
 import {
-  smallPriceList,
-  mixedPriceList,
-  longPriceList,
-  emptyPriceList,
+  holzPriceList,
+  metallPriceList,
+  keramikPriceList,
+  longSingleCategoryPriceList,
 } from "./price_list_test_fixtures";
 import type { PriceListRenderData } from "../../src/price_list/types";
 
@@ -135,19 +135,19 @@ async function compareAllPages(name: string, data: PriceListRenderData) {
 describe("buildPriceListPdf — visual regression", function () {
   this.timeout(30000);
 
-  it("small price list", async () => {
-    await compareAllPages("small-price-list", smallPriceList());
+  it("holz — several categories, one page", async () => {
+    await compareAllPages("holz-price-list", holzPriceList());
   });
 
-  it("mixed pricing models", async () => {
-    await compareAllPages("mixed-price-list", mixedPriceList());
+  it("metall — multi-page with split category", async () => {
+    await compareAllPages("metall-price-list", metallPriceList());
   });
 
-  it("long list (multi-page)", async () => {
-    await compareAllPages("long-price-list", longPriceList());
+  it("keramik — single category, suppressed heading", async () => {
+    await compareAllPages("keramik-price-list", keramikPriceList());
   });
 
-  it("empty list", async () => {
-    await compareAllPages("empty-price-list", emptyPriceList());
+  it("long single category — repeated splits", async () => {
+    await compareAllPages("long-category-price-list", longSingleCategoryPriceList());
   });
 });

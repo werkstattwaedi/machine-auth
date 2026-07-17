@@ -78,6 +78,7 @@ A `getPaymentQrData` callable returns the SPC-format QR payload, creditor detail
 
 - **Counter bottleneck:** `config/billing.nextBillNumber` is a single Firestore document, limiting concurrent invoice generation. At the expected volume (~100/month) this is a non-issue; could be sharded if volume grows.
 - **Signed URL expiry:** The 1-hour signed URL means users can't bookmark the download link. A persistent download mechanism would be needed for "download past invoices".
+- **Emulator downloads (2026-07):** Signed URLs cannot be produced against the Storage emulator (no service-account key to sign with; in production, gen2 signs via the IAM Credentials API, which requires `roles/iam.serviceAccountTokenCreator` on the runtime service account). All PDF paths (invoices and price lists) therefore route through `functions/src/util/storage_download.ts`: production keeps `getSignedUrl`, emulator mode saves objects with a Firebase download-token and returns the token URL — which is what the integration tests (`invoice-pdf-storage`, `price-list-pdf`) and local dev exercise.
 - **Retry window:** Failed PDF/email operations are only retried for 24 hours. Bills older than that require manual intervention.
 
 ## Alternatives Considered
