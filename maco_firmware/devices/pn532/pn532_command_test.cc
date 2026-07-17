@@ -350,5 +350,52 @@ TEST(Pn532CommandTest, BuildAndParse_RoundTrip) {
   EXPECT_EQ(result.value()[0], std::byte{0x01});  // Tg
 }
 
+// ============================================================================
+// ParseCheckPresentResponse Tri-State Tests (issue #548)
+// ============================================================================
+//
+// ParseCheckPresentResponse decodes the *payload* of a Diagnose (attention
+// request) response — a single status byte extracted by ParseResponse — into a
+// tri-state PresenceResult. The point of the tri-state (vs the old
+// bool/Internal binary parse) is to keep a genuine removal (clean status 0x01 →
+// Departed, abort immediately) distinct from an ambiguous link fault (timeout /
+// malformed / unexpected status → LinkFault, debounce). These cases would have
+// FAILED against the old parser, which returned only true / false / Internal and
+// so could not carry the removal-vs-fault distinction.
+
+TEST(Pn532CheckPresentTest, CleanStatus0x00_IsPresent) {
+  auto payload = pw::bytes::Array<0x00>();
+  EXPECT_EQ(ParseCheckPresentResponse(payload), PresenceResult::Present);
+}
+
+TEST(Pn532CheckPresentTest, CleanStatus0x01_IsDeparted) {
+  // A genuine removal: well-formed single-byte frame, status 0x01.
+  auto payload = pw::bytes::Array<0x01>();
+  EXPECT_EQ(ParseCheckPresentResponse(payload), PresenceResult::Departed);
+}
+
+TEST(Pn532CheckPresentTest, OtherStatus_IsLinkFault) {
+  // 0x27 = command not acceptable in the current context, and any other
+  // non-{0x00,0x01} status: this is an unexpected/ambiguous reply, NOT a
+  // confirmed removal.
+  auto payload_27 = pw::bytes::Array<0x27>();
+  EXPECT_EQ(ParseCheckPresentResponse(payload_27), PresenceResult::LinkFault);
+
+  auto payload_ff = pw::bytes::Array<0xFF>();
+  EXPECT_EQ(ParseCheckPresentResponse(payload_ff), PresenceResult::LinkFault);
+}
+
+TEST(Pn532CheckPresentTest, EmptyPayload_IsLinkFault) {
+  EXPECT_EQ(ParseCheckPresentResponse(pw::ConstByteSpan{}),
+            PresenceResult::LinkFault);
+}
+
+TEST(Pn532CheckPresentTest, WrongSizePayload_IsLinkFault) {
+  // More than one byte is a malformed Diagnose payload → ambiguous link fault,
+  // never a confirmed removal.
+  auto payload = pw::bytes::Array<0x00, 0x00>();
+  EXPECT_EQ(ParseCheckPresentResponse(payload), PresenceResult::LinkFault);
+}
+
 }  // namespace
 }  // namespace maco::nfc

@@ -29,6 +29,9 @@
 
 namespace maco::nfc {
 
+// PresenceResult (tri-state presence outcome) lives in pn532_command.h,
+// alongside the pure ParseCheckPresentResponse it is produced by.
+
 /// Timing constants for NFC operations.
 struct Pn532ReaderConfig {
   /// Timeout for tag detection attempts.
@@ -40,8 +43,21 @@ struct Pn532ReaderConfig {
       std::chrono::milliseconds(200);
 
   /// Timeout for presence check operations.
+  ///
+  /// Kept at 100 ms: the floor here is the PN532's *internal* "card gone"
+  /// processing (~tens of ms), not wire time. Issue #548's "~86.8 ms 1-byte
+  /// HSU timeout" premise was a µs/ms units slip — 10 bits ÷ 115200 baud =
+  /// 86.8 *µs*/byte, not ms — so 100 ms already clears the real floor with
+  /// margin. ReadWithTimeout returns the instant a frame arrives, so this
+  /// ceiling only bounds the pathological no-frame path; raising it would not
+  /// slow real departures.
   pw::chrono::SystemClock::duration presence_check_timeout =
       std::chrono::milliseconds(100);
+
+  /// Consecutive ambiguous link-fault presence checks required before declaring
+  /// the tag departed. A genuine (clean status 0x01) removal is authoritative
+  /// and ignores this — only link faults are debounced (issue #548).
+  int presence_absent_threshold = 2;
 
   /// Default timeout for transceive operations.
   pw::chrono::SystemClock::duration default_transceive_timeout =
@@ -120,8 +136,9 @@ class Pn532NfcReader : public NfcReader {
       pw::ByteSpan response_buffer,
       pw::chrono::SystemClock::duration timeout);
 
-  /// Check if tag is still present using Diagnose.
-  pw::async2::Coro<pw::Result<bool>> CheckTagPresent(
+  /// Check if tag is still present using Diagnose. Tri-state so the caller can
+  /// distinguish a genuine removal from an ambiguous link fault (issue #548).
+  pw::async2::Coro<PresenceResult> CheckTagPresent(
       pw::async2::CoroContext cx,
       pw::chrono::SystemClock::duration timeout);
 
@@ -149,7 +166,8 @@ class Pn532NfcReader : public NfcReader {
   pw::Result<TagInfo> ParseDetectResponse(pw::ConstByteSpan payload);
   pw::Result<size_t> ParseTransceiveResponse(pw::ConstByteSpan payload,
                                               pw::ByteSpan response_buffer);
-  pw::Result<bool> ParseCheckPresentResponse(pw::ConstByteSpan payload);
+  // Presence parsing is the free function ParseCheckPresentResponse in
+  // pn532_command.h (pure + host-testable).
 
  private:
   // Hardware

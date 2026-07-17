@@ -149,4 +149,20 @@ bool Pn532Command::ValidateDataChecksum(pw::ConstByteSpan data, uint8_t dcs) {
   return ((sum + dcs) & 0xFF) == 0;
 }
 
+PresenceResult ParseCheckPresentResponse(pw::ConstByteSpan payload) {
+  // Diagnose (attention request) response payload is a single status byte.
+  if (payload.size() != 1) {
+    return PresenceResult::LinkFault;
+  }
+
+  switch (static_cast<uint8_t>(payload[0])) {
+    case 0x00:
+      return PresenceResult::Present;
+    case 0x01:
+      return PresenceResult::Departed;
+    default:
+      return PresenceResult::LinkFault;
+  }
+}
+
 }  // namespace maco::nfc
