@@ -154,6 +154,23 @@ class FirebaseClient:
                 success=False, payload=b"", http_status=0, error=f"Unexpected error: {e}"
             )
 
+    async def ping(self) -> bool:
+        """Keep-warm ping against the `api` function (ADR-0037).
+
+        GETs /api/ping (same path prefix the device endpoints use) with the
+        bearer key. Returns True on HTTP 200; never raises — a failed warm
+        ping must not disturb the gateway.
+        """
+        url = f"{self._base_url}/api/ping"
+        headers = {"Authorization": f"Bearer {self._api_key}"}
+        try:
+            client = await self._get_client()
+            response = await client.get(url, headers=headers)
+            return response.status_code == 200
+        except Exception:
+            logger.debug("Warm ping to %s failed", url, exc_info=True)
+            return False
+
     async def close(self) -> None:
         """Close the HTTP client."""
         if self._client and not self._client.is_closed:

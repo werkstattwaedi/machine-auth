@@ -58,6 +58,7 @@ from maco_gateway.key_store import KeyStore
 from maco_gateway.print_worker import PrintWorker
 from maco_gateway.printer import parse_printer_endpoint
 from maco_gateway.sensing.service import SensingService
+from maco_gateway.warm import FunctionWarmer, parse_warm_schedule
 
 # Configure logging
 logging.basicConfig(
@@ -507,6 +508,15 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--warm-schedule",
+        default=os.environ.get("WARM_SCHEDULE", ""),
+        help=(
+            "Weekly window for keep-warm pings to the Firebase api function, "
+            "e.g. 'Mon-Sun 08-22' (local time, end hour exclusive). "
+            "Empty → no warm pings (ADR-0037)."
+        ),
+    )
+    parser.add_argument(
         "--verbose",
         "-v",
         action="store_true",
@@ -574,10 +584,24 @@ def main() -> int:
         worker = PrintWorker(printer_host, printer_port, project=args.gcp_project)
         logger.info("  Printer: %s:%d", printer_host, printer_port)
 
+    # Optional keep-warm pinger (ADR-0037): only started when a schedule is
+    # configured. A malformed schedule fails startup loudly.
+    try:
+        warm_config = parse_warm_schedule(args.warm_schedule)
+    except ValueError as e:
+        logger.error("%s", e)
+        return 1
+    warmer = None
+    if warm_config is not None:
+        warmer = FunctionWarmer(firebase_client, warm_config)
+        logger.info("  Warm schedule: %s", args.warm_schedule)
+
     async def serve() -> None:
         tasks = [server.run(), sensing.run_reaper()]
         if worker is not None:
             tasks.append(worker.run())
+        if warmer is not None:
+            tasks.append(warmer.run())
         await asyncio.gather(*tasks)
 
     try:

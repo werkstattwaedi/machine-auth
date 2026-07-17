@@ -54,8 +54,8 @@ describe("Admin API auth middleware (Integration)", () => {
   /**
    * Build a minimal express app that uses the same auth middleware as the
    * real adminApp, with a single `/protected` route that records who passed
-   * through. We don't reuse `adminApp` itself because its routes call out
-   * to the Particle Cloud and require secrets that aren't available here.
+   * through. `adminApp` itself has no routes today, so a synthetic route is
+   * needed to observe a request passing the middleware.
    */
   function buildTestApp(): express.Express {
     const app = express();
@@ -183,14 +183,14 @@ describe("Admin API auth middleware (Integration)", () => {
       // request must be rejected with 429 by the limiter itself.
       const within = await Promise.all(
         Array.from({ length: ADMIN_RATE_LIMIT_FOR_TEST }, () =>
-          request(adminApp).get("/particle/devices")
+          request(adminApp).get("/protected")
         )
       );
       for (const res of within) {
         expect(res.status).to.equal(401);
       }
 
-      const overflow = await request(adminApp).get("/particle/devices");
+      const overflow = await request(adminApp).get("/protected");
       expect(overflow.status).to.equal(429);
     });
   });

@@ -56,6 +56,7 @@ vi.mock("@modules/lib/rpc", () => ({
     (_functions: unknown, _group: string, method: string) =>
     (payload: unknown) =>
       RPC_MOCKS[method](payload),
+  prewarm: vi.fn(),
 }))
 
 const establishKioskSession = vi.fn()

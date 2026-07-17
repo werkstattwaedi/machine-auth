@@ -63,7 +63,6 @@ const BASE_CONFIG = JSON.stringify({
   },
   functions: {
     diversificationSystemName: "Oww8820Maco",
-    particleProductId: "base-product",
     loginAllowedOrigins: "https://checkout.example.test",
   },
   web: {

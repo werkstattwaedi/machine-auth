@@ -7,13 +7,8 @@
 import express from "express";
 import { rateLimit } from "express-rate-limit";
 import { onRequest } from "firebase-functions/v2/https";
-import { defineSecret, defineString } from "firebase-functions/params";
 import * as logger from "firebase-functions/logger";
 import { getAuth } from "firebase-admin/auth";
-import { getFirestore } from "firebase-admin/firestore";
-
-const particleToken = defineSecret("PARTICLE_TOKEN");
-const particleProductId = defineString("PARTICLE_PRODUCT_ID");
 
 // Per-IP request budget. Read per request so tests can override via the
 // `ADMIN_RATE_LIMIT` env var without re-importing the module. Production
@@ -93,128 +88,10 @@ export const adminAuthMiddleware = async (
 
 adminApp.use(adminAuthMiddleware);
 
-/**
- * List devices from Particle Cloud
- * GET /particle/devices
- */
-adminApp.get("/particle/devices", async (req: express.Request, res: express.Response): Promise<void> => {
-  try {
-    // Lazy import: keeps particle-api-js out of the cold-start bundle for
-    // every other function exported from index.ts.
-    const { default: Particle } = await import("particle-api-js");
-    const particle = new Particle();
-    const productId = particleProductId.value();
-    const token = particleToken.value();
+// No routes today. The former Particle device import (/particle/*) was
+// retired with the PARTICLE_TOKEN secret — terminal onboarding is manual
+// `maco/{deviceId}` doc creation (see docs/config.md). The function and
+// its auth/rate-limit middleware stay as scaffolding for future admin
+// REST endpoints.
 
-    if (!productId || !token) {
-      res.status(500).send({
-        error: "Particle configuration missing. Contact administrator.",
-      });
-      return;
-    }
-
-    logger.info(`Listing devices for product: ${productId}`);
-
-    // List devices in the product
-    const response = await particle.listDevices({
-      product: productId,
-      auth: token,
-    });
-
-    // Response structure: { devices: [...], customers: [...], meta: {...} }
-    const deviceList = response.body.devices || [];
-
-    const devices = deviceList.map((device: any) => ({
-      id: device.id,
-      name: device.name,
-      online: device.online,
-      lastHeard: device.last_heard,
-      platform: device.platform_id,
-      productId: device.product_id,
-      variables: device.variables,
-      functions: device.functions,
-    }));
-
-    logger.info(`Found ${devices.length} devices`);
-
-    res.status(200).json({ devices });
-  } catch (error: any) {
-    logger.error("Error listing Particle devices:", error);
-    res.status(500).json({
-      error: "Failed to list devices",
-      details: error.message,
-    });
-  }
-});
-
-/**
- * Import a device as a terminal (MaCo)
- * POST /particle/import-device
- * Body: { deviceId: string, name?: string }
- */
-adminApp.post("/particle/import-device", async (req: express.Request, res: express.Response): Promise<void> => {
-  try {
-    const { deviceId, name } = req.body;
-
-    if (!deviceId) {
-      res.status(400).json({ error: "deviceId is required" });
-      return;
-    }
-
-    const { default: Particle } = await import("particle-api-js");
-    const particle = new Particle();
-    const productId = particleProductId.value();
-    const token = particleToken.value();
-
-    // Get device info from Particle
-    const deviceResponse = await particle.getDevice({
-      deviceId,
-      product: productId,
-      auth: token,
-    });
-
-    const device = deviceResponse.body;
-
-    // Use provided name or fallback to Particle device name
-    const terminalName = name || device.name || deviceId;
-
-    // Create terminal in Firestore
-    const db = getFirestore();
-    const macoRef = db.collection("maco").doc(deviceId);
-
-    // Check if already exists
-    const existingDoc = await macoRef.get();
-    if (existingDoc.exists) {
-      res.status(409).json({
-        error: "Terminal already exists",
-        deviceId,
-      });
-      return;
-    }
-
-    // Create terminal document
-    await macoRef.set({
-      name: terminalName,
-      hwRevision: 0, // Default to Prototype
-    });
-
-    logger.info(`Imported device ${deviceId} as terminal: ${terminalName}`);
-
-    res.status(201).json({
-      success: true,
-      deviceId,
-      name: terminalName,
-    });
-  } catch (error: any) {
-    logger.error("Error importing device:", error);
-    res.status(500).json({
-      error: "Failed to import device",
-      details: error.message,
-    });
-  }
-});
-
-export const admin = onRequest(
-  { secrets: [particleToken], cors: true },
-  adminApp
-);
+export const admin = onRequest({ cors: true }, adminApp);

@@ -88,7 +88,6 @@ one fails the deploy with "no value for the secret". Currently:
 firebase functions:secrets:set DIVERSIFICATION_MASTER_KEY
 firebase functions:secrets:set GATEWAY_API_KEY
 firebase functions:secrets:set KIOSK_BEARER_KEY
-firebase functions:secrets:set PARTICLE_TOKEN
 firebase functions:secrets:set RESEND_API_KEY
 firebase functions:secrets:set TERMINAL_KEY
 ```
@@ -106,8 +105,8 @@ See [`config.md`](config.md#maco-gateway-configuration) for details.
 
 ## 2. Environment Config
 
-String parameters (`DIVERSIFICATION_SYSTEM_NAME`, `PARTICLE_PRODUCT_ID`,
-`LOGIN_*`, …) are `defineString` params read from `functions/.env.<projectId>`
+String parameters (`DIVERSIFICATION_SYSTEM_NAME`, `LOGIN_*`, …) are
+`defineString` params read from `functions/.env.<projectId>`
 at deploy time — they are NOT set via the deprecated `functions:config:set`.
 
 After editing `machine-auth-operations/config.jsonc`, run `npm run generate-env` from the repo root to refresh `functions/.env.<projectId>` (and the web/maco_gateway env files) before deploying. Otherwise newly-added Firebase Functions params (e.g. `LOGIN_ALLOWED_ORIGINS`, `RESEND_LOGIN_TEMPLATE_ID`) will be missing from the deployed environment and login will silently break.

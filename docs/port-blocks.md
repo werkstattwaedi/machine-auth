@@ -49,7 +49,7 @@ fallback) stays green. The pinned names live in
 ## Updating test fixtures
 
 The `.env.test` files contain only dummy / public values (test crypto
-keys, `re_test_fake_*` Resend keys, placeholder Particle / gateway
+keys, `re_test_fake_*` Resend keys, placeholder gateway
 keys, fake-API Firebase emulator config). They are committed to git so
 CI runners can boot the emulator suite + Playwright without the
 operations repo. When the operations config gains a new param, two

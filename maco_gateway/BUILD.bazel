@@ -34,6 +34,8 @@ py_library(
         "maco_gateway/sensing/backends.py",
         "maco_gateway/sensing/service.py",
         "maco_gateway/sensing/wsv2.py",
+        # Keep-warm pinger for the Firebase api function (ADR-0037).
+        "maco_gateway/warm.py",
     ],
     imports = ["."],  # Makes maco_gateway package importable
     deps = [
@@ -58,6 +60,13 @@ py_library(
         "test_service",
     ]
 ]
+
+py_test(
+    name = "test_warm",
+    srcs = ["maco_gateway/test_warm.py"],
+    main = "maco_gateway/test_warm.py",
+    deps = [":gateway_lib"],
+)
 
 # On-site laser probe: connects the xTool backend directly to a laser and prints
 # its live SensingState. Fastest way to re-validate the protocol at the makerspace.

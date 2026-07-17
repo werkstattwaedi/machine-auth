@@ -50,7 +50,6 @@ const REQUIRED_LITERALS: Record<string, string[]> = {
     "DIVERSIFICATION_SYSTEM_NAME=Oww8820Maco",
     // TEST_FIXTURE_OVERRIDES — dummy placeholders only.
     "RESEND_API_KEY=re_test_fake_ci_key",
-    "PARTICLE_TOKEN=ci-test-particle-token",
     "GATEWAY_API_KEY=ci-test-gateway-key",
   ],
   "web/apps/checkout/.env.test": [

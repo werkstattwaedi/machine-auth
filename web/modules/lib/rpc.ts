@@ -88,3 +88,35 @@ export function rpcCallable<Req = unknown, Res = unknown>(
   )
   return (payload: Req) => fn({ method, payload })
 }
+
+// Keep-warm pings (ADR-0037). A dispatcher's first call of the day pays the
+// container cold start; UI surfaces that know a call is imminent (login page
+// → authCall, checkout wizard → billingCall, …) fire a no-op ping on mount
+// so the instance is warm before the user submits. The server answers
+// `ping` centrally in dispatchRpc.
+const warmedAt = new Map<RpcGroup, number>()
+// Instances idle out after ~15 min; the TTL only prevents rapid remounts
+// from spamming pings, so a few minutes is plenty.
+const PREWARM_TTL_MS = 4 * 60_000
+
+/**
+ * Fire-and-forget keep-warm ping for a dispatcher group, deduped per group
+ * for PREWARM_TTL_MS. Never throws and never surfaces errors — a failed
+ * prewarm must not affect the UI.
+ */
+export function prewarm(functions: Functions, group: RpcGroup): void {
+  const last = warmedAt.get(group)
+  if (last !== undefined && Date.now() - last < PREWARM_TTL_MS) return
+  warmedAt.set(group, Date.now())
+  httpsCallable(functions, group)({ method: "ping", payload: {} }).catch(
+    () => {
+      // Allow a retry on the next mount after a failed warm.
+      warmedAt.delete(group)
+    }
+  )
+}
+
+/** Test hook: clear the prewarm dedupe state. */
+export function resetPrewarmForTest(): void {
+  warmedAt.clear()
+}

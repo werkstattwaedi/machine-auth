@@ -19,10 +19,10 @@ import {
 } from "@modules/components/ui/dialog"
 import { type ColumnDef } from "@tanstack/react-table"
 import { Info, Loader2, MoveRight, Plus } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { InventoryTabs } from "@/components/admin/inventory-tabs"
 import { FilterPills } from "@/components/admin/filter-pills"
-import { rpcCallable } from "@modules/lib/rpc"
+import { rpcCallable, prewarm } from "@modules/lib/rpc"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { useForm } from "react-hook-form"
 import { formatCHF } from "@modules/lib/format"
@@ -94,9 +94,16 @@ const columns: ColumnDef<CatalogItem>[] = [
 
 function CatalogPage() {
   const db = useDb()
+  const functions = useFunctions()
   const { data, loading } = useCollection(catalogCollection(db))
   const [createOpen, setCreateOpen] = useState(false)
   const [workshop, setWorkshop] = useState("all")
+
+  // Catalog writes and the importer hit catalogCall; warm it while the
+  // admin is still browsing the table (ADR-0037).
+  useEffect(() => {
+    prewarm(functions, "catalogCall")
+  }, [functions])
 
   const workshops = useMemo(
     () =>
