@@ -12,14 +12,17 @@
 // the .AppImage on the trusted host" — no chance of forgetting to set
 // an env var after a restart.
 //
-// `--prod` profile fills in production defaults from two sources:
+// `--prod` fills in production defaults from two sources:
 //   * URL comes from the operations repo's `config.jsonc` (the same
 //     file `scripts/generate-env.ts` reads, so checkout web +
 //     Electron + functions stay in sync).
 //   * Bearer comes from Google Secret Manager (`KIOSK_BEARER_KEY`,
 //     same secret Cloud Functions reads server-side).
-// Explicit env vars always win, so a staging URL + prod bearer combo
-// is just a matter of setting BRIDGE_KIOSK_URL=... before invoking.
+// `--env <name>` (e.g. `--env staging`, ADR-0034) works like `--prod`
+// but deep-merges the operations repo's `config.<name>.jsonc` overlay
+// over the base config first, so the URL points at that environment.
+// The bearer is still the Secret Manager value — environments share
+// secrets (ADR-0034). Explicit env vars always win in every profile.
 
 import { execSync } from "node:child_process"
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
@@ -29,10 +32,15 @@ import { dirname, join, resolve } from "node:path"
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const target = join(__dirname, "..", "src", "build-config.generated.ts")
 
-const profile = process.argv.includes("--prod") ? "prod" : "dev"
+const envName = parseEnvName(process.argv.slice(2))
+const profile = process.argv.includes("--prod")
+  ? "prod"
+  : envName
+    ? `env:${envName}`
+    : "dev"
 
-// ── Production defaults sourced from ops config ─────────────────────
-const opsDefaults = profile === "prod" ? loadProdDefaults() : null
+// ── Deploy-target defaults sourced from ops config ──────────────────
+const opsDefaults = profile === "dev" ? null : loadOpsDefaults(envName)
 
 // ── URL (defaults to localhost or ops config) ───────────────────────
 const urlEnvVar = "BRIDGE_KIOSK_URL"
@@ -42,11 +50,12 @@ const url = process.env[urlEnvVar] || defaultUrl
 const isDev = url.includes("localhost")
 
 // ── Bearer ──────────────────────────────────────────────────────────
-// In `--prod`: fetch from gcloud Secret Manager (`KIOSK_BEARER_KEY`)
-// unless the operator already set BRIDGE_BEARER_KEY explicitly.
-// Otherwise: take the env var verbatim, default to empty.
+// In `--prod` / `--env <name>`: fetch from gcloud Secret Manager
+// (`KIOSK_BEARER_KEY`) unless the operator already set
+// BRIDGE_BEARER_KEY explicitly. Otherwise: take the env var verbatim,
+// default to empty.
 let bearer = process.env.BRIDGE_BEARER_KEY ?? ""
-if (!bearer && profile === "prod") {
+if (!bearer && profile !== "dev") {
   bearer = fetchBearerFromGcloud()
 }
 if (!bearer && !isDev) {
@@ -78,7 +87,17 @@ console.log(
 
 // ── Helpers ────────────────────────────────────────────────────────
 
-function loadProdDefaults() {
+function parseEnvName(args) {
+  const eq = args.find((a) => a.startsWith("--env="))
+  if (eq) return eq.slice("--env=".length) || null
+  const idx = args.indexOf("--env")
+  if (idx !== -1 && args[idx + 1] && !args[idx + 1].startsWith("--")) {
+    return args[idx + 1]
+  }
+  return null
+}
+
+function loadOpsDefaults(envName) {
   const projectRoot = resolve(__dirname, "..", "..")
   const configDir =
     process.env.OPERATIONS_CONFIG_DIR ||
@@ -86,15 +105,45 @@ function loadProdDefaults() {
   const configPath = join(configDir, "config.jsonc")
   if (!existsSync(configPath)) {
     fail(
-      `Operations config not found at ${configPath}. The --prod profile ` +
-        `reads URLs from the operations repo. Clone it as ` +
+      `Operations config not found at ${configPath}. The --prod / --env ` +
+        `profiles read URLs from the operations repo. Clone it as ` +
         `a sibling of machine-auth/, or set OPERATIONS_CONFIG_DIR.`,
     )
   }
-  const cfg = parseJsonc(readFileSync(configPath, "utf-8"))
+  let cfg = parseJsonc(readFileSync(configPath, "utf-8"))
+
+  if (envName) {
+    const overlayPath = join(configDir, `config.${envName}.jsonc`)
+    if (!existsSync(overlayPath)) {
+      fail(
+        `Overlay config not found at ${overlayPath}. The --env ${envName} ` +
+          `profile needs it (same file scripts/generate-env.ts --env reads).`,
+      )
+    }
+    cfg = deepMerge(cfg, parseJsonc(readFileSync(overlayPath, "utf-8")))
+  }
 
   const domain = readPath(cfg, "web.checkoutDomain", configPath)
   return { url: `https://${domain}/?kiosk` }
+}
+
+function deepMerge(base, overrides) {
+  const result = { ...base }
+  for (const key of Object.keys(overrides)) {
+    if (
+      typeof result[key] === "object" &&
+      result[key] !== null &&
+      !Array.isArray(result[key]) &&
+      typeof overrides[key] === "object" &&
+      overrides[key] !== null &&
+      !Array.isArray(overrides[key])
+    ) {
+      result[key] = deepMerge(result[key], overrides[key])
+    } else {
+      result[key] = overrides[key]
+    }
+  }
+  return result
 }
 
 function readPath(cfg, jsonPath, configPath) {
