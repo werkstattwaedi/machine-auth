@@ -22,18 +22,23 @@ test.describe("Admin login flow", () => {
     await expect(page.getByRole("heading", { name: "Personen" })).toBeVisible()
   })
 
-  test("non-admin signed-in user is bounced away from the admin shell", async ({
+  test("non-admin signed-in user sees a terminal no-access state, not a redirect loop", async ({
     page,
   }) => {
     await signInWithEmailCode(page, NON_ADMIN_EMAIL)
 
-    // The admin gate in AuthenticatedLayout kicks non-admins back to /login
-    // the moment the user doc resolves. Observing the URL touch /login is
-    // sufficient proof the gate fired — we don't assert further state
-    // because the LoginPage then re-redirects a signed-in user to /users,
-    // which can produce a benign ping-pong that has no UX consequence
-    // (the admin heading never paints stably; this is asserted in the
-    // companion admin spec, which sees it for the admin user only).
+    // Regression for #558: a signed-in non-admin used to ping-pong between
+    // the admin gate and /login forever with no message. The gate now renders
+    // a terminal "Kein Admin-Zugriff" state on the protected route instead of
+    // bouncing to /login.
+    await expect(
+      page.getByRole("heading", { name: "Kein Admin-Zugriff" }),
+    ).toBeVisible({ timeout: 10_000 })
+    // The loop is broken: the URL settles on the protected route, never /login.
+    expect(new URL(page.url()).pathname).not.toBe("/login")
+
+    // The stranded user can actually leave via the sign-out affordance.
+    await page.getByRole("button", { name: "Abmelden" }).click()
     await page.waitForURL((url) => url.pathname.startsWith("/login"), {
       timeout: 10_000,
     })
