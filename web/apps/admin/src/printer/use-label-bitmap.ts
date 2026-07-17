@@ -33,7 +33,7 @@ export function useLabelBitmap(
   const [error, setError] = useState<string | null>(null)
 
   const inputKey = input
-    ? `${input.url}|${input.title}|${input.code}|${input.tape}`
+    ? `${input.url}|${input.name}|${input.mass ?? ""}|${input.code}|${input.tape}`
     : null
 
   useEffect(() => {

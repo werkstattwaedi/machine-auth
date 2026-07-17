@@ -48,7 +48,10 @@ function labelInput(
 ): MaterialLabelInput {
   return {
     url: buildItemLabelQrUrl(checkoutDomain, item.code),
-    title: item.name,
+    // Curated label fields from the pricelist import when present; items
+    // created by hand fall back to the composed display name, no mass line.
+    name: item.labelName ?? item.name,
+    mass: item.labelMass,
     code: `#${item.code}`,
     tape: TAPE,
   }

@@ -89,7 +89,8 @@ function CatalogDetailPage() {
     canPrint && catalog
       ? {
           url: buildItemLabelQrUrl(checkoutDomain, catalog.code),
-          title: catalog.name,
+          name: catalog.labelName ?? catalog.name,
+          mass: catalog.labelMass,
           code: `#${catalog.code}`,
           tape: "18mm" as const,
         }

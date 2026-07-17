@@ -8,7 +8,8 @@ import { LabelPreview } from "@/printer/label-preview"
 
 interface LabelPreviewSearch {
   url: string
-  title: string
+  name: string
+  mass: string
   code: string
   tape: TapeKey
 }
@@ -27,7 +28,8 @@ function coerceTape(value: unknown): TapeKey {
 export const Route = createFileRoute("/_test/label-preview")({
   validateSearch: (search): LabelPreviewSearch => ({
     url: String(search.url ?? ""),
-    title: String(search.title ?? ""),
+    name: String(search.name ?? ""),
+    mass: String(search.mass ?? ""),
     code: String(search.code ?? ""),
     tape: coerceTape(search.tape),
   }),
@@ -35,9 +37,11 @@ export const Route = createFileRoute("/_test/label-preview")({
 })
 
 function LabelPreviewTestPage() {
-  const { url, title, code, tape } = Route.useSearch()
+  const { url, name, mass, code, tape } = Route.useSearch()
   const { bitmap, loading } = useLabelBitmap(
-    url && title && code ? { url, title, code, tape } : null,
+    url && name && code
+      ? { url, name, mass: mass || undefined, code, tape }
+      : null,
     true,
   )
   return (

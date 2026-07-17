@@ -64,7 +64,7 @@ export function LabelPreview({
   }, [bitmap])
 
   // Reserve the slot whether or not we have a bitmap yet so the layout
-  // doesn't jump as the user edits the title/code.
+  // doesn't jump as the user edits the name/mass/code.
   return (
     <div
       className={className}
