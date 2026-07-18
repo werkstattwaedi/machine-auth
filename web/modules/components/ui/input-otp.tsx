@@ -15,7 +15,12 @@ function InputOTP({
     <OTPInput
       data-slot="input-otp"
       containerClassName={cn(
-        "flex items-center gap-2 has-disabled:opacity-50",
+        // text-base: the library's hidden <input> uses font-size:
+        // var(--root-height), which is only set after mount (ResizeObserver).
+        // With autoFocus, iOS Safari evaluates the font-size before that and
+        // falls back to the inherited size — keep it >= 16px so iOS doesn't
+        // auto-zoom the page (issue #492).
+        "flex items-center gap-2 text-base has-disabled:opacity-50",
         containerClassName
       )}
       className={cn("disabled:cursor-not-allowed", className)}

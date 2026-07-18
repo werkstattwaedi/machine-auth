@@ -14,8 +14,10 @@ import { Label } from "@modules/components/ui/label"
 import { MapPin } from "lucide-react"
 import type { AddressValue, AddressErrors } from "@modules/lib/address"
 
+// 16px on mobile: iOS Safari auto-zooms (and stays zoomed) when a focused
+// control's font-size is below 16px. See issue #492.
 const INPUT_BASE =
-  "block w-full h-10 rounded-md border bg-background px-3 text-sm shadow-xs outline-none transition-colors"
+  "block w-full h-10 rounded-md border bg-background px-3 text-base md:text-sm shadow-xs outline-none transition-colors"
 export const INPUT_OK = `${INPUT_BASE} border-[#ccc] focus:border-cog-teal focus:ring-2 focus:ring-cog-teal/30`
 export const INPUT_ERR = `${INPUT_BASE} border-destructive focus:border-destructive focus:ring-2 focus:ring-destructive/30`
 

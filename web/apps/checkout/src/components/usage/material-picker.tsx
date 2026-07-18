@@ -38,8 +38,10 @@ import {
   reassertPageScroll,
 } from "./picker-scroll-anchor"
 
+// 16px on mobile: iOS Safari auto-zooms (and stays zoomed) when a focused
+// control's font-size is below 16px. See issue #492.
 const INPUT_CLS =
-  "flex h-9 w-full rounded-none border border-[#ccc] bg-background px-3 py-1 text-sm outline-none focus:border-cog-teal"
+  "flex h-9 w-full rounded-none border border-[#ccc] bg-background px-3 py-1 text-base md:text-sm outline-none focus:border-cog-teal"
 
 // Fallback pricing models surfaced when the search has no catalog match.
 // Lets the member add ad-hoc materials we don't track in the catalog yet —
@@ -257,7 +259,7 @@ function PickerHeader({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Material suchen…"
-            className="flex-1 bg-transparent text-sm outline-none"
+            className="flex-1 bg-transparent text-base md:text-sm outline-none"
             aria-label="Material suchen"
           />
           {query && (
