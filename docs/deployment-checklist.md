@@ -104,6 +104,10 @@ firebase functions:secrets:set GATEWAY_API_KEY
 firebase functions:secrets:set KIOSK_BEARER_KEY
 firebase functions:secrets:set RESEND_API_KEY
 firebase functions:secrets:set TERMINAL_KEY
+# Stats subject-key salt (ADR-0039) — generate with `openssl rand -hex 32`,
+# DIFFERENT value per project (staging vs prod). Destroying this secret is
+# the retroactive-anonymization switch for all BigQuery stats rows.
+firebase functions:secrets:set STATS_SUBJECT_SALT
 ```
 
 Verify: `firebase functions:secrets:access GATEWAY_API_KEY`
@@ -222,6 +226,78 @@ firebase deploy
 3. **Dashboard**: Verify user doc loads from Firestore
 4. **Admin site**: Visit admin site, verify it requires admin custom claim
 5. **Functions**: Check a terminal checkin works end-to-end
+
+## 9. BigQuery statistics + data protection (ADR-0038 / ADR-0039)
+
+One-time per project (staging first, then prod). See
+[`data-protection.md`](data-protection.md) for the operating procedures.
+
+**9a. BigQuery dataset + IAM:**
+
+```bash
+# Dataset, tables, dedup views (idempotent; re-run after schema changes):
+npx tsx scripts/setup-bigquery.ts --project <project-id>
+
+# Functions runtime SA needs dataset write + job run:
+SA="<project-id>@appspot.gserviceaccount.com"   # or the configured runtime SA
+bq add-iam-policy-binding --member="serviceAccount:${SA}" \
+  --role="roles/bigquery.dataEditor" "<project-id>:stats"
+gcloud projects add-iam-policy-binding <project-id> \
+  --member="serviceAccount:${SA}" --role="roles/bigquery.jobUser"
+```
+
+**9b. Invoice archive bucket (PDF escrow):**
+
+```bash
+# Archive-class bucket, uniform access, europe-west6:
+gcloud storage buckets create gs://<project-id>-invoice-archive \
+  --project=<project-id> --location=europe-west6 \
+  --default-storage-class=ARCHIVE --uniform-bucket-level-access
+
+# Functions SA: WRITE ONLY (objectCreator). Reading archived PDFs is a
+# break-glass IAM grant, removed after use.
+gcloud storage buckets add-iam-policy-binding gs://<project-id>-invoice-archive \
+  --member="serviceAccount:${SA}" --role="roles/storage.objectCreator"
+
+# IAM BASELINE CHECK — objectCreator does not SUBTRACT broader grants.
+# Verify the runtime SA holds no project-level role with storage.objects.get
+# (the default compute SA's legacy Editor role does!). If it does, either
+# remove that grant or switch functions to a dedicated least-privilege SA:
+gcloud projects get-iam-policy <project-id> \
+  --flatten="bindings[].members" --filter="bindings.members:${SA}" \
+  --format="table(bindings.role)"
+
+# Lifecycle: expire archived PDFs 10 years after the bill's paid date.
+# The move stamps customTime = paidAt, so age is legal age, not move date:
+cat > /tmp/archive-lifecycle.json <<'EOF'
+{"rule": [{"action": {"type": "Delete"},
+           "condition": {"daysSinceCustomTime": 3650}}]}
+EOF
+gcloud storage buckets update gs://<project-id>-invoice-archive \
+  --lifecycle-file=/tmp/archive-lifecycle.json
+
+# Data-access audit logging for the archive bucket (break-glass evidence):
+# enable "Cloud Storage – Data Read" audit logs for the project in
+# IAM & Admin → Audit Logs (or via the project IAM policy).
+```
+
+**9c. Backfill + verification gate** (BEFORE first use of erase/trim):
+
+```bash
+STATS_SUBJECT_SALT="$(gcloud secrets versions access latest \
+  --secret=STATS_SUBJECT_SALT --project=<project-id>)" \
+FIREBASE_PROJECT_ID=<project-id> \
+  npx tsx scripts/backfill-stats.ts --prod
+
+# Verify (record the numbers in the PR / ops log):
+#  - Firestore counts vs `SELECT COUNT(*) FROM stats.visits_v` etc.
+#  - SUM(summary.totalPrice) vs SELECT SUM(total_price) FROM stats.visits_v
+#  - 5 random checkouts field-by-field
+```
+
+**9d. Ops calendar:** January = yearly retention trim
+(`privacy-cli.ts trim --dry-run --prod` → review counts → live run). See
+[`data-protection.md`](data-protection.md#ops-calendar).
 
 ## Gateway Deployment
 
