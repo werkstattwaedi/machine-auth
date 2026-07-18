@@ -109,6 +109,20 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "closedAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "checkouts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
           "fieldPath": "userId",
           "order": "ASCENDING"
         },

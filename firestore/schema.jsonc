@@ -338,6 +338,17 @@
       "source": "checkout | membership-renewal"
     }
   },
+  "export_state": {
+    // Server-only per-stream watermarks for the daily BigQuery stats export
+    // (ADR-0039). One doc per stream: visits, machine_usage, bills,
+    // membership_snapshots. Advanced only after a successful sink insert;
+    // the trim/erasure engines read these to guard unexported docs.
+    "{stream}": {
+      "watermark": "timestamp",             // age-basis of the last exported doc
+      "lastDocId": "string",                // cursor tiebreak (startAfter pair)
+      "updatedAt": "timestamp"
+    }
+  },
   "operations_log": {
     // Reusable error/warning log for async operations on any entity
     "{logId}": {

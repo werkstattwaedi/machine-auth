@@ -114,7 +114,7 @@ rm -rf lib/ && npm run build
 See `firestore/schema.jsonc` for complete structure.
 
 **Key Collections:**
-- `users/{userId}`: User profiles (doc ID != Firebase Auth UID)
+- `users/{userId}`: User profiles (doc ID == Firebase Auth UID; see `auth/create-user.ts`, `auth/set-custom-claims.ts` — holds for managed members too)
 - `tokens/{tokenId}`: NFC tag registrations (top-level, tokenId = tag UID)
 - `authentications/{authId}`: Tag authentication state (3-pass mutual auth)
 - `usage/{usageId}`: Machine usage records

@@ -242,6 +242,9 @@ export { dailyMembershipMaintenance } from "./membership/daily_maintenance";
 // Export scheduled cleanup
 export { cleanupAbandonedCheckouts } from "./checkout/cleanup_abandoned_checkouts";
 
+// Daily pseudonymized stats export to BigQuery (ADR-0039).
+export { dailyStatsExport } from "./stats/export_job";
+
 // Daily reminder for open checkouts a visitor walked away from (#531).
 export { staleCheckoutReminders } from "./checkout/stale_checkout_reminders";
 
