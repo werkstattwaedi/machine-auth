@@ -15,7 +15,7 @@ import {
   Users,
   X,
 } from "lucide-react"
-import { rpcCallable } from "@modules/lib/rpc"
+import { rpcCallable, reportRpcError } from "@modules/lib/rpc"
 import { where } from "firebase/firestore"
 import * as React from "react"
 import { z } from "zod"
@@ -293,7 +293,14 @@ function WrongAccountInviteNotice() {
       .then(({ data }) => {
         if (!cancelled) setEmail(data.status === "pending" ? data.email : null)
       })
-      .catch(() => {
+      .catch((err) => {
+        reportRpcError(
+          functions,
+          "checkout.wrongAccountInviteNotice",
+          "membershipCall",
+          "getFamilyInviteInfo",
+          err,
+        )
         if (!cancelled) setEmail(null)
       })
     return () => {
@@ -310,11 +317,22 @@ function WrongAccountInviteNotice() {
 
   const handleSwitch = () =>
     switchMutation.mutate(async () => {
-      await signOut()
+      // Navigate to the (public) invite page FIRST — if signOut flips `user`
+      // to null while we're still under _authenticated, the unauth gate
+      // bounces to /login?redirect=<pathname>, which drops the ?invite=
+      // search param and loses the invite context. Same pattern as the
+      // sidebar sign-out in authenticated-layout.tsx.
+      //
+      // Ordering caveat: the invite page's own redirect effect would send a
+      // still-signed-in wrong-account user straight back here. It doesn't,
+      // only because its `ready` gate waits on the getFamilyInviteInfo
+      // round-trip while signOut() is a local auth-state flip that wins that
+      // race. If signOut ever grows a network step, revisit this.
       navigate({
         to: "/account/invite/$membershipId/$inviteId",
         params: { membershipId, inviteId },
       })
+      await signOut()
     })
 
   return (
@@ -378,7 +396,16 @@ function PendingInvitesBanner() {
       .then(({ data }) => {
         if (!cancelled) setCards(data.invites)
       })
-      .catch(() => {
+      .catch((err) => {
+        // Degrading to "no invites" hides real failures (a missing index
+        // made pending invites silently invisible once) — report them.
+        reportRpcError(
+          functions,
+          "checkout.pendingInvitesBanner",
+          "membershipCall",
+          "listMyFamilyInvites",
+          err,
+        )
         if (!cancelled) setCards([])
       })
     return () => {

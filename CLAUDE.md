@@ -272,6 +272,8 @@ New screenshot tests automatically run at both viewports — no extra configurat
 - `functions/src/**/*.test.ts` — Functions unit tests (Mocha)
 - `functions/test/integration/` — Functions integration tests (Mocha + emulator)
 
+**The Firestore emulator does not enforce indexes.** A `collectionGroup(...)` query needs a `COLLECTION_GROUP`-scope entry in `firestore/firestore.indexes.json` `fieldOverrides` (pattern: `items.tokenId`, `invites.email`) or it throws `FAILED_PRECONDITION` on real projects — while passing every emulator-backed test. When adding a collection-group query, add the fieldOverride in the same PR and deploy with `firebase deploy --only firestore:indexes` to both projects. (This shipped a broken pending-invites banner past the full test suite in July 2026.)
+
 **When adding a new owner-scoped Firestore collection,** add cross-user negative tests to `web/modules/test/cross-user-rules.integration.test.ts` (matrix: other-user read/write/delete, anon, tag-tap, admin carve-out). This file is the regression net for the B2 launch-readiness incident (cross-user `checkouts` read leak) — it must fail loudly if any owner-scoped rule is ever loosened.
 
 ## Web Application

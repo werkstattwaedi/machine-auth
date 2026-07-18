@@ -63,6 +63,14 @@ public surface (`set` / `add` / `update` / `remove` / `mutate`, plus
   is the second line of redaction server-side.
 - A telemetry failure MUST NOT recurse or affect the re-thrown
   original error.
+- The same contract covers background *reads* whose failures degrade
+  to an empty UI instead of a toast: `reportQueryError`
+  (`web/modules/lib/firestore.ts`) for Firestore listeners and
+  `reportRpcError` (`web/modules/lib/rpc.ts`) for fetch-and-degrade
+  RPCs (e.g. the pending-invites banner). A `catch` that renders a
+  fallback state MUST report through one of these — a swallowed error
+  once hid a missing-index outage entirely (family-invite incident,
+  2026-07).
 
 ## Consequences
 

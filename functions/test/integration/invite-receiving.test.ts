@@ -8,6 +8,7 @@ process.env.FUNCTIONS_EMULATOR = "true";
 
 import { expect } from "chai";
 import { Timestamp, type DocumentReference } from "firebase-admin/firestore";
+import type { CallableRequest } from "firebase-functions/v2/https";
 import {
   setupEmulator,
   clearFirestore,
@@ -16,6 +17,7 @@ import {
 } from "../emulator-helper";
 import { handleGetFamilyInviteInfo } from "../../src/membership/invite_info";
 import { handleAcceptInviteNewAccount } from "../../src/membership/accept_invite_new_account";
+import { listMyFamilyInvitesHandler } from "../../src/membership/list_my_invites";
 import type {
   MembershipEntity,
   MembershipInviteEntity,
@@ -396,6 +398,76 @@ describe("Family invite receiving (Integration)", () => {
             "https://evil.example.com",
           ),
         "failed-precondition",
+      );
+    });
+  });
+
+  describe("listMyFamilyInvites", () => {
+    function authedRequest(email: string | null): CallableRequest<unknown> {
+      return {
+        data: {},
+        auth: { uid: "invitee-uid", token: email ? { email } : {} },
+      } as unknown as CallableRequest<unknown>;
+    }
+
+    it("lists a pending invite addressed to the token email", async () => {
+      const { membershipId, inviteId } = await seed("listed@example.com");
+      const result = await listMyFamilyInvitesHandler(
+        authedRequest("listed@example.com"),
+      );
+      expect(result.invites).to.have.length(1);
+      expect(result.invites[0]).to.deep.equal({
+        membershipId,
+        inviteId,
+        inviterName: "Anna Müller",
+      });
+    });
+
+    it("matches the token email case-insensitively", async () => {
+      await seed("mixedcase@example.com");
+      const result = await listMyFamilyInvitesHandler(
+        authedRequest("MixedCase@Example.com"),
+      );
+      expect(result.invites).to.have.length(1);
+    });
+
+    it("excludes invites addressed to other emails", async () => {
+      await seed("someone-else@example.com");
+      const result = await listMyFamilyInvitesHandler(
+        authedRequest("me@example.com"),
+      );
+      expect(result.invites).to.have.length(0);
+    });
+
+    it("excludes non-pending invites", async () => {
+      await seed("resolved@example.com", { status: "accepted" });
+      const result = await listMyFamilyInvitesHandler(
+        authedRequest("resolved@example.com"),
+      );
+      expect(result.invites).to.have.length(0);
+    });
+
+    it("excludes TTL-expired invites", async () => {
+      await seed("expired@example.com", { ttlMs: -1000 });
+      const result = await listMyFamilyInvitesHandler(
+        authedRequest("expired@example.com"),
+      );
+      expect(result.invites).to.have.length(0);
+    });
+
+    it("returns an empty list when the token carries no email", async () => {
+      await seed("no-email-token@example.com");
+      const result = await listMyFamilyInvitesHandler(authedRequest(null));
+      expect(result.invites).to.have.length(0);
+    });
+
+    it("rejects unauthenticated calls", async () => {
+      await expectHttpsError(
+        () =>
+          listMyFamilyInvitesHandler({
+            data: {},
+          } as unknown as CallableRequest<unknown>),
+        "unauthenticated",
       );
     });
   });

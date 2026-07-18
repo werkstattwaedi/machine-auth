@@ -58,7 +58,8 @@ function reportQueryError(
 ): void {
   const sessionId = getClientSessionId()
   const code = err.code ?? err.name ?? "unknown"
-  const message = err.message ?? String(err)
+  // Same 200-char cap as useAsyncMutation (ADR-0025); server caps again.
+  const message = (err.message ?? String(err)).slice(0, 200)
   // eslint-disable-next-line no-console
   console.error("[firestore] error", { path, code, message, sessionId })
 
