@@ -15,6 +15,7 @@
     "dotenv": "^17.0.0",
     "execa": "^9.0.0",
     "firebase-admin": "^13.6.0",
+    "libphonenumber-js": "^1.11.0",
     "particle-api-js": "^11.1.7"
   },
   "devDependencies": {
