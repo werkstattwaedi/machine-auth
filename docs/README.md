@@ -6,6 +6,7 @@ This directory contains structured documentation for the machine authentication 
 
 - **🚀 [Configuration Guide](config.md)** - Complete setup for new environments
 - **🔨 [Compilation Guide](compile.md)** - Building and running firmware
+- **🔒 [Data Protection](data-protection.md)** - DSG operating manual: register, DSAR/erasure procedures, retention trim
 
 ## Directory Structure
 
