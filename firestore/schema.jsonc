@@ -338,6 +338,24 @@
       "source": "checkout | membership-renewal"
     }
   },
+  "erasures": {
+    // Server-only, PII-free erasure receipts (ADR-0038). Doc id = the
+    // erased subject's uid, or HMAC(email) for email-only walk-ins.
+    // Retained indefinitely as proof of erasure; re-running an erasure is
+    // idempotent via the phase marker, and re-running a completed one
+    // re-executes only the audit purge (async-trigger race fix).
+    "{subjectId}": {
+      "subjectKind": "registered | walk-in",
+      "startedAt": "timestamp",
+      "completedAt": "timestamp",           // absent until phase == done
+      "actorUid": "string",                 // admin who ran the erasure
+      "phase": "flush | delete | auth | audit | done",
+      "counts": "map<string, number>",      // docs deleted/redacted per collection
+      "auditPurgePaths": ["string"],        // collection/docId of audited docs to purge
+      "auditPurged": "number",
+      "lastPurgeRunAt": "timestamp"
+    }
+  },
   "export_state": {
     // Server-only per-stream watermarks for the daily BigQuery stats export
     // (ADR-0039). One doc per stream: visits, machine_usage, bills,
@@ -355,7 +373,7 @@
       "collection": "string",               // source collection, e.g. "bills"
       "docId": "string",                    // source document ID
       "operation": "string",                // e.g. "pdf_generate", "email_send"
-      "severity": "error | warning",
+      "severity": "error | warning | info",   // info: DSAR accountability entries (ADR-0038)
       "message": "string",
       "timestamp": "timestamp"
     }

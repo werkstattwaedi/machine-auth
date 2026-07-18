@@ -470,5 +470,8 @@ service cloud.firestore {
     match /export_state/{streamId} {
       allow read, write: if false;
     }
+    match /erasures/{subjectId} {
+      allow read, write: if false;
+    }
   }
 }

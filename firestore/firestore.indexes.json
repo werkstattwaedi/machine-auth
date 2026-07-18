@@ -119,6 +119,20 @@
       ]
     },
     {
+      "collectionGroup": "bills",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "paidAt",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "created",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "checkouts",
       "queryScope": "COLLECTION",
       "fields": [
@@ -296,6 +310,16 @@
           "queryScope": "COLLECTION",
           "arrayConfig": "CONTAINS"
         },
+        {
+          "queryScope": "COLLECTION_GROUP",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "invites",
+      "fieldPath": "invitedBy",
+      "indexes": [
         {
           "queryScope": "COLLECTION_GROUP",
           "order": "ASCENDING"

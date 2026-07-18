@@ -44,6 +44,23 @@ export async function getStreamState(
   };
 }
 
+/**
+ * True when a doc's age-basis timestamp lies strictly past the stream's
+ * watermark cursor — i.e. the daily export has NOT covered it yet. Trim
+ * skips such docs; erasure flushes them to the sink before deleting
+ * (ADR-0038 §guard).
+ */
+export function isUnexported(
+  ts: Timestamp | null | undefined,
+  docId: string,
+  state: StreamState
+): boolean {
+  if (!ts) return false;
+  const cmp = ts.toMillis() - state.watermark.toMillis();
+  if (cmp !== 0) return cmp > 0;
+  return docId > state.lastDocId;
+}
+
 export async function advanceStreamState(
   db: Firestore,
   stream: string,
