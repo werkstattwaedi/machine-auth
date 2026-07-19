@@ -46,8 +46,12 @@ for the full env-var list.
 ## Packaging
 
 ```bash
-npm run build:kiosk     # → release/kiosk/oww-kiosk-<ver>-setup.exe (et al.)
+npm run build:kiosk     # → release/kiosk/oww-kiosk-dev-<ver>-setup.exe (et al.)
 ```
+
+Installer names carry the environment (`dev` / `staging` / `prod`, via the
+`KIOSK_DIST` env var each npm script sets) so builds for different
+environments never overwrite each other.
 
 electron-builder config: `electron-builder.kiosk.yml`.
 
@@ -83,16 +87,18 @@ threat model.
 
 Bump the `version` field in `checkout-kiosk/package.json` **once per change you
 ship** (semver — `1.0.1`, `1.0.2`, …). That single field is the source of truth:
-electron-builder names the installer `oww-kiosk-<version>-setup.exe`, stamps the
-NSIS product version, and it's what `app.getVersion()` returns (shown in the
-tray/taskbar tooltip). Forget to bump it and every build overwrites the same
-`oww-kiosk-1.0.0-setup.exe` — impossible to tell apart. Delete stale
-`release/kiosk/oww-kiosk-*-setup.exe` from older versions when they pile up.
+electron-builder names the installer `oww-kiosk-<env>-<version>-setup.exe`,
+stamps the NSIS product version, and it's what `app.getVersion()` returns
+(shown in the tray/taskbar tooltip). Forget to bump it and every build of the
+same environment overwrites the same installer — impossible to tell apart.
+Delete stale `release/kiosk/oww-kiosk-*-setup.exe` from older versions when
+they pile up.
 
 ### Production builds (`--prod`)
 
 ```bash
-npm run build:kiosk:prod    # → release/kiosk/oww-kiosk-<ver>-setup.exe
+npm run build:kiosk:prod       # → release/kiosk/oww-kiosk-prod-<ver>-setup.exe
+npm run build:kiosk:staging    # → release/kiosk/oww-kiosk-staging-<ver>-setup.exe
 ```
 
 The `:prod` script always targets a **Windows x64 NSIS installer**
