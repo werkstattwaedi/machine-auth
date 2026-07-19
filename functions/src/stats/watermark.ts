@@ -72,3 +72,43 @@ export async function advanceStreamState(
     updatedAt: Timestamp.now(),
   });
 }
+
+/**
+ * Where the export keeps its per-stream cursor. Production uses Firestore;
+ * dry-runs use the in-memory store so previewing a backfill can never
+ * advance the REAL watermark — a falsely-advanced watermark would both
+ * hole the BigQuery history and let trim/erasure delete unexported docs
+ * (`isUnexported` would wrongly report them as covered).
+ */
+export interface StreamStateStore {
+  get(stream: string): Promise<StreamState>;
+  advance(stream: string, state: StreamState): Promise<void>;
+}
+
+export function firestoreStateStore(db: Firestore): StreamStateStore {
+  return {
+    get: (stream) => getStreamState(db, stream),
+    advance: (stream, state) => advanceStreamState(db, stream, state),
+  };
+}
+
+/**
+ * Reads the seed cursor from Firestore once per stream, keeps every
+ * advance local. `db: null` seeds from epoch (pure in-memory runs).
+ */
+export function memoryStateStore(db: Firestore | null): StreamStateStore {
+  const cache = new Map<string, StreamState>();
+  return {
+    async get(stream) {
+      let state = cache.get(stream);
+      if (!state) {
+        state = db ? await getStreamState(db, stream) : EPOCH_STATE;
+        cache.set(stream, state);
+      }
+      return state;
+    },
+    async advance(stream, state) {
+      cache.set(stream, state);
+    },
+  };
+}

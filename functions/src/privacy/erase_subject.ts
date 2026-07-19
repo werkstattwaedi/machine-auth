@@ -33,6 +33,7 @@
 import * as logger from "firebase-functions/logger";
 import {
   DocumentReference,
+  FieldPath,
   FieldValue,
   Firestore,
   QueryDocumentSnapshot,
@@ -247,10 +248,13 @@ export async function eraseSubject(
     };
   }
 
-  // Blockers — skipped when resuming an in-flight erasure (they passed
-  // before the first write happened, and half-deleted state would trip
-  // false positives).
-  if (!receiptSnap.exists) {
+  // Blockers — checked on EVERY run, including resumes: a crashed erasure
+  // leaves the badge alive until the token batch near the end, so new
+  // business (open checkout, fresh bill) can appear in the gap and must
+  // block the resume just like a fresh run. None of the blocker
+  // predicates false-positive on partially-erased state (they only match
+  // live docs that would have blocked the original run too).
+  {
     const blockers = await findBlockers(deps.db, subject);
     if (blockers.length > 0) {
       if (dryRun) {
@@ -501,15 +505,22 @@ export async function eraseSubject(
 
   // ---- Live run ----
   if (!receiptSnap.exists) {
-    await receiptRef.set({
-      subjectKind: subject.kind,
-      startedAt: Timestamp.now(),
-      actorUid: deps.actorUid,
-      phase: "flush",
-      counts: {},
-      auditPurgePaths: [],
-      auditPurged: 0,
-    });
+    try {
+      // create() (not set) so two concurrent first-time calls can't both
+      // believe they own the fresh receipt; the loser proceeds as a
+      // resume — every later step is idempotent.
+      await receiptRef.create({
+        subjectKind: subject.kind,
+        startedAt: Timestamp.now(),
+        actorUid: deps.actorUid,
+        phase: "flush",
+        counts: {},
+        auditPurgePaths: [],
+        auditPurged: 0,
+      });
+    } catch (err) {
+      if ((err as { code?: number }).code !== 6 /* ALREADY_EXISTS */) throw err;
+    }
   }
 
   // Phase: flush unexported docs to the stats sink before deleting them.
@@ -626,7 +637,16 @@ export async function eraseSubject(
     ...(subject.userDocExists ? [`users/${subject.uid}`] : []),
   ]);
 
-  await receiptRef.update({ phase: "auth", counts: state.counts });
+  // Accumulate (never overwrite) so a crash-and-resume keeps the earlier
+  // attempts' tallies. Planned-set counting means a crash mid-delete can
+  // overcount slightly on resume; the receipt documents work attempted,
+  // deletion itself stays exactly idempotent. FieldPath segments because
+  // keys like "memberships/invites" aren't valid dotted paths.
+  const countIncrements: unknown[] = [];
+  for (const [key, n] of Object.entries(state.counts)) {
+    countIncrements.push(new FieldPath("counts", key), FieldValue.increment(n));
+  }
+  await receiptRef.update("phase", "auth", ...countIncrements);
 
   if (subject.uid) {
     try {

@@ -3,7 +3,9 @@
 
 /**
  * Yearly retention trim (ADR-0038): delete operational data older than
- * the 3-year retention cutoff, per the subject-data map's trim entries.
+ * the 3-year retention cutoff. The trimmed-collection set is pinned
+ * against the subject-data map's trim entries by subject_data_map.test.ts
+ * (the queries themselves live here, not in the map).
  *
  * MANUALLY triggered (`authCall/privacyTrim`, driven by
  * `scripts/privacy-cli.ts trim`): destructive, annual, and the dry-run

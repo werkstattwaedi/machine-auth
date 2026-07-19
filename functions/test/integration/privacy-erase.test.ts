@@ -343,6 +343,48 @@ describe("privacy erase (integration)", function () {
     expect(again.auditPurged).to.equal(0);
   });
 
+  it("re-checks blockers on resume (business appearing mid-erasure blocks)", async () => {
+    await seedGraph();
+    // Simulate a crashed in-flight erasure: receipt exists mid-phase, and
+    // the still-alive badge opened a new checkout in the gap.
+    await db.doc("erasures/u1").set({
+      subjectKind: "registered",
+      startedAt: Timestamp.now(),
+      actorUid: "admin-1",
+      phase: "delete",
+      counts: {},
+      auditPurgePaths: [],
+      auditPurged: 0,
+    });
+    await db.doc("checkouts/co-midflight").set({
+      userId: db.doc("users/u1"),
+      status: "open",
+      usageType: "regular",
+      created: Timestamp.now(),
+      workshopsVisited: [],
+      persons: [],
+      modifiedBy: null,
+      modifiedAt: Timestamp.now(),
+    });
+    await expectHttpsError(
+      eraseSubject({ uid: "u1" }, deps()),
+      "failed-precondition"
+    );
+    expect((await db.doc("checkouts/co-midflight").get()).exists).to.equal(true);
+    expect((await db.doc("users/u1").get()).exists).to.equal(true);
+
+    // Once the blocker is settled, the resume completes the erasure and
+    // the receipt accumulates counts instead of overwriting them.
+    await db.doc("checkouts/co-midflight").delete();
+    const outcome = await eraseSubject({ uid: "u1" }, deps());
+    expect(outcome.rerunOnly).to.equal(false);
+    expect((await db.doc("users/u1").get()).exists).to.equal(false);
+    const receipt = (await db.doc("erasures/u1").get()).data()!;
+    expect(receipt.phase).to.equal("done");
+    expect(receipt.counts.users).to.equal(1);
+    expect(receipt.counts.tokens).to.equal(1);
+  });
+
   it("re-run removes late trigger-race audit entries", async () => {
     await seedGraph();
     await eraseSubject({ uid: "u1" }, deps());

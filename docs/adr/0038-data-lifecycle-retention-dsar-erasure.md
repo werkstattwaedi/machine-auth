@@ -31,12 +31,13 @@ a yearly, manually triggered trim (`privacyTrim`, driven by
 ops-calendar entry). No cron: destructive + annual; convertible to
 onSchedule later if chronically forgotten.
 
-**The subject-data map is the single source of truth**
+**The subject-data map is the single source of truth for policy**
 (`functions/src/privacy/subject_data_map.ts`): every collection's PII
 fields, legal basis, retention, trim spec, and erasure strategy. The DSAR
-report, the erasure engine, the trim, and the processing register in
-`docs/data-protection.md` all derive from it; a coverage unit test fails CI
-if an audited collection lacks an entry.
+report and the processing register in `docs/data-protection.md` consume it
+directly; the erasure engine and the trim implement their per-collection
+queries in code, kept aligned with the map by coverage unit tests that
+also fail CI if an audited collection lacks an entry.
 
 **Erasure = per-subject trim (all ages) + identity deletion.** Blockers
 first (open checkout, unpaid bill, active owned membership, person in an

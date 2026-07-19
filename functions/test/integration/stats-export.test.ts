@@ -20,6 +20,7 @@ import {
   type StatsExportDeps,
 } from "../../src/stats/export_job";
 import { InMemorySink } from "../../src/stats/sink";
+import { memoryStateStore } from "../../src/stats/watermark";
 import { subjectKey } from "../../src/privacy/subject_key";
 
 const SALT = "test-salt";
@@ -251,6 +252,24 @@ describe("stats export (integration)", function () {
     const rows = sink.tableRows("visits");
     expect(rows).to.have.length(2);
     expect(rows[0].doc_id).to.equal(rows[1].doc_id);
+  });
+
+  it("dry-run state store never advances the Firestore watermark", async () => {
+    await seedClosedCheckout("co-1", { closedAt: ts("2026-07-18T15:30:00Z") });
+    const sink = new InMemorySink();
+    const store = memoryStateStore(db);
+
+    const first = await runStatsExport(NOW, { ...deps(sink), stateStore: store });
+    expect(first.visits.exported).to.equal(1);
+    // Cursor advanced only in memory — export_state stays empty …
+    expect((await db.doc("export_state/visits").get()).exists).to.equal(false);
+    // … the same store doesn't re-export …
+    const second = await runStatsExport(NOW, { ...deps(sink), stateStore: store });
+    expect(second.visits.exported).to.equal(0);
+    // … and a subsequent REAL run still sees the data as unexported.
+    const real = await runStatsExport(NOW, deps(new InMemorySink()));
+    expect(real.visits.exported).to.equal(1);
+    expect((await db.doc("export_state/visits").get()).exists).to.equal(true);
   });
 
   it("snapshots memberships once per month, then again next month", async () => {

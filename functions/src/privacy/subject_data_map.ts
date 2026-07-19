@@ -5,10 +5,12 @@
  * Subject-data map — the single source of truth for where personal data
  * lives and what happens to it (ADR-0038).
  *
- * The DSAR report, the erasure engine, the yearly trim, and the processing
- * register in docs/data-protection.md all derive from this map. The
- * coverage unit test asserts every audited collection has an entry, so a
- * new collection cannot ship without a data-protection policy.
+ * The DSAR report and the processing register in docs/data-protection.md
+ * consume this map directly. The erasure engine and the yearly trim
+ * implement their per-collection logic in code (queries differ too much to
+ * be table-driven) — the coverage tests in subject_data_map.test.ts keep
+ * them aligned with the map, and assert every audited collection has an
+ * entry, so a new collection cannot ship without a data-protection policy.
  *
  * Semantics of `erasure`:
  *  - "delete"          docs deleted outright (subject-owned)

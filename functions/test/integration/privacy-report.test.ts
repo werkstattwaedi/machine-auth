@@ -79,7 +79,17 @@ describe("privacy report (integration)", function () {
       created: ts("2026-07-01T10:00:00Z"),
       closedAt: ts("2026-07-01T12:00:00Z"),
       workshopsVisited: ["holz"],
-      persons: [{ name: "Erika Muster", email: "u1@example.com", userType: "erwachsen" }],
+      persons: [
+        { name: "Erika Muster", email: "u1@example.com", userType: "erwachsen" },
+        // A guest Erika brought along — their identity must NOT surface in
+        // Erika's DSAR export (guests are their own data subjects).
+        {
+          name: "Guest Person",
+          email: "guest@example.com",
+          userType: "kind",
+          billingAddress: { company: "", street: "Gasse 2", zip: "8820", city: "Wädenswil" },
+        },
+      ],
       modifiedBy: null,
       modifiedAt: ts("2026-07-01T12:00:00Z"),
     });
@@ -189,9 +199,24 @@ describe("privacy report (integration)", function () {
     expect((report.authAccount as { email: string }).email).to.equal("u1@example.com");
     expect((report.user as { firstName: string }).firstName).to.equal("Erika");
     expect(report.tokens).to.have.length(1);
-    const checkouts = report.checkouts as Array<{ id: string; items: unknown[] }>;
+    const checkouts = report.checkouts as Array<{
+      id: string;
+      items: unknown[];
+      persons: Array<Record<string, unknown>>;
+    }>;
     expect(checkouts.map((c) => c.id)).to.deep.equal(["co-own"]);
     expect(checkouts[0].items).to.have.length(1);
+
+    // Owned checkouts keep the subject's own entry but reduce co-visitors
+    // to their userType — no guest names/emails/addresses in the export.
+    expect(checkouts[0].persons).to.deep.equal([
+      { name: "Erika Muster", email: "u1@example.com", userType: "erwachsen" },
+      { userType: "kind", redacted: true },
+    ]);
+    const checkoutsJson = JSON.stringify(checkouts);
+    expect(checkoutsJson).to.not.include("guest@example.com");
+    expect(checkoutsJson).to.not.include("Guest Person");
+    expect(checkoutsJson).to.not.include("Gasse 2");
 
     // Appearance in u2's checkout: only Erika's entry, never u2's data.
     const appearances = report.personsAppearances as Array<{

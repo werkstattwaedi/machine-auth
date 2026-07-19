@@ -45,7 +45,7 @@ import {
   type RowContext,
 } from "./row_builders";
 import { makeBigQuerySink, type StatsSink } from "./sink";
-import { advanceStreamState, getStreamState } from "./watermark";
+import { firestoreStateStore, type StreamStateStore } from "./watermark";
 import type {
   CheckoutEntity,
   CheckoutItemEntity,
@@ -65,6 +65,9 @@ export interface StatsExportDeps {
   /** Page size per stream per invocation. Tests shrink this to exercise
    *  the pagination cursor; production uses the default. */
   batchSize?: number;
+  /** Cursor store; defaults to Firestore. Dry-runs MUST pass
+   *  `memoryStateStore` so the real watermark never advances. */
+  stateStore?: StreamStateStore;
 }
 
 export interface StreamResult {
@@ -195,11 +198,12 @@ const TIMESTAMP_STREAMS: TimestampStream[] = [
 async function exportTimestampStream(
   stream: TimestampStream,
   deps: StatsExportDeps,
+  store: StreamStateStore,
   ctx: RowContext,
   memberCache: MemberCache
 ): Promise<StreamResult> {
   const batchSize = deps.batchSize ?? DEFAULT_BATCH_SIZE;
-  const state = await getStreamState(deps.db, stream.name);
+  const state = await store.get(stream.name);
   let query = deps.db.collection(stream.collection).limit(batchSize);
   for (const f of stream.filters ?? []) {
     query = query.where(f.field, "==", f.value);
@@ -217,7 +221,7 @@ async function exportTimestampStream(
   }
   await stream.insert(deps, snap.docs, ctx, memberCache);
   const last = snap.docs[snap.docs.length - 1];
-  await advanceStreamState(deps.db, stream.name, {
+  await store.advance(stream.name, {
     watermark: last.get(stream.ageField) as Timestamp,
     lastDocId: last.id,
   });
@@ -231,11 +235,12 @@ export function zurichMonth(now: Date): string {
 
 async function exportMembershipSnapshots(
   deps: StatsExportDeps,
+  store: StreamStateStore,
   now: Date,
   ctx: RowContext
 ): Promise<StreamResult> {
   const month = zurichMonth(now);
-  const state = await getStreamState(deps.db, "membership_snapshots");
+  const state = await store.get("membership_snapshots");
   // lastDocId doubles as the last-snapshotted month marker for this stream.
   if (state.lastDocId === month) {
     return { exported: 0, drained: true };
@@ -251,7 +256,7 @@ async function exportMembershipSnapshots(
   });
   await deps.sink.insertRows("membership_snapshots", rows);
   const monthStartUtc = fromZonedTime(`${month}-01T00:00:00`, getWorkshopTimezone());
-  await advanceStreamState(deps.db, "membership_snapshots", {
+  await store.advance("membership_snapshots", {
     watermark: Timestamp.fromDate(monthStartUtc),
     lastDocId: month,
   });
@@ -268,11 +273,23 @@ export async function runStatsExport(
 ): Promise<StatsExportSummary> {
   const ctx: RowContext = { exportedAt: now.toISOString() };
   const memberCache: MemberCache = new Map();
+  const store = deps.stateStore ?? firestoreStateStore(deps.db);
   const summary: StatsExportSummary = {};
   for (const stream of TIMESTAMP_STREAMS) {
-    summary[stream.name] = await exportTimestampStream(stream, deps, ctx, memberCache);
+    summary[stream.name] = await exportTimestampStream(
+      stream,
+      deps,
+      store,
+      ctx,
+      memberCache
+    );
   }
-  summary["membership_snapshots"] = await exportMembershipSnapshots(deps, now, ctx);
+  summary["membership_snapshots"] = await exportMembershipSnapshots(
+    deps,
+    store,
+    now,
+    ctx
+  );
   return summary;
 }
 

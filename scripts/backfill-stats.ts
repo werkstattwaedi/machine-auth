@@ -11,10 +11,12 @@
  * duplicates are absorbed by the `*_v` dedup views, and an interrupted
  * backfill resumes from the persisted watermarks.
  *
- * `--dry-run` counts would-be rows without touching BigQuery (still
- * advances the Firestore watermarks — reset `export_state/*` if you want a
- * dry-run followed by a real run to re-export; against prod prefer running
- * dry-run first on staging instead).
+ * `--dry-run` counts would-be rows without touching BigQuery AND without
+ * touching the Firestore watermarks: pagination runs against an in-memory
+ * cursor (seeded from the current `export_state/*`), so a preview against
+ * prod can never mark data as exported — a falsely-advanced watermark
+ * would hole the BigQuery history and let trim/erasure delete unflushed
+ * docs (ADR-0038 guard).
  *
  * The live run needs the per-project subject salt:
  *   STATS_SUBJECT_SALT="$(gcloud secrets versions access latest \
@@ -98,15 +100,23 @@ async function main() {
   const { CountingSink, makeBigQuerySink } = await import(
     "../functions/src/stats/sink"
   );
+  const { memoryStateStore } = await import("../functions/src/stats/watermark");
 
   const datasetId = process.env.STATS_DATASET ?? "stats";
   const countingSink = DRY_RUN ? new CountingSink() : null;
   const sink = countingSink ?? (await makeBigQuerySink(datasetId, projectId));
   const db = admin.firestore();
+  // Dry-run: in-memory cursor only — the real export_state stays untouched.
+  const stateStore = DRY_RUN ? memoryStateStore(db) : undefined;
 
   const totals: Record<string, number> = {};
   for (let round = 1; ; round++) {
-    const summary = await runStatsExport(new Date(), { db, sink, salt });
+    const summary = await runStatsExport(new Date(), {
+      db,
+      sink,
+      salt,
+      stateStore,
+    });
     for (const [stream, res] of Object.entries(summary)) {
       totals[stream] = (totals[stream] ?? 0) + res.exported;
     }

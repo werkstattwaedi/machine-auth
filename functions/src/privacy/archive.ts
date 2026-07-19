@@ -57,6 +57,13 @@ export async function moveInvoicePdfToArchive(
     if (code !== 412) throw err;
     // 412: already archived by a previous (crashed) run — fall through.
   }
-  await source.delete();
+  try {
+    await source.delete();
+  } catch (err) {
+    const code = (err as { code?: number }).code;
+    if (code !== 404) throw err;
+    // 404: a concurrent move (trim vs erasure racing on the same bill)
+    // already deleted the source — the outcome we wanted either way.
+  }
   return "archived";
 }

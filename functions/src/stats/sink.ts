@@ -55,10 +55,17 @@ export async function makeBigQuerySink(
 ): Promise<StatsSink> {
   const { BigQuery } = await import("@google-cloud/bigquery");
   const bq = new BigQuery(projectId ? { projectId } : {});
+  // visit_items fans out per checkout with no cap, so a 500-checkout batch
+  // can exceed one insertAll request comfortably handles — chunk it.
+  const INSERT_CHUNK = 500;
   return {
     async insertRows(table, rows) {
-      if (rows.length === 0) return;
-      await bq.dataset(datasetId).table(table).insert(rows);
+      for (let i = 0; i < rows.length; i += INSERT_CHUNK) {
+        await bq
+          .dataset(datasetId)
+          .table(table)
+          .insert(rows.slice(i, i + INSERT_CHUNK));
+      }
     },
   };
 }

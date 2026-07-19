@@ -6,9 +6,12 @@
  *
  * Collects every doc the subject-data map attributes to a subject and
  * serializes it with the audit-trigger convention (refs → paths,
- * Timestamps → ISO). Appearances inside OTHER people's checkouts return
- * only the subject's own persons[] entry plus the checkout id/date —
- * never the other visitors' data.
+ * Timestamps → ISO). Never disclose other visitors' data: appearances
+ * inside OTHER people's checkouts return only the subject's own persons[]
+ * entry plus the checkout id/date, and the subject's OWN checkouts have
+ * every non-subject persons[] entry reduced to its userType (guests are
+ * their own data subjects, even when the requester originally typed their
+ * details in).
  *
  * audit_log entries mirror the business docs 1:1, so the report carries
  * per-collection counts instead of duplicating potentially thousands of
@@ -121,11 +124,22 @@ export async function buildPrivacyReport(
     }
   }
   const checkoutsWithItems = await Promise.all(
-    ownedCheckouts.map(async (doc) => ({
-      id: doc.id,
-      ...(serializeValue(doc.data()) as Record<string, unknown>),
-      items: serializeDocs((await doc.ref.collection("items").get()).docs),
-    }))
+    ownedCheckouts.map(async (doc) => {
+      const checkout = doc.data() as CheckoutEntity;
+      const sanitized = {
+        ...checkout,
+        persons: (checkout.persons ?? []).map((p) =>
+          personMatches(p, subject)
+            ? p
+            : { userType: p.userType, redacted: true }
+        ),
+      };
+      return {
+        id: doc.id,
+        ...(serializeValue(sanitized) as Record<string, unknown>),
+        items: serializeDocs((await doc.ref.collection("items").get()).docs),
+      };
+    })
   );
 
   // Appearances in other owners' checkouts: subject's entry only.
