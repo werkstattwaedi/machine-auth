@@ -185,6 +185,24 @@ function VisitRoute() {
       return next
     })
 
+  // Per-workshop "has an unparseable field" flags, reported up from each
+  // WorkshopInlineSection. Gates "Zum Checkout" so a half-typed unit (e.g.
+  // "12.34sdfs" hours) can't be carried into the checkout. `reportWsValidity`
+  // hands each section a *stable* callback so its report effect doesn't churn.
+  const [wsErrors, setWsErrors] = useState<Record<string, boolean>>({})
+  const reportWsValidity = useMemo(() => {
+    const cache: Record<string, (hasError: boolean) => void> = {}
+    return (wsId: WorkshopId) => {
+      if (!cache[wsId]) {
+        cache[wsId] = (hasError: boolean) =>
+          setWsErrors((prev) =>
+            prev[wsId] === hasError ? prev : { ...prev, [wsId]: hasError },
+          )
+      }
+      return cache[wsId]
+    }
+  }, [])
+
   // Selection in ADD ORDER (Werkstatt-Auswahl handoff): a newly added
   // workshop mounts directly above the chip row the user just tapped. All
   // three sources already carry add-order — Firestore's arrayUnion appends,
@@ -396,6 +414,7 @@ function VisitRoute() {
                   discountLevel={discountLevel}
                   pinnedCatalog={pinnedCatalogByWorkshop.get(wsId) ?? []}
                   checkoutId={checkoutId}
+                  onValidityChange={reportWsValidity(wsId)}
                   onRemoveWorkshop={() => requestRemoveWorkshop(wsId)}
                   // Selbstbedienungs-Badge (issue #505): the "tap a new badge
                   // on the reader" hint lives at the bottom of Diverses — the
@@ -501,6 +520,15 @@ function VisitRoute() {
           </button>
           <Button
             className="bg-cog-teal hover:bg-cog-teal-dark"
+            // Block continue while any workshop field holds an unparseable
+            // value. Only current workshops count — a removed workshop's stale
+            // flag is ignored.
+            disabled={orderedWorkshops.some((wsId) => wsErrors[wsId])}
+            title={
+              orderedWorkshops.some((wsId) => wsErrors[wsId])
+                ? "Bitte zuerst die rot markierten Eingaben korrigieren."
+                : undefined
+            }
             onClick={() =>
               navigate({
                 to: "/checkout",

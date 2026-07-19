@@ -8,6 +8,7 @@ import {
 } from "@modules/lib/pricing"
 import { X } from "lucide-react"
 import type { CheckoutPerson, PersonsAction } from "./use-checkout-state"
+import { ErrorBadge, FIELD_INPUT_OK, FIELD_INPUT_ERR } from "./field-error"
 
 /**
  * Shared remove (X) affordance for a person on /checkin. Used by both the
@@ -69,20 +70,11 @@ function showError(
   return null
 }
 
-// 16px on mobile: iOS Safari auto-zooms (and stays zoomed) when a focused
-// control's font-size is below 16px. See issue #492.
-const BASE_INPUT =
-  "flex h-9 w-full rounded-none border bg-background px-3 py-1 text-base md:text-sm outline-none"
-const INPUT_OK = `${BASE_INPUT} border-[#ccc] focus:border-cog-teal`
-const INPUT_ERR = `${BASE_INPUT} border-[#cc2a24] focus:border-[#cc2a24]`
-
-function ErrorBadge({ message }: { message: string }) {
-  return (
-    <span className="block w-full mt-1 px-2 py-0.5 text-xs text-white bg-[#cc2a24] rounded-sm">
-      {message}
-    </span>
-  )
-}
+// Field styling + ErrorBadge now live in ./field-error (shared with the
+// pinned-hours and material-picker fields). Aliased to the historic names to
+// keep the rest of this file untouched.
+const INPUT_OK = FIELD_INPUT_OK
+const INPUT_ERR = FIELD_INPUT_ERR
 
 export function PersonCard({
   person,

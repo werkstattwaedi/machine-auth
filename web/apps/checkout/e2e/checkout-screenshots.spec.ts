@@ -215,8 +215,8 @@ test.describe("Checkout step screenshots", () => {
       .click()
     await expect(page.getByText("E2E Testmaterial")).toBeVisible()
     await page.getByText("E2E Testmaterial").click()
-    await page.locator('label:has-text("Länge (cm)")').locator("..").locator("input").fill("60")
-    await page.locator('label:has-text("Breite (cm)")').locator("..").locator("input").fill("40")
+    await page.locator('label:has-text("Länge")').locator("..").locator("input").fill("60")
+    await page.locator('label:has-text("Breite")').locator("..").locator("input").fill("40")
     await page.getByRole("button", { name: "Hinzufügen", exact: true }).click()
     await page.getByRole("button", { name: "Schliessen" }).click()
     await expect(page.locator(`[data-slot="sheet-overlay"]`)).toBeHidden()
@@ -231,7 +231,7 @@ test.describe("Checkout step screenshots", () => {
     await expect(page.getByText("Filament").first()).toBeVisible()
     // Click the first catalog button matching "Filament" (not "Filament (Spezial)")
     await page.locator("button").filter({ hasText: /^Filament/ }).first().click()
-    await page.locator('label:has-text("Anzahl")').locator("..").locator("input").fill("100")
+    await page.locator('label:has-text("Gewicht")').locator("..").locator("input").fill("100")
     await page.getByRole("button", { name: "Hinzufügen", exact: true }).click()
     await page.getByRole("button", { name: "Schliessen" }).click()
     await expect(page.locator(`[data-slot="sheet-overlay"]`)).toBeHidden()
@@ -244,7 +244,7 @@ test.describe("Checkout step screenshots", () => {
     await page.getByText("Maschinenzeit").click()
     // Fill description, time and rate so the row commits
     await page.locator('label:has-text("Beschreibung")').locator("..").locator("input").fill("Maschinennutzung")
-    await page.locator('label:has-text("Anzahl")').locator("..").locator("input").fill("60")
+    await page.locator('label:has-text("Zeit")').locator("..").locator("input").fill("60")
     await page.locator('label:has-text("Preis")').locator("..").locator("input").first().fill("20")
     await page.getByRole("button", { name: "Hinzufügen", exact: true }).click()
     await page.getByRole("button", { name: "Schliessen" }).click()
@@ -560,7 +560,7 @@ test.describe("Checkout step screenshots", () => {
     // Fill Resin (ml) and Layer inputs. Labels aren't associated via htmlFor,
     // so walk from label → parent → input (same idiom as existing tests).
     const resinInput = page
-      .locator('label:has-text("Resin (ml)")')
+      .locator('label:has-text("Resin")')
       .locator("..")
       .locator("input")
     await resinInput.fill("50")
@@ -608,7 +608,7 @@ test.describe("Checkout step screenshots", () => {
 
     // Fill Resin (ml) and Layer inputs
     const resinInput = page
-      .locator('label:has-text("Resin (ml)")')
+      .locator('label:has-text("Resin")')
       .locator("..")
       .locator("input")
     await resinInput.fill("50")

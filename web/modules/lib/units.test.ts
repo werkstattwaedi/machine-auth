@@ -8,6 +8,7 @@ import {
   formatCount,
   formatPricePerCount,
   parseQuantity,
+  parseWithDefaultUnit,
   cmToMeters,
   gramsToKg,
   mlToLiters,
@@ -101,6 +102,10 @@ describe("parseQuantity", () => {
     ["100 cm2", "m2", 0.01],
     // Time: minutes → hours.
     ["30 min", "h", 0.5],
+    // "m" is accepted as minutes in the time dimension (only "m" = metres
+    // in the length dimension — aliases are per-dimension).
+    ["30m", "h", 0.5],
+    ["90m", "h", 1.5],
   ])("parseQuantity(%j, %s) → %s", (input, base, expected) => {
     const got = parseQuantity(input, base)
     expect(got).not.toBeNull()
@@ -117,6 +122,42 @@ describe("parseQuantity", () => {
     ["5 fooble", "m"],
   ])("parseQuantity(%j, %s) → null", (input, base) => {
     expect(parseQuantity(input, base)).toBeNull()
+  })
+})
+
+describe("parseWithDefaultUnit", () => {
+  it.each<[string, BaseUnit, string, number]>([
+    // Bare number → default unit
+    ["50", "m", "cm", 0.5], // 50 cm → 0.5 m
+    ["500", "kg", "g", 0.5], // 500 g → 0.5 kg
+    ["250", "l", "ml", 0.25], // 250 ml → 0.25 l
+    ["12", "h", "min", 0.2], // 12 min → 0.2 h
+    // Explicit unit overrides the default
+    [".5m", "m", "cm", 0.5],
+    ["50cm", "m", "cm", 0.5],
+    ["5dm", "m", "cm", 0.5],
+    ["1.5kg", "kg", "g", 1.5],
+    ["2.5l", "l", "ml", 2.5],
+    ["1.5h", "h", "min", 1.5],
+    // German decimal comma
+    ["1,5kg", "kg", "g", 1.5],
+    // Empty → 0
+    ["", "m", "cm", 0],
+    ["  ", "m", "cm", 0],
+  ])("parseWithDefaultUnit(%j, %s, %s) → %s", (input, base, def, expected) => {
+    const got = parseWithDefaultUnit(input, base, def)
+    expect(got).not.toBeNull()
+    expect(got!).toBeCloseTo(expected, 9)
+  })
+
+  it.each<[string, BaseUnit, string]>([
+    // Unknown unit token → null (even though a default exists)
+    ["50xyz", "m", "cm"],
+    ["12 sek", "h", "min"],
+    // Wrong-dimension unit
+    ["5kg", "m", "cm"],
+  ])("parseWithDefaultUnit(%j, %s, %s) → null", (input, base, def) => {
+    expect(parseWithDefaultUnit(input, base, def)).toBeNull()
   })
 })
 
