@@ -26,7 +26,7 @@ import { signInWithCustomToken } from "firebase/auth"
 import { Loader2 } from "lucide-react"
 import { useAuth } from "@modules/lib/auth"
 import { useFirebaseAuth, useFunctions } from "@modules/lib/firebase-context"
-import { rpcCallable } from "@modules/lib/rpc"
+import { rpcCallable, reportRpcError } from "@modules/lib/rpc"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import {
   SignupFields,
@@ -85,7 +85,16 @@ function InviteAcceptPage() {
       .then(({ data }) => {
         if (!cancelled) setInfo(data)
       })
-      .catch(() => {
+      .catch((err) => {
+        // The fallback renders "Einladung nicht gefunden" — report the error
+        // so an infra failure (vs a genuinely missing invite) isn't silent.
+        reportRpcError(
+          functions,
+          "checkout.inviteAcceptPage",
+          "membershipCall",
+          "getFamilyInviteInfo",
+          err,
+        )
         if (!cancelled)
           setInfo({
             status: "not_found",

@@ -642,7 +642,7 @@ function PinnedValueField({
           onChange(raw)
         }}
         onBlur={onBlur}
-        className="h-8 w-16 rounded-[3px] border border-[#ccc] bg-background px-2 text-right text-sm tabular-nums text-foreground outline-none focus:border-cog-teal"
+        className="h-8 w-16 rounded-[3px] border border-[#ccc] bg-background px-2 text-right text-base md:text-sm tabular-nums text-foreground outline-none focus:border-cog-teal"
       />
       <span className="text-xs text-muted-foreground">{suffix}</span>
     </span>

@@ -43,14 +43,16 @@ interface ProfileFormValues {
   phone: string
 }
 
+// 16px on mobile: iOS Safari auto-zooms (and stays zoomed) when a focused
+// control's font-size is below 16px. See issue #492.
 const INPUT_BASE =
-  "block w-full h-10 rounded-md border bg-background px-3 text-sm shadow-xs outline-none transition-colors"
+  "block w-full h-10 rounded-md border bg-background px-3 text-base md:text-sm shadow-xs outline-none transition-colors"
 const INPUT =
   `${INPUT_BASE} border-[#ccc] focus:border-cog-teal focus:ring-2 focus:ring-cog-teal/30`
 const INPUT_ERR =
   `${INPUT_BASE} border-destructive focus:border-destructive focus:ring-2 focus:ring-destructive/30`
 const INPUT_DISABLED =
-  "block w-full h-10 rounded-md border border-[#ccc] bg-muted/50 px-3 text-sm text-muted-foreground cursor-not-allowed shadow-xs"
+  "block w-full h-10 rounded-md border border-[#ccc] bg-muted/50 px-3 text-base md:text-sm text-muted-foreground cursor-not-allowed shadow-xs"
 
 function ErrorText({ message }: { message?: string }) {
   if (!message) return null

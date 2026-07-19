@@ -664,7 +664,7 @@ export function StepCheckout({
             id="usage-type"
             value={usageType}
             onChange={(e) => setUsageType(e.target.value as UsageType)}
-            className="mt-1.5 mb-4 h-10 w-full max-w-xs rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:border-cog-teal focus:ring-2 focus:ring-cog-teal/30"
+            className="mt-1.5 mb-4 h-10 w-full max-w-xs rounded-md border border-border bg-background px-3 text-base md:text-sm focus:outline-none focus:border-cog-teal focus:ring-2 focus:ring-cog-teal/30"
           >
             {Object.entries(USAGE_TYPE_LABELS).map(([key, label]) => (
               <option key={key} value={key}>
@@ -1075,7 +1075,7 @@ export function SpendeCard({
             value={String(roundUpTarget)}
             onChange={(e) => onRoundUpTarget(parseFloat(e.target.value))}
             aria-label="Aufrunden-Ziel"
-            className="appearance-none bg-transparent border-0 border-b border-dashed border-oww-gold-dark/70 text-oww-gold-text font-semibold pr-5 pl-1 py-0.5 cursor-pointer focus:outline-none focus:border-oww-gold-dark"
+            className="appearance-none bg-transparent border-0 border-b border-dashed border-oww-gold-dark/70 text-base md:text-sm text-oww-gold-text font-semibold pr-5 pl-1 py-0.5 cursor-pointer focus:outline-none focus:border-oww-gold-dark"
             style={{
               backgroundImage:
                 "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23a07c00' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>\")",

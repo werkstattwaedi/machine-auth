@@ -69,8 +69,10 @@ function showError(
   return null
 }
 
+// 16px on mobile: iOS Safari auto-zooms (and stays zoomed) when a focused
+// control's font-size is below 16px. See issue #492.
 const BASE_INPUT =
-  "flex h-9 w-full rounded-none border bg-background px-3 py-1 text-sm outline-none"
+  "flex h-9 w-full rounded-none border bg-background px-3 py-1 text-base md:text-sm outline-none"
 const INPUT_OK = `${BASE_INPUT} border-[#ccc] focus:border-cog-teal`
 const INPUT_ERR = `${BASE_INPUT} border-[#cc2a24] focus:border-[#cc2a24]`
 

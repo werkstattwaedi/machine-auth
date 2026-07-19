@@ -250,12 +250,23 @@ test.describe("Checkout step screenshots", () => {
     await page.getByRole("button", { name: "Schliessen" }).click()
     await expect(page.locator(`[data-slot="sheet-overlay"]`)).toBeHidden()
 
-    // Let issue #401's post-close scroll-restore rAF window (~600ms) settle,
-    // then pin to the top so the baseline is deterministic (same idiom as
-    // the "add article dropdown open" test — the picker flow otherwise
-    // leaves the page at a race-dependent scroll offset on mobile).
-    await page.waitForTimeout(700)
-    await page.evaluate(() => window.scrollTo(0, 0))
+    // Pin the page to the top and keep re-pinning until it sticks. The
+    // close-path scroll restore (#451) re-applies the pre-open offset (here:
+    // scrolled down to the holz add button) on an rAF schedule whose end we
+    // can't observe — a single pin after a fixed settle loses that race on
+    // slow runners, which left this baseline permanently red on CI. Each
+    // poll iteration pins, out-waits the ~600ms restore window, and only
+    // passes once the pin survived it.
+    await expect
+      .poll(
+        async () => {
+          await page.evaluate(() => window.scrollTo(0, 0))
+          await page.waitForTimeout(700)
+          return page.evaluate(() => window.scrollY)
+        },
+        { timeout: 10_000 },
+      )
+      .toBe(0)
 
     await expect(page).toHaveScreenshot("checkout-materials-added.png")
   })

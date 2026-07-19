@@ -17,6 +17,10 @@
  *
  * `RpcMethod` is the central registry of which method lives in which group —
  * the one place to look when adding or moving a callable.
+ *
+ * `reportRpcError` is the telemetry hook for background RPCs whose failures
+ * are otherwise swallowed (fetch-and-degrade UI); see ADR-0025 for the
+ * client-error telemetry contract.
  */
 
 import {
@@ -24,6 +28,7 @@ import {
   type Functions,
   type HttpsCallableResult,
 } from "firebase/functions"
+import { getClientSessionId } from "./client-session"
 
 export type RpcGroup =
   | "authCall"
@@ -87,6 +92,50 @@ export function rpcCallable<Req = unknown, Res = unknown>(
     group
   )
   return (payload: Req) => fn({ method, payload })
+}
+
+/**
+ * Fire-and-forget telemetry for a failed RPC whose error is otherwise
+ * swallowed by the caller (background fetches that degrade to an empty UI,
+ * like the pending-invites banner). Mirrors `reportQueryError` in
+ * `firestore.ts`: logs to console and to Cloud Logging via `logClientError`.
+ * Never throws. `context` must not contain user-specific values.
+ */
+export function reportRpcError(
+  functions: Functions,
+  context: string,
+  group: RpcGroup,
+  method: string,
+  err: unknown
+): void {
+  const sessionId = getClientSessionId()
+  const e = (err ?? {}) as { code?: unknown; name?: unknown; message?: unknown }
+  const code = String(e.code ?? e.name ?? "unknown")
+  // Same 200-char cap as useAsyncMutation (ADR-0025): app-level errors could
+  // theoretically contain user data; the server caps again as second line of
+  // defence.
+  const message = (
+    typeof e.message === "string" ? e.message : String(err)
+  ).slice(0, 200)
+  const path = `${group}.${method}`
+  // eslint-disable-next-line no-console
+  console.error("[rpc] error", { path, context, code, message, sessionId })
+
+  try {
+    httpsCallable(functions, "logClientError")({
+      sessionId,
+      context,
+      code,
+      message,
+      path,
+      userAgent:
+        typeof navigator !== "undefined" ? (navigator.userAgent ?? "") : "",
+    }).catch(() => {
+      // Swallow: telemetry failure must never surface to the UI.
+    })
+  } catch {
+    // Swallow synchronous init errors for the same reason.
+  }
 }
 
 // Keep-warm pings (ADR-0037). A dispatcher's first call of the day pays the

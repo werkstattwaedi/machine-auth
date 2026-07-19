@@ -2,6 +2,20 @@
 
 Steps to deploy the full system to production.
 
+## TL;DR — one-shot deploy (no gateway/kiosk)
+
+```bash
+npm run deploy:staging          # functions + rules + hosting → oww-maco-staging
+npm run deploy:prod             # same → oww-maco (asks for confirmation)
+scripts/deploy.sh staging prod  # both, staging first
+```
+
+`scripts/deploy.sh` chains generate-env, the functions deploy wrapper,
+`firestore,storage`, and hosting (with `WEB_BUILD_SCRIPT=build:staging` on
+staging) — always passing `--project` explicitly. It does NOT cover the
+gateway, the kiosk, or the manual steps below (secrets, custom claims,
+smoke tests).
+
 ## Prerequisites
 
 - Firebase CLI authenticated: `firebase login`
@@ -159,11 +173,15 @@ hook refuses commits while the dirty state is in effect.
 
 Verify: Check Functions logs in Firebase Console for startup errors.
 
-## 4. Deploy Firestore Rules
+## 4. Deploy Firestore + Storage Rules and Indexes
 
 ```bash
-firebase deploy --only firestore:rules
+firebase deploy --only firestore,storage
 ```
+
+This covers Firestore rules **and indexes** (collection-group queries need
+their fieldOverrides deployed to every project — the emulator doesn't
+enforce them) plus Storage rules. `scripts/deploy.sh` runs the same command.
 
 Verify: The `isAdmin()` rule now checks `request.auth.token.admin == true` (custom claims).
 

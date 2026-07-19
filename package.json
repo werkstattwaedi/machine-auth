@@ -38,6 +38,8 @@
     "snapshots:normalize": "node scripts/normalize-snapshots.mjs",
     "block": "npx tsx scripts/port-block.ts --",
     "predeploy": "scripts/predeploy.sh",
+    "deploy:staging": "scripts/deploy.sh staging",
+    "deploy:prod": "scripts/deploy.sh prod",
     "deploy:functions": "npx tsx scripts/deploy-functions.ts",
     "deploy:functions:cleanup": "git restore functions/package.json package-lock.json && rm -f functions/oww-shared-*.tgz && rm -rf functions/node_modules/@oww/shared",
     "deploy:gateway": "npx tsx scripts/deploy-gateway.ts",

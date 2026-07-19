@@ -396,7 +396,7 @@ export function CheckinSignin({
           }}
           disabled={busy}
           data-testid="checkin-identifier"
-          className="h-[42px] w-full rounded-md border border-[#ccc] bg-white pl-3 pr-[54px] text-[15px] shadow-xs outline-none transition-[color,box-shadow] focus:border-cog-teal focus:ring-[3px] focus:ring-cog-teal/30 disabled:cursor-not-allowed disabled:opacity-60"
+          className="h-[42px] w-full rounded-md border border-[#ccc] bg-white pl-3 pr-[54px] text-base md:text-[15px] shadow-xs outline-none transition-[color,box-shadow] focus:border-cog-teal focus:ring-[3px] focus:ring-cog-teal/30 disabled:cursor-not-allowed disabled:opacity-60"
         />
         <button
           type="submit"
@@ -658,7 +658,7 @@ function SignupDialog({
   const labelCls = "mb-1.5 block text-sm font-bold"
   const inputCls = (invalid: boolean) =>
     cn(
-      "h-11 w-full rounded-md border bg-white px-3 text-[15px] shadow-xs outline-none transition-[color,box-shadow] disabled:cursor-not-allowed disabled:opacity-60",
+      "h-11 w-full rounded-md border bg-white px-3 text-base md:text-[15px] shadow-xs outline-none transition-[color,box-shadow] disabled:cursor-not-allowed disabled:opacity-60",
       invalid
         ? "border-destructive focus:border-destructive focus:ring-[3px] focus:ring-destructive/30"
         : "border-[#ccc] focus:border-cog-teal focus:ring-[3px] focus:ring-cog-teal/30",
