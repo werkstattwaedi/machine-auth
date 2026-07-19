@@ -200,6 +200,14 @@ void ScheduleBootStableClear(pw::chrono::SystemClock::duration after);
 /// Host: no-op.
 void StartWatchdog(pw::chrono::SystemClock::duration timeout);
 
+/// Best-effort stop of the hardware watchdog. Used on the rapid-reset safe path
+/// to halt a watchdog that may have been armed on a previous boot and survived
+/// the reset, so it can't keep resetting the terminal. May be a no-op on
+/// hardware that cannot stop an independent watchdog once started.
+/// P2: pb::watchdog::Watchdog::Disable() (calls hal_watchdog_stop).
+/// Host: no-op.
+void StopWatchdog();
+
 /// Returns the KVS instance for session persistence.
 /// P2: External flash via ParticleFlashMemory
 /// Host: RAM-backed FakeFlash

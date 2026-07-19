@@ -310,6 +310,8 @@ void ScheduleBootStableClear(pw::chrono::SystemClock::duration) {}
 
 void StartWatchdog(pw::chrono::SystemClock::duration) {}
 
+void StopWatchdog() {}
+
 pw::kvs::KeyValueStore& GetSessionKvs() {
   static pw::kvs::FakeFlashMemoryBuffer<4096, 8> flash;
   static pw::kvs::FlashPartition partition(&flash);

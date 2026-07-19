@@ -30,7 +30,6 @@
 // Particle and project headers after Pigweed
 #include "core_hal.h"
 #include "delay_hal.h"
-#include "eeprom_hal.h"
 #include "system_defs.h"
 #include "device_config/device_config.h"
 #include "deviceid_hal.h"
@@ -413,18 +412,14 @@ pw::kvs::KeyValueStore& GetSessionKvs() {
 
 namespace {
 
-// Consecutive-boot counter persisted in EEPROM (a 4KB littlefs-backed file on
-// P2), so it survives watchdog reset, panic, and power cycle — unlike retained
-// RAM or the DeviceOS backup registers, which are not linkable from this split
-// user-part build. RecordBoot() bumps it each boot; the stable-clear coroutine
-// zeroes it once the device proves it can run for a while, so only a genuine
-// boot loop accumulates.
-struct RapidResetRecord {
-  uint32_t magic;
-  uint32_t count;
-};
-constexpr uint32_t kRapidResetMagic = 0x5245534D;  // 'RESM'
-constexpr uint32_t kRapidResetEepromAddr = 0;
+// Consecutive-boot counter, stored as a key in the raw-flash session KVS
+// (ParticleFlashMemory -> ExFlashLock, deliberately NOT LittleFS/HAL_EEPROM:
+// per ADR-0016, an HAL_EEPROM write from the app thread deadlocks against the
+// Device OS system thread's FsLock and bricked a device in production). It
+// survives watchdog reset, panic, and power cycle. RecordBoot() bumps it each
+// boot; ScheduleBootStableClear() zeroes it once the device proves it can run
+// for a while, so only a genuine boot loop accumulates.
+constexpr char kBootCountKey[] = "boot_count";
 
 // Ticked ~once per second by a coroutine on the system dispatcher; read by the
 // watchdog feeder thread as proof the safety-critical event loop is scheduling.
@@ -461,51 +456,42 @@ class DispatcherHeartbeat {
   std::optional<pw::async2::CoroOrElseTask> task_;
 };
 
-// Coroutine that clears the boot counter after the device has run for `after`,
-// proving this boot is stable.
-class BootStableClear {
- public:
-  explicit BootStableClear(pw::allocator::Allocator& alloc) : coro_cx_(alloc) {}
-
-  void Start(pw::async2::Dispatcher& dispatcher,
-             pw::chrono::SystemClock::duration after) {
-    after_ = after;
-    auto coro = Run(coro_cx_);
-    task_.emplace(std::move(coro), [](pw::Status) {});
-    dispatcher.Post(*task_);
-  }
-
- private:
-  pw::async2::Coro<pw::Status> Run([[maybe_unused]] pw::async2::CoroContext cx) {
-    co_await pw::async2::GetSystemTimeProvider().WaitFor(after_);
-    RapidResetRecord rec{kRapidResetMagic, 0};
-    HAL_EEPROM_Put(kRapidResetEepromAddr, &rec, sizeof(rec));
-    PW_LOG_INFO("Boot marked stable; rapid-reset counter cleared");
-    co_return pw::OkStatus();
-  }
-
-  pw::chrono::SystemClock::duration after_{};
-  pw::async2::CoroContext coro_cx_;
-  std::optional<pw::async2::CoroOrElseTask> task_;
-};
+// Zeroes the boot counter (a raw-flash KVS write). Called off the dispatcher.
+void ClearBootCounter() {
+  uint32_t zero = 0;
+  GetSessionKvs().Put(kBootCountKey, zero).IgnoreError();
+}
 
 }  // namespace
 
 int RecordBoot() {
-  RapidResetRecord rec{};
-  HAL_EEPROM_Get(kRapidResetEepromAddr, &rec, sizeof(rec));
-  if (rec.magic != kRapidResetMagic) {
-    rec.magic = kRapidResetMagic;
-    rec.count = 0;
-  }
-  rec.count += 1;
-  HAL_EEPROM_Put(kRapidResetEepromAddr, &rec, sizeof(rec));
-  return static_cast<int>(rec.count);
+  auto& kvs = GetSessionKvs();
+  uint32_t count = 0;
+  kvs.Get(kBootCountKey, &count).IgnoreError();  // absent -> stays 0
+  count += 1;
+  kvs.Put(kBootCountKey, count).IgnoreError();
+  return static_cast<int>(count);
 }
 
 void ScheduleBootStableClear(pw::chrono::SystemClock::duration after) {
-  static BootStableClear clear(pw::System().allocator());
-  clear.Start(pw::System().dispatcher(), after);
+  // A one-shot timer thread, NOT a dispatcher coroutine: the clear does a
+  // synchronous raw-flash write, which must not block the safety-critical
+  // dispatcher. Runs regardless of the watchdog so a boot-loop-detected boot
+  // can still recover on the next cycle.
+  // Pass `after` via a file-scope static rather than a lambda capture: a
+  // capturing lambda can exceed pw::Function's small inline capacity on the
+  // 32-bit target. Set before the thread starts; read once after.
+  static pw::chrono::SystemClock::duration s_stable_after;
+  s_stable_after = after;
+  static const pw::thread::particle::Options options =
+      pw::thread::particle::Options()
+          .set_name("boot_stable")
+          .set_stack_size(1536);
+  pw::thread::DetachedThread(options, [] {
+    pw::this_thread::sleep_for(s_stable_after);
+    ClearBootCounter();
+    PW_LOG_INFO("Boot marked stable; rapid-reset counter cleared");
+  });
 }
 
 void StartWatchdog(pw::chrono::SystemClock::duration timeout) {
@@ -527,7 +513,7 @@ void StartWatchdog(pw::chrono::SystemClock::duration timeout) {
       pw::thread::particle::Options()
           .set_name("wdg_feeder")
           .set_priority(8)  // above app threads, below DeviceOS-critical (9)
-          .set_stack_size(1024);
+          .set_stack_size(1536);  // matches the lcd_flush wait-and-call thread
   pw::thread::DetachedThread(feeder_options, [] {
     using namespace std::chrono_literals;
     uint32_t last_seen = 0;
@@ -540,6 +526,14 @@ void StartWatchdog(pw::chrono::SystemClock::duration timeout) {
       }
     }
   });
+}
+
+void StopWatchdog() {
+  // Best-effort: Disable() calls hal_watchdog_stop unconditionally, so it also
+  // attempts to stop an IWDG armed on a previous boot that survived the reset.
+  // FailedPrecondition (hardware that can't stop the watchdog) is expected and
+  // ignored — on such hardware the rapid-reset counter still bounds the loop.
+  (void)g_watchdog.Disable();
 }
 
 }  // namespace maco::system

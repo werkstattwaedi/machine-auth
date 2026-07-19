@@ -62,7 +62,8 @@ constexpr int kMaxConsecutiveBoots = 4;
 bool RecoverOrphanedSession(
     maco::session_upload::SessionStore& store,
     maco::app_state::SessionFsm& fsm,
-    maco::machine_control::MachineToggle& toggle) {
+    maco::machine_control::MachineToggle& toggle,
+    bool allow_resume) {
   if (!store.HasOrphanedSession()) {
     return false;
   }
@@ -70,7 +71,8 @@ bool RecoverOrphanedSession(
   auto reset_reason = maco::system::GetResetReason();
   bool relay_on = toggle.IsEnabled();
 
-  if ((reset_reason == maco::system::ResetReason::kWatchdog ||
+  if (allow_resume &&
+      (reset_reason == maco::system::ResetReason::kWatchdog ||
        reset_reason == maco::system::ResetReason::kPanic) &&
       relay_on) {
     // Machine still running after involuntary reset - resume session
@@ -196,15 +198,11 @@ void AppInit() {
   static maco::session_upload::SessionStore session_store(
       maco::system::GetSessionKvs());
 
-  bool resumed_session = false;
-  if (boot_loop) {
-    // Break the loop: never resume into a boot-looping state; drop any orphaned
-    // session so the next healthy boot starts clean and the relay stays off.
-    session_store.ClearActiveSession().IgnoreError();
-  } else {
-    resumed_session =
-        RecoverOrphanedSession(session_store, session_fsm, machine_toggle);
-  }
+  // In a reset loop, never resume (that could re-enter the looping state), but
+  // still run the orphan-close path so the session's usage record is stored
+  // rather than silently dropped. allow_resume=false forces the close branch.
+  const bool resumed_session = RecoverOrphanedSession(
+      session_store, session_fsm, machine_toggle, /*allow_resume=*/!boot_loop);
 
   static maco::machine_control::MachineController machine_controller(
       machine_toggle,
@@ -366,10 +364,16 @@ void AppInit() {
   maco::system::ScheduleBootStableClear(std::chrono::seconds(60));
 
   // Arm the hardware watchdog last, after all init is done, so a slow boot
-  // (display, NFC, gateway connect) can't trip it. Skipped in a reset loop
-  // (ADR-0040). No-op on host and when the config leaves it disabled (dev).
-  if (g_config.enable_watchdog && !boot_loop) {
-    maco::system::StartWatchdog(g_config.watchdog_timeout);
+  // (display, NFC, gateway connect) can't trip it. No-op on host and when the
+  // config leaves it disabled (dev). In a reset loop, don't arm it — and stop
+  // any watchdog armed on a previous boot that survived the reset, so it can't
+  // keep resetting us while we sit in the safe state (ADR-0040).
+  if (g_config.enable_watchdog) {
+    if (boot_loop) {
+      maco::system::StopWatchdog();
+    } else {
+      maco::system::StartWatchdog(g_config.watchdog_timeout);
+    }
   }
 
   PW_LOG_INFO("AppInit complete - place a card on the reader");

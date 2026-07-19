@@ -180,7 +180,6 @@ cc_library(
         "//maco_firmware/modules/machine_control:latching_machine_relay",
         "//maco_firmware/system:headers",
         "@particle_bazel//:device_os_headers",
-        "@particle_bazel//:hal_dynalib",  # HAL_EEPROM_* symbols (rapid-reset guard)
         "@particle_bazel//pb_cloud:pb_ledger_particle_backend",
         "@particle_bazel//pb_watchdog:watchdog",
         "@particle_bazel//pb_log:log_bridge",
