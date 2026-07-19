@@ -201,7 +201,7 @@ pw::Result<CheckinResult> DecodeCheckinResponse(pw::ConstByteSpan payload) {
           .reason = static_cast<RejectionReason>(
               response.result.rejected.reason),
           .action_url =
-              pw::InlineString<128>(response.result.rejected.action_url),
+              pw::InlineString<256>(response.result.rejected.action_url),
       };
     default:
       PW_LOG_ERROR("TerminalCheckinResponse missing oneof result field");

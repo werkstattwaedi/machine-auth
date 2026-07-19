@@ -91,7 +91,9 @@ class MainScreen : public ui::Screen<app_state::AppStateSnapshot> {
   lv_obj_t* denied_body_ = nullptr;
   lv_obj_t* denied_qr_ = nullptr;
   lv_obj_t* denied_qr_caption_ = nullptr;
-  pw::InlineString<128> denied_qr_url_;
+  // 256 to match the action URL length (snapshot.rejection_action_url); a
+  // shorter buffer would trip InlineString::assign's capacity check at runtime.
+  pw::InlineString<256> denied_qr_url_;
 
   // Hold-longer widgets (badge removed mid-authorization)
   lv_obj_t* hold_longer_icon_ = nullptr;

@@ -59,8 +59,10 @@ struct CheckinRejected {
   /// Machine-readable cause the UI branches on.
   RejectionReason reason = RejectionReason::kUnspecified;
   /// Deep link to the /denied landing page, rendered as a QR code. Empty when
-  /// there is nothing actionable.
-  pw::InlineString<128> action_url;
+  /// there is nothing actionable. Sized to match the nanopb action_url buffer
+  /// (auth.options max_size:256): the /denied URL with cause+uid+checkout+since
+  /// query params runs ~140-170 chars, past the old 128.
+  pw::InlineString<256> action_url;
 };
 
 /// Result of TerminalCheckin - either authorized or rejected.
