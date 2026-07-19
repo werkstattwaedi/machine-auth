@@ -206,24 +206,25 @@ case. Verify on-device, but no code change is required.
    `particle_firmware` plus a `--config=prod` `select()`. Verified on-device.
 6. **On-device test pass (below) — owner: maintainer**, before flashing the fleet.
 
-## Code-review follow-ups (not yet addressed)
+## Code-review follow-ups
 
 A review of the implementation (against ADR-0016 and the boot path) surfaced
-these; the safety-relevant storage/availability ones (EEPROM→KVS deadlock,
-watchdog disarm on boot-loop, orphan-session close-and-store, feeder stack) were
-fixed in the implementation commits. These remain open:
+these; the safety-relevant ones (EEPROM→KVS deadlock, watchdog disarm on
+boot-loop, orphan-session close-and-store, feeder stack, and the
+`machine_toggle.Init()` `PW_CHECK` below) were fixed in the implementation
+commits.
 
-- **Early `PW_CHECK_OK(machine_toggle.Init())` bypasses the rapid-reset guard.**
-  It runs unconditionally near the top of `AppInit`, *before* the `boot_loop`
-  branch and before `MachineController` (which drives the relay OFF) exists. So
-  the guard's own headline example — a deterministic `machine_toggle.Init()`
-  failure — hard-crashes every boot and never reaches the safe state, leaving the
-  latching relay in an undefined (possibly ON) state. Pre-existing behavior, but
-  ADR-0040 makes involuntary resets the normal recovery path, so it now matters.
-  Fix: degrade gracefully like display-init already does (log + force relay OFF +
-  minimal error state, skip watchdog) instead of `PW_CHECK`. Needs on-device
-  validation of what an `Init()` failure means for relay controllability.
-- **No user-visible safe-state indication.** `boot_loop` only logs; a person in
+- **[Fixed] Early `PW_CHECK_OK(machine_toggle.Init())` bypassed the rapid-reset
+  guard.** It ran unconditionally before the `boot_loop` branch and before
+  `MachineController` (which drives the relay OFF) existed, so a deterministic
+  `machine_toggle.Init()` failure hard-crashed every boot and left the latching
+  relay in an undefined (possibly ON) state. Now degrades: on `Init()` failure it
+  logs and continues, `MachineController` still starts and attempts the fail-safe
+  OFF via the async path, and the watchdog is left disarmed. Needs on-device
+  validation of whether the relay is actually controllable after an `Init()`
+  failure (if not, no software can force it OFF — a hardware limitation).
+- **[Open] No user-visible safe-state indication.** `boot_loop` (and now the
+  degraded-toggle state) only logs; a person in
   front of a boot-looping terminal sees the normal UI. Add a degraded-mode screen
   (or consciously accept log-only).
 - **`RecoverOrphanedSession` resume-branch fall-through** (pre-existing): when the

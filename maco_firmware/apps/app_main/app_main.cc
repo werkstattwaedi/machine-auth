@@ -192,7 +192,19 @@ void AppInit() {
   // Session state machine and observers
   static maco::app_state::SessionFsm session_fsm;
   auto& machine_toggle = maco::system::GetMachineToggle();
-  PW_CHECK_OK(machine_toggle.Init());
+  // Do NOT PW_CHECK here: a deterministic Init() failure would hard-crash every
+  // boot, before the rapid-reset safe state and before MachineController (which
+  // drives the relay OFF) exists — leaving the latching relay in an undefined,
+  // possibly energized state. Instead degrade: MachineController is still
+  // constructed and started below, so its fail-safe boot default still attempts
+  // to de-energize the relay via the async path, and the watchdog is left
+  // disarmed (below) so a hardware fault can't reset-loop the terminal.
+  const bool machine_toggle_ok = machine_toggle.Init().ok();
+  if (!machine_toggle_ok) {
+    PW_LOG_ERROR(
+        "Machine toggle init failed - machine control degraded; "
+        "MachineController will still attempt the fail-safe OFF");
+  }
 
   // Session persistence store (KVS-backed)
   static maco::session_upload::SessionStore session_store(
@@ -369,7 +381,9 @@ void AppInit() {
   // any watchdog armed on a previous boot that survived the reset, so it can't
   // keep resetting us while we sit in the safe state (ADR-0040).
   if (g_config.enable_watchdog) {
-    if (boot_loop) {
+    if (boot_loop || !machine_toggle_ok) {
+      // Degraded boot (reset loop, or the machine toggle failed to init): don't
+      // arm the watchdog, and stop any armed on a previous boot.
       maco::system::StopWatchdog();
     } else {
       maco::system::StartWatchdog(g_config.watchdog_timeout);
