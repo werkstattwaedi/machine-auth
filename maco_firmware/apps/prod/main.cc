@@ -15,10 +15,12 @@ int main() {
   maco::apps::RunApp(maco::apps::AppConfig{
       .wait_for_usb_serial = false,
       .enable_watchdog = true,
-      // 30s comfortably clears the bounded gateway RPC stalls (5-10s) so a slow
-      // cloud round-trip can't false-trip, while recovering a wedged terminal in
-      // well under a minute (ADR-0040).
-      .watchdog_timeout = std::chrono::seconds(30),
+      // Gateway RPC awaits YIELD (async co_await), so a slow cloud round-trip
+      // does not block the dispatcher — the heartbeat keeps ticking through it.
+      // The timeout only needs to clear the worst-case *legitimate* dispatcher
+      // block (brief flash writes) plus the feeder period, so a genuine wedge is
+      // caught in seconds rather than half a minute (ADR-0040).
+      .watchdog_timeout = std::chrono::seconds(8),
   });
   // RunApp never returns.
 }

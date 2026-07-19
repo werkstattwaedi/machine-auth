@@ -426,6 +426,12 @@ constexpr char kBootCountKey[] = "boot_count";
 std::atomic<uint32_t> g_watchdog_heartbeat{0};
 pb::watchdog::Watchdog g_watchdog;
 
+// This boot's consecutive-boot count, cached from RecordBoot (app thread) so the
+// GetDeviceInfo RPC (RPC thread) can read it without touching the non-thread-safe
+// session KVS — concurrent KVS access from both threads hung the device when
+// GetDeviceInfo was called early in boot.
+std::atomic<int> g_last_boot_count{1};
+
 // Coroutine that ticks the heartbeat while the dispatcher keeps scheduling it.
 class DispatcherHeartbeat {
  public:
@@ -470,13 +476,14 @@ int RecordBoot() {
   kvs.Get(kBootCountKey, &count).IgnoreError();  // absent -> stays 0
   count += 1;
   kvs.Put(kBootCountKey, count).IgnoreError();
+  g_last_boot_count.store(static_cast<int>(count), std::memory_order_relaxed);
   return static_cast<int>(count);
 }
 
 int LastBootCount() {
-  uint32_t count = 0;
-  GetSessionKvs().Get(kBootCountKey, &count).IgnoreError();
-  return static_cast<int>(count);
+  // Reads the cached atomic, NOT the KVS — the RPC thread must not touch the
+  // session KVS concurrently with the app thread.
+  return g_last_boot_count.load(std::memory_order_relaxed);
 }
 
 void ScheduleBootStableClear(pw::chrono::SystemClock::duration after) {
@@ -524,7 +531,9 @@ void StartWatchdog(pw::chrono::SystemClock::duration timeout) {
     using namespace std::chrono_literals;
     uint32_t last_seen = 0;
     while (true) {
-      pw::this_thread::sleep_for(5s);
+      // Feed every 2s while the ~1s heartbeat advances. Must stay well below the
+      // watchdog timeout so a couple of feed cycles fit within it.
+      pw::this_thread::sleep_for(2s);
       uint32_t hb = g_watchdog_heartbeat.load(std::memory_order_relaxed);
       if (hb != last_seen) {
         last_seen = hb;

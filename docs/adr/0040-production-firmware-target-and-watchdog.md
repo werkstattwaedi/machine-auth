@@ -85,13 +85,17 @@ Design — supervised feed:
 1. A periodic task **on the dispatcher** increments an
    `std::atomic<uint32_t> heartbeat` every ~1 s (proves the critical loop is
    scheduling work).
-2. A dedicated critical-priority feeder thread wakes every ~5 s and calls
+2. A dedicated critical-priority feeder thread wakes every ~2 s and calls
    `wdt.Feed()` **only if** the heartbeat advanced since it last looked. Stale
    heartbeat → no feed → IWDG expires → reset.
 
-- **Timeout: 30 s.** Comfortably clears the already-bounded gateway RPC stalls
-  (capped 5–10 s) so a slow cloud round-trip can't false-trip, while recovering
-  a wedged terminal in well under a minute.
+- **Timeout: 8 s** (heartbeat ~1 s, feeder ~2 s). Gateway RPC awaits are async
+  `co_await`s that **yield** — a slow cloud round-trip does not block the
+  dispatcher, so the heartbeat keeps ticking through it and does not need to be
+  covered by the timeout (the earlier 30 s figure wrongly assumed it did). The
+  timeout only has to clear the worst-case *legitimate* dispatcher stall (brief
+  synchronous flash writes) plus a feeder period, so a genuine wedge is caught in
+  seconds. Tunable via `AppConfig::watchdog_timeout` in `apps/prod/main.cc`.
 - **Arm only after `AppInit()` completes** — boot includes display/NFC init and
   a gateway connect with a 10 s timeout; an early tight watchdog would reset
   mid-boot.
@@ -148,9 +152,10 @@ case. Verify on-device, but no code change is required.
 
 - Production terminals boot without the 10 s serial wait and self-recover from a
   wedged dispatcher, a `PW_CHECK` fault, or a hard hang.
-- **Safe-mode semantics change in prod:** with the watchdog armed, "halt in safe
-  mode" becomes "halt, then reset ~30 s later." Any runbook expecting a terminal
-  to *stay* halted for inspection no longer holds in prod (dev is unchanged).
+- **Assert behavior differs in prod:** a `PW_CHECK` failure resets the terminal
+  directly (§3), and a genuine dispatcher wedge is caught by the watchdog in ~8 s;
+  dev keeps safe mode and has no watchdog. Any runbook expecting a prod terminal
+  to *stay* halted for inspection no longer holds.
 - Two firmware apps to maintain, but the shared `RunApp` library keeps the delta
   to a small config struct.
 - New required on-device test pass before rollout (see below); this cannot be
@@ -165,7 +170,7 @@ case. Verify on-device, but no code change is required.
   Validate an OTA with the watchdog armed, and stop feeding / `Disable()` around
   update events if needed, *before* broad rollout.
 - **Watchdog armed too early / too tight** resets mid-boot — mitigated by arming
-  after `AppInit` with a 30 s timeout.
+  after `AppInit` (the 8 s timeout starts only once init is complete).
 
 ## Alternatives considered
 
@@ -231,7 +236,8 @@ fixed in the implementation commits. These remain open:
 ## On-device verification (real hardware; done by the maintainer)
 
 - **Watchdog trips on a real hang:** a test-only RPC that spins the dispatcher
-  forever → logs stop, device reboots in ~30 s, `GetResetReason() == kWatchdog`.
+  forever → logs stop, device reboots in ~8 s, `GetResetReason() == kWatchdog`
+  (or query `GetDeviceInfo().reset_reason == 1`).
   Confirm the *naive-timer* design would NOT reboot (why it's rejected) and the
   supervised design does.
 - **Boot is fast:** time power-on → "AppInit complete"; prod should be markedly
