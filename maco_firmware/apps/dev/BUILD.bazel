@@ -17,46 +17,21 @@ load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
 package(default_visibility = ["//visibility:public"])
 
-DEV_DEPS = [
-    "//maco_firmware/modules/terminal_ui",
-    "//maco_firmware/modules/app_state:session_controller",
-    "//maco_firmware/modules/app_state:session_fsm",
-    "//maco_firmware/modules/app_state:system_state",
-    "//maco_firmware/modules/device_config",
-    "//maco_firmware/modules/display",
-    "//maco_firmware/modules/display:display_metrics",
-    "//maco_firmware/modules/gateway:gateway_client",
-    "//maco_firmware/modules/gateway:gateway_connection_check",
-    "//maco_firmware/modules/app_state:tag_verifier",
-    "//maco_firmware/modules/machine_control:default_machine_sensor",
-    "//maco_firmware/modules/machine_control:machine_controller",
-    "//maco_firmware/modules/machine_control:gateway_machine_sensor",
-    "//maco_firmware/modules/nfc_reader",
-    "//maco_firmware/modules/session_upload:session_store",
-    "//maco_firmware/modules/session_upload:usage_uploader",
-    "//maco_firmware/modules/stack_monitor",
-    "//maco_firmware/modules/led_animator:button_effects",
-    "//maco_firmware/modules/led_animator:nfc_effects",
-    "//maco_firmware/modules/terminal_effects",
-    "//maco_firmware/services:maco_service",
-    "//maco_firmware/system",
-    "//maco_firmware/system:headers",
-    "@pigweed//pw_async2:system_time_provider",
-    "@pigweed//pw_log",
-    "@pigweed//pw_system:async",
-    "@pigweed//pw_metric:global",
-    "@pigweed//pw_metric:metric_service_nanopb",
-    # Backend implementations required for linking
-    "@pigweed//pw_assert:assert_backend_impl",
-    "@pigweed//pw_assert:check_backend_impl",
-    "@pigweed//pw_log:backend_impl",
-    "@pigweed//pw_system:extra_platform_libs",
-]
+# The application lives in //maco_firmware/apps/app_main; dev is a thin main()
+# that passes a dev AppConfig. Only backend impls (which differ host vs P2) are
+# declared per-target here.
 
 cc_binary(
     name = "simulator_binary",
     srcs = ["main.cc"],
-    deps = DEV_DEPS,
+    deps = [
+        "//maco_firmware/apps/app_main",
+        # Host backend implementations required for linking
+        "@pigweed//pw_assert:assert_backend_impl",
+        "@pigweed//pw_assert:check_backend_impl",
+        "@pigweed//pw_log:backend_impl",
+        "@pigweed//pw_system:extra_platform_libs",
+    ],
 )
 
 host_device_simulator_binary(
@@ -69,34 +44,7 @@ particle_firmware(
     srcs = ["main.cc"],
     platform = "//maco_firmware/targets/p2:p2_system",
     deps = [
-        "//maco_firmware/modules/terminal_ui",
-        "//maco_firmware/modules/app_state:session_controller",
-        "//maco_firmware/modules/app_state:session_fsm",
-        "//maco_firmware/modules/app_state:system_state",
-        "//maco_firmware/modules/device_config",
-        "//maco_firmware/modules/display",
-        "//maco_firmware/modules/display:display_metrics",
-        "//maco_firmware/modules/app_state:tag_verifier",
-        "//maco_firmware/modules/gateway:gateway_client",
-        "//maco_firmware/modules/gateway:gateway_connection_check",
-        "//maco_firmware/modules/machine_control:default_machine_sensor",
-        "//maco_firmware/modules/machine_control:machine_controller",
-        "//maco_firmware/modules/machine_control:gateway_machine_sensor",
-        "//maco_firmware/modules/nfc_reader",
-        "//maco_firmware/modules/session_upload:session_store",
-        "//maco_firmware/modules/session_upload:usage_uploader",
-        "//maco_firmware/modules/stack_monitor",
-        "//maco_firmware/modules/led_animator:button_effects",
-        "//maco_firmware/modules/led_animator:nfc_effects",
-        "//maco_firmware/modules/terminal_effects",
-        "//maco_firmware/services:maco_service",
-        "//maco_firmware/system",
-        "//maco_firmware/system:headers",
-        "@pigweed//pw_async2:system_time_provider",
-        "@pigweed//pw_log",
-        "@pigweed//pw_metric:global",
-        "@pigweed//pw_metric:metric_service_nanopb",
-        "@pigweed//pw_system:async",
+        "//maco_firmware/apps/app_main",
         # Tokenized log handler (provides pw_log_tokenized_HandleLog)
         "@pigweed//pw_system:log_backend",
         # Includes tokenizer linker script for ELF token database
