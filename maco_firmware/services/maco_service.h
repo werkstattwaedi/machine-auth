@@ -17,10 +17,6 @@ class MacoService final
 
   pw::Status GetDeviceInfo(const ::maco_Empty& request,
                            ::maco_DeviceInfoResponse& response);
-
-  // TEMPORARY test hooks for ADR-0040 watchdog verification — remove after.
-  pw::Status HangDispatcher(const ::maco_Empty& request, ::maco_Empty& response);
-  pw::Status Crash(const ::maco_Empty& request, ::maco_Empty& response);
 };
 
 }  // namespace maco

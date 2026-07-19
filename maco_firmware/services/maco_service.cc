@@ -3,16 +3,11 @@
 
 #include "maco_firmware/services/maco_service.h"
 
-#include <cstdint>
 #include <cstring>
 
 #include "maco_firmware/system/system.h"
-#include "pw_assert/check.h"
-#include "pw_async2/dispatcher.h"
-#include "pw_async2/task.h"
 #include "pw_chrono/system_clock.h"
 #include "pw_log/log.h"
-#include "pw_system/system.h"
 
 namespace maco {
 namespace {
@@ -27,40 +22,7 @@ constexpr const char* kBuildTarget = "p2";
 constexpr const char* kBuildTarget = "host";
 #endif
 
-// TEMPORARY (ADR-0040 watchdog verification) — remove after on-device testing.
-// A task that wedges the pw_system dispatcher by spinning forever without
-// yielding. Once the dispatcher thread is stuck here, the watchdog heartbeat
-// coroutine can no longer run, the feeder thread stops feeding, and the
-// hardware IWDG resets the device (~30s on the prod build).
-class DispatcherWedge : public pw::async2::Task {
- private:
-  pw::async2::Poll<> DoPend(pw::async2::Context& /*cx*/) override {
-    PW_LOG_WARN("TEST: dispatcher wedged; hardware watchdog should reset soon");
-    // `volatile` so the compiler cannot delete this otherwise-side-effect-free
-    // (and therefore UB) infinite loop.
-    static volatile uint32_t spin = 0;
-    for (;;) {
-      spin = spin + 1;
-    }
-  }
-};
-
 }  // namespace
-
-pw::Status MacoService::HangDispatcher(const ::maco_Empty& /*request*/,
-                                       ::maco_Empty& /*response*/) {
-  PW_LOG_WARN("TEST: HangDispatcher RPC — posting a dispatcher wedge");
-  static DispatcherWedge wedge;
-  pw::System().dispatcher().Post(wedge);
-  return pw::OkStatus();
-}
-
-pw::Status MacoService::Crash(const ::maco_Empty& /*request*/,
-                              ::maco_Empty& /*response*/) {
-  PW_LOG_WARN("TEST: Crash RPC — forcing an assertion failure");
-  PW_CHECK(false, "TEST: forced crash for ADR-0040 verification");
-  return pw::OkStatus();  // unreachable
-}
 
 pw::Status MacoService::Echo(const ::maco_EchoMessage& request,
                              ::maco_EchoMessage& response) {
