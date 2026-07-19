@@ -42,6 +42,9 @@ loadEnv({
   path: PROD_MODE
     ? [path.join(__dirname, ".env"), path.join(__dirname, ".env.local")]
     : [path.join(__dirname, ".env.local"), path.join(__dirname, ".env")],
+  // dotenv's "injected env" banner prints to STDOUT and would corrupt the
+  // piped report JSON.
+  quiet: true,
 });
 
 function flagValue(name: string): string | undefined {

@@ -292,7 +292,9 @@ export const dailyStatsExport = onSchedule(
   async () => {
     const deps: StatsExportDeps = {
       db: getFirestore(),
-      sink: await makeBigQuerySink(statsDataset.value()),
+      // Empty when the env files predate this param — same fallback as the
+      // schema default (see generate-env.ts note on the emulator prompt).
+      sink: await makeBigQuerySink(statsDataset.value() || "stats"),
       salt: statsSubjectSalt.value(),
     };
     for (let round = 0; round < 50; round++) {

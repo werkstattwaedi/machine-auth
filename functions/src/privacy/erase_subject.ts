@@ -717,7 +717,7 @@ export async function privacyEraseHandler(
     !!process.env.FIRESTORE_EMULATOR_HOST;
   const sink = emulated
     ? new CountingSink()
-    : await makeBigQuerySink(statsDataset.value());
+    : await makeBigQuerySink(statsDataset.value() || "stats");
 
   return eraseSubject(
     { uid, email },
