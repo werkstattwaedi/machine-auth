@@ -172,6 +172,7 @@ function renderSection(props: {
   checkoutId?: string | null
   onAddMaterial?: () => void
   pinnedCatalog?: CatalogItem[]
+  onValidityChange?: (hasError: boolean) => void
 }) {
   const callbacks = props.callbacks ?? makeCallbacks()
   const onAddMaterial = props.onAddMaterial ?? (() => {})
@@ -185,6 +186,7 @@ function renderSection(props: {
       onAddMaterial={onAddMaterial}
       discountLevel={props.discountLevel}
       pinnedCatalog={props.pinnedCatalog}
+      onValidityChange={props.onValidityChange}
     />,
     { wrapper: FirebaseWrapper },
   )
@@ -290,6 +292,117 @@ describe("WorkshopInlineSection v5", () => {
       formInputs: [{ quantity: 1.5, unit: "h" }],
     })
   })
+
+  it("pinned hourly machine accepts a typed unit and converts to hours (12min → 0.2h)", async () => {
+    const user = userEvent.setup()
+    const { callbacks } = renderSection({ pinnedCatalog: [makeHourlyMachine()] })
+    await user.type(screen.getByLabelText("Stunden Drechselbank"), "12min")
+    await user.tab()
+    expect(callbacks.addItem).toHaveBeenCalledTimes(1)
+    expect(callbacks.addItem.mock.calls[0][0]).toMatchObject({
+      catalogId: "cat-hourly",
+      pricingModel: "time",
+      // 12 min = 0.2 h, × 10 CHF/Std. = 2.00
+      quantity: 0.2,
+      totalPrice: 2,
+      formInputs: [{ quantity: 0.2, unit: "h" }],
+    })
+  })
+
+  it("pinned hourly machine accepts 'm' as minutes (30m → 0.5h)", async () => {
+    const user = userEvent.setup()
+    const { callbacks } = renderSection({ pinnedCatalog: [makeHourlyMachine()] })
+    await user.type(screen.getByLabelText("Stunden Drechselbank"), "30m")
+    await user.tab()
+    expect(callbacks.addItem).toHaveBeenCalledTimes(1)
+    expect(callbacks.addItem.mock.calls[0][0]).toMatchObject({
+      quantity: 0.5, // 30 min
+      totalPrice: 5, // 0.5 h × 10 CHF/Std.
+    })
+  })
+
+  it("pinned hourly machine flags an unknown unit inline instead of committing", async () => {
+    const user = userEvent.setup()
+    const { callbacks } = renderSection({ pinnedCatalog: [makeHourlyMachine()] })
+    const field = screen.getByLabelText("Stunden Drechselbank")
+    // "sek" is not a known alias (only s/sec); it must not silently become 0.
+    await user.type(field, "12 sek")
+    await user.tab()
+    expect(callbacks.addItem).not.toHaveBeenCalled()
+    // Verbatim text is preserved and the field is marked invalid with a hint.
+    expect((field as HTMLInputElement).value).toBe("12 sek")
+    expect(field.getAttribute("aria-invalid")).toBe("true")
+    expect(screen.getByText(/Einheit unbekannt/)).toBeTruthy()
+  })
+
+  it("clears the inline error and commits once the input is corrected", async () => {
+    const user = userEvent.setup()
+    const { callbacks } = renderSection({ pinnedCatalog: [makeHourlyMachine()] })
+    const field = screen.getByLabelText("Stunden Drechselbank")
+    await user.type(field, "12 sek")
+    await user.tab()
+    expect(screen.getByText(/Einheit unbekannt/)).toBeTruthy()
+    // Fix it: clear + type a valid value. The error clears on edit.
+    await user.clear(field)
+    await user.type(field, "1.5h")
+    expect(screen.queryByText(/Einheit unbekannt/)).toBeNull()
+    await user.tab()
+    expect(callbacks.addItem).toHaveBeenCalledTimes(1)
+    expect(callbacks.addItem.mock.calls[0][0]).toMatchObject({
+      quantity: 1.5,
+      totalPrice: 15,
+    })
+  })
+
+  it("reports validity upward so the wizard can block continue on error", async () => {
+    const user = userEvent.setup()
+    const onValidityChange = vi.fn()
+    renderSection({
+      pinnedCatalog: [makeHourlyMachine()],
+      onValidityChange,
+    })
+    const field = screen.getByLabelText("Stunden Drechselbank")
+    // Typing an unknown unit and blurring must report hasError = true.
+    await user.type(field, "12.34sdfs")
+    await user.tab()
+    expect(onValidityChange).toHaveBeenLastCalledWith(true)
+    // Correcting it clears the error and reports valid again.
+    await user.clear(field)
+    await user.type(field, "2h")
+    await user.tab()
+    expect(onValidityChange).toHaveBeenLastCalledWith(false)
+  })
+
+  it.each([
+    [1.5, "1.5 h"], // 90 min → largest whole unit is hours
+    [0.5, "30 min"], // 0.5 h has no whole hours → step down to minutes
+    [75 / 3600, "1.25 min"], // 75 s → 1.25 min
+    [10 / 60, "10 min"], // exact-hours storage keeps this clean, not "10.002 min"
+  ])(
+    "normalises a committed %s h field to the largest whole unit (%s)",
+    (hours, display) => {
+      renderSection({
+        items: [
+          makeItem({
+            id: "h-1",
+            origin: "manual",
+            type: "machine",
+            catalogId: "cat-hourly",
+            pricingModel: "time",
+            quantity: hours,
+            unitPrice: 10,
+            totalPrice: Math.round(hours * 10 * 100) / 100,
+            description: "Drechselbank",
+          }),
+        ],
+        pinnedCatalog: [makeHourlyMachine()],
+      })
+      const field = screen.getByLabelText(
+        "Stunden Drechselbank",
+      ) as HTMLInputElement
+      expect(field.value).toBe(display)
+    },
+  )
 
   it("pinned direct machine (Pauschal CHF) commits the typed amount (issue #555)", async () => {
     const user = userEvent.setup()
@@ -803,9 +916,8 @@ describe("MaterialPicker", () => {
     const callbacks = makeCallbacks()
     renderPicker({ callbacks })
     await user.click(screen.getByText("MDF Platte 3mm"))
-    const inputs = screen.getAllByRole("spinbutton")
-    await user.type(inputs[0], "100")
-    await user.type(inputs[1], "200")
+    await user.type(screen.getByLabelText("Länge"), "100")
+    await user.type(screen.getByLabelText("Breite"), "200")
     await user.click(screen.getByRole("button", { name: "Hinzufügen" }))
     // 1m × 2m = 2 m², 25 CHF/m² → 50.00
     expect(callbacks.addItem.mock.calls[0][0]).toMatchObject({
@@ -833,9 +945,9 @@ describe("MaterialPicker", () => {
     const callbacks = makeCallbacks()
     renderPicker({ callbacks })
     await user.click(screen.getByText("SLA Druck"))
-    const inputs = screen.getAllByRole("spinbutton")
-    await user.type(inputs[0], "50") // resin ml
-    await user.type(inputs[1], "1000") // layers
+    await user.type(screen.getByLabelText("Resin"), "50") // resin ml
+    // Layer is still a plain integer spinbutton.
+    await user.type(screen.getByRole("spinbutton"), "1000") // layers
     await user.click(screen.getByRole("button", { name: "Hinzufügen" }))
     // 50 ml ÷ 1000 × 250 CHF/l = 12.50; 1000 × 0.01 = 10.00; total = 22.50
     expect(callbacks.addItem.mock.calls[0][0]).toMatchObject({
@@ -846,6 +958,37 @@ describe("MaterialPicker", () => {
         { quantity: 1000, unit: "layers" },
       ],
     })
+  })
+
+  it("parses a typed unit on a length field (.5m equals bare 50)", async () => {
+    const user = userEvent.setup()
+    const callbacks = makeCallbacks()
+    renderPicker({ callbacks })
+    await user.click(screen.getByText("Dachlatte 24x48"))
+    // ".5m" = 0.5 m — the same value a bare "50" (cm) would produce.
+    await user.type(screen.getByLabelText("Länge"), ".5m")
+    await user.click(screen.getByRole("button", { name: "Hinzufügen" }))
+    expect(callbacks.addItem.mock.calls[0][0]).toMatchObject({
+      pricingModel: "length",
+      quantity: 0.5,
+      // 0.5 m × 3 CHF/m = 1.50
+      totalPrice: 1.5,
+      formInputs: [{ quantity: 50, unit: "cm" }],
+    })
+  })
+
+  it("blocks Hinzufügen when a dimensional field holds an unknown unit", async () => {
+    const user = userEvent.setup()
+    renderPicker({})
+    await user.click(screen.getByText("Dachlatte 24x48"))
+    const field = screen.getByLabelText("Länge")
+    await user.type(field, "5xyz")
+    await user.tab()
+    expect(field.getAttribute("aria-invalid")).toBe("true")
+    expect(
+      (screen.getByRole("button", { name: "Hinzufügen" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true)
   })
 
   it("sorts catalog items alphabetically", async () => {
@@ -946,12 +1089,11 @@ describe("MaterialPicker ad-hoc fallback", () => {
     renderPicker({ callbacks })
     await user.type(screen.getByPlaceholderText("Material suchen…"), "Plattenrest")
     await user.click(screen.getByText("+ m²"))
-    const inputs = screen.getAllByRole("spinbutton")
-    // L, B, Preis/m²
-    expect(inputs.length).toBe(3)
-    await user.type(inputs[0], "100")
-    await user.type(inputs[1], "50")
-    await user.type(inputs[2], "20")
+    // Länge + Breite are UnitQuantityField text inputs now; only Preis/m²
+    // remains a spinbutton.
+    await user.type(screen.getByLabelText("Länge"), "100")
+    await user.type(screen.getByLabelText("Breite"), "50")
+    await user.type(screen.getByRole("spinbutton"), "20")
     await user.click(screen.getByRole("button", { name: "Hinzufügen" }))
     // 1m × 0.5m = 0.5 m²; 0.5 × 20 = 10.00
     expect(callbacks.addItem.mock.calls[0][0]).toMatchObject({
@@ -982,9 +1124,10 @@ describe("MaterialPicker ad-hoc fallback", () => {
     renderPicker({ callbacks })
     await user.type(screen.getByPlaceholderText("Material suchen…"), "Filament-Rest")
     await user.click(screen.getByText("+ kg"))
-    const inputs = screen.getAllByRole("spinbutton")
-    await user.type(inputs[0], "500") // grams
-    await user.type(inputs[1], "20") // CHF/kg
+    // Gewicht is a UnitQuantityField text input now; only Preis/kg remains
+    // a spinbutton.
+    await user.type(screen.getByLabelText("Gewicht"), "500") // grams
+    await user.type(screen.getByRole("spinbutton"), "20") // CHF/kg
     await user.click(screen.getByRole("button", { name: "Hinzufügen" }))
     // 0.5 kg × 20 CHF = 10.00
     expect(callbacks.addItem.mock.calls[0][0]).toMatchObject({

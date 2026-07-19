@@ -59,11 +59,13 @@ vi.mock("@/components/usage/workshop-section-with-catalog", () => ({
     items,
     footerSlot,
     onRemoveWorkshop,
+    onValidityChange,
   }: {
     workshopId: string
     items: CheckoutItemLocal[]
     footerSlot?: React.ReactNode
     onRemoveWorkshop?: () => void
+    onValidityChange?: (hasError: boolean) => void
   }) => (
     <div data-testid={`workshop-section-${workshopId}`}>
       {onRemoveWorkshop && (
@@ -75,6 +77,22 @@ vi.mock("@/components/usage/workshop-section-with-catalog", () => ({
           Werkstatt entfernen
         </button>
       )}
+      {/* Stand-ins for a field entering / leaving the unparseable state, so
+          the continue-gating can be exercised without real inputs. */}
+      <button
+        type="button"
+        data-testid={`ws-error-${workshopId}`}
+        onClick={() => onValidityChange?.(true)}
+      >
+        error
+      </button>
+      <button
+        type="button"
+        data-testid={`ws-fix-${workshopId}`}
+        onClick={() => onValidityChange?.(false)}
+      >
+        fix
+      </button>
       {items.map((i) => (
         <span key={i.id} data-testid={`ws-item-${i.id}`}>
           {i.description}
@@ -381,6 +399,38 @@ describe("VisitRoute — chip-based workshop selection (Werkstatt-Auswahl handof
     expect(
       screen.getByText(/Alle erfassten Einträge für\s+Maker Space\s+werden/),
     ).toBeTruthy()
+  })
+})
+
+describe("VisitRoute — continue-gating on field errors", () => {
+  const continueBtn = () =>
+    screen.getByRole("button", { name: /Zum Checkout/ }) as HTMLButtonElement
+
+  it("disables 'Zum Checkout' while a workshop reports an unparseable field, re-enables when fixed", async () => {
+    renderVisit({ workshopsVisited: ["makerspace"] })
+    expect(continueBtn().disabled).toBe(false)
+
+    await userEvent.click(screen.getByTestId("ws-error-makerspace"))
+    expect(continueBtn().disabled).toBe(true)
+
+    await userEvent.click(screen.getByTestId("ws-fix-makerspace"))
+    expect(continueBtn().disabled).toBe(false)
+  })
+
+  it("ignores a removed workshop's stale error (button re-enables after removal)", async () => {
+    renderVisit({})
+    await userEvent.click(screen.getByRole("button", { name: "Maker Space" }))
+    await userEvent.click(screen.getByTestId("ws-error-makerspace"))
+    expect(continueBtn().disabled).toBe(true)
+
+    // Remove the errored (empty) section — no confirm for an empty section.
+    await userEvent.click(screen.getByTestId("ws-remove-makerspace"))
+    await waitFor(() =>
+      expect(screen.queryByTestId("workshop-section-makerspace")).toBeNull(),
+    )
+    // `wsErrors` still holds makerspace=true, but it's no longer in
+    // orderedWorkshops, so the gate ignores it.
+    expect(continueBtn().disabled).toBe(false)
   })
 })
 

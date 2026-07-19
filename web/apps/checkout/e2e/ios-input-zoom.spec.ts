@@ -168,9 +168,11 @@ test.describe("iOS focus-zoom guard — no sub-16px controls at mobile widths (i
       await expect(search).toBeVisible({ timeout: 10_000 })
       await expectNoZoomTriggers(page, "picker search")
 
-      // Open a material form — its quantity input also autoFocuses.
+      // Open a material form — its quantity input also autoFocuses. Filament
+      // is weight-priced, so the quantity field is the unit-aware "Gewicht"
+      // text input (issue #105 smart units), not a number spinner.
       await page.getByText("Filament", { exact: true }).click()
-      await expect(page.locator('input[type="number"]').first()).toBeVisible({
+      await expect(page.getByLabel("Gewicht")).toBeVisible({
         timeout: 10_000,
       })
       await expectNoZoomTriggers(page, "picker quantity form")
