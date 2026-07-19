@@ -104,14 +104,27 @@ The reset path already works: an IWDG expiry sets the RTL reset flags →
 treats `kWatchdog` as involuntary and resumes the session iff the latching relay
 is still on. **No recovery-side code changes needed.**
 
-### 3. Prod assert handler resets instead of halting
+### 3. Prod assert handler — DEFERRED (watchdog already covers recovery)
 
-For the prod build, the `PW_CHECK` failure handler calls
-`HAL_Core_System_Reset()` (after logging the tokenized
-file/line/message) instead of `HAL_Core_Enter_Safe_Mode`. Unattended terminals
-should self-recover; the diagnosis is already captured in the log. Dev keeps
-safe-mode so a developer can inspect the halted state. Implemented as a
-prod-bound assert-handler backend (the handler is selected at platform level).
+The original intent was for the prod `PW_CHECK` handler to call
+`HAL_Core_System_Reset()` instead of `HAL_Core_Enter_Safe_Mode`, so an
+unattended terminal self-recovers immediately. **This is deferred**, because the
+`particle_firmware` Bazel rule
+(`third_party/particle/rules/particle_firmware.bzl:303`) **hardcodes**
+`@particle_bazel//pw_assert_particle:handler` into every firmware's `_lib` with
+`alwayslink = True` — so the safe-mode handler is force-linked regardless of the
+`pw_assert_basic:handler_backend` flag, and adding a second handler collides on
+`pw_assert_basic_HandleFailure`. Swapping it cleanly requires threading an
+optional `assert_handler` parameter through that shared rule (which also builds
+dev/factory/personalize) — worth doing, but not risk-appropriate right before
+launch.
+
+It is largely redundant anyway: with the watchdog armed (§2), a `PW_CHECK`
+failure enters safe mode, the feeder thread stops (the app has halted), and the
+IWDG resets the terminal ~30 s later. So prod **does** self-recover from an
+assertion failure — just after the watchdog timeout rather than immediately, and
+the rapid-reset guard (§4) still bounds any resulting loop. Follow-up: add the
+`assert_handler` rule parameter to make the reset immediate.
 
 ### 4. Required companion — rapid-reset guard (ships *with* the watchdog)
 
@@ -170,16 +183,24 @@ case. Verify on-device, but no code change is required.
 
 ## Implementation plan
 
-1. Extract `//maco_firmware/apps/app_main` (`RunApp(AppConfig)`); reduce
-   `apps/dev/main.cc` to a shim. No behavior change — verify dev still builds and
-   flashes identically.
-2. Add `apps/prod` target + `build:prod` config + `./pw prod-flash`/`prod-console`.
-   Verify prod boots without the 10 s wait.
-3. Add the §4 rapid-reset backup-RAM guard (independent of the watchdog).
-4. Add the supervised watchdog feed; fix the `WatchdogLock` bug; add a boot log
-   line reporting the reset reason.
-5. Add the prod assert-handler-resets backend.
-6. On-device test pass (below) before flashing the fleet.
+1. **Done.** Extract `//maco_firmware/apps/app_main` (`RunApp(AppConfig)`); reduce
+   `apps/dev/main.cc` to a shim. Behavior-preserving.
+2. **Done.** Add `apps/prod` target + `build:prod` config (`-c opt`) +
+   `./pw prod-flash`/`prod-console`; prod in `./pw build p2`.
+3. **Done.** Rapid-reset guard — persisted in **EEPROM** (`HAL_EEPROM_Get/Put`,
+   a littlefs-backed file that survives watchdog/panic/power cycle), not backup
+   registers (those are not linkable from this split user-part build). Exposed as
+   `system::RecordBoot` / `ScheduleBootStableClear`; `app_main` falls to a
+   safe state (no session resume, no watchdog) past `kMaxConsecutiveBoots`.
+4. **Done.** Supervised watchdog feed via `system::StartWatchdog` (P2:
+   `pb::watchdog::Watchdog` + dispatcher-heartbeat coroutine + priority-8 feeder
+   thread; host no-op). Boot logs the reset reason. The `WatchdogLock`
+   vexing-parse bug was **not** fixed — it lives in the prebuilt Device OS system
+   part (not the user build), and a single-threaded feeder doesn't need the lock.
+5. **Deferred** (see §3): the prod assert-handler swap is blocked by the
+   hardcoded handler in `particle_firmware.bzl`; the watchdog covers assert
+   recovery in the meantime.
+6. **On-device test pass (below) — owner: maintainer**, before flashing the fleet.
 
 ## On-device verification (real hardware; done by the maintainer)
 

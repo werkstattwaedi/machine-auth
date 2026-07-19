@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <string_view>
 
+#include "pw_chrono/system_clock.h"
 #include "pw_function/function.h"
 #include "pw_random/random.h"
 #include "pw_thread/options.h"
@@ -171,6 +172,33 @@ maco::app_state::SystemMonitorBackend& GetSystemMonitorBackend();
 /// P2: Maps HAL_Core_Get_Last_Reset_Info() to ResetReason
 /// Host: Always returns kPowerCycle
 ResetReason GetResetReason();
+
+/// Records this boot in persistent storage and returns the number of
+/// consecutive boots that have NOT yet been confirmed stable (see
+/// ScheduleBootStableClear). A healthy device reports 1; a boot loop (repeated
+/// resets before the stable window elapses) reports an increasing count. Used
+/// by the app to detect a reset loop and fall back to a minimal safe state
+/// instead of re-arming the watchdog forever (ADR-0040).
+/// P2: EEPROM-backed (survives watchdog/panic/power cycle).
+/// Host: no-op, always returns 1.
+int RecordBoot();
+
+/// Schedules a one-shot clear of the consecutive-boot counter after the device
+/// has run for `after`, proving this boot is stable. Post-boot; requires the
+/// system dispatcher. Call once during app init regardless of watchdog state.
+/// P2: posts a dispatcher coroutine that clears the EEPROM counter.
+/// Host: no-op.
+void ScheduleBootStableClear(pw::chrono::SystemClock::duration after);
+
+/// Arms the hardware watchdog with `timeout` and starts feeding it from a
+/// supervised dispatcher heartbeat: a coroutine on the system dispatcher proves
+/// the safety-critical event loop is scheduling work, and a dedicated
+/// high-priority thread feeds the watchdog only while that heartbeat advances.
+/// A genuinely wedged dispatcher stops the heartbeat, the feed stops, and the
+/// watchdog resets the device (ADR-0040). Call after app init completes.
+/// P2: hardware IWDG via pb::watchdog::Watchdog.
+/// Host: no-op.
+void StartWatchdog(pw::chrono::SystemClock::duration timeout);
 
 /// Returns the KVS instance for session persistence.
 /// P2: External flash via ParticleFlashMemory

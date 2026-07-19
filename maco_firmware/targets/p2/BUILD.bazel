@@ -180,7 +180,9 @@ cc_library(
         "//maco_firmware/modules/machine_control:latching_machine_relay",
         "//maco_firmware/system:headers",
         "@particle_bazel//:device_os_headers",
+        "@particle_bazel//:hal_dynalib",  # HAL_EEPROM_* symbols (rapid-reset guard)
         "@particle_bazel//pb_cloud:pb_ledger_particle_backend",
+        "@particle_bazel//pb_watchdog:watchdog",
         "@particle_bazel//pb_log:log_bridge",
         "@particle_bazel//pb_socket:particle_tcp_socket",
         "@particle_bazel//pw_digital_io_particle:digital_io",
@@ -190,7 +192,11 @@ cc_library(
         "@particle_bazel//pw_system_particle:threads",  # Particle scheduler stub
         "@particle_bazel//pw_thread_particle:thread",
         "@particle_bazel//pw_kvs_particle:flash_memory",
+        "@pigweed//pw_allocator:pw_allocator",
         "@pigweed//pw_assert:check",
+        "@pigweed//pw_async2:coro",
+        "@pigweed//pw_async2:coro_or_else_task",
+        "@pigweed//pw_async2:dispatcher",
         "@pigweed//pw_async2:system_time_provider",
         "@pigweed//pw_channel",
         "@pigweed//pw_channel:stream_channel",
@@ -204,7 +210,8 @@ cc_library(
         "@pigweed//pw_string:string",
         "@pigweed//pw_system:async",
         "@pigweed//pw_system:io",
-        "@pigweed//pw_thread:thread",
+        "@pigweed//pw_thread:sleep",
+        "@pigweed//pw_thread:thread",  # provides pw::thread::DetachedThread
     ],
     target_compatible_with = ["@pigweed//pw_build/constraints/arm:cortex-m33"],
     deps = ["//maco_firmware/system:headers"],

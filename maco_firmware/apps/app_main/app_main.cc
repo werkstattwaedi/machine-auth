@@ -45,6 +45,12 @@ namespace {
 // small inline capacity on the 32-bit target.
 AppConfig g_config;
 
+// A deterministic boot-time fault (e.g. a failing PW_CHECK) with the watchdog
+// armed would reset-loop forever. If this many consecutive boots occur without
+// one proving stable (running past the ScheduleBootStableClear window), fall
+// back to a minimal safe state instead of re-arming the watchdog (ADR-0040).
+constexpr int kMaxConsecutiveBoots = 4;
+
 /// Check for an orphaned session from a prior device reset.
 /// If the reset was involuntary (watchdog/panic) and the relay is still on,
 /// resume the session. Otherwise close it and queue the usage for upload.
@@ -110,6 +116,15 @@ bool RecoverOrphanedSession(
 
 void AppInit() {
   PW_LOG_INFO("MACO Firmware initializing...");
+
+  // Record this boot and detect a rapid-reset loop before doing anything that
+  // could itself fault. boot_loop drives the fail-safe below: no session
+  // resume, and the watchdog is not armed.
+  const int boot_count = maco::system::RecordBoot();
+  const bool boot_loop = boot_count >= kMaxConsecutiveBoots;
+  PW_LOG_INFO("Boot #%d after reset reason %d%s", boot_count,
+              static_cast<int>(maco::system::GetResetReason()),
+              boot_loop ? " - RAPID-RESET LOOP, entering safe state" : "");
 
   // Initialize LED animator: buttons and NFC off until system is ready.
   // The ambient ring boot animation is started by TerminalLedEffects::Start().
@@ -181,8 +196,15 @@ void AppInit() {
   static maco::session_upload::SessionStore session_store(
       maco::system::GetSessionKvs());
 
-  const bool resumed_session =
-      RecoverOrphanedSession(session_store, session_fsm, machine_toggle);
+  bool resumed_session = false;
+  if (boot_loop) {
+    // Break the loop: never resume into a boot-looping state; drop any orphaned
+    // session so the next healthy boot starts clean and the relay stays off.
+    session_store.ClearActiveSession().IgnoreError();
+  } else {
+    resumed_session =
+        RecoverOrphanedSession(session_store, session_fsm, machine_toggle);
+  }
 
   static maco::machine_control::MachineController machine_controller(
       machine_toggle,
@@ -337,6 +359,18 @@ void AppInit() {
   maco::StartStackMonitor(
       std::chrono::seconds(30), maco::display::metrics::OnThreadStackScan
   );
+
+  // Clear the rapid-reset counter once we've run stably, so ordinary reboots
+  // don't accumulate toward the safe-state threshold. Runs regardless of the
+  // watchdog so a boot-loop-detected boot can still recover next cycle.
+  maco::system::ScheduleBootStableClear(std::chrono::seconds(60));
+
+  // Arm the hardware watchdog last, after all init is done, so a slow boot
+  // (display, NFC, gateway connect) can't trip it. Skipped in a reset loop
+  // (ADR-0040). No-op on host and when the config leaves it disabled (dev).
+  if (g_config.enable_watchdog && !boot_loop) {
+    maco::system::StartWatchdog(g_config.watchdog_timeout);
+  }
 
   PW_LOG_INFO("AppInit complete - place a card on the reader");
 }
