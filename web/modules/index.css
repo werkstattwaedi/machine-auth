@@ -190,6 +190,18 @@
   h1, h2, h3, h4, h5, h6 {
     font-family: "Bitter", Georgia, serif;
   }
+  /* Desktop-only symmetric scrollbar gutter (#568). Reserving an equal
+     gutter on both edges keeps centered desktop content from reflowing
+     when the document scrollbar toggles (page grows past the viewport, or
+     a scroll-lock dialog opens/closes). `both-edges` avoids the asymmetric
+     inset that one-sided `stable` / `overflow-y: scroll` introduce. Scoped
+     to the md breakpoint so mobile — which already uses overlay scrollbars
+     and shows no shift — keeps its full-bleed dividers untouched. */
+  @media (min-width: 768px) {
+    html {
+      scrollbar-gutter: stable both-edges;
+    }
+  }
 }
 
 @utility font-body {

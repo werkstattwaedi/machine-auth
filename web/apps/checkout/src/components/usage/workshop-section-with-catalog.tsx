@@ -33,6 +33,7 @@ export function WorkshopSectionWithCatalog({
   pinnedCatalog,
   discountLevel,
   footerSlot,
+  onValidityChange,
 }: {
   workshopId: WorkshopId
   workshop: WorkshopConfig
@@ -54,6 +55,8 @@ export function WorkshopSectionWithCatalog({
   onRemoveWorkshop?: () => void
   /** Extra content below the material box (issue #505). */
   footerSlot?: React.ReactNode
+  /** Reports whether this section has an unparseable field (gates continue). */
+  onValidityChange?: (hasError: boolean) => void
 }) {
   return (
     <WorkshopInlineSection
@@ -67,6 +70,7 @@ export function WorkshopSectionWithCatalog({
       pinnedCatalog={pinnedCatalog}
       discountLevel={discountLevel}
       footerSlot={footerSlot}
+      onValidityChange={onValidityChange}
     />
   )
 }

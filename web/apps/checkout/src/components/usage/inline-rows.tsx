@@ -25,6 +25,8 @@ import {
   type PricingModel,
 } from "@modules/lib/workshop-config"
 import { isMachineItem, priceForTier, type ItemType } from "@oww/shared"
+import { parseQuantity, formatQuantity } from "@modules/lib/units"
+import { ErrorBadge } from "@/components/checkout/field-error"
 import { PositionTable, type PositionRow, rowFromItem } from "./position-table"
 
 /** Shape of a checkout item used by the workshop block. */
@@ -267,6 +269,7 @@ export function WorkshopInlineSection({
   pinnedCatalog = [],
   discountLevel = "none",
   footerSlot,
+  onValidityChange,
 }: {
   workshopId: WorkshopId
   workshop: WorkshopConfig
@@ -311,6 +314,12 @@ export function WorkshopInlineSection({
    * self-service badge hint inside Diverses (issue #505).
    */
   footerSlot?: React.ReactNode
+  /**
+   * Reports whether any always-visible field in this section currently holds
+   * an unparseable value. Lets the Kosten step block "Zum Checkout" until the
+   * error is fixed. Callers should pass a stable callback keyed by workshop.
+   */
+  onValidityChange?: (hasError: boolean) => void
 }) {
   const [expandedNfc, setExpandedNfc] = useState<Record<string, boolean>>({})
 
@@ -366,6 +375,13 @@ export function WorkshopInlineSection({
     return m
   }, [machineItems])
   const [pinnedText, setPinnedText] = useState<Record<string, string>>({})
+  // Fields whose current text failed to parse (unknown unit). We keep the
+  // verbatim text and show an inline error rather than silently zeroing it.
+  const [pinnedError, setPinnedError] = useState<Record<string, boolean>>({})
+  const hasPinnedError = Object.values(pinnedError).some(Boolean)
+  useEffect(() => {
+    onValidityChange?.(hasPinnedError)
+  }, [hasPinnedError, onValidityChange])
   const pinnedFocusRef = useRef<string | null>(null)
   useEffect(() => {
     setPinnedText((prev) => {
@@ -373,18 +389,34 @@ export function WorkshopInlineSection({
       const next = { ...prev }
       for (const cat of pinnedCatalog) {
         if (pinnedFocusRef.current === cat.id) continue
+        // Don't clobber a field the user is being asked to fix.
+        if (pinnedError[cat.id]) continue
         const item = pinnedItemByCatalog.get(cat.id)
-        const q = isDirectPinned(cat) ? (item?.totalPrice ?? 0) : (item?.quantity ?? 0)
-        const canonical = q > 0 ? String(q) : ""
-        const parsed = parseFloat((prev[cat.id] ?? "").replace(",", ".")) || 0
-        if (parsed !== q) {
-          next[cat.id] = canonical
-          changed = true
+        const direct = isDirectPinned(cat)
+        const q = direct ? (item?.totalPrice ?? 0) : (item?.quantity ?? 0)
+        const current = prev[cat.id] ?? ""
+        if (direct) {
+          // CHF: keep the verbatim number; only rewrite when it no longer
+          // matches the committed amount.
+          const parsed = parsePinnedValue(current, true)
+          if (parsed === null) continue
+          if (parsed !== q) {
+            next[cat.id] = q > 0 ? String(q) : ""
+            changed = true
+          }
+        } else {
+          // Hourly: normalise to the largest unit with a whole value
+          // (30min → "30 min", 90min → "1.5 h", 0.5h → "30 min").
+          const canonical = q > 0 ? formatQuantity(q, "h") : ""
+          if (current !== canonical) {
+            next[cat.id] = canonical
+            changed = true
+          }
         }
       }
       return changed ? next : prev
     })
-  }, [pinnedItemByCatalog, pinnedCatalog])
+  }, [pinnedItemByCatalog, pinnedCatalog, pinnedError])
 
   const commitPinned = (cat: CatalogItem, unitPrice: number) => {
     pinnedFocusRef.current = null
@@ -393,10 +425,15 @@ export function WorkshopInlineSection({
     // Hourly: the field holds hours. Direct: it IS the CHF amount from the
     // workshop's price note (issue #555) — quantity 1, unitPrice = total,
     // mirroring the picker's DirectForm item shape.
-    const value = Math.max(
-      0,
-      parseFloat((pinnedText[cat.id] ?? "").replace(",", ".")) || 0,
-    )
+    const parsed = parsePinnedValue(pinnedText[cat.id] ?? "", direct)
+    if (parsed === null) {
+      // Non-empty but unparseable (unknown unit): keep the verbatim text and
+      // surface an inline error; leave any previously committed item untouched.
+      setPinnedError((e) => ({ ...e, [cat.id]: true }))
+      return
+    }
+    setPinnedError((e) => (e[cat.id] ? { ...e, [cat.id]: false } : e))
+    const value = parsed
     const total = Math.round((direct ? value : value * unitPrice) * 100) / 100
     const existing = pinnedItemByCatalog.get(cat.id)
     if (value <= 0) {
@@ -437,7 +474,12 @@ export function WorkshopInlineSection({
     const direct = isDirectPinned(cat)
     const unitPrice = variant ? priceForTier(variant.unitPrice, discountLevel) : 0
     const text = pinnedText[cat.id] ?? ""
-    const value = Math.max(0, parseFloat(text.replace(",", ".")) || 0)
+    const parsed = parsePinnedValue(text, direct)
+    const committed = pinnedItemByCatalog.get(cat.id)
+    // While the text is unparseable, price off the last committed value so the
+    // Preis/subtotal don't drop to 0 mid-correction.
+    const value =
+      parsed ?? (direct ? (committed?.totalPrice ?? 0) : (committed?.quantity ?? 0))
     const total = Math.round((direct ? value : value * unitPrice) * 100) / 100
     return {
       key: cat.id,
@@ -448,10 +490,15 @@ export function WorkshopInlineSection({
           value={text}
           ariaLabel={`${direct ? "Betrag" : "Stunden"} ${cat.name}`}
           suffix={direct ? "CHF" : "Std."}
+          allowUnits={!direct}
+          error={pinnedError[cat.id] ?? false}
           onFocus={() => {
             pinnedFocusRef.current = cat.id
           }}
-          onChange={(v) => setPinnedText((p) => ({ ...p, [cat.id]: v }))}
+          onChange={(v) => {
+            setPinnedText((p) => ({ ...p, [cat.id]: v }))
+            setPinnedError((e) => (e[cat.id] ? { ...e, [cat.id]: false } : e))
+          }}
           onBlur={() => commitPinned(cat, unitPrice)}
         />
       ),
@@ -601,8 +648,43 @@ function isDirectPinned(cat: CatalogItem): boolean {
 /** Digits with at most one `.`/`,` separator and decimals; empty allowed so
  *  the field can be cleared. A `type="text"` input is used deliberately:
  *  `type="number"` returns "" from `e.target.value` mid-decimal (e.g. "1."),
- *  which silently swallowed fractional hours (issue #105). */
+ *  which silently swallowed fractional hours (issue #105). Used for direct
+ *  (CHF) fields, which have no unit suffix. */
 const PINNED_TYPING_PATTERN = /^(?:|\d*(?:[.,]\d*)?)$/
+
+/** Hourly fields default to hours but also accept a unit suffix
+ *  ("12min", "1.5h", "90s", "0,5 std.") which `parseQuantity` converts to
+ *  hours. Allows an optional trailing unit token after the number. */
+const PINNED_HOURLY_TYPING_PATTERN = /^\d*(?:[.,]\d*)?\s*[a-zµ]*\.?$/i
+
+// NOTE: this pinned-field parsing/typing/error logic deliberately parallels
+// (rather than reuses) `UnitQuantityField`. The pinned field carries two modes
+// UnitQuantityField doesn't: a direct/CHF (Pauschal) mode with no unit
+// dimension, and tight coupling to the committed checkout item for the live
+// Preis column, per-row removal on clear, and the compact in-table layout with
+// an inline unit adornment. If you change unit-parsing UX, update both.
+//
+/** Parse a pinned field's text into its stored numeric value. Direct (CHF)
+ *  fields are plain decimals; hourly fields go through `parseQuantity` so a
+ *  bare number is hours and "12min"/"90s"/"1.5h" auto-convert to hours.
+ *  Exact hours are stored (no rounding) — readability is handled at display
+ *  time by `formatQuantity` (see the resync effect), which keeps e.g. 10 min
+ *  as a clean "10 min" instead of a "0.1667" tail.
+ *
+ *  Returns `null` when the text is non-empty but can't be understood (unknown
+ *  unit / garbage) so the caller can keep the verbatim text and flag an
+ *  inline error; empty text is a valid `0` (clears the item). */
+function parsePinnedValue(text: string, direct: boolean): number | null {
+  const trimmed = text.trim()
+  if (trimmed.length === 0) return 0
+  if (direct) {
+    const n = parseFloat(trimmed.replace(",", "."))
+    return Number.isFinite(n) ? Math.max(0, n) : null
+  }
+  const hours = parseQuantity(trimmed, "h")
+  if (hours == null) return null
+  return hours <= 0 ? 0 : hours
+}
 
 /**
  * Editable value cell for a pinned machine (issue #105), rendered in the
@@ -616,6 +698,8 @@ function PinnedValueField({
   value,
   ariaLabel,
   suffix,
+  allowUnits,
+  error,
   onFocus,
   onChange,
   onBlur,
@@ -623,28 +707,57 @@ function PinnedValueField({
   value: string
   ariaLabel: string
   suffix: string
+  /** Hourly fields accept a unit suffix ("12min"); CHF fields stay numeric. */
+  allowUnits: boolean
+  /** Text is non-empty but couldn't be parsed — red border + inline hint. */
+  error: boolean
   onFocus: () => void
   onChange: (v: string) => void
   onBlur: () => void
 }) {
+  const typingPattern = allowUnits
+    ? PINNED_HOURLY_TYPING_PATTERN
+    : PINNED_TYPING_PATTERN
+  // The fixed unit sits *inside* the box as the default-unit hint. Hide it
+  // while the user is typing their own unit token so "12min" and "Std." don't
+  // contradict each other (the value normalises back to hours on blur).
+  const showUnit = !/[a-zµ]/i.test(value)
   return (
-    <span className="inline-flex items-center justify-end gap-1">
-      <input
-        type="text"
-        inputMode="decimal"
-        value={value}
-        aria-label={ariaLabel}
-        placeholder="0"
-        onFocus={onFocus}
-        onChange={(e) => {
-          const raw = e.target.value
-          if (!PINNED_TYPING_PATTERN.test(raw)) return
-          onChange(raw)
-        }}
-        onBlur={onBlur}
-        className="h-8 w-16 rounded-[3px] border border-[#ccc] bg-background px-2 text-right text-base md:text-sm tabular-nums text-foreground outline-none focus:border-cog-teal"
-      />
-      <span className="text-xs text-muted-foreground">{suffix}</span>
+    // Fixed width + whitespace-normal so the error badge wraps here instead of
+    // stretching the auto-width, nowrap Menge column. The "…12min, 1.5h"
+    // example lives in the box's persistent Tipp hint, so this badge stays
+    // terse.
+    <span className="inline-flex w-32 flex-col items-end gap-0.5 whitespace-normal">
+      <span
+        className={`inline-flex h-8 w-24 items-center rounded-[3px] border bg-background px-2 ${
+          error
+            ? "border-[#cc2a24]"
+            : "border-[#ccc] focus-within:border-cog-teal"
+        }`}
+      >
+        <input
+          type="text"
+          inputMode={allowUnits ? "text" : "decimal"}
+          value={value}
+          aria-label={ariaLabel}
+          aria-invalid={error || undefined}
+          placeholder="0"
+          onFocus={onFocus}
+          onChange={(e) => {
+            const raw = e.target.value
+            if (!typingPattern.test(raw)) return
+            onChange(raw)
+          }}
+          onBlur={onBlur}
+          className="min-w-0 flex-1 bg-transparent text-right text-base md:text-sm tabular-nums text-foreground outline-none"
+        />
+        {!error && showUnit ? (
+          <span className="ml-1 shrink-0 text-xs text-muted-foreground">
+            {suffix}
+          </span>
+        ) : null}
+      </span>
+      {error ? <ErrorBadge message="Einheit unbekannt" /> : null}
     </span>
   )
 }

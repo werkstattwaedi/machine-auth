@@ -32,6 +32,7 @@ import {
   nextLevelValues,
 } from "@modules/lib/categories"
 import { matchesCatalogQuery } from "@modules/lib/text-search"
+import { UnitQuantityField } from "@/components/usage/unit-quantity-field"
 import type { CheckoutItemLocal } from "./inline-rows"
 import {
   readPickerScrollAnchor,
@@ -962,43 +963,67 @@ function SimpleForm({
 }) {
   const isWeight = pricingModel === "weight"
   const isTime = pricingModel === "time"
+  const isDimensional = isWeight || isTime
   const displayUnit = isWeight
     ? "g"
     : isTime
       ? "min"
       : getUnitLabel(config, pricingModel)
-  const [raw, setRaw] = useState(0)
-  const baseQty = isWeight ? raw / 1000 : isTime ? raw / 60 : raw
+  // `baseQty` holds the base-unit quantity: kg for weight, hours for time,
+  // raw count otherwise (count is non-SI so base == displayed).
+  const [baseQty, setBaseQty] = useState(0)
+  const [err, setErr] = useState(false)
   const total = Math.round(baseQty * unitPrice * 100) / 100
+  const formInputQty = isWeight
+    ? Math.round(baseQty * 1000 * 100) / 100
+    : isTime
+      ? Math.round(baseQty * 60 * 100) / 100
+      : baseQty
+  const label = isWeight ? "Gewicht" : isTime ? "Zeit" : `Anzahl (${displayUnit})`
   return (
     <>
       <FormGrid>
-        <FormField label={`Anzahl (${displayUnit})`}>
-          <input
-            autoFocus
-            type="number"
-            min="0"
-            step="any"
-            value={raw || ""}
-            onChange={(e) =>
-              setRaw(Math.max(0, parseFloat(e.target.value) || 0))
-            }
-            className={INPUT_CLS}
-          />
+        <FormField label={label}>
+          {isDimensional ? (
+            <UnitQuantityField
+              value={baseQty}
+              onChange={(v, hasError) => {
+                setBaseQty(v)
+                setErr(hasError)
+              }}
+              baseUnit={isWeight ? "kg" : "h"}
+              defaultUnit={isWeight ? "g" : "min"}
+              ariaLabel={isWeight ? "Gewicht" : "Zeit"}
+              autoFocus
+            />
+          ) : (
+            <input
+              autoFocus
+              type="number"
+              min="0"
+              step="any"
+              value={baseQty || ""}
+              onChange={(e) =>
+                setBaseQty(Math.max(0, parseFloat(e.target.value) || 0))
+              }
+              className={INPUT_CLS}
+            />
+          )}
         </FormField>
       </FormGrid>
       <FormFooter
         total={total}
-        addDisabled={baseQty <= 0}
+        addDisabled={baseQty <= 0 || err}
         onAdd={() => {
           onAdd({
             ...baseItem,
             id: crypto.randomUUID(),
             quantity: baseQty,
             totalPrice: total,
-            formInputs: [{ quantity: raw, unit: displayUnit }],
+            formInputs: [{ quantity: formInputQty, unit: displayUnit }],
           })
-          setRaw(0)
+          setBaseQty(0)
+          setErr(false)
         }}
       />
     </>
@@ -1016,36 +1041,40 @@ function AreaForm({
   baseItem: Omit<CheckoutItemLocal, "quantity" | "totalPrice" | "formInputs">
   onAdd: (item: CheckoutItemLocal) => void
 }) {
-  const [lengthCm, setLengthCm] = useState(0)
-  const [widthCm, setWidthCm] = useState(0)
-  const m2 = (lengthCm / 100) * (widthCm / 100)
+  const [lengthM, setLengthM] = useState(0)
+  const [widthM, setWidthM] = useState(0)
+  const [lenErr, setLenErr] = useState(false)
+  const [widErr, setWidErr] = useState(false)
+  const m2 = lengthM * widthM
   const total = Math.round(m2 * unitPrice * 100) / 100
+  const lengthCm = Math.round(lengthM * 100 * 100) / 100
+  const widthCm = Math.round(widthM * 100 * 100) / 100
   return (
     <>
       <FormGrid>
-        <FormField label="Länge (cm)">
-          <input
+        <FormField label="Länge">
+          <UnitQuantityField
+            value={lengthM}
+            onChange={(v, hasError) => {
+              setLengthM(v)
+              setLenErr(hasError)
+            }}
+            baseUnit="m"
+            defaultUnit="cm"
+            ariaLabel="Länge"
             autoFocus
-            type="number"
-            min="0"
-            step="any"
-            value={lengthCm || ""}
-            onChange={(e) =>
-              setLengthCm(Math.max(0, parseFloat(e.target.value) || 0))
-            }
-            className={INPUT_CLS}
           />
         </FormField>
-        <FormField label="Breite (cm)">
-          <input
-            type="number"
-            min="0"
-            step="any"
-            value={widthCm || ""}
-            onChange={(e) =>
-              setWidthCm(Math.max(0, parseFloat(e.target.value) || 0))
-            }
-            className={INPUT_CLS}
+        <FormField label="Breite">
+          <UnitQuantityField
+            value={widthM}
+            onChange={(v, hasError) => {
+              setWidthM(v)
+              setWidErr(hasError)
+            }}
+            baseUnit="m"
+            defaultUnit="cm"
+            ariaLabel="Breite"
           />
         </FormField>
         <FormField label={getUnitLabel(config, "area")}>
@@ -1056,7 +1085,7 @@ function AreaForm({
       </FormGrid>
       <FormFooter
         total={total}
-        addDisabled={m2 <= 0}
+        addDisabled={m2 <= 0 || lenErr || widErr}
         onAdd={() => {
           onAdd({
             ...baseItem,
@@ -1068,8 +1097,10 @@ function AreaForm({
               { quantity: widthCm, unit: "cm" },
             ],
           })
-          setLengthCm(0)
-          setWidthCm(0)
+          setLengthM(0)
+          setWidthM(0)
+          setLenErr(false)
+          setWidErr(false)
         }}
       />
     </>
@@ -1087,23 +1118,24 @@ function LengthForm({
   baseItem: Omit<CheckoutItemLocal, "quantity" | "totalPrice" | "formInputs">
   onAdd: (item: CheckoutItemLocal) => void
 }) {
-  const [lengthCm, setLengthCm] = useState(0)
-  const meters = lengthCm / 100
+  const [meters, setMeters] = useState(0)
+  const [lenErr, setLenErr] = useState(false)
   const total = Math.round(meters * unitPrice * 100) / 100
+  const lengthCm = Math.round(meters * 100 * 100) / 100
   return (
     <>
       <FormGrid>
-        <FormField label={`Länge (cm)`}>
-          <input
+        <FormField label="Länge">
+          <UnitQuantityField
+            value={meters}
+            onChange={(v, hasError) => {
+              setMeters(v)
+              setLenErr(hasError)
+            }}
+            baseUnit="m"
+            defaultUnit="cm"
+            ariaLabel="Länge"
             autoFocus
-            type="number"
-            min="0"
-            step="any"
-            value={lengthCm || ""}
-            onChange={(e) =>
-              setLengthCm(Math.max(0, parseFloat(e.target.value) || 0))
-            }
-            className={INPUT_CLS}
           />
         </FormField>
         <FormField label={getUnitLabel(config, "length")}>
@@ -1114,7 +1146,7 @@ function LengthForm({
       </FormGrid>
       <FormFooter
         total={total}
-        addDisabled={meters <= 0}
+        addDisabled={meters <= 0 || lenErr}
         onAdd={() => {
           onAdd({
             ...baseItem,
@@ -1123,7 +1155,8 @@ function LengthForm({
             totalPrice: total,
             formInputs: [{ quantity: lengthCm, unit: "cm" }],
           })
-          setLengthCm(0)
+          setMeters(0)
+          setLenErr(false)
         }}
       />
     </>
@@ -1143,27 +1176,28 @@ function SlaForm({
   baseItem: Omit<CheckoutItemLocal, "quantity" | "totalPrice" | "formInputs">
   onAdd: (item: CheckoutItemLocal) => void
 }) {
-  const [resinMl, setResinMl] = useState(0)
+  const [resinL, setResinL] = useState(0)
+  const [resinErr, setResinErr] = useState(false)
   const [layers, setLayers] = useState(0)
   const layerPrice =
     config.slaLayerPrice?.[discountLevel] ?? config.slaLayerPrice?.none ?? 0
   const total =
-    Math.round(((resinMl / 1000) * unitPrice + layers * layerPrice) * 100) /
-    100
+    Math.round((resinL * unitPrice + layers * layerPrice) * 100) / 100
+  const resinMl = Math.round(resinL * 1000 * 100) / 100
   return (
     <>
       <FormGrid>
-        <FormField label="Resin (ml)">
-          <input
+        <FormField label="Resin">
+          <UnitQuantityField
+            value={resinL}
+            onChange={(v, hasError) => {
+              setResinL(v)
+              setResinErr(hasError)
+            }}
+            baseUnit="l"
+            defaultUnit="ml"
+            ariaLabel="Resin"
             autoFocus
-            type="number"
-            min="0"
-            step="0.1"
-            value={resinMl || ""}
-            onChange={(e) =>
-              setResinMl(Math.max(0, parseFloat(e.target.value) || 0))
-            }
-            className={INPUT_CLS}
           />
         </FormField>
         <FormField label="Layer">
@@ -1188,7 +1222,7 @@ function SlaForm({
       </FormGrid>
       <FormFooter
         total={total}
-        addDisabled={total <= 0}
+        addDisabled={total <= 0 || resinErr}
         onAdd={() => {
           onAdd({
             ...baseItem,
@@ -1200,7 +1234,8 @@ function SlaForm({
               { quantity: layers, unit: "layers" },
             ],
           })
-          setResinMl(0)
+          setResinL(0)
+          setResinErr(false)
           setLayers(0)
         }}
       />
@@ -1441,32 +1476,54 @@ function AdHocCountWeightTimeForm({
 }) {
   const isWeight = pricingModel === "weight"
   const isTime = pricingModel === "time"
+  const isDimensional = isWeight || isTime
   const displayUnit = isWeight
     ? "g"
     : isTime
       ? "min"
       : getUnitLabel(config, pricingModel)
-  const baseUnit = getUnitLabel(config, pricingModel)
-  const [raw, setRaw] = useState(0)
+  const priceUnitLabel = getUnitLabel(config, pricingModel)
+  // `baseQty` holds the base-unit quantity: kg for weight, hours for time,
+  // raw count otherwise.
+  const [baseQty, setBaseQty] = useState(0)
+  const [err, setErr] = useState(false)
   const [unitPrice, setUnitPrice] = useState(0)
-  const baseQty = isWeight ? raw / 1000 : isTime ? raw / 60 : raw
   const total = Math.round(baseQty * unitPrice * 100) / 100
+  const formInputQty = isWeight
+    ? Math.round(baseQty * 1000 * 100) / 100
+    : isTime
+      ? Math.round(baseQty * 60 * 100) / 100
+      : baseQty
+  const label = isWeight ? "Gewicht" : isTime ? "Zeit" : `Anzahl (${displayUnit})`
   return (
     <>
       <FormGrid>
-        <FormField label={`Anzahl (${displayUnit})`}>
-          <input
-            type="number"
-            min="0"
-            step="any"
-            value={raw || ""}
-            onChange={(e) =>
-              setRaw(Math.max(0, parseFloat(e.target.value) || 0))
-            }
-            className={INPUT_CLS}
-          />
+        <FormField label={label}>
+          {isDimensional ? (
+            <UnitQuantityField
+              value={baseQty}
+              onChange={(v, hasError) => {
+                setBaseQty(v)
+                setErr(hasError)
+              }}
+              baseUnit={isWeight ? "kg" : "h"}
+              defaultUnit={isWeight ? "g" : "min"}
+              ariaLabel={isWeight ? "Gewicht" : "Zeit"}
+            />
+          ) : (
+            <input
+              type="number"
+              min="0"
+              step="any"
+              value={baseQty || ""}
+              onChange={(e) =>
+                setBaseQty(Math.max(0, parseFloat(e.target.value) || 0))
+              }
+              className={INPUT_CLS}
+            />
+          )}
         </FormField>
-        <FormField label={`Preis/${baseUnit}`}>
+        <FormField label={`Preis/${priceUnitLabel}`}>
           <input
             type="number"
             min="0"
@@ -1481,7 +1538,7 @@ function AdHocCountWeightTimeForm({
       </FormGrid>
       <FormFooter
         total={total}
-        addDisabled={!descriptionFilled || total <= 0}
+        addDisabled={!descriptionFilled || total <= 0 || err}
         onAdd={() => {
           onAdd({
             ...baseItem,
@@ -1489,9 +1546,10 @@ function AdHocCountWeightTimeForm({
             quantity: baseQty,
             unitPrice,
             totalPrice: total,
-            formInputs: [{ quantity: raw, unit: displayUnit }],
+            formInputs: [{ quantity: formInputQty, unit: displayUnit }],
           })
-          setRaw(0)
+          setBaseQty(0)
+          setErr(false)
           setUnitPrice(0)
         }}
       />
@@ -1510,36 +1568,40 @@ function AdHocAreaForm({
   descriptionFilled: boolean
   onAdd: (item: CheckoutItemLocal) => void
 }) {
-  const [lengthCm, setLengthCm] = useState(0)
-  const [widthCm, setWidthCm] = useState(0)
+  const [lengthM, setLengthM] = useState(0)
+  const [widthM, setWidthM] = useState(0)
+  const [lenErr, setLenErr] = useState(false)
+  const [widErr, setWidErr] = useState(false)
   const [unitPrice, setUnitPrice] = useState(0)
-  const m2 = (lengthCm / 100) * (widthCm / 100)
+  const m2 = lengthM * widthM
   const total = Math.round(m2 * unitPrice * 100) / 100
+  const lengthCm = Math.round(lengthM * 100 * 100) / 100
+  const widthCm = Math.round(widthM * 100 * 100) / 100
   return (
     <>
       <FormGrid>
-        <FormField label="Länge (cm)">
-          <input
-            type="number"
-            min="0"
-            step="any"
-            value={lengthCm || ""}
-            onChange={(e) =>
-              setLengthCm(Math.max(0, parseFloat(e.target.value) || 0))
-            }
-            className={INPUT_CLS}
+        <FormField label="Länge">
+          <UnitQuantityField
+            value={lengthM}
+            onChange={(v, hasError) => {
+              setLengthM(v)
+              setLenErr(hasError)
+            }}
+            baseUnit="m"
+            defaultUnit="cm"
+            ariaLabel="Länge"
           />
         </FormField>
-        <FormField label="Breite (cm)">
-          <input
-            type="number"
-            min="0"
-            step="any"
-            value={widthCm || ""}
-            onChange={(e) =>
-              setWidthCm(Math.max(0, parseFloat(e.target.value) || 0))
-            }
-            className={INPUT_CLS}
+        <FormField label="Breite">
+          <UnitQuantityField
+            value={widthM}
+            onChange={(v, hasError) => {
+              setWidthM(v)
+              setWidErr(hasError)
+            }}
+            baseUnit="m"
+            defaultUnit="cm"
+            ariaLabel="Breite"
           />
         </FormField>
         <FormField label={getUnitLabel(config, "area")}>
@@ -1562,7 +1624,7 @@ function AdHocAreaForm({
       </FormGrid>
       <FormFooter
         total={total}
-        addDisabled={!descriptionFilled || total <= 0}
+        addDisabled={!descriptionFilled || total <= 0 || lenErr || widErr}
         onAdd={() => {
           onAdd({
             ...baseItem,
@@ -1575,8 +1637,10 @@ function AdHocAreaForm({
               { quantity: widthCm, unit: "cm" },
             ],
           })
-          setLengthCm(0)
-          setWidthCm(0)
+          setLengthM(0)
+          setWidthM(0)
+          setLenErr(false)
+          setWidErr(false)
           setUnitPrice(0)
         }}
       />
@@ -1595,23 +1659,24 @@ function AdHocLengthForm({
   descriptionFilled: boolean
   onAdd: (item: CheckoutItemLocal) => void
 }) {
-  const [lengthCm, setLengthCm] = useState(0)
+  const [meters, setMeters] = useState(0)
+  const [lenErr, setLenErr] = useState(false)
   const [unitPrice, setUnitPrice] = useState(0)
-  const meters = lengthCm / 100
   const total = Math.round(meters * unitPrice * 100) / 100
+  const lengthCm = Math.round(meters * 100 * 100) / 100
   return (
     <>
       <FormGrid>
-        <FormField label="Länge (cm)">
-          <input
-            type="number"
-            min="0"
-            step="any"
-            value={lengthCm || ""}
-            onChange={(e) =>
-              setLengthCm(Math.max(0, parseFloat(e.target.value) || 0))
-            }
-            className={INPUT_CLS}
+        <FormField label="Länge">
+          <UnitQuantityField
+            value={meters}
+            onChange={(v, hasError) => {
+              setMeters(v)
+              setLenErr(hasError)
+            }}
+            baseUnit="m"
+            defaultUnit="cm"
+            ariaLabel="Länge"
           />
         </FormField>
         <FormField label={`Preis/${getUnitLabel(config, "length")}`}>
@@ -1629,7 +1694,7 @@ function AdHocLengthForm({
       </FormGrid>
       <FormFooter
         total={total}
-        addDisabled={!descriptionFilled || total <= 0}
+        addDisabled={!descriptionFilled || total <= 0 || lenErr}
         onAdd={() => {
           onAdd({
             ...baseItem,
@@ -1639,7 +1704,8 @@ function AdHocLengthForm({
             totalPrice: total,
             formInputs: [{ quantity: lengthCm, unit: "cm" }],
           })
-          setLengthCm(0)
+          setMeters(0)
+          setLenErr(false)
           setUnitPrice(0)
         }}
       />

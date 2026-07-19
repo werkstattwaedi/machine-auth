@@ -96,6 +96,7 @@ const PARSE_ALIASES: Record<BaseUnit, Record<string, Unit>> = {
     ms: "ms",
     s: "s",
     sec: "s",
+    m: "min",
     min: "min",
     h: "hour",
     hr: "hour",
@@ -245,6 +246,30 @@ export function parseQuantity(
   const mappedUnit = aliases[rawUnit]
   if (!mappedUnit) return null
   return convert(value, mappedUnit).to(CONVERT_BASE[baseUnit])
+}
+
+/**
+ * Like {@link parseQuantity}, but a bare number (no unit token) is
+ * interpreted as `defaultUnit` rather than the SI base unit. This matches
+ * fields whose natural entry unit isn't the base — e.g. a length field
+ * labelled in cm: "50" means 50 cm (→ 0.5 m), while "50cm", ".5m", "5dm"
+ * still parse via their explicit unit. `defaultUnit` must be a valid alias
+ * of `baseUnit`'s dimension (e.g. "cm" for "m", "g" for "kg", "ml" for "l",
+ * "min" for "h").
+ *
+ * Returns `null` when the text is non-empty but can't be understood; empty
+ * text is a valid `0`.
+ */
+export function parseWithDefaultUnit(
+  input: string,
+  baseUnit: BaseUnit,
+  defaultUnit: string,
+): number | null {
+  const trimmed = input.trim()
+  if (trimmed.length === 0) return 0
+  // A unit token is any letter (or µ/²); if absent, append the default unit.
+  const hasUnit = /[a-zµ²]/i.test(trimmed)
+  return parseQuantity(hasUnit ? trimmed : `${trimmed}${defaultUnit}`, baseUnit)
 }
 
 /**
