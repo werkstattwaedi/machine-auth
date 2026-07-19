@@ -8,6 +8,13 @@ package maco;
 service MacoService {
   rpc Echo(EchoMessage) returns (EchoMessage);
   rpc GetDeviceInfo(Empty) returns (DeviceInfoResponse);
+
+  // TEMPORARY (ADR-0040 watchdog verification) — remove after on-device testing.
+  // HangDispatcher wedges the pw_system dispatcher so the watchdog heartbeat
+  // stalls and the hardware watchdog resets the device (~30s on prod). Crash
+  // forces an assertion failure to exercise the panic/reset path.
+  rpc HangDispatcher(Empty) returns (Empty);
+  rpc Crash(Empty) returns (Empty);
 }
 
 message Empty {}
