@@ -22,6 +22,10 @@ particle_firmware(
     name = "prod",
     srcs = ["main.cc"],
     platform = "//maco_firmware/targets/p2:p2_system",
+    # Reset-on-assert handler instead of the default safe-mode handler, so an
+    # unattended terminal self-recovers (ADR-0040). The select() resolves to the
+    # prod handler under --config=prod.
+    assert_handler = "//maco_firmware/targets/p2:assert_handler",
     deps = [
         "//maco_firmware/apps/app_main",
         # Tokenized log handler (provides pw_log_tokenized_HandleLog)

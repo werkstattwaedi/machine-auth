@@ -104,27 +104,26 @@ The reset path already works: an IWDG expiry sets the RTL reset flags →
 treats `kWatchdog` as involuntary and resumes the session iff the latching relay
 is still on. **No recovery-side code changes needed.**
 
-### 3. Prod assert handler — DEFERRED (watchdog already covers recovery)
+### 3. Prod assert handler resets instead of halting
 
-The original intent was for the prod `PW_CHECK` handler to call
-`HAL_Core_System_Reset()` instead of `HAL_Core_Enter_Safe_Mode`, so an
-unattended terminal self-recovers immediately. **This is deferred**, because the
-`particle_firmware` Bazel rule
-(`third_party/particle/rules/particle_firmware.bzl:303`) **hardcodes**
-`@particle_bazel//pw_assert_particle:handler` into every firmware's `_lib` with
-`alwayslink = True` — so the safe-mode handler is force-linked regardless of the
-`pw_assert_basic:handler_backend` flag, and adding a second handler collides on
-`pw_assert_basic_HandleFailure`. Swapping it cleanly requires threading an
-optional `assert_handler` parameter through that shared rule (which also builds
-dev/factory/personalize) — worth doing, but not risk-appropriate right before
-launch.
+The prod build's `PW_CHECK` failure handler logs the tokenized
+file/line/message and then calls `HAL_Core_System_Reset()`, so an unattended
+terminal self-recovers immediately instead of dropping into DeviceOS safe mode
+(recovery mode) and waiting for a human. Dev keeps the safe-mode handler so a
+developer can inspect the halted state.
 
-It is largely redundant anyway: with the watchdog armed (§2), a `PW_CHECK`
-failure enters safe mode, the feeder thread stops (the app has halted), and the
-IWDG resets the terminal ~30 s later. So prod **does** self-recover from an
-assertion failure — just after the watchdog timeout rather than immediately, and
-the rapid-reset guard (§4) still bounds any resulting loop. Follow-up: add the
-`assert_handler` rule parameter to make the reset immediate.
+Mechanism: the `particle_firmware` rule previously hardcoded
+`@particle_bazel//pw_assert_particle:handler` (the safe-mode handler) with
+`alwayslink = True`, so it was force-linked into every firmware. Added a
+backward-compatible `assert_handler` parameter to `particle_cc_binary` /
+`particle_firmware` (default = the safe-mode handler, so dev/factory/personalize
+are unchanged). `apps/prod` passes
+`//maco_firmware/targets/p2:assert_handler`, a `select()` that resolves to the
+reset handler under `--config=prod` and the safe-mode handler otherwise. The
+platform's `pw_assert_basic:handler_backend` flag points at the same `select()`
+target, so both the rule dep and the flag resolve to one handler (deduped) with
+no `pw_assert_basic_HandleFailure` collision. Verified on-device: `Crash` RPC
+previously dropped to recovery mode; now it resets.
 
 ### 4. Required companion — rapid-reset guard (ships *with* the watchdog)
 
@@ -197,9 +196,9 @@ case. Verify on-device, but no code change is required.
    thread; host no-op). Boot logs the reset reason. The `WatchdogLock`
    vexing-parse bug was **not** fixed — it lives in the prebuilt Device OS system
    part (not the user build), and a single-threaded feeder doesn't need the lock.
-5. **Deferred** (see §3): the prod assert-handler swap is blocked by the
-   hardcoded handler in `particle_firmware.bzl`; the watchdog covers assert
-   recovery in the meantime.
+5. **Done.** Prod assert handler resets instead of dropping to safe mode, via a
+   backward-compatible `assert_handler` parameter on `particle_cc_binary` /
+   `particle_firmware` plus a `--config=prod` `select()`. Verified on-device.
 6. **On-device test pass (below) — owner: maintainer**, before flashing the fleet.
 
 ## Code-review follow-ups (not yet addressed)
