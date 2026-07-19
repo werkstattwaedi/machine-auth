@@ -3,11 +3,17 @@
 
 #include "maco_firmware/system/system.h"
 
+#include <atomic>
 #include <cstddef>
+#include <optional>
 
 // Pigweed headers first - before Particle headers that define pin macros
 // (D2, D3, etc.) which conflict with Pigweed template parameter names.
+#include "pb_watchdog/watchdog.h"
+#include "pw_allocator/allocator.h"
 #include "pw_assert/check.h"
+#include "pw_async2/coro.h"
+#include "pw_async2/coro_or_else_task.h"
 #include "pw_async2/system_time_provider.h"
 #include "pw_channel/stream_channel.h"
 #include "pw_kvs/crc16_checksum.h"
@@ -17,6 +23,8 @@
 #include "pw_system/io.h"
 #include "pw_string/string.h"
 #include "pw_system/system.h"
+#include "pw_thread/detached_thread.h"
+#include "pw_thread/sleep.h"
 #include "pw_thread_particle/options.h"
 
 // Particle and project headers after Pigweed
@@ -396,6 +404,134 @@ pw::kvs::KeyValueStore& GetSessionKvs() {
     initialized = true;
   }
   return kvs;
+}
+
+// ---------------------------------------------------------------------------
+// Rapid-reset guard + hardware watchdog (ADR-0040)
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// Consecutive-boot counter, stored as a key in the raw-flash session KVS
+// (ParticleFlashMemory -> ExFlashLock, deliberately NOT LittleFS/HAL_EEPROM:
+// per ADR-0016, an HAL_EEPROM write from the app thread deadlocks against the
+// Device OS system thread's FsLock and bricked a device in production). It
+// survives watchdog reset, panic, and power cycle. RecordBoot() bumps it at
+// boot start; MarkBootComplete() zeroes it once boot finishes, so only boots
+// that FAILED to complete (a deterministic boot-time fault) accumulate.
+constexpr char kBootCountKey[] = "boot_count";
+
+// Ticked ~once per second by a coroutine on the system dispatcher; read by the
+// watchdog feeder thread as proof the safety-critical event loop is scheduling.
+std::atomic<uint32_t> g_watchdog_heartbeat{0};
+pb::watchdog::Watchdog g_watchdog;
+
+// This boot's consecutive-boot count, cached from RecordBoot (app thread) so the
+// GetDeviceInfo RPC (RPC thread) can read it without touching the non-thread-safe
+// session KVS — concurrent KVS access from both threads hung the device when
+// GetDeviceInfo was called early in boot.
+std::atomic<int> g_last_boot_count{1};
+
+// Coroutine that ticks the heartbeat while the dispatcher keeps scheduling it.
+class DispatcherHeartbeat {
+ public:
+  explicit DispatcherHeartbeat(pw::allocator::Allocator& alloc)
+      : coro_cx_(alloc) {}
+
+  void Start(pw::async2::Dispatcher& dispatcher) {
+    auto coro = Run(coro_cx_);
+    task_.emplace(std::move(coro), [](pw::Status status) {
+      PW_LOG_ERROR("Watchdog heartbeat coro exited: %d",
+                   static_cast<int>(status.code()));
+    });
+    dispatcher.Post(*task_);
+  }
+
+ private:
+  pw::async2::Coro<pw::Status> Run([[maybe_unused]] pw::async2::CoroContext cx) {
+    using namespace std::chrono_literals;
+    auto& time_provider = pw::async2::GetSystemTimeProvider();
+    while (true) {
+      co_await time_provider.WaitFor(1s);
+      g_watchdog_heartbeat.fetch_add(1, std::memory_order_relaxed);
+    }
+    co_return pw::OkStatus();
+  }
+
+  pw::async2::CoroContext coro_cx_;
+  std::optional<pw::async2::CoroOrElseTask> task_;
+};
+
+}  // namespace
+
+int RecordBoot() {
+  auto& kvs = GetSessionKvs();
+  uint32_t count = 0;
+  kvs.Get(kBootCountKey, &count).IgnoreError();  // absent -> stays 0
+  count += 1;
+  kvs.Put(kBootCountKey, count).IgnoreError();
+  g_last_boot_count.store(static_cast<int>(count), std::memory_order_relaxed);
+  return static_cast<int>(count);
+}
+
+int LastBootCount() {
+  // Reads the cached atomic, NOT the KVS — the RPC thread must not touch the
+  // session KVS concurrently with the app thread.
+  return g_last_boot_count.load(std::memory_order_relaxed);
+}
+
+void MarkBootComplete() {
+  // Reaching here means boot completed, so clear the persistent counter. A
+  // synchronous raw-flash write — safe because this runs on the app thread at
+  // the end of AppInit, before the dispatcher starts, so nothing else touches
+  // the KVS concurrently. Leaves the g_last_boot_count cache (this boot's start
+  // count, for the RPC) unchanged.
+  uint32_t zero = 0;
+  GetSessionKvs().Put(kBootCountKey, zero).IgnoreError();
+}
+
+void StartWatchdog(pw::chrono::SystemClock::duration timeout) {
+  if (auto status = g_watchdog.Enable(timeout); !status.ok()) {
+    PW_LOG_ERROR("Watchdog enable failed: %d", static_cast<int>(status.code()));
+    return;
+  }
+  PW_LOG_INFO("Hardware watchdog armed");
+
+  // Heartbeat coroutine proves the dispatcher is scheduling work.
+  static DispatcherHeartbeat heartbeat(pw::System().allocator());
+  heartbeat.Start(pw::System().dispatcher());
+
+  // Dedicated high-priority feeder: feeds only while the heartbeat advances, so
+  // a wedged dispatcher (busy-looping or deadlocked) stops the feed and the
+  // IWDG resets the device. A merely-idle-but-live dispatcher keeps ticking, so
+  // the terminal is not reset while healthy.
+  static const pw::thread::particle::Options feeder_options =
+      pw::thread::particle::Options()
+          .set_name("wdg_feeder")
+          .set_priority(8)  // above app threads, below DeviceOS-critical (9)
+          .set_stack_size(1536);  // matches the lcd_flush wait-and-call thread
+  pw::thread::DetachedThread(feeder_options, [] {
+    using namespace std::chrono_literals;
+    uint32_t last_seen = 0;
+    while (true) {
+      // Feed every 2s while the ~1s heartbeat advances. Must stay well below the
+      // watchdog timeout so a couple of feed cycles fit within it.
+      pw::this_thread::sleep_for(2s);
+      uint32_t hb = g_watchdog_heartbeat.load(std::memory_order_relaxed);
+      if (hb != last_seen) {
+        last_seen = hb;
+        (void)g_watchdog.Feed();
+      }
+    }
+  });
+}
+
+void StopWatchdog() {
+  // Best-effort: Disable() calls hal_watchdog_stop unconditionally, so it also
+  // attempts to stop an IWDG armed on a previous boot that survived the reset.
+  // FailedPrecondition (hardware that can't stop the watchdog) is expected and
+  // ignored — on such hardware the rapid-reset counter still bounds the loop.
+  (void)g_watchdog.Disable();
 }
 
 }  // namespace maco::system

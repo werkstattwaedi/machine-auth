@@ -11,6 +11,7 @@ cc_library(
     hdrs = ["maco_service.h"],
     deps = [
         "//maco_firmware/protos:maco_service_nanopb_rpc",
+        "//maco_firmware/system:headers",
         "@pigweed//pw_chrono:system_clock",
         "@pigweed//pw_log",
         "@pigweed//pw_status",

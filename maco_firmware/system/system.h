@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <string_view>
 
+#include "pw_chrono/system_clock.h"
 #include "pw_function/function.h"
 #include "pw_random/random.h"
 #include "pw_thread/options.h"
@@ -171,6 +172,47 @@ maco::app_state::SystemMonitorBackend& GetSystemMonitorBackend();
 /// P2: Maps HAL_Core_Get_Last_Reset_Info() to ResetReason
 /// Host: Always returns kPowerCycle
 ResetReason GetResetReason();
+
+/// Records this boot in persistent storage and returns the number of
+/// consecutive boots that did NOT reach MarkBootComplete(). A healthy device
+/// reports 1; a boot-time fault that keeps crashing before boot completes
+/// reports an increasing count. Used by the app to detect a boot loop and fall
+/// back to a minimal safe state instead of re-arming the watchdog forever
+/// (ADR-0040). Runtime hangs recover via the watchdog and DO reach
+/// MarkBootComplete, so they never accumulate here.
+/// P2: raw-flash-KVS-backed (survives watchdog/panic/power cycle).
+/// Host: no-op, always returns 1.
+int RecordBoot();
+
+/// Returns the current consecutive-boot count without modifying it (for
+/// diagnostics, e.g. the GetDeviceInfo RPC). 1 on a healthy device.
+/// P2: reads the cached count. Host: always returns 1.
+int LastBootCount();
+
+/// Marks this boot as successfully completed, clearing the consecutive-boot
+/// counter. Call once at the end of app init. Because it clears only when boot
+/// reaches this point, the counter counts only boots that FAILED to complete —
+/// so runtime hangs (which reboot fully) don't trip the rapid-reset guard.
+/// P2: clears the raw-flash counter. Host: no-op.
+void MarkBootComplete();
+
+/// Arms the hardware watchdog with `timeout` and starts feeding it from a
+/// supervised dispatcher heartbeat: a coroutine on the system dispatcher proves
+/// the safety-critical event loop is scheduling work, and a dedicated
+/// high-priority thread feeds the watchdog only while that heartbeat advances.
+/// A genuinely wedged dispatcher stops the heartbeat, the feed stops, and the
+/// watchdog resets the device (ADR-0040). Call after app init completes.
+/// P2: hardware IWDG via pb::watchdog::Watchdog.
+/// Host: no-op.
+void StartWatchdog(pw::chrono::SystemClock::duration timeout);
+
+/// Best-effort stop of the hardware watchdog. Used on the rapid-reset safe path
+/// to halt a watchdog that may have been armed on a previous boot and survived
+/// the reset, so it can't keep resetting the terminal. May be a no-op on
+/// hardware that cannot stop an independent watchdog once started.
+/// P2: pb::watchdog::Watchdog::Disable() (calls hal_watchdog_stop).
+/// Host: no-op.
+void StopWatchdog();
 
 /// Returns the KVS instance for session persistence.
 /// P2: External flash via ParticleFlashMemory

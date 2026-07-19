@@ -23,6 +23,7 @@
     "dev:gateway:staging": "GATEWAY_ENV=staging bazel run //maco_gateway:gateway -- --verbose",
     "seed": "npx tsx scripts/seed-emulator.ts",
     "sync-config": "npx tsx scripts/sync-device-config.ts",
+    "check:index-drift": "npx tsx scripts/check-index-drift.ts",
     "test:web": "cd web && npm test",
     "test:web:integration": "npx tsx scripts/port-block.ts -- bash -c 'scripts/emulator-exec.sh --config \"$FIREBASE_E2E_CONFIG\" --only firestore \"cd web && npm run test:integration\"'",
     "test:web:e2e": "npx tsx scripts/port-block.ts -- bash -c 'scripts/emulator-exec.sh --config \"$FIREBASE_E2E_CONFIG\" --only firestore,auth,functions,storage \"cd web && npm run test:e2e\"'",

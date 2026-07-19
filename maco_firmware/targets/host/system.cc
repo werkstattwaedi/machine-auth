@@ -301,6 +301,19 @@ ResetReason GetResetReason() {
   return ResetReason::kPowerCycle;
 }
 
+// The rapid-reset guard and hardware watchdog are P2-only. On the host
+// simulator there is no persistent boot counter and nothing to watchdog, so
+// these are no-ops (RecordBoot always reports a healthy single boot).
+int RecordBoot() { return 1; }
+
+int LastBootCount() { return 1; }
+
+void MarkBootComplete() {}
+
+void StartWatchdog(pw::chrono::SystemClock::duration) {}
+
+void StopWatchdog() {}
+
 pw::kvs::KeyValueStore& GetSessionKvs() {
   static pw::kvs::FakeFlashMemoryBuffer<4096, 8> flash;
   static pw::kvs::FlashPartition partition(&flash);

@@ -105,7 +105,14 @@ class SensingService:
         logger.info("sensing: lease reaper started")
         while True:
             await asyncio.sleep(REAPER_INTERVAL_S)
-            await self._sweep()
+            # The reaper runs under the top-level asyncio.gather in main.serve();
+            # an unhandled error here would tear down the whole gateway. A
+            # transient sensing-backend failure must not do that — log and keep
+            # sweeping so the next interval retries.
+            try:
+                await self._sweep()
+            except Exception:
+                logger.exception("sensing: reaper sweep failed; continuing")
 
     async def _sweep(self) -> None:
         now = self._now()
@@ -118,9 +125,16 @@ class SensingService:
             entry.refcount -= 1
             if entry.refcount <= 0:
                 self._probers.pop(lease.prober_key, None)
-                await entry.backend.stop()
-                logger.info("sensing: prober %s stopped (lease %s lapsed)",
-                            lease.prober_key, lid[:8])
+                # Best-effort stop: one backend failing to stop must not abort
+                # the sweep and leak the remaining expired leases/probers.
+                try:
+                    await entry.backend.stop()
+                    logger.info("sensing: prober %s stopped (lease %s lapsed)",
+                                lease.prober_key, lid[:8])
+                except Exception:
+                    logger.exception(
+                        "sensing: prober %s stop failed (lease %s lapsed)",
+                        lease.prober_key, lid[:8])
 
     async def shutdown(self) -> None:
         """Stop every prober (gateway shutdown)."""
