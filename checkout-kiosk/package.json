@@ -1,6 +1,6 @@
 {
   "name": "checkout-kiosk",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Electron hardware bridge for the OWW checkout kiosk (NFC).",
   "main": "dist/main.js",
   "scripts": {
@@ -11,9 +11,9 @@
     "start:kiosk": "npm run _compile && electron .",
     "dev:kiosk": "npm run start:kiosk",
     "start:kiosk:staging": "node scripts/inject-build-config.mjs --env staging && npm run tsc:main && npm run tsc:renderer && electron .",
-    "build:kiosk": "npm run _compile && electron-builder --config electron-builder.kiosk.yml",
-    "build:kiosk:staging": "node scripts/inject-build-config.mjs --env staging && npm run tsc:main && npm run tsc:renderer && electron-builder --config electron-builder.kiosk.yml --win",
-    "build:kiosk:prod": "node scripts/inject-build-config.mjs --prod && npm run tsc:main && npm run tsc:renderer && electron-builder --config electron-builder.kiosk.yml --win",
+    "build:kiosk": "npm run _compile && cross-env KIOSK_DIST=dev electron-builder --config electron-builder.kiosk.yml",
+    "build:kiosk:staging": "node scripts/inject-build-config.mjs --env staging && npm run tsc:main && npm run tsc:renderer && cross-env KIOSK_DIST=staging electron-builder --config electron-builder.kiosk.yml --win",
+    "build:kiosk:prod": "node scripts/inject-build-config.mjs --prod && npm run tsc:main && npm run tsc:renderer && cross-env KIOSK_DIST=prod electron-builder --config electron-builder.kiosk.yml --win",
     "test": "npm run inject-build-config && tsx --test \"src/**/*.test.ts\"",
     "rebuild": "electron-rebuild",
     "postinstall": "electron-rebuild",

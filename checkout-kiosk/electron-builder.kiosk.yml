@@ -21,7 +21,9 @@ win:
   target:
     - target: nsis
       arch: x64
-  artifactName: oww-kiosk-${version}-setup.${ext}
+  # KIOSK_DIST is set by the build:kiosk* npm scripts (dev/staging/prod)
+  # so installers from different environments can't overwrite each other.
+  artifactName: oww-kiosk-${env.KIOSK_DIST}-${version}-setup.${ext}
 nsis:
   oneClick: false
   perMachine: false
@@ -29,7 +31,7 @@ nsis:
 linux:
   target:
     - AppImage
-  artifactName: oww-kiosk-${version}-${arch}.${ext}
+  artifactName: oww-kiosk-${env.KIOSK_DIST}-${version}-${arch}.${ext}
 mac:
   target: dmg
-  artifactName: oww-kiosk-${version}-${arch}.${ext}
+  artifactName: oww-kiosk-${env.KIOSK_DIST}-${version}-${arch}.${ext}
