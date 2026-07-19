@@ -141,13 +141,20 @@ previously dropped to recovery mode; now it resets.
 
 ### 4. Required companion — rapid-reset guard (ships *with* the watchdog)
 
-A watchdog turns a *deterministic* boot-time failure (e.g. a failing
-`PW_CHECK_OK(machine_toggle.Init())`) into a reset **boot-loop**. Before arming
-any watchdog, add a rapid-reset counter in backup RAM (the `BKUP_*` registers,
-same mechanism the reset-reason already uses): if N resets occur within M
-seconds, fall through to a **minimal safe state** — relay forced OFF, watchdog
-disarmed, error screen — instead of re-arming. This is not optional; it is the
-guard against bricking a terminal on a deterministic fault.
+A watchdog turns a *deterministic* boot-time failure into a reset **boot-loop**.
+The guard is a persistent counter (raw-flash KVS, not backup RAM — those
+registers aren't linkable here; not HAL_EEPROM — that deadlocks, ADR-0016):
+`RecordBoot()` bumps it at boot start, `MarkBootComplete()` zeroes it at the end
+of a successful boot. So the counter only accumulates for boots that **fail to
+complete** — a genuine boot-time fault. Past `kMaxConsecutiveBoots` the app falls
+to a **minimal safe state** (no session resume, watchdog disarmed) instead of
+re-arming, so it can't brick on a deterministic fault.
+
+Crucially, the counter must clear on boot *completion*, not after a fixed
+"stable" time window: a **runtime hang** reboots fully (reaching
+`MarkBootComplete`) and so must NOT count toward the guard — otherwise repeated
+runtime hangs, which the watchdog is supposed to recover indefinitely, would
+trip the guard and disarm the very watchdog protecting against them.
 
 ### 5. Relay safety — no new code
 
@@ -201,11 +208,13 @@ case. Verify on-device, but no code change is required.
    `apps/dev/main.cc` to a shim. Behavior-preserving.
 2. **Done.** Add `apps/prod` target + `build:prod` config (`-c opt`) +
    `./pw prod-flash`/`prod-console`; prod in `./pw build p2`.
-3. **Done.** Rapid-reset guard — persisted in **EEPROM** (`HAL_EEPROM_Get/Put`,
-   a littlefs-backed file that survives watchdog/panic/power cycle), not backup
-   registers (those are not linkable from this split user-part build). Exposed as
-   `system::RecordBoot` / `ScheduleBootStableClear`; `app_main` falls to a
-   safe state (no session resume, no watchdog) past `kMaxConsecutiveBoots`.
+3. **Done.** Rapid-reset guard — persisted in the **raw-flash session KVS**
+   (survives watchdog/panic/power cycle; not HAL_EEPROM, which deadlocks per
+   ADR-0016, nor backup registers, which aren't linkable here). `RecordBoot`
+   bumps it at boot start, `MarkBootComplete` zeroes it at the end of a
+   successful boot (so only boots that fail to complete accumulate); `app_main`
+   falls to a safe state (no session resume, no watchdog) past
+   `kMaxConsecutiveBoots`.
 4. **Done.** Supervised watchdog feed via `system::StartWatchdog` (P2:
    `pb::watchdog::Watchdog` + dispatcher-heartbeat coroutine + priority-8 feeder
    thread; host no-op). Boot logs the reset reason. The `WatchdogLock`

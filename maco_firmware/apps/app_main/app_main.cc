@@ -45,10 +45,11 @@ namespace {
 // small inline capacity on the 32-bit target.
 AppConfig g_config;
 
-// A deterministic boot-time fault (e.g. a failing PW_CHECK) with the watchdog
-// armed would reset-loop forever. If this many consecutive boots occur without
-// one proving stable (running past the ScheduleBootStableClear window), fall
-// back to a minimal safe state instead of re-arming the watchdog (ADR-0040).
+// A deterministic boot-time fault that crashes before MarkBootComplete() would
+// reset-loop forever. If this many consecutive boots FAIL to complete, fall back
+// to a minimal safe state instead of re-arming the watchdog (ADR-0040). Runtime
+// hangs recover and reboot fully (reaching MarkBootComplete), so they clear the
+// counter and never count toward this threshold.
 constexpr int kMaxConsecutiveBoots = 4;
 
 /// Check for an orphaned session from a prior device reset.
@@ -381,11 +382,6 @@ void AppInit() {
       std::chrono::seconds(30), maco::display::metrics::OnThreadStackScan
   );
 
-  // Clear the rapid-reset counter once we've run stably, so ordinary reboots
-  // don't accumulate toward the safe-state threshold. Runs regardless of the
-  // watchdog so a boot-loop-detected boot can still recover next cycle.
-  maco::system::ScheduleBootStableClear(std::chrono::seconds(60));
-
   // Arm the hardware watchdog last, after all init is done, so a slow boot
   // (display, NFC, gateway connect) can't trip it. No-op on host and when the
   // config leaves it disabled (dev). In a reset loop, don't arm it — and stop
@@ -400,6 +396,13 @@ void AppInit() {
       maco::system::StartWatchdog(g_config.watchdog_timeout);
     }
   }
+
+  // Reaching here means the boot completed. Clear the consecutive-boot counter
+  // so it only ever counts boots that FAILED to complete (a deterministic
+  // boot-time fault → brick). Runtime hangs recover via the watchdog and reboot
+  // fully, so they clear the counter here and never trip the rapid-reset guard —
+  // the terminal stays protected however many times it wedges.
+  maco::system::MarkBootComplete();
 
   PW_LOG_INFO("AppInit complete - place a card on the reader");
 }

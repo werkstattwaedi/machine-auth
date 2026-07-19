@@ -416,9 +416,9 @@ namespace {
 // (ParticleFlashMemory -> ExFlashLock, deliberately NOT LittleFS/HAL_EEPROM:
 // per ADR-0016, an HAL_EEPROM write from the app thread deadlocks against the
 // Device OS system thread's FsLock and bricked a device in production). It
-// survives watchdog reset, panic, and power cycle. RecordBoot() bumps it each
-// boot; ScheduleBootStableClear() zeroes it once the device proves it can run
-// for a while, so only a genuine boot loop accumulates.
+// survives watchdog reset, panic, and power cycle. RecordBoot() bumps it at
+// boot start; MarkBootComplete() zeroes it once boot finishes, so only boots
+// that FAILED to complete (a deterministic boot-time fault) accumulate.
 constexpr char kBootCountKey[] = "boot_count";
 
 // Ticked ~once per second by a coroutine on the system dispatcher; read by the
@@ -462,12 +462,6 @@ class DispatcherHeartbeat {
   std::optional<pw::async2::CoroOrElseTask> task_;
 };
 
-// Zeroes the boot counter (a raw-flash KVS write). Called off the dispatcher.
-void ClearBootCounter() {
-  uint32_t zero = 0;
-  GetSessionKvs().Put(kBootCountKey, zero).IgnoreError();
-}
-
 }  // namespace
 
 int RecordBoot() {
@@ -486,25 +480,14 @@ int LastBootCount() {
   return g_last_boot_count.load(std::memory_order_relaxed);
 }
 
-void ScheduleBootStableClear(pw::chrono::SystemClock::duration after) {
-  // A one-shot timer thread, NOT a dispatcher coroutine: the clear does a
-  // synchronous raw-flash write, which must not block the safety-critical
-  // dispatcher. Runs regardless of the watchdog so a boot-loop-detected boot
-  // can still recover on the next cycle.
-  // Pass `after` via a file-scope static rather than a lambda capture: a
-  // capturing lambda can exceed pw::Function's small inline capacity on the
-  // 32-bit target. Set before the thread starts; read once after.
-  static pw::chrono::SystemClock::duration s_stable_after;
-  s_stable_after = after;
-  static const pw::thread::particle::Options options =
-      pw::thread::particle::Options()
-          .set_name("boot_stable")
-          .set_stack_size(1536);
-  pw::thread::DetachedThread(options, [] {
-    pw::this_thread::sleep_for(s_stable_after);
-    ClearBootCounter();
-    PW_LOG_INFO("Boot marked stable; rapid-reset counter cleared");
-  });
+void MarkBootComplete() {
+  // Reaching here means boot completed, so clear the persistent counter. A
+  // synchronous raw-flash write — safe because this runs on the app thread at
+  // the end of AppInit, before the dispatcher starts, so nothing else touches
+  // the KVS concurrently. Leaves the g_last_boot_count cache (this boot's start
+  // count, for the RPC) unchanged.
+  uint32_t zero = 0;
+  GetSessionKvs().Put(kBootCountKey, zero).IgnoreError();
 }
 
 void StartWatchdog(pw::chrono::SystemClock::duration timeout) {

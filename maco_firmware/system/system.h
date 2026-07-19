@@ -174,26 +174,27 @@ maco::app_state::SystemMonitorBackend& GetSystemMonitorBackend();
 ResetReason GetResetReason();
 
 /// Records this boot in persistent storage and returns the number of
-/// consecutive boots that have NOT yet been confirmed stable (see
-/// ScheduleBootStableClear). A healthy device reports 1; a boot loop (repeated
-/// resets before the stable window elapses) reports an increasing count. Used
-/// by the app to detect a reset loop and fall back to a minimal safe state
-/// instead of re-arming the watchdog forever (ADR-0040).
-/// P2: EEPROM-backed (survives watchdog/panic/power cycle).
+/// consecutive boots that did NOT reach MarkBootComplete(). A healthy device
+/// reports 1; a boot-time fault that keeps crashing before boot completes
+/// reports an increasing count. Used by the app to detect a boot loop and fall
+/// back to a minimal safe state instead of re-arming the watchdog forever
+/// (ADR-0040). Runtime hangs recover via the watchdog and DO reach
+/// MarkBootComplete, so they never accumulate here.
+/// P2: raw-flash-KVS-backed (survives watchdog/panic/power cycle).
 /// Host: no-op, always returns 1.
 int RecordBoot();
 
 /// Returns the current consecutive-boot count without modifying it (for
 /// diagnostics, e.g. the GetDeviceInfo RPC). 1 on a healthy device.
-/// P2: reads the raw-flash counter. Host: always returns 1.
+/// P2: reads the cached count. Host: always returns 1.
 int LastBootCount();
 
-/// Schedules a one-shot clear of the consecutive-boot counter after the device
-/// has run for `after`, proving this boot is stable. Post-boot; requires the
-/// system dispatcher. Call once during app init regardless of watchdog state.
-/// P2: posts a dispatcher coroutine that clears the EEPROM counter.
-/// Host: no-op.
-void ScheduleBootStableClear(pw::chrono::SystemClock::duration after);
+/// Marks this boot as successfully completed, clearing the consecutive-boot
+/// counter. Call once at the end of app init. Because it clears only when boot
+/// reaches this point, the counter counts only boots that FAILED to complete —
+/// so runtime hangs (which reboot fully) don't trip the rapid-reset guard.
+/// P2: clears the raw-flash counter. Host: no-op.
+void MarkBootComplete();
 
 /// Arms the hardware watchdog with `timeout` and starts feeding it from a
 /// supervised dispatcher heartbeat: a coroutine on the system dispatcher proves

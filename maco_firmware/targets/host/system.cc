@@ -308,7 +308,7 @@ int RecordBoot() { return 1; }
 
 int LastBootCount() { return 1; }
 
-void ScheduleBootStableClear(pw::chrono::SystemClock::duration) {}
+void MarkBootComplete() {}
 
 void StartWatchdog(pw::chrono::SystemClock::duration) {}
 
