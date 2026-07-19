@@ -119,6 +119,17 @@ bool RecoverOrphanedSession(
 void AppInit() {
   PW_LOG_INFO("MACO Firmware initializing...");
 
+  // Stop any watchdog that survived the reset it triggered BEFORE any slow
+  // synchronous work (the KVS/flash writes just below can erase sectors and take
+  // seconds). An independent IWDG keeps counting across its own reset; if it
+  // fired again mid-boot, before we re-arm and start feeding it at the end of
+  // AppInit, the device could never boot far enough to feed it — a reset loop
+  // that a short timeout makes far more likely. Re-armed fresh at the end, once
+  // the feeder is live, so the timeout only ever runs against a fed system.
+  if (g_config.enable_watchdog) {
+    maco::system::StopWatchdog();
+  }
+
   // Record this boot and detect a rapid-reset loop before doing anything that
   // could itself fault. boot_loop drives the fail-safe below: no session
   // resume, and the watchdog is not armed.

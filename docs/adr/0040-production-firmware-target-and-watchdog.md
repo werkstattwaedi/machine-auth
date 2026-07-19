@@ -96,9 +96,19 @@ Design — supervised feed:
   timeout only has to clear the worst-case *legitimate* dispatcher stall (brief
   synchronous flash writes) plus a feeder period, so a genuine wedge is caught in
   seconds. Tunable via `AppConfig::watchdog_timeout` in `apps/prod/main.cc`.
-- **Arm only after `AppInit()` completes** — boot includes display/NFC init and
-  a gateway connect with a 10 s timeout; an early tight watchdog would reset
-  mid-boot.
+- **Arm only after `AppInit()` completes** — the feeder can't run until the
+  dispatcher does, so the watchdog is armed at the end of AppInit and fed from
+  then on.
+- **Stop any surviving watchdog at the *start* of AppInit.** An independent IWDG
+  keeps counting across the reset it triggers. Because a short timeout can be
+  shorter than the synchronous boot work (a corrupt-KVS erase can take seconds),
+  a survived IWDG could fire again mid-boot before we re-arm — a reset loop the
+  device can't out-boot, which a short timeout makes far more likely. `AppInit`
+  calls `StopWatchdog()` (best-effort `hal_watchdog_stop`) before any flash work,
+  then arms fresh at the end, so the timeout only ever runs against a fed system.
+  **Depends on `hal_watchdog_stop` actually stopping the IWDG on RTL872x — an
+  on-device test item.** If it cannot be stopped, the timeout must instead exceed
+  the worst-case boot time (accepting slower wedge recovery).
 - Fix the pre-existing vexing-parse bug in `watchdog_hal.cpp` (`WatchdogLock
   lk();` declares a function, so the mutex is never taken) in the same PR, since
   we will exercise this code for real.
