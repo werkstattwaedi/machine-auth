@@ -306,6 +306,8 @@ ResetReason GetResetReason() {
 // these are no-ops (RecordBoot always reports a healthy single boot).
 int RecordBoot() { return 1; }
 
+int LastBootCount() { return 1; }
+
 void ScheduleBootStableClear(pw::chrono::SystemClock::duration) {}
 
 void StartWatchdog(pw::chrono::SystemClock::duration) {}

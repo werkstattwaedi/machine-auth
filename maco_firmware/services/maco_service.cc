@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cstring>
 
+#include "maco_firmware/system/system.h"
 #include "pw_assert/check.h"
 #include "pw_async2/dispatcher.h"
 #include "pw_async2/task.h"
@@ -90,6 +91,12 @@ pw::Status MacoService::GetDeviceInfo(const ::maco_Empty& /*request*/,
   std::strncpy(response.build_target, kBuildTarget,
                sizeof(response.build_target) - 1);
   response.build_target[sizeof(response.build_target) - 1] = '\0';
+
+  // Reset reason + rapid-reset boot count. Lets the watchdog test be verified
+  // via RPC when the early boot log is dropped (prod skips the USB wait).
+  response.reset_reason =
+      static_cast<uint32_t>(maco::system::GetResetReason());
+  response.boot_count = static_cast<uint32_t>(maco::system::LastBootCount());
 
   return pw::OkStatus();
 }

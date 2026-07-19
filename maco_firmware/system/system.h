@@ -183,6 +183,11 @@ ResetReason GetResetReason();
 /// Host: no-op, always returns 1.
 int RecordBoot();
 
+/// Returns the current consecutive-boot count without modifying it (for
+/// diagnostics, e.g. the GetDeviceInfo RPC). 1 on a healthy device.
+/// P2: reads the raw-flash counter. Host: always returns 1.
+int LastBootCount();
+
 /// Schedules a one-shot clear of the consecutive-boot counter after the device
 /// has run for `after`, proving this boot is stable. Post-boot; requires the
 /// system dispatcher. Call once during app init regardless of watchdog state.

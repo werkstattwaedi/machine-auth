@@ -473,6 +473,12 @@ int RecordBoot() {
   return static_cast<int>(count);
 }
 
+int LastBootCount() {
+  uint32_t count = 0;
+  GetSessionKvs().Get(kBootCountKey, &count).IgnoreError();
+  return static_cast<int>(count);
+}
+
 void ScheduleBootStableClear(pw::chrono::SystemClock::duration after) {
   // A one-shot timer thread, NOT a dispatcher coroutine: the clear does a
   // synchronous raw-flash write, which must not block the safety-critical
