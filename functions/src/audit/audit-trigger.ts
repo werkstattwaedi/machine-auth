@@ -15,8 +15,11 @@ import {
  * - DocumentReferences become path strings
  * - Timestamps become ISO strings
  * - Nested objects/arrays are recursively serialized
+ *
+ * Exported: the DSAR report (privacy/privacy_report.ts) serializes subject
+ * docs with the same convention (ADR-0038).
  */
-function serializeValue(value: unknown): unknown {
+export function serializeValue(value: unknown): unknown {
   if (value === null || value === undefined) return value;
   if (value instanceof DocumentReference) return value.path;
   if (value instanceof Timestamp) return value.toDate().toISOString();
@@ -80,6 +83,23 @@ function createAuditTrigger(collectionName: string, documentPattern: string) {
     handleAuditEvent(collectionName, event)
   );
 }
+
+/**
+ * Every audited collection. The privacy subject-data map's coverage test
+ * asserts each of these has a documented data-protection policy — adding a
+ * trigger below without a map entry fails CI (ADR-0038).
+ */
+export const AUDITED_COLLECTIONS = [
+  "users",
+  "tokens",
+  "machine",
+  "permission",
+  "maco",
+  "usage_machine",
+  "checkouts",
+  "catalog",
+  "bills",
+] as const;
 
 // Export individual triggers for each audited collection
 export const auditUsers = createAuditTrigger("users", "users/{docId}");

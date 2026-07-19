@@ -15,9 +15,37 @@ export interface OperationsLogEntry {
   collection: string;
   docId: string;
   operation: string;
-  severity: "error" | "warning";
+  severity: "error" | "warning" | "info";
   message: string;
   timestamp: Timestamp;
+}
+
+/**
+ * Accountability record for privileged operations (DSAR report/erase/trim
+ * invocations, ADR-0038). Unlike error/warning, these are expected events —
+ * the entry documents who did what, not that something went wrong. Keep the
+ * message PII-free (subject ids, not emails).
+ */
+export async function logOperationInfo(
+  collection: string,
+  docId: string,
+  operation: string,
+  message: string,
+): Promise<void> {
+  const entry: OperationsLogEntry = {
+    collection,
+    docId,
+    operation,
+    severity: "info",
+    message,
+    timestamp: Timestamp.now(),
+  };
+
+  try {
+    await getFirestore().collection("operations_log").add(entry);
+  } catch (err) {
+    logger.error("Failed to write operations log", { collection, docId, operation, err });
+  }
 }
 
 export async function logOperationError(

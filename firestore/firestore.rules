@@ -467,5 +467,11 @@ service cloud.firestore {
     match /operations_log/{logId} {
       allow read, write: if false;
     }
+    match /export_state/{streamId} {
+      allow read, write: if false;
+    }
+    match /erasures/{subjectId} {
+      allow read, write: if false;
+    }
   }
 }
