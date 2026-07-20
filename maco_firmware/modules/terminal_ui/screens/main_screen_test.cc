@@ -238,9 +238,84 @@ TEST_F(MainScreenTest, DeniedState) {
       "maco_firmware/modules/terminal_ui/testdata/main_denied.png",
       "/tmp/main_denied_diff.png"));
 
+  // A generic denial (no action URL) dismisses with "OK"; there is no
+  // QR, so no "Info" button (issue #559).
   auto config = screen_->GetButtonConfig();
-  EXPECT_EQ(config.ok.label, "Zurück");
+  EXPECT_EQ(config.ok.label, "OK");
   EXPECT_TRUE(config.cancel.label.empty());
+}
+
+// A missing-permission denial also carries a /denied action URL, but it must
+// render as the generic icon + "Nicht berechtigt" (identical to the no-reason
+// denial), NOT the stale-checkout heading/QR, and offers no "Info" button.
+// Regression guard for the missing-permission-shows-stale-layout bug (#559).
+TEST_F(MainScreenTest, DeniedMissingPermissionIsGeneric) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.verification.state =
+      app_state::TagVerificationState::kUnauthorized;
+  snapshot.verification.rejection_reason =
+      app_state::RejectionReason::kMissingPermission;
+  snapshot.verification.rejection_message =
+      "Keine Berechtigung für diese Maschine";
+  snapshot.verification.rejection_action_url =
+      "https://checkout.werkstattwaedi.ch/denied?cause=missing_permission"
+      "&uid=u1";
+  screen_->OnUpdate(snapshot);
+  RenderFrame();
+
+  // Pixel-identical to the generic denial golden.
+  EXPECT_TRUE(harness_.CompareToGolden(
+      "maco_firmware/modules/terminal_ui/testdata/main_denied.png",
+      "/tmp/main_denied_missing_diff.png"));
+
+  auto config = screen_->GetButtonConfig();
+  EXPECT_EQ(config.ok.label, "OK");
+  EXPECT_TRUE(config.cancel.label.empty());
+
+  // ESC must not open an Info/QR view for a non-stale denial.
+  EXPECT_TRUE(screen_->OnEscapePressed());
+  EXPECT_TRUE(screen_->GetButtonConfig().cancel.label.empty());
+}
+
+// A denial stays on screen after the badge is removed (verification → kIdle) so
+// a walk-up user still sees why they were rejected. A new tag clears it
+// (issue #559).
+TEST_F(MainScreenTest, DeniedPersistsAfterBadgeRemoval) {
+  app_state::AppStateSnapshot denied;
+  denied.verification.state = app_state::TagVerificationState::kUnauthorized;
+  screen_->OnUpdate(denied);
+  EXPECT_EQ(screen_->GetScreenStyle().bg_color, theme::kColorRed);
+
+  // Badge removed: TagVerifier resets to kIdle, but the denial must persist.
+  app_state::AppStateSnapshot idle;  // state defaults to kIdle
+  screen_->OnUpdate(idle);
+  EXPECT_EQ(screen_->GetScreenStyle().bg_color, theme::kColorRed);
+  EXPECT_EQ(screen_->GetButtonConfig().ok.label, "OK");
+
+  // A new tag being verified clears the latch → back to the idle screen.
+  app_state::AppStateSnapshot verifying;
+  verifying.verification.state = app_state::TagVerificationState::kVerifying;
+  screen_->OnUpdate(verifying);
+  EXPECT_NE(screen_->GetScreenStyle().bg_color, theme::kColorRed);
+}
+
+// Once the badge is gone, a persisted denial auto-dismisses after the ~20s
+// countdown (issue #559). The countdown is paused while the badge is present,
+// so it only starts after removal.
+TEST_F(MainScreenTest, DeniedAutoDismissesAfterTimeout) {
+  app_state::AppStateSnapshot denied;
+  denied.verification.state = app_state::TagVerificationState::kUnauthorized;
+  screen_->OnUpdate(denied);  // latch; badge present → countdown armed, paused
+  EXPECT_EQ(screen_->GetScreenStyle().bg_color, theme::kColorRed);
+
+  // Badge removed → the countdown may run; then advance lv_tick past the 20s
+  // auto-dismiss window and pump one more frame.
+  app_state::AppStateSnapshot idle;  // state defaults to kIdle
+  screen_->OnUpdate(idle);
+  harness_.RenderFrame(21000);
+  screen_->OnUpdate(idle);
+
+  EXPECT_NE(screen_->GetScreenStyle().bg_color, theme::kColorRed);
 }
 
 TEST_F(MainScreenTest, DeniedScreenStyle) {
@@ -265,8 +340,10 @@ TEST_F(MainScreenTest, HoldLongerState) {
       "maco_firmware/modules/terminal_ui/testdata/main_hold_longer.png",
       "/tmp/main_hold_longer_diff.png"));
 
+  // "Hold longer" is now dismissible with OK (it used to leak focus to the menu
+  // button); no Cancel affordance (issue #559).
   auto config = screen_->GetButtonConfig();
-  EXPECT_EQ(config.ok.label, "Zurück");
+  EXPECT_EQ(config.ok.label, "OK");
   EXPECT_TRUE(config.cancel.label.empty());
 }
 
@@ -280,9 +357,9 @@ TEST_F(MainScreenTest, HoldLongerScreenStyle) {
   EXPECT_EQ(style.bg_color, theme::kColorYellow);
 }
 
-// A stale-checkout rejection renders the actionable layout: heading + the
-// server message + a QR of the action URL, instead of the generic
-// "Nicht berechtigt" (issue #535).
+// A stale-checkout rejection renders the actionable base layout: heading + the
+// full-width server message, with the QR moved behind the "Info" button
+// (issue #535/#559).
 TEST_F(MainScreenTest, DeniedStaleCheckout) {
   app_state::AppStateSnapshot snapshot;
   snapshot.verification.state =
@@ -302,10 +379,42 @@ TEST_F(MainScreenTest, DeniedStaleCheckout) {
       "maco_firmware/modules/terminal_ui/testdata/main_denied_stale.png",
       "/tmp/main_denied_stale_diff.png"));
 
-  // Still the red denied screen with a single "Zurück" affordance.
+  // "OK" dismisses; "Info" reveals the QR (there is an action URL).
   auto config = screen_->GetButtonConfig();
-  EXPECT_EQ(config.ok.label, "Zurück");
-  EXPECT_TRUE(config.cancel.label.empty());
+  EXPECT_EQ(config.ok.label, "OK");
+  EXPECT_EQ(config.cancel.label, "Info");
+}
+
+// The QR sits behind the "Info" button: ESC opens the full-screen QR view and
+// ESC again returns to the message (issue #559).
+TEST_F(MainScreenTest, DeniedStaleCheckoutInfoTogglesQr) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.verification.state =
+      app_state::TagVerificationState::kUnauthorized;
+  snapshot.verification.rejection_reason =
+      app_state::RejectionReason::kStaleCheckout;
+  snapshot.verification.rejection_message =
+      "Schliesse deinen letzten Besuch ab.";
+  snapshot.verification.rejection_action_url =
+      "https://checkout.werkstattwaedi.ch/denied?cause=stale_checkout&uid=u1"
+      "&checkout=co_abc&since=2026-07-14";
+  screen_->OnUpdate(snapshot);
+
+  // ESC opens the QR view; the Cancel button flips "Info" → "Zurück".
+  EXPECT_EQ(screen_->GetButtonConfig().cancel.label, "Info");
+  EXPECT_TRUE(screen_->OnEscapePressed());
+  EXPECT_EQ(screen_->GetButtonConfig().cancel.label, "Zurück");
+
+  // The QR view shows the large, centered, scannable code.
+  screen_->OnUpdate(snapshot);
+  RenderFrame();
+  EXPECT_TRUE(harness_.CompareToGolden(
+      "maco_firmware/modules/terminal_ui/testdata/main_denied_stale_qr.png",
+      "/tmp/main_denied_stale_qr_diff.png"));
+
+  // ESC again returns to the message.
+  EXPECT_TRUE(screen_->OnEscapePressed());
+  EXPECT_EQ(screen_->GetButtonConfig().cancel.label, "Info");
 }
 
 TEST_F(MainScreenTest, StopSessionAction) {
