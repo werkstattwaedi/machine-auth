@@ -18,7 +18,7 @@ namespace maco::terminal_ui {
 ///   - Ready: yellow bg, session active but machine idle (e.g. laser not
 ///     cutting); user name + in-use timer
 ///   - Active: green bg, machine actually in use; user name + in-use timer
-///   - Denied: red bg, cancel icon, "Nicht berechtigt"
+///   - Denied: red bg, per-cause heading + short body (QR behind "Info")
 ///
 /// Pending confirmations (checkout, takeover, stop) are shown as a
 /// ConfirmationOverlay on top of the Active/Ready state.
@@ -57,10 +57,37 @@ class MainScreen : public ui::Screen<app_state::AppStateSnapshot> {
 
   void SetVisualState(VisualState state);
   void HideAllWidgets();
-  // Populates the denied widgets from the snapshot's rejection fields: the
-  // actionable stale-checkout layout (heading + message + QR) or the generic
-  // icon + "Nicht berechtigt" (issue #535).
-  void UpdateDenied(const app_state::TagVerificationSnapshot& verification);
+  // Populates the denied widgets from the latched rejection fields: a per-cause
+  // heading + short body, with the QR (when the server supplied one) moved
+  // behind the "Info" button (issue #535).
+  void UpdateDenied();
+
+  // --- Persisted notices: denial + "hold longer" ------------------------
+  // A cloud rejection (kDenied) or a mid-auth removal (kHoldLonger) stays on
+  // screen after the badge is gone until the user dismisses it ("OK") or a
+  // countdown elapses; a stale-checkout denial's QR moves behind an "Info"
+  // button. Latched locally so the verification/session core stays untouched.
+  enum class Notice : uint8_t { kNone, kDenied, kHoldLonger };
+
+  // Reconcile the on-screen notice with the verifier state each frame.
+  void UpdateNotice(const app_state::TagVerificationSnapshot& verification,
+                    bool session_engaged);
+  void StartNotice(Notice notice,
+                   const app_state::TagVerificationSnapshot& verification);
+  void DismissNotice();  // user pressed OK, or the countdown elapsed
+  void TickNoticeCountdown();
+  void SetNoticeInfoOpen(bool open);
+
+  // Heading/body are keyed on the cause (see CopyForReason); only the
+  // stale-checkout message is rendered verbatim, since it carries the date.
+  bool IsStaleDenial() const {
+    return denial_reason_ == app_state::RejectionReason::kStaleCheckout;
+  }
+
+  // The Info/QR view is offered whenever the server gave us a link — today
+  // missing-permission and stale-checkout; token unknown/deactivated have a
+  // cause but no URL, so they show heading + body only.
+  bool HasDenialInfo() const { return !denial_action_url_.empty(); }
 
   ActionCallback action_callback_;
   VisualState visual_state_ = VisualState::kIdle;
@@ -81,17 +108,37 @@ class MainScreen : public ui::Screen<app_state::AppStateSnapshot> {
   lv_obj_t* timer_icon_ = nullptr;
   lv_obj_t* timer_label_ = nullptr;
 
-  // Denied widgets. The generic denial uses icon_ + label_; the stale-checkout
-  // denial (issue #535) uses heading_ + body_ + a QR of the action URL and its
-  // caption. denied_qr_url_ caches the last-encoded URL so the QR is only
-  // rebuilt when the target changes.
-  lv_obj_t* denied_icon_ = nullptr;
-  lv_obj_t* denied_label_ = nullptr;
+  // Denied widgets. Every cause renders heading_ + body_ (see CopyForReason);
+  // causes that carry an action URL additionally offer a QR + caption behind
+  // the "Info" button. denied_qr_url_ caches the last-encoded URL so the QR is
+  // only rebuilt when the target changes.
   lv_obj_t* denied_heading_ = nullptr;
   lv_obj_t* denied_body_ = nullptr;
   lv_obj_t* denied_qr_ = nullptr;
   lv_obj_t* denied_qr_caption_ = nullptr;
-  pw::InlineString<128> denied_qr_url_;
+  // Focusable (size-0) button so the physical OK/ENTER key dismisses the
+  // persisted denial; the on-screen pill is drawn by the ButtonBar.
+  lv_obj_t* denied_dismiss_btn_ = nullptr;
+  // 256 to match the action URL length (snapshot.rejection_action_url); a
+  // shorter buffer would trip InlineString::assign's capacity check at runtime.
+  pw::InlineString<256> denied_qr_url_;
+
+  // Persisted-notice state. notice_ latches a denial/hold-longer so
+  // it survives badge removal; the countdown starts once the badge is gone
+  // (notice_tag_present_ == false) and pauses while the Info/QR view is open.
+  // notice_consumed_ suppresses re-latching the same verifier state after a
+  // dismiss/timeout until a new tag engages (kRemovedTooEarly persists on the
+  // snapshot, so without this it would immediately reappear).
+  Notice notice_ = Notice::kNone;
+  bool notice_consumed_ = false;
+  bool notice_tag_present_ = false;
+  bool notice_info_open_ = false;
+  uint32_t notice_countdown_start_ms_ = 0;  // lv_tick baseline for the countdown
+  uint8_t notice_progress_ = 0;             // 0-100, cached for GetButtonConfig()
+  app_state::RejectionReason denial_reason_ =
+      app_state::RejectionReason::kUnspecified;
+  pw::InlineString<128> denial_message_;
+  pw::InlineString<256> denial_action_url_;
 
   // Hold-longer widgets (badge removed mid-authorization)
   lv_obj_t* hold_longer_icon_ = nullptr;

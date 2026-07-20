@@ -78,7 +78,8 @@ struct TagVerificationSnapshot {
   // a QR of the action URL for the stale-checkout case (issue #535).
   RejectionReason rejection_reason = RejectionReason::kUnspecified;
   pw::InlineString<128> rejection_message;
-  pw::InlineString<128> rejection_action_url;
+  // 256 to match firebase::CheckinRejected::action_url / the nanopb buffer.
+  pw::InlineString<256> rejection_action_url;
 };
 
 // System-level connectivity and boot state for UI display
