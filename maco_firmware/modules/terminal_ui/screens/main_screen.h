@@ -18,7 +18,7 @@ namespace maco::terminal_ui {
 ///   - Ready: yellow bg, session active but machine idle (e.g. laser not
 ///     cutting); user name + in-use timer
 ///   - Active: green bg, machine actually in use; user name + in-use timer
-///   - Denied: red bg, cancel icon, "Nicht berechtigt"
+///   - Denied: red bg, per-cause heading + short body (QR behind "Info")
 ///
 /// Pending confirmations (checkout, takeover, stop) are shown as a
 /// ConfirmationOverlay on top of the Active/Ready state.
@@ -57,10 +57,9 @@ class MainScreen : public ui::Screen<app_state::AppStateSnapshot> {
 
   void SetVisualState(VisualState state);
   void HideAllWidgets();
-  // Populates the denied widgets from the latched rejection fields: the
-  // actionable stale-checkout layout (heading + message, with the QR moved
-  // behind the "Info" button) or the generic icon + "Nicht berechtigt"
-  // (issue #535).
+  // Populates the denied widgets from the latched rejection fields: a per-cause
+  // heading + short body, with the QR (when the server supplied one) moved
+  // behind the "Info" button (issue #535/#559).
   void UpdateDenied();
 
   // --- Persisted notices: denial + "hold longer" (issue #559) ----------------
@@ -79,12 +78,16 @@ class MainScreen : public ui::Screen<app_state::AppStateSnapshot> {
   void TickNoticeCountdown();
   void SetNoticeInfoOpen(bool open);
 
-  // Only the stale-checkout denial gets the heading + message + Info/QR view;
-  // every other cause (incl. missing-permission, which also has an action URL)
-  // uses the generic icon + label. Keyed on the cause, never on URL presence.
+  // Heading/body are keyed on the cause (see CopyForReason); only the
+  // stale-checkout message is rendered verbatim, since it carries the date.
   bool IsStaleDenial() const {
     return denial_reason_ == app_state::RejectionReason::kStaleCheckout;
   }
+
+  // The Info/QR view is offered whenever the server gave us a link — today
+  // missing-permission and stale-checkout; token unknown/deactivated have a
+  // cause but no URL, so they show heading + body only.
+  bool HasDenialInfo() const { return !denial_action_url_.empty(); }
 
   ActionCallback action_callback_;
   VisualState visual_state_ = VisualState::kIdle;
@@ -105,12 +108,10 @@ class MainScreen : public ui::Screen<app_state::AppStateSnapshot> {
   lv_obj_t* timer_icon_ = nullptr;
   lv_obj_t* timer_label_ = nullptr;
 
-  // Denied widgets. The generic denial uses icon_ + label_; the stale-checkout
-  // denial (issue #535) uses heading_ + body_ + a QR of the action URL and its
-  // caption. denied_qr_url_ caches the last-encoded URL so the QR is only
-  // rebuilt when the target changes.
-  lv_obj_t* denied_icon_ = nullptr;
-  lv_obj_t* denied_label_ = nullptr;
+  // Denied widgets. Every cause renders heading_ + body_ (see CopyForReason);
+  // causes that carry an action URL additionally offer a QR + caption behind
+  // the "Info" button. denied_qr_url_ caches the last-encoded URL so the QR is
+  // only rebuilt when the target changes.
   lv_obj_t* denied_heading_ = nullptr;
   lv_obj_t* denied_body_ = nullptr;
   lv_obj_t* denied_qr_ = nullptr;

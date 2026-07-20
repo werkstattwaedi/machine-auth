@@ -15,7 +15,6 @@ namespace maco::terminal_ui {
 namespace {
 
 // Material Symbols UTF-8 codepoints
-constexpr const char kIconCancel[] = "\xEE\x97\x89";    // U+E5C9
 constexpr const char kIconSchedule[] = "\xEE\xBF\x96";  // U+EFD6
 
 constexpr int kContentPadding = 16;
@@ -42,6 +41,40 @@ constexpr int kTimerIconGap = 4;       // between the clock icon and its text
 // Nachname" is the common case); the machine name is a single-line caption.
 constexpr int kUserNameMaxLines = 2;
 constexpr int kMachineNameMaxLines = 1;
+
+// Per-cause copy for the denied screen.
+//
+// The headings mirror `rejectionCopy()` in @oww/shared (which drives the
+// /denied web page) so the terminal and the page name the same problem. The
+// bodies are deliberately shorter than the web copy: this screen only has to
+// say *what* is wrong, while the detailed "how do I get access" guidance lives
+// on the page behind the QR (issue #559). Keep the headings in sync if the
+// shared copy changes.
+struct DenialCopy {
+  const char* heading;
+  const char* body;
+};
+
+DenialCopy CopyForReason(app_state::RejectionReason reason) {
+  switch (reason) {
+    case app_state::RejectionReason::kStaleCheckout:
+      // The body is overridden by the server message, which carries the date.
+      return {"Letzter Besuch noch offen",
+              "Schliesse deinen letzten Besuch ab."};
+    case app_state::RejectionReason::kMissingPermission:
+      return {"Berechtigung fehlt",
+              "Für diese Maschine brauchst du eine zusätzliche Berechtigung."};
+    case app_state::RejectionReason::kTokenUnknown:
+      return {"Badge unbekannt", "Dieser Badge ist nicht registriert."};
+    case app_state::RejectionReason::kTokenDeactivated:
+      return {"Badge deaktiviert", "Dieser Badge wurde deaktiviert."};
+    case app_state::RejectionReason::kUnspecified:
+      break;
+  }
+  // Also covers the server's internal errors, whose technical English messages
+  // ("Token not registered") must never reach the screen.
+  return {"Nicht berechtigt", "Du kannst diese Maschine gerade nicht nutzen."};
+}
 
 // Clamp a label to at most `lines` lines, which also re-enables LVGL's native
 // ellipsis.
@@ -201,21 +234,6 @@ pw::Status MainScreen::OnActivate() {
   lv_obj_set_style_text_font(timer_label_, &roboto_16, LV_PART_MAIN);
   lv_obj_set_style_text_color(timer_label_, lv_color_white(), LV_PART_MAIN);
 
-  // --- Denied widgets (hidden initially) ---
-  denied_icon_ = lv_label_create(lv_screen_);
-  lv_label_set_text(denied_icon_, kIconCancel);
-  lv_obj_set_style_text_font(denied_icon_, &material_symbols_64, LV_PART_MAIN);
-  lv_obj_set_style_text_color(denied_icon_, lv_color_white(), LV_PART_MAIN);
-  lv_obj_align(denied_icon_, LV_ALIGN_CENTER, 0, -20);
-  lv_obj_add_flag(denied_icon_, LV_OBJ_FLAG_HIDDEN);
-
-  denied_label_ = lv_label_create(lv_screen_);
-  lv_label_set_text(denied_label_, "Nicht berechtigt");
-  lv_obj_set_style_text_font(denied_label_, &roboto_24, LV_PART_MAIN);
-  lv_obj_set_style_text_color(denied_label_, lv_color_white(), LV_PART_MAIN);
-  lv_obj_align(denied_label_, LV_ALIGN_CENTER, 0, 30);
-  lv_obj_add_flag(denied_label_, LV_OBJ_FLAG_HIDDEN);
-
   // --- Hold-longer widgets (hidden initially) ---
   // Shown on a yellow (warning, not error) background with dark text: the badge
   // was lifted too early, ask the user to hold it on longer.
@@ -275,8 +293,9 @@ pw::Status MainScreen::OnActivate() {
   lv_obj_add_flag(denied_qr_, LV_OBJ_FLAG_HIDDEN);
 
   denied_qr_caption_ = lv_label_create(lv_screen_);
-  lv_label_set_text(denied_qr_caption_,
-                    "Scannen, um den Besuch abzuschliessen");
+  // Cause-neutral: the page behind the QR carries the per-cause detail, so this
+  // caption must not promise a specific action (issue #559).
+  lv_label_set_text(denied_qr_caption_, "Scanne den Code für mehr Infos");
   lv_obj_set_style_text_font(denied_qr_caption_, &roboto_16, LV_PART_MAIN);
   lv_obj_set_style_text_color(denied_qr_caption_, lv_color_white(),
                               LV_PART_MAIN);
@@ -340,8 +359,6 @@ void MainScreen::OnDeactivate() {
   timer_row_ = nullptr;
   timer_icon_ = nullptr;
   timer_label_ = nullptr;
-  denied_icon_ = nullptr;
-  denied_label_ = nullptr;
   hold_longer_icon_ = nullptr;
   hold_longer_label_ = nullptr;
   denied_heading_ = nullptr;
@@ -514,7 +531,7 @@ bool MainScreen::OnEscapePressed() {
     // stale-checkout denial has a QR/Info view; generic denials swallow ESC.
     if (notice_info_open_) {
       SetNoticeInfoOpen(false);
-    } else if (IsStaleDenial()) {
+    } else if (HasDenialInfo()) {
       SetNoticeInfoOpen(true);
     }
     return true;
@@ -576,7 +593,7 @@ ui::ButtonConfig MainScreen::GetButtonConfig() const {
                 .bg_color = theme::kColorYellow,
                 .text_color = theme::kColorDarkText,
                 .fill_progress = notice_progress_};
-      if (IsStaleDenial()) {
+      if (HasDenialInfo()) {
         cfg.cancel = {.label = "Info",
                       .led_effect = yellow,
                       .bg_color = theme::kColorYellow,
@@ -716,8 +733,6 @@ void MainScreen::HideAllWidgets() {
   lv_obj_add_flag(menu_btn_, LV_OBJ_FLAG_HIDDEN);
   // Hiding the column hides the name, chip and timer row it contains.
   lv_obj_add_flag(session_column_, LV_OBJ_FLAG_HIDDEN);
-  lv_obj_add_flag(denied_icon_, LV_OBJ_FLAG_HIDDEN);
-  lv_obj_add_flag(denied_label_, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(hold_longer_icon_, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(hold_longer_label_, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(denied_heading_, LV_OBJ_FLAG_HIDDEN);
@@ -728,27 +743,20 @@ void MainScreen::HideAllWidgets() {
   lv_obj_add_flag(denied_dismiss_btn_, LV_OBJ_FLAG_HIDDEN);
 }
 
-// Populate the denied screen from the latched rejection fields. The layout is
-// driven by the rejection *cause*, not merely by whether an action URL exists —
-// missing-permission also carries a /denied URL, so keying on the URL wrongly
-// gave it the stale-checkout heading + scan caption (issue #559). Only the
-// stale-checkout denial gets the heading + message + Info/QR; every other cause
-// keeps the generic icon + "Nicht berechtigt" (issue #535).
+// Populate the denied screen from the latched rejection fields. Heading + body
+// come from the per-cause table (keyed on the *cause*, never on URL presence —
+// missing-permission also carries a /denied URL, and keying on that wrongly
+// gave it the stale-checkout copy). The Info/QR view is offered whenever the
+// server supplied an action URL (issue #535/#559).
 void MainScreen::UpdateDenied() {
-  if (!IsStaleDenial()) {
-    // Generic denial: the classic centered icon + label; no Info/QR view.
-    lv_obj_add_flag(denied_heading_, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(denied_body_, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(denied_qr_, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(denied_qr_caption_, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_remove_flag(denied_icon_, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_remove_flag(denied_label_, LV_OBJ_FLAG_HIDDEN);
-    return;
-  }
-
-  lv_obj_add_flag(denied_icon_, LV_OBJ_FLAG_HIDDEN);
-  lv_obj_add_flag(denied_label_, LV_OBJ_FLAG_HIDDEN);
-  lv_label_set_text(denied_body_, denial_message_.c_str());
+  const DenialCopy copy = CopyForReason(denial_reason_);
+  lv_label_set_text(denied_heading_, copy.heading);
+  // Only the stale-checkout message is worth rendering verbatim — it carries
+  // the visit's date. Every other cause uses local copy, which also keeps the
+  // server's technical strings off the screen.
+  lv_label_set_text(denied_body_, (IsStaleDenial() && !denial_message_.empty())
+                                      ? denial_message_.c_str()
+                                      : copy.body);
 
   if (notice_info_open_) {
     // Info view: the QR takes the screen. Rebuild it only when the target URL

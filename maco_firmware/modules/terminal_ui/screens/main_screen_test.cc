@@ -245,11 +245,11 @@ TEST_F(MainScreenTest, DeniedState) {
   EXPECT_TRUE(config.cancel.label.empty());
 }
 
-// A missing-permission denial also carries a /denied action URL, but it must
-// render as the generic icon + "Nicht berechtigt" (identical to the no-reason
-// denial), NOT the stale-checkout heading/QR, and offers no "Info" button.
-// Regression guard for the missing-permission-shows-stale-layout bug (#559).
-TEST_F(MainScreenTest, DeniedMissingPermissionIsGeneric) {
+// A missing-permission denial gets its OWN heading ("Berechtigung fehlt") and
+// keeps the Info/QR button — it must never borrow the stale-checkout copy
+// ("Letzter Besuch noch offen"), which is what the URL-keyed layout used to do.
+// Regression guard for issue #559.
+TEST_F(MainScreenTest, DeniedMissingPermissionHasOwnCopyAndInfo) {
   app_state::AppStateSnapshot snapshot;
   snapshot.verification.state =
       app_state::TagVerificationState::kUnauthorized;
@@ -263,16 +263,34 @@ TEST_F(MainScreenTest, DeniedMissingPermissionIsGeneric) {
   screen_->OnUpdate(snapshot);
   RenderFrame();
 
-  // Pixel-identical to the generic denial golden.
   EXPECT_TRUE(harness_.CompareToGolden(
-      "maco_firmware/modules/terminal_ui/testdata/main_denied.png",
-      "/tmp/main_denied_missing_diff.png"));
+      "maco_firmware/modules/terminal_ui/testdata/main_denied_permission.png",
+      "/tmp/main_denied_permission_diff.png"));
+
+  // It has an action URL, so the QR is offered behind "Info".
+  auto config = screen_->GetButtonConfig();
+  EXPECT_EQ(config.ok.label, "OK");
+  EXPECT_EQ(config.cancel.label, "Info");
+
+  // ESC opens the QR view for this cause too.
+  EXPECT_TRUE(screen_->OnEscapePressed());
+  EXPECT_EQ(screen_->GetButtonConfig().cancel.label, "Zurück");
+}
+
+// A cause with no action URL (token deactivated) shows its own heading + body
+// but offers no Info/QR button, and ESC must not open one.
+TEST_F(MainScreenTest, DeniedWithoutActionUrlHasNoInfoButton) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.verification.state =
+      app_state::TagVerificationState::kUnauthorized;
+  snapshot.verification.rejection_reason =
+      app_state::RejectionReason::kTokenDeactivated;
+  screen_->OnUpdate(snapshot);
 
   auto config = screen_->GetButtonConfig();
   EXPECT_EQ(config.ok.label, "OK");
   EXPECT_TRUE(config.cancel.label.empty());
 
-  // ESC must not open an Info/QR view for a non-stale denial.
   EXPECT_TRUE(screen_->OnEscapePressed());
   EXPECT_TRUE(screen_->GetButtonConfig().cancel.label.empty());
 }
