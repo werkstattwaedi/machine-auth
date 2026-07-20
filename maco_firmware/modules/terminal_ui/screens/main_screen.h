@@ -59,10 +59,10 @@ class MainScreen : public ui::Screen<app_state::AppStateSnapshot> {
   void HideAllWidgets();
   // Populates the denied widgets from the latched rejection fields: a per-cause
   // heading + short body, with the QR (when the server supplied one) moved
-  // behind the "Info" button (issue #535/#559).
+  // behind the "Info" button (issue #535).
   void UpdateDenied();
 
-  // --- Persisted notices: denial + "hold longer" (issue #559) ----------------
+  // --- Persisted notices: denial + "hold longer" ------------------------
   // A cloud rejection (kDenied) or a mid-auth removal (kHoldLonger) stays on
   // screen after the badge is gone until the user dismisses it ("OK") or a
   // countdown elapses; a stale-checkout denial's QR moves behind an "Info"
@@ -123,7 +123,7 @@ class MainScreen : public ui::Screen<app_state::AppStateSnapshot> {
   // shorter buffer would trip InlineString::assign's capacity check at runtime.
   pw::InlineString<256> denied_qr_url_;
 
-  // Persisted-notice state (issue #559). notice_ latches a denial/hold-longer so
+  // Persisted-notice state. notice_ latches a denial/hold-longer so
   // it survives badge removal; the countdown starts once the badge is gone
   // (notice_tag_present_ == false) and pauses while the Info/QR view is open.
   // notice_consumed_ suppresses re-latching the same verifier state after a

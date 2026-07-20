@@ -20,7 +20,7 @@ constexpr const char kIconSchedule[] = "\xEE\xBF\x96";  // U+EFD6
 constexpr int kContentPadding = 16;
 constexpr int kUsableWidth = 208;   // 240 - 2*16px padding
 
-// Stale-checkout denied layout (issue #535/#559): the base view is a full-width
+// Stale-checkout denied layout (issue #535): the base view is a full-width
 // heading + server message; the QR moved behind the "Info" button, where it
 // gets shown large and centered so a phone can actually scan it. 150 px leaves
 // room below the status bar for the caption to clear the button bar.
@@ -28,8 +28,7 @@ constexpr int kInfoQrSize = 150;
 constexpr int kInfoQrTop = 36;  // below the status bar
 
 // How long a notice (denial / hold-longer) stays on screen after the badge is
-// removed before it auto-dismisses. The "OK" button fills over this window
-// (issue #559).
+// removed before it auto-dismisses. The "OK" button fills over this window.
 constexpr uint32_t kDenialDismissMs = 20000;
 
 constexpr int kSessionColumnTop = 78;  // below the machine name, session modes
@@ -48,7 +47,7 @@ constexpr int kMachineNameMaxLines = 1;
 // /denied web page) so the terminal and the page name the same problem. The
 // bodies are deliberately shorter than the web copy: this screen only has to
 // say *what* is wrong, while the detailed "how do I get access" guidance lives
-// on the page behind the QR (issue #559). Keep the headings in sync if the
+// on the page behind the QR. Keep the headings in sync if the
 // shared copy changes.
 struct DenialCopy {
   const char* heading;
@@ -256,7 +255,7 @@ pw::Status MainScreen::OnActivate() {
   lv_obj_align(hold_longer_label_, LV_ALIGN_CENTER, 0, 40);
   lv_obj_add_flag(hold_longer_label_, LV_OBJ_FLAG_HIDDEN);
 
-  // --- Stale-checkout denied widgets (issue #535/#559, hidden initially) ---
+  // --- Stale-checkout denied widgets (issue #535, hidden initially) ---
   // Base view: a full-width heading + server message (the message no longer
   // shares the row with the QR, so it can use the whole width and stay
   // readable). The QR lives behind the "Info" button (SetDenialInfoOpen), where
@@ -294,7 +293,7 @@ pw::Status MainScreen::OnActivate() {
 
   denied_qr_caption_ = lv_label_create(lv_screen_);
   // Cause-neutral: the page behind the QR carries the per-cause detail, so this
-  // caption must not promise a specific action (issue #559).
+  // caption must not promise a specific action.
   lv_label_set_text(denied_qr_caption_, "Scanne den Code für mehr Infos");
   lv_obj_set_style_text_font(denied_qr_caption_, &roboto_16, LV_PART_MAIN);
   lv_obj_set_style_text_color(denied_qr_caption_, lv_color_white(),
@@ -371,7 +370,7 @@ void MainScreen::OnDeactivate() {
   // lv_tick baseline (which would flash-dismiss on the first frame) or a stale
   // denial cause. Not reachable today — the menu (the only push/pop path) is
   // only reachable from kIdle/kReady/kActive where notice_ is kNone — but this
-  // keeps that from silently becoming a bug (issue #559).
+  // keeps that from silently becoming a bug.
   notice_ = Notice::kNone;
   notice_consumed_ = false;
   notice_tag_present_ = false;
@@ -389,7 +388,7 @@ void MainScreen::OnUpdate(const app_state::AppStateSnapshot& snapshot) {
   bool is_ending_soon =
       snapshot.session.state == app_state::SessionStateUi::kEndingSoon;
 
-  // --- Persisted notices (issue #559) ----------------------------------------
+  // --- Persisted notices ------------------------------------------------
   // Keep a denial / "hold longer" on screen after the badge is gone so a
   // walk-up user can read and dismiss it (see UpdateNotice()).
   const bool session_engaged =
@@ -577,7 +576,7 @@ ui::ButtonConfig MainScreen::GetButtonConfig() const {
       ui::ButtonConfig cfg;
       if (notice_info_open_) {
         // Info/QR view: a single "Zurück" (Cancel) returns to the message. OK
-        // is hidden here so it does not duplicate "Zurück" (issue #559).
+        // is hidden here so it does not duplicate "Zurück".
         cfg.cancel = {.label = "Zurück",
                       .led_effect = yellow,
                       .bg_color = theme::kColorYellow,
@@ -603,7 +602,7 @@ ui::ButtonConfig MainScreen::GetButtonConfig() const {
     }
     case VisualState::kHoldLonger:
       // OK dismisses the "hold the badge longer" prompt and fills over the same
-      // auto-dismiss countdown (issue #559).
+      // auto-dismiss countdown.
       return {
           .ok = {.label = "OK",
                  .led_effect = led_animator::SolidButton(
@@ -704,7 +703,7 @@ void MainScreen::SetVisualState(VisualState state) {
       // Content widgets (generic icon/label vs. stale heading/message, or the
       // Info/QR view) are managed per-frame by UpdateDenied(). Here we only arm
       // the invisible dismiss button so the physical OK/ENTER key clears the
-      // persisted denial (issue #559).
+      // persisted denial.
       lv_obj_remove_flag(denied_dismiss_btn_, LV_OBJ_FLAG_HIDDEN);
       if (lv_group_) {
         lv_group_focus_obj(denied_dismiss_btn_);
@@ -713,7 +712,7 @@ void MainScreen::SetVisualState(VisualState state) {
     case VisualState::kHoldLonger:
       // Background comes from ColorsFor(kHoldLonger); reveal the widgets and arm
       // the dismiss button so OK clears the prompt instead of the menu button
-      // stealing focus and opening the menu (issue #559).
+      // stealing focus and opening the menu.
       lv_obj_remove_flag(hold_longer_icon_, LV_OBJ_FLAG_HIDDEN);
       lv_obj_remove_flag(hold_longer_label_, LV_OBJ_FLAG_HIDDEN);
       lv_obj_remove_flag(denied_dismiss_btn_, LV_OBJ_FLAG_HIDDEN);
@@ -747,7 +746,7 @@ void MainScreen::HideAllWidgets() {
 // come from the per-cause table (keyed on the *cause*, never on URL presence —
 // missing-permission also carries a /denied URL, and keying on that wrongly
 // gave it the stale-checkout copy). The Info/QR view is offered whenever the
-// server supplied an action URL (issue #535/#559).
+// server supplied an action URL (issue #535).
 void MainScreen::UpdateDenied() {
   const DenialCopy copy = CopyForReason(denial_reason_);
   lv_label_set_text(denied_heading_, copy.heading);
@@ -784,7 +783,7 @@ void MainScreen::UpdateDenied() {
 }
 
 // Reconcile the persisted notice with the verifier state each frame (issue
-// #559). A denial (kUnauthorized) flips to kIdle when the badge leaves, so we
+// A denial (kUnauthorized) flips to kIdle when the badge leaves, so we
 // keep it latched across that. A mid-auth removal (kRemovedTooEarly) instead
 // persists on the snapshot until the next tag, so after it is dismissed
 // notice_consumed_ suppresses it until a new tag engages — otherwise it would

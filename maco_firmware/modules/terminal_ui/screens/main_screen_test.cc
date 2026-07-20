@@ -239,7 +239,7 @@ TEST_F(MainScreenTest, DeniedState) {
       "/tmp/main_denied_diff.png"));
 
   // A generic denial (no action URL) dismisses with "OK"; there is no
-  // QR, so no "Info" button (issue #559).
+  // QR, so no "Info" button.
   auto config = screen_->GetButtonConfig();
   EXPECT_EQ(config.ok.label, "OK");
   EXPECT_TRUE(config.cancel.label.empty());
@@ -248,7 +248,7 @@ TEST_F(MainScreenTest, DeniedState) {
 // A missing-permission denial gets its OWN heading ("Berechtigung fehlt") and
 // keeps the Info/QR button — it must never borrow the stale-checkout copy
 // ("Letzter Besuch noch offen"), which is what the URL-keyed layout used to do.
-// Regression guard for issue #559.
+// Regression guard for the denied-screen rework.
 TEST_F(MainScreenTest, DeniedMissingPermissionHasOwnCopyAndInfo) {
   app_state::AppStateSnapshot snapshot;
   snapshot.verification.state =
@@ -296,8 +296,7 @@ TEST_F(MainScreenTest, DeniedWithoutActionUrlHasNoInfoButton) {
 }
 
 // A denial stays on screen after the badge is removed (verification → kIdle) so
-// a walk-up user still sees why they were rejected. A new tag clears it
-// (issue #559).
+// a walk-up user still sees why they were rejected. A new tag clears it.
 TEST_F(MainScreenTest, DeniedPersistsAfterBadgeRemoval) {
   app_state::AppStateSnapshot denied;
   denied.verification.state = app_state::TagVerificationState::kUnauthorized;
@@ -318,7 +317,7 @@ TEST_F(MainScreenTest, DeniedPersistsAfterBadgeRemoval) {
 }
 
 // Once the badge is gone, a persisted denial auto-dismisses after the ~20s
-// countdown (issue #559). The countdown is paused while the badge is present,
+// countdown. The countdown is paused while the badge is present,
 // so it only starts after removal.
 TEST_F(MainScreenTest, DeniedAutoDismissesAfterTimeout) {
   app_state::AppStateSnapshot denied;
@@ -359,7 +358,7 @@ TEST_F(MainScreenTest, HoldLongerState) {
       "/tmp/main_hold_longer_diff.png"));
 
   // "Hold longer" is now dismissible with OK (it used to leak focus to the menu
-  // button); no Cancel affordance (issue #559).
+  // button); no Cancel affordance.
   auto config = screen_->GetButtonConfig();
   EXPECT_EQ(config.ok.label, "OK");
   EXPECT_TRUE(config.cancel.label.empty());
@@ -377,7 +376,7 @@ TEST_F(MainScreenTest, HoldLongerScreenStyle) {
 
 // A stale-checkout rejection renders the actionable base layout: heading + the
 // full-width server message, with the QR moved behind the "Info" button
-// (issue #535/#559).
+// (issue #535).
 TEST_F(MainScreenTest, DeniedStaleCheckout) {
   app_state::AppStateSnapshot snapshot;
   snapshot.verification.state =
@@ -404,7 +403,7 @@ TEST_F(MainScreenTest, DeniedStaleCheckout) {
 }
 
 // The QR sits behind the "Info" button: ESC opens the full-screen QR view and
-// ESC again returns to the message (issue #559).
+// ESC again returns to the message.
 TEST_F(MainScreenTest, DeniedStaleCheckoutInfoTogglesQr) {
   app_state::AppStateSnapshot snapshot;
   snapshot.verification.state =
