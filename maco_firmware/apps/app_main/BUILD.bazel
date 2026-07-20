@@ -1,0 +1,50 @@
+# Copyright Offene Werkstatt Wädenswil
+# SPDX-License-Identifier: MIT
+
+# Shared MACO terminal application.
+#
+# Dev and prod firmware are the same application (see ADR-0040) and both depend
+# on this library; they differ only in the AppConfig their thin main() passes to
+# RunApp(). Backend impls (assert/check/log) are NOT declared here — they are
+# platform-specific and are linked by the final binary/firmware targets.
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "app_main",
+    srcs = ["app_main.cc"],
+    hdrs = ["app_main.h"],
+    deps = [
+        "//maco_firmware/modules/terminal_ui",
+        "//maco_firmware/modules/app_state:session_controller",
+        "//maco_firmware/modules/app_state:session_fsm",
+        "//maco_firmware/modules/app_state:system_state",
+        "//maco_firmware/modules/device_config",
+        "//maco_firmware/modules/display",
+        "//maco_firmware/modules/display:display_metrics",
+        "//maco_firmware/modules/gateway:gateway_client",
+        "//maco_firmware/modules/gateway:gateway_connection_check",
+        "//maco_firmware/modules/app_state:tag_verifier",
+        "//maco_firmware/modules/machine_control:default_machine_sensor",
+        "//maco_firmware/modules/machine_control:machine_controller",
+        "//maco_firmware/modules/machine_control:gateway_machine_sensor",
+        "//maco_firmware/modules/nfc_reader",
+        "//maco_firmware/modules/session_upload:session_store",
+        "//maco_firmware/modules/session_upload:usage_uploader",
+        "//maco_firmware/modules/stack_monitor",
+        "//maco_firmware/modules/led_animator:button_effects",
+        "//maco_firmware/modules/led_animator:nfc_effects",
+        "//maco_firmware/modules/terminal_effects",
+        "//maco_firmware/services:maco_service",
+        "//maco_firmware/system",
+        "//maco_firmware/system:headers",
+        "@pigweed//pw_async2:system_time_provider",
+        "@pigweed//pw_chrono:system_clock",
+        "@pigweed//pw_log",
+        "@pigweed//pw_system:async",
+        "@pigweed//pw_metric:global",
+        "@pigweed//pw_metric:metric_service_nanopb",
+    ],
+)

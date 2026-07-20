@@ -30,6 +30,7 @@
       },
       "targets": [
         "//maco_firmware/apps/dev:dev",
+        "//maco_firmware/apps/prod:prod",
         "//maco_firmware/apps/factory:factory",
         "//maco_firmware/apps/personalize:personalize",
         "//maco_firmware/devices/pn532:hardware_test",

@@ -1,0 +1,24 @@
+{
+  "displayName": "Cloud Functions errors — oww-maco",
+  "documentation": {
+    "content": "A Cloud Function logged an ERROR. This includes the scheduled crons (autoAcknowledgeBills 03:00, dailyMembershipMaintenance 04:00, monthlyBillRun 06:00, staleCheckoutReminders 09:00, retryBillProcessing hourly, cleanupAbandonedCheckouts daily). Investigate in Cloud Logging / Error Reporting for the function `service_name` and the message. This alert exists so a silent failure — like the autoAcknowledgeBills FAILED_PRECONDITION that ran nightly unnoticed until a manual log check — pages someone instead of going undetected.",
+    "mimeType": "text/markdown"
+  },
+  "combiner": "OR",
+  "conditions": [
+    {
+      "displayName": "A Cloud Function logged ERROR or worse",
+      "conditionMatchedLog": {
+        "filter": "resource.type=\"cloud_run_revision\" AND labels.\"goog-managed-by\"=\"cloudfunctions\" AND severity>=ERROR"
+      }
+    }
+  ],
+  "alertStrategy": {
+    "notificationRateLimit": {
+      "period": "1800s"
+    }
+  },
+  "notificationChannels": [
+    "__CHANNEL__"
+  ]
+}

@@ -32,3 +32,12 @@ build --copt=-DPW_SYSTEM_ASYNC_DISPATCHER_THREAD_STACK_SIZE_BYTES=8192
 # ~10 concurrent coroutines need more than 8KB; 32KB gives comfortable headroom.
 build --copt=-DPW_SYSTEM_ALLOCATOR_HEAP_SIZE_BYTES=32768
 
+# Production firmware build (ADR-0040): optimized. Applied via `--config=prod`,
+# which `./pw prod-flash` / `prod-console` pass so the flashed image and the
+# console token database are built identically. Logging stays at INFO (tokenized
+# logs are near-free and the primary field-diagnostic surface).
+build:prod --compilation_mode=opt
+# Selects the prod reset-on-assert handler via the
+# //maco_firmware/targets/p2:assert_handler select() (ADR-0040).
+build:prod --define=maco_prod=1
+

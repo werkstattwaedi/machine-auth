@@ -1,26 +1,53 @@
 # Copyright Offene Werkstatt Wädenswil
 # SPDX-License-Identifier: MIT
 
-# Production firmware application
-# Optimized for release, minimal logging
+# Production firmware application (ADR-0040).
+#
+# Same application as apps/dev — both depend on //maco_firmware/apps/app_main —
+# but prod passes a production AppConfig: no boot-time USB serial wait, watchdog
+# armed. Build optimized with `--config=prod` (used by ./pw prod-flash /
+# prod-console so the flashed image and the console token database match).
 #
 # Usage:
+#   ./pw prod-flash       # build (opt) + flash
+#   ./pw prod-console     # connect console (matching opt token database)
 #   bazel build //maco_firmware/apps/prod:prod
-#   bazel run //maco_firmware/apps/prod:flash
 
-# load("@particle_bazel//rules:particle_firmware.bzl", "particle_firmware", "particle_flash_binary")
+load("@particle_bazel//rules:particle_firmware.bzl", "particle_firmware", "particle_flash_binary")
+load("@pigweed//pw_system/py:console.bzl", "device_console")
 
-# TODO: Add production firmware target
-# particle_firmware(
-#     name = "prod_firmware",
-#     srcs = ["main.cc"],
-#     deps = [
-#         "//maco_firmware/modules/...",
-#         "//maco_firmware/system",
-#     ],
-# )
-#
-# particle_flash_binary(
-#     name = "flash",
-#     firmware = ":prod_firmware",
-# )
+package(default_visibility = ["//visibility:public"])
+
+particle_firmware(
+    name = "prod",
+    srcs = ["main.cc"],
+    platform = "//maco_firmware/targets/p2:p2_system",
+    # Reset-on-assert handler instead of the default safe-mode handler, so an
+    # unattended terminal self-recovers (ADR-0040). The select() resolves to the
+    # prod handler under --config=prod.
+    assert_handler = "//maco_firmware/targets/p2:assert_handler",
+    deps = [
+        "//maco_firmware/apps/app_main",
+        # Tokenized log handler (provides pw_log_tokenized_HandleLog)
+        "@pigweed//pw_system:log_backend",
+        # Includes tokenizer linker script for ELF token database
+        "@pigweed//pw_system:extra_platform_libs",
+    ],
+)
+
+particle_flash_binary(
+    name = "flash",
+    firmware = ":prod.bin",
+)
+
+# Console for P2 device - depends on :prod ELF for tokens
+device_console(
+    name = "console",
+    binary = ":prod",
+    script = "//tools:console",
+)
+
+# TODO(ADR-0040): add a particle_memory_budget target once a golden
+# testdata/memory_budget.txt can be generated from a real prod build. prod
+# shares the app_main library with dev, whose memory_budget already guards the
+# shared footprint.

@@ -20,4 +20,10 @@ message DeviceInfoResponse {
   string firmware_version = 1;
   uint32 uptime_ms = 2;
   string build_target = 3;
+  // Reason for the most recent reset (maco::system::ResetReason): 0 unknown,
+  // 1 watchdog, 2 panic, 3 power-cycle, 4 ota, 5 user. Lets the watchdog test be
+  // verified via RPC when the early boot log is dropped (prod skips the USB wait).
+  uint32 reset_reason = 4;
+  // Consecutive boots not yet confirmed stable (rapid-reset guard); 1 = healthy.
+  uint32 boot_count = 5;
 }

@@ -271,6 +271,7 @@ def particle_cc_binary(
         linkopts = [],
         platform = None,
         two_pass = True,
+        assert_handler = "@particle_bazel//pw_assert_particle:handler",
         **kwargs):
     """Creates a Particle P2 firmware binary.
 
@@ -300,7 +301,9 @@ def particle_cc_binary(
             "@particle_bazel//:device_os_user_part",
             "@pigweed//pw_assert_basic",
             "@pigweed//pw_assert_basic:impl",  # Provides pw_assert_basic_HandleFailure
-            "@particle_bazel//pw_assert_particle:handler",  # Provides the actual handler
+            # The assert handler backend. Defaults to the safe-mode handler;
+            # overridable per firmware (ADR-0040 prod uses a reset handler).
+            assert_handler,
         ],
         copts = PARTICLE_COPTS + copts,
         defines = defines,
@@ -405,6 +408,7 @@ def particle_firmware(
         linkopts = [],
         platform = None,
         two_pass = True,
+        assert_handler = "@particle_bazel//pw_assert_particle:handler",
         **kwargs):
     """Creates a complete Particle firmware with ELF and flashable .bin.
 
@@ -436,6 +440,7 @@ def particle_firmware(
         linkopts = linkopts,
         platform = platform,
         two_pass = two_pass,
+        assert_handler = assert_handler,
         **{k: v for k, v in kwargs.items() if k not in ["visibility"]}
     )
 

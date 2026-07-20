@@ -83,6 +83,17 @@ in a sibling worktree.
 
 ---
 
+### Cron'd yearly retention trim
+**Status:** 💡 Idea
+
+**Context:** ADR-0038 keeps the yearly trim manual (privacy-cli, dry-run
+reviewed) because it is destructive and annual. If the January ops-calendar
+entry gets chronically forgotten, convert `privacyTrim` to an onSchedule
+job — the engine already supports it; only the trigger and a notification
+path (so a human still sees the counts) are missing.
+
+---
+
 ### Session Debug Viewer (Admin UI)
 **Status:** 📋 Planned
 

@@ -35,6 +35,18 @@ class _Factory:
         return b
 
 
+class _FailingStopBackend(MockBackend):
+    """Backend whose stop() raises, e.g. a probe unplugged mid-session."""
+
+    async def stop(self):
+        raise RuntimeError("device unreachable during stop")
+
+
+class _FailingStopFactory:
+    def __call__(self, kind, host, port, poll_interval_sec):
+        return _FailingStopBackend()
+
+
 class SensingServiceTest(unittest.IsolatedAsyncioTestCase):
     async def test_acquire_starts_prober_and_returns_state(self):
         factory = _Factory()
@@ -89,6 +101,17 @@ class SensingServiceTest(unittest.IsolatedAsyncioTestCase):
         await svc._sweep()
         self.assertEqual(backend.stops, 1)
         self.assertFalse(svc.renew(l2)[1])
+
+    async def test_sweep_survives_backend_stop_error(self):
+        # A backend whose stop() raises must not propagate out of _sweep — it
+        # runs under the reaper loop / top-level gather, so an unhandled error
+        # would crash the whole gateway. The lease/prober are still reaped.
+        svc = SensingService(factory=_FailingStopFactory())
+        lease_id, _, _ = await svc.acquire(kind="mock")
+        svc._leases[lease_id].expiry = asyncio.get_running_loop().time() - 1
+        await svc._sweep()  # must not raise
+        self.assertEqual(len(svc._probers), 0, "prober still removed")
+        self.assertFalse(svc.renew(lease_id)[1], "lease still reaped")
 
     async def test_shutdown_stops_all(self):
         factory = _Factory()

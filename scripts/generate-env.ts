@@ -49,6 +49,11 @@ const FUNCTIONS_PARAMS: VarMapping[] = [
   // price-list PDFs. Reuses `web.checkoutDomain` from the operations
   // config so admin web + functions stay in sync.
   { envVar: "CHECKOUT_DOMAIN", jsonPath: "web.checkoutDomain" },
+  // BigQuery stats dataset (ADR-0039). Must be present in the env files
+  // even though the code falls back to "stats" — a defineString absent
+  // from .env.* makes the functions emulator prompt interactively and
+  // hang every test run (the CLAUDE.md port-block gotcha).
+  { envVar: "STATS_DATASET", jsonPath: "functions.statsDataset" },
 ];
 
 const FUNCTIONS_SECRETS: VarMapping[] = [
@@ -166,6 +171,7 @@ const TEST_FIXTURE_CONFIG: Record<string, unknown> = {
     resendCheckoutReminderTemplateId: "ci-test-checkout-reminder-template",
     kasseEmail: "kasse@test.localhost",
     autoAckMinAgeHours: "1",
+    statsDataset: "stats",
   },
   web: {
     checkoutDomain: "localhost:5188",
