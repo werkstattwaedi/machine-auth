@@ -31,7 +31,8 @@
  */
 
 import { test, expect, type Page } from "@playwright/test"
-import { openGuestSection } from "./helpers"
+import { clearCollections, openGuestSection, waitForLoginCode } from "./helpers"
+import { AUTH_USER_EMAIL } from "./global-setup"
 
 /** Navigate to checkout — the check-in step is shown directly, with the
  *  account section of the switcher as the anonymous default. */
@@ -46,6 +47,23 @@ async function hasDocumentScrollbar(page: Page): Promise<boolean> {
   return page.evaluate(
     () => document.documentElement.scrollHeight > window.innerHeight,
   )
+}
+
+/** Sign in as the seeded auth user via the 6-digit code flow. */
+async function signIn(page: Page) {
+  await clearCollections("loginCodes")
+  await page.goto("/login")
+  await page.getByTestId("login-email-input").fill(AUTH_USER_EMAIL)
+  await page.getByTestId("login-email-submit").click()
+  await expect(page.getByTestId("login-code-stage")).toBeVisible({ timeout: 5000 })
+
+  const entry = await waitForLoginCode(AUTH_USER_EMAIL)
+  expect(entry).toBeTruthy()
+  await page.getByTestId("login-code-input").fill(entry!.code)
+  await page.getByTestId("login-code-submit").click()
+  await page.waitForURL((url) => !url.pathname.startsWith("/login"), {
+    timeout: 10_000,
+  })
 }
 
 test.describe("Scrollbar gutter — no content shift on toggle (issue #568)", () => {
@@ -105,5 +123,33 @@ test.describe("Scrollbar gutter — no content shift on toggle (issue #568)", ()
       Math.abs(leftTall - leftShort),
       `centered content must not shift horizontally when the scrollbar appears (short ${leftShort}, tall ${leftTall})`,
     ).toBeLessThanOrEqual(1)
+  })
+})
+
+test.describe("Scrollbar gutter — authenticated app shell (issue #581)", () => {
+  test("disables the reserved viewport gutter inside the sidebar+main shell", async ({
+    page,
+  }, testInfo) => {
+    // The reserved viewport gutter only applies on desktop (md+). Below it,
+    // `html` is already `auto`, so there is nothing to distinguish and the
+    // shell-scoped override is a no-op — skip on mobile.
+    if (testInfo.project.name !== "chromium") return
+
+    await signIn(page)
+    await page.goto("/account/usage")
+
+    // The authenticated shell owns the page scroll inside its own <main>, so
+    // it tags the document with `data-app-shell`.
+    await expect(page.locator("[data-app-shell]")).toBeVisible({
+      timeout: 10_000,
+    })
+
+    // Load-bearing guard: with the shell present the document gutter must be
+    // `auto` (no empty strips beside the sidebar). Fails without the fix,
+    // where the global `stable both-edges` rule still applies here.
+    const gutter = await page.evaluate(
+      () => getComputedStyle(document.documentElement).scrollbarGutter,
+    )
+    expect(gutter).toBe("auto")
   })
 })

@@ -201,6 +201,14 @@
     html {
       scrollbar-gutter: stable both-edges;
     }
+    /* The authenticated sidebar+main shell (issue #581) owns the page scroll
+       inside its own `<main>`; the document never scrolls. Disable the
+       reserved viewport gutter there so it doesn't inset empty strips beside
+       the sidebar (checkout) or on both edges (admin). Document-scroll pages
+       (wizard/login) have no `[data-app-shell]` and keep `stable both-edges`. */
+    html:has([data-app-shell]) {
+      scrollbar-gutter: auto;
+    }
   }
 }
 

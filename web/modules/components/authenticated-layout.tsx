@@ -311,7 +311,14 @@ export function AuthenticatedLayout({
   )
 
   const shell = (
-    <div className="min-h-screen flex flex-col md:h-screen md:flex-row md:overflow-hidden">
+    // `data-app-shell` marks the authenticated sidebar+main shell so global
+    // CSS can disable the reserved document scrollbar gutter here: the page
+    // scroll lives inside `<main>`, not the document, so the viewport gutter
+    // (#568) would only inset empty strips beside the sidebar (issue #581).
+    <div
+      data-app-shell
+      className="min-h-screen flex flex-col md:h-screen md:flex-row md:overflow-hidden"
+    >
       {/* Mobile header */}
       {isMobile && (
         <header className="flex items-center gap-3 px-4 py-3 border-b border-sidebar-border bg-sidebar">
