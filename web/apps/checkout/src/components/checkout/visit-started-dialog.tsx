@@ -37,7 +37,7 @@ export function VisitStartedDialog({ open, onDone }: VisitStartedDialogProps) {
             Besuch gestartet
           </AlertDialogTitle>
           <AlertDialogDescription>
-            Viel Spass in der Werkstatt! Material, Maschinen und Eintritte
+            Viel Spass in der Werkstatt! Material, Maschinen und Nutzungsgebühren
             kannst du jederzeit hier am Kiosk erfassen — Badge einfach wieder
             auflegen.
           </AlertDialogDescription>

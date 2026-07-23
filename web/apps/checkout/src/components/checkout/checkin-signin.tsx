@@ -740,7 +740,7 @@ function SignupDialog({
           <div>
             <span className={labelCls}>Nutzer:in</span>
             <p className="mb-2 text-[12.5px] leading-relaxed text-muted-foreground">
-              Bestimmt den Eintrittspreis in der Werkstatt.
+              Bestimmt die Nutzungsgebühr in der Werkstatt.
             </p>
             <div
               role="radiogroup"
