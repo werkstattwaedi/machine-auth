@@ -5,7 +5,13 @@
     "checkoutTemplateId": "$ref:catalog/iVppnklahLU3JuA5BMmH",
     "requiredPermission": ["$ref:permission/39ozgRe5iMWF5LccFNir"],
     "maco": "$ref:maco/aaa5427ee1cca38aeea743ae",
-    "control": {}
+    "control": {
+      "type": "gateway_sensing",
+      "kind": "xtool_laser",
+      "host": "laser.internal",
+      "idleTimeoutSec": 900,
+      "idleWarningSec": 120
+    }
   },
   "kMeIRDWEaDUzIbzGCZzP": {
     "name": "Lampe",
