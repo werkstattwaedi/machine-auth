@@ -38,6 +38,15 @@ export interface CheckAccountExistsResult {
   exists: boolean;
   /** A Firebase Auth user exists for the email (may be an incomplete signup). */
   hasAuthUser: boolean;
+  /**
+   * A `users` doc exists for this email, regardless of `termsAcceptedAt`.
+   * True for imported/admin-created members who have real profile data but
+   * have not yet accepted the terms — these must sign IN (code) and finish
+   * onboarding, not be offered a fresh sign-up. Distinct from `hasAuthUser`,
+   * which is also true for a bare Auth user with no `users` doc (an abandoned
+   * code request), where a fresh sign-up is still correct.
+   */
+  hasProfile: boolean;
 }
 
 export async function handleCheckAccountExists(
@@ -61,9 +70,10 @@ export async function handleCheckAccountExists(
     .where("email", "==", email)
     .limit(1)
     .get();
-  const exists = !snap.empty && snap.docs[0].get("termsAcceptedAt") != null;
+  const hasProfile = !snap.empty;
+  const exists = hasProfile && snap.docs[0].get("termsAcceptedAt") != null;
 
-  let hasAuthUser = !snap.empty;
+  let hasAuthUser = hasProfile;
   if (!hasAuthUser) {
     try {
       await getAuth().getUserByEmail(email);
@@ -74,7 +84,7 @@ export async function handleCheckAccountExists(
     }
   }
 
-  return { exists, hasAuthUser };
+  return { exists, hasAuthUser, hasProfile };
 }
 
 export const checkAccountExistsHandler = async (
@@ -121,12 +131,13 @@ export async function handleCheckPhoneAccountExists(
     const code = (err as { code?: string } | null)?.code;
     if (code !== "auth/user-not-found") throw err;
   }
-  if (!uid) return { exists: false, hasAuthUser: false };
+  if (!uid) return { exists: false, hasAuthUser: false, hasProfile: false };
 
   const doc = await getFirestore().collection("users").doc(uid).get();
   return {
     exists: doc.exists && doc.get("termsAcceptedAt") != null,
     hasAuthUser: true,
+    hasProfile: doc.exists,
   };
 }
 

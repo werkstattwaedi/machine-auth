@@ -95,6 +95,23 @@ describe("SMS login (Integration)", () => {
       const result = await handleCheckPhoneAccountExists({ phone: PHONE }, ORIGIN);
       expect(result.exists).to.equal(true);
       expect(result.hasAuthUser).to.equal(true);
+      expect(result.hasProfile).to.equal(true);
+    });
+
+    it("reports hasProfile=true (exists=false) for a linked number whose doc has no accepted terms", async () => {
+      // Imported member reachable by their linked phone: users doc exists but
+      // termsAcceptedAt is null → must sign IN + onboard, not sign up.
+      const user = await getAuth().createUser({ phoneNumber: PHONE });
+      await getFirestore().collection("users").doc(user.uid).set({
+        firstName: "Imported",
+        lastName: "Member",
+        termsAcceptedAt: null,
+      });
+
+      const result = await handleCheckPhoneAccountExists({ phone: PHONE }, ORIGIN);
+      expect(result.exists).to.equal(false);
+      expect(result.hasAuthUser).to.equal(true);
+      expect(result.hasProfile).to.equal(true);
     });
 
     it("ignores the free-text users.phone field — only the linked number counts", async () => {
@@ -111,6 +128,7 @@ describe("SMS login (Integration)", () => {
       const result = await handleCheckPhoneAccountExists({ phone: PHONE }, ORIGIN);
       expect(result.exists).to.equal(false);
       expect(result.hasAuthUser).to.equal(false);
+      expect(result.hasProfile).to.equal(false);
     });
 
     it("reports exists=false for a linked number without a completed doc", async () => {
@@ -118,6 +136,7 @@ describe("SMS login (Integration)", () => {
       const result = await handleCheckPhoneAccountExists({ phone: PHONE }, ORIGIN);
       expect(result.exists).to.equal(false);
       expect(result.hasAuthUser).to.equal(true);
+      expect(result.hasProfile).to.equal(false);
     });
 
     it("rejects a non-E.164 phone", async () => {

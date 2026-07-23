@@ -201,7 +201,7 @@ describe("CheckinSignin", () => {
   })
 
   it("own device: verifies via the persistent login, not the kiosk session", async () => {
-    checkAccountExists.mockResolvedValue({ exists: true })
+    checkAccountExists.mockResolvedValue({ exists: true, hasProfile: true })
     requestLoginEmail.mockResolvedValue(undefined)
     verifyLoginCode.mockResolvedValue(undefined)
 
@@ -216,7 +216,7 @@ describe("CheckinSignin", () => {
   })
 
   it("own device: an unknown e-mail opens the sign-up dialog instead", async () => {
-    checkAccountExists.mockResolvedValue({ exists: false })
+    checkAccountExists.mockResolvedValue({ exists: false, hasProfile: false })
     requestLoginEmail.mockResolvedValue(undefined)
 
     await typeIdentifierAndSubmit(false, "new@example.com")
@@ -225,6 +225,30 @@ describe("CheckinSignin", () => {
     // The sign-up form needs the code, so one was requested up front.
     expect(requestLoginEmail).toHaveBeenCalledWith("new@example.com")
     expect(screen.queryByText("Code eingeben")).toBeNull()
+  })
+
+  it("own device: an imported member (hasProfile, no terms yet) signs IN instead of signing up", async () => {
+    // Imported/admin-created member: a users doc exists but termsAcceptedAt is
+    // null, so `exists` is false while `hasProfile` is true. They must reach
+    // the code (sign-in) dialog — after login the wizard redirects them to
+    // complete-profile with their data prefilled — NOT the sign-up dialog.
+    checkAccountExists.mockResolvedValue({ exists: false, hasProfile: true })
+    requestLoginEmail.mockResolvedValue(undefined)
+    verifyLoginCode.mockResolvedValue(undefined)
+
+    const user = await typeIdentifierAndSubmit(false, "imported@example.com")
+
+    expect(await screen.findByText("Code eingeben")).toBeInTheDocument()
+    expect(screen.queryByTestId("checkin-signup-dialog")).toBeNull()
+    expect(requestLoginEmail).toHaveBeenCalledWith("imported@example.com")
+
+    await enterCode(user, "654321")
+    await waitFor(() =>
+      expect(verifyLoginCode).toHaveBeenCalledWith(
+        "imported@example.com",
+        "654321",
+      ),
+    )
   })
 
   it("renders the server error inline on a wrong code", async () => {
