@@ -7,6 +7,7 @@
 
 #include "maco_firmware/apps/personalize/personalization_keys.h"
 #include "maco_firmware/apps/personalize/screens/personalize_screen.h"
+#include "maco_firmware/modules/nfc_reader/nfc_event.h"
 #include "maco_firmware/modules/nfc_reader/nfc_reader.h"
 #include "maco_firmware/modules/nfc_tag/nfc_tag.h"
 #include "maco_firmware/modules/nfc_tag/ntag424/ntag424_tag.h"
@@ -64,8 +65,17 @@ class PersonalizeCoordinator {
       const maco::TagUid& tag_uid,
       const PersonalizationKeys& keys);
 
+  /// Verify an already-personalized tag against the delivered keys:
+  /// all key slots, random UID, real UID, NDEF template, SDM settings.
+  pw::async2::Coro<pw::Status> TryVerify(
+      pw::async2::CoroContext cx,
+      nfc::NfcTag& tag,
+      const maco::TagUid& tag_uid,
+      const PersonalizationKeys& keys);
+
   void SetState(PersonalizeStateId state) PW_LOCKS_EXCLUDED(lock_);
   void SetStateWithUid(PersonalizeStateId state,
+                       DetectedTagKind tag_kind,
                        const std::array<std::byte, 7>& uid,
                        size_t uid_size) PW_LOCKS_EXCLUDED(lock_);
   void SetError(std::string_view message) PW_LOCKS_EXCLUDED(lock_);
@@ -82,6 +92,10 @@ class PersonalizeCoordinator {
 
   pw::async2::CoroContext coro_cx_;
   std::optional<pw::async2::CoroOrElseTask> task_;
+
+  /// Tag arrival consumed by the awaiting-keys race; picked up by the main
+  /// loop on its next iteration. Only touched from the coroutine.
+  std::optional<nfc::NfcEvent> pending_event_;
 
   pw::sync::InterruptSpinLock lock_;
   PersonalizeSnapshot snapshot_ PW_GUARDED_BY(lock_);

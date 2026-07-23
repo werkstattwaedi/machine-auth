@@ -12,7 +12,8 @@ service PersonalizationService {
   // Poll the current coordinator state (tag type, UID, status).
   rpc GetPersonalizeState(GetPersonalizeStateRequest) returns (GetPersonalizeStateResponse);
 
-  // Deliver pre-diversified keys for the current tag.
+  // Deliver pre-diversified keys for the current tag. Factory tags are
+  // personalized; MaCo tags are verified against the delivered keys.
   rpc PersonalizeTag(PersonalizeTagRequest) returns (PersonalizeTagResponse);
 }
 
@@ -25,6 +26,8 @@ message TagEvent {
     TAG_DEPARTED = 2;
     PERSONALIZATION_COMPLETE = 3;
     PERSONALIZATION_FAILED = 4;
+    VERIFICATION_COMPLETE = 5;
+    VERIFICATION_FAILED = 6;
   }
   enum TagType {
     TAG_UNKNOWN = 0;
@@ -60,10 +63,16 @@ message GetPersonalizeStateResponse {
     PERSONALIZING = 6;
     PERSONALIZED = 7;
     ERROR = 8;
+    VERIFYING = 9;
+    VERIFIED = 10;
   }
   State state = 1;
   bytes uid = 2;
   string error_message = 3;
+  // Identified type of the current tag. Carried independently of `state`
+  // because polling clients usually miss the short-lived FACTORY_TAG /
+  // MACO_TAG states.
+  TagEvent.TagType tag_type = 4;
 }
 
 message PersonalizeTagResponse {

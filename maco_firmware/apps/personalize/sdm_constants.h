@@ -33,6 +33,16 @@ constexpr uint8_t kNdefFileNumber = 0x02;
 /// Maximum bytes per plain-mode WriteData (limited by single frame).
 constexpr size_t kWriteChunkSize = 44;
 
+/// Maximum bytes per ReadData request (the driver does not support 91AF
+/// response chaining, so reads must stay within a single frame).
+constexpr size_t kReadChunkSize = 44;
+
+/// ASCII hex length of the SDM PICC data mirror (16 encrypted bytes).
+constexpr size_t kPiccDataHexLength = 32;
+
+/// ASCII hex length of the SDM MAC mirror (8 CMAC bytes).
+constexpr size_t kSdmMacHexLength = 16;
+
 /// Maximum supported base URL length (leaves room for NDEF overhead + SDM
 /// placeholders within 256-byte NDEF file limit).
 constexpr size_t kMaxBaseUrlLength = 64;
@@ -80,6 +90,16 @@ struct NdefTemplate {
 ///   [0x06]      0x04 (URI prefix = "https://")
 ///   [0x07-...]  base_url + "?picc=" + 32 zeros + "&cmac=" + 16 zeros
 pw::Result<NdefTemplate> BuildNdefTemplate(std::string_view base_url);
+
+/// Compare NDEF file content read back from a tag against the expected
+/// template, ignoring the two SDM mirror regions (PICC data + CMAC).
+///
+/// With SDM enabled the tag may substitute those regions at read time
+/// (encrypted PICC data / CMAC instead of the '0' placeholders), so their
+/// content carries no information about what was written — everything
+/// outside them must match byte-for-byte.
+bool NdefContentMatches(pw::ConstByteSpan read_content,
+                        const NdefTemplate& expected);
 
 /// Build ChangeFileSettings payload for enabling SDM with the given offsets.
 ///

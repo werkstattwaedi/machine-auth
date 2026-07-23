@@ -63,6 +63,24 @@ from pw_unit_test_proto import unit_test_pb2
 _LOG = logging.getLogger(__file__)
 
 
+class _StatePollLogFilter(logging.Filter):
+    """Drop routine RPC logs for the GetPersonalizeState poll.
+
+    The personalize pane polls GetPersonalizeState twice per second, and
+    pw_rpc logs every call start ("Starting PendingRpc(...)" on the
+    "pw_rpc" logger) and completion (on "pw_rpc.callback_client") —
+    flooding the host log window with pings. Suppress those below WARNING
+    so only actual actions (PersonalizeTag, tag events, errors) remain
+    visible. Logger filters only apply to records created on that exact
+    logger, so this must be installed on both loggers.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.levelno >= logging.WARNING:
+            return True
+        return "GetPersonalizeState" not in record.getMessage()
+
+
 class ReconnectingSerialClient:
     """Serial client with automatic reconnection on disconnect."""
 
@@ -506,6 +524,13 @@ def main() -> int:
         pw_cli.log.install(
             level=logging.DEBUG, use_color=False, log_file=logfile
         )
+
+        # Silence the 2/s state-poll pings; real actions still get logged.
+        state_poll_filter = _StatePollLogFilter()
+        for logger_name in ("pw_rpc", "pw_rpc.callback_client"):
+            logging.getLogger(logger_name).addFilter(state_poll_filter)
+        # asyncio's "Using selector: ..." startup line is DEBUG noise.
+        logging.getLogger("asyncio").setLevel(logging.INFO)
 
         with device_connection as device_client:
             personalize_pane = PersonalizePane(

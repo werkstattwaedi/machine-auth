@@ -6,14 +6,73 @@
 #include "maco_firmware/apps/personalize/personalize_coordinator.h"
 
 #include "maco_firmware/apps/personalize/key_updater.h"
+#include "maco_firmware/apps/personalize/personalization_verifier.h"
 #include "maco_firmware/apps/personalize/sdm_configurator.h"
 #include "maco_firmware/apps/personalize/tag_identifier.h"  // TagInfoFromNfcTag
 #include "maco_firmware/modules/nfc_reader/nfc_event.h"
 #include "maco_firmware/modules/nfc_tag/ntag424/local_key_provider.h"
 #include "maco_firmware/modules/nfc_tag/ntag424/ntag424_tag.h"
+#include "pw_async2/future.h"
 #include "pw_log/log.h"
 
 namespace maco::personalize {
+
+namespace {
+
+/// Races console key delivery against the next NFC event so that a tag
+/// leaving the field aborts the wait — otherwise the coordinator would sit
+/// in "awaiting keys" forever and ignore every subsequent tap.
+///
+/// Modeled on async_util::ValueOrTimeout (see its header for why pw_async2's
+/// own combinator headers are avoided). The losing future is dropped
+/// unresolved, which is safe for ValueFuture: its destructor unlists itself
+/// from the provider, and a later Resolve with no waiter is a no-op.
+class [[nodiscard]] KeysOrNfcEvent {
+ public:
+  struct Outcome {
+    std::optional<PersonalizationKeys> keys;
+    std::optional<nfc::NfcEvent> event;
+  };
+  using value_type = Outcome;
+
+  constexpr KeysOrNfcEvent() = default;
+
+  KeysOrNfcEvent(pw::async2::ValueFuture<PersonalizationKeys>&& keys,
+                 nfc::EventFuture&& event)
+      : keys_(std::move(keys)),
+        event_(std::move(event)),
+        state_(pw::async2::FutureState::kPending) {}
+
+  [[nodiscard]] constexpr bool is_pendable() const {
+    return state_.is_pendable();
+  }
+  [[nodiscard]] constexpr bool is_complete() const {
+    return state_.is_complete();
+  }
+
+  pw::async2::Poll<Outcome> Pend(pw::async2::Context& cx) {
+    auto keys = keys_.Pend(cx);
+    if (keys.IsReady()) {
+      state_.MarkComplete();
+      return pw::async2::Ready(
+          Outcome{.keys = std::move(*keys), .event = std::nullopt});
+    }
+    auto event = event_.Pend(cx);
+    if (event.IsReady()) {
+      state_.MarkComplete();
+      return pw::async2::Ready(
+          Outcome{.keys = std::nullopt, .event = std::move(*event)});
+    }
+    return pw::async2::Pending();
+  }
+
+ private:
+  pw::async2::ValueFuture<PersonalizationKeys> keys_;
+  nfc::EventFuture event_;
+  pw::async2::FutureState state_;
+};
+
+}  // namespace
 
 PersonalizeCoordinator::PersonalizeCoordinator(
     nfc::NfcReader& reader,
@@ -53,14 +112,21 @@ void PersonalizeCoordinator::GetSnapshot(PersonalizeSnapshot& snapshot) {
 void PersonalizeCoordinator::SetState(PersonalizeStateId state) {
   std::lock_guard guard(lock_);
   snapshot_.state = state;
+  if (state == PersonalizeStateId::kIdle) {
+    // No tag in the field — drop the stale identification.
+    snapshot_.tag_kind = DetectedTagKind::kNone;
+    snapshot_.uid_size = 0;
+  }
 }
 
 void PersonalizeCoordinator::SetStateWithUid(
     PersonalizeStateId state,
+    DetectedTagKind tag_kind,
     const std::array<std::byte, 7>& uid,
     size_t uid_size) {
   std::lock_guard guard(lock_);
   snapshot_.state = state;
+  snapshot_.tag_kind = tag_kind;
   snapshot_.uid = uid;
   snapshot_.uid_size = uid_size;
 }
@@ -106,8 +172,15 @@ pw::async2::Coro<pw::Status> PersonalizeCoordinator::Run(
   while (true) {
     SetState(PersonalizeStateId::kIdle);
 
-    auto event_future = reader_.SubscribeOnce();
-    nfc::NfcEvent event = co_await event_future;
+    nfc::NfcEvent event;
+    if (pending_event_.has_value()) {
+      // A tag arrival consumed by the awaiting-keys race in HandleTag.
+      event = std::move(*pending_event_);
+      pending_event_.reset();
+    } else {
+      auto event_future = reader_.SubscribeOnce();
+      event = co_await event_future;
+    }
 
     switch (event.type) {
       case nfc::NfcEventType::kTagArrived: {
@@ -189,30 +262,48 @@ pw::async2::Coro<pw::Status> PersonalizeCoordinator::HandleTag(
   auto screen_state = ident.type == TagType::kFactory
                           ? PersonalizeStateId::kFactoryTag
                           : PersonalizeStateId::kMacoTag;
+  auto tag_kind = ident.type == TagType::kFactory ? DetectedTagKind::kFactory
+                                                  : DetectedTagKind::kMaco;
 
-  SetStateWithUid(screen_state, uid_buffer, uid_size);
+  SetStateWithUid(screen_state, tag_kind, uid_buffer, uid_size);
   StreamTagEvent(maco_TagEvent_EventType_TAG_ARRIVED,
                  stream_tag_type,
                  pw::ConstByteSpan(uid_buffer.data(), uid_size), "");
 
-  // Wait for keys from the console
+  // Wait for keys from the console, aborting if the tag leaves the field.
   SetState(PersonalizeStateId::kAwaitingTag);
   PW_LOG_INFO("Waiting for keys from console...");
 
-  auto keys_future = keys_provider_.Get();
-  PersonalizationKeys keys = co_await keys_future;
+  KeysOrNfcEvent::Outcome outcome = co_await KeysOrNfcEvent(
+      keys_provider_.Get(), reader_.SubscribeOnce());
 
-  PW_LOG_INFO("Keys received from console, personalizing...");
+  if (!outcome.keys.has_value()) {
+    if (outcome.event.has_value() &&
+        outcome.event->type == nfc::NfcEventType::kTagArrived) {
+      // Departure was missed; hand the fresh arrival back to the main loop
+      // so the new tap is processed immediately.
+      PW_LOG_INFO("New tag arrived while waiting for keys");
+      pending_event_ = std::move(*outcome.event);
+    } else {
+      PW_LOG_INFO("Tag departed while waiting for keys");
+      StreamTagEvent(maco_TagEvent_EventType_TAG_DEPARTED,
+                     stream_tag_type,
+                     pw::ConstByteSpan(uid_buffer.data(), uid_size), "");
+    }
+    co_return pw::OkStatus();
+  }
+  const PersonalizationKeys& keys = *outcome.keys;
 
-  if (uid_size == maco::TagUid::kSize) {
-    auto tag_uid = maco::TagUid::FromArray(uid_buffer);
-    co_await TryPersonalize(cx, tag, tag_uid, keys);
+  PW_LOG_INFO("Keys received from console");
+
+  // uid_size was already validated to be a full 7-byte UID above.
+  auto tag_uid = maco::TagUid::FromArray(uid_buffer);
+  if (ident.type == TagType::kMaCo) {
+    // Already personalized: verify everything is written correctly
+    // instead of re-personalizing.
+    co_await TryVerify(cx, tag, tag_uid, keys);
   } else {
-    SetError("Invalid UID size for personalization");
-    StreamTagEvent(maco_TagEvent_EventType_PERSONALIZATION_FAILED,
-                   stream_tag_type,
-                   pw::ConstByteSpan(uid_buffer.data(), uid_size),
-                   "Invalid UID size");
+    co_await TryPersonalize(cx, tag, tag_uid, keys);
   }
 
   co_return pw::OkStatus();
@@ -274,12 +365,54 @@ pw::async2::Coro<pw::Status> PersonalizeCoordinator::TryPersonalize(
   }
 
   PW_LOG_INFO("Tag personalization complete!");
-  SetStateWithUid(
-      PersonalizeStateId::kPersonalized, verified_uid, verified_uid_size);
+  SetStateWithUid(PersonalizeStateId::kPersonalized, DetectedTagKind::kMaco,
+                  verified_uid, verified_uid_size);
   StreamTagEvent(maco_TagEvent_EventType_PERSONALIZATION_COMPLETE,
                  maco_TagEvent_TagType_TAG_MACO,
                  pw::ConstByteSpan(verified_uid.data(), verified_uid_size),
                  "");
+  co_return pw::OkStatus();
+}
+
+pw::async2::Coro<pw::Status> PersonalizeCoordinator::TryVerify(
+    pw::async2::CoroContext cx,
+    nfc::NfcTag& tag,
+    const maco::TagUid& tag_uid,
+    const PersonalizationKeys& keys) {
+  SetState(PersonalizeStateId::kVerifying);
+  PW_LOG_INFO("Starting tag verification...");
+
+  auto tag_info = TagInfoFromNfcTag(tag);
+  nfc::Ntag424Tag ntag(reader_, tag_info);
+
+  auto report_result = co_await VerifyPersonalization(
+      cx, ntag, tag.uid(), tag_uid.bytes(), keys, rng_);
+  if (!report_result.ok()) {
+    SetError("Verifikation abgebrochen (Tag entfernt?)");
+    StreamTagEvent(maco_TagEvent_EventType_VERIFICATION_FAILED,
+                   maco_TagEvent_TagType_TAG_MACO,
+                   tag_uid.bytes(), "Verification aborted");
+    co_return report_result.status();
+  }
+
+  const VerificationReport& report = *report_result;
+  if (report.AllOk()) {
+    PW_LOG_INFO("Tag verification passed!");
+    SetStateWithUid(PersonalizeStateId::kVerified, DetectedTagKind::kMaco,
+                    tag_uid.array(), maco::TagUid::kSize);
+    StreamTagEvent(maco_TagEvent_EventType_VERIFICATION_COMPLETE,
+                   maco_TagEvent_TagType_TAG_MACO,
+                   tag_uid.bytes(), "");
+    co_return pw::OkStatus();
+  }
+
+  pw::StringBuffer<128> failures;
+  report.FormatFailures(failures);
+  PW_LOG_ERROR("Tag verification FAILED: %s", failures.c_str());
+  SetError(failures.view());
+  StreamTagEvent(maco_TagEvent_EventType_VERIFICATION_FAILED,
+                 maco_TagEvent_TagType_TAG_MACO,
+                 tag_uid.bytes(), failures.view());
   co_return pw::OkStatus();
 }
 

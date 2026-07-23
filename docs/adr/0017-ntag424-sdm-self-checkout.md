@@ -74,7 +74,7 @@ ChangeFileSettings payload (15 bytes):
 5. Enable SDM via ChangeFileSettings
 6. Verify via GetFileSettings
 
-Steps 4-6 are idempotent: `IsSdmConfigured()` compares the full GetFileSettings response against expected values, so if the configuration changes in a future firmware update, re-personalizing will detect the mismatch and reconfigure.
+Steps 4-6 are idempotent: `IsSdmConfigured()` compares the full GetFileSettings response against expected values. This flow only runs for **factory** tags. Tags that already authenticate with the terminal key (MaCo tags) are routed to a read-only **verification** flow instead (`personalization_verifier.cc`): all 5 key slots are checked by mutual authentication with the expected keys, plus random-UID, real UID, NDEF template, and SDM file settings. A MaCo tag that fails verification (e.g. after an SDM layout change in a future firmware) is reported with the failing checks but is *not* automatically reconfigured — re-personalization of live tags is a deliberate, separate operator action, not a side effect of a tap.
 
 ### Backend Verification
 
