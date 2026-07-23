@@ -20,7 +20,7 @@ import { useEffect, useRef, useState } from "react"
 import { useNavigate } from "@tanstack/react-router"
 import { toast } from "sonner"
 import { Loader2 } from "lucide-react"
-import { useAuth, isProfileComplete } from "@modules/lib/auth"
+import { useAuth } from "@modules/lib/auth"
 import { useFunctions } from "@modules/lib/firebase-context"
 import { prewarm } from "@modules/lib/rpc"
 import { Button } from "@modules/components/ui/button"
@@ -126,15 +126,23 @@ export function LoginPage({
       navigate({ to: pendingGoogleLink ? "/link-account" : targetPath })
       return
     }
-    if (userDoc && isProfileComplete(userDoc)) {
+    if (userDoc) {
+      // A users doc exists — completed OR incomplete (imported / admin-created
+      // / legacy straggler). Route into the app rather than the doc-less
+      // inline sign-up: the member gate / wizard then shows the
+      // welcome-onboarding dialog with their imported data prefilled for the
+      // incomplete case. Without this, an imported member logging in via
+      // /login would get a blank inline sign-up form instead of the welcome
+      // flow the check-in path gives.
       navigate({ to: pendingGoogleLink ? "/link-account" : targetPath })
       return
     }
-    // Signed in without a completed profile → finish sign-up inline. Keep an
-    // already-chosen sign-up stage (e.g. Google prefill) instead of resetting —
-    // EXCEPT the via:"code" stage: the user is signed in now (e.g. they clicked
-    // the magic link in another tab), so the inline code is consumed/moot and
-    // the form must submit via completeSignedInSignup instead.
+    // Signed in with NO users doc → a fresh principal (Google-new /
+    // magic-link-new). Finish sign-up inline. Keep an already-chosen sign-up
+    // stage (e.g. Google prefill) instead of resetting — EXCEPT the via:"code"
+    // stage: the user is signed in now (e.g. they clicked the magic link in
+    // another tab), so the inline code is consumed/moot and the form must
+    // submit via completeSignedInSignup instead.
     setStage((prev) =>
       prev.kind === "signup" && prev.via !== "code"
         ? prev
@@ -185,13 +193,19 @@ export function LoginPage({
         toast.success("E-Mail gesendet!")
         return
       }
-      const { exists } = await checkAccountExists(email)
+      // `hasProfile` = a `users` doc exists (with or without accepted terms).
+      // That covers both completed accounts and imported/admin-created members
+      // who still need onboarding — both sign IN with a code; only a truly new
+      // e-mail (no doc) gets the sign-up form. (`exists` ⇒ `hasProfile`, so it
+      // adds nothing here.) Post-login, the member-gate shows the onboarding
+      // dialog with their data prefilled.
+      const { hasProfile } = await checkAccountExists(email)
       // The 60s per-email throttle is not a dead end: a prior unconsumed code
       // stays valid (only a successful re-request invalidates it). Typical
       // trigger is "Ändern" → same e-mail again — advance to the stage and
       // tell the user the earlier code still works.
       const { throttled } = await requestCodeWithThrottle(requestLoginEmail, email)
-      if (exists) {
+      if (hasProfile) {
         setStage({ kind: "signin-code" })
         setSigninCode("")
         setCodeError(null)

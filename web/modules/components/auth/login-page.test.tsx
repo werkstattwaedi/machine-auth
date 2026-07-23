@@ -107,7 +107,7 @@ describe("LoginPage", () => {
   })
 
   it("shows only the code field for an existing account after email submit", async () => {
-    auth.checkAccountExists = vi.fn().mockResolvedValue({ exists: true, hasAuthUser: true })
+    auth.checkAccountExists = vi.fn().mockResolvedValue({ exists: true, hasAuthUser: true, hasProfile: true })
     render(<LoginPage defaultRedirect="/visit" signupEnabled />)
 
     enterEmail("known@example.com")
@@ -118,7 +118,7 @@ describe("LoginPage", () => {
   })
 
   it("shows the inline sign-up form for a new account after email submit", async () => {
-    auth.checkAccountExists = vi.fn().mockResolvedValue({ exists: false, hasAuthUser: false })
+    auth.checkAccountExists = vi.fn().mockResolvedValue({ exists: false, hasAuthUser: false, hasProfile: false })
     render(<LoginPage defaultRedirect="/visit" signupEnabled />)
 
     enterEmail("new@example.com")
@@ -127,6 +127,23 @@ describe("LoginPage", () => {
     expect(screen.getByTestId("signup-firstname")).toBeTruthy()
     expect(screen.getByTestId("signup-code-input")).toBeTruthy()
     expect(screen.getByTestId("signup-membertype-firma")).toBeTruthy()
+  })
+
+  it("shows the code field (sign-in) for an imported member with a profile but no accepted terms", async () => {
+    // hasProfile=true, exists=false: a users doc exists but terms aren't
+    // accepted (imported/admin-created). Must sign IN, not sign up — the
+    // post-login redirect handles profile completion with prefilled data.
+    auth.checkAccountExists = vi
+      .fn()
+      .mockResolvedValue({ exists: false, hasAuthUser: true, hasProfile: true })
+    render(<LoginPage defaultRedirect="/visit" signupEnabled />)
+
+    enterEmail("imported@example.com")
+
+    await waitFor(() => expect(screen.getByTestId("login-code-stage")).toBeTruthy())
+    expect(auth.requestLoginEmail).toHaveBeenCalledWith("imported@example.com")
+    expect(screen.queryByTestId("login-signup-stage")).toBeNull()
+    expect(screen.queryByTestId("signup-firstname")).toBeNull()
   })
 
   it("skips the existence check for admin and goes straight to the code field", async () => {
@@ -139,7 +156,7 @@ describe("LoginPage", () => {
   })
 
   it("reveals the firma address fields when Firma is selected in sign-up", async () => {
-    auth.checkAccountExists = vi.fn().mockResolvedValue({ exists: false, hasAuthUser: false })
+    auth.checkAccountExists = vi.fn().mockResolvedValue({ exists: false, hasAuthUser: false, hasProfile: false })
     render(<LoginPage defaultRedirect="/visit" signupEnabled />)
     enterEmail("firma@example.com")
 

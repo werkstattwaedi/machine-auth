@@ -258,9 +258,14 @@ export function CheckinSignin({
         if (e164) setStage({ kind: "code", identifier: e164, channel: "sms" })
         return
       }
-      const { exists } = await checkAccountExists(id)
+      const { exists, hasProfile } = await checkAccountExists(id)
       if (kiosk) {
-        // No sign-up at the shared terminal (ADR-0022).
+        // No sign-up at the shared terminal (ADR-0022). The kiosk verify
+        // (verifyLoginCodeKiosk) also requires accepted terms, so an
+        // unclaimed member (hasProfile but !exists) can't check in here
+        // anyway — must finish onboarding on their own device first. Gate on
+        // the stricter `exists` so they get an immediate field error instead
+        // of a failure after the code roundtrip.
         if (!exists) {
           setFieldError(
             "Für diese E-Mail existiert noch kein Konto. Bitte registriere dich zuerst auf deinem eigenen Gerät.",
@@ -271,8 +276,14 @@ export function CheckinSignin({
         setStage({ kind: "code", identifier: id, channel: "email" })
         return
       }
-      // Own device: the sign-up form needs the code too, so request it for
-      // both branches (same as /login).
+      // Own device: `hasProfile` = a `users` doc exists (completed OR an
+      // imported/admin-created member who still needs onboarding). Both sign
+      // IN with a code; only a truly new e-mail (no doc) gets the sign-up
+      // form. (`exists` ⇒ `hasProfile`, so it adds nothing here.) After login
+      // the wizard shows the welcome-onboarding dialog as an overlay with
+      // their name/address prefilled — a fresh sign-up here couldn't prefill
+      // (not authenticated yet) and would overwrite their imported profile.
+      // The sign-up form needs the code too, so request it for both branches.
       const { throttled } = await requestCodeWithThrottle(requestLoginEmail, id)
       if (throttled) {
         toast.info(
@@ -280,7 +291,7 @@ export function CheckinSignin({
         )
       }
       setStage(
-        exists
+        hasProfile
           ? { kind: "code", identifier: id, channel: "email" }
           : { kind: "signup", via: "code", identifier: id },
       )

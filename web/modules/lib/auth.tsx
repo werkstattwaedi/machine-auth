@@ -116,10 +116,15 @@ interface AuthContextValue {
   loading: boolean
   /** True while the Firestore user doc is being fetched (may be slow). */
   userDocLoading: boolean
-  /** Does a *completed* account (name + accepted terms) exist for this email? */
+  /**
+   * Account lookup for an email. `exists` = a *completed* account (name +
+   * accepted terms). `hasProfile` = a `users` doc exists at all (true for
+   * imported/admin-created members who still need to accept terms — they must
+   * sign IN and finish onboarding, not be offered a fresh sign-up).
+   */
   checkAccountExists: (
     email: string
-  ) => Promise<{ exists: boolean; hasAuthUser: boolean }>
+  ) => Promise<{ exists: boolean; hasAuthUser: boolean; hasProfile: boolean }>
   /** Ask the server to email a 6-digit code + magic link. */
   requestLoginEmail: (email: string) => Promise<void>
   /** Redeem the 6-digit code and sign in (existing account — no doc write). */
@@ -332,7 +337,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const checkAccountExists = async (email: string) => {
     const fn = rpcCallable<
       { email: string },
-      { exists: boolean; hasAuthUser: boolean }
+      { exists: boolean; hasAuthUser: boolean; hasProfile: boolean }
     >(functions, "authCall", "checkAccountExists")
     const { data } = await fn({ email })
     return data
@@ -449,6 +454,7 @@ async function writeSignupProfile(
 
   const userDocRef = userRef(db, user.uid)
   const snapshot = await getDoc(userDocRef)
+  const isNew = !snapshot.exists()
 
   await setDoc(
     userDocRef,
@@ -458,17 +464,25 @@ async function writeSignupProfile(
       lastName: profile.lastName.trim(),
       userType: profile.userType,
       termsAcceptedAt: serverTimestamp(),
-      billingAddress: profile.billingAddress ?? null,
+      // Only write billingAddress when the sign-up form actually captured one
+      // (firma). The non-firma onboarding form reports `null` — merging that
+      // into an existing doc would wipe an imported/admin-set address. New
+      // accounts still get an explicit `null` so the field is initialized.
+      ...(profile.billingAddress
+        ? { billingAddress: profile.billingAddress }
+        : isNew
+          ? { billingAddress: null }
+          : {}),
       // New accounts get the full scaffold; an existing doc keeps its
       // roles/permissions/created/phone (merge omits these fields).
-      ...(snapshot.exists()
-        ? {}
-        : {
+      ...(isNew
+        ? {
             created: serverTimestamp(),
             roles: [],
             permissions: [],
             phone: null,
-          }),
+          }
+        : {}),
     },
     { merge: true }
   )

@@ -66,16 +66,19 @@ describe("checkAccountExists (Integration)", () => {
     );
     expect(result.exists).to.equal(true);
     expect(result.hasAuthUser).to.equal(true);
+    expect(result.hasProfile).to.equal(true);
   });
 
-  it("reports exists=false but hasAuthUser=true for an unfinished signup", async () => {
+  it("reports hasProfile=true (exists=false) for an imported/admin-created member without accepted terms", async () => {
     const auth = getAuth();
     const user = await auth.createUser({ email: "half@example.com" });
-    // Doc exists but terms not accepted (e.g. admin-created or abandoned).
+    // Doc exists with real profile data but terms not accepted — this is the
+    // imported-member shape (scripts/import-members.ts sets termsAcceptedAt:
+    // null). It must route to sign-IN + onboarding, not a fresh sign-up.
     await getFirestore().collection("users").doc(user.uid).set({
       email: "half@example.com",
-      firstName: "",
-      lastName: "",
+      firstName: "Imported",
+      lastName: "Member",
       termsAcceptedAt: null,
     });
 
@@ -85,6 +88,21 @@ describe("checkAccountExists (Integration)", () => {
     );
     expect(result.exists).to.equal(false);
     expect(result.hasAuthUser).to.equal(true);
+    expect(result.hasProfile).to.equal(true);
+  });
+
+  it("reports hasProfile=false but hasAuthUser=true for a bare Auth user with no users doc", async () => {
+    // An abandoned code request auto-creates an Auth user but no users doc.
+    // This must still be offered a fresh sign-up (hasProfile=false).
+    await getAuth().createUser({ email: "bare@example.com" });
+
+    const result = await handleCheckAccountExists(
+      { email: "bare@example.com" },
+      ORIGIN
+    );
+    expect(result.exists).to.equal(false);
+    expect(result.hasAuthUser).to.equal(true);
+    expect(result.hasProfile).to.equal(false);
   });
 
   it("reports exists=false for a brand-new email", async () => {
@@ -94,6 +112,7 @@ describe("checkAccountExists (Integration)", () => {
     );
     expect(result.exists).to.equal(false);
     expect(result.hasAuthUser).to.equal(false);
+    expect(result.hasProfile).to.equal(false);
   });
 
   it("normalizes the email before lookup", async () => {

@@ -1,13 +1,12 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import {
   createFileRoute,
   Link,
   Outlet,
   useLocation,
-  useNavigate,
 } from "@tanstack/react-router"
 import { z } from "zod/v4/mini"
 import { signOut } from "firebase/auth"
@@ -24,6 +23,7 @@ import { StaleCheckoutBanner } from "@/components/checkout/stale-checkout-banner
 import { StartOverButton } from "@/components/checkout/start-over-button"
 import { KioskInactivityWatcher } from "@/components/checkout/kiosk-inactivity-watcher"
 import { NoCheckoutGate } from "@/components/checkout/no-checkout-gate"
+import { WelcomeOnboarding } from "@/components/account/welcome-onboarding"
 import { TagAuthOverlay } from "@/components/checkout/tag-auth-overlay"
 import { TagVisitRedirect } from "@/components/checkout/tag-visit-redirect"
 import { BadgeOfferCoordinator } from "@/components/checkout/badge-offer-coordinator"
@@ -58,8 +58,6 @@ function WizardLayout() {
   const auth = useFirebaseAuth()
   const { userDoc, loading, userDocLoading, sessionKind } = useAuth()
   const { picc, cmac, kiosk } = Route.useSearch()
-  const { pathname } = useLocation()
-  const navigate = useNavigate()
   const isKiosk = kiosk !== undefined
   const { data: pricingConfig, loading: loadingConfig, configError } =
     usePricingConfig()
@@ -74,24 +72,25 @@ function WizardLayout() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Redirect logged-in users with incomplete profiles to /account/complete-profile.
-  // Tag-auth sessions always carry picc/cmac — skip them.
+  // Imported/incomplete members get the "Willkommen" onboarding as a blocking
+  // overlay on top of the live checkout (not a redirect away). Tag-auth
+  // sessions always carry picc/cmac — skip them.
   const isAccountLoggedIn = sessionKind === "real" && !picc
   const profileLoading = loading || userDocLoading
-  const needsProfileCompletion =
+  const needsOnboarding =
     isAccountLoggedIn &&
     !profileLoading &&
     userDoc &&
     !isProfileComplete(userDoc)
 
-  useEffect(() => {
-    if (needsProfileCompletion) {
-      navigate({
-        to: "/account/complete-profile",
-        search: { redirect: pathname },
-      })
-    }
-  }, [needsProfileCompletion, navigate, pathname])
+  // Latch so the overlay stays mounted through all four steps even after
+  // step 3 records terms (which flips isProfileComplete). Cleared only when
+  // the member finishes (onDone). Set during render (guarded) rather than in
+  // an effect to avoid a cascading-render lint/perf hit.
+  const [onboardingActive, setOnboardingActive] = useState(false)
+  const [onboardingDone, setOnboardingDone] = useState(false)
+  if (needsOnboarding && !onboardingActive) setOnboardingActive(true)
+  const showOnboarding = onboardingActive && !onboardingDone
 
   if (isAccountLoggedIn && profileLoading) {
     return (
@@ -100,8 +99,6 @@ function WizardLayout() {
       </div>
     )
   }
-
-  if (needsProfileCompletion) return null
 
   if (loadingConfig) return <PageLoading />
 
@@ -133,6 +130,9 @@ function WizardLayout() {
       <TagAuthOverlay />
       <TagVisitRedirect />
       <BadgeOfferCoordinator />
+      {showOnboarding && (
+        <WelcomeOnboarding onDone={() => setOnboardingDone(true)} />
+      )}
     </WizardProvider>
   )
 }
