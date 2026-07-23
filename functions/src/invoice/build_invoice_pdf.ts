@@ -573,7 +573,7 @@ function renderCheckoutSection(
       y = renderDiscountRow(
         doc,
         y,
-        `${discountLabel}: Eintritt ${
+        `${discountLabel}: Nutzungsgebühr ${
           discount.entryFee === 0 ? "wird nicht verrechnet" : "ermässigt"
         }`,
         entryWaived,
