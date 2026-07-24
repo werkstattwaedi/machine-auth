@@ -83,5 +83,51 @@ TEST(BuildNdefTemplate, RejectsEmptyAndOverlongBaseUrl) {
   EXPECT_FALSE(BuildNdefTemplate(too_long).ok());
 }
 
+TEST(NdefContentMatches, AcceptsIdenticalContent) {
+  auto result = BuildNdefTemplate(kBaseUrl);
+  ASSERT_TRUE(result.ok());
+  EXPECT_TRUE(NdefContentMatches(result->content(), *result));
+}
+
+// With SDM enabled the tag substitutes the PICC/CMAC mirror regions at read
+// time, so differences there must not fail verification.
+TEST(NdefContentMatches, IgnoresBothSdmMirrorRegions) {
+  auto result = BuildNdefTemplate(kBaseUrl);
+  ASSERT_TRUE(result.ok());
+  NdefTemplate read_back = *result;
+
+  for (size_t i = 0; i < kPiccDataHexLength; ++i) {
+    read_back.data[result->picc_data_offset + i] = std::byte{'A'};
+  }
+  for (size_t i = 0; i < kSdmMacHexLength; ++i) {
+    read_back.data[result->sdm_mac_offset + i] = std::byte{'F'};
+  }
+
+  EXPECT_TRUE(NdefContentMatches(read_back.content(), *result));
+}
+
+TEST(NdefContentMatches, RejectsDifferenceOutsideMirrorRegions) {
+  auto result = BuildNdefTemplate(kBaseUrl);
+  ASSERT_TRUE(result.ok());
+
+  // Corrupt one byte of the base URL (just after the 7-byte NDEF overhead).
+  NdefTemplate read_back = *result;
+  read_back.data[kNdefOverhead] = std::byte{'x'};
+  EXPECT_FALSE(NdefContentMatches(read_back.content(), *result));
+
+  // A byte between the mirror regions ("&cmac=" separator) must also count.
+  NdefTemplate read_back2 = *result;
+  read_back2.data[result->picc_data_offset + kPiccDataHexLength] =
+      std::byte{'#'};
+  EXPECT_FALSE(NdefContentMatches(read_back2.content(), *result));
+}
+
+TEST(NdefContentMatches, RejectsSizeMismatch) {
+  auto result = BuildNdefTemplate(kBaseUrl);
+  ASSERT_TRUE(result.ok());
+  EXPECT_FALSE(NdefContentMatches(
+      pw::ConstByteSpan(result->data.data(), result->size - 1), *result));
+}
+
 }  // namespace
 }  // namespace maco::personalize::sdm

@@ -107,6 +107,26 @@ cc_library(
     ],
 )
 
+# Personalization verifier - checks keys + configuration of a MaCo tag
+cc_library(
+    name = "personalization_verifier",
+    srcs = ["personalization_verifier.cc"],
+    hdrs = ["personalization_verifier.h"],
+    deps = [
+        ":personalization_keys",
+        ":sdm_constants",
+        "//maco_firmware/modules/nfc_tag/ntag424:local_key_provider",
+        "//maco_firmware/modules/nfc_tag/ntag424:ntag424_session",
+        "//maco_firmware/modules/nfc_tag/ntag424:ntag424_tag",
+        "@pigweed//pw_async2:coro",
+        "@pigweed//pw_bytes",
+        "@pigweed//pw_log",
+        "@pigweed//pw_random",
+        "@pigweed//pw_result",
+        "@pigweed//pw_string",
+    ],
+)
+
 # Personalization coordinator - orchestrates identification, keys, and SDM
 cc_library(
     name = "personalize_coordinator",
@@ -114,6 +134,7 @@ cc_library(
     hdrs = ["personalize_coordinator.h"],
     deps = [
         ":key_updater",
+        ":personalization_verifier",
         ":personalization_keys",
         ":screens",
         ":sdm_configurator",

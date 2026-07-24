@@ -42,6 +42,12 @@ _STATE_AWAITING_KEYS = 5
 _STATE_PERSONALIZING = 6
 _STATE_PERSONALIZED = 7
 _STATE_ERROR = 8
+_STATE_VERIFYING = 9
+_STATE_VERIFIED = 10
+
+# Proto enum values for TagEvent.TagType
+_TAG_TYPE_FACTORY = 1
+_TAG_TYPE_MACO = 2
 
 _STATE_NAMES = {
     _STATE_IDLE: "idle",
@@ -53,15 +59,19 @@ _STATE_NAMES = {
     _STATE_PERSONALIZING: "personalizing",
     _STATE_PERSONALIZED: "personalized",
     _STATE_ERROR: "error",
+    _STATE_VERIFYING: "verifying",
+    _STATE_VERIFIED: "verified",
 }
 
 
 @dataclass
 class TagLogEntry:
-    """One personalization attempt in the scrolling log."""
+    """One personalization/verification attempt in the scrolling log."""
     uid_hex: str
     tag_type: str
-    status: str  # "pending", "personalizing", "ok", "fail", "skipped"
+    # "pending", "personalizing", "verifying", "ok", "verified", "fail",
+    # "skipped"
+    status: str
     message: str = ""
     timestamp: float = field(default_factory=time.monotonic)
 
@@ -223,11 +233,15 @@ class PersonalizePane(WindowPane, PluginMixin):
         uid_hex = uid.hex() if uid else ""
         error_msg = resp.error_message
 
+        # The response carries the identified tag type directly — polling
+        # usually misses the short-lived FACTORY_TAG/MACO_TAG states, so
+        # deriving the type from `state` would mislabel most tags.
         tag_type_str = {
-            _STATE_FACTORY_TAG: "factory",
-            _STATE_MACO_TAG: "maco",
-            _STATE_UNKNOWN_TAG: "unknown",
-        }.get(state, "")
+            _TAG_TYPE_FACTORY: "factory",
+            _TAG_TYPE_MACO: "maco",
+        }.get(resp.tag_type, "")
+        if not tag_type_str and state == _STATE_UNKNOWN_TAG:
+            tag_type_str = "unknown"
 
         with self._lock:
             prev = self._prev_state
@@ -268,10 +282,12 @@ class PersonalizePane(WindowPane, PluginMixin):
                 self._log.append(entry)
                 self._trim_log()
 
-            # Auto-personalize factory tags
+            # Auto-personalize factory tags / auto-verify MaCo tags. Both
+            # paths just deliver the diversified keys; the firmware decides
+            # (factory -> personalize, maco -> verify).
             if (state == _STATE_AWAITING_KEYS
                     and self._auto_mode
-                    and self._current_tag_type == "factory"):
+                    and self._current_tag_type in ("factory", "maco")):
                 uid_copy = uid
                 uid_hex_copy = uid_hex
                 # Release lock before RPC
@@ -290,6 +306,14 @@ class PersonalizePane(WindowPane, PluginMixin):
             self._current_uid = uid
             self._current_tag_type = "maco"
 
+        elif state == _STATE_VERIFYING:
+            self._update_last_entry(uid_hex, "verifying", "")
+
+        elif state == _STATE_VERIFIED:
+            self._update_last_entry(uid_hex, "verified", "")
+            self._current_uid = uid
+            self._current_tag_type = "maco"
+
         elif state == _STATE_ERROR:
             self._update_last_entry(uid_hex, "fail", error_msg)
 
@@ -300,7 +324,11 @@ class PersonalizePane(WindowPane, PluginMixin):
     def _do_personalize(self, uid: bytes, uid_hex: str) -> None:
         """Diversify keys and send PersonalizeTag RPC."""
         with self._lock:
-            self._update_last_entry(uid_hex, "personalizing", "")
+            status = (
+                "verifying" if self._current_tag_type == "maco"
+                else "personalizing"
+            )
+            self._update_last_entry(uid_hex, status, "")
 
         self.redraw_ui()
 
@@ -359,6 +387,7 @@ class PersonalizePane(WindowPane, PluginMixin):
             log_copy = list(self._log)
 
         ok_count = sum(1 for e in log_copy if e.status == "ok")
+        verified_count = sum(1 for e in log_copy if e.status == "verified")
         fail_count = sum(1 for e in log_copy if e.status == "fail")
 
         # Header
@@ -367,9 +396,14 @@ class PersonalizePane(WindowPane, PluginMixin):
         fragments.append(("class:theme-fg-cyan", "  Personalize"))
         fragments.append(("", "  "))
         fragments.append((mode_style, f"[{mode_str}]"))
-        if ok_count or fail_count:
+        if ok_count or verified_count or fail_count:
             fragments.append(("", "  "))
             fragments.append(("class:theme-fg-green", f"{ok_count} ok"))
+            if verified_count:
+                fragments.append(("", " / "))
+                fragments.append(
+                    ("class:theme-fg-cyan", f"{verified_count} verified")
+                )
             if fail_count:
                 fragments.append(("", " / "))
                 fragments.append(("class:theme-fg-red", f"{fail_count} fail"))
@@ -391,10 +425,17 @@ class PersonalizePane(WindowPane, PluginMixin):
             fragments.append(("bold", uid_hex))
             if current_state == _STATE_AWAITING_KEYS:
                 fragments.append(("", " "))
-                fragments.append(("class:theme-fg-yellow", "(press p)"))
+                hint = (
+                    "(press p to verify)" if current_tag_type == "maco"
+                    else "(press p)"
+                )
+                fragments.append(("class:theme-fg-yellow", hint))
             elif current_state == _STATE_PERSONALIZING:
                 fragments.append(("", " "))
                 fragments.append(("class:theme-fg-cyan", "(writing...)"))
+            elif current_state == _STATE_VERIFYING:
+                fragments.append(("", " "))
+                fragments.append(("class:theme-fg-cyan", "(verifying...)"))
             fragments.append(nl)
         else:
             fragments.append(("class:theme-fg-dim", f"  {state_name}"))
@@ -432,10 +473,12 @@ class PersonalizePane(WindowPane, PluginMixin):
         match status:
             case "pending":
                 return ".", ""
-            case "personalizing":
+            case "personalizing" | "verifying":
                 return "~", "class:theme-fg-cyan"
             case "ok":
                 return "\u2713", "class:theme-fg-green"
+            case "verified":
+                return "\u2713", "class:theme-fg-cyan"
             case "fail":
                 return "\u2717", "class:theme-fg-red"
             case "skipped":

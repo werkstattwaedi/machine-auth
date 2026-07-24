@@ -58,8 +58,26 @@ pw::Status PersonalizationRpcService::GetPersonalizeState(
       response.state =
           P::maco_GetPersonalizeStateResponse_State_PERSONALIZED;
       break;
+    case S::kVerifying:
+      response.state = P::maco_GetPersonalizeStateResponse_State_VERIFYING;
+      break;
+    case S::kVerified:
+      response.state = P::maco_GetPersonalizeStateResponse_State_VERIFIED;
+      break;
     case S::kError:
       response.state = P::maco_GetPersonalizeStateResponse_State_ERROR;
+      break;
+  }
+
+  switch (snapshot.tag_kind) {
+    case DetectedTagKind::kNone:
+      response.tag_type = maco_TagEvent_TagType_TAG_UNKNOWN;
+      break;
+    case DetectedTagKind::kFactory:
+      response.tag_type = maco_TagEvent_TagType_TAG_FACTORY;
+      break;
+    case DetectedTagKind::kMaco:
+      response.tag_type = maco_TagEvent_TagType_TAG_MACO;
       break;
   }
 

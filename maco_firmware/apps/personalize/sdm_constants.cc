@@ -80,4 +80,28 @@ pw::Result<NdefTemplate> BuildNdefTemplate(std::string_view base_url) {
   return result;
 }
 
+bool NdefContentMatches(pw::ConstByteSpan read_content,
+                        const NdefTemplate& expected) {
+  if (read_content.size() != expected.size) {
+    return false;
+  }
+
+  auto in_mirror_region = [&](size_t i) {
+    return (i >= expected.picc_data_offset &&
+            i < expected.picc_data_offset + kPiccDataHexLength) ||
+           (i >= expected.sdm_mac_offset &&
+            i < expected.sdm_mac_offset + kSdmMacHexLength);
+  };
+
+  for (size_t i = 0; i < expected.size; ++i) {
+    if (in_mirror_region(i)) {
+      continue;
+    }
+    if (read_content[i] != expected.data[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
 }  // namespace maco::personalize::sdm

@@ -156,22 +156,26 @@ class Ntag424Tag : public Iso14443Tag {
 
   /// Get file settings for a file.
   ///
-  /// The comm_mode must match the file's current CommMode setting:
-  /// - Plain: command has no CMAC, response is unencrypted
-  /// - Full: command includes CMAC, response is encrypted + MACed
+  /// GetFileSettings is a CommMode.MAC command per the NTAG424 datasheet:
+  /// in-session, the command carries a CMAC and the response is plain
+  /// settings data + CMAC — the data is never encrypted (unlike GetCardUid).
+  ///
+  /// - Plain: command has no CMAC, response is plain data; served outside
+  ///   secure messaging, so the session CmdCtr is not advanced
+  /// - Mac: command includes CMAC, response is plain data + CMAC
   ///
   /// @param cx Coroutine context for frame allocation
   /// @param session Proof token from Authenticate()
   /// @param file_number File number (0x01-0x03 for standard files)
   /// @param settings_buffer Buffer for settings (at least 32 bytes)
-  /// @param comm_mode Communication mode (must match file's CommMode)
+  /// @param comm_mode kMac in a session (default), kPlain outside one
   /// @return Coroutine resolving to number of settings bytes
   pw::async2::Coro<pw::Result<size_t>> GetFileSettings(
       pw::async2::CoroContext cx,
       const Ntag424Session& session,
       uint8_t file_number,
       pw::ByteSpan settings_buffer,
-      CommMode comm_mode = CommMode::kFull);
+      CommMode comm_mode = CommMode::kMac);
 
   /// Change file settings.
   ///

@@ -107,6 +107,13 @@ void PersonalizeScreen::UpdateStatusText(const PersonalizeSnapshot& snapshot) {
       status_text_ << "Tag personalized!\n";
       FormatUidTo(status_text_, snapshot.uid, snapshot.uid_size);
       break;
+    case PersonalizeStateId::kVerifying:
+      status_text_ << "Verifying tag...";
+      break;
+    case PersonalizeStateId::kVerified:
+      status_text_ << "Tag verified OK!\n";
+      FormatUidTo(status_text_, snapshot.uid, snapshot.uid_size);
+      break;
     case PersonalizeStateId::kError:
       status_text_ << "Error: ";
       status_text_ << snapshot.error_message;

@@ -398,9 +398,16 @@ pw::async2::Coro<pw::Result<size_t>> Ntag424Tag::ReadData(
   }
   size_t total_bytes_read = 0;
 
-  // Increment CmdCtr for every successful command. The PICC always increments
-  // regardless of CommMode; we must stay in sync.
-  if (!sm->IncrementCounter()) {
+  // Increment CmdCtr only for session commands. A plain ReadData only ever
+  // succeeds against a file whose read access is free (Eh) — the PICC serves
+  // it OUTSIDE the secure session (same path as an unauthenticated phone
+  // tap: SDM mirroring applies and SDMReadCtr increments) and does NOT
+  // advance CmdCtr. Incrementing here anyway desyncs the session and makes
+  // the next MACed command fail its response-CMAC check.
+  // Note: WriteData increments unconditionally, which is correct while
+  // write access is key-gated; a plain write to a free-write file would
+  // have the mirror-image desync.
+  if (comm_mode != CommMode::kPlain && !sm->IncrementCounter()) {
     co_return pw::Status::ResourceExhausted();
   }
 
@@ -619,7 +626,7 @@ pw::async2::Coro<pw::Result<size_t>> Ntag424Tag::GetFileSettings(
   auto* sm = secure_messaging();
 
   // Build GetFileSettings command
-  // Full mode: 90 F5 00 00 09 [FileNo] [CMACt(8)] 00
+  // MAC mode:   90 F5 00 00 09 [FileNo] [CMACt(8)] 00
   // Plain mode: 90 F5 00 00 01 [FileNo] 00
   std::array<std::byte, 16> command;
   command[0] = std::byte{ntag424_cmd::kClaNative};
@@ -631,7 +638,7 @@ pw::async2::Coro<pw::Result<size_t>> Ntag424Tag::GetFileSettings(
 
   size_t cmd_len;
 
-  if (comm_mode == CommMode::kFull) {
+  if (comm_mode != CommMode::kPlain) {
     command[4] = std::byte{9};  // Lc: 1 (FileNo) + 8 (CMACt)
 
     // Build CMACt over command header (FileNo)
@@ -665,42 +672,37 @@ pw::async2::Coro<pw::Result<size_t>> Ntag424Tag::GetFileSettings(
     co_return InterpretStatusWord(sw1, sw2);
   }
 
-  // Increment CmdCtr for every successful command. The PICC always increments
-  // regardless of CommMode; we must stay in sync.
-  if (!sm->IncrementCounter()) {
+  // Increment CmdCtr only for session (MACed) commands; a plain
+  // GetFileSettings is served outside secure messaging and does not
+  // advance the counter (same rule as plain ReadData).
+  if (comm_mode != CommMode::kPlain && !sm->IncrementCounter()) {
     co_return pw::Status::ResourceExhausted();
   }
 
-  if (comm_mode == CommMode::kFull) {
-    // Response format: [EncryptedData(N)] [CMACt(8)] [SW(2)]
+  if (comm_mode != CommMode::kPlain) {
+    // GetFileSettings is a CommMode.MAC command: the response data is plain
+    // settings + CMACt, never encrypted. (Treating it as encrypted made the
+    // 19-byte SDM settings fail the decrypt's multiple-of-16 check, so this
+    // call silently failed for every SDM-enabled file.)
+    // Response format: [SettingsData(N)] [CMACt(8)] [SW(2)]
     size_t data_with_cmac_len = response_len - 2;
     if (data_with_cmac_len < 8) {
       co_return pw::Status::DataLoss();
     }
-    size_t encrypted_len = data_with_cmac_len - 8;
+    size_t data_len = data_with_cmac_len - 8;
 
-    pw::ConstByteSpan encrypted_data(response.data(), encrypted_len);
-    pw::ConstByteSpan received_cmac(response.data() + encrypted_len, 8);
+    pw::ConstByteSpan settings_data(response.data(), data_len);
+    pw::ConstByteSpan received_cmac(response.data() + data_len, 8);
 
     PW_CO_TRY(
-        sm->VerifyResponseCMACWithData(0x00, encrypted_data, received_cmac));
+        sm->VerifyResponseCMACWithData(0x00, settings_data, received_cmac));
 
-    std::array<std::byte, 32> decrypted;
-    if (encrypted_len > decrypted.size()) {
+    if (settings_buffer.size() < data_len) {
       co_return pw::Status::ResourceExhausted();
     }
-
-    size_t plaintext_len;
-    PW_CO_TRY(sm->DecryptResponseData(
-        encrypted_data, pw::ByteSpan(decrypted.data(), encrypted_len),
-        plaintext_len));
-
-    if (settings_buffer.size() < plaintext_len) {
-      co_return pw::Status::ResourceExhausted();
-    }
-    std::copy(decrypted.begin(), decrypted.begin() + plaintext_len,
+    std::copy(settings_data.begin(), settings_data.end(),
               settings_buffer.begin());
-    co_return plaintext_len;
+    co_return data_len;
 
   } else {
     // Plain mode: [SettingsData(N)] [SW(2)]

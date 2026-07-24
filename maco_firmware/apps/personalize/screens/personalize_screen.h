@@ -22,12 +22,23 @@ enum class PersonalizeStateId {
   kAwaitingTag,
   kPersonalizing,
   kPersonalized,
+  kVerifying,
+  kVerified,
   kError,
+};
+
+/// Identified type of the current tag, tracked alongside the state because
+/// polling clients usually miss the short-lived kFactoryTag/kMacoTag states.
+enum class DetectedTagKind {
+  kNone,
+  kFactory,
+  kMaco,
 };
 
 /// Snapshot of tag prober state for the UI thread.
 struct PersonalizeSnapshot {
   PersonalizeStateId state = PersonalizeStateId::kIdle;
+  DetectedTagKind tag_kind = DetectedTagKind::kNone;
   std::array<std::byte, 7> uid{};
   size_t uid_size = 0;
   pw::InlineString<128> error_message;
