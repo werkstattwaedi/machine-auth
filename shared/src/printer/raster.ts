@@ -37,6 +37,16 @@ export interface RasterJobOptions {
   /** Tape feed margin in dots. 360 DPI ⇒ 1 mm ≈ 14 dots; the spec's
    *  minimum is 14, max 1800. Defaults to 14 (1 mm). */
   marginDots?: number
+  /** Vertical calibration offset across the tape width, in dots (360 DPI
+   *  ⇒ 1 mm ≈ 14 dots). Shifts the printable band within the print head:
+   *  positive moves the content toward the higher-pin edge, negative
+   *  toward the lower-pin edge. The bitmap is always centred in its own
+   *  `printPins` window; this compensates for the physical tape not
+   *  sitting exactly where the head geometry assumes, which shows up as
+   *  content biased to one edge of the printed tape. Clamped to
+   *  `[-leftPins, rightPins]` so the band never falls off the head.
+   *  Defaults to 0 (Brother's nominal geometry). */
+  verticalOffsetDots?: number
 }
 
 // Raster Command Reference v1.02, §4.
@@ -53,6 +63,12 @@ export function buildRasterJob(
   const autoCut = opts.autoCut ?? true
   const halfCut = opts.halfCut ?? true
   const marginDots = opts.marginDots ?? 14
+  // Clamp the calibration offset so the printable band always stays on
+  // the head (never off either edge).
+  const verticalOffset = Math.max(
+    -tape.leftPins,
+    Math.min(tape.rightPins, Math.round(opts.verticalOffsetDots ?? 0)),
+  )
 
   if (bitmap.height !== tape.printPins) {
     throw new Error(
@@ -114,7 +130,7 @@ export function buildRasterJob(
   // §2.1 (3) Raster data — one line per label-X column.
   const reusableLine = new Uint8Array(RASTER_LINE_BYTES)
   for (let col = 0; col < bitmap.width; col++) {
-    fillRasterLine(reusableLine, bitmap, col, tape, bytesPerCol)
+    fillRasterLine(reusableLine, bitmap, col, tape, bytesPerCol, verticalOffset)
     if (isZero(reusableLine)) {
       push(0x5a) // Z — empty raster, one byte instead of compressed run.
       continue
@@ -143,10 +159,11 @@ function fillRasterLine(
   col: number,
   tape: TapeSpec,
   bytesPerCol: number,
+  verticalOffset: number,
 ): void {
   out.fill(0)
   const colStart = col * bytesPerCol
-  const startBit = tape.leftPins
+  const startBit = tape.leftPins + verticalOffset
   for (let row = 0; row < bitmap.height; row++) {
     const srcByte = bitmap.data[colStart + (row >> 3)]
     const srcBit = (srcByte >> (7 - (row & 7))) & 1

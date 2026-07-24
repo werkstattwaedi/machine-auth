@@ -42,6 +42,15 @@ type CatalogRow = CatalogItemDoc & { id: string }
 
 const TAPE = "18mm" as const
 
+// Vertical calibration: the rendered bitmap is centred in its own pin
+// window, but on the physical tape the content prints biased toward one
+// edge (the head geometry doesn't match where the 18 mm tape actually
+// sits). Positive shifts content toward the higher-pin edge (down).
+// PROVISIONAL — dial in against a real print: print one label, measure
+// the top and bottom blank margins in mm, adjust by (bottom−top)/2 × 14
+// dots. 360 DPI ⇒ 1 mm ≈ 14 dots.
+const LABEL_VERTICAL_OFFSET_DOTS = 24
+
 function labelInput(
   checkoutDomain: string,
   item: CatalogRow,
@@ -119,7 +128,10 @@ function LabelsPage() {
           const bitmap = await renderMaterialLabel(
             labelInput(checkoutDomain, item),
           )
-          const bytes = buildRasterJob(bitmap, { tape: TAPE })
+          const bytes = buildRasterJob(bitmap, {
+            tape: TAPE,
+            verticalOffsetDots: LABEL_VERTICAL_OFFSET_DOTS,
+          })
           await enqueuePrintJob(db, { bytes, tape: TAPE, uid: user.uid })
         }
       })
