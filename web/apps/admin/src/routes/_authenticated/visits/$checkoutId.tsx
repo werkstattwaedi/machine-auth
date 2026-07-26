@@ -245,7 +245,7 @@ function VisitDetailPage() {
             <CardTitle className="text-base">Abrechnung</CardTitle>
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-            <SummaryField label="Eintritte" value={visit.summary.entryFees} />
+            <SummaryField label="Nutzungsgebühren" value={visit.summary.entryFees} />
             <SummaryField label="Maschinen" value={visit.summary.machineCost} />
             <SummaryField label="Material" value={visit.summary.materialCost} />
             <SummaryField label="Trinkgeld" value={visit.summary.tip} />

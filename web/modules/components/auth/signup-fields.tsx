@@ -202,7 +202,7 @@ export function SignupFields({
       <div className="flex flex-col gap-1">
         <Label className="text-sm font-bold">Nutzer:in</Label>
         <p className="text-xs text-muted-foreground">
-          Bestimmt den Eintrittspreis in der Werkstatt.
+          Bestimmt die Nutzungsgebühr in der Werkstatt.
         </p>
         <div
           role="radiogroup"

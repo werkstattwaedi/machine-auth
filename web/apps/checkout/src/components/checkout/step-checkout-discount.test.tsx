@@ -133,7 +133,9 @@ describe("StepCheckout — per-section discount rendering (#284)", () => {
     const notes = screen.getAllByTestId("section-discount-note")
     const texts = notes.map((n) => n.textContent ?? "")
     // Entry + machine waived → two notes, both naming Freiwilligengruppe.
-    expect(texts.some((t) => /Freiwilligengruppe.*Eintritt/.test(t))).toBe(true)
+    expect(texts.some((t) => /Freiwilligengruppe.*Nutzungsgebühr/.test(t))).toBe(
+      true,
+    )
     expect(
       texts.some((t) => /Freiwilligengruppe.*Maschinengeb/.test(t)),
     ).toBe(true)
@@ -160,7 +162,9 @@ describe("StepCheckout — per-section discount rendering (#284)", () => {
     const texts = screen
       .getAllByTestId("section-discount-note")
       .map((n) => n.textContent ?? "")
-    expect(texts.some((t) => /Interne Nutzung.*Eintritt/.test(t))).toBe(true)
+    expect(texts.some((t) => /Interne Nutzung.*Nutzungsgebühr/.test(t))).toBe(
+      true,
+    )
     expect(texts.some((t) => /Interne Nutzung.*Maschinengeb/.test(t))).toBe(true)
     expect(texts.some((t) => /Interne Nutzung.*Material/.test(t))).toBe(true)
   })

@@ -701,8 +701,8 @@ export function StepCheckout({
               label={discountLabel}
               text={
                 discount.entryFee === 0
-                  ? "Eintritt wird nicht verrechnet"
-                  : "Eintritt ermässigt"
+                  ? "Nutzungsgebühr wird nicht verrechnet"
+                  : "Nutzungsgebühr ermässigt"
               }
             />
           )}

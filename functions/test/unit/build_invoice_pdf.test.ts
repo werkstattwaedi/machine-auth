@@ -18,6 +18,7 @@ import {
   registeredUserInvoice,
   membershipOnlyInvoice,
   membershipMixedInvoice,
+  volunteeringDiscountInvoice,
 } from "./invoice_test_fixtures";
 
 // pdf-parse needs firebase-admin initialized for Timestamp usage in fixtures
@@ -132,6 +133,14 @@ describe("buildInvoicePdf — content", () => {
     expect(text).to.include("Nutzungsgebühren");
     expect(text).to.include("Erika Nur-Eintritt");
     expect(text).to.include("15.00");
+  });
+
+  // Issue #583: the waived-entry discount line uses the "Nutzungsgebühr"
+  // terminology, not the old "Eintritt" wording.
+  it("waived entry discount: uses Nutzungsgebühr terminology, not Eintritt (#583)", async () => {
+    const text = await pdfText(volunteeringDiscountInvoice());
+    expect(text).to.include("Nutzungsgebühr wird nicht verrechnet");
+    expect(text).to.not.include(": Eintritt ");
   });
 
   it("long invoice: all pricing models present", async () => {
