@@ -111,6 +111,22 @@ Deploy uses `scripts/deploy-functions.ts` to pack `@oww/shared` and rewrite
 rm -rf lib/ && npm run build
 ```
 
+**Log severity is an alerting decision** (ADR-0041). Both projects page on
+`severity>=ERROR`, so `logger.error` on a client-reachable path hands
+strangers a pager button. Pick by *who can cause it*:
+
+- Client-reachable (malformed input, stale/replayed tokens, duplicate
+  submits, failed auth, bot scans) → `logger.warn`. The rejection is the
+  system working.
+- Only we can cause it (broken invariant, missing config, impossible data
+  shape) → `logger.error`. E.g. `"Token has no userId"`.
+
+Real error records come from the client: web callers report through
+`reportRpcError` (`@modules/lib/rpc`) → `logClientError`, which carries the
+per-tab `sessionId`. Warnings are reviewed in batch by `dailyLogDigest`
+(daily mail) and `/log-triage` (files issues in the *private* operations
+repo — log payloads carry `userId`/`tokenId`/emails, this repo is public).
+
 ### Firestore Schema
 
 See `firestore/schema.jsonc` for complete structure.

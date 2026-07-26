@@ -154,7 +154,11 @@ export async function handleCompleteTagAuth(
       },
     };
   } catch (error) {
-    logger.error("Tag authentication failed", { authId, error });
+    // The terminal-side twin of verifyTagCheckout's wrapper: everything
+    // reachable here is tag input (wrong key, stale transaction, malformed
+    // APDU). A rejected tag is the auth working, not breaking — warn, not
+    // error (ADR-0041).
+    logger.warn("Tag authentication failed", { authId, error });
 
     // Delete the authentication record on failure
     try {

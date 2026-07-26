@@ -81,7 +81,11 @@ export const adminAuthMiddleware = async (
 
     next();
   } catch (error) {
-    logger.error("Admin API: Auth error", error);
+    // An expired or malformed token is client input, not a fault — same
+    // class as the two rejections above, which already log at warn
+    // (ADR-0041). Logging it at error let any caller page us with a bad
+    // Bearer value.
+    logger.warn("Admin API: Auth error", error);
     res.status(401).send({ error: "Invalid token" });
   }
 };

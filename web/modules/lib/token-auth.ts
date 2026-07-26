@@ -12,7 +12,7 @@ import {
 } from "firebase/auth"
 import { useFunctions, useFirebaseAuth } from "./firebase-context"
 import { resolveBridgeBearer } from "./use-bridge"
-import { rpcCallable } from "./rpc"
+import { rpcCallable, reportRpcError } from "./rpc"
 
 export interface TokenUser {
   /**
@@ -226,6 +226,14 @@ export function useTokenAuth(
           activeMembership: data.activeMembership,
         })
       } catch (err) {
+        // Reported before the `cancelled` bail-out on purpose: the server
+        // treats a rejected tag as ordinary client input (warn, not error),
+        // so this record is the only trace we get — and the duplicate-submit
+        // races we chase show up precisely as a losing call in a context
+        // that is already going away. `reportRpcError` stamps the per-tab
+        // sessionId, so two records for one physical tap prove a second
+        // browsing context is verifying the same picc.
+        reportRpcError(functions, "tagVerify", "authCall", "verifyTagCheckout", err)
         if (cancelled) return
         const msg = err instanceof Error ? err.message : "Tag-Verifizierung fehlgeschlagen"
         setError(msg)
