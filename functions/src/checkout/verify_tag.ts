@@ -108,7 +108,7 @@ export function decryptAndVerifyTag(
   try {
     piccData = decryptPICCData(picc, terminalKey);
   } catch (error: any) {
-    logger.error("Failed to decrypt PICC data", { error: error.message });
+    logger.warn("Failed to decrypt PICC data", { error: error.message });
     throw new Error(`PICC decryption failed: ${error.message}`);
   }
 
@@ -121,7 +121,7 @@ export function decryptAndVerifyTag(
     const sdmMacKey = diversifyKey(masterKey, systemName, piccData.uid, "sdm_mac");
     isValid = verifyCMAC(cmac, piccData, picc, sdmMacKey);
   } catch (error: any) {
-    logger.error("CMAC verification failed", { error: error.message });
+    logger.warn("CMAC verification failed", { error: error.message });
     throw new Error(`CMAC verification failed: ${error.message}`);
   }
 
@@ -267,7 +267,14 @@ export const verifyTagCheckoutHandler = async (
       }
     );
   } catch (error: any) {
-    logger.error("Tag verification failed", { error: error?.message });
+    // Everything reachable here is driven by untrusted client input (a
+    // malformed picc, a stale SDM URL, a duplicate submit of the same tap).
+    // From the server's side that is a rejected request, not a fault: any
+    // client could otherwise page us at will. Genuine invariant breaches
+    // (e.g. "Token has no userId") keep logging at error from their own
+    // site. The client reports its side via logClientError, which is what
+    // we actually debug from.
+    logger.warn("Tag verification failed", { error: error?.message });
     throw new HttpsError(
       "invalid-argument",
       error?.message || "Tag verification failed"

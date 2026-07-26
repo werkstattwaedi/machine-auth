@@ -1,0 +1,40 @@
+{
+  "$comment": [
+    "Log groups that are known noise and must not reach triage.",
+    "",
+    "`pattern` is a plain substring matched against a group's first message",
+    "line (the same string used as its grouping key). Keep patterns narrow —",
+    "a broad one silences future real failures too.",
+    "",
+    "Adding an entry is a deliberate act: it means 'we looked, and this can",
+    "never indicate a problem'. If something is merely usually-harmless,",
+    "leave it in and let triage judge it in context. /log-triage may propose",
+    "additions, but a human reviews the diff.",
+    "",
+    "Note that GET requests are already excluded at query time in",
+    "scripts/log-triage-fetch.ts, which removes most post-deploy sweep noise",
+    "before grouping. These rules cover what survives that."
+  ],
+  "rules": [
+    {
+      "pattern": "The request was not authenticated. Either allow unauthenticated invocations",
+      "reason": "Cloud Run rejecting an unauthenticated probe of a non-public function. Emitted by the platform for any internet scan; nothing of ours ran.",
+      "addedOn": "2026-07-26"
+    },
+    {
+      "pattern": "Request has invalid method.",
+      "reason": "firebase-functions rejecting a non-POST on a callable. Only reachable by a client calling the endpoint wrongly; the platform already returned 400.",
+      "addedOn": "2026-07-26"
+    },
+    {
+      "pattern": "Error: Invalid request, unable to process.",
+      "reason": "The ERROR that firebase-functions logs itself right after 'Request has invalid method'. Same event, second log line; severity is the library's choice, not ours.",
+      "addedOn": "2026-07-26"
+    },
+    {
+      "pattern": "Missing or invalid Authorization header.",
+      "reason": "Our api/admin Express handlers rejecting an unauthenticated request. Expected for any unauthenticated probe; a real auth regression shows up as failing user journeys, not as this line.",
+      "addedOn": "2026-07-26"
+    }
+  ]
+}

@@ -55,7 +55,9 @@ export const probeTagHandler = async (
       }
     );
   } catch (error: any) {
-    logger.error("probeTag verification failed", { error: error?.message });
+    // Client-input driven, same rationale as verifyTagCheckout: a rejected
+    // tag is not a server fault, so it must not page us.
+    logger.warn("probeTag verification failed", { error: error?.message });
     throw new HttpsError(
       "invalid-argument",
       error?.message || "Tag verification failed"
