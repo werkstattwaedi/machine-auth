@@ -46,10 +46,11 @@ const TAPE = "18mm" as const
 // window, but on the physical tape the content prints biased toward one
 // edge (the head geometry doesn't match where the 18 mm tape actually
 // sits). Positive shifts content toward the higher-pin edge (down).
-// PROVISIONAL — dial in against a real print: print one label, measure
-// the top and bottom blank margins in mm, adjust by (bottom−top)/2 × 14
-// dots. 360 DPI ⇒ 1 mm ≈ 14 dots.
-const LABEL_VERTICAL_OFFSET_DOTS = 24
+// Calibrated against a real 18 mm print: offset 24 measured 2.8 mm top /
+// 1.3 mm bottom, so 13 centres it (~2 mm each side). To re-tune: measure
+// the top/bottom margins and adjust by (bottom−top)/2 × 14 dots
+// (360 DPI ⇒ 1 mm ≈ 14 dots).
+const LABEL_VERTICAL_OFFSET_DOTS = 13
 
 function labelInput(
   checkoutDomain: string,
