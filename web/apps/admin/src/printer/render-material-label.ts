@@ -9,46 +9,68 @@ export type { TapeKey, Bitmap1 }
 export interface MaterialLabelInput {
   /** Encoded into the QR code. */
   url: string
-  /** Line 1 — curated `Etikett Name`, e.g. "MDF". */
+  /** Line 2 — curated `Etikett Name`, e.g. "MDF". Big, vertically centred. */
   name: string
-  /** Line 2 — curated `Etikett Mass`, e.g. "3 mm". Line omitted when absent. */
+  /** Line 3 — curated `Etikett Mass`, e.g. "3 mm". Line omitted when absent. */
   mass?: string
-  /** `#` + 4-digit code, e.g. "#3160". Rendered vertically beside the QR. */
+  /** Line 1 — `#` + 4-digit code, e.g. "#3160". Small, top of the text block. */
   code: string
   /** Tape width — currently 18 mm only in production. */
   tape: TapeKey
+  /** Uniform label length in mm (spec "Einheitslänge"). Default 72. */
+  widthMm?: number
 }
 
-// Layout per the "Material label design system" handoff (Stufenlängen
-// S/M/L, option 1c — code vertical right of the QR). The spec gives all
-// dimensions in print pixels at 300 dpi on a 212 px (18 mm) canvas; the
-// P950 prints 234 pins on 18 mm tape (16.5 mm printable window), so we
-// apply the spec's own scaling rule — content dimensions scale by
-// printPins/212. Label lengths stay physically 48/72/96 mm so labels on
-// a shelf line up in exactly three flush lengths.
+// Layout per the "Material label design system" handoff, option 2a
+// ("dreizeilig mit Einheitslänge"): QR left, then a three-line text
+// block — code small on top, name big and centred on the QR's middle,
+// mass small at the bottom. Every label is the same length so they sit
+// flush on the shelf.
+//
+// The spec gives all dimensions in print pixels on a 212 px (18 mm)
+// canvas at 300 dpi. The P950 prints 234 pins on 18 mm tape (a ~16.5 mm
+// printable window), so we apply the spec's own scaling rule — scale
+// every dimension by printPins/212, keeping pixels square, the QR
+// square, and the whole 18 mm design proportionally mapped onto the
+// printable window.
 const SPEC_CANVAS_PX = 212
+const DEFAULT_LABEL_WIDTH_MM = 72
+// The head's native feed-axis resolution. Unlike the tape-width (pin)
+// axis, the feed axis has no printable-window limit, so label length is
+// computed at true DPI — not through the `px()` squeeze.
 const DPI = 360
-const STEP_LENGTHS_MM = [48, 72, 96]
+
+/**
+ * Physical label length in printer dots. The feed axis prints at the
+ * head's true 360 DPI, independent of the vertical `px()` scaling that
+ * compresses the 18 mm design into the ~16.5 mm printable window — so a
+ * 72 mm label actually prints 72 mm long (and all labels stay flush on
+ * the shelf). Exported for a unit test that guards this against the
+ * double-scaling regression the screenshot test can't catch on its own.
+ */
+export function labelWidthDots(widthMm: number): number {
+  return Math.round((widthMm * DPI) / 25.4)
+}
 
 const BITTER = "Bitter, Georgia, serif"
 const ROBOTO_SLAB = '"Roboto Slab", Georgia, serif'
 const NAME_WEIGHT = 800 // Bitter ExtraBold
 const MASS_WEIGHT = 600 // Bitter SemiBold
 const CODE_WEIGHT = 500 // Roboto Slab Medium
-const CODE_TRACKING_EM = 0.05
+const CODE_TRACKING_EM = 0.08
 
 async function ensureFontsLoaded() {
   if (typeof document === "undefined" || !document.fonts) return
   await document.fonts.load(`${NAME_WEIGHT} 65px Bitter`)
-  await document.fonts.load(`${MASS_WEIGHT} 44px Bitter`)
-  await document.fonts.load(`${CODE_WEIGHT} 50px "Roboto Slab"`)
+  await document.fonts.load(`${MASS_WEIGHT} 51px Bitter`)
+  await document.fonts.load(`${CODE_WEIGHT} 51px "Roboto Slab"`)
   await document.fonts.ready
 }
 
 type Ctx2d = OffscreenCanvasRenderingContext2D
 
 // letterSpacing landed in Chromium 99; engines without it just render
-// the code column with slightly tighter tracking.
+// the code with slightly tighter tracking.
 function setLetterSpacing(ctx: Ctx2d, pxValue: number) {
   const c = ctx as { letterSpacing?: string }
   if ("letterSpacing" in ctx) c.letterSpacing = `${pxValue}px`
@@ -62,15 +84,15 @@ function context2d(canvas: OffscreenCanvas): Ctx2d {
 
 /**
  * Render a material label on an offscreen canvas at the printer's
- * native 360 DPI, threshold to 1-bit, and return a column-major
+ * native resolution, threshold to 1-bit, and return a column-major
  * `Bitmap1` suitable for `buildRasterJob`.
  *
- * Layout, left to right: QR code (vertically centred), the `#code`
- * rotated 90° reading bottom-up and height-matched to the QR, then the
- * text block — name on top, mass below (or the name alone, vertically
- * centred). The label length snaps to the smallest S/M/L step that fits;
- * only the name font may shrink (never mass or code) when even L is too
- * short.
+ * Layout, left to right: QR code (vertically centred), then a text
+ * block spanning the QR's height — `#code` flush with the QR top, the
+ * name big and centred on the QR's vertical middle, and the mass (when
+ * present) flush with the QR bottom. Every label is the same fixed
+ * length; only the name font shrinks (never code or mass) when a long
+ * name would otherwise overflow.
  */
 export async function renderMaterialLabel(
   input: MaterialLabelInput,
@@ -81,6 +103,7 @@ export async function renderMaterialLabel(
   const px = (specPx: number) => Math.round(specPx * s)
 
   const mass = input.mass?.trim() || null
+  const widthMm = input.widthMm ?? DEFAULT_LABEL_WIDTH_MM
 
   // QR sizing: integer module size nearest the spec's 15 mm target —
   // integer modules keep edges crisp through the 1-bit threshold step.
@@ -93,46 +116,35 @@ export async function renderMaterialLabel(
   while (modulePx > 2 && modulePx * qrModules > height - px(8)) modulePx--
   const qrPx = modulePx * qrModules
   const qrTop = Math.round((height - qrPx) / 2)
+  const qrBottom = qrTop + qrPx
 
   const leftMargin = px(18)
-  const gapQrCode = px(12)
-  const gapCodeText = px(21)
+  const gapQrText = px(21)
   const rightMargin = px(24)
-  const nameBasePx = px(65)
+  const nameBasePx = px(59)
   const nameMinPx = px(35)
   const nameStepPx = Math.max(1, px(3))
-  const massPx = px(44)
-  const nameMassGap = px(7)
+  // Code + mass a touch larger than the original spec's 38 px so the
+  // small lines stay legible on tape (feedback from the first prints).
+  const codePx = px(46)
+  const massPx = px(46)
+
+  // Uniform label length (spec "Einheitslänge"): fixed regardless of
+  // content so labels line up flush on the shelf.
+  const width = labelWidthDots(widthMm)
 
   // Make sure the label fonts are actually loaded before we measure —
-  // otherwise measureText() uses fallback metrics and the label width is
+  // otherwise measureText() uses fallback metrics and the layout is
   // computed for a different font than the one we render with.
   await ensureFontsLoaded()
 
   const sctx = context2d(new OffscreenCanvas(1, 1))
 
-  // Code font size: the rotated run must fill the QR height exactly,
-  // letter-spacing included. Measure at a reference size, scale linearly.
-  const REF = 100
-  sctx.font = `${CODE_WEIGHT} ${REF}px ${ROBOTO_SLAB}`
-  setLetterSpacing(sctx, CODE_TRACKING_EM * REF)
-  const codeRefW = sctx.measureText(input.code).width
-  const codePx = Math.max(8, Math.floor((REF * qrPx) / codeRefW))
-  sctx.font = `${CODE_WEIGHT} ${codePx}px ${ROBOTO_SLAB}`
-  setLetterSpacing(sctx, CODE_TRACKING_EM * codePx)
-  const codeMetrics = sctx.measureText(input.code)
-  const codeRun = codeMetrics.width
-  const codeColW = Math.ceil(
-    codeMetrics.actualBoundingBoxAscent + codeMetrics.actualBoundingBoxDescent,
-  )
-  setLetterSpacing(sctx, 0)
-
-  // Length steps + name shrink: pick the smallest step whose length fits
-  // the natural width. If the name alone overflows even L, shrink it (in
-  // spec steps, to the spec minimum); mass and code never shrink.
-  const stepWidths = STEP_LENGTHS_MM.map((mm) => Math.round((mm * DPI) / 25.4))
-  const fixedLeft = leftMargin + qrPx + gapQrCode + codeColW + gapCodeText
-  const maxTextW = stepWidths[stepWidths.length - 1] - fixedLeft - rightMargin
+  // Text block: left-aligned column right of the QR, up to the right
+  // margin. The name shrinks (spec steps, spec minimum) if it would
+  // overflow this width; code and mass never shrink.
+  const textX = leftMargin + qrPx + gapQrText
+  const availName = width - rightMargin - textX
 
   const measureName = (sizePx: number) => {
     sctx.font = `${NAME_WEIGHT} ${sizePx}px ${BITTER}`
@@ -140,25 +152,25 @@ export async function renderMaterialLabel(
   }
   let namePx = nameBasePx
   let nameMetrics = measureName(namePx)
-  while (nameMetrics.width > maxTextW && namePx - nameStepPx >= nameMinPx) {
+  while (nameMetrics.width > availName && namePx - nameStepPx >= nameMinPx) {
     namePx -= nameStepPx
     nameMetrics = measureName(namePx)
   }
 
-  sctx.font = `${MASS_WEIGHT} ${massPx}px ${BITTER}`
-  const massMetrics = mass ? sctx.measureText(mass) : null
+  // A name still overflowing at the minimum size extends the label
+  // instead of clipping ink — unreachable with the current catalog at
+  // 72 mm, but never cut ink even if it happens.
+  const overflow =
+    nameMetrics.width > availName
+      ? Math.ceil(nameMetrics.width - availName)
+      : 0
+  const finalWidth = width + overflow
 
-  const textW = Math.ceil(Math.max(nameMetrics.width, massMetrics?.width ?? 0))
-  const natural = fixedLeft + textW + rightMargin
-  // A name still overflowing L at minimum size extends the label instead
-  // of clipping — unreachable with the current catalog, but never cut ink.
-  const width = stepWidths.find((w) => w >= natural) ?? natural
-
-  const canvas = new OffscreenCanvas(width, height)
+  const canvas = new OffscreenCanvas(finalWidth, height)
   const ctx = context2d(canvas)
 
   ctx.fillStyle = "white"
-  ctx.fillRect(0, 0, width, height)
+  ctx.fillRect(0, 0, finalWidth, height)
 
   // QR: each dark module as a module-sized fillRect at integer coords.
   // qrcode's matrix is row-major: `modules.get(row, col)`.
@@ -178,43 +190,32 @@ export async function renderMaterialLabel(
 
   ctx.textBaseline = "alphabetic"
 
-  // Code column: rotated -90° so it reads bottom-up, ink centred on the
-  // QR. After rotation the glyph ascent extends left of the anchor, so
-  // the anchor sits `ascent` right of the column's left edge.
-  const codeX = leftMargin + qrPx + gapQrCode
-  ctx.save()
+  // Line 1 — code: Roboto Slab, tracked, top edge flush with the QR top.
   ctx.font = `${CODE_WEIGHT} ${codePx}px ${ROBOTO_SLAB}`
   setLetterSpacing(ctx, CODE_TRACKING_EM * codePx)
-  ctx.translate(
-    codeX + codeMetrics.actualBoundingBoxAscent,
-    qrTop + qrPx - (qrPx - codeRun) / 2,
-  )
-  ctx.rotate(-Math.PI / 2)
-  ctx.fillText(input.code, 0, 0)
-  ctx.restore()
+  const codeMetrics = ctx.measureText(input.code)
+  ctx.fillText(input.code, textX, qrTop + codeMetrics.actualBoundingBoxAscent)
+  setLetterSpacing(ctx, 0)
 
-  // Text block: name + mass stacked with a fixed ink gap, the whole
-  // block optically centred; without mass the name centres alone (the
-  // spec's "kein Loch unten").
-  const textX = codeX + codeColW + gapCodeText
+  // Line 2 — name: Bitter ExtraBold, always centred on the QR's vertical
+  // middle, whether or not a mass line exists (spec "kein Loch unten").
+  ctx.font = `${NAME_WEIGHT} ${namePx}px ${BITTER}`
   const nameA = nameMetrics.actualBoundingBoxAscent
   const nameD = nameMetrics.actualBoundingBoxDescent
-  ctx.font = `${NAME_WEIGHT} ${namePx}px ${BITTER}`
-  if (mass && massMetrics) {
-    const massA = massMetrics.actualBoundingBoxAscent
-    const massD = massMetrics.actualBoundingBoxDescent
-    const block = nameA + nameD + nameMassGap + massA + massD
-    const top = (height - block) / 2
-    ctx.fillText(input.name, textX, Math.round(top + nameA))
+  const qrMid = qrTop + qrPx / 2
+  ctx.fillText(input.name, textX, Math.round(qrMid + (nameA - nameD) / 2))
+
+  // Line 3 — mass (optional): Bitter SemiBold, bottom edge flush with
+  // the QR bottom.
+  if (mass) {
     ctx.font = `${MASS_WEIGHT} ${massPx}px ${BITTER}`
-    ctx.fillText(mass, textX, Math.round(top + nameA + nameD + nameMassGap + massA))
-  } else {
-    ctx.fillText(input.name, textX, Math.round((height + nameA - nameD) / 2))
+    const massMetrics = ctx.measureText(mass)
+    ctx.fillText(mass, textX, qrBottom - massMetrics.actualBoundingBoxDescent)
   }
 
   // Threshold to 1-bit, packed column-major MSB-first.
-  const image = ctx.getImageData(0, 0, width, height)
-  return imageDataToBitmap1(image, width, height)
+  const image = ctx.getImageData(0, 0, finalWidth, height)
+  return imageDataToBitmap1(image, finalWidth, height)
 }
 
 function imageDataToBitmap1(

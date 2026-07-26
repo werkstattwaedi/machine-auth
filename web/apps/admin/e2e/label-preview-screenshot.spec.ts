@@ -11,8 +11,9 @@ import { test, expect } from "@playwright/test"
 //
 // Fixtures are entries from Mario's pricelist (the design handoff's
 // materials.json), lightly edited for umlaut coverage, chosen to cover
-// the layout's branches: the S/M/L length steps, the no-mass centring
-// case, and the only name that needs the shrink-to-fit path.
+// the layout's branches: name+mass (three lines), the no-mass centring
+// case, and the only name that needs the shrink-to-fit path. Every
+// label is now the same uniform length (spec 2a "Einheitslänge").
 //
 // If layout, fonts, QR sizing, or threshold logic ever drift, this
 // fails loudly with a diff. Update snapshots with:
@@ -20,7 +21,7 @@ import { test, expect } from "@playwright/test"
 test.describe("Label renderer visual regression", () => {
   const fixtures = [
     {
-      // Short name + mass → S step.
+      // Short name + mass → all three lines, ample room.
       name: "short-name",
       query: {
         url: "https://checkout.werkstattwaedi.ch/visit/add/item/3160",
@@ -30,7 +31,7 @@ test.describe("Label renderer visual regression", () => {
       },
     },
     {
-      // Long name with umlauts + mass → wider step.
+      // Long name with umlauts + mass → full three-line at base size.
       name: "long-name-with-umlauts",
       query: {
         url: "https://checkout.werkstattwaedi.ch/visit/add/item/3156",

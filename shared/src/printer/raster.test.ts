@@ -77,6 +77,40 @@ describe("buildRasterJob", () => {
     ])
   })
 
+  it("shifts the print-area window by the vertical calibration offset", () => {
+    const tape = TAPE_SPECS["18mm"]
+    const bmp = makeBlankBitmap(1, tape.printPins)
+    bmp.data[0] = 0b10000000 // row 0 of column 0
+    // With +8 dots, row 0 lands at bit (leftPins + 8 = 163) instead of 155.
+    // Bit 163 → byte 20 (163 >> 3), bit 4 (7 - (163 & 7) = 4), value 0x10.
+    // 20 zero bytes, then 0x10, then 49 zero bytes.
+    // PackBits: repeat header (1 - N): N=20 → 0xED, N=49 → 0xD0.
+    const job = buildRasterJob(bmp, { tape: "18mm", verticalOffsetDots: 8 })
+    const g = job.indexOf(0x47, 238)
+    expect(g).toBeGreaterThan(0)
+    const compLen = job[g + 1] | (job[g + 2] << 8)
+    expect(Array.from(job.subarray(g + 3, g + 3 + compLen))).toEqual([
+      0xed, 0x00, 0x00, 0x10, 0xd0, 0x00,
+    ])
+  })
+
+  it("clamps a vertical offset that would push the band off the head", () => {
+    const tape = TAPE_SPECS["18mm"]
+    const bmp = makeBlankBitmap(1, tape.printPins)
+    bmp.data[0] = 0b10000000
+    // Offset far beyond rightPins (171) clamps so the band's last pin is
+    // exactly TOTAL_PINS-1 (559): startBit = leftPins + rightPins = 326,
+    // row 0 → bit 326 → byte 40 (326 >> 3), bit 1 (7 - (326 & 7) = 1),
+    // value 0x02. 40 zero bytes, 0x02, then 29 zero bytes.
+    // PackBits: N=40 → 0xD9, N=29 → 0xE4.
+    const job = buildRasterJob(bmp, { tape: "18mm", verticalOffsetDots: 9999 })
+    const g = job.indexOf(0x47, 238)
+    const compLen = job[g + 1] | (job[g + 2] << 8)
+    expect(Array.from(job.subarray(g + 3, g + 3 + compLen))).toEqual([
+      0xd9, 0x00, 0x00, 0x02, 0xe4, 0x00,
+    ])
+  })
+
   it("rejects mismatched bitmap height", () => {
     const bmp = makeBlankBitmap(10, 100)
     expect(() => buildRasterJob(bmp, { tape: "18mm" })).toThrow(
