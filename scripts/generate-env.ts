@@ -72,6 +72,7 @@ const FUNCTIONS_RESEND: VarMapping[] = [
   { envVar: "RESEND_LOGIN_TEMPLATE_ID", jsonPath: "functions.resendLoginTemplateId" },
   { envVar: "RESEND_INVITE_TEMPLATE_ID", jsonPath: "functions.resendInviteTemplateId" },
   { envVar: "RESEND_CHECKOUT_REMINDER_TEMPLATE_ID", jsonPath: "functions.resendCheckoutReminderTemplateId" },
+  { envVar: "RESEND_ACCOUNT_INSTRUCTIONS_TEMPLATE_ID", jsonPath: "functions.resendAccountInstructionsTemplateId" },
   // Optional cadence override for the stale-checkout reminder cron (#531).
   // Empty falls back to the built-in "1,7" default at read time.
   { envVar: "CHECKOUT_REMINDER_OFFSET_DAYS", jsonPath: "functions.checkoutReminderOffsetDays" },
@@ -169,6 +170,7 @@ const TEST_FIXTURE_CONFIG: Record<string, unknown> = {
     resendMonthlyTemplateId: "ci-test-monthly-template",
     resendSammelrechnungInvoiceTemplateId: "ci-test-sammelrechnung-template",
     resendCheckoutReminderTemplateId: "ci-test-checkout-reminder-template",
+    resendAccountInstructionsTemplateId: "ci-test-account-instructions-template",
     kasseEmail: "kasse@test.localhost",
     autoAckMinAgeHours: "1",
     statsDataset: "stats",

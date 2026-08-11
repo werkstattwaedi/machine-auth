@@ -447,6 +447,11 @@
       "termsAcceptedAt": "timestamp | null", // When user accepted terms of service
       "userType": "erwachsen | kind | firma", // User type for pricing
 
+      // When the kiosk "so nutzt du dein Konto" instructions email was last
+      // sent (issue #595) — throttles re-sends to once an hour. Absent on
+      // accounts that never triggered one.
+      "accountInstructionsSentAt": "timestamp",
+
       // Denormalized pointer to the user's single active membership.
       //   null  → not a member (pricing falls back to "none")
       //   !null → member (server still re-validates `validUntil > now`)

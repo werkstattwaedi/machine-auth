@@ -151,30 +151,34 @@ export function buildMagicLink(origin: string, docId: string): string {
 export type LoginMethod = "emailCode" | "magicLink";
 
 /**
+ * Resolve a Firebase Auth user by email, creating a password-less one when
+ * absent (mirrors the legacy email-link flow). Shared by the regular login
+ * (`mintSessionToken`) and the kiosk sign-up (`signup_kiosk.ts`).
+ */
+export async function resolveOrCreateAuthUid(email: string): Promise<string> {
+  const auth = getAuth();
+  try {
+    return (await auth.getUserByEmail(email)).uid;
+  } catch (err: unknown) {
+    const code = (err as { code?: string } | null)?.code;
+    if (code === "auth/user-not-found") {
+      return (await auth.createUser({ email })).uid;
+    }
+    throw err;
+  }
+}
+
+/**
  * Resolve-or-create a Firebase Auth user by email, then mint a custom token.
  *
- * Mirrors the legacy email-link flow: if no user exists, one is created
- * without a password. The web client swaps the custom token for a session
- * via signInWithCustomToken(). The `method` claim is useful for audit /
+ * The web client swaps the custom token for a session via
+ * signInWithCustomToken(). The `method` claim is useful for audit /
  * telemetry — which path the user actually took.
  */
 export async function mintSessionToken(
   email: string,
   method: LoginMethod
 ): Promise<string> {
-  const auth = getAuth();
-  let uid: string;
-  try {
-    const user = await auth.getUserByEmail(email);
-    uid = user.uid;
-  } catch (err: unknown) {
-    const code = (err as { code?: string } | null)?.code;
-    if (code === "auth/user-not-found") {
-      const created = await auth.createUser({ email });
-      uid = created.uid;
-    } else {
-      throw err;
-    }
-  }
-  return auth.createCustomToken(uid, { loginMethod: method });
+  const uid = await resolveOrCreateAuthUid(email);
+  return getAuth().createCustomToken(uid, { loginMethod: method });
 }

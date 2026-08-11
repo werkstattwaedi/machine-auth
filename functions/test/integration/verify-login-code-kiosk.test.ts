@@ -4,6 +4,9 @@
 // Covers verifyLoginCodeKiosk — the kiosk email-code sign-in (ADR-0022):
 // consumes a login code like verifyLoginCode but mints the synthetic-uid
 // actsAs session instead of a real one, and NEVER auto-creates an Auth user.
+// Since issue #595 a users doc WITHOUT accepted terms also gets a session
+// (the kiosk welcome onboarding collects the terms); only a missing doc
+// is rejected.
 
 // Force emulator branch so requestLoginCode skips Resend and writes debugCode.
 process.env.FUNCTIONS_EMULATOR = "true";
@@ -169,7 +172,7 @@ describe("verifyLoginCodeKiosk (Integration)", () => {
       () =>
         handleVerifyLoginCodeKiosk({ email: "stranger@example.com", code }),
       "failed-precondition",
-      "Kein abgeschlossenes Konto"
+      "Kein Konto"
     );
 
     // The critical no-auto-create invariant (mintSessionToken would have
@@ -182,18 +185,23 @@ describe("verifyLoginCodeKiosk (Integration)", () => {
     }
   });
 
-  it("rejects an incomplete account (termsAcceptedAt missing)", async () => {
+  it("mints a session for an unclaimed member (terms pending — issue #595)", async () => {
+    // The kiosk welcome onboarding needs an established session to run;
+    // termsAcceptedAt is collected there, not required here.
     await getFirestore().collection("users").doc("halfDone").set({
       email: "half@example.com",
       firstName: "Half",
+      termsAcceptedAt: null,
     });
     const code = await requestAndGetCode("half@example.com");
 
-    await expectHttpsError(
-      () => handleVerifyLoginCodeKiosk({ email: "half@example.com", code }),
-      "failed-precondition",
-      "Kein abgeschlossenes Konto"
-    );
+    const result = await handleVerifyLoginCodeKiosk({
+      email: "half@example.com",
+      code,
+    });
+    expect(result.userId).to.equal("halfDone");
+    const { claims } = decodeCustomToken(result.customToken);
+    expect(claims.actsAs).to.equal("halfDone");
   });
 
   it("propagates a wrong code as 'Code falsch.'", async () => {

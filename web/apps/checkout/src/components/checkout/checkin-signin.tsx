@@ -21,7 +21,13 @@
  * Two session flavors behind one UI (see ADR-0022):
  *   - kiosk: the verified code mints the same lightweight synthetic `actsAs`
  *     session as a badge tap (verifyLoginCodeKiosk + establishKioskSession).
- *     No sign-up (new users register on their own device), no Google.
+ *     No Google. A truly NEW e-mail gets the same sign-up dialog as the own
+ *     device, but the account is created server-side (signupKiosk, issue
+ *     #595) and the session stays ephemeral — the instructions email tells
+ *     them how to reach their account at home. An imported/unclaimed member
+ *     (users doc, terms not yet accepted) signs in like anyone else; the
+ *     wizard then shows the kiosk welcome onboarding as an overlay
+ *     (kiosk-welcome-onboarding.tsx).
  *   - own device: the regular persistent login (verifyLoginCode). An unknown
  *     e-mail offers the existing sign-up form in a dialog; Google sign-in is
  *     available and a Google-new account completes sign-up in the same
@@ -42,7 +48,7 @@ import {
   signOut as firebaseSignOut,
   type ConfirmationResult,
 } from "firebase/auth"
-import { useAuth } from "@modules/lib/auth"
+import { useAuth, type SignupProfile } from "@modules/lib/auth"
 import { useFunctions, useFirebaseAuth } from "@modules/lib/firebase-context"
 import { parseSwissPhone } from "@modules/lib/phone"
 import { resolveBridgeBearer } from "@modules/lib/use-bridge"
@@ -115,6 +121,10 @@ interface VerifyLoginCodeKioskResponse {
   email?: string
   userType?: string
   activeMembership?: boolean
+}
+
+interface SignupKioskResponse extends VerifyLoginCodeKioskResponse {
+  emailSent: boolean
 }
 
 type Stage =
@@ -260,20 +270,30 @@ export function CheckinSignin({
       }
       const { exists, hasProfile } = await checkAccountExists(id)
       if (kiosk) {
-        // No sign-up at the shared terminal (ADR-0022). The kiosk verify
-        // (verifyLoginCodeKiosk) also requires accepted terms, so an
-        // unclaimed member (hasProfile but !exists) can't check in here
-        // anyway — must finish onboarding on their own device first. Gate on
-        // the stricter `exists` so they get an immediate field error instead
-        // of a failure after the code roundtrip.
-        if (!exists) {
-          setFieldError(
-            "Für diese E-Mail existiert noch kein Konto. Bitte registriere dich zuerst auf deinem eigenen Gerät.",
-          )
+        if (exists || hasProfile) {
+          // Any existing profile → code sign-in (ephemeral kiosk session).
+          // An unclaimed/imported member (hasProfile, no terms) signs in the
+          // same way — verifyLoginCodeKiosk no longer requires terms, and
+          // the wizard then runs the kiosk welcome onboarding (issue #595).
+          await requestCodeWithThrottle(requestLoginEmail, id)
+          setStage({ kind: "code", identifier: id, channel: "email" })
           return
         }
-        await requestCodeWithThrottle(requestLoginEmail, id)
-        setStage({ kind: "code", identifier: id, channel: "email" })
+        // Truly new e-mail → the same sign-up dialog as the own device,
+        // but submitted to signupKiosk (issue #595): the account is created
+        // server-side and only the ephemeral actsAs session ever touches
+        // the shared terminal. The form needs the code, so request it up
+        // front like the own-device sign-up.
+        const { throttled } = await requestCodeWithThrottle(
+          requestLoginEmail,
+          id,
+        )
+        if (throttled) {
+          toast.info(
+            "Wir haben dir bereits eine E-Mail geschickt — der Code ist noch gültig.",
+          )
+        }
+        setStage({ kind: "signup", via: "code", identifier: id })
         return
       }
       // Own device: `hasProfile` = a `users` doc exists (completed OR an
@@ -368,6 +388,39 @@ export function CheckinSignin({
     await establishKioskSession(auth, data.customToken, tokenUser)
     // The identified session flips `isAnonymous` in the wizard, which
     // unmounts this component (dialog included) — nothing left to do.
+  }
+
+  /** Kiosk sign-up (issue #595): the server verifies the code, creates the
+   *  account, sends the instructions email and mints the same ephemeral
+   *  actsAs session a badge tap produces — the fresh account is checked in
+   *  without a persistent login ever touching the shared terminal. */
+  const submitKioskSignup = async (
+    id: string,
+    code: string,
+    profile: SignupProfile,
+  ) => {
+    const bearer = await resolveBridgeBearer()
+    const signup = rpcCallable<
+      { email: string; code: string; profile: SignupProfile; bearer?: string },
+      SignupKioskResponse
+    >(functions, "authCall", "signupKiosk")
+    const { data } = await signup({
+      email: id,
+      code,
+      profile,
+      bearer: bearer ?? undefined,
+    })
+    const tokenUser: TokenUser = {
+      tokenId: null,
+      userId: data.userId,
+      firstName: data.firstName,
+      lastName: data.lastName,
+      email: data.email,
+      userType: data.userType,
+      activeMembership: data.activeMembership,
+    }
+    await establishKioskSession(auth, data.customToken, tokenUser)
+    return data
   }
 
   const handleGoogleNewAccount = ({
@@ -547,52 +600,66 @@ export function CheckinSignin({
         }}
       />
 
-      {!kiosk && (
-        <SignupDialog
-          open={stage.kind === "signup"}
-          via={stage.kind === "signup" ? stage.via : "code"}
-          identifier={
-            stage.kind === "signup"
-              ? stage.identifier || user?.email || ""
-              : ""
+      <SignupDialog
+        open={stage.kind === "signup"}
+        via={stage.kind === "signup" ? stage.via : "code"}
+        identifier={
+          stage.kind === "signup"
+            ? stage.identifier || user?.email || ""
+            : ""
+        }
+        prefill={signupPrefill}
+        onCancel={async () => {
+          // A Google-new principal is already signed in (real session, no
+          // user doc) — abandoning sign-up must sign out again, otherwise
+          // the wizard treats the half-account as identified. (Kiosk
+          // sign-ups are always via "code": nothing is signed in yet.)
+          if (stage.kind === "signup" && stage.via === "google") {
+            try {
+              await signOut()
+            } catch (err) {
+              console.error("signOut failed", err)
+            }
           }
-          prefill={signupPrefill}
-          onCancel={async () => {
-            // A Google-new principal is already signed in (real session, no
-            // user doc) — abandoning sign-up must sign out again, otherwise
-            // the wizard treats the half-account as identified.
-            if (stage.kind === "signup" && stage.via === "google") {
-              try {
-                await signOut()
-              } catch (err) {
-                console.error("signOut failed", err)
-              }
-            }
-            setSignupPrefill(null)
-            reset()
-          }}
-          onResend={async (id) => {
-            const { throttled } = await requestCodeWithThrottle(
-              requestLoginEmail,
+          setSignupPrefill(null)
+          reset()
+        }}
+        onResend={async (id) => {
+          const { throttled } = await requestCodeWithThrottle(
+            requestLoginEmail,
+            id,
+          )
+          toast[throttled ? "info" : "success"](
+            throttled
+              ? "Wir haben dir bereits eine E-Mail geschickt — der Code ist noch gültig."
+              : "Neuer Code gesendet!",
+          )
+        }}
+        onSubmit={async (via, id, value) => {
+          const profile = signupProfileFrom(value)
+          if (kiosk) {
+            // Success establishes the ephemeral session, which unmounts
+            // this component — the toast is the only surviving feedback.
+            const { emailSent } = await submitKioskSignup(
               id,
+              value.code,
+              profile,
             )
-            toast[throttled ? "info" : "success"](
-              throttled
-                ? "Wir haben dir bereits eine E-Mail geschickt — der Code ist noch gültig."
-                : "Neuer Code gesendet!",
+            toast.success(
+              emailSent
+                ? "Konto erstellt! Wir haben dir eine E-Mail geschickt, wie du dein Konto auf deinem eigenen Gerät nutzt."
+                : "Konto erstellt!",
             )
-          }}
-          onSubmit={async (via, id, value) => {
-            const profile = signupProfileFrom(value)
-            if (via === "code") {
-              await verifyLoginCodeAndCreateProfile(id, value.code, profile)
-            } else {
-              await completeSignedInSignup(profile)
-            }
-            toast.success("Konto erstellt")
-          }}
-        />
-      )}
+            return
+          }
+          if (via === "code") {
+            await verifyLoginCodeAndCreateProfile(id, value.code, profile)
+          } else {
+            await completeSignedInSignup(profile)
+          }
+          toast.success("Konto erstellt")
+        }}
+      />
     </div>
   )
 }
