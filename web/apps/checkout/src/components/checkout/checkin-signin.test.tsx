@@ -5,8 +5,9 @@
  * Embedded check-in sign-in (design handoff "Kiosk sign-in flow redesign").
  * Covers the identifier gate, the two session flavors (kiosk ephemeral via
  * verifyLoginCodeKiosk + establishKioskSession; own-device persistent via
- * verifyLoginCode), the no-kiosk-sign-up invariant, the own-device sign-up
- * dialog for unknown e-mails, and the cancel-resets-to-idle contract.
+ * verifyLoginCode), the kiosk sign-up via signupKiosk and the unclaimed-
+ * member instructions offer (issue #595), the own-device sign-up dialog for
+ * unknown e-mails, and the cancel-resets-to-idle contract.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -46,10 +47,14 @@ vi.mock("@modules/lib/use-bridge", () => ({
 const verifyKioskCode = vi.fn()
 const checkPhoneAccountExists = vi.fn()
 const exchangeKioskSession = vi.fn()
+const signupKiosk = vi.fn()
+const sendAccountInstructions = vi.fn()
 const RPC_MOCKS: Record<string, (payload: unknown) => unknown> = {
   verifyLoginCodeKiosk: verifyKioskCode,
   checkPhoneAccountExists,
   exchangeKioskSession,
+  signupKiosk,
+  sendAccountInstructions,
 }
 vi.mock("@modules/lib/rpc", () => ({
   rpcCallable:
@@ -143,16 +148,94 @@ describe("CheckinSignin", () => {
     expect(submit).toBeEnabled()
   })
 
-  it("kiosk: does NOT send a code for an unknown account (no kiosk sign-up)", async () => {
-    checkAccountExists.mockResolvedValue({ exists: false })
+  it("kiosk: a truly new e-mail opens the sign-up dialog (issue #595)", async () => {
+    checkAccountExists.mockResolvedValue({ exists: false, hasProfile: false })
+    requestLoginEmail.mockResolvedValue(undefined)
 
     await typeIdentifierAndSubmit(true, "stranger@example.com")
 
     expect(
-      await screen.findByText(/existiert noch kein Konto/i),
+      await screen.findByTestId("checkin-signup-dialog"),
     ).toBeInTheDocument()
-    expect(requestLoginEmail).not.toHaveBeenCalled()
+    // The sign-up form needs the code, so one was requested up front.
+    expect(requestLoginEmail).toHaveBeenCalledWith("stranger@example.com")
     expect(screen.queryByText("Code eingeben")).toBeNull()
+  })
+
+  it("kiosk: sign-up submits to signupKiosk and establishes the ephemeral session", async () => {
+    checkAccountExists.mockResolvedValue({ exists: false, hasProfile: false })
+    requestLoginEmail.mockResolvedValue(undefined)
+    signupKiosk.mockResolvedValue({
+      data: {
+        customToken: "ct-signup",
+        userId: "u-new",
+        firstName: "Nora",
+        lastName: "Neu",
+        email: "stranger@example.com",
+        userType: "erwachsen",
+        activeMembership: false,
+        emailSent: true,
+      },
+    })
+
+    const user = await typeIdentifierAndSubmit(true, "stranger@example.com")
+    await screen.findByTestId("checkin-signup-dialog")
+    await user.type(screen.getByTestId("signup-code-input"), "123456")
+    await user.type(screen.getByTestId("signup-firstname"), "Nora")
+    await user.type(screen.getByTestId("signup-lastname"), "Neu")
+    await user.click(screen.getByTestId("signup-terms"))
+    await user.click(screen.getByTestId("checkin-signup-submit"))
+
+    await waitFor(() => expect(establishKioskSession).toHaveBeenCalled())
+    expect(signupKiosk).toHaveBeenCalledWith({
+      email: "stranger@example.com",
+      code: "123456",
+      profile: {
+        firstName: "Nora",
+        lastName: "Neu",
+        userType: "erwachsen",
+        termsAccepted: true,
+        billingAddress: null,
+      },
+      bearer: "kiosk-bearer",
+    })
+    const [, customToken, tokenUser] = establishKioskSession.mock.calls[0]
+    expect(customToken).toBe("ct-signup")
+    expect(tokenUser).toMatchObject({ tokenId: null, userId: "u-new" })
+    // Kiosk must never mint the persistent login.
+    expect(verifyLoginCodeAndCreateProfile).not.toHaveBeenCalled()
+  })
+
+  it("kiosk: an unclaimed member signs in with a code (onboarding runs in the wizard)", async () => {
+    // Imported member: users doc exists, terms not yet accepted. Since issue
+    // #595 they sign in like a completed account — verifyLoginCodeKiosk no
+    // longer requires terms; the wizard then overlays the kiosk welcome
+    // onboarding. NOT the sign-up dialog (that would overwrite their data).
+    checkAccountExists.mockResolvedValue({ exists: false, hasProfile: true })
+    requestLoginEmail.mockResolvedValue(undefined)
+    verifyKioskCode.mockResolvedValue({
+      data: {
+        customToken: "ct-unclaimed",
+        userId: "u-imported",
+        firstName: "Franziska",
+        activeMembership: false,
+      },
+    })
+
+    const user = await typeIdentifierAndSubmit(true, "imported@example.com")
+
+    expect(await screen.findByText("Code eingeben")).toBeInTheDocument()
+    expect(screen.queryByTestId("checkin-signup-dialog")).toBeNull()
+    expect(requestLoginEmail).toHaveBeenCalledWith("imported@example.com")
+
+    await enterCode(user, "654321")
+    await waitFor(() => expect(establishKioskSession).toHaveBeenCalled())
+    expect(verifyKioskCode).toHaveBeenCalledWith({
+      email: "imported@example.com",
+      code: "654321",
+      bearer: "kiosk-bearer",
+    })
+    expect(signupKiosk).not.toHaveBeenCalled()
   })
 
   it("kiosk: opens the code dialog and establishes the kiosk session on verify", async () => {

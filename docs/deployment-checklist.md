@@ -161,6 +161,28 @@ Smoke test after deploy: verify a phone number on `/account/profile`
 session lands as the ephemeral actsAs principal (the header shows no
 account avatar and "Besuch starten" appears).
 
+### Kiosk sign-up + account-instructions email (issue #595)
+
+The kiosk sign-up (`signupKiosk`) and the unclaimed-member offer
+(`sendAccountInstructions`) send the `self-checkout-account-instructions`
+Resend template. One-time setup before the functions deploy:
+
+1. Create/publish the template from the operations repo
+   (`email/account-instructions.html`; upload commands in
+   `email/README.md` — remember `--subject` and `--var GREETING:string`).
+2. The operations config carries
+   `functions.resendAccountInstructionsTemplateId`
+   (`self-checkout-account-instructions`); run `npm run generate-env` so
+   `RESEND_ACCOUNT_INSTRUCTIONS_TEMPLATE_ID` lands in
+   `functions/.env.<projectId>`. An empty param fails the send loudly at
+   runtime (`assertTemplateConfigured`), it does not block the deploy.
+
+Smoke test after deploy: sign up with a fresh e-mail at the kiosk
+(`/checkin?kiosk`) — the visitor should land identified (identity strip)
+and receive the instructions email; an unclaimed member's e-mail should
+sign in with a code and get the 4-step "Willkommen" onboarding overlay
+(step 4 offers the same instructions email).
+
 ## 3. Deploy Functions
 
 ```bash

@@ -14,11 +14,15 @@
 import * as crypto from "crypto";
 import { getAuth } from "firebase-admin/auth";
 import * as logger from "firebase-functions/logger";
-import { HttpsError } from "firebase-functions/v2/https";
+import {
+  HttpsError,
+  type CallableRequest,
+} from "firebase-functions/v2/https";
 import { kioskBearerKey } from "../config/tag-secrets";
 
-/** How the kiosk session was established — audit/telemetry only. */
-export type KioskSessionMethod = "tag" | "emailCode" | "smsCode";
+/** How the kiosk session was established — audit/telemetry only.
+ *  "signup" = the account was created in the same call (signupKiosk). */
+export type KioskSessionMethod = "tag" | "emailCode" | "smsCode" | "signup";
 
 /**
  * User fields the kiosk client may see for pre-fill. `activeMembership` is
@@ -53,6 +57,30 @@ export function assertKioskBearer(
     logger.warn(`${callableName} rejected: missing/invalid kiosk bearer.`);
     throw new HttpsError("permission-denied", "Forbidden");
   }
+}
+
+/**
+ * The acting user of an ESTABLISHED kiosk session, or throws. For callables
+ * whose credential is the session itself (issue #595): the `actsAs` claim is
+ * set exclusively by the bearer-gated mint paths below, so requiring it
+ * binds the call to exactly one user with no client-supplied id to trust.
+ */
+export function requireActsAs(request: CallableRequest<unknown>): string {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Nicht angemeldet.");
+  }
+  const claims = request.auth.token as {
+    tagCheckout?: unknown;
+    actsAs?: unknown;
+  };
+  if (
+    claims.tagCheckout !== true ||
+    typeof claims.actsAs !== "string" ||
+    claims.actsAs.length === 0
+  ) {
+    throw new HttpsError("permission-denied", "Forbidden");
+  }
+  return claims.actsAs;
 }
 
 /**

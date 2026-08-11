@@ -1,7 +1,7 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useSyncExternalStore } from "react"
 import {
   createFileRoute,
   Link,
@@ -23,7 +23,12 @@ import { StaleCheckoutBanner } from "@/components/checkout/stale-checkout-banner
 import { StartOverButton } from "@/components/checkout/start-over-button"
 import { KioskInactivityWatcher } from "@/components/checkout/kiosk-inactivity-watcher"
 import { NoCheckoutGate } from "@/components/checkout/no-checkout-gate"
+import {
+  getKioskTokenUser,
+  subscribeKioskSession,
+} from "@modules/lib/token-auth"
 import { WelcomeOnboarding } from "@/components/account/welcome-onboarding"
+import { KioskWelcomeOnboarding } from "@/components/account/kiosk-welcome-onboarding"
 import { TagAuthOverlay } from "@/components/checkout/tag-auth-overlay"
 import { TagVisitRedirect } from "@/components/checkout/tag-visit-redirect"
 import { BadgeOfferCoordinator } from "@/components/checkout/badge-offer-coordinator"
@@ -74,7 +79,7 @@ function WizardLayout() {
 
   // Imported/incomplete members get the "Willkommen" onboarding as a blocking
   // overlay on top of the live checkout (not a redirect away). Tag-auth
-  // sessions always carry picc/cmac — skip them.
+  // sessions get the kiosk flavor below instead.
   const isAccountLoggedIn = sessionKind === "real" && !picc
   const profileLoading = loading || userDocLoading
   const needsOnboarding =
@@ -91,6 +96,16 @@ function WizardLayout() {
   const [onboardingDone, setOnboardingDone] = useState(false)
   if (needsOnboarding && !onboardingActive) setOnboardingActive(true)
   const showOnboarding = onboardingActive && !onboardingDone
+
+  // Kiosk flavor (issue #595): an unclaimed member's badge tap or email-code
+  // sign-in establishes the actsAs session first; the wizard then runs the
+  // same onboarding with callable-based persistence. The component reads the
+  // user doc itself (tag sessions have no auth-context userDoc) and renders
+  // null once the profile is complete.
+  const kioskTokenUser = useSyncExternalStore(
+    subscribeKioskSession,
+    getKioskTokenUser,
+  )
 
   if (isAccountLoggedIn && profileLoading) {
     return (
@@ -132,6 +147,12 @@ function WizardLayout() {
       <BadgeOfferCoordinator />
       {showOnboarding && (
         <WelcomeOnboarding onDone={() => setOnboardingDone(true)} />
+      )}
+      {sessionKind === "tag" && kioskTokenUser && (
+        <KioskWelcomeOnboarding
+          key={kioskTokenUser.userId}
+          userId={kioskTokenUser.userId}
+        />
       )}
     </WizardProvider>
   )

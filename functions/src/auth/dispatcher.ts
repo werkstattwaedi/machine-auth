@@ -25,6 +25,9 @@ import { verifyMagicLinkHandler } from "./login-code/verify-link";
 import { resolveTagHandler } from "./resolve-tag";
 import { verifyTagCheckoutHandler } from "../checkout/verify_tag";
 import { verifyLoginCodeKioskHandler } from "../checkout/verify_login_code_kiosk";
+import { signupKioskHandler } from "../checkout/signup_kiosk";
+import { sendAccountInstructionsHandler } from "../checkout/account_instructions";
+import { completeOnboardingKioskHandler } from "../checkout/complete_onboarding_kiosk";
 import { exchangeKioskSessionHandler } from "../checkout/exchange_kiosk_session";
 import { probeTagHandler } from "../checkout/probe_tag";
 import { privacyReportHandler } from "../privacy/privacy_report";
@@ -39,6 +42,9 @@ const HANDLERS: Record<string, RpcHandler> = {
   requestLoginCode: requestLoginCodeHandler,
   verifyLoginCode: verifyLoginCodeHandler,
   verifyLoginCodeKiosk: verifyLoginCodeKioskHandler,
+  signupKiosk: signupKioskHandler,
+  sendAccountInstructions: sendAccountInstructionsHandler,
+  completeOnboardingKiosk: completeOnboardingKioskHandler,
   exchangeKioskSession: exchangeKioskSessionHandler,
   verifyMagicLink: verifyMagicLinkHandler,
   resolveTag: resolveTagHandler,

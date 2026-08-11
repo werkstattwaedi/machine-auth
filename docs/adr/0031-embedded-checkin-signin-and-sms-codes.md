@@ -45,8 +45,12 @@ already carries data) and an embedded account section
   flag, default off until step 2),
 - code entry and sign-up as **dialogs**, not inline stages,
 - **kiosk**: `verifyLoginCodeKiosk` → `establishKioskSession` (ephemeral,
-  ADR-0022 unchanged), NFC affordance below the "oder" divider, no Google,
-  no sign-up ("register on your own device"),
+  ADR-0022 unchanged), NFC affordance below the "oder" divider, no Google.
+  *(Amended by issue #595 / the 2026-08 ADR-0022 amendment: a truly new
+  e-mail now gets the same sign-up dialog, submitted to the server-side
+  `signupKiosk`; an unclaimed imported member signs in normally and the
+  wizard overlays the kiosk welcome onboarding — no more "register on your
+  own device" dead end.)*
 - **own device**: the regular persistent login (`verifyLoginCode`), Google
   button below the divider, unknown e-mail opens the existing sign-up form
   (`SignupFields`) in a dialog. A Google-new principal completes sign-up in

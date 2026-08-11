@@ -15,6 +15,12 @@
 // tab) become reachable rather than bouncing back through the gate. Whether
 // the dialog is shown is latched on first load (`needed`), so saving terms in
 // step 3 doesn't tear the dialog down before step 4.
+//
+// The wizard runs on two session flavors (issue #595): `WelcomeOnboarding`
+// (this file) is the own-device wrapper — auth-context userDoc, direct
+// Firestore writes. `KioskWelcomeOnboarding` (kiosk-welcome-onboarding.tsx)
+// reuses the exported `WelcomeOnboardingView` with callable-based
+// persistence, because kiosk actsAs sessions cannot write users docs.
 
 import { useEffect, useState } from "react"
 import { serverTimestamp } from "firebase/firestore"
@@ -76,7 +82,7 @@ const NEXT_LABELS = [
   "Zum Check-in",
 ] as const
 
-interface ProfileFields {
+export interface ProfileFields {
   firstName: string
   lastName: string
   company: string
@@ -86,17 +92,20 @@ interface ProfileFields {
   phone: string
 }
 
-const EMPTY_FIELDS: ProfileFields = {
-  firstName: "",
-  lastName: "",
-  company: "",
-  street: "",
-  zip: "",
-  city: "",
-  phone: "",
-}
-
 type FieldErrors = Partial<Record<keyof ProfileFields, string>>
+
+/** The validated step-2 payload handed to the wrapper's persistence. */
+export interface OnboardingProfileUpdate {
+  firstName: string
+  lastName: string
+  phone: string | null
+  billingAddress: {
+    company: string
+    street: string
+    zip: string
+    city: string
+  } | null
+}
 
 const INPUT_BASE =
   "block w-full h-10 rounded-md border bg-white px-3 text-base md:text-sm shadow-xs outline-none transition-colors box-border"
@@ -109,9 +118,9 @@ const INPUT_DISABLED =
 const LABEL = "text-sm font-bold"
 
 /**
- * Self-contained onboarding dialog. `onDone` hands control back to the parent
- * once the member finishes (or once we detect they never needed onboarding) —
- * the overlay parent dismisses in place; the route wrapper navigates away.
+ * Own-device onboarding. `onDone` hands control back to the parent once the
+ * member finishes (or once we detect they never needed onboarding) — the
+ * overlay parent dismisses in place; the route wrapper navigates away.
  */
 export function WelcomeOnboarding({ onDone }: { onDone: () => void }) {
   const db = useDb()
@@ -130,32 +139,13 @@ export function WelcomeOnboarding({ onDone }: { onDone: () => void }) {
   // member to "firma" — handle it so onboarding can still complete.
   const isFirma = userDoc?.userType === "firma"
 
-  const [step, setStep] = useState(1)
-  const [fields, setFields] = useState<ProfileFields>(EMPTY_FIELDS)
-  const [errors, setErrors] = useState<FieldErrors>({})
-  const [tosAccepted, setTosAccepted] = useState(false)
-  const [tosError, setTosError] = useState(false)
-
   // Latch whether onboarding is needed the first time the doc loads. Saving
   // terms in step 3 flips isProfileComplete → without this latch the parent
   // would unmount us before step 4. Set during render (not an effect) so the
-  // latch + prefill land in the same commit as the first doc-backed render.
+  // latch lands in the same commit as the first doc-backed render.
   const [needed, setNeeded] = useState<boolean | null>(null)
-  const [seeded, setSeeded] = useState(false)
   if (userDoc && needed === null) {
     setNeeded(!isProfileComplete(userDoc))
-  }
-  if (userDoc && !seeded) {
-    setSeeded(true)
-    setFields({
-      firstName: userDoc.firstName ?? "",
-      lastName: userDoc.lastName ?? "",
-      company: userDoc.billingAddress?.company ?? "",
-      street: userDoc.billingAddress?.street ?? "",
-      zip: userDoc.billingAddress?.zip ?? "",
-      city: userDoc.billingAddress?.city ?? "",
-      phone: userDoc.phone ?? "",
-    })
   }
 
   // Nothing to do (already-complete member reached this by mistake) → leave.
@@ -164,6 +154,105 @@ export function WelcomeOnboarding({ onDone }: { onDone: () => void }) {
   }, [needed, onDone])
 
   if (!userDoc || needed !== true) return null
+
+  // The hook owns the error toast and re-throws — report failure so the
+  // view short-circuits and stays put.
+  const persistProfile = async (
+    profile: OnboardingProfileUpdate,
+  ): Promise<boolean> => {
+    try {
+      await update(userRef(db, userDoc.id), profile)
+    } catch {
+      return false
+    }
+    return true
+  }
+
+  const persistTerms = async (): Promise<boolean> => {
+    try {
+      await update(userRef(db, userDoc.id), {
+        termsAcceptedAt: serverTimestamp(),
+      })
+    } catch {
+      return false
+    }
+    return true
+  }
+
+  return (
+    <WelcomeOnboardingView
+      prefill={{
+        firstName: userDoc.firstName ?? "",
+        lastName: userDoc.lastName ?? "",
+        company: userDoc.billingAddress?.company ?? "",
+        street: userDoc.billingAddress?.street ?? "",
+        zip: userDoc.billingAddress?.zip ?? "",
+        city: userDoc.billingAddress?.city ?? "",
+        phone: userDoc.phone ?? "",
+      }}
+      email={user?.email ?? userDoc.email ?? ""}
+      isFirma={isFirma}
+      isFamilie={isFamilie}
+      membership={
+        membership
+          ? {
+              label: isFamilie ? "Familie" : "Einzel",
+              validUntil: formatDate(membership.validUntil),
+            }
+          : null
+      }
+      saving={saving}
+      persistProfile={persistProfile}
+      persistTerms={persistTerms}
+      onDone={onDone}
+    />
+  )
+}
+
+export interface WelcomeOnboardingViewProps {
+  prefill: ProfileFields
+  /** Shown read-only in step 2. */
+  email: string
+  isFirma: boolean
+  isFamilie: boolean
+  /** Step-2 membership banner; null hides it (the kiosk only knows a
+   *  boolean and deliberately sees no membership internals — #358). */
+  membership: { label: string; validUntil: string } | null
+  saving: boolean
+  /** Persist the validated step-2 edits. Return false to stay on step 2
+   *  (the wrapper owns the error toast). */
+  persistProfile: (profile: OnboardingProfileUpdate) => Promise<boolean>
+  /** Persist the step-3 terms acceptance. Return false to stay put. */
+  persistTerms: () => Promise<boolean>
+  /** Step-4 content override — the kiosk swaps the member-area links for
+   *  the instructions-email offer. Default: resource links (+ family note). */
+  resourcesStep?: React.ReactNode
+  onDone: () => void
+}
+
+/**
+ * The presentational 4-step wizard. Owns form state, validation and step
+ * navigation; persistence and data sourcing are injected so the own-device
+ * and kiosk wrappers can differ (Firestore writes vs. the
+ * completeOnboardingKiosk callable).
+ */
+export function WelcomeOnboardingView({
+  prefill,
+  email,
+  isFirma,
+  isFamilie,
+  membership,
+  saving,
+  persistProfile,
+  persistTerms,
+  resourcesStep,
+  onDone,
+}: WelcomeOnboardingViewProps) {
+  const [step, setStep] = useState(1)
+  const [fields, setFields] = useState<ProfileFields>(prefill)
+  const [errors, setErrors] = useState<FieldErrors>({})
+  const [tosAccepted, setTosAccepted] = useState(false)
+  const [tosError, setTosError] = useState(false)
 
   const patch = (p: Partial<ProfileFields>) => {
     setFields((f) => ({ ...f, ...p }))
@@ -207,9 +296,7 @@ export function WelcomeOnboarding({ onDone }: { onDone: () => void }) {
     }
 
     const address = {
-      company: isFirma
-        ? fields.company.trim()
-        : (userDoc.billingAddress?.company ?? ""),
+      company: isFirma ? fields.company.trim() : (prefill.company ?? ""),
       street: fields.street.trim(),
       zip: fields.zip.trim(),
       city: fields.city.trim(),
@@ -223,31 +310,13 @@ export function WelcomeOnboarding({ onDone }: { onDone: () => void }) {
       address.zip ||
       address.city
 
-    // userType is intentionally NOT written (keep the imported value). The
-    // hook owns the error toast and re-throws — short-circuit and stay put.
-    try {
-      await update(userRef(db, userDoc.id), {
-        firstName: fields.firstName.trim(),
-        lastName: fields.lastName.trim(),
-        phone: phoneE164,
-        billingAddress: hasAddress ? address : null,
-      })
-    } catch {
-      return false
-    }
-    return true
-  }
-
-  /** Persist terms acceptance. Returns true on success. */
-  const saveTerms = async (): Promise<boolean> => {
-    try {
-      await update(userRef(db, userDoc.id), {
-        termsAcceptedAt: serverTimestamp(),
-      })
-    } catch {
-      return false
-    }
-    return true
+    // userType is intentionally NOT written (keep the imported value).
+    return persistProfile({
+      firstName: fields.firstName.trim(),
+      lastName: fields.lastName.trim(),
+      phone: phoneE164,
+      billingAddress: hasAddress ? address : null,
+    })
   }
 
   const goNext = async () => {
@@ -263,7 +332,7 @@ export function WelcomeOnboarding({ onDone }: { onDone: () => void }) {
       }
       // Record acceptance now so member-area pages (e.g. the step-4
       // "Mitgliedschaft" link, opened in a new tab) are immediately reachable.
-      if (await saveTerms()) setStep(4)
+      if (await persistTerms()) setStep(4)
       return
     }
     if (step === 4) {
@@ -273,7 +342,7 @@ export function WelcomeOnboarding({ onDone }: { onDone: () => void }) {
     setStep((s) => s + 1)
   }
 
-  const firstName = userDoc.firstName || fields.firstName
+  const firstName = prefill.firstName || fields.firstName
 
   return (
     <Dialog open>
@@ -314,9 +383,8 @@ export function WelcomeOnboarding({ onDone }: { onDone: () => void }) {
             fields={fields}
             errors={errors}
             isFirma={isFirma}
-            email={user?.email ?? userDoc.email ?? ""}
-            membershipLabel={isFamilie ? "Familie" : "Einzel"}
-            validUntil={membership ? formatDate(membership.validUntil) : null}
+            email={email}
+            membership={membership}
             onChange={patch}
           />
         )}
@@ -330,12 +398,15 @@ export function WelcomeOnboarding({ onDone }: { onDone: () => void }) {
             }}
           />
         )}
-        {step === 4 && <StepResources isFamilie={isFamilie} />}
+        {step === 4 &&
+          (resourcesStep ?? <StepResources isFamilie={isFamilie} />)}
 
-        {/* Footer nav */}
+        {/* Footer nav. No "Zurück" on step 4: terms are recorded, the
+            profile-edit door is closed (write-once on the kiosk callable) —
+            walking back would only offer edits that can no longer save. */}
         <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
           <div>
-            {step > 1 && (
+            {step > 1 && step < 4 && (
               <button
                 type="button"
                 onClick={() => !saving && setStep((s) => s - 1)}
@@ -400,16 +471,14 @@ function StepData({
   errors,
   isFirma,
   email,
-  membershipLabel,
-  validUntil,
+  membership,
   onChange,
 }: {
   fields: ProfileFields
   errors: FieldErrors
   isFirma: boolean
   email: string
-  membershipLabel: string
-  validUntil: string | null
+  membership: { label: string; validUntil: string } | null
   onChange: (p: Partial<ProfileFields>) => void
 }) {
   const cls = (f: keyof ProfileFields) => (errors[f] ? INPUT_ERR : INPUT_OK)
@@ -422,15 +491,17 @@ function StepData({
         </p>
       </div>
 
-      {validUntil && (
+      {membership && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-[oklch(0.97_0_0)] px-3.5 py-2.5">
           <span className="inline-flex items-center gap-1.5 rounded-full bg-[#1a1a1a] px-2.5 py-0.5 text-[11px] font-semibold text-white">
             <Users className="h-3 w-3" aria-hidden />
-            {membershipLabel}
+            {membership.label}
           </span>
           <span className="text-[13px] text-muted-foreground">
             Mitgliedschaft aktiv · gültig bis{" "}
-            <strong className="tabular-nums text-foreground">{validUntil}</strong>
+            <strong className="tabular-nums text-foreground">
+              {membership.validUntil}
+            </strong>
           </span>
         </div>
       )}

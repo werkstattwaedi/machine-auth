@@ -80,7 +80,15 @@ export interface UserDoc {
  * for companies (`firma`), which always invoice and therefore need an address
  * + company name up front.
  */
-export function isProfileComplete(userDoc: UserDoc): boolean {
+export function isProfileComplete(
+  // Structural subset so both UserDoc flavors qualify — this context's
+  // resolved doc and the raw firestore-entities doc (the kiosk onboarding
+  // reads the latter directly; tag sessions have no auth-context doc).
+  userDoc: Pick<
+    UserDoc,
+    "firstName" | "lastName" | "userType" | "billingAddress"
+  > & { termsAcceptedAt?: unknown },
+): boolean {
   if (!userDoc.firstName || !userDoc.lastName || !userDoc.termsAcceptedAt) {
     return false
   }

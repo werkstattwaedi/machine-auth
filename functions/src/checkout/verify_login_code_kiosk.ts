@@ -13,8 +13,10 @@
  * escalation exists — the gate keeps actsAs minting kiosk-only).
  *
  * Unlike `mintSessionToken` this NEVER auto-creates a Firebase Auth user:
- * the kiosk has no sign-up flow, so a completed account (users doc with
- * accepted terms) is required.
+ * a `users` doc is required. Truly new e-mails go through `signupKiosk`
+ * instead (issue #595). An unclaimed/imported member (doc without accepted
+ * terms) DOES get a session — the wizard then runs the kiosk welcome
+ * onboarding, whose writes go through `completeOnboardingKiosk`.
  */
 
 import { getFirestore } from "firebase-admin/firestore";
@@ -44,9 +46,11 @@ export async function handleVerifyLoginCodeKiosk(
 ): Promise<VerifyLoginCodeKioskResult> {
   const { email } = await consumeLoginCode(input);
 
-  // Same "completed account" semantics as checkAccountExists: a users doc
-  // with accepted terms. A bare Auth user from an abandoned sign-up does
-  // not count and must finish registration on their own device.
+  // A `users` doc is required (same as checkAccountExists' hasProfile) — a
+  // bare Auth user from an abandoned sign-up does not count. Terms are NOT
+  // required here (issue #595): an unclaimed member signs in and the kiosk
+  // welcome onboarding collects them; a badge tap never checked terms
+  // either, so this adds no new authority.
   const db = getFirestore();
   const snap = await db
     .collection("users")
@@ -54,11 +58,11 @@ export async function handleVerifyLoginCodeKiosk(
     .limit(1)
     .get();
   const userDoc = snap.empty ? null : snap.docs[0];
-  if (!userDoc || userDoc.get("termsAcceptedAt") == null) {
-    logger.warn("verifyLoginCodeKiosk: no completed account", { email });
+  if (!userDoc) {
+    logger.warn("verifyLoginCodeKiosk: no account", { email });
     throw new HttpsError(
       "failed-precondition",
-      "Kein abgeschlossenes Konto für diese E-Mail. Bitte registriere dich zuerst auf deinem eigenen Gerät."
+      "Kein Konto für diese E-Mail. Bitte erstelle zuerst ein Konto."
     );
   }
 
