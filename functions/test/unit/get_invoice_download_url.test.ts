@@ -78,4 +78,39 @@ describe("getInvoiceDownloadUrl — buildDownloadOptions", () => {
       'attachment; filename="Rechnung_RE-000012.pdf"',
     );
   });
+
+  it("names a TWINT-settled invoice Quittung_RE-XXXXXX.pdf", () => {
+    // The PDF inside is titled "Quittung Self Checkout" (#426); the
+    // filename must not keep calling it a Rechnung — same contract #405
+    // established for Belege.
+    const opts = buildDownloadOptions(
+      makeBill({ referenceNumber: 13, kind: "invoice" }),
+      "twint",
+    );
+    expect(opts.responseDisposition).to.equal(
+      'attachment; filename="Quittung_RE-000013.pdf"',
+    );
+  });
+
+  it("keeps the Rechnung prefix for the aggregated Sammelrechnung (paymentMethod 'monthly')", () => {
+    // The aggregated monthly invoice's checkout still records
+    // paymentMethod "monthly" but the document is a payable Rechnung.
+    const opts = buildDownloadOptions(
+      makeBill({ referenceNumber: 14, kind: "invoice" }),
+      "monthly",
+    );
+    expect(opts.responseDisposition).to.equal(
+      'attachment; filename="Rechnung_RE-000014.pdf"',
+    );
+  });
+
+  it("Beleg kind wins over any payment method", () => {
+    const opts = buildDownloadOptions(
+      makeBill({ referenceNumber: 15, kind: "beleg" }),
+      "twint",
+    );
+    expect(opts.responseDisposition).to.equal(
+      'attachment; filename="Beleg_BL-000015.pdf"',
+    );
+  });
 });

@@ -194,11 +194,18 @@ export async function buildInvoicePdf(
     // so the Rechnungsnummer label stays; we deliberately do NOT claim
     // "Bezahlt am …" since there is no bank-side confirmation yet.
     const isTwint = !isBeleg && data.paymentMethod === "twint";
+    // Membership renewal (issue #323): the bill was minted by the
+    // renewalInvoicer cron, not a workshop visit — title it after the
+    // Mitgliederbeitrag and (below) swap the visit header for a short
+    // letter from the Vorstand.
+    const isRenewal = !isBeleg && data.source === "membership-renewal";
     let title: string;
     if (isBeleg) {
       title = "Beleg Self Checkout";
     } else if (isTwint) {
       title = "Quittung Self Checkout";
+    } else if (isRenewal) {
+      title = "Rechnung Mitgliederbeitrag";
     } else if (data.checkouts.length > 1) {
       const earliest = data.checkouts.reduce(
         (a, b) => (a.date.getTime() < b.date.getTime() ? a : b),
@@ -227,6 +234,22 @@ export async function buildInvoicePdf(
     y += 14;
     doc.text(`Datum: ${formatDateOnly(data.invoiceDate)}`, MARGIN_LEFT, y);
     y += 28;
+
+    // Renewal letter intro (issue #323). Kept short — the renewal email
+    // carries the full Vorstand letter; the invoice states what the
+    // payment buys.
+    if (isRenewal) {
+      const intro =
+        "Schon wieder ist ein Jahr vorbei! Mit dieser Rechnung verlängerst du " +
+        "deine Mitgliedschaft bei der Offenen Werkstatt Wädenswil um ein " +
+        "weiteres Jahr. Als Mitglied profitierst du weiterhin von " +
+        "vergünstigten Preisen bei der Nutzung der Maschinen.";
+      doc.fontSize(10).font("Helvetica");
+      const introHeight = doc.heightOfString(intro, { width: CONTENT_WIDTH });
+      y = ensureSpace(doc, y, introHeight + 14);
+      doc.text(intro, MARGIN_LEFT, y, { width: CONTENT_WIDTH });
+      y += introHeight + 14;
+    }
 
     // --- Per-checkout sections ---
     for (const checkout of data.checkouts) {
@@ -280,6 +303,10 @@ export async function buildInvoicePdf(
       y += 16;
       doc.fontSize(9).font("Helvetica");
       doc.text("Diese Rechnung wurde bereits beglichen. Vielen Dank!", MARGIN_LEFT, y);
+      if (isRenewal) {
+        y += 20;
+        y = renderVorstandSignoff(doc, y);
+      }
 
       addPageFooters(doc, data, doc.bufferedPageRange().count);
     } else if (data.paymentMethod === "twint") {
@@ -323,8 +350,19 @@ export async function buildInvoicePdf(
       // --- Payment terms (rechnung or pre-ack default) ---
       y = ensureSpace(doc, y, 30);
       doc.fontSize(9).font("Helvetica");
-      doc.text("Zahlbar innert 30 Tagen. Besten Dank.", MARGIN_LEFT, y);
+      // Renewals drop the "Besten Dank." because the Vorstand sign-off
+      // follows directly — thanks + greeting back to back read redundant.
+      doc.text(
+        isRenewal
+          ? "Zahlbar innert 30 Tagen."
+          : "Zahlbar innert 30 Tagen. Besten Dank.",
+        MARGIN_LEFT,
+        y,
+      );
       y += 20;
+      if (isRenewal) {
+        y = renderVorstandSignoff(doc, y);
+      }
 
       // --- Swiss QR Bill (added on a new page by swissqrbill) ---
       const contentPages = doc.bufferedPageRange().count;
@@ -492,6 +530,17 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+/** "Beste Grüsse / Der Vorstand" block on renewal invoices (issue #323). */
+function renderVorstandSignoff(doc: PDFKit.PDFDocument, y: number): number {
+  y = ensureSpace(doc, y, 30);
+  doc.fontSize(9).font("Helvetica");
+  doc.text("Beste Grüsse", MARGIN_LEFT, y);
+  y += 12;
+  doc.text("Der Vorstand Offene Werkstatt Wädenswil", MARGIN_LEFT, y);
+  y += 20;
+  return y;
+}
+
 function renderCheckoutSection(
   doc: PDFKit.PDFDocument,
   y: number,
@@ -505,11 +554,15 @@ function renderCheckoutSection(
   const discount = usageDiscount(checkout.usageType as UsageType);
   const discountLabel = USAGE_DISCOUNT_LABELS[checkout.usageType as UsageType];
 
-  // Visit date header
-  y = ensureSpace(doc, y, 30);
-  doc.fontSize(11).font("Helvetica-Bold");
-  doc.text(`Besuch vom ${formatDate(checkout.date)}`, MARGIN_LEFT, y);
-  y += 20;
+  // Visit date header. A membership renewal has no visit — its checkout is
+  // a synthetic doc minted by the renewalInvoicer cron, so "Besuch vom …"
+  // would misdescribe the bill (issue #323).
+  if (data.source !== "membership-renewal") {
+    y = ensureSpace(doc, y, 30);
+    doc.fontSize(11).font("Helvetica-Bold");
+    doc.text(`Besuch vom ${formatDate(checkout.date)}`, MARGIN_LEFT, y);
+    y += 20;
+  }
 
   // Issue #262/#263: break the Vereinsmitgliedschaft SKU out of the workshop
   // groups into a dedicated "Mitgliedschaft" block at the very top of the

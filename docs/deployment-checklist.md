@@ -183,6 +183,23 @@ and receive the instructions email; an unclaimed member's e-mail should
 sign in with a code and get the 4-step "Willkommen" onboarding overlay
 (step 4 offers the same instructions email).
 
+### Membership-renewal invoice email (issue #323)
+
+Renewal bills (`bill.source === "membership-renewal"`, minted by the
+`renewalInvoicer` cron) send the `membership-renewal` Resend template.
+One-time setup before the functions deploy:
+
+1. Create/publish the template from the operations repo
+   (`email/invoice-renewal.html`; upload commands in `email/README.md` —
+   remember `--subject` and the four `--var` declarations).
+2. The operations config carries
+   `functions.resendMembershipRenewalTemplateId` (`membership-renewal`);
+   run `npm run generate-env` so `RESEND_RENEWAL_TEMPLATE_ID` lands in
+   `functions/.env.<projectId>`. If the param is unset, `pickTemplate`
+   silently falls back to the generic QR-bill template — the email still
+   sends, but with Self-Checkout copy instead of the Vorstand renewal
+   letter, so this misconfiguration does NOT fail loudly.
+
 ## 3. Deploy Functions
 
 ```bash

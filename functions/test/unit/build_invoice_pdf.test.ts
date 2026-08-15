@@ -18,6 +18,7 @@ import {
   registeredUserInvoice,
   membershipOnlyInvoice,
   membershipMixedInvoice,
+  membershipRenewalInvoice,
   volunteeringDiscountInvoice,
 } from "./invoice_test_fixtures";
 
@@ -268,6 +269,29 @@ describe("buildInvoicePdf — content", () => {
     // Must not falsely claim a confirmed payment — no bank confirmation.
     expect(text).to.not.include("Bezahlt via TWINT am");
     expect(text).to.not.include("bereits beglichen");
+  });
+
+  // Issue #323: a membership-renewal bill (source "membership-renewal") is
+  // not a workshop visit — the PDF titles itself after the Mitgliederbeitrag,
+  // replaces the "Besuch vom …" header with a short renewal letter, signs
+  // off from the Vorstand, and stays a payable QR-bill with 30-day terms.
+  it("membership renewal: Mitgliederbeitrag title, letter, sign-off, QR slip", async () => {
+    const text = await pdfText(membershipRenewalInvoice());
+    expect(text).to.include("Rechnung Mitgliederbeitrag");
+    expect(text).to.include("Rechnungsnummer: RE-000052");
+    // Renewal letter intro instead of the visit header.
+    expect(text).to.include("Schon wieder ist ein Jahr vorbei");
+    expect(text).to.not.include("Besuch vom");
+    expect(text).to.not.include("Rechnung Self Checkout");
+    // The line item carries the concrete new expiry.
+    expect(text).to.include("Verlängerung bis 20.05.2027");
+    // Still a payable invoice: 30-day terms + Swiss QR slip.
+    expect(text).to.include("Zahlbar innert 30 Tagen");
+    expect(text).to.include("Empfangsschein");
+    expect(text).to.include("Zahlteil");
+    // Vorstand sign-off.
+    expect(text).to.include("Beste Grüsse");
+    expect(text).to.include("Der Vorstand Offene Werkstatt Wädenswil");
   });
 
   it("QR bill: creditor info present", async () => {

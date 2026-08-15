@@ -200,6 +200,11 @@ describe("runRenewalInvoicer (Integration, #323)", () => {
     const items = await bills[0].checkouts[0].collection("items").get();
     expect(items.size).to.equal(1);
     expect(items.docs[0].get("catalogId")?.id).to.equal(MEMBERSHIP_CATALOG_ID);
+    // Issue #323: the line item names the concrete new expiry
+    // (validUntil + 1 year, mirroring applyMembershipPayment).
+    expect(items.docs[0].get("description")).to.match(
+      / — Verlängerung bis \d{2}\.\d{2}\.\d{4}$/,
+    );
   });
 
   it("skips a membership with autoRenew == false", async () => {

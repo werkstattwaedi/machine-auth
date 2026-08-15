@@ -35,6 +35,9 @@ process.env.RESEND_MONTHLY_TEMPLATE_ID = "test-monthly-template";
 // payable Sammelrechnung invoice emitted by monthlyBillRun — a distinct
 // template from the Beleg notice above (they must not share copy).
 process.env.RESEND_SAMMELRECHNUNG_TEMPLATE_ID = "test-sammelrechnung-template";
+// Issue #323: membership-renewal bills (bill.source "membership-renewal")
+// get the Vorstand renewal letter, not the Self-Checkout copy.
+process.env.RESEND_RENEWAL_TEMPLATE_ID = "test-renewal-template";
 process.env.KASSE_EMAIL = "kasse@test.localhost";
 
 import { expect } from "chai";
@@ -105,6 +108,7 @@ interface SeedBillOptions {
   paidVia?: "twint" | "ebanking" | "cash" | "free" | null;
   checkoutIds?: string[];
   kind?: "invoice" | "beleg";
+  source?: "checkout" | "membership-renewal";
 }
 
 interface SeedCheckoutOptions {
@@ -185,6 +189,7 @@ async function seedBill(
     paymentMethodConfirmationSource: opts.paymentMethodConfirmationSource ?? null,
     kind: opts.kind ?? "invoice",
     aggregatedIntoBillRef: null,
+    source: opts.source ?? "checkout",
   };
 
   await db.collection("bills").doc(billId).set(bill);
@@ -866,9 +871,47 @@ describe("bill processing triggers (Integration)", () => {
         await trySendEmail(billId);
         const [, entity] = resendSendStub.firstCall.args as [
           string,
-          { template: { id: string } },
+          {
+            template: { id: string };
+            attachments: Array<{ filename: string }>;
+          },
         ];
         expect(entity.template.id).to.equal("test-twint-template");
+        // The PDF inside is a "Quittung Self Checkout" (#426) — the
+        // attachment filename must match the document type, mirroring the
+        // Beleg filename contract from #405.
+        expect(entity.attachments[0].filename).to.equal("Quittung-RE-000011.pdf");
+      });
+
+      // Issue #323: a membership-renewal bill is minted with paymentMethod
+      // "rechnung" by the renewalInvoicer cron. Without the bill.source
+      // branch it would fall through to the QR-Rechnung template and read
+      // as a Self-Checkout visit — it must pick the renewal letter instead.
+      it("picks the membership-renewal template for bill.source 'membership-renewal'", async () => {
+        const billId = "bill-renewal";
+        await seedUser("u-bill-proc", { email: "member@example.com" });
+        await seedCheckout("co-default", {
+          paymentMethod: "rechnung",
+        });
+        await seedBill(billId, {
+          storagePath: "invoices/bill-renewal.pdf",
+          referenceNumber: 21,
+          paymentMethodConfirmationTime: Timestamp.now(),
+          paymentMethodConfirmationSource: "auto",
+          source: "membership-renewal",
+        });
+
+        await trySendEmail(billId);
+        const [, entity] = resendSendStub.firstCall.args as [
+          string,
+          {
+            template: { id: string; variables: Record<string, string> };
+            attachments: Array<{ filename: string }>;
+          },
+        ];
+        expect(entity.template.id).to.equal("test-renewal-template");
+        // A renewal is a payable Rechnung — filename keeps the prefix.
+        expect(entity.attachments[0].filename).to.equal("Rechnung-RE-000021.pdf");
       });
 
       it("picks the dedicated Sammelrechnung invoice template for monthly-acked invoice (aggregated bill, #245/#502)", async () => {

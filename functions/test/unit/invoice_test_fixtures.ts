@@ -172,6 +172,33 @@ export function membershipMixedInvoice(): InvoiceData {
   };
 }
 
+/**
+ * Issue #323: annual membership-renewal invoice minted by the
+ * renewalInvoicer cron. `source: "membership-renewal"` switches the PDF to
+ * the "Rechnung Mitgliederbeitrag" rendering: no "Besuch vom …" visit
+ * header, a short renewal letter under the date, and the Vorstand sign-off
+ * after the payment terms. Still a payable QR-bill (paymentMethod
+ * "rechnung"). The item description mirrors what the cron writes —
+ * SKU label plus the concrete new expiry.
+ */
+export function membershipRenewalInvoice(): InvoiceData {
+  const base = membershipOnlyInvoice();
+  base.referenceNumber = 52;
+  base.paymentMethod = "rechnung";
+  base.source = "membership-renewal";
+  base.checkouts[0].items = [
+    makeMembershipItem(
+      "Mitgliedschaft — Familie — Verlängerung bis 20.05.2027",
+      70,
+      "family",
+    ),
+  ];
+  base.checkouts[0].materialCost = 70;
+  base.checkouts[0].totalPrice = 70;
+  base.grandTotal = 70;
+  return base;
+}
+
 export function singleCheckoutInvoice(): InvoiceData {
   return {
     referenceNumber: 1,
