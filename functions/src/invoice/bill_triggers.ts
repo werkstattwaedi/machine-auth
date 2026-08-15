@@ -22,7 +22,7 @@ import { DocumentReference, getFirestore, Timestamp } from "firebase-admin/fires
 import { getStorage } from "firebase-admin/storage";
 import { downloadUrlFor, pdfSaveOptions } from "../util/storage_download";
 import { formatWorkshopDateTime } from "../util/workshop_timezone";
-import { formatBillReference } from "./types";
+import { billDocumentPrefix, formatBillReference } from "./types";
 import { logOperationError } from "../operations_log";
 import { assertTemplateConfigured } from "../util/resend_template";
 // The recipient resolver lives in its own module (`util/checkout_recipient`)
@@ -86,6 +86,14 @@ const resendSammelrechnungInvoiceTemplateId = defineString(
 );
 const resendTwintTemplateId = defineString(
   "RESEND_TWINT_TEMPLATE_ID",
+  { default: "" },
+);
+// Issue #323: annual membership-renewal invoices (bill.source
+// "membership-renewal", minted by the renewalInvoicer cron) get their own
+// Vorstand-letter template instead of the Self-Checkout copy. Falls back
+// to the generic QR-bill template when unset.
+const resendMembershipRenewalTemplateId = defineString(
+  "RESEND_RENEWAL_TEMPLATE_ID",
   { default: "" },
 );
 // Contact address surfaced on the TWINT email ("contact kasse@... if in
@@ -347,6 +355,7 @@ async function assembleInvoiceData(
     paidVia: bill.paidVia ?? null,
     paymentMethod,
     kind,
+    source: bill.source ?? "checkout",
     membershipCatalogId,
   };
 }
@@ -455,6 +464,18 @@ function pickTemplate(
   bill: BillEntity,
 ): TemplateChoice {
   const kind = bill.kind ?? "invoice";
+
+  // Membership renewal (issue #323): the renewalInvoicer cron mints these
+  // with paymentMethod "rechnung", so without the source check they'd read
+  // as a Self-Checkout visit ("Rechnung für deinen Self-Checkout vom …").
+  // The dedicated template carries the Vorstand renewal letter instead.
+  if ((bill.source ?? "checkout") === "membership-renewal") {
+    const id = resendMembershipRenewalTemplateId.value();
+    return {
+      id: id || resendQrBillTemplateId.value(),
+      paramName: id ? "RESEND_RENEWAL_TEMPLATE_ID" : "RESEND_QRBILL_TEMPLATE_ID",
+    };
+  }
 
   // Per-visit Beleg (issue #245/#405): a "charge queued for next month's
   // Sammelrechnung" receipt, emailed when a member picks "monthly" at
@@ -607,7 +628,7 @@ export async function trySendEmail(billId: string): Promise<boolean> {
       attachments: [
         {
           path: signedUrl,
-          filename: `${(bill.kind ?? "invoice") === "beleg" ? "Beleg" : "Rechnung"}-${invoiceNumber}.pdf`,
+          filename: `${billDocumentPrefix(bill.kind, checkout.paymentMethod ?? null)}-${invoiceNumber}.pdf`,
         },
       ],
     });

@@ -62,6 +62,8 @@ import type {
 import { priceForTier } from "../types/firestore_entities";
 import { allocateBill } from "../invoice/create_bill";
 import { formatFullName } from "../util/username-utils";
+import { formatWorkshopDateTime } from "../util/workshop_timezone";
+import { plusOneYear } from "./shared";
 
 /** Days before `validUntil` to issue the renewal invoice (issue #323, Q1). */
 export const RENEWAL_WINDOW_DAYS = 30;
@@ -229,15 +231,25 @@ export async function runRenewalInvoicer(
         },
       ],
       // The renewal is a real QR-Rechnung; mark the method up front so the
-      // email picks the QR-bill template and the PDF renders the slip.
+      // ack pipeline emails it and the PDF renders the slip. The email
+      // template itself is selected via bill.source ("membership-renewal"
+      // → the Vorstand renewal letter, see pickTemplate in bill_triggers).
       paymentMethod: "rechnung",
       billRef,
       modifiedBy: null,
       modifiedAt: now2,
     };
+    // The printed line item names the concrete new expiry. Payment applies
+    // `plusOneYear(max(now, validUntil))` (applyMembershipPayment), so a
+    // member who pays late gets at least the date printed here — the
+    // description can never overpromise.
+    const renewedUntil = formatWorkshopDateTime(
+      plusOneYear(membership.validUntil).toDate(),
+      "dd.MM.yyyy",
+    );
     const item: CheckoutItemEntity = {
       workshop: "diverses",
-      description: sku.label,
+      description: `${sku.label} — Verlängerung bis ${renewedUntil}`,
       origin: "manual",
       catalogId: sku.catalogRef,
       variantId: sku.variantId,

@@ -6,24 +6,27 @@ import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import { getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { downloadUrlFor } from "../util/storage_download";
-import { formatBillReference, type BillEntity } from "./types";
+import { billDocumentPrefix, formatBillReference, type BillEntity } from "./types";
+import type { CheckoutEntity, PaymentMethod } from "../types/firestore_entities";
 
 /**
  * Build the options passed to `file.getSignedUrl(...)` for a bill download.
  * Factored out as a pure function so we can regression-test the
  * Content-Disposition header without a callable-test harness.
  */
-export function buildDownloadOptions(bill: BillEntity): {
+export function buildDownloadOptions(
+  bill: BillEntity,
+  paymentMethod: PaymentMethod | null = null,
+): {
   action: "read";
   expires: number;
   responseDisposition: string;
 } {
-  // A `kind: "beleg"` (per-visit Sammelrechnung record) downloads as
-  // "Beleg_BL-…"; a real invoice downloads as "Rechnung_RE-…". The PDF
-  // *content* renderer already branches on `kind`; this fixes the
-  // filename so it stops lying about the document type. Issue #405.
+  // Filename mirrors the document type inside the PDF (issue #405 for
+  // Belege, #426 follow-up for TWINT): "Beleg_BL-…", "Quittung_RE-…" for
+  // a TWINT-settled visit, "Rechnung_RE-…" for everything payable.
   const reference = formatBillReference(bill.referenceNumber, bill.kind);
-  const prefix = (bill.kind ?? "invoice") === "beleg" ? "Beleg" : "Rechnung";
+  const prefix = billDocumentPrefix(bill.kind, paymentMethod);
   const filename = `${prefix}_${reference}.pdf`;
   return {
     action: "read",
@@ -69,8 +72,24 @@ export const getInvoiceDownloadUrlHandler = async (
     throw new HttpsError("failed-precondition", "PDF not yet generated");
   }
 
+  // The Quittung-vs-Rechnung filename needs the checkout's payment method
+  // (a bill doc doesn't carry it). Fail soft on a missing checkout — the
+  // download still works, just with the default "Rechnung" prefix.
+  let paymentMethod: PaymentMethod | null = null;
+  const firstCheckoutRef = bill.checkouts?.[0];
+  if (firstCheckoutRef) {
+    try {
+      const checkoutSnap = await firstCheckoutRef.get();
+      paymentMethod =
+        (checkoutSnap.data() as CheckoutEntity | undefined)?.paymentMethod ??
+        null;
+    } catch {
+      paymentMethod = null;
+    }
+  }
+
   const file = getStorage().bucket().file(bill.storagePath);
-  const url = await downloadUrlFor(file, buildDownloadOptions(bill));
+  const url = await downloadUrlFor(file, buildDownloadOptions(bill, paymentMethod));
 
   logger.info(`Generated download URL for bill ${billId}`);
 

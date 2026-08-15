@@ -22,6 +22,7 @@ import {
   zeroItemsInvoice,
   membershipOnlyInvoice,
   membershipMixedInvoice,
+  membershipRenewalInvoice,
   volunteeringDiscountInvoice,
   internDiscountInvoice,
 } from "./invoice_test_fixtures";
@@ -184,6 +185,13 @@ describe("buildInvoicePdf — visual regression", function () {
   // BL- prefix replaces RE-.
   it("Beleg per-visit (Sammelrechnung member)", async () => {
     await compareAllPages("beleg-per-visit", belegPerVisit());
+  });
+
+  // Issue #323: membership-renewal invoice. "Rechnung Mitgliederbeitrag"
+  // title, renewal letter instead of the "Besuch vom …" header, Vorstand
+  // sign-off after the 30-day terms, QR slip on its own page.
+  it("Membership renewal invoice", async () => {
+    await compareAllPages("membership-renewal", membershipRenewalInvoice());
   });
 
   // Issue #237 / PR #256 review: a free zero-amount bill (e.g. Interne

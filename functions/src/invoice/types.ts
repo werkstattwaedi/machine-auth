@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { DocumentReference, Timestamp } from "firebase-admin/firestore";
-import { CheckoutPersonEntity, CheckoutItemEntity, UsageType } from "../types/firestore_entities";
+import { CheckoutPersonEntity, CheckoutItemEntity, PaymentMethod, UsageType } from "../types/firestore_entities";
 
 export type BillKind = "invoice" | "beleg";
 
@@ -119,6 +119,13 @@ export interface InvoiceData {
    */
   kind?: BillKind;
   /**
+   * Bill origin (issue #323). "membership-renewal" switches the PDF into
+   * its renewal rendering: "Rechnung Mitgliederbeitrag" title, a short
+   * Vorstand letter instead of the "Besuch vom …" visit header, and a
+   * sign-off. Missing/"checkout" renders the standard Self-Checkout PDF.
+   */
+  source?: BillSource;
+  /**
    * Vereinsmitgliedschaft catalog doc id (issue #262/#263), resolved once
    * via `config/catalog-references` → `membership`. When set, items whose
    * `catalogId` matches are rendered under a dedicated "Mitgliedschaft"
@@ -147,6 +154,24 @@ export function formatBillReference(
   kind: BillKind | undefined,
 ): string {
   return kind === "beleg" ? formatBelegNumber(n) : formatInvoiceNumber(n);
+}
+
+/**
+ * Human filename prefix for a bill PDF (download + email attachment).
+ * Mirrors the PDF title logic in build_invoice_pdf: a Beleg is "Beleg",
+ * a TWINT-settled invoice renders as a receipt ("Quittung" — issue #426),
+ * everything else — including the aggregated Sammelrechnung, whose
+ * checkout still records paymentMethod "monthly" — is a payable
+ * "Rechnung". Keeping the filename in sync with the title inside the PDF
+ * is the same contract issue #405 established for Belege.
+ */
+export function billDocumentPrefix(
+  kind: BillKind | undefined,
+  paymentMethod: PaymentMethod | null | undefined,
+): "Beleg" | "Quittung" | "Rechnung" {
+  if ((kind ?? "invoice") === "beleg") return "Beleg";
+  if (paymentMethod === "twint") return "Quittung";
+  return "Rechnung";
 }
 
 /** Payment recipient configuration (from environment params) */
