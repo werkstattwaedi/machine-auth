@@ -195,6 +195,35 @@ npm run seed             # Seed emulator with test data
 - Hosting: http://localhost:5050
 - Gateway: localhost:5000
 
+## Dependency Maintenance
+
+`npm audit` is not gated in CI, but Dependabot is active — so an unfixable
+finding will keep resurfacing. Two standing exceptions, both dev-only:
+
+**`ts-deepmerge` (moderate, via `firebase-functions-test`) — do NOT override.**
+`firebase-functions-test` calls it as `ts_deepmerge_1.default(...)`, but
+ts-deepmerge switched from a default export to a named `{ merge }` export in
+v3. Forcing `^8` satisfies the advisory and breaks the test harness at
+runtime (`default is not a function`). It only merges test-authored CloudEvent
+fixtures, so the prototype-override DoS is not reachable. Wait for
+`firebase-functions-test` to bump it upstream.
+
+**`diff` (low, via `mocha`) — pinned by a scoped override.** mocha still
+declares `diff: ^7.0.0` and the fix landed in 8.0.3, so the root `overrides`
+block carries `"mocha": { "diff": "^8.0.4" }`. Drop it once mocha widens its
+range. mocha's diff usage is assertion-failure rendering, not `parsePatch`
+on untrusted input.
+
+**Playwright bumps move the bundled Chromium**, which can invalidate the
+`e2e/*.spec.ts-snapshots/` baselines. Regenerate them with the `update_snapshots`
+`workflow_dispatch` on the Tests workflow and commit the per-shard artifacts —
+never locally: baselines encode only the platform (`*-chromium-linux.png`), and
+`web/apps/admin/playwright.config.ts` compares exactly, with none of the
+`maxDiffPixelRatio: 0.01` tolerance the checkout config carries (issue #317).
+Keep exactly one Playwright version in the tree — CI's `npx playwright install`
+resolves `playwright` from the app dir independently of the `playwright-core`
+that `@playwright/test` uses, so a split silently installs the wrong browser.
+
 ## Testing
 
 **Before committing / during code review — always run:**
