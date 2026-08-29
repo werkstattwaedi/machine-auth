@@ -9,42 +9,46 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from "./routes/__root"
-import { Route as LoginRouteImport } from "./routes/login"
-import { Route as LinkAccountRouteImport } from "./routes/link-account"
-import { Route as AuthenticatedRouteImport } from "./routes/_authenticated"
 import { Route as IndexRouteImport } from "./routes/index"
-import { Route as LoginVerifyRouteImport } from "./routes/login_.verify"
-import { Route as TestLabelPreviewRouteImport } from "./routes/_test.label-preview"
-import { Route as AuthenticatedVisitsRouteImport } from "./routes/_authenticated/visits"
-import { Route as AuthenticatedUsersRouteImport } from "./routes/_authenticated/users"
-import { Route as AuthenticatedUsagesRouteImport } from "./routes/_authenticated/usages"
-import { Route as AuthenticatedPriceListsRouteImport } from "./routes/_authenticated/price-lists"
-import { Route as AuthenticatedPermissionsRouteImport } from "./routes/_authenticated/permissions"
-import { Route as AuthenticatedMaterialsRouteImport } from "./routes/_authenticated/materials"
-import { Route as AuthenticatedMachinesRouteImport } from "./routes/_authenticated/machines"
-import { Route as AuthenticatedInvoicesRouteImport } from "./routes/_authenticated/invoices"
+import { Route as AuthenticatedRouteImport } from "./routes/_authenticated"
+import { Route as LinkAccountRouteImport } from "./routes/link-account"
+import { Route as LoginRouteImport } from "./routes/login"
 import { Route as AuthenticatedAuditRouteImport } from "./routes/_authenticated/audit"
-import { Route as AuthenticatedVisitsIndexRouteImport } from "./routes/_authenticated/visits/index"
-import { Route as AuthenticatedUsersIndexRouteImport } from "./routes/_authenticated/users/index"
-import { Route as AuthenticatedPriceListsIndexRouteImport } from "./routes/_authenticated/price-lists/index"
-import { Route as AuthenticatedPermissionsIndexRouteImport } from "./routes/_authenticated/permissions/index"
-import { Route as AuthenticatedMaterialsIndexRouteImport } from "./routes/_authenticated/materials/index"
-import { Route as AuthenticatedMachinesIndexRouteImport } from "./routes/_authenticated/machines/index"
+import { Route as AuthenticatedInvoicesRouteImport } from "./routes/_authenticated/invoices"
+import { Route as AuthenticatedMachinesRouteImport } from "./routes/_authenticated/machines"
+import { Route as AuthenticatedMaterialsRouteImport } from "./routes/_authenticated/materials"
+import { Route as AuthenticatedPermissionsRouteImport } from "./routes/_authenticated/permissions"
+import { Route as AuthenticatedPriceListsRouteImport } from "./routes/_authenticated/price-lists"
+import { Route as AuthenticatedUsagesRouteImport } from "./routes/_authenticated/usages"
+import { Route as AuthenticatedUsersRouteImport } from "./routes/_authenticated/users"
+import { Route as AuthenticatedVisitsRouteImport } from "./routes/_authenticated/visits"
+import { Route as TestLabelPreviewRouteImport } from "./routes/_test.label-preview"
+import { Route as LoginVerifyRouteImport } from "./routes/login_.verify"
 import { Route as AuthenticatedInvoicesIndexRouteImport } from "./routes/_authenticated/invoices/index"
-import { Route as AuthenticatedVisitsCheckoutIdRouteImport } from "./routes/_authenticated/visits/$checkoutId"
-import { Route as AuthenticatedUsersUserIdRouteImport } from "./routes/_authenticated/users/$userId"
-import { Route as AuthenticatedPriceListsPriceListIdRouteImport } from "./routes/_authenticated/price-lists/$priceListId"
-import { Route as AuthenticatedPermissionsPermissionIdRouteImport } from "./routes/_authenticated/permissions/$permissionId"
-import { Route as AuthenticatedMaterialsLabelsRouteImport } from "./routes/_authenticated/materials/labels"
-import { Route as AuthenticatedMaterialsImportRouteImport } from "./routes/_authenticated/materials/import"
-import { Route as AuthenticatedMaterialsMaterialIdRouteImport } from "./routes/_authenticated/materials/$materialId"
-import { Route as AuthenticatedMachinesMachineIdRouteImport } from "./routes/_authenticated/machines/$machineId"
-import { Route as AuthenticatedInvoicesImportRouteImport } from "./routes/_authenticated/invoices/import"
 import { Route as AuthenticatedInvoicesBillIdRouteImport } from "./routes/_authenticated/invoices/$billId"
+import { Route as AuthenticatedInvoicesImportRouteImport } from "./routes/_authenticated/invoices/import"
+import { Route as AuthenticatedMachinesIndexRouteImport } from "./routes/_authenticated/machines/index"
+import { Route as AuthenticatedMachinesMachineIdRouteImport } from "./routes/_authenticated/machines/$machineId"
+import { Route as AuthenticatedMaterialsIndexRouteImport } from "./routes/_authenticated/materials/index"
+import { Route as AuthenticatedMaterialsMaterialIdRouteImport } from "./routes/_authenticated/materials/$materialId"
+import { Route as AuthenticatedMaterialsImportRouteImport } from "./routes/_authenticated/materials/import"
+import { Route as AuthenticatedMaterialsLabelsRouteImport } from "./routes/_authenticated/materials/labels"
+import { Route as AuthenticatedPermissionsIndexRouteImport } from "./routes/_authenticated/permissions/index"
+import { Route as AuthenticatedPermissionsPermissionIdRouteImport } from "./routes/_authenticated/permissions/$permissionId"
+import { Route as AuthenticatedPriceListsIndexRouteImport } from "./routes/_authenticated/price-lists/index"
+import { Route as AuthenticatedPriceListsPriceListIdRouteImport } from "./routes/_authenticated/price-lists/$priceListId"
+import { Route as AuthenticatedUsersIndexRouteImport } from "./routes/_authenticated/users/index"
+import { Route as AuthenticatedUsersUserIdRouteImport } from "./routes/_authenticated/users/$userId"
+import { Route as AuthenticatedVisitsIndexRouteImport } from "./routes/_authenticated/visits/index"
+import { Route as AuthenticatedVisitsCheckoutIdRouteImport } from "./routes/_authenticated/visits/$checkoutId"
 
-const LoginRoute = LoginRouteImport.update({
-  id: "/login",
-  path: "/login",
+const IndexRoute = IndexRouteImport.update({
+  id: "/",
+  path: "/",
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedRoute = AuthenticatedRouteImport.update({
+  id: "/_authenticated",
   getParentRoute: () => rootRouteImport,
 } as any)
 const LinkAccountRoute = LinkAccountRouteImport.update({
@@ -52,43 +56,29 @@ const LinkAccountRoute = LinkAccountRouteImport.update({
   path: "/link-account",
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedRoute = AuthenticatedRouteImport.update({
-  id: "/_authenticated",
+const LoginRoute = LoginRouteImport.update({
+  id: "/login",
+  path: "/login",
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: "/",
-  path: "/",
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LoginVerifyRoute = LoginVerifyRouteImport.update({
-  id: "/login_/verify",
-  path: "/login/verify",
-  getParentRoute: () => rootRouteImport,
-} as any)
-const TestLabelPreviewRoute = TestLabelPreviewRouteImport.update({
-  id: "/_test/label-preview",
-  path: "/label-preview",
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AuthenticatedVisitsRoute = AuthenticatedVisitsRouteImport.update({
-  id: "/visits",
-  path: "/visits",
+const AuthenticatedAuditRoute = AuthenticatedAuditRouteImport.update({
+  id: "/audit",
+  path: "/audit",
   getParentRoute: () => AuthenticatedRoute,
 } as any)
-const AuthenticatedUsersRoute = AuthenticatedUsersRouteImport.update({
-  id: "/users",
-  path: "/users",
+const AuthenticatedInvoicesRoute = AuthenticatedInvoicesRouteImport.update({
+  id: "/invoices",
+  path: "/invoices",
   getParentRoute: () => AuthenticatedRoute,
 } as any)
-const AuthenticatedUsagesRoute = AuthenticatedUsagesRouteImport.update({
-  id: "/usages",
-  path: "/usages",
+const AuthenticatedMachinesRoute = AuthenticatedMachinesRouteImport.update({
+  id: "/machines",
+  path: "/machines",
   getParentRoute: () => AuthenticatedRoute,
 } as any)
-const AuthenticatedPriceListsRoute = AuthenticatedPriceListsRouteImport.update({
-  id: "/price-lists",
-  path: "/price-lists",
+const AuthenticatedMaterialsRoute = AuthenticatedMaterialsRouteImport.update({
+  id: "/materials",
+  path: "/materials",
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedPermissionsRoute =
@@ -97,54 +87,53 @@ const AuthenticatedPermissionsRoute =
     path: "/permissions",
     getParentRoute: () => AuthenticatedRoute,
   } as any)
-const AuthenticatedMaterialsRoute = AuthenticatedMaterialsRouteImport.update({
-  id: "/materials",
-  path: "/materials",
+const AuthenticatedPriceListsRoute = AuthenticatedPriceListsRouteImport.update({
+  id: "/price-lists",
+  path: "/price-lists",
   getParentRoute: () => AuthenticatedRoute,
 } as any)
-const AuthenticatedMachinesRoute = AuthenticatedMachinesRouteImport.update({
-  id: "/machines",
-  path: "/machines",
+const AuthenticatedUsagesRoute = AuthenticatedUsagesRouteImport.update({
+  id: "/usages",
+  path: "/usages",
   getParentRoute: () => AuthenticatedRoute,
 } as any)
-const AuthenticatedInvoicesRoute = AuthenticatedInvoicesRouteImport.update({
-  id: "/invoices",
-  path: "/invoices",
+const AuthenticatedUsersRoute = AuthenticatedUsersRouteImport.update({
+  id: "/users",
+  path: "/users",
   getParentRoute: () => AuthenticatedRoute,
 } as any)
-const AuthenticatedAuditRoute = AuthenticatedAuditRouteImport.update({
-  id: "/audit",
-  path: "/audit",
+const AuthenticatedVisitsRoute = AuthenticatedVisitsRouteImport.update({
+  id: "/visits",
+  path: "/visits",
   getParentRoute: () => AuthenticatedRoute,
 } as any)
-const AuthenticatedVisitsIndexRoute =
-  AuthenticatedVisitsIndexRouteImport.update({
+const TestLabelPreviewRoute = TestLabelPreviewRouteImport.update({
+  id: "/_test/label-preview",
+  path: "/label-preview",
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginVerifyRoute = LoginVerifyRouteImport.update({
+  id: "/login_/verify",
+  path: "/login/verify",
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedInvoicesIndexRoute =
+  AuthenticatedInvoicesIndexRouteImport.update({
     id: "/",
     path: "/",
-    getParentRoute: () => AuthenticatedVisitsRoute,
+    getParentRoute: () => AuthenticatedInvoicesRoute,
   } as any)
-const AuthenticatedUsersIndexRoute = AuthenticatedUsersIndexRouteImport.update({
-  id: "/",
-  path: "/",
-  getParentRoute: () => AuthenticatedUsersRoute,
-} as any)
-const AuthenticatedPriceListsIndexRoute =
-  AuthenticatedPriceListsIndexRouteImport.update({
-    id: "/",
-    path: "/",
-    getParentRoute: () => AuthenticatedPriceListsRoute,
+const AuthenticatedInvoicesBillIdRoute =
+  AuthenticatedInvoicesBillIdRouteImport.update({
+    id: "/$billId",
+    path: "/$billId",
+    getParentRoute: () => AuthenticatedInvoicesRoute,
   } as any)
-const AuthenticatedPermissionsIndexRoute =
-  AuthenticatedPermissionsIndexRouteImport.update({
-    id: "/",
-    path: "/",
-    getParentRoute: () => AuthenticatedPermissionsRoute,
-  } as any)
-const AuthenticatedMaterialsIndexRoute =
-  AuthenticatedMaterialsIndexRouteImport.update({
-    id: "/",
-    path: "/",
-    getParentRoute: () => AuthenticatedMaterialsRoute,
+const AuthenticatedInvoicesImportRoute =
+  AuthenticatedInvoicesImportRouteImport.update({
+    id: "/import",
+    path: "/import",
+    getParentRoute: () => AuthenticatedInvoicesRoute,
   } as any)
 const AuthenticatedMachinesIndexRoute =
   AuthenticatedMachinesIndexRouteImport.update({
@@ -152,46 +141,16 @@ const AuthenticatedMachinesIndexRoute =
     path: "/",
     getParentRoute: () => AuthenticatedMachinesRoute,
   } as any)
-const AuthenticatedInvoicesIndexRoute =
-  AuthenticatedInvoicesIndexRouteImport.update({
+const AuthenticatedMachinesMachineIdRoute =
+  AuthenticatedMachinesMachineIdRouteImport.update({
+    id: "/$machineId",
+    path: "/$machineId",
+    getParentRoute: () => AuthenticatedMachinesRoute,
+  } as any)
+const AuthenticatedMaterialsIndexRoute =
+  AuthenticatedMaterialsIndexRouteImport.update({
     id: "/",
     path: "/",
-    getParentRoute: () => AuthenticatedInvoicesRoute,
-  } as any)
-const AuthenticatedVisitsCheckoutIdRoute =
-  AuthenticatedVisitsCheckoutIdRouteImport.update({
-    id: "/$checkoutId",
-    path: "/$checkoutId",
-    getParentRoute: () => AuthenticatedVisitsRoute,
-  } as any)
-const AuthenticatedUsersUserIdRoute =
-  AuthenticatedUsersUserIdRouteImport.update({
-    id: "/$userId",
-    path: "/$userId",
-    getParentRoute: () => AuthenticatedUsersRoute,
-  } as any)
-const AuthenticatedPriceListsPriceListIdRoute =
-  AuthenticatedPriceListsPriceListIdRouteImport.update({
-    id: "/$priceListId",
-    path: "/$priceListId",
-    getParentRoute: () => AuthenticatedPriceListsRoute,
-  } as any)
-const AuthenticatedPermissionsPermissionIdRoute =
-  AuthenticatedPermissionsPermissionIdRouteImport.update({
-    id: "/$permissionId",
-    path: "/$permissionId",
-    getParentRoute: () => AuthenticatedPermissionsRoute,
-  } as any)
-const AuthenticatedMaterialsLabelsRoute =
-  AuthenticatedMaterialsLabelsRouteImport.update({
-    id: "/labels",
-    path: "/labels",
-    getParentRoute: () => AuthenticatedMaterialsRoute,
-  } as any)
-const AuthenticatedMaterialsImportRoute =
-  AuthenticatedMaterialsImportRouteImport.update({
-    id: "/import",
-    path: "/import",
     getParentRoute: () => AuthenticatedMaterialsRoute,
   } as any)
 const AuthenticatedMaterialsMaterialIdRoute =
@@ -200,23 +159,64 @@ const AuthenticatedMaterialsMaterialIdRoute =
     path: "/$materialId",
     getParentRoute: () => AuthenticatedMaterialsRoute,
   } as any)
-const AuthenticatedMachinesMachineIdRoute =
-  AuthenticatedMachinesMachineIdRouteImport.update({
-    id: "/$machineId",
-    path: "/$machineId",
-    getParentRoute: () => AuthenticatedMachinesRoute,
-  } as any)
-const AuthenticatedInvoicesImportRoute =
-  AuthenticatedInvoicesImportRouteImport.update({
+const AuthenticatedMaterialsImportRoute =
+  AuthenticatedMaterialsImportRouteImport.update({
     id: "/import",
     path: "/import",
-    getParentRoute: () => AuthenticatedInvoicesRoute,
+    getParentRoute: () => AuthenticatedMaterialsRoute,
   } as any)
-const AuthenticatedInvoicesBillIdRoute =
-  AuthenticatedInvoicesBillIdRouteImport.update({
-    id: "/$billId",
-    path: "/$billId",
-    getParentRoute: () => AuthenticatedInvoicesRoute,
+const AuthenticatedMaterialsLabelsRoute =
+  AuthenticatedMaterialsLabelsRouteImport.update({
+    id: "/labels",
+    path: "/labels",
+    getParentRoute: () => AuthenticatedMaterialsRoute,
+  } as any)
+const AuthenticatedPermissionsIndexRoute =
+  AuthenticatedPermissionsIndexRouteImport.update({
+    id: "/",
+    path: "/",
+    getParentRoute: () => AuthenticatedPermissionsRoute,
+  } as any)
+const AuthenticatedPermissionsPermissionIdRoute =
+  AuthenticatedPermissionsPermissionIdRouteImport.update({
+    id: "/$permissionId",
+    path: "/$permissionId",
+    getParentRoute: () => AuthenticatedPermissionsRoute,
+  } as any)
+const AuthenticatedPriceListsIndexRoute =
+  AuthenticatedPriceListsIndexRouteImport.update({
+    id: "/",
+    path: "/",
+    getParentRoute: () => AuthenticatedPriceListsRoute,
+  } as any)
+const AuthenticatedPriceListsPriceListIdRoute =
+  AuthenticatedPriceListsPriceListIdRouteImport.update({
+    id: "/$priceListId",
+    path: "/$priceListId",
+    getParentRoute: () => AuthenticatedPriceListsRoute,
+  } as any)
+const AuthenticatedUsersIndexRoute = AuthenticatedUsersIndexRouteImport.update({
+  id: "/",
+  path: "/",
+  getParentRoute: () => AuthenticatedUsersRoute,
+} as any)
+const AuthenticatedUsersUserIdRoute =
+  AuthenticatedUsersUserIdRouteImport.update({
+    id: "/$userId",
+    path: "/$userId",
+    getParentRoute: () => AuthenticatedUsersRoute,
+  } as any)
+const AuthenticatedVisitsIndexRoute =
+  AuthenticatedVisitsIndexRouteImport.update({
+    id: "/",
+    path: "/",
+    getParentRoute: () => AuthenticatedVisitsRoute,
+  } as any)
+const AuthenticatedVisitsCheckoutIdRoute =
+  AuthenticatedVisitsCheckoutIdRouteImport.update({
+    id: "/$checkoutId",
+    path: "/$checkoutId",
+    getParentRoute: () => AuthenticatedVisitsRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -420,18 +420,11 @@ export interface RootRouteChildren {
 
 declare module "@tanstack/react-router" {
   interface FileRoutesByPath {
-    "/login": {
-      id: "/login"
-      path: "/login"
-      fullPath: "/login"
-      preLoaderRoute: typeof LoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    "/link-account": {
-      id: "/link-account"
-      path: "/link-account"
-      fullPath: "/link-account"
-      preLoaderRoute: typeof LinkAccountRouteImport
+    "/": {
+      id: "/"
+      path: "/"
+      fullPath: "/"
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     "/_authenticated": {
@@ -441,74 +434,25 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthenticatedRouteImport
       parentRoute: typeof rootRouteImport
     }
-    "/": {
-      id: "/"
-      path: "/"
-      fullPath: "/"
-      preLoaderRoute: typeof IndexRouteImport
+    "/link-account": {
+      id: "/link-account"
+      path: "/link-account"
+      fullPath: "/link-account"
+      preLoaderRoute: typeof LinkAccountRouteImport
       parentRoute: typeof rootRouteImport
     }
-    "/login_/verify": {
-      id: "/login_/verify"
-      path: "/login/verify"
-      fullPath: "/login/verify"
-      preLoaderRoute: typeof LoginVerifyRouteImport
+    "/login": {
+      id: "/login"
+      path: "/login"
+      fullPath: "/login"
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
-    "/_test/label-preview": {
-      id: "/_test/label-preview"
-      path: "/label-preview"
-      fullPath: "/label-preview"
-      preLoaderRoute: typeof TestLabelPreviewRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    "/_authenticated/visits": {
-      id: "/_authenticated/visits"
-      path: "/visits"
-      fullPath: "/visits"
-      preLoaderRoute: typeof AuthenticatedVisitsRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
-    "/_authenticated/users": {
-      id: "/_authenticated/users"
-      path: "/users"
-      fullPath: "/users"
-      preLoaderRoute: typeof AuthenticatedUsersRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
-    "/_authenticated/usages": {
-      id: "/_authenticated/usages"
-      path: "/usages"
-      fullPath: "/usages"
-      preLoaderRoute: typeof AuthenticatedUsagesRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
-    "/_authenticated/price-lists": {
-      id: "/_authenticated/price-lists"
-      path: "/price-lists"
-      fullPath: "/price-lists"
-      preLoaderRoute: typeof AuthenticatedPriceListsRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
-    "/_authenticated/permissions": {
-      id: "/_authenticated/permissions"
-      path: "/permissions"
-      fullPath: "/permissions"
-      preLoaderRoute: typeof AuthenticatedPermissionsRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
-    "/_authenticated/materials": {
-      id: "/_authenticated/materials"
-      path: "/materials"
-      fullPath: "/materials"
-      preLoaderRoute: typeof AuthenticatedMaterialsRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
-    "/_authenticated/machines": {
-      id: "/_authenticated/machines"
-      path: "/machines"
-      fullPath: "/machines"
-      preLoaderRoute: typeof AuthenticatedMachinesRouteImport
+    "/_authenticated/audit": {
+      id: "/_authenticated/audit"
+      path: "/audit"
+      fullPath: "/audit"
+      preLoaderRoute: typeof AuthenticatedAuditRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     "/_authenticated/invoices": {
@@ -518,54 +462,68 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthenticatedInvoicesRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    "/_authenticated/audit": {
-      id: "/_authenticated/audit"
-      path: "/audit"
-      fullPath: "/audit"
-      preLoaderRoute: typeof AuthenticatedAuditRouteImport
+    "/_authenticated/machines": {
+      id: "/_authenticated/machines"
+      path: "/machines"
+      fullPath: "/machines"
+      preLoaderRoute: typeof AuthenticatedMachinesRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    "/_authenticated/visits/": {
-      id: "/_authenticated/visits/"
-      path: "/"
-      fullPath: "/visits/"
-      preLoaderRoute: typeof AuthenticatedVisitsIndexRouteImport
-      parentRoute: typeof AuthenticatedVisitsRoute
+    "/_authenticated/materials": {
+      id: "/_authenticated/materials"
+      path: "/materials"
+      fullPath: "/materials"
+      preLoaderRoute: typeof AuthenticatedMaterialsRouteImport
+      parentRoute: typeof AuthenticatedRoute
     }
-    "/_authenticated/users/": {
-      id: "/_authenticated/users/"
-      path: "/"
-      fullPath: "/users/"
-      preLoaderRoute: typeof AuthenticatedUsersIndexRouteImport
-      parentRoute: typeof AuthenticatedUsersRoute
+    "/_authenticated/permissions": {
+      id: "/_authenticated/permissions"
+      path: "/permissions"
+      fullPath: "/permissions"
+      preLoaderRoute: typeof AuthenticatedPermissionsRouteImport
+      parentRoute: typeof AuthenticatedRoute
     }
-    "/_authenticated/price-lists/": {
-      id: "/_authenticated/price-lists/"
-      path: "/"
-      fullPath: "/price-lists/"
-      preLoaderRoute: typeof AuthenticatedPriceListsIndexRouteImport
-      parentRoute: typeof AuthenticatedPriceListsRoute
+    "/_authenticated/price-lists": {
+      id: "/_authenticated/price-lists"
+      path: "/price-lists"
+      fullPath: "/price-lists"
+      preLoaderRoute: typeof AuthenticatedPriceListsRouteImport
+      parentRoute: typeof AuthenticatedRoute
     }
-    "/_authenticated/permissions/": {
-      id: "/_authenticated/permissions/"
-      path: "/"
-      fullPath: "/permissions/"
-      preLoaderRoute: typeof AuthenticatedPermissionsIndexRouteImport
-      parentRoute: typeof AuthenticatedPermissionsRoute
+    "/_authenticated/usages": {
+      id: "/_authenticated/usages"
+      path: "/usages"
+      fullPath: "/usages"
+      preLoaderRoute: typeof AuthenticatedUsagesRouteImport
+      parentRoute: typeof AuthenticatedRoute
     }
-    "/_authenticated/materials/": {
-      id: "/_authenticated/materials/"
-      path: "/"
-      fullPath: "/materials/"
-      preLoaderRoute: typeof AuthenticatedMaterialsIndexRouteImport
-      parentRoute: typeof AuthenticatedMaterialsRoute
+    "/_authenticated/users": {
+      id: "/_authenticated/users"
+      path: "/users"
+      fullPath: "/users"
+      preLoaderRoute: typeof AuthenticatedUsersRouteImport
+      parentRoute: typeof AuthenticatedRoute
     }
-    "/_authenticated/machines/": {
-      id: "/_authenticated/machines/"
-      path: "/"
-      fullPath: "/machines/"
-      preLoaderRoute: typeof AuthenticatedMachinesIndexRouteImport
-      parentRoute: typeof AuthenticatedMachinesRoute
+    "/_authenticated/visits": {
+      id: "/_authenticated/visits"
+      path: "/visits"
+      fullPath: "/visits"
+      preLoaderRoute: typeof AuthenticatedVisitsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    "/_test/label-preview": {
+      id: "/_test/label-preview"
+      path: "/label-preview"
+      fullPath: "/label-preview"
+      preLoaderRoute: typeof TestLabelPreviewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    "/login_/verify": {
+      id: "/login_/verify"
+      path: "/login/verify"
+      fullPath: "/login/verify"
+      preLoaderRoute: typeof LoginVerifyRouteImport
+      parentRoute: typeof rootRouteImport
     }
     "/_authenticated/invoices/": {
       id: "/_authenticated/invoices/"
@@ -574,46 +532,39 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthenticatedInvoicesIndexRouteImport
       parentRoute: typeof AuthenticatedInvoicesRoute
     }
-    "/_authenticated/visits/$checkoutId": {
-      id: "/_authenticated/visits/$checkoutId"
-      path: "/$checkoutId"
-      fullPath: "/visits/$checkoutId"
-      preLoaderRoute: typeof AuthenticatedVisitsCheckoutIdRouteImport
-      parentRoute: typeof AuthenticatedVisitsRoute
+    "/_authenticated/invoices/$billId": {
+      id: "/_authenticated/invoices/$billId"
+      path: "/$billId"
+      fullPath: "/invoices/$billId"
+      preLoaderRoute: typeof AuthenticatedInvoicesBillIdRouteImport
+      parentRoute: typeof AuthenticatedInvoicesRoute
     }
-    "/_authenticated/users/$userId": {
-      id: "/_authenticated/users/$userId"
-      path: "/$userId"
-      fullPath: "/users/$userId"
-      preLoaderRoute: typeof AuthenticatedUsersUserIdRouteImport
-      parentRoute: typeof AuthenticatedUsersRoute
-    }
-    "/_authenticated/price-lists/$priceListId": {
-      id: "/_authenticated/price-lists/$priceListId"
-      path: "/$priceListId"
-      fullPath: "/price-lists/$priceListId"
-      preLoaderRoute: typeof AuthenticatedPriceListsPriceListIdRouteImport
-      parentRoute: typeof AuthenticatedPriceListsRoute
-    }
-    "/_authenticated/permissions/$permissionId": {
-      id: "/_authenticated/permissions/$permissionId"
-      path: "/$permissionId"
-      fullPath: "/permissions/$permissionId"
-      preLoaderRoute: typeof AuthenticatedPermissionsPermissionIdRouteImport
-      parentRoute: typeof AuthenticatedPermissionsRoute
-    }
-    "/_authenticated/materials/labels": {
-      id: "/_authenticated/materials/labels"
-      path: "/labels"
-      fullPath: "/materials/labels"
-      preLoaderRoute: typeof AuthenticatedMaterialsLabelsRouteImport
-      parentRoute: typeof AuthenticatedMaterialsRoute
-    }
-    "/_authenticated/materials/import": {
-      id: "/_authenticated/materials/import"
+    "/_authenticated/invoices/import": {
+      id: "/_authenticated/invoices/import"
       path: "/import"
-      fullPath: "/materials/import"
-      preLoaderRoute: typeof AuthenticatedMaterialsImportRouteImport
+      fullPath: "/invoices/import"
+      preLoaderRoute: typeof AuthenticatedInvoicesImportRouteImport
+      parentRoute: typeof AuthenticatedInvoicesRoute
+    }
+    "/_authenticated/machines/": {
+      id: "/_authenticated/machines/"
+      path: "/"
+      fullPath: "/machines/"
+      preLoaderRoute: typeof AuthenticatedMachinesIndexRouteImport
+      parentRoute: typeof AuthenticatedMachinesRoute
+    }
+    "/_authenticated/machines/$machineId": {
+      id: "/_authenticated/machines/$machineId"
+      path: "/$machineId"
+      fullPath: "/machines/$machineId"
+      preLoaderRoute: typeof AuthenticatedMachinesMachineIdRouteImport
+      parentRoute: typeof AuthenticatedMachinesRoute
+    }
+    "/_authenticated/materials/": {
+      id: "/_authenticated/materials/"
+      path: "/"
+      fullPath: "/materials/"
+      preLoaderRoute: typeof AuthenticatedMaterialsIndexRouteImport
       parentRoute: typeof AuthenticatedMaterialsRoute
     }
     "/_authenticated/materials/$materialId": {
@@ -623,26 +574,75 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthenticatedMaterialsMaterialIdRouteImport
       parentRoute: typeof AuthenticatedMaterialsRoute
     }
-    "/_authenticated/machines/$machineId": {
-      id: "/_authenticated/machines/$machineId"
-      path: "/$machineId"
-      fullPath: "/machines/$machineId"
-      preLoaderRoute: typeof AuthenticatedMachinesMachineIdRouteImport
-      parentRoute: typeof AuthenticatedMachinesRoute
-    }
-    "/_authenticated/invoices/import": {
-      id: "/_authenticated/invoices/import"
+    "/_authenticated/materials/import": {
+      id: "/_authenticated/materials/import"
       path: "/import"
-      fullPath: "/invoices/import"
-      preLoaderRoute: typeof AuthenticatedInvoicesImportRouteImport
-      parentRoute: typeof AuthenticatedInvoicesRoute
+      fullPath: "/materials/import"
+      preLoaderRoute: typeof AuthenticatedMaterialsImportRouteImport
+      parentRoute: typeof AuthenticatedMaterialsRoute
     }
-    "/_authenticated/invoices/$billId": {
-      id: "/_authenticated/invoices/$billId"
-      path: "/$billId"
-      fullPath: "/invoices/$billId"
-      preLoaderRoute: typeof AuthenticatedInvoicesBillIdRouteImport
-      parentRoute: typeof AuthenticatedInvoicesRoute
+    "/_authenticated/materials/labels": {
+      id: "/_authenticated/materials/labels"
+      path: "/labels"
+      fullPath: "/materials/labels"
+      preLoaderRoute: typeof AuthenticatedMaterialsLabelsRouteImport
+      parentRoute: typeof AuthenticatedMaterialsRoute
+    }
+    "/_authenticated/permissions/": {
+      id: "/_authenticated/permissions/"
+      path: "/"
+      fullPath: "/permissions/"
+      preLoaderRoute: typeof AuthenticatedPermissionsIndexRouteImport
+      parentRoute: typeof AuthenticatedPermissionsRoute
+    }
+    "/_authenticated/permissions/$permissionId": {
+      id: "/_authenticated/permissions/$permissionId"
+      path: "/$permissionId"
+      fullPath: "/permissions/$permissionId"
+      preLoaderRoute: typeof AuthenticatedPermissionsPermissionIdRouteImport
+      parentRoute: typeof AuthenticatedPermissionsRoute
+    }
+    "/_authenticated/price-lists/": {
+      id: "/_authenticated/price-lists/"
+      path: "/"
+      fullPath: "/price-lists/"
+      preLoaderRoute: typeof AuthenticatedPriceListsIndexRouteImport
+      parentRoute: typeof AuthenticatedPriceListsRoute
+    }
+    "/_authenticated/price-lists/$priceListId": {
+      id: "/_authenticated/price-lists/$priceListId"
+      path: "/$priceListId"
+      fullPath: "/price-lists/$priceListId"
+      preLoaderRoute: typeof AuthenticatedPriceListsPriceListIdRouteImport
+      parentRoute: typeof AuthenticatedPriceListsRoute
+    }
+    "/_authenticated/users/": {
+      id: "/_authenticated/users/"
+      path: "/"
+      fullPath: "/users/"
+      preLoaderRoute: typeof AuthenticatedUsersIndexRouteImport
+      parentRoute: typeof AuthenticatedUsersRoute
+    }
+    "/_authenticated/users/$userId": {
+      id: "/_authenticated/users/$userId"
+      path: "/$userId"
+      fullPath: "/users/$userId"
+      preLoaderRoute: typeof AuthenticatedUsersUserIdRouteImport
+      parentRoute: typeof AuthenticatedUsersRoute
+    }
+    "/_authenticated/visits/": {
+      id: "/_authenticated/visits/"
+      path: "/"
+      fullPath: "/visits/"
+      preLoaderRoute: typeof AuthenticatedVisitsIndexRouteImport
+      parentRoute: typeof AuthenticatedVisitsRoute
+    }
+    "/_authenticated/visits/$checkoutId": {
+      id: "/_authenticated/visits/$checkoutId"
+      path: "/$checkoutId"
+      fullPath: "/visits/$checkoutId"
+      preLoaderRoute: typeof AuthenticatedVisitsCheckoutIdRouteImport
+      parentRoute: typeof AuthenticatedVisitsRoute
     }
   }
 }
