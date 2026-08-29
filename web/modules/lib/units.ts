@@ -324,10 +324,31 @@ export function formatPricePerCount(
 }
 
 // ---------------------------------------------------------------------------
-// Internal helpers used by pricing-calc.ts to convert raw form inputs (cm,
-// g, ml) into the stored base unit. Kept here so the storage convention
-// table above stays the only source of truth.
+// Base-unit helpers: convert raw form inputs (cm, g, ml) into the stored base
+// unit, and round what gets written. Kept here so the storage convention table
+// above stays the only source of truth.
 // ---------------------------------------------------------------------------
+
+/**
+ * Round a base-unit quantity to a scale worth storing.
+ *
+ * Every derived quantity is a float product or quotient, so it carries IEEE
+ * noise: a sheet measured 107 cm × 24 cm gives `1.07 * 0.24 =
+ * 0.25680000000000003`, and "31min" of machine time gives `31/60 =
+ * 0.5166666666666667`. The workshop enters whole cm/g/ml/min, so nothing
+ * real needs more than four decimals in the base unit — six is generous.
+ *
+ * This is not cosmetic. The stats export (ADR-0039) writes `quantity` into a
+ * BigQuery NUMERIC column, which holds at most nine fractional digits and —
+ * because `insertAll` defaults to `skipInvalidRows: false` — fails the ENTIRE
+ * batch on one offending row. On 2026-08-28 a single plywood cut wedged the
+ * nightly export: the watermark never advanced, so every subsequent run
+ * failed identically. `stats/sink.ts` clamps as a backstop, but the value
+ * should not be written with the garbage in the first place.
+ */
+export function roundBaseQuantity(n: number): number {
+  return Math.round(n * 1e6) / 1e6
+}
 
 /** cm → m */
 export function cmToMeters(cm: number): number {

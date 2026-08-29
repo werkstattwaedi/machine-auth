@@ -321,6 +321,34 @@ describe("WorkshopInlineSection v5", () => {
     })
   })
 
+  // The stored quantity is rounded (31/60 = 0.5166666666666667 h would break
+  // the BigQuery NUMERIC stats export), so commitPinned's "nothing changed"
+  // guard has to compare the ROUNDED parse against what was committed. When it
+  // compared the raw parse instead, every blur of an untouched field looked
+  // like an edit and re-fired updateItem.
+  it("does not re-commit an unchanged pinned hourly field on blur", async () => {
+    const user = userEvent.setup()
+    const { callbacks } = renderSection({
+      items: [
+        makeItem({
+          id: "h-1",
+          origin: "manual",
+          type: "machine",
+          catalogId: "cat-hourly",
+          pricingModel: "time",
+          quantity: 0.516667, // 31 min, rounded as it is stored
+          unitPrice: 10,
+          totalPrice: 5.17,
+          description: "Drechselbank",
+        }),
+      ],
+      pinnedCatalog: [makeHourlyMachine()],
+    })
+    await user.click(screen.getByLabelText("Stunden Drechselbank"))
+    await user.tab()
+    expect(callbacks.updateItem).not.toHaveBeenCalled()
+  })
+
   it("pinned hourly machine flags an unknown unit inline instead of committing", async () => {
     const user = userEvent.setup()
     const { callbacks } = renderSection({ pinnedCatalog: [makeHourlyMachine()] })
@@ -925,6 +953,25 @@ describe("MaterialPicker", () => {
       quantity: 2,
       totalPrice: 50,
     })
+  })
+
+  // Regression net for the 2026-08-28 stats-export outage: 1.07 * 0.24 =
+  // 0.25680000000000003 in IEEE doubles. Stored unrounded it exceeds BigQuery
+  // NUMERIC's 9-digit scale, and because insertAll defaults to
+  // skipInvalidRows:false one such row failed the ENTIRE nightly batch —
+  // freezing the export watermark so every following run failed identically.
+  it("stores an area quantity free of float noise", async () => {
+    const user = userEvent.setup()
+    const callbacks = makeCallbacks()
+    renderPicker({ callbacks })
+    await user.click(screen.getByText("MDF Platte 3mm"))
+    await user.type(screen.getByLabelText("Länge"), "107")
+    await user.type(screen.getByLabelText("Breite"), "24")
+    await user.click(screen.getByRole("button", { name: "Hinzufügen" }))
+    const added = callbacks.addItem.mock.calls[0][0]
+    expect(added.quantity).toBe(0.2568)
+    // What the Firestore write — and therefore BigQuery — actually receives.
+    expect(JSON.stringify(added.quantity)).toBe("0.2568")
   })
 
   it("uses the member-discounted unit price", async () => {

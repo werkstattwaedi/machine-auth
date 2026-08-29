@@ -12,7 +12,7 @@ import { Collapsible, VisuallyHidden } from "radix-ui"
 import { Label } from "@modules/components/ui/label"
 import { useIsMobile } from "@modules/hooks/use-mobile"
 import { formatCHF } from "@modules/lib/format"
-import { formatPricePerCount } from "@modules/lib/units"
+import { formatPricePerCount, roundBaseQuantity } from "@modules/lib/units"
 import { ChevronRight, ScanLine, Search, X } from "lucide-react"
 import { QrScannerSheet } from "@/components/qr-scanner/qr-scanner-sheet"
 import { useCanScanQr } from "@/components/qr-scanner/use-can-scan-qr"
@@ -1018,7 +1018,7 @@ function SimpleForm({
           onAdd({
             ...baseItem,
             id: crypto.randomUUID(),
-            quantity: baseQty,
+            quantity: roundBaseQuantity(baseQty),
             totalPrice: total,
             formInputs: [{ quantity: formInputQty, unit: displayUnit }],
           })
@@ -1090,7 +1090,7 @@ function AreaForm({
           onAdd({
             ...baseItem,
             id: crypto.randomUUID(),
-            quantity: m2,
+            quantity: roundBaseQuantity(m2),
             totalPrice: total,
             formInputs: [
               { quantity: lengthCm, unit: "cm" },
@@ -1151,7 +1151,7 @@ function LengthForm({
           onAdd({
             ...baseItem,
             id: crypto.randomUUID(),
-            quantity: meters,
+            quantity: roundBaseQuantity(meters),
             totalPrice: total,
             formInputs: [{ quantity: lengthCm, unit: "cm" }],
           })
@@ -1543,7 +1543,7 @@ function AdHocCountWeightTimeForm({
           onAdd({
             ...baseItem,
             id: crypto.randomUUID(),
-            quantity: baseQty,
+            quantity: roundBaseQuantity(baseQty),
             unitPrice,
             totalPrice: total,
             formInputs: [{ quantity: formInputQty, unit: displayUnit }],
@@ -1629,7 +1629,7 @@ function AdHocAreaForm({
           onAdd({
             ...baseItem,
             id: crypto.randomUUID(),
-            quantity: m2,
+            quantity: roundBaseQuantity(m2),
             unitPrice,
             totalPrice: total,
             formInputs: [
@@ -1699,7 +1699,7 @@ function AdHocLengthForm({
           onAdd({
             ...baseItem,
             id: crypto.randomUUID(),
-            quantity: meters,
+            quantity: roundBaseQuantity(meters),
             unitPrice,
             totalPrice: total,
             formInputs: [{ quantity: lengthCm, unit: "cm" }],

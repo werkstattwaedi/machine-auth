@@ -7,6 +7,7 @@ import {
   cmToMeters,
   gramsToKg,
   mlToLiters,
+  roundBaseQuantity,
 } from "./units"
 
 export interface PricingResult {
@@ -38,7 +39,7 @@ export function computePricing(
   if (pricingModel === "area") {
     const l = raw.lengthCm ?? 0
     const w = raw.widthCm ?? 0
-    quantity = cmDimensionsToSquareMeters(l, w)
+    quantity = roundBaseQuantity(cmDimensionsToSquareMeters(l, w))
     totalPrice = quantity * unitPrice
     formInputs = [
       { quantity: l, unit: "cm" },
@@ -46,12 +47,12 @@ export function computePricing(
     ]
   } else if (pricingModel === "length") {
     const l = raw.lengthCm ?? 0
-    quantity = cmToMeters(l)
+    quantity = roundBaseQuantity(cmToMeters(l))
     totalPrice = quantity * unitPrice
     formInputs = [{ quantity: l, unit: "cm" }]
   } else if (pricingModel === "weight") {
     const g = raw.weightG ?? 0
-    quantity = gramsToKg(g)
+    quantity = roundBaseQuantity(gramsToKg(g))
     totalPrice = quantity * unitPrice
     formInputs = [{ quantity: g, unit: "g" }]
   } else if (pricingModel === "direct") {

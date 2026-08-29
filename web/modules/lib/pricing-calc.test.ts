@@ -28,6 +28,15 @@ describe("computePricing", () => {
       expect(result.quantity).toBe(0)
       expect(result.totalPrice).toBe(0)
     })
+
+    it("rounds float noise out of the derived quantity", () => {
+      const result = computePricing("area", 56.55, {
+        lengthCm: 107,
+        widthCm: 24,
+      })
+      expect(result.quantity).toBe(0.2568)
+      expect(result.totalPrice).toBe(14.52)
+    })
   })
 
   describe("length pricing", () => {

@@ -25,7 +25,11 @@ import {
   type PricingModel,
 } from "@modules/lib/workshop-config"
 import { isMachineItem, priceForTier, type ItemType } from "@oww/shared"
-import { parseQuantity, formatQuantity } from "@modules/lib/units"
+import {
+  parseQuantity,
+  formatQuantity,
+  roundBaseQuantity,
+} from "@modules/lib/units"
 import { ErrorBadge } from "@/components/checkout/field-error"
 import { PositionTable, type PositionRow, rowFromItem } from "./position-table"
 
@@ -441,16 +445,22 @@ export function WorkshopInlineSection({
       setPinnedText((p) => ({ ...p, [cat.id]: "" }))
       return
     }
+    // "31min" parses to 31/60 = 0.5166666666666667 hours — round the float
+    // noise off before it is stored (see roundBaseQuantity). The no-op guard
+    // below compares this SAME rounded value against what was committed:
+    // comparing the raw parse would make every blur of an unchanged field
+    // look like an edit and re-fire updateItem.
+    const hours = roundBaseQuantity(value)
     const priced = direct
       ? { quantity: 1, unitPrice: total, totalPrice: total }
       : {
-          quantity: value,
+          quantity: hours,
           unitPrice,
           totalPrice: total,
-          formInputs: [{ quantity: value, unit: "h" }],
+          formInputs: [{ quantity: hours, unit: "h" }],
         }
     if (existing) {
-      if (direct ? existing.totalPrice === total : existing.quantity === value) {
+      if (direct ? existing.totalPrice === total : existing.quantity === hours) {
         return
       }
       callbacks.updateItem(existing.id, { ...existing, ...priced })

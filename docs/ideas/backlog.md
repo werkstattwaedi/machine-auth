@@ -94,6 +94,35 @@ path (so a human still sees the counts) are missing.
 
 ---
 
+### Alert on a stalled stats-export watermark
+**Status:** 💡 Idea
+
+**Context:** On 2026-08-28 `dailyStatsExport` failed on a single BigQuery row
+and, because the watermark only advances after a successful insert, every
+following nightly run failed identically. Nothing noticed: the run does emit an
+ERROR (so the `Cloud Functions error logs` policy fires), but that policy
+auto-closes after 24h and a repeating nightly failure looks like one recurring
+alert rather than "statistics have been frozen for N days". The specific row
+shape is fixed, but the *stuck* mode is generic — any future single-row
+rejection wedges the export the same way.
+
+**Notes:**
+- Cheap version: a scheduled check that reads `export_state/*` and warns when
+  any stream's `updatedAt` is older than ~36h. Catches the stall regardless of
+  what caused it, including a silent one.
+- Streams run sequentially in `runStatsExport`, so a failure in the first
+  stream (`visits`) also starves `machine_usage`, `bills` and
+  `membership_snapshots` — the check should look at every stream, not just one.
+- Worth deciding at the same time whether a stream failure should abort the
+  whole run or let the remaining streams proceed. Aborting is the current
+  (deliberate) fail-fast; the cost is that one bad row freezes all four.
+
+**Related:** ADR-0039, `functions/src/stats/export_job.ts`, the
+`Cloud Functions error logs` alert policy and `dailyLogDigest`
+(`functions/src/util/log_digest.ts`)
+
+---
+
 ### Session Debug Viewer (Admin UI)
 **Status:** 📋 Planned
 

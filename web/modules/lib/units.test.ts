@@ -13,6 +13,7 @@ import {
   gramsToKg,
   mlToLiters,
   cmDimensionsToSquareMeters,
+  roundBaseQuantity,
   type BaseUnit,
 } from "./units"
 
@@ -227,6 +228,16 @@ describe("conversion helpers", () => {
   it("mlToLiters", () => {
     expect(mlToLiters(250)).toBe(0.25)
   })
+  it("roundBaseQuantity strips IEEE noise from derived quantities", () => {
+    // The 2026-08-28 stats-export outage: 107 cm × 24 cm.
+    expect(roundBaseQuantity(cmDimensionsToSquareMeters(107, 24))).toBe(0.2568)
+    // 31 minutes of machine time as hours.
+    expect(roundBaseQuantity(31 / 60)).toBe(0.516667)
+    // Exact values are left alone.
+    expect(roundBaseQuantity(0.5)).toBe(0.5)
+    expect(roundBaseQuantity(0)).toBe(0)
+  })
+
   it("cmDimensionsToSquareMeters", () => {
     expect(cmDimensionsToSquareMeters(200, 50)).toBe(1)
   })
