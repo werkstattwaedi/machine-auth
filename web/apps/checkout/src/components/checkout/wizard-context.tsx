@@ -328,9 +328,15 @@ export function WizardProvider({
   const openCheckout = openCheckouts[0] ?? null
   const checkoutId = openCheckout?.id ?? null
 
-  // Load checkout items
+  // Load checkout items. Held back while a checkout create is still in
+  // flight — see useCheckoutCreateLatch for why opening the listener any
+  // earlier gets it refused.
+  const { inFlight: checkoutCreateInFlight, run: runCheckoutCreate } =
+    useCheckoutCreateLatch()
   const { data: checkoutItems } = useCollection(
-    checkoutId ? checkoutItemsCollection(db, checkoutId) : null,
+    checkoutId && !checkoutCreateInFlight
+      ? checkoutItemsCollection(db, checkoutId)
+      : null,
     orderBy("created"),
   )
 
@@ -555,17 +561,20 @@ export function WizardProvider({
       } else {
         setPendingCheckout(true)
         const callerUid = auth?.currentUser?.uid ?? null
-        await fsMutation.add(checkoutsCollection(db), {
-          userId: identifiedUserRef ?? null,
-          status: "open",
-          usageType,
-          created: serverTimestamp() as unknown as CheckoutDoc["created"],
-          workshopsVisited: [],
-          persons: personDocs,
-          modifiedBy: callerUid,
-          modifiedAt: serverTimestamp() as unknown as CheckoutDoc["modifiedAt"],
-          firebaseUid: callerUid,
-        } as unknown as CheckoutDoc)
+        await runCheckoutCreate(() =>
+          fsMutation.add(checkoutsCollection(db), {
+            userId: identifiedUserRef ?? null,
+            status: "open",
+            usageType,
+            created: serverTimestamp() as unknown as CheckoutDoc["created"],
+            workshopsVisited: [],
+            persons: personDocs,
+            modifiedBy: callerUid,
+            modifiedAt:
+              serverTimestamp() as unknown as CheckoutDoc["modifiedAt"],
+            firebaseUid: callerUid,
+          } as unknown as CheckoutDoc),
+        )
       }
     } catch (err) {
       // Hook already toasted + telemetered. Clear the latch and re-throw so
@@ -574,7 +583,16 @@ export function WizardProvider({
       setPendingCheckout(false)
       throw err
     }
-  }, [persons, usageType, openCheckout, fsMutation, db, identifiedUserRef, auth])
+  }, [
+    persons,
+    usageType,
+    openCheckout,
+    fsMutation,
+    db,
+    identifiedUserRef,
+    auth,
+    runCheckoutCreate,
+  ])
 
   // Workshop attribution policy for non-workshop picker scopes.
   const visitedWorkshopSet = useMemo(() => {
@@ -600,6 +618,13 @@ export function WizardProvider({
 
   // Item callbacks (shared with picker sub-routes).
   const workshopsVisitedKey = openCheckout?.workshopsVisited?.join(",") ?? ""
+  // A burst of adds on an empty cart (double-tap, a manual add racing a badge
+  // auto-add) must not mint one checkout per call. The first call owns the
+  // create; calls arriving before it resolves attach to the same write.
+  const checkoutCreateRef = useRef<{
+    promise: Promise<DocumentReference<CheckoutDoc>>
+    workshop: string
+  } | null>(null)
   const addItem = useCallback(
     async (item: CheckoutItemLocal) => {
       try {
@@ -608,19 +633,35 @@ export function WizardProvider({
           const visited = openCheckout?.workshopsVisited ?? []
           const workshopIsNew = !visited.includes(item.workshop)
           const callerUid = auth?.currentUser?.uid ?? null
-          if (!coId) {
-            const coRef = await add(checkoutsCollection(db), {
-              userId: identifiedUserRef ?? null,
-              status: "open",
-              usageType,
-              created: serverTimestamp(),
-              workshopsVisited: [item.workshop],
-              persons: persons.map((p) => personLocalToDoc(p, db)),
-              modifiedBy: callerUid,
-              modifiedAt: serverTimestamp(),
-              firebaseUid: callerUid,
-            })
-            coId = coRef.id
+          if (!coId && checkoutCreateRef.current) {
+            const owner = checkoutCreateRef.current
+            coId = (await owner.promise).id
+            // The owner stamped only its own workshop at create time.
+            if (item.workshop !== owner.workshop) {
+              await update(checkoutRef(db, coId), {
+                workshopsVisited: arrayUnion(item.workshop),
+              })
+            }
+          } else if (!coId) {
+            const promise = runCheckoutCreate(() =>
+              add(checkoutsCollection(db), {
+                userId: identifiedUserRef ?? null,
+                status: "open",
+                usageType,
+                created: serverTimestamp(),
+                workshopsVisited: [item.workshop],
+                persons: persons.map((p) => personLocalToDoc(p, db)),
+                modifiedBy: callerUid,
+                modifiedAt: serverTimestamp(),
+                firebaseUid: callerUid,
+              }),
+            )
+            checkoutCreateRef.current = { promise, workshop: item.workshop }
+            try {
+              coId = (await promise).id
+            } finally {
+              checkoutCreateRef.current = null
+            }
           } else if (workshopIsNew) {
             await update(checkoutRef(db, coId), {
               workshopsVisited: arrayUnion(item.workshop),
@@ -645,7 +686,14 @@ export function WizardProvider({
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [checkoutId, identifiedUserRef, usageType, auth, workshopsVisitedKey],
+    [
+      checkoutId,
+      identifiedUserRef,
+      usageType,
+      auth,
+      workshopsVisitedKey,
+      runCheckoutCreate,
+    ],
   )
 
   const updateItem = useCallback(
@@ -1066,6 +1114,37 @@ export function buildFamilyCandidates({
     candidates.unshift(self)
   }
   return candidates
+}
+
+/**
+ * Latches "a checkout create is in flight" from the moment the write is
+ * issued until the server acknowledges it. The provider holds the items
+ * subscription while the latch is set.
+ *
+ * Why: Firestore's latency compensation surfaces a freshly-created checkout
+ * to the open-checkout query immediately, before the create has committed.
+ * The `checkouts/{id}/items` read rule does a `get()` on the parent, so a
+ * listener that reaches the server in that window finds no parent and is
+ * refused with permission-denied. Listener errors are terminal in the SDK:
+ * every later item write still lands (writes are sequenced after the ack),
+ * but the cart stays blank until a reload re-subscribes. The emulator
+ * commits fast enough that this only ever shows up against real Firestore
+ * (staging, 2026-09-02).
+ */
+export function useCheckoutCreateLatch() {
+  // A count, not a flag: overlapping creates must each hold the latch until
+  // their own ack, or the first to land would reopen the listener while the
+  // second is still uncommitted.
+  const [pending, setPending] = useState(0)
+  const run = useCallback(async <T,>(create: () => Promise<T>): Promise<T> => {
+    setPending((n) => n + 1)
+    try {
+      return await create()
+    } finally {
+      setPending((n) => n - 1)
+    }
+  }, [])
+  return { inFlight: pending > 0, run }
 }
 
 /**

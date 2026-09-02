@@ -20,10 +20,9 @@ import {
   type QueryConstraint,
   type Unsubscribe,
 } from "firebase/firestore"
-import { getFunctions, httpsCallable, type Functions } from "firebase/functions"
-import { useDb } from "./firebase-context"
+import { httpsCallable, type Functions } from "firebase/functions"
+import { useDb, useFunctions } from "./firebase-context"
 import { getClientSessionId } from "./client-session"
-import type { FirebaseApp } from "firebase/app"
 
 interface UseCollectionResult<T> {
   data: (T & { id: string })[]
@@ -51,6 +50,12 @@ interface FirestoreQueryError {
 // Fire-and-forget: log an error to console and to Cloud Logging via the
 // logClientError callable. Never throws — a failure here must not trigger
 // another error callback.
+//
+// `functions` must be the region-configured instance from context. A bare
+// `getFunctions(app)` targets us-central1, where nothing is deployed, so
+// the report 404s and is swallowed — listener errors then never reach
+// Cloud Logging at all (which is how the create-then-listen race on
+// checkout items went unlogged in production).
 function reportQueryError(
   functions: Functions,
   path: string,
@@ -91,10 +96,6 @@ function reportQueryError(
   }
 }
 
-function functionsForDb(db: { app: FirebaseApp }): Functions {
-  return getFunctions(db.app)
-}
-
 /**
  * Some refs/queries don't expose `.path` directly (e.g. queries built by
  * `query(collectionRef, ...constraints)` only carry the path on their
@@ -131,6 +132,7 @@ export function useCollection<T = DocumentData>(
   ...constraints: QueryConstraint[]
 ): UseCollectionResult<T> {
   const db = useDb()
+  const functions = useFunctions()
   const [data, setData] = useState<(T & { id: string })[]>([])
   const [loading, setLoading] = useState(!!refOrQuery)
   const [error, setError] = useState<Error | null>(null)
@@ -179,11 +181,7 @@ export function useCollection<T = DocumentData>(
           setReportedPath(path)
         },
         (err) => {
-          reportQueryError(
-            functionsForDb(db),
-            path,
-            err as FirestoreQueryError,
-          )
+          reportQueryError(functions, path, err as FirestoreQueryError)
           setError(err)
           setLoading(false)
           setReportedPath(path)
@@ -195,10 +193,10 @@ export function useCollection<T = DocumentData>(
       clearTimeout(timer)
       unsub?.()
     }
-    // Re-subscribe only when path or db changes. See comment above on
+    // Re-subscribe only when path, db or functions change. See comment above on
     // constraints stability per call site.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path, db])
+  }, [path, db, functions])
 
   // Report loading while the held snapshot belongs to a different path than
   // the one currently requested (a re-subscription is pending). Closes the
@@ -216,6 +214,7 @@ export function useDocument<T = DocumentData>(
   ref: DocumentReference<T> | null,
 ): UseDocumentResult<T> {
   const db = useDb()
+  const functions = useFunctions()
   const [data, setData] = useState<(T & { id: string }) | null>(null)
   const [loading, setLoading] = useState(!!ref)
   const [error, setError] = useState<Error | null>(null)
@@ -254,11 +253,7 @@ export function useDocument<T = DocumentData>(
           setReportedPath(path)
         },
         (err) => {
-          reportQueryError(
-            functionsForDb(db),
-            path,
-            err as FirestoreQueryError,
-          )
+          reportQueryError(functions, path, err as FirestoreQueryError)
           setError(err)
           setLoading(false)
           setReportedPath(path)
@@ -271,7 +266,7 @@ export function useDocument<T = DocumentData>(
       unsub?.()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path, db])
+  }, [path, db, functions])
 
   // See useCollection: report loading while the held snapshot belongs to a
   // different path than the one requested (re-subscription pending).
