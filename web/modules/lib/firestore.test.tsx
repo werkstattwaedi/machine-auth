@@ -18,9 +18,16 @@ const mockLogClientErrorCallable = vi.fn().mockResolvedValue({ data: { ok: true 
 const mockHttpsCallable = vi.fn().mockReturnValue(mockLogClientErrorCallable)
 
 vi.mock("firebase/functions", () => ({
-  getFunctions: () => ({}),
   httpsCallable: (...args: unknown[]) => mockHttpsCallable(...args),
 }))
+
+// Sentinel for the region-configured Functions instance the app puts in
+// context. The hooks must report through THIS instance: a bare
+// getFunctions(app) targets us-central1, where nothing is deployed, so the
+// report would be dropped silently.
+const providedFunctions = {
+  region: "europe-west6",
+} as unknown as FirebaseServices["functions"]
 
 /**
  * The real useCollection/useDocument hooks call `onSnapshot` and (for
@@ -104,7 +111,7 @@ function createWrapper() {
   const services: FirebaseServices = {
     db: { app: {} } as unknown as FirebaseServices["db"], // placeholder — hooks use mocked SDK
     auth: {} as FirebaseServices["auth"],
-    functions: {} as FirebaseServices["functions"],
+    functions: providedFunctions,
   }
   return ({ children }: { children: ReactNode }) => (
     <FirebaseProvider value={services}>{children}</FirebaseProvider>
@@ -280,9 +287,10 @@ describe("useCollection", () => {
     expect(details.sessionId).toMatch(/^[0-9a-z]{8}$/)
     expect(details.message).toBe("Missing or insufficient permissions.")
 
-    // httpsCallable was wired up for logClientError and invoked once.
+    // httpsCallable was wired up for logClientError on the context's
+    // region-configured instance and invoked once.
     expect(mockHttpsCallable).toHaveBeenCalledWith(
-      expect.anything(),
+      providedFunctions,
       "logClientError",
     )
     expect(mockLogClientErrorCallable).toHaveBeenCalledTimes(1)

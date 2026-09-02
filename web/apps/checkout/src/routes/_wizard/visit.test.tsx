@@ -37,7 +37,10 @@ vi.mock("@tanstack/react-router", () => ({
 // render and loop. Production's context db is stable; mirror that here.
 vi.mock("@modules/lib/firebase-context", () => {
   const db = {}
-  return { useDb: () => db }
+  // useCollection/useDocument report listener errors through the context's
+  // region-configured Functions instance, so the mock has to provide one.
+  const functions = {}
+  return { useDb: () => db, useFunctions: () => functions }
 })
 vi.mock("@modules/hooks/use-firestore-mutation", () => ({
   useFirestoreMutation: () => ({ update: vi.fn(), remove: vi.fn() }),
