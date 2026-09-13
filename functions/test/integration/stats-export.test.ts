@@ -326,6 +326,23 @@ describe("stats export (integration)", function () {
       expect(third.pending_flush.exported).to.equal(0);
     });
 
+    it("does not double-export a same-day replacement still ahead of the watermark", async () => {
+      await seedUserWithMembership("u1")
+      // A replacement whose closedAt the watermark has NOT passed yet, carrying the sentinel.
+      await seedClosedCheckout("co-new", { uid: "u1", closedAt: ts("2026-07-18T15:30:00Z"), items: 1 })
+      await db.doc("checkouts/co-new").update({ statsFlushedAt: null })
+      const sink = new InMemorySink()
+      const summary = await runStatsExport(NOW, deps(sink))
+      expect(summary.visits.exported).to.equal(0)
+      expect(summary.pending_flush.exported).to.equal(1)
+      expect(sink.tableRows("visits").filter((r) => r.doc_id === "co-new")).to.have.length(1)
+      expect(
+        sink.tableRows("visit_items").filter((r) => (r.doc_id as string).startsWith("co-new/")),
+      ).to.have.length(1)
+      // The watermark advanced over it regardless.
+      expect((await runStatsExport(NOW, deps(sink))).visits.exported).to.equal(0)
+    })
+
     it("dry run emits the rows but never stamps statsFlushedAt", async () => {
       await seedUserWithMembership("u1");
       await seedClosedCheckout("co-x", { uid: "u1", closedAt: ts("2026-07-10T15:30:00Z") });

@@ -222,13 +222,20 @@ async function exportTimestampStream(
   if (snap.empty) {
     return { exported: 0, drained: true };
   }
-  await stream.insert(deps, snap.docs, ctx, memberCache);
+  // Docs carrying `statsFlushedAt` (null or set) belong to the correction
+  // flush pass (ADR-0041): a same-day replacement is still ahead of the
+  // watermark and would otherwise be emitted by both passes in one run.
+  // The watermark still advances over them.
+  const owned = snap.docs.filter((d) => d.get("statsFlushedAt") === undefined);
+  if (owned.length > 0) {
+    await stream.insert(deps, owned, ctx, memberCache);
+  }
   const last = snap.docs[snap.docs.length - 1];
   await store.advance(stream.name, {
     watermark: last.get(stream.ageField) as Timestamp,
     lastDocId: last.id,
   });
-  return { exported: snap.size, drained: snap.size < batchSize };
+  return { exported: owned.length, drained: snap.size < batchSize };
 }
 
 /**
