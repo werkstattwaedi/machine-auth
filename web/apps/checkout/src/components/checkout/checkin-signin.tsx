@@ -39,15 +39,9 @@
  * signed-in "Deine Angaben" view instead.
  */
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { ArrowRight, Loader2 } from "lucide-react"
-import {
-  RecaptchaVerifier,
-  signInWithPhoneNumber,
-  signOut as firebaseSignOut,
-  type ConfirmationResult,
-} from "firebase/auth"
 import { useAuth, type SignupProfile } from "@modules/lib/auth"
 import { useFunctions, useFirebaseAuth } from "@modules/lib/firebase-context"
 import { parseSwissPhone } from "@modules/lib/phone"
@@ -76,6 +70,7 @@ import {
 } from "@modules/components/ui/dialog"
 import { Button } from "@modules/components/ui/button"
 import { CodeEntryDialog, messageFromError } from "./code-entry-dialog"
+import { useKioskSms } from "./use-kiosk-sms"
 
 /** Channel the typed identifier routes to. `sms` needs the smsEnabled flag. */
 export type LoginChannel = "email" | "sms"
@@ -121,6 +116,8 @@ interface VerifyLoginCodeKioskResponse {
   email?: string
   userType?: string
   activeMembership?: boolean
+  /** Code sign-ins are OTP-elevated at mint (ADR-0041). */
+  elevatedUntil?: number | null
 }
 
 interface SignupKioskResponse extends VerifyLoginCodeKioskResponse {
@@ -140,15 +137,6 @@ type Stage =
  */
 const SMS_LOGIN_ENABLED = import.meta.env.VITE_SMS_LOGIN_ENABLED === "true"
 
-interface ExchangeKioskSessionResponse {
-  customToken: string
-  userId: string
-  firstName?: string
-  lastName?: string
-  email?: string
-  userType?: string
-  activeMembership?: boolean
-}
 
 export interface CheckinSigninProps {
   kiosk: boolean
@@ -188,20 +176,9 @@ export function CheckinSignin({
   const [showLinkHint, setShowLinkHint] = useState(false)
   const [busy, setBusy] = useState(false)
 
-  // Firebase phone-auth handles (SMS channel). The ConfirmationResult from
-  // signInWithPhoneNumber is what confirms the typed code; the invisible
-  // reCAPTCHA verifier is single-use, so it's recreated per send inside a
-  // stable container div.
-  const confirmationRef = useRef<ConfirmationResult | null>(null)
-  const recaptchaHostRef = useRef<HTMLDivElement | null>(null)
-  const verifierRef = useRef<RecaptchaVerifier | null>(null)
-  useEffect(
-    () => () => {
-      verifierRef.current?.clear()
-      verifierRef.current = null
-    },
-    [],
-  )
+  // Firebase phone-auth plumbing (SMS channel) — shared with the kiosk
+  // step-up dialog (ADR-0041), see useKioskSms.
+  const sms = useKioskSms()
 
   const channel = detectChannel(identifier, smsEnabled)
 
@@ -210,21 +187,7 @@ export function CheckinSignin({
     setIdentifier("")
     setFieldError(null)
     setBusy(false)
-    confirmationRef.current = null
-  }
-
-  /** Fresh invisible reCAPTCHA for each SMS send (a verifier is consumed by
-   *  one signInWithPhoneNumber call). In the emulator the challenge is
-   *  bypassed via appVerificationDisabledForTesting (firebase.ts). */
-  const newRecaptchaVerifier = (): RecaptchaVerifier => {
-    verifierRef.current?.clear()
-    const host = recaptchaHostRef.current
-    if (!host) throw new Error("reCAPTCHA host not mounted")
-    const slot = document.createElement("div")
-    host.replaceChildren(slot)
-    const verifier = new RecaptchaVerifier(auth, slot, { size: "invisible" })
-    verifierRef.current = verifier
-    return verifier
+    sms.clear()
   }
 
   /** Look up the (verified, auth-linked) phone account and send the SMS.
@@ -248,11 +211,7 @@ export function CheckinSignin({
       )
       return null
     }
-    confirmationRef.current = await signInWithPhoneNumber(
-      auth,
-      parsed.e164,
-      newRecaptchaVerifier(),
-    )
+    await sms.sendCode(parsed.e164)
     return parsed.e164
   }
 
@@ -328,45 +287,12 @@ export function CheckinSignin({
    *  kiosk that session is immediately exchanged for the ephemeral actsAs
    *  session (ADR-0022) — and torn down again if the exchange fails. */
   const verifySmsCode = async (code: string) => {
-    const confirmation = confirmationRef.current
-    if (!confirmation) {
-      throw new Error("Kein Code aktiv — bitte fordere einen neuen Code an.")
+    if (!kiosk) {
+      // Own device: the persistent phone session IS the login.
+      await sms.confirm(code)
+      return
     }
-    try {
-      await confirmation.confirm(code)
-    } catch (err) {
-      const errCode = (err as { code?: string } | null)?.code
-      if (errCode === "auth/invalid-verification-code") {
-        throw new Error("Code falsch.")
-      }
-      if (errCode === "auth/code-expired") {
-        throw new Error("Der Code ist abgelaufen. Bitte fordere einen neuen an.")
-      }
-      throw err
-    }
-    if (!kiosk) return // Own device: the persistent phone session IS the login.
-    try {
-      const bearer = await resolveBridgeBearer()
-      const exchange = rpcCallable<
-        { bearer?: string },
-        ExchangeKioskSessionResponse
-      >(functions, "authCall", "exchangeKioskSession")
-      const { data } = await exchange({ bearer: bearer ?? undefined })
-      const tokenUser: TokenUser = {
-        tokenId: null,
-        userId: data.userId,
-        firstName: data.firstName,
-        lastName: data.lastName,
-        email: data.email,
-        userType: data.userType,
-        activeMembership: data.activeMembership,
-      }
-      await establishKioskSession(auth, data.customToken, tokenUser)
-    } catch (err) {
-      // Never leave the real phone session behind on the shared terminal.
-      await firebaseSignOut(auth).catch(() => {})
-      throw err
-    }
+    await sms.confirmAndExchange(code)
   }
 
   const verifyKioskCode = async (id: string, code: string) => {
@@ -384,6 +310,7 @@ export function CheckinSignin({
       email: data.email,
       userType: data.userType,
       activeMembership: data.activeMembership,
+      elevatedUntil: data.elevatedUntil ?? null,
     }
     await establishKioskSession(auth, data.customToken, tokenUser)
     // The identified session flips `isAnonymous` in the wizard, which
@@ -418,6 +345,7 @@ export function CheckinSignin({
       email: data.email,
       userType: data.userType,
       activeMembership: data.activeMembership,
+      elevatedUntil: data.elevatedUntil ?? null,
     }
     await establishKioskSession(auth, data.customToken, tokenUser)
     return data
@@ -498,8 +426,8 @@ export function CheckinSignin({
   return (
     <div data-testid="checkin-signin">
       {/* Invisible reCAPTCHA anchor for Firebase phone auth — a fresh child
-          element is mounted per SMS send (see newRecaptchaVerifier). */}
-      <div ref={recaptchaHostRef} aria-hidden />
+          element is mounted per SMS send (see useKioskSms). */}
+      <div ref={sms.recaptchaHostRef} aria-hidden />
 
       {showLinkHint && (
         <div className="mb-3 rounded-md border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-800">

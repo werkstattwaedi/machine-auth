@@ -13,6 +13,11 @@ vi.mock("firebase/auth", () => ({
   onAuthStateChanged: (auth: FakeAuth, cb: (user: unknown) => void) => {
     return auth.onAuthStateChanged(cb as (user: FakeAuth["currentUser"]) => void)
   },
+  // The provider listens on the id-token stream (a superset of the
+  // auth-state events — ADR-0041); the fake only models sign-in/out.
+  onIdTokenChanged: (auth: FakeAuth, cb: (user: unknown) => void) => {
+    return auth.onAuthStateChanged(cb as (user: FakeAuth["currentUser"]) => void)
+  },
   sendSignInLinkToEmail: vi.fn(),
   isSignInWithEmailLink: () => false,
   signInWithEmailLink: vi.fn(),

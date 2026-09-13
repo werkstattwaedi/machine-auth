@@ -22,6 +22,15 @@ service cloud.firestore {
       return isSignedIn() ? request.auth.token.get('actsAs', '') : '';
     }
 
+    // Kiosk step-up (ADR-0041): an `actsAs` session that proved an OTP
+    // carries `elevatedUntil` (epoch ms) and may reach the member area
+    // until then. Server-enforced here so an expired claim is refused
+    // even if the client's timer never fires.
+    function isElevatedActsAs() {
+      return actsAs() != '' &&
+        request.auth.token.get('elevatedUntil', 0) > request.time.toMillis();
+    }
+
     // True for sessions created by Firebase Anonymous Auth
     // (signInAnonymously). The truly-anonymous checkout path uses these
     // — each session has a fresh UID, so rules can scope writes per
@@ -141,14 +150,24 @@ service cloud.firestore {
                        isValidUserProfile(request.resource.data);
 
       // Users can update their own doc but cannot change roles/permissions.
-      // Tag-tap sessions cannot update users at all (their request.auth.uid
-      // is synthetic, won't match userId, so the predicate fails).
+      // A plain tag-tap session cannot update users at all (its
+      // request.auth.uid is synthetic, won't match userId, so the predicate
+      // fails). An OTP-ELEVATED kiosk session (ADR-0041) may edit the
+      // profile it acts on, with the same roles/permissions pin PLUS a pin
+      // on `email`: the e-mail is the login-code lookup key, so changing it
+      // from a shared terminal would be an account takeover.
       // Firma users must provide a valid billing address.
       allow update: if isAdmin() ||
                        (isSignedIn() &&
                         userId == request.auth.uid &&
                         request.resource.data.roles == resource.data.roles &&
                         request.resource.data.permissions == resource.data.permissions &&
+                        isValidUserProfile(request.resource.data)) ||
+                       (isElevatedActsAs() &&
+                        actsAs() == userId &&
+                        request.resource.data.roles == resource.data.roles &&
+                        request.resource.data.permissions == resource.data.permissions &&
+                        request.resource.data.get('email', null) == resource.data.get('email', null) &&
                         isValidUserProfile(request.resource.data));
 
       allow delete: if isAdmin();
@@ -432,11 +451,18 @@ service cloud.firestore {
         // document and the whole query fails.
         //   - admin: full access
         //   - membership owner: list/get all invites for their membership
+        //     (also as an OTP-elevated kiosk session acting for the owner,
+        //     ADR-0041 — the membership page's pending-invites list)
         //   - invitee: get/list an invite whose email matches their auth token
+        //     (kiosk sessions have no email claim; listMyFamilyInvites
+        //     resolves theirs server-side)
         allow read: if isAdmin() ||
           (isSignedIn() &&
            get(/databases/$(database)/documents/memberships/$(membershipId)).data.ownerUserId ==
            /databases/$(database)/documents/users/$(request.auth.uid)) ||
+          (isElevatedActsAs() &&
+           get(/databases/$(database)/documents/memberships/$(membershipId)).data.ownerUserId ==
+           /databases/$(database)/documents/users/$(actsAs())) ||
           (isSignedIn() &&
            request.auth.token.get('email', '') != '' &&
            resource.data.email == request.auth.token.get('email', ''));

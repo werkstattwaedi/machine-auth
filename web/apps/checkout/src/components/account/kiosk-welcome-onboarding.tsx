@@ -157,8 +157,9 @@ function StepResourcesKiosk({ email }: { email: string }) {
 
       <p className="m-0 text-sm leading-relaxed">
         Deine Besuche, Belege und deine Mitgliedschaft (z.B.
-        Familienmitglieder hinzufügen) verwaltest du in deinem Konto — das
-        geht am Kiosk nicht, sondern auf deinem eigenen Handy oder Computer.
+        Familienmitglieder hinzufügen) verwaltest du in deinem Konto — hier
+        am Kiosk über «Konto verwalten» oder zuhause auf deinem eigenen Handy
+        oder Computer.
       </p>
 
       <div

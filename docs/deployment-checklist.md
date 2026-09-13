@@ -110,6 +110,11 @@ firebase functions:secrets:set TERMINAL_KEY
 firebase functions:secrets:set STATS_SUBJECT_SALT
 ```
 
+Non-secret params with built-in defaults need no action unless you want to
+tune them — e.g. `KIOSK_ELEVATION_TTL_MS` (kiosk step-up lifetime, ADR-0041,
+`functions.kioskElevationTtlMs`, default 15 min). Rules changes that gate on
+the `elevatedUntil` claim ship with the regular rules deploy.
+
 Verify: `firebase functions:secrets:access GATEWAY_API_KEY`
 
 **Google Cloud Secret Manager (gateway):**

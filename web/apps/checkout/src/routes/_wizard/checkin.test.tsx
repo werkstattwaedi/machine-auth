@@ -39,6 +39,12 @@ vi.mock("@/components/checkout/visit-started-dialog", () => ({
 
 // The embedded account sign-in needs the full Auth/Firebase provider stack
 // (covered by its own checkin-signin tests); stub it here.
+// The kiosk member-area entry points need the auth + elevation providers;
+// they are out of scope for the footer gating under test.
+vi.mock("@/components/checkout/kiosk-account-actions", () => ({
+  KioskAccountActions: () => null,
+}))
+
 vi.mock("@/components/checkout/checkin-signin", () => ({
   CheckinSignin: () => null,
 }))

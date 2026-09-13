@@ -23,6 +23,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router"
 
 import { useAuth } from "@modules/lib/auth"
 import { useDb, useFunctions } from "@modules/lib/firebase-context"
+import { useBridge } from "@modules/lib/use-bridge"
 import { useDocument, useCollection } from "@modules/lib/firestore"
 import {
   catalogReferencesRef,
@@ -69,6 +70,7 @@ function MembershipPage() {
   const functions = useFunctions()
   const { userDoc } = useAuth()
   const navigate = useNavigate()
+  const bridge = useBridge()
 
   const userId = userDoc?.id
   const ref = userId ? userRef(db, userId) : null
@@ -162,8 +164,9 @@ function MembershipPage() {
       await fn({ type, renewExisting })
       // The membership SKU is appended to the user's open checkout (or a
       // fresh `materialbezug` checkout). Land directly on the checkout
-      // summary so the user can review and pay in one click.
-      navigate({ to: "/checkout" })
+      // summary so the user can review and pay in one click. Inside the
+      // kiosk (ADR-0041) keep the flag so the wizard stays in kiosk mode.
+      navigate({ to: "/checkout", search: bridge.available ? { kiosk: "" } : {} })
     })
   }
 

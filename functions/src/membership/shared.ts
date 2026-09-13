@@ -24,6 +24,7 @@ import type {
   MembershipType,
   UserEntity,
 } from "../types/firestore_entities";
+import { isElevatedNow } from "../checkout/kiosk_session";
 
 export const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
 export const INVITE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -134,14 +135,17 @@ export async function assertNoOtherActiveMembership(
 /**
  * Resolve a Firestore user-doc reference for the caller of a callable.
  *
- * Tag-tap (kiosk badge) sessions are intentionally rejected: a tag session is
- * not an authenticated channel for managing one's membership — the family
- * payer must be on the checkout app with their own login. Real signed-in
- * users (email-link auth) and admin sessions are accepted.
+ * Real signed-in users (email/Google/phone) resolve to `users/{uid}`. A
+ * kiosk `actsAs` session (ADR-0022) resolves to `users/{actsAs}` ONLY while
+ * elevated — i.e. carrying an unexpired `elevatedUntil` claim, which the
+ * server stamps after an OTP (ADR-0041). A plain badge-tap session is
+ * rejected: the badge alone is not an authenticated channel for managing
+ * one's membership. Never fall back to `authUid` for a tag session — it is
+ * synthetic and names no user doc.
  *
  * Accepts the auth token as `Record<string, unknown> | undefined` because
  * firebase-functions surfaces it as a strongly-typed `DecodedIdToken` that
- * doesn't expose our `actsAs` custom claim by name.
+ * doesn't expose our custom claims by name.
  */
 export function callerUserRef(
   db: Firestore,
@@ -153,12 +157,39 @@ export function callerUserRef(
   }
   const actsAs = authToken?.["actsAs"];
   if (typeof actsAs === "string" && actsAs.length > 0) {
-    throw new HttpsError(
-      "permission-denied",
-      "Tag-tap sessions cannot manage memberships",
-    );
+    if (!isElevatedNow(authToken)) {
+      throw new HttpsError(
+        "permission-denied",
+        "Bitte bestätige dich am Kiosk mit einem Code.",
+      );
+    }
+    return db.collection("users").doc(actsAs);
   }
   return db.collection("users").doc(authUid);
+}
+
+/**
+ * The caller's e-mail for e-mail-addressed invites. A real session carries
+ * it in the ID token; a synthetic kiosk session does not (custom tokens
+ * have no `email` claim), so an elevated `actsAs` caller reads it from the
+ * user doc. Returns `null` when unknown. Call AFTER `callerUserRef` so the
+ * elevation check has already run.
+ */
+export async function callerEmail(
+  callerRef: DocumentReference,
+  authToken: Record<string, unknown> | undefined,
+): Promise<string | null> {
+  const fromToken = authToken?.["email"];
+  if (typeof fromToken === "string" && fromToken.length > 0) {
+    return fromToken.toLowerCase();
+  }
+  const actsAs = authToken?.["actsAs"];
+  if (typeof actsAs !== "string" || actsAs.length === 0) return null;
+  const snap = await callerRef.get();
+  const email = (snap.data() as UserEntity | undefined)?.email;
+  return typeof email === "string" && email.length > 0
+    ? email.toLowerCase()
+    : null;
 }
 
 /**

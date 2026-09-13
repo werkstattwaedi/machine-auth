@@ -101,6 +101,11 @@ interface StepCheckinProps {
    * own line legitimately carries their userId.
    */
   ownerUserId?: string | null
+  /**
+   * Kiosk-only member-area entry points ("Konto verwalten" / "Mitglied
+   * werden", ADR-0041) rendered under the identified visitor's block.
+   */
+  accountActions?: React.ReactNode
 }
 
 // Footer buttons (design handoff): 42px teal primary / outline-teal
@@ -110,7 +115,7 @@ const FOOTER_PRIMARY =
 const FOOTER_SECONDARY =
   "inline-flex h-[42px] items-center gap-2 rounded-md border border-cog-teal bg-white px-5 text-[15px] font-semibold text-cog-teal-dark transition-colors hover:bg-cog-teal-light disabled:opacity-60 disabled:cursor-not-allowed"
 
-export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAccountLoggedIn, signedInUserId, signedInEmail, isMember, onSignOut, onAdvance, onStartVisit, hasOpenCheckout, familyCandidates, tagAuthLoading, tagAuthError, picc, ownerUserId }: StepCheckinProps) {
+export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAccountLoggedIn, signedInUserId, signedInEmail, isMember, onSignOut, onAdvance, onStartVisit, hasOpenCheckout, familyCandidates, tagAuthLoading, tagAuthError, picc, ownerUserId, accountActions }: StepCheckinProps) {
   // touched: personId → field → true
   const [touched, setTouched] = useState<Record<string, Record<string, boolean>>>({})
   const [submitted, setSubmitted] = useState(false)
@@ -500,6 +505,7 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
           <h2 className="font-heading text-xl font-bold">Deine Angaben</h2>
           {personsBlock}
           {addPersonBlock}
+          {accountActions}
         </>
       )}
 

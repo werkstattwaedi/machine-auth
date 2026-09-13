@@ -65,6 +65,27 @@ function tagSessionDb(realUserUid: string, sessionUid?: string) {
     .firestore()
 }
 
+/**
+ * OTP-elevated kiosk session (ADR-0041): the same synthetic principal with
+ * an `elevatedUntil` claim. `expired` stamps a deadline in the past — the
+ * rules must treat that exactly like a plain badge tap.
+ */
+function elevatedTagSessionDb(
+  realUserUid: string,
+  opts: { expired?: boolean } = {},
+) {
+  const elevatedUntil = opts.expired
+    ? Date.now() - 60_000
+    : Date.now() + 15 * 60_000
+  return getTestEnvironment()
+    .authenticatedContext(`tag:${realUserUid}:s1`, {
+      actsAs: realUserUid,
+      tagCheckout: true,
+      elevatedUntil,
+    })
+    .firestore()
+}
+
 /** Firebase Anonymous Auth session — used by truly-anonymous checkout. */
 function anonAuthDb(uid: string) {
   return getTestEnvironment()
@@ -394,6 +415,68 @@ describe("cross-user: users", () => {
         updateDoc(doc(tagSessionDb("bob"), "users", "alice"), {
           firstName: "pwned",
         }),
+    )
+  })
+
+  // ADR-0041: an OTP-elevated kiosk session may edit the profile it acts on
+  // — and nothing else. The e-mail (login-code lookup key) is pinned, roles
+  // and permissions stay pinned, an expired claim is a plain tag session.
+  it("allows elevated-tag-as-alice updating alice's profile fields", async () => {
+    await seedUser("alice")
+    await assertSucceeds(
+      updateDoc(doc(elevatedTagSessionDb("alice"), "users", "alice"), {
+        firstName: "Alicia",
+        phone: "+41791234567",
+      }),
+    )
+  })
+
+  it("denies elevated-tag-as-alice changing alice's e-mail (account takeover)", async () => {
+    await seedUser("alice")
+    await assertCrossUserDenied(
+      "users/{userId} e-mail change leaked to an elevated kiosk session",
+      "firestore.rules users update (ADR-0041 email pin)",
+      () =>
+        updateDoc(doc(elevatedTagSessionDb("alice"), "users", "alice"), {
+          email: "attacker@example.com",
+        }),
+    )
+  })
+
+  it("denies elevated-tag-as-alice granting roles/permissions", async () => {
+    await seedUser("alice")
+    await assertCrossUserDenied(
+      "users/{userId} roles change leaked to an elevated kiosk session",
+      "firestore.rules users update (ADR-0041 roles pin)",
+      () =>
+        updateDoc(doc(elevatedTagSessionDb("alice"), "users", "alice"), {
+          roles: ["admin"],
+        }),
+    )
+  })
+
+  it("denies elevated-tag-as-bob updating alice's user doc", async () => {
+    await seedUser("alice")
+    await assertCrossUserDenied(
+      "users/{userId} update leaked across elevated kiosk actsAs",
+      "firestore.rules users update (ADR-0041)",
+      () =>
+        updateDoc(doc(elevatedTagSessionDb("bob"), "users", "alice"), {
+          firstName: "pwned",
+        }),
+    )
+  })
+
+  it("denies an EXPIRED elevated-tag-as-alice updating alice's user doc", async () => {
+    await seedUser("alice")
+    await assertCrossUserDenied(
+      "users/{userId} update leaked to an expired kiosk elevation",
+      "firestore.rules users update (ADR-0041 elevatedUntil)",
+      () =>
+        updateDoc(
+          doc(elevatedTagSessionDb("alice", { expired: true }), "users", "alice"),
+          { firstName: "late" },
+        ),
     )
   })
 

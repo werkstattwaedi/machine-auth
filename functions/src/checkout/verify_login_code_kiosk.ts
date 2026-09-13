@@ -66,10 +66,16 @@ export async function handleVerifyLoginCodeKiosk(
     );
   }
 
-  const customToken = await mintKioskSessionToken(userDoc.id, "emailCode");
+  // The code just entered IS the OTP proof — elevated at mint (ADR-0041),
+  // so a code sign-in reaches the member area without a second code.
+  const { customToken, elevatedUntil } = await mintKioskSessionToken(
+    userDoc.id,
+    "emailCode",
+    { elevated: true }
+  );
   return {
     customToken,
-    ...buildKioskUserPayload(userDoc.id, userDoc.data()),
+    ...buildKioskUserPayload(userDoc.id, userDoc.data(), elevatedUntil),
   };
 }
 

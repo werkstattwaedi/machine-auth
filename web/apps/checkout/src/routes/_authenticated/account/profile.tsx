@@ -61,8 +61,12 @@ function ErrorText({ message }: { message?: string }) {
 
 function ProfilePage() {
   const db = useDb()
-  const { user, userDoc } = useAuth()
+  const { user, userDoc, sessionKind } = useAuth()
   const { update, loading: saving } = useFirestoreMutation()
+  // An OTP-elevated kiosk session (ADR-0041) edits the profile it acts on;
+  // its synthetic Auth principal carries no e-mail and cannot link a phone
+  // (linking needs the real uid), so those read from / hide by the doc.
+  const kioskSession = sessionKind === "tag"
 
   const {
     register,
@@ -297,7 +301,7 @@ function ProfilePage() {
         <div className="flex flex-col gap-1">
           <Label className="text-sm font-bold">E-Mail</Label>
           <input
-            value={user?.email ?? ""}
+            value={user?.email ?? userDoc?.email ?? ""}
             disabled
             className={INPUT_DISABLED}
           />
@@ -336,7 +340,7 @@ function ProfilePage() {
           <ErrorText message={errors.phone?.message} />
           {/* SMS login needs the SAVED number verified (linked to the Auth
               account) — one code, then the check-in field accepts it. */}
-          {SMS_LOGIN_ENABLED && (
+          {SMS_LOGIN_ENABLED && !kioskSession && (
             <PhoneVerification
               user={user}
               savedPhone={userDoc?.phone ?? null}

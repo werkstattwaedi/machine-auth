@@ -1,6 +1,6 @@
 # ADR-0022: Kiosk badge sign-in — synthetic-UID session, not the user's session
 
-**Status:** Accepted (amended 2026-07-03: second mint path via email login code; its UI moved into the check-in account section by [ADR-0031](0031-embedded-checkin-signin-and-sms-codes.md), which also plans a third mint path — Firebase phone auth token exchange for SMS codes. Amended 2026-08-11, issue #595: kiosk sign-up via server-side `signupKiosk`, and the welcome onboarding runs at the kiosk via `completeOnboardingKiosk` — the "sign-up stays on personal devices" rule is retired; the session model is unchanged)
+**Status:** Accepted (amended 2026-07-03: second mint path via email login code; its UI moved into the check-in account section by [ADR-0031](0031-embedded-checkin-signin-and-sms-codes.md), which also plans a third mint path — Firebase phone auth token exchange for SMS codes. Amended 2026-08-11, issue #595: kiosk sign-up via server-side `signupKiosk`, and the welcome onboarding runs at the kiosk via `completeOnboardingKiosk` — the "sign-up stays on personal devices" rule is retired; the session model is unchanged. Amended 2026-09-13 by [ADR-0041](0041-kiosk-step-up-elevation.md): §5's "never reaches the member area" is relaxed to "only while OTP-elevated (`elevatedUntil` claim)" — a badge tap alone still gets the checkout-only session; the synthetic uid and every other layer are unchanged)
 
 **Date:** 2026-04-26
 

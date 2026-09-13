@@ -173,14 +173,16 @@ describe("AuthenticatedLayout", () => {
     expect(navigateMock).not.toHaveBeenCalled()
   })
 
-  it("member gate redirects tag-tap sessions to /", () => {
+  it("member gate bounces an un-elevated tag-tap session to /checkin?kiosk", () => {
     mockAuthReturn = {
-      user: { uid: "u1", email: "tag@test.com" },
+      user: { uid: "tag:u1:s1", email: null },
       userDoc: null,
       userDocLoading: false,
       loading: false,
       isAdmin: false,
       sessionKind: "tag",
+      isKioskElevated: false,
+      kioskElevatedUntil: null,
       signOut: vi.fn(),
     }
 
@@ -191,7 +193,90 @@ describe("AuthenticatedLayout", () => {
       />,
     )
 
-    expect(navigateMock).toHaveBeenCalledWith({ to: "/" })
+    expect(navigateMock).toHaveBeenCalledWith({
+      to: "/checkin",
+      search: { kiosk: "" },
+    })
+    expect(screen.queryByTestId("outlet")).toBeNull()
+  })
+
+  // ADR-0041: an OTP-elevated kiosk session IS allowed into the member area
+  // — the guard must not bounce it, and the kiosk chrome (remaining-time
+  // chip, back-to-checkout row) renders.
+  it("member gate admits an elevated kiosk session and renders the kiosk chrome", () => {
+    const onKioskSignOut = vi.fn()
+    mockAuthReturn = {
+      user: { uid: "tag:u1:s1", email: null },
+      userDoc: {
+        name: "Kiosk Nutzer",
+        firstName: "Kiosk",
+        lastName: "Nutzer",
+        email: "kiosk@test.com",
+        roles: [],
+        termsAcceptedAt: new Date(),
+      },
+      userDocLoading: false,
+      loading: false,
+      isAdmin: false,
+      sessionKind: "tag",
+      isKioskElevated: true,
+      kioskElevatedUntil: Date.now() + 10 * 60_000,
+      signOut: vi.fn(),
+    }
+
+    render(
+      <AuthenticatedLayout
+        navItems={navItems}
+        gate={{ kind: "member", completeProfilePath: "/account/complete-profile" }}
+        kiosk={{ checkoutPath: "/checkin?kiosk", onSignOut: onKioskSignOut }}
+      />,
+    )
+
+    expect(navigateMock).not.toHaveBeenCalled()
+    expect(screen.getByTestId("outlet")).toBeTruthy()
+    expect(screen.getByTestId("kiosk-elevation-chip").textContent).toContain("Min")
+    expect(screen.getByTestId("kiosk-back-to-checkout")).toBeTruthy()
+    // The doc's e-mail stands in for the synthetic principal's missing one.
+    expect(screen.getByText("kiosk@test.com")).toBeTruthy()
+
+    // "Abmelden" on the kiosk is the strong start-over, not a plain signOut.
+    fireEvent.click(screen.getByRole("button", { name: "Abmelden" }))
+    expect(onKioskSignOut).toHaveBeenCalledTimes(1)
+    expect(mockAuthReturn.signOut).not.toHaveBeenCalled()
+  })
+
+  it("member gate bounces an elevated kiosk session once the elevation expires", () => {
+    mockAuthReturn = {
+      user: { uid: "tag:u1:s1", email: null },
+      userDoc: { name: "Kiosk Nutzer", firstName: "Kiosk", lastName: "Nutzer", roles: [], termsAcceptedAt: new Date() },
+      userDocLoading: false,
+      loading: false,
+      isAdmin: false,
+      sessionKind: "tag",
+      isKioskElevated: true,
+      kioskElevatedUntil: Date.now() + 60_000,
+      signOut: vi.fn(),
+    }
+
+    const { rerender } = render(
+      <AuthenticatedLayout
+        navItems={navItems}
+        gate={{ kind: "member", completeProfilePath: "/account/complete-profile" }}
+      />,
+    )
+    expect(navigateMock).not.toHaveBeenCalled()
+
+    mockAuthReturn = { ...mockAuthReturn, isKioskElevated: false, kioskElevatedUntil: null }
+    rerender(
+      <AuthenticatedLayout
+        navItems={navItems}
+        gate={{ kind: "member", completeProfilePath: "/account/complete-profile" }}
+      />,
+    )
+    expect(navigateMock).toHaveBeenCalledWith({
+      to: "/checkin",
+      search: { kiosk: "" },
+    })
   })
 
   it("member gate redirects incomplete profiles to completeProfilePath", () => {

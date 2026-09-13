@@ -31,6 +31,13 @@ import {
 
 export interface ExchangeKioskSessionInput {
   bearer?: string;
+  /**
+   * Step-up guard (ADR-0041): when the kiosk elevates an EXISTING actsAs
+   * session via SMS, it passes the user it was acting as. The exchange then
+   * refuses if the phone that confirmed belongs to a different account, so
+   * elevation can never silently switch whose session this is.
+   */
+  expectedUserId?: string;
 }
 
 export interface ExchangeKioskSessionResult extends KioskUserPayload {
@@ -57,6 +64,17 @@ export async function handleExchangeKioskSession(
     );
   }
 
+  const expectedUserId = request.data?.expectedUserId;
+  if (typeof expectedUserId === "string" && expectedUserId !== auth.uid) {
+    logger.warn(
+      `exchangeKioskSession rejected: confirmed uid=${auth.uid} != expected=${expectedUserId}`
+    );
+    throw new HttpsError(
+      "failed-precondition",
+      "Diese Handynummer gehört zu einem anderen Konto."
+    );
+  }
+
   const userDoc = await getFirestore().collection("users").doc(auth.uid).get();
   if (!userDoc.exists || userDoc.get("termsAcceptedAt") == null) {
     // Mirrors verifyLoginCodeKiosk: no kiosk sign-up — a bare Auth user
@@ -67,8 +85,17 @@ export async function handleExchangeKioskSession(
     );
   }
 
-  const customToken = await mintKioskSessionToken(auth.uid, "smsCode");
-  return { customToken, ...buildKioskUserPayload(auth.uid, userDoc.data()) };
+  // The SMS code just confirmed IS the OTP proof — elevated at mint
+  // (ADR-0041); this is also the SMS branch of the kiosk step-up.
+  const { customToken, elevatedUntil } = await mintKioskSessionToken(
+    auth.uid,
+    "smsCode",
+    { elevated: true }
+  );
+  return {
+    customToken,
+    ...buildKioskUserPayload(auth.uid, userDoc.data(), elevatedUntil),
+  };
 }
 
 export const exchangeKioskSessionHandler = async (

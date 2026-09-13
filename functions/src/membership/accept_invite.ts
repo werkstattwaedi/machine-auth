@@ -22,6 +22,7 @@ import {
 import type { MembershipInviteEntity } from "../types/firestore_entities";
 import {
   assertNoOtherActiveMembership,
+  callerEmail,
   callerUserRef,
   db,
   getMembershipInTx,
@@ -51,8 +52,11 @@ export const acceptFamilyInviteHandler = async (request: CallableRequest<AcceptF
   const memRef = membershipRef(database, membershipId);
   const inviteRef = memRef.collection("invites").doc(inviteId);
 
-  const callerEmail = (request.auth?.token?.email ?? "").toString().toLowerCase();
-  if (!callerEmail) {
+  const callerEmailAddr = await callerEmail(
+    callerRef,
+    request.auth?.token as Record<string, unknown> | undefined,
+  );
+  if (!callerEmailAddr) {
     throw new HttpsError(
       "failed-precondition",
       "Caller has no email — cannot accept email-based invite",
@@ -82,7 +86,7 @@ export const acceptFamilyInviteHandler = async (request: CallableRequest<AcceptF
         `Invite already ${invite.status}`,
       );
     }
-    if (invite.email !== callerEmail) {
+    if (invite.email !== callerEmailAddr) {
       throw new HttpsError(
         "permission-denied",
         "Invite is for a different email",
