@@ -37,6 +37,11 @@ equal-timestamp docs at a page boundary.
 **Export-once semantics.** A checkout exports when `closedAt` passes the
 watermark and never again (no reopen path exists). Post-export admin-SDK
 corrections do not reach BigQuery — accepted residual divergence.
+*Revised by [ADR-0041](0041-bill-cancellation-and-revisions.md):* admin
+cancellations and corrected re-issues are the one sanctioned correction
+path; both docs carry an explicit `statsFlushedAt: null` and the daily
+export flushes them in a final pass (`visits.cancelled_at`, replacement
+rows), so they do reach BigQuery.
 
 **Pseudonymization, never claimed anonymous.**
 `subject_key = HMAC-SHA256(uid, STATS_SUBJECT_SALT)` (uid == users doc id;

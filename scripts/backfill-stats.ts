@@ -116,6 +116,7 @@ async function main() {
       sink,
       salt,
       stateStore,
+      dryRun: DRY_RUN,
     });
     for (const [stream, res] of Object.entries(summary)) {
       totals[stream] = (totals[stream] ?? 0) + res.exported;

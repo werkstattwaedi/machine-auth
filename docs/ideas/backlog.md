@@ -136,6 +136,34 @@ rejection wedges the export the same way.
 
 ---
 
+### Bill corrections v2 — paid bills, credit notes, refunds
+**Status:** 💡 Idea
+
+**Context:** ADR-0041 corrects *unpaid* bills only; the callable rejects a
+paid bill (or a Beleg whose Sammelrechnung is paid) with a German message
+pointing here. Fixing a paid bill needs a credit-note / refund concept:
+the payment stays booked, a negative document or a refund record offsets
+it, and the bank reconciliation must accept a payment on a cancelled bill
+(the import already buckets those as "Zahlung auf stornierte Rechnung").
+
+**Notes:** Keep the base×10+digit numbering — a credit note could be a
+revision with a negative amount, but the QR slip must then be suppressed.
+
+### Correction editor — catalog picker
+**Status:** 💡 Idea
+
+**Context:** The admin correction editor (ADR-0041) only edits existing
+lines and adds free-form lines. A catalog picker (same one the checkout
+wizard uses) would let admins add priced catalog items with variants and
+member pricing instead of typing description + price by hand.
+
+### Cancelled PDFs — "STORNIERT" banner
+**Status:** 💡 Idea
+
+**Context:** Rejected for v1 because it overwrites the as-sent document.
+Alternative: render a *second* PDF (`invoices/{id}-storniert.pdf`) with the
+banner and offer it in the admin UI, keeping the original untouched.
+
 ## Template
 
 Copy this for new ideas:
