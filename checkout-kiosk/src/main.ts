@@ -22,7 +22,11 @@ import {
 import { resolveConfig } from "./config"
 import { startNfc } from "./bridge/nfc"
 import { performSessionReset } from "./reset-session"
-import { createDisplayWaker, wakeCommandArgs } from "./wake-display"
+import {
+  createDisplayWaker,
+  SCREENSAVER_DISMISSED_EXIT,
+  wakeCommandArgs,
+} from "./wake-display"
 import type { NfcTagEvent, ResetSessionOptions } from "./types"
 
 const config = resolveConfig()
@@ -89,6 +93,13 @@ function hideWindow(): void {
   mainWindow?.hide()
 }
 
+// Re-assert the foreground at these delays (ms) after a screensaver was torn
+// down. Windows hands the foreground back to whatever held it before the
+// screensaver engaged, and does so slightly after the process dies, so a
+// single immediate call loses the race. Cheap and idempotent — showWindow()
+// on an already-focused window is a no-op in practice.
+const FOREGROUND_REASSERT_MS = [0, 300, 900] as const
+
 // Raising the window is not enough when the terminal has gone to the
 // screensaver: it paints over the kiosk, so the tap looks ignored and users
 // reach for the mouse. Synthetic input cannot fix that — the screensaver runs
@@ -99,7 +110,7 @@ function hideWindow(): void {
 const wakeDisplay = createDisplayWaker({
   platform: process.platform,
   now: () => Date.now(),
-  nudge: () => {
+  nudge: (onDismissed) => {
     try {
       const child = spawn("powershell.exe", [...wakeCommandArgs()], {
         windowsHide: true,
@@ -110,8 +121,11 @@ const wakeDisplay = createDisplayWaker({
       child.on("error", (err) => {
         console.warn("Failed to wake the display:", err.message)
       })
-      // Fire-and-forget: don't hold the event loop open on the nudge.
-      child.unref()
+      // Only a genuine dismissal needs the foreground re-asserted; an ordinary
+      // tap (exit 0, no screensaver was up) already landed in front.
+      child.on("close", (code) => {
+        if (code === SCREENSAVER_DISMISSED_EXIT) onDismissed()
+      })
     } catch (err) {
       console.warn(
         "Failed to wake the display:",
@@ -304,8 +318,15 @@ function dispatchNfc(event: NfcTagEvent): void {
   // A badge tap on the terminal brings the kiosk to the front — this is how a
   // new user surfaces the checkout app from the tray (issue: tray/foreground).
   // The screensaver has to go first: it paints over everything, so without
-  // this the window comes up behind it and the tap reads as a no-op.
-  wakeDisplay()
+  // this the window comes up behind it and the tap reads as a no-op. Tearing
+  // it down is asynchronous, and the showWindow() below therefore runs while
+  // the screensaver still owns the screen — which Windows discards — so
+  // re-assert once it is actually gone.
+  wakeDisplay(() => {
+    for (const ms of FOREGROUND_REASSERT_MS) {
+      setTimeout(() => showWindow(), ms)
+    }
+  })
   showWindow()
   for (const wc of nfcSubscribers) {
     try {

@@ -30,6 +30,15 @@
 // sitting past the timeout at that point. The nudge also wakes a monitor that
 // has powered down, the other way the terminal ends up dark on approach.
 //
+// Dismissing the screensaver is only half the job. While it is up, the
+// foreground window belongs to no reachable process (GetForegroundWindow
+// resolves to the Idle process), and when it exits Windows hands the
+// foreground back to whatever held it *before* it engaged. A `showWindow()`
+// issued while the screensaver is still up is therefore thrown away, and the
+// kiosk ends up behind the previously-focused window. So the script reports
+// via its exit code whether it actually dismissed a screensaver, letting the
+// caller re-assert the foreground once the desktop has settled.
+//
 // Caveat worth knowing: if the terminal's screensaver is configured with "on
 // resume, display logon screen" (ScreenSaverIsSecure=1), dismissing it lands
 // on the Windows lock screen rather than the checkout. No app can — or
@@ -41,6 +50,13 @@ const MOUSEEVENTF_MOVE = 0x0001
 
 /** SPI_GETSCREENSAVERRUNNING — is the *system* screensaver up right now? */
 const SPI_GETSCREENSAVERRUNNING = 0x0072
+
+/**
+ * Exit code the script uses to say "a screensaver was up and I killed it", as
+ * opposed to the ordinary "nothing to do" 0. Distinct from PowerShell's own
+ * failure codes so a broken script never reads as a dismissal.
+ */
+export const SCREENSAVER_DISMISSED_EXIT = 10
 
 // One tap can produce more than one `onTag` call (bridge/nfc.ts dispatches
 // either a full event or a uid-only fallback), and users re-tap when nothing
@@ -62,7 +78,7 @@ const WAKE_SCRIPT = [
   `[Oww.Native]::mouse_event(${MOUSEEVENTF_MOVE}, -1, 0, 0, [IntPtr]::Zero)`,
   `$running = $false`,
   `[void][Oww.Native]::SystemParametersInfo(${SPI_GETSCREENSAVERRUNNING}, 0, [ref]$running, 0)`,
-  `if ($running) { Get-Process -Name '*.scr' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue }`,
+  `if ($running) { Get-Process -Name '*.scr' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; exit ${SCREENSAVER_DISMISSED_EXIT} }`,
 ].join("; ")
 
 /**
@@ -87,8 +103,12 @@ export interface WakeDisplayDeps {
   platform: NodeJS.Platform
   /** Clock backing the cooldown. */
   now: () => number
-  /** Fire off the wake attempt. Must not throw. */
-  nudge: () => void
+  /**
+   * Fire off the wake attempt. Must not throw. Calls `onDismissed` only when a
+   * screensaver was actually up and has now been torn down — that is the case
+   * where the caller has to re-assert the foreground.
+   */
+  nudge: (onDismissed: () => void) => void
 }
 
 /**
@@ -99,13 +119,13 @@ export interface WakeDisplayDeps {
 export function createDisplayWaker(
   deps: WakeDisplayDeps,
   cooldownMs: number = WAKE_COOLDOWN_MS
-): () => void {
+): (onDismissed: () => void) => void {
   let lastWakeAt: number | null = null
-  return function wakeDisplay(): void {
+  return function wakeDisplay(onDismissed: () => void): void {
     if (deps.platform !== "win32") return
     const now = deps.now()
     if (lastWakeAt !== null && now - lastWakeAt < cooldownMs) return
     lastWakeAt = now
-    deps.nudge()
+    deps.nudge(onDismissed)
   }
 }
