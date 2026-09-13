@@ -130,10 +130,15 @@ export async function aggregateBelegeIntoInvoice(
         preAck: { source: "auto" },
       });
 
-  for (const { ref } of args.belege) {
+  for (const { ref, bill: beleg } of args.belege) {
+    // Replacement Belege minted in the same commit are created already
+    // pointing at this invoice — nothing to re-point. The monthly run's
+    // Belege carry null and are re-pointed here.
+    if (beleg.aggregatedIntoBillRef?.isEqual(args.billRef)) continue;
     tx.update(ref, { aggregatedIntoBillRef: args.billRef });
   }
   return bill;
+
 }
 
 interface MonthlyBillRunSummary {

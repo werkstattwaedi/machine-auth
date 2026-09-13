@@ -62,7 +62,10 @@ export async function findBlockers(
       }
     }
     for (const doc of bills.docs) {
-      if ((doc.data() as BillEntity).paidAt == null) {
+      const bill = doc.data() as BillEntity;
+      // A cancelled bill (ADR-0041) is void — nothing left to settle.
+      if (bill.paidAt == null && !bill.cancelledAt) {
+
         blockers.push({
           type: "unpaid-bill",
           path: doc.ref.path,

@@ -76,7 +76,9 @@ export const RpcMethod = {
     "closeCheckoutAndGetPayment",
     "acknowledgeBill",
     "adminMarkBillsPaid",
+    "correctCheckouts",
   ],
+
   catalogCall: [
     "getPriceListPdfUrl",
     "upsertCatalogItem",

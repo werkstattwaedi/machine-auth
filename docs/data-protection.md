@@ -22,9 +22,10 @@ the map wins on conflict):
 |---|---|---|---|
 | Account (name, email, address) | `users`, Firebase Auth | Contract | Until erasure |
 | NFC badge (tag UID) | `tokens`, `items.tokenId` | Contract | Until erasure |
-| Visits incl. guests' names/emails | `checkouts` (+ `persons[]`) | Contract | 3 years |
+| Visits incl. guests' names/emails; admin cancellation reason (ADR-0041) | `checkouts` (+ `persons[]`) | Contract | 3 years (cancelled visits age out the same way) |
 | Machine usage | `usage_machine` | Contract | 3 years |
-| Invoices | `bills` | Contract | 3 years |
+| Invoices incl. cancellation / correction reasons (ADR-0041) | `bills` | Contract | 3 years |
+
 | Invoice PDFs | Storage `invoices/`, then archive bucket | OR Art. 958f | 10 years (escrowed) |
 | Badge auth records | `authentications` | Contract | 3 years (in-progress: 5 min TTL) |
 | Login codes | `loginCodes` | Contract | 5 min TTL |

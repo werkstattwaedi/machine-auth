@@ -104,7 +104,11 @@ export const adminMarkBillsPaidHandler = async (
         // books against that aggregate invoice, never the Beleg itself.
         return "rejected";
       }
+      // Cancelled (ADR-0041): a payment on a voided bill is booked by hand
+      // on its corrected re-issue — the import surfaces it separately.
+      if (bill.cancelledAt) return "rejected";
       if (bill.paidAt) return "alreadyPaid";
+
       tx.update(ref, {
         paidAt: input.paidAtMs
           ? Timestamp.fromMillis(input.paidAtMs)

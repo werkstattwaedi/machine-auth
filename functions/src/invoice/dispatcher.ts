@@ -15,6 +15,7 @@ import { getPaymentQrDataHandler } from "./get_payment_qr_data";
 import { closeCheckoutAndGetPaymentHandler } from "./close_checkout_and_get_payment";
 import { acknowledgeBillHandler } from "./acknowledge_bill";
 import { adminMarkBillsPaidHandler } from "./mark_bills_paid";
+import { correctCheckoutsHandler } from "./correct_checkouts";
 import { addBadgeToCheckoutHandler } from "../badge/purchase";
 import { diversificationMasterKey } from "../config/tag-secrets";
 
@@ -29,6 +30,8 @@ const HANDLERS: Record<string, RpcHandler> = {
   closeCheckoutAndGetPayment: closeCheckoutAndGetPaymentHandler,
   acknowledgeBill: acknowledgeBillHandler,
   adminMarkBillsPaid: adminMarkBillsPaidHandler,
+  correctCheckouts: correctCheckoutsHandler,
+
   addBadgeToCheckout: addBadgeToCheckoutHandler,
 };
 
