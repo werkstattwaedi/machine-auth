@@ -105,6 +105,8 @@ export async function aggregateBelegeIntoInvoice(
     amount += bill.amount;
     checkoutRefs.push(...bill.checkouts);
   }
+  // Belege amounts are cents-exact individually; the float sum is not.
+  amount = Math.round(amount * 100) / 100;
 
   const bill = args.supersedes
     ? await allocateBillRevision(tx, {

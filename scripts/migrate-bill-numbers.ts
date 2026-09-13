@@ -13,14 +13,18 @@
  * reading as a fallback. `config/billing.nextBillNumber` is NOT touched:
  * `allocateBill` multiplies at mint time.
  *
- * Safety:
- *   - Refuses to run when the marker is already set.
- *   - Asserts `max(referenceNumber) < min(referenceNumber) × 10`, which
- *     (a) guarantees legacy payloads can never collide with migrated
- *     numbers and (b) detects a half-applied run (shifted docs next to
- *     unshifted ones violate it) so a crash never double-shifts.
- *   - Writes the bills first and the marker last; the new `allocateBill`
- *     refuses to mint until the marker exists.
+ * Crash safety — every run is idempotent per document:
+ *   1. A fresh run asserts `max < min × 10` (legacy payloads can never
+ *      collide with migrated numbers) and records the pre-migration
+ *      minimum as `config/billing.migrationOriginalMin` BEFORE shifting.
+ *   2. Because of that assertion, a value `>= originalMin × 10` can only be
+ *      an already-shifted one, so an interrupted run resumes by skipping
+ *      those and shifting the rest exactly once. Legacy numbers that
+ *      happen to be multiples of 10 (4200010 …) are handled correctly —
+ *      a `% 10` test would not be.
+ *   3. The bills are written first, the marker last; the new
+ *      `allocateBill` refuses to mint until the marker exists, and this
+ *      script refuses to run once it does.
  *
  * Usage:
  *   # Emulator
@@ -55,6 +59,7 @@ const CHUNK = 400; // Firestore batch limit is 500
 
 async function main() {
   const admin = await import("firebase-admin");
+  const { FieldValue } = await import("firebase-admin/firestore");
 
   const projectId = process.env.FIREBASE_PROJECT_ID;
   if (!projectId) {
@@ -106,50 +111,80 @@ async function main() {
   }
 
   const snap = await db.collection("bills").get();
-  const numbers = snap.docs.map((d) => d.get("referenceNumber") as unknown);
-  const bad = snap.docs.filter((d, i) => !Number.isInteger(numbers[i]) || (numbers[i] as number) < 0);
+  const values = snap.docs.map((d) => d.get("referenceNumber") as unknown);
+  const bad = snap.docs.filter((d, i) => !Number.isInteger(values[i]) || (values[i] as number) < 0);
   if (bad.length > 0) {
     throw new Error(
       `${bad.length} bill(s) without a non-negative integer referenceNumber: ${bad.map((d) => d.id).join(", ")}`,
     );
   }
-  const ints = numbers as number[];
+  const ints = values as number[];
   console.log(`Found ${snap.size} bill(s); counter nextBillNumber=${config.nextBillNumber ?? "(unset)"}.`);
 
-  if (snap.size > 0) {
+  if (snap.size === 0) {
+    if (!DRY_RUN) {
+      await configRef.set({ referenceNumberFormat: FORMAT_MARKER }, { merge: true });
+    }
+    console.log(`No bills to shift; ${DRY_RUN ? "would write" : "wrote"} marker "${FORMAT_MARKER}".`);
+    return;
+  }
+
+  // Resume point: an interrupted run already recorded the original minimum.
+  let originalMin = config.migrationOriginalMin as number | undefined;
+  if (originalMin === undefined) {
     const min = Math.min(...ints);
     const max = Math.max(...ints);
     console.log(`referenceNumber range: ${min} … ${max}`);
     if (!(max < min * RADIX)) {
       throw new Error(
-        `Range check failed: max ${max} >= min ${min} × ${RADIX}. Either legacy payloads could collide ` +
-          "with migrated numbers, or a previous run was interrupted half-way. Inspect by hand.",
+        `Range check failed: max ${max} >= min ${min} × ${RADIX}. Legacy payloads could collide with ` +
+          "migrated numbers — inspect by hand.",
       );
     }
-    for (const doc of snap.docs.slice(0, 5)) {
-      const n = doc.get("referenceNumber") as number;
-      console.log(`  ${doc.id}: ${n} → ${n * RADIX}`);
+    originalMin = min;
+    if (!DRY_RUN) {
+      await configRef.set({ migrationOriginalMin: originalMin }, { merge: true });
     }
-    if (snap.size > 5) console.log(`  … ${snap.size - 5} more`);
+  } else {
+    console.log(`Resuming an interrupted run (original minimum ${originalMin}).`);
   }
+  const threshold = originalMin * RADIX;
+  const pending = snap.docs.filter((d) => (d.get("referenceNumber") as number) < threshold);
+  const alreadyShifted = snap.docs.filter((d) => (d.get("referenceNumber") as number) >= threshold);
+  const suspicious = alreadyShifted.filter((d) => (d.get("referenceNumber") as number) % RADIX !== 0);
+  if (suspicious.length > 0) {
+    throw new Error(
+      `${suspicious.length} bill(s) at or above ${threshold} are not multiples of ${RADIX} — not a resumable ` +
+        `state: ${suspicious.map((d) => d.id).join(", ")}`,
+    );
+  }
+  console.log(`${pending.length} to shift, ${alreadyShifted.length} already shifted.`);
+  for (const doc of pending.slice(0, 5)) {
+    const n = doc.get("referenceNumber") as number;
+    console.log(`  ${doc.id}: ${n} → ${n * RADIX}`);
+  }
+  if (pending.length > 5) console.log(`  … ${pending.length - 5} more`);
 
   if (DRY_RUN) {
     console.log("Dry-run: no writes performed.");
     return;
   }
 
-  for (let i = 0; i < snap.docs.length; i += CHUNK) {
+  for (let i = 0; i < pending.length; i += CHUNK) {
     const batch = db.batch();
-    for (const doc of snap.docs.slice(i, i + CHUNK)) {
+    for (const doc of pending.slice(i, i + CHUNK)) {
       const n = doc.get("referenceNumber") as number;
       batch.update(doc.ref, { referenceNumber: n * RADIX });
     }
     await batch.commit();
-    console.log(`Shifted ${Math.min(i + CHUNK, snap.docs.length)} / ${snap.docs.length}`);
+    console.log(`Shifted ${Math.min(i + CHUNK, pending.length)} / ${pending.length}`);
   }
 
-  await configRef.set({ referenceNumberFormat: FORMAT_MARKER }, { merge: true });
-  console.log(`Done. ${snap.size} bill(s) shifted ×${RADIX}; marker "${FORMAT_MARKER}" written.`);
+  await configRef.set(
+    { referenceNumberFormat: FORMAT_MARKER, migrationOriginalMin: FieldValue.delete() },
+    { merge: true },
+  );
+  console.log(`Done. ${pending.length} bill(s) shifted ×${RADIX}; marker "${FORMAT_MARKER}" written.`);
 }
 
 main().catch((err) => {

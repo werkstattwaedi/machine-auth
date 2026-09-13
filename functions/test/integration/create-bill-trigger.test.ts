@@ -408,7 +408,29 @@ describe("create_bill trigger (Integration)", () => {
       // A fresh install bootstraps with the migrated-format marker set.
       const cfg = await db.doc("config/billing").get();
       expect(cfg.data()?.referenceNumberFormat).to.equal("shifted-v1");
+    });
 
+    it("refuses to mint against an existing config/billing without the format marker (ADR-0041)", async () => {
+      // Un-migrated data: the counter exists but the ×10 migration never ran.
+      const db = getFirestore();
+      await db.doc("config/billing").set({ nextBillNumber: 42 });
+      const summary: CheckoutSummaryEntity = {
+        totalPrice: 10, entryFees: 10, machineCost: 0, materialCost: 0, tip: 0,
+      };
+      await seedCheckout("co-unmigrated", { status: "closed", summary });
+      const ref = db.collection("checkouts").doc("co-unmigrated");
+      const data = await getCheckout("co-unmigrated");
+
+      let thrown: unknown = null;
+      try {
+        await createBillForCheckout(ref, data);
+      } catch (err) {
+        thrown = err;
+      }
+      expect(thrown, "allocateBill must throw").to.not.be.null;
+      expect((thrown as { code?: string }).code).to.equal("failed-precondition");
+      expect(await getBillForCheckout("co-unmigrated")).to.be.null;
+      expect(await getBillingConfigNext(), "counter untouched").to.equal(42);
     });
   });
 
