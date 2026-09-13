@@ -45,14 +45,43 @@ const dateTimeFormatter = new Intl.DateTimeFormat(locale, {
   minute: "2-digit",
 })
 
-export function formatInvoiceNumber(n: number): string {
-  return `RE-${String(n).padStart(6, "0")}`
+/**
+ * Bill numbering (ADR-0041): `referenceNumber = base × 10 + d`, where `d`
+ * (0–9) is the revision digit — 0 for an original, 1 for the first
+ * corrected re-issue. Mirrors `functions/src/invoice/types.ts` so
+ * web/functions render the same string for the same stored number.
+ */
+export const BILL_REVISION_RADIX = 10
+
+/** Sequential base number, e.g. 42000011 → 4200001. */
+export function billBaseNumber(referenceNumber: number): number {
+  return Math.floor(referenceNumber / BILL_REVISION_RADIX)
 }
 
-/** Format a Beleg reference number for display, e.g. 1 → "BL-000001". */
-export function formatBelegNumber(n: number): string {
-  return `BL-${String(n).padStart(6, "0")}`
+/** 1 for an original, 2 for the first correction, … e.g. 42000011 → 2. */
+export function billRevision(referenceNumber: number): number {
+  return (referenceNumber % BILL_REVISION_RADIX) + 1
 }
+
+function formatBillNumber(prefix: "RE" | "BL", n: number): string {
+  const base = String(billBaseNumber(n)).padStart(6, "0")
+  const revision = billRevision(n)
+  return revision > 1 ? `${prefix}-${base}-${revision}` : `${prefix}-${base}`
+}
+
+/**
+ * Format an invoice reference number for display: 42000010 → "RE-4200001",
+ * 42000011 → "RE-4200001-2" (first correction).
+ */
+export function formatInvoiceNumber(n: number): string {
+  return formatBillNumber("RE", n)
+}
+
+/** Format a Beleg reference number for display: 42000010 → "BL-4200001". */
+export function formatBelegNumber(n: number): string {
+  return formatBillNumber("BL", n)
+}
+
 
 /**
  * Format a bill's reference number using its `kind`. A `kind: "beleg"`

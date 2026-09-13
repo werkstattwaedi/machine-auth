@@ -7,7 +7,9 @@ import {
   parseCamt053,
   parseRaiseNowCsv,
   parseStatementFile,
+  referenceNumberCandidates,
   referenceNumberFromScor,
+
   type MatchableBill,
 } from "./camt"
 
@@ -135,11 +137,59 @@ describe("referenceNumberFromScor", () => {
   })
 })
 
+describe("referenceNumberCandidates (ADR-0041)", () => {
+  it("tries the exact payload first, then the legacy ×10 reading", () => {
+    expect(referenceNumberCandidates("RF29000100042")).toEqual([100042, 1000420])
+  })
+
+  it("returns nothing for an invalid reference", () => {
+    expect(referenceNumberCandidates("RF32000100042")).toEqual([])
+  })
+})
+
 describe("matchStatement", () => {
   const bills: MatchableBill[] = [
     { id: "b1", referenceNumber: 100042, amount: 84, paid: false },
     { id: "b2", referenceNumber: 7, amount: 60, paid: true },
   ]
+
+  it("resolves a legacy slip payload to the ×10-migrated bill (ADR-0041)", () => {
+    const migrated: MatchableBill[] = [
+      { id: "m1", referenceNumber: 1000420, amount: 84, paid: false },
+    ]
+    const { entries } = parseCamt053(CAMT)
+    const result = matchStatement(entries, migrated)
+    expect(result.matched).toHaveLength(1)
+    expect(result.matched[0].bill.id).toBe("m1")
+  })
+
+  it("prefers the exact number over the legacy reading", () => {
+    const both: MatchableBill[] = [
+      { id: "exact", referenceNumber: 100042, amount: 84, paid: false },
+      { id: "legacy", referenceNumber: 1000420, amount: 84, paid: false },
+    ]
+    const { entries } = parseCamt053(CAMT)
+    expect(matchStatement(entries, both).matched[0].bill.id).toBe("exact")
+  })
+
+  it("routes a payment on a cancelled bill to cancelledBill, never booked", () => {
+    const cancelled: MatchableBill[] = [
+      {
+        id: "c1",
+        referenceNumber: 100042,
+        amount: 84,
+        paid: false,
+        cancelled: true,
+        supersededByReference: "RE-010004-2",
+      },
+    ]
+    const { entries } = parseCamt053(CAMT)
+    const result = matchStatement(entries, cancelled)
+    expect(result.matched).toHaveLength(0)
+    expect(result.cancelledBill).toHaveLength(1)
+    expect(result.cancelledBill[0].bill.supersededByReference).toBe("RE-010004-2")
+  })
+
 
   it("splits matched / already-paid / unmatched", () => {
     const { entries } = parseCamt053(CAMT)

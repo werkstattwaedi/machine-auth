@@ -957,7 +957,10 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
         billRef: db.collection("bills").doc(billId),
       });
       // Pre-allocate a billing config so we can detect any unintended advance.
-      await db.doc("config/billing").set({ nextBillNumber: 99 });
+      await db.doc("config/billing").set({
+        nextBillNumber: 99,
+        referenceNumberFormat: "shifted-v1",
+      });
 
       const result = await call({
         uid,
@@ -1175,13 +1178,15 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
       const refs = bills
         .map((b) => b.data.referenceNumber)
         .sort((a, b) => a - b);
-      // Two sequential numbers, no gaps.
-      expect(refs[1] - refs[0]).to.equal(1);
+      // Two sequential counter values, no gaps — stored as counter × 10
+      // (revision digit 0, ADR-0041).
+      expect(refs[1] - refs[0]).to.equal(10);
 
       const db = getFirestore();
       const cfg = await db.doc("config/billing").get();
       // First call bootstraps to nextBillNumber = 2; second advances to 3.
-      expect(cfg.data()?.nextBillNumber).to.equal(refs[1] + 1);
+      expect(cfg.data()?.nextBillNumber).to.equal(refs[1] / 10 + 1);
+
     });
   });
 

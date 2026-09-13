@@ -99,6 +99,18 @@ const resendMembershipRenewalTemplateId = defineString(
 // Contact address surfaced on the TWINT email ("contact kasse@... if in
 // error"). Set in the operations repo per env.
 const kasseEmail = defineString("KASSE_EMAIL", { default: "" });
+// Corrected re-issue / cancellation mails (ADR-0041). One correction
+// template serves every document kind (DOCUMENT_KIND carries the noun);
+// the cancellation template is for pure cancellations without a
+// replacement. Both fall back like the other optional templates.
+const resendCorrectionTemplateId = defineString(
+  "RESEND_CORRECTION_TEMPLATE_ID",
+  { default: "" },
+);
+const resendCancellationTemplateId = defineString(
+  "RESEND_CANCELLATION_TEMPLATE_ID",
+  { default: "" },
+);
 
 // Stale lock threshold: if a lock is older than this, treat it as failed
 const STALE_LOCK_MS = 5 * 60 * 1000; // 5 minutes
@@ -342,6 +354,21 @@ async function assembleInvoiceData(
       ? "rechnung"
       : rawPaymentMethod;
 
+  // Corrected re-issue (ADR-0041): one extra read for the superseded bill's
+  // number and date so the PDF can state what it replaces.
+  let supersedes: InvoiceData["supersedes"] = null;
+  if (bill.supersedesBillRef) {
+    const previousSnap = await bill.supersedesBillRef.get();
+    const previous = previousSnap.data() as BillEntity | undefined;
+    if (previous) {
+      supersedes = {
+        reference: formatBillReference(previous.referenceNumber, previous.kind),
+        date: previous.created.toDate(),
+        reason: bill.correctionReason ?? "",
+      };
+    }
+  }
+
   return {
     referenceNumber: bill.referenceNumber,
     invoiceDate: new Date(),
@@ -357,8 +384,10 @@ async function assembleInvoiceData(
     kind,
     source: bill.source ?? "checkout",
     membershipCatalogId,
+    supersedes,
   };
 }
+
 
 // --- Async processing with optimistic locking ---
 
@@ -465,6 +494,16 @@ function pickTemplate(
 ): TemplateChoice {
   const kind = bill.kind ?? "invoice";
 
+  // Corrected re-issue (ADR-0041). Checked first: a replacement keeps its
+  // original kind/source and would otherwise fall into those branches.
+  if (bill.supersedesBillRef) {
+    const id = resendCorrectionTemplateId.value();
+    return {
+      id: id || resendQrBillTemplateId.value(),
+      paramName: id ? "RESEND_CORRECTION_TEMPLATE_ID" : "RESEND_QRBILL_TEMPLATE_ID",
+    };
+  }
+
   // Membership renewal (issue #323): the renewalInvoicer cron mints these
   // with paymentMethod "rechnung", so without the source check they'd read
   // as a Self-Checkout visit ("Rechnung für deinen Self-Checkout vom …").
@@ -536,7 +575,19 @@ export async function trySendEmail(billId: string): Promise<boolean> {
   if (!billDoc.exists) return false;
   const bill = billDoc.data() as BillEntity;
 
+  // Cancelled (ADR-0041): nothing to send and nothing to retry — keeps the
+  // hourly sweep from mailing a never-sent original after its cancellation.
+  if (bill.cancelledAt) return true;
+
   const isBeleg = (bill.kind ?? "invoice") === "beleg";
+
+  // A replacement Beleg minted inside a Sammelrechnung revision (ADR-0041)
+  // never mails on its own: its PDF rides along as an attachment of the
+  // revision's correction mail (`correctedBillRefs`). An un-aggregated
+  // replacement Beleg has no revision to ride on and mails itself.
+  if (isBeleg && bill.supersedesBillRef && bill.aggregatedIntoBillRef) {
+    return true;
+  }
 
   // A Beleg (per-visit Sammelrechnung record, issue #245) is committed by
   // its kind transition (acknowledgeBill / autoAcknowledgeBills flip it to
@@ -549,8 +600,10 @@ export async function trySendEmail(billId: string): Promise<boolean> {
   if (!isBeleg && !bill.paymentMethodConfirmationTime) return false;
 
   // Free bills are auto-acked at creation to keep the cron out, but we
-  // don't email a "here's your zero-amount invoice" PDF.
-  if (bill.paidVia === "free") return false;
+  // don't email a "here's your zero-amount invoice" PDF — unless it is a
+  // corrected re-issue: a correction down to CHF 0.00 still owes the
+  // customer the "replaced" mail (ADR-0041).
+  if (bill.paidVia === "free" && !bill.supersedesBillRef) return false;
 
   // No PDF yet — can't send email without attachment
   if (!bill.storagePath) return false;
@@ -559,6 +612,20 @@ export async function trySendEmail(billId: string): Promise<boolean> {
   // emailSentAt to null so the retry picks it up. A process crash
   // mid-send would leave emailSentAt stuck — rare enough to handle manually.
   if (bill.emailSentAt) return false;
+
+  // Corrected re-issue (ADR-0041): the superseded bill's number goes into
+  // the copy, and a Sammelrechnung revision carries the replacement Belege
+  // of the same commit as extra attachments. Their PDFs are generated right
+  // before this call; if one is still missing, bail WITHOUT taking the lock
+  // so the hourly retry sends once everything exists.
+  const supersededBill = await loadSupersededBill(bill);
+  const attachedBills = await loadCorrectedBills(bill, billId);
+  if (attachedBills.some((a) => !a.bill.storagePath)) {
+    logger.info(
+      `Bill ${billId}: corrected Beleg PDF not ready yet, deferring the correction mail`,
+    );
+    return false;
+  }
 
   // Get recipient email from first checkout
   if (bill.checkouts.length === 0) return false;
@@ -606,6 +673,34 @@ export async function trySendEmail(billId: string): Promise<boolean> {
       checkout.created.toDate(),
       "dd. MMMM yyyy, HH:mm",
     );
+    // Correction-only variables (ADR-0041). Kept off the regular templates
+    // so their variable set stays exactly what ops published.
+    const correctionVariables: Record<string, string> = supersededBill
+      ? {
+
+          DOCUMENT_KIND: documentKindLabel(bill, checkout.paymentMethod ?? null),
+          SUPERSEDED_INVOICE_NUMBER: formatBillReference(
+            supersededBill.referenceNumber,
+            supersededBill.kind,
+          ),
+          REASON: bill.correctionReason ?? "",
+          CORRECTED_DOCUMENTS: attachedBills
+            .map((a) => formatBillReference(a.bill.referenceNumber, a.bill.kind))
+            .join(", "),
+          CANCELLED_DOCUMENTS: (
+            await cancelledWithoutReplacement(bill.supersedesBillRef!)
+          ).join(", "),
+        }
+      : {};
+    const extraAttachments = await Promise.all(
+      attachedBills.map(async (a) => ({
+        path: await downloadUrlFor(bucket.file(a.bill.storagePath!), {
+          action: "read",
+          expires: Date.now() + 24 * 3600 * 1000,
+        }),
+        filename: `Beleg-${formatBillReference(a.bill.referenceNumber, a.bill.kind)}.pdf`,
+      })),
+    );
 
     // Lazy import: same rationale as build_invoice_pdf above.
     const { Resend } = await import("resend");
@@ -623,6 +718,7 @@ export async function trySendEmail(billId: string): Promise<boolean> {
           CURRENCY: bill.currency,
           KASSE_EMAIL: kasseEmail.value(),
           CONFIRMATION_SOURCE: bill.paymentMethodConfirmationSource ?? "",
+          ...correctionVariables,
         },
       },
       attachments: [
@@ -630,6 +726,7 @@ export async function trySendEmail(billId: string): Promise<boolean> {
           path: signedUrl,
           filename: `${billDocumentPrefix(bill.kind, checkout.paymentMethod ?? null)}-${invoiceNumber}.pdf`,
         },
+        ...extraAttachments,
       ],
     });
 
@@ -645,6 +742,138 @@ export async function trySendEmail(billId: string): Promise<boolean> {
     const message = error instanceof Error ? error.message : String(error);
     logger.error(`Email send failed for bill ${billId}`, { error: message });
     await logOperationError("bills", billId, "email_send", message);
+    return false;
+  }
+}
+
+/** Noun for the correction/cancellation copy: Rechnung / Quittung / Beleg / Sammelrechnung. */
+function documentKindLabel(
+  bill: BillEntity,
+  paymentMethod: PaymentMethod | null,
+): string {
+  const prefix = billDocumentPrefix(bill.kind, paymentMethod);
+  return prefix === "Rechnung" && bill.checkouts.length > 1 ? "Sammelrechnung" : prefix;
+}
+
+async function loadSupersededBill(bill: BillEntity): Promise<BillEntity | null> {
+  if (!bill.supersedesBillRef) return null;
+  const snap = await bill.supersedesBillRef.get();
+  return (snap.data() as BillEntity | undefined) ?? null;
+}
+
+/** The replacement Belege listed on a Sammelrechnung revision (ADR-0041). */
+async function loadCorrectedBills(
+  bill: BillEntity,
+  billId: string,
+): Promise<Array<{ id: string; bill: BillEntity }>> {
+  if (!bill.correctedBillRefs?.length) return [];
+  const snaps = await Promise.all(bill.correctedBillRefs.map((ref) => ref.get()));
+  const out: Array<{ id: string; bill: BillEntity }> = [];
+  for (const snap of snaps) {
+    const data = snap.data() as BillEntity | undefined;
+    if (!data) {
+      logger.warn(`Bill ${billId}: corrected Beleg ${snap.ref.path} is missing, skipping attachment`);
+      continue;
+    }
+    out.push({ id: snap.id, bill: data });
+  }
+  return out;
+}
+
+/**
+ * Belege cancelled *without* a replacement in the commit that superseded
+ * `previousAggregateRef`. Active Belege were re-pointed at the revision in
+ * that commit, so the ones still pointing at the old aggregate are exactly
+ * that commit's cancellations; those with a `supersededByBillRef` were
+ * replaced and are already listed via `correctedBillRefs`.
+ */
+async function cancelledWithoutReplacement(
+  previousAggregateRef: DocumentReference,
+): Promise<string[]> {
+  const snap = await getFirestore()
+    .collection("bills")
+    .where("aggregatedIntoBillRef", "==", previousAggregateRef)
+    .get();
+  return snap.docs
+    .map((d) => d.data() as BillEntity)
+    .filter((b) => b.cancelledAt && !b.supersededByBillRef)
+    .map((b) => formatBillReference(b.referenceNumber, b.kind));
+}
+
+/**
+ * "Rechnung storniert" notice for a pure cancellation (ADR-0041): no
+ * replacement, no attachment. Same optimistic-lock convention as
+ * `trySendEmail` (`cancellationNoticeSentAt`). Returns true when sent or
+ * when there is nothing to send: the customer never received the original
+ * (`emailSentAt` null), or a correction / revision mail covers the
+ * cancellation (`supersededByBillRef` set). Called inline by the correction
+ * callable and retried by `retryBillProcessing`.
+ */
+export async function trySendCancellationNotice(billId: string): Promise<boolean> {
+  if (process.env.FUNCTIONS_EMULATOR === "true") {
+    logger.info(`Emulator: skipping cancellation notice for bill ${billId}`);
+    return true;
+  }
+
+  const db = getFirestore();
+  const billRef = db.collection("bills").doc(billId);
+  const billDoc = await billRef.get();
+  if (!billDoc.exists) return false;
+  const bill = billDoc.data() as BillEntity;
+
+  if (!bill.cancelledAt) return false;
+  if (bill.supersededByBillRef) return true;
+  if (!bill.emailSentAt) return true;
+  if (bill.cancellationNoticeSentAt) return false;
+
+  if (bill.checkouts.length === 0) return false;
+  const checkoutDoc = await bill.checkouts[0].get();
+  if (!checkoutDoc.exists) return false;
+  const checkout = checkoutDoc.data() as CheckoutEntity;
+  const recipientEmail = await resolveRecipientEmail(checkout);
+  if (!recipientEmail) {
+    logger.warn(`Bill ${billId}: no recipient email for cancellation notice, skipping`);
+    return true;
+  }
+
+  await billRef.update({ cancellationNoticeSentAt: Timestamp.now() });
+
+  try {
+    const templateId = resendCancellationTemplateId.value();
+    assertTemplateConfigured(templateId, "RESEND_CANCELLATION_TEMPLATE_ID");
+
+    const { Resend } = await import("resend");
+    const resend = new Resend(resendApiKey.value());
+    const { error } = await resend.emails.send({
+      from: resendFromEmail.value(),
+      to: recipientEmail,
+      template: {
+        id: templateId,
+        variables: {
+          RECIPIENT_NAME: checkout.persons[0]?.name ?? "Kunde",
+          CHECKOUT_DATE: formatWorkshopDateTime(
+            checkout.created.toDate(),
+            "dd. MMMM yyyy, HH:mm",
+          ),
+          INVOICE_NUMBER: formatBillReference(bill.referenceNumber, bill.kind),
+          DOCUMENT_KIND: documentKindLabel(bill, checkout.paymentMethod ?? null),
+          REASON: bill.cancellationReason ?? "",
+          AMOUNT: bill.amount.toFixed(2),
+          CURRENCY: bill.currency,
+          KASSE_EMAIL: kasseEmail.value(),
+        },
+      },
+    });
+    if (error) {
+      throw new Error(JSON.stringify(error));
+    }
+    logger.info(`Cancellation notice sent for bill ${billId} to ${recipientEmail}`);
+    return true;
+  } catch (error) {
+    await billRef.update({ cancellationNoticeSentAt: null });
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error(`Cancellation notice failed for bill ${billId}`, { error: message });
+    await logOperationError("bills", billId, "cancellation_notice", message);
     return false;
   }
 }
@@ -834,8 +1063,27 @@ export const retryBillProcessing = onSchedule(
       }
     }
 
-    if (pdfRetries > 0 || emailRetries > 0) {
-      logger.info(`Bill retry: ${pdfRetries} PDF, ${emailRetries} email attempts`);
+    // Cancellation notices (ADR-0041): the correction callable sends inline;
+    // this retries the ones that failed. Same 24 h window, keyed on the
+    // cancellation instead of creation (single-field range, no index).
+    const recentlyCancelled = await db
+      .collection("bills")
+      .where("cancelledAt", ">", cutoff)
+      .get();
+    let noticeRetries = 0;
+    for (const doc of recentlyCancelled.docs) {
+      const bill = doc.data() as BillEntity;
+      if (bill.cancellationNoticeSentAt || bill.supersededByBillRef || !bill.emailSentAt) {
+        continue;
+      }
+      noticeRetries++;
+      await trySendCancellationNotice(doc.id);
+    }
+
+    if (pdfRetries > 0 || emailRetries > 0 || noticeRetries > 0) {
+      logger.info(
+        `Bill retry: ${pdfRetries} PDF, ${emailRetries} email, ${noticeRetries} cancellation-notice attempts`,
+      );
     }
   },
 );

@@ -57,8 +57,11 @@ describe("buildInvoicePdf — content", () => {
     const text = await pdfText(singleCheckoutInvoice());
     expect(text).to.include("Rechnung Self Checkout");
     expect(text).to.include("Rechnungsnummer: RE-000001");
-    // SCOR reference in QR bill section (space-separated per spec)
-    expect(text).to.include("RF74 0000 0000 1");
+    // SCOR reference in QR bill section (space-separated per spec). The
+    // payload is the stored referenceNumber (10 = bill 1, revision digit 0,
+    // ADR-0041) zero-padded to 9 digits.
+    expect(text).to.include("RF25 0000 0001 0");
+
     expect(text).to.include("15.06.2025");
     expect(text).to.include("14.06.2025 14:30");
     expect(text).to.include("Max Mustermann");

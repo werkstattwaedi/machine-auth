@@ -109,7 +109,10 @@ describe("runMonthlyBillRun (Integration, #245)", () => {
     await clearFirestore();
     // Seed the bill-number counter so allocateBill has a base value.
     const db = getFirestore();
-    await db.doc("config/billing").set({ nextBillNumber: 100 });
+    await db.doc("config/billing").set({
+      nextBillNumber: 100,
+      referenceNumberFormat: "shifted-v1",
+    });
   });
 
   // 2026-05-15 12:00 UTC = Mai 2026 in Zurich (CEST = UTC+2).
@@ -165,7 +168,9 @@ describe("runMonthlyBillRun (Integration, #245)", () => {
     expect(invoice!.checkouts).to.have.length(3);
     expect(invoice!.paymentMethodConfirmationTime).to.be.instanceOf(Timestamp);
     expect(invoice!.paymentMethodConfirmationSource).to.equal("auto");
-    expect(invoice!.referenceNumber).to.equal(100);
+    // counter 100 → stored 1000 (revision digit 0, ADR-0041)
+    expect(invoice!.referenceNumber).to.equal(1000);
+
 
     // Each Beleg now points at the new invoice.
     for (const id of ["beleg-1", "beleg-2", "beleg-3"]) {

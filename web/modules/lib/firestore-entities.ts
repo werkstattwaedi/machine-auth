@@ -285,7 +285,17 @@ export type PaymentMethod = "rechnung" | "monthly" | "twint"
 
 export interface CheckoutDoc extends AuditFields {
   userId: DocumentReference<UserDoc> | null
-  status: "open" | "closed"
+  // "cancelled" (ADR-0041): an admin voided this closed visit; the doc stays
+  // as the as-billed record and the corrected re-issue is a NEW closed
+  // checkout (`supersededByCheckoutRef`). `status == "closed"` queries
+  // exclude cancelled visits automatically.
+  status: "open" | "closed" | "cancelled"
+  cancelledAt?: Timestamp | null
+  cancelledBy?: string | null
+  cancellationReason?: string | null
+  supersededByCheckoutRef?: DocumentReference<CheckoutDoc> | null
+  supersedesCheckoutRef?: DocumentReference<CheckoutDoc> | null
+
   usageType: CheckoutUsageType | string
   created: Timestamp
   workshopsVisited: string[]
@@ -370,7 +380,19 @@ export interface BillDoc extends AuditFields {
   // Origin discriminator (issue #323). Missing value is treated as
   // "checkout" so legacy docs migrate-free.
   source?: "checkout" | "membership-renewal"
+  // --- Cancellation / corrected re-issue (ADR-0041). Server-only; mirrors
+  // BillEntity in functions/src/invoice/types.ts. `referenceNumber` is
+  // base × 10 + revision digit — always render through formatBillReference.
+  cancelledAt?: Timestamp | null
+  cancelledBy?: string | null
+  cancellationReason?: string | null
+  supersededByBillRef?: DocumentReference<BillDoc> | null
+  supersedesBillRef?: DocumentReference<BillDoc> | null
+  correctionReason?: string | null
+  correctedBillRefs?: DocumentReference<BillDoc>[] | null
+  cancellationNoticeSentAt?: Timestamp | null
 }
+
 
 // ── memberships ──────────────────────────────────────────────────────────
 

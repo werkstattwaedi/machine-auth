@@ -17,7 +17,7 @@ function makeBill(partial: Partial<BillEntity>): BillEntity {
     // avoid importing DocumentReference test doubles.
     userId: {} as BillEntity["userId"],
     checkouts: [],
-    referenceNumber: 1,
+    referenceNumber: 10,
     amount: 0,
     currency: "CHF",
     storagePath: "invoices/bill.pdf",
@@ -38,14 +38,14 @@ describe("getInvoiceDownloadUrl — buildDownloadOptions", () => {
     // Content-Disposition: attachment so the browser downloads instead of
     // rendering the PDF inline (which, combined with window.open after an
     // await, tripped the popup blocker).
-    const opts = buildDownloadOptions(makeBill({ referenceNumber: 5 }));
+    const opts = buildDownloadOptions(makeBill({ referenceNumber: 50 }));
     expect(opts.responseDisposition).to.equal(
       'attachment; filename="Rechnung_RE-000005.pdf"',
     );
   });
 
   it("pads the reference number to six digits", () => {
-    const opts = buildDownloadOptions(makeBill({ referenceNumber: 42 }));
+    const opts = buildDownloadOptions(makeBill({ referenceNumber: 420 }));
     expect(opts.responseDisposition).to.contain(
       'filename="Rechnung_RE-000042.pdf"',
     );
@@ -53,7 +53,7 @@ describe("getInvoiceDownloadUrl — buildDownloadOptions", () => {
 
   it("uses read action and a future expires timestamp", () => {
     const before = Date.now();
-    const opts = buildDownloadOptions(makeBill({ referenceNumber: 1 }));
+    const opts = buildDownloadOptions(makeBill({ referenceNumber: 10 }));
     expect(opts.action).to.equal("read");
     expect(opts.expires).to.be.greaterThan(before);
   });
@@ -63,7 +63,7 @@ describe("getInvoiceDownloadUrl — buildDownloadOptions", () => {
     // downloaded as "Rechnung_RE-…" even though the PDF inside is a Beleg.
     // The filename must reflect the document type.
     const opts = buildDownloadOptions(
-      makeBill({ referenceNumber: 11, kind: "beleg" }),
+      makeBill({ referenceNumber: 110, kind: "beleg" }),
     );
     expect(opts.responseDisposition).to.equal(
       'attachment; filename="Beleg_BL-000011.pdf"',
@@ -72,7 +72,7 @@ describe("getInvoiceDownloadUrl — buildDownloadOptions", () => {
 
   it("names a kind: 'invoice' bill Rechnung_RE-XXXXXX.pdf (#405)", () => {
     const opts = buildDownloadOptions(
-      makeBill({ referenceNumber: 12, kind: "invoice" }),
+      makeBill({ referenceNumber: 120, kind: "invoice" }),
     );
     expect(opts.responseDisposition).to.equal(
       'attachment; filename="Rechnung_RE-000012.pdf"',
@@ -84,7 +84,7 @@ describe("getInvoiceDownloadUrl — buildDownloadOptions", () => {
     // filename must not keep calling it a Rechnung — same contract #405
     // established for Belege.
     const opts = buildDownloadOptions(
-      makeBill({ referenceNumber: 13, kind: "invoice" }),
+      makeBill({ referenceNumber: 130, kind: "invoice" }),
       "twint",
     );
     expect(opts.responseDisposition).to.equal(
@@ -96,7 +96,7 @@ describe("getInvoiceDownloadUrl — buildDownloadOptions", () => {
     // The aggregated monthly invoice's checkout still records
     // paymentMethod "monthly" but the document is a payable Rechnung.
     const opts = buildDownloadOptions(
-      makeBill({ referenceNumber: 14, kind: "invoice" }),
+      makeBill({ referenceNumber: 140, kind: "invoice" }),
       "monthly",
     );
     expect(opts.responseDisposition).to.equal(
@@ -106,7 +106,7 @@ describe("getInvoiceDownloadUrl — buildDownloadOptions", () => {
 
   it("Beleg kind wins over any payment method", () => {
     const opts = buildDownloadOptions(
-      makeBill({ referenceNumber: 15, kind: "beleg" }),
+      makeBill({ referenceNumber: 150, kind: "beleg" }),
       "twint",
     );
     expect(opts.responseDisposition).to.equal(

@@ -8,6 +8,7 @@
  */
 
 import { onCall } from "firebase-functions/v2/https";
+import { defineSecret } from "firebase-functions/params";
 import { dispatchRpc, type RpcHandler } from "../rpc/dispatch";
 import { getInvoiceDownloadUrlHandler } from "./get_invoice_download_url";
 import { getPaymentQrDataHandler } from "./get_payment_qr_data";
@@ -16,6 +17,11 @@ import { acknowledgeBillHandler } from "./acknowledge_bill";
 import { adminMarkBillsPaidHandler } from "./mark_bills_paid";
 import { addBadgeToCheckoutHandler } from "../badge/purchase";
 import { diversificationMasterKey } from "../config/tag-secrets";
+
+// correctCheckouts (ADR-0041) mails the corrected documents inline, like
+// monthlyBillRun does — pre-acked bills never see the ack transition that
+// drives the trigger-based send.
+const resendApiKey = defineSecret("RESEND_API_KEY");
 
 const HANDLERS: Record<string, RpcHandler> = {
   getInvoiceDownloadUrl: getInvoiceDownloadUrlHandler,
@@ -30,7 +36,8 @@ export const billingCall = onCall(
   {
     // diversificationMasterKey: addBadgeToCheckout verifies the signed
     // badge voucher (HMAC key derived from it).
-    secrets: [diversificationMasterKey],
+    secrets: [diversificationMasterKey, resendApiKey],
+
     memory: "512MiB",
   },
   (request) => dispatchRpc("billing", HANDLERS, request)

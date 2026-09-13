@@ -77,8 +77,14 @@ export const VISIT_OPEN_ID = "e2e-visit-open"
 export const BILL_OPEN_ID = "e2e-bill-open"
 export const BILL_OVERDUE_ID = "e2e-bill-overdue"
 export const BILL_PAID_ID = "e2e-bill-paid"
-export const BILL_OPEN_REFERENCE = 2041
-export const BILL_OVERDUE_REFERENCE = 2036
+// Stored bill numbers are base × 10 + revision digit (ADR-0041): 20410 renders
+// as RE-002041. `displayReference` mirrors the web formatter without pulling
+// `import.meta.env` into the Playwright process.
+export const BILL_OPEN_REFERENCE = 20410
+export const BILL_OVERDUE_REFERENCE = 20360
+export function displayReference(referenceNumber: number): string {
+  return `RE-${String(Math.floor(referenceNumber / 10)).padStart(6, "0")}`
+}
 
 export const MEMBERSHIP_ID = "e2e-membership-anna"
 
@@ -376,7 +382,8 @@ async function seedWorkflowData() {
     .set({
       ...billBase,
       checkouts: [],
-      referenceNumber: 2038,
+      referenceNumber: 20380,
+
       amount: 60,
       created: ts("2026-05-02T10:00:00Z"),
       paidAt: ts("2026-05-10T10:00:00Z"),

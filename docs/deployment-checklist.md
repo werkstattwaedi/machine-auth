@@ -205,6 +205,48 @@ One-time setup before the functions deploy:
    sends, but with Self-Checkout copy instead of the Vorstand renewal
    letter, so this misconfiguration does NOT fail loudly.
 
+### Bill correction + cancellation emails (ADR-0041)
+
+Corrected re-issues (`RE-…-2`) and pure cancellations send two dedicated Resend templates.
+One-time setup before the functions deploy:
+
+1. Create/publish the templates from the operations repo — `self-checkout-correction`
+   (variables: RECIPIENT_NAME, CHECKOUT_DATE, INVOICE_NUMBER, SUPERSEDED_INVOICE_NUMBER,
+   DOCUMENT_KIND, AMOUNT, CURRENCY, REASON, KASSE_EMAIL, CORRECTED_DOCUMENTS,
+   CANCELLED_DOCUMENTS; the corrected PDF plus any corrected Belege are attached) and
+   `self-checkout-cancellation` (RECIPIENT_NAME, CHECKOUT_DATE, INVOICE_NUMBER, DOCUMENT_KIND,
+   REASON, AMOUNT, CURRENCY, KASSE_EMAIL; no attachment).
+2. Add `functions.resendCorrectionTemplateId` / `functions.resendCancellationTemplateId` to the
+   operations config and run `npm run generate-env`.
+3. Until both are set, the correction mail falls back to the generic QR-bill template and the
+   cancellation notice fails into `operations_log` (retried hourly) — so set them before the first
+   correction, not after.
+
+### Bill-number migration (ADR-0041) — once per project, BEFORE the functions deploy
+
+Stored `bills.referenceNumber` values move to `base × 10 + revisionDigit`. The new `allocateBill`
+refuses to mint until `config/billing.referenceNumberFormat == "shifted-v1"` exists, and the daily
+stats export emits a new `cancelled_at` column. Order matters:
+
+```bash
+# 1. BigQuery first — the sink rejects unknown columns (skipInvalidRows: false).
+npx tsx scripts/setup-bigquery.ts --project <project-id>
+
+# 2. Dry-run, then migrate. Refuses to run twice; asserts max < min × 10 so a
+#    half-applied run can never double-shift.
+FIREBASE_PROJECT_ID=<project-id> GOOGLE_APPLICATION_CREDENTIALS=<sa.json> \
+  npx tsx scripts/migrate-bill-numbers.ts --prod --dry-run
+FIREBASE_PROJECT_ID=<project-id> GOOGLE_APPLICATION_CREDENTIALS=<sa.json> \
+  npx tsx scripts/migrate-bill-numbers.ts --prod
+
+# 3. Then rules/indexes, functions, hosting (sections 3–6).
+```
+
+Nothing needs to be quiet during the migration: the old code keeps working on un-migrated numbers,
+the new code refuses until migrated. Existing PDFs keep their printed number and legacy QR payload;
+the bank import resolves those slips through a ×10 fallback. Afterwards, check the admin Rechnungen
+list still shows `RE-4200001…` and that a second `migrate-bill-numbers.ts` run refuses.
+
 ## 3. Deploy Functions
 
 ```bash

@@ -29,7 +29,7 @@ function testBill(): BillEntity {
   return {
     userId: { id: "u1" } as never,
     checkouts: [],
-    referenceNumber: 42,
+    referenceNumber: 420,
     amount: 84,
     currency: "CHF",
     storagePath: null,
@@ -60,10 +60,13 @@ describe("buildPaymentData PayLink URL", () => {
     const url = new URL(data.paylinkUrl);
     expect(url.origin).to.equal("https://pay.raisenow.io");
     expect(url.pathname).to.equal("/tstslnid");
-    // The exact parameter TWINT reads — RF29000000042 is the SCOR ref for
+    // The exact parameter TWINT reads — the SCOR payload is the stored
+    // referenceNumber (base×10+revision, ADR-0041) zero-padded to 9 digits;
+    // 420 is bill 42, revision digit 0. RF29000000042 used to be the ref for
     // bill number 42 (9-digit padded payload).
     expect(url.searchParams.get("reference.creditor")).to.equal(data.reference);
-    expect(data.reference).to.match(/^RF\d{2}000000042$/);
+    expect(data.reference).to.match(/^RF\d{2}000000420$/);
+
     // The old, silently-ignored spelling must be gone.
     expect(url.searchParams.has("reference.creditor.value")).to.be.false;
     expect(url.searchParams.get("amount.values")).to.equal("84.00");

@@ -128,7 +128,12 @@ async function seedPricingConfig(
 
 async function seedBillingConfig(nextBillNumber: number): Promise<void> {
   const db = getFirestore();
-  await db.doc("config/billing").set({ nextBillNumber });
+  await db.doc("config/billing").set({
+    nextBillNumber,
+    // ADR-0041: allocateBill refuses to mint against an existing config doc
+    // without the migrated-format marker.
+    referenceNumberFormat: "shifted-v1",
+  });
 }
 
 async function getCheckout(checkoutId: string): Promise<CheckoutEntity> {
@@ -377,7 +382,9 @@ describe("create_bill trigger (Integration)", () => {
         allocated.push(result!.data.referenceNumber);
       }
 
-      expect(allocated).to.deep.equal([42, 43, 44]);
+      // Stored numbers are counter × 10 (revision digit 0, ADR-0041); the
+      // counter itself still advances by 1.
+      expect(allocated).to.deep.equal([420, 430, 440]);
       expect(await getBillingConfigNext()).to.equal(45);
     });
 
@@ -396,8 +403,12 @@ describe("create_bill trigger (Integration)", () => {
       await createBillForCheckout(ref, data);
 
       const result = await getBillForCheckout("co-first");
-      expect(result!.data.referenceNumber).to.equal(1);
+      expect(result!.data.referenceNumber).to.equal(10);
       expect(await getBillingConfigNext()).to.equal(2);
+      // A fresh install bootstraps with the migrated-format marker set.
+      const cfg = await db.doc("config/billing").get();
+      expect(cfg.data()?.referenceNumberFormat).to.equal("shifted-v1");
+
     });
   });
 

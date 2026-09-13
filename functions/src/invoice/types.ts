@@ -42,6 +42,31 @@ export interface BillEntity {
   // Origin discriminator (issue #323). Missing value is treated as
   // "checkout" so legacy docs migrate-free.
   source?: BillSource;
+
+  // --- Cancellation / corrected re-issue (ADR-0041). All server-only. ---
+  // A cancelled bill stays in place as the as-sent accounting record; the
+  // admin UIs derive "storniert" from `cancelledAt`. Legacy docs lack these
+  // fields entirely, so never filter on `== null` — check client-side.
+  cancelledAt?: Timestamp | null;
+  cancelledBy?: string | null; // admin uid
+  cancellationReason?: string | null;
+  // Forward / backward links of a corrected re-issue. The replacement keeps
+  // the base number with the next revision digit (see formatInvoiceNumber).
+  supersededByBillRef?: DocumentReference | null;
+  supersedesBillRef?: DocumentReference | null;
+  correctionReason?: string | null;
+  // Sammelrechnung revision only: the replacement Belege minted in the same
+  // commit. Their PDFs ride along as attachments of the revision's mail, so
+  // the Belege themselves never send. Stored (not derived) because Belege
+  // corrected in an earlier revision are re-pointed to the latest one and
+  // would otherwise be attached again.
+  correctedBillRefs?: DocumentReference[] | null;
+  // Optimistic lock for the "Rechnung storniert" notice (pure cancellation
+  // without replacement). Same convention as `emailSentAt`.
+  cancellationNoticeSentAt?: Timestamp | null;
+  // Last writer (admin uid) — read by the `auditBills` trigger as actor.
+  modifiedBy?: string | null;
+  modifiedAt?: Timestamp | null;
 }
 
 /** Per-person entry fee for display on the invoice */
@@ -136,16 +161,58 @@ export interface InvoiceData {
    * and the renderer stays pure (no Firestore reads).
    */
   membershipCatalogId?: string | null;
+  /**
+   * Set on a corrected re-issue (ADR-0041): the bill this document
+   * replaces. Rendered as a bold "ersetzt … vom … Grund: …" paragraph under
+   * the date line. `reference` is the already-formatted number of the
+   * superseded bill (e.g. "RE-4200001").
+   */
+  supersedes?: { reference: string; date: Date; reason: string } | null;
 }
 
-/** Format an invoice reference number for display, e.g. 1 → "RE-000001" */
+
+/**
+ * Bill numbering (ADR-0041): `referenceNumber = base × 10 + d`, where `d`
+ * (0–9) is the revision digit — 0 for an original, 1 for the first
+ * corrected re-issue, and so on. The base is the sequential counter value
+ * from `config/billing.nextBillNumber`. Keeping the digit *inside* the
+ * stored number means the SCOR payload, every Map keyed on the number and
+ * the "one bill doc per number" invariant all keep working unchanged;
+ * only the formatters below know about the split. Legacy numbers were
+ * shifted ×10 once by `scripts/migrate-bill-numbers.ts`. Mirrored in
+ * `web/modules/lib/format.ts`.
+ */
+export const BILL_REVISION_RADIX = 10;
+/** Highest revision digit — a bill can be corrected at most 9 times. */
+export const MAX_BILL_REVISION_DIGIT = BILL_REVISION_RADIX - 1;
+
+/** Sequential base number, e.g. 42000011 → 4200001. */
+export function billBaseNumber(referenceNumber: number): number {
+  return Math.floor(referenceNumber / BILL_REVISION_RADIX);
+}
+
+/** 1 for an original, 2 for the first correction, … e.g. 42000011 → 2. */
+export function billRevision(referenceNumber: number): number {
+  return (referenceNumber % BILL_REVISION_RADIX) + 1;
+}
+
+function formatBillNumber(prefix: "RE" | "BL", n: number): string {
+  const base = String(billBaseNumber(n)).padStart(6, "0");
+  const revision = billRevision(n);
+  return revision > 1 ? `${prefix}-${base}-${revision}` : `${prefix}-${base}`;
+}
+
+/**
+ * Format an invoice reference number for display: 42000010 → "RE-4200001",
+ * 42000011 → "RE-4200001-2" (first correction).
+ */
 export function formatInvoiceNumber(n: number): string {
-  return `RE-${String(n).padStart(6, "0")}`;
+  return formatBillNumber("RE", n);
 }
 
-/** Format a Beleg reference number for display, e.g. 1 → "BL-000001" */
+/** Format a Beleg reference number for display: 42000010 → "BL-4200001". */
 export function formatBelegNumber(n: number): string {
-  return `BL-${String(n).padStart(6, "0")}`;
+  return formatBillNumber("BL", n);
 }
 
 /** Format a bill's reference number using its `kind`. */

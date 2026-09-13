@@ -79,6 +79,7 @@ export function buildVisitRow(
     material_cost: summary?.materialCost ?? null,
     tip: summary?.tip ?? null,
     discount_amount: summary?.discountAmount ?? 0,
+    cancelled_at: checkout.cancelledAt ? truncateToHourIso(checkout.cancelledAt) : null,
   };
 }
 
@@ -106,8 +107,10 @@ export function buildVisitItemRows(
     unit_price: data.unitPrice ?? null,
     total_price: data.totalPrice ?? null,
     origin: data.origin ?? null,
+    cancelled_at: checkout.cancelledAt ? truncateToHourIso(checkout.cancelledAt) : null,
   }));
 }
+
 
 export function buildMachineUsageRow(
   usageId: string,

@@ -149,7 +149,11 @@
     "{checkoutId}": {
       // --- Always present ---
       "userId": "DocumentReference", // DocumentReference to /users/{userId}; null for anonymous
-      "status": "open | closed",
+      // "cancelled" (ADR-0041): an admin voided this closed visit. The doc
+      // stays as the as-billed record; the corrected re-issue is a NEW
+      // closed checkout linked via supersededByCheckoutRef. Legacy docs
+      // lack the cancellation fields — never filter on `== null`.
+      "status": "open | closed | cancelled",
       "usageType": "regular | ermaessigt | materialbezug | intern | hangenmoos",
       "created": "timestamp",
       "workshopsVisited": ["string"], // e.g., ["holz", "metall"]
@@ -221,6 +225,21 @@
       // config-only (CHECKOUT_REMINDER_OFFSET_DAYS).
       "remindersSent": ["timestamp"],
 
+      // --- Cancellation / corrected re-issue (ADR-0041). Server-only. ---
+      // Set by the admin `correctCheckouts` callable. A cancelled checkout
+      // keeps status "cancelled" and everything it had; the replacement is
+      // a NEW closed checkout with `supersedesCheckoutRef` pointing back.
+      "cancelledAt": "timestamp | null",
+      "cancelledBy": "string | null",          // admin uid
+      "cancellationReason": "string | null",
+      "supersededByCheckoutRef": "DocumentReference | null",
+      "supersedesCheckoutRef": "DocumentReference | null",
+      // Explicit null on cancelled + replacement checkouts until the daily
+      // stats export has flushed their rows (they sit behind the closedAt
+      // watermark); absent on every other doc, so `== null` is a precise
+      // "pending flush" query.
+      "statsFlushedAt": "timestamp | null",
+
       "items": {
         "{itemId}": { // Auto-generated — subcollection of checkouts/{checkoutId}
           "workshop": "string", // e.g., "holz"
@@ -283,7 +302,19 @@
     // find by purpose rather than by doc ID. Lets ops rebind a reference
     // (e.g. roll a new membership SKU with a price change) without a code
     // deploy.
+    "billing": {
+      // Sequential counter read + incremented by allocateBill inside the
+      // bill-minting transaction (ADR-0019). Stored bill numbers are
+      // counter × 10 + revision digit (ADR-0041): the counter is never
+      // multiplied itself.
+      "nextBillNumber": "number",
+      // Written once by scripts/migrate-bill-numbers.ts. allocateBill refuses
+      // to mint against an existing doc without it; a missing doc (fresh
+      // install) bootstraps with it set.
+      "referenceNumberFormat": "shifted-v1"
+    },
     "catalog-references": {
+
       "membership": "DocumentReference", // DocumentReference to the Mitgliedschaft catalog item (variants: "single", "family")
       "badge": "DocumentReference" // DocumentReference to the NFC-Badge catalog item (variants: "standard", "gratis")
     }
@@ -335,9 +366,27 @@
       // a bill the daily renewalInvoicer cron auto-issued for an
       // expiring membership (no in-person checkout). Surfaces on bill
       // PDFs / admin views and is the marker the renewal cron uses.
-      "source": "checkout | membership-renewal"
+      "source": "checkout | membership-renewal",
+      // --- Cancellation / corrected re-issue (ADR-0041). Server-only. ---
+      // referenceNumber is stored as base × 10 + revision digit (0 =
+      // original, 1 = first correction …); the formatters render
+      // "RE-4200001" / "RE-4200001-2" from 42000010 / 42000011. A cancelled
+      // bill stays in place; its replacement keeps the base number.
+      "cancelledAt": "timestamp | null",
+      "cancelledBy": "string | null",          // admin uid
+      "cancellationReason": "string | null",
+      "supersededByBillRef": "DocumentReference | null",
+      "supersedesBillRef": "DocumentReference | null",
+      "correctionReason": "string | null",
+      // Sammelrechnung revision only: replacement Belege of the same commit,
+      // attached to the revision's correction mail.
+      "correctedBillRefs": "[DocumentReference] | null",
+      "cancellationNoticeSentAt": "timestamp | null", // optimistic lock, pure cancellations
+      "modifiedBy": "string | null",
+      "modifiedAt": "timestamp | null"
     }
   },
+
   "erasures": {
     // Server-only, PII-free erasure receipts (ADR-0038). Doc id = the
     // erased subject's uid, or HMAC(email) for email-only walk-ins.

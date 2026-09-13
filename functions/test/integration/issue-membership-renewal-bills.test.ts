@@ -169,7 +169,11 @@ describe("runRenewalInvoicer (Integration, #323)", () => {
     await clearFirestore();
     await seedCatalog();
     const db = getFirestore();
-    await db.doc("config/billing").set({ nextBillNumber: 500 });
+    await db.doc("config/billing").set({
+      nextBillNumber: 500,
+      referenceNumberFormat: "shifted-v1",
+    });
+
   });
 
   it("issues a renewal bill once per in-window membership (member-tier price)", async () => {

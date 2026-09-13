@@ -239,7 +239,7 @@ describe("Usage page", () => {
     fakeDb.setDoc(fakeDb.doc("bills", "bill1"), {
       userId: fakeDb.doc("users", "user1"),
       checkouts: [],
-      referenceNumber: 42,
+      referenceNumber: 420,
       amount: 75.5,
       currency: "CHF",
       storagePath: "invoices/bill1.pdf",
@@ -263,7 +263,7 @@ describe("Usage page", () => {
     fakeDb.setDoc(fakeDb.doc("bills", "bill2"), {
       userId: fakeDb.doc("users", "user1"),
       checkouts: [],
-      referenceNumber: 10,
+      referenceNumber: 100,
       amount: 30,
       currency: "CHF",
       storagePath: "invoices/bill2.pdf",
@@ -289,7 +289,7 @@ describe("Usage page", () => {
     fakeDb.setDoc(fakeDb.doc("bills", "bill-beleg"), {
       userId: fakeDb.doc("users", "user1"),
       checkouts: [],
-      referenceNumber: 23,
+      referenceNumber: 230,
       amount: 18,
       currency: "CHF",
       storagePath: "invoices/bill-beleg.pdf",
@@ -434,7 +434,7 @@ describe("Usage page", () => {
     fakeDb.setDoc(fakeDb.doc("bills", "bill3"), {
       userId: fakeDb.doc("users", "user1"),
       checkouts: [],
-      referenceNumber: 5,
+      referenceNumber: 50,
       amount: 100,
       currency: "CHF",
       storagePath: "invoices/bill3.pdf",
@@ -480,7 +480,7 @@ describe("Usage page", () => {
     fakeDb.setDoc(fakeDb.doc("bills", "bill4"), {
       userId: fakeDb.doc("users", "user1"),
       checkouts: [],
-      referenceNumber: 7,
+      referenceNumber: 70,
       amount: 50,
       currency: "CHF",
       storagePath: "invoices/bill4.pdf",
@@ -529,7 +529,7 @@ describe("Usage page", () => {
     fakeDb.setDoc(fakeDb.doc("bills", "bill5"), {
       userId: fakeDb.doc("users", "user1"),
       checkouts: [],
-      referenceNumber: 99,
+      referenceNumber: 990,
       amount: 20,
       currency: "CHF",
       storagePath: null,

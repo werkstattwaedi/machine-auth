@@ -230,6 +230,48 @@ export function assertMembershipBillingAddress(
 }
 
 /**
+ * The pricing tail every closed checkout goes through — item validation,
+ * the usage-type loophole guards (issue #284) and the authoritative
+ * summary — shared by `closeExistingCheckout` and the admin correction
+ * callable (ADR-0041), so a corrected re-issue is priced by exactly the
+ * same rules as the original close. Identity-bound guards (roster,
+ * account-holder user type, badge owner, membership address) stay with
+ * their callers. Pure: no I/O.
+ *
+ * Anything that doesn't pass `isValidItem` is dropped — items already in
+ * Firestore have passed the rule-level validation, so this is a defensive
+ * secondary check.
+ */
+export function priceCheckoutItems(args: {
+  persons: CheckoutPersonEntity[];
+  usageType: UsageType;
+  items: CheckoutItemEntity[];
+  configFees: Record<string, Record<string, number>> | null;
+  membershipCatalogId: string | null;
+  tip: number;
+}): {
+  items: CheckoutItemEntity[];
+  summary: CheckoutSummaryEntity;
+  membershipPresent: boolean;
+} {
+  const items = args.items.filter(isValidItem);
+  const membershipPresent = hasMembershipItem(items, args.membershipCatalogId);
+  assertUsageTypeAllowed(args.usageType, {
+    hasMachineUsage: hasMachineUsage(items),
+    hasMembershipItem: membershipPresent,
+    hasPaidBadgeItem: items.some((i) => isBadgeItem(i) && i.totalPrice > 0),
+  });
+  const summary = recomputeSummary(
+    args.persons,
+    args.usageType,
+    items,
+    args.configFees,
+    args.tip,
+  );
+  return { items, summary, membershipPresent };
+}
+
+/**
  * Authoritative summary computation. The bill always uses what this
  * function returns, never the client-supplied summary. This is the
  * structural defense against a client posting `summary.totalPrice: 0.01`
@@ -786,23 +828,17 @@ async function closeExistingCheckout(
     }
 
     // Load the items subcollection inside the transaction for the
-    // server-side recompute. Anything that doesn't pass isValidItem is
-    // dropped — items already in Firestore have passed the rule-level
-    // validation, so this is a defensive secondary check.
+    // server-side recompute.
     const itemsSnap = await tx.get(checkoutRef.collection("items"));
-    const items = itemsSnap.docs
-      .map((d) => d.data() as CheckoutItemEntity)
-      .filter(isValidItem);
+    const rawItems = itemsSnap.docs.map((d) => d.data() as CheckoutItemEntity);
 
-    // Loophole guards (issue #284): reject materialbezug-with-machine,
-    // intern-with-membership, and intern-with-paid-badge before billing.
-    const membershipPresent = hasMembershipItem(items, membershipCatalogId);
-    assertUsageTypeAllowed(args.usageType, {
-      hasMachineUsage: hasMachineUsage(items),
-      hasMembershipItem: membershipPresent,
-      hasPaidBadgeItem: items.some(
-        (i) => isBadgeItem(i) && i.totalPrice > 0,
-      ),
+    const { items, summary, membershipPresent } = priceCheckoutItems({
+      persons: dedupedPersons,
+      usageType: args.usageType,
+      items: rawItems,
+      configFees,
+      membershipCatalogId,
+      tip: args.clientSummary?.tip ?? 0,
     });
     // Badge association needs an identified owner (see the guard's doc).
     assertBadgeItemsBelongToOwner(items, checkout.userId);
@@ -811,14 +847,6 @@ async function closeExistingCheckout(
     if (membershipPresent) {
       assertMembershipBillingAddress(memberBillingAddress);
     }
-
-    const summary = recomputeSummary(
-      dedupedPersons,
-      args.usageType,
-      items,
-      configFees,
-      args.clientSummary?.tip ?? 0,
-    );
     logSummaryDivergence(`closeExistingCheckout ${args.checkoutId}`, args.clientSummary, summary);
 
     const bill = await allocateBill(tx, db, {

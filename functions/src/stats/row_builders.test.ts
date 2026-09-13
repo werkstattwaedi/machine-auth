@@ -131,10 +131,30 @@ describe("stats row builders", () => {
         material_cost: 10,
         tip: 2.5,
         discount_amount: 0,
+        cancelled_at: null,
       });
     });
 
+    it("emits an hour-truncated cancelled_at for a voided visit (ADR-0041)", () => {
+      const row = buildVisitRow(
+        "co-1",
+        {
+          ...closedCheckout,
+          status: "cancelled",
+          cancelledAt: ts("2026-03-20T09:17:42Z"),
+        },
+        items.map((i) => i.data),
+        "subject-key-1",
+        true,
+        ctx
+      );
+      expect(row.cancelled_at).to.equal("2026-03-20T09:00:00.000Z");
+      // The voided visit keeps its original partition date.
+      expect(row.visit_date).to.equal("2026-03-14");
+    });
+
     it("never leaks person names or emails", () => {
+
       const row = buildVisitRow(
         "co-1",
         closedCheckout,
@@ -183,6 +203,7 @@ describe("stats row builders", () => {
         unit_price: 5,
         total_price: 10,
         origin: "manual",
+        cancelled_at: null,
       });
       expect(rows[1]).to.include({ item_type: "machine", catalog_id: null });
       // The badge tokenId (tag UID) must never reach BigQuery.

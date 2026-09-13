@@ -176,7 +176,7 @@ async function seedBill(
   const bill: BillEntity = {
     userId: userRef,
     checkouts: checkoutRefs,
-    referenceNumber: opts.referenceNumber ?? 1234,
+    referenceNumber: opts.referenceNumber ?? 12340,
     amount: opts.amount ?? 25.5,
     currency: "CHF",
     storagePath: opts.storagePath ?? null,
@@ -628,7 +628,7 @@ describe("bill processing triggers (Integration)", () => {
         });
         await seedBill(billId, {
           storagePath: "invoices/bill-email-ok.pdf",
-          referenceNumber: 7,
+          referenceNumber: 70,
           amount: 42.5,
           paymentMethodConfirmationTime: Timestamp.now(),
           paymentMethodConfirmationSource: "user",
@@ -710,7 +710,7 @@ describe("bill processing triggers (Integration)", () => {
         });
         await seedBill(billId, {
           storagePath: "invoices/bill-account-holder.pdf",
-          referenceNumber: 9,
+          referenceNumber: 90,
           paymentMethodConfirmationTime: Timestamp.now(),
           paymentMethodConfirmationSource: "user",
         });
@@ -863,7 +863,7 @@ describe("bill processing triggers (Integration)", () => {
         });
         await seedBill(billId, {
           storagePath: "invoices/bill-twint.pdf",
-          referenceNumber: 11,
+          referenceNumber: 110,
           paymentMethodConfirmationTime: Timestamp.now(),
           paymentMethodConfirmationSource: "user",
         });
@@ -895,7 +895,7 @@ describe("bill processing triggers (Integration)", () => {
         });
         await seedBill(billId, {
           storagePath: "invoices/bill-renewal.pdf",
-          referenceNumber: 21,
+          referenceNumber: 210,
           paymentMethodConfirmationTime: Timestamp.now(),
           paymentMethodConfirmationSource: "auto",
           source: "membership-renewal",
@@ -930,7 +930,7 @@ describe("bill processing triggers (Integration)", () => {
         });
         await seedBill(billId, {
           storagePath: "invoices/bill-sammelrechnung.pdf",
-          referenceNumber: 12,
+          referenceNumber: 120,
           paymentMethodConfirmationTime: Timestamp.now(),
           paymentMethodConfirmationSource: "auto",
           kind: "invoice",
@@ -950,7 +950,7 @@ describe("bill processing triggers (Integration)", () => {
         await seedCheckout("co-default", {});
         await seedBill(billId, {
           storagePath: "invoices/bill-default-template.pdf",
-          referenceNumber: 13,
+          referenceNumber: 130,
           paymentMethodConfirmationTime: Timestamp.now(),
           paymentMethodConfirmationSource: "auto",
         });
@@ -986,7 +986,7 @@ describe("bill processing triggers (Integration)", () => {
         });
         await seedBill(billId, {
           storagePath: "invoices/bill-beleg-email.pdf",
-          referenceNumber: 14,
+          referenceNumber: 140,
           amount: 18,
           kind: "beleg",
           // No paymentMethodConfirmationTime — a Beleg never gets one.

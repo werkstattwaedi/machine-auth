@@ -29,9 +29,11 @@ import {
   getFirestore,
   Timestamp,
   type DocumentReference,
+  type Firestore,
+  type Transaction,
 } from "firebase-admin/firestore";
 import type { BillEntity } from "./types";
-import { allocateBill } from "./create_bill";
+import { allocateBill, allocateBillRevision } from "./create_bill";
 import { tryGeneratePdf, trySendEmail } from "./bill_triggers";
 import { getWorkshopTimezone } from "../util/workshop_timezone";
 import { fromZonedTime, toZonedTime } from "date-fns-tz";
@@ -67,6 +69,69 @@ function startOfCurrentZurichMonth(now: Date): Date {
     0,
   );
   return fromZonedTime(localMonthStart, tz);
+}
+
+/**
+ * Fold `belege` into one `kind: "invoice"` Sammelrechnung inside the
+ * caller's transaction: sum the amounts, union the checkouts, mint the
+ * invoice pre-acked (the member acked by picking monthly on each visit)
+ * and re-point every Beleg's `aggregatedIntoBillRef` at it. Shaped like
+ * `allocateBill` (transaction first) so both the monthly cron and the
+ * correction callable (ADR-0041 — which passes `supersedes` to mint the
+ * Sammelrechnung *revision* inside its own, larger transaction) share one
+ * implementation. The caller owns the reads: `belege` must already have
+ * been re-read inside `tx`.
+ */
+export async function aggregateBelegeIntoInvoice(
+  tx: Transaction,
+  db: Firestore,
+  args: {
+    userId: DocumentReference;
+    belege: Array<{ ref: DocumentReference; bill: BillEntity }>;
+    billRef: DocumentReference;
+    /** Mint a revision of `previous` instead of a fresh counter number. */
+    supersedes?: {
+      previous: { ref: DocumentReference; bill: BillEntity };
+      reason: string;
+      /** Replacement Belege of this commit — attached to the revision's mail. */
+      correctedBillRefs: DocumentReference[];
+      modifiedBy: string | null;
+    };
+  },
+): Promise<BillEntity> {
+  let amount = 0;
+  const checkoutRefs: DocumentReference[] = [];
+  for (const { bill } of args.belege) {
+    amount += bill.amount;
+    checkoutRefs.push(...bill.checkouts);
+  }
+
+  const bill = args.supersedes
+    ? await allocateBillRevision(tx, {
+        previous: args.supersedes.previous,
+        userId: args.userId,
+        checkoutRefs,
+        amount,
+        billRef: args.billRef,
+        kind: "invoice",
+        ack: { time: Timestamp.now(), source: "auto" },
+        correctionReason: args.supersedes.reason,
+        correctedBillRefs: args.supersedes.correctedBillRefs,
+        modifiedBy: args.supersedes.modifiedBy,
+      })
+    : await allocateBill(tx, db, {
+        userId: args.userId,
+        checkoutRefs,
+        amount,
+        billRef: args.billRef,
+        kind: "invoice",
+        preAck: { source: "auto" },
+      });
+
+  for (const { ref } of args.belege) {
+    tx.update(ref, { aggregatedIntoBillRef: args.billRef });
+  }
+  return bill;
 }
 
 interface MonthlyBillRunSummary {
@@ -144,41 +209,29 @@ export async function runMonthlyBillRun(
       await db.runTransaction(async (tx) => {
         // Re-read each Beleg INSIDE the transaction. A concurrent run
         // (overlapping cron firings, manual ops repair) could have
-        // already aggregated some of them — skip those.
-        let amount = 0;
-        const checkoutRefs: DocumentReference[] = [];
-        const belegeToUpdate: DocumentReference[] = [];
-
+        // already aggregated some of them — skip those. A Beleg cancelled
+        // since the query (ADR-0041) is skipped the same way.
+        const fresh: Array<{ ref: DocumentReference; bill: BillEntity }> = [];
         for (const { ref } of belege) {
-          const fresh = await tx.get(ref);
-          if (!fresh.exists) continue;
-          const freshBill = fresh.data() as BillEntity;
+          const snap = await tx.get(ref);
+          if (!snap.exists) continue;
+          const freshBill = snap.data() as BillEntity;
           if ((freshBill.kind ?? "invoice") !== "beleg") continue;
           if (freshBill.aggregatedIntoBillRef) continue;
-          amount += freshBill.amount;
-          for (const checkoutRef of freshBill.checkouts) {
-            checkoutRefs.push(checkoutRef);
-          }
-          belegeToUpdate.push(ref);
+          if (freshBill.cancelledAt) continue;
+          fresh.push({ ref, bill: freshBill });
         }
 
-        if (belegeToUpdate.length === 0) {
+        if (fresh.length === 0) {
           // Lost the race; nothing to do.
           return;
         }
 
-        await allocateBill(tx, db, {
+        await aggregateBelegeIntoInvoice(tx, db, {
           userId,
-          checkoutRefs,
-          amount,
+          belege: fresh,
           billRef: aggregatedRef,
-          kind: "invoice",
-          preAck: { source: "auto" },
         });
-
-        for (const belegRef of belegeToUpdate) {
-          tx.update(belegRef, { aggregatedIntoBillRef: aggregatedRef });
-        }
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
