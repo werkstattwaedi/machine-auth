@@ -31,6 +31,13 @@ export interface TokenUser {
    * member pricing for kiosk checkout (issue #358).
    */
   activeMembership?: boolean
+  /**
+   * Epoch ms until which the kiosk session is OTP-elevated and may reach
+   * the member area (ADR-0041); `null` for a plain badge-tap session.
+   * Mirrors the `elevatedUntil` token claim (server-derived, never set
+   * client-side).
+   */
+  elevatedUntil?: number | null
 }
 
 /**
@@ -67,6 +74,7 @@ type VerifyTagResponse =
       email?: string
       userType?: string
       activeMembership?: boolean
+      elevatedUntil?: number | null
     }
   | {
       registered: false
@@ -224,6 +232,7 @@ export function useTokenAuth(
           email: data.email,
           userType: data.userType,
           activeMembership: data.activeMembership,
+          elevatedUntil: data.elevatedUntil ?? null,
         })
       } catch (err) {
         if (cancelled) return

@@ -228,7 +228,9 @@ export async function handleVerifyTagCheckout(
 
   // Step 5: Mint the synthetic-uid kiosk session (see kiosk_session.ts for
   // why the uid must NOT be the real user's).
-  const customToken = await mintKioskSessionToken(realUserId, "tag");
+  // Never elevated: the badge alone must not reach the member area; the
+  // step-up (kiosk_elevation.ts) adds the claim after an OTP (ADR-0041).
+  const { customToken } = await mintKioskSessionToken(realUserId, "tag");
 
   // Step 6: Return token and user information.
   // `userId` in the response is the REAL user, so the client can pre-fill

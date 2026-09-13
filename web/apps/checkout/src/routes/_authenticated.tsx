@@ -23,7 +23,9 @@ import {
 } from "@modules/lib/firestore-helpers"
 import { useDb } from "@modules/lib/firebase-context"
 import { isCheckoutStale } from "@modules/lib/session-day"
+import { useBridge } from "@modules/lib/use-bridge"
 import { cn } from "@modules/lib/utils"
+import { runStartOver } from "@/components/checkout/start-over"
 
 export const Route = createFileRoute("/_authenticated")({
   component: CheckoutAuthenticatedLayout,
@@ -36,12 +38,32 @@ const navItems: AuthenticatedLayoutNavItem[] = [
 ]
 
 function CheckoutAuthenticatedLayout() {
+  const bridge = useBridge()
+  const { signOut } = useAuth()
   return (
     <AuthenticatedLayout
       navItems={navItems}
       gate={{ kind: "member", completeProfilePath: "/account/complete-profile" }}
       headerAction={<VisitCta />}
       signOutRedirect="/checkin"
+      // Inside the Electron kiosk (ADR-0041) the member area is reached by an
+      // OTP-elevated session; leaving it must be the same strong wipe as the
+      // chrome's "Neuer Checkout".
+      kiosk={
+        bridge.available
+          ? {
+              checkoutPath: "/checkin?kiosk",
+              onSignOut: () =>
+                void runStartOver({
+                  signOut,
+                  bridgeAvailable: true,
+                  resetSession: bridge.resetSession,
+                  reload: (target) => window.location.replace(target),
+                  kiosk: true,
+                }),
+            }
+          : undefined
+      }
     />
   )
 }
@@ -58,6 +80,7 @@ function CheckoutAuthenticatedLayout() {
  */
 function VisitCta() {
   const db = useDb()
+  const bridge = useBridge()
   const { userDoc } = useAuth()
   const ref = userDoc ? userRef(db, userDoc.id) : null
   const { data: openCheckouts } = useCollection(
@@ -84,6 +107,8 @@ function VisitCta() {
   return (
     <Link
       to="/"
+      // Keep the kiosk flag so the dispatcher lands on /checkin?kiosk.
+      search={bridge.available ? { kiosk: "" } : {}}
       className={cn(
         "flex w-full items-center justify-center gap-2 rounded-[3px] px-3 py-2 text-sm font-bold transition-colors",
         stale

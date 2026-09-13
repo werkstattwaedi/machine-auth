@@ -25,7 +25,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@modules/components/ui/tooltip"
-import { Loader2, LogOut, Menu, type LucideIcon } from "lucide-react"
+import { ArrowLeft, Loader2, LogOut, Menu, ShieldCheck, type LucideIcon } from "lucide-react"
 
 export interface AuthenticatedLayoutNavItem {
   to: string
@@ -68,6 +68,17 @@ export interface AuthenticatedLayoutProps {
    * the right place for a logged-out admin).
    */
   signOutRedirect?: string
+  /**
+   * Kiosk mode (ADR-0041): the checkout app passes this when running inside
+   * the Electron bridge. An OTP-elevated kiosk session may browse the
+   * member area; the shell then shows the remaining elevation time, a
+   * "Zurück zum Checkout" row, and "Abmelden" runs `onSignOut` (the strong
+   * start-over wipe) instead of a plain sign-out + redirect.
+   */
+  kiosk?: {
+    checkoutPath: string
+    onSignOut: () => void
+  }
 }
 
 export function AuthenticatedLayout({
@@ -76,8 +87,19 @@ export function AuthenticatedLayout({
   wrapper: Wrapper,
   headerAction,
   signOutRedirect,
+  kiosk,
 }: AuthenticatedLayoutProps) {
-  const { user, userDoc, isAdmin, loading, userDocLoading, signOut, sessionKind } = useAuth()
+  const {
+    user,
+    userDoc,
+    isAdmin,
+    loading,
+    userDocLoading,
+    signOut,
+    sessionKind,
+    isKioskElevated,
+    kioskElevatedUntil,
+  } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   // Hooks must be called unconditionally before any early returns.
@@ -108,14 +130,19 @@ export function AuthenticatedLayout({
   // /login again — forever, with no message. Instead we render a terminal
   // "Kein Admin-Zugriff" state below so the user learns why and can sign out.
 
-  // Member gate: tag-tap (kiosk) sessions are scoped to the checkout flow
-  // and must never reach member-area routes; bounce to kiosk root.
+  // Member gate: a kiosk tag session reaches member-area routes ONLY while
+  // OTP-elevated (ADR-0041). Un-elevated — a bare badge tap, or an elevation
+  // that just expired mid-page — bounces back to the kiosk check-in.
+  const tagBlocked = sessionKind === "tag" && !isKioskElevated
   useEffect(() => {
     if (gate.kind !== "member") return
-    if (!loading && sessionKind === "tag") {
-      navigate({ to: "/" })
+    if (!loading && tagBlocked) {
+      ;(navigate as (opts: { to: string; search?: Record<string, unknown> }) => void)({
+        to: "/checkin",
+        search: { kiosk: "" },
+      })
     }
-  }, [gate, sessionKind, loading, navigate])
+  }, [gate, tagBlocked, loading, navigate])
 
   // Member gate: anonymous Firebase principals (eager-anon checkout flow)
   // must not reach member-area routes either. Bounce to /login with a
@@ -212,7 +239,7 @@ export function AuthenticatedLayout({
       )
     }
   }
-  if (gate.kind === "member" && (sessionKind === "tag" || sessionKind === "anonymous")) return null
+  if (gate.kind === "member" && (tagBlocked || sessionKind === "anonymous")) return null
 
   // A left accent border is reserved for the active item; inactive items
   // carry a transparent border of the same width so the row geometry stays
@@ -240,6 +267,17 @@ export function AuthenticatedLayout({
           {headerAction}
         </div>
       )}
+      {kiosk && (
+        <Link
+          to={kiosk.checkoutPath}
+          className={`${navLink} ${navLinkHover}`}
+          onClick={() => setSheetOpen(false)}
+          data-testid="kiosk-back-to-checkout"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Zurück zum Checkout
+        </Link>
+      )}
       {navItems.map(({ to, label, icon: Icon, primary }) => (
         <Link
           key={to}
@@ -257,6 +295,9 @@ export function AuthenticatedLayout({
       ))}
 
       <div className="mt-auto border-t border-sidebar-border pt-3 pb-2">
+        {kiosk && kioskElevatedUntil !== null && (
+          <KioskElevationChip until={kioskElevatedUntil} />
+        )}
         <div className="flex items-center gap-2.5 px-3 py-1.5">
           <Avatar
             name={userDoc?.name || user.email || "?"}
@@ -265,11 +306,11 @@ export function AuthenticatedLayout({
           />
           <div className="min-w-0 flex-1">
             <div className="text-sm font-medium truncate">
-              {userDoc?.name || user.email}
+              {userDoc?.name || user.email || userDoc?.email}
             </div>
-            {userDoc?.name && user.email ? (
+            {userDoc?.name && (user.email || userDoc.email) ? (
               <div className="text-xs text-muted-foreground truncate">
-                {user.email}
+                {user.email || userDoc.email}
               </div>
             ) : null}
           </div>
@@ -287,6 +328,13 @@ export function AuthenticatedLayout({
                   aria-label="Abmelden"
                   className="text-muted-foreground hover:text-foreground hover:bg-cog-teal-light"
                   onClick={() => {
+                    // Kiosk: the strong wipe (signOut + partition reset +
+                    // hard reload) — nothing of this visitor may survive
+                    // on the shared terminal.
+                    if (kiosk) {
+                      kiosk.onSignOut()
+                      return
+                    }
                     // Navigate to the public landing FIRST (before signOut
                     // flips `user` to null) so leaving the _authenticated
                     // subtree unmounts the unauth gate — otherwise it bounces
@@ -358,4 +406,28 @@ export function AuthenticatedLayout({
   )
 
   return Wrapper ? <Wrapper>{shell}</Wrapper> : shell
+}
+
+/**
+ * Remaining time of the kiosk elevation (ADR-0041), refreshed each minute.
+ * Purely informational — the guards bounce at the deadline regardless.
+ */
+function KioskElevationChip({ until }: { until: number }) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const t = window.setInterval(() => setNow(Date.now()), 30_000)
+    return () => window.clearInterval(t)
+  }, [])
+  const minutes = Math.max(1, Math.ceil((until - now) / 60_000))
+  return (
+    <div
+      className="mx-3 mb-2 flex items-center gap-2 rounded-md bg-cog-teal-light px-2.5 py-1.5 text-xs text-cog-teal-dark"
+      data-testid="kiosk-elevation-chip"
+    >
+      <ShieldCheck className="h-3.5 w-3.5 shrink-0" aria-hidden />
+      <span>
+        Kiosk-Sitzung — noch {minutes} Min
+      </span>
+    </div>
+  )
 }

@@ -45,6 +45,9 @@ const FUNCTIONS_PARAMS: VarMapping[] = [
   { envVar: "LOGIN_PER_EMAIL_WINDOW_MS", jsonPath: "functions.loginPerEmailWindowMs" },
   { envVar: "LOGIN_MAX_CODES_PER_EMAIL", jsonPath: "functions.loginMaxCodesPerEmail" },
   { envVar: "LOGIN_MAX_ATTEMPTS_PER_EMAIL", jsonPath: "functions.loginMaxAttemptsPerEmail" },
+  // Kiosk step-up elevation TTL (ADR-0041). Absent key → empty → the
+  // built-in 15 min default applies at read time.
+  { envVar: "KIOSK_ELEVATION_TTL_MS", jsonPath: "functions.kioskElevationTtlMs" },
   // Checkout domain (issue #248) drives the QR-code deep link printed on
   // price-list PDFs. Reuses `web.checkoutDomain` from the operations
   // config so admin web + functions stay in sync.
@@ -168,6 +171,7 @@ const TEST_FIXTURE_CONFIG: Record<string, unknown> = {
     loginPerEmailWindowMs: "86400000",
     loginMaxCodesPerEmail: "20",
     loginMaxAttemptsPerEmail: "30",
+    kioskElevationTtlMs: "900000",
     resendFromEmail: "OWW CI <ci@test.localhost>",
     resendQrBillTemplateId: "ci-test-qrbill-template",
     resendLoginTemplateId: "ci-test-login-template",

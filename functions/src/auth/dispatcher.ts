@@ -29,6 +29,11 @@ import { signupKioskHandler } from "../checkout/signup_kiosk";
 import { sendAccountInstructionsHandler } from "../checkout/account_instructions";
 import { completeOnboardingKioskHandler } from "../checkout/complete_onboarding_kiosk";
 import { exchangeKioskSessionHandler } from "../checkout/exchange_kiosk_session";
+import {
+  getKioskElevationOptionsHandler,
+  requestKioskElevationHandler,
+  verifyKioskElevationHandler,
+} from "../checkout/kiosk_elevation";
 import { probeTagHandler } from "../checkout/probe_tag";
 import { privacyReportHandler } from "../privacy/privacy_report";
 import { privacyEraseHandler } from "../privacy/erase_subject";
@@ -46,6 +51,10 @@ const HANDLERS: Record<string, RpcHandler> = {
   sendAccountInstructions: sendAccountInstructionsHandler,
   completeOnboardingKiosk: completeOnboardingKioskHandler,
   exchangeKioskSession: exchangeKioskSessionHandler,
+  // Kiosk step-up (ADR-0041): elevate an actsAs session for the member area.
+  getKioskElevationOptions: getKioskElevationOptionsHandler,
+  requestKioskElevation: requestKioskElevationHandler,
+  verifyKioskElevation: verifyKioskElevationHandler,
   verifyMagicLink: verifyMagicLinkHandler,
   resolveTag: resolveTagHandler,
   verifyTagCheckout: verifyTagCheckoutHandler,

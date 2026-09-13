@@ -5,6 +5,7 @@ import { useState } from "react"
 import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router"
 import { QrCode } from "lucide-react"
 import { StepCheckin } from "@/components/checkout/step-checkin"
+import { KioskAccountActions } from "@/components/checkout/kiosk-account-actions"
 import { VisitStartedDialog } from "@/components/checkout/visit-started-dialog"
 import { useWizardContext } from "@/components/checkout/wizard-context"
 
@@ -53,6 +54,8 @@ function CheckinRoute() {
       tagAuthLoading={ctx.tagAuthLoading}
       tagAuthError={ctx.tagAuthError}
       picc={ctx.picc}
+      // Kiosk member-area entry points (ADR-0041); renders nothing elsewhere.
+      accountActions={<KioskAccountActions />}
       // Signed-in "Abmelden" and the anon "Von vorne beginnen" share one
       // primitive: drop the session + hard-reload to a fresh /checkin.
       onSignOut={ctx.startOver}

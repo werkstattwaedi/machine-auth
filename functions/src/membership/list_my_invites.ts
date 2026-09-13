@@ -15,7 +15,7 @@
 import * as logger from "firebase-functions/logger";
 import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import type { MembershipInviteEntity } from "../types/firestore_entities";
-import { db } from "./shared";
+import { callerEmail, callerUserRef, db } from "./shared";
 import { resolveInviterName } from "./invite";
 
 export interface ListMyFamilyInvitesResult {
@@ -32,7 +32,12 @@ export const listMyFamilyInvitesHandler = async (
   if (!request.auth?.uid) {
     throw new HttpsError("unauthenticated", "Sign-in required");
   }
-  const email = (request.auth.token?.email ?? "").toString().toLowerCase();
+  // Elevated kiosk sessions resolve their e-mail from the user doc (no
+  // `email` claim on a synthetic token — ADR-0041); un-elevated tag
+  // sessions are rejected by callerUserRef like every membership callable.
+  const token = request.auth.token as Record<string, unknown> | undefined;
+  const callerRef = callerUserRef(db(), request.auth.uid, token);
+  const email = await callerEmail(callerRef, token);
   if (!email) return { invites: [] };
 
   // Single-equality collection-group query (status filtered below to avoid a

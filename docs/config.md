@@ -203,6 +203,7 @@ Parameters are set in your operations repo `config.jsonc` under `functions.*` an
 | Parameter | Description |
 |-----------|-------------|
 | `DIVERSIFICATION_SYSTEM_NAME` | System name for key diversification (e.g. `OwwMachineAuth`) |
+| `KIOSK_ELEVATION_TTL_MS` | Kiosk step-up elevation lifetime in ms (ADR-0041); `functions.kioskElevationTtlMs` in the operations config, empty/absent = 15 min |
 
 ### Verify Configuration
 

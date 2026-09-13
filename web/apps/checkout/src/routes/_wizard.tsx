@@ -7,6 +7,7 @@ import {
   Link,
   Outlet,
   useLocation,
+  useNavigate,
 } from "@tanstack/react-router"
 import { z } from "zod/v4/mini"
 import { signOut } from "firebase/auth"
@@ -32,6 +33,7 @@ import { KioskWelcomeOnboarding } from "@/components/account/kiosk-welcome-onboa
 import { TagAuthOverlay } from "@/components/checkout/tag-auth-overlay"
 import { TagVisitRedirect } from "@/components/checkout/tag-visit-redirect"
 import { BadgeOfferCoordinator } from "@/components/checkout/badge-offer-coordinator"
+import { useKioskElevation } from "@/components/checkout/kiosk-elevation-dialog"
 
 const wizardSearchSchema = z.object({
   picc: z.optional(z.string()),
@@ -67,11 +69,15 @@ function WizardLayout() {
   const { data: pricingConfig, loading: loadingConfig, configError } =
     usePricingConfig()
 
-  // Clear any stale Firebase Auth session on mount in kiosk mode with no
-  // tag params — the kiosk chrome "neuer checkout" navigates here without
-  // picc/cmac and the previous tag session must be wiped.
+  // Clear a stale REAL Firebase session on mount in kiosk mode — a
+  // persistent login has no business on the shared terminal. A kiosk
+  // (`tag:`) session is deliberately kept: since ADR-0041 the visitor
+  // returns here from /account with their session intact, and the chrome's
+  // "Neuer Checkout" wipes through startOver (signOut + partition reset)
+  // rather than relying on this mount effect.
   useEffect(() => {
-    if (isKiosk && !picc && !cmac) {
+    const current = auth.currentUser
+    if (isKiosk && !picc && !cmac && current && !current.uid.startsWith("tag:")) {
       signOut(auth)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -131,7 +137,15 @@ function WizardLayout() {
     )
   }
 
-  const headerName = userDoc?.name || null
+  // Header identity: the account login's doc name, or — for a kiosk
+  // session — the server-provided pre-fill name (no auth-context doc until
+  // the session is elevated, ADR-0041).
+  const headerName =
+    userDoc?.name ||
+    (sessionKind === "tag" && kioskTokenUser
+      ? `${kioskTokenUser.firstName ?? ""} ${kioskTokenUser.lastName ?? ""}`.trim() || null
+      : null)
+  const headerUserId = userDoc?.id ?? kioskTokenUser?.userId
 
   return (
     <WizardProvider
@@ -140,7 +154,11 @@ function WizardLayout() {
       kiosk={isKiosk}
       pricingConfig={pricingConfig}
     >
-      <WizardChrome headerName={headerName} userId={userDoc?.id} />
+      <WizardChrome
+        headerName={headerName}
+        userId={headerUserId}
+        kioskSession={sessionKind === "tag"}
+      />
       <KioskInactivityWatcher />
       <TagAuthOverlay />
       <TagVisitRedirect />
@@ -169,11 +187,17 @@ function WizardLayout() {
 function WizardChrome({
   headerName,
   userId,
+  kioskSession,
 }: {
   headerName: string | null
   userId?: string
+  /** True for a kiosk `actsAs` session: the header identity routes through
+   *  the step-up dialog before opening the member area (ADR-0041). */
+  kioskSession?: boolean
 }) {
   const { pathname } = useLocation()
+  const navigate = useNavigate()
+  const { ensureElevated } = useKioskElevation()
   const { openCheckout, pendingCheckout, paymentData } = useWizardContext()
   const currentStep = stepForPathname(pathname)
 
@@ -203,7 +227,23 @@ function WizardChrome({
             alt="Offene Werkstatt Wädenswil"
             className="h-[30px] shrink-0 sm:h-11"
           />
-          {headerName && (
+          {headerName && kioskSession && (
+            <button
+              type="button"
+              onClick={() =>
+                ensureElevated(() => navigate({ to: "/account/usage" }))
+              }
+              className="flex items-center gap-3 min-w-0 rounded-full -m-1 p-1 hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-cog-teal/40 focus-visible:outline-offset-2 transition-colors"
+              aria-label="Konto öffnen"
+              data-testid="wizard-header-account"
+            >
+              <span className="text-sm text-foreground truncate">
+                {headerName}
+              </span>
+              <Avatar name={headerName} seed={userId} />
+            </button>
+          )}
+          {headerName && !kioskSession && (
             <Link
               to="/account/usage"
               className="flex items-center gap-3 min-w-0 rounded-full -m-1 p-1 hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-cog-teal/40 focus-visible:outline-offset-2 transition-colors"

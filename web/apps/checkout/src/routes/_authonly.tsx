@@ -15,7 +15,7 @@ export const Route = createFileRoute("/_authonly")({
  * Used for flows like profile completion where the full app chrome is premature.
  */
 function AuthOnlyLayout() {
-  const { user, loading, sessionKind } = useAuth()
+  const { user, loading, sessionKind, isKioskElevated } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -25,13 +25,14 @@ function AuthOnlyLayout() {
     }
   }, [user, loading, navigate])
 
-  // Tag-tap (kiosk) sessions must never reach member-area screens — they
-  // are scoped to the checkout flow only. Bounce back to the kiosk root.
+  // A kiosk tag session reaches member-area screens only while OTP-elevated
+  // (ADR-0041); otherwise bounce back to the kiosk check-in.
+  const tagBlocked = sessionKind === "tag" && !isKioskElevated
   useEffect(() => {
-    if (!loading && sessionKind === "tag") {
-      navigate({ to: "/" })
+    if (!loading && tagBlocked) {
+      navigate({ to: "/checkin", search: { kiosk: "" } })
     }
-  }, [sessionKind, loading, navigate])
+  }, [tagBlocked, loading, navigate])
 
   // Anonymous Firebase principals (eager-anon checkout flow) must upgrade
   // to a real account before reaching member-area screens. Send them to
@@ -57,7 +58,7 @@ function AuthOnlyLayout() {
     )
   }
 
-  if (!user || sessionKind === "tag" || sessionKind === "anonymous") return null
+  if (!user || tagBlocked || sessionKind === "anonymous") return null
 
   return (
     <div className="min-h-screen flex flex-col items-center bg-background">

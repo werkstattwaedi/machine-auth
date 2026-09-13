@@ -187,11 +187,17 @@ export async function handleSignupKiosk(
     logger.error("signupKiosk: account-instructions email failed", { err });
   }
 
-  const customToken = await mintKioskSessionToken(uid, "signup");
+  // Sign-up verified an e-mail code moments ago — elevated at mint
+  // (ADR-0041) so the new member can go straight to a membership purchase.
+  const { customToken, elevatedUntil } = await mintKioskSessionToken(
+    uid,
+    "signup",
+    { elevated: true }
+  );
   return {
     customToken,
     emailSent,
-    ...buildKioskUserPayload(uid, docData),
+    ...buildKioskUserPayload(uid, docData, elevatedUntil),
   };
 }
 

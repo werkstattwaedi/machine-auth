@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react"
 import {
-  onAuthStateChanged,
+  onIdTokenChanged,
   signInAnonymously,
   signInWithCustomToken,
   signOut as firebaseSignOut,
@@ -120,6 +120,16 @@ interface AuthContextValue {
   userDoc: UserDoc | null
   isAdmin: boolean
   sessionKind: SessionKind
+  /**
+   * Kiosk step-up (ADR-0041): epoch ms until which a `tag` session is
+   * OTP-elevated and may reach the member area; `null` for real/anonymous
+   * sessions and for un-elevated (badge-only) kiosk sessions. Flips back to
+   * `null` client-side when the claim expires — rules and callables enforce
+   * the same deadline server-side.
+   */
+  kioskElevatedUntil: number | null
+  /** `kioskElevatedUntil` is set and in the future. */
+  isKioskElevated: boolean
   /** True until Firebase Auth state resolves (fast, local check). */
   loading: boolean
   /** True while the Firestore user doc is being fetched (may be slow). */
@@ -178,15 +188,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [userDocLoading, setUserDocLoading] = useState(false)
   const [sessionKind, setSessionKind] = useState<SessionKind>(null)
+  // The real user a `tag` session acts on (its `actsAs` claim); null otherwise.
+  const [actsAsUserId, setActsAsUserId] = useState<string | null>(null)
+  const [kioskElevatedUntil, setKioskElevatedUntil] = useState<number | null>(
+    null,
+  )
 
   // Listen to Firebase Auth state. Resolve sessionKind from the ID-token
   // claims so callers can distinguish a real login from a kiosk tag-tap.
+  //
+  // `onIdTokenChanged`, not `onAuthStateChanged`: the kiosk step-up
+  // (ADR-0041) re-signs in with the SAME synthetic uid and a new claim set,
+  // which the auth-state listener deliberately swallows (uid unchanged) —
+  // only the id-token listener sees the re-minted claims.
   useEffect(() => {
-    return onAuthStateChanged(auth, async (firebaseUser) => {
+    return onIdTokenChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser)
       if (!firebaseUser) {
         setUserDoc(null)
         setSessionKind(null)
+        setActsAsUserId(null)
+        setKioskElevatedUntil(null)
         setLoading(false)
         setUserDocLoading(false)
         return
@@ -201,11 +223,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Resolve sessionKind from token claims. The tag-tap session is the
       // one that must be locked out of the member area; everything else
       // is "real" (email/magic-link/Google) or "anonymous" (Phase C).
+      let elevated: number | null = null
+      let actsAs: string | null = null
       try {
         const tokenResult = await firebaseUser.getIdTokenResult()
-        const claims = tokenResult.claims as { tagCheckout?: unknown; actsAs?: unknown }
+        const claims = tokenResult.claims as {
+          tagCheckout?: unknown
+          actsAs?: unknown
+          elevatedUntil?: unknown
+        }
         if (claims.tagCheckout === true || typeof claims.actsAs === "string" || uidIsTag) {
           setSessionKind("tag")
+          actsAs = typeof claims.actsAs === "string" ? claims.actsAs : null
+          elevated =
+            typeof claims.elevatedUntil === "number" &&
+            claims.elevatedUntil > Date.now()
+              ? claims.elevatedUntil
+              : null
         } else if (firebaseUser.isAnonymous) {
           setSessionKind("anonymous")
         } else {
@@ -219,28 +253,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // members.
         setSessionKind(uidIsTag ? "tag" : "real")
       }
+      setActsAsUserId(actsAs)
+      setKioskElevatedUntil(elevated)
 
       setLoading(false)
       // Tag sessions don't have a user doc at users/{user.uid} — the
-      // synthetic uid never spawned one. Skip the Firestore subscription
-      // and the loading flag so the UI doesn't spin forever.
-      setUserDocLoading(!uidIsTag)
+      // synthetic uid never spawned one. Skip the loading flag unless the
+      // session is elevated (then the acted-on user's doc is subscribed
+      // below) so the UI doesn't spin forever.
+      setUserDocLoading(!uidIsTag || (actsAs !== null && elevated !== null))
     })
   }, [auth])
 
-  // Listen to Firestore user doc when authenticated (doc ID = Auth UID).
-  // Tag-tap sessions have a synthetic uid (`tag:…`) and no corresponding
-  // user doc; skip the subscription entirely (the kiosk reads pre-fill
-  // data from useTokenAuth's response).
+  // Client-side expiry of the elevation claim (ADR-0041): flip
+  // `kioskElevatedUntil` to null at the deadline so the member-area guards
+  // bounce the kiosk back to the checkout without waiting for a denied
+  // request. The server enforces the same deadline independently.
+  useEffect(() => {
+    if (kioskElevatedUntil === null) return
+    const delay = Math.max(0, kioskElevatedUntil - Date.now())
+    const timer = window.setTimeout(() => setKioskElevatedUntil(null), delay)
+    return () => window.clearTimeout(timer)
+  }, [kioskElevatedUntil])
+
+  // Which user doc to subscribe to: a real login reads users/{uid}; an
+  // OTP-elevated kiosk session reads the doc it acts on (rules allow the
+  // `actsAs` read) so the account pages work; a plain tag session or an
+  // anonymous principal subscribes nothing.
+  const uidIsTag = !!user && user.uid.startsWith("tag:")
+  const userDocId = !user
+    ? null
+    : !uidIsTag
+      ? user.uid
+      : kioskElevatedUntil !== null
+        ? actsAsUserId
+        : null
+
+  // Listen to Firestore user doc when authenticated (doc ID = Auth UID),
+  // or — for an elevated kiosk session — the acted-on user's doc.
+  // Tag-tap sessions without elevation have no doc to read (the kiosk
+  // reads pre-fill data from useTokenAuth's response).
   useEffect(() => {
     if (!user) return
-    if (user.uid.startsWith("tag:")) {
+    if (!userDocId) {
       setUserDoc(null)
       setUserDocLoading(false)
       return
     }
 
-    const userDocRef = userRef(db, user.uid)
+    const userDocRef = userRef(db, userDocId)
 
     return onSnapshot(userDocRef, async (docSnap) => {
       if (!docSnap.exists()) {
@@ -269,7 +330,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         // If user doc says admin but token doesn't have the claim,
         // force a token refresh so Firestore rules see the updated claims.
-        if (roles.includes("admin")) {
+        // Never for a kiosk session: its synthetic principal has no
+        // persistent claims to pick up, and must not (ADR-0022 §1).
+        if (roles.includes("admin") && !uidIsTag) {
           const tokenResult = await user.getIdTokenResult()
           if (!tokenResult.claims.admin) {
             await user.getIdToken(true)
@@ -278,7 +341,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setUserDocLoading(false)
     })
-  }, [user, db])
+    // `userDocId` is the effective subscription key; `user` only matters
+    // for the admin-claim refresh above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, userDocId, uidIsTag, db])
 
   const [pendingGoogleLink, setPendingGoogleLink] = useState(
     () => window.localStorage.getItem("pendingGoogleLink") === "true"
@@ -398,7 +464,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await signInAnonymously(auth)
   }
 
-  const isAdmin = userDoc?.roles?.includes("admin") ?? false
+  // A kiosk session acting for an admin is NOT admin: the `admin` custom
+  // claim lives on the real uid and is structurally absent from the
+  // synthetic principal (ADR-0022), so rules/callables would refuse anyway
+  // — keep the UI honest.
+  const isAdmin =
+    sessionKind !== "tag" && (userDoc?.roles?.includes("admin") ?? false)
+  const isKioskElevated =
+    sessionKind === "tag" && kioskElevatedUntil !== null
 
   return (
     <AuthContext value={{
@@ -406,6 +479,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       userDoc,
       isAdmin,
       sessionKind,
+      kioskElevatedUntil,
+      isKioskElevated,
       loading,
       userDocLoading,
       checkAccountExists,

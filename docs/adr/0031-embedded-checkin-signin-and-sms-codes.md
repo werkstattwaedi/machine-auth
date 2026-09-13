@@ -1,6 +1,6 @@
 # ADR-0031: Embedded check-in sign-in and SMS login codes via Firebase phone auth
 
-**Status:** Accepted
+**Status:** Accepted (amended 2026-09-13 by [ADR-0041](0041-kiosk-step-up-elevation.md): kiosk code sign-ins — e-mail and SMS — now mint an OTP-elevated session, and the same SMS/e-mail channels serve the kiosk step-up)
 
 **Date:** 2026-07-03
 
