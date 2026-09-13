@@ -34,7 +34,6 @@ import {
   MAX_CANCELLATION_REASON_LENGTH,
   MAX_CORRECTIONS_PER_CALL,
   USAGE_TYPE_DISCOUNTS,
-  roundTo5,
   type CorrectCheckoutEntry,
   type CorrectCheckoutItemInput,
   type CorrectCheckoutPersonInput,
@@ -216,9 +215,10 @@ function toItemEntity(
     created: now,
     quantity: item.quantity,
     unitPrice: item.unitPrice,
-    // Never trust a client-side product: the editor shows the same
-    // 5-Rappen rounding, and a typo'd total must not become the bill.
-    totalPrice: roundTo5(item.quantity * item.unitPrice),
+    // Never trust a client-side product. Cents, exactly like the checkout
+    // wizard's line totals (Math.round(x * 100) / 100) — so an untouched
+    // line reproduces its stored total instead of drifting by rounding.
+    totalPrice: Math.round(item.quantity * item.unitPrice * 100) / 100,
   };
 }
 

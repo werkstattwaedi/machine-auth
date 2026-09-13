@@ -419,6 +419,25 @@ describe("correctCheckouts (Integration, ADR-0041)", () => {
       expect(noticeStub.called).to.be.false;
     });
 
+    it("recomputes line totals to cents like the checkout wizard, ignoring the client's total", async () => {
+      await seedVisit();
+      const result = await correctCheckoutsHandler(
+        request({
+          reason: "Menge",
+          corrections: [{
+            checkoutId: "co-1",
+            replacement: replacement({
+              items: [{ workshop: "holz", description: "MDF 18 mm", type: "material", catalogId: null, quantity: 0.5, unitPrice: 18.15, totalPrice: 9.1 }],
+            }),
+          }],
+        }),
+      );
+      const items = await getFirestore().collection(`checkouts/${result.replacementCheckoutIds[0]}/items`).get();
+      // 0.5 × 18.15 = 9.075 → 9.07 with the wizard's rounding (not 9.10).
+      expect(items.docs[0].data().totalPrice).to.equal(9.07);
+      expect((await bill(result.replacementBillIds[0])).amount).to.equal(24.07);
+    });
+
     it("correcting a revision yields the next digit", async () => {
       await seedVisit("co-2", "bill-2", 42000011);
       const result = await correctCheckoutsHandler(
