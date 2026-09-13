@@ -70,11 +70,14 @@ test.describe("Authenticated checkout", () => {
     await page.getByRole("button", { name: "Zum Checkout" }).click()
     await expect(page.getByText("Dein Besuch")).toBeVisible()
 
-    // Expand the collapsible Nutzungsgebühren section to verify person is listed.
-    // The display name also renders in the page header ("Nutzungsverlauf öffnen"
-    // link), so scope the assertion to the section detail to avoid strict-mode
-    // dupes.
-    await page.getByRole("button", { name: /Nutzungsgebühren/ }).click()
+    // The Nutzungsgebühren section opens by itself when arriving from the
+    // visit step (#570). The display name also renders in the page header
+    // ("Nutzungsverlauf öffnen" link), so scope the assertion to the section
+    // detail to avoid strict-mode dupes.
+    // Arriving from the visit step opens Nutzungsgebühren by itself (#570).
+    await expect(
+      page.getByRole("button", { name: /Nutzungsgebühren/ }),
+    ).toHaveAttribute("aria-expanded", "true")
     await expect(
       page.locator("#nutzung-detail").getByText("E2E Testuser", { exact: true }),
     ).toBeVisible()

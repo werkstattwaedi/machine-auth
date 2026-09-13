@@ -18,6 +18,21 @@ if (typeof document !== "undefined" && !document.elementFromPoint) {
   document.elementFromPoint = () => null
 }
 
+// jsdom lacks pointer capture and scrollIntoView; the Radix Select
+// primitive (checkout Nutzungsart control) calls all three on open/select.
+if (typeof Element !== "undefined") {
+  const proto = Element.prototype as Element & {
+    hasPointerCapture?: unknown
+    setPointerCapture?: unknown
+    releasePointerCapture?: unknown
+    scrollIntoView?: unknown
+  }
+  if (!proto.hasPointerCapture) proto.hasPointerCapture = () => false
+  if (!proto.setPointerCapture) proto.setPointerCapture = () => {}
+  if (!proto.releasePointerCapture) proto.releasePointerCapture = () => {}
+  if (!proto.scrollIntoView) proto.scrollIntoView = () => {}
+}
+
 // input-otp@1.4.2 schedules setTimeout(0/10/50ms) from a mount effect and
 // never clears them (only its password-manager-badge timers get cleaned up).
 // If a straggler fires *after* Vitest tears down the jsdom `window` at

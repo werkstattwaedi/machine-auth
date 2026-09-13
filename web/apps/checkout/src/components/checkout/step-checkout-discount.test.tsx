@@ -5,8 +5,10 @@
  * Issue #284: the usage-type discount must be visible *per section* on the
  * receipt, with the reason spelled out — Marco's complaint was that an
  * `intern` checkout silently showed full prices but a CHF 0.00 total. These
- * render tests assert the discount notes appear and the displayed section
- * amounts collapse to the waived (net) value.
+ * render tests assert the discount notes appear on the machine/material
+ * sections. Issue #570 moved the entry-fee explanation onto the Nutzungsart
+ * control itself (effect line + declaration note), so the Nutzungsgebühren
+ * section carries no italic note any more.
  */
 
 import { describe, it, expect, afterEach } from "vitest"
@@ -69,7 +71,13 @@ const persons: CheckoutPerson[] = [
   },
 ]
 
-function Harness() {
+function Harness({
+  anonymous = false,
+  initialOpenSections,
+}: {
+  anonymous?: boolean
+  initialOpenSections?: string[]
+}) {
   const [usageType, setUsageType] = useState<UsageType>("regular")
   const [tip, setTip] = useState(0)
   return (
@@ -85,39 +93,117 @@ function Harness() {
       submitError={null}
       items={items}
       config={config}
+      anonymous={anonymous}
+      initialOpenSections={initialOpenSections}
     />
   )
 }
 
-async function selectUsageType(value: string) {
+async function openUsageTypeList() {
   const user = userEvent.setup()
-  // Open the Nutzungsgebühren section so the select is in the DOM.
+  // Open the Nutzungsgebühren section so the Nutzungsart control is
+  // reachable, then drop the list down.
   await act(async () => {
     await user.click(screen.getByRole("button", { name: /Nutzungsgebühren/ }))
   })
-  const usageSelect = screen.getByLabelText("Nutzungsart") as HTMLSelectElement
   await act(async () => {
-    await user.selectOptions(usageSelect, value)
+    await user.click(screen.getByLabelText("Nutzungsart"))
+  })
+  return user
+}
+
+async function selectUsageType(label: RegExp) {
+  const user = await openUsageTypeList()
+  await act(async () => {
+    await user.click(screen.getByRole("option", { name: label }))
   })
 }
 
-describe("StepCheckout — per-section discount rendering (#284)", () => {
-  it("offers the Freiwilligengruppe option", async () => {
+describe("StepCheckout — Nutzungsart control (#570)", () => {
+  it("lists every usage type in the agreed order for identified visitors", async () => {
     render(<Harness />)
-    // The usage-type select lives inside the Nutzungsgebühren section; open
-    // it so the options are in the DOM.
-    const user = userEvent.setup()
-    await act(async () => {
-      await user.click(screen.getByRole("button", { name: /Nutzungsgebühren/ }))
-    })
-    expect(
-      screen.getByRole("option", { name: "Freiwilligengruppe" }),
-    ).toBeTruthy()
+    await openUsageTypeList()
+    const names = screen
+      .getAllByRole("option")
+      .map((o) => o.getAttribute("aria-labelledby"))
+      .map((id) => document.getElementById(id ?? "")?.textContent ?? "")
+    expect(names).toEqual([
+      "Reguläre Nutzung",
+      "Ermässigte Nutzung (KulturLegi)",
+      "Hangenmoos AG",
+      "Nur Materialbezug",
+      "Freiwilligengruppe",
+      "Interne Nutzung",
+    ])
   })
 
-  it("shows entry + machine discount notes for volunteering, none for material", async () => {
+  it("explains each option: price effect and who it applies to", async () => {
     render(<Harness />)
-    await selectUsageType("volunteering")
+    await openUsageTypeList()
+    const volunteering = screen.getByRole("option", {
+      name: "Freiwilligengruppe",
+    })
+    expect(volunteering.textContent).toContain(
+      "Nutzungsgebühr und Maschinen werden nicht verrechnet",
+    )
+    expect(volunteering.textContent).toContain("Falls du heute eine Werkstatt")
+    // Regular carries no effect line.
+    expect(
+      screen.getByRole("option", { name: "Reguläre Nutzung" }).textContent,
+    ).toContain("Für alle, die die Werkstatt benutzen.")
+  })
+
+  it("hides the account-only types from anonymous checkouts", async () => {
+    render(<Harness anonymous />)
+    await openUsageTypeList()
+    expect(
+      screen.queryByRole("option", { name: "Freiwilligengruppe" }),
+    ).toBeNull()
+    expect(screen.queryByRole("option", { name: "Interne Nutzung" })).toBeNull()
+    expect(screen.getByRole("option", { name: "Hangenmoos AG" })).toBeTruthy()
+  })
+
+  it("shows the effect on the field and the declaration note after choosing a discount", async () => {
+    render(<Harness />)
+    expect(screen.queryByTestId("usage-type-declaration")).toBeNull()
+    await selectUsageType(/Ermässigte Nutzung/)
+
+    const trigger = screen.getByLabelText("Nutzungsart")
+    expect(trigger.textContent).toContain("Ermässigte Nutzung (KulturLegi)")
+    expect(trigger.textContent).toContain(
+      "50% Ermässigung auf Nutzungsgebühr",
+    )
+    expect(screen.getByTestId("usage-type-declaration").textContent).toMatch(
+      /KulturLegi dabei zu haben.*stichprobenweise/,
+    )
+    // Section summary + per-person fee follow in the same render.
+    expect(screen.getByText(/1 Person · Ermässigte Nutzung/)).toBeTruthy()
+    // Section amount and the person row both show the halved fee.
+    expect(screen.getAllByText("CHF 7.50")).toHaveLength(2)
+  })
+
+  it("starts with the Nutzungsgebühren section open when asked to", () => {
+    render(<Harness initialOpenSections={["nutzung"]} />)
+    expect(
+      screen.getByRole("button", { name: /Nutzungsgebühren/ }),
+    ).toHaveAttribute("aria-expanded", "true")
+    expect(
+      screen.getByRole("button", { name: /Maschinen-\/Werkzeugnutzung/ }),
+    ).toHaveAttribute("aria-expanded", "false")
+  })
+
+  it("keeps every section collapsed by default", () => {
+    render(<Harness />)
+    expect(
+      screen.getByRole("button", { name: /Nutzungsgebühren/ }),
+    ).toHaveAttribute("aria-expanded", "false")
+  })
+})
+
+describe("StepCheckout — per-section discount rendering (#284)", () => {
+  it("shows the machine discount note for volunteering, none for material", async () => {
+    render(<Harness />)
+    await selectUsageType(/Freiwilligengruppe/)
 
     // Open machine + material sections so their notes are in the DOM.
     const user = userEvent.setup()
@@ -130,12 +216,9 @@ describe("StepCheckout — per-section discount rendering (#284)", () => {
       await user.click(screen.getByRole("button", { name: /Materialbezug/ }))
     })
 
-    const notes = screen.getAllByTestId("section-discount-note")
-    const texts = notes.map((n) => n.textContent ?? "")
-    // Entry + machine waived → two notes, both naming Freiwilligengruppe.
-    expect(texts.some((t) => /Freiwilligengruppe.*Nutzungsgebühr/.test(t))).toBe(
-      true,
-    )
+    const texts = screen
+      .getAllByTestId("section-discount-note")
+      .map((n) => n.textContent ?? "")
     expect(
       texts.some((t) => /Freiwilligengruppe.*Maschinengeb/.test(t)),
     ).toBe(true)
@@ -143,11 +226,16 @@ describe("StepCheckout — per-section discount rendering (#284)", () => {
     expect(texts.some((t) => /Material wird nicht verrechnet/.test(t))).toBe(
       false,
     )
+    // The entry-fee waiver is explained on the control, not as a note.
+    expect(texts.some((t) => /Nutzungsgebühr/.test(t))).toBe(false)
+    expect(screen.getByTestId("usage-type-declaration").textContent).toContain(
+      "Werkstattbetreuung",
+    )
   })
 
-  it("shows entry + machine + material discount notes for intern", async () => {
+  it("shows machine + material discount notes for intern", async () => {
     render(<Harness />)
-    await selectUsageType("intern")
+    await selectUsageType(/Interne Nutzung/)
 
     const user = userEvent.setup()
     await act(async () => {
@@ -162,9 +250,6 @@ describe("StepCheckout — per-section discount rendering (#284)", () => {
     const texts = screen
       .getAllByTestId("section-discount-note")
       .map((n) => n.textContent ?? "")
-    expect(texts.some((t) => /Interne Nutzung.*Nutzungsgebühr/.test(t))).toBe(
-      true,
-    )
     expect(texts.some((t) => /Interne Nutzung.*Maschinengeb/.test(t))).toBe(true)
     expect(texts.some((t) => /Interne Nutzung.*Material/.test(t))).toBe(true)
   })

@@ -57,6 +57,7 @@ function renderStep(
       city?: string
     } | null
     onPrimaryBillingChange?: (updates: Partial<CheckoutPerson>) => void
+    initialOpenSections?: string[]
   } = {},
 ) {
   return render(
@@ -74,6 +75,7 @@ function renderStep(
       membershipCatalogId={MEMBERSHIP_CATALOG_ID}
       onPrimaryBillingChange={opts.onPrimaryBillingChange ?? (() => {})}
       profileBillingAddress={opts.profileBillingAddress ?? null}
+      initialOpenSections={opts.initialOpenSections}
     />,
   )
 }
@@ -91,6 +93,21 @@ describe("StepCheckout — membership billing address gate", () => {
     renderStep(person(), async () => {})
     expect(screen.getByTestId("membership-address")).toBeTruthy()
     expect(screen.getByLabelText("Strasse und Hausnummer")).toBeTruthy()
+  })
+
+  it("opens the membership section on arrival when asked to (stale resume / purchase landing)", () => {
+    renderStep(person(), async () => {}, {
+      initialOpenSections: ["mitgliedschaft"],
+    })
+    expect(membershipSectionExpanded()).toBe(true)
+  })
+
+  it("keeps the membership section collapsed by default when the address is complete", () => {
+    renderStep(
+      person({ billingStreet: "Seestrasse 1", billingZip: "8820", billingCity: "Wädenswil" }),
+      async () => {},
+    )
+    expect(membershipSectionExpanded()).toBe(false)
   })
 
   it("blocks Weiter zum Bezahlen when the address is missing", async () => {
