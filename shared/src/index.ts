@@ -13,4 +13,5 @@ export * from "./billing"
 export * from "./checkout-summary"
 
 export * from "./rejection"
+export * from "./log-triage"
 export * from "./env-label"
