@@ -1101,6 +1101,7 @@ describe("bill processing triggers (Integration)", () => {
       expect(entity.template.variables.REASON).to.equal("Menge korrigiert");
       expect(entity.template.variables.CORRECTED_DOCUMENTS).to.equal("");
       expect(entity.template.variables.CORRECTION_DETAILS).to.equal("");
+      expect(entity.template.variables.PAYMENT_NOTE).to.include("nächste Sammelrechnung");
       expect(entity.attachments).to.have.length(1);
       expect(entity.attachments![0].filename).to.equal("Beleg-BL-000061-2.pdf");
     });
@@ -1125,6 +1126,9 @@ describe("bill processing triggers (Integration)", () => {
       expect(resendSendStub.calledOnce).to.be.true;
       expect(sentEntity().template.variables.INVOICE_NUMBER).to.equal("RE-000007-2");
       expect(sentEntity().template.variables.AMOUNT).to.equal("0.00");
+      expect(sentEntity().template.variables.PAYMENT_NOTE).to.equal(
+        "Für diese Korrektur ist nichts zu bezahlen.",
+      );
     });
 
     it("trySendEmail: a revision defers without taking the lock while a corrected Beleg PDF is missing", async () => {
@@ -1197,6 +1201,10 @@ describe("bill processing triggers (Integration)", () => {
       expect(entity.template.variables.CORRECTION_DETAILS).to.equal(
         "Korrigierte Belege: BL-000061-2 · Stornierte Belege: BL-000062",
       );
+      // A payable Sammelrechnung revision ships a new QR slip.
+      expect(entity.template.variables.PAYMENT_NOTE).to.include(
+        "Einzahlungsschein zu RE-000050 ist ungültig",
+      );
       expect(entity.attachments!.map((a) => a.filename)).to.deep.equal([
         "Rechnung-RE-000050-2.pdf",
         "Beleg-BL-000061-2.pdf",
@@ -1239,6 +1247,7 @@ describe("bill processing triggers (Integration)", () => {
       expect(entity.template.variables.DOCUMENT_KIND).to.equal("Rechnung");
       expect(entity.template.variables.REASON).to.equal("Doppelt erfasst");
       expect(entity.template.variables.AMOUNT).to.equal("42.50");
+      expect(entity.template.variables.PAYMENT_NOTE).to.include("erstatten wir dir den Betrag");
       expect(entity.attachments ?? []).to.have.length(0);
       expect((await getBill("cancelled-sent")).cancellationNoticeSentAt).to.be.instanceOf(Timestamp);
       // Lock held: a second call sends nothing.

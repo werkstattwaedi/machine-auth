@@ -681,14 +681,19 @@ export async function trySendEmail(billId: string): Promise<boolean> {
     const cancelledDocuments = supersededBill
       ? (await cancelledWithoutReplacement(bill.supersedesBillRef!)).join(", ")
       : "";
+    const supersededReference = supersededBill
+      ? formatBillReference(supersededBill.referenceNumber, supersededBill.kind)
+      : "";
     const correctionVariables: Record<string, string> = supersededBill
       ? {
           DOCUMENT_KIND: documentKindLabel(bill, checkout.paymentMethod ?? null),
-          SUPERSEDED_INVOICE_NUMBER: formatBillReference(
-            supersededBill.referenceNumber,
-            supersededBill.kind,
-          ),
+          SUPERSEDED_INVOICE_NUMBER: supersededReference,
           REASON: bill.correctionReason ?? "",
+          PAYMENT_NOTE: correctionPaymentNote(
+            bill,
+            checkout.paymentMethod ?? null,
+            supersededReference,
+          ),
           CORRECTED_DOCUMENTS: correctedDocuments,
           CANCELLED_DOCUMENTS: cancelledDocuments,
           // Resend templates have no conditionals: one pre-composed line the
@@ -770,6 +775,48 @@ function documentKindLabel(
 ): string {
   const prefix = billDocumentPrefix(bill.kind, paymentMethod);
   return prefix === "Rechnung" && bill.checkouts.length > 1 ? "Sammelrechnung" : prefix;
+}
+
+/**
+ * What the customer has to do about money after a correction (ADR-0041).
+ * Composed here because Resend templates have no conditionals and the
+ * answer depends on the document: a payable Rechnung / Sammelrechnung ships
+ * a new QR slip, a TWINT Quittung was already paid, a Beleg rides on the
+ * next Sammelrechnung, a zero-amount re-issue needs nothing.
+ */
+function correctionPaymentNote(
+  bill: BillEntity,
+  paymentMethod: PaymentMethod | null,
+  supersededReference: string,
+): string {
+  if (bill.paidVia === "free") return "Für diese Korrektur ist nichts zu bezahlen.";
+  if ((bill.kind ?? "invoice") === "beleg") {
+    return "Der Betrag wird über deine nächste Sammelrechnung abgerechnet.";
+  }
+  if (paymentMethod === "twint") {
+    return "Du hast per TWINT bereits bezahlt — eine allfällige Differenz zum ursprünglichen Betrag klären wir direkt mit dir.";
+  }
+  return (
+    "Der neue QR-Einzahlungsschein liegt der PDF bei. Bitte nur noch diesen verwenden — " +
+    `der Einzahlungsschein zu ${supersededReference} ist ungültig.`
+  );
+}
+
+/** Same idea for a pure cancellation: what happens to money already in flight. */
+function cancellationPaymentNote(
+  bill: BillEntity,
+  paymentMethod: PaymentMethod | null,
+): string {
+  if ((bill.kind ?? "invoice") === "beleg") {
+    return "Der Betrag wird nicht auf deine Sammelrechnung übernommen.";
+  }
+  if (paymentMethod === "twint") {
+    return "Du hast per TWINT bereits bezahlt — wir erstatten dir den Betrag.";
+  }
+  return (
+    "Ein früher zugestellter QR-Einzahlungsschein zu dieser Nummer ist ungültig — bitte nicht mehr " +
+    "verwenden. Falls du bereits bezahlt hast, erstatten wir dir den Betrag."
+  );
 }
 
 async function loadSupersededBill(bill: BillEntity): Promise<BillEntity | null> {
@@ -875,6 +922,7 @@ export async function trySendCancellationNotice(billId: string): Promise<boolean
           INVOICE_NUMBER: formatBillReference(bill.referenceNumber, bill.kind),
           DOCUMENT_KIND: documentKindLabel(bill, checkout.paymentMethod ?? null),
           REASON: bill.cancellationReason ?? "",
+          PAYMENT_NOTE: cancellationPaymentNote(bill, checkout.paymentMethod ?? null),
           AMOUNT: bill.amount.toFixed(2),
           CURRENCY: bill.currency,
           KASSE_EMAIL: kasseEmail.value(),

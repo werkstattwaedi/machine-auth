@@ -212,12 +212,14 @@ One-time setup before the functions deploy:
 
 1. Create/publish the templates from the operations repo — `self-checkout-correction`
    (variables: RECIPIENT_NAME, CHECKOUT_DATE, INVOICE_NUMBER, SUPERSEDED_INVOICE_NUMBER,
-   DOCUMENT_KIND, AMOUNT, CURRENCY, REASON, KASSE_EMAIL, CORRECTION_DETAILS (pre-composed
-   Sammelrechnung line, empty otherwise), CORRECTED_DOCUMENTS, CANCELLED_DOCUMENTS; the
+   DOCUMENT_KIND, AMOUNT, CURRENCY, REASON, KASSE_EMAIL, PAYMENT_NOTE (pre-composed "what to
+   do about payment" sentence — new QR slip / TWINT already paid / next Sammelrechnung /
+   nothing to pay), CORRECTION_DETAILS (pre-composed Sammelrechnung line, empty otherwise),
+   CORRECTED_DOCUMENTS, CANCELLED_DOCUMENTS; the
    corrected PDF plus any corrected Belege are attached — HTML + upload commands live in the
    operations repo under `email/`) and
    `self-checkout-cancellation` (RECIPIENT_NAME, CHECKOUT_DATE, INVOICE_NUMBER, DOCUMENT_KIND,
-   REASON, AMOUNT, CURRENCY, KASSE_EMAIL; no attachment).
+   REASON, AMOUNT, CURRENCY, KASSE_EMAIL, PAYMENT_NOTE; no attachment).
 2. Add `functions.resendCorrectionTemplateId` / `functions.resendCancellationTemplateId` to the
    operations config and run `npm run generate-env`.
 3. Until both are set, the correction mail falls back to the generic QR-bill template and the
