@@ -675,21 +675,31 @@ export async function trySendEmail(billId: string): Promise<boolean> {
     );
     // Correction-only variables (ADR-0041). Kept off the regular templates
     // so their variable set stays exactly what ops published.
+    const correctedDocuments = attachedBills
+      .map((a) => formatBillReference(a.bill.referenceNumber, a.bill.kind))
+      .join(", ");
+    const cancelledDocuments = supersededBill
+      ? (await cancelledWithoutReplacement(bill.supersedesBillRef!)).join(", ")
+      : "";
     const correctionVariables: Record<string, string> = supersededBill
       ? {
-
           DOCUMENT_KIND: documentKindLabel(bill, checkout.paymentMethod ?? null),
           SUPERSEDED_INVOICE_NUMBER: formatBillReference(
             supersededBill.referenceNumber,
             supersededBill.kind,
           ),
           REASON: bill.correctionReason ?? "",
-          CORRECTED_DOCUMENTS: attachedBills
-            .map((a) => formatBillReference(a.bill.referenceNumber, a.bill.kind))
-            .join(", "),
-          CANCELLED_DOCUMENTS: (
-            await cancelledWithoutReplacement(bill.supersedesBillRef!)
-          ).join(", "),
+          CORRECTED_DOCUMENTS: correctedDocuments,
+          CANCELLED_DOCUMENTS: cancelledDocuments,
+          // Resend templates have no conditionals: one pre-composed line the
+          // template prints verbatim — empty (an invisible paragraph) for a
+          // single-document correction.
+          CORRECTION_DETAILS: [
+            correctedDocuments && `Korrigierte Belege: ${correctedDocuments}`,
+            cancelledDocuments && `Stornierte Belege: ${cancelledDocuments}`,
+          ]
+            .filter(Boolean)
+            .join(" · "),
         }
       : {};
     const extraAttachments = await Promise.all(

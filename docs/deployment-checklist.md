@@ -212,8 +212,10 @@ One-time setup before the functions deploy:
 
 1. Create/publish the templates from the operations repo — `self-checkout-correction`
    (variables: RECIPIENT_NAME, CHECKOUT_DATE, INVOICE_NUMBER, SUPERSEDED_INVOICE_NUMBER,
-   DOCUMENT_KIND, AMOUNT, CURRENCY, REASON, KASSE_EMAIL, CORRECTED_DOCUMENTS,
-   CANCELLED_DOCUMENTS; the corrected PDF plus any corrected Belege are attached) and
+   DOCUMENT_KIND, AMOUNT, CURRENCY, REASON, KASSE_EMAIL, CORRECTION_DETAILS (pre-composed
+   Sammelrechnung line, empty otherwise), CORRECTED_DOCUMENTS, CANCELLED_DOCUMENTS; the
+   corrected PDF plus any corrected Belege are attached — HTML + upload commands live in the
+   operations repo under `email/`) and
    `self-checkout-cancellation` (RECIPIENT_NAME, CHECKOUT_DATE, INVOICE_NUMBER, DOCUMENT_KIND,
    REASON, AMOUNT, CURRENCY, KASSE_EMAIL; no attachment).
 2. Add `functions.resendCorrectionTemplateId` / `functions.resendCancellationTemplateId` to the

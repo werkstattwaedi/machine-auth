@@ -1100,6 +1100,7 @@ describe("bill processing triggers (Integration)", () => {
       expect(entity.template.variables.DOCUMENT_KIND).to.equal("Beleg");
       expect(entity.template.variables.REASON).to.equal("Menge korrigiert");
       expect(entity.template.variables.CORRECTED_DOCUMENTS).to.equal("");
+      expect(entity.template.variables.CORRECTION_DETAILS).to.equal("");
       expect(entity.attachments).to.have.length(1);
       expect(entity.attachments![0].filename).to.equal("Beleg-BL-000061-2.pdf");
     });
@@ -1193,6 +1194,9 @@ describe("bill processing triggers (Integration)", () => {
       expect(entity.template.variables.SUPERSEDED_INVOICE_NUMBER).to.equal("RE-000050");
       expect(entity.template.variables.CORRECTED_DOCUMENTS).to.equal("BL-000061-2");
       expect(entity.template.variables.CANCELLED_DOCUMENTS).to.equal("BL-000062");
+      expect(entity.template.variables.CORRECTION_DETAILS).to.equal(
+        "Korrigierte Belege: BL-000061-2 · Stornierte Belege: BL-000062",
+      );
       expect(entity.attachments!.map((a) => a.filename)).to.deep.equal([
         "Rechnung-RE-000050-2.pdf",
         "Beleg-BL-000061-2.pdf",
