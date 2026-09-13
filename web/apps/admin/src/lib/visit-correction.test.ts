@@ -155,7 +155,13 @@ describe("estimateSummary", () => {
 
 describe("correctionBlockedReason", () => {
   const refs = { membershipCatalogId: "cat-membership", badgeCatalogId: "cat-badge" }
-  const unpaid = { paidAt: null, cancelledAt: null, source: "checkout" as const }
+  const unpaid = {
+    paidAt: null,
+    cancelledAt: null,
+    source: "checkout" as const,
+    kind: "invoice" as const,
+    referenceNumber: 42000010,
+  }
 
   it("allows a closed, unpaid, plain visit", () => {
     expect(correctionBlockedReason({ status: "closed" }, unpaid, items, refs)).toBeNull()
@@ -169,6 +175,16 @@ describe("correctionBlockedReason", () => {
     expect(correctionBlockedReason({ status: "closed" }, { ...unpaid, source: "membership-renewal" }, [], refs)).toMatch(/Mitgliederbeitrag/)
     const membershipItem = { catalogId: ref("cat-membership") as never, variantId: "single" }
     expect(correctionBlockedReason({ status: "closed" }, unpaid, [membershipItem], refs)).toMatch(/Mitgliedschaft oder Badge/)
+    // A Beleg never carries paidAt itself — its Sammelrechnung decides.
+    const beleg = { ...unpaid, kind: "beleg" as const }
+    expect(correctionBlockedReason({ status: "closed" }, beleg, [], refs, { paidAt: null, cancelledAt: null })).toBeNull()
+    expect(
+      correctionBlockedReason({ status: "closed" }, beleg, [], refs, { paidAt: {} as never, cancelledAt: null }),
+    ).toMatch(/Sammelrechnung .* bereits bezahlt/)
+    // Tenth revision (digit 9) cannot be corrected again.
+    expect(correctionBlockedReason({ status: "closed" }, { ...unpaid, referenceNumber: 42000019 }, [], refs)).toMatch(
+      /maximale Anzahl/,
+    )
     // No membership SKU configured → nothing to exclude.
     expect(
       correctionBlockedReason({ status: "closed" }, unpaid, [membershipItem], {

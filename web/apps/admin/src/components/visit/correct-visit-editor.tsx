@@ -236,7 +236,7 @@ export function CorrectVisitEditor({
                     step="0.01"
                     className="w-24 text-right tabular-nums"
                     value={numberValue(item.quantity)}
-                    onChange={(e) => patchItem(item.key, { quantity: e.target.valueAsNumber })}
+                    onChange={(e) => patchItem(item.key, { quantity: numberValue(e.target.valueAsNumber) })}
                     disabled={disabled}
                   />
                 </TableCell>
@@ -249,7 +249,7 @@ export function CorrectVisitEditor({
                     step="0.05"
                     className="w-28 text-right tabular-nums"
                     value={numberValue(item.unitPrice)}
-                    onChange={(e) => patchItem(item.key, { unitPrice: e.target.valueAsNumber })}
+                    onChange={(e) => patchItem(item.key, { unitPrice: numberValue(e.target.valueAsNumber) })}
                     disabled={disabled}
                   />
                 </TableCell>

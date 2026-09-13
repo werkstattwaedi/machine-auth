@@ -97,10 +97,16 @@ function VisitDetailPage() {
   // Same guards as the server (ADR-0041); a missing references doc means
   // "no membership / badge SKU configured" — nothing to exclude.
   const correctable =
-    correctionBlockedReason(visit, bill, items, {
-      membershipCatalogId: catalogRefs?.membership?.id ?? null,
-      badgeCatalogId: catalogRefs?.badge?.id ?? null,
-    }) === null
+    correctionBlockedReason(
+      visit,
+      bill,
+      items,
+      {
+        membershipCatalogId: catalogRefs?.membership?.id ?? null,
+        badgeCatalogId: catalogRefs?.badge?.id ?? null,
+      },
+      sammelrechnung,
+    ) === null
   const billReference = bill ? formatBillReference(bill.referenceNumber, bill.kind) : null
   const sammelReference =
     bill?.kind === "beleg" && sammelrechnung && !sammelrechnung.cancelledAt

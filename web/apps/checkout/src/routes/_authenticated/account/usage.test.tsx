@@ -290,6 +290,8 @@ describe("Usage page", () => {
     await waitFor(() => {
       expect(screen.getAllByText("Storniert").length).toBeGreaterThan(0)
     })
+    // The cancelled original and the open re-issue are both listed.
+    expect(screen.getAllByText("RE-000042").length).toBeGreaterThan(0)
     expect(screen.getAllByText("RE-000042-2").length).toBeGreaterThan(0)
     // Only the open bill counts: CHF 10.00, not 85.50.
     expect(screen.queryByText(/85[.,]50/)).toBeNull()

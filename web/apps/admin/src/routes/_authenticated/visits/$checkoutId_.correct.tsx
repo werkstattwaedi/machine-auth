@@ -99,10 +99,16 @@ function CorrectVisitPage() {
     return <PageLoading />
   }
 
-  const blocked = correctionBlockedReason(visit, bill, items, {
-    membershipCatalogId: catalogRefs?.membership?.id ?? null,
-    badgeCatalogId: catalogRefs?.badge?.id ?? null,
-  })
+  const blocked = correctionBlockedReason(
+    visit,
+    bill,
+    items,
+    {
+      membershipCatalogId: catalogRefs?.membership?.id ?? null,
+      badgeCatalogId: catalogRefs?.badge?.id ?? null,
+    },
+    sammelrechnung,
+  )
   if (blocked || !bill) {
     return (
       <div className="space-y-4">

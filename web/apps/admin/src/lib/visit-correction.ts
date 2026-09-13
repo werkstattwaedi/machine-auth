@@ -14,6 +14,7 @@ import type {
   CheckoutItemDoc,
   CheckoutPersonDoc,
 } from "@modules/lib/firestore-entities"
+import { billRevision } from "@modules/lib/format"
 import {
   CANCEL_REASON_MIN_LENGTH,
   MAX_CANCELLATION_REASON_LENGTH,
@@ -21,6 +22,7 @@ import {
   computeCheckoutSummary,
   partitionBadge,
   partitionMembership,
+  roundTo5,
   type CheckoutSummary,
   type CorrectCheckoutEntry,
   type UsageType,
@@ -65,11 +67,16 @@ export const USAGE_TYPES = Object.keys(USAGE_TYPE_DISCOUNTS) as UsageType[]
  * the server stays authoritative. Membership / badge lines are matched on
  * catalog id — a missing references doc means "no such SKU".
  */
+/** A bill can be corrected at most this many times (one revision digit). */
+export const MAX_BILL_REVISION = 10
+
 export function correctionBlockedReason(
   visit: Pick<CheckoutDoc, "status">,
-  bill: Pick<BillDoc, "paidAt" | "cancelledAt" | "source"> | null,
+  bill: Pick<BillDoc, "paidAt" | "cancelledAt" | "source" | "kind" | "referenceNumber"> | null,
   items: Array<Pick<CheckoutItemDoc, "catalogId" | "variantId">>,
   refs: { membershipCatalogId: string | null; badgeCatalogId: string | null },
+  /** The Sammelrechnung an aggregated Beleg was folded into; Belege never carry `paidAt` themselves. */
+  aggregate: Pick<BillDoc, "paidAt" | "cancelledAt"> | null = null,
 ): string | null {
   if (visit.status === "cancelled") return "Dieser Besuch wurde bereits storniert."
   if (visit.status !== "closed") return "Nur abgeschlossene Besuche können korrigiert werden."
@@ -78,8 +85,14 @@ export function correctionBlockedReason(
   if (bill.paidAt) {
     return "Die Rechnung ist bereits bezahlt — bezahlte Rechnungen können in dieser Version nicht korrigiert werden."
   }
+  if ((bill.kind ?? "invoice") === "beleg" && aggregate?.paidAt) {
+    return "Die Sammelrechnung ist bereits bezahlt — bezahlte Rechnungen können in dieser Version nicht korrigiert werden."
+  }
   if ((bill.source ?? "checkout") === "membership-renewal") {
     return "Mitgliederbeitrags-Rechnungen können nicht korrigiert werden."
+  }
+  if (billRevision(bill.referenceNumber) >= MAX_BILL_REVISION) {
+    return "Diese Rechnung hat die maximale Anzahl Korrekturen erreicht."
   }
   const classifiable = items.map((i) => ({
     catalogId: i.catalogId?.id ?? null,
@@ -148,9 +161,9 @@ export function newItemRow(workshop: string, key: string): DraftItem {
   }
 }
 
-/** Line total rounded to 5 Rappen, like the catalog prices. */
+/** Line total rounded to 5 Rappen — the same rounding the server applies. */
 export function rowTotal(item: Pick<DraftItem, "quantity" | "unitPrice">): number {
-  return Math.round(item.quantity * item.unitPrice * 20) / 20
+  return roundTo5(item.quantity * item.unitPrice)
 }
 
 const MAX_MONEY = 1_000_000

@@ -115,6 +115,8 @@ Deploy uses `scripts/deploy-functions.ts` to pack `@oww/shared` and rewrite
 rm -rf lib/ && npm run build
 ```
 
+`lib/` and `shared/dist` survive branch switches, and the pre-commit hook runs *every* compiled test under `lib/test/` — after checking out a branch with fewer sources, `rm -rf functions/lib shared/dist` first, or the hook fails on a test whose source no longer exists.
+
 ### Firestore Schema
 
 See `firestore/schema.jsonc` for complete structure.
