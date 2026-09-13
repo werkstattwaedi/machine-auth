@@ -77,6 +77,47 @@ function appIcon(): Electron.NativeImage {
   return nativeImage.createFromPath(path.join(__dirname, "..", "assets", file))
 }
 
+// How long the kiosk stays pinned above everything after being surfaced. Long
+// enough to outlast Windows handing the foreground back to the pre-screensaver
+// window, and for someone walking up to start touching the screen — a touch
+// gives the window focus the legitimate way. Then we let it go, so the kiosk
+// does not permanently cover the (transition-phase) browser.
+const TOPMOST_HOLD_MS = 5_000
+
+let topmostTimer: ReturnType<typeof setTimeout> | null = null
+
+// Windows refuses SetForegroundWindow to a process that is neither the
+// foreground process nor started by it, which is exactly the kiosk's position
+// after a screensaver: the tap gets a taskbar flash, the window shows for an
+// instant, and the previously-focused window is handed back the foreground.
+// `focus({steal:true})` does not lift that restriction — measured on Windows
+// 11, the kiosk never reached the foreground at all.
+//
+// Z-order is not policed the same way. Pinning the window always-on-top is a
+// pure SetWindowPos call needing no foreground right, and it verifiably moves
+// the kiosk in front of the window that otherwise wins. So put it on top, and
+// release it shortly after.
+function pinAboveEverything(): void {
+  if (!mainWindow) return
+  // "screen-saver" is Electron's highest level — above ordinary topmost
+  // windows, which is what a walk-up terminal wants.
+  mainWindow.setAlwaysOnTop(true, "screen-saver")
+  if (topmostTimer) clearTimeout(topmostTimer)
+  topmostTimer = setTimeout(() => {
+    topmostTimer = null
+    mainWindow?.setAlwaysOnTop(false)
+  }, TOPMOST_HOLD_MS)
+}
+
+/** Drop the pin immediately (e.g. when hiding back to the tray). */
+function unpin(): void {
+  if (topmostTimer) {
+    clearTimeout(topmostTimer)
+    topmostTimer = null
+  }
+  mainWindow?.setAlwaysOnTop(false)
+}
+
 // Bring the kiosk to the foreground (badge tap / tray click). Idempotent when
 // already visible — a mid-checkout tap just re-focuses.
 function showWindow(): void {
@@ -87,9 +128,13 @@ function showWindow(): void {
   // steal:true so we actually surface above the (transition-phase) browser
   // running the old checkout, instead of merely flashing the taskbar.
   app.focus({ steal: true })
+  // Best-effort focus above is not enough on Windows; the pin is what actually
+  // puts the kiosk in front.
+  pinAboveEverything()
 }
 
 function hideWindow(): void {
+  unpin()
   mainWindow?.hide()
 }
 
@@ -98,7 +143,7 @@ function hideWindow(): void {
 // screensaver engaged, and does so slightly after the process dies, so a
 // single immediate call loses the race. Cheap and idempotent — showWindow()
 // on an already-focused window is a no-op in practice.
-const FOREGROUND_REASSERT_MS = [0, 300, 900] as const
+const FOREGROUND_REASSERT_MS = [0, 300, 900, 2000] as const
 
 // Raising the window is not enough when the terminal has gone to the
 // screensaver: it paints over the kiosk, so the tap looks ignored and users
