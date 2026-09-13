@@ -22,7 +22,7 @@ import {
   computeCheckoutSummary,
   partitionBadge,
   partitionMembership,
-  roundTo5,
+  roundCents,
   type CheckoutSummary,
   type CorrectCheckoutEntry,
   type UsageType,
@@ -161,9 +161,12 @@ export function newItemRow(workshop: string, key: string): DraftItem {
   }
 }
 
-/** Line total rounded to 5 Rappen — the same rounding the server applies. */
+/**
+ * Line total in cents — the checkout wizard's rule and the server's, so an
+ * untouched line reproduces its stored total instead of drifting.
+ */
 export function rowTotal(item: Pick<DraftItem, "quantity" | "unitPrice">): number {
-  return roundTo5(item.quantity * item.unitPrice)
+  return roundCents(item.quantity * item.unitPrice)
 }
 
 const MAX_MONEY = 1_000_000

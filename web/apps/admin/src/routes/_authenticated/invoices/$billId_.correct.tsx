@@ -87,12 +87,15 @@ function CorrectSammelrechnungPage() {
   const [reason, setReason] = useState("")
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [serverError, setServerError] = useState<string | null>(null)
+  // After the commit the Sammelrechnung flips to "cancelled" in this page's
+  // own listener before the navigation fires — keep the spinner up.
+  const [submitted, setSubmitted] = useState(false)
   const correct = useAsyncMutation<CorrectCheckoutsResult>({
     context: "admin.sammelrechnungCorrect",
     errorMessage: "Korrektur konnte nicht gespeichert werden",
   })
 
-  if (loading || belegeLoading || pricing.loading) return <PageLoading />
+  if (loading || belegeLoading || pricing.loading || submitted) return <PageLoading />
   if (!bill) return <div>Rechnung nicht gefunden.</div>
 
   const reference = formatBillReference(bill.referenceNumber, bill.kind)
@@ -153,6 +156,7 @@ function CorrectSammelrechnungPage() {
 
   const handleSubmit = async () => {
     setServerError(null)
+    setSubmitted(true)
     let result: CorrectCheckoutsResult
     try {
       result = await correct.mutate(async () => {
@@ -168,6 +172,7 @@ function CorrectSammelrechnungPage() {
         return res.data
       })
     } catch (err) {
+      setSubmitted(false)
       setServerError(serverMessage(err, "Korrektur konnte nicht gespeichert werden."))
       return
     }

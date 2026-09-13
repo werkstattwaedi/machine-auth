@@ -79,6 +79,10 @@ function CorrectVisitPage() {
   const [reason, setReason] = useState("")
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [serverError, setServerError] = useState<string | null>(null)
+  // Once the callable commits, this page's own listener sees the original
+  // flip to "cancelled" before the navigation fires — keep showing the
+  // spinner instead of flashing the "bereits storniert" state.
+  const [submitted, setSubmitted] = useState(false)
   const correct = useAsyncMutation<CorrectCheckoutsResult>({
     context: "admin.visitCorrect",
     errorMessage: "Korrektur konnte nicht gespeichert werden",
@@ -95,7 +99,7 @@ function CorrectVisitPage() {
 
   if (loading) return <PageLoading />
   if (!visit) return <div>Besuch nicht gefunden.</div>
-  if (itemsLoading || billLoading || pricing.loading || !draft || !original) {
+  if (itemsLoading || billLoading || pricing.loading || !draft || !original || submitted) {
     return <PageLoading />
   }
 
@@ -142,6 +146,7 @@ function CorrectVisitPage() {
 
   const handleSubmit = async () => {
     setServerError(null)
+    setSubmitted(true)
     let result: CorrectCheckoutsResult
     try {
       result = await correct.mutate(async () => {
@@ -157,6 +162,7 @@ function CorrectVisitPage() {
         return res.data
       })
     } catch (err) {
+      setSubmitted(false)
       setServerError(serverMessage(err, "Korrektur konnte nicht gespeichert werden."))
       return
     }

@@ -80,10 +80,11 @@ describe("draftFromCheckout", () => {
 })
 
 describe("rowTotal", () => {
-  it("rounds to 5 Rappen", () => {
-    expect(rowTotal({ quantity: 3, unitPrice: 0.33 })).toBe(1)
+  it("rounds to cents exactly like the checkout wizard", () => {
+    expect(rowTotal({ quantity: 3, unitPrice: 0.33 })).toBe(0.99)
     expect(rowTotal({ quantity: 1.5, unitPrice: 30 })).toBe(45)
-    expect(rowTotal({ quantity: 0.333, unitPrice: 10 })).toBe(3.35)
+    // The staging smoke test: 0.5 × 18.15 was stored as 9.07 by the wizard.
+    expect(rowTotal({ quantity: 0.5, unitPrice: 18.15 })).toBe(9.07)
   })
 })
 
