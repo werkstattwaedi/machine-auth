@@ -260,10 +260,11 @@ tap still yields the checkout-only session it does today.
 5. **Docs/ops** — amend ADR-0022 §5 status line, deployment checklist entry
    for `KIOSK_ELEVATION_TTL_MS`, ops-repo config.
 
-## Open decisions
+## Decisions taken (2026-09-13)
 
-- Elevate code sign-ins at mint (proposed) or always require the step-up?
-- TTL: 15 min proposed; idle in the account area: 2 min proposed.
-- Scope of family-invite management at the kiosk in v1 (proposed: in, since
-  it rides on `callerUserRef`); accepting *incoming* invites at the kiosk
-  (proposed: out — needs the e-mail-from-doc change, low value).
+- Code sign-ins (e-mail, SMS, kiosk sign-up) are elevated at mint; only a
+  badge tap steps up.
+- TTL 15 min; account-area idle 2 min.
+- Full session: everything the own-device login can do, including
+  accepting and rejecting incoming family invites (`callerEmail` resolves
+  the address from the user doc for synthetic tokens).

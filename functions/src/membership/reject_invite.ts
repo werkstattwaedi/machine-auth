@@ -9,7 +9,7 @@ import * as logger from "firebase-functions/logger";
 import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import { Timestamp, type DocumentReference } from "firebase-admin/firestore";
 import type { MembershipInviteEntity } from "../types/firestore_entities";
-import { callerUserRef, db, membershipRef } from "./shared";
+import { callerEmail, callerUserRef, db, membershipRef } from "./shared";
 
 interface RejectFamilyInviteRequest {
   membershipId: string;
@@ -33,7 +33,18 @@ export const rejectFamilyInviteHandler = async (request: CallableRequest<RejectF
   );
   const memRef = membershipRef(database, membershipId);
   const inviteRef = memRef.collection("invites").doc(inviteId);
-  const callerEmail = (request.auth?.token?.email ?? "").toString().toLowerCase();
+  // Shared helper: an elevated kiosk session's synthetic token carries no
+  // e-mail claim, so the address comes from the user doc (ADR-0041).
+  const callerEmailAddr = await callerEmail(
+    callerRef,
+    request.auth?.token as Record<string, unknown> | undefined,
+  );
+  if (!callerEmailAddr) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Caller has no email — cannot reject email-based invite",
+    );
+  }
 
   await database.runTransaction(async (tx) => {
     const inviteSnap = await tx.get(inviteRef);
@@ -47,7 +58,7 @@ export const rejectFamilyInviteHandler = async (request: CallableRequest<RejectF
         `Invite already ${invite.status}`,
       );
     }
-    if (invite.email !== callerEmail) {
+    if (invite.email !== callerEmailAddr) {
       throw new HttpsError(
         "permission-denied",
         "Invite is for a different email",

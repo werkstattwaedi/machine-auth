@@ -41,6 +41,8 @@ import {
 } from "../../src/checkout/kiosk_session";
 import { callerUserRef, callerEmail } from "../../src/membership/shared";
 import { handlePurchaseMembership } from "../../src/membership/purchase";
+import { rejectFamilyInviteHandler } from "../../src/membership/reject_invite";
+import { listMyFamilyInvitesHandler } from "../../src/membership/list_my_invites";
 import type { CatalogEntity } from "../../src/types/firestore_entities";
 
 const ORIGIN = "http://localhost:5173";
@@ -387,6 +389,63 @@ describe("Kiosk step-up elevation (Integration)", () => {
         "token@example.com"
       );
       expect(await callerEmail(ref, {})).to.equal(null);
+    });
+
+    it("listMyFamilyInvites + rejectFamilyInvite work for an elevated kiosk caller", async () => {
+      const db = getFirestore();
+      await seedUser("owner", "owner@example.com");
+      await seedUser("invitee", "invitee@example.com");
+      await db.collection("memberships").doc("fam").set({
+        type: "family",
+        status: "active",
+        ownerUserId: db.collection("users").doc("owner"),
+        members: [db.collection("users").doc("owner")],
+        validUntil: Timestamp.fromMillis(Date.now() + 365 * 24 * 3600 * 1000),
+      });
+      await db
+        .collection("memberships")
+        .doc("fam")
+        .collection("invites")
+        .doc("inv1")
+        .set({
+          email: "invitee@example.com",
+          status: "pending",
+          invitedBy: db.collection("users").doc("owner"),
+          created: Timestamp.now(),
+          ttlAt: Timestamp.fromMillis(Date.now() + 24 * 3600 * 1000),
+        });
+      const elevatedClaims = {
+        tagCheckout: true,
+        actsAs: "invitee",
+        elevatedUntil: Date.now() + 60_000,
+      };
+
+      const listed = await listMyFamilyInvitesHandler(
+        kioskRequest("tag:invitee:1", elevatedClaims, {})
+      );
+      expect(listed.invites.map((i) => i.inviteId)).to.deep.equal(["inv1"]);
+
+      // Plain (un-elevated) kiosk caller: refused before any e-mail lookup.
+      await expectHttpsError(
+        () =>
+          rejectFamilyInviteHandler(
+            kioskRequest(
+              "tag:invitee:1",
+              { tagCheckout: true, actsAs: "invitee" },
+              { membershipId: "fam", inviteId: "inv1" }
+            )
+          ),
+        "permission-denied"
+      );
+
+      await rejectFamilyInviteHandler(
+        kioskRequest("tag:invitee:1", elevatedClaims, {
+          membershipId: "fam",
+          inviteId: "inv1",
+        })
+      );
+      const inv = await db.doc("memberships/fam/invites/inv1").get();
+      expect(inv.get("status")).to.equal("rejected");
     });
 
     it("purchaseMembership works for an elevated kiosk session, not for a plain one", async () => {

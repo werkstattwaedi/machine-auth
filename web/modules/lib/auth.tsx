@@ -227,6 +227,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       let actsAs: string | null = null
       try {
         const tokenResult = await firebaseUser.getIdTokenResult()
+        // A later token event (sign-out, re-mint) may have superseded this
+        // one while we awaited — never let stale claims overwrite it.
+        if (auth.currentUser !== firebaseUser) return
         const claims = tokenResult.claims as {
           tagCheckout?: unknown
           actsAs?: unknown

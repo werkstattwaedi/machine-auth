@@ -62,6 +62,8 @@ interface VerifyKioskElevationResponse {
   elevatedUntil?: number | null
 }
 
+const CLAIMS_TIMEOUT_MS = 8_000
+
 type Stage =
   | { kind: "closed" }
   | { kind: "options"; options: ElevationOptions | null; error: string | null }
@@ -102,11 +104,27 @@ export function KioskElevationProvider({ children }: { children: ReactNode }) {
   const [awaitingClaims, setAwaitingClaims] = useState(false)
 
   useEffect(() => {
-    if (!awaitingClaims || !isKioskElevated) return
-    setAwaitingClaims(false)
-    const next = pendingNextRef.current
-    pendingNextRef.current = null
-    next?.()
+    if (!awaitingClaims) return
+    if (isKioskElevated) {
+      setAwaitingClaims(false)
+      const next = pendingNextRef.current
+      pendingNextRef.current = null
+      next?.()
+      return
+    }
+    // The re-minted claims normally land within a tick; if they never do
+    // (token refresh hiccup), fail visibly instead of leaving the visitor
+    // on a closed dialog with nothing happening.
+    const timer = window.setTimeout(() => {
+      setAwaitingClaims(false)
+      pendingNextRef.current = null
+      setStage({
+        kind: "options",
+        options: null,
+        error: "Die Bestätigung konnte nicht übernommen werden. Bitte versuche es erneut.",
+      })
+    }, CLAIMS_TIMEOUT_MS)
+    return () => window.clearTimeout(timer)
   }, [awaitingClaims, isKioskElevated])
 
   const loadOptions = useCallback(async () => {
