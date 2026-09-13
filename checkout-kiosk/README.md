@@ -72,6 +72,7 @@ constants.
 |----------|---------|-------------|
 | `BRIDGE_KIOSK_URL` | `https://localhost:5173/?kiosk` | Base URL for the checkout web app. |
 | `BRIDGE_BEARER_KEY` | `""` | Per-build Bearer secret. **The build fails** when the URL points at a non-localhost host and this is empty. The web app includes it in the `authCall/verifyTagCheckout` callable payload to decode the tag. The dev/emulator path bypasses the check, so empty is fine on localhost. |
+| `BRIDGE_ENV_LABEL` | `""` (dev) / `web.envLabel` from the ops config (`--prod` / `--env`) | Prefix for the window title and tray tooltip, e.g. `[staging]`. Empty means no prefix. |
 
 Label printing is handled by the `maco_gateway` (printer host configured
 there), not this bridge — see the printing-via-gateway plan and

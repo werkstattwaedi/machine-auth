@@ -1,8 +1,17 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { BRIDGE_BEARER_KEY, BRIDGE_URL } from "./build-config.generated"
+import { withEnvLabel } from "@oww/shared"
+
+import {
+  BRIDGE_BEARER_KEY,
+  BRIDGE_ENV_LABEL,
+  BRIDGE_URL,
+} from "./build-config.generated"
 import type { BridgeMode } from "./types"
+
+/** Base product name; the OS window title is this plus the env label. */
+export const PRODUCT_NAME = "OWW Self Checkout"
 
 export interface BridgeConfig {
   mode: BridgeMode
@@ -33,7 +42,9 @@ export function resolveConfig(): BridgeConfig {
     isDev,
     // Volatile partition: a closed kiosk window equals a closed session.
     partition: "persist:kiosk:volatile",
-    productName: "OWW Self Checkout",
+    // "[staging] OWW Self Checkout" on non-prod builds (BRIDGE_ENV_LABEL
+    // comes from the ops config's web.envLabel via inject-build-config).
+    productName: withEnvLabel(BRIDGE_ENV_LABEL, PRODUCT_NAME),
     windowOpts: {
       width: 1280,
       height: 900,

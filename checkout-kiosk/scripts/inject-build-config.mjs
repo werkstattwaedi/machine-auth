@@ -49,6 +49,12 @@ const defaultUrl = opsDefaults?.url ?? devDefaultUrl
 const url = process.env[urlEnvVar] || defaultUrl
 const isDev = url.includes("localhost")
 
+// ── Environment label (window / tray title prefix) ──────────────────
+// Sourced from the ops config's `web.envLabel` (same key that feeds the
+// web apps' VITE_ENV_LABEL), so "[staging]" shows up on every surface.
+// Optional: absent in prod / dev profile → "" → no prefix.
+const label = process.env.BRIDGE_ENV_LABEL ?? opsDefaults?.envLabel ?? ""
+
 // ── Bearer ──────────────────────────────────────────────────────────
 // In `--prod` / `--env <name>`: fetch from gcloud Secret Manager
 // (`KIOSK_BEARER_KEY`) unless the operator already set
@@ -76,13 +82,14 @@ const content = `// Copyright Offene Werkstatt Wädenswil
 
 export const BRIDGE_URL: string = ${JSON.stringify(url)}
 export const BRIDGE_BEARER_KEY: string = ${JSON.stringify(bearer)}
+export const BRIDGE_ENV_LABEL: string = ${JSON.stringify(label)}
 `
 
 writeFileSync(target, content)
 const redactedBearer = bearer ? `(set, ${bearer.length} chars)` : "(empty)"
 console.log(
   `inject-build-config: profile=${profile} url=${url} ` +
-    `bearer=${redactedBearer}`,
+    `bearer=${redactedBearer} label=${JSON.stringify(label)}`,
 )
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -124,7 +131,21 @@ function loadOpsDefaults(envName) {
   }
 
   const domain = readPath(cfg, "web.checkoutDomain", configPath)
-  return { url: `https://${domain}/?kiosk` }
+  return {
+    url: `https://${domain}/?kiosk`,
+    envLabel: readOptionalString(cfg, "web.envLabel"),
+  }
+}
+
+// Soft variant of readPath() for keys that may legitimately be absent
+// (prod carries no label). Non-string values are treated as unset.
+function readOptionalString(cfg, jsonPath) {
+  let current = cfg
+  for (const part of jsonPath.split(".")) {
+    if (current == null || typeof current !== "object") return ""
+    current = current[part]
+  }
+  return typeof current === "string" ? current : ""
 }
 
 function deepMerge(base, overrides) {
