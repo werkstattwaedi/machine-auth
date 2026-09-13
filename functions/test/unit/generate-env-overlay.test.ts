@@ -81,7 +81,12 @@ const OVERLAY_CONFIG = JSON.stringify({
     apiKey: "OVERLAY_KEY",
     appId: "1:222:web:overlay",
   },
-  web: { checkoutDomain: "oww-overlaytest.web.app", smsLoginEnabled: "false" },
+  web: {
+    checkoutDomain: "oww-overlaytest.web.app",
+    smsLoginEnabled: "false",
+    // Absent in the base config: proves overlay-only keys reach the web env.
+    envLabel: "[overlaytest]",
+  },
   gateway: {
     firebaseUrl: "https://europe-west6-oww-overlaytest.cloudfunctions.net",
   },
@@ -196,6 +201,7 @@ describe("generate-env --env <name> overlay (ADR-0034)", () => {
     expect(web).to.include("VITE_FIREBASE_PROJECT_ID=oww-overlaytest");
     expect(web).to.include("VITE_FIREBASE_API_KEY=OVERLAY_KEY");
     expect(web).to.include("VITE_CHECKOUT_DOMAIN=oww-overlaytest.web.app");
+    expect(web).to.include("VITE_ENV_LABEL=[overlaytest]");
     expect(web).to.include("VITE_SMS_LOGIN_ENABLED=false");
     // Inherited from the base config (deep-merge, not replaced):
     expect(web).to.include("VITE_FUNCTIONS_REGION=europe-west6");

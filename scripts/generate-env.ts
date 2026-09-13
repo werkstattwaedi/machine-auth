@@ -100,6 +100,11 @@ const VITE_DEPLOYMENT: VarMapping[] = [
   // → disabled; set web.smsLoginEnabled: "true" in the operations config to
   // roll out (the Firebase project also needs the phone provider enabled).
   { envVar: "VITE_SMS_LOGIN_ENABLED", jsonPath: "web.smsLoginEnabled" },
+  // Deployment label prefixed to the web tab titles (and, via the kiosk's
+  // inject-build-config.mjs, the Electron window/tray title) so staging
+  // and local builds are recognisable. Absent key → empty → no prefix;
+  // config.staging.jsonc sets "[staging]", config.local.jsonc "[local]".
+  { envVar: "VITE_ENV_LABEL", jsonPath: "web.envLabel" },
 ];
 
 const FUNCTIONS_PAYMENT: VarMapping[] = [
@@ -184,6 +189,8 @@ const TEST_FIXTURE_CONFIG: Record<string, unknown> = {
     organizationName: "Verein Offene Werkstatt Wädenswil (CI)",
     // E2E exercises the SMS login flow against the Auth emulator.
     smsLoginEnabled: "true",
+    // Labels emulator-backed CI/e2e tabs; no test asserts on document.title.
+    envLabel: "[ci]",
     iban: "CH00 0000 0000 0000 0000 0",
     raisenowPaylinkSolutionId: "test-fake-solution",
     paymentRecipientName: "OWW CI Recipient",

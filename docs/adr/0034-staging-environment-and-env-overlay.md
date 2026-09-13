@@ -69,6 +69,13 @@ env file by name via `GATEWAY_ENV` (default `local`). The kiosk's
 env generator reads, so the kiosk URL follows `web.checkoutDomain`
 automatically; its bearer always comes from Secret Manager.
 
+Staging is made recognisable on every surface by config alone: the overlay
+sets `web.envLabel: "[staging]"`, which the web apps prefix onto the tab
+title (`VITE_ENV_LABEL`) and the kiosk onto its window/tray title
+(`BRIDGE_ENV_LABEL`), and a `[staging]`-prefixed display name in
+`functions.resendFromEmail` marks outgoing mail. Production leaves the label
+empty; `config.local.jsonc` uses `[local]`, the CI fixture `[ci]`.
+
 Staging **shares production's Function secrets** (same Secret Manager values,
 copied into the staging project): both projects sit in the same org with the
 same access controls, so a separate key set adds upkeep without a security

@@ -55,10 +55,12 @@ const REQUIRED_LITERALS: Record<string, string[]> = {
   "web/apps/checkout/.env.test": [
     "VITE_FIREBASE_PROJECT_ID=oww-maco",
     "VITE_FIREBASE_API_KEY=fake-api-key",
+    "VITE_ENV_LABEL=[ci]",
   ],
   "web/apps/admin/.env.test": [
     "VITE_FIREBASE_PROJECT_ID=oww-maco",
     "VITE_FIREBASE_API_KEY=fake-api-key",
+    "VITE_ENV_LABEL=[ci]",
   ],
 };
 
