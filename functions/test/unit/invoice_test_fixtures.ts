@@ -85,7 +85,7 @@ function makeMembershipItem(
  */
 export function membershipOnlyInvoice(): InvoiceData {
   return {
-    referenceNumber: 50,
+    referenceNumber: 500,
     invoiceDate: zurich(2026, 4, 20),
     billingAddress: {
       company: "",
@@ -132,7 +132,7 @@ export function membershipOnlyInvoice(): InvoiceData {
  */
 export function membershipMixedInvoice(): InvoiceData {
   return {
-    referenceNumber: 51,
+    referenceNumber: 510,
     invoiceDate: zurich(2026, 4, 22),
     billingAddress: {
       company: "",
@@ -183,7 +183,7 @@ export function membershipMixedInvoice(): InvoiceData {
  */
 export function membershipRenewalInvoice(): InvoiceData {
   const base = membershipOnlyInvoice();
-  base.referenceNumber = 52;
+  base.referenceNumber = 520;
   base.paymentMethod = "rechnung";
   base.source = "membership-renewal";
   base.checkouts[0].items = [
@@ -201,7 +201,7 @@ export function membershipRenewalInvoice(): InvoiceData {
 
 export function singleCheckoutInvoice(): InvoiceData {
   return {
-    referenceNumber: 1,
+    referenceNumber: 10,
     invoiceDate: zurich(2025, 5, 15),
     // Registered users carry a billingAddress on their user doc (issue
     // #269 review). Empty company → registered-user shape.
@@ -243,7 +243,7 @@ export function singleCheckoutInvoice(): InvoiceData {
 
 export function firmaCheckoutInvoice(): InvoiceData {
   return {
-    referenceNumber: 2,
+    referenceNumber: 20,
     invoiceDate: zurich(2025, 6, 1),
     billingAddress: {
       company: "Muster AG",
@@ -286,7 +286,7 @@ export function firmaCheckoutInvoice(): InvoiceData {
 
 export function multiCheckoutInvoice(): InvoiceData {
   return {
-    referenceNumber: 3,
+    referenceNumber: 30,
     invoiceDate: zurich(2025, 6, 10),
     // Registered user with billingAddress (issue #269 review).
     billingAddress: {
@@ -347,7 +347,7 @@ export function checkoutWithTipInvoice(): InvoiceData {
   base.checkouts[0].tip = 5;
   base.checkouts[0].totalPrice = 57.50;
   base.grandTotal = 57.50;
-  base.referenceNumber = 4;
+  base.referenceNumber = 40;
   return base;
 }
 
@@ -359,7 +359,7 @@ export function longInvoice(): InvoiceData {
   };
 
   return {
-    referenceNumber: 6,
+    referenceNumber: 60,
     invoiceDate: zurich(2025, 7, 15),
     billingAddress: {
       company: "Schreinerei Müller GmbH",
@@ -482,7 +482,7 @@ export function longInvoice(): InvoiceData {
 
 export function paidInvoice(): InvoiceData {
   const base = singleCheckoutInvoice();
-  base.referenceNumber = 7;
+  base.referenceNumber = 70;
   base.paidAt = zurich(2025, 5, 16);
   base.paidVia = "twint";
   return base;
@@ -496,7 +496,7 @@ export function paidInvoice(): InvoiceData {
  */
 export function twintMethodInvoice(): InvoiceData {
   const base = singleCheckoutInvoice();
-  base.referenceNumber = 10;
+  base.referenceNumber = 100;
   base.paymentMethod = "twint";
   return base;
 }
@@ -508,7 +508,7 @@ export function twintMethodInvoice(): InvoiceData {
  */
 export function monthlyMethodInvoice(): InvoiceData {
   const base = singleCheckoutInvoice();
-  base.referenceNumber = 11;
+  base.referenceNumber = 110;
   base.paymentMethod = "monthly";
   return base;
 }
@@ -520,7 +520,7 @@ export function monthlyMethodInvoice(): InvoiceData {
  */
 export function belegPerVisit(): InvoiceData {
   const base = singleCheckoutInvoice();
-  base.referenceNumber = 42;
+  base.referenceNumber = 420;
   base.paymentMethod = "monthly";
   base.kind = "beleg";
   return base;
@@ -534,7 +534,7 @@ export function belegPerVisit(): InvoiceData {
 export function freeZeroAmountInvoice(): InvoiceData {
   const now = zurich(2025, 4, 12);
   return {
-    referenceNumber: 8,
+    referenceNumber: 80,
     invoiceDate: now,
     // Registered user with billingAddress (issue #269 review). Interne
     // Nutzung is normally booked by a known member, not an anonymous
@@ -583,7 +583,7 @@ export function freeZeroAmountInvoice(): InvoiceData {
  */
 export function volunteeringDiscountInvoice(): InvoiceData {
   return {
-    referenceNumber: 50,
+    referenceNumber: 500,
     invoiceDate: zurich(2025, 4, 20),
     billingAddress: {
       company: "",
@@ -634,7 +634,7 @@ export function volunteeringDiscountInvoice(): InvoiceData {
 export function internDiscountInvoice(): InvoiceData {
   const now = zurich(2025, 4, 12);
   return {
-    referenceNumber: 51,
+    referenceNumber: 510,
     invoiceDate: now,
     billingAddress: {
       company: "",
@@ -681,7 +681,7 @@ export function internDiscountInvoice(): InvoiceData {
  */
 export function registeredUserInvoice(): InvoiceData {
   return {
-    referenceNumber: 9,
+    referenceNumber: 90,
     invoiceDate: zurich(2025, 4, 20),
     billingAddress: {
       // Empty company → PDF emits the recipientName instead of a blank line.
@@ -727,7 +727,7 @@ export function registeredUserInvoice(): InvoiceData {
  */
 export function zeroItemsInvoice(): InvoiceData {
   return {
-    referenceNumber: 5,
+    referenceNumber: 50,
     invoiceDate: zurich(2025, 7, 1),
     billingAddress: null,
     recipientName: "Erika Nur-Eintritt",

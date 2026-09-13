@@ -33,7 +33,12 @@ import type {
   ItemType,
   UsageType,
 } from "../types/firestore_entities";
-import { usageDiscount, isMachineItem, isSameBusinessDay } from "@oww/shared";
+import {
+  computeCheckoutSummary,
+  isMachineItem,
+  isSameBusinessDay,
+  usageDiscount,
+} from "@oww/shared";
 import type { BillEntity } from "./types";
 import { buildPaymentData, type PaymentData } from "./get_payment_qr_data";
 import { allocateBill } from "./create_bill";
@@ -230,6 +235,48 @@ export function assertMembershipBillingAddress(
 }
 
 /**
+ * The pricing tail every closed checkout goes through — item validation,
+ * the usage-type loophole guards (issue #284) and the authoritative
+ * summary — shared by `closeExistingCheckout` and the admin correction
+ * callable (ADR-0042), so a corrected re-issue is priced by exactly the
+ * same rules as the original close. Identity-bound guards (roster,
+ * account-holder user type, badge owner, membership address) stay with
+ * their callers. Pure: no I/O.
+ *
+ * Anything that doesn't pass `isValidItem` is dropped — items already in
+ * Firestore have passed the rule-level validation, so this is a defensive
+ * secondary check.
+ */
+export function priceCheckoutItems(args: {
+  persons: CheckoutPersonEntity[];
+  usageType: UsageType;
+  items: CheckoutItemEntity[];
+  configFees: Record<string, Record<string, number>> | null;
+  membershipCatalogId: string | null;
+  tip: number;
+}): {
+  items: CheckoutItemEntity[];
+  summary: CheckoutSummaryEntity;
+  membershipPresent: boolean;
+} {
+  const items = args.items.filter(isValidItem);
+  const membershipPresent = hasMembershipItem(items, args.membershipCatalogId);
+  assertUsageTypeAllowed(args.usageType, {
+    hasMachineUsage: hasMachineUsage(items),
+    hasMembershipItem: membershipPresent,
+    hasPaidBadgeItem: items.some((i) => isBadgeItem(i) && i.totalPrice > 0),
+  });
+  const summary = recomputeSummary(
+    args.persons,
+    args.usageType,
+    items,
+    args.configFees,
+    args.tip,
+  );
+  return { items, summary, membershipPresent };
+}
+
+/**
  * Authoritative summary computation. The bill always uses what this
  * function returns, never the client-supplied summary. This is the
  * structural defense against a client posting `summary.totalPrice: 0.01`
@@ -243,57 +290,16 @@ export function recomputeSummary(
   configFees: Record<string, Record<string, number>> | null,
   clientTip: number,
 ): CheckoutSummaryEntity {
-  const round = (n: number) => Math.round(n * 100) / 100;
-  const discount = usageDiscount(usageType);
-
-  // RAW (pre-discount) section amounts. `entryFeeFor` returns the standard
-  // regular fee already scaled by the entry-fee discount multiplier, so to
-  // recover the raw entry fee we divide it back out (the only section whose
-  // discount lives in the per-person fee). For waived entry fees (multiplier
-  // 0) the raw is the un-waived standard fee.
-  //
-  // Daily-fee dedup (issue #268): a person flagged `entryFeeWaivedToday`
-  // already paid the daily usage fee earlier today (same Zurich business
-  // day), so they contribute nothing to the entry-fee section — neither raw
-  // nor net. The flag is set authoritatively at close-time
-  // (markEntryFeeWaivedToday) from prior bills.
-  const standardEntryFees = persons.reduce(
-    (sum, p) =>
-      sum +
-      (p.entryFeeWaivedToday
-        ? 0
-        : standardEntryFeeFor(p.userType, configFees)),
-    0,
-  );
-  const machineRaw = items
-    .filter((i) => isMachineItem(i))
-    .reduce((sum, i) => sum + (i.totalPrice ?? 0), 0);
-  const materialRaw = items
-    .filter((i) => !isMachineItem(i))
-    .reduce((sum, i) => sum + (i.totalPrice ?? 0), 0);
-  const tipRaw = Math.max(0, clientTip ?? 0);
-
-  // NET (billed) section amounts = raw × per-section discount multiplier.
-  const entryFeesNet = standardEntryFees * discount.entryFee;
-  const machineNet = machineRaw * discount.machine;
-  const materialNet = materialRaw * discount.material;
-  const tipNet = tipRaw * discount.tip;
-
-  const totalPrice = round(entryFeesNet + machineNet + materialNet + tipNet);
-  const rawTotal = round(standardEntryFees + machineRaw + materialRaw + tipRaw);
-  const discountAmount = round(rawTotal - totalPrice);
-
-  // Store RAW section amounts (issue #284) so the invoice can re-render the
-  // standard prices and spell out what was waived per section. `totalPrice`
-  // is the authoritative net the bill is charged at.
-  return {
-    totalPrice,
-    entryFees: round(standardEntryFees),
-    machineCost: round(machineRaw),
-    materialCost: round(materialRaw),
-    tip: round(tipRaw),
-    discountAmount,
-  };
+  // The arithmetic lives in @oww/shared (ADR-0042) so the wizard's live
+  // receipt and the admin correction estimate agree with this authoritative
+  // result; only the fail-loud config lookup stays here.
+  return computeCheckoutSummary({
+    persons,
+    usageType,
+    items,
+    standardEntryFee: (userType) => standardEntryFeeFor(userType, configFees),
+    tip: clientTip,
+  });
 }
 
 /**
@@ -786,23 +792,17 @@ async function closeExistingCheckout(
     }
 
     // Load the items subcollection inside the transaction for the
-    // server-side recompute. Anything that doesn't pass isValidItem is
-    // dropped — items already in Firestore have passed the rule-level
-    // validation, so this is a defensive secondary check.
+    // server-side recompute.
     const itemsSnap = await tx.get(checkoutRef.collection("items"));
-    const items = itemsSnap.docs
-      .map((d) => d.data() as CheckoutItemEntity)
-      .filter(isValidItem);
+    const rawItems = itemsSnap.docs.map((d) => d.data() as CheckoutItemEntity);
 
-    // Loophole guards (issue #284): reject materialbezug-with-machine,
-    // intern-with-membership, and intern-with-paid-badge before billing.
-    const membershipPresent = hasMembershipItem(items, membershipCatalogId);
-    assertUsageTypeAllowed(args.usageType, {
-      hasMachineUsage: hasMachineUsage(items),
-      hasMembershipItem: membershipPresent,
-      hasPaidBadgeItem: items.some(
-        (i) => isBadgeItem(i) && i.totalPrice > 0,
-      ),
+    const { items, summary, membershipPresent } = priceCheckoutItems({
+      persons: dedupedPersons,
+      usageType: args.usageType,
+      items: rawItems,
+      configFees,
+      membershipCatalogId,
+      tip: args.clientSummary?.tip ?? 0,
     });
     // Badge association needs an identified owner (see the guard's doc).
     assertBadgeItemsBelongToOwner(items, checkout.userId);
@@ -811,14 +811,6 @@ async function closeExistingCheckout(
     if (membershipPresent) {
       assertMembershipBillingAddress(memberBillingAddress);
     }
-
-    const summary = recomputeSummary(
-      dedupedPersons,
-      args.usageType,
-      items,
-      configFees,
-      args.clientSummary?.tip ?? 0,
-    );
     logSummaryDivergence(`closeExistingCheckout ${args.checkoutId}`, args.clientSummary, summary);
 
     const bill = await allocateBill(tx, db, {

@@ -34,7 +34,13 @@ import type { CheckoutPerson } from "./use-checkout-state"
 import type { CheckoutItemLocal } from "@/components/usage/inline-rows"
 import { PositionTable, rowFromItem } from "@/components/usage/position-table"
 import type { UsageType } from "@modules/lib/pricing"
-import { partitionMembership, partitionBadge, isMachineItem } from "@oww/shared"
+import {
+  partitionMembership,
+  partitionBadge,
+  isMachineItem,
+  rawSections,
+} from "@oww/shared"
+
 import { BadgeCheck, Nfc } from "lucide-react"
 import { UsageTypeSelect } from "./usage-type-select"
 
@@ -295,13 +301,6 @@ export function computeCheckoutCosts({
   // *Net fields, while the RAW fields stay populated so the receipt can show
   // each waived amount with a per-section discount line.
   const discount = usageDiscount(usageType)
-  const personFees = persons.reduce(
-    (sum, p) => sum + (standardFee(p.userType as Parameters<typeof standardFee>[0], config) ?? 0),
-    0,
-  )
-  const machineCost = items
-    .filter((i) => isMachineItem(i))
-    .reduce((s, i) => s + i.totalPrice, 0)
   const nonMachine = items.filter((i) => !isMachineItem(i))
   const { membershipItems, otherItems: nonMembership } = partitionMembership(
     nonMachine,
@@ -310,18 +309,26 @@ export function computeCheckoutCosts({
   const { badgeItems, otherItems } = partitionBadge(nonMembership, {
     badgeCatalogId,
   })
+  // Section arithmetic is shared with the server's recomputeSummary and the
+  // admin correction editor (@oww/shared, ADR-0042); membership + badge are
+  // split out beforehand so only the display buckets differ.
+  const raw = rawSections({
+    persons,
+    items: [...items.filter((i) => isMachineItem(i)), ...otherItems],
+    standardEntryFee: (userType) =>
+      standardFee(userType as Parameters<typeof standardFee>[0], config) ?? 0,
+  })
   const membershipCost = membershipItems.reduce((s, i) => s + i.totalPrice, 0)
   const badgeCost = badgeItems.reduce((s, i) => s + i.totalPrice, 0)
-  const materialCost = otherItems.reduce((s, i) => s + i.totalPrice, 0)
   return {
-    personFees,
-    machineCost,
-    materialCost,
+    personFees: raw.entryFees,
+    machineCost: raw.machineCost,
+    materialCost: raw.materialCost,
     membershipCost,
     badgeCost,
-    personFeesNet: personFees * discount.entryFee,
-    machineCostNet: machineCost * discount.machine,
-    materialCostNet: materialCost * discount.material,
+    personFeesNet: raw.entryFees * discount.entryFee,
+    machineCostNet: raw.machineCost * discount.machine,
+    materialCostNet: raw.materialCost * discount.material,
   }
 }
 

@@ -11,6 +11,8 @@ import {
   ADMIN_EMAIL,
   BILL_OPEN_ID,
   BILL_OPEN_REFERENCE,
+  displayReference,
+
   BILL_OVERDUE_ID,
   BILL_OVERDUE_REFERENCE,
 } from "./global-setup"
@@ -95,7 +97,7 @@ test.describe("Rechnungen workspace", () => {
     await page.goto(`/invoices/${BILL_OPEN_ID}`)
 
     await expect(
-      page.getByRole("heading", { name: `RE-00${BILL_OPEN_REFERENCE}` }),
+      page.getByRole("heading", { name: displayReference(BILL_OPEN_REFERENCE) }),
     ).toBeVisible()
     await expect(page.getByText("CHF 84.00")).toBeVisible()
 

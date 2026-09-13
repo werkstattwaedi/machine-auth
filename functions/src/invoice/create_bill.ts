@@ -25,15 +25,106 @@ import type {
   CheckoutEntity,
   CheckoutItemEntity,
 } from "../types/firestore_entities";
-import type { BillEntity, BillKind, BillSource } from "./types";
+import { HttpsError } from "firebase-functions/v2/https";
+import {
+  BILL_REVISION_RADIX,
+  MAX_BILL_REVISION_DIGIT,
+  formatBillReference,
+  type BillEntity,
+  type BillKind,
+  type BillSource,
+} from "./types";
 import { usageDiscount, isMachineItem, type UsageType } from "@oww/shared";
+
+/**
+ * Marker written by `scripts/migrate-bill-numbers.ts` once every stored
+ * `referenceNumber` has been shifted to the `base × 10 + revision` layout
+ * (ADR-0042). `allocateBill` refuses to mint against a `config/billing`
+ * doc that exists without it, so this code can never run on un-migrated
+ * data. A *missing* config doc is a fresh install (emulator, tests) with
+ * nothing to migrate and bootstraps with the marker set.
+ */
+export const REFERENCE_NUMBER_FORMAT = "shifted-v1";
+
+interface BillingConfig {
+  nextBillNumber?: number;
+  referenceNumberFormat?: string;
+}
+
+/** Payment-method ack stamp applied at mint time (skips the ack cron). */
+export interface BillAck {
+  time: Timestamp;
+  source: "user" | "auto";
+}
+
+interface BuildBillArgs {
+  userId: DocumentReference | null;
+  checkoutRefs: DocumentReference[];
+  referenceNumber: number;
+  amount: number;
+  kind?: BillKind;
+  ack?: BillAck | null;
+  source?: BillSource;
+  aggregatedIntoBillRef?: DocumentReference | null;
+  supersedesBillRef?: DocumentReference | null;
+  correctionReason?: string | null;
+  correctedBillRefs?: DocumentReference[] | null;
+  modifiedBy?: string | null;
+}
+
+/**
+ * Field assembly shared by every minted bill — originals (`allocateBill`)
+ * and corrected re-issues (`allocateBillRevision`) — so the zero-amount
+ * auto-close and the doc shape live in one place.
+ */
+export function buildBillEntity(args: BuildBillArgs): BillEntity {
+  // Issue #237: zero-amount bills (e.g. "Interne Nutzung") are auto-closed
+  // as `paidVia: "free"` so they don't sit "unpaid forever" waiting for a
+  // bank QR scan that will never come. The PDF generator gates its
+  // QR-bill section on `paidAt` already, so the same flag also keeps the
+  // payment slip out of the generated invoice.
+  const isFree = args.amount === 0;
+  const now = Timestamp.now();
+  const ack: BillAck | null =
+    args.ack ?? (isFree ? { time: now, source: "auto" } : null);
+  return {
+    userId: args.userId as DocumentReference,
+    checkouts: args.checkoutRefs,
+    referenceNumber: args.referenceNumber,
+    amount: args.amount,
+    currency: "CHF",
+    storagePath: null,
+    created: now,
+    paidAt: isFree ? now : null,
+    paidVia: isFree ? "free" : null,
+    pdfGeneratedAt: null,
+    emailSentAt: null,
+    paymentMethodConfirmationTime: ack?.time ?? null,
+    paymentMethodConfirmationSource: ack?.source ?? null,
+    kind: args.kind ?? "invoice",
+    aggregatedIntoBillRef: args.aggregatedIntoBillRef ?? null,
+    source: args.source ?? "checkout",
+    cancelledAt: null,
+    cancelledBy: null,
+    cancellationReason: null,
+    supersededByBillRef: null,
+    supersedesBillRef: args.supersedesBillRef ?? null,
+    correctionReason: args.correctionReason ?? null,
+    correctedBillRefs: args.correctedBillRefs ?? null,
+    cancellationNoticeSentAt: null,
+    modifiedBy: args.modifiedBy ?? null,
+    modifiedAt: now,
+  };
+}
 
 /**
  * Allocate a sequential reference number from `config/billing` and write a
  * bill doc inside the supplied transaction. Shared by every code path that
- * mints a bill — per-visit triggers (`createBillForCheckout`), the
- * `closeCheckoutAndGetPayment` callable, and the monthlyBillRun cron — so
- * the counter increment lives in one place.
+ * mints an *original* bill — per-visit triggers (`createBillForCheckout`),
+ * the `closeCheckoutAndGetPayment` callable, and the monthlyBillRun cron —
+ * so the counter increment lives in one place. The stored number is
+ * `counter × 10` (revision digit 0, ADR-0042); the counter itself keeps
+ * advancing by 1.
  *
  * Returns the constructed bill entity so callers can build PaymentData /
  * trigger downstream PDF generation without re-reading from Firestore.
@@ -54,7 +145,7 @@ export async function allocateBill(
      * picking monthly on each visit). The acknowledgeBill code paths never
      * pass this — the ack stamp lands later via the callable / auto-ack cron.
      */
-     preAck?: { source: "user" | "auto" };
+    preAck?: { source: "user" | "auto" };
     /**
      * Origin discriminator (issue #323). Defaults to "checkout". The
      * renewalInvoicer cron passes "membership-renewal" to mark bills it
@@ -65,47 +156,85 @@ export async function allocateBill(
 ): Promise<BillEntity> {
   const configRef = db.doc("config/billing");
   const configDoc = await tx.get(configRef);
-  const nextBillNumber = configDoc.exists
-    ? (configDoc.data()?.nextBillNumber as number) ?? 1
-    : 1;
+  const config = (configDoc.data() ?? {}) as BillingConfig;
+  if (configDoc.exists && config.referenceNumberFormat !== REFERENCE_NUMBER_FORMAT) {
+    throw new HttpsError(
+      "failed-precondition",
+      `config/billing.referenceNumberFormat is ${JSON.stringify(config.referenceNumberFormat ?? null)}, ` +
+        `expected "${REFERENCE_NUMBER_FORMAT}" — run scripts/migrate-bill-numbers.ts before this version mints bills`,
+    );
+  }
+  const nextBillNumber = configDoc.exists ? config.nextBillNumber ?? 1 : 1;
 
   if (configDoc.exists) {
     tx.update(configRef, { nextBillNumber: FieldValue.increment(1) });
   } else {
-    tx.set(configRef, { nextBillNumber: nextBillNumber + 1 });
+    tx.set(configRef, {
+      nextBillNumber: nextBillNumber + 1,
+      referenceNumberFormat: REFERENCE_NUMBER_FORMAT,
+    });
   }
 
-  // Issue #237: zero-amount bills (e.g. "Interne Nutzung") are auto-closed
-  // as `paidVia: "free"` so they don't sit "unpaid forever" waiting for a
-  // bank QR scan that will never come. The PDF generator gates its
-  // QR-bill section on `paidAt` already, so the same flag also keeps the
-  // payment slip out of the generated invoice.
-  const isFree = args.amount === 0;
-  const now = Timestamp.now();
-  const ackTime = args.preAck ? now : isFree ? now : null;
-  const ackSource: "user" | "auto" | null = args.preAck
-    ? args.preAck.source
-    : isFree
-    ? "auto"
-    : null;
-  const bill: BillEntity = {
-    userId: args.userId as DocumentReference,
-    checkouts: args.checkoutRefs,
-    referenceNumber: nextBillNumber,
+  const bill = buildBillEntity({
+    userId: args.userId,
+    checkoutRefs: args.checkoutRefs,
+    referenceNumber: nextBillNumber * BILL_REVISION_RADIX,
     amount: args.amount,
-    currency: "CHF",
-    storagePath: null,
-    created: now,
-    paidAt: isFree ? now : null,
-    paidVia: isFree ? "free" : null,
-    pdfGeneratedAt: null,
-    emailSentAt: null,
-    paymentMethodConfirmationTime: ackTime,
-    paymentMethodConfirmationSource: ackSource,
-    kind: args.kind ?? "invoice",
-    aggregatedIntoBillRef: null,
-    source: args.source ?? "checkout",
-  };
+    kind: args.kind,
+    ack: args.preAck ? { time: Timestamp.now(), source: args.preAck.source } : null,
+    source: args.source,
+  });
+  tx.set(args.billRef, bill);
+  return bill;
+}
+
+/**
+ * Mint a corrected re-issue of `previous` (ADR-0042): same base number,
+ * next revision digit, no counter read. Rejects once the previous bill
+ * already carries the highest digit. The caller cancels the previous bill
+ * and links `supersededByBillRef` in the same transaction.
+ */
+export async function allocateBillRevision(
+  tx: Transaction,
+  args: {
+    previous: { ref: DocumentReference; bill: BillEntity };
+    userId: DocumentReference | null;
+    checkoutRefs: DocumentReference[];
+    amount: number;
+    billRef: DocumentReference;
+    /** Defaults to the previous bill's kind. */
+    kind?: BillKind;
+    aggregatedIntoBillRef?: DocumentReference | null;
+    /** Invoice-kind replacements are pre-acked; Belege pass null. */
+    ack?: BillAck | null;
+    correctionReason: string;
+    /** Sammelrechnung revision only: replacement Belege attached to its mail. */
+    correctedBillRefs?: DocumentReference[] | null;
+    modifiedBy: string | null;
+  },
+): Promise<BillEntity> {
+  const previousNumber = args.previous.bill.referenceNumber;
+  if (previousNumber % BILL_REVISION_RADIX >= MAX_BILL_REVISION_DIGIT) {
+    throw new HttpsError(
+      "failed-precondition",
+      `${formatBillReference(previousNumber, args.previous.bill.kind)} hat die maximale Anzahl ` +
+        `Korrekturen (${MAX_BILL_REVISION_DIGIT}) erreicht — keine weitere Korrektur möglich.`,
+    );
+  }
+  const bill = buildBillEntity({
+    userId: args.userId,
+    checkoutRefs: args.checkoutRefs,
+    referenceNumber: previousNumber + 1,
+    amount: args.amount,
+    kind: args.kind ?? args.previous.bill.kind ?? "invoice",
+    ack: args.ack ?? null,
+    source: args.previous.bill.source,
+    aggregatedIntoBillRef: args.aggregatedIntoBillRef ?? null,
+    supersedesBillRef: args.previous.ref,
+    correctionReason: args.correctionReason,
+    correctedBillRefs: args.correctedBillRefs ?? null,
+    modifiedBy: args.modifiedBy,
+  });
   tx.set(args.billRef, bill);
   return bill;
 }

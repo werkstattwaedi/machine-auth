@@ -188,7 +188,12 @@ export interface CatalogEntity {
 
 // --- Checkouts ---
 
-export type CheckoutStatus = "open" | "closed";
+// "cancelled" (ADR-0042): an admin voided this closed visit. The doc stays
+// in place as the as-billed record; a corrected re-issue is a *new* closed
+// checkout linked via `supersededByCheckoutRef` / `supersedesCheckoutRef`.
+// Legacy docs lack the cancellation fields entirely — never filter on
+// `== null`; the `status == "closed"` queries exclude cancelled docs.
+export type CheckoutStatus = "open" | "closed" | "cancelled";
 
 export interface CheckoutPersonEntity {
   name: string;
@@ -275,7 +280,21 @@ export interface CheckoutEntity {
   // to client writes in firestore.rules (open-update denylist) so a user
   // can't self-mute their reminders.
   remindersSent?: Timestamp[];
+
+  // --- Cancellation / corrected re-issue (ADR-0042). Server-only. ---
+  cancelledAt?: Timestamp | null;
+  cancelledBy?: string | null; // admin uid
+  cancellationReason?: string | null;
+  supersededByCheckoutRef?: DocumentReference | null;
+  supersedesCheckoutRef?: DocumentReference | null;
+  // Explicit `null` on cancelled + replacement checkouts written by the
+  // correction callable; the daily stats export flushes those rows (they
+  // sit behind the `closedAt` watermark) and stamps the timestamp. Absent
+  // on every other doc, so `where("statsFlushedAt", "==", null)` is a
+  // precise "pending flush" query.
+  statsFlushedAt?: Timestamp | null;
 }
+
 
 export type PaymentMethod = "rechnung" | "monthly" | "twint";
 

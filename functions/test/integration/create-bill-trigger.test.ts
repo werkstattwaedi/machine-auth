@@ -128,7 +128,12 @@ async function seedPricingConfig(
 
 async function seedBillingConfig(nextBillNumber: number): Promise<void> {
   const db = getFirestore();
-  await db.doc("config/billing").set({ nextBillNumber });
+  await db.doc("config/billing").set({
+    nextBillNumber,
+    // ADR-0042: allocateBill refuses to mint against an existing config doc
+    // without the migrated-format marker.
+    referenceNumberFormat: "shifted-v1",
+  });
 }
 
 async function getCheckout(checkoutId: string): Promise<CheckoutEntity> {
@@ -377,7 +382,9 @@ describe("create_bill trigger (Integration)", () => {
         allocated.push(result!.data.referenceNumber);
       }
 
-      expect(allocated).to.deep.equal([42, 43, 44]);
+      // Stored numbers are counter × 10 (revision digit 0, ADR-0042); the
+      // counter itself still advances by 1.
+      expect(allocated).to.deep.equal([420, 430, 440]);
       expect(await getBillingConfigNext()).to.equal(45);
     });
 
@@ -396,8 +403,34 @@ describe("create_bill trigger (Integration)", () => {
       await createBillForCheckout(ref, data);
 
       const result = await getBillForCheckout("co-first");
-      expect(result!.data.referenceNumber).to.equal(1);
+      expect(result!.data.referenceNumber).to.equal(10);
       expect(await getBillingConfigNext()).to.equal(2);
+      // A fresh install bootstraps with the migrated-format marker set.
+      const cfg = await db.doc("config/billing").get();
+      expect(cfg.data()?.referenceNumberFormat).to.equal("shifted-v1");
+    });
+
+    it("refuses to mint against an existing config/billing without the format marker (ADR-0042)", async () => {
+      // Un-migrated data: the counter exists but the ×10 migration never ran.
+      const db = getFirestore();
+      await db.doc("config/billing").set({ nextBillNumber: 42 });
+      const summary: CheckoutSummaryEntity = {
+        totalPrice: 10, entryFees: 10, machineCost: 0, materialCost: 0, tip: 0,
+      };
+      await seedCheckout("co-unmigrated", { status: "closed", summary });
+      const ref = db.collection("checkouts").doc("co-unmigrated");
+      const data = await getCheckout("co-unmigrated");
+
+      let thrown: unknown = null;
+      try {
+        await createBillForCheckout(ref, data);
+      } catch (err) {
+        thrown = err;
+      }
+      expect(thrown, "allocateBill must throw").to.not.be.null;
+      expect((thrown as { code?: string }).code).to.equal("failed-precondition");
+      expect(await getBillForCheckout("co-unmigrated")).to.be.null;
+      expect(await getBillingConfigNext(), "counter untouched").to.equal(42);
     });
   });
 

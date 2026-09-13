@@ -45,14 +45,49 @@ const dateTimeFormatter = new Intl.DateTimeFormat(locale, {
   minute: "2-digit",
 })
 
-export function formatInvoiceNumber(n: number): string {
-  return `RE-${String(n).padStart(6, "0")}`
+/**
+ * Bill numbering (ADR-0042): `referenceNumber = base × 10 + d`, where `d`
+ * (0–9) is the revision digit — 0 for an original, 1 for the first
+ * corrected re-issue. Mirrors `functions/src/invoice/types.ts` so
+ * web/functions render the same string for the same stored number.
+ */
+export const BILL_REVISION_RADIX = 10
+
+/** Sequential base number, e.g. 42000011 → 4200001. */
+export function billBaseNumber(referenceNumber: number): number {
+  return Math.floor(referenceNumber / BILL_REVISION_RADIX)
 }
 
-/** Format a Beleg reference number for display, e.g. 1 → "BL-000001". */
-export function formatBelegNumber(n: number): string {
-  return `BL-${String(n).padStart(6, "0")}`
+/**
+ * Version count: 1 for an original, 2 for the first correction, … e.g.
+ * 42000011 → 2. Used for the revision cap; the printed suffix is the digit.
+ */
+export function billRevision(referenceNumber: number): number {
+  return (referenceNumber % BILL_REVISION_RADIX) + 1
 }
+
+function formatBillNumber(prefix: "RE" | "BL", n: number): string {
+  const base = String(billBaseNumber(n)).padStart(6, "0")
+  // The printed suffix IS the stored digit, so the number on the document
+  // and the last digit of its QR payload always agree (042000151 ↔
+  // RE-4200015-1). billRevision() is the version count, not the suffix.
+  const digit = n % BILL_REVISION_RADIX
+  return digit > 0 ? `${prefix}-${base}-${digit}` : `${prefix}-${base}`
+}
+
+/**
+ * Format an invoice reference number for display: 42000010 → "RE-4200001",
+ * 42000011 → "RE-4200001-1" (first correction).
+ */
+export function formatInvoiceNumber(n: number): string {
+  return formatBillNumber("RE", n)
+}
+
+/** Format a Beleg reference number for display: 42000010 → "BL-4200001". */
+export function formatBelegNumber(n: number): string {
+  return formatBillNumber("BL", n)
+}
+
 
 /**
  * Format a bill's reference number using its `kind`. A `kind: "beleg"`

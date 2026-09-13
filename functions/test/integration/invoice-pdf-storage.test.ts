@@ -99,7 +99,7 @@ async function seedBillWithCheckout(billId: string): Promise<void> {
   const bill: BillEntity = {
     userId: userRef,
     checkouts: [checkoutRef],
-    referenceNumber: 4321,
+    referenceNumber: 43210, // bill 4321, revision digit 0 (ADR-0042)
     amount: 25.5,
     currency: "CHF",
     storagePath: null,
@@ -160,7 +160,8 @@ describe("invoice PDF storage (Integration, real Storage)", () => {
     expect(stored.subarray(0, 4).toString("utf8")).to.equal("%PDF");
     const { text } = await pdfParse(stored);
     // Reference number appears in the rendered invoice.
-    expect(text).to.include("4321");
+    expect(text).to.include("RE-004321");
+
   });
 
   it("getInvoiceDownloadUrl returns a URL that serves the stored bytes", async function () {

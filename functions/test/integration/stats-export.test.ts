@@ -284,4 +284,83 @@ describe("stats export (integration)", function () {
     const ids = sink.tableRows("membership_snapshots").map((r) => r.doc_id);
     expect(ids).to.deep.equal(["m-u1/2026-07", "m-u1/2026-08"]);
   });
+
+  describe("correction flush (ADR-0042)", () => {
+    function lastRow(sink: InMemorySink, table: string, docId: string) {
+      const rows = sink.tableRows(table).filter((r) => r.doc_id === docId);
+      return rows[rows.length - 1];
+    }
+
+    it("flushes cancelled + replacement checkouts sitting behind the watermark and stamps them", async () => {
+      await seedUserWithMembership("u1");
+      await seedClosedCheckout("co-old", { uid: "u1", closedAt: ts("2026-07-10T15:30:00Z"), items: 1 });
+      const sink = new InMemorySink();
+      const first = await runStatsExport(NOW, deps(sink));
+      expect(first.visits.exported).to.equal(1);
+      expect(first.pending_flush.exported).to.equal(0);
+
+      // An admin voids co-old and issues a replacement with the SAME closedAt
+      // (behind the watermark now); both carry the explicit null sentinel.
+      await db.doc("checkouts/co-old").update({
+        status: "cancelled",
+        cancelledAt: ts("2026-07-18T09:17:00Z"),
+        statsFlushedAt: null,
+      });
+      await seedClosedCheckout("co-new", { uid: "u1", closedAt: ts("2026-07-10T15:30:00Z"), items: 1 });
+      await db.doc("checkouts/co-new").update({
+        statsFlushedAt: null,
+        supersedesCheckoutRef: db.doc("checkouts/co-old"),
+      });
+
+      const second = await runStatsExport(NOW, deps(sink));
+      expect(second.visits.exported).to.equal(0);
+      expect(second.pending_flush).to.deep.equal({ exported: 2, drained: true });
+      expect(lastRow(sink, "visits", "co-old").cancelled_at).to.equal("2026-07-18T09:00:00.000Z");
+      expect(lastRow(sink, "visits", "co-new").cancelled_at).to.equal(null);
+      expect(lastRow(sink, "visits", "co-new").visit_date).to.equal("2026-07-10");
+      expect(sink.tableRows("visit_items").filter((r) => (r.doc_id as string).startsWith("co-new/"))).to.have.length(1);
+      expect((await db.doc("checkouts/co-old").get()).get("statsFlushedAt")).to.be.instanceOf(Timestamp);
+      expect((await db.doc("checkouts/co-new").get()).get("statsFlushedAt")).to.be.instanceOf(Timestamp);
+
+      const third = await runStatsExport(NOW, deps(sink));
+      expect(third.pending_flush.exported).to.equal(0);
+    });
+
+    it("does not double-export a same-day replacement still ahead of the watermark", async () => {
+      await seedUserWithMembership("u1")
+      // A replacement whose closedAt the watermark has NOT passed yet, carrying the sentinel.
+      await seedClosedCheckout("co-new", { uid: "u1", closedAt: ts("2026-07-18T15:30:00Z"), items: 1 })
+      await db.doc("checkouts/co-new").update({ statsFlushedAt: null })
+      const sink = new InMemorySink()
+      const summary = await runStatsExport(NOW, deps(sink))
+      expect(summary.visits.exported).to.equal(0)
+      expect(summary.pending_flush.exported).to.equal(1)
+      expect(sink.tableRows("visits").filter((r) => r.doc_id === "co-new")).to.have.length(1)
+      expect(
+        sink.tableRows("visit_items").filter((r) => (r.doc_id as string).startsWith("co-new/")),
+      ).to.have.length(1)
+      // The watermark advanced over it regardless.
+      expect((await runStatsExport(NOW, deps(sink))).visits.exported).to.equal(0)
+    })
+
+    it("dry run emits the rows but never stamps statsFlushedAt", async () => {
+      await seedUserWithMembership("u1");
+      await seedClosedCheckout("co-x", { uid: "u1", closedAt: ts("2026-07-10T15:30:00Z") });
+      await db.doc("checkouts/co-x").update({
+        status: "cancelled",
+        cancelledAt: ts("2026-07-18T09:17:00Z"),
+        statsFlushedAt: null,
+      });
+      const sink = new InMemorySink();
+      const summary = await runStatsExport(NOW, {
+        ...deps(sink),
+        dryRun: true,
+        stateStore: memoryStateStore(db),
+      });
+      expect(summary.pending_flush).to.deep.equal({ exported: 1, drained: true });
+      expect(lastRow(sink, "visits", "co-x").cancelled_at).to.equal("2026-07-18T09:00:00.000Z");
+      expect((await db.doc("checkouts/co-x").get()).get("statsFlushedAt")).to.equal(null);
+    });
+  });
+
 });

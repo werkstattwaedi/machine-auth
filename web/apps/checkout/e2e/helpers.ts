@@ -324,7 +324,7 @@ export async function seedUsageBills(authUserUid: string): Promise<void> {
   await db.collection("bills").doc(USAGE_BILL_PAID_ID).set({
     userId: userRef,
     checkouts: [],
-    referenceNumber: 240001,
+    referenceNumber: 2400010,
     amount: 42.5,
     currency: "CHF",
     storagePath: "bills/e2e-bill-paid-001.pdf",
@@ -336,7 +336,7 @@ export async function seedUsageBills(authUserUid: string): Promise<void> {
   await db.collection("bills").doc(USAGE_BILL_OPEN_ID).set({
     userId: userRef,
     checkouts: [],
-    referenceNumber: 240002,
+    referenceNumber: 2400020,
     amount: 18,
     currency: "CHF",
     storagePath: "bills/e2e-bill-open-001.pdf",

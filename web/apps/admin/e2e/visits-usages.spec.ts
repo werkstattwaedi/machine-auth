@@ -36,6 +36,10 @@ test.describe("Besuche + Nutzungen ledgers", () => {
     await expect(
       page.getByRole("link", { name: /Rechnung öffnen/ }),
     ).toBeVisible()
+    // The header actions and the bill reference render only once the bill
+    // document (a second listener) has arrived — wait for them, or the
+    // screenshot races that load (ADR-0042).
+    await expect(page.getByRole("link", { name: "Korrigieren" })).toBeVisible()
 
     await expect(page).toHaveScreenshot("visit-detail.png", {
       fullPage: false,

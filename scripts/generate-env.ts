@@ -72,6 +72,8 @@ const FUNCTIONS_RESEND: VarMapping[] = [
   { envVar: "RESEND_MONTHLY_TEMPLATE_ID", jsonPath: "functions.resendMonthlyTemplateId" },
   { envVar: "RESEND_SAMMELRECHNUNG_TEMPLATE_ID", jsonPath: "functions.resendSammelrechnungInvoiceTemplateId" },
   { envVar: "RESEND_RENEWAL_TEMPLATE_ID", jsonPath: "functions.resendMembershipRenewalTemplateId" },
+  { envVar: "RESEND_CORRECTION_TEMPLATE_ID", jsonPath: "functions.resendCorrectionTemplateId" },
+  { envVar: "RESEND_CANCELLATION_TEMPLATE_ID", jsonPath: "functions.resendCancellationTemplateId" },
   { envVar: "RESEND_QRBILL_TEMPLATE_ID", jsonPath: "functions.resendQrBillTemplateId" },
   { envVar: "RESEND_LOGIN_TEMPLATE_ID", jsonPath: "functions.resendLoginTemplateId" },
   { envVar: "RESEND_INVITE_TEMPLATE_ID", jsonPath: "functions.resendInviteTemplateId" },
@@ -180,6 +182,9 @@ const TEST_FIXTURE_CONFIG: Record<string, unknown> = {
     resendMonthlyTemplateId: "ci-test-monthly-template",
     resendSammelrechnungInvoiceTemplateId: "ci-test-sammelrechnung-template",
     resendMembershipRenewalTemplateId: "ci-test-renewal-template",
+    resendCorrectionTemplateId: "ci-test-correction-template",
+    resendCancellationTemplateId: "ci-test-cancellation-template",
+
     resendCheckoutReminderTemplateId: "ci-test-checkout-reminder-template",
     resendAccountInstructionsTemplateId: "ci-test-account-instructions-template",
     kasseEmail: "kasse@test.localhost",

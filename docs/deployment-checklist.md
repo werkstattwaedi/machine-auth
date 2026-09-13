@@ -205,6 +205,57 @@ One-time setup before the functions deploy:
    sends, but with Self-Checkout copy instead of the Vorstand renewal
    letter, so this misconfiguration does NOT fail loudly.
 
+### Bill correction + cancellation emails (ADR-0042)
+
+Corrected re-issues (`RE-…-1`) and pure cancellations send two dedicated Resend templates.
+One-time setup before the functions deploy:
+
+1. Create/publish the templates from the operations repo — `self-checkout-correction`
+   (variables: RECIPIENT_NAME, CHECKOUT_DATE, INVOICE_NUMBER, SUPERSEDED_INVOICE_NUMBER,
+   DOCUMENT_KIND, AMOUNT, CURRENCY, REASON, KASSE_EMAIL, PAYMENT_NOTE (pre-composed "what to
+   do about payment" sentence — new QR slip / TWINT already paid / next Sammelrechnung /
+   nothing to pay), CORRECTION_DETAILS (pre-composed Sammelrechnung line, empty otherwise),
+   CORRECTED_DOCUMENTS, CANCELLED_DOCUMENTS; the
+   corrected PDF plus any corrected Belege are attached — HTML + upload commands live in the
+   operations repo under `email/`) and
+   `self-checkout-cancellation` (RECIPIENT_NAME, CHECKOUT_DATE, INVOICE_NUMBER, DOCUMENT_KIND,
+   REASON, AMOUNT, CURRENCY, KASSE_EMAIL, PAYMENT_NOTE; no attachment).
+2. Add `functions.resendCorrectionTemplateId` / `functions.resendCancellationTemplateId` to the
+   operations config and run `npm run generate-env`.
+3. Until both are set, the correction mail falls back to the generic QR-bill template and the
+   cancellation notice fails into `operations_log` (retried hourly) — so set them before the first
+   correction, not after.
+
+### Bill-number migration (ADR-0042) — once per project, RIGHT AFTER the functions deploy
+
+Stored `bills.referenceNumber` values move to `base × 10 + revisionDigit`. The new `allocateBill`
+refuses to mint until `config/billing.referenceNumberFormat == "shifted-v1"` exists, and the daily
+stats export emits a new `cancelled_at` column. Order matters — and it is **functions first**:
+
+```bash
+# 1. BigQuery first — the sink rejects unknown columns (skipInvalidRows: false).
+npx tsx scripts/setup-bigquery.ts --project <project-id>
+
+# 2. Deploy functions (section 3). From now on bill minting is BLOCKED
+#    (failed-precondition) until step 3 runs — keep the gap short.
+
+# 3. Dry-run, then migrate. Refuses to run twice; resumable per document.
+FIREBASE_PROJECT_ID=<project-id> GOOGLE_APPLICATION_CREDENTIALS=<sa.json> \
+  npx tsx scripts/migrate-bill-numbers.ts --prod --dry-run
+FIREBASE_PROJECT_ID=<project-id> GOOGLE_APPLICATION_CREDENTIALS=<sa.json> \
+  npx tsx scripts/migrate-bill-numbers.ts --prod
+
+# 4. Then hosting (section 6); rules/indexes carry no change for this feature.
+```
+
+Why not migrate first: the *old* `allocateBill` would keep minting un-shifted numbers
+(4200017 …) next to migrated ones, and every such bill is misread by the new formatter forever
+(4200017 = base 420001, revision 8) with no way to rerun the migration. The new code refusing to
+mint for a minute is the safe failure; a wrong number is not. Existing PDFs keep their printed
+number and legacy QR payload; the bank import resolves those slips through a ×10 fallback.
+Afterwards, check the admin Rechnungen list still shows `RE-4200001…`, close a test checkout to
+confirm minting works again, and confirm a second `migrate-bill-numbers.ts` run refuses.
+
 ## 3. Deploy Functions
 
 ```bash

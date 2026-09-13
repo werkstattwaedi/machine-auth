@@ -22,9 +22,10 @@ the map wins on conflict):
 |---|---|---|---|
 | Account (name, email, address) | `users`, Firebase Auth | Contract | Until erasure |
 | NFC badge (tag UID) | `tokens`, `items.tokenId` | Contract | Until erasure |
-| Visits incl. guests' names/emails | `checkouts` (+ `persons[]`) | Contract | 3 years |
+| Visits incl. guests' names/emails; admin cancellation reason (ADR-0042) | `checkouts` (+ `persons[]`) | Contract | 3 years (cancelled visits age out the same way) |
 | Machine usage | `usage_machine` | Contract | 3 years |
-| Invoices | `bills` | Contract | 3 years |
+| Invoices incl. cancellation / correction reasons (ADR-0042) | `bills` | Contract | 3 years |
+
 | Invoice PDFs | Storage `invoices/`, then archive bucket | OR Art. 958f | 10 years (escrowed) |
 | Badge auth records | `authentications` | Contract | 3 years (in-progress: 5 min TTL) |
 | Login codes | `loginCodes` | Contract | 5 min TTL |
@@ -120,7 +121,10 @@ invoice PDFs remain in a locked archive for the legal 10 years.
   resolve to nothing after erasure (`resolveRef` falls back to the raw
   id).
 - **Stats divergence**: admin-SDK edits to already-exported docs never
-  reach BigQuery (export-once, ADR-0039).
+  reach BigQuery (export-once, ADR-0039). The exception is the sanctioned
+  correction path (ADR-0042): cancelled visits and their replacements are
+  flushed explicitly by the daily export (`visits.cancelled_at`), and
+  erasure flushes them first if that pass has not run yet.
 - **Outside our systems**: the Verein's bank records keep (date, amount,
   payer) for 10 years — the same join the PDF escrow defeats internally.
 - **Re-identification**: BigQuery rows are pseudonymous, not anonymous; a

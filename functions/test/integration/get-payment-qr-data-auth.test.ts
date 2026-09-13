@@ -155,6 +155,16 @@ describe("getPaymentQrData authorisation (Integration, S-1)", () => {
     expect(data.payerEmail).to.equal("alice@example.com");
   });
 
+  it("refuses a payable QR reference for a cancelled bill, even to its owner (ADR-0042)", async () => {
+    await seedBillAndCheckout("b1", "alice");
+    await getFirestore().doc("bills/b1").update({
+      cancelledAt: Timestamp.now(),
+      cancellationReason: "Doppelt erfasst",
+    });
+    await expectRejects(call("alice", { billId: "b1" }), "failed-precondition");
+    await expectRejects(call("admin", { billId: "b1" }, { admin: true }), "failed-precondition");
+  });
+
   it("allows the kiosk tag-tap principal (actsAs)", async () => {
     await seedBillAndCheckout("b1", "alice");
     const data = await call("tag:alice:s1", { billId: "b1" }, { actsAs: "alice" });

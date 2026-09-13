@@ -2,13 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { useEffect, useState, useSyncExternalStore } from "react"
-import {
-  createFileRoute,
-  Link,
-  Outlet,
-  useLocation,
-  useNavigate,
-} from "@tanstack/react-router"
+import { createFileRoute, Outlet, useLocation } from "@tanstack/react-router"
 import { z } from "zod/v4/mini"
 import { signOut } from "firebase/auth"
 import { useAuth, isProfileComplete } from "@modules/lib/auth"
@@ -16,7 +10,6 @@ import { useFirebaseAuth } from "@modules/lib/firebase-context"
 import { usePricingConfig } from "@modules/lib/workshop-config"
 import { PageLoading } from "@modules/components/page-loading"
 import { EmptyState } from "@modules/components/empty-state"
-import { Avatar } from "@modules/components/ui/avatar"
 import { AlertTriangle, Loader2 } from "lucide-react"
 import { WizardProvider, useWizardContext } from "@/components/checkout/wizard-context"
 import { CheckoutProgress } from "@/components/checkout/checkout-progress"
@@ -33,7 +26,7 @@ import { KioskWelcomeOnboarding } from "@/components/account/kiosk-welcome-onboa
 import { TagAuthOverlay } from "@/components/checkout/tag-auth-overlay"
 import { TagVisitRedirect } from "@/components/checkout/tag-visit-redirect"
 import { BadgeOfferCoordinator } from "@/components/checkout/badge-offer-coordinator"
-import { useKioskElevation } from "@/components/checkout/kiosk-elevation-dialog"
+import { AccountMenu } from "@/components/account/account-menu"
 
 const wizardSearchSchema = z.object({
   picc: z.optional(z.string()),
@@ -63,7 +56,7 @@ function stepForPathname(pathname: string): number | null {
 
 function WizardLayout() {
   const auth = useFirebaseAuth()
-  const { userDoc, loading, userDocLoading, sessionKind } = useAuth()
+  const { user, userDoc, loading, userDocLoading, sessionKind } = useAuth()
   const { picc, cmac, kiosk } = Route.useSearch()
   const isKiosk = kiosk !== undefined
   const { data: pricingConfig, loading: loadingConfig, configError } =
@@ -146,6 +139,10 @@ function WizardLayout() {
       ? `${kioskTokenUser.firstName ?? ""} ${kioskTokenUser.lastName ?? ""}`.trim() || null
       : null)
   const headerUserId = userDoc?.id ?? kioskTokenUser?.userId
+  const headerEmail =
+    sessionKind === "tag"
+      ? kioskTokenUser?.email ?? null
+      : user?.email ?? userDoc?.email ?? null
 
   return (
     <WizardProvider
@@ -156,6 +153,7 @@ function WizardLayout() {
     >
       <WizardChrome
         headerName={headerName}
+        headerEmail={headerEmail}
         userId={headerUserId}
         kioskSession={sessionKind === "tag"}
       />
@@ -186,18 +184,18 @@ function WizardLayout() {
  */
 function WizardChrome({
   headerName,
+  headerEmail,
   userId,
   kioskSession,
 }: {
   headerName: string | null
+  headerEmail: string | null
   userId?: string
   /** True for a kiosk `actsAs` session: the header identity routes through
    *  the step-up dialog before opening the member area (ADR-0041). */
   kioskSession?: boolean
 }) {
   const { pathname } = useLocation()
-  const navigate = useNavigate()
-  const { ensureElevated } = useKioskElevation()
   const { openCheckout, pendingCheckout, paymentData } = useWizardContext()
   const currentStep = stepForPathname(pathname)
 
@@ -227,33 +225,13 @@ function WizardChrome({
             alt="Offene Werkstatt Wädenswil"
             className="h-[30px] shrink-0 sm:h-11"
           />
-          {headerName && kioskSession && (
-            <button
-              type="button"
-              onClick={() =>
-                ensureElevated(() => navigate({ to: "/account/usage" }))
-              }
-              className="flex items-center gap-3 min-w-0 rounded-full -m-1 p-1 hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-cog-teal/40 focus-visible:outline-offset-2 transition-colors"
-              aria-label="Konto öffnen"
-              data-testid="wizard-header-account"
-            >
-              <span className="text-sm text-foreground truncate">
-                {headerName}
-              </span>
-              <Avatar name={headerName} seed={userId} />
-            </button>
-          )}
-          {headerName && !kioskSession && (
-            <Link
-              to="/account/usage"
-              className="flex items-center gap-3 min-w-0 rounded-full -m-1 p-1 hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-cog-teal/40 focus-visible:outline-offset-2 transition-colors"
-              aria-label="Nutzungsverlauf öffnen"
-            >
-              <span className="text-sm text-foreground truncate">
-                {headerName}
-              </span>
-              <Avatar name={headerName} seed={userId} />
-            </Link>
+          {headerName && (
+            <AccountMenu
+              name={headerName}
+              email={headerEmail}
+              userId={userId}
+              kioskSession={kioskSession}
+            />
           )}
           {/* Anon escape hatch — self-gates to anon + open checkout, so it's
               mutually exclusive with the signed-in identity above and absent

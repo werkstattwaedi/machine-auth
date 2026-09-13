@@ -138,7 +138,9 @@ interstitial collapses to a single *Code senden* button. Then the existing
 - **Entry points** in the wizard: a "Konto verwalten" action in the signed-in
   "Deine Angaben" block and in the kiosk welcome onboarding's closing step
   (replacing the "auf deinem eigenen Gerät" copy), plus "Mitglied werden" for
-  non-members. If already elevated → navigate; otherwise
+  non-members, and the header account menu (`AccountMenu`: Profil /
+  Nutzungsverlauf / Mitgliedschaft; its "Abmelden" is the start-over wipe and
+  never steps up). If already elevated → navigate; otherwise
   `KioskElevationDialog` (§2): the channel interstitial, then the existing
   `CodeEntryDialog`.
 - **Account area in kiosk mode** (detected via `useBridge().available` — the

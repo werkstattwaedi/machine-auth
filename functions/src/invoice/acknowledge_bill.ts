@@ -136,6 +136,12 @@ export const acknowledgeBillHandler = async (
     throw new HttpsError("permission-denied", "Access denied");
   }
 
+  // A cancelled bill (ADR-0042) is no longer payable; the corrected
+  // re-issue (if any) is its own, pre-acked bill.
+  if (bill.cancelledAt) {
+    throw new HttpsError("failed-precondition", "Diese Rechnung wurde storniert.");
+  }
+
   // Idempotent: a second click after the first one landed returns OK
   // without rewriting. The frontend may double-fire under double-tap.
   // For monthly: the bill has already been flipped to kind "beleg" — same
@@ -247,6 +253,9 @@ export async function runAutoAcknowledgeBills(
     if (bill.paidVia === "free") continue;
     // Belege are never acked — they wait for monthlyBillRun.
     if ((bill.kind ?? "invoice") === "beleg") continue;
+    // Cancelled (ADR-0042): never ack, never mail. Checked in code, not in
+    // the query — legacy docs lack the field.
+    if (bill.cancelledAt) continue;
 
     const linkedCheckoutRef: DocumentReference | null =
       bill.checkouts.length > 0 ? bill.checkouts[0] : null;

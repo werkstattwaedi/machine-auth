@@ -151,18 +151,24 @@ export async function trimBefore(
   };
 
   // checkouts — composite index (status, closedAt); recursiveDelete for items.
+  // Cancelled visits (ADR-0042) keep their closedAt and age out the same way.
   const wmVisits = await getStreamState(db, "visits");
-  ctx.outcome.counts["checkouts"] = await forEachPage(
-    db.collection("checkouts").where("status", "==", "closed").where("closedAt", "<", cutoff),
-    "closedAt",
-    async (docs) => {
-      const deletable = splitByWatermark(docs, "closedAt", wmVisits, ctx);
-      if (!ctx.dryRun) {
-        for (const doc of deletable) await db.recursiveDelete(doc.ref);
+  let checkoutCount = 0;
+  for (const status of ["closed", "cancelled"] as const) {
+    checkoutCount += await forEachPage(
+      db.collection("checkouts").where("status", "==", status).where("closedAt", "<", cutoff),
+      "closedAt",
+      async (docs) => {
+        const deletable = splitByWatermark(docs, "closedAt", wmVisits, ctx);
+        if (!ctx.dryRun) {
+          for (const doc of deletable) await db.recursiveDelete(doc.ref);
+        }
+        return deletable.length;
       }
-      return deletable.length;
-    }
-  );
+    );
+  }
+  ctx.outcome.counts["checkouts"] = checkoutCount;
+
 
   // usage_machine
   const wmUsage = await getStreamState(db, "machine_usage");

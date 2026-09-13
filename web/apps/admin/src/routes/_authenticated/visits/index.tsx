@@ -20,7 +20,7 @@ import { PageHeader } from "@/components/admin/page-header"
 import { ActiveFilterChip } from "@/components/admin/active-filter-chip"
 import { FilterPills } from "@/components/admin/filter-pills"
 import { formatCHF, formatDateTime } from "@modules/lib/format"
-import { Badge } from "@modules/components/ui/badge"
+import { VisitStatusBadge } from "@/components/visit/visit-status-badge"
 import {
   Table,
   TableBody,
@@ -33,18 +33,20 @@ import { Card } from "@modules/components/ui/card"
 import { EmptyState } from "@modules/components/empty-state"
 import { ClipboardList, MoveRight } from "lucide-react"
 
-type StatusFilter = "all" | "open" | "closed"
+type StatusFilter = "all" | "open" | "closed" | "cancelled"
 
 interface VisitsSearch {
   user?: string
-  status?: "open" | "closed"
+  status?: "open" | "closed" | "cancelled"
 }
 
 export const Route = createFileRoute("/_authenticated/visits/")({
   validateSearch: (search: Record<string, unknown>): VisitsSearch => ({
     user: typeof search.user === "string" ? search.user : undefined,
     status:
-      search.status === "open" || search.status === "closed"
+      search.status === "open" ||
+      search.status === "closed" ||
+      search.status === "cancelled"
         ? search.status
         : undefined,
   }),
@@ -76,6 +78,7 @@ function VisitsPage() {
             { value: "all", label: "Alle" },
             { value: "open", label: "Offen" },
             { value: "closed", label: "Abgerechnet" },
+            { value: "cancelled", label: "Storniert" },
           ]}
           value={statusFilter}
           onChange={(v) =>
@@ -142,8 +145,12 @@ function VisitsTable({
         </TableHeader>
         <TableBody>
           {rows.map((visit) => (
-            <TableRow key={visit.id}>
+            <TableRow
+              key={visit.id}
+              className={visit.status === "cancelled" ? "opacity-60" : undefined}
+            >
               <TableCell className="tabular-nums">
+
                 {formatDateTime(visit.created)}
               </TableCell>
               <TableCell>
@@ -159,13 +166,7 @@ function VisitsTable({
                 {visit.workshopsVisited?.join(", ") || "–"}
               </TableCell>
               <TableCell>
-                {visit.status === "open" ? (
-                  <Badge className="bg-oww-gold-light text-oww-gold-text border-oww-gold-border">
-                    offen
-                  </Badge>
-                ) : (
-                  <Badge variant="secondary">abgerechnet</Badge>
-                )}
+                <VisitStatusBadge status={visit.status} />
               </TableCell>
               <TableCell className="text-right tabular-nums">
                 {visit.summary?.totalPrice != null

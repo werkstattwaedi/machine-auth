@@ -105,7 +105,7 @@ async function typeIdentifierAndSubmit(
 }
 
 async function enterCode(user: ReturnType<typeof userEvent.setup>, code: string) {
-  await screen.findByText("Code eingeben")
+  await screen.findByText("Anmelde-Code eingeben")
   await user.type(screen.getByTestId("checkin-code-input"), code)
   await user.click(screen.getByRole("button", { name: /Anmelden/ }))
 }
@@ -159,7 +159,7 @@ describe("CheckinSignin", () => {
     ).toBeInTheDocument()
     // The sign-up form needs the code, so one was requested up front.
     expect(requestLoginEmail).toHaveBeenCalledWith("stranger@example.com")
-    expect(screen.queryByText("Code eingeben")).toBeNull()
+    expect(screen.queryByText("Anmelde-Code eingeben")).toBeNull()
   })
 
   it("kiosk: sign-up submits to signupKiosk and establishes the ephemeral session", async () => {
@@ -224,7 +224,7 @@ describe("CheckinSignin", () => {
 
     const user = await typeIdentifierAndSubmit(true, "imported@example.com")
 
-    expect(await screen.findByText("Code eingeben")).toBeInTheDocument()
+    expect(await screen.findByText("Anmelde-Code eingeben")).toBeInTheDocument()
     expect(screen.queryByTestId("checkin-signup-dialog")).toBeNull()
     expect(requestLoginEmail).toHaveBeenCalledWith("imported@example.com")
 
@@ -280,7 +280,7 @@ describe("CheckinSignin", () => {
 
     await typeIdentifierAndSubmit(true)
 
-    expect(await screen.findByText("Code eingeben")).toBeInTheDocument()
+    expect(await screen.findByText("Anmelde-Code eingeben")).toBeInTheDocument()
   })
 
   it("own device: verifies via the persistent login, not the kiosk session", async () => {
@@ -307,7 +307,7 @@ describe("CheckinSignin", () => {
     expect(await screen.findByTestId("checkin-signup-dialog")).toBeInTheDocument()
     // The sign-up form needs the code, so one was requested up front.
     expect(requestLoginEmail).toHaveBeenCalledWith("new@example.com")
-    expect(screen.queryByText("Code eingeben")).toBeNull()
+    expect(screen.queryByText("Anmelde-Code eingeben")).toBeNull()
   })
 
   it("own device: an imported member (hasProfile, no terms yet) signs IN instead of signing up", async () => {
@@ -321,7 +321,7 @@ describe("CheckinSignin", () => {
 
     const user = await typeIdentifierAndSubmit(false, "imported@example.com")
 
-    expect(await screen.findByText("Code eingeben")).toBeInTheDocument()
+    expect(await screen.findByText("Anmelde-Code eingeben")).toBeInTheDocument()
     expect(screen.queryByTestId("checkin-signup-dialog")).toBeNull()
     expect(requestLoginEmail).toHaveBeenCalledWith("imported@example.com")
 
@@ -351,11 +351,11 @@ describe("CheckinSignin", () => {
     requestLoginEmail.mockResolvedValue(undefined)
 
     const user = await typeIdentifierAndSubmit(true)
-    await screen.findByText("Code eingeben")
+    await screen.findByText("Anmelde-Code eingeben")
     await user.click(screen.getByTestId("checkin-code-cancel"))
 
     await waitFor(() =>
-      expect(screen.queryByText("Code eingeben")).toBeNull(),
+      expect(screen.queryByText("Anmelde-Code eingeben")).toBeNull(),
     )
     expect(screen.getByTestId("checkin-identifier")).toHaveValue("")
   })

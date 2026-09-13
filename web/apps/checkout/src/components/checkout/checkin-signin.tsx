@@ -504,18 +504,16 @@ export function CheckinSignin({
             // mid-flow — surface it in the dialog instead of a stale toast.
             const e164 = await sendSmsCode(id)
             if (!e164) throw new Error("Code konnte nicht gesendet werden.")
-            toast.success("Neuer Code gesendet!")
-            return
+            return "Neuer Code gesendet."
           }
           const { throttled } = await requestCodeWithThrottle(
             requestLoginEmail,
             id,
           )
-          toast[throttled ? "info" : "success"](
-            throttled
-              ? "Wir haben dir bereits eine E-Mail geschickt — der Code ist noch gültig."
-              : "Neuer Code gesendet!",
-          )
+          // Shown in the dialog's notice bar, not as a toast.
+          return throttled
+            ? "Wir haben dir bereits eine E-Mail geschickt — der Code ist noch gültig."
+            : "Neuer Code gesendet."
         }}
         onVerify={async (id, code) => {
           if (stage.kind === "code" && stage.channel === "sms") {

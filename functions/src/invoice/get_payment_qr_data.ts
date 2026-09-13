@@ -259,6 +259,12 @@ export const getPaymentQrDataHandler = async (
     throw new HttpsError("permission-denied", "Access denied");
   }
 
+  // A cancelled bill (ADR-0042) must not hand out a payable QR reference.
+  if (bill.cancelledAt) {
+    throw new HttpsError("failed-precondition", "Diese Rechnung wurde storniert.");
+  }
+
+
   // Payer info from the linked checkout's primary person.
   let payer: PaymentPayer | null = null;
   const person = checkoutData?.persons[0];

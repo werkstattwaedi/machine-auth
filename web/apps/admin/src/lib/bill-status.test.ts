@@ -13,6 +13,7 @@ function bill(overrides: {
   paidDaysAgo?: number | null
   kind?: "invoice" | "beleg"
   amount?: number
+  cancelled?: boolean
 }) {
   return {
     created: Timestamp.fromMillis(NOW - (overrides.createdDaysAgo ?? 0) * DAY),
@@ -22,6 +23,7 @@ function bill(overrides: {
         : null,
     kind: overrides.kind,
     amount: overrides.amount ?? 100,
+    cancelledAt: overrides.cancelled ? Timestamp.fromMillis(NOW - DAY) : null,
   }
 }
 
@@ -45,7 +47,14 @@ describe("billStatus", () => {
     ).toBe("paid")
   })
 
+  it("a cancelled bill is 'cancelled' regardless of age, kind or payment (ADR-0042)", () => {
+    expect(billStatus(bill({ createdDaysAgo: 60, cancelled: true }), NOW)).toBe("cancelled")
+    expect(billStatus(bill({ kind: "beleg", cancelled: true }), NOW)).toBe("cancelled")
+    expect(billStatus(bill({ paidDaysAgo: 1, cancelled: true }), NOW)).toBe("cancelled")
+  })
+
   it("Belege are never payable on their own", () => {
+
     expect(
       billStatus(bill({ createdDaysAgo: 90, kind: "beleg" }), NOW),
     ).toBe("beleg")
@@ -61,7 +70,10 @@ describe("billTotals", () => {
         bill({ createdDaysAgo: 45, paidDaysAgo: 2, amount: 40 }), // paid Jul
         bill({ createdDaysAgo: 90, paidDaysAgo: 40, amount: 500 }), // paid May
         bill({ createdDaysAgo: 90, kind: "beleg", amount: 20 }), // beleg
+        bill({ createdDaysAgo: 5, amount: 999, cancelled: true }), // storniert — never counted
+        bill({ createdDaysAgo: 5, paidDaysAgo: 1, amount: 999, cancelled: true }),
       ],
+
       NOW,
     )
     expect(totals.openAmount).toBe(144)
