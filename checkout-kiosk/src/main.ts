@@ -13,6 +13,7 @@ import {
   type WebContents,
 } from "electron"
 import path from "node:path"
+import { spawn } from "node:child_process"
 import {
   decideKioskOverlay,
   isAllowedKioskOverlayNavigation,
@@ -21,6 +22,7 @@ import {
 import { resolveConfig } from "./config"
 import { startNfc } from "./bridge/nfc"
 import { performSessionReset } from "./reset-session"
+import { createDisplayWaker, wakeCommandArgs } from "./wake-display"
 import type { NfcTagEvent, ResetSessionOptions } from "./types"
 
 const config = resolveConfig()
@@ -86,6 +88,37 @@ function showWindow(): void {
 function hideWindow(): void {
   mainWindow?.hide()
 }
+
+// Raising the window is not enough when the terminal has gone to the
+// screensaver: it paints over the kiosk, so the tap looks ignored and users
+// reach for the mouse. Windows only dismisses a screensaver on real input, so
+// synthesize a 1px there-and-back mouse move (see wake-display.ts). Best
+// effort by design — a failed nudge leaves the user exactly where they were
+// (jiggling the mouse), so it must never break the tap itself.
+const wakeDisplay = createDisplayWaker({
+  platform: process.platform,
+  now: () => Date.now(),
+  nudge: () => {
+    try {
+      const child = spawn("powershell.exe", [...wakeCommandArgs()], {
+        windowsHide: true,
+        stdio: "ignore",
+      })
+      // A missing powershell.exe surfaces as an 'error' event, not a throw;
+      // unhandled it would take the whole main process down with it.
+      child.on("error", (err) => {
+        console.warn("Failed to wake the display:", err.message)
+      })
+      // Fire-and-forget: don't hold the event loop open on the nudge.
+      child.unref()
+    } catch (err) {
+      console.warn(
+        "Failed to wake the display:",
+        err instanceof Error ? err.message : err
+      )
+    }
+  },
+})
 
 // Closing the window mid-session must end the session, not just hide it —
 // otherwise the previous user stays authenticated until the idle timeout and
@@ -269,6 +302,9 @@ function dispatchNfc(event: NfcTagEvent): void {
   )
   // A badge tap on the terminal brings the kiosk to the front — this is how a
   // new user surfaces the checkout app from the tray (issue: tray/foreground).
+  // The screensaver has to go first: it paints over everything, so without
+  // this the window comes up behind it and the tap reads as a no-op.
+  wakeDisplay()
   showWindow()
   for (const wc of nfcSubscribers) {
     try {
