@@ -325,7 +325,7 @@ function ActiveMembershipView({
                 </div>
                 {pendingInvites.map((inv) => (
                   <div key={inv.id} className="flex items-center gap-2 text-sm">
-                    <span className="font-mono">{inv.email}</span>
+                    <span>{inv.email}</span>
                     <span className="text-xs text-muted-foreground">
                       eingeladen {formatDateTime(inv.invitedAt)}
                     </span>
