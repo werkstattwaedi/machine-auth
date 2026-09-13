@@ -28,6 +28,8 @@ process.env.PAYMENT_CURRENCY = "CHF";
 process.env.RESEND_API_KEY = "re_test_fake";
 process.env.RESEND_FROM_EMAIL = "OWW Test <test@localhost>";
 process.env.RESEND_QRBILL_TEMPLATE_ID = "test-qrbill-template";
+process.env.RESEND_CORRECTION_TEMPLATE_ID = "test-correction-template";
+process.env.RESEND_CANCELLATION_TEMPLATE_ID = "test-cancellation-template";
 process.env.RESEND_TWINT_TEMPLATE_ID = "test-twint-template";
 // RESEND_MONTHLY_TEMPLATE_ID is the per-visit Beleg "charge queued" notice.
 process.env.RESEND_MONTHLY_TEMPLATE_ID = "test-monthly-template";
@@ -54,7 +56,11 @@ import {
   teardownEmulator,
   getFirestore,
 } from "../emulator-helper";
-import { tryGeneratePdf, trySendEmail } from "../../src/invoice/bill_triggers";
+import {
+  tryGeneratePdf,
+  trySendCancellationNotice,
+  trySendEmail,
+} from "../../src/invoice/bill_triggers";
 import type {
   BillEntity,
 } from "../../src/invoice/types";
@@ -1015,4 +1021,241 @@ describe("bill processing triggers (Integration)", () => {
       });
     });
   });
+
+  describe("correction / cancellation mails (ADR-0041, non-emulator path)", () => {
+    let savedEmulatorEnv: string | undefined;
+    beforeEach(() => {
+      savedEmulatorEnv = process.env.FUNCTIONS_EMULATOR;
+      delete process.env.FUNCTIONS_EMULATOR;
+    });
+    afterEach(() => {
+      if (savedEmulatorEnv === undefined) {
+        delete process.env.FUNCTIONS_EMULATOR;
+      } else {
+        process.env.FUNCTIONS_EMULATOR = savedEmulatorEnv;
+      }
+    });
+
+    interface SentEntity {
+      to: string;
+      template: { id: string; variables: Record<string, string> };
+      attachments?: Array<{ path: string; filename: string }>;
+    }
+    function sentEntity(): SentEntity {
+      return resendSendStub.firstCall.args[1] as SentEntity;
+    }
+    async function seedRecipient(): Promise<void> {
+      await seedUser("u-alice", { email: "alice@example.com", firstName: "Alice" });
+      await seedCheckout("co-default", {
+        userId: "u-alice",
+        persons: [{ name: "Alice Adult", email: "alice@example.com", userType: "erwachsen" }],
+      });
+    }
+
+    it("trySendEmail: a cancelled bill is never mailed and reports nothing to retry", async () => {
+      await seedRecipient();
+      await seedBill("bill-cancelled", {
+        storagePath: "invoices/x.pdf",
+        paymentMethodConfirmationTime: Timestamp.now(),
+        paymentMethodConfirmationSource: "user",
+      });
+      await getFirestore().doc("bills/bill-cancelled").update({
+        cancelledAt: Timestamp.now(),
+        cancelledBy: "admin-1",
+        cancellationReason: "Falsch erfasst",
+      });
+      expect(await trySendEmail("bill-cancelled")).to.be.true;
+      expect(resendSendStub.called).to.be.false;
+      expect((await getBill("bill-cancelled")).emailSentAt).to.be.null;
+    });
+
+    it("trySendEmail: a replacement Beleg inside a Sammelrechnung revision does not mail itself", async () => {
+      await seedRecipient();
+      const db = getFirestore();
+      await seedBill("beleg-new", { kind: "beleg", storagePath: "invoices/beleg-new.pdf", referenceNumber: 611 });
+      await db.doc("bills/beleg-new").update({
+        supersedesBillRef: db.doc("bills/beleg-old"),
+        aggregatedIntoBillRef: db.doc("bills/agg-rev"),
+      });
+      expect(await trySendEmail("beleg-new")).to.be.true;
+      expect(resendSendStub.called).to.be.false;
+      expect((await getBill("beleg-new")).emailSentAt).to.be.null;
+    });
+
+    it("trySendEmail: an un-aggregated replacement Beleg mails itself with the correction template", async () => {
+      await seedRecipient();
+      const db = getFirestore();
+      await seedBill("beleg-old", { kind: "beleg", referenceNumber: 610 });
+      await seedBill("beleg-new", { kind: "beleg", storagePath: "invoices/beleg-new.pdf", referenceNumber: 611 });
+      await db.doc("bills/beleg-new").update({
+        supersedesBillRef: db.doc("bills/beleg-old"),
+        correctionReason: "Menge korrigiert",
+      });
+      expect(await trySendEmail("beleg-new")).to.be.true;
+      expect(resendSendStub.calledOnce).to.be.true;
+      const entity = sentEntity();
+      expect(entity.template.id).to.equal("test-correction-template");
+      expect(entity.template.variables.INVOICE_NUMBER).to.equal("BL-000061-2");
+      expect(entity.template.variables.SUPERSEDED_INVOICE_NUMBER).to.equal("BL-000061");
+      expect(entity.template.variables.DOCUMENT_KIND).to.equal("Beleg");
+      expect(entity.template.variables.REASON).to.equal("Menge korrigiert");
+      expect(entity.template.variables.CORRECTED_DOCUMENTS).to.equal("");
+      expect(entity.attachments).to.have.length(1);
+      expect(entity.attachments![0].filename).to.equal("Beleg-BL-000061-2.pdf");
+    });
+
+    it("trySendEmail: a CHF 0.00 corrected re-issue still sends the 'replaced' mail", async () => {
+      await seedRecipient();
+      const db = getFirestore();
+      await seedBill("bill-old", { referenceNumber: 70 });
+      await seedBill("bill-free-new", {
+        storagePath: "invoices/free.pdf",
+        referenceNumber: 71,
+        amount: 0,
+        paidVia: "free",
+        paymentMethodConfirmationTime: Timestamp.now(),
+        paymentMethodConfirmationSource: "auto",
+      });
+      await db.doc("bills/bill-free-new").update({
+        supersedesBillRef: db.doc("bills/bill-old"),
+        correctionReason: "Interne Nutzung",
+      });
+      expect(await trySendEmail("bill-free-new")).to.be.true;
+      expect(resendSendStub.calledOnce).to.be.true;
+      expect(sentEntity().template.variables.INVOICE_NUMBER).to.equal("RE-000007-2");
+      expect(sentEntity().template.variables.AMOUNT).to.equal("0.00");
+    });
+
+    it("trySendEmail: a revision defers without taking the lock while a corrected Beleg PDF is missing", async () => {
+      await seedRecipient();
+      const db = getFirestore();
+      await seedBill("agg-old", { referenceNumber: 500 });
+      await seedBill("beleg-new", { kind: "beleg", referenceNumber: 611 }); // no storagePath yet
+      await seedBill("agg-rev", {
+        storagePath: "invoices/agg-rev.pdf",
+        referenceNumber: 501,
+        paymentMethodConfirmationTime: Timestamp.now(),
+        paymentMethodConfirmationSource: "auto",
+      });
+      await db.doc("bills/agg-rev").update({
+        supersedesBillRef: db.doc("bills/agg-old"),
+        correctedBillRefs: [db.doc("bills/beleg-new")],
+        correctionReason: "x",
+      });
+      expect(await trySendEmail("agg-rev")).to.be.false;
+      expect(resendSendStub.called).to.be.false;
+      expect((await getBill("agg-rev")).emailSentAt).to.be.null;
+    });
+
+    it("trySendEmail: a Sammelrechnung revision attaches its corrected Belege and lists corrected + cancelled documents", async () => {
+      await seedRecipient();
+      await seedCheckout("co-2", { userId: "u-alice" });
+      const db = getFirestore();
+      await seedBill("agg-old", { referenceNumber: 500, checkoutIds: ["co-default", "co-2"] });
+      // Corrected in this commit: the old Beleg is cancelled + replaced, the
+      // replacement is re-pointed at the revision.
+      await seedBill("beleg-old", { kind: "beleg", referenceNumber: 610 });
+      await db.doc("bills/beleg-old").update({
+        cancelledAt: Timestamp.now(),
+        supersededByBillRef: db.doc("bills/beleg-new"),
+        aggregatedIntoBillRef: db.doc("bills/agg-old"),
+      });
+      await seedBill("beleg-new", { kind: "beleg", referenceNumber: 611, storagePath: "invoices/beleg-new.pdf" });
+      await db.doc("bills/beleg-new").update({
+        supersedesBillRef: db.doc("bills/beleg-old"),
+        aggregatedIntoBillRef: db.doc("bills/agg-rev"),
+      });
+      // Cancelled in this commit without a replacement: still points at the old aggregate.
+      await seedBill("beleg-x", { kind: "beleg", referenceNumber: 620 });
+      await db.doc("bills/beleg-x").update({
+        cancelledAt: Timestamp.now(),
+        aggregatedIntoBillRef: db.doc("bills/agg-old"),
+      });
+      await seedBill("agg-rev", {
+        storagePath: "invoices/agg-rev.pdf",
+        referenceNumber: 501,
+        checkoutIds: ["co-default", "co-2"],
+        paymentMethodConfirmationTime: Timestamp.now(),
+        paymentMethodConfirmationSource: "auto",
+      });
+      await db.doc("bills/agg-rev").update({
+        supersedesBillRef: db.doc("bills/agg-old"),
+        correctedBillRefs: [db.doc("bills/beleg-new")],
+        correctionReason: "Zwei Belege korrigiert",
+      });
+
+      expect(await trySendEmail("agg-rev")).to.be.true;
+      expect(resendSendStub.calledOnce).to.be.true;
+      const entity = sentEntity();
+      expect(entity.template.id).to.equal("test-correction-template");
+      expect(entity.template.variables.DOCUMENT_KIND).to.equal("Sammelrechnung");
+      expect(entity.template.variables.INVOICE_NUMBER).to.equal("RE-000050-2");
+      expect(entity.template.variables.SUPERSEDED_INVOICE_NUMBER).to.equal("RE-000050");
+      expect(entity.template.variables.CORRECTED_DOCUMENTS).to.equal("BL-000061-2");
+      expect(entity.template.variables.CANCELLED_DOCUMENTS).to.equal("BL-000062");
+      expect(entity.attachments!.map((a) => a.filename)).to.deep.equal([
+        "Rechnung-RE-000050-2.pdf",
+        "Beleg-BL-000061-2.pdf",
+      ]);
+      expect((await getBill("agg-rev")).emailSentAt).to.be.instanceOf(Timestamp);
+    });
+
+    it("trySendCancellationNotice: skips when the original was never mailed, has a replacement, or is not cancelled", async () => {
+      await seedRecipient();
+      const db = getFirestore();
+      await seedBill("never-sent", { referenceNumber: 70 });
+      await db.doc("bills/never-sent").update({ cancelledAt: Timestamp.now() });
+      expect(await trySendCancellationNotice("never-sent")).to.be.true;
+      await seedBill("replaced", { referenceNumber: 80, emailSentAt: Timestamp.now() });
+      await db.doc("bills/replaced").update({
+        cancelledAt: Timestamp.now(),
+        supersededByBillRef: db.doc("bills/replaced-2"),
+      });
+      expect(await trySendCancellationNotice("replaced")).to.be.true;
+      await seedBill("not-cancelled", { referenceNumber: 90, emailSentAt: Timestamp.now() });
+      expect(await trySendCancellationNotice("not-cancelled")).to.be.false;
+      expect(resendSendStub.called).to.be.false;
+    });
+
+    it("trySendCancellationNotice: sends the cancellation template once and takes the lock", async () => {
+      await seedRecipient();
+      const db = getFirestore();
+      await seedBill("cancelled-sent", { referenceNumber: 70, amount: 42.5, emailSentAt: Timestamp.now() });
+      await db.doc("bills/cancelled-sent").update({
+        cancelledAt: Timestamp.now(),
+        cancelledBy: "admin-1",
+        cancellationReason: "Doppelt erfasst",
+      });
+      expect(await trySendCancellationNotice("cancelled-sent")).to.be.true;
+      expect(resendSendStub.calledOnce).to.be.true;
+      const entity = sentEntity();
+      expect(entity.to).to.equal("alice@example.com");
+      expect(entity.template.id).to.equal("test-cancellation-template");
+      expect(entity.template.variables.INVOICE_NUMBER).to.equal("RE-000007");
+      expect(entity.template.variables.DOCUMENT_KIND).to.equal("Rechnung");
+      expect(entity.template.variables.REASON).to.equal("Doppelt erfasst");
+      expect(entity.template.variables.AMOUNT).to.equal("42.50");
+      expect(entity.attachments ?? []).to.have.length(0);
+      expect((await getBill("cancelled-sent")).cancellationNoticeSentAt).to.be.instanceOf(Timestamp);
+      // Lock held: a second call sends nothing.
+      expect(await trySendCancellationNotice("cancelled-sent")).to.be.false;
+      expect(resendSendStub.calledOnce).to.be.true;
+    });
+
+    it("trySendCancellationNotice: releases the lock and logs when Resend fails", async () => {
+      await seedRecipient();
+      const db = getFirestore();
+      await seedBill("cancelled-fail", { referenceNumber: 70, emailSentAt: Timestamp.now() });
+      await db.doc("bills/cancelled-fail").update({
+        cancelledAt: Timestamp.now(),
+        cancellationReason: "x",
+      });
+      resendSendStub.resolves({ data: null, error: { message: "boom" } } as never);
+      expect(await trySendCancellationNotice("cancelled-fail")).to.be.false;
+      expect((await getBill("cancelled-fail")).cancellationNoticeSentAt).to.be.null;
+      const ops = await db.collection("operations_log").where("operation", "==", "cancellation_notice").get();
+      expect(ops.size).to.equal(1);
+    });
+  });
+
 });
