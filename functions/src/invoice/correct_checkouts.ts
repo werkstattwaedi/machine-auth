@@ -34,6 +34,7 @@ import {
   MAX_CANCELLATION_REASON_LENGTH,
   MAX_CORRECTIONS_PER_CALL,
   USAGE_TYPE_DISCOUNTS,
+  roundTo5,
   type CorrectCheckoutEntry,
   type CorrectCheckoutItemInput,
   type CorrectCheckoutPersonInput,
@@ -215,7 +216,9 @@ function toItemEntity(
     created: now,
     quantity: item.quantity,
     unitPrice: item.unitPrice,
-    totalPrice: item.totalPrice,
+    // Never trust a client-side product: the editor shows the same
+    // 5-Rappen rounding, and a typo'd total must not become the bill.
+    totalPrice: roundTo5(item.quantity * item.unitPrice),
   };
 }
 
@@ -437,7 +440,14 @@ export const correctCheckoutsHandler = async (
 
     for (const l of loaded) {
       const isBeleg = (l.bill.kind ?? "invoice") === "beleg";
-      const insideRevision = isBeleg && revisionRef !== null;
+      // Per bill, not per batch: a standalone Beleg listed next to an
+      // aggregated one must stay standalone (own mail, no re-pointing).
+      const insideRevision =
+        isBeleg &&
+        revisionRef !== null &&
+        aggregateRef !== null &&
+        !!l.bill.aggregatedIntoBillRef &&
+        l.bill.aggregatedIntoBillRef.isEqual(aggregateRef);
       let newCheckoutRef: DocumentReference | null = null;
       let newBillRef: DocumentReference | null = null;
 

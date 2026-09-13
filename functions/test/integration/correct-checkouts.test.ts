@@ -540,6 +540,33 @@ describe("correctCheckouts (Integration, ADR-0041)", () => {
       expect(noticeStub.calledOnceWith("sammel")).to.be.true;
     });
 
+    it("a standalone Beleg in the same batch stays standalone (per-bill revision membership)", async () => {
+      await seedSammelrechnung();
+      await seedCheckout("co-solo", { ownerUid: "u-member", billId: "beleg-solo", paymentMethod: "monthly" });
+      await seedBill("beleg-solo", { ownerUid: "u-member", checkoutIds: ["co-solo"], referenceNumber: 7000, amount: 25, kind: "beleg" });
+      const result = await correctCheckoutsHandler(
+        request({
+          reason: "Gemischt",
+          corrections: [
+            { checkoutId: "co-a", replacement: replacement() },
+            { checkoutId: "co-solo", replacement: replacement() },
+          ],
+        }),
+      );
+      const revision = await bill(result.revisionBillId!);
+      // Survivor beleg-b (35) + replacement of co-a (25); co-solo is not part of it.
+      expect(revision.amount).to.equal(60);
+      expect(revision.correctedBillRefs).to.have.length(1);
+      const soloReplacement = (await billsWhere("supersedesBillRef", getFirestore().doc("bills/beleg-solo")))[0];
+      expect(soloReplacement.data.aggregatedIntoBillRef).to.be.null;
+      expect(soloReplacement.data.referenceNumber).to.equal(7001);
+      // The standalone replacement mails itself; the revision mails once.
+      expect(mailStub.args.map((a) => a[0]).sort()).to.deep.equal(
+        [soloReplacement.id, result.revisionBillId!].sort(),
+      );
+      expect(noticeStub.called).to.be.false;
+    });
+
     it("an un-aggregated Beleg is corrected on its own and mails itself", async () => {
       await seedUser("u-member");
       await seedCheckout("co-solo", { ownerUid: "u-member", billId: "beleg-solo", paymentMethod: "monthly" });
