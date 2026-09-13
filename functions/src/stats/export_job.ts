@@ -223,7 +223,7 @@ async function exportTimestampStream(
     return { exported: 0, drained: true };
   }
   // Docs carrying `statsFlushedAt` (null or set) belong to the correction
-  // flush pass (ADR-0041): a same-day replacement is still ahead of the
+  // flush pass (ADR-0042): a same-day replacement is still ahead of the
   // watermark and would otherwise be emitted by both passes in one run.
   // The watermark still advances over them.
   const owned = snap.docs.filter((d) => d.get("statsFlushedAt") === undefined);
@@ -239,7 +239,7 @@ async function exportTimestampStream(
 }
 
 /**
- * Corrections (ADR-0041): a cancelled checkout and its replacement keep the
+ * Corrections (ADR-0042): a cancelled checkout and its replacement keep the
  * original `closedAt`, so they sit behind the visits watermark and the
  * stream never sees them. The correction callable writes an explicit
  * `statsFlushedAt: null` on both; this pass exports those rows (the

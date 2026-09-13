@@ -139,7 +139,7 @@ rejection wedges the export the same way.
 ### Bill corrections v2 — paid bills, credit notes, refunds
 **Status:** 💡 Idea
 
-**Context:** ADR-0041 corrects *unpaid* bills only; the callable rejects a
+**Context:** ADR-0042 corrects *unpaid* bills only; the callable rejects a
 paid bill (or a Beleg whose Sammelrechnung is paid) with a German message
 pointing here. Fixing a paid bill needs a credit-note / refund concept:
 the payment stays booked, a negative document or a refund record offsets
@@ -152,7 +152,7 @@ revision with a negative amount, but the QR slip must then be suppressed.
 ### Correction editor — catalog picker
 **Status:** 💡 Idea
 
-**Context:** The admin correction editor (ADR-0041) only edits existing
+**Context:** The admin correction editor (ADR-0042) only edits existing
 lines and adds free-form lines. A catalog picker (same one the checkout
 wizard uses) would let admins add priced catalog items with variants and
 member pricing instead of typing description + price by hand.

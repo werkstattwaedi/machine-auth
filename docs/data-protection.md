@@ -122,7 +122,7 @@ invoice PDFs remain in a locked archive for the legal 10 years.
   id).
 - **Stats divergence**: admin-SDK edits to already-exported docs never
   reach BigQuery (export-once, ADR-0039). The exception is the sanctioned
-  correction path (ADR-0041): cancelled visits and their replacements are
+  correction path (ADR-0042): cancelled visits and their replacements are
   flushed explicitly by the daily export (`visits.cancelled_at`), and
   erasure flushes them first if that pass has not run yet.
 - **Outside our systems**: the Verein's bank records keep (date, amount,

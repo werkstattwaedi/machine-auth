@@ -285,7 +285,7 @@ describe("stats export (integration)", function () {
     expect(ids).to.deep.equal(["m-u1/2026-07", "m-u1/2026-08"]);
   });
 
-  describe("correction flush (ADR-0041)", () => {
+  describe("correction flush (ADR-0042)", () => {
     function lastRow(sink: InMemorySink, table: string, docId: string) {
       const rows = sink.tableRows(table).filter((r) => r.doc_id === docId);
       return rows[rows.length - 1];
