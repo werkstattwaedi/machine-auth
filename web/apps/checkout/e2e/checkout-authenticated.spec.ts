@@ -71,9 +71,9 @@ test.describe("Authenticated checkout", () => {
     await expect(page.getByText("Dein Besuch")).toBeVisible()
 
     // Expand the collapsible Nutzungsgebühren section to verify person is listed.
-    // The display name also renders in the page header ("Nutzungsverlauf öffnen"
-    // link), so scope the assertion to the section detail to avoid strict-mode
-    // dupes.
+    // The display name also renders in the page header (account-menu
+    // trigger), so scope the assertion to the section detail to avoid
+    // strict-mode dupes.
     await page.getByRole("button", { name: /Nutzungsgebühren/ }).click()
     await expect(
       page.locator("#nutzung-detail").getByText("E2E Testuser", { exact: true }),
@@ -125,9 +125,10 @@ test.describe("Authenticated checkout", () => {
     expect(userIdRef.path).toContain("users/")
   })
 
-  // Regression for #361: the wizard header avatar/name used to deep-link to
-  // /account/profile; it should land on the more useful past-usage page.
-  test("wizard header avatar navigates to past usage, not profile", async ({
+  // Regression for #361 (header identity must reach the past-usage page) and
+  // the "Kontobereich sichtbar machen" handoff: the header identity is now a
+  // menu trigger whose entries name the member-area destinations.
+  test("wizard header account menu names and reaches the member area", async ({
     page,
   }) => {
     // ── Sign in via email + code ──
@@ -145,16 +146,36 @@ test.describe("Authenticated checkout", () => {
       timeout: 10_000,
     })
 
-    // ── Land on the wizard header (checkin) where the identity link renders ──
+    // ── Land on the wizard header (checkin) where the account menu renders ──
     await page.goto("/checkin")
-    const headerLink = page.getByRole("link", { name: "Nutzungsverlauf öffnen" })
-    await expect(headerLink).toBeVisible({ timeout: 10_000 })
+    const trigger = page.getByRole("button", { name: "Konto-Menü" })
+    await expect(trigger).toBeVisible({ timeout: 10_000 })
+    await expect(trigger).toHaveAttribute("aria-haspopup", "menu")
 
-    // The link must target the past-usage route, not the profile page.
-    await expect(headerLink).toHaveAttribute("href", "/account/usage")
+    // Open the menu: header shows who is signed in, entries name the targets.
+    await trigger.click()
+    const menu = page.getByRole("menu")
+    await expect(menu).toBeVisible()
+    await expect(menu).toContainText(AUTH_USER_EMAIL)
+    await expect(page.getByRole("menuitem", { name: "Profil" })).toHaveAttribute(
+      "href",
+      "/account/profile",
+    )
+    const usageItem = page.getByRole("menuitem", { name: "Nutzungsverlauf" })
+    await expect(usageItem).toHaveAttribute("href", "/account/usage")
+    await expect(
+      page.getByRole("menuitem", { name: "Mitgliedschaft" }),
+    ).toHaveAttribute("href", "/account/membership")
+    await expect(page.getByRole("menuitem", { name: "Abmelden" })).toBeVisible()
 
-    // Clicking it lands on the usage page.
-    await headerLink.click()
+    // Escape closes without navigating.
+    await page.keyboard.press("Escape")
+    await expect(menu).not.toBeVisible()
+    expect(new URL(page.url()).pathname).toBe("/checkin")
+
+    // Selecting the usage entry lands on the usage page.
+    await trigger.click()
+    await usageItem.click()
     await page.waitForURL("**/account/usage", { timeout: 10_000 })
     expect(new URL(page.url()).pathname).toBe("/account/usage")
   })

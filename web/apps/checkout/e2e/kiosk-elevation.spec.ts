@@ -114,6 +114,43 @@ test.describe("Kiosk step-up elevation", () => {
     expect(items.some((i) => i.variantId === "single")).toBe(true)
   })
 
+  // The header account menu is a second entry point into the same step-up
+  // (ADR-0041 §4). Selecting an item closes the Radix dropdown and opens the
+  // Radix elevation dialog in the same tick — this checks the two overlays
+  // hand over cleanly and the queued navigation still runs.
+  test("badge tap → header account menu → step-up → membership page", async ({
+    page,
+  }) => {
+    await tapBadge2(page)
+
+    const trigger = page.getByRole("button", { name: "Konto-Menü" })
+    await expect(trigger).toBeVisible()
+    await trigger.click()
+    await page.getByRole("menuitem", { name: "Mitgliedschaft" }).click()
+
+    await expect(page.getByRole("menu")).not.toBeVisible()
+    await expect(page.getByTestId("kiosk-elevation-dialog")).toBeVisible()
+    await page.getByTestId("kiosk-elevation-email").click()
+
+    const entry = await waitForLoginCode(BADGE2_EMAIL)
+    expect(entry, "debugCode should be present in emulator").toBeTruthy()
+    await expect(page.getByTestId("checkin-code-dialog")).toBeVisible()
+    await page.getByTestId("checkin-code-input").fill(entry!.code)
+    await page.getByTestId("checkin-code-submit").click()
+
+    await expect(page).toHaveURL(/\/account\/membership/, { timeout: 10_000 })
+    await expect(
+      page.getByRole("heading", { name: "Mitgliedschaft", level: 1 }),
+    ).toBeVisible()
+    // No overlay may linger from the dropdown/dialog handover: Radix restores
+    // body pointer events once the last modal layer unmounts.
+    await expect
+      .poll(() => page.evaluate(() => getComputedStyle(document.body).pointerEvents))
+      .not.toBe("none")
+    await expect(page.getByRole("menu")).toHaveCount(0)
+    await expect(page.getByRole("dialog")).toHaveCount(0)
+  })
+
   test("badge tap → SMS code (linked phone) → account area", async ({
     page,
   }) => {
