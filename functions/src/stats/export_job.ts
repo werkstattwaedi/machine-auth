@@ -68,6 +68,9 @@ export interface StatsExportDeps {
   /** Cursor store; defaults to Firestore. Dry-runs MUST pass
    *  `memoryStateStore` so the real watermark never advances. */
   stateStore?: StreamStateStore;
+  /** Dry-run: the correction flush emits rows but never stamps
+   *  `statsFlushedAt` (a Firestore write) and reports drained after one pass. */
+  dryRun?: boolean;
 }
 
 export interface StreamResult {
@@ -219,13 +222,68 @@ async function exportTimestampStream(
   if (snap.empty) {
     return { exported: 0, drained: true };
   }
-  await stream.insert(deps, snap.docs, ctx, memberCache);
+  // Docs carrying `statsFlushedAt` (null or set) belong to the correction
+  // flush pass (ADR-0042): a same-day replacement is still ahead of the
+  // watermark and would otherwise be emitted by both passes in one run.
+  // The watermark still advances over them.
+  const owned = snap.docs.filter((d) => d.get("statsFlushedAt") === undefined);
+  if (owned.length > 0) {
+    await stream.insert(deps, owned, ctx, memberCache);
+  }
   const last = snap.docs[snap.docs.length - 1];
   await store.advance(stream.name, {
     watermark: last.get(stream.ageField) as Timestamp,
     lastDocId: last.id,
   });
-  return { exported: snap.size, drained: snap.size < batchSize };
+  return { exported: owned.length, drained: snap.size < batchSize };
+}
+
+/**
+ * Corrections (ADR-0042): a cancelled checkout and its replacement keep the
+ * original `closedAt`, so they sit behind the visits watermark and the
+ * stream never sees them. The correction callable writes an explicit
+ * `statsFlushedAt: null` on both; this pass exports those rows (the
+ * cancelled one now carries `cancelled_at`, the `*_v` views keep the latest
+ * row per doc_id) and stamps the timestamp. Legacy docs lack the field, so
+ * the `== null` query is exact. Erasure's flush-before-delete applies the
+ * same test so a subject can be erased before this pass ran.
+ */
+async function flushPendingCheckouts(
+  deps: StatsExportDeps,
+  ctx: RowContext,
+  memberCache: MemberCache,
+  now: Date
+): Promise<StreamResult> {
+  const batchSize = deps.batchSize ?? DEFAULT_BATCH_SIZE;
+  const snap = await deps.db
+    .collection("checkouts")
+    .where("statsFlushedAt", "==", null)
+    .limit(batchSize)
+    .get();
+  if (snap.empty) {
+    return { exported: 0, drained: true };
+  }
+  // A pending doc without closedAt cannot become a row (buildVisitRow
+  // throws); stamp it anyway so it never blocks the pass.
+  const exportable = snap.docs.filter((d) => d.get("closedAt") != null);
+  for (const doc of snap.docs) {
+    if (!exportable.includes(doc)) {
+      logger.warn(`stats flush: checkout ${doc.id} pending without closedAt, skipping row`);
+    }
+  }
+  await insertCheckoutRows(deps, exportable, ctx, memberCache);
+  if (deps.dryRun) {
+    return { exported: exportable.length, drained: true };
+  }
+  const stamp = Timestamp.fromDate(now);
+  for (let i = 0; i < snap.docs.length; i += 400) {
+    const batch = deps.db.batch();
+    for (const doc of snap.docs.slice(i, i + 400)) {
+      batch.update(doc.ref, { statsFlushedAt: stamp });
+    }
+    await batch.commit();
+  }
+  return { exported: exportable.length, drained: snap.size < batchSize };
 }
 
 /** Zurich month (`yyyy-MM`) that `now` falls in. */
@@ -290,6 +348,7 @@ export async function runStatsExport(
     now,
     ctx
   );
+  summary["pending_flush"] = await flushPendingCheckouts(deps, ctx, memberCache, now);
   return summary;
 }
 

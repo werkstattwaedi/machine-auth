@@ -235,6 +235,29 @@ export async function buildInvoicePdf(
     doc.text(`Datum: ${formatDateOnly(data.invoiceDate)}`, MARGIN_LEFT, y);
     y += 28;
 
+    // Corrected re-issue (ADR-0042): say what this document replaces and
+    // why, right under the date so it cannot be missed. The superseded
+    // document keeps its printed number; only the suffix tells them apart.
+    if (data.supersedes) {
+      const lead = isBeleg
+        ? "Dieser Beleg ersetzt den Beleg"
+        : isTwint
+          ? "Diese Quittung ersetzt die Quittung"
+          : data.checkouts.length > 1
+            ? "Diese Sammelrechnung ersetzt die Rechnung"
+            : "Diese Rechnung ersetzt die Rechnung";
+      const notice =
+        `${lead} ${data.supersedes.reference} vom ` +
+        `${formatDateOnly(data.supersedes.date)}. Grund: ${data.supersedes.reason}`;
+      doc.fontSize(10).font("Helvetica-Bold");
+      const noticeHeight = doc.heightOfString(notice, { width: CONTENT_WIDTH });
+      y = ensureSpace(doc, y, noticeHeight + 14);
+      doc.text(notice, MARGIN_LEFT, y, { width: CONTENT_WIDTH });
+      doc.font("Helvetica");
+      y += noticeHeight + 14;
+    }
+
+
     // Renewal letter intro (issue #323). Kept short — the renewal email
     // carries the full Vorstand letter; the invoice states what the
     // payment buys.

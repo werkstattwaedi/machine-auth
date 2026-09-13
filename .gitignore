@@ -119,3 +119,5 @@ compile_commands.json
 
 # proprietary docs
 docs/proprietary/
+# PDF visual-regression failure artifacts (mocha writes <name>-actual.png next to the baselines)
+functions/test/unit/*-snapshots/*-actual.png

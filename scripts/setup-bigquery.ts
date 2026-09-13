@@ -7,9 +7,12 @@
  *
  * Creates the dataset (europe-west6), the append-only tables, and the
  * `*_v` dedup views from the single source of truth in
- * `functions/src/stats/schema.ts`. Safe to re-run: existing datasets and
- * tables are left untouched; view queries are updated in place so schema
- * evolution ships by re-running this script.
+ * `functions/src/stats/schema.ts`. Safe to re-run: existing datasets are
+ * left untouched, existing tables get any NULLABLE column the schema has
+ * gained appended (never dropped or retyped), and view queries are updated
+ * in place — so schema evolution ships by re-running this script. Run it
+ * BEFORE deploying functions that emit a new column: the sink inserts with
+ * `skipInvalidRows: false`, so an unknown column fails the whole batch.
  *
  * IAM (documented in docs/deployment-checklist.md, not automated here):
  * the functions runtime SA needs `roles/bigquery.dataEditor` on the dataset
@@ -68,9 +71,31 @@ async function main() {
     const table = dataset.table(def.name);
     const [tableExists] = await table.exists();
     if (tableExists) {
-      console.log(`Table ${def.name} exists — leaving untouched.`);
+      const [metadata] = await table.getMetadata();
+      const existing = new Set(
+        ((metadata.schema?.fields ?? []) as Array<{ name: string }>).map((f) => f.name),
+      );
+      const missing = def.fields.filter((f) => !existing.has(f.name));
+      const notAddable = missing.filter((f) => f.mode === "REQUIRED");
+      if (notAddable.length > 0) {
+        throw new Error(
+          `Table ${def.name}: cannot add REQUIRED column(s) ${notAddable.map((f) => f.name).join(", ")} ` +
+            "to an existing table — make them NULLABLE or migrate by hand.",
+        );
+      }
+      if (missing.length === 0) {
+        console.log(`Table ${def.name} exists — schema up to date.`);
+      } else {
+        await table.setMetadata({
+          schema: { fields: [...(metadata.schema?.fields ?? []), ...missing] },
+        });
+        console.log(
+          `Table ${def.name}: added column(s) ${missing.map((f) => f.name).join(", ")}.`,
+        );
+      }
     } else {
       await dataset.createTable(def.name, {
+
         description: def.description,
         schema: { fields: def.fields },
         timePartitioning: { type: "DAY", field: def.partitionField },

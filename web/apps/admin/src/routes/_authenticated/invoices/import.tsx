@@ -29,7 +29,9 @@ import {
   formatBillReference,
   formatCHF,
   formatDate,
+  formatInvoiceNumber,
 } from "@modules/lib/format"
+
 import { useLookup, resolveRef } from "@modules/lib/lookup"
 import { Badge } from "@modules/components/ui/badge"
 import { Button } from "@modules/components/ui/button"
@@ -78,14 +80,24 @@ function StatementImportPage() {
 
   const liveResult: MatchResult | null = useMemo(() => {
     if (!parsed) return null
+    const byId = new Map(bills.map((b) => [b.id, b]))
     return matchStatement(
       parsed.entries,
-      bills.map((b) => ({
-        id: b.id,
-        referenceNumber: b.referenceNumber,
-        amount: b.amount ?? 0,
-        paid: !!b.paidAt,
-      })),
+      bills.map((b) => {
+        const successor = b.supersededByBillRef
+          ? byId.get(b.supersededByBillRef.id)
+          : undefined
+        return {
+          id: b.id,
+          referenceNumber: b.referenceNumber,
+          amount: b.amount ?? 0,
+          paid: !!b.paidAt,
+          cancelled: !!b.cancelledAt,
+          supersededByReference: successor
+            ? formatBillReference(successor.referenceNumber, successor.kind)
+            : null,
+        }
+      }),
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [parsed, bills])
@@ -201,6 +213,11 @@ function StatementImportPage() {
                 tone: result.unmatched.length ? "text-destructive" : undefined,
               },
               { label: "Bereits bezahlt", value: result.alreadyPaid.length },
+              {
+                label: "Storniert",
+                value: result.cancelledBill.length,
+                tone: result.cancelledBill.length ? "text-destructive" : undefined,
+              },
             ]}
           />
 
@@ -282,11 +299,50 @@ function StatementImportPage() {
             </Card>
           )}
 
+          {result.cancelledBill.length > 0 && (
+            <Card className="px-4 py-2">
+              <h3 className="px-2 pt-3 text-sm font-semibold">
+                Zahlungen auf stornierte Rechnungen — manuell buchen
+              </h3>
+              <p className="px-2 pb-1 text-xs text-muted-foreground">
+                Die Person hat den alten Einzahlungsschein bezahlt. Auf die
+                korrigierte Rechnung buchen oder rückerstatten.
+              </p>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Einzahler</TableHead>
+                    <TableHead>Stornierte Rechnung</TableHead>
+                    <TableHead>Ersetzt durch</TableHead>
+                    <TableHead className="text-right">Betrag</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {result.cancelledBill.map((m, i) => (
+                    <TableRow key={i}>
+                      <TableCell>{m.entry.debtorName ?? "–"}</TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {formatInvoiceNumber(m.bill.referenceNumber)}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {m.bill.supersededByReference ?? "–"}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatCHF(m.entry.amount)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Card>
+          )}
+
           {result.unmatched.length > 0 && (
             <Card className="px-4 py-2">
               <h3 className="px-2 pt-3 text-sm font-semibold">
                 Nicht zuordenbare Zahlungen — manuell prüfen
               </h3>
+
               <Table>
                 <TableHeader>
                   <TableRow>

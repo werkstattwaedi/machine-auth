@@ -41,7 +41,7 @@ import {
 import { EmptyState } from "@modules/components/empty-state"
 import { CheckCheck, MoveRight, Receipt, Search, Upload } from "lucide-react"
 
-type StatusFilter = "all" | "open" | "overdue" | "paid" | "beleg"
+type StatusFilter = "all" | "open" | "overdue" | "paid" | "beleg" | "cancelled"
 
 interface InvoicesSearch {
   user?: string
@@ -55,7 +55,8 @@ export const Route = createFileRoute("/_authenticated/invoices/")({
       search.status === "open" ||
       search.status === "overdue" ||
       search.status === "paid" ||
-      search.status === "beleg"
+      search.status === "beleg" ||
+      search.status === "cancelled"
         ? search.status
         : undefined,
   }),
@@ -98,6 +99,7 @@ function InvoicesPage() {
             { value: "overdue", label: "Überfällig" },
             { value: "paid", label: "Bezahlt" },
             { value: "beleg", label: "Belege" },
+            { value: "cancelled", label: "Storniert" },
           ]}
           value={statusFilter}
           onChange={(v) =>
@@ -235,9 +237,13 @@ function InvoicesContent({
                   bill.derivedStatus === "open" ||
                   bill.derivedStatus === "overdue"
                 return (
-                  <TableRow key={bill.id}>
+                  <TableRow
+                    key={bill.id}
+                    className={bill.derivedStatus === "cancelled" ? "opacity-60" : undefined}
+                  >
                     <TableCell>
                       {payable && (
+
                         <Checkbox
                           checked={selected.has(bill.id)}
                           onCheckedChange={() => toggle(bill.id)}

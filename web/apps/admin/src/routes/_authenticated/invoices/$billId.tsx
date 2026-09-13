@@ -7,9 +7,10 @@
 
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { useState } from "react"
-import { useDocument } from "@modules/lib/firestore"
+import { where } from "firebase/firestore"
+import { useCollection, useDocument } from "@modules/lib/firestore"
 import { useDb, useFunctions } from "@modules/lib/firebase-context"
-import { billRef } from "@modules/lib/firestore-helpers"
+import { billRef, billsCollection } from "@modules/lib/firestore-helpers"
 import { rpcCallable } from "@modules/lib/rpc"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { useLookup, resolveRef } from "@modules/lib/lookup"
@@ -25,7 +26,7 @@ import {
 } from "@modules/lib/format"
 import { Button } from "@modules/components/ui/button"
 import { Card, CardContent } from "@modules/components/ui/card"
-import { CheckCheck, Download, Loader2, MoveRight } from "lucide-react"
+import { CheckCheck, Download, Loader2, MoveRight, Pencil } from "lucide-react"
 
 export const Route = createFileRoute("/_authenticated/invoices/$billId")({
   component: BillDetailPage,
@@ -43,6 +44,15 @@ function BillDetailPage() {
   const functions = useFunctions()
   const { billId } = Route.useParams()
   const { data: bill, loading } = useDocument(billRef(db, billId))
+  // Correction links (ADR-0042): the bill this one replaced / was replaced
+  // by, and — for a Sammelrechnung — its Belege, which decide whether the
+  // "Belege korrigieren" batch editor applies.
+  const { data: successor } = useDocument(bill?.supersededByBillRef ?? null)
+  const { data: predecessor } = useDocument(bill?.supersedesBillRef ?? null)
+  const { data: belege } = useCollection(
+    billsCollection(db),
+    where("aggregatedIntoBillRef", "==", billRef(db, billId)),
+  )
   const { users } = useLookup()
   const [markPaidOpen, setMarkPaidOpen] = useState(false)
   const download = useAsyncMutation<string>({
@@ -56,6 +66,12 @@ function BillDetailPage() {
   const reference = formatBillReference(bill.referenceNumber, bill.kind)
   const status = billStatus(bill, Date.now())
   const payable = status === "open" || status === "overdue"
+  const activeBelege = belege.filter((b) => !b.cancelledAt)
+  const correctableSammelrechnung =
+    (bill.kind ?? "invoice") === "invoice" &&
+    !bill.paidAt &&
+    !bill.cancelledAt &&
+    activeBelege.length > 0
 
   const handleDownload = async () => {
     let url: string
@@ -98,6 +114,14 @@ function BillDetailPage() {
                   <Download className="mr-2 h-4 w-4" />
                 )}
                 PDF
+              </Button>
+            )}
+            {correctableSammelrechnung && (
+              <Button asChild variant="outline">
+                <Link to="/invoices/$billId/correct" params={{ billId }}>
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Belege korrigieren
+                </Link>
               </Button>
             )}
             {payable && (
@@ -146,8 +170,49 @@ function BillDetailPage() {
               ? "Mitgliedschafts-Verlängerung"
               : "Besuch / Checkout"}
           </Field>
+          {bill.cancelledAt && (
+            <Field label="Storniert">
+              {formatDateTime(bill.cancelledAt)}
+              {bill.cancelledBy
+                ? ` · ${users.get(bill.cancelledBy) ?? bill.cancelledBy}`
+                : ""}
+            </Field>
+          )}
+          {bill.cancellationReason && (
+            <Field label="Grund">{bill.cancellationReason}</Field>
+          )}
+          {bill.supersededByBillRef && (
+            <Field label="Ersetzt durch">
+              <Link
+                to="/invoices/$billId"
+                params={{ billId: bill.supersededByBillRef.id }}
+                className="font-medium text-primary hover:underline"
+              >
+                {successor
+                  ? formatBillReference(successor.referenceNumber, successor.kind)
+                  : "…"}
+              </Link>
+            </Field>
+          )}
+          {bill.supersedesBillRef && (
+            <Field label="Ersetzt">
+              <Link
+                to="/invoices/$billId"
+                params={{ billId: bill.supersedesBillRef.id }}
+                className="font-medium text-primary hover:underline"
+              >
+                {predecessor
+                  ? formatBillReference(predecessor.referenceNumber, predecessor.kind)
+                  : "…"}
+              </Link>
+            </Field>
+          )}
+          {bill.correctionReason && (
+            <Field label="Korrekturgrund">{bill.correctionReason}</Field>
+          )}
           {bill.aggregatedIntoBillRef && (
             <Field label="Verrechnet über">
+
               <Link
                 to="/invoices/$billId"
                 params={{ billId: bill.aggregatedIntoBillRef.id }}

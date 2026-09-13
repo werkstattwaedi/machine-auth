@@ -3,8 +3,11 @@
 
 import { describe, it, expect } from "vitest"
 import {
+  billBaseNumber,
+  billRevision,
   currency,
   formatBelegNumber,
+
   formatBillReference,
   formatCHF,
   formatDate,
@@ -29,22 +32,39 @@ describe("formatCHF", () => {
   })
 })
 
-describe("bill reference formatting (#405)", () => {
-  it("formatInvoiceNumber pads to RE-XXXXXX", () => {
-    expect(formatInvoiceNumber(5)).toBe("RE-000005")
-    expect(formatInvoiceNumber(123456)).toBe("RE-123456")
+// Stored numbers are base × 10 + revision digit (ADR-0042): 50 is bill 5,
+// original; 51 is its first correction.
+describe("bill reference formatting (#405, ADR-0042)", () => {
+  it("formatInvoiceNumber pads the base to RE-XXXXXX", () => {
+    expect(formatInvoiceNumber(50)).toBe("RE-000005")
+    expect(formatInvoiceNumber(1234560)).toBe("RE-123456")
+    expect(formatInvoiceNumber(42000010)).toBe("RE-4200001")
+  })
+
+  it("appends the stored digit as suffix for corrected re-issues", () => {
+    expect(formatInvoiceNumber(51)).toBe("RE-000005-1")
+    expect(formatInvoiceNumber(42000011)).toBe("RE-4200001-1")
+    expect(formatInvoiceNumber(42000019)).toBe("RE-4200001-9")
+    expect(formatBelegNumber(51)).toBe("BL-000005-1")
   })
 
   it("formatBelegNumber pads to BL-XXXXXX", () => {
-    expect(formatBelegNumber(5)).toBe("BL-000005")
-    expect(formatBelegNumber(42)).toBe("BL-000042")
+    expect(formatBelegNumber(50)).toBe("BL-000005")
+    expect(formatBelegNumber(420)).toBe("BL-000042")
   })
 
   it("formatBillReference uses BL- for a Beleg and RE- otherwise", () => {
-    expect(formatBillReference(7, "beleg")).toBe("BL-000007")
-    expect(formatBillReference(7, "invoice")).toBe("RE-000007")
+    expect(formatBillReference(70, "beleg")).toBe("BL-000007")
+    expect(formatBillReference(70, "invoice")).toBe("RE-000007")
     // Missing kind (legacy doc) is treated as an invoice.
-    expect(formatBillReference(7, undefined)).toBe("RE-000007")
+    expect(formatBillReference(70, undefined)).toBe("RE-000007")
+  })
+
+  it("billBaseNumber / billRevision split the stored number", () => {
+    expect(billBaseNumber(42000011)).toBe(4200001)
+    expect(billRevision(42000010)).toBe(1)
+    expect(billRevision(42000011)).toBe(2)
+    expect(billRevision(42000019)).toBe(10)
   })
 })
 

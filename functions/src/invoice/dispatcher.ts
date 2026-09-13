@@ -8,14 +8,21 @@
  */
 
 import { onCall } from "firebase-functions/v2/https";
+import { defineSecret } from "firebase-functions/params";
 import { dispatchRpc, type RpcHandler } from "../rpc/dispatch";
 import { getInvoiceDownloadUrlHandler } from "./get_invoice_download_url";
 import { getPaymentQrDataHandler } from "./get_payment_qr_data";
 import { closeCheckoutAndGetPaymentHandler } from "./close_checkout_and_get_payment";
 import { acknowledgeBillHandler } from "./acknowledge_bill";
 import { adminMarkBillsPaidHandler } from "./mark_bills_paid";
+import { correctCheckoutsHandler } from "./correct_checkouts";
 import { addBadgeToCheckoutHandler } from "../badge/purchase";
 import { diversificationMasterKey } from "../config/tag-secrets";
+
+// correctCheckouts (ADR-0042) mails the corrected documents inline, like
+// monthlyBillRun does — pre-acked bills never see the ack transition that
+// drives the trigger-based send.
+const resendApiKey = defineSecret("RESEND_API_KEY");
 
 const HANDLERS: Record<string, RpcHandler> = {
   getInvoiceDownloadUrl: getInvoiceDownloadUrlHandler,
@@ -23,6 +30,8 @@ const HANDLERS: Record<string, RpcHandler> = {
   closeCheckoutAndGetPayment: closeCheckoutAndGetPaymentHandler,
   acknowledgeBill: acknowledgeBillHandler,
   adminMarkBillsPaid: adminMarkBillsPaidHandler,
+  correctCheckouts: correctCheckoutsHandler,
+
   addBadgeToCheckout: addBadgeToCheckoutHandler,
 };
 
@@ -30,7 +39,8 @@ export const billingCall = onCall(
   {
     // diversificationMasterKey: addBadgeToCheckout verifies the signed
     // badge voucher (HMAC key derived from it).
-    secrets: [diversificationMasterKey],
+    secrets: [diversificationMasterKey, resendApiKey],
+
     memory: "512MiB",
   },
   (request) => dispatchRpc("billing", HANDLERS, request)

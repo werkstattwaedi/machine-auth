@@ -260,11 +260,29 @@ export function referenceNumberFromScor(reference: string): number | null {
   return Number.isFinite(n) ? n : null
 }
 
+/**
+ * Bill numbers a statement payload may refer to (ADR-0042). Stored numbers
+ * are `base × 10 + revision digit`; slips printed before the one-off ×10
+ * migration carry the bare base as payload. The exact number is tried
+ * first, then the legacy reading — the migration asserted that no legacy
+ * payload can collide with a migrated number, so the fallback is
+ * unambiguous.
+ */
+export function referenceNumberCandidates(reference: string): number[] {
+  const n = referenceNumberFromScor(reference)
+  if (n == null) return []
+  return n === 0 ? [n] : [n, n * 10]
+}
+
 export interface MatchableBill {
   id: string
   referenceNumber: number
   amount: number
   paid: boolean
+  /** Voided by an admin (ADR-0042); a payment on it needs manual booking. */
+  cancelled?: boolean
+  /** Display reference of the corrected re-issue, when one exists. */
+  supersededByReference?: string | null
 }
 
 export interface StatementMatch {
@@ -285,6 +303,12 @@ export interface MatchResult {
    * entry (double payment — booking it would silently vanish).
    */
   unmatched: StatementEntry[]
+  /**
+   * Payments on a bill an admin has cancelled (ADR-0042) — the customer
+   * paid the old slip. Never booked automatically; the treasurer books it
+   * on the corrected re-issue (`bill.supersededByReference`) or refunds.
+   */
+  cancelledBill: StatementMatch[]
 }
 
 export function matchStatement(
@@ -293,12 +317,19 @@ export function matchStatement(
 ): MatchResult {
   const byReference = new Map(bills.map((b) => [b.referenceNumber, b]))
   const matchedBillIds = new Set<string>()
-  const result: MatchResult = { matched: [], alreadyPaid: [], unmatched: [] }
+  const result: MatchResult = {
+    matched: [],
+    alreadyPaid: [],
+    unmatched: [],
+    cancelledBill: [],
+  }
   for (const entry of entries) {
-    const refNumber = entry.reference
-      ? referenceNumberFromScor(entry.reference)
-      : null
-    const bill = refNumber != null ? byReference.get(refNumber) : undefined
+    const candidates = entry.reference
+      ? referenceNumberCandidates(entry.reference)
+      : []
+    const bill = candidates
+      .map((n) => byReference.get(n))
+      .find((b) => b !== undefined)
     if (!bill) {
       result.unmatched.push(entry)
       continue
@@ -308,7 +339,10 @@ export function matchStatement(
       bill,
       amountMismatch: Math.abs(entry.amount - bill.amount) > 0.005,
     }
-    if (bill.paid) {
+    if (bill.cancelled) {
+      result.cancelledBill.push(match)
+    } else if (bill.paid) {
+
       result.alreadyPaid.push(match)
     } else if (matchedBillIds.has(bill.id)) {
       // Same invoice paid twice within one statement: only the first

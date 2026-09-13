@@ -270,8 +270,14 @@ async function seed() {
     .set(resolveValue(loadFixture<Record<string, unknown>>("config-catalog-references.json")) as Record<string, unknown>);
   console.log("  config/catalog-references: 1 doc");
 
-  await db.collection("config").doc("billing").set({ nextBillNumber: 4_200_000 });
-  console.log("  config/billing: nextBillNumber=4200000");
+  // ADR-0042: stored referenceNumbers are counter × 10 + revision digit; the
+  // marker tells allocateBill the data is in the migrated layout.
+  await db.collection("config").doc("billing").set({
+    nextBillNumber: 4_200_000,
+    referenceNumberFormat: "shifted-v1",
+  });
+  console.log("  config/billing: nextBillNumber=4200000 (format shifted-v1)");
+
 
   if (mode === "full") {
     await seedAuthUsers();

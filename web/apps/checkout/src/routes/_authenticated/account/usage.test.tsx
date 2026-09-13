@@ -239,7 +239,7 @@ describe("Usage page", () => {
     fakeDb.setDoc(fakeDb.doc("bills", "bill1"), {
       userId: fakeDb.doc("users", "user1"),
       checkouts: [],
-      referenceNumber: 42,
+      referenceNumber: 420,
       amount: 75.5,
       currency: "CHF",
       storagePath: "invoices/bill1.pdf",
@@ -259,11 +259,50 @@ describe("Usage page", () => {
     expect(screen.getAllByText("Bezahlt (TWINT)").length).toBeGreaterThan(0)
   })
 
+  it("renders a cancelled bill as 'Storniert' and keeps it out of the open total (ADR-0042)", async () => {
+    fakeDb.setDoc(fakeDb.doc("bills", "bill-cancelled"), {
+      userId: fakeDb.doc("users", "user1"),
+      checkouts: [],
+      referenceNumber: 420,
+      amount: 75.5,
+      currency: "CHF",
+      storagePath: "invoices/bill-cancelled.pdf",
+      created: new Date(),
+      paidAt: null,
+      paidVia: null,
+      cancelledAt: new Date(),
+      cancellationReason: "Falsch erfasst",
+    })
+    fakeDb.setDoc(fakeDb.doc("bills", "bill-open"), {
+      userId: fakeDb.doc("users", "user1"),
+      checkouts: [],
+      referenceNumber: 421,
+      amount: 10,
+      currency: "CHF",
+      storagePath: null,
+      created: new Date(),
+      paidAt: null,
+      paidVia: null,
+    })
+
+    renderUsagePage()
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Storniert").length).toBeGreaterThan(0)
+    })
+    // The cancelled original and the open re-issue are both listed.
+    expect(screen.getAllByText("RE-000042").length).toBeGreaterThan(0)
+    expect(screen.getAllByText("RE-000042-1").length).toBeGreaterThan(0)
+    // Only the open bill counts: CHF 10.00, not 85.50.
+    expect(screen.queryByText(/85[.,]50/)).toBeNull()
+  })
+
   it("renders unpaid bill with 'Offen' badge", async () => {
+
     fakeDb.setDoc(fakeDb.doc("bills", "bill2"), {
       userId: fakeDb.doc("users", "user1"),
       checkouts: [],
-      referenceNumber: 10,
+      referenceNumber: 100,
       amount: 30,
       currency: "CHF",
       storagePath: "invoices/bill2.pdf",
@@ -289,7 +328,7 @@ describe("Usage page", () => {
     fakeDb.setDoc(fakeDb.doc("bills", "bill-beleg"), {
       userId: fakeDb.doc("users", "user1"),
       checkouts: [],
-      referenceNumber: 23,
+      referenceNumber: 230,
       amount: 18,
       currency: "CHF",
       storagePath: "invoices/bill-beleg.pdf",
@@ -434,7 +473,7 @@ describe("Usage page", () => {
     fakeDb.setDoc(fakeDb.doc("bills", "bill3"), {
       userId: fakeDb.doc("users", "user1"),
       checkouts: [],
-      referenceNumber: 5,
+      referenceNumber: 50,
       amount: 100,
       currency: "CHF",
       storagePath: "invoices/bill3.pdf",
@@ -480,7 +519,7 @@ describe("Usage page", () => {
     fakeDb.setDoc(fakeDb.doc("bills", "bill4"), {
       userId: fakeDb.doc("users", "user1"),
       checkouts: [],
-      referenceNumber: 7,
+      referenceNumber: 70,
       amount: 50,
       currency: "CHF",
       storagePath: "invoices/bill4.pdf",
@@ -529,7 +568,7 @@ describe("Usage page", () => {
     fakeDb.setDoc(fakeDb.doc("bills", "bill5"), {
       userId: fakeDb.doc("users", "user1"),
       checkouts: [],
-      referenceNumber: 99,
+      referenceNumber: 990,
       amount: 20,
       currency: "CHF",
       storagePath: null,
