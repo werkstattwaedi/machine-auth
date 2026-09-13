@@ -370,7 +370,7 @@
       // --- Cancellation / corrected re-issue (ADR-0042). Server-only. ---
       // referenceNumber is stored as base × 10 + revision digit (0 =
       // original, 1 = first correction …); the formatters render
-      // "RE-4200001" / "RE-4200001-2" from 42000010 / 42000011. A cancelled
+      // "RE-4200001" / "RE-4200001-1" from 42000010 / 42000011. A cancelled
       // bill stays in place; its replacement keeps the base number.
       "cancelledAt": "timestamp | null",
       "cancelledBy": "string | null",          // admin uid

@@ -207,7 +207,7 @@ One-time setup before the functions deploy:
 
 ### Bill correction + cancellation emails (ADR-0042)
 
-Corrected re-issues (`RE-…-2`) and pure cancellations send two dedicated Resend templates.
+Corrected re-issues (`RE-…-1`) and pure cancellations send two dedicated Resend templates.
 One-time setup before the functions deploy:
 
 1. Create/publish the templates from the operations repo — `self-checkout-correction`

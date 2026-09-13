@@ -20,10 +20,10 @@ describe("bill reference formatting (ADR-0042)", () => {
     expect(formatBelegNumber(50)).to.equal("BL-000005");
   });
 
-  it("renders corrected re-issues with the revision suffix", () => {
-    expect(formatInvoiceNumber(42000011)).to.equal("RE-4200001-2");
-    expect(formatInvoiceNumber(42000019)).to.equal("RE-4200001-10");
-    expect(formatBelegNumber(51)).to.equal("BL-000005-2");
+  it("renders corrected re-issues with the stored digit as suffix", () => {
+    expect(formatInvoiceNumber(42000011)).to.equal("RE-4200001-1");
+    expect(formatInvoiceNumber(42000019)).to.equal("RE-4200001-9");
+    expect(formatBelegNumber(51)).to.equal("BL-000005-1");
   });
 
   it("formatBillReference picks the prefix by kind, invoice by default", () => {

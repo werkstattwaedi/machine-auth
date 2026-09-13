@@ -25,8 +25,9 @@ and the customer kept a wrong PDF. Three constraints shaped the design:
 
 The stored number carries the revision: digit 0 is the original, 1 the first corrected re-issue,
 up to 9. `formatInvoiceNumber(42000010)` renders `RE-4200001`, `formatInvoiceNumber(42000011)`
-renders `RE-4200001-2`. The SCOR payload is still the raw stored number, so every revision has its
-own QR reference, uniqueness holds, and no lookup changes. `allocateBill` mints `counter × 10` (the
+renders `RE-4200001-1` — the printed suffix is the stored digit, so the number on the document and
+the last digit of its QR payload (`042000011`) always agree. The SCOR payload is still the raw
+stored number, so every revision has its own QR reference, uniqueness holds, and no lookup changes. `allocateBill` mints `counter × 10` (the
 counter still advances by 1); `allocateBillRevision` mints `previous + 1` without touching the
 counter and rejects a tenth correction.
 

@@ -375,7 +375,7 @@ describe("correctCheckouts (Integration, ADR-0042)", () => {
         }),
       );
       expect(result.replacementBillIds).to.have.length(1);
-      expect(result.references).to.deep.equal(["RE-4200001-2"]);
+      expect(result.references).to.deep.equal(["RE-4200001-1"]);
       const newBillId = result.replacementBillIds[0];
       const newCheckoutId = result.replacementCheckoutIds[0];
 
@@ -444,7 +444,7 @@ describe("correctCheckouts (Integration, ADR-0042)", () => {
         request({ reason: "Nochmals", corrections: [{ checkoutId: "co-2", replacement: replacement() }] }),
       );
       expect((await bill(result.replacementBillIds[0])).referenceNumber).to.equal(42000012);
-      expect(result.references).to.deep.equal(["RE-4200001-3"]);
+      expect(result.references).to.deep.equal(["RE-4200001-2"]);
     });
 
     it("keeps an admin-set entry-fee waiver and applies it to the price", async () => {
@@ -474,7 +474,7 @@ describe("correctCheckouts (Integration, ADR-0042)", () => {
         request({ reason: "Menge", corrections: [{ checkoutId: "co-a", replacement: replacement() }] }),
       );
       expect(result.revisionBillId).to.not.be.null;
-      expect(result.references).to.deep.equal(["BL-000610-2", "RE-000500-2"]);
+      expect(result.references).to.deep.equal(["BL-000610-1", "RE-000500-1"]);
       const newBelegId = result.replacementBillIds[0];
       const revisionId = result.revisionBillId!;
 
@@ -526,7 +526,7 @@ describe("correctCheckouts (Integration, ADR-0042)", () => {
       const rev = revisions[0].data;
       expect(rev.amount).to.equal(25 + 19);
       expect(rev.correctedBillRefs).to.have.length(2);
-      expect(result.references).to.deep.equal(["BL-000610-2", "BL-000620-2", "RE-000500-2"]);
+      expect(result.references).to.deep.equal(["BL-000610-1", "BL-000620-1", "RE-000500-1"]);
       expect(mailStub.calledOnce).to.be.true;
     });
 

@@ -258,7 +258,7 @@ test.describe("visit corrections (ADR-0041)", () => {
     await expect(page.getByTestId("visit-replacement-banner")).toContainText(
       "Korrektur des Besuchs",
     )
-    await expect(page.getByText("RE-002050-2")).toBeVisible()
+    await expect(page.getByText("RE-002050-1")).toBeVisible()
     // Summe line + Abrechnung total both show the new amount.
     await expect(page.getByText("CHF 71.00").first()).toBeVisible()
 
@@ -277,13 +277,13 @@ test.describe("visit corrections (ADR-0041)", () => {
 
     // List: original storniert, revision offen.
     await page.goto("/invoices")
-    await expect(page.getByRole("cell", { name: "RE-002050-2", exact: true })).toBeVisible()
+    await expect(page.getByRole("cell", { name: "RE-002050-1", exact: true })).toBeVisible()
     await expect(page.getByRole("row", { name: /^RE-002050 / })).toContainText("storniert")
 
     // Original bill points at its replacement.
     await page.goto(`/invoices/${BILL_CORRECT_ID}`)
     await expect(page.getByText("Ersetzt durch")).toBeVisible()
-    await expect(page.getByRole("link", { name: "RE-002050-2" })).toBeVisible()
+    await expect(page.getByRole("link", { name: "RE-002050-1" })).toBeVisible()
   })
 
   test("a paid bill hides the correction actions", async ({ page }) => {
@@ -318,7 +318,7 @@ test.describe("visit corrections (ADR-0041)", () => {
         !url.pathname.includes(SAMMEL_ID) &&
         !url.pathname.endsWith("/correct"),
     )
-    await expect(page.getByRole("heading", { name: "RE-002060-2" })).toBeVisible()
+    await expect(page.getByRole("heading", { name: "RE-002060-1" })).toBeVisible()
     // (15 + 56) + (15 + 112)
     await expect(page.getByText("CHF 198.00")).toBeVisible()
 

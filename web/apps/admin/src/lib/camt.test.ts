@@ -180,14 +180,14 @@ describe("matchStatement", () => {
         amount: 84,
         paid: false,
         cancelled: true,
-        supersededByReference: "RE-010004-2",
+        supersededByReference: "RE-010004-1",
       },
     ]
     const { entries } = parseCamt053(CAMT)
     const result = matchStatement(entries, cancelled)
     expect(result.matched).toHaveLength(0)
     expect(result.cancelledBill).toHaveLength(1)
-    expect(result.cancelledBill[0].bill.supersededByReference).toBe("RE-010004-2")
+    expect(result.cancelledBill[0].bill.supersededByReference).toBe("RE-010004-1")
   })
 
 

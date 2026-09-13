@@ -41,11 +41,11 @@ describe("bill reference formatting (#405, ADR-0042)", () => {
     expect(formatInvoiceNumber(42000010)).toBe("RE-4200001")
   })
 
-  it("appends the revision suffix for corrected re-issues", () => {
-    expect(formatInvoiceNumber(51)).toBe("RE-000005-2")
-    expect(formatInvoiceNumber(42000011)).toBe("RE-4200001-2")
-    expect(formatInvoiceNumber(42000019)).toBe("RE-4200001-10")
-    expect(formatBelegNumber(51)).toBe("BL-000005-2")
+  it("appends the stored digit as suffix for corrected re-issues", () => {
+    expect(formatInvoiceNumber(51)).toBe("RE-000005-1")
+    expect(formatInvoiceNumber(42000011)).toBe("RE-4200001-1")
+    expect(formatInvoiceNumber(42000019)).toBe("RE-4200001-9")
+    expect(formatBelegNumber(51)).toBe("BL-000005-1")
   })
 
   it("formatBelegNumber pads to BL-XXXXXX", () => {

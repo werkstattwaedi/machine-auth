@@ -1095,7 +1095,7 @@ describe("bill processing triggers (Integration)", () => {
       expect(resendSendStub.calledOnce).to.be.true;
       const entity = sentEntity();
       expect(entity.template.id).to.equal("test-correction-template");
-      expect(entity.template.variables.INVOICE_NUMBER).to.equal("BL-000061-2");
+      expect(entity.template.variables.INVOICE_NUMBER).to.equal("BL-000061-1");
       expect(entity.template.variables.SUPERSEDED_INVOICE_NUMBER).to.equal("BL-000061");
       expect(entity.template.variables.DOCUMENT_KIND).to.equal("Beleg");
       expect(entity.template.variables.REASON).to.equal("Menge korrigiert");
@@ -1103,7 +1103,7 @@ describe("bill processing triggers (Integration)", () => {
       expect(entity.template.variables.CORRECTION_DETAILS).to.equal("");
       expect(entity.template.variables.PAYMENT_NOTE).to.include("nächste Sammelrechnung");
       expect(entity.attachments).to.have.length(1);
-      expect(entity.attachments![0].filename).to.equal("Beleg-BL-000061-2.pdf");
+      expect(entity.attachments![0].filename).to.equal("Beleg-BL-000061-1.pdf");
     });
 
     it("trySendEmail: a CHF 0.00 corrected re-issue still sends the 'replaced' mail", async () => {
@@ -1124,7 +1124,7 @@ describe("bill processing triggers (Integration)", () => {
       });
       expect(await trySendEmail("bill-free-new")).to.be.true;
       expect(resendSendStub.calledOnce).to.be.true;
-      expect(sentEntity().template.variables.INVOICE_NUMBER).to.equal("RE-000007-2");
+      expect(sentEntity().template.variables.INVOICE_NUMBER).to.equal("RE-000007-1");
       expect(sentEntity().template.variables.AMOUNT).to.equal("0.00");
       expect(sentEntity().template.variables.PAYMENT_NOTE).to.equal(
         "Für diese Korrektur ist nichts zu bezahlen.",
@@ -1194,20 +1194,20 @@ describe("bill processing triggers (Integration)", () => {
       const entity = sentEntity();
       expect(entity.template.id).to.equal("test-correction-template");
       expect(entity.template.variables.DOCUMENT_KIND).to.equal("Sammelrechnung");
-      expect(entity.template.variables.INVOICE_NUMBER).to.equal("RE-000050-2");
+      expect(entity.template.variables.INVOICE_NUMBER).to.equal("RE-000050-1");
       expect(entity.template.variables.SUPERSEDED_INVOICE_NUMBER).to.equal("RE-000050");
-      expect(entity.template.variables.CORRECTED_DOCUMENTS).to.equal("BL-000061-2");
+      expect(entity.template.variables.CORRECTED_DOCUMENTS).to.equal("BL-000061-1");
       expect(entity.template.variables.CANCELLED_DOCUMENTS).to.equal("BL-000062");
       expect(entity.template.variables.CORRECTION_DETAILS).to.equal(
-        "Korrigierte Belege: BL-000061-2 · Stornierte Belege: BL-000062",
+        "Korrigierte Belege: BL-000061-1 · Stornierte Belege: BL-000062",
       );
       // A payable Sammelrechnung revision ships a new QR slip.
       expect(entity.template.variables.PAYMENT_NOTE).to.include(
         "Einzahlungsschein zu RE-000050 ist ungültig",
       );
       expect(entity.attachments!.map((a) => a.filename)).to.deep.equal([
-        "Rechnung-RE-000050-2.pdf",
-        "Beleg-BL-000061-2.pdf",
+        "Rechnung-RE-000050-1.pdf",
+        "Beleg-BL-000061-1.pdf",
       ]);
       expect((await getBill("agg-rev")).emailSentAt).to.be.instanceOf(Timestamp);
     });

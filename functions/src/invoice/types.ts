@@ -191,20 +191,26 @@ export function billBaseNumber(referenceNumber: number): number {
   return Math.floor(referenceNumber / BILL_REVISION_RADIX);
 }
 
-/** 1 for an original, 2 for the first correction, … e.g. 42000011 → 2. */
+/**
+ * Version count: 1 for an original, 2 for the first correction, … e.g.
+ * 42000011 → 2. Used for the revision cap; the printed suffix is the digit.
+ */
 export function billRevision(referenceNumber: number): number {
   return (referenceNumber % BILL_REVISION_RADIX) + 1;
 }
 
 function formatBillNumber(prefix: "RE" | "BL", n: number): string {
   const base = String(billBaseNumber(n)).padStart(6, "0");
-  const revision = billRevision(n);
-  return revision > 1 ? `${prefix}-${base}-${revision}` : `${prefix}-${base}`;
+  // The printed suffix IS the stored digit, so the number on the document
+  // and the last digit of its QR payload always agree (042000151 ↔
+  // RE-4200015-1). billRevision() is the version count, not the suffix.
+  const digit = n % BILL_REVISION_RADIX;
+  return digit > 0 ? `${prefix}-${base}-${digit}` : `${prefix}-${base}`;
 }
 
 /**
  * Format an invoice reference number for display: 42000010 → "RE-4200001",
- * 42000011 → "RE-4200001-2" (first correction).
+ * 42000011 → "RE-4200001-1" (first correction).
  */
 export function formatInvoiceNumber(n: number): string {
   return formatBillNumber("RE", n);
