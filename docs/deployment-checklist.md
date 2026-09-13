@@ -205,7 +205,7 @@ One-time setup before the functions deploy:
    sends, but with Self-Checkout copy instead of the Vorstand renewal
    letter, so this misconfiguration does NOT fail loudly.
 
-### Bill correction + cancellation emails (ADR-0041)
+### Bill correction + cancellation emails (ADR-0042)
 
 Corrected re-issues (`RE-…-2`) and pure cancellations send two dedicated Resend templates.
 One-time setup before the functions deploy:
@@ -226,7 +226,7 @@ One-time setup before the functions deploy:
    cancellation notice fails into `operations_log` (retried hourly) — so set them before the first
    correction, not after.
 
-### Bill-number migration (ADR-0041) — once per project, RIGHT AFTER the functions deploy
+### Bill-number migration (ADR-0042) — once per project, RIGHT AFTER the functions deploy
 
 Stored `bills.referenceNumber` values move to `base × 10 + revisionDigit`. The new `allocateBill`
 refuses to mint until `config/billing.referenceNumberFormat == "shifted-v1"` exists, and the daily

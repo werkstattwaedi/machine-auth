@@ -32,9 +32,9 @@ describe("formatCHF", () => {
   })
 })
 
-// Stored numbers are base × 10 + revision digit (ADR-0041): 50 is bill 5,
+// Stored numbers are base × 10 + revision digit (ADR-0042): 50 is bill 5,
 // original; 51 is its first correction.
-describe("bill reference formatting (#405, ADR-0041)", () => {
+describe("bill reference formatting (#405, ADR-0042)", () => {
   it("formatInvoiceNumber pads the base to RE-XXXXXX", () => {
     expect(formatInvoiceNumber(50)).toBe("RE-000005")
     expect(formatInvoiceNumber(1234560)).toBe("RE-123456")

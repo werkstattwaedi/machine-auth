@@ -10,10 +10,10 @@ import {
   formatInvoiceNumber,
 } from "./types";
 
-// Stored numbers are base × 10 + revision digit (ADR-0041): 42000010 is
+// Stored numbers are base × 10 + revision digit (ADR-0042): 42000010 is
 // bill 4200001 (original), 42000011 its first corrected re-issue. Mirrors
 // web/modules/lib/format.test.ts so both formatters stay in lockstep.
-describe("bill reference formatting (ADR-0041)", () => {
+describe("bill reference formatting (ADR-0042)", () => {
   it("renders an original without a suffix, base padded to 6", () => {
     expect(formatInvoiceNumber(42000010)).to.equal("RE-4200001");
     expect(formatInvoiceNumber(50)).to.equal("RE-000005");

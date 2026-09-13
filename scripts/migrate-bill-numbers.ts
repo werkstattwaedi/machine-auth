@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * One-shot migration (ADR-0041): shift every stored `bills.referenceNumber`
+ * One-shot migration (ADR-0042): shift every stored `bills.referenceNumber`
  * to the `base × 10 + revisionDigit` layout and stamp
  * `config/billing.referenceNumberFormat = "shifted-v1"`.
  *

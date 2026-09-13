@@ -188,7 +188,7 @@ export interface CatalogEntity {
 
 // --- Checkouts ---
 
-// "cancelled" (ADR-0041): an admin voided this closed visit. The doc stays
+// "cancelled" (ADR-0042): an admin voided this closed visit. The doc stays
 // in place as the as-billed record; a corrected re-issue is a *new* closed
 // checkout linked via `supersededByCheckoutRef` / `supersedesCheckoutRef`.
 // Legacy docs lack the cancellation fields entirely — never filter on
@@ -281,7 +281,7 @@ export interface CheckoutEntity {
   // can't self-mute their reminders.
   remindersSent?: Timestamp[];
 
-  // --- Cancellation / corrected re-issue (ADR-0041). Server-only. ---
+  // --- Cancellation / corrected re-issue (ADR-0042). Server-only. ---
   cancelledAt?: Timestamp | null;
   cancelledBy?: string | null; // admin uid
   cancellationReason?: string | null;

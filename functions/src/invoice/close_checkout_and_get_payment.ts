@@ -233,7 +233,7 @@ export function assertMembershipBillingAddress(
  * The pricing tail every closed checkout goes through — item validation,
  * the usage-type loophole guards (issue #284) and the authoritative
  * summary — shared by `closeExistingCheckout` and the admin correction
- * callable (ADR-0041), so a corrected re-issue is priced by exactly the
+ * callable (ADR-0042), so a corrected re-issue is priced by exactly the
  * same rules as the original close. Identity-bound guards (roster,
  * account-holder user type, badge owner, membership address) stay with
  * their callers. Pure: no I/O.

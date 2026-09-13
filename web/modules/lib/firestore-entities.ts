@@ -285,7 +285,7 @@ export type PaymentMethod = "rechnung" | "monthly" | "twint"
 
 export interface CheckoutDoc extends AuditFields {
   userId: DocumentReference<UserDoc> | null
-  // "cancelled" (ADR-0041): an admin voided this closed visit; the doc stays
+  // "cancelled" (ADR-0042): an admin voided this closed visit; the doc stays
   // as the as-billed record and the corrected re-issue is a NEW closed
   // checkout (`supersededByCheckoutRef`). `status == "closed"` queries
   // exclude cancelled visits automatically.
@@ -380,7 +380,7 @@ export interface BillDoc extends AuditFields {
   // Origin discriminator (issue #323). Missing value is treated as
   // "checkout" so legacy docs migrate-free.
   source?: "checkout" | "membership-renewal"
-  // --- Cancellation / corrected re-issue (ADR-0041). Server-only; mirrors
+  // --- Cancellation / corrected re-issue (ADR-0042). Server-only; mirrors
   // BillEntity in functions/src/invoice/types.ts. `referenceNumber` is
   // base × 10 + revision digit — always render through formatBillReference.
   cancelledAt?: Timestamp | null

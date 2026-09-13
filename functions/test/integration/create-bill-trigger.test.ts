@@ -130,7 +130,7 @@ async function seedBillingConfig(nextBillNumber: number): Promise<void> {
   const db = getFirestore();
   await db.doc("config/billing").set({
     nextBillNumber,
-    // ADR-0041: allocateBill refuses to mint against an existing config doc
+    // ADR-0042: allocateBill refuses to mint against an existing config doc
     // without the migrated-format marker.
     referenceNumberFormat: "shifted-v1",
   });
@@ -382,7 +382,7 @@ describe("create_bill trigger (Integration)", () => {
         allocated.push(result!.data.referenceNumber);
       }
 
-      // Stored numbers are counter × 10 (revision digit 0, ADR-0041); the
+      // Stored numbers are counter × 10 (revision digit 0, ADR-0042); the
       // counter itself still advances by 1.
       expect(allocated).to.deep.equal([420, 430, 440]);
       expect(await getBillingConfigNext()).to.equal(45);
@@ -410,7 +410,7 @@ describe("create_bill trigger (Integration)", () => {
       expect(cfg.data()?.referenceNumberFormat).to.equal("shifted-v1");
     });
 
-    it("refuses to mint against an existing config/billing without the format marker (ADR-0041)", async () => {
+    it("refuses to mint against an existing config/billing without the format marker (ADR-0042)", async () => {
       // Un-migrated data: the counter exists but the ×10 migration never ran.
       const db = getFirestore();
       await db.doc("config/billing").set({ nextBillNumber: 42 });

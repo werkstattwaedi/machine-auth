@@ -137,7 +137,7 @@ describe("referenceNumberFromScor", () => {
   })
 })
 
-describe("referenceNumberCandidates (ADR-0041)", () => {
+describe("referenceNumberCandidates (ADR-0042)", () => {
   it("tries the exact payload first, then the legacy ×10 reading", () => {
     expect(referenceNumberCandidates("RF29000100042")).toEqual([100042, 1000420])
   })
@@ -153,7 +153,7 @@ describe("matchStatement", () => {
     { id: "b2", referenceNumber: 7, amount: 60, paid: true },
   ]
 
-  it("resolves a legacy slip payload to the ×10-migrated bill (ADR-0041)", () => {
+  it("resolves a legacy slip payload to the ×10-migrated bill (ADR-0042)", () => {
     const migrated: MatchableBill[] = [
       { id: "m1", referenceNumber: 1000420, amount: 84, paid: false },
     ]

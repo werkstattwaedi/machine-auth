@@ -39,7 +39,7 @@ import { usageDiscount, isMachineItem, type UsageType } from "@oww/shared";
 /**
  * Marker written by `scripts/migrate-bill-numbers.ts` once every stored
  * `referenceNumber` has been shifted to the `base × 10 + revision` layout
- * (ADR-0041). `allocateBill` refuses to mint against a `config/billing`
+ * (ADR-0042). `allocateBill` refuses to mint against a `config/billing`
  * doc that exists without it, so this code can never run on un-migrated
  * data. A *missing* config doc is a fresh install (emulator, tests) with
  * nothing to migrate and bootstraps with the marker set.
@@ -123,7 +123,7 @@ export function buildBillEntity(args: BuildBillArgs): BillEntity {
  * mints an *original* bill — per-visit triggers (`createBillForCheckout`),
  * the `closeCheckoutAndGetPayment` callable, and the monthlyBillRun cron —
  * so the counter increment lives in one place. The stored number is
- * `counter × 10` (revision digit 0, ADR-0041); the counter itself keeps
+ * `counter × 10` (revision digit 0, ADR-0042); the counter itself keeps
  * advancing by 1.
  *
  * Returns the constructed bill entity so callers can build PaymentData /
@@ -189,7 +189,7 @@ export async function allocateBill(
 }
 
 /**
- * Mint a corrected re-issue of `previous` (ADR-0041): same base number,
+ * Mint a corrected re-issue of `previous` (ADR-0042): same base number,
  * next revision digit, no counter read. Rejects once the previous bill
  * already carries the highest digit. The caller cancels the previous bill
  * and links `supersededByBillRef` in the same transaction.

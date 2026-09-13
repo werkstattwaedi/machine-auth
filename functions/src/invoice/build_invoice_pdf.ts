@@ -235,7 +235,7 @@ export async function buildInvoicePdf(
     doc.text(`Datum: ${formatDateOnly(data.invoiceDate)}`, MARGIN_LEFT, y);
     y += 28;
 
-    // Corrected re-issue (ADR-0041): say what this document replaces and
+    // Corrected re-issue (ADR-0042): say what this document replaces and
     // why, right under the date so it cannot be missed. The superseded
     // document keeps its printed number; only the suffix tells them apart.
     if (data.supersedes) {

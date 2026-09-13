@@ -18,7 +18,7 @@ import { adminMarkBillsPaidHandler } from "./mark_bills_paid";
 import { addBadgeToCheckoutHandler } from "../badge/purchase";
 import { diversificationMasterKey } from "../config/tag-secrets";
 
-// correctCheckouts (ADR-0041) mails the corrected documents inline, like
+// correctCheckouts (ADR-0042) mails the corrected documents inline, like
 // monthlyBillRun does — pre-acked bills never see the ack transition that
 // drives the trigger-based send.
 const resendApiKey = defineSecret("RESEND_API_KEY");

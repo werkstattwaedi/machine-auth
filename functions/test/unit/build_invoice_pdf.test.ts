@@ -59,7 +59,7 @@ describe("buildInvoicePdf — content", () => {
     expect(text).to.include("Rechnungsnummer: RE-000001");
     // SCOR reference in QR bill section (space-separated per spec). The
     // payload is the stored referenceNumber (10 = bill 1, revision digit 0,
-    // ADR-0041) zero-padded to 9 digits.
+    // ADR-0042) zero-padded to 9 digits.
     expect(text).to.include("RF25 0000 0001 0");
 
     expect(text).to.include("15.06.2025");

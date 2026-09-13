@@ -61,7 +61,7 @@ describe("buildPaymentData PayLink URL", () => {
     expect(url.origin).to.equal("https://pay.raisenow.io");
     expect(url.pathname).to.equal("/tstslnid");
     // The exact parameter TWINT reads — the SCOR payload is the stored
-    // referenceNumber (base×10+revision, ADR-0041) zero-padded to 9 digits;
+    // referenceNumber (base×10+revision, ADR-0042) zero-padded to 9 digits;
     // 420 is bill 42, revision digit 0. RF29000000042 used to be the ref for
     // bill number 42 (9-digit padded payload).
     expect(url.searchParams.get("reference.creditor")).to.equal(data.reference);

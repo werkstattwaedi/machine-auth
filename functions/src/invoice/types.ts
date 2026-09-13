@@ -43,7 +43,7 @@ export interface BillEntity {
   // "checkout" so legacy docs migrate-free.
   source?: BillSource;
 
-  // --- Cancellation / corrected re-issue (ADR-0041). All server-only. ---
+  // --- Cancellation / corrected re-issue (ADR-0042). All server-only. ---
   // A cancelled bill stays in place as the as-sent accounting record; the
   // admin UIs derive "storniert" from `cancelledAt`. Legacy docs lack these
   // fields entirely, so never filter on `== null` — check client-side.
@@ -162,7 +162,7 @@ export interface InvoiceData {
    */
   membershipCatalogId?: string | null;
   /**
-   * Set on a corrected re-issue (ADR-0041): the bill this document
+   * Set on a corrected re-issue (ADR-0042): the bill this document
    * replaces. Rendered as a bold "ersetzt … vom … Grund: …" paragraph under
    * the date line. `reference` is the already-formatted number of the
    * superseded bill (e.g. "RE-4200001").
@@ -172,7 +172,7 @@ export interface InvoiceData {
 
 
 /**
- * Bill numbering (ADR-0041): `referenceNumber = base × 10 + d`, where `d`
+ * Bill numbering (ADR-0042): `referenceNumber = base × 10 + d`, where `d`
  * (0–9) is the revision digit — 0 for an original, 1 for the first
  * corrected re-issue, and so on. The base is the sequential counter value
  * from `config/billing.nextBillNumber`. Keeping the digit *inside* the

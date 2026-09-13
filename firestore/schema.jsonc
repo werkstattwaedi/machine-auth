@@ -149,7 +149,7 @@
     "{checkoutId}": {
       // --- Always present ---
       "userId": "DocumentReference", // DocumentReference to /users/{userId}; null for anonymous
-      // "cancelled" (ADR-0041): an admin voided this closed visit. The doc
+      // "cancelled" (ADR-0042): an admin voided this closed visit. The doc
       // stays as the as-billed record; the corrected re-issue is a NEW
       // closed checkout linked via supersededByCheckoutRef. Legacy docs
       // lack the cancellation fields — never filter on `== null`.
@@ -225,7 +225,7 @@
       // config-only (CHECKOUT_REMINDER_OFFSET_DAYS).
       "remindersSent": ["timestamp"],
 
-      // --- Cancellation / corrected re-issue (ADR-0041). Server-only. ---
+      // --- Cancellation / corrected re-issue (ADR-0042). Server-only. ---
       // Set by the admin `correctCheckouts` callable. A cancelled checkout
       // keeps status "cancelled" and everything it had; the replacement is
       // a NEW closed checkout with `supersedesCheckoutRef` pointing back.
@@ -305,7 +305,7 @@
     "billing": {
       // Sequential counter read + incremented by allocateBill inside the
       // bill-minting transaction (ADR-0019). Stored bill numbers are
-      // counter × 10 + revision digit (ADR-0041): the counter is never
+      // counter × 10 + revision digit (ADR-0042): the counter is never
       // multiplied itself.
       "nextBillNumber": "number",
       // Written once by scripts/migrate-bill-numbers.ts. allocateBill refuses
@@ -367,7 +367,7 @@
       // expiring membership (no in-person checkout). Surfaces on bill
       // PDFs / admin views and is the marker the renewal cron uses.
       "source": "checkout | membership-renewal",
-      // --- Cancellation / corrected re-issue (ADR-0041). Server-only. ---
+      // --- Cancellation / corrected re-issue (ADR-0042). Server-only. ---
       // referenceNumber is stored as base × 10 + revision digit (0 =
       // original, 1 = first correction …); the formatters render
       // "RE-4200001" / "RE-4200001-2" from 42000010 / 42000011. A cancelled

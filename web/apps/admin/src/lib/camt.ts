@@ -261,7 +261,7 @@ export function referenceNumberFromScor(reference: string): number | null {
 }
 
 /**
- * Bill numbers a statement payload may refer to (ADR-0041). Stored numbers
+ * Bill numbers a statement payload may refer to (ADR-0042). Stored numbers
  * are `base × 10 + revision digit`; slips printed before the one-off ×10
  * migration carry the bare base as payload. The exact number is tried
  * first, then the legacy reading — the migration asserted that no legacy
@@ -279,7 +279,7 @@ export interface MatchableBill {
   referenceNumber: number
   amount: number
   paid: boolean
-  /** Voided by an admin (ADR-0041); a payment on it needs manual booking. */
+  /** Voided by an admin (ADR-0042); a payment on it needs manual booking. */
   cancelled?: boolean
   /** Display reference of the corrected re-issue, when one exists. */
   supersededByReference?: string | null
@@ -304,7 +304,7 @@ export interface MatchResult {
    */
   unmatched: StatementEntry[]
   /**
-   * Payments on a bill an admin has cancelled (ADR-0041) — the customer
+   * Payments on a bill an admin has cancelled (ADR-0042) — the customer
    * paid the old slip. Never booked automatically; the treasurer books it
    * on the corrected re-issue (`bill.supersededByReference`) or refunds.
    */

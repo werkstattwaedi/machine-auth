@@ -99,7 +99,7 @@ async function seedBillWithCheckout(billId: string): Promise<void> {
   const bill: BillEntity = {
     userId: userRef,
     checkouts: [checkoutRef],
-    referenceNumber: 43210, // bill 4321, revision digit 0 (ADR-0041)
+    referenceNumber: 43210, // bill 4321, revision digit 0 (ADR-0042)
     amount: 25.5,
     currency: "CHF",
     storagePath: null,

@@ -135,7 +135,7 @@ describe("stats row builders", () => {
       });
     });
 
-    it("emits an hour-truncated cancelled_at for a voided visit (ADR-0041)", () => {
+    it("emits an hour-truncated cancelled_at for a voided visit (ADR-0042)", () => {
       const row = buildVisitRow(
         "co-1",
         {

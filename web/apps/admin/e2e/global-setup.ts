@@ -77,7 +77,7 @@ export const VISIT_OPEN_ID = "e2e-visit-open"
 export const BILL_OPEN_ID = "e2e-bill-open"
 export const BILL_OVERDUE_ID = "e2e-bill-overdue"
 export const BILL_PAID_ID = "e2e-bill-paid"
-// Stored bill numbers are base × 10 + revision digit (ADR-0041): 20410 renders
+// Stored bill numbers are base × 10 + revision digit (ADR-0042): 20410 renders
 // as RE-002041. `displayReference` mirrors the web formatter without pulling
 // `import.meta.env` into the Playwright process.
 export const BILL_OPEN_REFERENCE = 20410

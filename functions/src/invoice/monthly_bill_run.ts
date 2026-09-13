@@ -77,7 +77,7 @@ function startOfCurrentZurichMonth(now: Date): Date {
  * invoice pre-acked (the member acked by picking monthly on each visit)
  * and re-point every Beleg's `aggregatedIntoBillRef` at it. Shaped like
  * `allocateBill` (transaction first) so both the monthly cron and the
- * correction callable (ADR-0041 — which passes `supersedes` to mint the
+ * correction callable (ADR-0042 — which passes `supersedes` to mint the
  * Sammelrechnung *revision* inside its own, larger transaction) share one
  * implementation. The caller owns the reads: `belege` must already have
  * been re-read inside `tx`.
@@ -212,7 +212,7 @@ export async function runMonthlyBillRun(
         // Re-read each Beleg INSIDE the transaction. A concurrent run
         // (overlapping cron firings, manual ops repair) could have
         // already aggregated some of them — skip those. A Beleg cancelled
-        // since the query (ADR-0041) is skipped the same way.
+        // since the query (ADR-0042) is skipped the same way.
         const fresh: Array<{ ref: DocumentReference; bill: BillEntity }> = [];
         for (const { ref } of belege) {
           const snap = await tx.get(ref);

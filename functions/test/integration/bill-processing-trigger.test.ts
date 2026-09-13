@@ -1022,7 +1022,7 @@ describe("bill processing triggers (Integration)", () => {
     });
   });
 
-  describe("correction / cancellation mails (ADR-0041, non-emulator path)", () => {
+  describe("correction / cancellation mails (ADR-0042, non-emulator path)", () => {
     let savedEmulatorEnv: string | undefined;
     beforeEach(() => {
       savedEmulatorEnv = process.env.FUNCTIONS_EMULATOR;

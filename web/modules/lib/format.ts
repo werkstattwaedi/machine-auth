@@ -46,7 +46,7 @@ const dateTimeFormatter = new Intl.DateTimeFormat(locale, {
 })
 
 /**
- * Bill numbering (ADR-0041): `referenceNumber = base × 10 + d`, where `d`
+ * Bill numbering (ADR-0042): `referenceNumber = base × 10 + d`, where `d`
  * (0–9) is the revision digit — 0 for an original, 1 for the first
  * corrected re-issue. Mirrors `functions/src/invoice/types.ts` so
  * web/functions render the same string for the same stored number.

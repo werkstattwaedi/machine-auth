@@ -1179,7 +1179,7 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
         .map((b) => b.data.referenceNumber)
         .sort((a, b) => a - b);
       // Two sequential counter values, no gaps — stored as counter × 10
-      // (revision digit 0, ADR-0041).
+      // (revision digit 0, ADR-0042).
       expect(refs[1] - refs[0]).to.equal(10);
 
       const db = getFirestore();

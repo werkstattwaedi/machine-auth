@@ -99,7 +99,7 @@ const resendMembershipRenewalTemplateId = defineString(
 // Contact address surfaced on the TWINT email ("contact kasse@... if in
 // error"). Set in the operations repo per env.
 const kasseEmail = defineString("KASSE_EMAIL", { default: "" });
-// Corrected re-issue / cancellation mails (ADR-0041). One correction
+// Corrected re-issue / cancellation mails (ADR-0042). One correction
 // template serves every document kind (DOCUMENT_KIND carries the noun);
 // the cancellation template is for pure cancellations without a
 // replacement. Both fall back like the other optional templates.
@@ -354,7 +354,7 @@ async function assembleInvoiceData(
       ? "rechnung"
       : rawPaymentMethod;
 
-  // Corrected re-issue (ADR-0041): one extra read for the superseded bill's
+  // Corrected re-issue (ADR-0042): one extra read for the superseded bill's
   // number and date so the PDF can state what it replaces.
   let supersedes: InvoiceData["supersedes"] = null;
   if (bill.supersedesBillRef) {
@@ -494,7 +494,7 @@ function pickTemplate(
 ): TemplateChoice {
   const kind = bill.kind ?? "invoice";
 
-  // Corrected re-issue (ADR-0041). Checked first: a replacement keeps its
+  // Corrected re-issue (ADR-0042). Checked first: a replacement keeps its
   // original kind/source and would otherwise fall into those branches.
   if (bill.supersedesBillRef) {
     const id = resendCorrectionTemplateId.value();
@@ -575,13 +575,13 @@ export async function trySendEmail(billId: string): Promise<boolean> {
   if (!billDoc.exists) return false;
   const bill = billDoc.data() as BillEntity;
 
-  // Cancelled (ADR-0041): nothing to send and nothing to retry — keeps the
+  // Cancelled (ADR-0042): nothing to send and nothing to retry — keeps the
   // hourly sweep from mailing a never-sent original after its cancellation.
   if (bill.cancelledAt) return true;
 
   const isBeleg = (bill.kind ?? "invoice") === "beleg";
 
-  // A replacement Beleg minted inside a Sammelrechnung revision (ADR-0041)
+  // A replacement Beleg minted inside a Sammelrechnung revision (ADR-0042)
   // never mails on its own: its PDF rides along as an attachment of the
   // revision's correction mail (`correctedBillRefs`). An un-aggregated
   // replacement Beleg has no revision to ride on and mails itself.
@@ -602,7 +602,7 @@ export async function trySendEmail(billId: string): Promise<boolean> {
   // Free bills are auto-acked at creation to keep the cron out, but we
   // don't email a "here's your zero-amount invoice" PDF — unless it is a
   // corrected re-issue: a correction down to CHF 0.00 still owes the
-  // customer the "replaced" mail (ADR-0041).
+  // customer the "replaced" mail (ADR-0042).
   if (bill.paidVia === "free" && !bill.supersedesBillRef) return false;
 
   // No PDF yet — can't send email without attachment
@@ -613,7 +613,7 @@ export async function trySendEmail(billId: string): Promise<boolean> {
   // mid-send would leave emailSentAt stuck — rare enough to handle manually.
   if (bill.emailSentAt) return false;
 
-  // Corrected re-issue (ADR-0041): the superseded bill's number goes into
+  // Corrected re-issue (ADR-0042): the superseded bill's number goes into
   // the copy, and a Sammelrechnung revision carries the replacement Belege
   // of the same commit as extra attachments. Their PDFs are generated right
   // before this call; if one is still missing, bail WITHOUT taking the lock
@@ -673,7 +673,7 @@ export async function trySendEmail(billId: string): Promise<boolean> {
       checkout.created.toDate(),
       "dd. MMMM yyyy, HH:mm",
     );
-    // Correction-only variables (ADR-0041). Kept off the regular templates
+    // Correction-only variables (ADR-0042). Kept off the regular templates
     // so their variable set stays exactly what ops published.
     const correctedDocuments = attachedBills
       .map((a) => formatBillReference(a.bill.referenceNumber, a.bill.kind))
@@ -778,7 +778,7 @@ function documentKindLabel(
 }
 
 /**
- * What the customer has to do about money after a correction (ADR-0041).
+ * What the customer has to do about money after a correction (ADR-0042).
  * Composed here because Resend templates have no conditionals and the
  * answer depends on the document: a payable Rechnung / Sammelrechnung ships
  * a new QR slip, a TWINT Quittung was already paid, a Beleg rides on the
@@ -825,7 +825,7 @@ async function loadSupersededBill(bill: BillEntity): Promise<BillEntity | null> 
   return (snap.data() as BillEntity | undefined) ?? null;
 }
 
-/** The replacement Belege listed on a Sammelrechnung revision (ADR-0041). */
+/** The replacement Belege listed on a Sammelrechnung revision (ADR-0042). */
 async function loadCorrectedBills(
   bill: BillEntity,
   billId: string,
@@ -865,7 +865,7 @@ async function cancelledWithoutReplacement(
 }
 
 /**
- * "Rechnung storniert" notice for a pure cancellation (ADR-0041): no
+ * "Rechnung storniert" notice for a pure cancellation (ADR-0042): no
  * replacement, no attachment. Same optimistic-lock convention as
  * `trySendEmail` (`cancellationNoticeSentAt`). Returns true when sent or
  * when there is nothing to send: the customer never received the original
@@ -1128,7 +1128,7 @@ export const retryBillProcessing = onSchedule(
       }
     }
 
-    // Cancellation notices (ADR-0041): the correction callable sends inline;
+    // Cancellation notices (ADR-0042): the correction callable sends inline;
     // this retries the ones that failed. Same 24 h window, keyed on the
     // cancellation instead of creation (single-field range, no index).
     const recentlyCancelled = await db

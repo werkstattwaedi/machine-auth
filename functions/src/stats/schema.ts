@@ -65,7 +65,7 @@ export const STATS_TABLES: StatsTableDef[] = [
       { name: "material_cost", type: "NUMERIC" },
       { name: "tip", type: "NUMERIC" },
       { name: "discount_amount", type: "NUMERIC" },
-      { name: "cancelled_at", type: "TIMESTAMP", description: "Hour-truncated; set when an admin voided the visit (ADR-0041). The row stays so history is complete — filter it out for revenue." },
+      { name: "cancelled_at", type: "TIMESTAMP", description: "Hour-truncated; set when an admin voided the visit (ADR-0042). The row stays so history is complete — filter it out for revenue." },
     ],
   },
   {
@@ -85,7 +85,7 @@ export const STATS_TABLES: StatsTableDef[] = [
       { name: "unit_price", type: "NUMERIC" },
       { name: "total_price", type: "NUMERIC" },
       { name: "origin", type: "STRING", description: "nfc | manual | qr" },
-      { name: "cancelled_at", type: "TIMESTAMP", description: "Hour-truncated; mirrors visits.cancelled_at (ADR-0041)" },
+      { name: "cancelled_at", type: "TIMESTAMP", description: "Hour-truncated; mirrors visits.cancelled_at (ADR-0042)" },
     ],
   },
 

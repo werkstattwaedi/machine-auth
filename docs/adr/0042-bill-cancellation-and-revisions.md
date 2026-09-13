@@ -1,4 +1,4 @@
-# ADR-0041: Bill cancellation and corrected re-issue (Storno / Korrektur)
+# ADR-0042: Bill cancellation and corrected re-issue (Storno / Korrektur)
 
 **Status:** Accepted
 

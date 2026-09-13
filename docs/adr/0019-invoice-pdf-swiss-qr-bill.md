@@ -90,10 +90,10 @@ A QR-Reference (27-digit format) requires a QR-IBAN — a special IBAN issued by
 Can't atomically allocate bill numbers, browser QR rendering is fragile, no durable storage, not suitable for emails.
 
 
-## Addendum (2026-09, ADR-0041)
+## Addendum (2026-09, ADR-0042)
 
 Bill numbers are now stored as `base × 10 + revisionDigit` so a corrected re-issue keeps its base
 number with a `-2`, `-3`, … suffix (`RE-4200001-2`). The SCOR payload is still the raw stored number
 zero-padded to 9 digits, so each revision has its own QR reference. Existing numbers were shifted
 ×10 once by `scripts/migrate-bill-numbers.ts`; the bank-import decoder reads legacy slips through a
-×10 fallback. See [ADR-0041](0041-bill-cancellation-and-revisions.md).
+×10 fallback. See [ADR-0042](0042-bill-cancellation-and-revisions.md).

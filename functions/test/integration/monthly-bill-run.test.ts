@@ -168,7 +168,7 @@ describe("runMonthlyBillRun (Integration, #245)", () => {
     expect(invoice!.checkouts).to.have.length(3);
     expect(invoice!.paymentMethodConfirmationTime).to.be.instanceOf(Timestamp);
     expect(invoice!.paymentMethodConfirmationSource).to.equal("auto");
-    // counter 100 → stored 1000 (revision digit 0, ADR-0041)
+    // counter 100 → stored 1000 (revision digit 0, ADR-0042)
     expect(invoice!.referenceNumber).to.equal(1000);
 
 
