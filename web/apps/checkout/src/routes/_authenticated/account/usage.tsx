@@ -102,8 +102,9 @@ function UsageContent({ userDoc }: { userDoc: UserDoc }) {
     const openBills = bills.filter((b) => isOpenBill(b))
     const totalOpen = openBills.reduce((s, b) => s + b.amount, 0)
     const currentYear = new Date().getFullYear()
+    // Cancelled bills (ADR-0041) stay listed as "Storniert" but never count.
     const yearBills = bills.filter(
-      (b) => toJsDate(b.created)?.getFullYear() === currentYear,
+      (b) => !b.cancelledAt && toJsDate(b.created)?.getFullYear() === currentYear,
     )
     const totalYear = yearBills.reduce((s, b) => s + b.amount, 0)
     const lastSession = closedCheckouts[0]
@@ -312,7 +313,9 @@ function InvoicesPanel({
             {bills.map((bill) => (
               <li
                 key={bill.id}
-                className="flex items-center gap-3 px-4 py-3 border-t border-border first:border-t-0 text-sm"
+                className={`flex items-center gap-3 px-4 py-3 border-t border-border first:border-t-0 text-sm${
+                  bill.cancelledAt ? " opacity-60" : ""
+                }`}
               >
                 <div className="flex flex-col min-w-0 flex-1">
                   <span className="font-semibold">
@@ -357,8 +360,11 @@ function InvoicesPanel({
               {bills.map((bill) => (
                 <tr
                   key={bill.id}
-                  className="border-t border-border hover:bg-muted/30"
+                  className={`border-t border-border hover:bg-muted/30${
+                    bill.cancelledAt ? " opacity-60" : ""
+                  }`}
                 >
+
                   <td className="px-6 py-3 font-semibold">
                     {formatBillReference(bill.referenceNumber, bill.kind)}
                   </td>
@@ -417,6 +423,13 @@ function FilterPill({
  * instead. Issue #405.
  */
 function BillStatusBadge({ bill }: { bill: BillDoc }) {
+  if (bill.cancelledAt) {
+    return (
+      <Badge variant="outline" className="text-muted-foreground">
+        Storniert
+      </Badge>
+    )
+  }
   if (bill.kind === "beleg") {
     return <Badge variant="secondary">Beleg</Badge>
   }
@@ -532,7 +545,7 @@ function WorkshopChips({ workshops }: { workshops: string[] }) {
  * invoice — so it is neither open nor paid. Issue #405.
  */
 function isOpenBill(bill: BillDoc): boolean {
-  return bill.kind !== "beleg" && !bill.paidAt
+  return bill.kind !== "beleg" && !bill.paidAt && !bill.cancelledAt
 }
 
 /** Tolerant Timestamp-or-Date converter — fakes used in tests store plain

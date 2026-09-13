@@ -19,9 +19,15 @@ const STATUS_BADGE: Record<
   },
   overdue: { label: "überfällig", variant: "destructive" },
   beleg: { label: "Beleg", variant: "outline" },
+  cancelled: {
+    label: "storniert",
+    variant: "outline",
+    className: "text-muted-foreground line-through decoration-muted-foreground/60",
+  },
 }
 
-export function BillStatusBadge({ status }: { status: BillStatus }) {
+export function BillStatusBadge
+({ status }: { status: BillStatus }) {
   const cfg = STATUS_BADGE[status]
   return (
     <Badge variant={cfg.variant} className={cfg.className}>

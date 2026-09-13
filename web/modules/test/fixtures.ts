@@ -63,7 +63,8 @@ interface CatalogItemInput {
 interface CheckoutInput {
   id: string
   userId: string
-  status?: "open" | "closed"
+  status?: "open" | "closed" | "cancelled"
+
   usageType?: string
   workshopsVisited?: string[]
   items?: CheckoutItemInput[]

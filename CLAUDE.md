@@ -337,6 +337,8 @@ npm run dev:admin         # https://localhost:5174
 - German UI throughout
 - Firebase Auth custom claims for Firestore security rules
 
+**Stale `@oww/shared` in the Vite dev server:** after adding an export to `shared/` (and rebuilding it), the e2e / `npm run dev` servers can still serve the previous pre-bundle from `web/apps/*/node_modules/.vite` — the page then fails with `<newExport> is not a function` while `npm run build` passes. Delete those `.vite` directories (or start Vite with `--force`) before running e2e locally.
+
 **Async mutations:** All async writes go through `useAsyncMutation` (or
 `useFirestoreMutation` for typed Firestore writes — it delegates).
 The hook owns the toast; callers MUST NOT add their own `toast.error`

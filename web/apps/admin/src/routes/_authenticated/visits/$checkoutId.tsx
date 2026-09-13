@@ -3,13 +3,17 @@
 
 // Opened Besuch (checkout) — the one place where line items get edited.
 // Open visits: positions removable, whole visit deletable. Billed visits
-// are read-only records with their summary and bill reference.
+// are read-only records with their summary and bill reference; an admin
+// can void them ("Stornieren") or issue a corrected re-issue
+// ("Korrigieren") — ADR-0041. Cancelled visits stay, marked as such, and
+// link to their replacement.
 
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router"
 import { useState } from "react"
 import { useDocument, useCollection } from "@modules/lib/firestore"
 import { useDb } from "@modules/lib/firebase-context"
 import {
+  catalogReferencesRef,
   checkoutItemRef,
   checkoutItemsCollection,
   checkoutRef,
@@ -19,7 +23,11 @@ import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { useLookup, resolveRef } from "@modules/lib/lookup"
 import { PageLoading } from "@modules/components/page-loading"
 import { PageHeader } from "@/components/admin/page-header"
-import { formatCHF, formatDateTime } from "@modules/lib/format"
+import {
+  formatBillReference,
+  formatCHF,
+  formatDateTime,
+} from "@modules/lib/format"
 import { Badge } from "@modules/components/ui/badge"
 import { Button } from "@modules/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@modules/components/ui/card"
@@ -32,7 +40,11 @@ import {
   TableHeader,
   TableRow,
 } from "@modules/components/ui/table"
-import { Loader2, MoveRight, Trash2, X } from "lucide-react"
+import { SummaryField } from "@/components/visit/summary-fields"
+import { VisitStatusBadge } from "@/components/visit/visit-status-badge"
+import { CancelVisitDialog } from "@/components/visit/cancel-visit-dialog"
+import { correctionBlockedReason } from "@/lib/visit-correction"
+import { Ban, Loader2, MoveRight, Pencil, Trash2, X } from "lucide-react"
 
 export const Route = createFileRoute("/_authenticated/visits/$checkoutId")({
   component: VisitDetailPage,
@@ -46,6 +58,14 @@ function VisitDetailPage() {
   const { data: items, loading: itemsLoading } = useCollection(
     checkoutItemsCollection(db, checkoutId),
   )
+  // Correction context (ADR-0041): the bill decides whether the visit is
+  // still correctable, the catalog references tell membership / badge
+  // lines apart (those visits are excluded in v1), the linked checkouts
+  // feed the banners.
+  const { data: bill } = useDocument(visit?.billRef ?? null)
+  const { data: sammelrechnung } = useDocument(bill?.aggregatedIntoBillRef ?? null)
+  const { data: catalogRefs } = useDocument(catalogReferencesRef(db))
+  const { data: original } = useDocument(visit?.supersedesCheckoutRef ?? null)
   const { users } = useLookup()
   const { remove } = useFirestoreMutation()
   const removeItemMutation = useAsyncMutation({
@@ -59,11 +79,13 @@ function VisitDetailPage() {
     errorMessage: "Besuch konnte nicht gelöscht werden",
   })
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [cancelOpen, setCancelOpen] = useState(false)
 
   if (loading) return <PageLoading />
   if (!visit) return <div>Besuch nicht gefunden.</div>
 
   const isOpen = visit.status === "open"
+  const isCancelled = visit.status === "cancelled"
   const personLabel = visit.persons?.length
     ? visit.persons.map((p) => p.name).join(", ")
     : visit.userId
@@ -71,6 +93,19 @@ function VisitDetailPage() {
       : "anonym"
 
   const itemsTotal = items.reduce((sum, it) => sum + (it.totalPrice ?? 0), 0)
+
+  // Same guards as the server (ADR-0041); a missing references doc means
+  // "no membership / badge SKU configured" — nothing to exclude.
+  const correctable =
+    correctionBlockedReason(visit, bill, items, {
+      membershipCatalogId: catalogRefs?.membership?.id ?? null,
+      badgeCatalogId: catalogRefs?.badge?.id ?? null,
+    }) === null
+  const billReference = bill ? formatBillReference(bill.referenceNumber, bill.kind) : null
+  const sammelReference =
+    bill?.kind === "beleg" && sammelrechnung && !sammelrechnung.cancelledAt
+      ? formatBillReference(sammelrechnung.referenceNumber, sammelrechnung.kind)
+      : null
 
   const handleRemoveItem = async (itemId: string) => {
     try {
@@ -117,18 +152,69 @@ function VisitDetailPage() {
               )}
               Besuch löschen
             </Button>
+          ) : correctable ? (
+            <div className="flex gap-2">
+              <Button asChild variant="outline">
+                <Link to="/visits/$checkoutId/correct" params={{ checkoutId }}>
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Korrigieren
+                </Link>
+              </Button>
+              <Button variant="destructive" onClick={() => setCancelOpen(true)}>
+                <Ban className="mr-2 h-4 w-4" />
+                Stornieren
+              </Button>
+            </div>
           ) : undefined
         }
       />
 
+      {isCancelled && (
+        <div
+          className="rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm"
+          data-testid="visit-cancelled-banner"
+        >
+          <div className="font-medium text-destructive">
+            Storniert am {formatDateTime(visit.cancelledAt)}
+            {visit.cancelledBy
+              ? ` durch ${users.get(visit.cancelledBy) ?? visit.cancelledBy}`
+              : ""}
+            {visit.cancellationReason ? ` · Grund: ${visit.cancellationReason}` : ""}
+          </div>
+          {visit.supersededByCheckoutRef && (
+            <Link
+              to="/visits/$checkoutId"
+              params={{ checkoutId: visit.supersededByCheckoutRef.id }}
+              className="mt-1 inline-flex items-center gap-1 font-medium text-primary hover:underline"
+            >
+              Ersetzt durch korrigierten Besuch
+              <MoveRight className="h-3.5 w-3.5" />
+            </Link>
+          )}
+        </div>
+      )}
+
+      {visit.supersedesCheckoutRef && (
+        <div
+          className="rounded-lg border bg-muted/40 px-4 py-3 text-sm"
+          data-testid="visit-replacement-banner"
+        >
+          <Link
+            to="/visits/$checkoutId"
+            params={{ checkoutId: visit.supersedesCheckoutRef.id }}
+            className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+          >
+            Korrektur des Besuchs vom {original ? formatDateTime(original.created) : "…"}
+            <MoveRight className="h-3.5 w-3.5" />
+          </Link>
+          {bill?.correctionReason && (
+            <div className="text-muted-foreground">Grund: {bill.correctionReason}</div>
+          )}
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        {isOpen ? (
-          <Badge className="bg-oww-gold-light text-oww-gold-text border-oww-gold-border">
-            offen
-          </Badge>
-        ) : (
-          <Badge variant="secondary">abgerechnet</Badge>
-        )}
+        <VisitStatusBadge status={visit.status} />
         <Badge variant="outline">{visit.usageType}</Badge>
         <span className="text-muted-foreground">
           Beginn {formatDateTime(visit.created)}
@@ -144,6 +230,10 @@ function VisitDetailPage() {
             <MoveRight className="h-3.5 w-3.5" />
           </Link>
         )}
+        {billReference && (
+          <span className="font-mono text-xs text-muted-foreground">{billReference}</span>
+        )}
+
       </div>
 
       {visit.userId && (
@@ -239,6 +329,16 @@ function VisitDetailPage() {
         onConfirm={handleDeleteVisit}
       />
 
+      {billReference && (
+        <CancelVisitDialog
+          open={cancelOpen}
+          onOpenChange={setCancelOpen}
+          checkoutId={checkoutId}
+          reference={billReference}
+          sammelrechnungReference={sammelReference}
+        />
+      )}
+
       {visit.summary && (
         <Card>
           <CardHeader>
@@ -259,25 +359,6 @@ function VisitDetailPage() {
           </CardContent>
         </Card>
       )}
-    </div>
-  )
-}
-
-function SummaryField({
-  label,
-  value,
-  bold,
-}: {
-  label: string
-  value: number
-  bold?: boolean
-}) {
-  return (
-    <div>
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className={`tabular-nums ${bold ? "font-bold" : ""}`}>
-        {formatCHF(value)}
-      </div>
     </div>
   )
 }

@@ -242,9 +242,12 @@ export interface CheckoutPersonDoc {
   // Set when the person was picked from the signed-in user's family roster,
   // so the visit is attributed to a real account (including child accounts).
   userRef?: DocumentReference<UserDoc> | null
+  /** Already paid the daily usage fee earlier the same business day (issue #268). */
+  entryFeeWaivedToday?: boolean
 }
 
 export interface CheckoutSummaryDoc {
+
   /** Net amount actually billed (raw sections minus the usage discount). */
   totalPrice: number
   /**

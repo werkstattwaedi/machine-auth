@@ -743,6 +743,69 @@ describe("cross-user: checkouts", () => {
   })
 })
 
+describe("cross-user: cancelled checkouts + bills (ADR-0041)", () => {
+  // Cancellation is server-only (the correctCheckouts callable). A
+  // cancelled checkout is neither open (no principal edits) nor closed
+  // (no paymentMethod carve-out), so every client write must fail while
+  // owner + admin reads keep working for the "storniert" views.
+  const cancelledExtra = {
+    status: "cancelled",
+    cancelledAt: FieldValue.serverTimestamp(),
+    cancelledBy: "admin-test",
+    cancellationReason: "Doppelt erfasst",
+    supersededByCheckoutRef: null,
+    statsFlushedAt: null,
+  }
+
+  it("denies the owner writing paymentMethod on their cancelled checkout", async () => {
+    await seedClosedCheckout("co1", "alice", cancelledExtra)
+    await assertFails(
+      updateDoc(doc(authedDb("alice"), "checkouts", "co1"), {
+        paymentMethod: "twint",
+      }),
+    )
+  })
+
+  it("denies the owner cancelling their own closed checkout client-side", async () => {
+    await seedClosedCheckout("co1", "alice")
+    await assertFails(
+      updateDoc(doc(authedDb("alice"), "checkouts", "co1"), {
+        status: "cancelled",
+        cancelledAt: serverTimestamp(),
+      }),
+    )
+  })
+
+  it("keeps a cancelled checkout readable by owner + admin, not by bob", async () => {
+    await seedClosedCheckout("co1", "alice", cancelledExtra)
+    await assertSucceeds(getDoc(doc(authedDb("alice"), "checkouts", "co1")))
+    await assertSucceeds(getDoc(doc(adminDb(), "checkouts", "co1")))
+    await assertCrossUserDenied(
+      "cancelled checkouts/{id} read leaked to non-owner",
+      "firestore.rules:checkouts read",
+      () => getDoc(doc(authedDb("bob"), "checkouts", "co1")),
+    )
+  })
+
+  it("keeps a cancelled bill readable by owner + admin, not by bob, and client-write-denied", async () => {
+    await seedBill("b1", "alice")
+    await getAdminFirestore().doc("bills/b1").update({
+      cancelledAt: FieldValue.serverTimestamp(),
+      cancellationReason: "Doppelt erfasst",
+    })
+    await assertSucceeds(getDoc(doc(authedDb("alice"), "bills", "b1")))
+    await assertSucceeds(getDoc(doc(adminDb(), "bills", "b1")))
+    await assertCrossUserDenied(
+      "cancelled bills/{id} read leaked to non-owner",
+      "firestore.rules:bills read",
+      () => getDoc(doc(authedDb("bob"), "bills", "b1")),
+    )
+    await assertFails(
+      updateDoc(doc(adminDb(), "bills", "b1"), { cancelledAt: null }),
+    )
+  })
+})
+
 describe("cross-user: checkouts paymentMethod last-selection write", () => {
   // After #251 the customer-stated ack (paymentMethodConfirmationTime /
   // Source) lives on the BILL and is server-only via the

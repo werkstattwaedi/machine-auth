@@ -259,7 +259,44 @@ describe("Usage page", () => {
     expect(screen.getAllByText("Bezahlt (TWINT)").length).toBeGreaterThan(0)
   })
 
+  it("renders a cancelled bill as 'Storniert' and keeps it out of the open total (ADR-0041)", async () => {
+    fakeDb.setDoc(fakeDb.doc("bills", "bill-cancelled"), {
+      userId: fakeDb.doc("users", "user1"),
+      checkouts: [],
+      referenceNumber: 420,
+      amount: 75.5,
+      currency: "CHF",
+      storagePath: "invoices/bill-cancelled.pdf",
+      created: new Date(),
+      paidAt: null,
+      paidVia: null,
+      cancelledAt: new Date(),
+      cancellationReason: "Falsch erfasst",
+    })
+    fakeDb.setDoc(fakeDb.doc("bills", "bill-open"), {
+      userId: fakeDb.doc("users", "user1"),
+      checkouts: [],
+      referenceNumber: 421,
+      amount: 10,
+      currency: "CHF",
+      storagePath: null,
+      created: new Date(),
+      paidAt: null,
+      paidVia: null,
+    })
+
+    renderUsagePage()
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Storniert").length).toBeGreaterThan(0)
+    })
+    expect(screen.getAllByText("RE-000042-2").length).toBeGreaterThan(0)
+    // Only the open bill counts: CHF 10.00, not 85.50.
+    expect(screen.queryByText(/85[.,]50/)).toBeNull()
+  })
+
   it("renders unpaid bill with 'Offen' badge", async () => {
+
     fakeDb.setDoc(fakeDb.doc("bills", "bill2"), {
       userId: fakeDb.doc("users", "user1"),
       checkouts: [],

@@ -11,17 +11,20 @@ import type { BillDoc } from "@modules/lib/firestore-entities"
  * - "overdue": unpaid invoice older than {@link OVERDUE_AFTER_DAYS}. Bills
  *   carry no explicit due date; the invoice PDF asks for payment within
  *   30 days of issue, so created + 30d is the due date.
+ * - "cancelled": voided by an admin (ADR-0041) — never payable, never
+ *   counted; the corrected re-issue is its own bill.
  */
-export type BillStatus = "paid" | "open" | "overdue" | "beleg"
+export type BillStatus = "paid" | "open" | "overdue" | "beleg" | "cancelled"
 
 export const OVERDUE_AFTER_DAYS = 30
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
 export function billStatus(
-  bill: Pick<BillDoc, "paidAt" | "created" | "kind">,
+  bill: Pick<BillDoc, "paidAt" | "created" | "kind" | "cancelledAt">,
   nowMs: number,
 ): BillStatus {
+  if (bill.cancelledAt) return "cancelled"
   if ((bill.kind ?? "invoice") === "beleg") return "beleg"
   if (bill.paidAt) return "paid"
   const createdMs = bill.created?.toMillis() ?? nowMs
@@ -37,7 +40,8 @@ export interface BillTotals {
 }
 
 export function billTotals(
-  bills: Pick<BillDoc, "paidAt" | "created" | "kind" | "amount">[],
+  bills: Pick<BillDoc, "paidAt" | "created" | "kind" | "amount" | "cancelledAt">[],
+
   nowMs: number,
 ): BillTotals {
   const now = new Date(nowMs)

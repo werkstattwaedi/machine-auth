@@ -10,5 +10,7 @@ export * from "./printer"
 export * from "./kiosk-navigation"
 export * from "./catalog-import"
 export * from "./billing"
+export * from "./checkout-summary"
+
 export * from "./rejection"
 export * from "./env-label"
