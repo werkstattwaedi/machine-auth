@@ -31,6 +31,10 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  /* Solid red + tinted surface from the OWW design system (colors_and_type.css)
+     for inline notices; the wizard's field errors use the same hexes. */
+  --color-destructive-solid: #cc2a24;
+  --color-destructive-bg: #fce4e4;
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
