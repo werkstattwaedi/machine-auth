@@ -155,7 +155,7 @@ describe("getPaymentQrData authorisation (Integration, S-1)", () => {
     expect(data.payerEmail).to.equal("alice@example.com");
   });
 
-  it("refuses a payable QR reference for a cancelled bill, even to its owner (ADR-0041)", async () => {
+  it("refuses a payable QR reference for a cancelled bill, even to its owner (ADR-0042)", async () => {
     await seedBillAndCheckout("b1", "alice");
     await getFirestore().doc("bills/b1").update({
       cancelledAt: Timestamp.now(),

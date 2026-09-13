@@ -536,7 +536,7 @@ export async function eraseSubject(
   const wmBills = await getStreamState(deps.db, "bills");
   const flushCheckouts = checkouts.filter((d) => {
     const c = d.data() as CheckoutEntity;
-    // Cancelled + replacement checkouts (ADR-0041) sit behind the closedAt
+    // Cancelled + replacement checkouts (ADR-0042) sit behind the closedAt
     // watermark and are flushed by the daily export's statsFlushedAt pass;
     // if that pass hasn't run yet, flush them here before deleting.
     return (

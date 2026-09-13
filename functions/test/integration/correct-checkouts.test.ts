@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * `correctCheckouts` (ADR-0041) against the Firestore emulator: guards,
+ * `correctCheckouts` (ADR-0042) against the Firestore emulator: guards,
  * pure cancellation, corrected re-issue, and the synchronous
  * Sammelrechnung revision. The PDF / mail follow-through is stubbed on the
  * bill_triggers module so the tests assert the *sequence* (replacement
@@ -210,7 +210,7 @@ async function expectFailedPrecondition(p: Promise<unknown>, pattern: RegExp): P
   expect.fail("expected failed-precondition");
 }
 
-describe("correctCheckouts (Integration, ADR-0041)", () => {
+describe("correctCheckouts (Integration, ADR-0042)", () => {
   let pdfStub: sinon.SinonStub;
   let mailStub: sinon.SinonStub;
   let noticeStub: sinon.SinonStub;

@@ -151,7 +151,7 @@ export async function trimBefore(
   };
 
   // checkouts — composite index (status, closedAt); recursiveDelete for items.
-  // Cancelled visits (ADR-0041) keep their closedAt and age out the same way.
+  // Cancelled visits (ADR-0042) keep their closedAt and age out the same way.
   const wmVisits = await getStreamState(db, "visits");
   let checkoutCount = 0;
   for (const status of ["closed", "cancelled"] as const) {

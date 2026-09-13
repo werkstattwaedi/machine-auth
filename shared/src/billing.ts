@@ -39,7 +39,7 @@ export interface MarkBillsPaidResult {
   rejected: string[]
 }
 
-// ── correctCheckouts (ADR-0041) ────────────────────────────────────────────
+// ── correctCheckouts (ADR-0042) ────────────────────────────────────────────
 //
 // Wire contract of the admin `correctCheckouts` callable: cancel closed
 // visits (and their bills) with one reason, optionally issuing an edited

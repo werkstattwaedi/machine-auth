@@ -3,7 +3,7 @@
 
 /**
  * `correctCheckouts` — admin cancellation / corrected re-issue of closed
- * visits (ADR-0041). One reason, a list of visits; each entry is a pure
+ * visits (ADR-0042). One reason, a list of visits; each entry is a pure
  * cancellation or a cancellation plus an edited replacement.
  *
  * Everything happens in ONE transaction — including, when a Beleg inside a
