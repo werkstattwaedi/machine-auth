@@ -156,8 +156,8 @@ export function PhoneVerification({
         submitLabel="Bestätigen"
         onCancel={() => setDialogOpen(false)}
         onResend={async () => {
+          // Acknowledged in the dialog's notice bar, not as a toast.
           await sendCode()
-          toast.success("Neuer Code gesendet!")
         }}
         onVerify={async (_id, code) => confirmCode(code)}
       />

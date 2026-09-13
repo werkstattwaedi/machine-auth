@@ -38,25 +38,22 @@ type NoticeKind = "info" | "error" | "success"
 type Notice = { kind: NoticeKind; text: string }
 
 // One bar, never stacked: the newest state replaces the previous one in
-// place and the colors cross-fade. Error is the only assertive one.
+// place and the colors cross-fade.
 const NOTICE_STYLE: Record<
   NoticeKind,
-  { className: string; Icon: typeof Info; role: "status" | "alert" }
+  { className: string; Icon: typeof Info }
 > = {
   info: {
     className: "bg-oww-gold-light text-oww-gold-text-muted",
     Icon: Info,
-    role: "status",
   },
   error: {
     className: "bg-destructive-bg text-destructive-solid",
     Icon: CircleAlert,
-    role: "alert",
   },
   success: {
     className: "bg-cog-teal-light text-cog-teal-dark",
     Icon: Check,
-    role: "status",
   },
 }
 
@@ -168,6 +165,9 @@ function CodeEntryPanel({
     hideNotice()
     try {
       const message = await onResend(identifier)
+      // Whatever was typed belongs to the old code — don't let it be
+      // submitted and burn a verify attempt.
+      setCode("")
       showNotice({ kind: "info", text: message || "Neuer Code gesendet." })
     } catch (err) {
       showNotice({
@@ -257,8 +257,11 @@ function CodeEntryPanel({
             current ? "max-h-20 opacity-100" : "max-h-0 opacity-0",
           )}
         >
+          {/* A single, always-mounted live region: swapping `role` on a
+              rendered node isn't reliably re-announced, so it stays a
+              polite status even for errors (focus is already right here). */}
           <div
-            role={style?.role ?? "status"}
+            role="status"
             data-testid={
               current?.kind === "error"
                 ? "checkin-code-error"
