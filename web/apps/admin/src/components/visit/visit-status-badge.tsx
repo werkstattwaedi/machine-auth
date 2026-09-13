@@ -4,7 +4,7 @@
 import { Badge } from "@modules/components/ui/badge"
 import type { CheckoutDoc } from "@modules/lib/firestore-entities"
 
-/** offen / abgerechnet / storniert (ADR-0041) — shared by list and detail. */
+/** offen / abgerechnet / storniert (ADR-0042) — shared by list and detail. */
 export function VisitStatusBadge({ status }: { status: CheckoutDoc["status"] }) {
   if (status === "open") {
     return (

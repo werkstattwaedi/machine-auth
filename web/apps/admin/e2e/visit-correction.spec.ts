@@ -1,7 +1,7 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-// Admin corrections (ADR-0041): pure cancellation, corrected re-issue with
+// Admin corrections (ADR-0042): pure cancellation, corrected re-issue with
 // a revision suffix, paid bills hiding the actions, and the Sammelrechnung
 // batch editor. Seeds its own fixtures in beforeAll and runs in the
 // "corrections" Playwright project AFTER the screenshot specs — these
@@ -121,7 +121,7 @@ async function seedBill(
     })
 }
 
-test.describe("visit corrections (ADR-0041)", () => {
+test.describe("visit corrections (ADR-0042)", () => {
   test.beforeAll(async () => {
     const db = getAdminFirestore()
     // The callable prices the replacement server-side and the editor

@@ -259,7 +259,7 @@ describe("Usage page", () => {
     expect(screen.getAllByText("Bezahlt (TWINT)").length).toBeGreaterThan(0)
   })
 
-  it("renders a cancelled bill as 'Storniert' and keeps it out of the open total (ADR-0041)", async () => {
+  it("renders a cancelled bill as 'Storniert' and keeps it out of the open total (ADR-0042)", async () => {
     fakeDb.setDoc(fakeDb.doc("bills", "bill-cancelled"), {
       userId: fakeDb.doc("users", "user1"),
       checkouts: [],

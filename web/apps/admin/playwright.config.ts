@@ -49,7 +49,7 @@ export default defineConfig({
       use: { browserName: "chromium" },
       testIgnore: /visit-correction\.spec\.ts/,
     },
-    // Corrections (ADR-0041) mutate seeded visits and bills and seed their
+    // Corrections (ADR-0042) mutate seeded visits and bills and seed their
     // own fixtures in beforeAll. They run strictly AFTER the screenshot
     // specs so no list baseline ever sees a mid-flight state. Locally:
     // `npx playwright test --project corrections --no-deps`.

@@ -290,7 +290,7 @@ export function recomputeSummary(
   configFees: Record<string, Record<string, number>> | null,
   clientTip: number,
 ): CheckoutSummaryEntity {
-  // The arithmetic lives in @oww/shared (ADR-0041) so the wizard's live
+  // The arithmetic lives in @oww/shared (ADR-0042) so the wizard's live
   // receipt and the admin correction estimate agree with this authoritative
   // result; only the fail-loud config lookup stays here.
   return computeCheckoutSummary({

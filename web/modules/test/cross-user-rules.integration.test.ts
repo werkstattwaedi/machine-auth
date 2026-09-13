@@ -743,7 +743,7 @@ describe("cross-user: checkouts", () => {
   })
 })
 
-describe("cross-user: cancelled checkouts + bills (ADR-0041)", () => {
+describe("cross-user: cancelled checkouts + bills (ADR-0042)", () => {
   // Cancellation is server-only (the correctCheckouts callable). A
   // cancelled checkout is neither open (no principal edits) nor closed
   // (no paymentMethod carve-out), so every client write must fail while

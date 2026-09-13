@@ -1,7 +1,7 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-// Batch correction of a Sammelrechnung's Belege (ADR-0041): one editor per
+// Batch correction of a Sammelrechnung's Belege (ADR-0042): one editor per
 // active Beleg (collapsed until opened), one reason, one commit. Only the
 // changed Belege go to the server, which voids them, mints their
 // replacements and re-issues the Sammelrechnung as a single revision — so

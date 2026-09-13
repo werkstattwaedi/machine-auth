@@ -298,7 +298,7 @@ export function computeCheckoutCosts({
     badgeCatalogId,
   })
   // Section arithmetic is shared with the server's recomputeSummary and the
-  // admin correction editor (@oww/shared, ADR-0041); membership + badge are
+  // admin correction editor (@oww/shared, ADR-0042); membership + badge are
   // split out beforehand so only the display buckets differ.
   const raw = rawSections({
     persons,

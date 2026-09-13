@@ -1,7 +1,7 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-// The lean correction editor (ADR-0041): persons (user type + waiver),
+// The lean correction editor (ADR-0042): persons (user type + waiver),
 // usage type, free-form line items, tip. Purely presentational — the page
 // owns the draft (`lib/visit-correction.ts`) and the estimate.
 

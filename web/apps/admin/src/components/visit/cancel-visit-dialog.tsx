@@ -1,7 +1,7 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-// "Stornieren" dialog (ADR-0041): voids a closed visit and its bill with a
+// "Stornieren" dialog (ADR-0042): voids a closed visit and its bill with a
 // reason via the correctCheckouts callable. The checkout and bill stay in
 // place as "storniert"; the customer gets the cancellation notice. When the
 // bill is a Beleg inside a sent Sammelrechnung, that Sammelrechnung is

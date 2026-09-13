@@ -5,7 +5,7 @@
 // Open visits: positions removable, whole visit deletable. Billed visits
 // are read-only records with their summary and bill reference; an admin
 // can void them ("Stornieren") or issue a corrected re-issue
-// ("Korrigieren") — ADR-0041. Cancelled visits stay, marked as such, and
+// ("Korrigieren") — ADR-0042. Cancelled visits stay, marked as such, and
 // link to their replacement.
 
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router"
@@ -58,7 +58,7 @@ function VisitDetailPage() {
   const { data: items, loading: itemsLoading } = useCollection(
     checkoutItemsCollection(db, checkoutId),
   )
-  // Correction context (ADR-0041): the bill decides whether the visit is
+  // Correction context (ADR-0042): the bill decides whether the visit is
   // still correctable, the catalog references tell membership / badge
   // lines apart (those visits are excluded in v1), the linked checkouts
   // feed the banners.
@@ -94,7 +94,7 @@ function VisitDetailPage() {
 
   const itemsTotal = items.reduce((sum, it) => sum + (it.totalPrice ?? 0), 0)
 
-  // Same guards as the server (ADR-0041); a missing references doc means
+  // Same guards as the server (ADR-0042); a missing references doc means
   // "no membership / badge SKU configured" — nothing to exclude.
   const correctable =
     correctionBlockedReason(

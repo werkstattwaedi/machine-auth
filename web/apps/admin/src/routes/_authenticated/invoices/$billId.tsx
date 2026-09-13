@@ -44,7 +44,7 @@ function BillDetailPage() {
   const functions = useFunctions()
   const { billId } = Route.useParams()
   const { data: bill, loading } = useDocument(billRef(db, billId))
-  // Correction links (ADR-0041): the bill this one replaced / was replaced
+  // Correction links (ADR-0042): the bill this one replaced / was replaced
   // by, and — for a Sammelrechnung — its Belege, which decide whether the
   // "Belege korrigieren" batch editor applies.
   const { data: successor } = useDocument(bill?.supersededByBillRef ?? null)

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Pure model behind the admin correction editor (ADR-0041): a draft of an
+ * Pure model behind the admin correction editor (ADR-0042): a draft of an
  * edited visit, its validation, the client-side estimate (via the shared
  * summary arithmetic — the server prices authoritatively), and the wire
  * entry for `correctCheckouts`. No React, no Firestore — unit-tested.

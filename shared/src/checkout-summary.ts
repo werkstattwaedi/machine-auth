@@ -4,7 +4,7 @@
 /**
  * The checkout summary arithmetic (issue #284), SDK-agnostic so the server
  * (`recomputeSummary`, authoritative), the checkout wizard (live receipt)
- * and the admin correction editor (estimate, ADR-0041) share ONE
+ * and the admin correction editor (estimate, ADR-0042) share ONE
  * implementation: RAW per-section amounts, the usage-type discount
  * multiplier applied per section, cents rounding, and the waived-today
  * entry-fee rule. Callers supply the standard entry fee lookup so each

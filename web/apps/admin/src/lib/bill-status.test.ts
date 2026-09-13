@@ -47,7 +47,7 @@ describe("billStatus", () => {
     ).toBe("paid")
   })
 
-  it("a cancelled bill is 'cancelled' regardless of age, kind or payment (ADR-0041)", () => {
+  it("a cancelled bill is 'cancelled' regardless of age, kind or payment (ADR-0042)", () => {
     expect(billStatus(bill({ createdDaysAgo: 60, cancelled: true }), NOW)).toBe("cancelled")
     expect(billStatus(bill({ kind: "beleg", cancelled: true }), NOW)).toBe("cancelled")
     expect(billStatus(bill({ paidDaysAgo: 1, cancelled: true }), NOW)).toBe("cancelled")

@@ -1,7 +1,7 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-// Korrektur-Editor for one Besuch (ADR-0041): edit the draft, give one
+// Korrektur-Editor for one Besuch (ADR-0042): edit the draft, give one
 // reason, commit once → the server voids the original and mints the
 // replacement (and, for a Beleg inside a sent Sammelrechnung, that
 // Sammelrechnung's revision — several Belege of one Sammelrechnung are

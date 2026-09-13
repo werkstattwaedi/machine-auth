@@ -102,7 +102,7 @@ function UsageContent({ userDoc }: { userDoc: UserDoc }) {
     const openBills = bills.filter((b) => isOpenBill(b))
     const totalOpen = openBills.reduce((s, b) => s + b.amount, 0)
     const currentYear = new Date().getFullYear()
-    // Cancelled bills (ADR-0041) stay listed as "Storniert" but never count.
+    // Cancelled bills (ADR-0042) stay listed as "Storniert" but never count.
     const yearBills = bills.filter(
       (b) => !b.cancelledAt && toJsDate(b.created)?.getFullYear() === currentYear,
     )

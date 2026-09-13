@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 // One cell of the Abrechnung grid on a Besuch. With `previous` set (the
-// correction editor's estimate, ADR-0041) it reads "Bisher X → Neu Y".
+// correction editor's estimate, ADR-0042) it reads "Bisher X → Neu Y".
 
 import { formatCHF } from "@modules/lib/format"
 import { MoveRight } from "lucide-react"

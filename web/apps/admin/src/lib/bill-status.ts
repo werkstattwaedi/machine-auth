@@ -11,7 +11,7 @@ import type { BillDoc } from "@modules/lib/firestore-entities"
  * - "overdue": unpaid invoice older than {@link OVERDUE_AFTER_DAYS}. Bills
  *   carry no explicit due date; the invoice PDF asks for payment within
  *   30 days of issue, so created + 30d is the due date.
- * - "cancelled": voided by an admin (ADR-0041) — never payable, never
+ * - "cancelled": voided by an admin (ADR-0042) — never payable, never
  *   counted; the corrected re-issue is its own bill.
  */
 export type BillStatus = "paid" | "open" | "overdue" | "beleg" | "cancelled"
