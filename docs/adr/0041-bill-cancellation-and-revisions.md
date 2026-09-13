@@ -94,7 +94,9 @@ stream exports paid bills only, so bill rows are unaffected.
 - The aggregation and pricing logic is shared with the existing close and monthly paths.
 
 **Cons:**
-- A one-off data migration with a deploy-order dependency (migrate before deploying functions).
+- A one-off data migration with a deploy-order dependency: deploy functions first (the new
+  `allocateBill` refuses to mint until the marker exists), migrate right after. Migrating first
+  would let the old code mint un-shifted numbers that the new formatter misreads forever.
 - Nine corrections per bill is a hard cap; a tenth needs a fresh number by hand.
 - Bank slips printed before the migration resolve through a fallback reading in the decoder.
 - Paid bills cannot be corrected in v1 (credit notes / refunds are backlog).

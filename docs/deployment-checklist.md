@@ -226,30 +226,35 @@ One-time setup before the functions deploy:
    cancellation notice fails into `operations_log` (retried hourly) — so set them before the first
    correction, not after.
 
-### Bill-number migration (ADR-0041) — once per project, BEFORE the functions deploy
+### Bill-number migration (ADR-0041) — once per project, RIGHT AFTER the functions deploy
 
 Stored `bills.referenceNumber` values move to `base × 10 + revisionDigit`. The new `allocateBill`
 refuses to mint until `config/billing.referenceNumberFormat == "shifted-v1"` exists, and the daily
-stats export emits a new `cancelled_at` column. Order matters:
+stats export emits a new `cancelled_at` column. Order matters — and it is **functions first**:
 
 ```bash
 # 1. BigQuery first — the sink rejects unknown columns (skipInvalidRows: false).
 npx tsx scripts/setup-bigquery.ts --project <project-id>
 
-# 2. Dry-run, then migrate. Refuses to run twice; asserts max < min × 10 so a
-#    half-applied run can never double-shift.
+# 2. Deploy functions (section 3). From now on bill minting is BLOCKED
+#    (failed-precondition) until step 3 runs — keep the gap short.
+
+# 3. Dry-run, then migrate. Refuses to run twice; resumable per document.
 FIREBASE_PROJECT_ID=<project-id> GOOGLE_APPLICATION_CREDENTIALS=<sa.json> \
   npx tsx scripts/migrate-bill-numbers.ts --prod --dry-run
 FIREBASE_PROJECT_ID=<project-id> GOOGLE_APPLICATION_CREDENTIALS=<sa.json> \
   npx tsx scripts/migrate-bill-numbers.ts --prod
 
-# 3. Then rules/indexes, functions, hosting (sections 3–6).
+# 4. Then hosting (section 6); rules/indexes carry no change for this feature.
 ```
 
-Nothing needs to be quiet during the migration: the old code keeps working on un-migrated numbers,
-the new code refuses until migrated. Existing PDFs keep their printed number and legacy QR payload;
-the bank import resolves those slips through a ×10 fallback. Afterwards, check the admin Rechnungen
-list still shows `RE-4200001…` and that a second `migrate-bill-numbers.ts` run refuses.
+Why not migrate first: the *old* `allocateBill` would keep minting un-shifted numbers
+(4200017 …) next to migrated ones, and every such bill is misread by the new formatter forever
+(4200017 = base 420001, revision 8) with no way to rerun the migration. The new code refusing to
+mint for a minute is the safe failure; a wrong number is not. Existing PDFs keep their printed
+number and legacy QR payload; the bank import resolves those slips through a ×10 fallback.
+Afterwards, check the admin Rechnungen list still shows `RE-4200001…`, close a test checkout to
+confirm minting works again, and confirm a second `migrate-bill-numbers.ts` run refuses.
 
 ## 3. Deploy Functions
 
