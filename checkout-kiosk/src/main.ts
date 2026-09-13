@@ -91,10 +91,11 @@ function hideWindow(): void {
 
 // Raising the window is not enough when the terminal has gone to the
 // screensaver: it paints over the kiosk, so the tap looks ignored and users
-// reach for the mouse. Windows only dismisses a screensaver on real input, so
-// synthesize a 1px there-and-back mouse move (see wake-display.ts). Best
-// effort by design — a failed nudge leaves the user exactly where they were
-// (jiggling the mouse), so it must never break the tap itself.
+// reach for the mouse. Synthetic input cannot fix that — the screensaver runs
+// on its own desktop and never sees it — so wake-display.ts terminates the
+// screensaver process instead. Best effort by design: a failed attempt leaves
+// the user exactly where they were (jiggling the mouse), so it must never
+// break the tap itself.
 const wakeDisplay = createDisplayWaker({
   platform: process.platform,
   now: () => Date.now(),

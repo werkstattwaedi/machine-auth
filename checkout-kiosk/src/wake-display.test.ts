@@ -73,14 +73,26 @@ test("the encoded command round-trips to the original script", () => {
   assert.equal(decoded, "Write-Output 'it''s \"quoted\"'")
 })
 
-test("the real script drives mouse_event there and back", () => {
+test("the script kills the screensaver, gated on it actually running", () => {
   const args = wakeCommandArgs()
   const decoded = Buffer.from(
     args[args.indexOf("-EncodedCommand") + 1]!,
     "base64"
   ).toString("utf16le")
-  assert.match(decoded, /user32\.dll/)
-  // A relative +1 / -1 pair: real movement, zero net cursor displacement.
+
+  // Injected input cannot cross into the screensaver's own desktop, so
+  // terminating the process is what actually dismisses it. `.scr` survives in
+  // the process name because Windows only strips `.exe`.
+  assert.match(decoded, /Get-Process -Name '\*\.scr'/)
+  assert.match(decoded, /Stop-Process -Force/)
+
+  // Never terminate a stray .scr on an ordinary tap: the kill is guarded by
+  // SPI_GETSCREENSAVERRUNNING (0x0072 = 114).
+  assert.match(decoded, /SystemParametersInfo\(114, 0, \[ref\]\$running, 0\)/)
+  assert.match(decoded, /if \(\$running\) \{ Get-Process/)
+
+  // The nudge stays, to reset the idle timer so Windows cannot immediately
+  // re-arm the screensaver we just killed. Relative +1/-1 = no net movement.
   assert.match(decoded, /mouse_event\(1, 1, 0, 0/)
   assert.match(decoded, /mouse_event\(1, -1, 0, 0/)
 })

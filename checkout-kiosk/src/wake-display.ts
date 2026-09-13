@@ -6,12 +6,29 @@
 // `showWindow()` already restores and focuses the kiosk window on every tag
 // read, but a running screensaver paints over everything: the tap "worked"
 // (window raised, tag dispatched) while the user still faces the screensaver
-// and has to jiggle the mouse to see the checkout they just started. Windows
-// only tears a screensaver down on *input*, and Electron exposes no API for
-// that — so synthesize the same small mouse move the user makes by hand.
+// and has to jiggle the mouse to see the checkout they just started.
 //
-// The identical input also wakes a monitor that has powered down, which is the
-// other way the terminal ends up dark on approach, so one nudge covers both.
+// The obvious fix — synthesize the mouse move the user makes by hand — does
+// NOT work, and it fails silently. A running screensaver lives on its own
+// desktop (`winsta0\Screen-saver`), while `mouse_event` / `keybd_event` inject
+// into the *calling* thread's desktop. The input therefore never reaches the
+// screensaver: measured on Windows 11, neither a synthetic mouse move nor a
+// synthetic keypress dismissed a running screensaver, even though both reset
+// the system idle timer. Resetting that timer is not the same thing as
+// dismissing the screensaver — the screensaver's own window procedure decides
+// that, and it never sees desktop-crossing input.
+//
+// What does work is terminating the screensaver process, which is not
+// desktop-bound. Screensavers are `.scr` executables, and Windows only strips
+// `.exe` when deriving a process name, so they show up as e.g. `ssText3d.scr`
+// — a precise filter that needs no path lookup (and so no access-denied
+// handling for processes we cannot open).
+//
+// The mouse nudge is kept, for a different reason than it was added: killing
+// the screensaver does not reset the idle timer, so without it Windows would
+// be free to re-arm the screensaver seconds later — the idle clock is still
+// sitting past the timeout at that point. The nudge also wakes a monitor that
+// has powered down, the other way the terminal ends up dark on approach.
 //
 // Caveat worth knowing: if the terminal's screensaver is configured with "on
 // resume, display logon screen" (ScreenSaverIsSecure=1), dismissing it lands
@@ -22,21 +39,30 @@
 /** MOUSEEVENTF_MOVE — a relative mouse move (winuser.h). */
 const MOUSEEVENTF_MOVE = 0x0001
 
+/** SPI_GETSCREENSAVERRUNNING — is the *system* screensaver up right now? */
+const SPI_GETSCREENSAVERRUNNING = 0x0072
+
 // One tap can produce more than one `onTag` call (bridge/nfc.ts dispatches
 // either a full event or a uid-only fallback), and users re-tap when nothing
 // appears to happen. Without a cooldown every one of those spawns its own
 // PowerShell.
 export const WAKE_COOLDOWN_MS = 2_000
 
-// Nudge the cursor one pixel right, then straight back. A *relative* pair
-// leaves the pointer exactly where it was, so this stays invisible mid-checkout
-// while still counting as real input to the screensaver and the display-idle
-// timer. A zero-delta move is not reliably treated as movement, hence
-// there-and-back rather than a single no-op event.
+// Nudge the cursor one pixel right, then straight back: a *relative* pair
+// leaves the pointer exactly where it was, so it stays invisible if it fires
+// mid-checkout, while still counting as input for the idle timer.
+//
+// The kill is gated on SPI_GETSCREENSAVERRUNNING rather than run
+// unconditionally, so a badge tap during normal operation never terminates a
+// stray `.scr` process. Note the flag reports only the *system*-initiated
+// screensaver — one launched by hand with `/s` reads as not running.
 const WAKE_SCRIPT = [
-  `Add-Type -Namespace Oww -Name Native -MemberDefinition '[DllImport("user32.dll")] public static extern void mouse_event(uint dwFlags, int dx, int dy, uint dwData, IntPtr dwExtraInfo);'`,
+  `Add-Type -Namespace Oww -Name Native -MemberDefinition '[DllImport("user32.dll")] public static extern void mouse_event(uint dwFlags, int dx, int dy, uint dwData, IntPtr dwExtraInfo); [DllImport("user32.dll")] public static extern bool SystemParametersInfo(uint uiAction, uint uiParam, ref bool pvParam, uint fWinIni);'`,
   `[Oww.Native]::mouse_event(${MOUSEEVENTF_MOVE}, 1, 0, 0, [IntPtr]::Zero)`,
   `[Oww.Native]::mouse_event(${MOUSEEVENTF_MOVE}, -1, 0, 0, [IntPtr]::Zero)`,
+  `$running = $false`,
+  `[void][Oww.Native]::SystemParametersInfo(${SPI_GETSCREENSAVERRUNNING}, 0, [ref]$running, 0)`,
+  `if ($running) { Get-Process -Name '*.scr' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue }`,
 ].join("; ")
 
 /**
@@ -61,14 +87,14 @@ export interface WakeDisplayDeps {
   platform: NodeJS.Platform
   /** Clock backing the cooldown. */
   now: () => number
-  /** Fire off the input nudge. Must not throw. */
+  /** Fire off the wake attempt. Must not throw. */
   nudge: () => void
 }
 
 /**
  * Build the tap-time display waker. The returned function is safe to call on
  * every tag read: it no-ops off Windows, and collapses repeat taps inside
- * `WAKE_COOLDOWN_MS` into a single nudge.
+ * `WAKE_COOLDOWN_MS` into a single attempt.
  */
 export function createDisplayWaker(
   deps: WakeDisplayDeps,
