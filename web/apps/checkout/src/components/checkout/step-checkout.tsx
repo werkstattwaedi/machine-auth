@@ -42,6 +42,7 @@ import {
 } from "@oww/shared"
 
 import { BadgeCheck, Nfc } from "lucide-react"
+import { UsageTypeSelect } from "./usage-type-select"
 
 /**
  * Compute up to 4 sensible round-up total targets for the current base.
@@ -203,6 +204,17 @@ interface StepCheckoutProps {
    */
   onPrimaryBillingChange?: (updates: Partial<CheckoutPerson>) => void
   /**
+   * Section ids (`"nutzung"`, `"maschinen"`, `"material"`, …) that start
+   * expanded. The wizard opens Nutzungsgebühren when the visitor arrives
+   * from the material step (issue #570) so the Nutzungsart is in view.
+   */
+  initialOpenSections?: readonly string[]
+  /**
+   * Anonymous checkout: the account-only usage types (Freiwilligengruppe,
+   * Interne Nutzung) are not offered (issue #570).
+   */
+  anonymous?: boolean
+  /**
    * The identified user's profile `billingAddress`, if any. Used to pre-fill
    * the membership address when the primary person carries no billing fields —
    * e.g. a server-created checkout (purchaseMembership) whose rehydrated
@@ -336,6 +348,8 @@ export function StepCheckout({
   badgeCatalogId,
   onPrimaryBillingChange,
   profileBillingAddress,
+  initialOpenSections,
+  anonymous = false,
 }: StepCheckoutProps) {
   // Display NET (billed) section amounts — what the customer actually pays
   // after the usage-type discount (issue #284). `membershipCost` renders the
@@ -475,7 +489,9 @@ export function StepCheckout({
     setTip,
   ])
 
-  const [openSections, setOpenSections] = useState<Set<string>>(new Set())
+  const [openSections, setOpenSections] = useState<Set<string>>(
+    () => new Set(initialOpenSections),
+  )
   const toggle = (id: string) =>
     setOpenSections((prev) => {
       const next = new Set(prev)
@@ -661,24 +677,20 @@ export function StepCheckout({
           open={openSections.has("nutzung")}
           onToggle={() => toggle("nutzung")}
         >
-          <Label
-            htmlFor="usage-type"
-            className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
-          >
-            Nutzungsart
-          </Label>
-          <select
-            id="usage-type"
-            value={usageType}
-            onChange={(e) => setUsageType(e.target.value as UsageType)}
-            className="mt-1.5 mb-4 h-10 w-full max-w-xs rounded-md border border-border bg-background px-3 text-base md:text-sm focus:outline-none focus:border-cog-teal focus:ring-2 focus:ring-cog-teal/30"
-          >
-            {Object.entries(USAGE_TYPE_LABELS).map(([key, label]) => (
-              <option key={key} value={key}>
-                {label}
-              </option>
-            ))}
-          </select>
+          <div className="mb-4 flex flex-col gap-1.5">
+            <Label
+              htmlFor="usage-type"
+              className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
+            >
+              Nutzungsart
+            </Label>
+            <UsageTypeSelect
+              id="usage-type"
+              value={usageType}
+              onChange={setUsageType}
+              anonymous={anonymous}
+            />
+          </div>
 
           <DetailLabel>Personen</DetailLabel>
           <ul className="flex flex-col mt-1">
@@ -703,16 +715,6 @@ export function StepCheckout({
               )
             })}
           </ul>
-          {discount.entryFee < 1 && discountLabel && (
-            <SectionDiscountNote
-              label={discountLabel}
-              text={
-                discount.entryFee === 0
-                  ? "Nutzungsgebühr wird nicht verrechnet"
-                  : "Nutzungsgebühr ermässigt"
-              }
-            />
-          )}
         </ExpandableSection>
 
         <ExpandableSection

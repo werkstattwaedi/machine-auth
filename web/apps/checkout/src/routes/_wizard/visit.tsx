@@ -41,6 +41,7 @@ import { MembershipInlineSection } from "@/components/usage/membership-inline-se
 import { BadgeCtaHint } from "@/components/usage/badge-cta-hint"
 import { ScanFab } from "@/components/qr-scanner/scan-fab"
 import { useWizardContext } from "@/components/checkout/wizard-context"
+import { CHECKOUT_FROM_VISIT_STATE } from "@/components/checkout/checkout-history-state"
 import { capturePickerScrollAnchor } from "@/components/usage/picker-scroll-anchor"
 
 export const Route = createFileRoute("/_wizard/visit")({
@@ -533,6 +534,7 @@ function VisitRoute() {
               navigate({
                 to: "/checkout",
                 search: kiosk ? { kiosk: "" } : {},
+                state: CHECKOUT_FROM_VISIT_STATE,
               })
             }
           >

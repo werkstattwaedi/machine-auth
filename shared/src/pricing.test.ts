@@ -6,6 +6,9 @@ import {
   USAGE_TYPE_DISCOUNTS,
   USAGE_TYPE_LABELS,
   USAGE_DISCOUNT_LABELS,
+  USAGE_TYPE_INFO,
+  USAGE_TYPE_ORDER,
+  selectableUsageTypes,
   usageDiscount,
   isMachineItem,
   type UsageType,
@@ -65,5 +68,59 @@ describe("usage type labels (issue #284)", () => {
         expect(USAGE_DISCOUNT_LABELS[ut], `label for ${ut}`).toBeTruthy()
       }
     }
+  })
+})
+
+// Issue #570: the visitor-facing description of each usage type lives next
+// to the discount table. Pin that the effect sentence names exactly the
+// sections the multipliers waive, so retuning a multiplier without touching
+// its description fails here instead of misinforming a visitor.
+describe("USAGE_TYPE_INFO (issue #570)", () => {
+  it("orders every usage type exactly once", () => {
+    expect([...USAGE_TYPE_ORDER].sort()).toEqual(
+      Object.keys(USAGE_TYPE_DISCOUNTS).sort(),
+    )
+    expect(USAGE_TYPE_ORDER[0]).toBe("regular")
+  })
+
+  it("keeps each effect sentence consistent with the discount row", () => {
+    for (const ut of USAGE_TYPE_ORDER) {
+      const d = USAGE_TYPE_DISCOUNTS[ut]
+      const { effect } = USAGE_TYPE_INFO[ut]
+      expect(effect !== "", `${ut} effect`).toBe(d.entryFee < 1)
+      expect(/50%/.test(effect), `${ut} half fee`).toBe(d.entryFee === 0.5)
+      // materialbezug's machine multiplier is a defensive 0 — machine usage
+      // cannot occur there, so the sentence deliberately stays silent.
+      if (ut !== "materialbezug") {
+        expect(/Maschinen/.test(effect), `${ut} machine`).toBe(d.machine < 1)
+      }
+      expect(/Material/.test(effect), `${ut} material`).toBe(d.material < 1)
+    }
+  })
+
+  it("only regular has no declaration; audits only on KulturLegi + Hangenmoos", () => {
+    for (const ut of USAGE_TYPE_ORDER) {
+      const info = USAGE_TYPE_INFO[ut]
+      expect(info.declaration === null).toBe(ut === "regular")
+      expect(/stichprobenweise/.test(info.declaration ?? "")).toBe(
+        ut === "ermaessigt" || ut === "hangenmoos",
+      )
+    }
+  })
+
+  it("hides the account-only types from anonymous checkouts", () => {
+    expect(selectableUsageTypes({ anonymous: false })).toEqual(
+      USAGE_TYPE_ORDER,
+    )
+    expect(selectableUsageTypes({ anonymous: true })).toEqual([
+      "regular",
+      "ermaessigt",
+      "hangenmoos",
+      "materialbezug",
+    ])
+    // A rehydrated account-only selection stays displayable.
+    expect(
+      selectableUsageTypes({ anonymous: true, current: "intern" }),
+    ).toContain("intern")
   })
 })

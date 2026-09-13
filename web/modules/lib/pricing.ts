@@ -17,7 +17,10 @@ export {
   USAGE_TYPE_LABELS,
   USAGE_DISCOUNT_LABELS,
   USAGE_TYPE_DISCOUNTS,
+  USAGE_TYPE_INFO,
+  USAGE_TYPE_ORDER,
   USER_TYPE_LABELS,
+  selectableUsageTypes,
   type UsageType,
   type UserType,
 } from "@oww/shared"

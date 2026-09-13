@@ -42,6 +42,19 @@ vi.mock("@modules/lib/pricing", async () => {
   }
 })
 
+/** Drop the Nutzungsart list down and pick the option labelled `label`. */
+async function pickUsageType(
+  user: ReturnType<typeof userEvent.setup>,
+  label: string,
+) {
+  await act(async () => {
+    await user.click(screen.getByLabelText("Nutzungsart"))
+  })
+  await act(async () => {
+    await user.click(screen.getByRole("option", { name: label }))
+  })
+}
+
 const config: PricingConfig = {
   entryFees: {
     erwachsen: { regular: 15, ermaessigt: 7.5, materialbezug: 0, intern: 99, hangenmoos: 15 },
@@ -128,10 +141,7 @@ describe("StepCheckout — round-up tip stays in sync with the billed subtotal (
     await act(async () => {
       await user.click(screen.getByRole("button", { name: /Nutzungsgebühren/ }))
     })
-    const usageSelect = screen.getByLabelText("Nutzungsart") as HTMLSelectElement
-    await act(async () => {
-      await user.selectOptions(usageSelect, "intern")
-    })
+    await pickUsageType(user, "Intern")
 
     // After the effect runs, the tip is back to 0 — nothing to round up
     // against a 0 CHF subtotal.
@@ -155,10 +165,7 @@ describe("StepCheckout — round-up tip stays in sync with the billed subtotal (
     await act(async () => {
       await user.click(screen.getByRole("button", { name: /Nutzungsgebühren/ }))
     })
-    const usageSelect = screen.getByLabelText("Nutzungsart") as HTMLSelectElement
-    await act(async () => {
-      await user.selectOptions(usageSelect, "intern")
-    })
+    await pickUsageType(user, "Intern")
 
     // Manual tip survives.
     expect(lastTip).toBe(5)
@@ -177,14 +184,9 @@ describe("StepCheckout — round-up tip stays in sync with the billed subtotal (
     await act(async () => {
       await user.click(screen.getByRole("button", { name: /Nutzungsgebühren/ }))
     })
-    const usageSelect = screen.getByLabelText("Nutzungsart") as HTMLSelectElement
-    await act(async () => {
-      await user.selectOptions(usageSelect, "intern")
-    })
+    await pickUsageType(user, "Intern")
 
-    await act(async () => {
-      await user.selectOptions(usageSelect, "regular")
-    })
+    await pickUsageType(user, "Regulär")
     const aufrundenAfter = screen.getByRole("checkbox", { name: /aufrunden/i }) as HTMLInputElement
     expect(aufrundenAfter.checked).toBe(false)
   })

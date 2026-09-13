@@ -37,9 +37,26 @@ async function goToSummary(page: Page) {
   await expect(page.getByText("Dein Besuch")).toBeVisible()
 }
 
-/** Navigate to checkout summary with a holz item added */
-async function goToSummaryWithItems(page: Page) {
-  await goToWorkshops(page)
+/**
+ * Navigate to checkout summary with a holz item added. `signedIn` runs the
+ * flow as the E2E auth user instead of an anonymous guest — needed for the
+ * account-only usage types (Freiwilligengruppe, Interne Nutzung), which an
+ * anonymous checkout never offers (#570).
+ */
+async function goToSummaryWithItems(
+  page: Page,
+  { signedIn = false }: { signedIn?: boolean } = {},
+) {
+  if (signedIn) {
+    await signIn(page)
+    // Logged-in user sees the pre-filled form; advance to workshops.
+    await page.goto("/")
+    await expect(page.getByText("Abmelden")).toBeVisible({ timeout: 10_000 })
+    await page.getByRole("button", { name: "Weiter" }).click()
+    await expect(page.getByText("Werkstätten wählen")).toBeVisible()
+  } else {
+    await goToWorkshops(page)
+  }
 
   await page.getByRole("button", { name: "Holz", exact: true }).click()
   const holzSection = page.getByTestId("workshop-block-holz")
@@ -320,15 +337,40 @@ test.describe("Checkout step screenshots", () => {
   test("summary — Nutzungsgebühren expanded (Nutzungsart + Personen)", async ({ page }) => {
     await goToSummary(page)
 
-    // Expand the first type-of-cost row — panel shows the Nutzungsart
-    // dropdown plus a "Personen" list with per-person fees.
-    await page.getByRole("button", { name: /Nutzungsgebühren/ }).click()
+    // The first type-of-cost row opens by itself when arriving from the
+    // visit step (#570) — panel shows the Nutzungsart dropdown plus a
+    // "Personen" list with per-person fees.
     await expect(page.getByLabel("Nutzungsart")).toBeVisible()
 
     // Click a neutral spot so the screenshot is stable
     await page.locator("h1").first().click()
 
     await expect(page).toHaveScreenshot("checkout-summary-nutzung-expanded.png")
+  })
+
+  // Issue #570: the Nutzungsart dropdown explains every usage type (price
+  // effect + who it applies to). Anonymous guests never see the two
+  // account-only types; the open list is the state worth pixel-guarding.
+  test("summary — Nutzungsart dropdown open (anonymous: account-only types hidden)", async ({ page }) => {
+    await goToSummary(page)
+
+    await page.getByLabel("Nutzungsart").click()
+    await expect(
+      page.getByRole("option", { name: "Hangenmoos AG", exact: true }),
+    ).toBeVisible()
+    await expect(
+      page.getByRole("option", { name: "Freiwilligengruppe", exact: true }),
+    ).toBeHidden()
+    await expect(
+      page.getByRole("option", { name: "Interne Nutzung", exact: true }),
+    ).toBeHidden()
+
+    await expect(page).toHaveScreenshot("checkout-summary-nutzungsart-open.png")
+
+    // Escape closes without changing the selection.
+    await page.keyboard.press("Escape")
+    await expect(page.getByRole("option", { name: "Hangenmoos AG", exact: true })).toBeHidden()
+    await expect(page.getByLabel("Nutzungsart")).toContainText("Reguläre Nutzung")
   })
 
   test("summary — Materialbezug expanded with workshop items", async ({ page }) => {
@@ -348,16 +390,18 @@ test.describe("Checkout step screenshots", () => {
   // No existing fixture used a discounted usage type, so the new rendering
   // had no visual-regression coverage (PR #346 review feedback).
   test("summary — Freiwilligengruppe waives entry, bills material (discount note)", async ({ page }) => {
-    await goToSummaryWithItems(page)
+    // Account-only usage type → identified visitor (#570).
+    await goToSummaryWithItems(page, { signedIn: true })
 
-    // Expand Nutzungsgebühren so the Nutzungsart dropdown + the per-section
-    // discount note are visible.
-    await page.getByRole("button", { name: /Nutzungsgebühren/ }).click()
+    // Nutzungsgebühren is open on arrival (#570); pick Freiwilligengruppe
+    // from the rich dropdown.
     await expect(page.getByLabel("Nutzungsart")).toBeVisible()
-    await page.getByLabel("Nutzungsart").selectOption({ value: "volunteering" })
+    await page.getByLabel("Nutzungsart").click()
+    await page.getByRole("option", { name: "Freiwilligengruppe", exact: true }).click()
 
-    // The waived-entry note must appear inside the expanded section.
-    await expect(page.getByTestId("section-discount-note").first()).toBeVisible()
+    // The field now carries the effect line and the self-declaration note
+    // (#570) — the entry-fee waiver is explained there, not as a section note.
+    await expect(page.getByTestId("usage-type-declaration")).toBeVisible()
 
     // Click a neutral spot so the screenshot is stable.
     await page.locator("h1").first().click()
@@ -370,11 +414,12 @@ test.describe("Checkout step screenshots", () => {
   // discount notes now spell out every waived section. Expand both
   // Nutzungsgebühren and Materialbezug so all notes are captured.
   test("summary — Interne Nutzung waives all sections (discount notes, CHF 0)", async ({ page }) => {
-    await goToSummaryWithItems(page)
+    // Account-only usage type → identified visitor (#570).
+    await goToSummaryWithItems(page, { signedIn: true })
 
-    await page.getByRole("button", { name: /Nutzungsgebühren/ }).click()
     await expect(page.getByLabel("Nutzungsart")).toBeVisible()
-    await page.getByLabel("Nutzungsart").selectOption({ value: "intern" })
+    await page.getByLabel("Nutzungsart").click()
+    await page.getByRole("option", { name: "Interne Nutzung", exact: true }).click()
 
     // Expand Materialbezug too so its waived note is visible.
     await page.getByRole("button", { name: /Materialbezug/ }).click()
@@ -433,12 +478,12 @@ test.describe("Checkout step screenshots", () => {
     await checkoutBtn.click()
     await expect(page.getByText("Dein Besuch")).toBeVisible()
 
-    // Expand Nutzungsgebühren and switch to "Interne Nutzung". This zeros
-    // entry + machine + material costs both client- and server-side
-    // (issue #199), giving a CHF 0.00 bill.
-    await page.getByRole("button", { name: /Nutzungsgebühren/ }).click()
+    // Switch to "Interne Nutzung" (the section is open on arrival, #570).
+    // This zeros entry + machine + material costs both client- and
+    // server-side (issue #199), giving a CHF 0.00 bill.
     await expect(page.getByLabel("Nutzungsart")).toBeVisible()
-    await page.getByLabel("Nutzungsart").selectOption({ value: "intern" })
+    await page.getByLabel("Nutzungsart").click()
+    await page.getByRole("option", { name: "Interne Nutzung", exact: true }).click()
 
     // Submit — wizard advances to step 4 (Bezahlen).
     const submitBtn = page.getByRole("button", { name: "Weiter zum Bezahlen" })

@@ -163,3 +163,112 @@ export const USAGE_DISCOUNT_LABELS: Partial<Record<UsageType, string>> = {
   volunteering: "Freiwilligengruppe",
   intern: "Interne Nutzung",
 }
+
+/**
+ * Display order of the usage types in the checkout's Nutzungsart control
+ * (issue #570): the common case first, then the discounts roughly by how
+ * often they apply. `Object.keys(USAGE_TYPE_LABELS)` order is *not* the
+ * display order.
+ */
+export const USAGE_TYPE_ORDER: readonly UsageType[] = [
+  "regular",
+  "ermaessigt",
+  "hangenmoos",
+  "materialbezug",
+  "volunteering",
+  "intern",
+]
+
+/**
+ * What the checkout tells the visitor about each usage type (issue #570).
+ * Kept next to {@link USAGE_TYPE_DISCOUNTS} on purpose: `effect` is the
+ * human sentence for that discount row and `pricing.test.ts` asserts the
+ * two agree, so a multiplier change cannot silently desync from its
+ * description.
+ */
+export interface UsageTypeInfo {
+  /**
+   * Price effect shown on the selected value and on each option, e.g.
+   * "Nutzungsgebühr wird nicht verrechnet". Empty for the undiscounted
+   * `regular` type — the UI renders no effect line then.
+   */
+  effect: string
+  /** Who the type is for, as a full du-form sentence ("Falls du …"). */
+  appliesTo: string
+  /**
+   * What the visitor declares by choosing the type. Discounts are
+   * self-declared; only KulturLegi and Hangenmoos carry the spot-check
+   * sentence. Null for `regular`.
+   */
+  declaration: string | null
+  /**
+   * Only offered to identified visitors (issue #570): the club needs to
+   * know *who* claimed to be a volunteer / on an internal project.
+   */
+  accountOnly: boolean
+}
+
+const AUDIT_NOTE = " Wir behalten uns vor, stichprobenweise nachzuprüfen."
+
+export const USAGE_TYPE_INFO: Record<UsageType, UsageTypeInfo> = {
+  regular: {
+    effect: "",
+    appliesTo: "Für alle, die die Werkstatt benutzen.",
+    declaration: null,
+    accountOnly: false,
+  },
+  ermaessigt: {
+    effect: "50% Ermässigung auf Nutzungsgebühr",
+    appliesTo: "Falls du eine gültige KulturLegi hast.",
+    declaration:
+      "Du bestätigst, deine gültige KulturLegi dabei zu haben." + AUDIT_NOTE,
+    accountOnly: false,
+  },
+  hangenmoos: {
+    effect: "Nutzungsgebühr wird nicht verrechnet",
+    appliesTo: "Falls du in einer Wohnung der Hangenmoos AG wohnst.",
+    declaration:
+      "Du bestätigst, in einer Wohnung der Hangenmoos AG zu wohnen." +
+      AUDIT_NOTE,
+    accountOnly: false,
+  },
+  materialbezug: {
+    // Machine usage is impossible here (guarded server-side), so the
+    // machine multiplier of 0 is not worth a word to the visitor.
+    effect: "Nutzungsgebühr wird nicht verrechnet",
+    appliesTo:
+      "Falls du nicht in der Werkstatt arbeitest, sondern nur Material kaufst oder einen fertigen 3D-Druck abholst.",
+    declaration:
+      "Du bestätigst, heute nicht in der Werkstatt gearbeitet, sondern nur Material bezogen zu haben.",
+    accountOnly: false,
+  },
+  volunteering: {
+    effect: "Nutzungsgebühr und Maschinen werden nicht verrechnet",
+    appliesTo:
+      "Falls du heute eine Werkstatt betreust und dabei an deinem eigenen Projekt arbeitest.",
+    declaration:
+      "Du bestätigst, heute als Werkstattbetreuung im Einsatz gewesen zu sein.",
+    accountOnly: true,
+  },
+  intern: {
+    effect: "Nutzungsgebühr, Maschinen und Material werden nicht verrechnet",
+    appliesTo: "Falls du an einem Projekt für die OWW selbst arbeitest.",
+    declaration:
+      "Du bestätigst, an einem OWW-internen Projekt gearbeitet zu haben.",
+    accountOnly: true,
+  },
+}
+
+/**
+ * Usage types offered in the checkout, in display order. Anonymous
+ * checkouts never see the account-only types (issue #570); `current` is
+ * always kept so a rehydrated selection can still be displayed.
+ */
+export function selectableUsageTypes(
+  opts: { anonymous: boolean; current?: UsageType },
+): UsageType[] {
+  return USAGE_TYPE_ORDER.filter(
+    (t) =>
+      t === opts.current || !opts.anonymous || !USAGE_TYPE_INFO[t].accountOnly,
+  )
+}
