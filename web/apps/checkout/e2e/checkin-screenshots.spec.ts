@@ -74,6 +74,50 @@ test.describe("Check-in step screenshots", () => {
     await expect(page).toHaveScreenshot("checkin-code-dialog.png")
   })
 
+  test("code entry dialog — wrong code (error notice)", async ({ page }) => {
+    await clearCollections("loginCodes")
+    await goToCheckin(page)
+
+    await page.getByTestId("checkin-identifier").fill(AUTH_USER_EMAIL)
+    await page.getByTestId("checkin-identifier-submit").click()
+    await expect(page.getByTestId("checkin-code-dialog")).toBeVisible({
+      timeout: 10_000,
+    })
+    // Wait for the real code so verify reports "wrong code", not "no code".
+    await waitForLoginCode(AUTH_USER_EMAIL)
+
+    await page.getByTestId("checkin-code-input").fill("000000")
+    await page.getByTestId("checkin-code-submit").click()
+    await expect(page.getByTestId("checkin-code-error")).toContainText(
+      "Code falsch.",
+    )
+
+    await settleLayout(page)
+    await expect(page).toHaveScreenshot("checkin-code-dialog-error.png")
+  })
+
+  test("code entry dialog — resend (info notice)", async ({ page }) => {
+    await clearCollections("loginCodes")
+    await goToCheckin(page)
+
+    await page.getByTestId("checkin-identifier").fill(AUTH_USER_EMAIL)
+    await page.getByTestId("checkin-identifier-submit").click()
+    await expect(page.getByTestId("checkin-code-dialog")).toBeVisible({
+      timeout: 10_000,
+    })
+    await waitForLoginCode(AUTH_USER_EMAIL)
+
+    // Inside the 60s per-email throttle, so the resend is acknowledged
+    // with the "already sent — still valid" info bar.
+    await page.getByTestId("checkin-code-resend").click()
+    await expect(page.getByTestId("checkin-code-notice")).toContainText(
+      "der Code ist noch gültig",
+    )
+
+    await settleLayout(page)
+    await expect(page).toHaveScreenshot("checkin-code-dialog-resend.png")
+  })
+
   test("empty guest form", async ({ page }) => {
     await goToCheckin(page)
     await openGuestSection(page)
