@@ -218,6 +218,11 @@ export { catalogCall } from "./catalog/dispatcher";
 // error reporter and must not depend on a dispatcher that may itself be failing.
 export { logClientError } from "./util/log_client_error";
 
+// Daily batched digest of WARNING-and-above logs. Client-input rejections
+// log at warn (they must not page us), so this is how those — and the
+// clientError records the web app reports — actually get looked at.
+export { dailyLogDigest } from "./util/log_digest";
+
 // Export bill lifecycle triggers + the daily auto-ack cron (#251).
 export { onCheckoutClosed, onCheckoutCreatedClosed } from "./invoice/create_bill";
 

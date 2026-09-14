@@ -84,6 +84,9 @@ const FUNCTIONS_RESEND: VarMapping[] = [
   { envVar: "CHECKOUT_REMINDER_OFFSET_DAYS", jsonPath: "functions.checkoutReminderOffsetDays" },
   { envVar: "KASSE_EMAIL", jsonPath: "functions.kasseEmail" },
   { envVar: "AUTO_ACK_MIN_AGE_HOURS", jsonPath: "functions.autoAckMinAgeHours" },
+  // Recipient of the daily WARNING-and-above log digest. Empty disables the
+  // send (the job still runs and logs what it would have reported).
+  { envVar: "LOG_DIGEST_EMAIL", jsonPath: "functions.logDigestEmail" },
 ];
 
 const VITE_FIREBASE: VarMapping[] = [
@@ -189,6 +192,7 @@ const TEST_FIXTURE_CONFIG: Record<string, unknown> = {
     resendAccountInstructionsTemplateId: "ci-test-account-instructions-template",
     kasseEmail: "kasse@test.localhost",
     autoAckMinAgeHours: "1",
+    logDigestEmail: "ops@test.localhost",
     statsDataset: "stats",
   },
   web: {
