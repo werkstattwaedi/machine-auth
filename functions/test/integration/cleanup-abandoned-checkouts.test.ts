@@ -9,15 +9,17 @@
  * `runCleanupAbandonedCheckouts` directly against the Firestore and
  * Auth emulators so the test is independent of the scheduler runtime.
  *
- * Issue #318 reshaped this job: it now reaps anonymous Firebase Auth
- * users idle for >7d AND any checkouts they created (via the
- * `firebaseUid` field, which carries the creating principal's
- * `request.auth.uid` — anon or signed-in). Signed-in checkouts are
- * never touched: their `firebaseUid` is a real-user UID and never
- * shows up in the expired-anon-user list the cleanup queries. The
- * test matrix below locks that down so a future change cannot
- * accidentally reach back to the broad time-based reap that also
- * nuked signed-in carts.
+ * The job reaps throwaway auth principals idle for >7d AND the
+ * abandoned anonymous carts they created (via the `firebaseUid` field,
+ * which carries the creating principal's `request.auth.uid`). Two
+ * invariants are pinned here because breaking either one destroys
+ * records (incident 2026-09: kiosk sessions matched as anonymous and
+ * their closed, billed checkouts were deleted):
+ *
+ *   - only principals with no provider, no e-mail and no phone are
+ *     reaped — password-less login-code accounts never are;
+ *   - only `status == "open"`, `userId == null` carts are deleted —
+ *     closed, billed or user-owned checkouts survive their principal.
  */
 
 process.env.FUNCTIONS_EMULATOR = "true";
@@ -47,9 +49,12 @@ interface SeedCheckoutOpts {
   /**
    * Firebase Auth UID stamped at create time. For seeded test data this
    * is the anon UID for anon-created checkouts, the real-user UID for
-   * signed-in creates, or null for system / admin-SDK imports.
+   * signed-in creates, the `tag:` session uid for kiosk visits, or null
+   * for system / admin-SDK imports.
    */
   firebaseUid?: string | null;
+  /** doc id under /bills — set on closed, billed checkouts. */
+  billRef?: string | null;
   itemCount?: number;
 }
 
@@ -68,6 +73,7 @@ async function seedCheckout(id: string, opts: SeedCheckoutOpts): Promise<void> {
     modifiedBy: null,
     modifiedAt: created,
     firebaseUid: opts.firebaseUid ?? null,
+    billRef: opts.billRef ? db.doc(`bills/${opts.billRef}`) : null,
   };
 
   await db.collection("checkouts").doc(id).set(checkout);
@@ -106,17 +112,24 @@ async function itemCount(id: string): Promise<number> {
 }
 
 /**
- * Create an anonymous Firebase Auth user via the admin SDK's
+ * Create a provider-less Firebase Auth user via the admin SDK's
  * `importUsers` path so we can synthesize an arbitrary
  * `lastLoginAt` (millis) — `createUser` doesn't accept that field
  * and the emulator doesn't let us "rewind" sign-ins after the fact.
- * `providerData: []` is the canonical marker for an anon user.
+ * `providerData: []` is what anonymous sign-ins, custom-token kiosk
+ * sessions AND password-less login-code accounts all look like; the
+ * optional `email` / `phoneNumber` is what tells them apart.
  */
-async function seedAnonUser(uid: string, lastSignInAgeHours: number): Promise<void> {
+async function seedNoProviderUser(
+  uid: string,
+  lastSignInAgeHours: number,
+  identity: { email?: string; phoneNumber?: string } = {},
+): Promise<void> {
   const lastLoginAt = Date.now() - lastSignInAgeHours * HOUR_MS;
   await getAuth().importUsers([
     {
       uid,
+      ...identity,
       providerData: [],
       metadata: {
         creationTime: new Date(lastLoginAt).toUTCString(),
@@ -124,6 +137,11 @@ async function seedAnonUser(uid: string, lastSignInAgeHours: number): Promise<vo
       },
     },
   ]);
+}
+
+/** Anonymous web visitor: no provider, no e-mail, no phone. */
+async function seedAnonUser(uid: string, lastSignInAgeHours: number): Promise<void> {
+  await seedNoProviderUser(uid, lastSignInAgeHours);
 }
 
 /** Create a non-anon (email/password) user via the admin SDK. */
@@ -191,6 +209,7 @@ describe("cleanupAbandonedCheckouts (Integration)", () => {
     expect(result.deletedUsers).to.equal(1);
     expect(result.deletedCheckoutCount).to.equal(1);
     expect(result.deletedCheckoutIds).to.deep.equal(["co-expired"]);
+    expect(result.keptCheckoutCount).to.equal(0);
     expect(await checkoutExists("co-expired")).to.be.false;
     // Items subcollection is gone too.
     expect(await itemCount("co-expired")).to.equal(0);
@@ -242,6 +261,88 @@ describe("cleanupAbandonedCheckouts (Integration)", () => {
     expect(result.anonymousUsers).to.equal(0);
     expect(result.deletedUsers).to.equal(0);
     expect(await authUserExists("real-1")).to.be.true;
+  });
+
+  it("does NOT treat a password-less e-mail account as anonymous", async () => {
+    // The login-code flow creates accounts with `createUser({ email })`
+    // and signs them in via custom token — their provider list is as
+    // empty as an anonymous visitor's. A member idle for months must
+    // keep both their account and the checkout they made while signed in.
+    await seedNoProviderUser("member-idle", ANON_USER_RETENTION_HOURS * 20, {
+      email: "idle@example.com",
+    });
+    await seedCheckout("co-member-idle", {
+      status: "closed",
+      ageHours: ANON_USER_RETENTION_HOURS * 20,
+      userId: "member-idle",
+      firebaseUid: "member-idle",
+      billRef: "bill-idle",
+      itemCount: 1,
+    });
+
+    const result = await runCleanupAbandonedCheckouts();
+    expect(result.anonymousUsers).to.equal(0);
+    expect(result.deletedUsers).to.equal(0);
+    expect(result.deletedCheckoutCount).to.equal(0);
+    expect(await authUserExists("member-idle")).to.be.true;
+    expect(await checkoutExists("co-member-idle")).to.be.true;
+    expect(await itemCount("co-member-idle")).to.equal(1);
+  });
+
+  it("does NOT treat a phone-auth account as anonymous", async () => {
+    await seedNoProviderUser("member-phone", ANON_USER_RETENTION_HOURS * 20, {
+      phoneNumber: "+41791234567",
+    });
+
+    const result = await runCleanupAbandonedCheckouts();
+    expect(result.anonymousUsers).to.equal(0);
+    expect(result.deletedUsers).to.equal(0);
+    expect(await authUserExists("member-phone")).to.be.true;
+  });
+
+  it("reaps a stale kiosk session but keeps its closed, billed visit", async () => {
+    // A kiosk badge tap mints a `tag:<userId>:<nonce>` custom-token
+    // session: no provider, no e-mail — a throwaway principal like an
+    // anonymous visitor, but the checkout it created is a member's
+    // visit with a bill attached. The session may go, the visit stays.
+    await seedNoProviderUser("tag:member-1:abc", ANON_USER_RETENTION_HOURS + 1);
+    await seedCheckout("co-kiosk-closed", {
+      status: "closed",
+      ageHours: ANON_USER_RETENTION_HOURS + 1,
+      userId: "member-1",
+      firebaseUid: "tag:member-1:abc",
+      billRef: "bill-1",
+      itemCount: 2,
+    });
+
+    const result = await runCleanupAbandonedCheckouts();
+    expect(result.expiredUsers).to.equal(1);
+    expect(result.deletedUsers).to.equal(1);
+    expect(result.deletedCheckoutCount).to.equal(0);
+    expect(result.keptCheckoutCount).to.equal(1);
+    expect(await authUserExists("tag:member-1:abc")).to.be.false;
+    expect(await checkoutExists("co-kiosk-closed")).to.be.true;
+    expect(await itemCount("co-kiosk-closed")).to.equal(2);
+  });
+
+  it("keeps an open checkout that belongs to a user (not an anonymous cart)", async () => {
+    // A member's visit left open at the kiosk is a stale visit for
+    // `staleCheckoutReminders` to chase, not an abandoned anonymous cart.
+    await seedNoProviderUser("tag:member-2:xyz", ANON_USER_RETENTION_HOURS + 1);
+    await seedCheckout("co-kiosk-open", {
+      status: "open",
+      ageHours: ANON_USER_RETENTION_HOURS + 1,
+      userId: "member-2",
+      firebaseUid: "tag:member-2:xyz",
+      itemCount: 1,
+    });
+
+    const result = await runCleanupAbandonedCheckouts();
+    expect(result.deletedUsers).to.equal(1);
+    expect(result.deletedCheckoutCount).to.equal(0);
+    expect(result.keptCheckoutCount).to.equal(1);
+    expect(await checkoutExists("co-kiosk-open")).to.be.true;
+    expect(await itemCount("co-kiosk-open")).to.equal(1);
   });
 
   it("processes a mixed batch: expired anon reaped, others survive", async () => {
@@ -306,29 +407,43 @@ describe("cleanupAbandonedCheckouts (Integration)", () => {
     expect(await authUserExists("anon-no-co")).to.be.false;
   });
 
-  it("does NOT delete closed checkouts even when their anon user expires", async () => {
-    // Closed checkouts are kept indefinitely (bill / receipt history).
-    // The reaper joins on `firebaseUid`, not status, so we have to be
-    // explicit: the server's createAnonymousCheckout DOES stamp
-    // firebaseUid. So we assert here that we still delete only when
-    // the user is GC'd — closed docs ride along with their anon
-    // user's deletion only when that user truly expires.
-    //
-    // For now, the join deletes the closed doc too. We document that
-    // behaviour with this test so a future change has to be explicit
-    // about preserving closed anon receipts.
+  it("keeps a closed anonymous checkout when its anon user expires", async () => {
+    // An anonymous visitor who paid at the web checkout: the auth
+    // principal is disposable, the closed checkout is the receipt a
+    // bill points at (issue #364 tolerates the gap, but never create it).
     await seedAnonUser("anon-closed", ANON_USER_RETENTION_HOURS + 1);
     await seedCheckout("co-closed", {
       status: "closed",
       ageHours: 1,
       userId: null,
       firebaseUid: "anon-closed",
+      billRef: "bill-closed",
       itemCount: 1,
     });
 
     const result = await runCleanupAbandonedCheckouts();
-    expect(result.deletedCheckoutCount).to.equal(1);
-    expect(await checkoutExists("co-closed")).to.be.false;
+    expect(result.deletedUsers).to.equal(1);
+    expect(result.deletedCheckoutCount).to.equal(0);
+    expect(result.keptCheckoutCount).to.equal(1);
+    expect(await authUserExists("anon-closed")).to.be.false;
+    expect(await checkoutExists("co-closed")).to.be.true;
+    expect(await itemCount("co-closed")).to.equal(1);
+  });
+
+  it("keeps a closed anonymous checkout even before its bill is linked", async () => {
+    // Closed-but-not-yet-billed is a transient state between the close
+    // and `onCheckoutCreatedClosed` — status alone must protect it.
+    await seedAnonUser("anon-closing", ANON_USER_RETENTION_HOURS + 1);
+    await seedCheckout("co-closing", {
+      status: "closed",
+      ageHours: 1,
+      userId: null,
+      firebaseUid: "anon-closing",
+    });
+
+    const result = await runCleanupAbandonedCheckouts();
+    expect(result.deletedCheckoutCount).to.equal(0);
+    expect(await checkoutExists("co-closing")).to.be.true;
   });
 
   it("returns zero counts when there is nothing to reap", async () => {

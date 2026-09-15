@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Scheduled cleanup of expired anonymous Firebase Auth users and the
- * abandoned `checkouts` docs they created (issues #151, #318).
+ * Scheduled cleanup of expired throwaway Firebase Auth principals and the
+ * abandoned anonymous carts they created (issues #151, #318).
  *
  * Eager anonymous sign-in (#151) means every visitor that gets past
  * step 1 of the checkout wizard creates a Firebase Anonymous Auth
@@ -11,21 +11,33 @@
  * who close the tab before submitting leave both behind. The Cleanup
  * Pact (#318) reaps them together:
  *
- *   1. Anonymous Firebase Auth user whose `metadata.lastSignInTime` is
+ *   1. A throwaway auth principal whose `metadata.lastSignInTime` is
  *      older than ANON_USER_RETENTION_HOURS expires.
- *   2. For each expired user, any checkout doc stamped with
- *      `firebaseUid == <expiredUid>` is `recursiveDelete`d (the doc
- *      and its `items` subcollection).
- *   3. The expired anon Firebase Auth user is then `deleteUser`d.
+ *   2. For each expired principal, every *abandoned cart* stamped with
+ *      `firebaseUid == <expiredUid>` is `recursiveDelete`d (the doc and
+ *      its `items` subcollection).
+ *   3. The expired auth principal is then `deleteUser`d.
  *
- * Signed-in checkouts are safe by construction: `firebaseUid` is set
- * to the creating principal's `auth.uid` (anon OR real), so the only
- * UIDs that ever appear in step 2's query are the ones the listUsers
- * scan flagged as expired anonymous-auth users. A signed-in user's
- * `firebaseUid` will never match an expired anon UID, so their
- * checkouts are never touched by this job. The previous 24h
- * time-based reaper that also nuked signed-in carts (the bug this
- * issue addresses) is gone.
+ * Two invariants keep this job away from anything that is a record:
+ *
+ *   - "Throwaway principal" means no provider data AND no e-mail AND no
+ *     phone number. `providerData.length === 0` alone is NOT enough: the
+ *     login-code flow creates password-less accounts (`createUser({
+ *     email })` + custom token) and every kiosk badge tap mints a
+ *     `tag:<userId>:<nonce>` custom-token session — both have an empty
+ *     provider list. Kiosk session principals *are* reaped (they are
+ *     per-visit nonces and pile up otherwise); e-mail / phone accounts
+ *     never are.
+ *   - "Abandoned cart" means `status == "open"` with no `userId`. A
+ *     checkout that is closed, billed, or belongs to a user (kiosk
+ *     visits, signed-in web checkouts) is never deleted here, whatever
+ *     principal created it — bills point at it and the 3-year retention
+ *     (ADR-0038) owns its lifecycle.
+ *
+ * Incident 2026-09: the job matched kiosk sessions as anonymous and
+ * deleted every checkout they created, including closed, billed ones
+ * (37 of the 75 checkouts referenced by prod bills). Both invariants
+ * above are the fix; the integration test pins them.
  *
  * Run cadence is daily; the cap is one batch of users per run so a
  * runaway anon-signup spike cannot OOM the function. A two-day reap
@@ -38,9 +50,9 @@ import { getFirestore } from "firebase-admin/firestore";
 import { getAuth, UserRecord } from "firebase-admin/auth";
 
 /**
- * Anon Firebase Auth users idle for longer than this expire and have
- * their abandoned checkouts (if any) reaped. 7 days matches the
- * direction in issue #318.
+ * Throwaway auth principals idle for longer than this expire and have
+ * their abandoned carts (if any) reaped. 7 days matches the direction
+ * in issue #318.
  */
 export const ANON_USER_RETENTION_HOURS = 7 * 24;
 
@@ -50,11 +62,26 @@ const AUTH_LIST_PAGE_SIZE = 1000;
 /** Cap how many expired users we successfully delete per run. */
 const USER_BATCH_LIMIT = 500;
 
-/** True iff the auth user was created via anonymous sign-in. */
-function isAnonymousUser(user: UserRecord): boolean {
-  // Anonymous sign-ins have no provider entries. A real user (email/
-  // password, Google, custom token) has at least one provider record.
-  return user.providerData.length === 0;
+/**
+ * True iff the auth user is a throwaway principal nobody can sign back
+ * into: no provider entries and no contact identity. Anonymous sign-ins
+ * and kiosk `tag:` sessions qualify; password-less e-mail accounts from
+ * the login-code flow and phone-auth accounts do not, even though their
+ * provider list is empty too.
+ */
+export function isThrowawayPrincipal(user: UserRecord): boolean {
+  return (
+    user.providerData.length === 0 && !user.email && !user.phoneNumber
+  );
+}
+
+/**
+ * True iff the checkout is an abandoned anonymous cart: still open and
+ * owned by nobody. Anything closed, billed or attached to a user is a
+ * record and must survive its creating principal.
+ */
+export function isAbandonedCart(data: FirebaseFirestore.DocumentData): boolean {
+  return data.status === "open" && data.userId == null && data.billRef == null;
 }
 
 /**
@@ -70,33 +97,30 @@ function lastSignInMs(user: UserRecord): number | null {
 }
 
 /**
- * Delete every checkout stamped with the supplied Firebase Auth UID.
- * Returns the deleted checkout doc IDs (used for log/test assertions).
- *
- * The caller only ever passes UIDs of expired anonymous-auth users
- * here, so even though `firebaseUid` is set on every client-side
- * create (signed-in too), a signed-in user's UID will never appear in
- * the input and their checkouts are never touched. `firebaseUid` is
- * set at create time in all three create paths (wizard lazy-create,
- * persistPersons, createAnonymousCheckout) and is not writable
- * thereafter (security rules block updates that affect `firebaseUid`),
- * so the join is reliable.
+ * Delete the abandoned carts stamped with the supplied Firebase Auth
+ * UID. Returns the deleted checkout doc IDs plus the number of records
+ * that were stamped by the same principal but kept (closed, billed or
+ * user-owned) — surfaced in the run log so a regression is visible.
  */
-async function deleteCheckoutsForFirebaseUid(
+async function deleteAbandonedCartsForFirebaseUid(
   uid: string,
-): Promise<string[]> {
+): Promise<{ deletedIds: string[]; keptCount: number }> {
   const db = getFirestore();
   const snap = await db
     .collection("checkouts")
     .where("firebaseUid", "==", uid)
     .get();
-  if (snap.empty) return [];
   const deletedIds: string[] = [];
+  let keptCount = 0;
   for (const doc of snap.docs) {
+    if (!isAbandonedCart(doc.data())) {
+      keptCount += 1;
+      continue;
+    }
     await db.recursiveDelete(doc.ref);
     deletedIds.push(doc.id);
   }
-  return deletedIds;
+  return { deletedIds, keptCount };
 }
 
 /**
@@ -114,6 +138,7 @@ export async function runCleanupAbandonedCheckouts(
   deletedUsers: number;
   deletedCheckoutCount: number;
   deletedCheckoutIds: string[];
+  keptCheckoutCount: number;
 }> {
   const cutoffMs = now.getTime() - ANON_USER_RETENTION_HOURS * 60 * 60 * 1000;
   const auth = getAuth();
@@ -122,6 +147,7 @@ export async function runCleanupAbandonedCheckouts(
   let anonymousUsers = 0;
   let expiredUsers = 0;
   let deletedUsers = 0;
+  let keptCheckoutCount = 0;
   const deletedCheckoutIds: string[] = [];
 
   let pageToken: string | undefined = undefined;
@@ -129,7 +155,7 @@ export async function runCleanupAbandonedCheckouts(
     const page = await auth.listUsers(AUTH_LIST_PAGE_SIZE, pageToken);
     for (const user of page.users) {
       scannedUsers += 1;
-      if (!isAnonymousUser(user)) continue;
+      if (!isThrowawayPrincipal(user)) continue;
       anonymousUsers += 1;
       const last = lastSignInMs(user);
       // Missing `lastSignInTime` → safer to keep; Firebase normally
@@ -138,12 +164,14 @@ export async function runCleanupAbandonedCheckouts(
       if (last >= cutoffMs) continue;
       expiredUsers += 1;
 
-      // Reap checkouts first so a partial failure leaves the (now
+      // Reap carts first so a partial failure leaves the (now
       // unreferenced) auth user around for the next run — which will
       // re-discover it and retry. The opposite ordering would orphan
-      // checkouts with no anon user to ever re-discover them.
-      const ids = await deleteCheckoutsForFirebaseUid(user.uid);
-      deletedCheckoutIds.push(...ids);
+      // carts with no principal to ever re-discover them.
+      const { deletedIds, keptCount } =
+        await deleteAbandonedCartsForFirebaseUid(user.uid);
+      deletedCheckoutIds.push(...deletedIds);
+      keptCheckoutCount += keptCount;
 
       try {
         await auth.deleteUser(user.uid);
@@ -166,6 +194,7 @@ export async function runCleanupAbandonedCheckouts(
     expiredUsers,
     deletedUsers,
     deletedCheckoutCount: deletedCheckoutIds.length,
+    keptCheckoutCount,
     olderThanHours: ANON_USER_RETENTION_HOURS,
     // Doc IDs only — no PII (anon checkouts have no name/billing).
     sampleCheckoutIds: deletedCheckoutIds.slice(0, 10),
@@ -178,6 +207,7 @@ export async function runCleanupAbandonedCheckouts(
     deletedUsers,
     deletedCheckoutCount: deletedCheckoutIds.length,
     deletedCheckoutIds,
+    keptCheckoutCount,
   };
 }
 

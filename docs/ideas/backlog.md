@@ -164,6 +164,16 @@ member pricing instead of typing description + price by hand.
 Alternative: render a *second* PDF (`invoices/{id}-storniert.pdf`) with the
 banner and offer it in the admin UI, keeping the original untouched.
 
+### Bills with permanently deleted checkouts (2026-09 cleanup incident)
+**Status:** 💡 Idea
+
+**Context:** Until 2026-09-15 `cleanupAbandonedCheckouts` treated kiosk `tag:` sessions as anonymous visitors and deleted their checkouts seven days after the visit, closed and billed ones included. 25 checkouts referenced by prod bills `BL-4200000`…`RE-4200042` (bills created 2026-07-21 … 2026-09-05) are gone beyond the PITR/backup window; the bill docs and PDFs survive, so the money trail is intact, but the admin "Besuch …" links on those bills dead-end and `correctCheckouts` refuses them with "Besuch … nicht gefunden".
+
+**Notes:**
+- The BigQuery `stats.visits` / `visit_items` rows (pseudonymized) still hold the item lines and amounts of every lost visit, and each Beleg PDF has the full line items — enough to rebuild a checkout by hand if one of these bills ever needs a correction.
+- The bill detail page could render a checkout ref that no longer resolves as "Besuch gelöscht" instead of a link — cheap, and the only place an admin would notice.
+- Only bills before 2026-09-15 are affected; the job now refuses to delete anything closed, billed or user-owned.
+
 ## Template
 
 Copy this for new ideas:
