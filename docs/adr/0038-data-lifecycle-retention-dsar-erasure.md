@@ -106,7 +106,7 @@ shares the warm login instance; the salt secret rides along), and logged to
 - The persons[] scan is O(all checkouts) per erasure/report (bounded,
   paged 500 — ~30k docs today, cents).
 - Erasure leaves residuals, documented in `docs/data-protection.md`:
-  backups/PITR (~7 days), operations_log + machine_reports free text until
+  PITR (~7 days) and backups (~30 days), operations_log + machine_reports free text until
   trim, Cloud Logging (~30d), Resend, the org's own bank records
   ((date, amount) join outside our systems), and post-export stats
   divergence (admin-SDK edits after export never reach BigQuery).

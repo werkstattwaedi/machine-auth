@@ -105,13 +105,13 @@ invoice PDFs remain in a locked archive for the legal 10 years.
 
 ## Residuals & accepted risks
 
-- **Backups / PITR**: Firestore point-in-time recovery *and* the daily
-  managed backup schedule each retain deleted docs up to 7 days after an
-  erasure. The backup retention window is deliberately capped at the 7-day
-  PITR window — no schedule is kept longer — so erased data ages out of
-  backups within the same 7 days. If a backup/PITR restore is ever performed,
-  re-apply any erasure/trim requests made after the snapshot before returning
-  the database to service.
+- **Backups / PITR**: Firestore point-in-time recovery retains deleted docs
+  for 7 days after an erasure, the daily managed backup schedule for 30 days
+  (see `docs/disaster-recovery.md` for why 30 — a deletion bug that goes
+  unnoticed for a couple of weeks must still be recoverable). Erased data
+  therefore ages out of every copy within 30 days of the erasure. If a
+  backup/PITR restore is ever performed, re-apply any erasure/trim requests
+  made after the snapshot before returning the database to service.
 - **Escrowed PDFs**: 10-year archive readable only via break-glass IAM
   (bucket audit-logged); expires via `daysSinceCustomTime` lifecycle.
 - **Free text**: `operations_log.message` (error payloads can embed

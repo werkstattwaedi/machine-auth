@@ -9,7 +9,8 @@
  * `runCleanupAbandonedCheckouts` directly against the Firestore and
  * Auth emulators so the test is independent of the scheduler runtime.
  *
- * The job reaps throwaway auth principals idle for >7d AND the
+ * The job reaps throwaway auth principals idle beyond
+ * ANON_USER_RETENTION_HOURS AND the
  * abandoned anonymous carts they created (via the `firebaseUid` field,
  * which carries the creating principal's `request.auth.uid`). Two
  * invariants are pinned here because breaking either one destroys

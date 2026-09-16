@@ -51,8 +51,11 @@ import { getAuth, UserRecord } from "firebase-admin/auth";
 
 /**
  * Throwaway auth principals idle for longer than this expire and have
- * their abandoned carts (if any) reaped. 7 days matches the direction
- * in issue #318.
+ * their abandoned carts (if any) reaped. 7 days per issue #318 — kept
+ * deliberately shorter than the 30-day backup retention after the 2026-09
+ * incident: a wrong deletion then surfaces and is restorable long before
+ * its last backup expires, which a window as long as the backups would
+ * not guarantee.
  */
 export const ANON_USER_RETENTION_HOURS = 7 * 24;
 
