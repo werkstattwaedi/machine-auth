@@ -8,7 +8,7 @@ with [`deployment-checklist.md`](deployment-checklist.md).
 | Data | Mechanism | Window |
 |------|-----------|--------|
 | Firestore `(default)` | **Point-in-Time Recovery (PITR)** | trailing 7 days, per-minute |
-| Firestore `(default)` | **Daily scheduled backups** | 7-day retention |
+| Firestore `(default)` | **Daily scheduled backups** | 30-day retention |
 | Firestore `(default)` | **Delete protection** | prevents accidental DB deletion |
 | Cloud Storage (`invoices/`, `price-lists/`) | *Not backed up — regenerable* | n/a |
 
@@ -27,9 +27,14 @@ also safe to re-run to confirm state.
 gcloud firestore databases update --database='(default)' \
   --enable-pitr --delete-protection --project=oww-maco
 
-# Daily backups, 7-day retention
+# Daily backups, 30-day retention
 gcloud firestore backups schedules create --database='(default)' \
-  --recurrence=daily --retention=7d --project=oww-maco
+  --recurrence=daily --retention=30d --project=oww-maco
+
+# Retention of an existing schedule can be changed in place
+# (recurrence cannot — delete and recreate for that):
+gcloud firestore backups schedules update --database='(default)' \
+  --backup-schedule=<SCHEDULE_ID> --retention=30d --project=oww-maco
 ```
 
 Verify:
@@ -41,8 +46,39 @@ gcloud firestore backups schedules list --database='(default)' --project=oww-mac
 gcloud firestore backups list --location=europe-west6 --project=oww-maco
 ```
 
-> Retention: daily schedules allow up to 7 days. For longer history add a
-> weekly schedule (`--recurrence=weekly --retention=14w`, up to 14 weeks).
+> Retention: Firestore allows up to 14 weeks (98 days) for daily and weekly
+> schedules alike. 30 days is deliberate: PITR covers the "noticed within a
+> week" case, the backups cover the slow-burning kind — the 2026-09 cleanup
+> bug deleted billed checkouts for two weeks before anyone looked, and the
+> original 7-day retention had already aged the early ones out. Longer than
+> 30 days would stretch the erasure residual promised in
+> `docs/data-protection.md`; revisit both together if that ever changes.
+
+## Deletion paths
+
+Every code path that deletes data, with the guard that keeps it from deleting
+too much (audited 2026-09-16 after the cleanup incident). The rule of thumb:
+leaving unused data behind is always cheaper than one eager delete — a new
+deletion path needs a row here and a test pinning its guard.
+
+| Path | Trigger | Deletes | Guard |
+|------|---------|---------|-------|
+| `cleanupAbandonedCheckouts` | daily cron | anon/kiosk auth principals idle > 7 d; their **open, ownerless** carts | no provider + no e-mail + no phone; `status == "open" && userId == null && !billRef`; kept records counted in the run log |
+| `privacyErase` (`privacy-cli.ts erase`) | admin, manual | the subject's own docs (checkouts by `userId`/`firebaseUid`, bills, usage, tokens, users doc, auth account); *redacts* their persons[] entry elsewhere | admin-only, blockers (open checkout / unpaid bill), export watermark, `--dry-run` first, receipt with phases |
+| `privacyTrim` (`privacy-cli.ts trim`) | admin, yearly | operational docs older than 3 years | admin-only, dry-run review, export watermark, `pendingRenewalBill` skip, PDFs escrowed before the bill doc goes |
+| Firestore TTL | automatic | `loginCodes` (5 min), in-progress `authentications` (5 min, `ttlAt` cleared on completion), pending `invites` (30 d, cleared on accept), `printJobs` | field is only ever set on transient docs |
+| `handleCompleteTagAuth` | on failed tag auth | the in-progress `authentications` doc being processed | that doc only; TTL would take it anyway |
+| `createUser` / `createManagedMember` / `import-members.ts` | rollback | the auth user created in the same call when the Firestore write fails | only `authUser.uid` from this call |
+| `moveInvoicePdfToArchive` | erase / trim | the source PDF | only after the archive copy exists (`ifGenerationMatch: 0`, 412 = already there) |
+| Admin UI "Besuch löschen" | admin click | an **open** visit and its items | button only rendered for `status == "open"`; billed visits go through correction (ADR-0042); rules: `checkouts` delete is admin-only |
+| Admin UI "Berechtigung löschen" | admin click | a `permission` doc | confirm dialog; rules admin-only |
+| Checkout wizard | member/visitor | items of their own **open** checkout (remove item, uncheck workshop) | rules: principal of the open checkout, or anon creator; NFC items excluded |
+| Archive bucket lifecycle | automatic | escrowed PDFs 10 years after `customTime` | OR 958f retention; main bucket has no lifecycle rule |
+
+Scheduled jobs other than the cleanup (`dailyMembershipMaintenance`,
+`staleCheckoutReminders`, `retryBillProcessing`, `autoAcknowledgeBills`,
+`monthlyBillRun`, `dailyStatsExport`, `dailyLogDigest`) do not delete
+documents. Seeding scripts delete only against the emulator.
 
 ## Restore procedures
 
