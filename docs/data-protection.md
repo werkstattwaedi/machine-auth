@@ -102,6 +102,20 @@ invoice PDFs remain in a locked archive for the legal 10 years.
   dry-run review is mandatory — first prod run doubly so.
 - **After schema changes to the stats tables:** re-run
   `scripts/setup-bigquery.ts` (idempotent).
+- **Monthly, and after any restore or bulk import: identity audit**
+  (ADR-0043).
+  ```bash
+  npx tsx scripts/privacy-cli.ts audit-identity --prod         # report first
+  npx tsx scripts/privacy-cli.ts audit-identity --fix --prod   # then repair
+  ```
+  Lists users docs without an Auth record, Auth records without a users
+  doc, and e-mail / phone mismatches — **uids only**, so the output is safe
+  to paste into an issue. `--fix` recreates missing Auth records under the
+  same uid, corrects Auth e-mails (reclaiming bare records), normalises
+  doc e-mails and unlinks mismatched phones. It never touches duplicate
+  e-mails, doc-less non-bare Auth records or disabled accounts — those need
+  a human. Exit code 4 while findings remain. A PITR/backup restore brings
+  back users docs but **not** their Auth records, so run it right after one.
 
 ## Residuals & accepted risks
 

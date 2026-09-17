@@ -275,6 +275,13 @@ hosting (the admin profile tab now changes e-mails through `updateUserEmail`). B
 the hosting deploy the *old* profile tab gets "Keine Berechtigung" when an admin changes an e-mail
 — the rules now pin `users.email` for admins too — so keep that gap short.
 
+Afterwards backfill the drift that predates the sync — report first, read it, then fix:
+
+```bash
+npx tsx scripts/privacy-cli.ts audit-identity --prod
+npx tsx scripts/privacy-cli.ts audit-identity --fix --prod   # expect only report-only kinds left
+```
+
 ## 3. Deploy Functions
 
 ```bash

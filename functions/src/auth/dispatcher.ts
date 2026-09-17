@@ -40,6 +40,7 @@ import { privacyReportHandler } from "../privacy/privacy_report";
 import { privacyEraseHandler } from "../privacy/erase_subject";
 import { privacyTrimHandler } from "../privacy/trim";
 import { statsSubjectSalt } from "../privacy/subject_key";
+import { auditIdentityHandler } from "./identity-audit";
 
 const HANDLERS: Record<string, RpcHandler> = {
   createUser: createUserHandler,
@@ -68,6 +69,9 @@ const HANDLERS: Record<string, RpcHandler> = {
   privacyReport: privacyReportHandler,
   privacyErase: privacyEraseHandler,
   privacyTrim: privacyTrimHandler,
+  // Admin-only doc↔Auth consistency check + backfill (ADR-0043), driven by
+  // `privacy-cli.ts audit-identity` like the DSAR tooling above.
+  auditIdentity: auditIdentityHandler,
 };
 
 export const authCall = onCall(
