@@ -342,7 +342,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!docSnap.exists()) {
         setUserDoc(null)
       } else {
-        const data = docSnap.data()
+        // "estimate": a serverTimestamp() this client just wrote reads as
+        // null in the optimistic snapshot until the server acknowledges it.
+        // Sign-up stamps termsAcceptedAt that way, and the checkout wizard
+        // latches "profile incomplete" on the first doc it sees — so a null
+        // here greeted a brand-new account with the imported-member welcome
+        // dialog. Only visible on a real backend; the emulator acknowledges
+        // within milliseconds.
+        const data = docSnap.data({ serverTimestamps: "estimate" })
         const roles: string[] = data.roles ?? []
         const firstName = data.firstName ?? ""
         const lastName = data.lastName ?? ""

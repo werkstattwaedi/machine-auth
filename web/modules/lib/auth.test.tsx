@@ -70,7 +70,7 @@ vi.mock("firebase/firestore", async () => {
 })
 
 // Import after mocks are set up
-const { AuthProvider, useAuth } = await import("./auth")
+const { AuthProvider, useAuth, isProfileComplete } = await import("./auth")
 
 afterEach(() => {
   cleanup()
@@ -96,6 +96,9 @@ function AuthStateDisplay() {
       <span data-testid="isAdmin">{String(isAdmin)}</span>
       <span data-testid="userDoc">{userDoc ? userDoc.id : "null"}</span>
       <span data-testid="userDocName">{userDoc ? userDoc.name : ""}</span>
+      <span data-testid="profileComplete">
+        {String(userDoc ? isProfileComplete(userDoc) : false)}
+      </span>
       <span data-testid="pendingGoogleLink">{String(pendingGoogleLink)}</span>
       <span data-testid="googleSignInPending">{String(googleSignInPending)}</span>
     </div>
@@ -261,6 +264,44 @@ describe("AuthProvider", () => {
       "Michael Schneider",
     )
     expect(screen.getByTestId("userDocName").textContent).not.toBe("MikeS")
+  })
+
+  it("treats a just-written serverTimestamp() as set, not null (no onboarding for a fresh sign-up)", async () => {
+    // writeSignupProfile stamps termsAcceptedAt with serverTimestamp(). Until
+    // the server acknowledges the write, the listener's OPTIMISTIC snapshot
+    // reads that field as null unless asked for an estimate. The checkout
+    // wizard latches "profile incomplete" on the first doc it sees, so a
+    // null here opened the imported-member welcome dialog ("Deine Daten …
+    // haben wir übernommen") for a brand-new account — invisible on the
+    // emulator, where the acknowledgement lands within milliseconds.
+    const pendingSnapshot = {
+      id: "fresh1",
+      exists: () => true,
+      data: (options?: { serverTimestamps?: string }) => ({
+        firstName: "Brand",
+        lastName: "New",
+        email: "fresh@test.com",
+        roles: [],
+        permissions: [],
+        userType: "erwachsen",
+        billingAddress: null,
+        termsAcceptedAt:
+          options?.serverTimestamps === "estimate" ? { seconds: 1 } : null,
+      }),
+    }
+    fakeDb.onSnapshotDoc = ((_ref: unknown, cb: (snap: unknown) => void) => {
+      cb(pendingSnapshot)
+      return () => {}
+    }) as unknown as FakeFirestore["onSnapshotDoc"]
+
+    const auth = new FakeAuth()
+    renderWithAuth(auth)
+    await act(() => {
+      auth.setCurrentUser(createFakeUser({ uid: "fresh1", email: "fresh@test.com" }))
+    })
+
+    expect(screen.getByTestId("userDoc").textContent).toBe("fresh1")
+    expect(screen.getByTestId("profileComplete").textContent).toBe("true")
   })
 
   it("reads pendingGoogleLink from localStorage", () => {

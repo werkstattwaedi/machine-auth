@@ -113,6 +113,14 @@ test.describe("Self-registration (combined sign-in/sign-up)", () => {
       "Checkout Tester",
     )
 
+    // A brand-new account is complete (terms accepted in the dialog) — the
+    // imported-member "Willkommen" onboarding must not open. It did on a
+    // real backend: the optimistic snapshot of the sign-up write read the
+    // pending serverTimestamp() termsAcceptedAt as null.
+    await expect(
+      page.getByText("Willkommen im neuen Self-Checkout"),
+    ).toHaveCount(0)
+
     // ── Verify Firestore ──
     const db = getAdminFirestore()
     let snap = await db
