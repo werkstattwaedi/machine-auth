@@ -83,6 +83,7 @@ export function LoginPage({
     completeSignedInSignup,
     signOut,
     pendingGoogleLink,
+    googleSignInPending,
   } = useAuth()
   const navigate = useNavigate()
   const targetPath = redirectTo || defaultRedirect
@@ -118,6 +119,10 @@ export function LoginPage({
   // and tag sessions are left alone.
   useEffect(() => {
     if (signingOutRef.current) return
+    // Google sign-in has not decided yet whether it keeps this session
+    // (ADR-0043 guard) — routing now could pin the sign-up form for a
+    // principal that is signed out again a moment later.
+    if (googleSignInPending) return
     if (loading || !user || user.isAnonymous || sessionKind === "tag") return
     if (userDocLoading) return
 
@@ -156,6 +161,7 @@ export function LoginPage({
     sessionKind,
     signupEnabled,
     pendingGoogleLink,
+    googleSignInPending,
     navigate,
     targetPath,
   ])

@@ -194,6 +194,16 @@ interface AuthContextValue {
    * (real, anonymous, or tag) already exists.
    */
   signInAnonymouslyIfNeeded: () => Promise<void>
+  /**
+   * True for the whole `signInWithGoogle` call. The auth-state listener
+   * reports the popup's user BEFORE the call has decided whether to keep the
+   * session (ADR-0043 guard: a doc-less uid whose e-mail belongs to a member
+   * under another uid is dropped again). Effects that route a "signed in
+   * without a users doc" principal into sign-up must wait for this to clear,
+   * or they strand the member on a sign-up form for a session that is
+   * about to be signed out.
+   */
+  googleSignInPending: boolean
   /** Set when Google sign-in failed because an email-link account exists. */
   pendingGoogleLink: boolean
   clearPendingGoogleLink: () => void
@@ -374,6 +384,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [pendingGoogleLink, setPendingGoogleLink] = useState(
     () => window.localStorage.getItem("pendingGoogleLink") === "true"
   )
+  const [googleSignInPending, setGoogleSignInPending] = useState(false)
 
   /**
    * Google sign-in is Auth-first by nature: when no Auth record holds the
@@ -426,6 +437,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     firstName: string
     lastName: string
   }> => {
+    setGoogleSignInPending(true)
     try {
       const result = await signInWithPopup(auth, new GoogleAuthProvider())
       // Prefer the OAuth identity's structured name claims; fall back to
@@ -470,6 +482,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setPendingGoogleLink(true)
       }
       throw error
+    } finally {
+      setGoogleSignInPending(false)
     }
   }
 
@@ -569,6 +583,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       linkGoogle,
       signOut,
       signInAnonymouslyIfNeeded,
+      googleSignInPending,
       pendingGoogleLink,
       clearPendingGoogleLink,
     }}>

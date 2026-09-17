@@ -31,6 +31,7 @@ const auth = {
   completeSignedInSignup: vi.fn(),
   signInWithGoogle: vi.fn(),
   pendingGoogleLink: false,
+  googleSignInPending: false,
 }
 
 vi.mock("@modules/lib/auth", () => ({
@@ -66,6 +67,10 @@ describe("LoginPage", () => {
     auth.checkAccountExists = vi.fn()
     auth.requestLoginEmail = vi.fn().mockResolvedValue(undefined)
     auth.signInWithGoogle = vi.fn()
+    auth.user = null
+    auth.userDoc = null
+    auth.sessionKind = null
+    auth.googleSignInPending = false
     window.localStorage.clear()
   })
 
@@ -164,5 +169,45 @@ describe("LoginPage", () => {
     expect(screen.queryByLabelText("Strasse und Hausnummer")).toBeNull()
     fireEvent.click(screen.getByTestId("signup-membertype-firma"))
     expect(screen.getByLabelText("Strasse und Hausnummer")).toBeTruthy()
+  })
+  // ADR-0043 Google guard: the auth-state listener reports the popup's user
+  // before signInWithGoogle has decided whether to keep the session. A member
+  // whose account lives under another uid is signed out again a moment later
+  // — the page must not have pinned the sign-up form for them by then, or
+  // they are left signed out in front of a form that cannot submit, with the
+  // "Konto existiert bereits" banner (e-mail stage only) never shown.
+  describe("doc-less signed-in principal vs. a pending Google sign-in", () => {
+    const docLessUser = { uid: "google-uid", isAnonymous: false }
+
+    it("drops a doc-less principal into inline sign-up once nothing is pending", () => {
+      auth.user = docLessUser
+      auth.sessionKind = "real"
+      render(<LoginPage defaultRedirect="/visit" signupEnabled />)
+
+      expect(screen.getByTestId("login-signup-stage")).toBeTruthy()
+    })
+
+    it("stays on the e-mail stage while the Google sign-in is still deciding", () => {
+      auth.user = docLessUser
+      auth.sessionKind = "real"
+      auth.googleSignInPending = true
+      const { rerender } = render(
+        <LoginPage defaultRedirect="/visit" signupEnabled />,
+      )
+
+      expect(screen.getByTestId("login-email-stage")).toBeTruthy()
+      expect(screen.queryByTestId("login-signup-stage")).toBeNull()
+      expect(navigateMock).not.toHaveBeenCalled()
+
+      // The guard refused: signed out, nothing pending → still the e-mail
+      // stage, ready for the e-mail code.
+      auth.user = null
+      auth.sessionKind = null
+      auth.googleSignInPending = false
+      rerender(<LoginPage defaultRedirect="/visit" signupEnabled />)
+
+      expect(screen.getByTestId("login-email-stage")).toBeTruthy()
+      expect(screen.queryByTestId("login-signup-stage")).toBeNull()
+    })
   })
 })

@@ -160,10 +160,21 @@ export function PersonProfileTab({
                 {...register("email", {
                   // A login e-mail can be changed, not removed — Auth would
                   // be stranded on an address the profile no longer names.
-                  validate: (v) =>
-                    !user.email ||
-                    v.trim() !== "" ||
-                    "Die Anmelde-E-Mail kann geändert, aber nicht entfernt werden.",
+                  validate: (v) => {
+                    const value = v.trim()
+                    if (value === "") {
+                      return (
+                        !user.email ||
+                        "Die Anmelde-E-Mail kann geändert, aber nicht entfernt werden."
+                      )
+                    }
+                    // Same sanity check the callable applies — catch it here
+                    // with a German message instead of "invalid email".
+                    return (
+                      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) ||
+                      "Bitte gib eine gültige E-Mail-Adresse ein."
+                    )
+                  },
                 })}
               />
               {errors.email && (

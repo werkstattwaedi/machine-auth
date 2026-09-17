@@ -101,6 +101,15 @@ export const createUserHandler = async (request: CallableRequest<unknown>) => {
       billingAddress: null,
     });
   } catch (error: any) {
+    // ALREADY_EXISTS: a sign-up finished on the adopted uid while we were
+    // here. Anyone requesting a code at the right moment can cause that, so
+    // it is a warning, not a fault — and nothing of ours to roll back.
+    if (error.code === 6 /* ALREADY_EXISTS */) {
+      logger.warn("createUser: users doc appeared concurrently", {
+        uid: authUser.uid,
+      });
+      throw new HttpsError("already-exists", EMAIL_IN_USE);
+    }
     logger.error("Firestore write failed for new user", error);
     if (createdHere) {
       // Rollback: delete the Auth user this call created.

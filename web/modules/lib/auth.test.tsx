@@ -79,7 +79,15 @@ afterEach(() => {
 
 /** Renders a component that displays auth state for assertions. */
 function AuthStateDisplay() {
-  const { user, userDoc, isAdmin, loading, userDocLoading, pendingGoogleLink } = useAuth()
+  const {
+    user,
+    userDoc,
+    isAdmin,
+    loading,
+    userDocLoading,
+    pendingGoogleLink,
+    googleSignInPending,
+  } = useAuth()
   return (
     <div>
       <span data-testid="loading">{String(loading)}</span>
@@ -89,6 +97,7 @@ function AuthStateDisplay() {
       <span data-testid="userDoc">{userDoc ? userDoc.id : "null"}</span>
       <span data-testid="userDocName">{userDoc ? userDoc.name : ""}</span>
       <span data-testid="pendingGoogleLink">{String(pendingGoogleLink)}</span>
+      <span data-testid="googleSignInPending">{String(googleSignInPending)}</span>
     </div>
   )
 }
@@ -278,10 +287,10 @@ describe("signInWithGoogle guard (issue #633)", () => {
     return null
   }
 
-  function renderCapture() {
+  function renderCapture(fakeAuth: FakeAuth = new FakeAuth()) {
     const services = {
       db: {} as FirebaseServices["db"],
-      auth: new FakeAuth() as unknown as FirebaseServices["auth"],
+      auth: fakeAuth as unknown as FirebaseServices["auth"],
       functions: {} as FirebaseServices["functions"],
     }
     render(
@@ -377,6 +386,62 @@ describe("signInWithGoogle guard (issue #633)", () => {
     // The session is dropped, never deleted on a guess …
     expect(mockSignOut).toHaveBeenCalled()
     expect(mockDeleteUser).not.toHaveBeenCalled()
+  })
+
+  it("flags googleSignInPending while the popup's user is already visible to the app", async () => {
+    // Firebase notifies auth-state listeners BEFORE signInWithPopup's caller
+    // gets to run the guard, so hosts see a signed-in, doc-less user while
+    // the account check is still in flight. They key off this flag to not
+    // route that principal into sign-up (login page) or into the member
+    // area (invite route) for a session that is about to be dropped.
+    const fakeAuth = new FakeAuth()
+    mockSignInWithPopup.mockImplementation(async () => {
+      fakeAuth.setCurrentUser(googleUser)
+      return { user: googleUser }
+    })
+    mockSignOut.mockImplementation(async () => {
+      fakeAuth.setCurrentUser(null)
+    })
+    let answerAccountCheck!: (value: unknown) => void
+    mockRpc.mockReturnValue(
+      new Promise((resolve) => {
+        answerAccountCheck = resolve
+      }),
+    )
+    renderCapture(fakeAuth)
+    expect(screen.getByTestId("googleSignInPending").textContent).toBe("false")
+
+    let outcome: Promise<unknown>
+    await act(async () => {
+      outcome = api!.signInWithGoogle().catch((err: unknown) => err)
+      await new Promise((r) => setTimeout(r, 0))
+    })
+
+    // Mid-guard: the app already sees the user — and the flag.
+    expect(screen.getByTestId("user").textContent).toBe("google-uid")
+    expect(screen.getByTestId("googleSignInPending").textContent).toBe("true")
+
+    await act(async () => {
+      answerAccountCheck({
+        data: { exists: true, hasAuthUser: true, hasProfile: true },
+      })
+      await outcome
+    })
+
+    expect(await outcome!).toMatchObject({ code: "oww/existing-account" })
+    expect(screen.getByTestId("user").textContent).toBe("null")
+    expect(screen.getByTestId("googleSignInPending").textContent).toBe("false")
+  })
+
+  it("clears googleSignInPending after a successful sign-in too", async () => {
+    mockRpc.mockResolvedValue({
+      data: { exists: false, hasAuthUser: true, hasProfile: false },
+    })
+    renderCapture()
+
+    await signIn()
+
+    expect(screen.getByTestId("googleSignInPending").textContent).toBe("false")
   })
 
   it("still refuses when the leftover record could not be deleted", async () => {

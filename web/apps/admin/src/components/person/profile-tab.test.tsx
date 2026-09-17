@@ -357,6 +357,19 @@ describe("PersonProfileTab e-mail change (issue #633)", () => {
     expect(mockUpdate).not.toHaveBeenCalled()
   })
 
+  it("rejects a malformed e-mail before calling the RPC", async () => {
+    render(<PersonProfileTab userId="u1" user={testUser([])} />)
+
+    // Passes the browser's lenient type=email check, fails ours (no TLD).
+    await changeEmailAndSave("someone@localhost")
+
+    await waitFor(() =>
+      expect(screen.getByText(/gültige E-Mail-Adresse/)).toBeTruthy(),
+    )
+    expect(mockUpdateUserEmail).not.toHaveBeenCalled()
+    expect(mockUpdate).not.toHaveBeenCalled()
+  })
+
   it("refuses to remove an existing login e-mail", async () => {
     render(<PersonProfileTab userId="u1" user={testUser([])} />)
 

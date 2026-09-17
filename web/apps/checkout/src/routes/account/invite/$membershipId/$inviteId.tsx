@@ -69,7 +69,14 @@ function sameEmail(a: string | null | undefined, b: string | null | undefined) {
 function InviteAcceptPage() {
   const { membershipId, inviteId } = Route.useParams()
   const functions = useFunctions()
-  const { user, userDoc, sessionKind, loading, userDocLoading } = useAuth()
+  const {
+    user,
+    userDoc,
+    sessionKind,
+    loading,
+    userDocLoading,
+    googleSignInPending,
+  } = useAuth()
   const navigate = useNavigate()
 
   const [info, setInfo] = React.useState<InviteInfo | null>(null)
@@ -117,6 +124,10 @@ function InviteAcceptPage() {
 
   // Signed-in users never accept here — they're routed to the membership page.
   React.useEffect(() => {
+    // Wait out a Google sign-in that may still drop its session (ADR-0043
+    // guard) — navigating now would land the visitor on a member page they
+    // are signed out of a moment later.
+    if (googleSignInPending) return
     if (!ready || !info || !isReal || info.status !== "pending") return
     if (sameEmail(userDoc?.email, info.email)) {
       navigate({ to: "/account/membership" })
@@ -126,7 +137,16 @@ function InviteAcceptPage() {
         search: { invite: `${membershipId}~${inviteId}` },
       })
     }
-  }, [ready, info, isReal, userDoc?.email, navigate, membershipId, inviteId])
+  }, [
+    ready,
+    info,
+    isReal,
+    userDoc?.email,
+    navigate,
+    membershipId,
+    inviteId,
+    googleSignInPending,
+  ])
 
   if (!ready || !info) return <PageLoading />
 

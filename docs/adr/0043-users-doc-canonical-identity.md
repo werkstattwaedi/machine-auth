@@ -61,19 +61,32 @@ shared by two docs — every write path already normalises.
    Auth record is recreated **under the same uid**, including its `admin`
    claim (the claims trigger only fires on doc writes); a drifted Auth e-mail
    is corrected. A **bare** Auth record squatting on a member's address — no
-   users doc, no provider, no phone, no custom claims, not a `tag:` principal
-   — is deleted so the heal can proceed. That is the leftover of an abandoned
-   code request. Anything not provably bare is a conflict for a human, never
-   a deletion. The admin `createUser` callable *adopts* a bare record instead
-   (creates the doc under its uid), which deletes nothing.
+   users doc, no provider, no phone, no custom claims, not disabled, not a
+   `tag:` principal — is deleted so the heal can proceed, but only once it
+   has been **idle for two hours** (`BARE_RECORD_MIN_IDLE_MS`, measured from
+   its latest creation / sign-in / token refresh). That is the leftover of an
+   abandoned code request. The idle term matters because a bare record can
+   have a live session — someone looking at the sign-up form has exactly this
+   shape — and an ID token outlives its deleted Auth record by up to an hour:
+   long enough to create `users/{deletedUid}` with the same e-mail, which
+   would leave two docs sharing the address and lock both members out.
+   Anything not provably bare and idle is a conflict, never a deletion. The
+   admin `createUser` callable *adopts* a bare record instead (creates the
+   doc under its uid), which deletes nothing and therefore needs no idle
+   term.
 
-5. **Clients cannot set or change `users.email`.** Rules pin it on create to
-   the session's own token e-mail and on update to its prior value. Without
-   the create pin, doc-first resolution would let any signed-in session —
-   anonymous included — register someone else's address and either pre-hijack
-   that person's first login or lock an existing member out. Admin e-mail
-   changes go through the `updateUserEmail` callable, which moves Auth first
-   (a conflict aborts before the doc changes) and then the doc.
+5. **No client can set or change `users.email` — admins included.** Rules
+   pin it on create to the session's own token e-mail and on update to its
+   prior value, in every branch: owner, elevated kiosk session **and admin**
+   (an admin writing the field straight to Firestore is one of the three ways
+   members got split). Without the create pin, doc-first resolution would let
+   any signed-in session — anonymous included — register someone else's
+   address and either pre-hijack that person's first login or lock an
+   existing member out. Admin e-mail changes go through the `updateUserEmail`
+   callable (Admin SDK, not subject to rules), which moves Auth first — a
+   conflict aborts before the doc changes — and then the doc; if that doc
+   write fails, Auth is moved back, because a login with the new address
+   would otherwise find no doc for it and be minted a second uid.
 
 6. **A users trigger keeps Auth aligned** (`syncAuthIdentity` →
    `reconcileAuthIdentity`): doc e-mail → Auth, and the phone unlink of
@@ -92,7 +105,10 @@ shared by two docs — every write path already normalises.
    signed in as, signs out, and sends the member to the e-mail code (which
    heals). The guard keys on "no users doc for this uid + `hasProfile` for its
    e-mail", not on `isNewUser`, so a missed delete is caught — and cleaned up —
-   on the next attempt. An unanswered check fails closed.
+   on the next attempt. An unanswered check fails closed. The auth-state
+   listener reports the popup's user *before* the guard has decided, so the
+   auth context exposes `googleSignInPending`; effects that route a "signed
+   in without a users doc" principal (login page, invite route) wait for it.
 
 9. **`audit-identity`** in `privacy-cli` lists docs without an Auth record,
    Auth records without a doc, and e-mail/phone mismatches, with `--fix` for
@@ -110,9 +126,12 @@ shared by two docs — every write path already normalises.
 - The verified-phone rule is enforced, not just intended.
 
 **Cons:**
-- One more deletion path (bare-record reclaim). It is narrow, guarded by four
-  independent terms, registered in `docs/disaster-recovery.md`, and pinned by
-  one test per guard term.
+- One more deletion path (bare-record reclaim). It is narrow, guarded by
+  independent terms (shape, not disabled, idle), registered in
+  `docs/disaster-recovery.md`, and pinned by one test per guard term.
+- An admin cannot assign an address that was used for a login attempt within
+  the last two hours (the bare record is not yet reclaimable). The callable
+  says so and asks to retry later, rather than claiming another account.
 - An admin e-mail change revokes the member's refresh tokens (Firebase does
   this on any Auth e-mail update): they are signed out everywhere within the
   hour and sign back in with the new address.

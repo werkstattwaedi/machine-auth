@@ -97,6 +97,18 @@ describe("createUser (Integration)", () => {
     expect(docs.size).to.equal(0);
   });
 
+  it("does not adopt a manually blocked (disabled) record", async () => {
+    const blocked = await getAuth().createUser({ email: EMAIL, disabled: true });
+
+    await expectHttpsError(
+      () => createUserHandler(request({ email: EMAIL })),
+      "already-exists"
+    );
+
+    expect((await getAuth().getUser(blocked.uid)).disabled).to.equal(true);
+    expect((await getFirestore().collection("users").get()).size).to.equal(0);
+  });
+
   it("refuses when a users doc already carries the e-mail", async () => {
     await getFirestore().collection("users").doc("member-1").set({
       created: Timestamp.now(),

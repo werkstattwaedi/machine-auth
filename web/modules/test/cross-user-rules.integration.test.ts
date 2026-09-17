@@ -689,11 +689,29 @@ describe("cross-user: users", () => {
     )
   })
 
-  it("allows admin changing a user's e-mail (the callable's own write path)", async () => {
+  it("denies even an admin changing a user's e-mail client-side", async () => {
+    // The admin profile tab writing `email` straight to Firestore is what
+    // used to split members in two (issue #633). E-mail changes go through
+    // the `updateUserEmail` callable — Admin SDK, not subject to rules —
+    // which moves Firebase Auth and the doc together.
+    await seedUser("alice")
+    await assertCrossUserDenied(
+      "users/{userId} admin client rewrote the login e-mail",
+      "firestore.rules users update (ADR-0043 email pin, admin branch)",
+      () =>
+        updateDoc(doc(adminDb(), "users", "alice"), {
+          email: "alice.new@test.com",
+        }),
+    )
+  })
+
+  it("allows admin editing everything else, incl. roles", async () => {
     await seedUser("alice")
     await assertSucceeds(
       updateDoc(doc(adminDb(), "users", "alice"), {
-        email: "alice.new@test.com",
+        firstName: "Alicia",
+        phone: "+41791234567",
+        roles: ["admin"],
       }),
     )
   })

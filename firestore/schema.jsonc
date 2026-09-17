@@ -489,9 +489,9 @@
                    // the auth user has no sign-in credentials and email is null.
       "created": "timestamp",
       // Login e-mail, normalized (trim + lowercase). Canonical identity —
-      // Firebase Auth follows it (ADR-0043). Clients cannot set or change it
-      // (rules pin it to the session's token e-mail on create, to the prior
-      // value on update); admins change it via `updateUserEmail`.
+      // Firebase Auth follows it (ADR-0043). No client can set or change it,
+      // admins included (rules pin it to the session's token e-mail on create,
+      // to the prior value on update); admins change it via `updateUserEmail`.
       "email": "string | null",       // null for child accounts created by a family owner
       // Contact number, E.164. The Auth-linked SMS-login number must be null
       // or equal to this — a mismatch unlinks it until re-verified (ADR-0043).

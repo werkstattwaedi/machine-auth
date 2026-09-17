@@ -177,6 +177,35 @@ describe("useAsyncMutation", () => {
     )
   })
 
+  it("shows an app-level (oww/…) error's own message instead of the fallback", async () => {
+    const { result } = renderHook(
+      () =>
+        useAsyncMutation({
+          context: "test.appError",
+          errorMessage: "Google-Anmeldung fehlgeschlagen",
+        }),
+      { wrapper: createWrapper() },
+    )
+
+    const refusal = Object.assign(
+      new Error("Für diese E-Mail existiert bereits ein Konto. Bitte melde dich per E-Mail-Code an."),
+      { code: "oww/existing-account" },
+    )
+
+    await act(async () => {
+      try {
+        await result.current.mutate(() => Promise.reject(refusal))
+      } catch {
+        /* expected */
+      }
+    })
+
+    // The refusal tells the member what to do next — the generic
+    // errorMessage must not replace it.
+    expect(mockToastError).toHaveBeenCalledWith(refusal.message)
+    expect(result.current.error?.code).toBe("oww/existing-account")
+  })
+
   it("maps FunctionsError code unavailable to the offline German message", async () => {
     const { result } = renderHook(
       () => useAsyncMutation({ context: "test.unavailable" }),

@@ -80,7 +80,8 @@ export function PhoneVerification({
   const verifierRef = useRef<RecaptchaVerifier | null>(null)
 
   useEffect(() => {
-    if (!user) return
+    // Nothing renders without a saved number — skip the Auth round-trip.
+    if (!user || !savedPhone) return
     let cancelled = false
     user
       .reload()
@@ -88,7 +89,9 @@ export function PhoneVerification({
         if (!cancelled) setLinkedPhone(user.phoneNumber ?? null)
       })
       .catch(() => {
-        // Offline: keep the cached value.
+        // Reload failed (offline, expired session, …): keep the cached
+        // value. Worst case the line says "Bestätigt" for a number the
+        // server has unlinked; the SMS login then simply reports no account.
       })
     return () => {
       cancelled = true

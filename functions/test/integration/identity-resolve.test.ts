@@ -14,10 +14,13 @@ import {
   clearFirestore,
   teardownEmulator,
   getFirestore,
+  importIdleBareUser,
 } from "../emulator-helper";
 import {
+  BARE_RECORD_MIN_IDLE_MS,
   defaultIdentityDeps,
   isBareAuthRecord,
+  isReclaimableBareRecord,
   resolveLoginUid,
 } from "../../src/auth/identity";
 
@@ -165,61 +168,101 @@ describe("resolveLoginUid (Integration)", () => {
   });
 
   describe("bare-record reclaim (deletion guard)", () => {
-    it("deletes a bare record squatting on the member's e-mail", async () => {
+    it("deletes an idle bare record squatting on the member's e-mail", async () => {
       await seedUserDoc(MEMBER_UID);
-      // What an abandoned code request leaves behind.
-      const bare = await getAuth().createUser({ email: EMAIL });
-      expect(isBareAuthRecord(bare)).to.equal(true);
+      // What an abandoned code request leaves behind, hours later.
+      await importIdleBareUser("squatter", EMAIL);
+      const bare = await getAuth().getUser("squatter");
+      expect(isReclaimableBareRecord(bare)).to.equal(true);
 
       const uid = await resolve(EMAIL);
 
       expect(uid).to.equal(MEMBER_UID);
-      expect(await getUserOrNull(bare.uid)).to.equal(null);
+      expect(await getUserOrNull("squatter")).to.equal(null);
       expect((await getAuth().getUser(MEMBER_UID)).email).to.equal(EMAIL);
     });
 
+    it("never deletes a bare record that could still have a session", async () => {
+      // Someone verified a code moments ago and is looking at the sign-up
+      // form: same shape as an abandoned record, but their ID token outlives
+      // a deleted Auth record and could still create users/{uid}.
+      await seedUserDoc(MEMBER_UID);
+      const fresh = await getAuth().createUser({ email: EMAIL });
+      expect(isBareAuthRecord(fresh)).to.equal(true);
+      expect(isReclaimableBareRecord(fresh)).to.equal(false);
+
+      await expectHttpsError(() => resolve(EMAIL), "failed-precondition");
+
+      expect(await getUserOrNull(fresh.uid)).to.not.equal(null);
+    });
+
+    it("counts the most recent sign of life, not just creation", async () => {
+      // Created days ago, but signed in an hour ago: the session is live.
+      await seedUserDoc(MEMBER_UID);
+      await importIdleBareUser("old-but-active", EMAIL, 1, 72);
+      const record = await getAuth().getUser("old-but-active");
+      expect(isReclaimableBareRecord(record)).to.equal(false);
+
+      await expectHttpsError(() => resolve(EMAIL), "failed-precondition");
+      expect(await getUserOrNull("old-but-active")).to.not.equal(null);
+
+      // The boundary is exactly BARE_RECORD_MIN_IDLE_MS after that sign-in.
+      const lastSignIn = Date.parse(record.metadata.lastSignInTime);
+      expect(
+        isReclaimableBareRecord(record, lastSignIn + BARE_RECORD_MIN_IDLE_MS)
+      ).to.equal(true);
+      expect(
+        isReclaimableBareRecord(record, lastSignIn + BARE_RECORD_MIN_IDLE_MS - 1)
+      ).to.equal(false);
+    });
+
+    // Every survivor below is IDLE (imported hours old), so the term named
+    // in the test is the only thing standing between it and deletion.
     const survivors: Array<{
       term: string;
-      make: () => Promise<UserRecord>;
+      arm: (uid: string) => Promise<unknown>;
     }> = [
       {
         term: "a sign-in provider",
-        make: () => getAuth().createUser({ email: EMAIL, password: "hunter2-hunter2" }),
+        arm: (uid) => getAuth().updateUser(uid, { password: "hunter2-hunter2" }),
       },
       {
         term: "a linked phone",
-        make: () => getAuth().createUser({ email: EMAIL, phoneNumber: "+41790000001" }),
+        arm: (uid) => getAuth().updateUser(uid, { phoneNumber: "+41790000001" }),
       },
       {
         term: "custom claims",
-        make: async () => {
-          const user = await getAuth().createUser({ email: EMAIL });
-          await getAuth().setCustomUserClaims(user.uid, { admin: false });
-          return getAuth().getUser(user.uid);
-        },
+        arm: (uid) => getAuth().setCustomUserClaims(uid, { admin: false }),
+      },
+      {
+        term: "a manual block (disabled)",
+        arm: (uid) => getAuth().updateUser(uid, { disabled: true }),
       },
     ];
-    for (const { term, make } of survivors) {
+    for (const { term, arm } of survivors) {
       it(`never deletes a record with ${term} — login fails instead`, async () => {
         await seedUserDoc(MEMBER_UID);
-        const holder = await make();
+        await importIdleBareUser("holder", EMAIL);
+        expect(isReclaimableBareRecord(await getAuth().getUser("holder"))).to.equal(true);
+        await arm("holder");
+        const holder = await getAuth().getUser("holder");
         expect(isBareAuthRecord(holder)).to.equal(false);
 
         await expectHttpsError(() => resolve(EMAIL), "failed-precondition");
 
-        expect(await getUserOrNull(holder.uid)).to.not.equal(null);
+        expect(await getUserOrNull("holder")).to.not.equal(null);
         expect(await getUserOrNull(MEMBER_UID)).to.equal(null);
       });
     }
 
     it("never deletes a record that has a users doc of its own", async () => {
       await seedUserDoc(MEMBER_UID);
-      const holder = await getAuth().createUser({ uid: "other", email: EMAIL });
+      await importIdleBareUser("other", EMAIL);
       await seedUserDoc("other", { email: "someone-else@example.com" });
 
       await expectHttpsError(() => resolve(EMAIL), "failed-precondition");
 
-      expect(await getUserOrNull(holder.uid)).to.not.equal(null);
+      expect(await getUserOrNull("other")).to.not.equal(null);
     });
 
     it("does not treat a kiosk tag: principal as bare", async () => {

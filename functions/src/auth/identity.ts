@@ -132,21 +132,69 @@ export async function findUserDocByEmail(
 }
 
 /**
- * An Auth record nobody ever used as a member: the leftover of an abandoned
- * code request (`createUser({ email })`, never followed by a users doc).
+ * An Auth record nobody ever used as a member, by SHAPE: the leftover of an
+ * abandoned code request (`createUser({ email })`, never followed by a users
+ * doc).
  *
  * The claims term is the load-bearing one: `syncCustomClaims` stamps
  * `{ admin }` on the first write of every users doc, so a record without
- * custom claims never had one. This is the guard of a deletion path
- * (docs/disaster-recovery.md "Deletion paths") — do not loosen a term
- * without updating that register and the guard tests.
+ * custom claims never had one. A disabled record is never bare: outside
+ * managed members (which have a doc) `disabled` only ever means someone
+ * blocked it by hand, and that decision is not ours to delete.
+ *
+ * Shape alone is enough to ADOPT a record (`createUser`), which deletes
+ * nothing. It is NOT enough to delete one — see `isReclaimableBareRecord`.
  */
 export function isBareAuthRecord(user: UserRecord): boolean {
   return (
     user.providerData.length === 0 &&
     !user.phoneNumber &&
+    !user.disabled &&
     Object.keys(user.customClaims ?? {}).length === 0 &&
     !user.uid.startsWith("tag:")
+  );
+}
+
+/**
+ * How long a bare record must have been idle before it may be deleted.
+ *
+ * A bare record can have a LIVE session: someone who just verified a code
+ * and is looking at the sign-up form has exactly this shape until they
+ * submit. Deleting the record does not end that session — its ID token
+ * stays valid for Firestore rules for up to an hour, long enough to create
+ * `users/{deletedUid}` with the same e-mail. Two docs would then share the
+ * address and login would refuse both members. Twice the token lifetime.
+ */
+export const BARE_RECORD_MIN_IDLE_MS = 2 * 60 * 60 * 1000;
+
+/** Latest sign of life of an Auth record; +Infinity when unreadable (keep). */
+function lastActivityMs(user: UserRecord): number {
+  const stamps = [
+    user.metadata.creationTime,
+    user.metadata.lastSignInTime,
+    user.metadata.lastRefreshTime,
+  ]
+    .filter((t): t is string => !!t)
+    .map((t) => Date.parse(t));
+  if (stamps.length === 0 || stamps.some((ms) => !Number.isFinite(ms))) {
+    return Number.POSITIVE_INFINITY;
+  }
+  return Math.max(...stamps);
+}
+
+/**
+ * The guard of a DELETION path (docs/disaster-recovery.md "Deletion
+ * paths"): bare by shape AND idle for longer than any session it could
+ * still have. Do not loosen a term without updating that register and the
+ * per-term tests in `identity-resolve.test.ts`.
+ */
+export function isReclaimableBareRecord(
+  user: UserRecord,
+  nowMs: number = Date.now()
+): boolean {
+  return (
+    isBareAuthRecord(user) &&
+    nowMs - lastActivityMs(user) >= BARE_RECORD_MIN_IDLE_MS
   );
 }
 
@@ -155,8 +203,10 @@ export type ReclaimResult = "free" | "reclaimed" | "conflict";
 /**
  * Make `email` available to `keepUid`. Auth enforces one account per
  * e-mail, so a bare record squatting on a member's address would block
- * every heal; it is deleted. Anything that is not provably bare — it has a
- * users doc, a provider, a phone, claims — is a conflict for a human.
+ * every heal; it is deleted. Anything that is not provably bare and idle —
+ * it has a users doc, a provider, a phone, claims, a manual block, or was
+ * active recently enough to still have a session — is a conflict: a human
+ * resolves it, or the caller retries once the record has gone idle.
  */
 export async function reclaimEmailFromBareRecord(
   deps: IdentityDeps,
@@ -167,7 +217,7 @@ export async function reclaimEmailFromBareRecord(
   if (!holder || holder.uid === keepUid) return "free";
 
   const holderDoc = await deps.db.collection("users").doc(holder.uid).get();
-  if (holderDoc.exists || !isBareAuthRecord(holder)) return "conflict";
+  if (holderDoc.exists || !isReclaimableBareRecord(holder)) return "conflict";
 
   await deps.auth.deleteUser(holder.uid);
   logger.warn("Reclaimed e-mail from a bare Auth record", {
