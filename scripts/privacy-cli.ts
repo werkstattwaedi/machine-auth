@@ -3,7 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * DSAR tooling CLI (ADR-0038): report | erase | trim, calling the DEPLOYED
+ * DSAR tooling CLI (ADR-0038): report | erase | trim, plus the identity
+ * consistency audit (ADR-0043): audit-identity — all calling the DEPLOYED
  * `authCall` dispatcher (or the emulator) — the CLI is a thin wrapper, all
  * logic lives in functions/src/privacy/.
  *
@@ -24,6 +25,13 @@
  *   npx tsx scripts/privacy-cli.ts report --email <email> [--prod]
  *   npx tsx scripts/privacy-cli.ts erase --uid <uid> --confirm-email <email> [--dry-run] [--prod]
  *   npx tsx scripts/privacy-cli.ts trim [--cutoff-year YYYY] [--dry-run] [--prod]
+ *   npx tsx scripts/privacy-cli.ts audit-identity [--fix] [--prod]
+ *
+ * audit-identity lists users docs without an Auth record, Auth records
+ * without a doc, and e-mail / phone mismatches (uids only — no e-mail or
+ * phone in the output). Run it WITHOUT --fix first and read the findings;
+ * --fix applies the mechanical repairs and prints what is left. Exit code
+ * 4 when findings remain, so a cron can alert on it.
  *
  * Emulator mode (default): expects `npm run dev` emulators on the standard
  * ports; override with FIREBASE_AUTH_EMULATOR_HOST / FUNCTIONS_EMULATOR_ORIGIN.
@@ -38,6 +46,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
 const PROD_MODE = argv.includes("--prod");
 const DRY_RUN = argv.includes("--dry-run");
+const FIX = argv.includes("--fix");
 loadEnv({
   path: PROD_MODE
     ? [path.join(__dirname, ".env"), path.join(__dirname, ".env.local")]
@@ -160,10 +169,13 @@ function sleep(seconds: number): Promise<void> {
 
 async function main() {
   const command = argv[0];
-  if (!command || !["report", "erase", "trim"].includes(command)) {
+  if (
+    !command ||
+    !["report", "erase", "trim", "audit-identity"].includes(command)
+  ) {
     console.error(
-      "Usage: privacy-cli.ts <report|erase|trim> [--uid U | --email E] " +
-        "[--confirm-email E] [--cutoff-year YYYY] [--dry-run] [--prod] [--wait-secs N]"
+      "Usage: privacy-cli.ts <report|erase|trim|audit-identity> [--uid U | --email E] " +
+        "[--confirm-email E] [--cutoff-year YYYY] [--dry-run] [--fix] [--prod] [--wait-secs N]"
     );
     process.exit(1);
   }
@@ -232,6 +244,28 @@ async function main() {
         "re-run `privacy-cli.ts erase` later to finish."
     );
     process.exit(3);
+  }
+
+  if (command === "audit-identity") {
+    const outcome = (await callAuthRpc(target, idToken, "auditIdentity", {
+      fix: FIX,
+    })) as {
+      counts: Record<string, number>;
+      findings: unknown[];
+      actions: string[];
+      residual?: unknown[];
+    };
+    console.log(JSON.stringify(outcome, null, 2));
+    const open = outcome.residual ?? outcome.findings;
+    console.error(
+      FIX
+        ? `\n${outcome.actions.length} action(s) applied; ${open.length} finding(s) remain.`
+        : `\n${open.length} finding(s). Review them, then re-run with --fix ` +
+            "(it never touches duplicate e-mails, doc-less non-bare Auth " +
+            "records or disabled accounts)."
+    );
+    if (open.length > 0) process.exit(4);
+    return;
   }
 
   if (command === "trim") {
