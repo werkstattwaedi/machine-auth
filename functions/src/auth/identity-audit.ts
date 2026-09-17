@@ -27,6 +27,7 @@ import {
   ensureAuthIdentity,
   identityFromUserDoc,
   isBareAuthRecord,
+  isReclaimableBareRecord,
   normalizeEmail,
   type IdentityDeps,
 } from "./identity";
@@ -148,6 +149,16 @@ function isDocLessByDesign(user: UserRecord): boolean {
   );
 }
 
+/** Why (or whether) the Auth record holding a doc's e-mail blocks a heal. */
+function describeHolder(holder: UserRecord, holderHasDoc: boolean): string {
+  if (holderHasDoc || !isBareAuthRecord(holder)) {
+    return "held by a non-bare Auth record";
+  }
+  return isReclaimableBareRecord(holder)
+    ? "held by a bare Auth record (reclaimable)"
+    : "held by a bare Auth record that was active too recently to reclaim — re-run later";
+}
+
 interface ScanResult {
   findings: IdentityFinding[];
   docs: Map<string, UserDocInfo>;
@@ -197,9 +208,7 @@ async function scan(deps: IdentityDeps): Promise<ScanResult> {
     const holderUid = doc.email ? authUidByEmail.get(doc.email) : undefined;
     const heldByOther = holderUid !== undefined && holderUid !== uid;
     const holderNote = heldByOther
-      ? isBareAuthRecord(authRecords.get(holderUid)!) && !docs.has(holderUid)
-        ? "held by a bare Auth record (reclaimable)"
-        : "held by a non-bare Auth record"
+      ? describeHolder(authRecords.get(holderUid)!, docs.has(holderUid))
       : "";
 
     const user = authRecords.get(uid);

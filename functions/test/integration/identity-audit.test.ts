@@ -14,6 +14,7 @@ import {
   clearFirestore,
   teardownEmulator,
   getFirestore,
+  importIdleBareUser,
 } from "../emulator-helper";
 import {
   REPORT_ONLY_KINDS,
@@ -173,9 +174,18 @@ describe("runIdentityAudit (Integration)", () => {
     await getAuth().createUser({ uid: "shouty", email: "shouty@example.com" });
     await seedDoc("squatted", { email: "squatted@example.com" });
     await getAuth().createUser({ uid: "squatted", email: "squatted-old@example.com" });
-    await getAuth().createUser({ uid: "squatter", email: "squatted@example.com" });
+    await importIdleBareUser("squatter", "squatted@example.com");
+    // Same, but the bare holder was active moments ago: it may still have a
+    // session, so --fix must not delete it (BARE_RECORD_MIN_IDLE_MS).
+    await seedDoc("fresh-squatted", { email: "fresh-squatted@example.com" });
+    await getAuth().createUser({ uid: "fresh-squatted", email: "fresh-old@example.com" });
+    await getAuth().createUser({ uid: "fresh-squatter", email: "fresh-squatted@example.com" });
     await seedHealthy("phone-drift", "phone-drift@example.com", "+41790000002");
     await getFirestore().collection("users").doc("phone-drift").update({ phone: null });
+    // Auth has an e-mail, the doc has none: which side is right is a human
+    // call. Acting on it would push a null e-mail into the heal.
+    await seedDoc("auth-only-email", { email: null });
+    await getAuth().createUser({ uid: "auth-only-email", email: "auth-only@example.com" });
     // Report-only:
     await seedDoc("manual-block", { email: "manual-block@example.com" });
     await getAuth().createUser({
@@ -218,21 +228,40 @@ describe("runIdentityAudit (Integration)", () => {
 
     expect((await auth.getUser("phone-drift")).phoneNumber).to.equal(undefined);
 
-    // Never touched: a manual block stays blocked, a non-bare holder stays.
+    // Never touched: a manual block stays blocked, a non-bare holder stays,
+    // a recently active bare holder stays, an Auth-only e-mail stays.
     expect((await auth.getUser("manual-block")).disabled).to.equal(true);
     expect((await auth.getUser("google-orphan")).email).to.equal("taken@example.com");
+    expect((await auth.getUser("fresh-squatter")).email).to.equal(
+      "fresh-squatted@example.com"
+    );
+    expect((await auth.getUser("fresh-squatted")).email).to.equal("fresh-old@example.com");
+    expect((await auth.getUser("auth-only-email")).email).to.equal(
+      "auth-only@example.com"
+    );
+    const authOnlyDoc = await getFirestore().collection("users").doc("auth-only-email").get();
+    expect(authOnlyDoc.get("email")).to.equal(null);
 
     expect(kindsByUid(outcome.residual!)).to.deep.equal({
       "manual-block": ["disabled-with-email"],
       "blocked-by-google": ["email-conflict"],
       "google-orphan": ["auth-without-doc"],
+      "fresh-squatted": ["email-conflict"],
+      "fresh-squatter": ["bare-auth"],
+      "auth-only-email": ["email-mismatch"],
     });
     expect(outcome.actions.length).to.be.greaterThan(0);
-    // Everything still open after a fix is either report-only or a conflict
-    // fix could not resolve.
+    // Everything still open after a fix is report-only, a conflict fix could
+    // not resolve, or the Auth-only e-mail a human has to decide.
     for (const f of outcome.residual!) {
-      expect(REPORT_ONLY_KINDS.has(f.kind) || f.kind === "email-conflict").to.equal(true);
+      expect(
+        REPORT_ONLY_KINDS.has(f.kind) ||
+          f.kind === "email-conflict" ||
+          f.uid === "auth-only-email"
+      ).to.equal(true);
     }
+    const conflictNote = outcome.residual!.find((f) => f.uid === "fresh-squatted")!;
+    expect(conflictNote.detail).to.match(/too recently/);
   });
 
   it("never normalizes an e-mail into a duplicate", async () => {
