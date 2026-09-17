@@ -12,18 +12,28 @@
  *   - saved number linked        → confirmation line
  *   - saved number not linked    → "Für SMS-Anmeldung bestätigen" button
  *     (sends the code, confirms in the shared CodeEntryDialog, then links
- *     via linkWithCredential — or updatePhoneNumber when replacing a
- *     previously linked number)
+ *     via updatePhoneNumber — see below for why never linkWithCredential)
  *   - no saved number / flag off → renders nothing
+ *
+ * The server UNLINKS the Auth number as soon as the saved number stops
+ * matching it (ADR-0043: `users.phone` is canonical, the login number must
+ * equal it). Two consequences for this component:
+ *   - The cached `User` does not learn about an unlink on its own, so it is
+ *     reloaded before its `phoneNumber` drives the "Bestätigt" line.
+ *   - Linking always goes through `updatePhoneNumber`, which sets the number
+ *     whether or not one is linked. `linkWithCredential` first asserts that
+ *     the cached `providerData` has no `phone` entry — and `reload()` only
+ *     MERGES provider data, it never drops a provider removed server-side.
+ *     After an unlink that assertion fails with
+ *     `auth/provider-already-linked` for as long as the session lives.
  */
 
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { CheckCircle2, Loader2, ShieldCheck } from "lucide-react"
 import {
   PhoneAuthProvider,
   RecaptchaVerifier,
-  linkWithCredential,
   updatePhoneNumber,
   type User,
 } from "firebase/auth"
@@ -69,6 +79,22 @@ export function PhoneVerification({
   const recaptchaHostRef = useRef<HTMLDivElement | null>(null)
   const verifierRef = useRef<RecaptchaVerifier | null>(null)
 
+  useEffect(() => {
+    if (!user) return
+    let cancelled = false
+    user
+      .reload()
+      .then(() => {
+        if (!cancelled) setLinkedPhone(user.phoneNumber ?? null)
+      })
+      .catch(() => {
+        // Offline: keep the cached value.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [user, savedPhone])
+
   if (!user || !savedPhone) return null
   const verified = linkedPhone === savedPhone
 
@@ -104,12 +130,8 @@ export function PhoneVerification({
     }
     const credential = PhoneAuthProvider.credential(verificationId, code)
     try {
-      if (user.phoneNumber) {
-        // Replacing a previously verified number.
-        await updatePhoneNumber(user, credential)
-      } else {
-        await linkWithCredential(user, credential)
-      }
+      // Sets the number whether or not one is linked (see file comment).
+      await updatePhoneNumber(user, credential)
     } catch (err) {
       throw new Error(verificationErrorMessage(err))
     }

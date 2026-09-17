@@ -37,6 +37,7 @@ import {
   membershipRef,
 } from "./shared";
 import { isAllowedOrigin } from "../auth/login-code/helpers";
+import { resolveLoginUid } from "../auth/identity";
 
 type SignupUserType = "erwachsen" | "kind" | "firma";
 
@@ -146,18 +147,13 @@ export async function handleAcceptInviteNewAccount(
     );
   }
 
-  // Resolve-or-create the Auth user for the invited email. `emailVerified` is
-  // set only AFTER the transaction commits — we don't want to mark an existing
-  // (incomplete) user's email verified if the accept then fails.
+  // Resolve the uid for the invited email — users doc first, so an imported
+  // (incomplete) member is completed in place rather than split (ADR-0043).
+  // `emailVerified` is set only AFTER the transaction commits — we don't want
+  // to mark an existing (incomplete) user's email verified if the accept then
+  // fails.
   const auth = getAuth();
-  let uid: string;
-  try {
-    uid = (await auth.getUserByEmail(email)).uid;
-  } catch (err: unknown) {
-    const code = (err as { code?: string } | null)?.code;
-    if (code !== "auth/user-not-found") throw err;
-    uid = (await auth.createUser({ email })).uid;
-  }
+  const uid = await resolveLoginUid({ auth, db: database }, email);
 
   const userDocRef = database.collection("users").doc(uid);
 
@@ -246,7 +242,7 @@ export async function handleAcceptInviteNewAccount(
     });
   } catch (err) {
     // We may have just created the Auth user. Leave it: re-running the flow
-    // resolves the same uid via getUserByEmail, and a credential-less,
+    // resolves the same uid via resolveLoginUid, and a credential-less,
     // doc-less, email-UNverified Auth user is inert (we set emailVerified only
     // after a successful commit, below). Mirrors mintSessionToken, which also
     // leaves its created user in place.

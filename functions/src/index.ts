@@ -255,6 +255,7 @@ export { staleCheckoutReminders } from "./checkout/stale_checkout_reminders";
 
 // Export Firestore triggers
 export { syncCustomClaims } from "./auth/set-custom-claims";
+export { syncAuthIdentity } from "./auth/sync-auth-identity";
 
 // Export audit triggers
 export {

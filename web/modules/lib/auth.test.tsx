@@ -9,6 +9,22 @@ import { FakeFirestore } from "../test/fake-firestore"
 
 let fakeDb: FakeFirestore
 
+// Shared with the hoisted module mocks below (Google sign-in guard tests).
+const { mockSignInWithPopup, mockDeleteUser, mockSignOut, mockRpc } =
+  vi.hoisted(() => ({
+    mockSignInWithPopup: vi.fn(),
+    mockDeleteUser: vi.fn(),
+    mockSignOut: vi.fn(),
+    mockRpc: vi.fn(),
+  }))
+
+vi.mock("./rpc", () => ({
+  rpcCallable:
+    (_functions: unknown, _group: string, method: string) =>
+    (payload: unknown) =>
+      mockRpc(method, payload),
+}))
+
 vi.mock("firebase/auth", () => ({
   onAuthStateChanged: (auth: FakeAuth, cb: (user: unknown) => void) => {
     return auth.onAuthStateChanged(cb as (user: FakeAuth["currentUser"]) => void)
@@ -21,9 +37,13 @@ vi.mock("firebase/auth", () => ({
   sendSignInLinkToEmail: vi.fn(),
   isSignInWithEmailLink: () => false,
   signInWithEmailLink: vi.fn(),
-  signOut: vi.fn(),
+  signOut: mockSignOut,
+  deleteUser: mockDeleteUser,
   GoogleAuthProvider: vi.fn(),
-  signInWithPopup: vi.fn(),
+  signInWithPopup: mockSignInWithPopup,
+  getAdditionalUserInfo: () => ({
+    profile: { given_name: "Gina", family_name: "Google" },
+  }),
   linkWithPopup: vi.fn(),
 }))
 
@@ -241,5 +261,137 @@ describe("AuthProvider", () => {
     renderWithAuth(auth)
 
     expect(screen.getByTestId("pendingGoogleLink").textContent).toBe("true")
+  })
+})
+
+/**
+ * Google sign-in guard (ADR-0043, issue #633). Google sign-in is Auth-first:
+ * when no Auth record holds the Google e-mail, the popup mints a fresh uid.
+ * If a users doc carries that e-mail anyway (its Auth record was deleted or
+ * drifted), continuing would sign the member up a second time. The guard
+ * drops the doc-less record and sends them to the e-mail code instead.
+ */
+describe("signInWithGoogle guard (issue #633)", () => {
+  let api: ReturnType<typeof useAuth> | null = null
+  function Capture() {
+    api = useAuth()
+    return null
+  }
+
+  function renderCapture() {
+    const services = {
+      db: {} as FirebaseServices["db"],
+      auth: new FakeAuth() as unknown as FirebaseServices["auth"],
+      functions: {} as FirebaseServices["functions"],
+    }
+    render(
+      <FirebaseProvider value={services}>
+        <AuthProvider>
+          <Capture />
+          <AuthStateDisplay />
+        </AuthProvider>
+      </FirebaseProvider>,
+    )
+  }
+
+  const googleUser = createFakeUser({ uid: "google-uid", email: "mia@example.com" })
+
+  async function signIn(): Promise<unknown> {
+    let outcome: unknown
+    await act(async () => {
+      outcome = await api!.signInWithGoogle().catch((err: unknown) => err)
+    })
+    return outcome
+  }
+
+  beforeEach(() => {
+    fakeDb = new FakeFirestore()
+    api = null
+    mockSignInWithPopup.mockReset()
+    mockSignInWithPopup.mockResolvedValue({ user: googleUser })
+    mockDeleteUser.mockReset()
+    mockDeleteUser.mockResolvedValue(undefined)
+    mockSignOut.mockReset()
+    mockSignOut.mockResolvedValue(undefined)
+    mockRpc.mockReset()
+  })
+
+  it("drops the doc-less record when the e-mail belongs to a member under another uid", async () => {
+    mockRpc.mockResolvedValue({
+      data: { exists: true, hasAuthUser: true, hasProfile: true },
+    })
+    renderCapture()
+
+    const outcome = await signIn()
+
+    expect(outcome).toMatchObject({ code: "oww/existing-account" })
+    expect(mockRpc).toHaveBeenCalledWith("checkAccountExists", {
+      email: "mia@example.com",
+    })
+    expect(mockDeleteUser).toHaveBeenCalledWith(googleUser)
+    expect(mockSignOut).toHaveBeenCalled()
+    // Same follow-up as Firebase's own refusal: offer to link Google after
+    // the e-mail sign-in.
+    expect(screen.getByTestId("pendingGoogleLink").textContent).toBe("true")
+  })
+
+  it("lets a genuinely new Google user through to sign-up", async () => {
+    mockRpc.mockResolvedValue({
+      data: { exists: false, hasAuthUser: true, hasProfile: false },
+    })
+    renderCapture()
+
+    const outcome = await signIn()
+
+    expect(outcome).toEqual({
+      isNewAccount: true,
+      firstName: "Gina",
+      lastName: "Google",
+    })
+    expect(mockDeleteUser).not.toHaveBeenCalled()
+    expect(mockSignOut).not.toHaveBeenCalled()
+  })
+
+  it("does not ask (or delete) when the signed-in uid has its own users doc", async () => {
+    fakeDb.setDoc(fakeDb.doc("users", "google-uid"), {
+      email: "mia@example.com",
+      termsAcceptedAt: { _fake: "ts" },
+      roles: [],
+    })
+    renderCapture()
+
+    const outcome = await signIn()
+
+    expect(outcome).toMatchObject({ isNewAccount: false })
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockDeleteUser).not.toHaveBeenCalled()
+  })
+
+  it("fails closed when the account check cannot be answered", async () => {
+    mockRpc.mockRejectedValue(new Error("unavailable"))
+    renderCapture()
+
+    const outcome = await signIn()
+
+    expect(outcome).toMatchObject({ code: "oww/account-check-failed" })
+    // The session is dropped, never deleted on a guess …
+    expect(mockSignOut).toHaveBeenCalled()
+    expect(mockDeleteUser).not.toHaveBeenCalled()
+  })
+
+  it("still refuses when the leftover record could not be deleted", async () => {
+    // A missed delete (closed tab, network) leaves the record behind; the
+    // guard does not key on isNewUser, so the next attempt lands here again
+    // and must refuse again rather than fall through to sign-up.
+    mockRpc.mockResolvedValue({
+      data: { exists: true, hasAuthUser: true, hasProfile: true },
+    })
+    mockDeleteUser.mockRejectedValue(new Error("network"))
+    renderCapture()
+
+    const outcome = await signIn()
+
+    expect(outcome).toMatchObject({ code: "oww/existing-account" })
+    expect(mockSignOut).toHaveBeenCalled()
   })
 })

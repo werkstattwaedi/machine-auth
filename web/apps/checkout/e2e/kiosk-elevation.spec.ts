@@ -21,6 +21,7 @@ import {
   getAdminAuth,
   getAdminFirestore,
   getCheckoutItems,
+  linkPhone,
   waitForLoginCode,
   waitForSmsCode,
 } from "./helpers"
@@ -156,16 +157,14 @@ test.describe("Kiosk step-up elevation", () => {
   }) => {
     // Link a phone to the badge user's Auth account (verified self-service
     // state, ADR-0031) — the step-up then offers SMS first.
+    // The seed has only the users doc for this member; the linked number
+    // needs an Auth record. Link it on BOTH sides — an Auth phone the doc
+    // does not name is unlinked by the identity trigger (ADR-0043).
     const auth = await getAdminAuth()
-    try {
-      await auth.updateUser(NFC_USER_ID_2, { phoneNumber: BADGE2_PHONE })
-    } catch {
-      await auth.createUser({
-        uid: NFC_USER_ID_2,
-        email: BADGE2_EMAIL,
-        phoneNumber: BADGE2_PHONE,
-      })
-    }
+    await auth.getUser(NFC_USER_ID_2).catch(() =>
+      auth.createUser({ uid: NFC_USER_ID_2, email: BADGE2_EMAIL }),
+    )
+    await linkPhone(NFC_USER_ID_2, BADGE2_PHONE)
     try {
       await tapBadge2(page)
       await page.getByTestId("kiosk-manage-account").click()
@@ -185,7 +184,7 @@ test.describe("Kiosk step-up elevation", () => {
       await expect(page).toHaveURL(/\/account\/usage/, { timeout: 10_000 })
     } finally {
       // Leave the shared seed as the other specs expect it.
-      await auth.updateUser(NFC_USER_ID_2, { phoneNumber: null }).catch(() => {})
+      await linkPhone(NFC_USER_ID_2, null).catch(() => {})
     }
   })
 

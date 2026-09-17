@@ -1,6 +1,6 @@
 # ADR-0029: Concurrent family-member checkouts — account-less family members
 
-**Status:** Accepted
+**Status:** Accepted (amended 2026-09-17 by [ADR-0043](0043-users-doc-canonical-identity.md): a managed member becomes a login account through the admin `updateUserEmail` callable, which sets the Auth e-mail and clears `disabled` — typing an e-mail into the users doc alone no longer happens)
 
 **Date:** 2026-06-09 (revised 2026-06-12)
 

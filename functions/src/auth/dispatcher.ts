@@ -15,6 +15,7 @@ import {
   kioskBearerKey,
 } from "../config/tag-secrets";
 import { createUserHandler } from "./create-user";
+import { updateUserEmailHandler } from "./update-user-email";
 import {
   checkAccountExistsHandler,
   checkPhoneAccountExistsHandler,
@@ -42,6 +43,8 @@ import { statsSubjectSalt } from "../privacy/subject_key";
 
 const HANDLERS: Record<string, RpcHandler> = {
   createUser: createUserHandler,
+  // Admin-only: the login e-mail moves on Auth and the doc together (ADR-0043).
+  updateUserEmail: updateUserEmailHandler,
   checkAccountExists: checkAccountExistsHandler,
   checkPhoneAccountExists: checkPhoneAccountExistsHandler,
   requestLoginCode: requestLoginCodeHandler,

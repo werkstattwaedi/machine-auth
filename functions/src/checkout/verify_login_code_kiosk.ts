@@ -29,7 +29,7 @@ import {
   consumeLoginCode,
   type VerifyLoginCodeInput,
 } from "../auth/login-code/verify-code";
-import { normalizeEmail } from "../auth/login-code/helpers";
+import { findUserDocByEmail, normalizeEmail } from "../auth/identity";
 import {
   assertKioskBearer,
   buildKioskUserPayload,
@@ -51,13 +51,10 @@ export async function handleVerifyLoginCodeKiosk(
   // required here (issue #595): an unclaimed member signs in and the kiosk
   // welcome onboarding collects them; a badge tap never checked terms
   // either, so this adds no new authority.
-  const db = getFirestore();
-  const snap = await db
-    .collection("users")
-    .where("email", "==", normalizeEmail(email))
-    .limit(1)
-    .get();
-  const userDoc = snap.empty ? null : snap.docs[0];
+  const userDoc = await findUserDocByEmail(
+    getFirestore(),
+    normalizeEmail(email)
+  );
   if (!userDoc) {
     logger.warn("verifyLoginCodeKiosk: no account", { email });
     throw new HttpsError(

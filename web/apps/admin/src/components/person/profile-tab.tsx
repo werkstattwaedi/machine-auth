@@ -3,13 +3,21 @@
 
 // Person · Profil — one focused edit form, one Speichern. Contact data,
 // user type and the admin role flag. Permissions live in their own tab.
+//
+// The e-mail is the member's login identity (ADR-0043): it is the one field
+// this form does NOT write to Firestore. A change goes through the
+// `updateUserEmail` callable, which moves Firebase Auth and the doc together
+// — a doc-only edit used to split the member into two accounts on their
+// next sign-in (issue #633).
 
 import { useEffect, useRef } from "react"
 import { useForm } from "react-hook-form"
+import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
 import { userRef } from "@modules/lib/firestore-helpers"
 import { parseSwissPhone } from "@modules/lib/phone"
-import { useDb } from "@modules/lib/firebase-context"
+import { useDb, useFunctions } from "@modules/lib/firebase-context"
+import { rpcCallable } from "@modules/lib/rpc"
 import type { UserDoc } from "@modules/lib/firestore-entities"
 import { formatDateTime } from "@modules/lib/format"
 import { Button } from "@modules/components/ui/button"
@@ -40,7 +48,13 @@ export function PersonProfileTab({
   user: UserDoc
 }) {
   const db = useDb()
-  const { update, loading: saving } = useFirestoreMutation()
+  const functions = useFunctions()
+  const { update, loading: updating } = useFirestoreMutation()
+  // ADR-0025: the hook owns the error toast. No successMessage — the doc
+  // update that always follows reports "Profil gespeichert", so a save
+  // shows one toast, not two.
+  const emailChange = useAsyncMutation({ context: "admin.updateUserEmail" })
+  const saving = updating || emailChange.loading
   const {
     register,
     handleSubmit,
@@ -79,13 +93,30 @@ export function PersonProfileTab({
     const roles = (user.roles ?? []).filter((r) => r !== "admin")
     if (values.isAdmin) roles.push("admin")
 
+    // E-mail first: a conflict ("already used by another account") must
+    // abort before any other field moves. The hook toasts and re-throws.
+    const email = values.email.trim().toLowerCase()
+    if (email !== (user.email ?? "")) {
+      try {
+        await emailChange.mutate(async () => {
+          const updateUserEmail = rpcCallable(
+            functions,
+            "authCall",
+            "updateUserEmail",
+          )
+          await updateUserEmail({ uid: userId, email })
+        })
+      } catch {
+        return
+      }
+    }
+
     const hasAddress = values.street || values.zip || values.city
     await update(
       userRef(db, userId),
       {
         firstName: values.firstName,
         lastName: values.lastName,
-        email: values.email || null,
         // Phone was already parsed + normalised during validation; use the
         // cached E.164 form. Empty input is stored as `null`. Mirrors the
         // checkout profile form so admin edits can't reintroduce formatted
@@ -123,7 +154,23 @@ export function PersonProfileTab({
           <div className="grid grid-cols-3 gap-4">
             <div className="col-span-2 space-y-2">
               <Label htmlFor="email">E-Mail</Label>
-              <Input id="email" type="email" {...register("email")} />
+              <Input
+                id="email"
+                type="email"
+                {...register("email", {
+                  // A login e-mail can be changed, not removed — Auth would
+                  // be stranded on an address the profile no longer names.
+                  validate: (v) =>
+                    !user.email ||
+                    v.trim() !== "" ||
+                    "Die Anmelde-E-Mail kann geändert, aber nicht entfernt werden.",
+                })}
+              />
+              {errors.email && (
+                <p className="text-xs text-destructive">
+                  {errors.email.message}
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="phone">Telefon</Label>
@@ -155,6 +202,10 @@ export function PersonProfileTab({
               )}
             </div>
           </div>
+          <p className="text-xs text-muted-foreground">
+            Eine geänderte Nummer pausiert die SMS-Anmeldung, bis das Mitglied
+            sie neu bestätigt.
+          </p>
           <div className="max-w-56 space-y-2">
             <Label htmlFor="userType">Benutzertyp</Label>
             <select

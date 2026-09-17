@@ -174,6 +174,16 @@ banner and offer it in the admin UI, keeping the original untouched.
 - The bill detail page could render a checkout ref that no longer resolves as "Besuch gelöscht" instead of a link — cheap, and the only place an admin would notice.
 - Only bills before 2026-09-15 are affected; the job now refuses to delete anything closed, billed or user-owned.
 
+### Member import — a changed e-mail creates a second person
+**Status:** 💡 Idea
+
+**Context:** `scripts/import-members.ts` matches rows to existing accounts by e-mail only (Auth + `users.email`). A member whose address changed between two exports of the club's member list is not recognised and is imported again as a new person — a second users doc and Auth account, with the membership attached to the new one. ADR-0043 makes the e-mail the canonical login identity and stops a *login* from splitting a member, but the import still can.
+
+**Notes:**
+- Needs a stable key in the export (member number) stored on the users doc, or a fuzzy "same name + address" pre-check that stops the row for a human.
+- A merge tool (move tokens, memberships, checkouts, bills from uid B to uid A, then erase B) would also resolve the duplicates `privacy-cli audit-identity` can only report.
+- Until then: before an import, change the e-mail of known movers in the admin profile tab first (`updateUserEmail` moves Auth and the doc together), so the import sees the account as existing.
+
 ## Template
 
 Copy this for new ideas:

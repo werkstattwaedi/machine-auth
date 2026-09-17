@@ -13,6 +13,7 @@ import {
   signInAnonymously,
   signInWithCustomToken,
   signOut as firebaseSignOut,
+  deleteUser,
   GoogleAuthProvider,
   signInWithPopup,
   linkWithPopup,
@@ -52,6 +53,27 @@ export interface SignupProfile {
   userType: UserType
   termsAccepted: boolean
   billingAddress?: BillingAddress | null
+}
+
+/**
+ * `signInWithGoogle` refused the session (ADR-0043). `code`:
+ *  - `oww/existing-account`: the Google e-mail belongs to a member whose
+ *    account lives under another uid. The member must sign in with an
+ *    e-mail code (which heals their login), then link Google.
+ *  - `oww/account-check-failed`: that lookup could not be answered; the
+ *    session was dropped rather than risk a duplicate account.
+ */
+export class GoogleSignInRefusedError extends Error {
+  readonly code: "oww/existing-account" | "oww/account-check-failed"
+
+  constructor(
+    code: "oww/existing-account" | "oww/account-check-failed",
+    message: string,
+  ) {
+    super(message)
+    this.name = "GoogleSignInRefusedError"
+    this.code = code
+  }
 }
 
 export interface UserDoc {
@@ -353,6 +375,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => window.localStorage.getItem("pendingGoogleLink") === "true"
   )
 
+  /**
+   * Google sign-in is Auth-first by nature: when no Auth record holds the
+   * Google e-mail, the popup mints a fresh uid. If a users doc nevertheless
+   * carries that e-mail (its Auth record was deleted or drifted — issue
+   * #633), continuing would walk the member through sign-up into a second
+   * account. Drop the doc-less record instead and send them to the e-mail
+   * code, which resolves by the users doc and heals the login (ADR-0043).
+   *
+   * Deliberately NOT keyed on `isNewUser`: if the delete below is missed
+   * once (closed tab, network), the next attempt arrives with
+   * `isNewUser == false` and must still be caught — and cleans the leftover
+   * up. Fails closed: an unanswered check never falls through to sign-up.
+   */
+  const refuseIfMemberUnderOtherUid = async (
+    docLessUser: User,
+    email: string,
+  ): Promise<void> => {
+    let hasProfile: boolean
+    try {
+      hasProfile = (await checkAccountExists(email)).hasProfile
+    } catch (err) {
+      console.error("signInWithGoogle: account check failed", err)
+      await firebaseSignOut(auth).catch(() => {})
+      throw new GoogleSignInRefusedError(
+        "oww/account-check-failed",
+        "Die Anmeldung konnte nicht geprüft werden. Bitte versuche es erneut.",
+      )
+    }
+    if (!hasProfile) return
+
+    // Only ever the record we are signed in as, and only while it has no
+    // users doc (docs/disaster-recovery.md "Deletion paths").
+    await deleteUser(docLessUser).catch((err) => {
+      console.error("signInWithGoogle: could not drop the doc-less record", err)
+    })
+    await firebaseSignOut(auth).catch(() => {})
+    // Same follow-up as Firebase's own "different credential" refusal:
+    // after the e-mail sign-in, offer to link Google.
+    window.localStorage.setItem("pendingGoogleLink", "true")
+    setPendingGoogleLink(true)
+    throw new GoogleSignInRefusedError(
+      "oww/existing-account",
+      "Für diese E-Mail existiert bereits ein Konto. Bitte melde dich per E-Mail-Code an.",
+    )
+  }
+
   const signInWithGoogle = async (): Promise<{
     isNewAccount: boolean
     firstName: string
@@ -379,11 +447,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // the whole call — default to "not new" and let the login page's
       // redirect effect drop an incomplete account into sign-up anyway.
       let isNewAccount = false
+      let hasOwnDoc: boolean | null = null
       try {
         const snap = await getDoc(userRef(db, result.user.uid))
+        hasOwnDoc = snap.exists()
         isNewAccount = !(snap.exists() && snap.data()?.termsAcceptedAt)
       } catch (err) {
         console.error("signInWithGoogle: user-doc lookup failed", err)
+      }
+      if (hasOwnDoc === false && result.user.email) {
+        await refuseIfMemberUnderOtherUid(result.user, result.user.email)
       }
       return { isNewAccount, firstName, lastName }
     } catch (error: unknown) {
@@ -545,7 +618,6 @@ async function writeSignupProfile(
   await setDoc(
     userDocRef,
     {
-      email: user.email,
       firstName: profile.firstName.trim(),
       lastName: profile.lastName.trim(),
       userType: profile.userType,
@@ -560,9 +632,12 @@ async function writeSignupProfile(
           ? { billingAddress: null }
           : {}),
       // New accounts get the full scaffold; an existing doc keeps its
-      // roles/permissions/created/phone (merge omits these fields).
+      // roles/permissions/created/phone (merge omits these fields). `email`
+      // belongs here too: rules pin it to the token e-mail on create and to
+      // its prior value on update (ADR-0043), so a merge must not touch it.
       ...(isNew
         ? {
+            email: user.email,
             created: serverTimestamp(),
             roles: [],
             permissions: [],

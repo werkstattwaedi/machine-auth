@@ -25,6 +25,26 @@ vi.mock("@modules/lib/firestore-helpers", () => ({
 
 vi.mock("@modules/lib/firebase-context", () => ({
   useDb: () => ({}),
+  useFunctions: () => ({}),
+}))
+
+// The e-mail goes through the `updateUserEmail` callable (ADR-0043), never
+// through the Firestore update. `mockRpcCallable` records (group, method).
+const mockUpdateUserEmail = vi.fn()
+const mockRpcCallable = vi.fn(() => mockUpdateUserEmail)
+vi.mock("@modules/lib/rpc", () => ({
+  rpcCallable: (...args: unknown[]) =>
+    (mockRpcCallable as (...a: unknown[]) => unknown)(...args),
+}))
+// The real hook toasts and re-throws (ADR-0025); only the re-throw matters
+// to the form, so the mock just runs the function.
+vi.mock("@modules/hooks/use-async-mutation", () => ({
+  useAsyncMutation: () => ({
+    mutate: (fn: () => Promise<unknown>) => fn(),
+    loading: false,
+    error: null,
+    reset: vi.fn(),
+  }),
 }))
 
 const mockUpdate = vi.fn()
@@ -261,5 +281,91 @@ describe("PersonProfileTab phone normalisation (issue #554)", () => {
       expect.objectContaining({ phone: null }),
       expect.anything(),
     )
+  })
+})
+
+/**
+ * Issue #633 / ADR-0043: `users.email` is the login identity. A doc-only
+ * edit left Firebase Auth on the old address, so the member's next code
+ * sign-in with the new one minted a second, doc-less account. The form now
+ * routes an e-mail change through the `updateUserEmail` callable (Auth +
+ * doc together) and never includes `email` in its Firestore update.
+ */
+describe("PersonProfileTab e-mail change (issue #633)", () => {
+  beforeEach(() => {
+    mockUpdate.mockReset()
+    mockUpdate.mockResolvedValue(undefined)
+    mockUpdateUserEmail.mockReset()
+    mockUpdateUserEmail.mockResolvedValue({ data: {} })
+    mockRpcCallable.mockClear()
+  })
+
+  afterEach(() => {
+    cleanup()
+  })
+
+  async function changeEmailAndSave(value: string) {
+    const user = userEvent.setup()
+    const email = screen.getByLabelText(/E-Mail/) as HTMLInputElement
+    await act(async () => {
+      await user.clear(email)
+      if (value) await user.type(email, value)
+      await user.click(screen.getByRole("button", { name: /Speichern/ }))
+    })
+  }
+
+  it("sends a changed e-mail through the RPC, not the Firestore update", async () => {
+    render(<PersonProfileTab userId="u1" user={testUser([])} />)
+
+    await changeEmailAndSave("New@Example.com")
+
+    await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(1))
+    expect(mockRpcCallable).toHaveBeenCalledWith(
+      expect.anything(),
+      "authCall",
+      "updateUserEmail",
+    )
+    expect(mockUpdateUserEmail).toHaveBeenCalledWith({
+      uid: "u1",
+      email: "new@example.com",
+    })
+    expect(mockUpdate.mock.calls[0][1]).not.toHaveProperty("email")
+  })
+
+  it("skips the RPC when the e-mail is unchanged", async () => {
+    render(<PersonProfileTab userId="u1" user={testUser([])} />)
+
+    const user = userEvent.setup()
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: /Speichern/ }))
+    })
+
+    await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(1))
+    expect(mockUpdateUserEmail).not.toHaveBeenCalled()
+    expect(mockUpdate.mock.calls[0][1]).not.toHaveProperty("email")
+  })
+
+  it("moves no other field when the e-mail change is refused", async () => {
+    mockUpdateUserEmail.mockRejectedValue(
+      Object.assign(new Error("in use"), { code: "functions/already-exists" }),
+    )
+    render(<PersonProfileTab userId="u1" user={testUser([])} />)
+
+    await changeEmailAndSave("taken@example.com")
+
+    await waitFor(() => expect(mockUpdateUserEmail).toHaveBeenCalledTimes(1))
+    expect(mockUpdate).not.toHaveBeenCalled()
+  })
+
+  it("refuses to remove an existing login e-mail", async () => {
+    render(<PersonProfileTab userId="u1" user={testUser([])} />)
+
+    await changeEmailAndSave("")
+
+    await waitFor(() =>
+      expect(screen.getByText(/nicht entfernt werden/)).toBeTruthy(),
+    )
+    expect(mockUpdateUserEmail).not.toHaveBeenCalled()
+    expect(mockUpdate).not.toHaveBeenCalled()
   })
 })

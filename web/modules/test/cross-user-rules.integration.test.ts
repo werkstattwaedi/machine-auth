@@ -516,11 +516,22 @@ describe("cross-user: users", () => {
 
   // Self-registration create invariants (combined sign-in/sign-up): the
   // create path enforces the same firma billing-address rule as update.
+  //
+  // A sign-up session carries the address it just verified as its token
+  // e-mail, and the create rule pins `email` to it (ADR-0043). Every case
+  // below registers with a MATCHING e-mail unless the e-mail is what it
+  // tests — otherwise the roles/permissions/billing denials would pass on
+  // the e-mail pin alone and stop guarding their own condition.
+  const SIGNUP_EMAIL = "carol@example.com"
+  function signupDb(uid: string, email: string = SIGNUP_EMAIL) {
+    return getTestEnvironment().authenticatedContext(uid, { email }).firestore()
+  }
+
   function signupDoc(overrides: Record<string, unknown> = {}) {
     return {
       firstName: "Carol",
       lastName: "Muster",
-      email: "carol@example.com",
+      email: SIGNUP_EMAIL,
       userType: "erwachsen",
       termsAcceptedAt: serverTimestamp(),
       roles: [],
@@ -534,14 +545,14 @@ describe("cross-user: users", () => {
 
   it("allows erwachsen self-registration without a billing address", async () => {
     await assertSucceeds(
-      setDoc(doc(authedDb("carol"), "users", "carol"), signupDoc()),
+      setDoc(doc(signupDb("carol"), "users", "carol"), signupDoc()),
     )
   })
 
   it("denies firma self-registration without a billing address", async () => {
     await assertFails(
       setDoc(
-        doc(authedDb("carol"), "users", "carol"),
+        doc(signupDb("carol"), "users", "carol"),
         signupDoc({ userType: "firma" }),
       ),
     )
@@ -550,7 +561,7 @@ describe("cross-user: users", () => {
   it("allows firma self-registration with a complete billing address", async () => {
     await assertSucceeds(
       setDoc(
-        doc(authedDb("carol"), "users", "carol"),
+        doc(signupDb("carol"), "users", "carol"),
         signupDoc({
           userType: "firma",
           billingAddress: {
@@ -578,7 +589,7 @@ describe("cross-user: users", () => {
       "firestore.rules:users create (roles == [])",
       () =>
         setDoc(
-          doc(authedDb("mallory"), "users", "mallory"),
+          doc(signupDb("mallory"), "users", "mallory"),
           signupDoc({ roles: ["admin"] }),
         ),
     )
@@ -593,7 +604,9 @@ describe("cross-user: users", () => {
       () =>
         setDoc(
           doc(anonAuthDb("anon-mallory"), "users", "anon-mallory"),
-          signupDoc({ roles: ["admin"] }),
+          // No token e-mail on an anonymous session → register e-mail-less,
+          // so the roles pin is the only thing left to deny this.
+          signupDoc({ roles: ["admin"], email: null }),
         ),
     )
   })
@@ -604,9 +617,9 @@ describe("cross-user: users", () => {
       "firestore.rules:users create (permissions == [])",
       () =>
         setDoc(
-          doc(authedDb("mallory"), "users", "mallory"),
+          doc(signupDb("mallory"), "users", "mallory"),
           signupDoc({
-            permissions: [doc(authedDb("mallory"), "permission", "laser")],
+            permissions: [doc(signupDb("mallory"), "permission", "laser")],
           }),
         ),
     )
@@ -618,9 +631,70 @@ describe("cross-user: users", () => {
       "firestore.rules:users create (roles == [])",
       () =>
         setDoc(
-          doc(authedDb("mallory"), "users", "mallory"),
+          doc(signupDb("mallory"), "users", "mallory"),
           signupDoc({ roles: ["vereinsmitglied"] }),
         ),
+    )
+  })
+
+  // ADR-0043: login resolves a verified address to the users doc carrying
+  // it. A session that could register SOMEONE ELSE's address would either
+  // pre-hijack that person's first login (their code signs them into this
+  // uid) or lock an existing member out (two docs share the e-mail → login
+  // refuses). These MUST fail against a create rule without the e-mail pin.
+  it("denies self-registration under someone else's e-mail (login pre-hijack)", async () => {
+    await assertCrossUserDenied(
+      "users/{id} create registers a foreign e-mail",
+      "firestore.rules:users create (email == token e-mail)",
+      () =>
+        setDoc(
+          doc(signupDb("mallory", "mallory@example.com"), "users", "mallory"),
+          signupDoc({ email: "victim@example.com" }),
+        ),
+    )
+  })
+
+  it("denies an anonymous-auth session registering a member's e-mail (login lock-out)", async () => {
+    await seedUser("alice")
+    await assertCrossUserDenied(
+      "users/{id} create from anon session squats a member's e-mail",
+      "firestore.rules:users create (email == token e-mail)",
+      () =>
+        setDoc(
+          doc(anonAuthDb("anon-mallory"), "users", "anon-mallory"),
+          signupDoc({ email: "alice@test.com" }),
+        ),
+    )
+  })
+
+  it("denies alice changing her own e-mail (login identity moves via updateUserEmail only)", async () => {
+    await seedUser("alice")
+    await assertCrossUserDenied(
+      "users/{userId} owner rewrote the login e-mail",
+      "firestore.rules users update (ADR-0043 email pin)",
+      () =>
+        updateDoc(doc(authedDb("alice"), "users", "alice"), {
+          email: "attacker@example.com",
+        }),
+    )
+  })
+
+  it("allows alice changing her own phone and name", async () => {
+    await seedUser("alice")
+    await assertSucceeds(
+      updateDoc(doc(authedDb("alice"), "users", "alice"), {
+        firstName: "Alicia",
+        phone: "+41791234567",
+      }),
+    )
+  })
+
+  it("allows admin changing a user's e-mail (the callable's own write path)", async () => {
+    await seedUser("alice")
+    await assertSucceeds(
+      updateDoc(doc(adminDb(), "users", "alice"), {
+        email: "alice.new@test.com",
+      }),
     )
   })
 })

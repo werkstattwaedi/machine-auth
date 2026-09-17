@@ -12,6 +12,7 @@
 import { DocumentReference, Firestore } from "firebase-admin/firestore";
 import type { Auth, UserRecord } from "firebase-admin/auth";
 import { HttpsError } from "firebase-functions/v2/https";
+import { normalizeEmail } from "../auth/identity";
 
 export interface SubjectInput {
   uid?: string;
@@ -30,9 +31,8 @@ export interface Subject {
   userDocExists: boolean;
 }
 
-export function normalizeEmail(email: string): string {
-  return email.trim().toLowerCase();
-}
+// One copy, owned by the identity module (ADR-0043).
+export { normalizeEmail };
 
 export async function resolveSubject(
   db: Firestore,
