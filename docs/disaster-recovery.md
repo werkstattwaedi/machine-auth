@@ -68,12 +68,18 @@ deletion path needs a row here and a test pinning its guard.
 | `privacyTrim` (`privacy-cli.ts trim`) | admin, yearly | operational docs older than 3 years | admin-only, dry-run review, export watermark, `pendingRenewalBill` skip, PDFs escrowed before the bill doc goes |
 | Firestore TTL | automatic | `loginCodes` (5 min), in-progress `authentications` (5 min, `ttlAt` cleared on completion), pending `invites` (30 d, cleared on accept), `printJobs` | field is only ever set on transient docs |
 | `handleCompleteTagAuth` | on failed tag auth | the in-progress `authentications` doc being processed | that doc only; TTL would take it anyway |
-| `createUser` / `createManagedMember` / `import-members.ts` | rollback | the auth user created in the same call when the Firestore write fails | only `authUser.uid` from this call |
+| `createUser` / `createManagedMember` / `import-members.ts` | rollback | the auth user created in the same call when the Firestore write fails | only `authUser.uid` from this call (`createUser` never rolls back a bare record it *adopted*) |
+| Bare Auth record reclaim (`reclaimEmailFromBareRecord`, ADR-0043) | member login, `syncAuthIdentity` trigger, `updateUserEmail` | an Auth record holding a member's e-mail under a different uid — the leftover of an abandoned code request | no `users/{uid}` doc + no provider + no phone + **no custom claims** (every doc-backed record carries `{ admin }` from `syncCustomClaims`) + not disabled + not a `tag:` principal + **idle ≥ 2 h** since its latest creation / sign-in / refresh (a bare record can have a live session whose ID token outlives the deleted record); anything else is a conflict, never a delete; warn log with both uids; one test per guard term in `identity-resolve.test.ts` |
+| Google sign-in orphan (`signInWithGoogle`, ADR-0043) | member, client-side | the doc-less Auth record the popup just signed in as | only `auth.currentUser`; only when `users/{uid}` does not exist **and** another users doc carries its e-mail (`hasProfile`); an unanswered check signs out and deletes nothing |
 | `moveInvoicePdfToArchive` | erase / trim | the source PDF | only after the archive copy exists (`ifGenerationMatch: 0`, 412 = already there) |
 | Admin UI "Besuch löschen" | admin click | an **open** visit and its items | button only rendered for `status == "open"`; billed visits go through correction (ADR-0042); rules: `checkouts` delete is admin-only |
 | Admin UI "Berechtigung löschen" | admin click | a `permission` doc | confirm dialog; rules admin-only |
 | Checkout wizard | member/visitor | items of their own **open** checkout (remove item, uncheck workshop) | rules: principal of the open checkout, or anon creator; NFC items excluded |
 | Archive bucket lifecycle | automatic | escrowed PDFs 10 years after `customTime` | OR 958f retention; main bucket has no lifecycle rule |
+
+The `syncAuthIdentity` trigger also *unlinks* an Auth phone number that
+`users.phone` no longer names (ADR-0043). That clears a field, it deletes no
+record; the member re-verifies on `/account/profile`.
 
 Scheduled jobs other than the cleanup (`dailyMembershipMaintenance`,
 `staleCheckoutReminders`, `retryBillProcessing`, `autoAcknowledgeBills`,

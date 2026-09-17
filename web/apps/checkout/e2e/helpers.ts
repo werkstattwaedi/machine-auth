@@ -590,6 +590,20 @@ export async function getAdminAuth() {
 }
 
 /**
+ * Put a member into the "verified phone" state, or clear it with `null`:
+ * the Auth-linked SMS-login number AND `users.phone` together. They must
+ * agree — the `syncAuthIdentity` trigger is live in the e2e emulators and
+ * unlinks an Auth phone the doc does not name on the doc's next write
+ * (ADR-0043). Auth first: the doc write is what wakes the trigger, and it
+ * must already find the matching number.
+ */
+export async function linkPhone(uid: string, phone: string | null) {
+  const auth = await getAdminAuth()
+  await auth.updateUser(uid, { phoneNumber: phone })
+  await getAdminFirestore().collection("users").doc(uid).update({ phone })
+}
+
+/**
  * Fetch the most recent phone-auth verification code the Auth emulator
  * "sent" to `phone` (E.164). The emulator never sends real SMS; codes are
  * exposed on its REST surface for tests (SMS login, ADR-0031).

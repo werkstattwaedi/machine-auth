@@ -48,6 +48,13 @@ export const syncCustomClaims = onDocumentWritten(
         `Custom claims updated for ${authUid}: admin=${isAdmin}`
       );
     } catch (error) {
+      // A users doc without an Auth record is a known, client-reachable
+      // state (managed by login self-heal + `audit-identity`, ADR-0043) —
+      // anything else is a real fault.
+      if ((error as { code?: string } | null)?.code === "auth/user-not-found") {
+        logger.warn(`No Auth record to set custom claims on for ${authUid}`);
+        return;
+      }
       logger.error(`Failed to set custom claims for ${authUid}`, error);
     }
   }

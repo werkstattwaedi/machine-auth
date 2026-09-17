@@ -34,9 +34,10 @@ import {
   type VerifyLoginCodeInput,
 } from "../auth/login-code/verify-code";
 import {
+  defaultIdentityDeps,
   normalizeEmail,
-  resolveOrCreateAuthUid,
-} from "../auth/login-code/helpers";
+  resolveLoginUid,
+} from "../auth/identity";
 import { sendAccountInstructionsEmail } from "./account_instructions";
 import {
   assertKioskBearer,
@@ -142,7 +143,7 @@ export async function handleSignupKiosk(
   }
 
   const { email } = await consumeLoginCode(input);
-  const uid = await resolveOrCreateAuthUid(email);
+  const uid = await resolveLoginUid(defaultIdentityDeps(), email);
 
   // Same scaffold as the own-device sign-up (writeSignupProfile), written
   // with the admin SDK because the kiosk holds no principal yet. `create()`

@@ -63,6 +63,10 @@ interface MutationState {
  * second line of defence, but truncating keeps log entries bounded. */
 const MESSAGE_MAX = 200
 
+/** Code prefix of errors this app throws itself, with a user-facing German
+ * message (as opposed to SDK errors, whose messages are English internals). */
+const APP_ERROR_PREFIX = "oww/"
+
 interface FirebaseLikeError {
   code?: unknown
   message?: unknown
@@ -206,7 +210,12 @@ export function useAsyncMutation<T = void>(
         const rawMessage = extractMessage(err)
         const fallback =
           options.errorMessage ?? `Fehler: ${rawMessage}`
-        const message = firebaseErrorToGerman(code, fallback)
+        // App-level refusals (code "oww/…", e.g. GoogleSignInRefusedError)
+        // are thrown with a German message that tells the user what to do
+        // next — a generic fallback would throw that guidance away.
+        const message = code.startsWith(APP_ERROR_PREFIX)
+          ? rawMessage
+          : firebaseErrorToGerman(code, fallback)
 
         const structured: MutationError = {
           code,

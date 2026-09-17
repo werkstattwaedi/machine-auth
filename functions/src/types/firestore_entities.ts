@@ -32,7 +32,12 @@ export interface UserEntity {
   created: Timestamp;
   firstName: string;
   lastName: string;
-  email?: string | null; // null for child accounts (no Firebase Auth credentials)
+  // Login e-mail, normalized (trim + lowercase). Canonical: Firebase Auth
+  // follows it (ADR-0043). null for managed members (no login).
+  email?: string | null;
+  // Contact number, E.164. The Auth-linked (SMS login) number must be null
+  // or equal to this; a mismatch unlinks it (ADR-0043).
+  phone?: string | null;
   permissions: DocumentReference[]; // References to /permission/{permissionId}
   roles: string[];
   termsAcceptedAt?: Timestamp | null;

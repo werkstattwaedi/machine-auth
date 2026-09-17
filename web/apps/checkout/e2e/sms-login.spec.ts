@@ -12,17 +12,24 @@
  */
 
 import { test, expect } from "@playwright/test"
-import { clearCollections, getAdminAuth, waitForSmsCode, waitForLoginCode } from "./helpers"
+import {
+  clearCollections,
+  getAdminAuth,
+  linkPhone,
+  waitForSmsCode,
+  waitForLoginCode,
+} from "./helpers"
 import { AUTH_USER_EMAIL } from "./global-setup"
 
 const SMS_PHONE = "+41791234599"
 
 // Link the phone to the seeded auth user once — the verified-self-service
-// state the flows depend on. updateUser is idempotent for the same value.
+// state the flows depend on: Auth-linked number == users.phone (ADR-0043).
+// Idempotent for the same value.
 test.beforeAll(async () => {
   const auth = await getAdminAuth()
   const user = await auth.getUserByEmail(AUTH_USER_EMAIL)
-  await auth.updateUser(user.uid, { phoneNumber: SMS_PHONE })
+  await linkPhone(user.uid, SMS_PHONE)
 })
 
 test.describe("SMS login on the check-in page", () => {
@@ -154,6 +161,17 @@ test.describe("SMS login on the check-in page", () => {
     // ("Zuerst speichern" gating lifts). "Gespeichert." flashes only until
     // that reset, so don't assert on it.
     await expect(phoneField).toHaveValue(NEW_PHONE, { timeout: 10_000 })
+
+    // users.phone no longer names the linked number, so the server unlinks
+    // it (ADR-0043): SMS login is paused until the new number is verified.
+    const auth = await getAdminAuth()
+    const authUid = (await auth.getUserByEmail(AUTH_USER_EMAIL)).uid
+    await expect
+      .poll(async () => (await auth.getUser(authUid)).phoneNumber ?? null, {
+        timeout: 15_000,
+      })
+      .toBeNull()
+
     await expect(page.getByTestId("phone-verify-start")).toBeEnabled()
     await page.getByTestId("phone-verify-start").click()
     await expect(page.getByTestId("checkin-code-dialog")).toBeVisible({
@@ -169,8 +187,6 @@ test.describe("SMS login on the check-in page", () => {
     ).toBeVisible({ timeout: 10_000 })
 
     // The freshly verified number is accepted by the auth-linked lookup.
-    const auth = await getAdminAuth()
-    const user = await auth.getUserByEmail(AUTH_USER_EMAIL)
-    expect(user.phoneNumber).toBe(NEW_PHONE)
+    expect((await auth.getUser(authUid)).phoneNumber).toBe(NEW_PHONE)
   })
 })

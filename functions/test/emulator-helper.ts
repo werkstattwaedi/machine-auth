@@ -194,3 +194,33 @@ export async function seedTestData(data: {
 export function getFirestore() {
   return admin.firestore();
 }
+
+/**
+ * Create a BARE Auth record (e-mail only — what an abandoned code request
+ * leaves behind) that has been idle for `idleHours`. The bare-record reclaim
+ * only deletes records idle beyond any session they could still have
+ * (`BARE_RECORD_MIN_IDLE_MS`), and `createUser` always stamps "now" — the
+ * Auth emulator honours imported timestamps.
+ */
+export async function importIdleBareUser(
+  uid: string,
+  email: string,
+  idleHours = 5,
+  createdHoursAgo = idleHours
+): Promise<void> {
+  const hoursAgo = (h: number) =>
+    new Date(Date.now() - h * 60 * 60 * 1000).toUTCString();
+  const result = await admin.auth().importUsers([
+    {
+      uid,
+      email,
+      metadata: {
+        creationTime: hoursAgo(createdHoursAgo),
+        lastSignInTime: hoursAgo(idleHours),
+      },
+    },
+  ]);
+  if (result.failureCount > 0) {
+    throw new Error(`importIdleBareUser failed: ${result.errors[0].error.message}`);
+  }
+}

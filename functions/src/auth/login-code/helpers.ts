@@ -11,6 +11,11 @@ import { getAuth } from "firebase-admin/auth";
 import * as logger from "firebase-functions/logger";
 import { defineString } from "firebase-functions/params";
 import { HttpsError } from "firebase-functions/v2/https";
+import {
+  defaultIdentityDeps,
+  normalizeEmail,
+  resolveLoginUid,
+} from "../identity";
 
 /**
  * Comma-separated list of allowed production origins (exact-match).
@@ -34,9 +39,9 @@ export function isEmulator(): boolean {
   return process.env.FUNCTIONS_EMULATOR === "true";
 }
 
-export function normalizeEmail(email: string): string {
-  return email.trim().toLowerCase();
-}
+// Lives with the identity module (ADR-0043); re-exported so the login-code
+// call sites keep their import.
+export { normalizeEmail };
 
 /** Sanity-only check — server doesn't do deep validation, provider does. */
 export function isPlausibleEmail(email: string): boolean {
@@ -151,25 +156,8 @@ export function buildMagicLink(origin: string, docId: string): string {
 export type LoginMethod = "emailCode" | "magicLink";
 
 /**
- * Resolve a Firebase Auth user by email, creating a password-less one when
- * absent (mirrors the legacy email-link flow). Shared by the regular login
- * (`mintSessionToken`) and the kiosk sign-up (`signup_kiosk.ts`).
- */
-export async function resolveOrCreateAuthUid(email: string): Promise<string> {
-  const auth = getAuth();
-  try {
-    return (await auth.getUserByEmail(email)).uid;
-  } catch (err: unknown) {
-    const code = (err as { code?: string } | null)?.code;
-    if (code === "auth/user-not-found") {
-      return (await auth.createUser({ email })).uid;
-    }
-    throw err;
-  }
-}
-
-/**
- * Resolve-or-create a Firebase Auth user by email, then mint a custom token.
+ * Resolve the uid a verified e-mail signs in as (users doc first, Auth
+ * healed to match — see `resolveLoginUid`), then mint a custom token.
  *
  * The web client swaps the custom token for a session via
  * signInWithCustomToken(). The `method` claim is useful for audit /
@@ -179,6 +167,6 @@ export async function mintSessionToken(
   email: string,
   method: LoginMethod
 ): Promise<string> {
-  const uid = await resolveOrCreateAuthUid(email);
+  const uid = await resolveLoginUid(defaultIdentityDeps(), email);
   return getAuth().createCustomToken(uid, { loginMethod: method });
 }

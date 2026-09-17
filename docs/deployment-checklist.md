@@ -256,6 +256,25 @@ number and legacy QR payload; the bank import resolves those slips through a ×1
 Afterwards, check the admin Rechnungen list still shows `RE-4200001…`, close a test checkout to
 confirm minting works again, and confirm a second `migrate-bill-numbers.ts` run refuses.
 
+### Member identity (ADR-0043) — data gate BEFORE the functions + rules deploy
+
+Login resolves by `users.email` and the Auth-linked phone must equal `users.phone`, both by exact
+match. That is only safe while the stored values are clean, and the old admin profile tab can
+still write any e-mail until the new **rules** are live — so check right before deploying:
+
+```bash
+# Read-only; prints counts and offender UIDs only, never an e-mail or phone. Exit 1 = findings.
+FIREBASE_PROJECT_ID=<project-id> npx tsx scripts/check-user-identity-fields.ts --prod
+```
+
+It must report: every phone null or E.164, every e-mail null or trimmed+lowercase, **no e-mail
+shared by two users docs** (after the deploy that is a hard login failure for both). Fix findings
+by hand first. Then deploy functions **and** rules together (the rules pin `users.email` for
+clients; the functions make the doc the login lookup key — either half alone leaves a gap), then
+hosting (the admin profile tab now changes e-mails through `updateUserEmail`). Between the rules and
+the hosting deploy the *old* profile tab gets "Keine Berechtigung" when an admin changes an e-mail
+— the rules now pin `users.email` for admins too — so keep that gap short.
+
 ## 3. Deploy Functions
 
 ```bash

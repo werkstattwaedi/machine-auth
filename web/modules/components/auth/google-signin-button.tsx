@@ -53,6 +53,11 @@ export function GoogleSignInButton({
       if (code === "auth/account-exists-with-different-credential") {
         onLinkHint()
         toast.info("Bitte zuerst per E-Mail-Code anmelden")
+      } else if (code === "oww/existing-account") {
+        // The Google e-mail belongs to a member under another uid
+        // (ADR-0043) — same way out: e-mail code first, then link Google.
+        onLinkHint()
+        toast.info((err as Error).message)
       } else if (code === "auth/popup-closed-by-user") {
         // User closed the popup — no error needed.
       } else {
