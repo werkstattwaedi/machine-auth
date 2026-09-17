@@ -56,13 +56,50 @@ cd checkout-kiosk && npm run start:kiosk:staging   # or build:kiosk:staging
 ```
 
 Secrets are **shared with production** (same Secret Manager values, copied
-into the staging project — see ADR-0034). After rotating any secret in
+into the staging project — see ADR-0034) — **except `KIOSK_BEARER_KEY`**,
+which has its own value per project (the smoke test holds the staging one,
+so it must open nothing in prod). After rotating any *shared* secret in
 prod, re-copy it:
 
 ```bash
 gcloud secrets versions access latest --secret=<NAME> --project=oww-maco \
   | firebase functions:secrets:set <NAME> --project oww-maco-staging --data-file=-
 ```
+
+Giving staging its own kiosk bearer (one-time, and again to rotate it):
+
+```bash
+openssl rand -hex 32 | firebase functions:secrets:set KIOSK_BEARER_KEY \
+  --project oww-maco-staging --data-file=-
+cd functions && npm run deploy -- --project oww-maco-staging   # pins the new version
+cd ../checkout-kiosk && npm run build:kiosk:staging           # bakes it into the staging kiosk
+```
+
+### Staging-only test tooling: `mintTestTap`
+
+`mintTestTap` mints the `picc`/`cmac` of a badge tap for a **virtual** tag so
+the post-deploy smoke test can run the kiosk flows without a reader or the tag
+keys. It forges taps with keys production shares, so it is fenced three ways
+(`functions/src/testing/mint_test_tap.ts`): it is exported only when the deploy
+target is `oww-maco-staging` and answers 404 anywhere else; it is
+`invoker: "private"` (Google identity token of a principal with `run.invoker`)
+and additionally wants the staging kiosk bearer; and it only mints for UIDs
+starting with `f0` — real NXP tags start with `04`. `scripts/deploy.sh prod`
+fails if the function is ever found in production.
+
+```bash
+# Smoke-check it after a staging deploy (prints {"picc":…,"cmac":…}):
+URL=$(gcloud functions describe mintTestTap --gen2 --region europe-west6 \
+  --project oww-maco-staging --format='value(serviceConfig.uri)')
+curl -s -X POST "$URL" -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
+  -d "{\"uid\":\"f0000000000001\",\"counter\":1,\"bearer\":\"$(gcloud secrets versions \
+       access latest --secret=KIOSK_BEARER_KEY --project=oww-maco-staging)\"}"
+```
+
+A 403 from Google (HTML, before our code runs) means the caller lacks
+`roles/run.invoker` on the service; grant it to the people who run the smoke
+test, never to `allUsers`.
 
 One-time setup on a fresh clone: apply the staging hosting targets (prod
 `generate-env` preserves foreign-project target entries in `.firebaserc`,

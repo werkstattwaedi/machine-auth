@@ -27,7 +27,7 @@ export interface PICCData {
  * @param counter - 3-byte read counter (little-endian)
  * @returns 16-byte SV2 value
  */
-function deriveSV2(key: Buffer, uid: Buffer, counter: Buffer): Buffer {
+export function deriveSV2(key: Buffer, uid: Buffer, counter: Buffer): Buffer {
   if (key.length !== 16) throw new Error("Key must be 16 bytes");
   if (uid.length !== 7) throw new Error("UID must be 7 bytes");
   if (counter.length !== 3) throw new Error("Counter must be 3 bytes");
@@ -50,7 +50,7 @@ function deriveSV2(key: Buffer, uid: Buffer, counter: Buffer): Buffer {
  * @param data - Input data
  * @returns 16-byte CMAC
  */
-function computeCMAC(key: Buffer, data: Buffer): Buffer {
+export function computeCMAC(key: Buffer, data: Buffer): Buffer {
   // Generate subkeys K1 and K2
   const { k1, k2 } = generateCMACSubkeys(key);
 

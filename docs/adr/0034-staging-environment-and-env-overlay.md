@@ -1,6 +1,6 @@
 # ADR-0034: Staging environment via a config overlay
 
-**Status:** Accepted
+**Status:** Accepted (amended 2026-09-18: `KIOSK_BEARER_KEY` is **per environment**, no longer shared — see "Secrets" below. The tag keys stay shared.)
 
 **Date:** 2026-07-06
 
@@ -84,6 +84,27 @@ already-personalized NFC tags authenticate against staging without
 re-personalization, which is precisely the integration we want to test. All
 test/validation happens here; production only ever receives real data.
 
+**Amendment (2026-09-18): the kiosk bearer is the exception.**
+`KIOSK_BEARER_KEY` has its own value per project. Nothing is gained by
+sharing it — it is baked into each environment's own kiosk build, no tag
+depends on it — and sharing it made the staging value a production
+credential. The post-deploy smoke test needs the staging bearer on the test
+machine (it drives the kiosk flows from a plain browser), which is only
+acceptable if that value opens nothing in production. The kiosk build
+therefore fetches the bearer from the *target* project
+(`inject-build-config.mjs` passes `--project`), and "re-copy after rotating"
+applies to every secret **except** this one.
+
+The shared tag keys have a consequence of their own: anything on staging that
+can *mint* a valid tap can forge one for a real member's badge, valid on
+production too. The staging-only `mintTestTap` function
+(`functions/src/testing/mint_test_tap.ts`) exists so the smoke test never
+holds those keys, and it is fenced accordingly: exported only when the deploy
+target is the staging project (and refusing at runtime anywhere else),
+invocable only with a Google identity token (`invoker: "private"`) plus the
+staging bearer, and limited to virtual UIDs that no real NXP tag can have
+(real UIDs start with `0x04`).
+
 ## Consequences
 
 **Pros:**
@@ -96,7 +117,8 @@ test/validation happens here; production only ever receives real data.
 
 **Cons:**
 - A second Blaze project to operate (low usage, but real cost).
-- Secret rotation must be applied to both projects (values are shared).
+- Secret rotation must be applied to both projects (values are shared —
+  except `KIOSK_BEARER_KEY`, which is per environment).
 - Device provisioning (maco terminals) must still be pointed at staging
   explicitly; only tags carry over for free.
 

@@ -110,6 +110,18 @@ deploy_env() {
   step "[$env] Functions → $project"
   npx tsx scripts/deploy-functions.ts --project "$project"
 
+  # mintTestTap forges badge taps with the tag keys production shares
+  # (functions/src/testing/mint_test_tap.ts). Its export is conditional on
+  # the staging project id and the handler refuses elsewhere — this is the
+  # third, after-the-fact check that it never reached production.
+  if [ "$env" = "prod" ]; then
+    step "[$env] Verifying staging-only test tooling is absent from $project"
+    if firebase functions:list --project "$project" | grep -q "mintTestTap"; then
+      fail "mintTestTap is deployed in PRODUCTION ($project). Delete it now:
+  firebase functions:delete mintTestTap --region europe-west6 --project $project"
+    fi
+  fi
+
   step "[$env] Firestore + Storage rules/indexes → $project"
   firebase deploy --only firestore,storage --project "$project"
 
