@@ -1,7 +1,7 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import React, { useEffect, useMemo, useState } from "react"
+import React, { useEffect, useLayoutEffect, useMemo, useState } from "react"
 import {
   Sheet,
   SheetContent,
@@ -370,6 +370,18 @@ function PickerBody({
     return [...matches].sort((a, b) => a.name.localeCompare(b.name, "de"))
   }, [catalogItems, categoryPrefix, query])
 
+  // A narrower result set keeps the list's old scroll offset. With few
+  // matches followed by the ad-hoc rows, that offset shows only ad-hoc rows
+  // while the actual matches sit above the visible area — worst on a phone,
+  // where the keyboard leaves room for a few rows (#631). Whenever the filter
+  // changes, start the new result set from the top. Layout effect so the
+  // stale offset never paints. Row expansion is deliberately not a trigger:
+  // opening a form must not move the list.
+  const listRef = React.useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    if (listRef.current) listRef.current.scrollTop = 0
+  }, [query, categoryPrefix])
+
   function onChipClick(level: number, value: string) {
     setCategoryPrefix((prev) => {
       if (prev[level] === value) {
@@ -421,7 +433,11 @@ function PickerBody({
           ))}
         </div>
       )}
-      <div className="flex-1 overflow-y-auto">
+      <div
+        ref={listRef}
+        data-testid="picker-list"
+        className="flex-1 overflow-y-auto"
+      >
       {filtered.length === 0 && !showFallbacks ? (
         <div className="px-4 py-8 text-center text-sm text-muted-foreground">
           Keine Treffer. Suchbegriff anpassen oder einen anderen Filter wählen.
