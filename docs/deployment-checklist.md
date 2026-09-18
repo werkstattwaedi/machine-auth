@@ -379,11 +379,35 @@ firebase deploy
 
 ## 8. Smoke Tests
 
-1. **Public checkout**: Visit checkout site with `?picc=...&cmac=...` tag URL
-2. **Login**: Request 6-digit code on `/login`, redeem it (or click the magic link in the Resend email) to complete sign-in
-3. **Dashboard**: Verify user doc loads from Firestore
-4. **Admin site**: Visit admin site, verify it requires admin custom claim
-5. **Functions**: Check a terminal checkin works end-to-end
+**Staging: automated.** `scripts/deploy.sh staging` ends with the post-deploy
+smoke test from the operations repo (`machine-auth-operations/smoke/`, see its
+README) — a ~4-minute Playwright run against the *deployed* staging apps. It
+exists for what the emulator structurally cannot show: missing indexes, races
+hidden by instant commits, IAM/secrets/allowed-origins, bundles built for the
+wrong project, real mail delivery. It covers: sign-up and login by **mailed**
+code (no imported-member welcome dialog, Auth uid == users doc id); a visit →
+bill → **invoice mail with its PDF**; a deleted Auth record healing on login
+(#633); a membership purchase, the **admin app** booking the payment and the
+membership turning active; an admin e-mail change landing on the same uid; and
+the **kiosk** in a plain browser — a virtual badge bought and then used to sign
+in, with taps minted by the staging-only `mintTestTap`.
+
+Because staging always deploys first, `scripts/deploy.sh staging prod` does not
+touch production when the smoke test fails. `--no-smoke` skips it; run it alone
+with `(cd ../machine-auth-operations && npm run smoke:staging)`. It needs
+`gcloud auth login` + `gcloud auth application-default login` with staging
+access, and refuses to run against the production project.
+
+**Still by hand** (after a deploy that touches them):
+
+1. **Google sign-in** — real Google blocks automation (its guard is covered in
+   the emulator e2e).
+2. **TWINT** — the automated visits end on the QR-bill method.
+3. **A physical badge on the physical kiosk** — after a kiosk rebuild: tap,
+   confirm the session, check out.
+4. **Terminal check-in** — a MaCo terminal end to end.
+5. **Production** — no automated run there: load both apps, sign in once,
+   confirm the admin site demands the admin claim.
 
 ## 9. BigQuery statistics + data protection (ADR-0038 / ADR-0039)
 
