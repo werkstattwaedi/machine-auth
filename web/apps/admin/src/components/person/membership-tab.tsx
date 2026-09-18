@@ -5,14 +5,20 @@
 // to, managed inline (no separate memberships area). Create when none;
 // otherwise focused actions: verlängern, Auto-Verlängerung beenden,
 // kündigen. Family memberships show the roster + open invites.
+// An admin never invites by e-mail (#622): the invitation is signed with
+// the caller's name, so it would go out "from" the admin. Instead the
+// admin adds an existing person directly or creates a login-less one.
 // All mutations flow through membershipCall (client writes are denied).
 
-import { useState } from "react"
+import { useState, type FormEvent } from "react"
 import { Link } from "@tanstack/react-router"
 import { rpcCallable } from "@modules/lib/rpc"
 import { useFunctions, useDb } from "@modules/lib/firebase-context"
 import { useCollection } from "@modules/lib/firestore"
-import { membershipInvitesCollection } from "@modules/lib/firestore-helpers"
+import {
+  membershipInvitesCollection,
+  usersCollection,
+} from "@modules/lib/firestore-helpers"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import type {
   MembershipDoc,
@@ -31,13 +37,25 @@ import { EmptyState } from "@modules/components/empty-state"
 import { Input } from "@modules/components/ui/input"
 import { Label } from "@modules/components/ui/label"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@modules/components/ui/select"
+import {
   BadgeX,
   CalendarPlus,
   Loader2,
-  Mail,
   Plus,
   UserMinus,
+  UserPlus,
 } from "lucide-react"
+
+/** Managed members are login-less; firma always needs a real login. */
+type ManagedMemberType = "erwachsen" | "kind"
+/** `closed` = collapsed to the "Mitglied hinzufügen" button. */
+type AddMode = "closed" | "existing" | "no-login"
 
 export function PersonMembershipTab({
   userId,
@@ -152,12 +170,27 @@ function ActiveMembershipView({
     id: string
     name: string
   } | null>(null)
-  const [inviteEmail, setInviteEmail] = useState("")
+  const [addMode, setAddMode] = useState<AddMode>("closed")
+  const [pickedUserId, setPickedUserId] = useState("")
+  const [noLoginFirst, setNoLoginFirst] = useState("")
+  const [noLoginLast, setNoLoginLast] = useState("")
+  const [noLoginType, setNoLoginType] = useState<ManagedMemberType>("erwachsen")
 
   const { data: invites } = useCollection(
     membershipInvitesCollection(db, membership.id),
   )
   const pendingInvites = invites.filter((i) => i.status === "pending")
+
+  // Same query LookupProvider already streams, so this shares its watch.
+  // Eligibility mirrors the server invariant only (one active membership
+  // per person). Login-less people stay eligible: re-adding a previously
+  // removed managed member is a legitimate admin action.
+  const { data: allUsers } = useCollection(usersCollection(db))
+  const memberIds = new Set(membership.members?.map((m) => m.id) ?? [])
+  const eligibleUsers = allUsers
+    .filter((u) => !u.activeMembership && !memberIds.has(u.id))
+    .map((u) => ({ id: u.id, name: formatFullName(u, u.id) }))
+    .sort((a, b) => a.name.localeCompare(b.name, "de"))
 
   const extend = useAsyncMutation({
     context: "admin.extendMembership",
@@ -179,10 +212,20 @@ function ActiveMembershipView({
     successMessage: "Mitglied entfernt",
     errorMessage: "Mitglied konnte nicht entfernt werden",
   })
-  const invite = useAsyncMutation({
-    context: "admin.inviteFamilyMember",
-    successMessage: "Einladung versendet",
-    errorMessage: "Einladung konnte nicht versendet werden",
+  const addExisting = useAsyncMutation({
+    context: "admin.addFamilyMember",
+    successMessage: "Mitglied hinzugefügt",
+    errorMessage: "Mitglied konnte nicht hinzugefügt werden",
+  })
+  const createNoLogin = useAsyncMutation({
+    context: "admin.createManagedMember",
+    successMessage: "Mitglied hinzugefügt",
+    errorMessage: "Mitglied konnte nicht erstellt werden",
+  })
+  const revokeInvite = useAsyncMutation({
+    context: "admin.revokeFamilyInvite",
+    successMessage: "Einladung zurückgezogen",
+    errorMessage: "Einladung konnte nicht zurückgezogen werden",
   })
 
   const call = async (method: string, payload: Record<string, unknown>) => {
@@ -192,6 +235,45 @@ function ActiveMembershipView({
       method,
     )
     await fn(payload)
+  }
+
+  const resetAdd = () => {
+    setAddMode("closed")
+    setPickedUserId("")
+    setNoLoginFirst("")
+    setNoLoginLast("")
+    setNoLoginType("erwachsen")
+  }
+
+  // On failure the hook toasts and re-throws (ADR-0025), so the form stays
+  // open with its input intact; only a success collapses it.
+  const handleAddExisting = () => {
+    if (!pickedUserId) return
+    addExisting
+      .mutate(() =>
+        call("adminAddFamilyMember", {
+          membershipId: membership.id,
+          userId: pickedUserId,
+        }),
+      )
+      .then(resetAdd)
+      .catch(() => {})
+  }
+
+  const handleCreateNoLogin = (e: FormEvent) => {
+    e.preventDefault()
+    if (!noLoginFirst.trim() || !noLoginLast.trim()) return
+    createNoLogin
+      .mutate(() =>
+        call("createManagedMember", {
+          membershipId: membership.id,
+          firstName: noLoginFirst.trim(),
+          lastName: noLoginLast.trim(),
+          userType: noLoginType,
+        }),
+      )
+      .then(resetAdd)
+      .catch(() => {})
   }
 
   const autoRenewOn = membership.autoRenew !== false
@@ -326,50 +408,159 @@ function ActiveMembershipView({
                 {pendingInvites.map((inv) => (
                   <div key={inv.id} className="flex items-center gap-2 text-sm">
                     <span>{inv.email}</span>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="flex-1 text-xs text-muted-foreground">
                       eingeladen {formatDateTime(inv.invitedAt)}
                     </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        revokeInvite
+                          .mutate(() =>
+                            call("revokeFamilyInvite", {
+                              membershipId: membership.id,
+                              inviteId: inv.id,
+                            }),
+                          )
+                          .catch(() => {})
+                      }
+                      disabled={revokeInvite.loading}
+                    >
+                      Zurückziehen
+                    </Button>
                   </div>
                 ))}
               </div>
             )}
 
-            <form
-              className="flex gap-2 border-t pt-3"
-              onSubmit={(e) => {
-                e.preventDefault()
-                if (!inviteEmail.trim()) return
-                invite
-                  .mutate(() =>
-                    call("inviteFamilyMember", {
-                      membershipId: membership.id,
-                      email: inviteEmail.trim(),
-                    }),
-                  )
-                  .then(() => setInviteEmail(""))
-                  .catch(() => {})
-              }}
-            >
-              <Input
-                type="email"
-                placeholder="mitglied@example.ch"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                className="max-w-xs"
-              />
-              <Button
-                type="submit"
-                variant="outline"
-                disabled={invite.loading || !inviteEmail.trim()}
-              >
-                {invite.loading ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Mail className="mr-2 h-4 w-4" />
-                )}
-                Mitglied einladen
-              </Button>
-            </form>
+            <div className="space-y-3 border-t pt-3">
+              {addMode === "closed" && (
+                <Button variant="outline" onClick={() => setAddMode("existing")}>
+                  <UserPlus className="mr-2 h-4 w-4" />
+                  Mitglied hinzufügen
+                </Button>
+              )}
+
+              {addMode !== "closed" && (
+                <div className="inline-flex gap-0.5 rounded-lg bg-muted p-1">
+                  {(["existing", "no-login"] as const).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setAddMode(m)}
+                      className={
+                        "rounded-md px-4 py-1.5 text-sm font-medium transition-colors " +
+                        (addMode === m
+                          ? "bg-background shadow-sm"
+                          : "text-muted-foreground")
+                      }
+                    >
+                      {m === "existing" ? "Bestehende Person" : "Ohne Login"}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {addMode === "existing" && (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-2">
+                    <Select value={pickedUserId} onValueChange={setPickedUserId}>
+                      <SelectTrigger className="max-w-72">
+                        <SelectValue placeholder="Person wählen …" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {eligibleUsers.map((u) => (
+                          <SelectItem key={u.id} value={u.id}>
+                            {u.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      onClick={handleAddExisting}
+                      disabled={!pickedUserId || addExisting.loading}
+                    >
+                      {addExisting.loading ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Plus className="mr-2 h-4 w-4" />
+                      )}
+                      Hinzufügen
+                    </Button>
+                    <Button variant="ghost" onClick={resetAdd}>
+                      Abbrechen
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Nur Personen ohne aktive Mitgliedschaft. Es wird keine
+                    E-Mail versendet.
+                  </p>
+                </div>
+              )}
+
+              {addMode === "no-login" && (
+                <form className="space-y-3" onSubmit={handleCreateNoLogin}>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1">
+                      <Label htmlFor="no-login-first">Vorname</Label>
+                      <Input
+                        id="no-login-first"
+                        value={noLoginFirst}
+                        onChange={(e) => setNoLoginFirst(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="no-login-last">Nachname</Label>
+                      <Input
+                        id="no-login-last"
+                        value={noLoginLast}
+                        onChange={(e) => setNoLoginLast(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Typ</Label>
+                    <div className="inline-flex gap-0.5 rounded-lg bg-muted p-1">
+                      {(["erwachsen", "kind"] as const).map((t) => (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => setNoLoginType(t)}
+                          className={
+                            "rounded-md px-4 py-1.5 text-sm font-medium transition-colors " +
+                            (noLoginType === t
+                              ? "bg-background shadow-sm"
+                              : "text-muted-foreground")
+                          }
+                        >
+                          {t === "erwachsen" ? "Erwachsen" : "Kind"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="submit"
+                      disabled={
+                        createNoLogin.loading ||
+                        !noLoginFirst.trim() ||
+                        !noLoginLast.trim()
+                      }
+                    >
+                      {createNoLogin.loading ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Plus className="mr-2 h-4 w-4" />
+                      )}
+                      Person erstellen
+                    </Button>
+                    <Button type="button" variant="ghost" onClick={resetAdd}>
+                      Abbrechen
+                    </Button>
+                  </div>
+                </form>
+              )}
+            </div>
           </CardContent>
         </Card>
       )}
