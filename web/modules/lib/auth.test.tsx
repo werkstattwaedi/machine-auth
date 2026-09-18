@@ -55,8 +55,20 @@ vi.mock("firebase/firestore", async () => {
       const segments = (args as unknown[]).slice(1) as string[]
       return fakeDb.doc(...segments)
     },
-    onSnapshot: (ref: ReturnType<FakeFirestore["doc"]>, cb: (snap: unknown) => void) => {
-      return fakeDb.onSnapshotDoc(ref, cb as Parameters<FakeFirestore["onSnapshotDoc"]>[1])
+    onSnapshot: (
+      ref: ReturnType<FakeFirestore["doc"]>,
+      cb: (snap: unknown) => void,
+      onError?: (err: unknown) => void,
+    ) => {
+      // The fake never errors; a test that needs the error path replaces
+      // `onSnapshotDoc` and picks the error callback up as a third argument.
+      return (
+        fakeDb.onSnapshotDoc as unknown as (
+          ref: unknown,
+          cb: unknown,
+          onError: unknown,
+        ) => () => void
+      )(ref, cb, onError)
     },
     setDoc: (ref: ReturnType<FakeFirestore["doc"]>, data: Record<string, unknown>) => {
       fakeDb.setDoc(ref, data)
@@ -302,6 +314,109 @@ describe("AuthProvider", () => {
 
     expect(screen.getByTestId("userDoc").textContent).toBe("fresh1")
     expect(screen.getByTestId("profileComplete").textContent).toBe("true")
+  })
+
+  describe("userDocLoading (issue #635)", () => {
+    const adminDoc = {
+      firstName: "Admin",
+      lastName: "User",
+      email: "admin@test.com",
+      roles: ["admin"],
+      permissions: [],
+      termsAcceptedAt: null,
+      userType: "erwachsen",
+      billingAddress: null,
+    }
+
+    /** Hands each user-doc subscription to the test instead of firing it. */
+    function captureSubscriptions() {
+      const subs: {
+        path: string
+        next: (snap: unknown) => void
+        error: (err: unknown) => void
+      }[] = []
+      fakeDb.onSnapshotDoc = ((
+        ref: { path: string },
+        next: (snap: unknown) => void,
+        error: (err: unknown) => void,
+      ) => {
+        subs.push({ path: ref.path, next, error })
+        return () => {}
+      }) as unknown as FakeFirestore["onSnapshotDoc"]
+      return subs
+    }
+
+    it("stays false across a token refresh for the same user", async () => {
+      // The id-token listener re-fires on every background token refresh
+      // (hourly, and when a slept tab wakes) with the SAME user. Neither the
+      // subscription nor the doc changes then, so no snapshot follows — a
+      // loading flag raised from that event never cleared, and the gates
+      // showed a full-page spinner until reload.
+      const auth = new FakeAuth()
+      fakeDb.setDoc(fakeDb.doc("users", "admin1"), adminDoc)
+      renderWithAuth(auth)
+      const adminUser = createFakeUser({ uid: "admin1", claims: { admin: true } })
+      await act(() => {
+        auth.setCurrentUser(adminUser)
+      })
+      expect(screen.getByTestId("userDocLoading").textContent).toBe("false")
+
+      await act(() => {
+        auth.setCurrentUser(adminUser)
+      })
+
+      expect(screen.getByTestId("userDocLoading").textContent).toBe("false")
+      expect(screen.getByTestId("isAdmin").textContent).toBe("true")
+      expect(screen.getByTestId("userDoc").textContent).toBe("admin1")
+    })
+
+    it("reports loading for a switched user until that doc's snapshot arrives", async () => {
+      const subs = captureSubscriptions()
+      const auth = new FakeAuth()
+      renderWithAuth(auth)
+
+      await act(() => {
+        auth.setCurrentUser(createFakeUser({ uid: "admin1" }))
+      })
+      expect(screen.getByTestId("userDocLoading").textContent).toBe("true")
+      await act(() => {
+        subs[0].next({ id: "admin1", exists: () => true, data: () => adminDoc })
+      })
+      expect(screen.getByTestId("userDocLoading").textContent).toBe("false")
+
+      await act(() => {
+        auth.setCurrentUser(createFakeUser({ uid: "user2" }))
+      })
+      // Still holding admin1's doc: the gates must keep waiting rather than
+      // judge user2 by it (or by "no doc").
+      expect(subs[1].path).toBe("users/user2")
+      expect(screen.getByTestId("userDocLoading").textContent).toBe("true")
+
+      await act(() => {
+        subs[1].next({ id: "user2", exists: () => false, data: () => undefined })
+      })
+      expect(screen.getByTestId("userDocLoading").textContent).toBe("false")
+      expect(screen.getByTestId("userDoc").textContent).toBe("null")
+    })
+
+    it("ends loading when the user-doc listener errors", async () => {
+      const subs = captureSubscriptions()
+      const consoleError = vi.spyOn(console, "error").mockImplementation(() => {})
+      const auth = new FakeAuth()
+      renderWithAuth(auth)
+      await act(() => {
+        auth.setCurrentUser(createFakeUser({ uid: "admin1" }))
+      })
+      expect(screen.getByTestId("userDocLoading").textContent).toBe("true")
+
+      await act(() => {
+        subs[0].error(new Error("permission-denied"))
+      })
+
+      expect(screen.getByTestId("userDocLoading").textContent).toBe("false")
+      expect(screen.getByTestId("userDoc").textContent).toBe("null")
+      consoleError.mockRestore()
+    })
   })
 
   it("reads pendingGoogleLink from localStorage", () => {

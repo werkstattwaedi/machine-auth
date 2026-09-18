@@ -218,7 +218,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [userDoc, setUserDoc] = useState<UserDoc | null>(null)
   const [loading, setLoading] = useState(true)
-  const [userDocLoading, setUserDocLoading] = useState(false)
+  // The doc id the held `userDoc` result belongs to. `userDocLoading` is
+  // derived from it rather than set from the token listener: that listener
+  // also fires on every background token refresh (hourly, and when a slept
+  // tab wakes), where neither the subscription nor the doc changes — so no
+  // snapshot would ever clear a flag raised there (issue #635).
+  const [loadedUserDocId, setLoadedUserDocId] = useState<string | null>(null)
   const [sessionKind, setSessionKind] = useState<SessionKind>(null)
   // The real user a `tag` session acts on (its `actsAs` claim); null otherwise.
   const [actsAsUserId, setActsAsUserId] = useState<string | null>(null)
@@ -242,7 +247,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setActsAsUserId(null)
         setKioskElevatedUntil(null)
         setLoading(false)
-        setUserDocLoading(false)
+        setLoadedUserDocId(null)
         return
       }
 
@@ -292,11 +297,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setKioskElevatedUntil(elevated)
 
       setLoading(false)
-      // Tag sessions don't have a user doc at users/{user.uid} — the
-      // synthetic uid never spawned one. Skip the loading flag unless the
-      // session is elevated (then the acted-on user's doc is subscribed
-      // below) so the UI doesn't spin forever.
-      setUserDocLoading(!uidIsTag || (actsAs !== null && elevated !== null))
     })
   }, [auth])
 
@@ -332,13 +332,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!user) return
     if (!userDocId) {
       setUserDoc(null)
-      setUserDocLoading(false)
+      setLoadedUserDocId(null)
       return
     }
 
     const userDocRef = userRef(db, userDocId)
+    // The callback awaits; a continuation that outlives this subscription
+    // must not mark its (old) doc id as the loaded one.
+    let active = true
 
-    return onSnapshot(userDocRef, async (docSnap) => {
+    const unsubscribe = onSnapshot(userDocRef, async (docSnap) => {
       if (!docSnap.exists()) {
         setUserDoc(null)
       } else {
@@ -381,8 +384,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
       }
-      setUserDocLoading(false)
+      if (active) setLoadedUserDocId(userDocId)
+    }, (err) => {
+      // Listener errors are terminal (e.g. permission-denied). End loading
+      // with no doc so the gates land on "no access" / sign-in instead of
+      // spinning until a reload.
+      console.error("AuthProvider: user-doc listener failed", err)
+      if (!active) return
+      setUserDoc(null)
+      setLoadedUserDocId(userDocId)
     })
+    return () => {
+      active = false
+      unsubscribe()
+    }
     // `userDocId` is the effective subscription key; `user` only matters
     // for the admin-claim refresh above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -569,6 +584,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     sessionKind !== "tag" && (userDoc?.roles?.includes("admin") ?? false)
   const isKioskElevated =
     sessionKind === "tag" && kioskElevatedUntil !== null
+  // No subscription key (signed out, un-elevated tag session) means there
+  // is nothing to wait for.
+  const userDocLoading = userDocId !== null && loadedUserDocId !== userDocId
 
   return (
     <AuthContext value={{
