@@ -26,3 +26,17 @@ export const diversificationSystemName = defineString(
 // The actual security is the synthetic-UID custom token returned by
 // verifyTagCheckout (see checkout/verify_tag.ts).
 export const kioskBearerKey = defineSecret("KIOSK_BEARER_KEY");
+
+/**
+ * The bearer to compare against — always read it through this, never
+ * `kioskBearerKey.value()` directly. Secret Manager stores stdin verbatim, so
+ * `openssl rand -hex 32 | firebase functions:secrets:set … --data-file=-`
+ * saves the value WITH its trailing newline, while every client (the kiosk
+ * build, the smoke test) reads it trimmed. The untrimmed comparison locked
+ * the freshly rotated staging bearer out completely (2026-09-18): "Forbidden"
+ * on every tap and every kiosk code sign-in. A bearer never legitimately
+ * starts or ends in whitespace.
+ */
+export function kioskBearer(): string {
+  return kioskBearerKey.value().trim();
+}
