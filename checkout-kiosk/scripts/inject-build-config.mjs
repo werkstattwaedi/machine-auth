@@ -21,8 +21,12 @@
 // `--env <name>` (e.g. `--env staging`, ADR-0034) works like `--prod`
 // but deep-merges the operations repo's `config.<name>.jsonc` overlay
 // over the base config first, so the URL points at that environment.
-// The bearer is still the Secret Manager value — environments share
-// secrets (ADR-0034). Explicit env vars always win in every profile.
+// The bearer is fetched from THAT environment's project (the ops config's
+// `firebase.projectId`), never from whatever project gcloud happens to be
+// on: the kiosk bearer is per-environment (ADR-0034, amended) — unlike the
+// tag keys it is not shared, so a staging bearer can be handed to test
+// tooling without being a production credential. Explicit env vars always
+// win in every profile.
 
 import { execSync } from "node:child_process"
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
@@ -62,7 +66,7 @@ const label = process.env.BRIDGE_ENV_LABEL ?? opsDefaults?.envLabel ?? ""
 // default to empty.
 let bearer = process.env.BRIDGE_BEARER_KEY ?? ""
 if (!bearer && profile !== "dev") {
-  bearer = fetchBearerFromGcloud()
+  bearer = fetchBearerFromGcloud(opsDefaults.projectId)
 }
 if (!bearer && !isDev) {
   fail(
@@ -132,6 +136,7 @@ function loadOpsDefaults(envName) {
 
   const domain = readPath(cfg, "web.checkoutDomain", configPath)
   return {
+    projectId: readPath(cfg, "firebase.projectId", configPath),
     url: `https://${domain}/?kiosk`,
     envLabel: readOptionalString(cfg, "web.envLabel"),
   }
@@ -218,20 +223,23 @@ function parseJsonc(text) {
   return JSON.parse(result)
 }
 
-function fetchBearerFromGcloud() {
+function fetchBearerFromGcloud(projectId) {
+  // Project ids come from our own ops config, but this lands in a shell.
+  if (!/^[a-z][a-z0-9-]{4,29}$/.test(projectId)) {
+    fail(`Refusing to query Secret Manager for project id ${JSON.stringify(projectId)}.`)
+  }
   console.log(
-    "inject-build-config: fetching KIOSK_BEARER_KEY from gcloud Secret Manager…",
+    `inject-build-config: fetching KIOSK_BEARER_KEY from Secret Manager (${projectId})…`,
   )
   try {
     return execSync(
-      "gcloud secrets versions access latest --secret=KIOSK_BEARER_KEY",
+      `gcloud secrets versions access latest --secret=KIOSK_BEARER_KEY --project=${projectId}`,
       { encoding: "utf-8" },
     ).trim()
   } catch (err) {
     fail(
-      `Failed to fetch KIOSK_BEARER_KEY from gcloud. Check:\n` +
-        `  • gcloud config get-value project  (must be the OWW project)\n` +
-        `  • gcloud auth list                  (must have Secret Manager access)\n` +
+      `Failed to fetch KIOSK_BEARER_KEY from project ${projectId}. Check:\n` +
+        `  • gcloud auth list   (the account needs Secret Manager access there)\n` +
         `Underlying error: ${err.message ?? err}`,
     )
   }
