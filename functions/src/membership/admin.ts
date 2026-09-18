@@ -9,8 +9,11 @@
  *    bank-transfer payments).
  *  - adminExtendMembership: bump `validUntil` without payment (refunds,
  *    goodwill).
+ *  - adminAddFamilyMember: put an existing person straight into a family
+ *    membership. An admin acts on someone else's behalf, so the invite flow
+ *    (whose e-mail is signed with the *caller's* name) is the wrong tool.
  *
- * Both require the `admin` custom claim on the caller. The
+ * All require the `admin` custom claim on the caller. The
  * onMembershipWritten trigger handles `activeMembership` denormalization.
  */
 
@@ -28,6 +31,7 @@ import type {
 import {
   assertNoOtherActiveMembership,
   db,
+  getMembershipInTx,
   membershipRef,
   plusOneYear,
 } from "./shared";
@@ -167,4 +171,62 @@ export const adminExtendMembershipHandler = async (request: CallableRequest<Admi
   });
 
   return { validUntilMs: newValidUntilMs };
+};
+
+interface AdminAddFamilyMemberRequest {
+  membershipId: string;
+  userId: string;
+}
+
+export const adminAddFamilyMemberHandler = async (request: CallableRequest<AdminAddFamilyMemberRequest>) => {
+  if (request.auth?.token?.admin !== true) {
+    throw new HttpsError("permission-denied", "Admin access required");
+  }
+  const { membershipId, userId } =
+    request.data ?? ({} as AdminAddFamilyMemberRequest);
+  if (!membershipId || !userId) {
+    throw new HttpsError(
+      "invalid-argument",
+      "membershipId and userId are required",
+    );
+  }
+
+  const database = db();
+  const memRef = membershipRef(database, membershipId);
+  const targetRef = database.collection("users").doc(userId);
+
+  // Same write an accepted invite performs, minus the invite: no e-mail is
+  // sent and no `invites/*` doc is created.
+  await database.runTransaction(async (tx) => {
+    const membership = await getMembershipInTx(tx, memRef);
+    if (membership.type !== "family") {
+      throw new HttpsError(
+        "failed-precondition",
+        "Members can only be added to family memberships",
+      );
+    }
+    if (membership.status !== "active") {
+      throw new HttpsError("failed-precondition", "Membership is not active");
+    }
+    if (membership.members.some((m) => m.id === targetRef.id)) {
+      throw new HttpsError("already-exists", "User is already a member");
+    }
+
+    // Also surfaces `not-found` for an unknown user doc.
+    await assertNoOtherActiveMembership(tx, targetRef, membershipId);
+
+    tx.update(memRef, {
+      members: FieldValue.arrayUnion(targetRef),
+      modifiedAt: FieldValue.serverTimestamp(),
+      modifiedBy: request.auth?.uid ?? null,
+    });
+  });
+
+  logger.info("Admin added family member", {
+    membershipId,
+    userId,
+    adminUid: request.auth?.uid,
+  });
+
+  return { ok: true };
 };

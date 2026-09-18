@@ -70,6 +70,7 @@ export const RpcMethod = {
     "cancelMembershipAutoRenew",
     "adminCreateMembership",
     "adminExtendMembership",
+    "adminAddFamilyMember",
   ],
   billingCall: [
     "getInvoiceDownloadUrl",
