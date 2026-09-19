@@ -104,44 +104,65 @@ test("an ordinary tap with no screensaver reports no dismissal", () => {
   assert.equal(dismissed, 0)
 })
 
-test("the script signals a dismissal through its exit code", () => {
+function decodedScript(): string {
   const args = wakeCommandArgs()
-  const decoded = Buffer.from(
+  return Buffer.from(
     args[args.indexOf("-EncodedCommand") + 1]!,
     "base64"
   ).toString("utf16le")
-  // The exit must sit inside the $running branch: a tap with no screensaver
-  // has to fall through to 0, or every tap would re-assert the foreground.
-  const branchStart = decoded.indexOf("if ($running) {")
-  assert.ok(branchStart >= 0, "expected a $running guard")
-  const branch = decoded.slice(branchStart)
-  assert.ok(
-    branch.includes(`exit ${SCREENSAVER_DISMISSED_EXIT}`),
-    "dismissal exit code must be inside the guard"
-  )
-  assert.notEqual(SCREENSAVER_DISMISSED_EXIT, 0)
+}
+
+test("the script never terminates the screensaver process", () => {
+  // A killed .scr skips its own exit path, leaving SPI_SETSCREENSAVERRUNNING
+  // stale — on the terminal that broke the next screensaver launch and our
+  // own running-gate. It has to be asked to close instead.
+  const script = decodedScript()
+  assert.doesNotMatch(script, /Stop-Process|TerminateProcess|\.scr/)
 })
 
-test("the script kills the screensaver, gated on it actually running", () => {
-  const args = wakeCommandArgs()
-  const decoded = Buffer.from(
-    args[args.indexOf("-EncodedCommand") + 1]!,
-    "base64"
-  ).toString("utf16le")
+test("the script asks the screensaver to close via WM_CLOSE", () => {
+  const script = decodedScript()
+  // Screen-saver desktop first, with read+write access (0x0001 | 0x0080).
+  assert.match(script, /OpenDesktop\("Screen-saver", 0, false, 129\)/)
+  assert.match(script, /EnumDesktopWindows\(desk,/)
+  assert.match(script, /CloseDesktop\(desk\)/)
+  // Default-desktop fallback.
+  assert.match(script, /FindWindow\("WindowsScreenSaverClass", null\)/)
+  // WM_CLOSE = 0x0010 = 16, on both paths.
+  assert.equal(script.match(/PostMessage\([^,]+, 16,/g)?.length, 2)
+})
 
-  // Injected input cannot cross into the screensaver's own desktop, so
-  // terminating the process is what actually dismisses it. `.scr` survives in
-  // the process name because Windows only strips `.exe`.
-  assert.match(decoded, /Get-Process -Name '\*\.scr'/)
-  assert.match(decoded, /Stop-Process -Force/)
+test("an ordinary tap exits 0 before touching any window", () => {
+  // SPI_GETSCREENSAVERRUNNING = 0x0072 = 114. The gate must come before the
+  // first OpenDesktop, or a tap with no screensaver would still post WM_CLOSE.
+  const script = decodedScript()
+  const gate = script.indexOf("if (!running) return 0;")
+  assert.ok(script.includes("SystemParametersInfo(114, 0, ref running, 0)"))
+  assert.ok(gate >= 0, "expected the running gate")
+  assert.ok(gate < script.indexOf("OpenDesktop(\"Screen-saver\""))
+})
 
-  // Never terminate a stray .scr on an ordinary tap: the kill is guarded by
-  // SPI_GETSCREENSAVERRUNNING (0x0072 = 114).
-  assert.match(decoded, /SystemParametersInfo\(114, 0, \[ref\]\$running, 0\)/)
-  assert.match(decoded, /if \(\$running\) \{ Get-Process/)
+test("the script reports an acted-on screensaver through its exit code", () => {
+  const script = decodedScript()
+  assert.notEqual(SCREENSAVER_DISMISSED_EXIT, 0)
+  // Both dismissal paths return it; PowerShell turns it into the exit code.
+  const returns = script.match(
+    new RegExp(`return ${SCREENSAVER_DISMISSED_EXIT};`, "g")
+  )
+  assert.equal(returns?.length, 2)
+  assert.match(script, /exit \[Oww\.Saver\]::Dismiss\(\)/)
+})
 
-  // The nudge stays, to reset the idle timer so Windows cannot immediately
-  // re-arm the screensaver we just killed. Relative +1/-1 = no net movement.
-  assert.match(decoded, /mouse_event\(1, 1, 0, 0/)
-  assert.match(decoded, /mouse_event\(1, -1, 0, 0/)
+test("the here-string terminator starts its own line", () => {
+  // PowerShell only ends @'...'@ on a line starting with '@; anything else
+  // swallows the rest of the script into the C# source and fails to compile.
+  assert.match(decodedScript(), /\n'@\n/)
+})
+
+test("the nudge stays, as a relative there-and-back move", () => {
+  // Resets the idle timer so Windows does not immediately re-arm the
+  // screensaver; +1/-1 means no net cursor movement.
+  const script = decodedScript()
+  assert.match(script, /mouse_event\(1, 1, 0, 0/)
+  assert.match(script, /mouse_event\(1, -1, 0, 0/)
 })
