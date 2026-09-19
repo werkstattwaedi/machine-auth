@@ -19,7 +19,7 @@ import {
   type CallableRequest,
 } from "firebase-functions/v2/https";
 import { defineString } from "firebase-functions/params";
-import { kioskBearerKey } from "../config/tag-secrets";
+import { kioskBearer } from "../config/tag-secrets";
 import { parseIntParamOrDie } from "../auth/login-code/helpers";
 
 /**
@@ -77,10 +77,10 @@ export function assertKioskBearer(
   bearer: string | undefined,
   callableName: string
 ): void {
-  if (
-    process.env.FUNCTIONS_EMULATOR !== "true" &&
-    bearer !== kioskBearerKey.value()
-  ) {
+  if (process.env.FUNCTIONS_EMULATOR === "true") return;
+  const expected = kioskBearer();
+  // An unset/blank secret must refuse everyone, not accept an empty bearer.
+  if (expected === "" || bearer !== expected) {
     logger.warn(`${callableName} rejected: missing/invalid kiosk bearer.`);
     throw new HttpsError("permission-denied", "Forbidden");
   }

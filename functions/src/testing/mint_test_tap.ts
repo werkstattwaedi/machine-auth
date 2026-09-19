@@ -34,6 +34,7 @@ import { onRequest } from "firebase-functions/v2/https";
 import {
   diversificationMasterKey,
   diversificationSystemName,
+  kioskBearer,
   kioskBearerKey,
   terminalKey,
 } from "../config/tag-secrets";
@@ -135,7 +136,7 @@ export function createMintTestTap() {
       }
       const result = handleMintTestTap(req.body, {
         projectId: process.env.GCLOUD_PROJECT,
-        bearerKey: kioskBearerKey.value(),
+        bearerKey: kioskBearer(),
         terminalKey: terminalKey.value(),
         masterKey: diversificationMasterKey.value(),
         systemName: diversificationSystemName.value(),

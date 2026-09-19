@@ -69,7 +69,9 @@ gcloud secrets versions access latest --secret=<NAME> --project=oww-maco \
 Giving staging its own kiosk bearer (one-time, and again to rotate it):
 
 ```bash
-openssl rand -hex 32 | firebase functions:secrets:set KIOSK_BEARER_KEY \
+# `tr -d '\n'` matters: --data-file=- stores stdin VERBATIM, and a bearer
+# saved with openssl's trailing newline matches nothing a client sends.
+openssl rand -hex 32 | tr -d '\n' | firebase functions:secrets:set KIOSK_BEARER_KEY \
   --project oww-maco-staging --data-file=-
 cd functions && npm run deploy -- --project oww-maco-staging   # pins the new version
 cd ../checkout-kiosk && npm run build:kiosk:staging           # bakes it into the staging kiosk
