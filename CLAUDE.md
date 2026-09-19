@@ -303,6 +303,8 @@ npm run block -- bash -c 'firebase emulators:exec --config "$FIREBASE_E2E_CONFIG
 
 New screenshot tests automatically run at both viewports — no extra configuration needed.
 
+**Post-deploy smoke test (staging):** the emulator cannot show missing indexes, races hidden by instant commits, IAM/secrets/origin config, wrong-project bundles or real mail delivery — each has shipped a bug past the full suite. `scripts/deploy.sh staging` therefore ends with a Playwright run against the *deployed* staging apps; it lives in the private operations repo (`../machine-auth-operations/smoke/`, it carries the smoke mailbox's credential) and gates a queued prod deploy. Scenarios: mailed-code sign-up/login, visit → bill → invoice mail with PDF, #633 Auth heal, membership purchase + admin marks paid, admin e-mail change, kiosk badge purchase + badge login (stub `window.bridge`, taps from the staging-only `mintTestTap`). When you change a test id or a button label those flows use (`checkin-identifier`, `signup-*`, `login-code-*`, `badge-purchase-*`, "Weiter zum Bezahlen", "Material erfassen", "Als bezahlt markieren", …), the smoke suite breaks at the next deploy — grep it too. Run alone: `(cd ../machine-auth-operations && npm run smoke:staging)`. The scripted suite is only the regression gate; the **assessment** is `/smoke-staging` — an agent follows `smoke/RUNBOOK.md` through a persistent browser driver (`npm run agent -- …`), opens every screenshot, the rendered mails and the invoice PDF pages, and reports what looks wrong.
+
 **Test locations:**
 - `web/apps/checkout/src/**/*.test.{ts,tsx}` — Checkout unit tests (Vitest)
 - `web/apps/admin/src/**/*.test.{ts,tsx}` — Admin unit tests (Vitest)

@@ -12,6 +12,7 @@
 #   scripts/deploy.sh prod             # deploy everything to oww-maco
 #   scripts/deploy.sh staging prod     # staging first, then prod
 #   scripts/deploy.sh prod --yes       # skip the production confirmation
+#   scripts/deploy.sh staging --no-smoke   # skip the post-deploy smoke test
 #
 # Per environment this runs:
 #   1. generate-env (staging: --env staging overlay per ADR-0034)
@@ -21,6 +22,12 @@
 #   4. firebase deploy --only hosting             (predeploy hook builds web;
 #      staging builds with WEB_BUILD_SCRIPT=build:staging so staging sites
 #      never ship prod-configured bundles)
+#
+#   5. staging only: the post-deploy smoke test from the operations repo
+#      (smoke/ — real mail, bills, kiosk taps, admin app against the deployed
+#      environment). It covers what the emulator structurally cannot, and
+#      because staging always deploys first, a failure stops the script
+#      BEFORE production is touched.
 #
 # The active `firebase use` alias is never changed — every command passes
 # --project explicitly.
@@ -44,12 +51,14 @@ STAGING_PROJECT="oww-maco-staging"
 WANT_STAGING=0
 WANT_PROD=0
 ASSUME_YES=0
+RUN_SMOKE=1
 for arg in "$@"; do
   case "$arg" in
     staging) WANT_STAGING=1 ;;
     prod) WANT_PROD=1 ;;
     --yes|-y) ASSUME_YES=1 ;;
-    *) fail "Unknown argument: $arg (expected: staging, prod, --yes)" ;;
+    --no-smoke) RUN_SMOKE=0 ;;
+    *) fail "Unknown argument: $arg (expected: staging, prod, --yes, --no-smoke)" ;;
   esac
 done
 [ $((WANT_STAGING + WANT_PROD)) -gt 0 ] || fail "Usage: scripts/deploy.sh [staging] [prod] [--yes]"
@@ -128,7 +137,33 @@ deploy_env() {
   step "[$env] Hosting (checkout + admin) → $project"
   WEB_BUILD_SCRIPT="$web_build" firebase deploy --only hosting --project "$project"
 
+  if [ "$env" = "staging" ]; then
+    run_staging_smoke
+  fi
+
   step "[$env] Done → $project"
+}
+
+# The smoke suite lives in the private operations repo (it carries the smoke
+# mailbox's credential). Missing repo/suite is a warning, not a failure — a
+# contributor without access can still deploy staging; a FAILING suite stops
+# everything, including a production deploy queued behind it.
+run_staging_smoke() {
+  local ops_dir="${OPERATIONS_CONFIG_DIR:-../machine-auth-operations}"
+  if [ "$RUN_SMOKE" -ne 1 ]; then
+    warn "[staging] Smoke test skipped (--no-smoke)."
+    return
+  fi
+  if [ ! -f "$ops_dir/smoke/playwright.config.ts" ]; then
+    warn "[staging] No smoke suite at $ops_dir/smoke — skipping. Run the manual checks in docs/deployment-checklist.md §8."
+    return
+  fi
+  step "[staging] Post-deploy smoke test ($ops_dir/smoke)"
+  (cd "$ops_dir" && npm run smoke:staging) \
+    || fail "Staging smoke test FAILED — nothing further is deployed. Traces: $ops_dir/smoke/.results/ (npx playwright show-trace …). Re-run alone: (cd $ops_dir && npm run smoke:staging)"
+  # The scripted run only knows what it was told to check. The run that finds
+  # the unexpected is an agent walking the apps and LOOKING at them:
+  warn "[staging] Scripted smoke test passed. For the assessment-by-looking run, use /smoke-staging in Claude Code ($ops_dir/smoke/RUNBOOK.md)."
 }
 
 for env in "${ENVS[@]}"; do
@@ -143,5 +178,6 @@ Not covered by this script (see docs/deployment-checklist.md):
   - Gateway (npx tsx scripts/deploy-gateway.ts) and kiosk
   - Secrets rotation / new defineSecret values
   - Custom claims for newly-promoted admins (re-save user doc)
-  - Smoke tests
+  - Manual smoke checks the automated run cannot do (Google sign-in, TWINT,
+    a physical badge on the physical kiosk)
 EOF
