@@ -161,6 +161,9 @@ run_staging_smoke() {
   step "[staging] Post-deploy smoke test ($ops_dir/smoke)"
   (cd "$ops_dir" && npm run smoke:staging) \
     || fail "Staging smoke test FAILED — nothing further is deployed. Traces: $ops_dir/smoke/.results/ (npx playwright show-trace …). Re-run alone: (cd $ops_dir && npm run smoke:staging)"
+  # The scripted run only knows what it was told to check. The run that finds
+  # the unexpected is an agent walking the apps and LOOKING at them:
+  warn "[staging] Scripted smoke test passed. For the assessment-by-looking run, use /smoke-staging in Claude Code ($ops_dir/smoke/RUNBOOK.md)."
 }
 
 for env in "${ENVS[@]}"; do

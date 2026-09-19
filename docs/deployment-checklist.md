@@ -398,6 +398,15 @@ with `(cd ../machine-auth-operations && npm run smoke:staging)`. It needs
 `gcloud auth login` + `gcloud auth application-default login` with staging
 access, and refuses to run against the production project.
 
+**Staging: the agent run.** The scripted suite only knows what it was told to
+check. `/smoke-staging` in Claude Code sends an agent through
+`machine-auth-operations/smoke/RUNBOOK.md`: it uses the apps step by step,
+**looks at every screenshot**, reads the real mails and the invoice PDF as
+images, and writes a report with a verdict. Its first run found an invoice PDF
+without a recipient and a "Seite 1 / 1" on a two-page document — nothing a
+scripted check would raise. Do it before a production deploy that changes
+anything a member sees.
+
 **Still by hand** (after a deploy that touches them):
 
 1. **Google sign-in** — real Google blocks automation (its guard is covered in
