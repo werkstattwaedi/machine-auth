@@ -232,10 +232,9 @@ function createWindow(): void {
     height: config.windowOpts.height,
     frame: true,
     icon: appIcon(),
-    // Never shown on creation — createWindow() minimizes it instead, so during
-    // the transition phase it never covers the browser running the old
-    // checkout. A badge tap (or the tray / taskbar) brings it forward for
-    // users who opt into the new flow.
+    // Start hidden in the tray: during the transition phase the kiosk must
+    // never cover the browser running the old checkout. A badge tap (or the
+    // tray) brings it forward for users who opt into the new flow.
     show: false,
     autoHideMenuBar: config.windowOpts.autoHideMenuBar,
     kiosk: false,
@@ -270,11 +269,11 @@ function createWindow(): void {
     void endSessionAndHide()
   })
 
-  // Start minimized. Do NOT maximize here: Electron's maximize() also shows a
-  // hidden window, so the old start-maximized call made the kiosk come up
-  // visible and full-screen on every launch despite `show: false`.
+  // Start hidden in the tray: leave the window exactly as `show: false`
+  // created it. Do NOT maximize (or minimize) here — Electron's maximize()
+  // also shows a hidden window, which is how the old start-maximized call
+  // made the kiosk come up visible and full-screen on every launch.
   // showWindow() maximizes when the kiosk is actually surfaced.
-  mainWindow.minimize()
 
   mainWindow.loadFile(path.join(__dirname, "..", "renderer", "index.html"))
 
