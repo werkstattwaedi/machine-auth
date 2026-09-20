@@ -28,7 +28,6 @@
  *     worthless there.
  */
 
-import * as crypto from "crypto";
 import * as logger from "firebase-functions/logger";
 import { onRequest } from "firebase-functions/v2/https";
 import {
@@ -39,9 +38,13 @@ import {
   terminalKey,
 } from "../config/tag-secrets";
 import { mintSdmTap } from "../ntag/sdm_mint";
+import {
+  isStagingProject,
+  refuseUnlessStagingCaller,
+  STAGING_PROJECT_ID,
+} from "./staging_guard";
 
-/** The one project this function may exist and answer in. */
-export const STAGING_PROJECT_ID = "oww-maco-staging";
+export { isStagingProject, STAGING_PROJECT_ID };
 
 /**
  * Reserved first UID byte for virtual test tags. Must never be 0x04 (NXP):
@@ -49,12 +52,6 @@ export const STAGING_PROJECT_ID = "oww-maco-staging";
  */
 export const VIRTUAL_UID_PREFIX = "f0";
 const VIRTUAL_UID = new RegExp(`^${VIRTUAL_UID_PREFIX}[0-9a-f]{12}$`);
-
-export function isStagingProject(
-  projectId: string | undefined = process.env.GCLOUD_PROJECT
-): boolean {
-  return projectId === STAGING_PROJECT_ID;
-}
 
 export interface MintTestTapEnv {
   projectId: string | undefined;
@@ -69,28 +66,13 @@ export interface MintTestTapResult {
   body: { picc: string; cmac: string } | { error: string };
 }
 
-function sameSecret(a: string, b: string): boolean {
-  const bufA = Buffer.from(a);
-  const bufB = Buffer.from(b);
-  return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
-}
-
 /** The function's logic, free of the HTTP/secret plumbing (unit-tested). */
 export function handleMintTestTap(
   input: { uid?: unknown; counter?: unknown; bearer?: unknown } | undefined,
   env: MintTestTapEnv
 ): MintTestTapResult {
-  if (!isStagingProject(env.projectId)) {
-    return { status: 404, body: { error: "not found" } };
-  }
-  const bearer = input?.bearer;
-  if (
-    typeof bearer !== "string" ||
-    env.bearerKey.length === 0 ||
-    !sameSecret(bearer, env.bearerKey)
-  ) {
-    return { status: 403, body: { error: "forbidden" } };
-  }
+  const refusal = refuseUnlessStagingCaller(input?.bearer, env);
+  if (refusal) return refusal;
   const uid = typeof input?.uid === "string" ? input.uid.toLowerCase() : "";
   if (!VIRTUAL_UID.test(uid)) {
     return {

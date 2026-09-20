@@ -77,7 +77,10 @@ cd functions && npm run deploy -- --project oww-maco-staging   # pins the new ve
 cd ../checkout-kiosk && npm run build:kiosk:staging           # bakes it into the staging kiosk
 ```
 
-### Staging-only test tooling: `mintTestTap`
+### Staging-only test tooling: `mintTestTap`, `uploadTestUsage`
+
+Both hooks back the agent smoke run (§8), share two guards
+(`functions/src/testing/staging_guard.ts`) and add one of their own.
 
 `mintTestTap` mints the `picc`/`cmac` of a badge tap for a **virtual** tag so
 the post-deploy smoke test can run the kiosk flows without a reader or the tag
@@ -86,8 +89,18 @@ keys. It forges taps with keys production shares, so it is fenced three ways
 target is `oww-maco-staging` and answers 404 anywhere else; it is
 `invoker: "private"` (Google identity token of a principal with `run.invoker`)
 and additionally wants the staging kiosk bearer; and it only mints for UIDs
-starting with `f0` — real NXP tags start with `04`. `scripts/deploy.sh prod`
-fails if the function is ever found in production.
+starting with `f0` — real NXP tags start with `04`.
+
+`uploadTestUsage` reports a finished machine session (`uid`, `machineId`,
+`activeSeconds`, optional `wallClockSeconds`) to the **real**
+`handleUploadUsage`, so the run can look at what a laser session does to a
+member's cart without a terminal. Same staging-only export and private
+invoker + bearer; its own guard is that it only bills an account of the smoke
+mailbox (`users.email` starts with `smoke.testing+`) on a machine that exists
+(`functions/src/testing/upload_test_usage.ts`). The runbook calls it as
+`npm run agent -- usage add <uid> <machineId> <activeSeconds>`.
+
+`scripts/deploy.sh prod` fails if either function is ever found in production.
 
 ```bash
 # Smoke-check it after a staging deploy (prints {"picc":…,"cmac":…}):
@@ -100,8 +113,8 @@ curl -s -X POST "$URL" -H "Content-Type: application/json" \
 ```
 
 A 403 from Google (HTML, before our code runs) means the caller lacks
-`roles/run.invoker` on the service; grant it to the people who run the smoke
-test, never to `allUsers`.
+`roles/run.invoker` on the service; grant it — on **both** services — to the
+people who run the smoke test, never to `allUsers`.
 
 One-time setup on a fresh clone: apply the staging hosting targets (prod
 `generate-env` preserves foreign-project target entries in `.firebaserc`,
@@ -379,13 +392,40 @@ Verify: Visit both checkout and admin hosting URLs.
 firebase deploy
 ```
 
-## 8. Smoke Tests
+## 8. Smoke run
 
-1. **Public checkout**: Visit checkout site with `?picc=...&cmac=...` tag URL
-2. **Login**: Request 6-digit code on `/login`, redeem it (or click the magic link in the Resend email) to complete sign-in
-3. **Dashboard**: Verify user doc loads from Firestore
-4. **Admin site**: Visit admin site, verify it requires admin custom claim
-5. **Functions**: Check a terminal checkin works end-to-end
+**Staging: an agent walks the apps.** `/smoke-staging` in Claude Code sends an
+agent through `machine-auth-operations/smoke/RUNBOOK.md` against the *deployed*
+staging apps: it uses them step by step, **looks at every screenshot**, reads
+the real mails and the invoice PDF as images, and writes a report with a
+verdict. It exists for what the emulator structurally cannot show — missing
+indexes, races hidden by instant commits, IAM/secrets/allowed-origins, bundles
+built for the wrong project, real mail delivery — and for what no scripted
+check anticipates: its first run found an invoice PDF without a recipient and
+"Seite 1 / 1" on a two-page document. There is deliberately no scripted smoke
+suite; the emulator e2e is the regression net.
+
+Run it **by choice**: after a staging deploy that changes anything a person
+sees, and before the production deploy that follows — or for single scenarios
+("/smoke-staging only H and I"). Scenarios: sign-up and login by mailed code,
+visit → bill → invoice mail, a deleted Auth record healing (#633), guest
+checkout, account + membership at the kiosk, badge purchase / badge login / the
+badge price rule, family membership with both invitation flows and an
+account-less member, a cart filled via QR targets, a backend-uploaded laser
+session and every pricing unit, an admin e-mail change. It needs
+`gcloud auth login` + `gcloud auth application-default login` with staging
+access, and refuses the production project.
+
+**Still by hand** (after a deploy that touches them):
+
+1. **Google sign-in** — real Google blocks automation (its guard is covered in
+   the emulator e2e).
+2. **TWINT** — the agent's visits end on the QR-bill method.
+3. **A physical badge on the physical kiosk** — after a kiosk rebuild: tap,
+   confirm the session, check out.
+4. **Terminal check-in** — a MaCo terminal end to end.
+5. **Production** — no smoke run there: load both apps, sign in once, confirm
+   the admin site demands the admin claim.
 
 ## 9. BigQuery statistics + data protection (ADR-0038 / ADR-0039)
 
