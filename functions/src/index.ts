@@ -3,7 +3,9 @@
 import "./options";
 import express from "express";
 import { onRequest } from "firebase-functions/v2/https";
-import { createMintTestTap, isStagingProject } from "./testing/mint_test_tap";
+import { createMintTestTap } from "./testing/mint_test_tap";
+import { isStagingProject } from "./testing/staging_guard";
+import { createUploadTestUsage } from "./testing/upload_test_usage";
 import * as logger from "firebase-functions/logger";
 import { defineSecret } from "firebase-functions/params";
 import { initializeApp } from "firebase-admin/app";
@@ -213,6 +215,10 @@ export { admin } from "./admin-api";
 // production manifest. The handler re-checks the project at runtime. See
 // ./testing/mint_test_tap.ts for why this must never exist in production.
 export const mintTestTap = isStagingProject() ? createMintTestTap() : undefined;
+// Same contract: reports a machine session for a smoke-test account.
+export const uploadTestUsage = isStagingProject()
+  ? createUploadTestUsage()
+  : undefined;
 
 // Export grouped callable dispatchers (#277). The ~20 individual callables
 // collapsed into one onCall per domain, so a session that touches several

@@ -110,16 +110,21 @@ deploy_env() {
   step "[$env] Functions → $project"
   npx tsx scripts/deploy-functions.ts --project "$project"
 
-  # mintTestTap forges badge taps with the tag keys production shares
-  # (functions/src/testing/mint_test_tap.ts). Its export is conditional on
-  # the staging project id and the handler refuses elsewhere — this is the
-  # third, after-the-fact check that it never reached production.
+  # The staging-only test hooks (functions/src/testing/) forge badge taps with
+  # the tag keys production shares and bill machine time without a terminal.
+  # Their exports are conditional on the staging project id and the handlers
+  # refuse elsewhere — this is the third, after-the-fact check that none of
+  # them ever reached production.
   if [ "$env" = "prod" ]; then
     step "[$env] Verifying staging-only test tooling is absent from $project"
-    if firebase functions:list --project "$project" | grep -q "mintTestTap"; then
-      fail "mintTestTap is deployed in PRODUCTION ($project). Delete it now:
-  firebase functions:delete mintTestTap --region europe-west6 --project $project"
-    fi
+    local deployed hook
+    deployed="$(firebase functions:list --project "$project")"
+    for hook in mintTestTap uploadTestUsage; do
+      if grep -q "$hook" <<<"$deployed"; then
+        fail "$hook is deployed in PRODUCTION ($project). Delete it now:
+  firebase functions:delete $hook --region europe-west6 --project $project"
+      fi
+    done
   fi
 
   step "[$env] Firestore + Storage rules/indexes → $project"
@@ -143,5 +148,7 @@ Not covered by this script (see docs/deployment-checklist.md):
   - Gateway (npx tsx scripts/deploy-gateway.ts) and kiosk
   - Secrets rotation / new defineSecret values
   - Custom claims for newly-promoted admins (re-save user doc)
-  - Smoke tests
+  - The smoke run: after a staging deploy that changes what people see, and
+    before production, send an agent through the staging apps with
+    /smoke-staging in Claude Code (runbook: ../machine-auth-operations/smoke)
 EOF
