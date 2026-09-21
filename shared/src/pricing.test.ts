@@ -8,7 +8,10 @@ import {
   USAGE_DISCOUNT_LABELS,
   USAGE_TYPE_INFO,
   USAGE_TYPE_ORDER,
+  MATERIALBEZUG_MACHINE_REASON,
   selectableUsageTypes,
+  usageTypeOptions,
+  resolveUsageType,
   usageDiscount,
   isMachineItem,
   type UsageType,
@@ -122,5 +125,63 @@ describe("USAGE_TYPE_INFO (issue #570)", () => {
     expect(
       selectableUsageTypes({ anonymous: true, current: "intern" }),
     ).toContain("intern")
+  })
+})
+
+// Issue #628: „Nur Materialbezug" + machine usage is rejected by the server
+// (`assertUsageTypeAllowed`), so the checkout must not offer it as
+// selectable — and must never submit it.
+describe("usageTypeOptions / resolveUsageType (issue #628)", () => {
+  it("disables only materialbezug, with the reason, when the cart has machine usage", () => {
+    const options = usageTypeOptions({ anonymous: false, hasMachineUsage: true })
+    expect(options.map((o) => o.type)).toEqual(USAGE_TYPE_ORDER)
+    for (const o of options) {
+      if (o.type === "materialbezug") {
+        expect(o.disabledReason).toBe(MATERIALBEZUG_MACHINE_REASON)
+      } else {
+        expect(o.disabledReason, o.type).toBeUndefined()
+      }
+    }
+  })
+
+  it("disables nothing without machine usage", () => {
+    const options = usageTypeOptions({ anonymous: false, hasMachineUsage: false })
+    expect(options.map((o) => o.type)).toEqual(USAGE_TYPE_ORDER)
+    expect(options.every((o) => o.disabledReason === undefined)).toBe(true)
+  })
+
+  it("keeps the anonymous filter and the rehydrated `current`", () => {
+    expect(
+      usageTypeOptions({ anonymous: true, hasMachineUsage: true }).map(
+        (o) => o.type,
+      ),
+    ).toEqual(selectableUsageTypes({ anonymous: true }))
+    const withCurrent = usageTypeOptions({
+      anonymous: true,
+      current: "intern",
+      hasMachineUsage: true,
+    })
+    expect(withCurrent.map((o) => o.type)).toContain("intern")
+    // A rehydrated materialbezug stays displayable but is still disabled.
+    const rehydrated = usageTypeOptions({
+      anonymous: true,
+      current: "materialbezug",
+      hasMachineUsage: true,
+    })
+    expect(rehydrated.find((o) => o.type === "materialbezug")?.disabledReason).toBe(
+      MATERIALBEZUG_MACHINE_REASON,
+    )
+  })
+
+  it("resolves materialbezug + machine usage to regular, everything else unchanged", () => {
+    expect(resolveUsageType("materialbezug", { hasMachineUsage: true })).toBe(
+      "regular",
+    )
+    for (const ut of USAGE_TYPE_ORDER) {
+      expect(resolveUsageType(ut, { hasMachineUsage: false }), ut).toBe(ut)
+      if (ut !== "materialbezug") {
+        expect(resolveUsageType(ut, { hasMachineUsage: true }), ut).toBe(ut)
+      }
+    }
   })
 })

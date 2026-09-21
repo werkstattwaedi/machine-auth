@@ -57,7 +57,12 @@ import type {
   CheckoutDoc,
   CheckoutPersonDoc,
 } from "@modules/lib/firestore-entities"
-import { type UserType, type UsageType } from "@modules/lib/pricing"
+import {
+  isMachineItem,
+  resolveUsageType,
+  type UserType,
+  type UsageType,
+} from "@modules/lib/pricing"
 import type { CheckoutItemLocal } from "@/components/usage/inline-rows"
 import type { PricingModel } from "@modules/lib/workshop-config"
 import {
@@ -71,6 +76,17 @@ import type { FamilyCandidate } from "./step-checkin"
 import type { PaymentData } from "./payment-result"
 import { computeCheckoutCosts } from "./step-checkout"
 import { runStartOver } from "./start-over"
+
+/**
+ * `closeCheckoutAndGetPayment` throws `failed-precondition` with a
+ * user-facing German reason (e.g. „Materialbezug ist nicht möglich, wenn
+ * Maschinen genutzt wurden."); the generic „Bitte erneut versuchen" would
+ * hide it and is wrong advice — retrying cannot succeed (issue #628).
+ * Module-level so `useAsyncMutation`'s `mutate` keeps a stable identity.
+ */
+const CLOSE_AND_PAY_SERVER_MESSAGE_CODES: readonly string[] = [
+  "functions/failed-precondition",
+]
 
 export interface WizardContextValue {
   // ----- identification -----
@@ -268,6 +284,7 @@ export function WizardProvider({
     context: "checkout.closeAndPay",
     errorMessage:
       "Bezahlung konnte nicht erstellt werden. Bitte erneut versuchen.",
+    serverMessageCodes: CLOSE_AND_PAY_SERVER_MESSAGE_CODES,
   })
 
   // Per-item-callback wrappers so failures toast + telemeter.
@@ -403,6 +420,8 @@ export function WizardProvider({
       setUsageType(openCheckout.usageType as UsageType)
     }
   }, [openCheckout?.usageType])
+
+  useUsageTypeFallback(usageType, items, setUsageType)
 
   // Pre-fill primary person for logged-in users
   usePreFillPerson(identifiedUserDoc, personsDispatch, persons, prefillNonce)
@@ -1209,6 +1228,29 @@ export function usePreFillPerson(
  *
  * Exported for unit testing (see wizard-prefill-tag.test.tsx).
  */
+/**
+ * Keep the selected usage type submittable (issue #628): „Nur Materialbezug"
+ * is rejected by the server once the cart holds a machine item, so a
+ * selection that becomes invalid — rehydrated from the open doc before the
+ * items arrived, an NFC session syncing in, manual hours added on the visit
+ * page — falls back to `regular`. A state change rather than a derived
+ * value on purpose: removing the last machine item re-enables the option
+ * but does not silently re-apply the waiver; the visitor re-selects it.
+ * The open doc is not written — its `usageType` is set authoritatively by
+ * the server at close from the value the wizard submits.
+ */
+export function useUsageTypeFallback(
+  usageType: UsageType,
+  items: readonly { type?: string | null }[],
+  setUsageType: (t: UsageType) => void,
+): void {
+  const hasMachineUsage = items.some(isMachineItem)
+  useEffect(() => {
+    const resolved = resolveUsageType(usageType, { hasMachineUsage })
+    if (resolved !== usageType) setUsageType(resolved)
+  }, [usageType, hasMachineUsage, setUsageType])
+}
+
 export function usePreFillTagPerson(
   tokenUser: TokenUser | null,
   dispatch: React.Dispatch<PersonsAction>,

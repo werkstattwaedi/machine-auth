@@ -51,6 +51,15 @@ export interface UseAsyncMutationOptions {
   successMessage?: string
   /** Fallback toast message when the error code has no localized mapping. */
   errorMessage?: string
+  /**
+   * Error codes whose *server* message is shown verbatim instead of the
+   * localized mapping / `errorMessage` fallback (issue #628). Opt-in per
+   * call site, because e.g. `functions/failed-precondition` carries a
+   * user-facing German reason on some callables (`closeCheckoutAndGetPayment`)
+   * but English internals on others — a global mapping would leak those
+   * into toasts. Pass a stable (module-level) array; it is a `mutate` dep.
+   */
+  serverMessageCodes?: readonly string[]
 }
 
 interface MutationState {
@@ -213,9 +222,11 @@ export function useAsyncMutation<T = void>(
         // App-level refusals (code "oww/…", e.g. GoogleSignInRefusedError)
         // are thrown with a German message that tells the user what to do
         // next — a generic fallback would throw that guidance away.
-        const message = code.startsWith(APP_ERROR_PREFIX)
-          ? rawMessage
-          : firebaseErrorToGerman(code, fallback)
+        const message =
+          code.startsWith(APP_ERROR_PREFIX) ||
+          options.serverMessageCodes?.includes(code)
+            ? rawMessage
+            : firebaseErrorToGerman(code, fallback)
 
         const structured: MutationError = {
           code,
@@ -241,7 +252,13 @@ export function useAsyncMutation<T = void>(
         throw err
       }
     },
-    [functions, options.context, options.successMessage, options.errorMessage],
+    [
+      functions,
+      options.context,
+      options.successMessage,
+      options.errorMessage,
+      options.serverMessageCodes,
+    ],
   )
 
   return {

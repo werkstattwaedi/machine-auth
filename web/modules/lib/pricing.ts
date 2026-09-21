@@ -20,8 +20,13 @@ export {
   USAGE_TYPE_INFO,
   USAGE_TYPE_ORDER,
   USER_TYPE_LABELS,
+  MATERIALBEZUG_MACHINE_REASON,
+  isMachineItem,
   selectableUsageTypes,
+  usageTypeOptions,
+  resolveUsageType,
   type UsageType,
+  type UsageTypeOption,
   type UserType,
 } from "@oww/shared"
 
