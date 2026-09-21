@@ -371,7 +371,7 @@ describe("bill processing triggers (Integration)", () => {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const pdfParse = require("pdf-parse") as (b: Buffer) => Promise<{ text: string }>;
       const { text } = await pdfParse(buffer);
-      expect(text).to.include("Quittung Self Checkout");
+      expect(text).to.include("Quittung Self-Checkout");
       expect(text).to.include("Zahlweise: TWINT");
       expect(text).to.not.include("Empfangsschein");
       expect(text).to.not.include("Zahlteil");
@@ -883,7 +883,7 @@ describe("bill processing triggers (Integration)", () => {
           },
         ];
         expect(entity.template.id).to.equal("test-twint-template");
-        // The PDF inside is a "Quittung Self Checkout" (#426) — the
+        // The PDF inside is a "Quittung Self-Checkout" (#426) — the
         // attachment filename must match the document type, mirroring the
         // Beleg filename contract from #405.
         expect(entity.attachments[0].filename).to.equal("Quittung-RE-000011.pdf");

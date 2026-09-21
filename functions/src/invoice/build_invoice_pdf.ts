@@ -84,6 +84,19 @@ function unitLabel(pricingModel?: PricingModel | null): string {
   return UNIT_LABELS[pricingModel] ?? "";
 }
 
+// Stored `formInputs[].unit` strings are identifiers written by the client
+// (`pricing-calc.ts`: "ml", "layers"), not display copy. Mapped here at
+// render time — rather than changing what the client stores — so bills
+// already in Firestore (and re-rendered corrections of them) print the
+// same German label as the app's position table ("Layer", issue #659).
+const FORM_INPUT_UNIT_LABELS: Record<string, string> = {
+  layers: "Layer",
+};
+
+function formInputUnitLabel(unit: string): string {
+  return FORM_INPUT_UNIT_LABELS[unit] ?? unit;
+}
+
 function formatDate(date: Date): string {
   return formatWorkshopDateTime(date, "dd.MM.yyyy HH:mm");
 }
@@ -201,9 +214,9 @@ export async function buildInvoicePdf(
     const isRenewal = !isBeleg && data.source === "membership-renewal";
     let title: string;
     if (isBeleg) {
-      title = "Beleg Self Checkout";
+      title = "Beleg Self-Checkout";
     } else if (isTwint) {
-      title = "Quittung Self Checkout";
+      title = "Quittung Self-Checkout";
     } else if (isRenewal) {
       title = "Rechnung Mitgliederbeitrag";
     } else if (data.checkouts.length > 1) {
@@ -213,12 +226,12 @@ export async function buildInvoicePdf(
       title = `Sammelrechnung — ${formatWorkshopDateTime(earliest.date, "MMMM yyyy")}`;
     } else {
       // Single-checkout aggregated invoice (a member who visited once in
-      // the prior month). Keeps the standard "Rechnung Self Checkout"
+      // the prior month). Keeps the standard "Rechnung Self-Checkout"
       // title rather than a "Sammelrechnung" label — a single line item
       // doesn't read as an aggregation, and the per-visit Beleg the
       // member received earlier already mentioned the upcoming
       // Sammelrechnung. Accounting treats it as a regular Rechnung.
-      title = "Rechnung Self Checkout";
+      title = "Rechnung Self-Checkout";
     }
     y = ensureSpace(doc, y, 40);
     doc.fontSize(16).font("Helvetica-Bold");
@@ -690,7 +703,7 @@ function renderCheckoutSection(
         // as an arithmetic falsehood. Render the axes in the description and
         // skip the middle columns — only totalPrice stays.
         const axes = (item.formInputs ?? [])
-          .map((fi) => `${formatQty(fi.quantity)} ${fi.unit}`)
+          .map((fi) => `${formatQty(fi.quantity)} ${formInputUnitLabel(fi.unit)}`)
           .join(" · ");
         const desc = axes ? `${item.description} (${axes})` : item.description;
         y = renderItemRow(doc, y, desc, "", null, null, item.totalPrice);
@@ -787,7 +800,7 @@ function renderItemGroup(
       // as an arithmetic falsehood. Render the axes in the description and
       // skip the middle columns — only totalPrice stays.
       const axes = (item.formInputs ?? [])
-        .map((fi) => `${formatQty(fi.quantity)} ${fi.unit}`)
+        .map((fi) => `${formatQty(fi.quantity)} ${formInputUnitLabel(fi.unit)}`)
         .join(" · ");
       const desc = axes ? `${item.description} (${axes})` : item.description;
       y = renderItemRow(doc, y, desc, "", null, null, item.totalPrice);

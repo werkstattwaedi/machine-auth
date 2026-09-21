@@ -764,7 +764,7 @@ export async function trySendEmail(billId: string): Promise<boolean> {
 /**
  * Noun for the correction/cancellation copy: Rechnung / Quittung / Beleg /
  * Sammelrechnung. Mirrors the PDF title rule in `build_invoice_pdf.ts`
- * (a one-visit aggregate is titled "Rechnung Self Checkout", only a
+ * (a one-visit aggregate is titled "Rechnung Self-Checkout", only a
  * multi-visit one "Sammelrechnung") so the mail names the document the
  * customer actually holds — deliberately NOT the `paymentMethod`-based
  * template choice in `pickTemplate`, which picks copy, not the noun.
