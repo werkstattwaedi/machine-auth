@@ -73,3 +73,64 @@ describe("PersonCard billing address", () => {
     expect(screen.queryByDisplayValue("Zürich")).toBeNull()
   })
 })
+
+// Issue #663: every input must carry an accessible name that includes the
+// card ("Person 2 Vorname"), so assistive tech and `getByLabel` can tell the
+// guests apart. The card number is a visually-hidden prefix inside the label.
+describe("PersonCard accessible names", () => {
+  it("associates each editable field with a card-scoped label", () => {
+    render(
+      <PersonCard
+        person={makePerson({ isPreFilled: false })}
+        index={1}
+        showTerms={false}
+        dispatch={noop}
+      />,
+    )
+
+    const firstName = screen.getByLabelText(/Person 2 Vorname/)
+    expect(firstName.tagName).toBe("INPUT")
+    expect((firstName as HTMLInputElement).value).toBe("Max")
+
+    expect(screen.getByLabelText(/Person 2 Nachname/).tagName).toBe("INPUT")
+    expect(screen.getByLabelText(/Person 2 E-Mail/).tagName).toBe("INPUT")
+
+    // Firma billing address fields are scoped the same way.
+    expect(
+      (screen.getByLabelText(/Person 2 Firma\*/) as HTMLInputElement).value,
+    ).toBe("Muster AG")
+    expect(screen.getByLabelText(/Person 2 Strasse/).tagName).toBe("INPUT")
+    expect(screen.getByLabelText(/Person 2 PLZ/).tagName).toBe("INPUT")
+    expect(screen.getByLabelText(/Person 2 Ort/).tagName).toBe("INPUT")
+
+    // The radio group is named by its visible "Nutzer:in" label.
+    expect(
+      screen.getByRole("radiogroup", { name: /Person 2 Nutzer:in/ }),
+    ).toBeTruthy()
+  })
+
+  it("keeps ids unique across cards so labels never cross-wire", () => {
+    render(
+      <>
+        <PersonCard
+          person={makePerson({ id: "a", firstName: "Anna", userType: "erwachsen" })}
+          index={0}
+          showTerms={false}
+          dispatch={noop}
+        />
+        <PersonCard
+          person={makePerson({ id: "b", firstName: "Ben", userType: "erwachsen" })}
+          index={1}
+          showTerms={false}
+          dispatch={noop}
+        />
+      </>,
+    )
+
+    const first = screen.getByLabelText(/Person 1 Vorname/) as HTMLInputElement
+    const second = screen.getByLabelText(/Person 2 Vorname/) as HTMLInputElement
+    expect(first.value).toBe("Anna")
+    expect(second.value).toBe("Ben")
+    expect(first.id).not.toBe(second.id)
+  })
+})

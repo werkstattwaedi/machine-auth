@@ -20,7 +20,7 @@ import {
 } from "@modules/components/profile-form"
 import { useForm } from "react-hook-form"
 import { Check, KeyRound, Loader2, Mail, MapPin, Save } from "lucide-react"
-import { useEffect, useRef } from "react"
+import { useEffect, useId, useRef } from "react"
 import { USER_TYPE_LABELS, type UserType } from "@modules/lib/pricing"
 import { cn } from "@modules/lib/utils"
 import { PhoneVerification } from "@/components/account/phone-verification"
@@ -67,6 +67,10 @@ function ProfilePage() {
   // its synthetic Auth principal carries no e-mail and cannot link a phone
   // (linking needs the real uid), so those read from / hide by the doc.
   const kioskSession = sessionKind === "tag"
+  // Issue #663: labels are wired to their inputs via `htmlFor`/`id` so each
+  // field has an accessible name (the visible label text).
+  const idPrefix = useId()
+  const fieldId = (field: string) => `${idPrefix}-${field}`
 
   const {
     register,
@@ -158,8 +162,14 @@ function ProfilePage() {
         className="rounded-2xl border border-border bg-card shadow-xs p-6 sm:p-7 flex flex-col gap-5"
       >
         <div className="flex flex-col gap-1">
-          <Label className="text-sm font-bold">Nutzer:in</Label>
-          <div className="flex gap-6 flex-wrap pt-1.5">
+          <Label id={fieldId("userType-label")} className="text-sm font-bold">
+            Nutzer:in
+          </Label>
+          <div
+            role="radiogroup"
+            aria-labelledby={fieldId("userType-label")}
+            className="flex gap-6 flex-wrap pt-1.5"
+          >
             {(Object.entries(USER_TYPE_LABELS) as [UserType, string][]).map(
               ([value, label]) => (
                 <label
@@ -193,8 +203,11 @@ function ProfilePage() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="flex flex-col gap-1">
-            <Label className="text-sm font-bold">Vorname</Label>
+            <Label htmlFor={fieldId("firstName")} className="text-sm font-bold">
+              Vorname
+            </Label>
             <input
+              id={fieldId("firstName")}
               {...register("firstName", {
                 validate: (v) =>
                   v.trim() !== "" || "Vorname ist erforderlich",
@@ -205,8 +218,11 @@ function ProfilePage() {
             <ErrorText message={errors.firstName?.message} />
           </div>
           <div className="flex flex-col gap-1">
-            <Label className="text-sm font-bold">Nachname</Label>
+            <Label htmlFor={fieldId("lastName")} className="text-sm font-bold">
+              Nachname
+            </Label>
             <input
+              id={fieldId("lastName")}
               {...register("lastName", {
                 validate: (v) =>
                   v.trim() !== "" || "Nachname ist erforderlich",
@@ -220,8 +236,11 @@ function ProfilePage() {
 
         {isFirma && (
           <div className="flex flex-col gap-1">
-            <Label className="text-sm font-bold">Firmenname</Label>
+            <Label htmlFor={fieldId("company")} className="text-sm font-bold">
+              Firmenname
+            </Label>
             <input
+              id={fieldId("company")}
               {...register("company", {
                 validate: (v) =>
                   !isFirma ||
@@ -246,8 +265,11 @@ function ProfilePage() {
         </SectionEyebrow>
 
         <div className="flex flex-col gap-1">
-          <Label className="text-sm font-bold">Strasse und Hausnummer</Label>
+          <Label htmlFor={fieldId("street")} className="text-sm font-bold">
+            Strasse und Hausnummer
+          </Label>
           <input
+            id={fieldId("street")}
             {...register("street", {
               validate: (v) =>
                 !isFirma || v.trim() !== "" || "Strasse ist erforderlich",
@@ -260,8 +282,11 @@ function ProfilePage() {
 
         <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-4">
           <div className="flex flex-col gap-1">
-            <Label className="text-sm font-bold">PLZ</Label>
+            <Label htmlFor={fieldId("zip")} className="text-sm font-bold">
+              PLZ
+            </Label>
             <input
+              id={fieldId("zip")}
               {...register("zip", {
                 validate: (v) => {
                   // Required only for firma; format-checked whenever non-empty.
@@ -280,8 +305,11 @@ function ProfilePage() {
             <ErrorText message={errors.zip?.message} />
           </div>
           <div className="flex flex-col gap-1">
-            <Label className="text-sm font-bold">Ort</Label>
+            <Label htmlFor={fieldId("city")} className="text-sm font-bold">
+              Ort
+            </Label>
             <input
+              id={fieldId("city")}
               {...register("city", {
                 validate: (v) =>
                   !isFirma || v.trim() !== "" || "Ort ist erforderlich",
@@ -299,8 +327,11 @@ function ProfilePage() {
         </SectionEyebrow>
 
         <div className="flex flex-col gap-1">
-          <Label className="text-sm font-bold">E-Mail</Label>
+          <Label htmlFor={fieldId("email")} className="text-sm font-bold">
+            E-Mail
+          </Label>
           <input
+            id={fieldId("email")}
             value={user?.email ?? userDoc?.email ?? ""}
             disabled
             className={INPUT_DISABLED}
@@ -311,11 +342,12 @@ function ProfilePage() {
         </div>
 
         <div className="flex flex-col gap-1">
-          <Label className="text-sm font-bold">
+          <Label htmlFor={fieldId("phone")} className="text-sm font-bold">
             Telefon{" "}
             <span className="text-muted-foreground font-normal">(optional)</span>
           </Label>
           <input
+            id={fieldId("phone")}
             {...register("phone", {
               validate: async (v) => {
                 // Optional field: empty is fine. Non-empty must parse as a
