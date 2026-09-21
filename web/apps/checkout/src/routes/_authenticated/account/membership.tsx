@@ -49,6 +49,7 @@ import { Input } from "@modules/components/ui/input"
 import { Skeleton } from "@modules/components/ui/skeleton"
 import { Label } from "@modules/components/ui/label"
 import { PageLoading } from "@modules/components/page-loading"
+import { MEMBER_DISCOUNT_BENEFIT } from "@/lib/membership-copy"
 
 /**
  * `?invite=<membershipId>~<inviteId>` is set only when an invite link is opened
@@ -487,7 +488,7 @@ function PendingInvitesBanner() {
 /* Status hero — gold swash on the validity date when active          */
 /* ------------------------------------------------------------------ */
 
-function StatusHero({
+export function StatusHero({
   type,
   status,
   validUntil,
@@ -546,12 +547,12 @@ function StatusHero({
             )}
             {status === "active" && type === "family" && !isOwner && (
               <>
-                Du bist Mitglied einer Familienmitgliedschaft. Vergünstigte
-                Preise auf Maschinen und Material.
+                Du bist Mitglied einer Familienmitgliedschaft.{" "}
+                {MEMBER_DISCOUNT_BENEFIT}.
               </>
             )}
             {status === "active" && type === "single" && (
-              <>Vergünstigte Preise auf Maschinen und Material.</>
+              <>{MEMBER_DISCOUNT_BENEFIT}.</>
             )}
             {status === "expired" && (
               <>Erneuere, um wieder Mitglieder-Preise zu erhalten.</>
@@ -650,12 +651,12 @@ const STATUTEN_URL =
   "https://static1.squarespace.com/static/64671911eefe89405a1c141c/t/64c0d17d08167476c68a6a2d/1690358141557/230609+OWW+Statuten+aktualisiert.pdf"
 
 const SINGLE_BENEFITS: string[] = [
-  "Vergünstigungen bei der Maschinennutzung",
+  MEMBER_DISCOUNT_BENEFIT,
   "Ein Stimmrecht an der jährlichen Mitgliederversammlung",
 ]
 
 const FAMILY_BENEFITS: string[] = [
-  "Vergünstigungen bei der Maschinennutzung",
+  MEMBER_DISCOUNT_BENEFIT,
   "Ein Stimmrecht an der jährlichen Mitgliederversammlung",
   "Gültig für alle im selben Haushalt lebende Personen",
 ]
