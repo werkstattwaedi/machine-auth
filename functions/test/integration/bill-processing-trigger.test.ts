@@ -57,6 +57,7 @@ import {
   getFirestore,
 } from "../emulator-helper";
 import {
+  isEmailRetryDue,
   tryGeneratePdf,
   trySendCancellationNotice,
   trySendEmail,
@@ -122,7 +123,9 @@ interface SeedCheckoutOptions {
   persons?: CheckoutPersonEntity[];
   summary?: CheckoutSummaryEntity | null;
   workshopsVisited?: string[];
-  userId?: string;
+  // `null` seeds a guest (anonymous) checkout without an account holder —
+  // the case that went untested between #487 and #651.
+  userId?: string | null;
   paymentMethod?: "rechnung" | "monthly" | "twint" | null;
 }
 
@@ -131,7 +134,12 @@ async function seedCheckout(
   opts: SeedCheckoutOptions = {},
 ): Promise<void> {
   const db = getFirestore();
-  const userRef = db.doc(`users/${opts.userId ?? "u-bill-proc"}`);
+  // The functions-side CheckoutEntity.userId is typed non-nullable, but a
+  // guest checkout stores null (the web CheckoutDoc type has it right).
+  const userRef =
+    opts.userId === null
+      ? (null as unknown as CheckoutEntity["userId"])
+      : db.doc(`users/${opts.userId ?? "u-bill-proc"}`);
   const now = Timestamp.now();
 
   const checkout: CheckoutEntity = {
@@ -685,12 +693,96 @@ describe("bill processing triggers (Integration)", () => {
           paymentMethodConfirmationSource: "user",
         });
 
+        expect(isEmailRetryDue(await getBill(billId)), "due before the attempt").to.be.true;
+
         const ok = await trySendEmail(billId);
         expect(ok).to.be.true; // Nothing to retry
         expect(resendSendStub.called, "Resend not called").to.be.false;
 
         const updated = await getBill(billId);
         expect(updated.emailSentAt).to.be.null;
+        // Marked once so the hourly sweep stops re-trying / re-logging (#651).
+        expect(updated.emailSkippedReason).to.equal("no-recipient");
+        expect(isEmailRetryDue(updated), "retry gate honours the mark").to.be.false;
+      });
+
+      it("mails the invoice to the guest's e-mail when the checkout has no account holder (#651)", async () => {
+        const billId = "bill-guest";
+        await seedCheckout("co-default", {
+          userId: null,
+          persons: [
+            { name: "Gast Gabi", email: "guest@example.com", userType: "erwachsen" },
+          ],
+        });
+        await seedBill(billId, {
+          storagePath: "invoices/bill-guest.pdf",
+          referenceNumber: 70,
+          paymentMethodConfirmationTime: Timestamp.now(),
+          paymentMethodConfirmationSource: "user",
+        });
+
+        const ok = await trySendEmail(billId);
+        expect(ok).to.be.true;
+        expect(resendSendStub.calledOnce, "Resend invoked for the guest").to.be.true;
+
+        const [, entity] = resendSendStub.firstCall.args as [
+          string,
+          { to: string; template: { variables: Record<string, string> } },
+        ];
+        expect(entity.to).to.equal("guest@example.com");
+        expect(entity.template.variables.RECIPIENT_NAME).to.equal("Gast Gabi");
+
+        const updated = await getBill(billId);
+        expect(updated.emailSentAt).to.be.instanceOf(Timestamp);
+        expect(updated.emailSkippedReason).to.be.undefined;
+      });
+
+      it("still mails the account holder, not a roster e-mail, when there is an account holder (#471 guard)", async () => {
+        const billId = "bill-holder-wins";
+        await seedUser("u-alice", { email: "alice@example.com", firstName: "Alice" });
+        await seedCheckout("co-default", {
+          userId: "u-alice",
+          persons: [
+            { name: "Someone Else", email: "other@example.com", userType: "erwachsen" },
+          ],
+        });
+        await seedBill(billId, {
+          storagePath: "invoices/bill-holder-wins.pdf",
+          paymentMethodConfirmationTime: Timestamp.now(),
+          paymentMethodConfirmationSource: "user",
+        });
+
+        expect(await trySendEmail(billId)).to.be.true;
+        expect(resendSendStub.calledOnce).to.be.true;
+        const [, entity] = resendSendStub.firstCall.args as [string, { to: string }];
+        expect(entity.to).to.equal("alice@example.com");
+      });
+
+      it("returns true without resolving or sending once a bill is marked emailSkippedReason (#651)", async () => {
+        const billId = "bill-marked";
+        // The checkout DOES have a mailable guest — proves the early return
+        // fires before the resolver, not that the resolver came up empty.
+        await seedCheckout("co-default", {
+          userId: null,
+          persons: [
+            { name: "Gast Gabi", email: "guest@example.com", userType: "erwachsen" },
+          ],
+        });
+        await seedBill(billId, {
+          storagePath: "invoices/bill-marked.pdf",
+          paymentMethodConfirmationTime: Timestamp.now(),
+          paymentMethodConfirmationSource: "user",
+        });
+        await getFirestore()
+          .doc(`bills/${billId}`)
+          .update({ emailSkippedReason: "no-recipient" });
+
+        expect(await trySendEmail(billId)).to.be.true;
+        expect(resendSendStub.called, "Resend not called").to.be.false;
+
+        const updated = await getBill(billId);
+        expect(updated.emailSentAt).to.be.null;
+        expect(updated.emailSkippedReason).to.equal("no-recipient");
       });
 
       it("sends to the account holder when an account-less member remains on the roster (#471)", async () => {
@@ -768,6 +860,7 @@ describe("bill processing triggers (Integration)", () => {
 
         const updated = await getBill(billId);
         expect(updated.emailSentAt).to.be.null;
+        expect(updated.emailSkippedReason).to.equal("no-recipient");
       });
 
       it("releases lock and writes operations_log on Resend failure", async () => {
@@ -1253,6 +1346,23 @@ describe("bill processing triggers (Integration)", () => {
       // Lock held: a second call sends nothing.
       expect(await trySendCancellationNotice("cancelled-sent")).to.be.false;
       expect(resendSendStub.calledOnce).to.be.true;
+    });
+
+    it("trySendCancellationNotice: mails the guest's e-mail when the checkout has no account holder (#651)", async () => {
+      await seedCheckout("co-default", {
+        userId: null,
+        persons: [{ name: "Gast Gabi", email: "guest@example.com", userType: "erwachsen" }],
+      });
+      const db = getFirestore();
+      await seedBill("cancelled-guest", { referenceNumber: 70, emailSentAt: Timestamp.now() });
+      await db.doc("bills/cancelled-guest").update({
+        cancelledAt: Timestamp.now(),
+        cancellationReason: "Doppelt erfasst",
+      });
+      expect(await trySendCancellationNotice("cancelled-guest")).to.be.true;
+      expect(resendSendStub.calledOnce).to.be.true;
+      expect(sentEntity().to).to.equal("guest@example.com");
+      expect((await getBill("cancelled-guest")).cancellationNoticeSentAt).to.be.instanceOf(Timestamp);
     });
 
     it("trySendCancellationNotice: releases the lock and logs when Resend fails", async () => {

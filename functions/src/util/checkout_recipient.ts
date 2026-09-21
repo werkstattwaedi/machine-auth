@@ -2,7 +2,14 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Resolve the email recipient for a checkout — always the account holder.
+ * Resolve the email recipient for a checkout.
+ *
+ * Two resolvers live here on purpose (issue #651):
+ * - `resolveRecipientEmail` — account holder only. Used by the
+ *   stale-checkout reminder cron, whose `/checkout/<id>` link requires a
+ *   sign-in, so anonymous (guest) checkouts must stay out of it.
+ * - `resolveBillRecipientEmail` — account holder, else the guest's own
+ *   e-mail. Used by the bill mails (invoice / Beleg / cancellation).
  *
  * Lives in its own module (rather than `invoice/bill_triggers.ts`) so callers
  * that only need the recipient — e.g. the stale-checkout reminder cron (#531)
@@ -49,4 +56,38 @@ export async function resolveRecipientEmail(
     );
     return null;
   }
+}
+
+/**
+ * The e-mail a walk-in guest typed at check-in (issue #651).
+ *
+ * A guest checkout has no account holder (`userId` null) and the only
+ * e-mail we hold is the one on the roster. Picks the first `persons[]`
+ * entry with a non-empty e-mail. Returns `null` when the checkout HAS an
+ * account holder: per ADR-0029 / #471 a roster member is never mailed
+ * instead of the payer, so the fallback must not leak into that case.
+ *
+ * `CheckoutEntity.userId` is typed non-nullable but is `null` in practice
+ * for anonymous checkouts (the web `CheckoutDoc` type has it right).
+ *
+ * Exported for unit testing.
+ */
+export function resolveGuestEmail(checkout: CheckoutEntity): string | null {
+  if (checkout.userId) return null;
+  for (const person of checkout.persons ?? []) {
+    const email = person.email?.trim();
+    if (email) return email;
+  }
+  return null;
+}
+
+/**
+ * Recipient for bill mails: the account holder when there is one (#471),
+ * otherwise the guest's own e-mail (#651). Returns `null` when neither
+ * resolves — callers mark the bill `emailSkippedReason: "no-recipient"`.
+ */
+export async function resolveBillRecipientEmail(
+  checkout: CheckoutEntity,
+): Promise<string | null> {
+  return (await resolveRecipientEmail(checkout)) ?? resolveGuestEmail(checkout);
 }
