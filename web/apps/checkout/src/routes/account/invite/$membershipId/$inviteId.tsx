@@ -41,6 +41,7 @@ import { GoogleIcon } from "@modules/components/icons/google"
 import { Button } from "@modules/components/ui/button"
 import { Label } from "@modules/components/ui/label"
 import { PageLoading } from "@modules/components/page-loading"
+import { MEMBER_DISCOUNT_BENEFIT } from "@/lib/membership-copy"
 
 export const Route = createFileRoute("/account/invite/$membershipId/$inviteId")({
   component: InviteAcceptPage,
@@ -243,9 +244,8 @@ function InviteSignup({
         <>
           Du wurdest von <strong>{info.inviterName}</strong>
           {info.inviterEmail ? ` (${info.inviterEmail})` : ""} zur
-          Familienmitgliedschaft eingeladen. Damit profitierst du von
-          Vergünstigungen bei der Maschinenbenutzung. Erstelle dein Konto, um
-          beizutreten.
+          Familienmitgliedschaft eingeladen. Damit profitierst du von{" "}
+          {MEMBER_DISCOUNT_BENEFIT}. Erstelle dein Konto, um beizutreten.
         </>
       }
     >
