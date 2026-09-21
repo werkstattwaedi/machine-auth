@@ -55,7 +55,9 @@ function footerLabels(text: string): string[] {
 describe("buildInvoicePdf — content", () => {
   it("single checkout: reference number, date, person, items, total", async () => {
     const text = await pdfText(singleCheckoutInvoice());
-    expect(text).to.include("Rechnung Self Checkout");
+    // Hyphenated to match the app and the mail copy (issue #659).
+    expect(text).to.include("Rechnung Self-Checkout");
+    expect(text).to.not.include("Self Checkout");
     expect(text).to.include("Rechnungsnummer: RE-000001");
     // SCOR reference in QR bill section (space-separated per spec). The
     // payload is the stored referenceNumber (10 = bill 1, revision digit 0,
@@ -162,7 +164,11 @@ describe("buildInvoicePdf — content", () => {
     // SLA row renders the two input axes inline in the description instead
     // of the misleading quantity × unitPrice columns (see build_invoice_pdf
     // SLA special-case).
-    expect(text).to.include("SLA Resin (Tough) (50 ml · 1000 layers)");
+    // The stored "layers" unit identifier prints as the German "Layer"
+    // (same word as the app's position table, issue #659) — mapped at
+    // render time so already-stored items get the label too.
+    expect(text).to.include("SLA Resin (Tough) (50 ml · 1000 Layer)");
+    expect(text).to.not.include("layers");
     // Payment terms (unpaid)
     expect(text).to.include("Zahlbar innert 30 Tagen");
   });
@@ -252,15 +258,15 @@ describe("buildInvoicePdf — content", () => {
   });
 
   // Issue #426: a TWINT-method self-checkout is a payment receipt, not a
-  // payable Rechnung. The PDF must (a) title itself "Quittung Self
+  // payable Rechnung. The PDF must (a) title itself "Quittung Self-
   // Checkout" so the customer sees it's a TWINT receipt (matching the
   // "Quittung TWINT-Zahlung" email), (b) state the TWINT payment method,
   // and (c) omit the QR payment slip so nobody pays twice. It must NOT
   // claim "Bezahlt am …" — we have no bank-side confirmation.
   it("TWINT-method invoice: 'Quittung' title, TWINT notice, no QR slip (#426)", async () => {
     const text = await pdfText(twintMethodInvoice());
-    expect(text).to.include("Quittung Self Checkout");
-    expect(text).to.not.include("Rechnung Self Checkout");
+    expect(text).to.include("Quittung Self-Checkout");
+    expect(text).to.not.include("Rechnung Self-Checkout");
     // The underlying bill is still kind "invoice" → RE- reference kept.
     expect(text).to.include("Rechnungsnummer: RE-000010");
     // States the payment method.
@@ -285,7 +291,7 @@ describe("buildInvoicePdf — content", () => {
     // Renewal letter intro instead of the visit header.
     expect(text).to.include("Schon wieder ist ein Jahr vorbei");
     expect(text).to.not.include("Besuch vom");
-    expect(text).to.not.include("Rechnung Self Checkout");
+    expect(text).to.not.include("Rechnung Self-Checkout");
     // The line item carries the concrete new expiry.
     expect(text).to.include("Verlängerung bis 20.05.2027");
     // Still a payable invoice: 30-day terms + Swiss QR slip.

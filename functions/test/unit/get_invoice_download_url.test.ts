@@ -80,7 +80,7 @@ describe("getInvoiceDownloadUrl — buildDownloadOptions", () => {
   });
 
   it("names a TWINT-settled invoice Quittung_RE-XXXXXX.pdf", () => {
-    // The PDF inside is titled "Quittung Self Checkout" (#426); the
+    // The PDF inside is titled "Quittung Self-Checkout" (#426); the
     // filename must not keep calling it a Rechnung — same contract #405
     // established for Belege.
     const opts = buildDownloadOptions(
