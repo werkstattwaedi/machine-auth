@@ -4,13 +4,17 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { renderHook, act, waitFor } from "@testing-library/react"
 import { type ReactNode } from "react"
-import { useCollection, useDocument } from "./firestore"
+import { chunkIds, useCollection, useDocument, useDocumentsByIds } from "./firestore"
 import { FirebaseProvider, type FirebaseServices } from "./firebase-context"
 import { FakeFirestore } from "../test/fake-firestore"
 
 // Per-test error injection: map (collection|doc) path -> error to deliver
 // to the onSnapshot error callback instead of a snapshot.
 const errorPaths = new Map<string, Error>()
+
+// Every collection/query listener opened through the mocked onSnapshot, so
+// tests can assert how many subscriptions a hook fans out to.
+const openedQueries: { path: string; constraints: unknown[] }[] = []
 
 // Spy on the functions-module callable so we can assert useCollection /
 // useDocument forward errors to the logClientError Cloud Function.
@@ -79,6 +83,7 @@ vi.mock("firebase/firestore", async () => {
           return () => {}
         }
         const constraints = (refOrQuery as { constraints?: unknown[] }).constraints ?? []
+        openedQueries.push({ path, constraints })
         return fakeDb.onSnapshotCollection(
           fakeDb.collection(path),
           constraints as Parameters<FakeFirestore["onSnapshotCollection"]>[1],
@@ -95,6 +100,8 @@ vi.mock("firebase/firestore", async () => {
       op,
       value,
     }),
+    // FakeFirestore resolves Firestore's `__name__` field path to the doc id.
+    documentId: () => "__name__",
     orderBy: (field: string, direction: string = "asc") => ({
       kind: "orderBy",
       field,
@@ -364,5 +371,155 @@ describe("useDocument", () => {
     })
 
     await waitFor(() => expect(result.current.data?.name).toBe("Anna"))
+  })
+})
+
+describe("chunkIds", () => {
+  const ids = (n: number) => Array.from({ length: n }, (_, i) => `id-${i}`)
+
+  it("returns no chunks for an empty list", () => {
+    expect(chunkIds([])).toEqual([])
+  })
+
+  it("keeps exactly 30 ids in a single chunk", () => {
+    const chunks = chunkIds(ids(30))
+    expect(chunks).toHaveLength(1)
+    expect(chunks[0]).toHaveLength(30)
+  })
+
+  it("spills the 31st id into a second chunk", () => {
+    const chunks = chunkIds(ids(31))
+    expect(chunks.map((c) => c.length)).toEqual([30, 1])
+    expect(chunks[1]).toEqual(["id-30"])
+  })
+
+  it("splits 65 ids into 30 / 30 / 5 preserving order", () => {
+    const chunks = chunkIds(ids(65))
+    expect(chunks.map((c) => c.length)).toEqual([30, 30, 5])
+    expect(chunks.flat()).toEqual(ids(65))
+  })
+})
+
+describe("useDocumentsByIds", () => {
+  beforeEach(() => {
+    fakeDb = new FakeFirestore()
+    errorPaths.clear()
+    openedQueries.length = 0
+    sessionStorage.clear()
+    mockHttpsCallable.mockClear()
+    mockLogClientErrorCallable.mockClear()
+  })
+
+  function seedCatalog(count: number): string[] {
+    const ids: string[] = []
+    for (let i = 1; i <= count; i++) {
+      const id = `item-${String(i).padStart(2, "0")}`
+      fakeDb.setDoc(fakeDb.doc("catalog", id), { code: `9${String(i).padStart(3, "0")}` })
+      ids.push(id)
+    }
+    return ids
+  }
+
+  // Regression for issue #632: a price list with more than 30 items lost
+  // every item past the 30th because a single `documentId() in [...]`
+  // query is capped at 30 operands.
+  it("loads all documents of a 31-id list across two listeners", async () => {
+    const ids = seedCatalog(31)
+
+    const { result } = renderHook(
+      () => useDocumentsByIds<{ code: string }>(colRef("catalog"), ids),
+      { wrapper: createWrapper() },
+    )
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.error).toBeNull()
+    expect(result.current.data).toHaveLength(31)
+    expect(result.current.data.at(-1)).toMatchObject({ id: "item-31", code: "9031" })
+
+    // One `in` query per chunk of 30, each against the doc id.
+    const catalogQueries = openedQueries.filter((q) => q.path === "catalog")
+    expect(catalogQueries).toHaveLength(2)
+    for (const q of catalogQueries) {
+      expect(q.constraints).toHaveLength(1)
+      expect(q.constraints[0]).toMatchObject({ kind: "where", field: "__name__", op: "in" })
+    }
+    const operands = catalogQueries.map(
+      (q) => (q.constraints[0] as { value: string[] }).value.length,
+    )
+    expect(operands).toEqual([30, 1])
+  })
+
+  it("returns documents in id order and skips ids without a document", async () => {
+    seedCatalog(3)
+
+    const { result } = renderHook(
+      () =>
+        useDocumentsByIds<{ code: string }>(colRef("catalog"), [
+          "item-03",
+          "missing",
+          "item-01",
+        ]),
+      { wrapper: createWrapper() },
+    )
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.data.map((d) => d.id)).toEqual(["item-03", "item-01"])
+  })
+
+  it("resolves immediately with no data for an empty id list", () => {
+    const { result } = renderHook(
+      () => useDocumentsByIds(colRef("catalog"), []),
+      { wrapper: createWrapper() },
+    )
+
+    expect(result.current.loading).toBe(false)
+    expect(result.current.data).toEqual([])
+    expect(openedQueries).toHaveLength(0)
+  })
+
+  it("re-subscribes when the id list changes", async () => {
+    const ids = seedCatalog(2)
+
+    const { result, rerender } = renderHook(
+      ({ ids }: { ids: string[] }) =>
+        useDocumentsByIds<{ code: string }>(colRef("catalog"), ids),
+      { wrapper: createWrapper(), initialProps: { ids: [ids[0]] } },
+    )
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.data.map((d) => d.id)).toEqual(["item-01"])
+
+    act(() => {
+      rerender({ ids })
+    })
+
+    // The stale single-item result must read as loading until the new
+    // subscription reports (same guard as useCollection, issue #387).
+    expect(result.current.loading).toBe(true)
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.data.map((d) => d.id)).toEqual(["item-01", "item-02"])
+  })
+
+  it("surfaces a listener error and reports it via logClientError", async () => {
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+    const err = Object.assign(new Error("Missing or insufficient permissions."), {
+      code: "permission-denied",
+    })
+    errorPaths.set("catalog", err)
+
+    const { result } = renderHook(
+      () => useDocumentsByIds(colRef("catalog"), ["item-01"]),
+      { wrapper: createWrapper() },
+    )
+
+    await waitFor(() => expect(result.current.error).not.toBeNull())
+    expect(result.current.loading).toBe(false)
+    expect(mockHttpsCallable).toHaveBeenCalledWith(providedFunctions, "logClientError")
+    expect(mockLogClientErrorCallable).toHaveBeenCalledTimes(1)
+    const payload = mockLogClientErrorCallable.mock.calls[0][0] as { path: string; code: string }
+    expect(payload.path).toBe("catalog")
+    expect(payload.code).toBe("permission-denied")
+
+    consoleSpy.mockRestore()
   })
 })

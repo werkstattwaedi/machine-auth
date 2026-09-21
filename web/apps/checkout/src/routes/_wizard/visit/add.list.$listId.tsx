@@ -2,13 +2,12 @@
 // SPDX-License-Identifier: MIT
 
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
-import { useCollection, useDocument } from "@modules/lib/firestore"
+import { useDocument, useDocumentsByIds } from "@modules/lib/firestore"
 import {
   catalogCollection,
   priceListRef,
 } from "@modules/lib/firestore-helpers"
 import { useDb } from "@modules/lib/firebase-context"
-import { documentId, where } from "firebase/firestore"
 import { MaterialPicker } from "@/components/usage/material-picker"
 import { restorePickerScrollAnchor } from "@/components/usage/picker-scroll-anchor"
 import { useWizardContext } from "@/components/checkout/wizard-context"
@@ -33,18 +32,12 @@ function AddListRoute() {
     priceListRef(db, listId),
   )
 
-  const rawItemIds = priceList?.items ?? []
-  const itemIds = rawItemIds.slice(0, 30)
-  if (rawItemIds.length > itemIds.length) {
-    // eslint-disable-next-line no-console
-    console.warn(
-      `Pricelist ${listId} has ${rawItemIds.length} items; picker only loads the first ${itemIds.length} (Firestore documentId() in [] cap).`,
-    )
-  }
+  // Chunked by id under the hood — a list longer than 30 items used to be
+  // cut off at Firestore's `in` operand cap (#632).
   const { data: catalogItems, loading: loadingItems } =
-    useCollection<CatalogItemDoc>(
-      itemIds.length > 0 ? catalogCollection(db) : null,
-      where(documentId(), "in", itemIds),
+    useDocumentsByIds<CatalogItemDoc>(
+      catalogCollection(db),
+      priceList?.items ?? [],
     )
 
   if (loadingList || loadingItems) return <PageLoading />

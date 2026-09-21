@@ -27,6 +27,58 @@ import { FieldValue } from "firebase-admin/firestore"
 
 const PRICE_LIST_ID = "e2e-pricelist-1"
 
+// Regression fixture for issue #632: Firestore caps a `documentId() in`
+// query at 30 operands, and the picker used to load only the first 30
+// items of a price list. 35 items puts the last ones past that cap.
+const LONG_PRICE_LIST_ID = "e2e-pricelist-long"
+const LONG_LIST_ITEM_COUNT = 35
+const longListItemId = (n: number) =>
+  `e2e-long-item-${String(n).padStart(2, "0")}`
+// Codes 9501–9535: outside the 90xx/91xx/92xx/93xx band of the seed.
+const longListItemCode = (n: number) => String(9500 + n)
+const longListItemName = (n: number) => `E2E Listenartikel ${n}`
+
+async function seedLongPriceList() {
+  const db = getAdminFirestore()
+  const batch = db.batch()
+  const items: string[] = []
+  for (let n = 1; n <= LONG_LIST_ITEM_COUNT; n++) {
+    items.push(longListItemId(n))
+    batch.set(db.collection("catalog").doc(longListItemId(n)), {
+      code: longListItemCode(n),
+      name: longListItemName(n),
+      workshops: ["holz"],
+      category: [],
+      active: true,
+      userCanAdd: true,
+      variants: [
+        {
+          id: "default",
+          pricingModel: "count",
+          unitPrice: { default: 1 },
+        },
+      ],
+    })
+  }
+  batch.set(db.collection("price_lists").doc(LONG_PRICE_LIST_ID), {
+    name: "E2E Lange Preisliste",
+    items,
+    active: true,
+    modifiedAt: FieldValue.serverTimestamp(),
+  })
+  await batch.commit()
+}
+
+async function clearLongPriceList() {
+  const db = getAdminFirestore()
+  const batch = db.batch()
+  batch.delete(db.collection("price_lists").doc(LONG_PRICE_LIST_ID))
+  for (let n = 1; n <= LONG_LIST_ITEM_COUNT; n++) {
+    batch.delete(db.collection("catalog").doc(longListItemId(n)))
+  }
+  await batch.commit().catch(() => {})
+}
+
 async function seedPriceList() {
   const db = getAdminFirestore()
   await db.collection("price_lists").doc(PRICE_LIST_ID).set({
@@ -78,11 +130,13 @@ test.describe("Visit /add/* sub-routes (issue #213)", () => {
   test.beforeEach(async () => {
     await clearCollections("checkouts", "loginCodes")
     await clearPriceList()
+    await clearLongPriceList()
     await seedPriceList()
   })
 
   test.afterEach(async () => {
     await clearPriceList()
+    await clearLongPriceList()
   })
 
   test("/visit/add — opens the picker unfiltered", async ({ page }) => {
@@ -127,6 +181,27 @@ test.describe("Visit /add/* sub-routes (issue #213)", () => {
     await expect(page.getByText("E2E Holzplatte")).toBeVisible()
     await expect(page.getByText(/^Filament$/)).toHaveCount(0)
     await expect(page.getByText(/^Schleifpapier$/)).toHaveCount(0)
+  })
+
+  // Issue #632: "Acryl blau" sat past position 30 of a price list and the
+  // code search reported "Keine Treffer" although it was on the printed
+  // list — the picker had only loaded the first 30 items.
+  test("/visit/add/list/$id — a list longer than 30 items loads every item", async ({
+    page,
+  }) => {
+    await seedLongPriceList()
+    await signIn(page)
+    await page.goto(`/visit/add/list/${LONG_PRICE_LIST_ID}`)
+
+    const search = page.getByPlaceholder("Material suchen…")
+    await expect(search).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByText(longListItemName(1), { exact: true })).toBeVisible()
+
+    await search.fill(longListItemCode(LONG_LIST_ITEM_COUNT))
+    await expect(
+      page.getByText(longListItemName(LONG_LIST_ITEM_COUNT), { exact: true }),
+    ).toBeVisible()
+    await expect(page.getByText(/Keine Treffer/)).toHaveCount(0)
   })
 
   test("/visit/add/item/$code — single-item scope auto-expands the form", async ({
