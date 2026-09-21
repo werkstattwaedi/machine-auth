@@ -32,8 +32,13 @@ import {
 } from "@modules/lib/address"
 import type { CheckoutPerson } from "./use-checkout-state"
 import type { CheckoutItemLocal } from "@/components/usage/inline-rows"
-import { PositionTable, rowFromItem } from "@/components/usage/position-table"
+import {
+  PositionTable,
+  rowFromItem,
+  type PositionRow,
+} from "@/components/usage/position-table"
 import type { UsageType } from "@modules/lib/pricing"
+import type { PricingModel } from "@modules/lib/workshop-config"
 import {
   partitionMembership,
   partitionBadge,
@@ -332,6 +337,36 @@ export function computeCheckoutCosts({
   }
 }
 
+/**
+ * Machine items used to be time-priced only, so the summary once rendered
+ * every one of them as "N Min · x.xx/h". Per-piece machine services (e.g.
+ * "Sandstrahlen Metall", `pricingModel: "count"`) broke that assumption
+ * (issue #653). Legacy NFC rows predate the `pricingModel` stamp, so an
+ * absent model still means hours.
+ */
+export function machinePricingModel(item: CheckoutItemLocal): PricingModel {
+  return item.pricingModel ?? "time"
+}
+
+/**
+ * Minutes accumulated across the time-priced machine items only — a
+ * per-piece machine service has no duration to contribute.
+ */
+export function timedMachineMinutes(items: CheckoutItemLocal[]): number {
+  return items
+    .filter((i) => machinePricingModel(i) === "time")
+    .reduce((m, i) => m + Math.round(i.quantity * 60), 0)
+}
+
+/**
+ * Summary row for the Maschinen-/Werkzeugnutzung section: the same
+ * per-pricing-model Menge/Kosten formatting the cart uses, with the
+ * time fallback above.
+ */
+export function machineRowFromItem(item: CheckoutItemLocal): PositionRow {
+  return rowFromItem({ ...item, pricingModel: machinePricingModel(item) })
+}
+
 export function StepCheckout({
   persons,
   usageType,
@@ -577,9 +612,10 @@ export function StepCheckout({
     await onSubmit()
   }
 
-  const totalMachineMinutes = nfcItems.reduce(
-    (m, i) => m + Math.round(i.quantity * 60),
-    0,
+  const totalMachineMinutes = timedMachineMinutes(nfcItems)
+  // Only mention a duration when there is a timed item to sum (issue #653).
+  const hasTimedMachine = nfcItems.some(
+    (i) => machinePricingModel(i) === "time",
   )
 
   return (
@@ -726,7 +762,7 @@ export function StepCheckout({
               ? "Keine Maschinennutzung"
               : `${nfcItems.length} ${
                   nfcItems.length === 1 ? "Maschine" : "Maschinen"
-                } · ${totalMachineMinutes} Min total`
+                }${hasTimedMachine ? ` · ${totalMachineMinutes} Min total` : ""}`
           }
           amount={machineCostNet}
           open={openSections.has("maschinen")}
@@ -740,14 +776,7 @@ export function StepCheckout({
             <>
               <PositionTable
                 firstColLabel="Akkumulierte Nutzungszeit"
-                rows={nfcItems.map((item) => ({
-                  key: item.id,
-                  title: item.description,
-                  subtitle: null,
-                  menge: `${Math.round(item.quantity * 60)} Min`,
-                  kosten: `${item.unitPrice.toFixed(2)}/h`,
-                  preis: item.totalPrice.toFixed(2),
-                }))}
+                rows={nfcItems.map(machineRowFromItem)}
               />
               {discount.machine < 1 && discountLabel && (
                 <SectionDiscountNote
