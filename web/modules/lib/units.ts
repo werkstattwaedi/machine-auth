@@ -272,6 +272,40 @@ export function parseWithDefaultUnit(
   return parseQuantity(hasUnit ? trimmed : `${trimmed}${defaultUnit}`, baseUnit)
 }
 
+const entryNumberFormatter = new Intl.NumberFormat(locale, {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 3,
+  // No thousands separator: the result goes back into an editable field whose
+  // keystroke pattern only admits digits and one decimal separator.
+  useGrouping: false,
+})
+
+/**
+ * Render a stored base-unit value as a bare number in a fixed display unit —
+ * the inverse of {@link parseWithDefaultUnit} for a field that shows its entry
+ * unit as a suffix (issue #656): 0.5 m in a cm field → "50", 1.5 h in a min
+ * field → "90". `unit` must be a valid alias of `baseUnit`'s dimension.
+ *
+ * Examples (locale = `de-CH`):
+ * - `formatInUnit(1.205, "m", "cm")` → "120.5"
+ * - `formatInUnit(0.05, "l", "ml")`  → "50"
+ * - `formatInUnit(1500, "kg", "g")`  → "1500000"
+ */
+export function formatInUnit(
+  value: number,
+  baseUnit: BaseUnit,
+  unit: string,
+): string {
+  if (!Number.isFinite(value)) return ""
+  const mapped = PARSE_ALIASES[baseUnit][unit.toLowerCase()]
+  if (!mapped) {
+    throw new Error(`formatInUnit: "${unit}" is not a ${baseUnit} unit`)
+  }
+  return entryNumberFormatter.format(
+    convert(value, CONVERT_BASE[baseUnit]).to(mapped),
+  )
+}
+
 /**
  * Format a non-SI count (Stk., Layer, Cuts). Uses the locale's thousands
  * separator and appends the singular label (German UI convention does not

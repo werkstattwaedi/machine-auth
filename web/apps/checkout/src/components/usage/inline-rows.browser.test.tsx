@@ -766,8 +766,8 @@ describe("MaterialPicker", () => {
     // (variants[0]) and selected by default. Switch to the cut variant.
     const a3Chip = screen.getByRole("radio", { name: "Zuschnitt A3" })
     await user.click(a3Chip)
-    // Enter a quantity (count form: single spinbutton) and submit.
-    const qty = screen.getByRole("spinbutton")
+    // Enter a quantity (count form: digits-only Anzahl field) and submit.
+    const qty = screen.getByLabelText("Anzahl")
     await user.clear(qty)
     await user.type(qty, "4")
     await user.click(screen.getByRole("button", { name: "Hinzufügen" }))
@@ -901,7 +901,7 @@ describe("MaterialPicker", () => {
     await user.click(screen.getByText("Schrauben M5"))
 
     // Form is now expanded — fill the count input and submit.
-    const qty = screen.getByRole("spinbutton")
+    const qty = screen.getByLabelText("Anzahl")
     await user.type(qty, "10")
     await user.click(screen.getByRole("button", { name: "Hinzufügen" }))
 
@@ -921,7 +921,7 @@ describe("MaterialPicker", () => {
     const user = userEvent.setup()
     renderPicker({})
     await user.click(screen.getByText("Schrauben M5"))
-    const qty = screen.getByRole("spinbutton")
+    const qty = screen.getByLabelText("Anzahl")
     await user.type(qty, "3")
     await user.click(screen.getByRole("button", { name: "Hinzufügen" }))
     // The search box and result list are still rendered after the add.
@@ -935,8 +935,42 @@ describe("MaterialPicker", () => {
     await user.click(screen.getByText("Schrauben M5"))
     const addBtn = screen.getByRole("button", { name: "Hinzufügen" })
     expect((addBtn as HTMLButtonElement).disabled).toBe(true)
-    await user.type(screen.getByRole("spinbutton"), "2")
+    await user.type(screen.getByLabelText("Anzahl"), "2")
     expect((addBtn as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  // Issue #656: a zero count used to leave Hinzufügen silently disabled.
+  it("explains a zero count inline and keeps Hinzufügen disabled", async () => {
+    const user = userEvent.setup()
+    const callbacks = makeCallbacks()
+    renderPicker({ callbacks })
+    await user.click(screen.getByText("Schrauben M5"))
+    const qty = screen.getByLabelText("Anzahl")
+    await user.type(qty, "0")
+    await user.tab()
+    expect(screen.getByRole("alert").textContent).toBe(
+      "Bitte eine Zahl grösser als 0 eingeben",
+    )
+    const addBtn = screen.getByRole("button", { name: "Hinzufügen" })
+    expect((addBtn as HTMLButtonElement).disabled).toBe(true)
+    await user.clear(qty)
+    await user.type(qty, "3")
+    expect(screen.queryByRole("alert")).toBeNull()
+    await user.click(addBtn)
+    expect(callbacks.addItem.mock.calls[0][0]).toMatchObject({ quantity: 3 })
+  })
+
+  it("cannot take a fractional count (1.5 Stk. types as 15, not 1.5)", async () => {
+    const user = userEvent.setup()
+    const callbacks = makeCallbacks()
+    renderPicker({ callbacks })
+    await user.click(screen.getByText("Schrauben M5"))
+    const qty = screen.getByLabelText("Anzahl") as HTMLInputElement
+    await user.type(qty, "1.5")
+    // The "." keystroke is rejected; the digits around it land.
+    expect(qty.value).toBe("15")
+    await user.click(screen.getByRole("button", { name: "Hinzufügen" }))
+    expect(callbacks.addItem.mock.calls[0][0]).toMatchObject({ quantity: 15 })
   })
 
   it("converts cm to m² when adding an area-priced item", async () => {
@@ -979,7 +1013,7 @@ describe("MaterialPicker", () => {
     const callbacks = makeCallbacks()
     renderPicker({ callbacks, discountLevel: "member" })
     await user.click(screen.getByText("Schrauben M5"))
-    await user.type(screen.getByRole("spinbutton"), "10")
+    await user.type(screen.getByLabelText("Anzahl"), "10")
     await user.click(screen.getByRole("button", { name: "Hinzufügen" }))
     expect(callbacks.addItem.mock.calls[0][0]).toMatchObject({
       unitPrice: 0.4,
@@ -993,8 +1027,7 @@ describe("MaterialPicker", () => {
     renderPicker({ callbacks })
     await user.click(screen.getByText("SLA Druck"))
     await user.type(screen.getByLabelText("Resin"), "50") // resin ml
-    // Layer is still a plain integer spinbutton.
-    await user.type(screen.getByRole("spinbutton"), "1000") // layers
+    await user.type(screen.getByLabelText("Layer"), "1000")
     await user.click(screen.getByRole("button", { name: "Hinzufügen" }))
     // 50 ml ÷ 1000 × 250 CHF/l = 12.50; 1000 × 0.01 = 10.00; total = 22.50
     expect(callbacks.addItem.mock.calls[0][0]).toMatchObject({
@@ -1114,11 +1147,9 @@ describe("MaterialPicker ad-hoc fallback", () => {
     renderPicker({ callbacks })
     await user.type(screen.getByPlaceholderText("Material suchen…"), "Spezialschraube")
     await user.click(screen.getByText("+ Stk"))
-    // First spinbutton = qty, second = unit price.
-    const inputs = screen.getAllByRole("spinbutton")
-    expect(inputs.length).toBe(2)
-    await user.type(inputs[0], "5")
-    await user.type(inputs[1], "0.30")
+    // Anzahl is a digits-only text field; the unit price stays a spinbutton.
+    await user.type(screen.getByLabelText("Anzahl"), "5")
+    await user.type(screen.getByRole("spinbutton"), "0.30")
     await user.click(screen.getByRole("button", { name: "Hinzufügen" }))
     expect(callbacks.addItem.mock.calls[0][0]).toMatchObject({
       catalogId: null,
@@ -1158,10 +1189,9 @@ describe("MaterialPicker ad-hoc fallback", () => {
     await user.click(screen.getByText("+ Stk"))
     const addBtn = screen.getByRole("button", { name: "Hinzufügen" })
     expect((addBtn as HTMLButtonElement).disabled).toBe(true)
-    const inputs = screen.getAllByRole("spinbutton")
-    await user.type(inputs[0], "1")
+    await user.type(screen.getByLabelText("Anzahl"), "1")
     expect((addBtn as HTMLButtonElement).disabled).toBe(true)
-    await user.type(inputs[1], "1")
+    await user.type(screen.getByRole("spinbutton"), "1")
     expect((addBtn as HTMLButtonElement).disabled).toBe(false)
   })
 

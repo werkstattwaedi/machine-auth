@@ -33,6 +33,7 @@ import {
 } from "@modules/lib/categories"
 import { matchesCatalogQuery } from "@modules/lib/text-search"
 import { UnitQuantityField } from "@/components/usage/unit-quantity-field"
+import { CountField } from "@/components/usage/count-field"
 import type { CheckoutItemLocal } from "./inline-rows"
 import {
   readPickerScrollAnchor,
@@ -1013,16 +1014,14 @@ function SimpleForm({
               autoFocus
             />
           ) : (
-            <input
+            <CountField
               autoFocus
-              type="number"
-              min="0"
-              step="any"
-              value={baseQty || ""}
-              onChange={(e) =>
-                setBaseQty(Math.max(0, parseFloat(e.target.value) || 0))
-              }
-              className={INPUT_CLS}
+              value={baseQty}
+              onChange={(v, hasError) => {
+                setBaseQty(v)
+                setErr(hasError)
+              }}
+              ariaLabel="Anzahl"
             />
           )}
         </FormField>
@@ -1195,6 +1194,7 @@ function SlaForm({
   const [resinL, setResinL] = useState(0)
   const [resinErr, setResinErr] = useState(false)
   const [layers, setLayers] = useState(0)
+  const [layersErr, setLayersErr] = useState(false)
   const layerPrice =
     config.slaLayerPrice?.[discountLevel] ?? config.slaLayerPrice?.none ?? 0
   const total =
@@ -1217,17 +1217,13 @@ function SlaForm({
           />
         </FormField>
         <FormField label="Layer">
-          <input
-            type="number"
-            min="0"
-            step="1"
-            value={layers || ""}
-            onChange={(e) =>
-              setLayers(
-                Math.max(0, Math.floor(parseFloat(e.target.value) || 0)),
-              )
-            }
-            className={INPUT_CLS}
+          <CountField
+            value={layers}
+            onChange={(v, hasError) => {
+              setLayers(v)
+              setLayersErr(hasError)
+            }}
+            ariaLabel="Layer"
           />
         </FormField>
         <FormField label="Preis Layer">
@@ -1238,7 +1234,7 @@ function SlaForm({
       </FormGrid>
       <FormFooter
         total={total}
-        addDisabled={total <= 0 || resinErr}
+        addDisabled={resinL <= 0 || layers <= 0 || resinErr || layersErr}
         onAdd={() => {
           onAdd({
             ...baseItem,
@@ -1253,6 +1249,7 @@ function SlaForm({
           setResinL(0)
           setResinErr(false)
           setLayers(0)
+          setLayersErr(false)
         }}
       />
     </>
@@ -1527,15 +1524,13 @@ function AdHocCountWeightTimeForm({
               ariaLabel={isWeight ? "Gewicht" : "Zeit"}
             />
           ) : (
-            <input
-              type="number"
-              min="0"
-              step="any"
-              value={baseQty || ""}
-              onChange={(e) =>
-                setBaseQty(Math.max(0, parseFloat(e.target.value) || 0))
-              }
-              className={INPUT_CLS}
+            <CountField
+              value={baseQty}
+              onChange={(v, hasError) => {
+                setBaseQty(v)
+                setErr(hasError)
+              }}
+              ariaLabel="Anzahl"
             />
           )}
         </FormField>
