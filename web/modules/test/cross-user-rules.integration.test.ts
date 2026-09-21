@@ -1653,6 +1653,34 @@ describe("cross-user: family-roster join on users", () => {
     await assertSucceeds(getDoc(doc(authedDb("bob"), "users", "alice")))
   })
 
+  // Issue #654: the join is evaluated on the *pointers*, not on
+  // `members[]`. A callable that appends to `members[]` but leaves
+  // `activeMembership` to the async trigger opens a window in which the
+  // roster listeners on both sides are denied — and SDK listener errors
+  // are terminal. This pins down why acceptFamilyInvite must write the
+  // pointer in the same transaction as `members[]`.
+  it("denies a joiner in members[] whose activeMembership pointer is still null", async () => {
+    await seedUser("alice")
+    await seedUser("bob")
+    await seedMembership("m1", "alice", "family", ["alice", "bob"])
+    await getAdminFirestore()
+      .collection("users")
+      .doc("bob")
+      .update({ activeMembership: null })
+    // Joiner side: bob cannot read the owner ...
+    await assertCrossUserDenied(
+      "users/{id} read granted on members[] alone (joiner side)",
+      "firestore.rules: shareActiveMembership join",
+      () => getDoc(doc(authedDb("bob"), "users", "alice")),
+    )
+    // ... and owner side: alice cannot read the joiner either.
+    await assertCrossUserDenied(
+      "users/{id} read granted on members[] alone (owner side)",
+      "firestore.rules: shareActiveMembership join",
+      () => getDoc(doc(authedDb("alice"), "users", "bob")),
+    )
+  })
+
   it("denies non-co-member reading another user's doc", async () => {
     await seedUser("alice")
     await seedUser("carol")

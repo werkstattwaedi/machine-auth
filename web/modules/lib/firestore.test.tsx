@@ -1,7 +1,7 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { renderHook, act, waitFor } from "@testing-library/react"
 import { type ReactNode } from "react"
 import { chunkIds, useCollection, useDocument, useDocumentsByIds } from "./firestore"
@@ -11,6 +11,21 @@ import { FakeFirestore } from "../test/fake-firestore"
 // Per-test error injection: map (collection|doc) path -> error to deliver
 // to the onSnapshot error callback instead of a snapshot.
 const errorPaths = new Map<string, Error>()
+// Optional per-path budget of failures: once it hits zero the next subscribe
+// falls through to FakeFirestore ("fail N times, then deliver"). Absent =
+// fail every time.
+const errorBudget = new Map<string, number>()
+// Number of onSnapshot registrations per path, to assert re-subscriptions.
+const subscribeCounts = new Map<string, number>()
+
+function shouldFail(path: string): boolean {
+  if (!errorPaths.has(path)) return false
+  const budget = errorBudget.get(path)
+  if (budget === undefined) return true
+  if (budget <= 0) return false
+  errorBudget.set(path, budget - 1)
+  return true
+}
 
 // Every collection/query listener opened through the mocked onSnapshot, so
 // tests can assert how many subscriptions a hook fans out to.
@@ -65,9 +80,9 @@ vi.mock("firebase/firestore", async () => {
       try {
         if (refOrQuery.type === "document") {
           const docPath = (refOrQuery as { path?: string }).path ?? ""
-          const injected = errorPaths.get(docPath)
-          if (injected) {
-            queueMicrotask(() => onError?.(injected))
+          subscribeCounts.set(docPath, (subscribeCounts.get(docPath) ?? 0) + 1)
+          if (shouldFail(docPath)) {
+            queueMicrotask(() => onError?.(errorPaths.get(docPath)!))
             return () => {}
           }
           return fakeDb.onSnapshotDoc(
@@ -77,9 +92,9 @@ vi.mock("firebase/firestore", async () => {
         }
         // Collection or query
         const path = refOrQuery.collectionPath ?? refOrQuery.path ?? ""
-        const injected = errorPaths.get(path)
-        if (injected) {
-          queueMicrotask(() => onError?.(injected))
+        subscribeCounts.set(path, (subscribeCounts.get(path) ?? 0) + 1)
+        if (shouldFail(path)) {
+          queueMicrotask(() => onError?.(errorPaths.get(path)!))
           return () => {}
         }
         const constraints = (refOrQuery as { constraints?: unknown[] }).constraints ?? []
@@ -521,5 +536,177 @@ describe("useDocumentsByIds", () => {
     expect(payload.code).toBe("permission-denied")
 
     consoleSpy.mockRestore()
+  })
+})
+
+// Issue #654: SDK listener errors are terminal. With `retry`, a
+// permission-denied on registration is re-tried a bounded number of times
+// with exponential backoff (the rule's inputs may be written by a later
+// commit than the one that mounted the caller); without it, behaviour is
+// unchanged. Fake timers: LISTENER_DELAY_MS (50 ms) precedes every
+// subscribe, so a retry due at T lands its subscribe at T + 50.
+describe("listener retry", () => {
+  const RETRY = { retry: { attempts: 3, delayMs: 1000 } }
+  const LISTENER_DELAY = 50
+
+  function denied() {
+    return Object.assign(new Error("Missing or insufficient permissions."), {
+      code: "permission-denied",
+    })
+  }
+
+  async function tick(ms: number) {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ms)
+    })
+  }
+
+  // Advance to the instant a retry is due (the nonce bump it schedules is
+  // committed when `act` exits, which is when the re-subscription effect
+  // registers its LISTENER_DELAY timer), then let that delay elapse.
+  async function retryAfter(delayMs: number) {
+    await tick(delayMs)
+    await tick(LISTENER_DELAY)
+  }
+
+  let consoleSpy: ReturnType<typeof vi.spyOn>
+
+  beforeEach(() => {
+    fakeDb = new FakeFirestore()
+    errorPaths.clear()
+    errorBudget.clear()
+    subscribeCounts.clear()
+    sessionStorage.clear()
+    mockHttpsCallable.mockClear()
+    mockLogClientErrorCallable.mockClear()
+    consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    consoleSpy.mockRestore()
+  })
+
+  it("useDocument stays loading across denials and resolves once admitted (1 s, 2 s backoff)", async () => {
+    fakeDb.setDoc(fakeDb.doc("users", "owner"), { name: "Owner" })
+    errorPaths.set("users/owner", denied())
+    errorBudget.set("users/owner", 2)
+
+    const { result } = renderHook(
+      () => useDocument(docRef("users", "owner"), RETRY),
+      { wrapper: createWrapper() },
+    )
+
+    // Attempt 1 → denied. Still loading, no error surfaced.
+    await tick(LISTENER_DELAY)
+    expect(subscribeCounts.get("users/owner")).toBe(1)
+    expect(result.current.loading).toBe(true)
+    expect(result.current.error).toBeNull()
+
+    // First retry is due after 1 s — not a millisecond earlier.
+    await tick(999)
+    expect(subscribeCounts.get("users/owner")).toBe(1)
+    await retryAfter(1)
+    expect(subscribeCounts.get("users/owner")).toBe(2)
+    expect(result.current.loading).toBe(true)
+    expect(result.current.error).toBeNull()
+
+    // Second retry after 2 s; the budget is spent, so this one is admitted.
+    await tick(1999)
+    expect(subscribeCounts.get("users/owner")).toBe(2)
+    await retryAfter(1)
+    expect(subscribeCounts.get("users/owner")).toBe(3)
+    expect(result.current.loading).toBe(false)
+    expect(result.current.error).toBeNull()
+    expect(result.current.data).toMatchObject({ id: "owner", name: "Owner" })
+
+    // Each denial was still reported.
+    expect(mockLogClientErrorCallable).toHaveBeenCalledTimes(2)
+
+    // No further re-subscription once healthy.
+    await tick(10_000)
+    expect(subscribeCounts.get("users/owner")).toBe(3)
+  })
+
+  it("useDocument surfaces the error once all retries are exhausted", async () => {
+    errorPaths.set("users/owner", denied())
+
+    const { result } = renderHook(
+      () => useDocument(docRef("users", "owner"), RETRY),
+      { wrapper: createWrapper() },
+    )
+
+    await tick(LISTENER_DELAY) // attempt 1
+    await retryAfter(1000) // retry 1
+    await retryAfter(2000) // retry 2
+    expect(subscribeCounts.get("users/owner")).toBe(3)
+    expect(result.current.loading).toBe(true)
+
+    await retryAfter(4000) // retry 3 — last one
+    expect(subscribeCounts.get("users/owner")).toBe(4)
+    expect(result.current.loading).toBe(false)
+    expect(result.current.error).not.toBeNull()
+    expect(result.current.data).toBeNull()
+    // attempts + 1 reports: the initial failure and every retry.
+    expect(mockLogClientErrorCallable).toHaveBeenCalledTimes(4)
+
+    await tick(60_000)
+    expect(subscribeCounts.get("users/owner")).toBe(4)
+  })
+
+  it("useDocument treats a single error as terminal without the option (unchanged default)", async () => {
+    errorPaths.set("users/owner", denied())
+
+    const { result } = renderHook(() => useDocument(docRef("users", "owner")), {
+      wrapper: createWrapper(),
+    })
+
+    await tick(LISTENER_DELAY)
+    expect(result.current.loading).toBe(false)
+    expect(result.current.error).not.toBeNull()
+
+    await tick(60_000)
+    expect(subscribeCounts.get("users/owner")).toBe(1)
+    expect(mockLogClientErrorCallable).toHaveBeenCalledTimes(1)
+  })
+
+  it("useDocument does not retry errors other than permission-denied", async () => {
+    errorPaths.set(
+      "users/owner",
+      Object.assign(new Error("boom"), { code: "internal" }),
+    )
+
+    const { result } = renderHook(
+      () => useDocument(docRef("users", "owner"), RETRY),
+      { wrapper: createWrapper() },
+    )
+
+    await tick(LISTENER_DELAY)
+    expect(result.current.loading).toBe(false)
+    expect(result.current.error).not.toBeNull()
+    await tick(60_000)
+    expect(subscribeCounts.get("users/owner")).toBe(1)
+  })
+
+  it("useCollection accepts a trailing retry option and recovers", async () => {
+    fakeDb.setDoc(fakeDb.doc("bills", "b1"), { total: 5 })
+    errorPaths.set("bills", denied())
+    errorBudget.set("bills", 1)
+
+    const { result } = renderHook(
+      () => useCollection(colRef("bills"), { retry: { attempts: 1, delayMs: 500 } }),
+      { wrapper: createWrapper() },
+    )
+
+    await tick(LISTENER_DELAY)
+    expect(subscribeCounts.get("bills")).toBe(1)
+    expect(result.current.loading).toBe(true)
+
+    await retryAfter(500)
+    expect(subscribeCounts.get("bills")).toBe(2)
+    expect(result.current.loading).toBe(false)
+    expect(result.current.error).toBeNull()
+    expect(result.current.data).toHaveLength(1)
   })
 })
