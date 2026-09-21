@@ -161,26 +161,23 @@ export async function buildInvoicePdf(
 
     // --- Recipient address (left-aligned) ---
     // Standard Swiss invoice convention: full postal address block. For
-    // firma the company line identifies the recipient and stands alone.
-    // For a registered (logged-in) non-firma user we render the person
-    // name above their stored street/zip/city (issue #269). Anonymous
-    // walk-ins have no recipient block — the person already appears in
-    // the Nutzungsgebühren table further down, and a stray name above
-    // the title looked like a layout glitch (issue #269 review).
+    // firma the company line identifies the recipient and stands alone;
+    // otherwise the account holder's / check-in name comes first, followed
+    // by street and zip/city when an address is known (issue #269). A
+    // guest without an address still gets the name line (issue #658 —
+    // revisits the #269 review, which dropped the block entirely for
+    // anonymous walk-ins): a bill must name who it is addressed to, and
+    // the Nutzungsgebühren table alone was never rendered for badge or
+    // membership purchases.
     y = ensureSpace(doc, y, 60);
     doc.fontSize(10).font("Helvetica");
-    if (data.billingAddress) {
-      const { company, street, zip, city } = data.billingAddress;
-      if (company) {
-        doc.text(company, MARGIN_LEFT, y);
-        y += 14;
-      } else {
-        doc.text(data.recipientName, MARGIN_LEFT, y);
-        y += 14;
-      }
-      doc.text(street, MARGIN_LEFT, y);
+    const recipientAddress = data.billingAddress;
+    doc.text(recipientAddress?.company || data.recipientName, MARGIN_LEFT, y);
+    y += 14;
+    if (recipientAddress) {
+      doc.text(recipientAddress.street, MARGIN_LEFT, y);
       y += 14;
-      doc.text(`${zip} ${city}`, MARGIN_LEFT, y);
+      doc.text(`${recipientAddress.zip} ${recipientAddress.city}`, MARGIN_LEFT, y);
       y += 14;
     }
     y += 24;
@@ -403,9 +400,11 @@ export async function buildInvoicePdf(
       // --- Swiss QR Bill (added on a new page by swissqrbill) ---
       const contentPages = doc.bufferedPageRange().count;
       // Issue #269: pre-fill the "Zahlbar durch" debtor section when we
-      // have a billing address. Anonymous walk-ins (no billingAddress)
-      // intentionally omit the debtor so the printed QR bill leaves the
-      // box empty for handwriting. Country is hardcoded "CH" — the
+      // have a billing address. Recipients without one (guests, members
+      // without a stored address) intentionally omit the debtor so the
+      // printed QR bill leaves the box empty for handwriting — the
+      // name-only recipient block (#658) is deliberately NOT mirrored
+      // here, a debtor without a postal address is not a valid QR-bill. Country is hardcoded "CH" — the
       // billingAddress shape doesn't carry a country and the whole
       // product is Swiss-only (creditor.country is hardcoded upstream).
       const billingAddr = data.billingAddress;
