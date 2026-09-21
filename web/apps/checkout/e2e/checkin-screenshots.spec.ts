@@ -131,7 +131,7 @@ test.describe("Check-in step screenshots", () => {
 
     // Add second person
     await page.getByRole("button", { name: "Person hinzufügen" }).click()
-    await expect(page.getByText("Person 2")).toBeVisible()
+    await expect(page.getByRole("heading", { name: "Person 2" })).toBeVisible()
 
     // Set second person to Firma
     const person2 = page.getByTestId("person-card").nth(1)
@@ -259,7 +259,7 @@ test.describe("Check-in step screenshots", () => {
 
     // Add second person so the page content is taller than the viewport
     await page.getByRole("button", { name: "Person hinzufügen" }).click()
-    await expect(page.getByText("Person 2")).toBeVisible()
+    await expect(page.getByRole("heading", { name: "Person 2" })).toBeVisible()
 
     // Scroll down so content above the fold is visible and sticky nav is at bottom
     await page.evaluate(() => window.scrollBy(0, 300))

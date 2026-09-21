@@ -7,6 +7,7 @@ import {
   type UserType,
 } from "@modules/lib/pricing"
 import { X } from "lucide-react"
+import { useId } from "react"
 import type { CheckoutPerson, PersonsAction } from "./use-checkout-state"
 import { ErrorBadge, FIELD_INPUT_OK, FIELD_INPUT_ERR } from "./field-error"
 
@@ -97,6 +98,21 @@ export function PersonCard({
   // `editable` so a rehydrated person can still be corrected in place.
   const readOnly = person.isPreFilled && !editable
 
+  // Issue #663: inputs need an accessible name that also says *which* card
+  // they belong to ("Person 2 Vorname") — the visible heading isn't part of
+  // the label, so a visually-hidden prefix carries it into every label.
+  const idPrefix = useId()
+  const fieldId = (field: string) => `${idPrefix}-${field}`
+  // The separating space sits *outside* the span: accessible-name
+  // computation trims each element's text, so a space inside would vanish.
+  const cardName = (
+    <>
+      <span className="sr-only">
+        {title === undefined || title === "" ? `Person ${index + 1}` : title}
+      </span>{" "}
+    </>
+  )
+
   const err = (field: string) => showError(field, errors, touched, submitted)
   const fieldCls = (field: string) => (err(field) ? INPUT_ERR : INPUT_OK)
   const wrapCls = (field: string) =>
@@ -156,10 +172,12 @@ export function PersonCard({
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className={wrapCls("firstName")}>
-            <Label className="text-sm font-bold">
+            <Label htmlFor={fieldId("firstName")} className="text-sm font-bold">
+              {cardName}
               Vorname<span className="text-[#cc2a24]">*</span>
             </Label>
             <input
+              id={fieldId("firstName")}
               value={person.firstName}
               onChange={(e) => update({ firstName: e.target.value })}
               onBlur={() => onBlur?.("firstName")}
@@ -168,10 +186,12 @@ export function PersonCard({
             {err("firstName") && <ErrorBadge message={err("firstName")!} />}
           </div>
           <div className={wrapCls("lastName")}>
-            <Label className="text-sm font-bold">
+            <Label htmlFor={fieldId("lastName")} className="text-sm font-bold">
+              {cardName}
               Nachname<span className="text-[#cc2a24]">*</span>
             </Label>
             <input
+              id={fieldId("lastName")}
               value={person.lastName}
               onChange={(e) => update({ lastName: e.target.value })}
               onBlur={() => onBlur?.("lastName")}
@@ -180,10 +200,12 @@ export function PersonCard({
             {err("lastName") && <ErrorBadge message={err("lastName")!} />}
           </div>
           <div className={wrapCls("email")}>
-            <Label className="text-sm font-bold">
+            <Label htmlFor={fieldId("email")} className="text-sm font-bold">
+              {cardName}
               E-Mail{index === 0 && <span className="text-[#cc2a24]">*</span>}
             </Label>
             <input
+              id={fieldId("email")}
               value={person.email}
               onChange={(e) => update({ email: e.target.value })}
               onBlur={() => onBlur?.("email")}
@@ -196,8 +218,15 @@ export function PersonCard({
 
       {!readOnly && (
         <div className="space-y-1">
-          <Label className="text-sm font-bold">Nutzer:in</Label>
-          <div className="flex gap-3 pt-1">
+          <Label id={fieldId("userType-label")} className="text-sm font-bold">
+            {cardName}
+            Nutzer:in
+          </Label>
+          <div
+            role="radiogroup"
+            aria-labelledby={fieldId("userType-label")}
+            className="flex gap-3 pt-1"
+          >
             {(Object.entries(USER_TYPE_LABELS) as [UserType, string][]).map(
               ([value, label]) => (
                 <label key={value} className="flex items-center gap-1.5 text-sm cursor-pointer">
@@ -253,8 +282,12 @@ export function PersonCard({
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className={wrapCls("billingCompany")}>
-                <Label className="text-sm">Firma<span className="text-[#cc2a24]">*</span></Label>
+                <Label htmlFor={fieldId("billingCompany")} className="text-sm">
+                  {cardName}
+                  Firma<span className="text-[#cc2a24]">*</span>
+                </Label>
                 <input
+                  id={fieldId("billingCompany")}
                   value={person.billingCompany ?? ""}
                   onChange={(e) => update({ billingCompany: e.target.value })}
                   onBlur={() => onBlur?.("billingCompany")}
@@ -263,8 +296,12 @@ export function PersonCard({
                 {err("billingCompany") && <ErrorBadge message={err("billingCompany")!} />}
               </div>
               <div className={wrapCls("billingStreet")}>
-                <Label className="text-sm">Strasse / Nr.<span className="text-[#cc2a24]">*</span></Label>
+                <Label htmlFor={fieldId("billingStreet")} className="text-sm">
+                  {cardName}
+                  Strasse / Nr.<span className="text-[#cc2a24]">*</span>
+                </Label>
                 <input
+                  id={fieldId("billingStreet")}
                   value={person.billingStreet ?? ""}
                   onChange={(e) => update({ billingStreet: e.target.value })}
                   onBlur={() => onBlur?.("billingStreet")}
@@ -273,8 +310,12 @@ export function PersonCard({
                 {err("billingStreet") && <ErrorBadge message={err("billingStreet")!} />}
               </div>
               <div className={wrapCls("billingZip")}>
-                <Label className="text-sm">PLZ<span className="text-[#cc2a24]">*</span></Label>
+                <Label htmlFor={fieldId("billingZip")} className="text-sm">
+                  {cardName}
+                  PLZ<span className="text-[#cc2a24]">*</span>
+                </Label>
                 <input
+                  id={fieldId("billingZip")}
                   value={person.billingZip ?? ""}
                   onChange={(e) => update({ billingZip: e.target.value })}
                   onBlur={() => onBlur?.("billingZip")}
@@ -283,8 +324,12 @@ export function PersonCard({
                 {err("billingZip") && <ErrorBadge message={err("billingZip")!} />}
               </div>
               <div className={wrapCls("billingCity")}>
-                <Label className="text-sm">Ort<span className="text-[#cc2a24]">*</span></Label>
+                <Label htmlFor={fieldId("billingCity")} className="text-sm">
+                  {cardName}
+                  Ort<span className="text-[#cc2a24]">*</span>
+                </Label>
                 <input
+                  id={fieldId("billingCity")}
                   value={person.billingCity ?? ""}
                   onChange={(e) => update({ billingCity: e.target.value })}
                   onBlur={() => onBlur?.("billingCity")}

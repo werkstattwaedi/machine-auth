@@ -104,9 +104,9 @@ test.describe("Scrollbar gutter — no content shift on toggle (issue #568)", ()
     // section and add extra person cards.
     await openGuestSection(page)
     await page.getByRole("button", { name: "Person hinzufügen" }).click()
-    await expect(page.getByText("Person 2")).toBeVisible()
+    await expect(page.getByRole("heading", { name: "Person 2" })).toBeVisible()
     await page.getByRole("button", { name: "Person hinzufügen" }).click()
-    await expect(page.getByText("Person 3")).toBeVisible()
+    await expect(page.getByRole("heading", { name: "Person 3" })).toBeVisible()
 
     // Tall state now overflows the viewport → the scrollbar toggles on.
     expect(
