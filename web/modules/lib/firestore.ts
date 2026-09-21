@@ -279,7 +279,6 @@ export function useDocument<T = DocumentData>(
   return { data, loading: loading || stale, error }
 }
 
-
 // Firestore caps the operand list of an `in` query at 30 entries.
 const DOCUMENT_ID_IN_LIMIT = 30
 
