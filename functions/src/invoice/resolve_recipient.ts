@@ -25,6 +25,7 @@ import type {
   CheckoutPersonEntity,
   UserEntity,
 } from "../types/firestore_entities";
+import { formatFullName } from "../util/username-utils";
 
 /** The subset of the account holder's user doc the resolver reads. */
 export type RecipientHolder = Pick<
@@ -83,9 +84,7 @@ export function pickRecipient({
   }
 
   const first = persons[0];
-  const holderName = holder
-    ? `${holder.firstName ?? ""} ${holder.lastName ?? ""}`.trim()
-    : "";
+  const holderName = holder ? formatFullName(holder) : "";
   const recipientName = holderName || first?.name || "Unbekannt";
 
   const billingAddress =

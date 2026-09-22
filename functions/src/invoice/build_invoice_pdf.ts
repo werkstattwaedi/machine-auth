@@ -404,9 +404,10 @@ export async function buildInvoicePdf(
       // without a stored address) intentionally omit the debtor so the
       // printed QR bill leaves the box empty for handwriting — the
       // name-only recipient block (#658) is deliberately NOT mirrored
-      // here, a debtor without a postal address is not a valid QR-bill. Country is hardcoded "CH" — the
-      // billingAddress shape doesn't carry a country and the whole
-      // product is Swiss-only (creditor.country is hardcoded upstream).
+      // here — a debtor without a postal address is not a valid QR-bill.
+      // Country is hardcoded "CH" — the billingAddress shape doesn't
+      // carry a country and the whole product is Swiss-only
+      // (creditor.country is hardcoded upstream).
       const billingAddr = data.billingAddress;
       const debtor = billingAddr
         ? {
