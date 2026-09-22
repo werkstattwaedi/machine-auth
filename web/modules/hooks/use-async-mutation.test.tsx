@@ -206,6 +206,67 @@ describe("useAsyncMutation", () => {
     expect(result.current.error?.code).toBe("oww/existing-account")
   })
 
+  // Issue #628: `closeCheckoutAndGetPayment` throws `failed-precondition`
+  // with a user-facing German reason; the generic „Bitte erneut versuchen"
+  // hid it. The carve-out is opt-in per call site so the many callables whose
+  // failed-precondition messages are English internals keep the fallback.
+  it("shows the server message for a code listed in serverMessageCodes", async () => {
+    const { result } = renderHook(
+      () =>
+        useAsyncMutation({
+          context: "checkout.closeAndPay",
+          errorMessage:
+            "Bezahlung konnte nicht erstellt werden. Bitte erneut versuchen.",
+          serverMessageCodes: ["functions/failed-precondition"],
+        }),
+      { wrapper: createWrapper() },
+    )
+
+    const original = firebaseError(
+      "functions/failed-precondition",
+      "Materialbezug ist nicht möglich, wenn Maschinen genutzt wurden.",
+    )
+
+    await act(async () => {
+      try {
+        await result.current.mutate(() => Promise.reject(original))
+      } catch {
+        /* expected */
+      }
+    })
+
+    expect(mockToastError).toHaveBeenCalledWith(original.message)
+    expect(result.current.error?.message).toBe(original.message)
+    expect(result.current.error?.code).toBe("functions/failed-precondition")
+  })
+
+  it("keeps the fallback for functions/failed-precondition when not opted in", async () => {
+    const { result } = renderHook(
+      () =>
+        useAsyncMutation({
+          context: "test.failed-precondition",
+          errorMessage: "Speichern fehlgeschlagen",
+        }),
+      { wrapper: createWrapper() },
+    )
+
+    const original = firebaseError(
+      "functions/failed-precondition",
+      "Pricing config missing standard entry fee for erwachsen",
+    )
+
+    await act(async () => {
+      try {
+        await result.current.mutate(() => Promise.reject(original))
+      } catch {
+        /* expected */
+      }
+    })
+
+    expect(mockToastError).toHaveBeenCalledWith("Speichern fehlgeschlagen")
+    expect(result.current.error?.message).toBe("Speichern fehlgeschlagen")
+  })
+
   it("maps FunctionsError code unavailable to the offline German message", async () => {
     const { result } = renderHook(
       () => useAsyncMutation({ context: "test.unavailable" }),

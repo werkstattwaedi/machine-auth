@@ -6,7 +6,7 @@ import { Select as SelectPrimitive } from "radix-ui"
 import {
   USAGE_TYPE_INFO,
   USAGE_TYPE_LABELS,
-  selectableUsageTypes,
+  usageTypeOptions,
   type UsageType,
 } from "@modules/lib/pricing"
 import { cn } from "@modules/lib/utils"
@@ -17,6 +17,12 @@ interface UsageTypeSelectProps {
   onChange: (t: UsageType) => void
   /** Anonymous checkouts never see the account-only types (issue #570). */
   anonymous: boolean
+  /**
+   * The cart holds a machine item (`isMachineItem`). „Nur Materialbezug" is
+   * then shown disabled with the reason (issue #628) — the server rejects
+   * that combination, so offering it only leads to a failed submit.
+   */
+  hasMachineUsage: boolean
 }
 
 /**
@@ -38,8 +44,13 @@ export function UsageTypeSelect({
   value,
   onChange,
   anonymous,
+  hasMachineUsage,
 }: UsageTypeSelectProps) {
-  const options = selectableUsageTypes({ anonymous, current: value })
+  const options = usageTypeOptions({
+    anonymous,
+    current: value,
+    hasMachineUsage,
+  })
   const current = USAGE_TYPE_INFO[value]
 
   return (
@@ -84,23 +95,35 @@ export function UsageTypeSelect({
             className="z-50 w-[var(--radix-select-trigger-width)] max-h-[var(--radix-select-content-available-height)] overflow-hidden rounded-[6px] border border-cog-teal bg-white text-foreground shadow-[0_10px_15px_-3px_rgb(0_0_0/0.12),0_4px_6px_-4px_rgb(0_0_0/0.1)] data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0"
           >
             <SelectPrimitive.Viewport className="overflow-y-auto">
-              {options.map((t) => {
+              {options.map(({ type: t, disabledReason }) => {
                 const info = USAGE_TYPE_INFO[t]
                 return (
                   <SelectPrimitive.Item
                     key={t}
                     value={t}
-                    className="flex w-full cursor-pointer select-none flex-col gap-0.5 border-b border-border px-3.5 py-[11px] text-left outline-none last:border-b-0 data-[highlighted]:bg-[#f0fbfc] data-[state=checked]:bg-cog-teal-light"
+                    disabled={disabledReason !== undefined}
+                    className="flex w-full cursor-pointer select-none flex-col gap-0.5 border-b border-border px-3.5 py-[11px] text-left outline-none last:border-b-0 data-[highlighted]:bg-[#f0fbfc] data-[state=checked]:bg-cog-teal-light data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60"
                   >
                     <SelectPrimitive.ItemText>
                       <span className="text-sm font-semibold">
                         {USAGE_TYPE_LABELS[t]}
                       </span>
                     </SelectPrimitive.ItemText>
-                    {info.effect && (
-                      <span className="text-[12.5px] leading-[1.4] text-cog-teal-dark">
-                        {info.effect}
+                    {disabledReason ? (
+                      // The reason replaces the price effect: a waiver the
+                      // visitor cannot pick is not worth advertising.
+                      <span
+                        data-testid="usage-type-disabled-reason"
+                        className="text-[12.5px] leading-[1.4] text-muted-foreground"
+                      >
+                        {disabledReason}
                       </span>
+                    ) : (
+                      info.effect && (
+                        <span className="text-[12.5px] leading-[1.4] text-cog-teal-dark">
+                          {info.effect}
+                        </span>
+                      )
                     )}
                     <span className="text-[12.5px] leading-[1.45] text-muted-foreground text-pretty">
                       {info.appliesTo}

@@ -725,6 +725,7 @@ export function StepCheckout({
               value={usageType}
               onChange={setUsageType}
               anonymous={anonymous}
+              hasMachineUsage={nfcItems.length > 0}
             />
           </div>
 

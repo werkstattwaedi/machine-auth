@@ -272,3 +272,54 @@ export function selectableUsageTypes(
       t === opts.current || !opts.anonymous || !USAGE_TYPE_INFO[t].accountOnly,
   )
 }
+
+/**
+ * Why „Nur Materialbezug" is not selectable once the cart holds machine
+ * usage. The server rejects that combination outright
+ * (`assertUsageTypeAllowed`, issue #284); showing the reason on the option
+ * itself (issue #628) beats letting the visitor submit into a generic
+ * „Bitte erneut versuchen" toast that can never succeed.
+ */
+export const MATERIALBEZUG_MACHINE_REASON =
+  "Nicht möglich, da Maschinen genutzt wurden."
+
+export interface UsageTypeOption {
+  type: UsageType
+  /** Set when the option is shown but not selectable, with the reason. */
+  disabledReason?: string
+}
+
+/**
+ * {@link selectableUsageTypes} plus the per-option disabled state the
+ * checkout's Nutzungsart control renders (issue #628). `materialbezug`
+ * stays visible but disabled while the cart contains a machine item — the
+ * client-side mirror of the server guard, so the visitor learns *why*
+ * instead of hitting a `failed-precondition` on submit.
+ */
+export function usageTypeOptions(opts: {
+  anonymous: boolean
+  current?: UsageType
+  hasMachineUsage: boolean
+}): UsageTypeOption[] {
+  return selectableUsageTypes(opts).map((type) =>
+    type === "materialbezug" && opts.hasMachineUsage
+      ? { type, disabledReason: MATERIALBEZUG_MACHINE_REASON }
+      : { type },
+  )
+}
+
+/**
+ * The usage type the checkout may actually submit: `materialbezug` with
+ * machine usage falls back to `regular` (the correct price for someone who
+ * used a machine); every other combination is returned unchanged. Used by
+ * the wizard to fall back a rehydrated or stale selection once machine
+ * items appear (NFC session syncing in, manual hours added), so the
+ * disabled option is never the submitted one.
+ */
+export function resolveUsageType(
+  usageType: UsageType,
+  opts: { hasMachineUsage: boolean },
+): UsageType {
+  if (usageType === "materialbezug" && opts.hasMachineUsage) return "regular"
+  return usageType
+}

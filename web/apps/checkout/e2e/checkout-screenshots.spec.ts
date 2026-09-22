@@ -373,6 +373,60 @@ test.describe("Checkout step screenshots", () => {
     await expect(page.getByLabel("Nutzungsart")).toContainText("Reguläre Nutzung")
   })
 
+  // Issue #628: „Nur Materialbezug" is rejected by the server once the cart
+  // holds machine usage (#284). With a manual-hours machine line the option
+  // is rendered disabled with the reason, so the invalid combination can
+  // never reach the server guard (which used to surface as a generic
+  // „Bitte erneut versuchen" toast).
+  test("summary — Nutzungsart dropdown: Materialbezug disabled with machine usage", async ({ page }) => {
+    await signIn(page)
+    await page.goto("/")
+    await expect(page.getByText("Abmelden")).toBeVisible({ timeout: 10_000 })
+    await page.getByRole("button", { name: "Weiter" }).click()
+    await expect(page.getByText("Werkstätten wählen")).toBeVisible()
+
+    // Metall carries the pinned "Standbohrmaschine" (CHF 30/h) — an
+    // always-visible manual hours input (#105). 2 h → CHF 60.00.
+    await page.getByRole("button", { name: "Metall", exact: true }).click()
+    const block = page.getByTestId("workshop-block-metall")
+    await block.getByLabel("Stunden Standbohrmaschine").fill("2")
+    // Blur commits the line; wait for the subtotal so the item doc exists
+    // before we move on to the summary.
+    await page.locator("h1").first().click()
+    await expect(block.getByText("CHF 60.00")).toBeVisible({ timeout: 10_000 })
+
+    const checkoutBtn = page.getByRole("button", { name: "Zum Checkout" })
+    await checkoutBtn.scrollIntoViewIfNeeded()
+    await checkoutBtn.click()
+    await expect(page.getByText("Dein Besuch")).toBeVisible()
+
+    await expect(page.getByLabel("Nutzungsart")).toBeVisible()
+    await page.getByLabel("Nutzungsart").click()
+    const materialbezug = page.getByRole("option", {
+      name: "Nur Materialbezug",
+      exact: true,
+    })
+    await expect(materialbezug).toBeVisible()
+    await expect(materialbezug).toHaveAttribute("aria-disabled", "true")
+    await expect(page.getByTestId("usage-type-disabled-reason")).toHaveText(
+      "Nicht möglich, da Maschinen genutzt wurden.",
+    )
+    // The other discounts stay selectable.
+    await expect(
+      page.getByRole("option", { name: "Hangenmoos AG", exact: true }),
+    ).not.toHaveAttribute("aria-disabled", "true")
+
+    await expect(page).toHaveScreenshot(
+      "checkout-summary-nutzungsart-machine-disabled.png",
+    )
+
+    // Clicking the disabled option changes nothing.
+    await materialbezug.click({ force: true })
+    await page.keyboard.press("Escape")
+    await expect(materialbezug).toBeHidden()
+    await expect(page.getByLabel("Nutzungsart")).toContainText("Reguläre Nutzung")
+  })
+
   test("summary — Materialbezug expanded with workshop items", async ({ page }) => {
     await goToSummaryWithItems(page)
 
