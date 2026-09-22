@@ -178,7 +178,10 @@ test.describe("Visit page — long machine and material names (issue #652)", () 
     await clearLongNamesFixture()
   })
 
-  test("names stay fully readable in the cart tables", async ({ page }) => {
+  test("names stay fully readable in the cart tables", async ({
+    page,
+    isMobile,
+  }) => {
     await signIn(page)
     await page.goto("/visit")
 
@@ -205,6 +208,30 @@ test.describe("Visit page — long machine and material names (issue #652)", () 
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
     )
     expect(pageOverflows).toBe(false)
+
+    // The Menge / Kosten / Preis headers must be genuinely rendered, not
+    // `sr-only`. `toBeVisible()` alone would not catch a regression: an
+    // `sr-only` element keeps a 1×1 box, which Playwright counts as visible,
+    // so the box must also be wide enough to hold the word. On a phone the
+    // three headers sit on their own line beneath the label (review on
+    // PR #679), which the y-ordering pins down.
+    const table = block.getByRole("table").first()
+    const label = table.getByRole("columnheader").first()
+    const labelBox = await label.boundingBox()
+    expect(labelBox).not.toBeNull()
+    for (const name of ["Menge", "Kosten", "Preis"]) {
+      const header = table.getByRole("columnheader", { name })
+      await expect(header).toBeVisible()
+      const box = await header.boundingBox()
+      expect(box).not.toBeNull()
+      expect(box!.width).toBeGreaterThan(20)
+      expect(box!.height).toBeGreaterThan(8)
+      if (isMobile) {
+        expect(box!.y).toBeGreaterThanOrEqual(labelBox!.y + labelBox!.height - 1)
+      } else {
+        expect(Math.abs(box!.y - labelBox!.y)).toBeLessThan(2)
+      }
+    }
 
     // Neutral focus so the empty hours input has no focus ring.
     await page.locator("h1").first().click()

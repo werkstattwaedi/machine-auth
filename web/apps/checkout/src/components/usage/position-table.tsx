@@ -57,10 +57,11 @@ export interface PositionRow {
  * Below `sm` (issue #652) each position stacks: the title takes the full
  * row and Menge / Kosten / Preis sit right-aligned on the grid row below,
  * so long names ("Stationäre Maschinen", "Kirschbaum 24 mm, gehobelt")
- * stay readable on a phone instead of collapsing to "Sta…". The numeric
- * column headers become screen-reader-only there — the values are
- * self-describing ("60 Min", "40.00/Std.", bold total). Every `sm:`
- * variant restores the side-by-side classes, so the desktop rendering is
+ * stay readable on a phone instead of collapsing to "Sta…". The header
+ * stacks the same way — `firstColLabel` on its own line, the three column
+ * names right-aligned beneath it in the value columns — so the numeric
+ * headers still sit above the values they label. Every `sm:` variant
+ * restores the side-by-side classes, so the desktop rendering is
  * unchanged.
  */
 export function PositionTable({
@@ -89,10 +90,11 @@ export function PositionTable({
     : ["col-start-2", "col-start-3", "col-start-4"]
   const valueCell =
     "pt-0.5 pb-2 sm:py-2 text-sm tabular-nums text-right whitespace-nowrap sm:border-t border-dotted border-border sm:col-auto"
-  // `sr-only` on mobile keeps the headers in the accessibility tree; note
-  // `not-sr-only` resets padding, so `pb-1.5` is re-applied under `sm:`.
+  // The numeric headers share the value cells' column starts so that, on
+  // mobile, they land on the grid row under the label and line up with the
+  // values beneath them.
   const numHeader =
-    "sr-only sm:not-sr-only text-[11px] font-semibold uppercase text-muted-foreground text-right sm:pb-1.5"
+    "text-[11px] font-semibold uppercase text-muted-foreground text-right pb-1.5 sm:col-auto"
   return (
     <div
       role="table"
@@ -110,13 +112,13 @@ export function PositionTable({
             text-right, the trailing letter-spacing of tracking would push
             the visible text leftward inside the cell box, leaving the
             header text visually inset from the value columns below. */}
-        <span role="columnheader" className={numHeader}>
+        <span role="columnheader" className={`${numHeader} ${valueStart[0]}`}>
           Menge
         </span>
-        <span role="columnheader" className={numHeader}>
+        <span role="columnheader" className={`${numHeader} ${valueStart[1]}`}>
           Kosten
         </span>
-        <span role="columnheader" className={numHeader}>
+        <span role="columnheader" className={`${numHeader} ${valueStart[2]}`}>
           Preis
         </span>
       </div>
