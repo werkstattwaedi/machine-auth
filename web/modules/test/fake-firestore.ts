@@ -234,8 +234,10 @@ export class FakeFirestore {
 
     for (const c of constraints) {
       if (c.kind === "where") {
-        result = result.filter(([, data]) => {
-          const fieldVal = this.getFieldValue(data, c.field)
+        result = result.filter(([id, data]) => {
+          // `__name__` is Firestore's field path for `documentId()`.
+          const fieldVal =
+            c.field === "__name__" ? id : this.getFieldValue(data, c.field)
           switch (c.op) {
             case "==":
               return this.equals(fieldVal, c.value)

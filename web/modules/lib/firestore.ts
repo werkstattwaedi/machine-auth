@@ -7,12 +7,17 @@
  * / `Query<T>` from `firestore-helpers.ts` — never raw string paths.
  *
  * Refs are matched by their `path` (string-stable); pass `null` to unsubscribe.
+ *
+ * `useDocumentsByIds` loads an explicit id list (e.g. a price list's items)
+ * in chunks of 30, the operand cap of a `documentId() in [...]` query.
  */
 
 import { useEffect, useState } from "react"
 import {
+  documentId,
   onSnapshot,
   query,
+  where,
   type CollectionReference,
   type DocumentData,
   type DocumentReference,
@@ -274,3 +279,111 @@ export function useDocument<T = DocumentData>(
   return { data, loading: loading || stale, error }
 }
 
+// Firestore caps the operand list of an `in` query at 30 entries.
+const DOCUMENT_ID_IN_LIMIT = 30
+
+/** Split `ids` into consecutive groups of at most `size` entries. */
+export function chunkIds(
+  ids: readonly string[],
+  size: number = DOCUMENT_ID_IN_LIMIT,
+): string[][] {
+  const chunks: string[][] = []
+  for (let i = 0; i < ids.length; i += size) {
+    chunks.push(ids.slice(i, i + size))
+  }
+  return chunks
+}
+
+/**
+ * Subscribe to the documents of `ref` whose ids are listed in `ids`, in
+ * `ids` order (ids without a document are skipped). Firestore caps a
+ * `documentId() in [...]` query at 30 operands, so one listener is opened
+ * per chunk of 30 and the snapshots are merged; `loading` stays true until
+ * every chunk has reported. A price list with more than 30 items used to
+ * be cut off silently at this cap (issue #632).
+ *
+ * Unlike `useCollection`, the id list is part of the subscription key: a
+ * price list edited while the picker is open re-subscribes with the new
+ * ids. Pass `null` or an empty list to skip the subscription.
+ */
+export function useDocumentsByIds<T = DocumentData>(
+  ref: CollectionReference<T> | null,
+  ids: readonly string[],
+): UseCollectionResult<T> {
+  const db = useDb()
+  const functions = useFunctions()
+  const [data, setData] = useState<(T & { id: string })[]>([])
+  const [loading, setLoading] = useState(!!ref && ids.length > 0)
+  const [error, setError] = useState<Error | null>(null)
+  // See useCollection: the key the held `data`/`error` were reported for,
+  // so a freshly-changed request reads as loading until its effect runs.
+  const [reportedKey, setReportedKey] = useState("")
+
+  const path = ref ? pathOf(ref) : ""
+  // Duplicate ids would produce duplicate rows on merge and count double
+  // against the operand cap.
+  const uniqueIds = Array.from(new Set(ids))
+  const key = ref && uniqueIds.length > 0 ? `${path}\n${uniqueIds.join("\n")}` : ""
+
+  useEffect(() => {
+    if (!key || !ref) {
+      setData([])
+      setLoading(false)
+      setError(null)
+      setReportedKey("")
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+    const chunks = chunkIds(uniqueIds)
+    const chunkDocs: (T & { id: string })[][] = chunks.map(() => [])
+    const reported: boolean[] = chunks.map(() => false)
+    const unsubs: Unsubscribe[] = []
+
+    const timer = setTimeout(() => {
+      chunks.forEach((chunk, index) => {
+        unsubs.push(
+          onSnapshot(
+            query(ref, where(documentId(), "in", chunk)),
+            (snapshot) => {
+              chunkDocs[index] = snapshot.docs.map(
+                (d) => ({ id: d.id, ...d.data() }) as T & { id: string },
+              )
+              reported[index] = true
+              if (!reported.every(Boolean)) return
+              const byId = new Map(chunkDocs.flat().map((d) => [d.id, d]))
+              setData(
+                uniqueIds.flatMap((id) => {
+                  const doc = byId.get(id)
+                  return doc ? [doc] : []
+                }),
+              )
+              setLoading(false)
+              setReportedKey(key)
+            },
+            (err) => {
+              reportQueryError(functions, path, err as FirestoreQueryError)
+              // Listener errors are terminal, so the first one stands; a
+              // later chunk's success must not paint over it.
+              setError((prev) => prev ?? err)
+              setLoading(false)
+              setReportedKey(key)
+            },
+          ),
+        )
+      })
+    }, LISTENER_DELAY_MS)
+
+    return () => {
+      clearTimeout(timer)
+      unsubs.forEach((unsub) => unsub())
+    }
+    // `key` covers the collection path and the (deduplicated) id list, so
+    // `ref` and `uniqueIds` are stable while it is.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, db, functions])
+
+  const stale = key !== reportedKey
+  return { data, loading: loading || stale, error }
+}
