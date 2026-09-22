@@ -343,6 +343,12 @@
       "paidVia": "twint | ebanking | cash | free | null",
       "pdfGeneratedAt": "timestamp | null", // optimistic lock for PDF generation
       "emailSentAt": "timestamp | null",    // optimistic lock for email sending
+      // Set once by trySendEmail when the bill has nobody to mail (no
+      // account-holder e-mail, no guest e-mail — #651) so the hourly retry
+      // stops re-trying and re-logging. Absent on legacy docs (= not
+      // skipped). Clear it manually to re-arm the send, e.g. after an
+      // admin adds an e-mail to a child account.
+      "emailSkippedReason": "no-recipient | null",
       // The customer-stated "I'll pay this" ack. Server-only — written by
       // the acknowledgeBill callable (source: "user") or the
       // autoAcknowledgeBills cron (source: "auto"). The email and

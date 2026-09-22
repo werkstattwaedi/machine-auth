@@ -24,6 +24,12 @@ export interface BillEntity {
   paidVia: "twint" | "ebanking" | "cash" | "free" | null;
   pdfGeneratedAt: Timestamp | null;
   emailSentAt: Timestamp | null;
+  // Set once by trySendEmail when no recipient resolves (no account-holder
+  // e-mail and no guest e-mail, #651) so the hourly retry stops re-trying
+  // and re-logging. Legacy docs lack the field → not skipped. Clear it
+  // manually to re-arm the send (e.g. after adding an e-mail to a child
+  // account).
+  emailSkippedReason?: "no-recipient" | null;
   // The customer-stated "I'll pay this" ack. Server-only — written by
   // the acknowledgeBill callable (source: "user") or the
   // autoAcknowledgeBills cron (source: "auto"). The email and

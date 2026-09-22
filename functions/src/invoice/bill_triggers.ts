@@ -28,7 +28,10 @@ import { assertTemplateConfigured } from "../util/resend_template";
 // The recipient resolver lives in its own module (`util/checkout_recipient`)
 // so the stale-checkout reminder cron can reuse it without importing this
 // module's PDF stack (#531). Re-exported to preserve the existing surface.
-import { resolveRecipientEmail } from "../util/checkout_recipient";
+import {
+  resolveBillRecipientEmail,
+  resolveRecipientEmail,
+} from "../util/checkout_recipient";
 export { resolveRecipientEmail };
 import { loadMembershipCatalogId } from "../membership/shared";
 import { processMembershipForAckedBill } from "../membership/process_membership_payment";
@@ -579,6 +582,11 @@ export async function trySendEmail(billId: string): Promise<boolean> {
   // hourly sweep from mailing a never-sent original after its cancellation.
   if (bill.cancelledAt) return true;
 
+  // Already established that this bill has nobody to mail (#651). Decided
+  // once, below; re-deciding here would re-log the same warning on every
+  // hourly retry for 24 h. Clear the field manually to re-arm the send.
+  if (bill.emailSkippedReason) return true;
+
   const isBeleg = (bill.kind ?? "invoice") === "beleg";
 
   // A replacement Beleg minted inside a Sammelrechnung revision (ADR-0042)
@@ -632,12 +640,16 @@ export async function trySendEmail(billId: string): Promise<boolean> {
   const checkoutDoc = await bill.checkouts[0].get();
   if (!checkoutDoc.exists) return false;
   const checkout = checkoutDoc.data() as CheckoutEntity;
-  // Resolve recipient from the account holder (checkout.userId). Per
-  // ADR-0029, account-less roster members have no email; the account
-  // holder is always the correct recipient (issue #471).
-  const recipientEmail = await resolveRecipientEmail(checkout);
+  // Recipient is the account holder (checkout.userId) — per ADR-0029,
+  // account-less roster members have no email of their own (issue #471) —
+  // or, for a guest checkout without an account holder, the e-mail the
+  // guest typed at check-in (issue #651).
+  const recipientEmail = await resolveBillRecipientEmail(checkout);
   if (!recipientEmail) {
     logger.warn(`Bill ${billId}: no recipient email, skipping`);
+    // Mark once so `isEmailRetryDue` / the early return above keep the
+    // hourly retry from re-logging this for the rest of the 24 h window.
+    await billRef.update({ emailSkippedReason: "no-recipient" });
     return true; // Nothing to retry
   }
 
@@ -894,7 +906,7 @@ export async function trySendCancellationNotice(billId: string): Promise<boolean
   const checkoutDoc = await bill.checkouts[0].get();
   if (!checkoutDoc.exists) return false;
   const checkout = checkoutDoc.data() as CheckoutEntity;
-  const recipientEmail = await resolveRecipientEmail(checkout);
+  const recipientEmail = await resolveBillRecipientEmail(checkout);
   if (!recipientEmail) {
     logger.warn(`Bill ${billId}: no recipient email for cancellation notice, skipping`);
     return true;
@@ -1065,6 +1077,24 @@ export const onBillUpdate = onDocumentUpdated(
 );
 
 /**
+ * Retry gate for the hourly email sweep. An email is due once the bill is
+ * committed: a real invoice carries a payment-method ack stamp (#251); a
+ * Beleg is committed by its kind transition and never gets that stamp,
+ * but still emails a visit receipt (#405). Not due once sent, or once
+ * `trySendEmail` has established there is nobody to mail (#651) — without
+ * that last term the sweep re-logged "no recipient" 24× per guest bill.
+ * `trySendEmail` re-checks everything; this only decides whether to call it.
+ *
+ * Exported for unit testing.
+ */
+export function isEmailRetryDue(bill: BillEntity): boolean {
+  const committed =
+    (bill.kind ?? "invoice") === "beleg" ||
+    !!bill.paymentMethodConfirmationTime;
+  return committed && !bill.emailSentAt && !bill.emailSkippedReason;
+}
+
+/**
  * Scheduled retry: pick up bills where PDF generation or email sending
  * failed. This is only the fallback for the trigger-driven path —
  * `onBillCreate`/`onBillUpdate` do the immediate PDF/email work — so a
@@ -1095,14 +1125,9 @@ export const retryBillProcessing = onSchedule(
       const bill = doc.data() as BillEntity;
       const billId = doc.id;
 
-      // An email is due once the bill is committed: a real invoice carries
-      // a payment-method ack stamp (#251); a Beleg is committed by its kind
-      // transition and never gets that stamp, but still emails a visit
-      // receipt (#405). trySendEmail re-checks both, so this is just the
-      // retry gate. Free bills / missing recipients are handled there.
-      const emailDue =
-        (bill.kind ?? "invoice") === "beleg" ||
-        !!bill.paymentMethodConfirmationTime;
+      // Free bills are handled inside trySendEmail; see isEmailRetryDue
+      // for the commit / sent / no-recipient terms.
+      const emailDue = isEmailRetryDue(bill);
 
       // Needs PDF: no storagePath, no active lock (or stale lock)
       if (!bill.storagePath) {
@@ -1121,8 +1146,8 @@ export const retryBillProcessing = onSchedule(
         continue;
       }
 
-      // PDF exists but email not sent — same commit gate.
-      if (!bill.emailSentAt && emailDue) {
+      // PDF exists but email not sent — same gate.
+      if (emailDue) {
         emailRetries++;
         await trySendEmail(billId);
       }
