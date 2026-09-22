@@ -1077,13 +1077,6 @@ export const onBillUpdate = onDocumentUpdated(
 );
 
 /**
- * Scheduled retry: pick up bills where PDF generation or email sending
- * failed. This is only the fallback for the trigger-driven path —
- * `onBillCreate`/`onBillUpdate` do the immediate PDF/email work — so a
- * ≤1h retry latency for an already-failed send is acceptable. Hourly,
- * processes bills created in the last 24h.
- */
-/**
  * Retry gate for the hourly email sweep. An email is due once the bill is
  * committed: a real invoice carries a payment-method ack stamp (#251); a
  * Beleg is committed by its kind transition and never gets that stamp,
@@ -1101,6 +1094,13 @@ export function isEmailRetryDue(bill: BillEntity): boolean {
   return committed && !bill.emailSentAt && !bill.emailSkippedReason;
 }
 
+/**
+ * Scheduled retry: pick up bills where PDF generation or email sending
+ * failed. This is only the fallback for the trigger-driven path —
+ * `onBillCreate`/`onBillUpdate` do the immediate PDF/email work — so a
+ * ≤1h retry latency for an already-failed send is acceptable. Hourly,
+ * processes bills created in the last 24h.
+ */
 export const retryBillProcessing = onSchedule(
   {
     schedule: "every 60 minutes",
