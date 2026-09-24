@@ -9,6 +9,7 @@ import {
   formatPricePerCount,
   parseQuantity,
   parseWithDefaultUnit,
+  formatInUnit,
   cmToMeters,
   gramsToKg,
   mlToLiters,
@@ -123,6 +124,27 @@ describe("parseQuantity", () => {
     ["5 fooble", "m"],
   ])("parseQuantity(%j, %s) → null", (input, base) => {
     expect(parseQuantity(input, base)).toBeNull()
+  })
+})
+
+describe("formatInUnit", () => {
+  it.each<[number, BaseUnit, string, string]>([
+    // Entry-unit display for the picker fields (issue #656): the number in
+    // the field's own unit, no unit text, no grouping separator.
+    [1.205, "m", "cm", "120.5"],
+    [0.5, "m", "cm", "50"],
+    [0.05, "l", "ml", "50"], // convert() yields 50.00000000000001
+    [1.5, "kg", "g", "1500"],
+    [1.5, "h", "min", "90"],
+    [10 / 60, "h", "min", "10"],
+    [0.001, "m", "cm", "0.1"],
+    [99.9999, "m", "cm", "9999.99"],
+  ])("formatInUnit(%s, %s, %s) → %s", (value, base, unit, expected) => {
+    expect(formatInUnit(value, base, unit)).toBe(expected)
+  })
+
+  it("throws on a unit from another dimension", () => {
+    expect(() => formatInUnit(1, "m", "g")).toThrow(/not a m unit/)
   })
 })
 
