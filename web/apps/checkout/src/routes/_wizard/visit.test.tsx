@@ -17,6 +17,7 @@
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from "vitest"
 import { render, screen, cleanup, within, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { arrayRemove } from "firebase/firestore"
 import type { CheckoutItemLocal } from "@/components/usage/inline-rows"
 
 // ── Capture the route component (mirrors usage.test.tsx) ─────────────────
@@ -42,9 +43,28 @@ vi.mock("@modules/lib/firebase-context", () => {
   const functions = {}
   return { useDb: () => db, useFunctions: () => functions }
 })
+// Module-level spies so the workshop-removal writes are observable
+// (issue #657: which item docs get deleted, and whether `workshopsVisited`
+// is touched).
+const mockUpdate = vi.fn()
+const mockRemove = vi.fn()
 vi.mock("@modules/hooks/use-firestore-mutation", () => ({
-  useFirestoreMutation: () => ({ update: vi.fn(), remove: vi.fn() }),
+  useFirestoreMutation: () => ({ update: mockUpdate, remove: mockRemove }),
 }))
+// `useDb` is a bare `{}` above, which the real `doc()` rejects; hand back
+// plain path markers for the two refs the removal flow writes.
+vi.mock("@modules/lib/firestore-helpers", async () => {
+  const actual = await vi.importActual<
+    typeof import("@modules/lib/firestore-helpers")
+  >("@modules/lib/firestore-helpers")
+  return {
+    ...actual,
+    checkoutRef: (_db: unknown, id: string) => ({ path: `checkouts/${id}` }),
+    checkoutItemRef: (_db: unknown, checkoutId: string, itemId: string) => ({
+      path: `checkouts/${checkoutId}/items/${itemId}`,
+    }),
+  }
+})
 // Shared across both useAsyncMutation call sites in VisitRoute; individual
 // tests reject it (mockRejectedValueOnce) to exercise failure recovery.
 const mockMutate = vi.fn()
@@ -170,6 +190,22 @@ function materialItem(
   }
 }
 
+/** A device-tracked machine session, as `handleUploadUsage` writes it. */
+function nfcItem(id = "n1", workshop = "makerspace"): CheckoutItemLocal {
+  return {
+    id,
+    workshop,
+    description: "CO₂ Laser",
+    origin: "nfc",
+    type: "machine",
+    catalogId: null,
+    pricingModel: "time",
+    quantity: 0.5,
+    unitPrice: 12,
+    totalPrice: 6,
+  }
+}
+
 const pricingConfig = {
   workshops: {
     makerspace: { order: 0, label: "Maker Space" },
@@ -225,6 +261,8 @@ beforeAll(async () => {
 beforeEach(() => {
   mockMutate.mockReset()
   mockMutate.mockResolvedValue(undefined)
+  mockUpdate.mockReset()
+  mockRemove.mockReset()
 })
 
 afterEach(() => {
@@ -394,6 +432,8 @@ describe("VisitRoute — chip-based workshop selection (Werkstatt-Auswahl handof
   })
 
   it("asks for confirmation before removing a section with recorded items", async () => {
+    // Run the mutation body so the Firestore writes are observable.
+    mockMutate.mockImplementation((fn: () => Promise<void>) => fn())
     renderVisit({ items: [materialItem("i1", "makerspace")] })
 
     await userEvent.click(screen.getByTestId("ws-remove-makerspace"))
@@ -402,6 +442,85 @@ describe("VisitRoute — chip-based workshop selection (Werkstatt-Auswahl handof
     expect(
       screen.getByText(/Alle erfassten Einträge für\s+Maker Space\s+werden/),
     ).toBeTruthy()
+
+    // Self-entered items only: the workshop really goes away, so the item
+    // is deleted AND the workshop leaves `workshopsVisited`.
+    await userEvent.click(screen.getByRole("button", { name: "Entfernen" }))
+    await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(1))
+    expect(mockRemove).toHaveBeenCalledTimes(1)
+    expect(mockRemove).toHaveBeenCalledWith({ path: "checkouts/co1/items/i1" })
+    expect(mockUpdate).toHaveBeenCalledWith(
+      { path: "checkouts/co1" },
+      { workshopsVisited: arrayRemove("makerspace") },
+    )
+  })
+})
+
+// Device-tracked machine usage (`origin: "nfc"`) is server-owned and billed
+// regardless, so the (×) on such a block must never claim to delete it, must
+// not strip the workshop from `workshopsVisited` (the server keeps "NFC item
+// ⇒ workshop visited"), and must not play the exit animation on a block that
+// stays.
+describe("VisitRoute — (×) on a block with tracked machine usage (issue #657)", () => {
+  const wrapperOf = (ws: string) =>
+    screen.getByTestId(`workshop-section-${ws}`).parentElement!
+
+  it("tracked-only: explains instead of removing, writes nothing", async () => {
+    mockMutate.mockImplementation((fn: () => Promise<void>) => fn())
+    renderVisit({
+      items: [nfcItem("n1", "makerspace")],
+      workshopsVisited: ["makerspace"],
+    })
+
+    await userEvent.click(screen.getByTestId("ws-remove-makerspace"))
+    expect(
+      screen.getByText("Werkstatt kann nicht entfernt werden"),
+    ).toBeTruthy()
+    expect(screen.getByText(/Maschinennutzung in\s+Maker Space/)).toBeTruthy()
+    // Informational: a single acknowledge button, no cancel, no destructive
+    // action.
+    expect(screen.queryByRole("button", { name: "Abbrechen" })).toBeNull()
+    expect(screen.queryByRole("button", { name: "Entfernen" })).toBeNull()
+    expect(wrapperOf("makerspace").className).toContain("animate-ws-in")
+
+    await userEvent.click(screen.getByRole("button", { name: "Verstanden" }))
+    await waitFor(() =>
+      expect(
+        screen.queryByText("Werkstatt kann nicht entfernt werden"),
+      ).toBeNull(),
+    )
+    expect(mockMutate).not.toHaveBeenCalled()
+    expect(mockUpdate).not.toHaveBeenCalled()
+    expect(mockRemove).not.toHaveBeenCalled()
+    // The block and its machine row stay.
+    expect(screen.getByTestId("ws-item-n1")).toBeTruthy()
+    expect(wrapperOf("makerspace").className).toContain("animate-ws-in")
+  })
+
+  it("mixed: deletes only the self-entered items and keeps workshopsVisited", async () => {
+    mockMutate.mockImplementation((fn: () => Promise<void>) => fn())
+    renderVisit({
+      items: [nfcItem("n1", "makerspace"), materialItem("i1", "makerspace")],
+      workshopsVisited: ["makerspace"],
+    })
+
+    await userEvent.click(screen.getByTestId("ws-remove-makerspace"))
+    expect(screen.getByText("Eigene Einträge löschen?")).toBeTruthy()
+    const description = screen.getByText(/Von dir erfasste Einträge/)
+    expect(description.textContent).toMatch(/bleibt bestehen/)
+    expect(description.textContent).not.toMatch(/Alle erfassten Einträge/)
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Einträge löschen" }),
+    )
+    await waitFor(() => expect(mockRemove).toHaveBeenCalledTimes(1))
+    // Only the manual item goes; the tracked session is untouched.
+    expect(mockRemove).toHaveBeenCalledWith({ path: "checkouts/co1/items/i1" })
+    // No `arrayRemove`: the tracked usage keeps its workshop on the visit.
+    expect(mockUpdate).not.toHaveBeenCalled()
+    // No exit animation — the block stays visible with the machine row.
+    expect(wrapperOf("makerspace").className).toContain("animate-ws-in")
+    expect(screen.getByTestId("ws-item-n1")).toBeTruthy()
   })
 })
 

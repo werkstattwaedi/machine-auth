@@ -152,6 +152,21 @@ function VisitRoute() {
     }
     return s
   }, [workshopItems])
+  // Workshops holding device-tracked machine usage (`origin: "nfc"`, written
+  // by the terminal via handleUploadUsage). Those rows are server-owned and
+  // billed regardless, so the (×) on such a block can never remove the
+  // workshop — it only clears the visitor's own entries (issue #657).
+  const workshopsWithTrackedItems = useMemo(() => {
+    const s = new Set<WorkshopId>()
+    for (const item of workshopItems) {
+      if (item.workshop && item.origin === "nfc") {
+        s.add(item.workshop as WorkshopId)
+      }
+    }
+    return s
+  }, [workshopItems])
+  const hasSelfEnteredItems = (wsId: WorkshopId) =>
+    workshopItems.some((i) => i.workshop === wsId && i.origin !== "nfc")
 
   const visitedWorkshops = useMemo(() => {
     const s = new Set<WorkshopId>()
@@ -168,7 +183,22 @@ function VisitRoute() {
   const [manuallySelectedWorkshops, setManuallySelectedWorkshops] = useState<
     Set<WorkshopId>
   >(() => new Set())
-  const [uncheckConfirm, setUncheckConfirm] = useState<WorkshopId | null>(null)
+  // What the (×) on a block with recorded entries will do, decided in
+  // `requestRemoveWorkshop` from the block's item origins:
+  //  - "remove":       only self-entered items → delete them and drop the
+  //                    workshop (today's behaviour);
+  //  - "clear-own":    self-entered AND tracked items → delete only the
+  //                    self-entered ones, the block stays;
+  //  - "tracked-only": nothing to delete → purely informational dialog.
+  // `uncheckConfirm` is the dialog's subject and is only ever replaced, never
+  // cleared: the content stays mounted through Radix's close animation, and
+  // clearing it would snap the copy to another variant mid-fade. `uncheckOpen`
+  // alone drives visibility.
+  const [uncheckConfirm, setUncheckConfirm] = useState<{
+    wsId: WorkshopId
+    mode: "remove" | "clear-own" | "tracked-only"
+  } | null>(null)
+  const [uncheckOpen, setUncheckOpen] = useState(false)
   // Workshops currently playing their exit animation (Werkstatt-Auswahl
   // handoff). A Set, not a scalar: two removals inside one 160ms window are
   // reachable (rapid taps on two × buttons), and a scalar would flip the
@@ -302,7 +332,13 @@ function VisitRoute() {
     // Sections with recorded entries confirm first (dialog); empty sections
     // remove immediately.
     if (workshopsWithItems.has(wsId)) {
-      setUncheckConfirm(wsId)
+      const mode = !workshopsWithTrackedItems.has(wsId)
+        ? "remove"
+        : hasSelfEnteredItems(wsId)
+          ? "clear-own"
+          : "tracked-only"
+      setUncheckConfirm({ wsId, mode })
+      setUncheckOpen(true)
       return
     }
     animateOutThen(wsId, () => {
@@ -325,17 +361,37 @@ function VisitRoute() {
   }
 
   const confirmUncheckWorkshop = () => {
-    if (!uncheckConfirm || !checkoutId) return
-    const wsId = uncheckConfirm
-    setUncheckConfirm(null)
+    if (!uncheckOpen || !uncheckConfirm || !checkoutId) return
+    const { wsId, mode } = uncheckConfirm
+    setUncheckOpen(false)
+    if (mode === "tracked-only") return
+    // Delete everything in the workshop EXCEPT NFC items (those are
+    // server-owned MaCo sessions). Pinned manual-hour items have
+    // origin "manual", so they're intentionally included — keep this as an
+    // `origin` check, not `!isMachineItem`, or NFC usage would be orphaned.
+    const itemsToDelete = items.filter(
+      (i) => i.workshop === wsId && i.origin !== "nfc",
+    )
+    if (mode === "clear-own") {
+      // Tracked usage keeps its workshop: the server establishes
+      // "NFC item ⇒ workshop ∈ workshopsVisited" (handleUploadUsage), and
+      // the admin views list a visit's workshops from that field. So no
+      // `arrayRemove`, no selection change and no exit animation — the block
+      // stays mounted with the machine rows (issue #657; the exit animation
+      // used to leave the still-visible block stuck at opacity 0, #519).
+      // Errors toast via the hook (ADR-0025); nothing to roll back here.
+      void uncheckWorkshop
+        .mutate(async () => {
+          await Promise.all(
+            itemsToDelete.map((i) =>
+              remove(checkoutItemRef(db, checkoutId, i.id)),
+            ),
+          )
+        })
+        .catch(() => {})
+      return
+    }
     animateOutThen(wsId, () => {
-      // Delete everything in the workshop EXCEPT NFC items (those are
-      // server-owned MaCo sessions). Pinned manual-hour items have
-      // origin "manual", so they're intentionally included — keep this as an
-      // `origin` check, not `!isMachineItem`, or NFC usage would be orphaned.
-      const itemsToDelete = items.filter(
-        (i) => i.workshop === wsId && i.origin !== "nfc",
-      )
       void (async () => {
         try {
           await uncheckWorkshop.mutate(async () => {
@@ -545,31 +601,88 @@ function VisitRoute() {
         </div>
 
         <AlertDialog
-          open={!!uncheckConfirm}
+          open={uncheckOpen}
           onOpenChange={(v) => {
-            if (!v) setUncheckConfirm(null)
+            if (!v) setUncheckOpen(false)
           }}
         >
           <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Werkstatt entfernen?</AlertDialogTitle>
-              <AlertDialogDescription>
-                Alle erfassten Einträge für{" "}
-                {(uncheckConfirm &&
-                  pricingConfig.workshops[uncheckConfirm]?.label) ||
-                  "diese Werkstatt"}{" "}
-                werden gelöscht.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-              <AlertDialogAction
-                variant="destructive"
-                onClick={confirmUncheckWorkshop}
-              >
-                Entfernen
-              </AlertDialogAction>
-            </AlertDialogFooter>
+            {(() => {
+              const wsLabel =
+                (uncheckConfirm &&
+                  pricingConfig.workshops[uncheckConfirm.wsId]?.label) ||
+                "diese Werkstatt"
+              switch (uncheckConfirm?.mode) {
+                case "tracked-only":
+                  // Nothing to delete — the (×) explains itself instead of
+                  // being hidden, which also works on the touch kiosk where
+                  // a disabled button's tooltip would never show.
+                  return (
+                    <>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>
+                          Werkstatt kann nicht entfernt werden
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Die am Gerät erfasste Maschinennutzung in {wsLabel}{" "}
+                          wird abgerechnet und bleibt im Besuch. Es gibt hier
+                          keine von dir erfassten Einträge, die gelöscht werden
+                          könnten.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogAction onClick={confirmUncheckWorkshop}>
+                          Verstanden
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </>
+                  )
+                case "clear-own":
+                  return (
+                    <>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>
+                          Eigene Einträge löschen?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Von dir erfasste Einträge für {wsLabel} werden
+                          gelöscht. Die am Gerät erfasste Maschinennutzung
+                          bleibt bestehen und wird abgerechnet.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                        <AlertDialogAction
+                          variant="destructive"
+                          onClick={confirmUncheckWorkshop}
+                        >
+                          Einträge löschen
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </>
+                  )
+                default:
+                  return (
+                    <>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Werkstatt entfernen?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Alle erfassten Einträge für {wsLabel} werden gelöscht.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                        <AlertDialogAction
+                          variant="destructive"
+                          onClick={confirmUncheckWorkshop}
+                        >
+                          Entfernen
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </>
+                  )
+              }
+            })()}
           </AlertDialogContent>
         </AlertDialog>
       </div>

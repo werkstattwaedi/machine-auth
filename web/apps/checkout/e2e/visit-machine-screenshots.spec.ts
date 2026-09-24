@@ -181,4 +181,53 @@ test.describe("Visit page — machine row alignment (issue #214)", () => {
 
     await expect(page).toHaveScreenshot("visit-machine-expanded.png")
   })
+
+  // Issue #657: the Holz block here exists only because of a device-tracked
+  // laser session (`origin: "nfc"`). Its (×) used to open "Werkstatt
+  // entfernen? — Alle erfassten Einträge … werden gelöscht", then silently
+  // did nothing visible (the session rightly stays). Now it explains itself
+  // and leaves the block — and the visit's `workshopsVisited` — untouched.
+  test("(×) on a tracked-only block explains instead of removing (issue #657)", async ({
+    page,
+  }) => {
+    await signIn(page)
+    await page.goto("/visit")
+
+    await expect(page.getByTestId("workshop-block-holz")).toBeVisible({
+      timeout: 10_000,
+    })
+    await expect(page.getByText("CO₂ Laser")).toBeVisible()
+
+    await page.getByRole("button", { name: "Werkstatt Holz entfernen" }).click()
+
+    const dialog = page.getByRole("alertdialog")
+    await expect(dialog).toContainText("Werkstatt kann nicht entfernt werden")
+    await expect(dialog).toContainText(
+      "Die am Gerät erfasste Maschinennutzung in Holz wird abgerechnet",
+    )
+    // Informational only: no cancel / destructive pair, one acknowledge.
+    await expect(dialog.getByRole("button", { name: "Abbrechen" })).toHaveCount(0)
+    await expect(dialog.getByRole("button", { name: "Entfernen" })).toHaveCount(0)
+    await dialog.getByRole("button", { name: "Verstanden" }).click()
+    await expect(dialog).toBeHidden()
+
+    // The block and its machine row are still there …
+    await expect(page.getByTestId("workshop-block-holz")).toBeVisible()
+    await expect(page.getByText("CO₂ Laser")).toBeVisible()
+
+    // … and the visit still lists Holz as visited (the tracked session keeps
+    // its workshop; the old code `arrayRemove`d it).
+    const checkout = await getAdminFirestore()
+      .collection("checkouts")
+      .doc(CHECKOUT_ID)
+      .get()
+    expect(checkout.get("workshopsVisited")).toEqual(["holz"])
+    const item = await getAdminFirestore()
+      .collection("checkouts")
+      .doc(CHECKOUT_ID)
+      .collection("items")
+      .doc(ITEM_ID)
+      .get()
+    expect(item.exists).toBe(true)
+  })
 })
